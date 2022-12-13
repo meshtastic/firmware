@@ -1419,16 +1419,21 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
     display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
     display->setColor(BLACK);
-    display->setColor(WHITE);
 
     if (WiFi.status() != WL_CONNECTED) {
         display->drawString(x, y, String("WiFi: Not Connected"));
+        display->drawString(x + 1, y, String("WiFi: Not Connected"));
     } else {
         display->drawString(x, y, String("WiFi: Connected"));
+        display->drawString(x + 1, y, String("WiFi: Connected"));
 
         display->drawString(x + SCREEN_WIDTH - display->getStringWidth("RSSI " + String(WiFi.RSSI())), y,
                             "RSSI " + String(WiFi.RSSI()));
+        display->drawString(x + SCREEN_WIDTH - display->getStringWidth("RSSI " + String(WiFi.RSSI())) - 1, y,
+                            "RSSI " + String(WiFi.RSSI()));
     }
+
+        display->setColor(WHITE);
 
     /*
     - WL_CONNECTED: assigned when connected to a WiFi network;
