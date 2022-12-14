@@ -295,6 +295,7 @@ void Power::readPowerStatus()
                     // We can't trigger deep sleep on NRF52, it's freezing the board
                     //powerFSM.trigger(EVENT_LOW_BATTERY);
                     DEBUG_MSG("Low voltage detected, but not triggering deep sleep\n");
+                }
             } else {
                 low_voltage_counter = 0;
             }
