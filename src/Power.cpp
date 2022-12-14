@@ -568,11 +568,11 @@ bool Power::axpChipInit()
     }
     DEBUG_MSG("=======================================================================\n");
 
-
-
+// Disable shutdown for non ESP32 boards
+#ifdef ARCH_ESP32
     // Set PMU shutdown voltage at 2.6V to maximize battery utilization
     PMU->setSysPowerDownVoltage(2600);
-
+#endif
 
 
 #ifdef PMU_IRQ
