@@ -568,8 +568,12 @@ bool Power::axpChipInit()
     }
     DEBUG_MSG("=======================================================================\n");
 
-// Disable shutdown for non ESP32 boards
-#ifdef ARCH_ESP32
+// We can safely ignore this approach for most (or all) boards because MCU turned off
+// earlier than battery discharged to 2.6V.
+//
+// Unfortanly for now we can't use this killswitch for RAK4630-based boards because they have a bug with
+// battery voltage measurement. Probably it sometimes drops to low values.
+#ifndef RAK4630
     // Set PMU shutdown voltage at 2.6V to maximize battery utilization
     PMU->setSysPowerDownVoltage(2600);
 #endif
