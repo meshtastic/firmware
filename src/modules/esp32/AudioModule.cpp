@@ -10,6 +10,10 @@
 
 #include <assert.h>
 
+#ifdef OLED_RU
+#include "graphics/fonts/OLEDDisplayFontsRU.h"
+#endif
+
 /*
     AudioModule
         A interface to send raw codec2 audio data over the mesh network. Based on the example code from the ESP32_codec2 project.
