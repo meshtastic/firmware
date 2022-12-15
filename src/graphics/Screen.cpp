@@ -506,6 +506,22 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
     }
 }
 
+//Draw status when gps is disabled by PMU
+static void drawGPSpowerstat(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps){
+String displayLine = "";
+displayLine = "GPS disabled";
+int16_t xPos = display->getStringWidth(displayLine);
+    #ifdef HAS_PMU
+    if (!config.position.gps_enabled){
+            display->drawString(x + xPos, y, displayLine);
+        #ifdef GPS_POWER_TOGGLE 
+            display->drawString(x + xPos, y - 2 + FONT_HEIGHT_SMALL, " by button");
+        #endif
+        //display->drawString(x + xPos, y + 2, displayLine);
+    }
+    #endif
+}
+
 static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
     String displayLine = "";
@@ -1372,7 +1388,15 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     // Display nodes status
     drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 2, nodeStatus);
     // Display GPS status
+    if (!config.position.gps_enabled){
+    int16_t yPos = y + 2;
+        #ifdef GPS_POWER_TOGGLE
+        yPos = (y + 10 + FONT_HEIGHT_SMALL);
+        #endif
+    drawGPSpowerstat(display, x, yPos, gpsStatus);
+    } else {
     drawGPS(display, x + (SCREEN_WIDTH * 0.63), y + 2, gpsStatus);
+    }
 
     // Draw the channel name
     display->drawString(x, y + FONT_HEIGHT_SMALL, channelStr);
@@ -1613,7 +1637,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     char chUtil[13];
     sprintf(chUtil, "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), y + FONT_HEIGHT_SMALL * 1, chUtil);
-
+if (config.position.gps_enabled) {
     // Line 3
     if (config.display.gps_format !=
         Config_DisplayConfig_GpsCoordinateFormat_DMS) // if DMS then don't draw altitude
@@ -1621,7 +1645,9 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 
     // Line 4
     drawGPScoordinates(display, x, y + FONT_HEIGHT_SMALL * 3, gpsStatus);
-
+} else {
+    drawGPSpowerstat(display, x - (SCREEN_WIDTH / 4), y + FONT_HEIGHT_SMALL * 2, gpsStatus);
+}
     /* Display a heartbeat pixel that blinks every time the frame is redrawn */
 #ifdef SHOW_REDRAWS
     if (heartbeat)
