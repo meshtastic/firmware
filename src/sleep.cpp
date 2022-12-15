@@ -185,6 +185,18 @@ void doGPSpowersave(bool on)
         setGPSPower(0);
     }
     #endif
+    #ifdef PIN_GPS_WAKE
+    if (on)
+    {
+        DEBUG_MSG("Waking GPS");
+        gps->forceWake(1);
+    }
+    else
+    {
+        DEBUG_MSG("GPS entering sleep");
+        notifyGPSSleep.notifyObservers(NULL);
+    }
+    #endif
 }
 
 void doDeepSleep(uint64_t msecToWake)
