@@ -291,8 +291,11 @@ void Power::readPowerStatus()
             if (batteryLevel->getBattVoltage() < MIN_BAT_MILLIVOLTS) {
                 low_voltage_counter++;
                 DEBUG_MSG("Warning RAK4631 Low voltage counter: %d/10\n", low_voltage_counter);
-                if (low_voltage_counter > 10)
-                    powerFSM.trigger(EVENT_LOW_BATTERY);
+                if (low_voltage_counter > 10) {
+                    // We can't trigger deep sleep on NRF52, it's freezing the board
+                    //powerFSM.trigger(EVENT_LOW_BATTERY);
+                    DEBUG_MSG("Low voltage detected, but not triggering deep sleep\n");
+                }
             } else {
                 low_voltage_counter = 0;
             }
@@ -565,11 +568,15 @@ bool Power::axpChipInit()
     }
     DEBUG_MSG("=======================================================================\n");
 
-
-
+// We can safely ignore this approach for most (or all) boards because MCU turned off
+// earlier than battery discharged to 2.6V.
+//
+// Unfortanly for now we can't use this killswitch for RAK4630-based boards because they have a bug with
+// battery voltage measurement. Probably it sometimes drops to low values.
+#ifndef RAK4630
     // Set PMU shutdown voltage at 2.6V to maximize battery utilization
     PMU->setSysPowerDownVoltage(2600);
-
+#endif
 
 
 #ifdef PMU_IRQ
