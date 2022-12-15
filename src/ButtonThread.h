@@ -51,6 +51,7 @@ class ButtonThread : public concurrency::OSThread
         pinMode(BUTTON_PIN, INPUT_PULLUP_SENSE);
 #endif
         userButton.attachClick(userButtonPressed);
+        userButton.setClickTicks(300);
         userButton.attachDuringLongPress(userButtonPressedLong);
         userButton.attachDoubleClick(userButtonDoublePressed);
         userButton.attachMultiClick(userButtonMultiPressed);
