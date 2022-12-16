@@ -34,19 +34,6 @@ uint32_t externalTurnedOn[3] = {};
 
 int32_t ExternalNotificationModule::runOnce()
 {
-    /*
-        Uncomment the preferences below if you want to use the module
-        without having to configure it from the PythonAPI or WebUI.
-    */
-
-    // moduleConfig.external_notification.enabled = 1;
-    // moduleConfig.external_notification.alert_message = 1;
-
-    // moduleConfig.external_notification.active = 1;
-    // moduleConfig.external_notification.alert_bell = 1;
-    // moduleConfig.external_notification.output_ms = 1000;
-    // moduleConfig.external_notification.output = 13;
-
     if (moduleConfig.external_notification.use_pwm || !moduleConfig.external_notification.enabled) {
         return INT32_MAX; // we don't need this thread here...
     } else {
@@ -143,13 +130,18 @@ ExternalNotificationModule::ExternalNotificationModule()
         without having to configure it from the PythonAPI or WebUI.
     */
 
-    // moduleConfig.external_notification.enabled = 1;
-    // moduleConfig.external_notification.alert_message = 1;
+    // moduleConfig.external_notification.enabled = true;
+    // moduleConfig.external_notification.alert_message = true;
+    // moduleConfig.external_notification.alert_message_buzzer = true;
+    // moduleConfig.external_notification.alert_message_vibra = true;
 
-    // moduleConfig.external_notification.active = 1;
+    // moduleConfig.external_notification.active = true;
     // moduleConfig.external_notification.alert_bell = 1;
     // moduleConfig.external_notification.output_ms = 1000;
-    // moduleConfig.external_notification.output = 13;
+    // moduleConfig.external_notification.output = 4; // RAK4631 IO4
+    // moduleConfig.external_notification.output_buzzer = 10; // RAK4631 IO6
+    // moduleConfig.external_notification.output_vibra = 28; // RAK4631 IO7
+    // moduleConfig.external_notification.nag_timeout = 300;
     
     if (moduleConfig.external_notification.enabled) {
 
