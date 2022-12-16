@@ -11,7 +11,7 @@ PacketHistory::PacketHistory()
 /**
  * Update recentBroadcasts and return true if we have already seen this packet
  */
-bool PacketHistory::wasSeenRecently(const MeshPacket *p, bool withUpdate)
+bool PacketHistory::wasSeenRecently(const MeshPacket *p, bool withUpdate)  //, bool checkAck
 {
     if (p->id == 0) {
         DEBUG_MSG("Ignoring message with zero id\n");
@@ -24,6 +24,12 @@ bool PacketHistory::wasSeenRecently(const MeshPacket *p, bool withUpdate)
     r.id = p->id;
     r.sender = getFrom(p);
     r.rxTimeMsec = now;
+    // if (checkAck)
+    //     if (p->which_payload_variant == MeshPacket_decoded_tag && p->decoded.portnum == PortNum_ROUTING_APP) {
+    //       perhapsDecode(p);
+    //         bool seenAck = (p-> ==  )
+    // }
+    // r.seenAck = p->
 
     auto found = recentPackets.find(r);
     bool seenRecently = (found != recentPackets.end());  // found not equal to .end() means packet was seen recently
@@ -52,7 +58,7 @@ bool PacketHistory::wasSeenRecently(const MeshPacket *p, bool withUpdate)
         clearExpiredRecentPackets();
     }
 
-    return seenRecently;
+    return seenRecently; //checkAck ? seenAck : 
 }
 
 /**
