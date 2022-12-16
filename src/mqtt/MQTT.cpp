@@ -182,7 +182,7 @@ void MQTT::reconnect()
             sendSubscriptions();
         } else {
             DEBUG_MSG("Failed to contact MQTT server (%d/10)...\n",reconnectCount);
-#if HAS_WIFI
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
             if (reconnectCount > 9) {
                 needReconnect = true;
                 wifiReconnect->setIntervalFromNow(1000);
