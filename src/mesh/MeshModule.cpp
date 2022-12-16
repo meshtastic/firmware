@@ -48,7 +48,7 @@ MeshPacket *MeshModule::allocAckNak(Routing_Error err, NodeNum to, PacketId idFr
 
     p->priority = MeshPacket_Priority_ACK;
 
-    p->hop_limit = 0; // Assume just immediate neighbors for now
+    p->hop_limit = config.lora.hop_limit; // Assume just immediate neighbors for now
     p->to = to;
     p->decoded.request_id = idFrom;
     p->channel = chIndex;

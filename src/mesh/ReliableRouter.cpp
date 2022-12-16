@@ -21,7 +21,7 @@ ErrorCode ReliableRouter::send(MeshPacket *p)
         }
 
         auto copy = packetPool.allocCopy(*p);
-        startRetransmission(copy);
+        startRetransmission(copy); // TODO: also on not want_ack? 
     }
 
     return FloodingRouter::send(p);
@@ -37,27 +37,29 @@ bool ReliableRouter::shouldFilterReceived(MeshPacket *p)
         // If this is the first time we saw this, cancel any retransmissions we have queued up and generate an internal ack for
         // the original sending process.
 
-        // FIXME - we might want to turn off this "optimization", it does save lots of airtime but it assumes that once we've
-        // heard one one adjacent node hear our packet that a) probably other adjacent nodes heard it and b) we can trust those
-        // nodes to reach our destination.  Both of which might be incorrect.
+        // This "optimization", does save lots of airtime, but can be turned off for direct messages to get
+        // a confirmation from the specific node it was sent to. 
         auto key = GlobalPacketId(getFrom(p), p->id);
         auto old = findPendingPacket(key);
         if (old) {
-            DEBUG_MSG("generating implicit ack\n");
-            // NOTE: we do NOT check p->wantAck here because p is the INCOMING rebroadcast and that packet is not expected to be
-            // marked as wantAck
-            sendAckNak(Routing_Error_NONE, getFrom(p), p->id, old->packet->channel);
-
+            // Only if want_ack was not set, we mark the packet as ACKed already on an implicit ACK
+            if (!p->want_ack) {
+              DEBUG_MSG("generating implicit ack\n");
+              sendAckNak(Routing_Error_NONE, getFrom(p), p->id, old->packet->channel);
+            } 
+            // At this point we assume it will arrive. 
+            // We don't now how long we have to wait for the real ACK so stop retransmissions. 
+            DEBUG_MSG("Stopping retransmissions\n");
             stopRetransmission(key);
-        } else {
-            DEBUG_MSG("didn't find pending packet\n");
         }
     }
 
+
+    //bool isAck = ((c && c->error_reason == Routing_Error_NONE)); // consider only ROUTING_APP message without error as ACK
     /* send acks for repeated packets that want acks and are destined for us
-     * this way if an ACK is dropped and a packet is resent we'll ACK the resent packet
-     * make sure wasSeenRecently _doesn't_ update
-     * finding the channel requires decoding the packet. */
+    * this way if an ACK is dropped and a packet is resent we'll ACK the resent packet
+    * make sure wasSeenRecently _doesn't_ update
+    * finding the channel requires decoding the packet. */
     if (p->want_ack && (p->to == getNodeNum()) && wasSeenRecently(p, false) && !MeshModule::currentReply) {
         if (perhapsDecode(p)) {
             sendAckNak(Routing_Error_NONE, getFrom(p), p->id, p->channel);
