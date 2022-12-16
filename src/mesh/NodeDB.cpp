@@ -214,9 +214,9 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.has_external_notification = true;
     moduleConfig.has_canned_message = true;
 
-    strncpy(moduleConfig.mqtt.address, default_mqtt_address, sizeof(default_mqtt_address));
-    strncpy(moduleConfig.mqtt.username, default_mqtt_username, sizeof(default_mqtt_username));
-    strncpy(moduleConfig.mqtt.password, default_mqtt_password, sizeof(default_mqtt_password));
+    strncpy(moduleConfig.mqtt.address, default_mqtt_address, sizeof(moduleConfig.mqtt.address));
+    strncpy(moduleConfig.mqtt.username, default_mqtt_username, sizeof(moduleConfig.mqtt.username));
+    strncpy(moduleConfig.mqtt.password, default_mqtt_password, sizeof(moduleConfig.mqtt.password));
 
     initModuleConfigIntervals();
 }
