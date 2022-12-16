@@ -3,7 +3,9 @@
 #include "esp_task_wdt.h"
 #include "main.h"
 
+#if !defined(CONFIG_IDF_TARGET_ESP32S2)
 #include "nimble/NimbleBluetooth.h"
+#endif
 #include "BleOta.h"
 #include "mesh/http/WiFiAPClient.h"
 
@@ -16,12 +18,8 @@
 #include <nvs_flash.h>
 #include "soc/rtc.h"
 
+#if !defined(CONFIG_IDF_TARGET_ESP32S2)
 NimbleBluetooth *nimbleBluetooth;
-
-void getMacAddr(uint8_t *dmac)
-{
-    assert(esp_efuse_mac_get_default(dmac) == ESP_OK);
-}
 
 void setBluetoothEnable(bool on) {
 
@@ -35,6 +33,15 @@ void setBluetoothEnable(bool on) {
             nimbleBluetooth->shutdown();
         }
     }
+}
+#else
+void setBluetoothEnable(bool on) { }
+void updateBatteryLevel(uint8_t level) { }
+#endif
+
+void getMacAddr(uint8_t *dmac)
+{
+    assert(esp_efuse_mac_get_default(dmac) == ESP_OK);
 }
 
 #ifdef HAS_32768HZ

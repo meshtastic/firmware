@@ -4,6 +4,7 @@
 
 #include "concurrency/OSThread.h"
 #include "mesh/Channels.h"
+#include "mesh/generated/mqtt.pb.h"
 #include <PubSubClient.h>
 #if HAS_WIFI
 #include <WiFiClient.h>
@@ -11,6 +12,8 @@
 #if HAS_ETHERNET
 #include <EthernetClient.h>
 #endif
+
+#define MAX_MQTT_QUEUE 32
 
 /**
  * Our wrapper/singleton for sending/receiving MQTT "udp" packets.  This object isolates the MQTT protocol implementation from
@@ -52,6 +55,10 @@ class MQTT : private concurrency::OSThread
     bool connected();
     
   protected:
+    PointerQueue<ServiceEnvelope> mqttQueue;
+
+    int reconnectCount = 0;
+
     virtual int32_t runOnce() override;
 
   private:

@@ -10,6 +10,8 @@
 #include <functional>
 #include <codec2.h>
 #include <ButterworthFilter.h>
+#include <OLEDDisplay.h>
+#include <OLEDDisplayUi.h>
 
 enum RadioState { standby, rx, tx };
 
@@ -28,7 +30,7 @@ struct c2_header {
 #define AUDIO_MODULE_RX_BUFFER 128
 #define AUDIO_MODULE_MODE ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700
 
-class AudioModule : public SinglePortModule, private concurrency::OSThread
+class AudioModule : public SinglePortModule, public Observable<const UIFrameEvent *>, private concurrency::OSThread
 {
   public:
     unsigned char rx_encode_frame[Constants_DATA_PAYLOAD_LEN] = {};
@@ -50,6 +52,8 @@ class AudioModule : public SinglePortModule, private concurrency::OSThread
 
     AudioModule();
 
+    bool shouldDraw();
+
     /**
      * Send our payload into the mesh
      */
@@ -62,6 +66,15 @@ class AudioModule : public SinglePortModule, private concurrency::OSThread
     virtual int32_t runOnce() override;
 
     virtual MeshPacket *allocReply() override;
+
+    virtual bool wantUIFrame() override { return this->shouldDraw(); }
+    virtual Observable<const UIFrameEvent *>* getUIFrameObservable() override { return this; }
+#if !HAS_SCREEN
+    void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+#else    
+    virtual void drawFrame(
+        OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;
+#endif
 
     /** Called to handle a particular incoming message
      * @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for it

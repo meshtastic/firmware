@@ -182,6 +182,9 @@ Power::Power() : OSThread("Power")
 {
     statusHandler = {};
     low_voltage_counter = 0;
+#ifdef DEBUG_HEAP
+    lastheap = ESP.getFreeHeap();
+#endif
 }
 
 bool Power::analogInit()
@@ -284,7 +287,10 @@ void Power::readPowerStatus()
                   powerStatus2.getIsCharging(), powerStatus2.getBatteryVoltageMv(), powerStatus2.getBatteryChargePercent());
         newStatus.notifyObservers(&powerStatus2);
 #ifdef DEBUG_HEAP
-        DEBUG_MSG("Heap status: %d/%d bytes free, running %d threads\n", ESP.getFreeHeap(), ESP.getHeapSize(), concurrency::mainController.size(false));
+        if (lastheap != ESP.getFreeHeap()){
+            DEBUG_MSG("Heap status: %d/%d bytes free (%d), running %d threads\n", ESP.getFreeHeap(), ESP.getHeapSize(), ESP.getFreeHeap() - lastheap , concurrency::mainController.size(false));
+            lastheap = ESP.getFreeHeap();
+        }
 #endif
 
 // If we have a battery at all and it is less than 10% full, force deep sleep if we have more than 3 low readings in a row
@@ -458,6 +464,9 @@ bool Power::axpChipInit()
         // Set constant current charging current
         PMU->setChargerConstantCurr(XPOWERS_AXP192_CHG_CUR_450MA);
 
+        //Set up the charging voltage
+        PMU->setChargeTargetVoltage(XPOWERS_AXP192_CHG_VOL_4V2);
+
     } else if (PMU->getChipModel() == XPOWERS_AXP2101) {
 
         // t-beam s3 core 
@@ -510,6 +519,8 @@ bool Power::axpChipInit()
         //Set the constant current charging current of AXP2101, temporarily use 500mA by default
         PMU->setChargerConstantCurr(XPOWERS_AXP2101_CHG_CUR_500MA);
 
+        //Set up the charging voltage
+        PMU->setChargeTargetVoltage(XPOWERS_AXP2101_CHG_VOL_4V2);
     }
     
 
@@ -563,9 +574,6 @@ bool Power::axpChipInit()
     DEBUG_MSG("=======================================================================\n");
 
 
-    //Set up the charging voltage, AXP2101/AXP192 4.2V gear is the same
-    // XPOWERS_AXP192_CHG_VOL_4V2 = XPOWERS_AXP2101_CHG_VOL_4V2
-    PMU->setChargeTargetVoltage(XPOWERS_AXP192_CHG_VOL_4V2);
 
     // Set PMU shutdown voltage at 2.6V to maximize battery utilization
     PMU->setSysPowerDownVoltage(2600);

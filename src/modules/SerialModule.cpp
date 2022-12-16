@@ -82,7 +82,7 @@ SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
 
 int32_t SerialModule::runOnce()
 {
-#if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(TTGO_T_ECHO)
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(TTGO_T_ECHO) && !defined(CONFIG_IDF_TARGET_ESP32S2)
     /*
         Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
@@ -214,7 +214,6 @@ int32_t SerialModule::runOnce()
 
 MeshPacket *SerialModuleRadio::allocReply()
 {
-
     auto reply = allocDataPacket(); // Allocate a packet for sending
 
     return reply;
@@ -236,7 +235,7 @@ void SerialModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 
 ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
 {
-#if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(TTGO_T_ECHO)
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(TTGO_T_ECHO) && !defined(CONFIG_IDF_TARGET_ESP32S2)
     if (moduleConfig.serial.enabled) {
 
         auto &p = mp.decoded;
@@ -266,7 +265,12 @@ ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
             if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_DEFAULT ||
                 moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_SIMPLE) {
                 Serial2.printf("%s", p.payload.bytes);
-
+            } else if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG) {
+                NodeInfo *node = nodeDB.getNode(getFrom(&mp));
+                String sender = (node && node->has_user) ? node->user.short_name : "???";
+                Serial2.println();
+                Serial2.printf("%s: %s", sender, p.payload.bytes);
+                Serial2.println();
             } else if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_PROTO) {
                 // TODO this needs to be implemented
             } else if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_NMEA) {
