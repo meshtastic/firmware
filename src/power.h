@@ -40,6 +40,7 @@ class Power : private concurrency::OSThread
 
   private:
     uint8_t low_voltage_counter;
+    uint32_t lastheap;
 };
 
 extern Power *power;
