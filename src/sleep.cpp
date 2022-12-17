@@ -29,7 +29,9 @@ Observable<void *> preflightSleep;
 
 /// Called to tell observers we are now entering sleep and you should prepare.  Must return 0
 /// notifySleep will be called for light or deep sleep, notifyDeepSleep is only called for deep sleep
+/// notifyGPSSleep will be called when config.position.gps_enabled is set to 0 or from buttonthread when GPS_POWER_TOGGLE is enabled.
 Observable<void *> notifySleep, notifyDeepSleep;
+Observable<void *> notifyGPSSleep;
 
 // deep sleep support
 RTC_DATA_ATTR int bootCount = 0;
@@ -165,6 +167,36 @@ static void waitEnterSleep()
     setBluetoothEnable(false); // has to be off before calling light sleep
 
     notifySleep.notifyObservers(NULL);
+}
+
+void doGPSpowersave(bool on)
+{
+    #ifdef HAS_PMU
+    if (on)
+    {
+        DEBUG_MSG("Turning GPS back on\n");
+        gps->forceWake(1);
+        setGPSPower(1);
+    }
+    else
+    {
+        DEBUG_MSG("Turning off GPS chip\n");
+        notifyGPSSleep.notifyObservers(NULL);
+        setGPSPower(0);
+    }
+    #endif
+    #ifdef PIN_GPS_WAKE
+    if (on)
+    {
+        DEBUG_MSG("Waking GPS");
+        gps->forceWake(1);
+    }
+    else
+    {
+        DEBUG_MSG("GPS entering sleep");
+        notifyGPSSleep.notifyObservers(NULL);
+    }
+    #endif
 }
 
 void doDeepSleep(uint64_t msecToWake)
