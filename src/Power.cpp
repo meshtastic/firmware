@@ -102,6 +102,10 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #define ADC_MULTIPLIER 2.0
 #endif
 
+#ifndef BATTERY_SENSE_SAMPLES
+#define BATTERY_SENSE_SAMPLES 30
+#endif
+
 #ifdef BATTERY_PIN
         // Override variant or default ADC_MULTIPLIER if we have the override pref
         float operativeAdcMultiplier = config.power.adc_multiplier_override > 0
@@ -112,16 +116,12 @@ class AnalogBatteryLevel : public HasBatteryLevel
         if (millis() - last_read_time_ms > min_read_interval) {
             last_read_time_ms = millis();
 
-#ifdef BATTERY_SENSE_SAMPLES
 //Set the number of samples, it has an effect of increasing sensitivity, especially in complex electromagnetic environment.
             uint32_t raw = 0;
-            for(uint32_t i=0; i<BATTERY_SENSE_SAMPLES;i++){
+            for(uint32_t i=0; i<BATTERY_SENSE_SAMPLES; i++){
                 raw += analogRead(BATTERY_PIN);
             }
             raw = raw/BATTERY_SENSE_SAMPLES;
-#else
-            uint32_t raw = analogRead(BATTERY_PIN);
-#endif
 
             float scaled;
 #ifndef VBAT_RAW_TO_SCALED
@@ -299,8 +299,12 @@ void Power::readPowerStatus()
         if (powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
             if (batteryLevel->getBattVoltage() < MIN_BAT_MILLIVOLTS) {
                 low_voltage_counter++;
-                if (low_voltage_counter > 3)
-                    powerFSM.trigger(EVENT_LOW_BATTERY);
+                DEBUG_MSG("Warning RAK4631 Low voltage counter: %d/10\n", low_voltage_counter);
+                if (low_voltage_counter > 10) {
+                    // We can't trigger deep sleep on NRF52, it's freezing the board
+                    //powerFSM.trigger(EVENT_LOW_BATTERY);
+                    DEBUG_MSG("Low voltage detected, but not triggering deep sleep\n");
+                }
             } else {
                 low_voltage_counter = 0;
             }
@@ -573,11 +577,15 @@ bool Power::axpChipInit()
     }
     DEBUG_MSG("=======================================================================\n");
 
-
-
+// We can safely ignore this approach for most (or all) boards because MCU turned off
+// earlier than battery discharged to 2.6V.
+//
+// Unfortanly for now we can't use this killswitch for RAK4630-based boards because they have a bug with
+// battery voltage measurement. Probably it sometimes drops to low values.
+#ifndef RAK4630
     // Set PMU shutdown voltage at 2.6V to maximize battery utilization
     PMU->setSysPowerDownVoltage(2600);
-
+#endif
 
 
 #ifdef PMU_IRQ
