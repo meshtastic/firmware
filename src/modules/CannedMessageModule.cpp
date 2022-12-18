@@ -451,11 +451,15 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         if (this->destSelect) {
             display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
             display->setColor(BLACK);
+            display->drawStringf(1 + x, 0 + y, buffer, "To: %s", cannedMessageModule->getNodeName(this->dest));
         }
         display->drawStringf(0 + x, 0 + y, buffer, "To: %s", cannedMessageModule->getNodeName(this->dest));
         // used chars right aligned
         sprintf(buffer, "%d left", Constants_DATA_PAYLOAD_LEN - this->freetext.length());
         display->drawString(x + display->getWidth() - display->getStringWidth(buffer), y + 0, buffer);
+        if (this->destSelect) {
+            display->drawString(x + display->getWidth() - display->getStringWidth(buffer) - 1, y + 0, buffer);
+        }
         display->setColor(WHITE);
         display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), cannedMessageModule->drawWithCursor(cannedMessageModule->freetext, cannedMessageModule->cursor));
     } else {
