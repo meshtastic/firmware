@@ -2,6 +2,7 @@
 #include "Channels.h"
 #include "CryptoEngine.h"
 #include "NodeDB.h"
+#include "MeshRadio.h"
 #include "RTC.h"
 #include "configuration.h"
 #include "main.h"
@@ -21,7 +22,6 @@ extern "C" {
  * DONE: Implement basic interface and use it elsewhere in app
  * Add naive flooding mixin (& drop duplicate rx broadcasts), add tools for sending broadcasts with incrementing sequence #s
  * Add an optional adjacent node only 'send with ack' mixin.  If we timeout waiting for the ack, call handleAckTimeout(packet)
- * Add DSR mixin
  *
  **/
 
@@ -187,6 +187,18 @@ void printBytes(const char *label, const uint8_t *p, size_t numbytes)
 ErrorCode Router::send(MeshPacket *p)
 {
     assert(p->to != nodeDB.getNodeNum()); // should have already been handled by sendLocal
+
+    // Abort sending if we are violating the duty cycle
+    if (!config.lora.override_duty_cycle && myRegion->dutyCycle != 100) {
+      float hourlyTxPercent = airTime->utilizationTXPercent();
+      if (hourlyTxPercent > myRegion->dutyCycle) {
+          uint8_t silentMinutes = airTime->getSilentMinutes(hourlyTxPercent, myRegion->dutyCycle); 
+          DEBUG_MSG("WARNING: Duty cycle limit exceeded. Aborting send for now, you can send again in %d minutes.\n", silentMinutes);
+          Routing_Error err = Routing_Error_DUTY_CYCLE_LIMIT;
+          abortSendAndNak(err, p);
+          return err;
+      }
+    }
 
     // PacketId nakId = p->decoded.which_ackVariant == SubPacket_fail_id_tag ? p->decoded.ackVariant.fail_id : 0;
     // assert(!nakId); // I don't think we ever send 0hop naks over the wire (other than to the phone), test that assumption with

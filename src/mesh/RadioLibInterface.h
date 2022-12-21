@@ -1,10 +1,9 @@
 #pragma once
 
-#include "../concurrency/OSThread.h"
+#include "concurrency/NotifiedWorkerThread.h"
 #include "RadioInterface.h"
 #include "MeshPacketQueue.h"
 
-#define RADIOLIB_EXCLUDE_HTTP
 #include <RadioLib.h>
 
 // ESP32 has special rules about ISR code

@@ -182,6 +182,9 @@ Power::Power() : OSThread("Power")
 {
     statusHandler = {};
     low_voltage_counter = 0;
+#ifdef DEBUG_HEAP
+    lastheap = ESP.getFreeHeap();
+#endif
 }
 
 bool Power::analogInit()
@@ -283,6 +286,12 @@ void Power::readPowerStatus()
         DEBUG_MSG("Battery: usbPower=%d, isCharging=%d, batMv=%d, batPct=%d\n", powerStatus2.getHasUSB(),
                   powerStatus2.getIsCharging(), powerStatus2.getBatteryVoltageMv(), powerStatus2.getBatteryChargePercent());
         newStatus.notifyObservers(&powerStatus2);
+#ifdef DEBUG_HEAP
+        if (lastheap != ESP.getFreeHeap()){
+            DEBUG_MSG("Heap status: %d/%d bytes free (%d), running %d threads\n", ESP.getFreeHeap(), ESP.getHeapSize(), ESP.getFreeHeap() - lastheap , concurrency::mainController.size(false));
+            lastheap = ESP.getFreeHeap();
+        }
+#endif
 
 // If we have a battery at all and it is less than 10% full, force deep sleep if we have more than 3 low readings in a row
 // Supect fluctuating voltage on the RAK4631 to force it to deep sleep even if battery is at 85% after only a few days

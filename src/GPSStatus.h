@@ -20,16 +20,19 @@ class GPSStatus : public Status
     bool hasLock = false;     // default to false, until we complete our first read
     bool isConnected = false; // Do we have a GPS we are talking to
 
+    bool isPowerSaving = false; //Are we in power saving state
+
     Position p = Position_init_default;
 
   public:
     GPSStatus() { statusType = STATUS_TYPE_GPS; }
 
     // preferred method
-    GPSStatus(bool hasLock, bool isConnected, const Position &pos) : Status()
+    GPSStatus(bool hasLock, bool isConnected, bool isPowerSaving, const Position &pos) : Status()
     {
         this->hasLock = hasLock;
         this->isConnected = isConnected;
+        this->isPowerSaving = isPowerSaving;
 
         // all-in-one struct copy
         this->p = pos;
@@ -43,6 +46,8 @@ class GPSStatus : public Status
     bool getHasLock() const { return hasLock; }
 
     bool getIsConnected() const { return isConnected; }
+
+    bool getIsPowerSaving() const { return isPowerSaving;}
 
     int32_t getLatitude() const
     {
@@ -94,7 +99,7 @@ class GPSStatus : public Status
 #ifdef GPS_EXTRAVERBOSE
         DEBUG_MSG("GPSStatus.match() new pos@%x to old pos@%x\n", newStatus->p.pos_timestamp, p.pos_timestamp);
 #endif
-        return (newStatus->hasLock != hasLock || newStatus->isConnected != isConnected ||
+        return (newStatus->hasLock != hasLock || newStatus->isConnected != isConnected || newStatus->isPowerSaving !=isPowerSaving ||
                 newStatus->p.latitude_i != p.latitude_i || newStatus->p.longitude_i != p.longitude_i ||
                 newStatus->p.altitude != p.altitude || newStatus->p.altitude_hae != p.altitude_hae ||
                 newStatus->p.PDOP != p.PDOP || newStatus->p.ground_track != p.ground_track ||

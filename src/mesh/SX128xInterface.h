@@ -1,7 +1,5 @@
 #pragma once
 
-#if defined(RADIOLIB_GODMODE)
-
 #include "RadioLibInterface.h"
 
 /**
@@ -19,6 +17,8 @@ class SX128xInterface : public RadioLibInterface
     /// \return true if initialisation succeeded.
     virtual bool init() override;
 
+    virtual bool wideLora() override;
+
     /// Apply any radio provisioning changes
     /// Make sure the Driver is properly configured before calling init().
     /// \return true if initialisation succeeded.
@@ -27,9 +27,11 @@ class SX128xInterface : public RadioLibInterface
     /// Prepare hardware for sleep.  Call this _only_ for deep sleep, not needed for light sleep.
     virtual bool sleep() override;
 
-  protected:
+#ifdef RADIOLIB_GODMODE
+    bool isIRQPending() override { return lora.getIrqStatus() != 0; }
+#endif
 
-    float currentLimit = 140; // Higher OCP limit for SX128x PA
+  protected:
 
     /**
      * Specific module instance 
@@ -71,5 +73,3 @@ class SX128xInterface : public RadioLibInterface
 
   private:
 };
-
-#endif
