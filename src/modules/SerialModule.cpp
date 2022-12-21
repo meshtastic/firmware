@@ -221,8 +221,12 @@ MeshPacket *SerialModuleRadio::allocReply()
 
 void SerialModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 {
+    Channel *ch = (boundChannel != NULL) ? &channels.getByName(boundChannel) : NULL;
     MeshPacket *p = allocReply();
     p->to = dest;
+    if (ch != NULL) {
+        p->channel = ch->index;
+    }
     p->decoded.want_response = wantReplies;
 
     p->want_ack = ACK;
