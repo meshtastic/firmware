@@ -372,6 +372,23 @@ bool StoreForwardModule::handleReceivedProtobuf(const MeshPacket &mp, StoreAndFo
             }
             break;
 
+        case StoreAndForward_RequestResponse_ROUTER_STATS:
+            if(is_client) {
+                DEBUG_MSG("*** Router Response STATS\n");
+                // These fields only have informational purpose on a client. Fill them to consume later.
+                if (p->which_variant == StoreAndForward_stats_tag) {
+                    this->packetHistoryMax = p->variant.stats.messages_total;
+                    this->packetHistoryCurrent = p->variant.stats.messages_saved;
+                    this->records = p->variant.stats.messages_max;
+                    this->requests = p->variant.stats.requests;
+                    this->requests_history = p->variant.stats.requests_history;
+                    this->heartbeat = p->variant.stats.heartbeat;
+                    this->historyReturnMax = p->variant.stats.return_max;
+                    this->historyReturnWindow = p->variant.stats.return_window;
+                }
+            }
+            break;
+
         default:
             assert(0); // unexpected state - FIXME, make an error code and reboot
     }
