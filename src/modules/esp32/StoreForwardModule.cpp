@@ -42,8 +42,9 @@ int32_t StoreForwardModule::runOnce()
         } else if ((millis() - lastHeartbeat > (heartbeatInterval * 1000)) && (airTime->channelUtilizationPercent() < polite_channel_util_percent)) {
             lastHeartbeat = millis();
             DEBUG_MSG("*** Sending heartbeat\n");
-            StoreAndForward sf;
+            StoreAndForward sf = StoreAndForward_init_zero;
             sf.rr = StoreAndForward_RequestResponse_ROUTER_HEARTBEAT;
+            sf.which_variant = StoreAndForward_heartbeat_tag;
             sf.variant.heartbeat.period = 300;
             sf.variant.heartbeat.secondary = 0; // TODO we always have one primary router for now
             storeForwardModule->sendMessage(NODENUM_BROADCAST, sf);
@@ -181,7 +182,7 @@ void StoreForwardModule::sendPayload(NodeNum dest, uint32_t packetHistory_index)
     service.sendToMesh(p);
 }
 
-void StoreForwardModule::sendMessage(NodeNum dest, StoreAndForward payload)
+void StoreForwardModule::sendMessage(NodeNum dest, StoreAndForward &payload)
 {
     MeshPacket *p = allocDataProtobuf(payload);
 
@@ -205,8 +206,9 @@ void StoreForwardModule::sendMessage(NodeNum dest, StoreAndForward payload)
 
 void StoreForwardModule::statsSend(uint32_t to)
 {
-    StoreAndForward sf;
+    StoreAndForward sf = StoreAndForward_init_zero;
 
+    sf.rr = StoreAndForward_RequestResponse_ROUTER_STATS;
     sf.which_variant = StoreAndForward_stats_tag;
     sf.variant.stats.messages_total = this->packetHistoryMax;
     sf.variant.stats.messages_saved = this->packetHistoryCurrent;
