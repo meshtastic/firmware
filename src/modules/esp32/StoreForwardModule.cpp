@@ -339,7 +339,7 @@ bool StoreForwardModule::handleReceivedProtobuf(const MeshPacket &mp, StoreAndFo
             if(is_client) {
                 DEBUG_MSG("*** StoreAndForward_RequestResponse_ROUTER_BUSY\n");
                 // retry in messages_saved * packetTimeMax ms
-                retry_delay = millis() + packetHistoryCurrent * packetTimeMax * StoreAndForward_RequestResponse_ROUTER_ERROR? 2 : 1;
+                retry_delay = millis() + packetHistoryCurrent * packetTimeMax * (StoreAndForward_RequestResponse_ROUTER_ERROR ? 2 : 1);
             }
             break;
 

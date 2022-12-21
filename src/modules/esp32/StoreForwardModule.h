@@ -58,6 +58,8 @@ class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<
      */
     void sendPayload(NodeNum dest = NODENUM_BROADCAST, uint32_t packetHistory_index = 0);
     void sendMessage(NodeNum dest, StoreAndForward &payload);
+    void sendMessage(NodeNum dest, StoreAndForward_RequestResponse rr);
+
     virtual MeshPacket *allocReply() override;
     /*
       -Override the wantPacket method.
