@@ -162,6 +162,7 @@ void NodeDB::installDefaultConfig()
     config.has_network = true;
     config.has_bluetooth = true;
     config.lora.tx_enabled = true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
+    config.lora.override_duty_cycle = false; 
     config.lora.region = Config_LoRaConfig_RegionCode_UNSET;
     config.lora.modem_preset = Config_LoRaConfig_ModemPreset_LONG_FAST;
     config.lora.hop_limit = HOP_RELIABLE;
@@ -214,9 +215,9 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.has_external_notification = true;
     moduleConfig.has_canned_message = true;
 
-    strncpy(moduleConfig.mqtt.address, default_mqtt_address, sizeof(default_mqtt_address));
-    strncpy(moduleConfig.mqtt.username, default_mqtt_username, sizeof(default_mqtt_username));
-    strncpy(moduleConfig.mqtt.password, default_mqtt_password, sizeof(default_mqtt_password));
+    strncpy(moduleConfig.mqtt.address, default_mqtt_address, sizeof(moduleConfig.mqtt.address));
+    strncpy(moduleConfig.mqtt.username, default_mqtt_username, sizeof(moduleConfig.mqtt.username));
+    strncpy(moduleConfig.mqtt.password, default_mqtt_password, sizeof(moduleConfig.mqtt.password));
 
     initModuleConfigIntervals();
 }

@@ -35,6 +35,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "mesh/Channels.h"
 #include "mesh/generated/deviceonly.pb.h"
 #include "modules/TextMessageModule.h"
+
 #include "sleep.h"
 #include "target_specific.h"
 #include "utils.h"
@@ -42,6 +43,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifdef ARCH_ESP32
 #include "esp_task_wdt.h"
 #include "mesh/http/WiFiAPClient.h"
+#include "modules/esp32/StoreForwardModule.h"
 #endif
 
 #ifdef OLED_RU
@@ -95,17 +97,17 @@ static uint16_t displayWidth, displayHeight;
 
 #if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)
 // The screen is bigger so use bigger fonts
-#define FONT_SMALL ArialMT_Plain_16
-#define FONT_MEDIUM ArialMT_Plain_24
-#define FONT_LARGE ArialMT_Plain_24
+#define FONT_SMALL ArialMT_Plain_16 // Height: 19
+#define FONT_MEDIUM ArialMT_Plain_24 // Height: 28
+#define FONT_LARGE ArialMT_Plain_24 // Height: 28
 #else
 #ifdef OLED_RU
 #define FONT_SMALL ArialMT_Plain_10_RU
 #else
-#define FONT_SMALL ArialMT_Plain_10
+#define FONT_SMALL ArialMT_Plain_10 // Height: 13
 #endif
-#define FONT_MEDIUM ArialMT_Plain_16
-#define FONT_LARGE ArialMT_Plain_24
+#define FONT_MEDIUM ArialMT_Plain_16 // Height: 19
+#define FONT_LARGE ArialMT_Plain_24 // Height: 28
 #endif
 
 #define fontHeight(font) ((font)[1] + 1) // height is position 1
@@ -329,11 +331,8 @@ static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, i
     display->drawString(64 + x, y, "Updating");
 
     display->setFont(FONT_SMALL);
-    if ((millis() / 1000) % 2) {
-        display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . . .");
-    } else {
-        display->drawString(64 + x, FONT_HEIGHT_SMALL + y + 2, "Please wait . .  ");
-    }
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->drawStringMaxWidth(0 + x, 2 + y + FONT_HEIGHT_SMALL *2, x + display->getWidth(), "Please be patient and do not power off.");
 }
 
 /// Draw the last text message we received
@@ -364,6 +363,9 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
 {
     displayedNodeNum = 0; // Not currently showing a node pane
 
+    // the max length of this buffer is much longer than we can possibly print
+    static char tempBuf[237];
+
     MeshPacket &mp = devicestate.rx_text_message;
     NodeInfo *node = nodeDB.getNode(getFrom(&mp));
     // DEBUG_MSG("drawing text message from 0x%x: %s\n", mp.from,
@@ -373,16 +375,14 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     // with the third parameter you can define the width after which words will
     // be wrapped. Currently only spaces and "-" are allowed for wrapping
     display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->setFont(FONT_MEDIUM);
-    String sender = (node && node->has_user) ? node->user.short_name : "???";
-    display->drawString(0 + x, 0 + y, sender);
     display->setFont(FONT_SMALL);
-
-    // the max length of this buffer is much longer than we can possibly print
-    static char tempBuf[96];
-    snprintf(tempBuf, sizeof(tempBuf), "         %s", mp.decoded.payload.bytes);
-
-    display->drawStringMaxWidth(4 + x, 10 + y, SCREEN_WIDTH - (6 + x), tempBuf);
+    display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+    display->setColor(BLACK);
+    display->drawStringf(0 + x, 0 + y, tempBuf, "From: %s", (node && node->has_user) ? node->user.short_name : "???");
+    display->drawStringf(1 + x, 0 + y, tempBuf, "From: %s", (node && node->has_user) ? node->user.short_name : "???");
+    display->setColor(WHITE);
+    snprintf(tempBuf, sizeof(tempBuf), "%s", mp.decoded.payload.bytes);
+    display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), tempBuf);
 }
 
 /// Draw a series of fields in a column, wrapping to multiple colums if needed
@@ -395,6 +395,10 @@ static void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char *
     int xo = x, yo = y;
     while (*f) {
         display->drawString(xo, yo, *f);
+        if (display->getColor() == BLACK)
+            display->drawString(xo + 1, yo, *f);
+
+        display->setColor(WHITE);
         yo += FONT_HEIGHT_SMALL;
         if (yo > SCREEN_HEIGHT - FONT_HEIGHT_SMALL) {
             xo += SCREEN_WIDTH / 2;
@@ -463,8 +467,13 @@ static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, NodeStatus *no
 {
     char usersString[20];
     sprintf(usersString, "%d/%d", nodeStatus->getNumOnline(), nodeStatus->getNumTotal());
+#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)
+    display->drawFastImage(x, y + 3, 8, 8, imgUser);
+#else
     display->drawFastImage(x, y, 8, 8, imgUser);
+#endif
     display->drawString(x + 10, y - 2, usersString);
+    display->drawString(x + 11, y - 2, usersString);
 }
 
 // Draw GPS status summary
@@ -473,15 +482,18 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
     if (config.position.fixed_position) {
         // GPS coordinates are currently fixed
         display->drawString(x - 1, y - 2, "Fixed GPS");
+        display->drawString(x, y - 2, "Fixed GPS");
         return;
     }
     if (!gps->getIsConnected()) {
         display->drawString(x, y - 2, "No GPS");
+        display->drawString(x + 1, y - 2, "No GPS");
         return;
     }
     display->drawFastImage(x, y, 6, 8, gps->getHasLock() ? imgPositionSolid : imgPositionEmpty);
     if (!gps->getHasLock()) {
         display->drawString(x + 8, y - 2, "No sats");
+        display->drawString(x + 9, y - 2, "No sats");
         return;
     } else {
         char satsString[3];
@@ -504,6 +516,23 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
         sprintf(satsString, "%u", gps->getNumSatellites());
         display->drawString(x + 34, y - 2, satsString);
     }
+}
+
+//Draw status when gps is disabled by PMU
+static void drawGPSpowerstat(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
+{
+#ifdef HAS_PMU    
+    String displayLine = "GPS disabled";
+    int16_t xPos = display->getStringWidth(displayLine);
+
+    if (!config.position.gps_enabled){
+        display->drawString(x + xPos, y, displayLine);
+#ifdef GPS_POWER_TOGGLE 
+        display->drawString(x + xPos, y - 2 + FONT_HEIGHT_SMALL, " by button");
+#endif
+        //display->drawString(x + xPos, y + 2, displayLine);
+    }
+#endif
 }
 
 static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
@@ -669,16 +698,16 @@ static uint16_t getCompassDiam(OLEDDisplay *display)
 {
     uint16_t diam = 0;
     // get the smaller of the 2 dimensions and subtract 20
-    if(display->getWidth() > display->getHeight()) {
-        diam = display->getHeight();
+    if(display->getWidth() > (display->getHeight() - FONT_HEIGHT_SMALL)) {
+        diam = display->getHeight() - FONT_HEIGHT_SMALL;
         // if 2/3 of the other size would be smaller, use that
         if (diam > (display->getWidth() * 2 / 3)) {
             diam = display->getWidth() * 2 / 3;
         }
     } else {
         diam = display->getWidth();
-        if (diam > (display->getHeight() * 2 / 3)) {
-            diam = display->getHeight() * 2 / 3;
+        if (diam > ((display->getHeight() - FONT_HEIGHT_SMALL) * 2 / 3)) {
+            diam = (display->getHeight() - FONT_HEIGHT_SMALL) * 2 / 3;
         }
     }
     
@@ -758,6 +787,8 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     // The coordinates define the left starting point of the text
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
+    display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+
     const char *username = node->has_user ? node->user.long_name : "Unknown Name";
 
     static char signalStr[20];
@@ -788,7 +819,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     const char *fields[] = {username, distStr, signalStr, lastStr, NULL};
 
     // coordinates for the center of the compass/circle
-    int16_t compassX = x + SCREEN_WIDTH - getCompassDiam(display) / 2 - 5, compassY = y + SCREEN_HEIGHT / 2;
+    int16_t compassX = x + SCREEN_WIDTH - getCompassDiam(display) / 2 - 5, compassY = y + FONT_HEIGHT_SMALL + (SCREEN_HEIGHT - FONT_HEIGHT_SMALL) / 2;
     bool hasNodeHeading = false;
 
     if (ourNode && hasPosition(ourNode)) {
@@ -831,32 +862,10 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         display->drawString(compassX - FONT_HEIGHT_SMALL / 4, compassY - FONT_HEIGHT_SMALL / 2, "?");
     display->drawCircle(compassX, compassY, getCompassDiam(display) / 2);
 
+    display->setColor(BLACK);
     // Must be after distStr is populated
     drawColumns(display, x, y, fields);
 }
-
-#if 0
-void _screen_header()
-{
-    if (!disp)
-        return;
-
-    // Message count
-    //snprintf(buffer, sizeof(buffer), "#%03d", ttn_get_count() % 1000);
-    //display->setTextAlignment(TEXT_ALIGN_LEFT);
-    //display->drawString(0, 2, buffer);
-
-    // Datetime
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->drawString(display->getWidth()/2, 2, gps.getTimeStr());
-
-    // Satellite count
-    display->setTextAlignment(TEXT_ALIGN_RIGHT);
-    char buffer[10];
-    display->drawString(display->getWidth() - SATELLITE_IMAGE_WIDTH - 4, 2, itoa(gps.satellites.value(), buffer, 10));
-    display->drawXbm(display->getWidth() - SATELLITE_IMAGE_WIDTH, 0, SATELLITE_IMAGE_WIDTH, SATELLITE_IMAGE_HEIGHT, SATELLITE_IMAGE);
-}
-#endif
 
 // #ifdef RAK4630
 // Screen::Screen(uint8_t address, int sda, int scl) : OSThread("Screen"), cmdQueue(32), dispdev(address, sda, scl),
@@ -1357,6 +1366,9 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     // The coordinates define the left starting point of the text
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
+    display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+    display->setColor(BLACK);
+
     char channelStr[20];
     {
         concurrency::LockGuard guard(&lock);
@@ -1366,18 +1378,54 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     // Display power status
     if (powerStatus->getHasBattery())
-        drawBattery(display, x, y + 2, imgBattery, powerStatus);
+        drawBattery(display, x + 1, y + 3, imgBattery, powerStatus);
     else if (powerStatus->knowsUSB())
-        display->drawFastImage(x, y + 2, 16, 8, powerStatus->getHasUSB() ? imgUSB : imgPower);
+        display->drawFastImage(x + 1, y + 3, 16, 8, powerStatus->getHasUSB() ? imgUSB : imgPower);
     // Display nodes status
-    drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 2, nodeStatus);
+    drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 3, nodeStatus);
     // Display GPS status
-    drawGPS(display, x + (SCREEN_WIDTH * 0.63), y + 2, gpsStatus);
+    if (!config.position.gps_enabled){
+        int16_t yPos = y + 2;
+#ifdef GPS_POWER_TOGGLE
+        yPos = (y + 10 + FONT_HEIGHT_SMALL);
+#endif
+        drawGPSpowerstat(display, x, yPos, gpsStatus);
+    } else {
+        drawGPS(display, x + (SCREEN_WIDTH * 0.63), y + 2, gpsStatus);
+        drawGPS(display, x + (SCREEN_WIDTH * 0.63), y + 3, gpsStatus);
+    }
 
+    display->setColor(WHITE);
     // Draw the channel name
     display->drawString(x, y + FONT_HEIGHT_SMALL, channelStr);
-    // Draw our hardware ID to assist with bluetooth pairing
-    display->drawFastImage(x + SCREEN_WIDTH - (10) - display->getStringWidth(ourId), y + 2 + FONT_HEIGHT_SMALL, 8, 8, imgInfo);
+    // Draw our hardware ID to assist with bluetooth pairing. Either prefix with Info or S&F Logo
+    if (moduleConfig.store_forward.enabled) {
+#if 0        
+        if (millis() - storeForwardModule->lastHeartbeat > (storeForwardModule->heartbeatInterval * 1200)) { //no heartbeat, overlap a bit
+#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)
+            display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8, imgQuestionL1);
+            display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 11 + FONT_HEIGHT_SMALL, 12, 8, imgQuestionL2);
+#else
+            display->drawFastImage(x + SCREEN_WIDTH - 10 - display->getStringWidth(ourId), y + 2 + FONT_HEIGHT_SMALL, 8, 8, imgQuestion);
+#endif
+        } else {
+#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)
+            display->drawFastImage(x + SCREEN_WIDTH - 18 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 16, 8, imgSFL1);
+            display->drawFastImage(x + SCREEN_WIDTH - 18 - display->getStringWidth(ourId), y + 11 + FONT_HEIGHT_SMALL, 16, 8, imgSFL2);
+#else
+            display->drawFastImage(x + SCREEN_WIDTH - 13 - display->getStringWidth(ourId), y + 2 + FONT_HEIGHT_SMALL, 11, 8, imgSF);
+#endif
+        }
+#endif        
+    } else {
+#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)
+        display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8, imgInfoL1);
+        display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 11 + FONT_HEIGHT_SMALL, 12, 8, imgInfoL2);
+#else
+        display->drawFastImage(x + SCREEN_WIDTH - 10 - display->getStringWidth(ourId), y + 2 + FONT_HEIGHT_SMALL, 8, 8, imgInfo);
+#endif
+    }
+
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(ourId), y + FONT_HEIGHT_SMALL, ourId);
 
     // Draw any log messages
@@ -1404,14 +1452,23 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
     // The coordinates define the left starting point of the text
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
+    display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+    display->setColor(BLACK);
+
     if (WiFi.status() != WL_CONNECTED) {
         display->drawString(x, y, String("WiFi: Not Connected"));
+        display->drawString(x + 1, y, String("WiFi: Not Connected"));
     } else {
         display->drawString(x, y, String("WiFi: Connected"));
+        display->drawString(x + 1, y, String("WiFi: Connected"));
 
         display->drawString(x + SCREEN_WIDTH - display->getStringWidth("RSSI " + String(WiFi.RSSI())), y,
                             "RSSI " + String(WiFi.RSSI()));
+        display->drawString(x + SCREEN_WIDTH - display->getStringWidth("RSSI " + String(WiFi.RSSI())) - 1, y,
+                            "RSSI " + String(WiFi.RSSI()));
     }
+
+        display->setColor(WHITE);
 
     /*
     - WL_CONNECTED: assigned when connected to a WiFi network;
@@ -1521,6 +1578,9 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     // The coordinates define the left starting point of the text
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
+    display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+    display->setColor(BLACK);
+
     char batStr[20];
     if (powerStatus->getHasBattery()) {
         int batV = powerStatus->getBatteryVoltageMv() / 1000;
@@ -1531,9 +1591,11 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 
         // Line 1
         display->drawString(x, y, batStr);
+        display->drawString(x + 1, y, batStr);
     } else {
         // Line 1
         display->drawString(x, y, String("USB"));
+        display->drawString(x + 1, y, String("USB"));
     }
 
     auto mode = "";
@@ -1566,6 +1628,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     }
 
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(mode), y, mode);
+    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(mode) - 1, y, mode);
 
     // Line 2
     uint32_t currentMillis = millis();
@@ -1577,6 +1640,8 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     // seconds %= 60;
     // minutes %= 60;
     // hours %= 24;
+
+    display->setColor(WHITE);
 
     // Show uptime as days, hours, minutes OR seconds
     String uptime;
@@ -1613,7 +1678,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     char chUtil[13];
     sprintf(chUtil, "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), y + FONT_HEIGHT_SMALL * 1, chUtil);
-
+if (config.position.gps_enabled) {
     // Line 3
     if (config.display.gps_format !=
         Config_DisplayConfig_GpsCoordinateFormat_DMS) // if DMS then don't draw altitude
@@ -1621,7 +1686,9 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 
     // Line 4
     drawGPScoordinates(display, x, y + FONT_HEIGHT_SMALL * 3, gpsStatus);
-
+} else {
+    drawGPSpowerstat(display, x - (SCREEN_WIDTH / 4), y + FONT_HEIGHT_SMALL * 2, gpsStatus);
+}
     /* Display a heartbeat pixel that blinks every time the frame is redrawn */
 #ifdef SHOW_REDRAWS
     if (heartbeat)
