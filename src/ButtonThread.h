@@ -51,6 +51,7 @@ class ButtonThread : public concurrency::OSThread
         pinMode(BUTTON_PIN, INPUT_PULLUP_SENSE);
 #endif
         userButton.attachClick(userButtonPressed);
+        userButton.setClickTicks(300);
         userButton.attachDuringLongPress(userButtonPressedLong);
         userButton.attachDoubleClick(userButtonDoublePressed);
         userButton.attachMultiClick(userButtonMultiPressed);
@@ -159,9 +160,21 @@ class ButtonThread : public concurrency::OSThread
 
     static void userButtonDoublePressed()
     {
-#if defined(USE_EINK) && defined(PIN_EINK_EN)
+    #if defined(USE_EINK) && defined(PIN_EINK_EN)
         digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
-#endif
+    #endif
+    #if defined(GPS_POWER_TOGGLE)
+        if(config.position.gps_enabled)
+        {
+        DEBUG_MSG("Flag set to false for gps power\n");
+        } 
+        else 
+        {
+        DEBUG_MSG("Flag set to true to restore power\n");
+        }
+    config.position.gps_enabled = !(config.position.gps_enabled);
+    doGPSpowersave(config.position.gps_enabled);
+    #endif
     }
 
     static void userButtonMultiPressed()
