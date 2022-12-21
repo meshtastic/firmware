@@ -97,6 +97,7 @@ void StoreForwardModule::historySend(uint32_t msAgo, uint32_t to)
     sf.rr = StoreAndForward_RequestResponse_ROUTER_HISTORY;
     sf.which_variant = StoreAndForward_history_tag;
     sf.variant.history.history_messages = queueSize;
+    sf.variant.history.window = msAgo;
     storeForwardModule->sendMessage(to, sf);
 }
 
@@ -200,8 +201,14 @@ void StoreForwardModule::sendMessage(NodeNum dest, StoreAndForward &payload)
     p->decoded.want_response = false;
 
     service.sendToMesh(p);
+}
 
-    // HardwareMessage_init_default
+void StoreForwardModule::sendMessage(NodeNum dest, StoreAndForward_RequestResponse rr)
+{
+    // Craft an empty response, save some bytes in flash
+    StoreAndForward sf = StoreAndForward_init_zero;
+    sf.rr = rr;
+    storeForwardModule->sendMessage(dest, sf);
 }
 
 void StoreForwardModule::statsSend(uint32_t to)
@@ -287,15 +294,13 @@ bool StoreForwardModule::handleReceivedProtobuf(const MeshPacket &mp, StoreAndFo
                 DEBUG_MSG("*** Client Request to send HISTORY\n");
                 // Send the last 60 minutes of messages.
                 if (this->busy) {
-                    StoreAndForward sf = StoreAndForward_init_zero;
-                    sf.rr = StoreAndForward_RequestResponse_ROUTER_BUSY;
-                    storeForwardModule->sendMessage(getFrom(&mp), sf);
+                    storeForwardModule->sendMessage(getFrom(&mp), StoreAndForward_RequestResponse_ROUTER_BUSY);
                     DEBUG_MSG("*** S&F - Busy. Try again shortly.\n");
                 } else {
                     if ((p->which_variant == StoreAndForward_history_tag) && (p->variant.history.window > 0)){
-                        storeForwardModule->historySend(p->variant.history.window * 1000 * 60, getFrom(&mp)); // window is in minutes
+                        storeForwardModule->historySend(p->variant.history.window * 60000, getFrom(&mp)); // window is in minutes
                     } else {
-                        storeForwardModule->historySend(60 * 1000 * 60, getFrom(&mp)); // defaults to 60 minutes
+                        storeForwardModule->historySend(historyReturnWindow * 60000, getFrom(&mp)); // defaults to 4 hours
                     }
                 }
             }
@@ -305,9 +310,7 @@ bool StoreForwardModule::handleReceivedProtobuf(const MeshPacket &mp, StoreAndFo
             if(is_server) {
                 DEBUG_MSG("*** StoreAndForward_RequestResponse_CLIENT_PING\n");
                 // respond with a ROUTER PONG
-                StoreAndForward sf = StoreAndForward_init_zero;
-                sf.rr = StoreAndForward_RequestResponse_ROUTER_PONG;
-                storeForwardModule->sendMessage(getFrom(&mp), sf);
+                storeForwardModule->sendMessage(getFrom(&mp), StoreAndForward_RequestResponse_ROUTER_PONG);
             }
             break;
 
@@ -323,9 +326,7 @@ bool StoreForwardModule::handleReceivedProtobuf(const MeshPacket &mp, StoreAndFo
             if(is_server) {
                 DEBUG_MSG("*** Client Request to send STATS\n");
                 if (this->busy) {
-                    StoreAndForward sf = StoreAndForward_init_zero;
-                    sf.rr = StoreAndForward_RequestResponse_ROUTER_BUSY;
-                    storeForwardModule->sendMessage(getFrom(&mp), sf);
+                    storeForwardModule->sendMessage(getFrom(&mp), StoreAndForward_RequestResponse_ROUTER_BUSY);
                     DEBUG_MSG("*** S&F - Busy. Try again shortly.\n");
                 } else {
                     storeForwardModule->statsSend(getFrom(&mp));
@@ -333,19 +334,12 @@ bool StoreForwardModule::handleReceivedProtobuf(const MeshPacket &mp, StoreAndFo
             }
             break;
 
+        case StoreAndForward_RequestResponse_ROUTER_ERROR:
         case StoreAndForward_RequestResponse_ROUTER_BUSY:
             if(is_client) {
                 DEBUG_MSG("*** StoreAndForward_RequestResponse_ROUTER_BUSY\n");
                 // retry in messages_saved * packetTimeMax ms
-                retry_delay = millis() + packetHistoryCurrent * packetTimeMax;
-            }
-            break;
-
-        case StoreAndForward_RequestResponse_ROUTER_ERROR:
-            if(is_client) {
-                DEBUG_MSG("*** StoreAndForward_RequestResponse_ROUTER_ERROR\n");
-                 // retry in messages_saved * packetTimeMax * 2 ms
-                retry_delay = millis() + packetHistoryCurrent * packetTimeMax * 2;
+                retry_delay = millis() + packetHistoryCurrent * packetTimeMax * StoreAndForward_RequestResponse_ROUTER_ERROR? 2 : 1;
             }
             break;
 
@@ -366,9 +360,7 @@ bool StoreForwardModule::handleReceivedProtobuf(const MeshPacket &mp, StoreAndFo
             if(is_client) {
                 DEBUG_MSG("*** StoreAndForward_RequestResponse_ROUTER_PING\n");
                 // respond with a CLIENT PONG
-                StoreAndForward sf = StoreAndForward_init_zero;
-                sf.rr = StoreAndForward_RequestResponse_CLIENT_PONG;
-                storeForwardModule->sendMessage(getFrom(&mp), sf);
+                storeForwardModule->sendMessage(getFrom(&mp), StoreAndForward_RequestResponse_CLIENT_PONG);
             }
             break;
 
@@ -385,6 +377,16 @@ bool StoreForwardModule::handleReceivedProtobuf(const MeshPacket &mp, StoreAndFo
                     this->heartbeat = p->variant.stats.heartbeat;
                     this->historyReturnMax = p->variant.stats.return_max;
                     this->historyReturnWindow = p->variant.stats.return_window;
+                }
+            }
+            break;
+
+        case StoreAndForward_RequestResponse_ROUTER_HISTORY:
+            if(is_client) {
+                // These fields only have informational purpose on a client. Fill them to consume later.
+                if (p->which_variant == StoreAndForward_history_tag) {
+                    this->historyReturnWindow = p->variant.history.window / 60000;
+                    DEBUG_MSG("*** Router Response HISTORY - Sending %d messages from last %d minutes\n", p->variant.history.history_messages, this->historyReturnWindow);
                 }
             }
             break;
