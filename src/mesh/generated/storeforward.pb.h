@@ -28,6 +28,8 @@ typedef enum _StoreAndForward_RequestResponse {
     StoreAndForward_RequestResponse_ROUTER_BUSY = 5,
     /* Router is responding to a request for history. */
     StoreAndForward_RequestResponse_ROUTER_HISTORY = 6,
+    /* Router is responding to a request for stats. */
+    StoreAndForward_RequestResponse_ROUTER_STATS = 7,
     /* Client is an in error state. */
     StoreAndForward_RequestResponse_CLIENT_ERROR = 64,
     /* Client has requested a replay from the router. */
