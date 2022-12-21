@@ -326,10 +326,8 @@ void PowerFSM_setup()
 
     powerFSM.add_timed_transition(&stateON, &stateDARK, getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL, "Screen-on timeout");
 
-    // On most boards we use light-sleep to be our main state, but on NRF52 we just stay in DARK
-    State *lowPowerState = &stateLS;
-
 #ifdef ARCH_ESP32
+    State *lowPowerState = &stateLS;
     // We never enter light-sleep or NB states on NRF52 (because the CPU uses so little power normally)
 
     // See: https://github.com/meshtastic/firmware/issues/1071
@@ -340,9 +338,6 @@ void PowerFSM_setup()
 
     if (config.power.sds_secs != UINT32_MAX)
         powerFSM.add_timed_transition(lowPowerState, &stateSDS, getConfiguredOrDefaultMs(config.power.sds_secs), NULL, "mesh timeout");
-
-#elif defined (ARCH_NRF52)
-    lowPowerState = &stateDARK;
 #endif
 
 
