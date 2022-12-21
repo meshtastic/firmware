@@ -195,6 +195,7 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
 void AdminModule::handleSetOwner(const User &o)
 {
     int changed = 0;
+    bool licensed_changed = false;
 
     if (*o.long_name) {
         changed |= strcmp(owner.long_name, o.long_name);
@@ -210,12 +211,14 @@ void AdminModule::handleSetOwner(const User &o)
     }
     if (owner.is_licensed != o.is_licensed) {
         changed = 1;
+        licensed_changed = true;
         owner.is_licensed = o.is_licensed;
+        config.lora.override_duty_cycle = owner.is_licensed; // override duty cycle for licensed operators 
     }
 
     if (changed) { // If nothing really changed, don't broadcast on the network or write to flash
         service.reloadOwner(!hasOpenEditTransaction);
-        saveChanges(SEGMENT_DEVICESTATE);
+        licensed_changed ? saveChanges(SEGMENT_CONFIG | SEGMENT_DEVICESTATE) : saveChanges(SEGMENT_DEVICESTATE);
     }
 }
 
