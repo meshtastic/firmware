@@ -196,6 +196,17 @@ Channel &Channels::getByIndex(ChannelIndex chIndex)
     return *ch;
 }
 
+Channel &Channels::getByName(const char* chName)
+{
+    for (ChannelIndex i = 0; i < getNumChannels(); i++) {
+        if (strcasecmp(channelFile.channels[i].settings.name, chName) == 0) {
+            return channelFile.channels[i];
+        }
+    }
+
+    return getByIndex(getPrimaryIndex());
+}
+
 void Channels::setChannel(const Channel &c)
 {
     Channel &old = getByIndex(c.index);
