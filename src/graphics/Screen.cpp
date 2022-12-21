@@ -35,6 +35,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "mesh/Channels.h"
 #include "mesh/generated/deviceonly.pb.h"
 #include "modules/TextMessageModule.h"
+#include "modules/esp32/StoreForwardModule.h"
 #include "sleep.h"
 #include "target_specific.h"
 #include "utils.h"
@@ -95,17 +96,17 @@ static uint16_t displayWidth, displayHeight;
 
 #if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)
 // The screen is bigger so use bigger fonts
-#define FONT_SMALL ArialMT_Plain_16
-#define FONT_MEDIUM ArialMT_Plain_24
-#define FONT_LARGE ArialMT_Plain_24
+#define FONT_SMALL ArialMT_Plain_16 // Height: 19
+#define FONT_MEDIUM ArialMT_Plain_24 // Height: 28
+#define FONT_LARGE ArialMT_Plain_24 // Height: 28
 #else
 #ifdef OLED_RU
 #define FONT_SMALL ArialMT_Plain_10_RU
 #else
-#define FONT_SMALL ArialMT_Plain_10
+#define FONT_SMALL ArialMT_Plain_10 // Height: 13
 #endif
-#define FONT_MEDIUM ArialMT_Plain_16
-#define FONT_LARGE ArialMT_Plain_24
+#define FONT_MEDIUM ArialMT_Plain_16 // Height: 19
+#define FONT_LARGE ArialMT_Plain_24 // Height: 28
 #endif
 
 #define fontHeight(font) ((font)[1] + 1) // height is position 1
@@ -465,7 +466,11 @@ static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, NodeStatus *no
 {
     char usersString[20];
     sprintf(usersString, "%d/%d", nodeStatus->getNumOnline(), nodeStatus->getNumTotal());
+#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)
+    display->drawFastImage(x, y + 3, 8, 8, imgUser);
+#else
     display->drawFastImage(x, y, 8, 8, imgUser);
+#endif
     display->drawString(x + 10, y - 2, usersString);
     display->drawString(x + 11, y - 2, usersString);
 }
@@ -513,19 +518,20 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
 }
 
 //Draw status when gps is disabled by PMU
-static void drawGPSpowerstat(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps){
-String displayLine = "";
-displayLine = "GPS disabled";
-int16_t xPos = display->getStringWidth(displayLine);
-    #ifdef HAS_PMU
+static void drawGPSpowerstat(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
+{
+#ifdef HAS_PMU    
+    String displayLine = "GPS disabled";
+    int16_t xPos = display->getStringWidth(displayLine);
+
     if (!config.position.gps_enabled){
-            display->drawString(x + xPos, y, displayLine);
-        #ifdef GPS_POWER_TOGGLE 
-            display->drawString(x + xPos, y - 2 + FONT_HEIGHT_SMALL, " by button");
-        #endif
+        display->drawString(x + xPos, y, displayLine);
+#ifdef GPS_POWER_TOGGLE 
+        display->drawString(x + xPos, y - 2 + FONT_HEIGHT_SMALL, " by button");
+#endif
         //display->drawString(x + xPos, y + 2, displayLine);
     }
-    #endif
+#endif
 }
 
 static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
@@ -859,29 +865,6 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     // Must be after distStr is populated
     drawColumns(display, x, y, fields);
 }
-
-#if 0
-void _screen_header()
-{
-    if (!disp)
-        return;
-
-    // Message count
-    //snprintf(buffer, sizeof(buffer), "#%03d", ttn_get_count() % 1000);
-    //display->setTextAlignment(TEXT_ALIGN_LEFT);
-    //display->drawString(0, 2, buffer);
-
-    // Datetime
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->drawString(display->getWidth()/2, 2, gps.getTimeStr());
-
-    // Satellite count
-    display->setTextAlignment(TEXT_ALIGN_RIGHT);
-    char buffer[10];
-    display->drawString(display->getWidth() - SATELLITE_IMAGE_WIDTH - 4, 2, itoa(gps.satellites.value(), buffer, 10));
-    display->drawXbm(display->getWidth() - SATELLITE_IMAGE_WIDTH, 0, SATELLITE_IMAGE_WIDTH, SATELLITE_IMAGE_HEIGHT, SATELLITE_IMAGE);
-}
-#endif
 
 // #ifdef RAK4630
 // Screen::Screen(uint8_t address, int sda, int scl) : OSThread("Screen"), cmdQueue(32), dispdev(address, sda, scl),
@@ -1414,8 +1397,32 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     display->setColor(WHITE);
     // Draw the channel name
     display->drawString(x, y + FONT_HEIGHT_SMALL, channelStr);
-    // Draw our hardware ID to assist with bluetooth pairing
-    display->drawFastImage(x + SCREEN_WIDTH - (10) - display->getStringWidth(ourId), y + 2 + FONT_HEIGHT_SMALL, 8, 8, imgInfo);
+    // Draw our hardware ID to assist with bluetooth pairing. Either prefix with Info or S&F Logo
+    if (moduleConfig.store_forward.enabled) {
+        if (millis() - storeForwardModule->lastHeartbeat > (storeForwardModule->heartbeatInterval * 1200)) { //no heartbeat, overlap a bit
+#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)
+            display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8, imgQuestionL1);
+            display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 11 + FONT_HEIGHT_SMALL, 12, 8, imgQuestionL2);
+#else
+            display->drawFastImage(x + SCREEN_WIDTH - 10 - display->getStringWidth(ourId), y + 2 + FONT_HEIGHT_SMALL, 8, 8, imgQuestion);
+#endif
+        } else {
+#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)
+            display->drawFastImage(x + SCREEN_WIDTH - 18 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 16, 8, imgSFL1);
+            display->drawFastImage(x + SCREEN_WIDTH - 18 - display->getStringWidth(ourId), y + 11 + FONT_HEIGHT_SMALL, 16, 8, imgSFL2);
+#else
+            display->drawFastImage(x + SCREEN_WIDTH - 13 - display->getStringWidth(ourId), y + 2 + FONT_HEIGHT_SMALL, 11, 8, imgSF);
+#endif
+        }
+    } else {
+#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)
+        display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8, imgInfoL1);
+        display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 11 + FONT_HEIGHT_SMALL, 12, 8, imgInfoL2);
+#else
+        display->drawFastImage(x + SCREEN_WIDTH - 10 - display->getStringWidth(ourId), y + 2 + FONT_HEIGHT_SMALL, 8, 8, imgInfo);
+#endif
+    }
+
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(ourId), y + FONT_HEIGHT_SMALL, ourId);
 
     // Draw any log messages

@@ -182,6 +182,9 @@ Power::Power() : OSThread("Power")
 {
     statusHandler = {};
     low_voltage_counter = 0;
+#ifdef DEBUG_HEAP
+    lastheap = ESP.getFreeHeap();
+#endif
 }
 
 bool Power::analogInit()
