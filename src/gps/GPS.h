@@ -49,6 +49,7 @@ class GPS : private concurrency::OSThread
 
     CallbackObserver<GPS, void *> notifySleepObserver = CallbackObserver<GPS, void *>(this, &GPS::prepareSleep);
     CallbackObserver<GPS, void *> notifyDeepSleepObserver = CallbackObserver<GPS, void *>(this, &GPS::prepareDeepSleep);
+    CallbackObserver<GPS, void *> notifyGPSSleepObserver = CallbackObserver<GPS, void *>(this, &GPS::prepareDeepSleep);
 
   public:
     /** If !NULL we will use this serial port to construct our GPS */
@@ -76,6 +77,8 @@ class GPS : private concurrency::OSThread
 
     /// Return true if we are connected to a GPS
     bool isConnected() const { return hasGPS; }
+
+    bool isPowerSaving() const { return !config.position.gps_enabled;}
 
     /**
      * Restart our lock attempt - try to get and broadcast a GPS reading ASAP

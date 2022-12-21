@@ -29,6 +29,7 @@
 #define PERIODS_TO_LOG 8
 #define MINUTES_IN_HOUR 60
 #define SECONDS_IN_MINUTE 60
+#define MS_IN_MINUTE (SECONDS_IN_MINUTE * 1000)
 #define MS_IN_HOUR (MINUTES_IN_HOUR * SECONDS_IN_MINUTE * 1000)
 
 
@@ -57,6 +58,7 @@ class AirTime : private concurrency::OSThread
     uint32_t getSecondsPerPeriod();
     uint32_t getSecondsSinceBoot();
     uint32_t *airtimeReport(reportTypes reportType);
+    uint8_t getSilentMinutes(float txPercent, float dutyCycle);
 
   private:
     bool firstTime = true;

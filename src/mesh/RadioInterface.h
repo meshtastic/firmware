@@ -1,6 +1,5 @@
 #pragma once
 
-#include "../concurrency/NotifiedWorkerThread.h"
 #include "MemoryPool.h"
 #include "MeshTypes.h"
 #include "Observer.h"
@@ -96,6 +95,8 @@ class RadioInterface
      * This method must be used before putting the CPU into deep or light sleep.
      */
     virtual bool canSleep() { return true; }
+
+    virtual bool wideLora() { return false; }
 
     /// Prepare hardware for sleep.  Call this _only_ for deep sleep, not needed for light sleep.
     virtual bool sleep() { return true; }

@@ -4,7 +4,6 @@
 #include "MeshPacketQueue.h"
 #include "wifi/WiFiServerAPI.h"
 
-#define RADIOLIB_EXCLUDE_HTTP
 #include <RadioLib.h>
 
 class SimRadio : public RadioInterface

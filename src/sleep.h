@@ -13,7 +13,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t msecToWake);
 extern esp_sleep_source_t wakeCause;
 #endif
 void setGPSPower(bool on);
-
+void doGPSpowersave(bool on);
 // Perform power on init that we do on each wake from deep sleep
 void initDeepSleep();
 
@@ -37,4 +37,6 @@ extern Observable<void *> notifySleep;
 /// Called to tell observers we are now entering (deep) sleep and you should prepare.  Must return 0
 extern Observable<void *> notifyDeepSleep;
 
+/// Called to tell GPS thread to enter deep sleep independently of LoRa/MCU sleep, prior to full poweroff. Must return 0
+extern Observable<void *> notifyGPSSleep;
 void enableModemSleep();

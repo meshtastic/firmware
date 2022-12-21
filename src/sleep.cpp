@@ -29,7 +29,9 @@ Observable<void *> preflightSleep;
 
 /// Called to tell observers we are now entering sleep and you should prepare.  Must return 0
 /// notifySleep will be called for light or deep sleep, notifyDeepSleep is only called for deep sleep
+/// notifyGPSSleep will be called when config.position.gps_enabled is set to 0 or from buttonthread when GPS_POWER_TOGGLE is enabled.
 Observable<void *> notifySleep, notifyDeepSleep;
+Observable<void *> notifyGPSSleep;
 
 // deep sleep support
 RTC_DATA_ATTR int bootCount = 0;
@@ -167,6 +169,36 @@ static void waitEnterSleep()
     notifySleep.notifyObservers(NULL);
 }
 
+void doGPSpowersave(bool on)
+{
+    #ifdef HAS_PMU
+    if (on)
+    {
+        DEBUG_MSG("Turning GPS back on\n");
+        gps->forceWake(1);
+        setGPSPower(1);
+    }
+    else
+    {
+        DEBUG_MSG("Turning off GPS chip\n");
+        notifyGPSSleep.notifyObservers(NULL);
+        setGPSPower(0);
+    }
+    #endif
+    #ifdef PIN_GPS_WAKE
+    if (on)
+    {
+        DEBUG_MSG("Waking GPS");
+        gps->forceWake(1);
+    }
+    else
+    {
+        DEBUG_MSG("GPS entering sleep");
+        notifyGPSSleep.notifyObservers(NULL);
+    }
+    #endif
+}
+
 void doDeepSleep(uint64_t msecToWake)
 {
     DEBUG_MSG("Entering deep sleep for %lu seconds\n", msecToWake / 1000);
@@ -237,7 +269,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // We want RTC peripherals to stay on
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
 
-#ifdef BUTTON_NEED_PULLUP
+#if defined(BUTTON_PIN) && defined(BUTTON_NEED_PULLUP)
     gpio_pullup_en((gpio_num_t)BUTTON_PIN);
 #endif
 
@@ -300,6 +332,8 @@ void enableModemSleep()
 
 #if CONFIG_IDF_TARGET_ESP32S3
     esp32_config.max_freq_mhz = CONFIG_ESP32S3_DEFAULT_CPU_FREQ_MHZ;
+#elif CONFIG_IDF_TARGET_ESP32S2
+    esp32_config.max_freq_mhz = CONFIG_ESP32S2_DEFAULT_CPU_FREQ_MHZ;
 #else
     esp32_config.max_freq_mhz = CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ;
 #endif
