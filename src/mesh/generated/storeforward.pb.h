@@ -10,8 +10,8 @@
 #endif
 
 /* Enum definitions */
-/* 1   - 99  = From Router
- 101 - 199 = From Client */
+/* 001 - 063 = From Router
+ 064 - 127 = From Client */
 typedef enum _StoreAndForward_RequestResponse {
     /* Unset/unused */
     StoreAndForward_RequestResponse_UNSET = 0,
@@ -29,16 +29,16 @@ typedef enum _StoreAndForward_RequestResponse {
     /* Router is responding to a request for history. */
     StoreAndForward_RequestResponse_ROUTER_HISTORY = 6,
     /* Client is an in error state. */
-    StoreAndForward_RequestResponse_CLIENT_ERROR = 101,
+    StoreAndForward_RequestResponse_CLIENT_ERROR = 64,
     /* Client has requested a replay from the router. */
-    StoreAndForward_RequestResponse_CLIENT_HISTORY = 102,
+    StoreAndForward_RequestResponse_CLIENT_HISTORY = 65,
     /* Client has requested stats from the router. */
-    StoreAndForward_RequestResponse_CLIENT_STATS = 103,
+    StoreAndForward_RequestResponse_CLIENT_STATS = 66,
     /* Client has requested the router respond. This can work as a
  "are you there" message. */
-    StoreAndForward_RequestResponse_CLIENT_PING = 104,
+    StoreAndForward_RequestResponse_CLIENT_PING = 67,
     /* The response to a "Ping" */
-    StoreAndForward_RequestResponse_CLIENT_PONG = 105,
+    StoreAndForward_RequestResponse_CLIENT_PONG = 68,
     /* Client has requested that the router abort processing the client's request */
     StoreAndForward_RequestResponse_CLIENT_ABORT = 106
 } StoreAndForward_RequestResponse;
@@ -88,15 +88,17 @@ typedef struct _StoreAndForward_Heartbeat {
 typedef struct _StoreAndForward {
     /* TODO: REPLACE */
     StoreAndForward_RequestResponse rr;
-    /* TODO: REPLACE */
-    bool has_stats;
-    StoreAndForward_Statistics stats;
-    /* TODO: REPLACE */
-    bool has_history;
-    StoreAndForward_History history;
-    /* TODO: REPLACE */
-    bool has_heartbeat;
-    StoreAndForward_Heartbeat heartbeat;
+    pb_size_t which_variant;
+    union {
+        /* TODO: REPLACE */
+        StoreAndForward_Statistics stats;
+        /* TODO: REPLACE */
+        StoreAndForward_History history;
+        /* TODO: REPLACE */
+        StoreAndForward_Heartbeat heartbeat;
+        /* Empty Payload */
+        bool empty;
+    } variant;
 } StoreAndForward;
 
 
@@ -116,11 +118,11 @@ extern "C" {
 
 
 /* Initializer values for message structs */
-#define StoreAndForward_init_default             {_StoreAndForward_RequestResponse_MIN, false, StoreAndForward_Statistics_init_default, false, StoreAndForward_History_init_default, false, StoreAndForward_Heartbeat_init_default}
+#define StoreAndForward_init_default             {_StoreAndForward_RequestResponse_MIN, 0, {StoreAndForward_Statistics_init_default}}
 #define StoreAndForward_Statistics_init_default  {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define StoreAndForward_History_init_default     {0, 0, 0}
 #define StoreAndForward_Heartbeat_init_default   {0, 0}
-#define StoreAndForward_init_zero                {_StoreAndForward_RequestResponse_MIN, false, StoreAndForward_Statistics_init_zero, false, StoreAndForward_History_init_zero, false, StoreAndForward_Heartbeat_init_zero}
+#define StoreAndForward_init_zero                {_StoreAndForward_RequestResponse_MIN, 0, {StoreAndForward_Statistics_init_zero}}
 #define StoreAndForward_Statistics_init_zero     {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define StoreAndForward_History_init_zero        {0, 0, 0}
 #define StoreAndForward_Heartbeat_init_zero      {0, 0}
@@ -144,18 +146,20 @@ extern "C" {
 #define StoreAndForward_stats_tag                2
 #define StoreAndForward_history_tag              3
 #define StoreAndForward_heartbeat_tag            4
+#define StoreAndForward_empty_tag                5
 
 /* Struct field encoding specification for nanopb */
 #define StoreAndForward_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    rr,                1) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  stats,             2) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  history,           3) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  heartbeat,         4)
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,stats,variant.stats),   2) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,history,variant.history),   3) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,heartbeat,variant.heartbeat),   4) \
+X(a, STATIC,   ONEOF,    BOOL,     (variant,empty,variant.empty),   5)
 #define StoreAndForward_CALLBACK NULL
 #define StoreAndForward_DEFAULT NULL
-#define StoreAndForward_stats_MSGTYPE StoreAndForward_Statistics
-#define StoreAndForward_history_MSGTYPE StoreAndForward_History
-#define StoreAndForward_heartbeat_MSGTYPE StoreAndForward_Heartbeat
+#define StoreAndForward_variant_stats_MSGTYPE StoreAndForward_Statistics
+#define StoreAndForward_variant_history_MSGTYPE StoreAndForward_History
+#define StoreAndForward_variant_heartbeat_MSGTYPE StoreAndForward_Heartbeat
 
 #define StoreAndForward_Statistics_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   messages_total,    1) \
@@ -198,7 +202,7 @@ extern const pb_msgdesc_t StoreAndForward_Heartbeat_msg;
 #define StoreAndForward_Heartbeat_size           12
 #define StoreAndForward_History_size             18
 #define StoreAndForward_Statistics_size          50
-#define StoreAndForward_size                     88
+#define StoreAndForward_size                     54
 
 #ifdef __cplusplus
 } /* extern "C" */
