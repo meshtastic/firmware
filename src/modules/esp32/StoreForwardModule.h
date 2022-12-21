@@ -24,10 +24,9 @@ class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<
     uint32_t busyTo = 0;
     char routerMessage[Constants_DATA_PAYLOAD_LEN] = {0};
 
-    uint32_t receivedRecord[50][2] = {{0}};
-
     PacketHistoryStruct *packetHistory = 0;
     uint32_t packetHistoryCurrent = 0;
+    uint32_t packetHistoryMax = 0;
 
     PacketHistoryStruct *packetHistoryTXQueue = 0;
     uint32_t packetHistoryTXQueue_size = 0;
@@ -35,20 +34,21 @@ class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<
 
     uint32_t packetTimeMax = 5000;
 
-    unsigned long lastHeartbeat = 0;
-
     bool is_client = false;
     bool is_server = false;
 
   public:
     StoreForwardModule();
 
+    unsigned long lastHeartbeat = 0;
+    uint32_t heartbeatInterval = 300;
+
     /**
      Update our local reference of when we last saw that node.
      @return 0 if we have never seen that node before otherwise return the last time we saw the node.
      */
     void historyAdd(const MeshPacket &mp);
-    void historyReport();
+    void statsSend(uint32_t to);
     void historySend(uint32_t msAgo, uint32_t to);
 
     uint32_t historyQueueCreate(uint32_t msAgo, uint32_t to);
@@ -57,12 +57,21 @@ class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<
      * Send our payload into the mesh
      */
     void sendPayload(NodeNum dest = NODENUM_BROADCAST, uint32_t packetHistory_index = 0);
-    void sendMessage(NodeNum dest, char *str);
+    void sendMessage(NodeNum dest, StoreAndForward payload);
     virtual MeshPacket *allocReply() override;
     /*
-      Override the wantPortnum method.
-      */
-    virtual bool wantPortnum(PortNum p) { return true; };
+      -Override the wantPacket method.
+    */
+    virtual bool wantPacket(const MeshPacket *p) override
+    {
+        switch(p->decoded.portnum) {
+            case PortNum_TEXT_MESSAGE_APP:
+            case PortNum_STORE_FORWARD_APP:
+                return true;
+            default:
+                return false;
+        }
+    }
 
   private:
     void populatePSRAM();
@@ -72,6 +81,12 @@ class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<
     uint32_t historyReturnWindow = 240; // 4 hours
     uint32_t records = 0; // Calculated
     bool heartbeat = false; // No heartbeat.
+
+    // stats
+    uint32_t requests = 0;
+    uint32_t requests_history = 0;
+
+    uint32_t retry_delay = 0;
 
   protected:
     virtual int32_t runOnce() override;
