@@ -35,7 +35,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "mesh/Channels.h"
 #include "mesh/generated/deviceonly.pb.h"
 #include "modules/TextMessageModule.h"
-#include "modules/esp32/StoreForwardModule.h"
 #include "sleep.h"
 #include "target_specific.h"
 #include "utils.h"
@@ -43,6 +42,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifdef ARCH_ESP32
 #include "esp_task_wdt.h"
 #include "mesh/http/WiFiAPClient.h"
+#include "modules/esp32/StoreForwardModule.h"
 #endif
 
 #ifdef OLED_RU
@@ -1399,6 +1399,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     display->drawString(x, y + FONT_HEIGHT_SMALL, channelStr);
     // Draw our hardware ID to assist with bluetooth pairing. Either prefix with Info or S&F Logo
     if (moduleConfig.store_forward.enabled) {
+#ifdef ARCH_ESP32        
         if (millis() - storeForwardModule->lastHeartbeat > (storeForwardModule->heartbeatInterval * 1200)) { //no heartbeat, overlap a bit
 #if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)
             display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8, imgQuestionL1);
@@ -1414,6 +1415,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             display->drawFastImage(x + SCREEN_WIDTH - 13 - display->getStringWidth(ourId), y + 2 + FONT_HEIGHT_SMALL, 11, 8, imgSF);
 #endif
         }
+#endif        
     } else {
 #if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)
         display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8, imgInfoL1);
