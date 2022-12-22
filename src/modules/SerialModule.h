@@ -8,7 +8,7 @@
 #include "Router.h"
 #include <functional>
 
-class SerialModule : private concurrency::OSThread
+class SerialModule : public StreamAPI, private concurrency::OSThread
 {
     bool firstTime = 1;
     unsigned long lastNmeaTime = millis();
@@ -19,6 +19,9 @@ class SerialModule : private concurrency::OSThread
 
   protected:
     virtual int32_t runOnce() override;
+
+    /// Check the current underlying physical link to see if the client is currently connected
+    virtual bool checkIsConnected() override;
 };
 
 extern SerialModule *serialModule;
