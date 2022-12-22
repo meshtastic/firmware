@@ -6,7 +6,7 @@
 #define START2 0xc3
 #define HEADER_LEN 4
 
-int32_t StreamAPI::runOnce()
+int32_t StreamAPI::runOncePart()
 {
     auto result = readStream();
     writeStream();

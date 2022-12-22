@@ -7,7 +7,7 @@
  * Provides both debug printing and, if the client starts sending protobufs to us, switches to send/receive protobufs
  * (and starts dropping debug printing - FIXME, eventually those prints should be encapsulated in protobufs).
  */
-class ethServerAPI : public StreamAPI
+class ethServerAPI : public StreamAPI, private concurrency::OSThread
 {
   private:
     EthernetClient client;
