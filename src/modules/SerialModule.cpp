@@ -197,7 +197,7 @@ int32_t SerialModule::runOnce()
         } else {
 
             if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_PROTO) {
-                return StreamAPI::runOnce();
+                return runOncePart();
             } else if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_NMEA) {
                 // in NMEA mode send out GGA every 2 seconds, Don't read from Port
                 if (millis() - lastNmeaTime > 2000) {
