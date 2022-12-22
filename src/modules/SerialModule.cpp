@@ -46,6 +46,8 @@
 
 */
 
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(TTGO_T_ECHO) && !defined(CONFIG_IDF_TARGET_ESP32S2)
+
 #define RXD2 16
 #define TXD2 17
 #define RX_BUFFER 128
@@ -92,7 +94,6 @@ bool SerialModule::checkIsConnected()
 
 int32_t SerialModule::runOnce()
 {
-#if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(TTGO_T_ECHO) && !defined(CONFIG_IDF_TARGET_ESP32S2)
     /*
         Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
@@ -224,9 +225,6 @@ int32_t SerialModule::runOnce()
 
         return INT32_MAX;
     }
-#else
-    return INT32_MAX;
-#endif
 }
 
 MeshPacket *SerialModuleRadio::allocReply()
@@ -252,7 +250,6 @@ void SerialModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 
 ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
 {
-#if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(TTGO_T_ECHO) && !defined(CONFIG_IDF_TARGET_ESP32S2)
     if (moduleConfig.serial.enabled) {
         if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_PROTO) {
             // in API mode we don't care about stuff from radio.
@@ -311,8 +308,6 @@ ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
     } else {
         DEBUG_MSG("Serial Module Disabled\n");
     }
-
-#endif
-
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }
+#endif
