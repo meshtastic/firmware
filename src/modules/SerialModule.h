@@ -8,7 +8,9 @@
 #include "Router.h"
 #include <functional>
 
-class SerialModule : private concurrency::OSThread
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(TTGO_T_ECHO) && !defined(CONFIG_IDF_TARGET_ESP32S2)
+
+class SerialModule : public StreamAPI, private concurrency::OSThread
 {
     bool firstTime = 1;
     unsigned long lastNmeaTime = millis();
@@ -19,6 +21,9 @@ class SerialModule : private concurrency::OSThread
 
   protected:
     virtual int32_t runOnce() override;
+
+    /// Check the current underlying physical link to see if the client is currently connected
+    virtual bool checkIsConnected() override;
 };
 
 extern SerialModule *serialModule;
@@ -65,3 +70,5 @@ class SerialModuleRadio : public MeshModule
 };
 
 extern SerialModuleRadio *serialModuleRadio;
+
+#endif

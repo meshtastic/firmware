@@ -24,7 +24,7 @@
 #endif
 #if defined(ARCH_ESP32) || defined(ARCH_NRF52)
 #include "modules/ExternalNotificationModule.h"
-#if !defined(TTGO_T_ECHO)
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(TTGO_T_ECHO) && !defined(CONFIG_IDF_TARGET_ESP32S2)
 #include "modules/SerialModule.h"
 #endif
 #endif
@@ -63,7 +63,7 @@ void setupModules()
     new DeviceTelemetryModule();
     new EnvironmentTelemetryModule();
 #endif
-#if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(TTGO_T_ECHO)
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(TTGO_T_ECHO) && !defined(CONFIG_IDF_TARGET_ESP32S2)
     new SerialModule();
 #endif
 #ifdef ARCH_ESP32
