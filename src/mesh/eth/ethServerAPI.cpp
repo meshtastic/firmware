@@ -14,7 +14,7 @@ void initApiServer(int port)
     }
 }
 
-ethServerAPI::ethServerAPI(EthernetClient &_client) : StreamAPI(&client), client(_client)
+ethServerAPI::ethServerAPI(EthernetClient &_client) : StreamAPI(&client), concurrency::OSThread("ethServerAPI"), client(_client)
 {
     DEBUG_MSG("Incoming ethernet connection\n");
 }
@@ -42,7 +42,7 @@ bool ethServerAPI::checkIsConnected()
 int32_t ethServerAPI::runOnce()
 {
     if (client.connected()) {
-        return StreamAPI::runOnce();
+        return StreamAPI::runOncePart();
     } else {
         DEBUG_MSG("Client dropped connection, suspending API service\n");
         enabled = false; // we no longer need to run
