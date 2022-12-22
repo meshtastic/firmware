@@ -49,7 +49,6 @@
 #define RXD2 16
 #define TXD2 17
 #define RX_BUFFER 128
-#define STRING_MAX Constants_DATA_PAYLOAD_LEN
 #define TIMEOUT 250
 #define BAUD 38400
 #define ACK 1
@@ -59,7 +58,8 @@ SerialModuleRadio *serialModuleRadio;
 
 SerialModule::SerialModule() : concurrency::OSThread("SerialModule") {}
 
-char serialStringChar[Constants_DATA_PAYLOAD_LEN];
+char serialBytes[Constants_DATA_PAYLOAD_LEN];
+size_t serialPayloadSize;
 
 SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
 {
@@ -188,15 +188,9 @@ int32_t SerialModule::runOnce()
                     Serial2.printf("%s", outbuf);
                 }
             } else {
-                String serialString;
-
                 while (Serial2.available()) {
-                    serialString = Serial2.readString();
-                    serialString.toCharArray(serialStringChar, Constants_DATA_PAYLOAD_LEN);
-
+                    serialPayloadSize = Serial2.readBytes(serialBytes, Constants_DATA_PAYLOAD_LEN);
                     serialModuleRadio->sendPayload();
-
-                    DEBUG_MSG("Received: %s\n", serialStringChar);
                 }
             }
         }
@@ -227,8 +221,8 @@ void SerialModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 
     p->want_ack = ACK;
 
-    p->decoded.payload.size = strlen(serialStringChar); // You must specify how many bytes are in the reply
-    memcpy(p->decoded.payload.bytes, serialStringChar, p->decoded.payload.size);
+    p->decoded.payload.size = serialPayloadSize; // You must specify how many bytes are in the reply
+    memcpy(p->decoded.payload.bytes, serialBytes, p->decoded.payload.size);
 
     service.sendToMesh(p);
 }
@@ -264,7 +258,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
 
             if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_DEFAULT ||
                 moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_SIMPLE) {
-                Serial2.printf("%s", p.payload.bytes);
+                Serial2.write(p.payload.bytes, p.payload.size);
             } else if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG) {
                 NodeInfo *node = nodeDB.getNode(getFrom(&mp));
                 String sender = (node && node->has_user) ? node->user.short_name : "???";
