@@ -70,17 +70,17 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
                 //invent the "sendposition" type for a valid envelope
                 if (json["payload"]->IsObject() && json["type"]->IsString() && (json["sender"]->AsString().compare(owner.id) != 0)) {
                     JSONObject posit;
-                    posit=json["payload"]->AsObject(); //get nested JSON Position
-                    Position pos =Position_init_default;
-                    pos.latitude_i=posit["latitude_i"]->AsNumber();
-                    pos.longitude_i=posit["longitude_i"]->AsNumber();
-                    pos.altitude=posit["altitude"]->AsNumber();
-                    pos.time=posit["time"]->AsNumber();
+                    posit = json["payload"]->AsObject(); //get nested JSON Position
+                    Position pos = Position_init_default;
+                    pos.latitude_i = posit["latitude_i"]->AsNumber();
+                    pos.longitude_i = posit["longitude_i"]->AsNumber();
+                    pos.altitude = posit["altitude"]->AsNumber();
+                    pos.time = posit["time"]->AsNumber();
 
                     // construct protobuf data packet using POSITION, send it to the mesh
                     MeshPacket *p = router->allocForSending();
                     p->decoded.portnum = PortNum_POSITION_APP;
-                    p->decoded.payload.size=pb_encode_to_bytes(p->decoded.payload.bytes,sizeof(p->decoded.payload.bytes),Position_fields, &pos); //make the Data protobuf from position
+                    p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &Position_msg, &pos); //make the Data protobuf from position
                     service.sendToMesh(p, RX_SRC_LOCAL);
 
                 } else {
@@ -95,7 +95,7 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
         }
         delete json_value;
     } else {
-        if (!pb_decode_from_bytes(payload, length, ServiceEnvelope_fields, &e)) {
+        if (!pb_decode_from_bytes(payload, length, &ServiceEnvelope_msg, &e)) {
             DEBUG_MSG("Invalid MQTT service envelope, topic %s, len %u!\n", topic, length);
             return;
         }else {
@@ -251,7 +251,7 @@ int32_t MQTT::runOnce()
                     // FIXME - this size calculation is super sloppy, but it will go away once we dynamically alloc meshpackets
                     ServiceEnvelope *env = mqttQueue.dequeuePtr(0);
                     static uint8_t bytes[MeshPacket_size + 64];
-                    size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), ServiceEnvelope_fields, env);
+                    size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &ServiceEnvelope_msg, env);
 
                     String topic = cryptTopic + env->channel_id + "/" + owner.id;
                     DEBUG_MSG("publish %s, %u bytes from queue\n", topic.c_str(), numBytes);
@@ -305,7 +305,7 @@ void MQTT::onSend(const MeshPacket &mp, ChannelIndex chIndex)
 
             // FIXME - this size calculation is super sloppy, but it will go away once we dynamically alloc meshpackets
             static uint8_t bytes[MeshPacket_size + 64];
-            size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), ServiceEnvelope_fields, env);
+            size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &ServiceEnvelope_msg, env);
 
             String topic = cryptTopic + channelId + "/" + owner.id;
             DEBUG_MSG("publish %s, %u bytes\n", topic.c_str(), numBytes);

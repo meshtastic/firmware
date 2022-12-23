@@ -515,7 +515,7 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
     }
 }
 
-AdminModule::AdminModule() : ProtobufModule("Admin", PortNum_ADMIN_APP, AdminMessage_fields)
+AdminModule::AdminModule() : ProtobufModule("Admin", PortNum_ADMIN_APP, &AdminMessage_msg)
 {
     // restrict to the admin channel for rx
     boundChannel = Channels::adminChannel;
