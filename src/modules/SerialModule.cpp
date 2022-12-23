@@ -51,7 +51,6 @@
 #define RXD2 16
 #define TXD2 17
 #define RX_BUFFER 128
-#define STRING_MAX Constants_DATA_PAYLOAD_LEN
 #define TIMEOUT 250
 #define BAUD 38400
 #define ACK 1
