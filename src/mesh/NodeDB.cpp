@@ -450,7 +450,7 @@ void NodeDB::loadFromDisk()
 }
 
 /** Save a protobuf from a file, return true for success */
-bool saveProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, const void *dest_struct)
+bool saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct)
 {
     bool okay = false;
 #ifdef FSCom
@@ -498,7 +498,7 @@ void NodeDB::saveChannelsToDisk()
 #ifdef FSCom
         FSCom.mkdir("/prefs");
 #endif
-        saveProto(channelFileName, ChannelFile_size, sizeof(channelFile), ChannelFile_fields, &channelFile);
+        saveProto(channelFileName, ChannelFile_size, ChannelFile_fields, &channelFile);
     }
 }
 
@@ -508,7 +508,7 @@ void NodeDB::saveDeviceStateToDisk()
 #ifdef FSCom
         FSCom.mkdir("/prefs");
 #endif
-        saveProto(prefFileName, DeviceState_size, sizeof(devicestate), DeviceState_fields, &devicestate);
+        saveProto(prefFileName, DeviceState_size, DeviceState_fields, &devicestate);
     }
 }
 
@@ -530,7 +530,7 @@ void NodeDB::saveToDisk(int saveWhat)
             config.has_power = true;
             config.has_network = true;
             config.has_bluetooth = true;
-            saveProto(configFileName, LocalConfig_size, sizeof(config), LocalConfig_fields, &config);
+            saveProto(configFileName, LocalConfig_size, LocalConfig_fields, &config);
         }
 
         if (saveWhat & SEGMENT_MODULECONFIG) {
@@ -541,7 +541,7 @@ void NodeDB::saveToDisk(int saveWhat)
             moduleConfig.has_serial = true;
             moduleConfig.has_store_forward = true;
             moduleConfig.has_telemetry = true;
-            saveProto(moduleConfigFileName, LocalModuleConfig_size, sizeof(moduleConfig), LocalModuleConfig_fields, &moduleConfig);
+            saveProto(moduleConfigFileName, LocalModuleConfig_size, LocalModuleConfig_fields, &moduleConfig);
         }
 
         if (saveWhat & SEGMENT_CHANNELS) {
