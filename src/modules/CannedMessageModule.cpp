@@ -479,7 +479,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 void CannedMessageModule::loadProtoForModule()
 {
     if (!loadProto(cannedMessagesConfigFile, CannedMessageModuleConfig_size, sizeof(cannedMessagesConfigFile),
-                   CannedMessageModuleConfig_fields, &cannedMessageModuleConfig)) {
+                   &CannedMessageModuleConfig_msg, &cannedMessageModuleConfig)) {
         installDefaultCannedMessageModuleConfig();
     }
 }
@@ -499,7 +499,7 @@ bool CannedMessageModule::saveProtoForModule()
 #endif
 
     okay &= saveProto(cannedMessagesConfigFile, CannedMessageModuleConfig_size,
-        CannedMessageModuleConfig_fields, &cannedMessageModuleConfig);
+        &CannedMessageModuleConfig_msg, &cannedMessageModuleConfig);
 
     return okay;
 }

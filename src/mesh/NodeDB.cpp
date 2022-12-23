@@ -401,7 +401,7 @@ bool loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_
 void NodeDB::loadFromDisk()
 {
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
-    if (!loadProto(prefFileName, DeviceState_size, sizeof(devicestate), DeviceState_fields, &devicestate)) {
+    if (!loadProto(prefFileName, DeviceState_size, sizeof(DeviceState), &DeviceState_msg, &devicestate)) {
         installDefaultDeviceState(); // Our in RAM copy might now be corrupt
     } else {
         if (devicestate.version < DEVICESTATE_MIN_VER) {
@@ -412,7 +412,7 @@ void NodeDB::loadFromDisk()
         }
     }
 
-    if (!loadProto(configFileName, LocalConfig_size, sizeof(LocalConfig), LocalConfig_fields, &config)) {
+    if (!loadProto(configFileName, LocalConfig_size, sizeof(LocalConfig), &LocalConfig_msg, &config)) {
         installDefaultConfig(); // Our in RAM copy might now be corrupt
     } else {
         if (config.version < DEVICESTATE_MIN_VER) {
@@ -423,7 +423,7 @@ void NodeDB::loadFromDisk()
         }
     }
 
-    if (!loadProto(moduleConfigFileName, LocalModuleConfig_size, sizeof(LocalModuleConfig), LocalModuleConfig_fields, &moduleConfig)) {
+    if (!loadProto(moduleConfigFileName, LocalModuleConfig_size, sizeof(LocalModuleConfig), &LocalModuleConfig_msg, &moduleConfig)) {
         installDefaultModuleConfig(); // Our in RAM copy might now be corrupt
     } else {
         if (moduleConfig.version < DEVICESTATE_MIN_VER) {
@@ -434,7 +434,7 @@ void NodeDB::loadFromDisk()
         }
     }
 
-    if (!loadProto(channelFileName, ChannelFile_size, sizeof(ChannelFile), ChannelFile_fields, &channelFile)) {
+    if (!loadProto(channelFileName, ChannelFile_size, sizeof(ChannelFile), &ChannelFile_msg, &channelFile)) {
         installDefaultChannels(); // Our in RAM copy might now be corrupt
     } else {
         if (channelFile.version < DEVICESTATE_MIN_VER) {
@@ -445,7 +445,7 @@ void NodeDB::loadFromDisk()
         }
     }
 
-    if (loadProto(oemConfigFile, OEMStore_size, sizeof(OEMStore), OEMStore_fields, &oemStore))
+    if (loadProto(oemConfigFile, OEMStore_size, sizeof(OEMStore), &OEMStore_msg, &oemStore))
         DEBUG_MSG("Loaded OEMStore\n");
 }
 
@@ -498,7 +498,7 @@ void NodeDB::saveChannelsToDisk()
 #ifdef FSCom
         FSCom.mkdir("/prefs");
 #endif
-        saveProto(channelFileName, ChannelFile_size, ChannelFile_fields, &channelFile);
+        saveProto(channelFileName, ChannelFile_size, &ChannelFile_msg, &channelFile);
     }
 }
 
@@ -508,7 +508,7 @@ void NodeDB::saveDeviceStateToDisk()
 #ifdef FSCom
         FSCom.mkdir("/prefs");
 #endif
-        saveProto(prefFileName, DeviceState_size, DeviceState_fields, &devicestate);
+        saveProto(prefFileName, DeviceState_size, &DeviceState_msg, &devicestate);
     }
 }
 
@@ -530,7 +530,7 @@ void NodeDB::saveToDisk(int saveWhat)
             config.has_power = true;
             config.has_network = true;
             config.has_bluetooth = true;
-            saveProto(configFileName, LocalConfig_size, LocalConfig_fields, &config);
+            saveProto(configFileName, LocalConfig_size, &LocalConfig_msg, &config);
         }
 
         if (saveWhat & SEGMENT_MODULECONFIG) {
@@ -541,7 +541,7 @@ void NodeDB::saveToDisk(int saveWhat)
             moduleConfig.has_serial = true;
             moduleConfig.has_store_forward = true;
             moduleConfig.has_telemetry = true;
-            saveProto(moduleConfigFileName, LocalModuleConfig_size, LocalModuleConfig_fields, &moduleConfig);
+            saveProto(moduleConfigFileName, LocalModuleConfig_size, &LocalModuleConfig_msg, &moduleConfig);
         }
 
         if (saveWhat & SEGMENT_CHANNELS) {

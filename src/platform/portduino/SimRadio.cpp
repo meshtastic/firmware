@@ -201,7 +201,7 @@ void SimRadio::startSend(MeshPacket * txp)
     } else {
         DEBUG_MSG("Payload size is larger than compressed message allows! Sending empty payload.\n");
     }
-    p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), Compressed_fields, &c);
+    p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &Compressed_msg, &c);
     p->decoded.portnum = PortNum_SIMULATOR_APP;
     service.sendToPhone(p); // Sending back to simulator
 }

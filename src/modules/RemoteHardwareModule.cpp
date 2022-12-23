@@ -47,7 +47,7 @@ static uint64_t digitalReads(uint64_t mask)
 }
 
 RemoteHardwareModule::RemoteHardwareModule()
-    : ProtobufModule("remotehardware", PortNum_REMOTE_HARDWARE_APP, HardwareMessage_fields), concurrency::OSThread(
+    : ProtobufModule("remotehardware", PortNum_REMOTE_HARDWARE_APP, &HardwareMessage_msg), concurrency::OSThread(
                                                                                                  "remotehardware")
 {
 }
