@@ -294,7 +294,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
                 Position *decoded = NULL;
                 if (mp.which_payload_variant == MeshPacket_decoded_tag && mp.decoded.portnum == ourPortNum) {
                     memset(&scratch, 0, sizeof(scratch));
-                    if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, Position_fields, &scratch)) {
+                    if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &Position_msg, &scratch)) {
                         decoded = &scratch;
                     }
                     // send position packet as WPL to the serial port
