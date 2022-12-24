@@ -117,6 +117,20 @@ float AirTime::utilizationTXPercent()
     return (float(sum) / float(MS_IN_HOUR)) * 100;
 }
 
+// Get the amount of minutes we have to be silent before we can send again
+uint8_t AirTime::getSilentMinutes(float txPercent, float dutyCycle) 
+{  
+  float newTxPercent = txPercent;
+  for (int8_t i = MINUTES_IN_HOUR-1; i >= 0; --i) {
+      newTxPercent -= ((float)this->utilizationTX[i] / (MS_IN_MINUTE * MINUTES_IN_HOUR / 100));
+      if (newTxPercent < dutyCycle) 
+          return MINUTES_IN_HOUR-1-i;
+  }
+
+  return MINUTES_IN_HOUR;
+}
+
+
 AirTime::AirTime() : concurrency::OSThread("AirTime"),airtimes({}) {
 }
 

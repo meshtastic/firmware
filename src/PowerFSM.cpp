@@ -34,7 +34,7 @@ static void sdsEnter()
 {
     DEBUG_MSG("Enter state: SDS\n");
     // FIXME - make sure GPS and LORA radio are off first - because we want close to zero current draw
-    doDeepSleep(config.power.sds_secs * 1000);
+    doDeepSleep(getConfiguredOrDefaultMs(config.power.sds_secs));
 }
 
 extern Power *power;
@@ -324,31 +324,24 @@ void PowerFSM_setup()
 
     powerFSM.add_transition(&stateDARK, &stateDARK, EVENT_CONTACT_FROM_PHONE, NULL, "Contact from phone");
 
-    // each time we get a new update packet make sure we are staying in the ON state so the screen stays awake (also we don't
-    // shutdown bluetooth if is_router)
-    powerFSM.add_transition(&stateDARK, &stateON, EVENT_FIRMWARE_UPDATE, NULL, "Got firmware update");
-    powerFSM.add_transition(&stateON, &stateON, EVENT_FIRMWARE_UPDATE, NULL, "Got firmware update");
-
     powerFSM.add_timed_transition(&stateON, &stateDARK, getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL, "Screen-on timeout");
 
+#ifdef ARCH_ESP32
     // On most boards we use light-sleep to be our main state, but on NRF52 we just stay in DARK
     State *lowPowerState = &stateLS;
 
-#ifdef ARCH_ESP32
     // We never enter light-sleep or NB states on NRF52 (because the CPU uses so little power normally)
 
     // See: https://github.com/meshtastic/firmware/issues/1071
     if (isRouter || config.power.is_power_saving) {
         powerFSM.add_timed_transition(&stateNB, &stateLS, getConfiguredOrDefaultMs(config.power.min_wake_secs, default_min_wake_secs), NULL, "Min wake timeout");
         powerFSM.add_timed_transition(&stateDARK, &stateLS, getConfiguredOrDefaultMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs), NULL, "Bluetooth timeout");
-    } 
-
-#elif defined (ARCH_NRF52)
-    lowPowerState = &stateDARK;
-#endif
+    }
 
     if (config.power.sds_secs != UINT32_MAX)
-        powerFSM.add_timed_transition(lowPowerState, &stateSDS, config.power.sds_secs * 1000, NULL, "mesh timeout");
+        powerFSM.add_timed_transition(lowPowerState, &stateSDS, getConfiguredOrDefaultMs(config.power.sds_secs), NULL, "mesh timeout");
+#endif
+
 
     powerFSM.run_machine(); // run one interation of the state machine, so we run our on enter tasks for the initial DARK state
 }

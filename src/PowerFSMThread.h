@@ -26,11 +26,9 @@ class PowerFSMThread : public OSThread
 
         if (powerStatus->getHasUSB()) {
             timeLastPowered = millis();
-        } else if (config.power.on_battery_shutdown_after_secs > 0 &&
-                   millis() >
-                       timeLastPowered +
-                           (1000 *
-                            config.power.on_battery_shutdown_after_secs)) { // shutdown after 30 minutes unpowered
+        } else if (config.power.on_battery_shutdown_after_secs > 0 && 
+            config.power.on_battery_shutdown_after_secs != UINT32_MAX && 
+            millis() > (timeLastPowered + getConfiguredOrDefaultMs(config.power.on_battery_shutdown_after_secs))) { // shutdown after 30 minutes unpowered
             powerFSM.trigger(EVENT_SHUTDOWN);
         }
 

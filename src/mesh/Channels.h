@@ -40,6 +40,9 @@ class Channels
     /** Return the Channel for a specified index */
     Channel &getByIndex(ChannelIndex chIndex);
 
+     /** Return the Channel for a specified name, return primary if not found. */
+    Channel &getByName(const char* chName);
+
     /** Using the index inside the channel, update the specified channel's settings and role.  If this channel is being promoted
      * to be primary, force all other channels to be secondary.
      */
