@@ -66,3 +66,4 @@
 //has 32768 Hz crystal
 #define HAS_32768HZ
 
+#define USE_SH1106
