@@ -11,6 +11,9 @@
 
 #define POWER_DEFAULT 17 // How much power to use if the user hasn't set a power level
 
+#define RF95_PA_PWM_RES_BIT 8 // DAC and PWM resolution (in bits) to uniformly set analog level 
+#define RF95_PA_PWM_FREQ 1000 // ESP32 PWM-specific frequency
+
 RF95Interface::RF95Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, SPIClass &spi)
     : RadioLibInterface(cs, irq, rst, RADIOLIB_NC, spi)
 {
@@ -21,6 +24,10 @@ RF95Interface::RF95Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOL
 void RF95Interface::setTransmitEnable(bool txon)
 {
 #ifdef RF95_TXEN
+    // cool down during tx
+    #ifdef RF95_FAN_EN
+        digitalWrite(RF95_FAN_EN, txon ? 1 : 0);
+    #endif
     digitalWrite(RF95_TXEN, txon ? 1 : 0);
 #endif
 
@@ -56,6 +63,21 @@ bool RF95Interface::init()
     #define RF95_RXEN (23) // If defined, this pin should be set high prior to receive (controls an external analog switch)
     */
 
+// enable PA
+#ifdef RF95_PA_EN
+    #if defined(RF95_PA_DAC_EN) && defined(ARCH_ESP32)
+        dacWrite(RF95_PA_EN, RF95_PA_LEVEL);
+    #elif defined(ARCH_ESP32)
+        ledcAttachPin(RF95_PA_EN, RF95_PA_PWM_CH);
+        ledcSetup(RF95_PA_PWM_CH, RF95_PA_PWM_FREQ, RF95_PA_PWM_RES_BIT);
+        ledcWrite(RF95_PA_PWM_CH, RF95_PA_LEVEL);
+    #else
+        pinMode(RF95_PA_EN, OUTPUT);
+        analogWriteResolution(RF95_PA_PWM_RES_BIT)
+        analogWrite(RF95_PA_EN, RF95_PA_LEVEL)
+    #endif
+#endif
+
 #ifdef RF95_TXEN
     pinMode(RF95_TXEN, OUTPUT);
     digitalWrite(RF95_TXEN, 0);
@@ -64,6 +86,11 @@ bool RF95Interface::init()
 #ifdef RF95_RXEN
     pinMode(RF95_RXEN, OUTPUT);
     digitalWrite(RF95_RXEN, 1);
+#endif
+
+#ifdef RF95_FAN_EN
+    pinMode(RF95_FAN_EN, OUTPUT);
+    digitalWrite(RF95_FAN_EN, 0);
 #endif
     setTransmitEnable(false);
 
