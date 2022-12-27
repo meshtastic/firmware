@@ -38,6 +38,20 @@ int32_t ExternalNotificationModule::runOnce()
         return INT32_MAX; // we don't need this thread here...
     } else {
 
+        if (nagCycleCutoff < millis()) {
+            nagCycleCutoff = UINT32_MAX;
+            DEBUG_MSG("Turning off external notification: ");
+            for (int i = 0; i < 2; i++) {
+                if (getExternal(i)) {
+                    setExternalOff(i);
+                    externalTurnedOn[i] = 0;
+                    DEBUG_MSG("%d ", i);
+                }
+            }
+            DEBUG_MSG("\n");
+            return INT32_MAX; // save cycles till we're needed again
+        }
+
         // If the output is turned on, turn it back off after the given period of time.
         if (nagCycleCutoff != UINT32_MAX) {
             if (externalTurnedOn[0] + (moduleConfig.external_notification.output_ms
@@ -55,20 +69,6 @@ int32_t ExternalNotificationModule::runOnce()
                                     : EXT_NOTIFICATION_MODULE_OUTPUT_MS) < millis()) {
                 getExternal(2) ? setExternalOff(2) : setExternalOn(2);
             }
-        }
-
-        if (nagCycleCutoff < millis()) {
-            nagCycleCutoff = UINT32_MAX;
-            DEBUG_MSG("Turning off external notification: ");
-            for (int i = 0; i < 2; i++) {
-                if (getExternal(i)) {
-                    setExternalOff(i);
-                    externalTurnedOn[i] = 0;
-                    DEBUG_MSG("%d ", i);
-                }
-            }
-            DEBUG_MSG("\n");
-            return INT32_MAX; // save cycles till we're needed again
         }
         return 25;
     }
