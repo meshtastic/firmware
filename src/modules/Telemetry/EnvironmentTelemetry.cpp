@@ -20,6 +20,7 @@
 #include "Sensor/INA219Sensor.h"
 #include "Sensor/SHTC3Sensor.h"
 #include "Sensor/LPS22HBSensor.h"
+#include "Sensor/SHT31Sensor.h"
 
 BMP280Sensor bmp280Sensor;
 BME280Sensor bme280Sensor;
@@ -29,6 +30,7 @@ INA260Sensor ina260Sensor;
 INA219Sensor ina219Sensor;
 SHTC3Sensor shtc3Sensor;
 LPS22HBSensor lps22hbSensor;
+SHT31Sensor sht31Sensor;
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
@@ -93,6 +95,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
             if (lps22hbSensor.hasSensor()) {
                 result = lps22hbSensor.runOnce();
             }
+            if (sht31Sensor.hasSensor())
+                result = sht31Sensor.runOnce();
         }
         return result;
     } else {
@@ -211,6 +215,8 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.variant.environment_metrics.temperature = 0;
     m.variant.environment_metrics.voltage = 0;
 
+    if (sht31Sensor.hasSensor())
+        sht31Sensor.getMetrics(&m);
     if (lps22hbSensor.hasSensor())
         lps22hbSensor.getMetrics(&m);
     if (shtc3Sensor.hasSensor())
