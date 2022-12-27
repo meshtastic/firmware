@@ -51,7 +51,7 @@ class FloodingRouter : public Router, protected PacketHistory
      * Called immedately on receiption, before any further processing.
      * @return true to abandon the packet
      */
-    virtual bool shouldFilterReceived(MeshPacket *p) override;
+    virtual bool shouldFilterReceived(const MeshPacket *p) override;
 
     /**
      * Look for broadcasts we need to rebroadcast
