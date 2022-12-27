@@ -4,7 +4,6 @@
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include "graphics/Screen.h"
-#include "modules/ExternalNotificationModule.h"
 #include "power.h"
 #include <OneButton.h>
 
@@ -116,10 +115,6 @@ class ButtonThread : public concurrency::OSThread
     {
         // DEBUG_MSG("press!\n");
 #ifdef BUTTON_PIN
-        // If a nag notification is running, stop it
-        if (externalNotificationModule->nagCycleCutoff != UINT32_MAX) {
-            externalNotificationModule->nagCycleCutoff = 0;
-        }
         if ((BUTTON_PIN != moduleConfig.canned_message.inputbroker_pin_press) ||
             !moduleConfig.canned_message.enabled) {
             powerFSM.trigger(EVENT_PRESS);

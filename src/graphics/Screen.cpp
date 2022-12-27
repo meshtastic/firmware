@@ -35,6 +35,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "mesh/Channels.h"
 #include "mesh/generated/deviceonly.pb.h"
 #include "modules/TextMessageModule.h"
+#include "modules/ExternalNotificationModule.h"
 #include "sleep.h"
 #include "target_specific.h"
 #include "utils.h"
@@ -1070,6 +1071,10 @@ int32_t Screen::runOnce()
             handleSetOn(false);
             break;
         case Cmd::ON_PRESS:
+            // If a nag notification is running, stop it
+            if (externalNotificationModule->nagCycleCutoff != UINT32_MAX) {
+                externalNotificationModule->nagCycleCutoff = 0;
+            }
             handleOnPress();
             break;
         case Cmd::START_BLUETOOTH_PIN_SCREEN:
