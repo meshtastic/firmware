@@ -13,7 +13,7 @@ PositionModule::PositionModule()
     : ProtobufModule("position", PortNum_POSITION_APP, &Position_msg), concurrency::OSThread("PositionModule")
 {
     isPromiscuous = true;          // We always want to update our nodedb, even if we are sniffing on others
-    //setIntervalFromNow(60 * 1000); // Send our initial position 60 seconds after we start (to give GPS time to setup)
+    setIntervalFromNow(60 * 1000); // Send our initial position 60 seconds after we start (to give GPS time to setup)
 }
 
 bool PositionModule::handleReceivedProtobuf(const MeshPacket &mp, Position *pptr)

@@ -54,7 +54,7 @@ NodeInfoModule::NodeInfoModule()
     : ProtobufModule("nodeinfo", PortNum_NODEINFO_APP, &User_msg), concurrency::OSThread("NodeInfoModule")
 {
     isPromiscuous = true; // We always want to update our nodedb, even if we are sniffing on others
-    //setIntervalFromNow(30 * 1000); // Send our initial owner announcement 30 seconds after we start (to give network time to setup)
+    setIntervalFromNow(30 * 1000); // Send our initial owner announcement 30 seconds after we start (to give network time to setup)
 }
 
 int32_t NodeInfoModule::runOnce()

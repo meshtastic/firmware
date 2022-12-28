@@ -13,7 +13,6 @@ struct PacketRecord {
     NodeNum sender;
     PacketId id;
     uint32_t rxTimeMsec; // Unix time in msecs - the time we received it
-    //bool seenAck; 
 
     bool operator==(const PacketRecord &p) const { return sender == p.sender && id == p.id; }
 };

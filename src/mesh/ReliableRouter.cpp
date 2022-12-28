@@ -21,7 +21,7 @@ ErrorCode ReliableRouter::send(MeshPacket *p)
         }
 
         auto copy = packetPool.allocCopy(*p);
-        startRetransmission(copy); // TODO: also on not want_ack? 
+        startRetransmission(copy);
     }
 
     return FloodingRouter::send(p);
@@ -37,26 +37,26 @@ bool ReliableRouter::shouldFilterReceived(const MeshPacket *p)
         // If this is the first time we saw this, cancel any retransmissions we have queued up and generate an internal ack for
         // the original sending process.
 
-        // This "optimization", does save lots of airtime, but can be turned off for direct messages to get
-        // a confirmation from the specific node it was sent to. 
+        // This "optimization", does save lots of airtime. For DMs, you also get a real ACK back
+	// from the intended recipient.
         auto key = GlobalPacketId(getFrom(p), p->id);
         auto old = findPendingPacket(key);
         if (old) {
-            // Only if want_ack was not set, we mark the packet as ACKed already on an implicit ACK
-            if (!p->want_ack) {
-              DEBUG_MSG("generating implicit ack\n");
-              sendAckNak(Routing_Error_NONE, getFrom(p), p->id, old->packet->channel);
-            } 
-            // At this point we assume it will arrive. 
-            // We don't now how long we have to wait for the real ACK so stop retransmissions. 
-            DEBUG_MSG("Stopping retransmissions\n");
+            DEBUG_MSG("generating implicit ack\n");
+            // NOTE: we do NOT check p->wantAck here because p is the INCOMING rebroadcast and that packet is not expected to be
+            // marked as wantAck
+            sendAckNak(Routing_Error_NONE, getFrom(p), p->id, old->packet->channel);
+
             stopRetransmission(key);
+        } else {
+            DEBUG_MSG("didn't find pending packet\n");
         }
     }
 
-    /* Resend implicit ACKs for repeated packets (assuming original packet was sent with HOP_RELIABLE)
-    * this way if an implicit ACK is dropped and a packet is resent we'll rebroadcast again
-    * Not used for real ACKs, as you might receive a packet multiple times due to flooding. */
+    /* Resend implicit ACKs for repeated packets (assuming the original packet was sent with HOP_RELIABLE)
+    * this way if an implicit ACK is dropped and a packet is resent we'll rebroadcast again.
+    * Resending real ACKs is omitted, as you might receive a packet multiple times due to flooding and 
+    * flooding this ACK back to the original sender already adds redundancy. */ 
     if (wasSeenRecently(p, false) && p->hop_limit == HOP_RELIABLE && !MeshModule::currentReply && p->to != nodeDB.getNodeNum()) {
         // retransmission on broadcast has hop_limit still equal to HOP_RELIABLE
         DEBUG_MSG("Resending implicit ack for a repeated floodmsg\n");
