@@ -71,6 +71,7 @@ int32_t ExternalNotificationModule::runOnce()
         }
 
         // now let the PWM buzzer play
+#ifndef ARCH_PORTDUINO
         if (moduleConfig.external_notification.use_pwm) {
             if (rtttl::isPlaying()) {
                 rtttl::play();
@@ -79,6 +80,7 @@ int32_t ExternalNotificationModule::runOnce()
                 rtttl::begin(config.device.buzzer_gpio, pwmRingtone);
             }
         }
+#endif        
         return 25;
     }
 }
@@ -129,7 +131,9 @@ bool ExternalNotificationModule::getExternal(uint8_t index)
 }
 
 void ExternalNotificationModule::stopNow() {
+#ifndef ARCH_PORTDUINO    
     rtttl::stop();
+#endif    
     nagCycleCutoff = 1; // small value
     setIntervalFromNow(0);
 }
@@ -240,7 +244,9 @@ ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
                     if (!moduleConfig.external_notification.use_pwm) {
                         setExternalOn(2);
                     } else {
+#ifndef ARCH_PORTDUINO
                         rtttl::begin(config.device.buzzer_gpio, pwmRingtone);
+#endif
                     }
                     if (moduleConfig.external_notification.nag_timeout) {
                         nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
@@ -276,7 +282,9 @@ ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
                     if (!moduleConfig.external_notification.use_pwm) {
                         setExternalOn(2);
                     } else {
+#ifndef ARCH_PORTDUINO
                         rtttl::begin(config.device.buzzer_gpio, pwmRingtone);
+#endif
                     }
                     if (moduleConfig.external_notification.nag_timeout) {
                         nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
