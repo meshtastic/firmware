@@ -35,7 +35,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "mesh/Channels.h"
 #include "mesh/generated/deviceonly.pb.h"
 #include "modules/TextMessageModule.h"
-
+#include "modules/ExternalNotificationModule.h"
 #include "sleep.h"
 #include "target_specific.h"
 #include "utils.h"
@@ -1071,7 +1071,13 @@ int32_t Screen::runOnce()
             handleSetOn(false);
             break;
         case Cmd::ON_PRESS:
-            handleOnPress();
+            // If a nag notification is running, stop it
+            if (externalNotificationModule->nagCycleCutoff != UINT32_MAX) {
+                externalNotificationModule->stopNow();
+            } else {
+                // Don't advance the screen if we just wanted to switch off the nag notification
+                handleOnPress();
+            }
             break;
         case Cmd::START_BLUETOOTH_PIN_SCREEN:
             handleStartBluetoothPinScreen(cmd.bluetooth_pin);
@@ -1400,7 +1406,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     display->drawString(x, y + FONT_HEIGHT_SMALL, channelStr);
     // Draw our hardware ID to assist with bluetooth pairing. Either prefix with Info or S&F Logo
     if (moduleConfig.store_forward.enabled) {
-#if 0        
+#ifdef ARCH_ESP32        
         if (millis() - storeForwardModule->lastHeartbeat > (storeForwardModule->heartbeatInterval * 1200)) { //no heartbeat, overlap a bit
 #if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)
             display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8, imgQuestionL1);

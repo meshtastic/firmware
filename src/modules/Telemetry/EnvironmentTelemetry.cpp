@@ -159,7 +159,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     const char *lastSender = getSenderShortName(*lastMeasurementPacket);
 
     auto &p = lastMeasurementPacket->decoded;
-    if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, Telemetry_fields, &lastMeasurement)) {
+    if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, &Telemetry_msg, &lastMeasurement)) {
         display->setFont(FONT_SMALL);
         display->drawString(x, y += fontHeight(FONT_MEDIUM), "Measurement Error");
         DEBUG_MSG("Unable to decode last packet");

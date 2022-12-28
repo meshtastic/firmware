@@ -28,7 +28,7 @@ valid utf8 encoding. This makes it a bit easier to start a device outputting reg
 after it has received a valid packet from the PC, turn off unencoded debug printing and switch to this packet encoding.
 
  */
-class StreamAPI : public PhoneAPI, protected concurrency::OSThread
+class StreamAPI : public PhoneAPI
 {
     /**
      * The stream we read/write from
@@ -42,13 +42,13 @@ class StreamAPI : public PhoneAPI, protected concurrency::OSThread
     uint32_t lastRxMsec = 0;
 
   public:
-    StreamAPI(Stream *_stream) : concurrency::OSThread("StreamAPI"), stream(_stream) {}
+    StreamAPI(Stream *_stream) : stream(_stream) {}
 
     /**
      * Currently we require frequent invocation from loop() to check for arrived serial packets and to send new packets to the
      * phone.
      */
-    virtual int32_t runOnce() override;
+    virtual int32_t runOncePart();
 
   private:
     /**

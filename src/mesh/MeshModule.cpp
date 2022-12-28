@@ -44,11 +44,11 @@ MeshPacket *MeshModule::allocAckNak(Routing_Error err, NodeNum to, PacketId idFr
     // auto p = allocDataProtobuf(c);
     MeshPacket *p = router->allocForSending();
     p->decoded.portnum = PortNum_ROUTING_APP;
-    p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), Routing_fields, &c);
+    p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &Routing_msg, &c);
 
     p->priority = MeshPacket_Priority_ACK;
 
-    p->hop_limit = 0; // Assume just immediate neighbors for now
+    p->hop_limit = config.lora.hop_limit; // Flood ACK back to original sender
     p->to = to;
     p->decoded.request_id = idFrom;
     p->channel = chIndex;

@@ -14,7 +14,7 @@ void initApiServer(int port)
     }
 }
 
-WiFiServerAPI::WiFiServerAPI(WiFiClient &_client) : StreamAPI(&client), client(_client)
+WiFiServerAPI::WiFiServerAPI(WiFiClient &_client) : StreamAPI(&client), concurrency::OSThread("WiFiServerAPI"), client(_client)
 {
     DEBUG_MSG("Incoming wifi connection\n");
 }
@@ -42,7 +42,7 @@ bool WiFiServerAPI::checkIsConnected()
 int32_t WiFiServerAPI::runOnce()
 {
     if (client.connected()) {
-        return StreamAPI::runOnce();
+        return StreamAPI::runOncePart();
     } else {
         DEBUG_MSG("Client dropped connection, suspending API service\n");
         enabled = false; // we no longer need to run

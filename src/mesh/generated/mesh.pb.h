@@ -54,6 +54,8 @@ typedef enum _HardwareModel {
     HardwareModel_NANO_G1 = 14,
     /* TODO: REPLACE */
     HardwareModel_TLORA_V2_1_1P8 = 15,
+    /* TODO: REPLACE */
+    HardwareModel_TLORA_T3_S3 = 16,
     /* B&Q Consulting Station Edition G1: https://uniteng.com/wiki/doku.php?id=meshtastic:station */
     HardwareModel_STATION_G1 = 25,
     /* Less common/prototype boards listed here (needs one more byte over the air) */

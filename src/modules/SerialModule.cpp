@@ -46,6 +46,8 @@
 
 */
 
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(TTGO_T_ECHO) && !defined(CONFIG_IDF_TARGET_ESP32S2)
+
 #define RXD2 16
 #define TXD2 17
 #define RX_BUFFER 128
@@ -53,13 +55,15 @@
 #define BAUD 38400
 #define ACK 1
 
+// API: Defaulting to the formerly removed phone_timeout_secs value of 15 minutes
+#define SERIAL_CONNECTION_TIMEOUT (15 * 60) * 1000UL
+
 SerialModule *serialModule;
 SerialModuleRadio *serialModuleRadio;
 
-SerialModule::SerialModule() : concurrency::OSThread("SerialModule") {}
+SerialModule::SerialModule() : StreamAPI(&Serial2), concurrency::OSThread("SerialModule") {}
 
-char serialBytes[Constants_DATA_PAYLOAD_LEN];
-size_t serialPayloadSize;
+char serialStringChar[Constants_DATA_PAYLOAD_LEN];
 
 SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
 {
@@ -80,9 +84,15 @@ SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
     }
 }
 
+// For the serial2 port we can't really detect if any client is on the other side, so instead just look for recent messages
+bool SerialModule::checkIsConnected()
+{
+    uint32_t now = millis();
+    return (now - lastContactMsec) < SERIAL_CONNECTION_TIMEOUT;
+}
+
 int32_t SerialModule::runOnce()
 {
-#if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(TTGO_T_ECHO) && !defined(CONFIG_IDF_TARGET_ESP32S2)
     /*
         Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
@@ -178,19 +188,32 @@ int32_t SerialModule::runOnce()
 
             firstTime = 0;
 
+            // in API mode send rebooted sequence
+            if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_PROTO) {
+                emitRebooted();
+            }
+
         } else {
 
-            // in NMEA mode send out GGA every 2 seconds, Don't read from Port
-            if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_NMEA) {
+            if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_PROTO) {
+                return runOncePart();
+            } else if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_NMEA) {
+                // in NMEA mode send out GGA every 2 seconds, Don't read from Port
                 if (millis() - lastNmeaTime > 2000) {
                     lastNmeaTime = millis();
                     printGGA(outbuf, nodeDB.getNode(myNodeInfo.my_node_num)->position);
                     Serial2.printf("%s", outbuf);
                 }
             } else {
+                String serialString;
+
                 while (Serial2.available()) {
-                    serialPayloadSize = Serial2.readBytes(serialBytes, Constants_DATA_PAYLOAD_LEN);
+                    serialString = Serial2.readString();
+                    serialString.toCharArray(serialStringChar, Constants_DATA_PAYLOAD_LEN);
+
                     serialModuleRadio->sendPayload();
+
+                    DEBUG_MSG("Received: %s\n", serialStringChar);
                 }
             }
         }
@@ -201,9 +224,6 @@ int32_t SerialModule::runOnce()
 
         return INT32_MAX;
     }
-#else
-    return INT32_MAX;
-#endif
 }
 
 MeshPacket *SerialModuleRadio::allocReply()
@@ -215,26 +235,25 @@ MeshPacket *SerialModuleRadio::allocReply()
 
 void SerialModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 {
-    Channel *ch = (boundChannel != NULL) ? &channels.getByName(boundChannel) : NULL;
     MeshPacket *p = allocReply();
     p->to = dest;
-    if (ch != NULL) {
-        p->channel = ch->index;
-    }
     p->decoded.want_response = wantReplies;
 
     p->want_ack = ACK;
 
-    p->decoded.payload.size = serialPayloadSize; // You must specify how many bytes are in the reply
-    memcpy(p->decoded.payload.bytes, serialBytes, p->decoded.payload.size);
+    p->decoded.payload.size = strlen(serialStringChar); // You must specify how many bytes are in the reply
+    memcpy(p->decoded.payload.bytes, serialStringChar, p->decoded.payload.size);
 
     service.sendToMesh(p);
 }
 
 ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
 {
-#if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(TTGO_T_ECHO) && !defined(CONFIG_IDF_TARGET_ESP32S2)
     if (moduleConfig.serial.enabled) {
+        if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_PROTO) {
+            // in API mode we don't care about stuff from radio.
+            return ProcessMessage::CONTINUE;
+        }
 
         auto &p = mp.decoded;
         // DEBUG_MSG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s\n",
@@ -262,22 +281,20 @@ ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
 
             if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_DEFAULT ||
                 moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_SIMPLE) {
-                Serial2.write(p.payload.bytes, p.payload.size);
+                Serial2.printf("%s", p.payload.bytes);
             } else if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG) {
                 NodeInfo *node = nodeDB.getNode(getFrom(&mp));
                 String sender = (node && node->has_user) ? node->user.short_name : "???";
                 Serial2.println();
                 Serial2.printf("%s: %s", sender, p.payload.bytes);
                 Serial2.println();
-            } else if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_PROTO) {
-                // TODO this needs to be implemented
             } else if (moduleConfig.serial.mode == ModuleConfig_SerialConfig_Serial_Mode_NMEA) {
                 // Decode the Payload some more
                 Position scratch;
                 Position *decoded = NULL;
                 if (mp.which_payload_variant == MeshPacket_decoded_tag && mp.decoded.portnum == ourPortNum) {
                     memset(&scratch, 0, sizeof(scratch));
-                    if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, Position_fields, &scratch)) {
+                    if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &Position_msg, &scratch)) {
                         decoded = &scratch;
                     }
                     // send position packet as WPL to the serial port
@@ -290,8 +307,6 @@ ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
     } else {
         DEBUG_MSG("Serial Module Disabled\n");
     }
-
-#endif
-
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }
+#endif
