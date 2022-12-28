@@ -182,7 +182,7 @@ uint32_t RadioInterface::getRetransmissionMsec(const MeshPacket *p)
     float channelUtil = airTime->channelUtilizationPercent();
     uint8_t CWsize = map(channelUtil, 0, 100, CWmin, CWmax);
     // Assuming we pick max. of CWsize and there will be a receiver with SNR at half the range
-    return 1000*packetAirtime + (pow(2, CWsize) + pow(2, int((CWmax+CWmin)/2))) * slotTimeMsec + PROCESSING_TIME_MSEC;
+    return 2*packetAirtime + (pow(2, CWsize) + pow(2, int((CWmax+CWmin)/2))) * slotTimeMsec + PROCESSING_TIME_MSEC;
 }
 
 /** The delay to use when we want to send something */
