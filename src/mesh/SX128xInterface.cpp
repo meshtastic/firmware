@@ -238,13 +238,9 @@ bool SX128xInterface<T>::isChannelActive()
 template<typename T>
 bool SX128xInterface<T>::isActivelyReceiving()
 {
-#ifdef RADIOLIB_GODMODE
     uint16_t irq = lora.getIrqStatus();
     bool hasPreamble = (irq & RADIOLIB_SX128X_IRQ_HEADER_VALID);
     return hasPreamble;
-#else
-    return isChannelActive();
-#endif
 }
 
 template<typename T>

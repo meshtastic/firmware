@@ -34,11 +34,10 @@ uint32_t externalTurnedOn[3] = {};
 
 int32_t ExternalNotificationModule::runOnce()
 {
-    if (moduleConfig.external_notification.use_pwm || !moduleConfig.external_notification.enabled) {
+    if (!moduleConfig.external_notification.enabled) {
         return INT32_MAX; // we don't need this thread here...
     } else {
-
-        if (nagCycleCutoff < millis()) {
+        if ((nagCycleCutoff < millis()) && !rtttl::isPlaying()) {
             nagCycleCutoff = UINT32_MAX;
             DEBUG_MSG("Turning off external notification: ");
             for (int i = 0; i < 2; i++) {
@@ -68,6 +67,16 @@ int32_t ExternalNotificationModule::runOnce()
                                     ? moduleConfig.external_notification.output_ms
                                     : EXT_NOTIFICATION_MODULE_OUTPUT_MS) < millis()) {
                 getExternal(2) ? setExternalOff(2) : setExternalOn(2);
+            }
+        }
+
+        // now let the PWM buzzer play
+        if (moduleConfig.external_notification.use_pwm) {
+            if (rtttl::isPlaying()) {
+                rtttl::play();
+            } else if (nagCycleCutoff >= millis()) {
+                // start the song again if we have time left
+                rtttl::begin(config.device.buzzer_gpio, pwmRingtone);
             }
         }
         return 25;
@@ -119,7 +128,11 @@ bool ExternalNotificationModule::getExternal(uint8_t index)
     return externalCurrentState[index];
 }
 
-// --------
+void ExternalNotificationModule::stopNow() {
+    rtttl::stop();
+    nagCycleCutoff = 1; // small value
+    setIntervalFromNow(0);
+}
 
 ExternalNotificationModule::ExternalNotificationModule()
     : SinglePortModule("ExternalNotificationModule", PortNum_TEXT_MESSAGE_APP), concurrency::OSThread(
@@ -151,31 +164,30 @@ ExternalNotificationModule::ExternalNotificationModule()
                         ? moduleConfig.external_notification.output
                         : EXT_NOTIFICATION_MODULE_OUTPUT;
 
-        if (!moduleConfig.external_notification.use_pwm) {
-            // Set the direction of a pin
-            DEBUG_MSG("Using Pin %i in digital mode\n", output);
-            pinMode(output, OUTPUT);
-            setExternalOff(0);
-            externalTurnedOn[0] = 0;
-            if(moduleConfig.external_notification.output_vibra) {
-                DEBUG_MSG("Using Pin %i for vibra motor\n", moduleConfig.external_notification.output_vibra);
-                pinMode(moduleConfig.external_notification.output_vibra, OUTPUT);
-                setExternalOff(1);
-                externalTurnedOn[1] = 0;
-            }
-            if(moduleConfig.external_notification.output_buzzer) {
+        // Set the direction of a pin
+        DEBUG_MSG("Using Pin %i in digital mode\n", output);
+        pinMode(output, OUTPUT);
+        setExternalOff(0);
+        externalTurnedOn[0] = 0;
+        if(moduleConfig.external_notification.output_vibra) {
+            DEBUG_MSG("Using Pin %i for vibra motor\n", moduleConfig.external_notification.output_vibra);
+            pinMode(moduleConfig.external_notification.output_vibra, OUTPUT);
+            setExternalOff(1);
+            externalTurnedOn[1] = 0;
+        }
+        if(moduleConfig.external_notification.output_buzzer) {
+            if (!moduleConfig.external_notification.use_pwm) {
                 DEBUG_MSG("Using Pin %i for buzzer\n", moduleConfig.external_notification.output_buzzer);
                 pinMode(moduleConfig.external_notification.output_buzzer, OUTPUT);
                 setExternalOff(2);
                 externalTurnedOn[2] = 0;
+            } else {
+                config.device.buzzer_gpio = config.device.buzzer_gpio
+                    ? config.device.buzzer_gpio
+                    : PIN_BUZZER;
+                // in PWM Mode we force the buzzer pin if it is set
+                DEBUG_MSG("Using Pin %i in PWM mode\n", config.device.buzzer_gpio);
             }
-        } else {
-            config.device.buzzer_gpio = config.device.buzzer_gpio
-                                ? config.device.buzzer_gpio
-                                : PIN_BUZZER;
-                                
-            // in PWM Mode we force the buzzer pin if it is set
-            DEBUG_MSG("Using Pin %i in PWM mode\n", config.device.buzzer_gpio);
         }
     } else {
         DEBUG_MSG("External Notification Module Disabled\n");
@@ -201,57 +213,50 @@ ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
             if (moduleConfig.external_notification.alert_bell) {
                 if (containsBell) {
                     DEBUG_MSG("externalNotificationModule - Notification Bell\n");
-                    if (!moduleConfig.external_notification.use_pwm) {
-                        setExternalOn(0);
-                        if (moduleConfig.external_notification.nag_timeout) {
-                            nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
-                        } else {
-                            nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
-                        }
-                        // run_once now
-                    } else {
-                        playBeep();
-                    }
-                }
-            }
-
-            if (!moduleConfig.external_notification.use_pwm) {
-                if (moduleConfig.external_notification.alert_bell_vibra) {
-                    if (containsBell) {
-                        DEBUG_MSG("externalNotificationModule - Notification Bell (Vibra)\n");
-                        setExternalOn(1);
-                        if (moduleConfig.external_notification.nag_timeout) {
-                            nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
-                        } else {
-                            nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
-                        }
-                    }
-                }
-
-                if (moduleConfig.external_notification.alert_bell_buzzer) {
-                    if (containsBell) {
-                        DEBUG_MSG("externalNotificationModule - Notification Bell (Buzzer)\n");
-                        setExternalOn(2);
-                        if (moduleConfig.external_notification.nag_timeout) {
-                            nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
-                        } else {
-                            nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
-                        }
-                    }
-                }
-            }
-
-            if (moduleConfig.external_notification.alert_message) {
-                DEBUG_MSG("externalNotificationModule - Notification Module\n");
-                if (!moduleConfig.external_notification.use_pwm) {
                     setExternalOn(0);
                     if (moduleConfig.external_notification.nag_timeout) {
                         nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
                     } else {
                         nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
                     }
+                }
+            }
+
+            if (moduleConfig.external_notification.alert_bell_vibra) {
+                if (containsBell) {
+                    DEBUG_MSG("externalNotificationModule - Notification Bell (Vibra)\n");
+                    setExternalOn(1);
+                    if (moduleConfig.external_notification.nag_timeout) {
+                        nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
+                    } else {
+                        nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
+                    }
+                }
+            }
+
+            if (moduleConfig.external_notification.alert_bell_buzzer) {
+                if (containsBell) {
+                    DEBUG_MSG("externalNotificationModule - Notification Bell (Buzzer)\n");
+                    if (!moduleConfig.external_notification.use_pwm) {
+                        setExternalOn(2);
+                    } else {
+                        rtttl::begin(config.device.buzzer_gpio, pwmRingtone);
+                    }
+                    if (moduleConfig.external_notification.nag_timeout) {
+                        nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
+                    } else {
+                        nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
+                    }
+                }
+            }
+
+            if (moduleConfig.external_notification.alert_message) {
+                DEBUG_MSG("externalNotificationModule - Notification Module\n");
+                setExternalOn(0);
+                if (moduleConfig.external_notification.nag_timeout) {
+                    nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
                 } else {
-                    playBeep();
+                    nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
                 }
             }
 
@@ -268,7 +273,11 @@ ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
 
                 if (moduleConfig.external_notification.alert_message_buzzer) {
                     DEBUG_MSG("externalNotificationModule - Notification Module (Buzzer)\n");
-                    setExternalOn(2);
+                    if (!moduleConfig.external_notification.use_pwm) {
+                        setExternalOn(2);
+                    } else {
+                        rtttl::begin(config.device.buzzer_gpio, pwmRingtone);
+                    }
                     if (moduleConfig.external_notification.nag_timeout) {
                         nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
                     } else {
