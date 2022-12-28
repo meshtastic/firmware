@@ -37,7 +37,11 @@ int32_t ExternalNotificationModule::runOnce()
     if (!moduleConfig.external_notification.enabled) {
         return INT32_MAX; // we don't need this thread here...
     } else {
+#ifndef ARCH_PORTDUINO
         if ((nagCycleCutoff < millis()) && !rtttl::isPlaying()) {
+#else
+        if (nagCycleCutoff < millis()) {
+#endif
             nagCycleCutoff = UINT32_MAX;
             DEBUG_MSG("Turning off external notification: ");
             for (int i = 0; i < 2; i++) {
