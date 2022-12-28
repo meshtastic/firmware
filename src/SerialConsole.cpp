@@ -25,7 +25,7 @@ void consolePrintf(const char *format, ...)
 #endif
 }
 
-SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port)
+SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), concurrency::OSThread("SerialConsole")
 {
     assert(!console);
     console = this;
@@ -46,6 +46,10 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port)
     emitRebooted();
 }
 
+int32_t SerialConsole::runOnce()
+{
+    return runOncePart();
+}
 
 // For the serial port we can't really detect if any client is on the other side, so instead just look for recent messages
 bool SerialConsole::checkIsConnected()

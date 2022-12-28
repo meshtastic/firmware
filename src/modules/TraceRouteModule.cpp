@@ -24,14 +24,14 @@ void TraceRouteModule::updateRoute(MeshPacket* p)
         RouteDiscovery scratch;
         RouteDiscovery *updated = NULL;
         memset(&scratch, 0, sizeof(scratch));
-        pb_decode_from_bytes(incoming.payload.bytes, incoming.payload.size, RouteDiscovery_fields, &scratch);
+        pb_decode_from_bytes(incoming.payload.bytes, incoming.payload.size, &RouteDiscovery_msg, &scratch);
         updated = &scratch;
 
         appendMyID(updated);
         printRoute(updated, p->from, NODENUM_BROADCAST);
       
         // Set updated route to the payload of the to be flooded packet
-        p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), RouteDiscovery_fields, updated);
+        p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &RouteDiscovery_msg, updated);
     }
 }
 
@@ -69,7 +69,7 @@ MeshPacket* TraceRouteModule::allocReply()
     RouteDiscovery scratch;
     RouteDiscovery *updated = NULL;
     memset(&scratch, 0, sizeof(scratch));
-    pb_decode_from_bytes(p.payload.bytes, p.payload.size, RouteDiscovery_fields, &scratch);
+    pb_decode_from_bytes(p.payload.bytes, p.payload.size, &RouteDiscovery_msg, &scratch);
     updated = &scratch;
 
     printRoute(updated, req.from, req.to);
@@ -81,6 +81,6 @@ MeshPacket* TraceRouteModule::allocReply()
 }
 
 
-TraceRouteModule::TraceRouteModule() : ProtobufModule("traceroute", PortNum_TRACEROUTE_APP, RouteDiscovery_fields) {
+TraceRouteModule::TraceRouteModule() : ProtobufModule("traceroute", PortNum_TRACEROUTE_APP, &RouteDiscovery_msg) {
     ourPortNum = PortNum_TRACEROUTE_APP; 
 }

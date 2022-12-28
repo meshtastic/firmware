@@ -306,7 +306,7 @@ bool perhapsDecode(MeshPacket *p)
 
             // Take those raw bytes and convert them back into a well structured protobuf we can understand
             memset(&p->decoded, 0, sizeof(p->decoded));
-            if (!pb_decode_from_bytes(bytes, rawSize, Data_fields, &p->decoded)) {
+            if (!pb_decode_from_bytes(bytes, rawSize, &Data_msg, &p->decoded)) {
                 DEBUG_MSG("Invalid protobufs in received mesh packet (bad psk?)!\n");
             } else if (p->decoded.portnum == PortNum_UNKNOWN_APP) {
                 DEBUG_MSG("Invalid portnum (bad psk?)!\n");
@@ -360,7 +360,7 @@ Routing_Error perhapsEncode(MeshPacket *p)
     if (p->which_payload_variant == MeshPacket_decoded_tag) {
         static uint8_t bytes[MAX_RHPACKETLEN]; // we have to use a scratch buffer because a union
 
-        size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), Data_fields, &p->decoded);
+        size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &Data_msg, &p->decoded);
 
         // Only allow encryption on the text message app.
         //  TODO: Allow modules to opt into compression.
