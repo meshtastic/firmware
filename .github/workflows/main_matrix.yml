@@ -32,7 +32,8 @@ jobs:
           - board: station-g1
           - board: m5stack-coreink
           - board: tbeam-s3-core
-
+          - board: tlora-t3s3-v1
+          
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -53,6 +54,7 @@ jobs:
           - board: tlora-v1
           - board: tlora_v1_3
           - board: tlora-v2-1-1.6
+          - board: tlora-v2-1-1.8
           - board: tbeam
           - board: heltec-v1
           - board: heltec-v2.0
@@ -67,6 +69,7 @@ jobs:
           - board: m5stack-core
           - board: m5stack-coreink
           - board: tbeam-s3-core
+          - board: tlora-t3s3-v1
     uses: ./.github/workflows/build_esp32.yml
     with:
       board: ${{ matrix.board }}
