@@ -3,7 +3,9 @@
 #include "SinglePortModule.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
+#ifndef ARCH_PORTDUINO
 #include <NonBlockingRtttl.h>
+#endif
 #include <Arduino.h>
 #include <functional>
 
