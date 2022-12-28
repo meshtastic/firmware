@@ -1,5 +1,6 @@
 #include "configuration.h"
 #include "SX128xInterface.h"
+#include "mesh/NodeDB.h"
 #include "error.h"
 
 // Particular boards might define a different max power based on what their hardware can do
@@ -49,6 +50,20 @@ bool SX128xInterface<T>::init()
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength);
     // \todo Display actual typename of the adapter, not just `SX128x`
     DEBUG_MSG("SX128x init result %d\n", res);
+
+    if((config.lora.region != Config_LoRaConfig_RegionCode_LORA_24) && (res == RADIOLIB_ERR_INVALID_FREQUENCY)) {
+        DEBUG_MSG("Warning: Radio chip only supports 2.4GHz LoRa. Adjusting Region and rebooting.\n");
+        config.lora.region = Config_LoRaConfig_RegionCode_LORA_24;
+        nodeDB.saveToDisk(SEGMENT_CONFIG);
+        delay(2000);
+#if defined(ARCH_ESP32)
+        ESP.restart();
+#elif defined(ARCH_NRF52)
+        NVIC_SystemReset();
+#else
+        DEBUG_MSG("FIXME implement reboot for this platform. Skipping for now.\n");
+#endif
+    }
 
     DEBUG_MSG("Frequency set to %f\n", getFreq());    
     DEBUG_MSG("Bandwidth set to %f\n", bw);    
