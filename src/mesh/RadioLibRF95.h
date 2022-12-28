@@ -66,10 +66,5 @@ class RadioLibRF95: public SX1278 {
     // since default current limit for SX126x/127x in updated RadioLib is 60mA
     // use the previous value
     float currentLimit = 100;
-
-#ifndef RADIOLIB_GODMODE
-  private:
-#endif
-
 };
 

@@ -1073,9 +1073,11 @@ int32_t Screen::runOnce()
         case Cmd::ON_PRESS:
             // If a nag notification is running, stop it
             if (externalNotificationModule->nagCycleCutoff != UINT32_MAX) {
-                externalNotificationModule->nagCycleCutoff = 0;
+                externalNotificationModule->stopNow();
+            } else {
+                // Don't advance the screen if we just wanted to switch off the nag notification
+                handleOnPress();
             }
-            handleOnPress();
             break;
         case Cmd::START_BLUETOOTH_PIN_SCREEN:
             handleStartBluetoothPinScreen(cmd.bluetooth_pin);

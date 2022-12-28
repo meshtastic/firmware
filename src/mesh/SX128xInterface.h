@@ -27,9 +27,7 @@ class SX128xInterface : public RadioLibInterface
     /// Prepare hardware for sleep.  Call this _only_ for deep sleep, not needed for light sleep.
     virtual bool sleep() override;
 
-#ifdef RADIOLIB_GODMODE
     bool isIRQPending() override { return lora.getIrqStatus() != 0; }
-#endif
 
   protected:
 
