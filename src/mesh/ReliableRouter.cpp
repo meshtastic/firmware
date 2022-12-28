@@ -27,7 +27,7 @@ ErrorCode ReliableRouter::send(MeshPacket *p)
     return FloodingRouter::send(p);
 }
 
-bool ReliableRouter::shouldFilterReceived(MeshPacket *p)
+bool ReliableRouter::shouldFilterReceived(const MeshPacket *p)
 {
     // Note: do not use getFrom() here, because we want to ignore messages sent from phone
     if (p->from == getNodeNum()) {
@@ -37,9 +37,8 @@ bool ReliableRouter::shouldFilterReceived(MeshPacket *p)
         // If this is the first time we saw this, cancel any retransmissions we have queued up and generate an internal ack for
         // the original sending process.
 
-        // FIXME - we might want to turn off this "optimization", it does save lots of airtime but it assumes that once we've
-        // heard one one adjacent node hear our packet that a) probably other adjacent nodes heard it and b) we can trust those
-        // nodes to reach our destination.  Both of which might be incorrect.
+        // This "optimization", does save lots of airtime. For DMs, you also get a real ACK back
+	// from the intended recipient.
         auto key = GlobalPacketId(getFrom(p), p->id);
         auto old = findPendingPacket(key);
         if (old) {
@@ -54,16 +53,11 @@ bool ReliableRouter::shouldFilterReceived(MeshPacket *p)
         }
     }
 
-    /* send acks for repeated packets that want acks and are destined for us
-     * this way if an ACK is dropped and a packet is resent we'll ACK the resent packet
-     * make sure wasSeenRecently _doesn't_ update
-     * finding the channel requires decoding the packet. */
-    if (p->want_ack && (p->to == getNodeNum()) && wasSeenRecently(p, false) && !MeshModule::currentReply) {
-        if (perhapsDecode(p)) {
-            sendAckNak(Routing_Error_NONE, getFrom(p), p->id, p->channel);
-            DEBUG_MSG("acking a repeated want_ack packet\n");
-        }
-    } else if (wasSeenRecently(p, false) && p->hop_limit == HOP_RELIABLE && !MeshModule::currentReply && p->to != nodeDB.getNodeNum()) {
+    /* Resend implicit ACKs for repeated packets (assuming the original packet was sent with HOP_RELIABLE)
+    * this way if an implicit ACK is dropped and a packet is resent we'll rebroadcast again.
+    * Resending real ACKs is omitted, as you might receive a packet multiple times due to flooding and 
+    * flooding this ACK back to the original sender already adds redundancy. */ 
+    if (wasSeenRecently(p, false) && p->hop_limit == HOP_RELIABLE && !MeshModule::currentReply && p->to != nodeDB.getNodeNum()) {
         // retransmission on broadcast has hop_limit still equal to HOP_RELIABLE
         DEBUG_MSG("Resending implicit ack for a repeated floodmsg\n");
         MeshPacket *tosend = packetPool.allocCopy(*p);

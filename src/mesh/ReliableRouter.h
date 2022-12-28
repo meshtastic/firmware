@@ -96,7 +96,7 @@ class ReliableRouter : public FloodingRouter
     /**
      * We hook this method so we can see packets before FloodingRouter says they should be discarded
      */
-    virtual bool shouldFilterReceived(MeshPacket *p) override;
+    virtual bool shouldFilterReceived(const MeshPacket *p) override;
 
     /**
      * Add p to the list of packets to retransmit occasionally.  We will free it once we stop retransmitting.
