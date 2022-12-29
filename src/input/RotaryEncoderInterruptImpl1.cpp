@@ -9,8 +9,7 @@ void RotaryEncoderInterruptImpl1::init()
 {
     if (!moduleConfig.canned_message.rotary1_enabled) {
         // Input device is disabled.
-        setInterval(INT32_MAX);
-        enabled = false;
+        disable();
         return;
     }
 

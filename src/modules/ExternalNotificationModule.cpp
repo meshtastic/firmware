@@ -199,8 +199,7 @@ ExternalNotificationModule::ExternalNotificationModule()
         }
     } else {
         DEBUG_MSG("External Notification Module Disabled\n");
-        setInterval(INT32_MAX);
-        enabled = false;
+        disable();
     }
 }
 

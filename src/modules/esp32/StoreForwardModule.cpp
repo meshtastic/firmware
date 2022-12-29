@@ -460,8 +460,7 @@ StoreForwardModule::StoreForwardModule()
             DEBUG_MSG("*** Initializing Store & Forward Module in Client mode\n");
         }
     } else {
-        setInterval(INT32_MAX);
-        enabled = false;
+        disable();
     }
 #endif
 }
