@@ -367,7 +367,7 @@ static const char *oemConfigFile = "/oem/oem.proto";
 
 
 /** Load a protobuf from a file, return true for success */
-bool loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, void *dest_struct)
+bool NodeDB::loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, void *dest_struct)
 {
     bool okay = false;
 #ifdef FSCom
@@ -450,7 +450,7 @@ void NodeDB::loadFromDisk()
 }
 
 /** Save a protobuf from a file, return true for success */
-bool saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct)
+bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct)
 {
     bool okay = false;
 #ifdef FSCom
