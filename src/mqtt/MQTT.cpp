@@ -137,8 +137,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), pubSub(mqttClient), mqttQueue(MAX_
 
         // preflightSleepObserver.observe(&preflightSleep);
     } else {
-        setInterval(INT32_MAX);
-        enabled = false;
+        disable();
     }
 }
 

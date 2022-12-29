@@ -12,9 +12,7 @@ void CardKbI2cImpl::init()
 {
     if (cardkb_found != CARDKB_ADDR)
     {
-        // Input device is not detected.
-        setInterval(INT32_MAX);
-        enabled = false;
+        disable();
         return;
     }
 
