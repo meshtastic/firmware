@@ -323,8 +323,13 @@ void AdminModule::handleSetModuleConfig(const ModuleConfig &c)
             moduleConfig.has_audio = true;
             moduleConfig.audio = c.payload_variant.audio;
             break;
+        case ModuleConfig_remote_hardware_tag:
+            DEBUG_MSG("Setting module config: Remote Hardware\n");
+            moduleConfig.has_remote_hardware = true;
+            moduleConfig.remote_hardware = c.payload_variant.remote_hardware;
+            break;
     }
-    
+
     saveChanges(SEGMENT_MODULECONFIG);
 }
 
@@ -452,6 +457,11 @@ void AdminModule::handleGetModuleConfig(const MeshPacket &req, const uint32_t co
             DEBUG_MSG("Getting module config: Audio\n");
             res.get_module_config_response.which_payload_variant = ModuleConfig_audio_tag;
             res.get_module_config_response.payload_variant.audio = moduleConfig.audio;
+            break;
+        case AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG:
+            DEBUG_MSG("Getting module config: Remote Hardware\n");
+            res.get_module_config_response.which_payload_variant = ModuleConfig_remote_hardware_tag;
+            res.get_module_config_response.payload_variant.remote_hardware = moduleConfig.remote_hardware;
             break;
         }
 
