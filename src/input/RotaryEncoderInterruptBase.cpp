@@ -54,7 +54,7 @@ int32_t RotaryEncoderInterruptBase::runOnce()
 
     this->action = ROTARY_ACTION_NONE;
 
-    return 30000; // TODO: technically this can be MAX_INT
+    return INT32_MAX;
 }
 
 void RotaryEncoderInterruptBase::intPressHandler()

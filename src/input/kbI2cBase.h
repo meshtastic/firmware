@@ -5,7 +5,7 @@
 
 class KbI2cBase :
     public Observable<const InputEvent *>,
-    private concurrency::OSThread
+    public concurrency::OSThread
 {
   public:
     explicit KbI2cBase(const char *name);

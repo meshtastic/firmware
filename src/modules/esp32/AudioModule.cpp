@@ -139,6 +139,8 @@ AudioModule::AudioModule() : SinglePortModule("AudioModule", PortNum_AUDIO_APP),
         DEBUG_MSG(" using %d frames of %d bytes for a total payload length of %d bytes\n", encode_frame_num, encode_codec_size, encode_frame_size);
         xTaskCreate(&run_codec2, "codec2_task", 30000, NULL, 5, &codec2HandlerTask);
     } else {
+        setInterval(INT32_MAX);
+        enabled = false;
         DEBUG_MSG("Codec2 disabled (AudioModule %d, Region %s, permitted %d)\n", moduleConfig.audio.codec2_enabled, myRegion->name, myRegion->audioPermitted);
     }
 }
@@ -259,6 +261,7 @@ int32_t AudioModule::runOnce()
         return 100;
     } else {
         DEBUG_MSG("Audio Module Disabled\n");
+        enabled = false;
         return INT32_MAX;
     }
     

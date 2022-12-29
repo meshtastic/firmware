@@ -55,10 +55,18 @@ CannedMessageModule::CannedMessageModule()
         if ((this->splitConfiguredMessages() <= 0) && (cardkb_found != CARDKB_ADDR)) {
             DEBUG_MSG("CannedMessageModule: No messages are configured. Module is disabled\n");
             this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
+            setInterval(INT32_MAX);
+            enabled = false;
         } else {
             DEBUG_MSG("CannedMessageModule is enabled\n");
             this->inputObserver.observe(inputBroker);
         }
+        setInterval(INT32_MAX);
+            enabled = false;
+    } else {
+        this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
+        setInterval(INT32_MAX);
+        enabled = false;
     }
 }
 

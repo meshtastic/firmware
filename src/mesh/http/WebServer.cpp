@@ -165,11 +165,20 @@ void createSSLCert()
 
 WebServerThread *webServerThread;
 
-WebServerThread::WebServerThread() : concurrency::OSThread("WebServerThread") {}
+WebServerThread::WebServerThread() : concurrency::OSThread("WebServerThread") {
+    if(!config.network.wifi_enabled) {
+        setInterval(INT32_MAX);
+        enabled = false;
+    }
+}
 
 int32_t WebServerThread::runOnce()
 {
-    // DEBUG_MSG("WebServerThread::runOnce()\n");
+    if(!config.network.wifi_enabled) {
+        setInterval(INT32_MAX);
+        enabled = false;
+    }
+
     handleWebResponse();
 
     if (requestRestart && (millis() / 1000) > requestRestart) {
