@@ -43,10 +43,6 @@ CannedMessageModuleConfig cannedMessageModuleConfig;
 
 CannedMessageModule *cannedMessageModule;
 
-// TODO: move it into NodeDB.h!
-extern bool loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, void *dest_struct);
-extern bool saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct);
-
 CannedMessageModule::CannedMessageModule()
     : SinglePortModule("canned", PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("CannedMessageModule")
 {
@@ -478,7 +474,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 
 void CannedMessageModule::loadProtoForModule()
 {
-    if (!loadProto(cannedMessagesConfigFile, CannedMessageModuleConfig_size, sizeof(cannedMessagesConfigFile),
+    if (!nodeDB.loadProto(cannedMessagesConfigFile, CannedMessageModuleConfig_size, sizeof(CannedMessageModuleConfig),
                    &CannedMessageModuleConfig_msg, &cannedMessageModuleConfig)) {
         installDefaultCannedMessageModuleConfig();
     }
@@ -498,7 +494,7 @@ bool CannedMessageModule::saveProtoForModule()
     FS.mkdir("/prefs");
 #endif
 
-    okay &= saveProto(cannedMessagesConfigFile, CannedMessageModuleConfig_size,
+    okay &= nodeDB.saveProto(cannedMessagesConfigFile, CannedMessageModuleConfig_size,
         &CannedMessageModuleConfig_msg, &cannedMessageModuleConfig);
 
     return okay;
