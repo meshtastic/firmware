@@ -61,8 +61,6 @@ CannedMessageModule::CannedMessageModule()
             DEBUG_MSG("CannedMessageModule is enabled\n");
             this->inputObserver.observe(inputBroker);
         }
-        setInterval(INT32_MAX);
-            enabled = false;
     } else {
         this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
         setInterval(INT32_MAX);
