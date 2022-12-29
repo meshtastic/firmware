@@ -53,6 +53,8 @@ class OSThread : public Thread
 
     static void setup();
 
+    void disable();
+
     /**
      * Wait a specified number msecs starting from the current time (rather than the last time we were run)
      */
