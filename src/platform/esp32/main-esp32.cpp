@@ -114,7 +114,7 @@ void esp32Setup()
     if (BLEOTA.isEmpty()) {
         DEBUG_MSG("No OTA firmware available\n");
     }else{
-        DEBUG_MSG("OTA firmware version %s\n", BLEOTA);
+        DEBUG_MSG("OTA firmware version %s\n", BLEOTA.c_str());
     }
 
     // enableModemSleep();
