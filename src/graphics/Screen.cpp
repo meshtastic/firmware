@@ -1072,7 +1072,7 @@ int32_t Screen::runOnce()
             break;
         case Cmd::ON_PRESS:
             // If a nag notification is running, stop it
-            if (externalNotificationModule->nagCycleCutoff != UINT32_MAX) {
+            if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) {
                 externalNotificationModule->stopNow();
             } else {
                 // Don't advance the screen if we just wanted to switch off the nag notification
