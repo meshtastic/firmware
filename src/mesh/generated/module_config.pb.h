@@ -98,6 +98,12 @@ typedef struct _ModuleConfig_MQTTConfig {
     bool json_enabled;
 } ModuleConfig_MQTTConfig;
 
+/* RemoteHardwareModule Config */
+typedef struct _ModuleConfig_RemoteHardwareConfig {
+    /* Whether the Module is enabled */
+    bool enabled;
+} ModuleConfig_RemoteHardwareConfig;
+
 /* Audio Config for codec2 voice */
 typedef struct _ModuleConfig_AudioConfig {
     /* Whether Audio is enabled */
@@ -266,6 +272,8 @@ typedef struct _ModuleConfig {
         ModuleConfig_CannedMessageConfig canned_message;
         /* TODO: REPLACE */
         ModuleConfig_AudioConfig audio;
+        /* TODO: REPLACE */
+        ModuleConfig_RemoteHardwareConfig remote_hardware;
     } payload_variant;
 } ModuleConfig;
 
@@ -293,6 +301,7 @@ extern "C" {
 
 
 
+
 #define ModuleConfig_AudioConfig_bitrate_ENUMTYPE ModuleConfig_AudioConfig_Audio_Baud
 
 #define ModuleConfig_SerialConfig_baud_ENUMTYPE ModuleConfig_SerialConfig_Serial_Baud
@@ -310,6 +319,7 @@ extern "C" {
 /* Initializer values for message structs */
 #define ModuleConfig_init_default                {0, {ModuleConfig_MQTTConfig_init_default}}
 #define ModuleConfig_MQTTConfig_init_default     {0, "", "", "", 0, 0}
+#define ModuleConfig_RemoteHardwareConfig_init_default {0}
 #define ModuleConfig_AudioConfig_init_default    {0, 0, _ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define ModuleConfig_SerialConfig_init_default   {0, 0, 0, 0, _ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _ModuleConfig_SerialConfig_Serial_Mode_MIN}
 #define ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -319,6 +329,7 @@ extern "C" {
 #define ModuleConfig_CannedMessageConfig_init_default {0, 0, 0, 0, _ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define ModuleConfig_init_zero                   {0, {ModuleConfig_MQTTConfig_init_zero}}
 #define ModuleConfig_MQTTConfig_init_zero        {0, "", "", "", 0, 0}
+#define ModuleConfig_RemoteHardwareConfig_init_zero {0}
 #define ModuleConfig_AudioConfig_init_zero       {0, 0, _ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define ModuleConfig_SerialConfig_init_zero      {0, 0, 0, 0, _ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _ModuleConfig_SerialConfig_Serial_Mode_MIN}
 #define ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -334,6 +345,7 @@ extern "C" {
 #define ModuleConfig_MQTTConfig_password_tag     4
 #define ModuleConfig_MQTTConfig_encryption_enabled_tag 5
 #define ModuleConfig_MQTTConfig_json_enabled_tag 6
+#define ModuleConfig_RemoteHardwareConfig_enabled_tag 1
 #define ModuleConfig_AudioConfig_codec2_enabled_tag 1
 #define ModuleConfig_AudioConfig_ptt_pin_tag     2
 #define ModuleConfig_AudioConfig_bitrate_tag     3
@@ -394,6 +406,7 @@ extern "C" {
 #define ModuleConfig_telemetry_tag               6
 #define ModuleConfig_canned_message_tag          7
 #define ModuleConfig_audio_tag                   8
+#define ModuleConfig_remote_hardware_tag         9
 
 /* Struct field encoding specification for nanopb */
 #define ModuleConfig_FIELDLIST(X, a) \
@@ -404,7 +417,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,store_forward,payload_varian
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,range_test,payload_variant.range_test),   5) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,telemetry,payload_variant.telemetry),   6) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,canned_message,payload_variant.canned_message),   7) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,audio,payload_variant.audio),   8)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,audio,payload_variant.audio),   8) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,remote_hardware,payload_variant.remote_hardware),   9)
 #define ModuleConfig_CALLBACK NULL
 #define ModuleConfig_DEFAULT NULL
 #define ModuleConfig_payload_variant_mqtt_MSGTYPE ModuleConfig_MQTTConfig
@@ -415,6 +429,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,audio,payload_variant.audio)
 #define ModuleConfig_payload_variant_telemetry_MSGTYPE ModuleConfig_TelemetryConfig
 #define ModuleConfig_payload_variant_canned_message_MSGTYPE ModuleConfig_CannedMessageConfig
 #define ModuleConfig_payload_variant_audio_MSGTYPE ModuleConfig_AudioConfig
+#define ModuleConfig_payload_variant_remote_hardware_MSGTYPE ModuleConfig_RemoteHardwareConfig
 
 #define ModuleConfig_MQTTConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
@@ -425,6 +440,11 @@ X(a, STATIC,   SINGULAR, BOOL,     encryption_enabled,   5) \
 X(a, STATIC,   SINGULAR, BOOL,     json_enabled,      6)
 #define ModuleConfig_MQTTConfig_CALLBACK NULL
 #define ModuleConfig_MQTTConfig_DEFAULT NULL
+
+#define ModuleConfig_RemoteHardwareConfig_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, BOOL,     enabled,           1)
+#define ModuleConfig_RemoteHardwareConfig_CALLBACK NULL
+#define ModuleConfig_RemoteHardwareConfig_DEFAULT NULL
 
 #define ModuleConfig_AudioConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     codec2_enabled,    1) \
@@ -508,6 +528,7 @@ X(a, STATIC,   SINGULAR, BOOL,     send_bell,        11)
 
 extern const pb_msgdesc_t ModuleConfig_msg;
 extern const pb_msgdesc_t ModuleConfig_MQTTConfig_msg;
+extern const pb_msgdesc_t ModuleConfig_RemoteHardwareConfig_msg;
 extern const pb_msgdesc_t ModuleConfig_AudioConfig_msg;
 extern const pb_msgdesc_t ModuleConfig_SerialConfig_msg;
 extern const pb_msgdesc_t ModuleConfig_ExternalNotificationConfig_msg;
@@ -519,6 +540,7 @@ extern const pb_msgdesc_t ModuleConfig_CannedMessageConfig_msg;
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define ModuleConfig_fields &ModuleConfig_msg
 #define ModuleConfig_MQTTConfig_fields &ModuleConfig_MQTTConfig_msg
+#define ModuleConfig_RemoteHardwareConfig_fields &ModuleConfig_RemoteHardwareConfig_msg
 #define ModuleConfig_AudioConfig_fields &ModuleConfig_AudioConfig_msg
 #define ModuleConfig_SerialConfig_fields &ModuleConfig_SerialConfig_msg
 #define ModuleConfig_ExternalNotificationConfig_fields &ModuleConfig_ExternalNotificationConfig_msg
@@ -533,6 +555,7 @@ extern const pb_msgdesc_t ModuleConfig_CannedMessageConfig_msg;
 #define ModuleConfig_ExternalNotificationConfig_size 40
 #define ModuleConfig_MQTTConfig_size             169
 #define ModuleConfig_RangeTestConfig_size        10
+#define ModuleConfig_RemoteHardwareConfig_size   2
 #define ModuleConfig_SerialConfig_size           26
 #define ModuleConfig_StoreForwardConfig_size     22
 #define ModuleConfig_TelemetryConfig_size        18
