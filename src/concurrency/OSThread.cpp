@@ -74,8 +74,16 @@ bool OSThread::shouldRun(unsigned long time)
 
 void OSThread::run()
 {
+#ifdef DEBUG_HEAP
+    auto heap = ESP.getFreeHeap();
+#endif    
     currentThread = this;
     auto newDelay = runOnce();
+#ifdef DEBUG_HEAP
+    auto newHeap = ESP.getFreeHeap();
+    if (newHeap < heap)
+        DEBUG_MSG("Thread %s leaked heap %d -> %d (%d)\n", ThreadName.c_str(), heap, newHeap, newHeap - heap);
+#endif
 
     runned();
 
@@ -83,6 +91,12 @@ void OSThread::run()
         setInterval(newDelay);
 
     currentThread = NULL;
+}
+
+void OSThread::disable() {
+    enabled = false;
+    setInterval(INT32_MAX);
+
 }
 
 /**
