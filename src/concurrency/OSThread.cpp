@@ -93,10 +93,12 @@ void OSThread::run()
     currentThread = NULL;
 }
 
-void OSThread::disable() 
+int32_t OSThread::disable() 
 {
     enabled = false;
     setInterval(INT32_MAX);
+    
+    return INT32_MAX;
 }
 
 /**

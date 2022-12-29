@@ -260,8 +260,7 @@ int32_t AudioModule::runOnce()
         return 100;
     } else {
         DEBUG_MSG("Audio Module Disabled\n");
-        enabled = false;
-        return INT32_MAX;
+        return disable();
     }
     
 }
