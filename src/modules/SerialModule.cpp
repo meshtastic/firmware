@@ -222,6 +222,7 @@ int32_t SerialModule::runOnce()
     } else {
         DEBUG_MSG("Serial Module Disabled\n");
 
+        enabled = false;
         return INT32_MAX;
     }
 }
@@ -303,9 +304,6 @@ ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
                 }
             }
         }
-
-    } else {
-        DEBUG_MSG("Serial Module Disabled\n");
     }
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }

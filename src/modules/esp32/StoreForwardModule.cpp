@@ -52,6 +52,7 @@ int32_t StoreForwardModule::runOnce()
         return (this->packetTimeMax);
     }
 #endif
+    enabled = false; // Client doesn't need periodical
     return (INT32_MAX);
 }
 
@@ -458,6 +459,9 @@ StoreForwardModule::StoreForwardModule()
             is_client = true;
             DEBUG_MSG("*** Initializing Store & Forward Module in Client mode\n");
         }
+    } else {
+        setInterval(INT32_MAX);
+        enabled = false;
     }
 #endif
 }

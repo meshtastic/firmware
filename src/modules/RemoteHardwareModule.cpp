@@ -48,64 +48,66 @@ static uint64_t digitalReads(uint64_t mask)
 
 RemoteHardwareModule::RemoteHardwareModule()
     : ProtobufModule("remotehardware", PortNum_REMOTE_HARDWARE_APP, &HardwareMessage_msg), concurrency::OSThread(
-                                                                                                 "remotehardware")
+                                                                                                 "RemoteHardwareModule")
 {
 }
 
 bool RemoteHardwareModule::handleReceivedProtobuf(const MeshPacket &req, HardwareMessage *pptr)
 {
-    auto p = *pptr;
-    DEBUG_MSG("Received RemoteHardware typ=%d\n", p.type);
+    if (moduleConfig.remote_hardware.enabled) {
+        auto p = *pptr;
+        DEBUG_MSG("Received RemoteHardware typ=%d\n", p.type);
 
-    switch (p.type) {
-    case HardwareMessage_Type_WRITE_GPIOS:
-        // Print notification to LCD screen
-        screen->print("Write GPIOs\n");
+        switch (p.type) {
+        case HardwareMessage_Type_WRITE_GPIOS:
+            // Print notification to LCD screen
+            screen->print("Write GPIOs\n");
 
-        for (uint8_t i = 0; i < NUM_GPIOS; i++) {
-            uint64_t mask = 1 << i;
-            if (p.gpio_mask & mask) {
-                digitalWrite(i, (p.gpio_value & mask) ? 1 : 0);
+            for (uint8_t i = 0; i < NUM_GPIOS; i++) {
+                uint64_t mask = 1 << i;
+                if (p.gpio_mask & mask) {
+                    digitalWrite(i, (p.gpio_value & mask) ? 1 : 0);
+                }
             }
+            pinModes(p.gpio_mask, OUTPUT);
+
+            break;
+
+        case HardwareMessage_Type_READ_GPIOS: {
+            // Print notification to LCD screen
+            if (screen)
+                screen->print("Read GPIOs\n");
+
+            uint64_t res = digitalReads(p.gpio_mask);
+
+            // Send the reply
+            HardwareMessage r = HardwareMessage_init_default;
+            r.type = HardwareMessage_Type_READ_GPIOS_REPLY;
+            r.gpio_value = res;
+            r.gpio_mask = p.gpio_mask;
+            MeshPacket *p2 = allocDataProtobuf(r);
+            setReplyTo(p2, req);
+            myReply = p2;
+            break;
         }
-        pinModes(p.gpio_mask, OUTPUT);
 
-        break;
+        case HardwareMessage_Type_WATCH_GPIOS: {
+            watchGpios = p.gpio_mask;
+            lastWatchMsec = 0;           // Force a new publish soon
+            previousWatch = ~watchGpios; // generate a 'previous' value which is guaranteed to not match (to force an initial publish)
+            enabled = true;              // Let our thread run at least once
+            DEBUG_MSG("Now watching GPIOs 0x%llx\n", watchGpios);
+            break;
+        }
 
-    case HardwareMessage_Type_READ_GPIOS: {
-        // Print notification to LCD screen
-        if (screen)
-            screen->print("Read GPIOs\n");
+        case HardwareMessage_Type_READ_GPIOS_REPLY:
+        case HardwareMessage_Type_GPIOS_CHANGED:
+            break; // Ignore - we might see our own replies
 
-        uint64_t res = digitalReads(p.gpio_mask);
-
-        // Send the reply
-        HardwareMessage r = HardwareMessage_init_default;
-        r.type = HardwareMessage_Type_READ_GPIOS_REPLY;
-        r.gpio_value = res;
-        r.gpio_mask = p.gpio_mask;
-        MeshPacket *p2 = allocDataProtobuf(r);
-        setReplyTo(p2, req);
-        myReply = p2;
-        break;
-    }
-
-    case HardwareMessage_Type_WATCH_GPIOS: {
-        watchGpios = p.gpio_mask;
-        lastWatchMsec = 0;           // Force a new publish soon
-        previousWatch = ~watchGpios; // generate a 'previous' value which is guaranteed to not match (to force an initial publish)
-        enabled = true;              // Let our thread run at least once
-        DEBUG_MSG("Now watching GPIOs 0x%llx\n", watchGpios);
-        break;
-    }
-
-    case HardwareMessage_Type_READ_GPIOS_REPLY:
-    case HardwareMessage_Type_GPIOS_CHANGED:
-        break; // Ignore - we might see our own replies
-
-    default:
-        DEBUG_MSG("Hardware operation %d not yet implemented! FIXME\n", p.type);
-        break;
+        default:
+            DEBUG_MSG("Hardware operation %d not yet implemented! FIXME\n", p.type);
+            break;
+        }
     }
 
     return false;
@@ -113,7 +115,7 @@ bool RemoteHardwareModule::handleReceivedProtobuf(const MeshPacket &req, Hardwar
 
 int32_t RemoteHardwareModule::runOnce()
 {
-    if (watchGpios) {
+    if (moduleConfig.remote_hardware.enabled && watchGpios) {
         uint32_t now = millis();
 
         if (now - lastWatchMsec >= WATCH_INTERVAL_MSEC) {
@@ -134,6 +136,7 @@ int32_t RemoteHardwareModule::runOnce()
     } else {
         // No longer watching anything - stop using CPU
         enabled = false;
+        return INT32_MAX;
     }
 
     return 200; // Poll our GPIOs every 200ms (FIXME, make adjustable via protobuf arg)
