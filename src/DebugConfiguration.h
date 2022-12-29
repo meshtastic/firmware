@@ -19,11 +19,20 @@
 
 #ifdef USE_SEGGER
 #define DEBUG_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
+#define INFO_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
+#define WARN_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
+#define ERROR_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
 #else
 #ifdef DEBUG_PORT
 #define DEBUG_MSG(...) DEBUG_PORT.logDebug(__VA_ARGS__)
+#define INFO_MSG(...) DEBUG_PORT.logDebug(__VA_ARGS__)
+#define WARN_MSG(...) DEBUG_PORT.logDebug(__VA_ARGS__)
+#define ERROR_MSG(...) DEBUG_PORT.logDebug(__VA_ARGS__)
 #else
 #define DEBUG_MSG(...)
+#define INFO_MSG(...)
+#define WARN_MSG(...)
+#define ERROR_MSG(...)
 #endif
 #endif
 
