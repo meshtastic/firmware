@@ -244,8 +244,7 @@ bool MQTT::wantsLink() const
 int32_t MQTT::runOnce()
 {
     if(!moduleConfig.mqtt.enabled) {
-        enabled = false;
-        return INT32_MAX;
+        return disable();
     }
     bool wantConnection = wantsLink();
 
