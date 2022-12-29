@@ -171,7 +171,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         // Advance when we have sent all of our Channels
         if (config_state >= MAX_NUM_CHANNELS) {
             state = STATE_SEND_CONFIG;
-            config_state = Config_device_tag;
+            config_state = _AdminMessage_ConfigType_MIN + 1;
         }
         break;
 
@@ -215,9 +215,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
         config_state++;
         // Advance when we have sent all of our config objects
-        if (config_state > Config_bluetooth_tag) {
+        if (config_state > (_AdminMessage_ConfigType_MAX + 1)) {
             state = STATE_SEND_MODULECONFIG;
-            config_state = ModuleConfig_mqtt_tag;
+            config_state = _AdminMessage_ModuleConfigType_MIN + 1;
         }
         break;
 
@@ -237,6 +237,10 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.moduleConfig.which_payload_variant = ModuleConfig_external_notification_tag;
             fromRadioScratch.moduleConfig.payload_variant.external_notification = moduleConfig.external_notification;
             break;
+        case ModuleConfig_store_forward_tag:
+            fromRadioScratch.moduleConfig.which_payload_variant = ModuleConfig_store_forward_tag;
+            fromRadioScratch.moduleConfig.payload_variant.store_forward = moduleConfig.store_forward;
+            break;
         case ModuleConfig_range_test_tag:
             fromRadioScratch.moduleConfig.which_payload_variant = ModuleConfig_range_test_tag;
             fromRadioScratch.moduleConfig.payload_variant.range_test = moduleConfig.range_test;
@@ -253,11 +257,15 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.moduleConfig.which_payload_variant = ModuleConfig_audio_tag;
             fromRadioScratch.moduleConfig.payload_variant.audio = moduleConfig.audio;
             break;
+        case ModuleConfig_remote_hardware_tag:
+            fromRadioScratch.moduleConfig.which_payload_variant = ModuleConfig_remote_hardware_tag;
+            fromRadioScratch.moduleConfig.payload_variant.remote_hardware = moduleConfig.remote_hardware;
+            break;
         }
 
         config_state++;
         // Advance when we have sent all of our ModuleConfig objects
-        if (config_state > ModuleConfig_audio_tag) {
+        if (config_state > (_AdminMessage_ModuleConfigType_MAX + 1)) {
             state = STATE_SEND_COMPLETE_ID;
             config_state = 0;
         }
