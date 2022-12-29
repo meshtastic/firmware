@@ -125,6 +125,9 @@ class NodeDB
     
     bool factoryReset();
 
+    bool loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, void *dest_struct);
+    bool saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct);
+
   private:
     /// Find a node in our DB, create an empty NodeInfo if missing
     NodeInfo *getOrCreateNode(NodeNum n);
