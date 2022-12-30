@@ -11,7 +11,7 @@ BME280Sensor::BME280Sensor() :
 }
 
 int32_t BME280Sensor::runOnce() {
-    DEBUG_MSG("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s\n", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
@@ -30,7 +30,7 @@ int32_t BME280Sensor::runOnce() {
 void BME280Sensor::setup() { }
 
 bool BME280Sensor::getMetrics(Telemetry *measurement) {
-    DEBUG_MSG("BME280Sensor::getMetrics\n");
+    LOG_DEBUG("BME280Sensor::getMetrics\n");
     bme280.takeForcedMeasurement();
     measurement->variant.environment_metrics.temperature = bme280.readTemperature();
     measurement->variant.environment_metrics.relative_humidity = bme280.readHumidity();

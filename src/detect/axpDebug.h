@@ -3,13 +3,13 @@
 uint32_t axpDebugRead()
 {
   axp.debugCharging();
-  DEBUG_MSG("vbus current %f\n", axp.getVbusCurrent());
-  DEBUG_MSG("charge current %f\n", axp.getBattChargeCurrent());
-  DEBUG_MSG("bat voltage %f\n", axp.getBattVoltage());
-  DEBUG_MSG("batt pct %d\n", axp.getBattPercentage());
-  DEBUG_MSG("is battery connected %d\n", axp.isBatteryConnect());
-  DEBUG_MSG("is USB connected %d\n", axp.isVBUSPlug());
-  DEBUG_MSG("is charging %d\n", axp.isChargeing());
+  LOG_DEBUG("vbus current %f\n", axp.getVbusCurrent());
+  LOG_DEBUG("charge current %f\n", axp.getBattChargeCurrent());
+  LOG_DEBUG("bat voltage %f\n", axp.getBattVoltage());
+  LOG_DEBUG("batt pct %d\n", axp.getBattPercentage());
+  LOG_DEBUG("is battery connected %d\n", axp.isBatteryConnect());
+  LOG_DEBUG("is USB connected %d\n", axp.isVBUSPlug());
+  LOG_DEBUG("is charging %d\n", axp.isChargeing());
 
   return 30 * 1000;
 }

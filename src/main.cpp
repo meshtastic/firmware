@@ -174,7 +174,7 @@ void setup()
 
     serialSinceMsec = millis();
 
-    DEBUG_MSG("\n\n//\\ E S H T /\\ S T / C\n\n");
+    LOG_INFO("\n\n//\\ E S H T /\\ S T / C\n\n");
 
     initDeepSleep();
 
@@ -256,7 +256,7 @@ void setup()
     Wire1.beginTransmission(PCF8563_RTC);
     if (Wire1.endTransmission() == 0){
         rtc_found = PCF8563_RTC;
-        DEBUG_MSG("PCF8563 RTC found\n");
+        LOG_INFO("PCF8563 RTC found\n");
     }
 #endif
 
@@ -282,7 +282,7 @@ void setup()
 #endif
 
     // Hello
-    DEBUG_MSG("Meshtastic hwvendor=%d, swver=%s\n", HW_VENDOR, optstr(APP_VERSION));
+    LOG_INFO("Meshtastic hwvendor=%d, swver=%s\n", HW_VENDOR, optstr(APP_VERSION));
 
 #ifdef ARCH_ESP32
     // Don't init display if we don't have one or we are waking headless due to a timer event
@@ -325,7 +325,7 @@ void setup()
     if (gps)
         gpsStatus->observe(&gps->newStatus);
     else
-        DEBUG_MSG("Warning: No GPS found - running without GPS\n");
+        LOG_WARN("No GPS found - running without GPS\n");
 
     nodeStatus->observe(&nodeDB.newStatus);
 
@@ -355,7 +355,7 @@ void setup()
 
     // ONCE we will factory reset the GPS for bug #327
     if (gps && !devicestate.did_gps_reset) {
-        DEBUG_MSG("GPS FactoryReset requested\n");
+        LOG_WARN("GPS FactoryReset requested\n");
         if (gps->factoryReset()) { // If we don't succeed try again next time
             devicestate.did_gps_reset = true;
             nodeDB.saveToDisk(SEGMENT_DEVICESTATE);
@@ -374,11 +374,11 @@ void setup()
     if (!rIf) {
         rIf = new RF95Interface(RF95_NSS, RF95_IRQ, RF95_RESET, SPI);
         if (!rIf->init()) {
-            DEBUG_MSG("Warning: Failed to find RF95 radio\n");
+            LOG_WARN("Failed to find RF95 radio\n");
             delete rIf;
             rIf = NULL;
         } else {
-            DEBUG_MSG("RF95 Radio init succeeded, using RF95 radio\n");
+            LOG_INFO("RF95 Radio init succeeded, using RF95 radio\n");
         }
     }
 #endif
@@ -387,11 +387,11 @@ void setup()
     if (!rIf) {
         rIf = new SX1280Interface(SX128X_CS, SX128X_DIO1, SX128X_RESET, SX128X_BUSY, SPI);
         if (!rIf->init()) {
-            DEBUG_MSG("Warning: Failed to find SX1280 radio\n");
+            LOG_WARN("Failed to find SX1280 radio\n");
             delete rIf;
             rIf = NULL;
         } else {
-            DEBUG_MSG("SX1280 Radio init succeeded, using SX1280 radio\n");
+            LOG_INFO("SX1280 Radio init succeeded, using SX1280 radio\n");
         }
     }
 #endif
@@ -400,11 +400,11 @@ void setup()
     if (!rIf) {
         rIf = new SX1262Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
         if (!rIf->init()) {
-            DEBUG_MSG("Warning: Failed to find SX1262 radio\n");
+            LOG_WARN("Failed to find SX1262 radio\n");
             delete rIf;
             rIf = NULL;
         } else {
-            DEBUG_MSG("SX1262 Radio init succeeded, using SX1262 radio\n");
+            LOG_INFO("SX1262 Radio init succeeded, using SX1262 radio\n");
         }
     }
 #endif
@@ -413,11 +413,11 @@ void setup()
     if (!rIf) {
         rIf = new SX1268Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
         if (!rIf->init()) {
-            DEBUG_MSG("Warning: Failed to find SX1268 radio\n");
+            LOG_WARN("Failed to find SX1268 radio\n");
             delete rIf;
             rIf = NULL;
         } else {
-            DEBUG_MSG("SX1268 Radio init succeeded, using SX1268 radio\n");
+            LOG_INFO("SX1268 Radio init succeeded, using SX1268 radio\n");
         }
     }
 #endif
@@ -426,11 +426,11 @@ void setup()
     if (!rIf) {
         rIf = new LLCC68Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
         if (!rIf->init()) {
-            DEBUG_MSG("Warning: Failed to find LLCC68 radio\n");
+            LOG_WARN("Failed to find LLCC68 radio\n");
             delete rIf;
             rIf = NULL;
         } else {
-            DEBUG_MSG("LLCC68 Radio init succeeded, using LLCC68 radio\n");
+            LOG_INFO("LLCC68 Radio init succeeded, using LLCC68 radio\n");
         }
     }
 #endif
@@ -439,11 +439,11 @@ void setup()
     if (!rIf) {
         rIf = new SimRadio;
         if (!rIf->init()) {
-            DEBUG_MSG("Warning: Failed to find simulated radio\n");
+            LOG_WARN("Failed to find simulated radio\n");
             delete rIf;
             rIf = NULL;
         } else {
-            DEBUG_MSG("Using SIMULATED radio!\n");
+            LOG_INFO("Using SIMULATED radio!\n");
         }
     }
 #endif
@@ -451,11 +451,11 @@ void setup()
 // check if the radio chip matches the selected region
 
 if((config.lora.region == Config_LoRaConfig_RegionCode_LORA_24) && (!rIf->wideLora())){
-    DEBUG_MSG("Warning: Radio chip does not support 2.4GHz LoRa. Reverting to unset.\n");
+    LOG_WARN("Radio chip does not support 2.4GHz LoRa. Reverting to unset.\n");
     config.lora.region = Config_LoRaConfig_RegionCode_UNSET;
     nodeDB.saveToDisk(SEGMENT_CONFIG);
     if(!rIf->reconfigure()) {
-        DEBUG_MSG("Reconfigure failed, rebooting\n");
+        LOG_WARN("Reconfigure failed, rebooting\n");
         screen->startRebootScreen();
         rebootAtMsec = millis() + 5000;
     }
@@ -493,7 +493,7 @@ if((config.lora.region == Config_LoRaConfig_RegionCode_LORA_24) && (!rIf->wideLo
         // Calculate and save the bit rate to myNodeInfo
         // TODO: This needs to be added what ever method changes the channel from the phone.
         myNodeInfo.bitrate = (float(Constants_DATA_PAYLOAD_LEN) / (float(rIf->getPacketTime(Constants_DATA_PAYLOAD_LEN)))) * 1000;
-        DEBUG_MSG("myNodeInfo.bitrate = %f bytes / sec\n", myNodeInfo.bitrate);
+        LOG_DEBUG("myNodeInfo.bitrate = %f bytes / sec\n", myNodeInfo.bitrate);
     }
 
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
@@ -546,13 +546,13 @@ void loop()
     long delayMsec = mainController.runOrDelay();
 
     /* if (mainController.nextThread && delayMsec)
-        DEBUG_MSG("Next %s in %ld\n", mainController.nextThread->ThreadName.c_str(),
+        LOG_DEBUG("Next %s in %ld\n", mainController.nextThread->ThreadName.c_str(),
                   mainController.nextThread->tillRun(millis())); */
 
     // We want to sleep as long as possible here - because it saves power
     if (!runASAP && loopCanSleep()) {
-        // if(delayMsec > 100) DEBUG_MSG("sleeping %ld\n", delayMsec);
+        // if(delayMsec > 100) LOG_DEBUG("sleeping %ld\n", delayMsec);
         mainDelay.delay(delayMsec);
     }
-    // if (didWake) DEBUG_MSG("wake!\n");
+    // if (didWake) LOG_DEBUG("wake!\n");
 }

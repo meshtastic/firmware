@@ -43,19 +43,19 @@ void TraceRouteModule::appendMyID(RouteDiscovery* updated)
         updated->route[updated->route_count] = myNodeInfo.my_node_num;
         updated->route_count += 1;        
     } else {
-        DEBUG_MSG("WARNING: Route exceeded maximum hop limit, are you bridging networks?\n");
+        LOG_WARN("Route exceeded maximum hop limit, are you bridging networks?\n");
     }
 }
 
 
 void TraceRouteModule::printRoute(RouteDiscovery* r, uint32_t origin, uint32_t dest) 
 {
-    DEBUG_MSG("Route traced:\n");
-    DEBUG_MSG("0x%x --> ", origin);
+    LOG_INFO("Route traced:\n");
+    LOG_INFO("0x%x --> ", origin);
     for (uint8_t i=0; i<r->route_count; i++) {
-        DEBUG_MSG("0x%x --> ", r->route[i]); 
+        LOG_INFO("0x%x --> ", r->route[i]); 
     }
-    if (dest != NODENUM_BROADCAST) DEBUG_MSG("0x%x\n", dest); else DEBUG_MSG("...\n");
+    if (dest != NODENUM_BROADCAST) LOG_INFO("0x%x\n", dest); else LOG_INFO("...\n");
 }
 
 

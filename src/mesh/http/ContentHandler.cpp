@@ -140,7 +140,7 @@ void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer)
 void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
 {
 
-    DEBUG_MSG("webAPI handleAPIv1FromRadio\n");
+    LOG_DEBUG("webAPI handleAPIv1FromRadio\n");
 
     /*
         For documentation, see:
@@ -185,12 +185,12 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
         res->write(txBuf, len);
     }
 
-    DEBUG_MSG("webAPI handleAPIv1FromRadio, len %d\n", len);
+    LOG_DEBUG("webAPI handleAPIv1FromRadio, len %d\n", len);
 }
 
 void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
 {
-    DEBUG_MSG("webAPI handleAPIv1ToRadio\n");
+    LOG_DEBUG("webAPI handleAPIv1ToRadio\n");
 
     /*
         For documentation, see:
@@ -213,11 +213,11 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
     byte buffer[MAX_TO_FROM_RADIO_SIZE];
     size_t s = req->readBytes(buffer, MAX_TO_FROM_RADIO_SIZE);
 
-    DEBUG_MSG("Received %d bytes from PUT request\n", s);
+    LOG_DEBUG("Received %d bytes from PUT request\n", s);
     webAPI.handleToRadio(buffer, s);
 
     res->write(buffer, s);
-    DEBUG_MSG("webAPI handleAPIv1ToRadio\n");
+    LOG_DEBUG("webAPI handleAPIv1ToRadio\n");
 }
 
 void htmlDeleteDir(const char *dirname)
@@ -238,7 +238,7 @@ void htmlDeleteDir(const char *dirname)
         } else {
             String fileName = String(file.name());
             file.close();
-            DEBUG_MSG("    %s\n", fileName.c_str());
+            LOG_DEBUG("    %s\n", fileName.c_str());
             FSCom.remove(fileName);
         }
         file = root.openNextFile();
@@ -335,7 +335,7 @@ void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
     if (params->getQueryParameter("delete", paramValDelete)) {
         std::string pathDelete = "/" + paramValDelete;
         if (FSCom.remove(pathDelete.c_str())) {
-            Serial.println(pathDelete.c_str());
+            LOG_INFO("%s\n", pathDelete.c_str());
             JSONObject jsonObjOuter; 
             jsonObjOuter["status"] = new JSONValue("ok");
             JSONValue *value = new JSONValue(jsonObjOuter);
@@ -343,7 +343,7 @@ void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
             delete value;
             return;
         } else {
-            Serial.println(pathDelete.c_str());
+            LOG_INFO("%s\n", pathDelete.c_str());
             JSONObject jsonObjOuter;
             jsonObjOuter["status"] = new JSONValue("Error");
             JSONValue *value = new JSONValue(jsonObjOuter);
@@ -379,13 +379,13 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
         if (FSCom.exists(filename.c_str())) {
             file = FSCom.open(filename.c_str());
             if (!file.available()) {
-                DEBUG_MSG("File not available - %s\n", filename.c_str());
+                LOG_WARN("File not available - %s\n", filename.c_str());
             }
         } else if (FSCom.exists(filenameGzip.c_str())) {
             file = FSCom.open(filenameGzip.c_str());
             res->setHeader("Content-Encoding", "gzip");
             if (!file.available()) {
-                DEBUG_MSG("File not available - %s\n", filenameGzip.c_str());
+                LOG_WARN("File not available - %s\n", filenameGzip.c_str());
             }
         } else {
             has_set_content_type = true;
@@ -393,7 +393,7 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
             file = FSCom.open(filenameGzip.c_str());
             res->setHeader("Content-Type", "text/html");
             if (!file.available()) {
-                DEBUG_MSG("File not available - %s\n", filenameGzip.c_str());
+                LOG_WARN("File not available - %s\n", filenameGzip.c_str());
                 res->println("Web server is running.<br><br>The content you are looking for can't be found. Please see: <a "
                              "href=https://meshtastic.org/docs/getting-started/faq#wifi--web-browser>FAQ</a>.<br><br><a "
                              "href=/admin>admin</a>");
@@ -437,7 +437,7 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
         return;
 
     } else {
-        DEBUG_MSG("ERROR: This should not have happened...\n");
+        LOG_ERROR("This should not have happened...\n");
         res->println("ERROR: This should not have happened...");
     }
 }
@@ -445,7 +445,7 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
 void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
 {
 
-    DEBUG_MSG("Form Upload - Disabling keep-alive\n");
+    LOG_DEBUG("Form Upload - Disabling keep-alive\n");
     res->setHeader("Connection", "close");
 
     // First, we need to check the encoding of the form that we have received.
@@ -453,7 +453,7 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
     // Then we select the body parser based on the encoding.
     // Actually we do this only for documentary purposes, we know the form is going
     // to be multipart/form-data.
-    DEBUG_MSG("Form Upload - Creating body parser reference\n");
+    LOG_DEBUG("Form Upload - Creating body parser reference\n");
     HTTPBodyParser *parser;
     std::string contentType = req->getHeader("Content-Type");
 
@@ -469,10 +469,10 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
 
     // Now, we can decide based on the content type:
     if (contentType == "multipart/form-data") {
-        DEBUG_MSG("Form Upload - multipart/form-data\n");
+        LOG_DEBUG("Form Upload - multipart/form-data\n");
         parser = new HTTPMultipartBodyParser(req);
     } else {
-        Serial.printf("Unknown POST Content-Type: %s\n", contentType.c_str());
+        LOG_DEBUG("Unknown POST Content-Type: %s\n", contentType.c_str());
         return;
     }
 
@@ -499,19 +499,19 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
         std::string filename = parser->getFieldFilename();
         std::string mimeType = parser->getFieldMimeType();
         // We log all three values, so that you can observe the upload on the serial monitor:
-        DEBUG_MSG("handleFormUpload: field name='%s', filename='%s', mimetype='%s'\n", name.c_str(), filename.c_str(),
+        LOG_DEBUG("handleFormUpload: field name='%s', filename='%s', mimetype='%s'\n", name.c_str(), filename.c_str(),
                   mimeType.c_str());
 
         // Double check that it is what we expect
         if (name != "file") {
-            DEBUG_MSG("Skipping unexpected field\n");
+            LOG_DEBUG("Skipping unexpected field\n");
             res->println("<p>No file found.</p>");
             return;
         }
 
         // Double check that it is what we expect
         if (filename == "") {
-            DEBUG_MSG("Skipping unexpected field\n");
+            LOG_DEBUG("Skipping unexpected field\n");
             res->println("<p>No file found.</p>");
             return;
         }
@@ -532,7 +532,7 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
 
             byte buf[512];
             size_t readLength = parser->read(buf, 512);
-            // DEBUG_MSG("\n\nreadLength - %i\n", readLength);
+            // LOG_DEBUG("\n\nreadLength - %i\n", readLength);
 
             // Abort the transfer if there is less than 50k space left on the filesystem.
             if (FSCom.totalBytes() - FSCom.usedBytes() < 51200) {
@@ -548,7 +548,7 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
             // if (readLength) {
             file.write(buf, readLength);
             fileLength += readLength;
-            DEBUG_MSG("File Length %i\n", fileLength);
+            LOG_DEBUG("File Length %i\n", fileLength);
             //}
         }
         // enableLoopWDT();
@@ -671,7 +671,7 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 */
 void handleHotspot(HTTPRequest *req, HTTPResponse *res)
 {
-    DEBUG_MSG("Hotspot Request\n");
+    LOG_INFO("Hotspot Request\n");
 
     /*
         If we don't do a redirect, be sure to return a "Success" message
@@ -697,7 +697,7 @@ void handleDeleteFsContent(HTTPRequest *req, HTTPResponse *res)
     res->println("<h1>Meshtastic</h1>\n");
     res->println("Deleting Content in /static/*");
 
-    DEBUG_MSG("Deleting files from /static/* : \n");
+    LOG_INFO("Deleting files from /static/* : \n");
 
     htmlDeleteDir("/static");
 
@@ -771,7 +771,7 @@ void handleRestart(HTTPRequest *req, HTTPResponse *res)
     res->println("<h1>Meshtastic</h1>\n");
     res->println("Restarting");
 
-    DEBUG_MSG("***** Restarted on HTTP(s) Request *****\n");
+    LOG_DEBUG("***** Restarted on HTTP(s) Request *****\n");
     webServerThread->requestRestart = (millis() / 1000) + 5;
 }
 

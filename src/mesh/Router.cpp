@@ -48,9 +48,9 @@ Router::Router() : concurrency::OSThread("Router"), fromRadioQueue(MAX_RX_FROMRA
 {
     // This is called pre main(), don't touch anything here, the following code is not safe
 
-    /* DEBUG_MSG("Size of NodeInfo %d\n", sizeof(NodeInfo));
-    DEBUG_MSG("Size of SubPacket %d\n", sizeof(SubPacket));
-    DEBUG_MSG("Size of MeshPacket %d\n", sizeof(MeshPacket)); */
+    /* LOG_DEBUG("Size of NodeInfo %d\n", sizeof(NodeInfo));
+    LOG_DEBUG("Size of SubPacket %d\n", sizeof(SubPacket));
+    LOG_DEBUG("Size of MeshPacket %d\n", sizeof(MeshPacket)); */
 
     fromRadioQueue.setReader(this);
 }
@@ -67,7 +67,7 @@ int32_t Router::runOnce()
         perhapsHandleReceived(mp);
     }
 
-    // DEBUG_MSG("sleeping forever!\n");
+    // LOG_DEBUG("sleeping forever!\n");
     return INT32_MAX; // Wait a long time - until we get woken for the message queue
 }
 
@@ -103,7 +103,7 @@ PacketId generatePacketId()
         // pick a random initial sequence number at boot (to prevent repeated reboots always starting at 0)
         // Note: we mask the high order bit to ensure that we never pass a 'negative' number to random
         i = random(numPacketId & 0x7fffffff);
-        DEBUG_MSG("Initial packet id %u, numPacketId %u\n", i, numPacketId);
+        LOG_DEBUG("Initial packet id %u, numPacketId %u\n", i, numPacketId);
     }
 
     i++;
@@ -136,14 +136,14 @@ void Router::sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelI
 
 void Router::abortSendAndNak(Routing_Error err, MeshPacket *p)
 {
-    DEBUG_MSG("Error=%d, returning NAK and dropping packet.\n", err);
+    LOG_ERROR("Error=%d, returning NAK and dropping packet.\n", err);
     sendAckNak(Routing_Error_NO_INTERFACE, getFrom(p), p->id, p->channel);
     packetPool.release(p);
 }
 
 void Router::setReceivedMessage()
 {
-    // DEBUG_MSG("set interval to ASAP\n");
+    // LOG_DEBUG("set interval to ASAP\n");
     setInterval(0); // Run ASAP, so we can figure out our correct sleep time
     runASAP = true;
 }
@@ -173,10 +173,10 @@ ErrorCode Router::sendLocal(MeshPacket *p, RxSource src)
 
 void printBytes(const char *label, const uint8_t *p, size_t numbytes)
 {
-    DEBUG_MSG("%s: ", label);
+    LOG_DEBUG("%s: ", label);
     for (size_t i = 0; i < numbytes; i++)
-        DEBUG_MSG("%02x ", p[i]);
-    DEBUG_MSG("\n");
+        LOG_DEBUG("%02x ", p[i]);
+    LOG_DEBUG("\n");
 }
 
 /**
@@ -193,7 +193,7 @@ ErrorCode Router::send(MeshPacket *p)
       float hourlyTxPercent = airTime->utilizationTXPercent();
       if (hourlyTxPercent > myRegion->dutyCycle) {
           uint8_t silentMinutes = airTime->getSilentMinutes(hourlyTxPercent, myRegion->dutyCycle); 
-          DEBUG_MSG("WARNING: Duty cycle limit exceeded. Aborting send for now, you can send again in %d minutes.\n", silentMinutes);
+          LOG_WARN("Duty cycle limit exceeded. Aborting send for now, you can send again in %d minutes.\n", silentMinutes);
           Routing_Error err = Routing_Error_DUTY_CYCLE_LIMIT;
           abortSendAndNak(err, p);
           return err;
@@ -239,7 +239,7 @@ ErrorCode Router::send(MeshPacket *p)
             shouldActuallyEncrypt = false;
         }
 
-        DEBUG_MSG("Should encrypt MQTT?: %d\n", shouldActuallyEncrypt);
+        LOG_INFO("Should encrypt MQTT?: %d\n", shouldActuallyEncrypt);
 
         // the packet is currently in a decrypted state.  send it now if they want decrypted packets
         if (mqtt && !shouldActuallyEncrypt)
@@ -276,14 +276,14 @@ bool Router::cancelSending(NodeNum from, PacketId id)
  */
 void Router::sniffReceived(const MeshPacket *p, const Routing *c)
 {
-    DEBUG_MSG("FIXME-update-db Sniffing packet\n");
+    LOG_DEBUG("FIXME-update-db Sniffing packet\n");
     // FIXME, update nodedb here for any packet that passes through us
 }
 
 bool perhapsDecode(MeshPacket *p)
 {
 
-    // DEBUG_MSG("\n\n** perhapsDecode payloadVariant - %d\n\n", p->which_payloadVariant);
+    // LOG_DEBUG("\n\n** perhapsDecode payloadVariant - %d\n\n", p->which_payloadVariant);
 
     if (p->which_payload_variant == MeshPacket_decoded_tag)
         return true; // If packet was already decoded just return
@@ -307,9 +307,9 @@ bool perhapsDecode(MeshPacket *p)
             // Take those raw bytes and convert them back into a well structured protobuf we can understand
             memset(&p->decoded, 0, sizeof(p->decoded));
             if (!pb_decode_from_bytes(bytes, rawSize, &Data_msg, &p->decoded)) {
-                DEBUG_MSG("Invalid protobufs in received mesh packet (bad psk?)!\n");
+                LOG_ERROR("Invalid protobufs in received mesh packet (bad psk?)!\n");
             } else if (p->decoded.portnum == PortNum_UNKNOWN_APP) {
-                DEBUG_MSG("Invalid portnum (bad psk?)!\n");
+                LOG_ERROR("Invalid portnum (bad psk?)!\n");
             } else {
                 // parsing was successful
                 p->which_payload_variant = MeshPacket_decoded_tag; // change type to decoded
@@ -317,9 +317,9 @@ bool perhapsDecode(MeshPacket *p)
 
                 /*
                 if (p->decoded.portnum == PortNum_TEXT_MESSAGE_APP) {
-                    DEBUG_MSG("\n\n** TEXT_MESSAGE_APP\n");
+                    LOG_DEBUG("\n\n** TEXT_MESSAGE_APP\n");
                 } else if (p->decoded.portnum == PortNum_TEXT_MESSAGE_COMPRESSED_APP) {
-                    DEBUG_MSG("\n\n** PortNum_TEXT_MESSAGE_COMPRESSED_APP\n");
+                    LOG_DEBUG("\n\n** PortNum_TEXT_MESSAGE_COMPRESSED_APP\n");
                 }
                 */
 
@@ -334,7 +334,7 @@ bool perhapsDecode(MeshPacket *p)
 
                     decompressed_len = unishox2_decompress_simple(compressed_in, p->decoded.payload.size, decompressed_out);
 
-                    // DEBUG_MSG("\n\n**\n\nDecompressed length - %d \n", decompressed_len);
+                    // LOG_DEBUG("\n\n**\n\nDecompressed length - %d \n", decompressed_len);
 
                     memcpy(p->decoded.payload.bytes, decompressed_out, decompressed_len);
 
@@ -348,7 +348,7 @@ bool perhapsDecode(MeshPacket *p)
         }
     }
 
-    DEBUG_MSG("No suitable channel found for decoding, hash was 0x%x!\n", p->channel);
+    LOG_WARN("No suitable channel found for decoding, hash was 0x%x!\n", p->channel);
     return false;
 }
 
@@ -374,20 +374,20 @@ Routing_Error perhapsEncode(MeshPacket *p)
             int compressed_len;
             compressed_len = unishox2_compress_simple(original_payload, p->decoded.payload.size, compressed_out);
 
-            DEBUG_MSG("Original length - %d \n", p->decoded.payload.size);
-            DEBUG_MSG("Compressed length - %d \n", compressed_len);
-            DEBUG_MSG("Original message - %s \n", p->decoded.payload.bytes);
+            LOG_DEBUG("Original length - %d \n", p->decoded.payload.size);
+            LOG_DEBUG("Compressed length - %d \n", compressed_len);
+            LOG_DEBUG("Original message - %s \n", p->decoded.payload.bytes);
 
             // If the compressed length is greater than or equal to the original size, don't use the compressed form
             if (compressed_len >= p->decoded.payload.size) {
 
-                DEBUG_MSG("Not using compressing message.\n");
+                LOG_DEBUG("Not using compressing message.\n");
                 // Set the uncompressed payload varient anyway. Shouldn't hurt?
                 // p->decoded.which_payloadVariant = Data_payload_tag;
 
                 // Otherwise we use the compressor
             } else {
-                DEBUG_MSG("Using compressed message.\n");
+                LOG_DEBUG("Using compressed message.\n");
                 // Copy the compressed data into the meshpacket
 
                 p->decoded.payload.size = compressed_len;
@@ -459,9 +459,9 @@ void Router::perhapsHandleReceived(MeshPacket *p)
     bool ignore = is_in_repeated(config.lora.ignore_incoming, p->from);
 
     if (ignore)
-        DEBUG_MSG("Ignoring incoming message, 0x%x is in our ignore list\n", p->from);
+        LOG_DEBUG("Ignoring incoming message, 0x%x is in our ignore list\n", p->from);
     else if (ignore |= shouldFilterReceived(p)) {
-        DEBUG_MSG("Incoming message was filtered 0x%x\n", p->from);
+        LOG_DEBUG("Incoming message was filtered 0x%x\n", p->from);
     }
 
     // Note: we avoid calling shouldFilterReceived if we are supposed to ignore certain nodes - because some overrides might

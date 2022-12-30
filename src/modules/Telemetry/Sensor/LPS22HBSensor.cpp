@@ -11,7 +11,7 @@ LPS22HBSensor::LPS22HBSensor() :
 }
 
 int32_t LPS22HBSensor::runOnce() {
-    DEBUG_MSG("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s\n", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }

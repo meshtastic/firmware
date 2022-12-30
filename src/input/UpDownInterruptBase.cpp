@@ -26,7 +26,7 @@ void UpDownInterruptBase::init(
     attachInterrupt(this->_pinDown, onIntDown, RISING);
     attachInterrupt(this->_pinUp, onIntUp, RISING);
 
-    DEBUG_MSG("GPIO initialized (%d, %d, %d)\n",
+    LOG_DEBUG("GPIO initialized (%d, %d, %d)\n",
         this->_pinDown, this->_pinUp, pinPress);
 }
 
@@ -34,7 +34,7 @@ void UpDownInterruptBase::intPressHandler()
 {
     InputEvent e;
     e.source = this->_originName;
-    DEBUG_MSG("GPIO event Press\n");
+    LOG_DEBUG("GPIO event Press\n");
     e.inputEvent = this->_eventPressed;
     this->notifyObservers(&e);
 }
@@ -43,7 +43,7 @@ void UpDownInterruptBase::intDownHandler()
 {
     InputEvent e;
     e.source = this->_originName;
-    DEBUG_MSG("GPIO event Down\n");
+    LOG_DEBUG("GPIO event Down\n");
     e.inputEvent = this->_eventDown;
     this->notifyObservers(&e);
 }
@@ -52,7 +52,7 @@ void UpDownInterruptBase::intUpHandler()
 {
     InputEvent e;
     e.source = this->_originName;
-    DEBUG_MSG("GPIO event Up\n");
+    LOG_DEBUG("GPIO event Up\n");
     e.inputEvent = this->_eventUp;
     this->notifyObservers(&e);
 }
