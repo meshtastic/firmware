@@ -208,7 +208,7 @@ ExternalNotificationModule::ExternalNotificationModule()
         }
     } else {
         LOG_INFO("External Notification Module Disabled\n");
-        enabled = false;
+        disable();
     }
 }
 

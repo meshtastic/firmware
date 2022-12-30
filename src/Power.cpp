@@ -287,8 +287,18 @@ void Power::readPowerStatus()
                   powerStatus2.getIsCharging(), powerStatus2.getBatteryVoltageMv(), powerStatus2.getBatteryChargePercent());
         newStatus.notifyObservers(&powerStatus2);
 #ifdef DEBUG_HEAP
-        if (lastheap != ESP.getFreeHeap()){
-            LOG_DEBUG("Heap status: %d/%d bytes free (%d), running %d threads\n", ESP.getFreeHeap(), ESP.getHeapSize(), ESP.getFreeHeap() - lastheap , concurrency::mainController.size(false));
+        if (lastheap != ESP.getFreeHeap()) {
+            LOG_DEBUG("Threads running:");
+            int running = 0;
+            for(int i = 0; i < MAX_THREADS; i++){
+                auto thread = concurrency::mainController.get(i);
+                if((thread != nullptr) && (thread->enabled)) {
+                    LOG_DEBUG(" %s", thread->ThreadName.c_str());
+                    running++;
+                }
+            }
+            LOG_DEBUG("\n");
+            LOG_DEBUG("Heap status: %d/%d bytes free (%d), running %d/%d threads\n", ESP.getFreeHeap(), ESP.getHeapSize(), ESP.getFreeHeap() - lastheap, running, concurrency::mainController.size(false));
             lastheap = ESP.getFreeHeap();
         }
 #endif

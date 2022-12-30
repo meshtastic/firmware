@@ -128,12 +128,17 @@ void mqttInit()
 
 MQTT::MQTT() : concurrency::OSThread("mqtt"), pubSub(mqttClient), mqttQueue(MAX_MQTT_QUEUE)
 {
-    assert(!mqtt);
-    mqtt = this;
+    if(moduleConfig.mqtt.enabled) {
 
-    pubSub.setCallback(mqttCallback);
+        assert(!mqtt);
+        mqtt = this;
 
-    // preflightSleepObserver.observe(&preflightSleep);
+        pubSub.setCallback(mqttCallback);
+
+        // preflightSleepObserver.observe(&preflightSleep);
+    } else {
+        disable();
+    }
 }
 
 bool MQTT::connected()
@@ -239,6 +244,9 @@ bool MQTT::wantsLink() const
 
 int32_t MQTT::runOnce()
 {
+    if(!moduleConfig.mqtt.enabled) {
+        return disable();
+    }
     bool wantConnection = wantsLink();
 
     // If connected poll rapidly, otherwise only occasionally check for a wifi connection change and ability to contact server

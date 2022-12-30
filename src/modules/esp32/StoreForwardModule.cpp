@@ -52,7 +52,7 @@ int32_t StoreForwardModule::runOnce()
         return (this->packetTimeMax);
     }
 #endif
-    return (INT32_MAX);
+    return disable();
 }
 
 /*
@@ -458,6 +458,8 @@ StoreForwardModule::StoreForwardModule()
             is_client = true;
             LOG_INFO("*** Initializing Store & Forward Module in Client mode\n");
         }
+    } else {
+        disable();
     }
 #endif
 }
