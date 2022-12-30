@@ -136,7 +136,7 @@ void Router::sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelI
 
 void Router::abortSendAndNak(Routing_Error err, MeshPacket *p)
 {
-    LOG_DEBUG("Error=%d, returning NAK and dropping packet.\n", err);
+    LOG_ERROR("Error=%d, returning NAK and dropping packet.\n", err);
     sendAckNak(Routing_Error_NO_INTERFACE, getFrom(p), p->id, p->channel);
     packetPool.release(p);
 }
@@ -239,7 +239,7 @@ ErrorCode Router::send(MeshPacket *p)
             shouldActuallyEncrypt = false;
         }
 
-        LOG_DEBUG("Should encrypt MQTT?: %d\n", shouldActuallyEncrypt);
+        LOG_INFO("Should encrypt MQTT?: %d\n", shouldActuallyEncrypt);
 
         // the packet is currently in a decrypted state.  send it now if they want decrypted packets
         if (mqtt && !shouldActuallyEncrypt)
@@ -307,9 +307,9 @@ bool perhapsDecode(MeshPacket *p)
             // Take those raw bytes and convert them back into a well structured protobuf we can understand
             memset(&p->decoded, 0, sizeof(p->decoded));
             if (!pb_decode_from_bytes(bytes, rawSize, &Data_msg, &p->decoded)) {
-                LOG_DEBUG("Invalid protobufs in received mesh packet (bad psk?)!\n");
+                LOG_ERROR("Invalid protobufs in received mesh packet (bad psk?)!\n");
             } else if (p->decoded.portnum == PortNum_UNKNOWN_APP) {
-                LOG_DEBUG("Invalid portnum (bad psk?)!\n");
+                LOG_ERROR("Invalid portnum (bad psk?)!\n");
             } else {
                 // parsing was successful
                 p->which_payload_variant = MeshPacket_decoded_tag; // change type to decoded
@@ -348,7 +348,7 @@ bool perhapsDecode(MeshPacket *p)
         }
     }
 
-    LOG_DEBUG("No suitable channel found for decoding, hash was 0x%x!\n", p->channel);
+    LOG_WARN("No suitable channel found for decoding, hash was 0x%x!\n", p->channel);
     return false;
 }
 

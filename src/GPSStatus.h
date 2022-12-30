@@ -114,7 +114,7 @@ class GPSStatus : public Status
 
         if (isDirty && p.timestamp && (newStatus->p.timestamp == p.timestamp)) {
             // We can NEVER be in two locations at the same time! (also PR #886)
-            LOG_DEBUG("BUG!! positional timestamp unchanged from prev solution\n");
+            LOG_ERROR("BUG: Positional timestamp unchanged from prev solution\n");
         }
 
         initialized = true;

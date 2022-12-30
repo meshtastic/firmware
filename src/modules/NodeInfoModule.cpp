@@ -46,7 +46,7 @@ MeshPacket *NodeInfoModule::allocReply()
 {
     User &u = owner;
 
-    LOG_DEBUG("sending owner %s/%s/%s\n", u.id, u.long_name, u.short_name);
+    LOG_INFO("sending owner %s/%s/%s\n", u.id, u.long_name, u.short_name);
     return allocDataProtobuf(u);
 }
 
@@ -65,7 +65,7 @@ int32_t NodeInfoModule::runOnce()
     bool requestReplies = currentGeneration != radioGeneration;
     currentGeneration = radioGeneration;
 
-    LOG_DEBUG("Sending our nodeinfo to mesh (wantReplies=%d)\n", requestReplies);
+    LOG_INFO("Sending our nodeinfo to mesh (wantReplies=%d)\n", requestReplies);
     sendOurNodeInfo(NODENUM_BROADCAST, requestReplies); // Send our info (don't request replies)
 
     return default_broadcast_interval_secs * 1000;

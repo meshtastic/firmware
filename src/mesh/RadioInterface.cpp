@@ -117,7 +117,7 @@ void initRegion()
     for (; r->code != Config_LoRaConfig_RegionCode_UNSET && r->code != config.lora.region; r++)
         ;
     myRegion = r;
-    LOG_DEBUG("Wanted region %d, using %s\n", config.lora.region, r->name);
+    LOG_INFO("Wanted region %d, using %s\n", config.lora.region, r->name);
 }
 
 /**
@@ -284,7 +284,7 @@ bool RadioInterface::reconfigure()
 
 bool RadioInterface::init()
 {
-    LOG_DEBUG("Starting meshradio init...\n");
+    LOG_INFO("Starting meshradio init...\n");
 
     configChangedObserver.observe(&service.configChanged);
     preflightSleepObserver.observe(&preflightSleep);
@@ -449,13 +449,13 @@ void RadioInterface::applyModemConfig()
     saveChannelNum(channel_num);
     saveFreq(freq + config.lora.frequency_offset);
 
-    LOG_DEBUG("Radio freq=%.3f, config.lora.frequency_offset=%.3f\n", freq, config.lora.frequency_offset);
-    LOG_DEBUG("Set radio: region=%s, name=%s, config=%u, ch=%d, power=%d\n", myRegion->name, channelName, loraConfig.modem_preset, channel_num, power);
-    LOG_DEBUG("Radio myRegion->freqStart -> myRegion->freqEnd: %f -> %f (%f mhz)\n", myRegion->freqStart, myRegion->freqEnd, myRegion->freqEnd - myRegion->freqStart);
-    LOG_DEBUG("Radio myRegion->numChannels: %d x %.3fkHz\n", numChannels, bw);
-    LOG_DEBUG("Radio channel_num: %d\n", channel_num);
-    LOG_DEBUG("Radio frequency: %f\n", getFreq());
-    LOG_DEBUG("Slot time: %u msec\n", slotTimeMsec);
+    LOG_INFO("Radio freq=%.3f, config.lora.frequency_offset=%.3f\n", freq, config.lora.frequency_offset);
+    LOG_INFO("Set radio: region=%s, name=%s, config=%u, ch=%d, power=%d\n", myRegion->name, channelName, loraConfig.modem_preset, channel_num, power);
+    LOG_INFO("Radio myRegion->freqStart -> myRegion->freqEnd: %f -> %f (%f mhz)\n", myRegion->freqStart, myRegion->freqEnd, myRegion->freqEnd - myRegion->freqStart);
+    LOG_INFO("Radio myRegion->numChannels: %d x %.3fkHz\n", numChannels, bw);
+    LOG_INFO("Radio channel_num: %d\n", channel_num);
+    LOG_INFO("Radio frequency: %f\n", getFreq());
+    LOG_INFO("Slot time: %u msec\n", slotTimeMsec);
 }
 
 /**
@@ -470,11 +470,11 @@ void RadioInterface::limitPower()
         maxPower = myRegion->powerLimit;
 
     if ((power > maxPower) && !devicestate.owner.is_licensed) {
-        LOG_DEBUG("Lowering transmit power because of regulatory limits\n");
+        LOG_INFO("Lowering transmit power because of regulatory limits\n");
         power = maxPower;
     }
 
-    LOG_DEBUG("Set radio: final power level=%d\n", power);
+    LOG_INFO("Set radio: final power level=%d\n", power);
 }
 
 

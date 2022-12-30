@@ -52,7 +52,7 @@ MeshPacket *MeshModule::allocAckNak(Routing_Error err, NodeNum to, PacketId idFr
     p->to = to;
     p->decoded.request_id = idFrom;
     p->channel = chIndex;
-    LOG_DEBUG("Alloc an err=%d,to=0x%x,idFrom=0x%x,id=0x%x\n", err, to, idFrom, p->id);
+    LOG_ERROR("Alloc an err=%d,to=0x%x,idFrom=0x%x,id=0x%x\n", err, to, idFrom, p->id);
 
     return p;
 }
@@ -134,7 +134,7 @@ void MeshModule::callPlugins(const MeshPacket &mp, RxSource src)
                 // any other node.
                 if (mp.decoded.want_response && toUs && (getFrom(&mp) != ourNodeNum || mp.to == ourNodeNum) && !currentReply) {
                     pi.sendResponse(mp);
-                    LOG_DEBUG("Module '%s' sent a response\n", pi.name);
+                    LOG_INFO("Module '%s' sent a response\n", pi.name);
                 } else {
                     LOG_DEBUG("Module '%s' considered\n", pi.name);
                 }

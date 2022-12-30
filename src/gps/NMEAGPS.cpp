@@ -137,7 +137,7 @@ bool NMEAGPS::lookForLocation()
             (reader.time.age() < GPS_SOL_EXPIRY_MS) &&
             (reader.date.age() < GPS_SOL_EXPIRY_MS)))
     {
-        LOG_DEBUG("SOME data is TOO OLD: LOC %u, TIME %u, DATE %u\n", reader.location.age(), reader.time.age(), reader.date.age());
+        LOG_WARN("SOME data is TOO OLD: LOC %u, TIME %u, DATE %u\n", reader.location.age(), reader.time.age(), reader.date.age());
         return false;
     }
 
@@ -212,7 +212,7 @@ bool NMEAGPS::lookForLocation()
         if (reader.course.value() < 36000) {  // sanity check
             p.ground_track = reader.course.value() * 1e3; // Scale the heading (in degrees * 10^-2) to match the expected degrees * 10^-5
         } else {
-            LOG_DEBUG("BOGUS course.value() REJECTED: %d\n",
+            LOG_WARN("BOGUS course.value() REJECTED: %d\n",
                         reader.course.value());
         }
     }

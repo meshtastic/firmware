@@ -21,13 +21,13 @@ bool copyFile(const char* from, const char* to)
    
     File f1 = FSCom.open(from, FILE_O_READ);
     if (!f1){
-        LOG_DEBUG("Failed to open source file %s\n", from);
+        LOG_ERROR("Failed to open source file %s\n", from);
         return false;
     }
 
     File f2 = FSCom.open(to, FILE_O_WRITE);
     if (!f2) {
-        LOG_DEBUG("Failed to open destination file %s\n", to);
+        LOG_ERROR("Failed to open destination file %s\n", to);
         return false;
     }
    
@@ -170,7 +170,7 @@ void fsInit()
 #ifdef FSCom
     if (!FSBegin())
     {
-        LOG_DEBUG("ERROR filesystem mount Failed. Formatting...\n");
+        LOG_ERROR("Filesystem mount Failed. Formatting...\n");
         assert(0); // FIXME - report failure to phone
     }
 #ifdef ARCH_ESP32

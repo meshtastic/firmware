@@ -12,7 +12,7 @@ SX126xInterface<T>::SX126xInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq,
                                  SPIClass &spi)
     : RadioLibInterface(cs, irq, rst, busy, spi, &lora), lora(&module)
 {
-    LOG_DEBUG("SX126xInterface(cs=%d, irq=%d, rst=%d, busy=%d)\n", cs, irq, rst, busy);
+    LOG_WARN("SX126xInterface(cs=%d, irq=%d, rst=%d, busy=%d)\n", cs, irq, rst, busy);
 }
 
 /// Initialise the Driver transport hardware and software.
@@ -55,11 +55,11 @@ bool SX126xInterface<T>::init()
 
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage, useRegulatorLDO);
     // \todo Display actual typename of the adapter, not just `SX126x`
-    LOG_DEBUG("SX126x init result %d\n", res);
+    LOG_INFO("SX126x init result %d\n", res);
 
-    LOG_DEBUG("Frequency set to %f\n", getFreq());
-    LOG_DEBUG("Bandwidth set to %f\n", bw);
-    LOG_DEBUG("Power output set to %d\n", power);
+    LOG_INFO("Frequency set to %f\n", getFreq());
+    LOG_INFO("Bandwidth set to %f\n", bw);
+    LOG_INFO("Power output set to %d\n", power);
 
     // current limit was removed from module' ctor
     // override default value (60 mA)

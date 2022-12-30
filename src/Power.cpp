@@ -242,7 +242,7 @@ void Power::shutdown()
 #endif
 
 #ifdef HAS_PMU
-    LOG_DEBUG("Shutting down\n");
+    LOG_INFO("Shutting down\n");
     if(PMU) {
         PMU->setChargingLedMode(XPOWERS_CHG_LED_OFF);
         PMU->shutdown();
@@ -333,12 +333,12 @@ int32_t Power::runOnce()
         PMU->getIrqStatus();
 
         if(PMU->isVbusRemoveIrq()){
-            LOG_DEBUG("USB unplugged\n");
+            LOG_INFO("USB unplugged\n");
             powerFSM.trigger(EVENT_POWER_DISCONNECTED);
         }
 
         if (PMU->isVbusInsertIrq()) {
-            LOG_DEBUG("USB plugged In\n");
+            LOG_INFO("USB plugged In\n");
             powerFSM.trigger(EVENT_POWER_CONNECTED);
         }
 
@@ -405,7 +405,7 @@ bool Power::axpChipInit()
             delete PMU;
             PMU = NULL;
         } else {
-            LOG_DEBUG("AXP2101 PMU init succeeded, using AXP2101 PMU\n");
+            LOG_INFO("AXP2101 PMU init succeeded, using AXP2101 PMU\n");
         }
     }
 
@@ -416,7 +416,7 @@ bool Power::axpChipInit()
             delete PMU;
             PMU = NULL;
         } else {
-            LOG_DEBUG("AXP192 PMU init succeeded, using AXP192 PMU\n");
+            LOG_INFO("AXP192 PMU init succeeded, using AXP192 PMU\n");
         }
     }
 

@@ -140,7 +140,7 @@ void MeshService::handleToRadio(MeshPacket &p)
                 // Switch the port from PortNum_SIMULATOR_APP back to the original PortNum 
                 p.decoded.portnum = decoded->portnum;
             } else
-                LOG_DEBUG("Error decoding protobuf for simulator message!\n");
+                LOG_ERROR("Error decoding protobuf for simulator message!\n");
         }
         // Let SimRadio receive as if it did via its LoRa chip
         SimRadio::instance->startReceive(&p); 
@@ -198,12 +198,12 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
 
     if (node->has_position && (node->position.latitude_i != 0 || node->position.longitude_i != 0)) {
         if (positionModule) {
-            LOG_DEBUG("Sending position ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
+            LOG_INFO("Sending position ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
             positionModule->sendOurPosition(dest, wantReplies);
         }
     } else {
         if (nodeInfoModule) {
-            LOG_DEBUG("Sending nodeinfo ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
+            LOG_INFO("Sending nodeinfo ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
             nodeInfoModule->sendOurNodeInfo(dest, wantReplies);
         }
     }
@@ -212,7 +212,7 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
 void MeshService::sendToPhone(MeshPacket *p)
 {
     if (toPhoneQueue.numFree() == 0) {
-        LOG_DEBUG("NOTE: tophone queue is full, discarding oldest\n");
+        LOG_WARN("ToPhone queue is full, discarding oldest\n");
         MeshPacket *d = toPhoneQueue.dequeuePtr(0);
         if (d)
             releaseToPool(d);

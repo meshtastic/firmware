@@ -37,7 +37,7 @@ void PhoneAPI::handleStartConfig()
     // even if we were already connected - restart our state machine
     state = STATE_SEND_MY_INFO;
 
-    LOG_DEBUG("Starting API client config\n");
+    LOG_INFO("Starting API client config\n");
     nodeInfoForPhone = NULL;   // Don't keep returning old nodeinfos
     nodeDB.resetReadPointer(); // FIXME, this read pointer should be moved out of nodeDB and into this class - because
                                // this will break once we have multiple instances of PhoneAPI running independently
@@ -60,7 +60,7 @@ void PhoneAPI::checkConnectionTimeout()
     if (isConnected()) {
         bool newContact = checkIsConnected();
         if (!newContact) {
-            LOG_DEBUG("Lost phone connection\n");
+            LOG_INFO("Lost phone connection\n");
             close();
         }
     }
@@ -83,11 +83,11 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
             return handleToRadioPacket(toRadioScratch.packet);
         case ToRadio_want_config_id_tag:
             config_nonce = toRadioScratch.want_config_id;
-            LOG_DEBUG("Client wants config, nonce=%u\n", config_nonce);
+            LOG_INFO("Client wants config, nonce=%u\n", config_nonce);
             handleStartConfig();
             break;
         case ToRadio_disconnect_tag:
-            LOG_DEBUG("Disconnecting from phone\n");
+            LOG_INFO("Disconnecting from phone\n");
             close();
             break;
         default:
@@ -96,7 +96,7 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
             break;
         }
     } else {
-        LOG_DEBUG("Error: ignoring malformed toradio\n");
+        LOG_ERROR("Error: ignoring malformed toradio\n");
     }
 
     return false;
@@ -128,11 +128,11 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     // Advance states as needed
     switch (state) {
     case STATE_SEND_NOTHING:
-        LOG_DEBUG("getFromRadio=STATE_SEND_NOTHING\n");
+        LOG_INFO("getFromRadio=STATE_SEND_NOTHING\n");
         break;
 
     case STATE_SEND_MY_INFO:
-        LOG_DEBUG("getFromRadio=STATE_SEND_MY_INFO\n");
+        LOG_INFO("getFromRadio=STATE_SEND_MY_INFO\n");
         // If the user has specified they don't want our node to share its location, make sure to tell the phone
         // app not to send locations on our behalf.
         myNodeInfo.has_gps = gps && gps->isConnected(); // Update with latest GPS connect info
@@ -144,18 +144,18 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         break;
 
     case STATE_SEND_NODEINFO: {
-        LOG_DEBUG("getFromRadio=STATE_SEND_NODEINFO\n");
+        LOG_INFO("getFromRadio=STATE_SEND_NODEINFO\n");
         const NodeInfo *info = nodeInfoForPhone;
         nodeInfoForPhone = NULL; // We just consumed a nodeinfo, will need a new one next time
 
         if (info) {
-            LOG_DEBUG("Sending nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s\n", info->num, info->last_heard, info->user.id,
+            LOG_INFO("Sending nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s\n", info->num, info->last_heard, info->user.id,
                       info->user.long_name);
             fromRadioScratch.which_payload_variant = FromRadio_node_info_tag;
             fromRadioScratch.node_info = *info;
             // Stay in current state until done sending nodeinfos
         } else {
-            LOG_DEBUG("Done sending nodeinfos\n");
+            LOG_INFO("Done sending nodeinfos\n");
             state = STATE_SEND_CHANNELS;
             // Go ahead and send that ID right now
             return getFromRadio(buf);
@@ -164,7 +164,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     }
 
     case STATE_SEND_CHANNELS:
-        LOG_DEBUG("getFromRadio=STATE_SEND_CHANNELS\n");
+        LOG_INFO("getFromRadio=STATE_SEND_CHANNELS\n");
         fromRadioScratch.which_payload_variant = FromRadio_channel_tag;
         fromRadioScratch.channel = channels.getByIndex(config_state);
         config_state++;
@@ -176,7 +176,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         break;
 
     case STATE_SEND_CONFIG:
-        LOG_DEBUG("getFromRadio=STATE_SEND_CONFIG\n");
+        LOG_INFO("getFromRadio=STATE_SEND_CONFIG\n");
         fromRadioScratch.which_payload_variant = FromRadio_config_tag;
         switch (config_state) {
         case Config_device_tag:
@@ -222,7 +222,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         break;
 
     case STATE_SEND_MODULECONFIG:
-        LOG_DEBUG("getFromRadio=STATE_SEND_MODULECONFIG\n");
+        LOG_INFO("getFromRadio=STATE_SEND_MODULECONFIG\n");
         fromRadioScratch.which_payload_variant = FromRadio_moduleConfig_tag;
         switch (config_state) {
         case ModuleConfig_mqtt_tag:
@@ -272,7 +272,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         break;
 
     case STATE_SEND_COMPLETE_ID:
-        LOG_DEBUG("getFromRadio=STATE_SEND_COMPLETE_ID\n");
+        LOG_INFO("getFromRadio=STATE_SEND_COMPLETE_ID\n");
         fromRadioScratch.which_payload_variant = FromRadio_config_complete_id_tag;
         fromRadioScratch.config_complete_id = config_nonce;
         config_nonce = 0;
@@ -281,7 +281,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
     case STATE_SEND_PACKETS:
         // Do we have a message from the mesh?
-        LOG_DEBUG("getFromRadio=STATE_SEND_PACKETS\n");
+        LOG_INFO("getFromRadio=STATE_SEND_PACKETS\n");
         if (packetForPhone) {
             printPacket("phone downloaded packet", packetForPhone);
 
@@ -311,7 +311,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
 void PhoneAPI::handleDisconnect()
 {
-    LOG_DEBUG("PhoneAPI disconnect\n");
+    LOG_INFO("PhoneAPI disconnect\n");
 }
 
 void PhoneAPI::releasePhonePacket()
@@ -373,7 +373,7 @@ int PhoneAPI::onNotify(uint32_t newValue)
                               // from idle)
 
     if (state == STATE_SEND_PACKETS) {
-        LOG_DEBUG("Telling client we have new packets %u\n", newValue);
+        LOG_INFO("Telling client we have new packets %u\n", newValue);
         onNowHasData(newValue);
     } else
         LOG_DEBUG("(Client not yet interested in packets)\n");

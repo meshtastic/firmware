@@ -49,10 +49,10 @@ CannedMessageModule::CannedMessageModule()
     if (moduleConfig.canned_message.enabled) {
         this->loadProtoForModule();
         if ((this->splitConfiguredMessages() <= 0) && (cardkb_found != CARDKB_ADDR)) {
-            LOG_DEBUG("CannedMessageModule: No messages are configured. Module is disabled\n");
+            LOG_INFO("CannedMessageModule: No messages are configured. Module is disabled\n");
             this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
         } else {
-            LOG_DEBUG("CannedMessageModule is enabled\n");
+            LOG_INFO("CannedMessageModule is enabled\n");
             this->inputObserver.observe(inputBroker);
         }
     }
@@ -198,7 +198,7 @@ void CannedMessageModule::sendText(NodeNum dest, const char *message, bool wantR
         p->decoded.payload.size++;
     }
 
-    LOG_DEBUG("Sending message id=%d, dest=%x, msg=%.*s\n", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
+    LOG_INFO("Sending message id=%d, dest=%x, msg=%.*s\n", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
 
     service.sendToMesh(p);
 }

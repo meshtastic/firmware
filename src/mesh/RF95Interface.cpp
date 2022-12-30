@@ -68,11 +68,11 @@ bool RF95Interface::init()
     setTransmitEnable(false);
 
     int res = lora->begin(getFreq(), bw, sf, cr, syncWord, power, currentLimit, preambleLength);
-    LOG_DEBUG("RF95 init result %d\n", res);
+    LOG_INFO("RF95 init result %d\n", res);
 
-    LOG_DEBUG("Frequency set to %f\n", getFreq());    
-    LOG_DEBUG("Bandwidth set to %f\n", bw);    
-    LOG_DEBUG("Power output set to %d\n", power);    
+    LOG_INFO("Frequency set to %f\n", getFreq());    
+    LOG_INFO("Bandwidth set to %f\n", bw);    
+    LOG_INFO("Power output set to %d\n", power);    
 
     // current limit was removed from module' ctor
     // override default value (60 mA)

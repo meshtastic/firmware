@@ -335,7 +335,7 @@ void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
     if (params->getQueryParameter("delete", paramValDelete)) {
         std::string pathDelete = "/" + paramValDelete;
         if (FSCom.remove(pathDelete.c_str())) {
-            Serial.println(pathDelete.c_str());
+            LOG_INFO("%s\n", pathDelete.c_str());
             JSONObject jsonObjOuter; 
             jsonObjOuter["status"] = new JSONValue("ok");
             JSONValue *value = new JSONValue(jsonObjOuter);
@@ -343,7 +343,7 @@ void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
             delete value;
             return;
         } else {
-            Serial.println(pathDelete.c_str());
+            LOG_INFO("%s\n", pathDelete.c_str());
             JSONObject jsonObjOuter;
             jsonObjOuter["status"] = new JSONValue("Error");
             JSONValue *value = new JSONValue(jsonObjOuter);
@@ -379,13 +379,13 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
         if (FSCom.exists(filename.c_str())) {
             file = FSCom.open(filename.c_str());
             if (!file.available()) {
-                LOG_DEBUG("File not available - %s\n", filename.c_str());
+                LOG_WARN("File not available - %s\n", filename.c_str());
             }
         } else if (FSCom.exists(filenameGzip.c_str())) {
             file = FSCom.open(filenameGzip.c_str());
             res->setHeader("Content-Encoding", "gzip");
             if (!file.available()) {
-                LOG_DEBUG("File not available - %s\n", filenameGzip.c_str());
+                LOG_WARN("File not available - %s\n", filenameGzip.c_str());
             }
         } else {
             has_set_content_type = true;
@@ -393,7 +393,7 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
             file = FSCom.open(filenameGzip.c_str());
             res->setHeader("Content-Type", "text/html");
             if (!file.available()) {
-                LOG_DEBUG("File not available - %s\n", filenameGzip.c_str());
+                LOG_WARN("File not available - %s\n", filenameGzip.c_str());
                 res->println("Web server is running.<br><br>The content you are looking for can't be found. Please see: <a "
                              "href=https://meshtastic.org/docs/getting-started/faq#wifi--web-browser>FAQ</a>.<br><br><a "
                              "href=/admin>admin</a>");
@@ -437,7 +437,7 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
         return;
 
     } else {
-        LOG_DEBUG("ERROR: This should not have happened...\n");
+        LOG_ERROR("This should not have happened...\n");
         res->println("ERROR: This should not have happened...");
     }
 }
@@ -472,7 +472,7 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
         LOG_DEBUG("Form Upload - multipart/form-data\n");
         parser = new HTTPMultipartBodyParser(req);
     } else {
-        Serial.printf("Unknown POST Content-Type: %s\n", contentType.c_str());
+        LOG_DEBUG("Unknown POST Content-Type: %s\n", contentType.c_str());
         return;
     }
 
@@ -671,7 +671,7 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 */
 void handleHotspot(HTTPRequest *req, HTTPResponse *res)
 {
-    LOG_DEBUG("Hotspot Request\n");
+    LOG_INFO("Hotspot Request\n");
 
     /*
         If we don't do a redirect, be sure to return a "Success" message
@@ -697,7 +697,7 @@ void handleDeleteFsContent(HTTPRequest *req, HTTPResponse *res)
     res->println("<h1>Meshtastic</h1>\n");
     res->println("Deleting Content in /static/*");
 
-    LOG_DEBUG("Deleting files from /static/* : \n");
+    LOG_INFO("Deleting files from /static/* : \n");
 
     htmlDeleteDir("/static");
 

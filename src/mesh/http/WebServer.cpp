@@ -74,13 +74,13 @@ static void taskCreateCert(void *parameter)
     prefs.remove("cert");
 #endif
 
-    LOG_DEBUG("Checking if we have a previously saved SSL Certificate.\n");
+    LOG_INFO("Checking if we have a previously saved SSL Certificate.\n");
 
     size_t pkLen = prefs.getBytesLength("PK");
     size_t certLen = prefs.getBytesLength("cert");
 
     if (pkLen && certLen) {
-        LOG_DEBUG("Existing SSL Certificate found!\n");
+        LOG_INFO("Existing SSL Certificate found!\n");
 
         uint8_t *pkBuffer = new uint8_t[pkLen];
         prefs.getBytes("PK", pkBuffer, pkLen);
@@ -95,7 +95,7 @@ static void taskCreateCert(void *parameter)
 
     } else {
 
-        LOG_DEBUG("Creating the certificate. This may take a while. Please wait...\n");
+        LOG_INFO("Creating the certificate. This may take a while. Please wait...\n");
         yield();
         cert = new SSLCert();
         yield();
@@ -104,10 +104,10 @@ static void taskCreateCert(void *parameter)
         yield();
 
         if (createCertResult != 0) {
-            LOG_DEBUG("Creating the certificate failed\n");
+            LOG_ERROR("Creating the certificate failed\n");
 
         } else {
-            LOG_DEBUG("Creating the certificate was successful\n");
+            LOG_INFO("Creating the certificate was successful\n");
 
             LOG_DEBUG("Created Private Key: %d Bytes\n", cert->getPKLength());
 
@@ -159,7 +159,7 @@ void createSSLCert()
                 runLoop = true;
             }
         }
-        LOG_DEBUG("SSL Cert Ready!\n");
+        LOG_INFO("SSL Cert Ready!\n");
     }
 }
 
@@ -191,15 +191,15 @@ void initWebServer()
     registerHandlers(insecureServer, secureServer);
 
     if (secureServer) {
-        LOG_DEBUG("Starting Secure Web Server...\n");
+        LOG_INFO("Starting Secure Web Server...\n");
         secureServer->start();
     }
-    LOG_DEBUG("Starting Insecure Web Server...\n");
+    LOG_INFO("Starting Insecure Web Server...\n");
     insecureServer->start();
     if (insecureServer->isRunning()) {
-        LOG_DEBUG("Web Servers Ready! :-) \n");
+        LOG_INFO("Web Servers Ready! :-) \n");
         isWebServerReady = true;
     } else {
-        LOG_DEBUG("Web Servers Failed! ;-( \n");
+        LOG_ERROR("Web Servers Failed! ;-( \n");
     }
 }

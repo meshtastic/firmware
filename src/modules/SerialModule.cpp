@@ -109,7 +109,7 @@ int32_t SerialModule::runOnce()
         if (firstTime) {
 
             // Interface with the serial peripheral from in here.
-            LOG_DEBUG("Initializing serial peripheral interface\n");
+            LOG_INFO("Initializing serial peripheral interface\n");
 
             uint32_t baud = 0;
 
@@ -213,14 +213,14 @@ int32_t SerialModule::runOnce()
 
                     serialModuleRadio->sendPayload();
 
-                    LOG_DEBUG("Received: %s\n", serialStringChar);
+                    LOG_INFO("Received: %s\n", serialStringChar);
                 }
             }
         }
 
         return (10);
     } else {
-        LOG_DEBUG("Serial Module Disabled\n");
+        LOG_INFO("Serial Module Disabled\n");
 
         return INT32_MAX;
     }
@@ -305,7 +305,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
         }
 
     } else {
-        LOG_DEBUG("Serial Module Disabled\n");
+        LOG_INFO("Serial Module Disabled\n");
     }
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }

@@ -49,7 +49,7 @@ bool SX128xInterface<T>::init()
 
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength);
     // \todo Display actual typename of the adapter, not just `SX128x`
-    LOG_DEBUG("SX128x init result %d\n", res);
+    LOG_INFO("SX128x init result %d\n", res);
 
     if((config.lora.region != Config_LoRaConfig_RegionCode_LORA_24) && (res == RADIOLIB_ERR_INVALID_FREQUENCY)) {
         LOG_WARN("Radio chip only supports 2.4GHz LoRa. Adjusting Region and rebooting.\n");
@@ -61,13 +61,13 @@ bool SX128xInterface<T>::init()
 #elif defined(ARCH_NRF52)
         NVIC_SystemReset();
 #else
-        LOG_DEBUG("FIXME implement reboot for this platform. Skipping for now.\n");
+        LOG_ERROR("FIXME implement reboot for this platform. Skipping for now.\n");
 #endif
     }
 
-    LOG_DEBUG("Frequency set to %f\n", getFreq());    
-    LOG_DEBUG("Bandwidth set to %f\n", bw);    
-    LOG_DEBUG("Power output set to %d\n", power);    
+    LOG_INFO("Frequency set to %f\n", getFreq());    
+    LOG_INFO("Bandwidth set to %f\n", bw);    
+    LOG_INFO("Power output set to %d\n", power);    
 
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setCRC(2);
@@ -145,7 +145,7 @@ void SX128xInterface<T>::setStandby()
     int err = lora.standby();
 
     if (err != RADIOLIB_ERR_NONE)
-        LOG_DEBUG("SX128x standby failed with error %d\n", err);
+        LOG_ERROR("SX128x standby failed with error %d\n", err);
 
     assert(err == RADIOLIB_ERR_NONE);
 

@@ -10,7 +10,7 @@ INA260Sensor::INA260Sensor() :
 }
 
 int32_t INA260Sensor::runOnce() {
-    LOG_DEBUG("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s\n", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }

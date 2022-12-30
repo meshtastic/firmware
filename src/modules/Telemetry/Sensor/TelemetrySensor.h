@@ -21,10 +21,10 @@ class TelemetrySensor
 
     int32_t initI2CSensor() {
         if (!status) {
-            LOG_DEBUG("Could not connect to detected %s sensor.\n Removing from nodeTelemetrySensorsMap.\n", sensorName);
+            LOG_WARN("Could not connect to detected %s sensor.\n Removing from nodeTelemetrySensorsMap.\n", sensorName);
             nodeTelemetrySensorsMap[sensorType] = 0;
         } else {
-            LOG_DEBUG("Opened %s sensor on default i2c bus\n", sensorName);
+            LOG_INFO("Opened %s sensor on default i2c bus\n", sensorName);
             setup();
         }
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
