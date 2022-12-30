@@ -88,7 +88,31 @@ void portduinoSetup()
 {
     printf("Setting up Meshtastic on Portduino...\n");
 
-#ifdef PORTDUINO_LINUX_HARDWARE
+#ifdef ARCH_RASPBERRY_PI
+    printf("using GPIOD Version: %s\n", gpiod_version_string());
+    // We need to create SPI
+    SPI.begin();
+    if(!spiChip->isSimulated()) {
+        printf("Connecting to RFM95 board...\n");
+        loraIrq = new LinuxGPIOPin(LORA_DIO0, GPIOD_CHIP_LABEL, LORA_DIO0_LABEL, "loraIrq");
+        loraIrq->setSilent();
+        gpioBind(loraIrq);
+
+#if (RF95_NSS != RADIOLIB_NC)
+            auto loraCs = new LinuxGPIOPin(RF95_NSS, GPIOD_CHIP_LABEL, RF95_NSS_LABEL, "loraCs");
+            loraCs->setSilent();
+            gpioBind(loraCs);
+#endif
+
+        auto loraReset = new LinuxGPIOPin(LORA_RESET, GPIOD_CHIP_LABEL, LORA_RESET_LABEL, "loraReset");
+        loraReset->setSilent();
+        gpioBind(loraReset);
+
+    }
+    else
+
+
+#elif defined(PORTDUINO_LINUX_HARDWARE)
     SPI.begin(); // We need to create SPI 
     bool usePineLora = !spiChip->isSimulated();
     if(usePineLora) {
