@@ -32,7 +32,7 @@ bool loopCanSleep() {
 // handle standard gcc assert failures
 void __attribute__((noreturn)) __assert_func(const char *file, int line, const char *func, const char *failedexpr)
 {
-    DEBUG_MSG("assert failed %s: %d, %s, test=%s\n", file, line, func, failedexpr);
+    LOG_ERROR("assert failed %s: %d, %s, test=%s\n", file, line, func, failedexpr);
     // debugger_break(); FIXME doesn't work, possibly not for segger
     // Reboot cpu
     NVIC_SystemReset();
@@ -73,7 +73,7 @@ void setBluetoothEnable(bool on)
         if (on) {
             if (!nrf52Bluetooth) {
                 if (!useSoftDevice)
-                    DEBUG_MSG("DISABLING NRF52 BLUETOOTH WHILE DEBUGGING\n");
+                    LOG_INFO("DISABLING NRF52 BLUETOOTH WHILE DEBUGGING\n");
                 else {
                     nrf52Bluetooth = new NRF52Bluetooth();
                     nrf52Bluetooth->setup();
@@ -112,7 +112,7 @@ void checkSDEvents()
                 break;
 
             default:
-                DEBUG_MSG("Unexpected SDevt %d\n", evt);
+                LOG_DEBUG("Unexpected SDevt %d\n", evt);
                 break;
             }
         }
@@ -132,7 +132,7 @@ void nrf52Setup()
     auto why = NRF_POWER->RESETREAS;
     // per
     // https://infocenter.nordicsemi.com/index.jsp?topic=%2Fcom.nordic.infocenter.nrf52832.ps.v1.1%2Fpower.html
-    DEBUG_MSG("Reset reason: 0x%x\n", why);
+    LOG_DEBUG("Reset reason: 0x%x\n", why);
 
     // Per
     // https://devzone.nordicsemi.com/nordic/nordic-blog/b/blog/posts/monitor-mode-debugging-with-j-link-and-gdbeclipse
@@ -142,7 +142,7 @@ void nrf52Setup()
 #ifdef BQ25703A_ADDR
     auto *bq = new BQ25713();
     if (!bq->setup())
-        DEBUG_MSG("ERROR! Charge controller init failed\n");
+        LOG_ERROR("ERROR! Charge controller init failed\n");
 #endif
 
     // Init random seed
@@ -152,7 +152,7 @@ void nrf52Setup()
     } seed;
     nRFCrypto.begin();
     nRFCrypto.Random.generate(seed.seed8, sizeof(seed.seed8));
-    DEBUG_MSG("Setting random seed %u\n", seed.seed32);
+    LOG_DEBUG("Setting random seed %u\n", seed.seed32);
     randomSeed(seed.seed32);
     nRFCrypto.end();
 }
@@ -178,15 +178,14 @@ void cpuDeepSleep(uint64_t msecToWake)
 
     auto ok = sd_power_system_off();
     if (ok != NRF_SUCCESS) {
-        DEBUG_MSG("FIXME: Ignoring soft device (EasyDMA pending?) and forcing "
-                  "system-off!\n");
+        LOG_ERROR("FIXME: Ignoring soft device (EasyDMA pending?) and forcing system-off!\n");
         NRF_POWER->SYSTEMOFF = 1;
     }
 
     // The following code should not be run, because we are off
     while (1) {
         delay(5000);
-        DEBUG_MSG(".");
+        LOG_DEBUG(".");
     }
 }
 

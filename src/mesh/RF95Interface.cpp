@@ -68,17 +68,17 @@ bool RF95Interface::init()
     setTransmitEnable(false);
 
     int res = lora->begin(getFreq(), bw, sf, cr, syncWord, power, currentLimit, preambleLength);
-    DEBUG_MSG("RF95 init result %d\n", res);
+    LOG_INFO("RF95 init result %d\n", res);
 
-    DEBUG_MSG("Frequency set to %f\n", getFreq());    
-    DEBUG_MSG("Bandwidth set to %f\n", bw);    
-    DEBUG_MSG("Power output set to %d\n", power);    
+    LOG_INFO("Frequency set to %f\n", getFreq());    
+    LOG_INFO("Bandwidth set to %f\n", bw);    
+    LOG_INFO("Power output set to %d\n", power);    
 
     // current limit was removed from module' ctor
     // override default value (60 mA)
     res = lora->setCurrentLimit(currentLimit);
-    DEBUG_MSG("Current limit set to %f\n", currentLimit);
-    DEBUG_MSG("Current limit set result %d\n", res);
+    LOG_DEBUG("Current limit set to %f\n", currentLimit);
+    LOG_DEBUG("Current limit set result %d\n", res);
 
     if (res == RADIOLIB_ERR_NONE)
         res = lora->setCRC(RADIOLIB_SX126X_LORA_CRC_ON);
@@ -190,12 +190,12 @@ bool RF95Interface::isChannelActive()
     result = lora->scanChannel();
     
     if (result == RADIOLIB_PREAMBLE_DETECTED) {
-        // DEBUG_MSG("Channel is busy!\n");
+        // LOG_DEBUG("Channel is busy!\n");
         return true;
     }
     assert(result != RADIOLIB_ERR_WRONG_MODEM);
     
-    // DEBUG_MSG("Channel is free!\n");
+    // LOG_DEBUG("Channel is free!\n");
     return false;
 }
 

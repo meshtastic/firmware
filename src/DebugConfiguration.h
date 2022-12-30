@@ -13,17 +13,33 @@
 #define SERIAL_BAUD 115200 // Serial debug baud rate
 #endif
 
+#define MESHTASTIC_LOG_LEVEL_DEBUG "DEBUG"
+#define MESHTASTIC_LOG_LEVEL_INFO "INFO "
+#define MESHTASTIC_LOG_LEVEL_WARN "WARN "
+#define MESHTASTIC_LOG_LEVEL_ERROR "ERROR"
+#define MESHTASTIC_LOG_LEVEL_TRACE "TRACE"
+
 #include "SerialConsole.h"
 
 #define DEBUG_PORT (*console) // Serial debug port
 
 #ifdef USE_SEGGER
-#define DEBUG_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
+#define LOG_DEBUG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
+#define LOG_INFO(...) SEGGER_RTT_printf(0, __VA_ARGS__)
+#define LOG_WARN(...) SEGGER_RTT_printf(0, __VA_ARGS__)
+#define LOG_ERROR(...) SEGGER_RTT_printf(0, __VA_ARGS__)
 #else
 #ifdef DEBUG_PORT
-#define DEBUG_MSG(...) DEBUG_PORT.logDebug(__VA_ARGS__)
+#define LOG_DEBUG(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_DEBUG, __VA_ARGS__)
+#define LOG_INFO(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_INFO, __VA_ARGS__)
+#define LOG_WARN(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_WARN, __VA_ARGS__)
+#define LOG_ERROR(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_ERROR, __VA_ARGS__)
+#define LOG_TRACE(...) DEBUG_PORT.log(MESHTASTIC_LOG_TRACE, __VA_ARGS__)
 #else
-#define DEBUG_MSG(...)
+#define LOG_DEBUG(...)
+#define LOG_INFO(...)
+#define LOG_WARN(...)
+#define LOG_ERROR(...)
 #endif
 #endif
 

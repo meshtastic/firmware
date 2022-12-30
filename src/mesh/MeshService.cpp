@@ -106,7 +106,7 @@ bool MeshService::reloadConfig(int saveWhat)
 /// The owner User record just got updated, update our node DB and broadcast the info into the mesh
 void MeshService::reloadOwner(bool shouldSave)
 {
-    // DEBUG_MSG("reloadOwner()\n");
+    // LOG_DEBUG("reloadOwner()\n");
     // update our local data directly
     nodeDB.updateUser(nodeDB.getNodeNum(), owner);
     assert(nodeInfoModule);
@@ -140,7 +140,7 @@ void MeshService::handleToRadio(MeshPacket &p)
                 // Switch the port from PortNum_SIMULATOR_APP back to the original PortNum 
                 p.decoded.portnum = decoded->portnum;
             } else
-                DEBUG_MSG("Error decoding protobuf for simulator message!\n");
+                LOG_ERROR("Error decoding protobuf for simulator message!\n");
         }
         // Let SimRadio receive as if it did via its LoRa chip
         SimRadio::instance->startReceive(&p); 
@@ -148,7 +148,7 @@ void MeshService::handleToRadio(MeshPacket &p)
     }
     #endif
     if (p.from != 0) { // We don't let phones assign nodenums to their sent messages
-        DEBUG_MSG("Warning: phone tried to pick a nodenum, we don't allow that.\n");
+        LOG_WARN("phone tried to pick a nodenum, we don't allow that.\n");
         p.from = 0;
     } else {
         // p.from = nodeDB.getNodeNum();
@@ -198,12 +198,12 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
 
     if (node->has_position && (node->position.latitude_i != 0 || node->position.longitude_i != 0)) {
         if (positionModule) {
-            DEBUG_MSG("Sending position ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
+            LOG_INFO("Sending position ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
             positionModule->sendOurPosition(dest, wantReplies);
         }
     } else {
         if (nodeInfoModule) {
-            DEBUG_MSG("Sending nodeinfo ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
+            LOG_INFO("Sending nodeinfo ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
             nodeInfoModule->sendOurNodeInfo(dest, wantReplies);
         }
     }
@@ -212,7 +212,7 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
 void MeshService::sendToPhone(MeshPacket *p)
 {
     if (toPhoneQueue.numFree() == 0) {
-        DEBUG_MSG("NOTE: tophone queue is full, discarding oldest\n");
+        LOG_WARN("ToPhone queue is full, discarding oldest\n");
         MeshPacket *d = toPhoneQueue.dequeuePtr(0);
         if (d)
             releaseToPool(d);
@@ -262,10 +262,10 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
         // The GPS has lost lock, if we are fixed position we should just keep using
         // the old position
 #ifdef GPS_EXTRAVERBOSE
-        DEBUG_MSG("onGPSchanged() - lost validLocation\n");
+        LOG_DEBUG("onGPSchanged() - lost validLocation\n");
 #endif
         if (config.position.fixed_position) {
-            DEBUG_MSG("WARNING: Using fixed position\n");
+            LOG_WARN("Using fixed position\n");
             pos = node->position;
         }
     }
@@ -276,7 +276,7 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
     pos.time = getValidTime(RTCQualityGPS);
 
     // In debug logs, identify position by @timestamp:stage (stage 4 = nodeDB)
-    DEBUG_MSG("onGPSChanged() pos@%x, time=%u, lat=%d, lon=%d, alt=%d\n", pos.timestamp, pos.time, pos.latitude_i,
+    LOG_DEBUG("onGPSChanged() pos@%x, time=%u, lat=%d, lon=%d, alt=%d\n", pos.timestamp, pos.time, pos.latitude_i,
               pos.longitude_i, pos.altitude);
 
     // Update our current position in the local DB

@@ -61,13 +61,13 @@ bool OSThread::shouldRun(unsigned long time)
     bool r = Thread::shouldRun(time);
 
     if (showRun && r)
-        DEBUG_MSG("Thread %s: run\n", ThreadName.c_str());
+        LOG_DEBUG("Thread %s: run\n", ThreadName.c_str());
 
     if (showWaiting && enabled && !r)
-        DEBUG_MSG("Thread %s: wait %lu\n", ThreadName.c_str(), interval);
+        LOG_DEBUG("Thread %s: wait %lu\n", ThreadName.c_str(), interval);
 
     if (showDisabled && !enabled)
-        DEBUG_MSG("Thread %s: disabled\n", ThreadName.c_str());
+        LOG_DEBUG("Thread %s: disabled\n", ThreadName.c_str());
 
     return r;
 }

@@ -56,7 +56,7 @@ int32_t KbI2cBase::runOnce()
             }
         }
         if (PrintDataBuf != 0) {
-            DEBUG_MSG("RAK14004 key 0x%x pressed\n", PrintDataBuf);
+            LOG_DEBUG("RAK14004 key 0x%x pressed\n", PrintDataBuf);
             InputEvent e;
             e.inputEvent = MATRIXKEY;
             e.source = this->_originName;

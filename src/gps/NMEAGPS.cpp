@@ -53,9 +53,9 @@ bool NMEAGPS::setupGPS()
     // see NMEAGPS.h
     gsafixtype.begin(reader, NMEA_MSG_GXGSA, 2);
     gsapdop.begin(reader, NMEA_MSG_GXGSA, 15);
-    DEBUG_MSG("Using " NMEA_MSG_GXGSA " for 3DFIX and PDOP\n");
+    LOG_DEBUG("Using " NMEA_MSG_GXGSA " for 3DFIX and PDOP\n");
 #else
-    DEBUG_MSG("GxGSA NOT available\n");
+    LOG_DEBUG("GxGSA NOT available\n");
 #endif
 
     return true;
@@ -85,7 +85,7 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         t.tm_year = d.year() - 1900;
         t.tm_isdst = false;
         if (t.tm_mon > -1){
-            DEBUG_MSG("NMEA GPS time %02d-%02d-%02d %02d:%02d:%02d\n", d.year(), d.month(), t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
+            LOG_DEBUG("NMEA GPS time %02d-%02d-%02d %02d:%02d:%02d\n", d.year(), d.month(), t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
             perhapsSetRTC(RTCQualityGPS, t);
             return true;
         } else
@@ -109,7 +109,7 @@ bool NMEAGPS::lookForLocation()
 
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
     fixType = atoi(gsafixtype.value());  // will set to zero if no data
-    // DEBUG_MSG("FIX QUAL=%d, TYPE=%d\n", fixQual, fixType);
+    // LOG_DEBUG("FIX QUAL=%d, TYPE=%d\n", fixQual, fixType);
 #endif
 
     // check if GPS has an acceptable lock
@@ -117,7 +117,7 @@ bool NMEAGPS::lookForLocation()
         return false;
 
 #ifdef GPS_EXTRAVERBOSE
-    DEBUG_MSG("AGE: LOC=%d FIX=%d DATE=%d TIME=%d\n", 
+    LOG_DEBUG("AGE: LOC=%d FIX=%d DATE=%d TIME=%d\n", 
                 reader.location.age(), 
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
                 gsafixtype.age(),
@@ -137,7 +137,7 @@ bool NMEAGPS::lookForLocation()
             (reader.time.age() < GPS_SOL_EXPIRY_MS) &&
             (reader.date.age() < GPS_SOL_EXPIRY_MS)))
     {
-        DEBUG_MSG("SOME data is TOO OLD: LOC %u, TIME %u, DATE %u\n", reader.location.age(), reader.time.age(), reader.date.age());
+        LOG_WARN("SOME data is TOO OLD: LOC %u, TIME %u, DATE %u\n", reader.location.age(), reader.time.age(), reader.date.age());
         return false;
     }
 
@@ -151,13 +151,13 @@ bool NMEAGPS::lookForLocation()
     // Bail out EARLY to avoid overwriting previous good data (like #857)
     if (toDegInt(loc.lat) > 900000000) {
 #ifdef GPS_EXTRAVERBOSE        
-        DEBUG_MSG("Bail out EARLY on LAT %i\n",toDegInt(loc.lat));
+        LOG_DEBUG("Bail out EARLY on LAT %i\n",toDegInt(loc.lat));
 #endif
         return false;
     }
     if (toDegInt(loc.lng) > 1800000000) {
 #ifdef GPS_EXTRAVERBOSE        
-        DEBUG_MSG("Bail out EARLY on LNG %i\n",toDegInt(loc.lng));
+        LOG_DEBUG("Bail out EARLY on LNG %i\n",toDegInt(loc.lng));
 #endif
         return false;
     }
@@ -168,7 +168,7 @@ bool NMEAGPS::lookForLocation()
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
     p.HDOP = reader.hdop.value();
     p.PDOP = TinyGPSPlus::parseDecimal(gsapdop.value());
-    // DEBUG_MSG("PDOP=%d, HDOP=%d\n", p.PDOP, p.HDOP);
+    // LOG_DEBUG("PDOP=%d, HDOP=%d\n", p.PDOP, p.HDOP);
 #else
     // FIXME! naive PDOP emulation (assumes VDOP==HDOP)
     // correct formula is PDOP = SQRT(HDOP^2 + VDOP^2)
@@ -212,7 +212,7 @@ bool NMEAGPS::lookForLocation()
         if (reader.course.value() < 36000) {  // sanity check
             p.ground_track = reader.course.value() * 1e3; // Scale the heading (in degrees * 10^-2) to match the expected degrees * 10^-5
         } else {
-            DEBUG_MSG("BOGUS course.value() REJECTED: %d\n",
+            LOG_WARN("BOGUS course.value() REJECTED: %d\n",
                         reader.course.value());
         }
     }
@@ -251,7 +251,7 @@ bool NMEAGPS::whileIdle()
     // First consume any chars that have piled up at the receiver
     while (_serial_gps->available() > 0) {
         int c = _serial_gps->read();
-        // DEBUG_MSG("%c", c);
+        // LOG_DEBUG("%c", c);
         isValid |= reader.encode(c);
     }
 
