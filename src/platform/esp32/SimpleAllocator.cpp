@@ -1,6 +1,6 @@
-#include "SimpleAllocator.h"
 #include "assert.h"
-
+#include "configuration.h"
+#include "SimpleAllocator.h"
 
 SimpleAllocator::SimpleAllocator() { reset(); }
 
