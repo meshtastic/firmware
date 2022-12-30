@@ -14,7 +14,7 @@
 RF95Interface::RF95Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, SPIClass &spi)
     : RadioLibInterface(cs, irq, rst, RADIOLIB_NC, spi)
 {
-    // FIXME - we assume devices never get destroyed
+    LOG_WARN("RF95Interface(cs=%d, irq=%d, rst=%d)\n", cs, irq, rst);
 }
 
 /** Some boards require GPIO control of tx vs rx paths */
