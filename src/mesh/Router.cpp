@@ -137,7 +137,7 @@ void Router::sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelI
 void Router::abortSendAndNak(Routing_Error err, MeshPacket *p)
 {
     DEBUG_MSG("Error=%d, returning NAK and dropping packet.\n", err);
-    sendAckNak(Routing_Error_NO_INTERFACE, getFrom(p), p->id, p->channel);
+    sendAckNak(err, getFrom(p), p->id, p->channel);
     packetPool.release(p);
 }
 
