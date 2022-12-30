@@ -98,8 +98,8 @@ class ButtonThread : public concurrency::OSThread
         userButtonTouch.tick();
         canSleep &= userButtonTouch.isIdle();
 #endif
-        // if (!canSleep) DEBUG_MSG("Supressing sleep!\n");
-        // else DEBUG_MSG("sleep ok\n");
+        // if (!canSleep) LOG_DEBUG("Supressing sleep!\n");
+        // else LOG_DEBUG("sleep ok\n");
 
         return 5;
     }
@@ -108,12 +108,12 @@ class ButtonThread : public concurrency::OSThread
     static void touchPressed()
     {
         screen->forceDisplay();
-        DEBUG_MSG("touch press!\n");
+        LOG_DEBUG("touch press!\n");
     }
 
     static void userButtonPressed()
     {
-        // DEBUG_MSG("press!\n");
+        // LOG_DEBUG("press!\n");
 #ifdef BUTTON_PIN
         if ((BUTTON_PIN != moduleConfig.canned_message.inputbroker_pin_press) ||
             !moduleConfig.canned_message.enabled) {
@@ -123,7 +123,7 @@ class ButtonThread : public concurrency::OSThread
     }
     static void userButtonPressedLong()
     {
-        // DEBUG_MSG("Long press!\n");
+        // LOG_DEBUG("Long press!\n");
 #ifdef ARCH_ESP32
         screen->adjustBrightness();
 #endif
@@ -139,7 +139,7 @@ class ButtonThread : public concurrency::OSThread
             // may wake the board immediatedly.
             if ((!shutdown_on_long_stop) && (millis() > 30 * 1000)) {
                 screen->startShutdownScreen();
-                DEBUG_MSG("Shutdown from long press");
+                LOG_DEBUG("Shutdown from long press");
                 playBeep();
 #ifdef PIN_LED1
                 ledOff(PIN_LED1);
@@ -154,7 +154,7 @@ class ButtonThread : public concurrency::OSThread
             }
 #endif
         } else {
-            // DEBUG_MSG("Long press %u\n", (millis() - longPressTime));
+            // LOG_DEBUG("Long press %u\n", (millis() - longPressTime));
         }
     }
 
@@ -166,11 +166,11 @@ class ButtonThread : public concurrency::OSThread
     #if defined(GPS_POWER_TOGGLE)
         if(config.position.gps_enabled)
         {
-        DEBUG_MSG("Flag set to false for gps power\n");
+        LOG_DEBUG("Flag set to false for gps power\n");
         } 
         else 
         {
-        DEBUG_MSG("Flag set to true to restore power\n");
+        LOG_DEBUG("Flag set to true to restore power\n");
         }
     config.position.gps_enabled = !(config.position.gps_enabled);
     doGPSpowersave(config.position.gps_enabled);
@@ -187,7 +187,7 @@ class ButtonThread : public concurrency::OSThread
     static void userButtonPressedLongStart()
     {
         if (millis() > 30 * 1000) {
-            DEBUG_MSG("Long press start!\n");
+            LOG_DEBUG("Long press start!\n");
             longPressTime = millis();
         }
     }
@@ -195,7 +195,7 @@ class ButtonThread : public concurrency::OSThread
     static void userButtonPressedLongStop()
     {
         if (millis() > 30 * 1000) {
-            DEBUG_MSG("Long press stop!\n");
+            LOG_DEBUG("Long press stop!\n");
             longPressTime = 0;
             if (shutdown_on_long_stop) {
                 playShutdownMelody();

@@ -109,7 +109,7 @@ int32_t SerialModule::runOnce()
         if (firstTime) {
 
             // Interface with the serial peripheral from in here.
-            DEBUG_MSG("Initializing serial peripheral interface\n");
+            LOG_DEBUG("Initializing serial peripheral interface\n");
 
             uint32_t baud = 0;
 
@@ -213,14 +213,14 @@ int32_t SerialModule::runOnce()
 
                     serialModuleRadio->sendPayload();
 
-                    DEBUG_MSG("Received: %s\n", serialStringChar);
+                    LOG_DEBUG("Received: %s\n", serialStringChar);
                 }
             }
         }
 
         return (10);
     } else {
-        DEBUG_MSG("Serial Module Disabled\n");
+        LOG_DEBUG("Serial Module Disabled\n");
 
         return INT32_MAX;
     }
@@ -256,7 +256,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
         }
 
         auto &p = mp.decoded;
-        // DEBUG_MSG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s\n",
+        // LOG_DEBUG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s\n",
         //          nodeDB.getNodeNum(), mp.from, mp.to, mp.id, p.payload.size, p.payload.bytes);
 
         if (getFrom(&mp) == nodeDB.getNodeNum()) {
@@ -271,7 +271,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
                 //   TODO: need to find out why.
                 if (lastRxID != mp.id) {
                     lastRxID = mp.id;
-                    // DEBUG_MSG("* * Message came this device\n");
+                    // LOG_DEBUG("* * Message came this device\n");
                     // Serial2.println("* * Message came this device");
                     Serial2.printf("%s", p.payload.bytes);
                 }
@@ -305,7 +305,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
         }
 
     } else {
-        DEBUG_MSG("Serial Module Disabled\n");
+        LOG_DEBUG("Serial Module Disabled\n");
     }
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }

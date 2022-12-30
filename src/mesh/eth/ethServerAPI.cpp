@@ -9,14 +9,14 @@ void initApiServer(int port)
     // Start API server on port 4403
     if (!apiPort) {
         apiPort = new ethServerPort(port);
-        DEBUG_MSG("API server listening on TCP port %d\n", port);
+        LOG_DEBUG("API server listening on TCP port %d\n", port);
         apiPort->init();
     }
 }
 
 ethServerAPI::ethServerAPI(EthernetClient &_client) : StreamAPI(&client), concurrency::OSThread("ethServerAPI"), client(_client)
 {
-    DEBUG_MSG("Incoming ethernet connection\n");
+    LOG_DEBUG("Incoming ethernet connection\n");
 }
 
 ethServerAPI::~ethServerAPI()
@@ -44,7 +44,7 @@ int32_t ethServerAPI::runOnce()
     if (client.connected()) {
         return StreamAPI::runOncePart();
     } else {
-        DEBUG_MSG("Client dropped connection, suspending API service\n");
+        LOG_DEBUG("Client dropped connection, suspending API service\n");
         enabled = false; // we no longer need to run
         return 0;
     }
@@ -71,7 +71,7 @@ int32_t ethServerPort::runOnce()
     if (client) {
         // Close any previous connection (see FIXME in header file)
         if (openAPI) {
-            DEBUG_MSG("Force closing previous TCP connection\n");
+            LOG_DEBUG("Force closing previous TCP connection\n");
             delete openAPI;
         }
 

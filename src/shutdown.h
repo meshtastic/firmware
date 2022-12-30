@@ -7,14 +7,14 @@
 void powerCommandsCheck()
 {
     if (rebootAtMsec && millis() > rebootAtMsec) {
-        DEBUG_MSG("Rebooting\n");
+        LOG_DEBUG("Rebooting\n");
 #if defined(ARCH_ESP32)
         ESP.restart();
 #elif defined(ARCH_NRF52)
         NVIC_SystemReset();
 #else
         rebootAtMsec = -1; 
-        DEBUG_MSG("FIXME implement reboot for this platform. Skipping for now.\n");
+        LOG_DEBUG("FIXME implement reboot for this platform. Skipping for now.\n");
 #endif
     }
 
@@ -35,7 +35,7 @@ void powerCommandsCheck()
 #endif
 
     if (shutdownAtMsec && millis() > shutdownAtMsec) {
-        DEBUG_MSG("Shutting down from admin command\n");
+        LOG_DEBUG("Shutting down from admin command\n");
 #ifdef HAS_PMU
         if (pmu_found == true) {
             playShutdownMelody();
@@ -45,7 +45,7 @@ void powerCommandsCheck()
         playShutdownMelody();
         power->shutdown();
 #else
-        DEBUG_MSG("FIXME implement shutdown for this platform");
+        LOG_DEBUG("FIXME implement shutdown for this platform");
 #endif
     }
 }

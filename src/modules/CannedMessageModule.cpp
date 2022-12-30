@@ -49,10 +49,10 @@ CannedMessageModule::CannedMessageModule()
     if (moduleConfig.canned_message.enabled) {
         this->loadProtoForModule();
         if ((this->splitConfiguredMessages() <= 0) && (cardkb_found != CARDKB_ADDR)) {
-            DEBUG_MSG("CannedMessageModule: No messages are configured. Module is disabled\n");
+            LOG_DEBUG("CannedMessageModule: No messages are configured. Module is disabled\n");
             this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
         } else {
-            DEBUG_MSG("CannedMessageModule is enabled\n");
+            LOG_DEBUG("CannedMessageModule is enabled\n");
             this->inputObserver.observe(inputBroker);
         }
     }
@@ -81,7 +81,7 @@ int CannedMessageModule::splitConfiguredMessages()
         if (this->messageStore[i] == '|') {
             // Message ending found, replace it with string-end character.
             this->messageStore[i] = '\0';
-            DEBUG_MSG("CannedMessage %d is: '%s'\n", messageIndex - 1, this->messages[messageIndex - 1]);
+            LOG_DEBUG("CannedMessage %d is: '%s'\n", messageIndex - 1, this->messages[messageIndex - 1]);
 
             // hit our max messages, bail
             if (messageIndex >= CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT) {
@@ -96,7 +96,7 @@ int CannedMessageModule::splitConfiguredMessages()
     }
     if (strlen(this->messages[messageIndex - 1]) > 0) {
         // We have a last message.
-        DEBUG_MSG("CannedMessage %d is: '%s'\n", messageIndex - 1, this->messages[messageIndex - 1]);
+        LOG_DEBUG("CannedMessage %d is: '%s'\n", messageIndex - 1, this->messages[messageIndex - 1]);
         this->messagesCount = messageIndex;
     } else {
         this->messagesCount = messageIndex - 1;
@@ -119,17 +119,17 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
     bool validEvent = false;
     if (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_UP)) {
-        DEBUG_MSG("Canned message event UP\n");
+        LOG_DEBUG("Canned message event UP\n");
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_UP;
         validEvent = true;
     }
     if (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_DOWN)) {
-        DEBUG_MSG("Canned message event DOWN\n");
+        LOG_DEBUG("Canned message event DOWN\n");
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_DOWN;
         validEvent = true;
     }
     if (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_SELECT)) {
-        DEBUG_MSG("Canned message event Select\n");
+        LOG_DEBUG("Canned message event Select\n");
         // when inactive, call the onebutton shortpress instead. Activate Module only on up/down
         if ((this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED)) {
             powerFSM.trigger(EVENT_PRESS);
@@ -140,7 +140,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         }
     }
     if (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL)) {
-        DEBUG_MSG("Canned message event Cancel\n");
+        LOG_DEBUG("Canned message event Cancel\n");
         // emulate a timeout. Same result
         this->lastTouchMillis = 0;
         validEvent = true;
@@ -148,7 +148,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     if ((event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_BACK)) || 
         (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) ||
         (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT))) {
-        DEBUG_MSG("Canned message event (%x)\n",event->kbchar);
+        LOG_DEBUG("Canned message event (%x)\n",event->kbchar);
         if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
             // pass the pressed key
             this->payload = event->kbchar;
@@ -157,7 +157,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         }
     }
     if (event->inputEvent == static_cast<char>(ANYKEY)) {
-        DEBUG_MSG("Canned message event any key pressed\n");
+        LOG_DEBUG("Canned message event any key pressed\n");
         // when inactive, this will switch to the freetext mode
         if ((this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED)) {
             this->runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
@@ -168,7 +168,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         validEvent = true;
     }
     if (event->inputEvent == static_cast<char>(MATRIXKEY)) {
-        DEBUG_MSG("Canned message event Matrix key pressed\n");
+        LOG_DEBUG("Canned message event Matrix key pressed\n");
         // this will send the text immediately on matrix press
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
         this->payload = MATRIXKEY;
@@ -198,7 +198,7 @@ void CannedMessageModule::sendText(NodeNum dest, const char *message, bool wantR
         p->decoded.payload.size++;
     }
 
-    DEBUG_MSG("Sending message id=%d, dest=%x, msg=%.*s\n", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
+    LOG_DEBUG("Sending message id=%d, dest=%x, msg=%.*s\n", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
 
     service.sendToMesh(p);
 }
@@ -209,7 +209,7 @@ int32_t CannedMessageModule::runOnce()
         (this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE)) {
         return INT32_MAX;
     }
-    DEBUG_MSG("Check status\n");
+    LOG_DEBUG("Check status\n");
     UIFrameEvent e = {false, true};
     if (this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {
         // TODO: might have some feedback of sendig state
@@ -222,7 +222,7 @@ int32_t CannedMessageModule::runOnce()
         this->notifyObservers(&e);
     } else if (((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)) && ((millis() - this->lastTouchMillis) > INACTIVATE_AFTER_MS)) {
         // Reset module
-        DEBUG_MSG("Reset due to lack of activity.\n");
+        LOG_DEBUG("Reset due to lack of activity.\n");
         e.frameChanged = true;
         this->currentMessageIndex = -1;
         this->freetext = ""; // clear freetext
@@ -236,7 +236,7 @@ int32_t CannedMessageModule::runOnce()
                 sendText(this->dest, this->freetext.c_str(), true);
                 this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
             } else {
-                DEBUG_MSG("Reset message is empty.\n");
+                LOG_DEBUG("Reset message is empty.\n");
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
             }
         } else {
@@ -249,7 +249,7 @@ int32_t CannedMessageModule::runOnce()
                 }
                 this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
             } else {
-                DEBUG_MSG("Reset message is empty.\n");
+                LOG_DEBUG("Reset message is empty.\n");
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
             }
         }
@@ -262,7 +262,7 @@ int32_t CannedMessageModule::runOnce()
         return 2000;
      } else if ((this->runState != CANNED_MESSAGE_RUN_STATE_FREETEXT) && (this->currentMessageIndex == -1)) {
         this->currentMessageIndex = 0;
-        DEBUG_MSG("First touch (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
+        LOG_DEBUG("First touch (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
         e.frameChanged = true;
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_UP) {
@@ -272,7 +272,7 @@ int32_t CannedMessageModule::runOnce()
             this->cursor = 0;
             this->destSelect = false;
             this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
-            DEBUG_MSG("MOVE UP (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
+            LOG_DEBUG("MOVE UP (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
         }
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_DOWN) {
         if (this->messagesCount > 0) {
@@ -281,7 +281,7 @@ int32_t CannedMessageModule::runOnce()
             this->cursor = 0;
             this->destSelect = false;
             this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
-            DEBUG_MSG("MOVE DOWN (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
+            LOG_DEBUG("MOVE DOWN (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
         }
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
         e.frameChanged = true;
@@ -524,13 +524,13 @@ AdminMessageHandleResult CannedMessageModule::handleAdminMessageForModule(const 
 
     switch (request->which_payload_variant) {
     case AdminMessage_get_canned_message_module_messages_request_tag:
-        DEBUG_MSG("Client is getting radio canned messages\n");
+        LOG_DEBUG("Client is getting radio canned messages\n");
         this->handleGetCannedMessageModuleMessages(mp, response);
         result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
         break;
 
     case AdminMessage_set_canned_message_module_messages_tag:
-        DEBUG_MSG("Client is setting radio canned messages\n");
+        LOG_DEBUG("Client is setting radio canned messages\n");
         this->handleSetCannedMessageModuleMessages(request->set_canned_message_module_messages);
         result = AdminMessageHandleResult::HANDLED;
         break;
@@ -544,7 +544,7 @@ AdminMessageHandleResult CannedMessageModule::handleAdminMessageForModule(const 
 
 void CannedMessageModule::handleGetCannedMessageModuleMessages(const MeshPacket &req, AdminMessage *response)
 {
-    DEBUG_MSG("*** handleGetCannedMessageModuleMessages\n");
+    LOG_DEBUG("*** handleGetCannedMessageModuleMessages\n");
     assert(req.decoded.want_response);
 
     response->which_payload_variant = AdminMessage_get_canned_message_module_messages_response_tag;
@@ -559,7 +559,7 @@ void CannedMessageModule::handleSetCannedMessageModuleMessages(const char *from_
     if (*from_msg) {
         changed |= strcmp(cannedMessageModuleConfig.messages, from_msg);
         strcpy(cannedMessageModuleConfig.messages, from_msg);
-        DEBUG_MSG("*** from_msg.text:%s\n", from_msg);
+        LOG_DEBUG("*** from_msg.text:%s\n", from_msg);
     }
 
     if (changed) {
