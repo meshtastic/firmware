@@ -11,7 +11,7 @@ BMP280Sensor::BMP280Sensor() :
 }
 
 int32_t BMP280Sensor::runOnce() {
-    DEBUG_MSG("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s\n", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
@@ -29,7 +29,7 @@ int32_t BMP280Sensor::runOnce() {
 void BMP280Sensor::setup() { }
 
 bool BMP280Sensor::getMetrics(Telemetry *measurement) {
-    DEBUG_MSG("BMP280Sensor::getMetrics\n");
+    LOG_DEBUG("BMP280Sensor::getMetrics\n");
     bmp280.takeForcedMeasurement();
     measurement->variant.environment_metrics.temperature = bmp280.readTemperature();
     measurement->variant.environment_metrics.barometric_pressure = bmp280.readPressure() / 100.0F;

@@ -117,7 +117,7 @@ void initRegion()
     for (; r->code != Config_LoRaConfig_RegionCode_UNSET && r->code != config.lora.region; r++)
         ;
     myRegion = r;
-    DEBUG_MSG("Wanted region %d, using %s\n", config.lora.region, r->name);
+    LOG_INFO("Wanted region %d, using %s\n", config.lora.region, r->name);
 }
 
 /**
@@ -157,7 +157,7 @@ uint32_t RadioInterface::getPacketTime(uint32_t pl)
 
     uint32_t msecs = tPacket * 1000;
 
-    DEBUG_MSG("(bw=%d, sf=%d, cr=4/%d) packet symLen=%d ms, payloadSize=%u, time %d ms\n", (int)bw, sf, cr, (int)(tSym * 1000),
+    LOG_DEBUG("(bw=%d, sf=%d, cr=4/%d) packet symLen=%d ms, payloadSize=%u, time %d ms\n", (int)bw, sf, cr, (int)(tSym * 1000),
               pl, msecs);
     return msecs;
 }
@@ -178,7 +178,7 @@ uint32_t RadioInterface::getRetransmissionMsec(const MeshPacket *p)
     size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &Data_msg, &p->decoded);
     uint32_t packetAirtime = getPacketTime(numbytes + sizeof(PacketHeader));
     // Make sure enough time has elapsed for this packet to be sent and an ACK is received.
-    // DEBUG_MSG("Waiting for flooding message with airtime %d and slotTime is %d\n", packetAirtime, slotTimeMsec);
+    // LOG_DEBUG("Waiting for flooding message with airtime %d and slotTime is %d\n", packetAirtime, slotTimeMsec);
     float channelUtil = airTime->channelUtilizationPercent();
     uint8_t CWsize = map(channelUtil, 0, 100, CWmin, CWmax);
     // Assuming we pick max. of CWsize and there will be a receiver with SNR at half the range
@@ -193,7 +193,7 @@ uint32_t RadioInterface::getTxDelayMsec()
     current channel utilization. */
     float channelUtil = airTime->channelUtilizationPercent();
     uint8_t CWsize = map(channelUtil, 0, 100, CWmin, CWmax);
-    // DEBUG_MSG("Current channel utilization is %f so setting CWsize to %d\n", channelUtil, CWsize);
+    // LOG_DEBUG("Current channel utilization is %f so setting CWsize to %d\n", channelUtil, CWsize);
     return random(0, pow(2, CWsize)) * slotTimeMsec;
 }
 
@@ -210,14 +210,14 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(float snr)
     //  low SNR = small CW size (Short Delay)
     uint32_t delay = 0;
     uint8_t CWsize = map(snr, SNR_MIN, SNR_MAX, CWmin, CWmax);
-    // DEBUG_MSG("rx_snr of %f so setting CWsize to:%d\n", snr, CWsize);
+    // LOG_DEBUG("rx_snr of %f so setting CWsize to:%d\n", snr, CWsize);
     if (config.device.role == Config_DeviceConfig_Role_ROUTER ||
         config.device.role == Config_DeviceConfig_Role_ROUTER_CLIENT) {
         delay = random(0, 2*CWsize) * slotTimeMsec;
-        DEBUG_MSG("rx_snr found in packet. As a router, setting tx delay:%d\n", delay);
+        LOG_DEBUG("rx_snr found in packet. As a router, setting tx delay:%d\n", delay);
     } else {
         delay = random(0, pow(2, CWsize)) * slotTimeMsec;
-        DEBUG_MSG("rx_snr found in packet. Setting tx delay:%d\n", delay);
+        LOG_DEBUG("rx_snr found in packet. Setting tx delay:%d\n", delay);
     }
 
     return delay;
@@ -225,47 +225,47 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(float snr)
 
 void printPacket(const char *prefix, const MeshPacket *p)
 {
-    DEBUG_MSG("%s (id=0x%08x fr=0x%02x to=0x%02x, WantAck=%d, HopLim=%d Ch=0x%x", prefix, p->id, p->from & 0xff, p->to & 0xff,
+    LOG_DEBUG("%s (id=0x%08x fr=0x%02x to=0x%02x, WantAck=%d, HopLim=%d Ch=0x%x", prefix, p->id, p->from & 0xff, p->to & 0xff,
               p->want_ack, p->hop_limit, p->channel);
     if (p->which_payload_variant == MeshPacket_decoded_tag) {
         auto &s = p->decoded;
 
-        DEBUG_MSG(" Portnum=%d", s.portnum);
+        LOG_DEBUG(" Portnum=%d", s.portnum);
 
         if (s.want_response)
-            DEBUG_MSG(" WANTRESP");
+            LOG_DEBUG(" WANTRESP");
 
         if (s.source != 0)
-            DEBUG_MSG(" source=%08x", s.source);
+            LOG_DEBUG(" source=%08x", s.source);
 
         if (s.dest != 0)
-            DEBUG_MSG(" dest=%08x", s.dest);
+            LOG_DEBUG(" dest=%08x", s.dest);
 
         if (s.request_id)
-            DEBUG_MSG(" requestId=%0x", s.request_id);
+            LOG_DEBUG(" requestId=%0x", s.request_id);
 
         /* now inside Data and therefore kinda opaque
         if (s.which_ackVariant == SubPacket_success_id_tag)
-            DEBUG_MSG(" successId=%08x", s.ackVariant.success_id);
+            LOG_DEBUG(" successId=%08x", s.ackVariant.success_id);
         else if (s.which_ackVariant == SubPacket_fail_id_tag)
-            DEBUG_MSG(" failId=%08x", s.ackVariant.fail_id); */
+            LOG_DEBUG(" failId=%08x", s.ackVariant.fail_id); */
     } else {
-        DEBUG_MSG(" encrypted");
+        LOG_DEBUG(" encrypted");
     }
 
     if (p->rx_time != 0) {
-        DEBUG_MSG(" rxtime=%u", p->rx_time);
+        LOG_DEBUG(" rxtime=%u", p->rx_time);
     }
     if (p->rx_snr != 0.0) {
-        DEBUG_MSG(" rxSNR=%g", p->rx_snr);
+        LOG_DEBUG(" rxSNR=%g", p->rx_snr);
     }
     if (p->rx_rssi != 0) {
-        DEBUG_MSG(" rxRSSI=%g", p->rx_rssi);
+        LOG_DEBUG(" rxRSSI=%g", p->rx_rssi);
     }
     if (p->priority != 0)
-        DEBUG_MSG(" priority=%d", p->priority);
+        LOG_DEBUG(" priority=%d", p->priority);
 
-    DEBUG_MSG(")\n");
+    LOG_DEBUG(")\n");
 }
 
 RadioInterface::RadioInterface()
@@ -273,7 +273,7 @@ RadioInterface::RadioInterface()
     assert(sizeof(PacketHeader) == 16); // make sure the compiler did what we expected
 
     // Can't print strings this early - serial not setup yet
-    // DEBUG_MSG("Set meshradio defaults name=%s\n", channelSettings.name);
+    // LOG_DEBUG("Set meshradio defaults name=%s\n", channelSettings.name);
 }
 
 bool RadioInterface::reconfigure()
@@ -284,7 +284,7 @@ bool RadioInterface::reconfigure()
 
 bool RadioInterface::init()
 {
-    DEBUG_MSG("Starting meshradio init...\n");
+    LOG_INFO("Starting meshradio init...\n");
 
     configChangedObserver.observe(&service.configChanged);
     preflightSleepObserver.observe(&preflightSleep);
@@ -449,13 +449,13 @@ void RadioInterface::applyModemConfig()
     saveChannelNum(channel_num);
     saveFreq(freq + config.lora.frequency_offset);
 
-    DEBUG_MSG("Radio freq=%.3f, config.lora.frequency_offset=%.3f\n", freq, config.lora.frequency_offset);
-    DEBUG_MSG("Set radio: region=%s, name=%s, config=%u, ch=%d, power=%d\n", myRegion->name, channelName, loraConfig.modem_preset, channel_num, power);
-    DEBUG_MSG("Radio myRegion->freqStart -> myRegion->freqEnd: %f -> %f (%f mhz)\n", myRegion->freqStart, myRegion->freqEnd, myRegion->freqEnd - myRegion->freqStart);
-    DEBUG_MSG("Radio myRegion->numChannels: %d x %.3fkHz\n", numChannels, bw);
-    DEBUG_MSG("Radio channel_num: %d\n", channel_num);
-    DEBUG_MSG("Radio frequency: %f\n", getFreq());
-    DEBUG_MSG("Slot time: %u msec\n", slotTimeMsec);
+    LOG_INFO("Radio freq=%.3f, config.lora.frequency_offset=%.3f\n", freq, config.lora.frequency_offset);
+    LOG_INFO("Set radio: region=%s, name=%s, config=%u, ch=%d, power=%d\n", myRegion->name, channelName, loraConfig.modem_preset, channel_num, power);
+    LOG_INFO("Radio myRegion->freqStart -> myRegion->freqEnd: %f -> %f (%f mhz)\n", myRegion->freqStart, myRegion->freqEnd, myRegion->freqEnd - myRegion->freqStart);
+    LOG_INFO("Radio myRegion->numChannels: %d x %.3fkHz\n", numChannels, bw);
+    LOG_INFO("Radio channel_num: %d\n", channel_num);
+    LOG_INFO("Radio frequency: %f\n", getFreq());
+    LOG_INFO("Slot time: %u msec\n", slotTimeMsec);
 }
 
 /**
@@ -470,11 +470,11 @@ void RadioInterface::limitPower()
         maxPower = myRegion->powerLimit;
 
     if ((power > maxPower) && !devicestate.owner.is_licensed) {
-        DEBUG_MSG("Lowering transmit power because of regulatory limits\n");
+        LOG_INFO("Lowering transmit power because of regulatory limits\n");
         power = maxPower;
     }
 
-    DEBUG_MSG("Set radio: final power level=%d\n", power);
+    LOG_INFO("Set radio: final power level=%d\n", power);
 }
 
 
@@ -491,7 +491,7 @@ size_t RadioInterface::beginSending(MeshPacket *p)
 {
     assert(!sendingPacket);
 
-    // DEBUG_MSG("sending queued packet on mesh (txGood=%d,rxGood=%d,rxBad=%d)\n", rf95.txGood(), rf95.rxGood(), rf95.rxBad());
+    // LOG_DEBUG("sending queued packet on mesh (txGood=%d,rxGood=%d,rxBad=%d)\n", rf95.txGood(), rf95.rxGood(), rf95.rxBad());
     assert(p->which_payload_variant == MeshPacket_encrypted_tag); // It should have already been encoded by now
 
     lastTxStart = millis();

@@ -12,7 +12,7 @@ SX126xInterface<T>::SX126xInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq,
                                  SPIClass &spi)
     : RadioLibInterface(cs, irq, rst, busy, spi, &lora), lora(&module)
 {
-    DEBUG_MSG("SX126xInterface(cs=%d, irq=%d, rst=%d, busy=%d)\n", cs, irq, rst, busy);
+    LOG_WARN("SX126xInterface(cs=%d, irq=%d, rst=%d, busy=%d)\n", cs, irq, rst, busy);
 }
 
 /// Initialise the Driver transport hardware and software.
@@ -55,17 +55,17 @@ bool SX126xInterface<T>::init()
 
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage, useRegulatorLDO);
     // \todo Display actual typename of the adapter, not just `SX126x`
-    DEBUG_MSG("SX126x init result %d\n", res);
+    LOG_INFO("SX126x init result %d\n", res);
 
-    DEBUG_MSG("Frequency set to %f\n", getFreq());
-    DEBUG_MSG("Bandwidth set to %f\n", bw);
-    DEBUG_MSG("Power output set to %d\n", power);
+    LOG_INFO("Frequency set to %f\n", getFreq());
+    LOG_INFO("Bandwidth set to %f\n", bw);
+    LOG_INFO("Power output set to %d\n", power);
 
     // current limit was removed from module' ctor
     // override default value (60 mA)
     res = lora.setCurrentLimit(currentLimit);
-    DEBUG_MSG("Current limit set to %f\n", currentLimit);
-    DEBUG_MSG("Current limit set result %d\n", res);
+    LOG_DEBUG("Current limit set to %f\n", currentLimit);
+    LOG_DEBUG("Current limit set result %d\n", res);
 
 #if defined(SX126X_TXEN) && (SX126X_TXEN != RADIOLIB_NC)
     // lora.begin sets Dio2 as RF switch control, which is not true if we are manually controlling RX and TX
@@ -170,7 +170,7 @@ void SX126xInterface<T>::setStandby()
     int err = lora.standby();
 
     if (err != RADIOLIB_ERR_NONE)
-        DEBUG_MSG("SX126x standby failed with error %d\n", err);
+        LOG_DEBUG("SX126x standby failed with error %d\n", err);
 
     assert(err == RADIOLIB_ERR_NONE);
 
@@ -192,7 +192,7 @@ void SX126xInterface<T>::setStandby()
 template<typename T>
 void SX126xInterface<T>::addReceiveMetadata(MeshPacket *mp)
 {
-    // DEBUG_MSG("PacketStatus %x\n", lora.getPacketStatus());
+    // LOG_DEBUG("PacketStatus %x\n", lora.getPacketStatus());
     mp->rx_snr = lora.getSNR();
     mp->rx_rssi = lround(lora.getRSSI());
 }
@@ -275,7 +275,7 @@ bool SX126xInterface<T>::isActivelyReceiving()
     // this is not correct - often always true - need to add an extra conditional
     // size_t bytesPending = lora.getPacketLength();
 
-    // if (hasPreamble) DEBUG_MSG("rx hasPreamble\n");
+    // if (hasPreamble) LOG_DEBUG("rx hasPreamble\n");
     return hasPreamble;
 }
 
@@ -284,7 +284,7 @@ bool SX126xInterface<T>::sleep()
 {
     // Not keeping config is busted - next time nrf52 board boots lora sending fails  tcxo related? - see datasheet
     // \todo Display actual typename of the adapter, not just `SX126x`
-    DEBUG_MSG("sx126x entering sleep mode (FIXME, don't keep config)\n");
+    LOG_DEBUG("sx126x entering sleep mode (FIXME, don't keep config)\n");
     setStandby(); // Stop any pending operations
 
     // turn off TCXO if it was powered

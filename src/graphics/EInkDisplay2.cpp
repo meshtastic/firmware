@@ -103,7 +103,7 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
             }
         }
 
-        DEBUG_MSG("Updating E-Paper... ");
+        LOG_DEBUG("Updating E-Paper... ");
         
         #if defined(TTGO_T_ECHO)
         // ePaper.Reset(); // wake the screen from sleep
@@ -128,11 +128,11 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
         
         // Put screen to sleep to save power (possibly not necessary because we already did poweroff inside of display)
         adafruitDisplay->hibernate();
-        DEBUG_MSG("done\n");
+        LOG_DEBUG("done\n");
 
         return true;
     } else {
-        // DEBUG_MSG("Skipping eink display\n");
+        // LOG_DEBUG("Skipping eink display\n");
         return false;
     }
 }
@@ -162,7 +162,7 @@ void EInkDisplay::setDetected(uint8_t detected)
 // Connect to the display
 bool EInkDisplay::connect()
 {
-    DEBUG_MSG("Doing EInk init\n");
+    LOG_INFO("Doing EInk init\n");
 
 #ifdef PIN_EINK_PWR_ON
     digitalWrite(PIN_EINK_PWR_ON, HIGH); // If we need to assert a pin to power external peripherals

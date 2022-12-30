@@ -3,7 +3,7 @@
 
 void CryptoEngine::setKey(const CryptoKey &k)
 {
-    DEBUG_MSG("Using AES%d key!\n", k.length * 8);
+    LOG_DEBUG("Using AES%d key!\n", k.length * 8);
     key = k;
 }
 
@@ -14,12 +14,12 @@ void CryptoEngine::setKey(const CryptoKey &k)
  */
 void CryptoEngine::encrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes)
 {
-    DEBUG_MSG("WARNING: noop encryption!\n");
+    LOG_WARN("noop encryption!\n");
 }
 
 void CryptoEngine::decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes)
 {
-    DEBUG_MSG("WARNING: noop decryption!\n");
+    LOG_WARN("noop decryption!\n");
 }
 
 /**
