@@ -203,7 +203,7 @@ void NodeDB::initConfigIntervals()
 
 void NodeDB::installDefaultModuleConfig()
 {
-    LOG_DEBUG("Installing default ModuleConfig\n");
+    LOG_INFO("Installing default ModuleConfig\n");
     memset(&moduleConfig, 0, sizeof(ModuleConfig));
     
     moduleConfig.version = DEVICESTATE_CUR_VER;
@@ -230,7 +230,7 @@ void NodeDB::initModuleConfigIntervals()
 
 void NodeDB::installDefaultChannels()
 {
-    LOG_DEBUG("Installing default ChannelFile\n");
+    LOG_INFO("Installing default ChannelFile\n");
     memset(&channelFile, 0, sizeof(ChannelFile));
     channelFile.version = DEVICESTATE_CUR_VER;
 }
@@ -244,7 +244,7 @@ void NodeDB::resetNodes()
 
 void NodeDB::installDefaultDeviceState()
 {
-    LOG_DEBUG("Installing default DeviceState\n");
+    LOG_INFO("Installing default DeviceState\n");
     memset(&devicestate, 0, sizeof(DeviceState));
 
     *numNodes = 0;
@@ -275,7 +275,7 @@ void NodeDB::installDefaultDeviceState()
 
 void NodeDB::init()
 {
-    LOG_DEBUG("Initializing NodeDB\n");
+    LOG_INFO("Initializing NodeDB\n");
     loadFromDisk();
 
     uint32_t devicestateCRC = crc32Buffer(&devicestate, sizeof(devicestate));
@@ -383,7 +383,7 @@ bool NodeDB::loadProto(const char *filename, size_t protoSize, size_t objSize, c
 
         memset(dest_struct, 0, objSize);
         if (!pb_decode(&stream, fields, dest_struct)) {
-            LOG_DEBUG("Error: can't decode protobuf %s\n", PB_GET_ERROR(&stream));
+            LOG_ERROR("Error: can't decode protobuf %s\n", PB_GET_ERROR(&stream));
         } else {
             okay = true;
         }
@@ -393,7 +393,7 @@ bool NodeDB::loadProto(const char *filename, size_t protoSize, size_t objSize, c
         LOG_DEBUG("No %s preferences found\n", filename);
     }
 #else
-    LOG_DEBUG("ERROR: Filesystem not implemented\n");
+    LOG_ERROR("ERROR: Filesystem not implemented\n");
 #endif
     return okay;
 }
@@ -405,7 +405,7 @@ void NodeDB::loadFromDisk()
         installDefaultDeviceState(); // Our in RAM copy might now be corrupt
     } else {
         if (devicestate.version < DEVICESTATE_MIN_VER) {
-            LOG_DEBUG("Warn: devicestate %d is old, discarding\n", devicestate.version);
+            LOG_WARN("Devicestate %d is old, discarding\n", devicestate.version);
             factoryReset();
         } else {
             LOG_DEBUG("Loaded saved devicestate version %d\n", devicestate.version);
@@ -416,7 +416,7 @@ void NodeDB::loadFromDisk()
         installDefaultConfig(); // Our in RAM copy might now be corrupt
     } else {
         if (config.version < DEVICESTATE_MIN_VER) {
-            LOG_DEBUG("Warn: config %d is old, discarding\n", config.version);
+            LOG_WARN("config %d is old, discarding\n", config.version);
             installDefaultConfig();
         } else {
             LOG_DEBUG("Loaded saved config version %d\n", config.version);
@@ -427,7 +427,7 @@ void NodeDB::loadFromDisk()
         installDefaultModuleConfig(); // Our in RAM copy might now be corrupt
     } else {
         if (moduleConfig.version < DEVICESTATE_MIN_VER) {
-            LOG_DEBUG("Warn: moduleConfig %d is old, discarding\n", moduleConfig.version);
+            LOG_WARN("moduleConfig %d is old, discarding\n", moduleConfig.version);
             installDefaultModuleConfig();
         } else {
             LOG_DEBUG("Loaded saved moduleConfig version %d\n", moduleConfig.version);
@@ -438,7 +438,7 @@ void NodeDB::loadFromDisk()
         installDefaultChannels(); // Our in RAM copy might now be corrupt
     } else {
         if (channelFile.version < DEVICESTATE_MIN_VER) {
-            LOG_DEBUG("Warn: channelFile %d is old, discarding\n", channelFile.version);
+            LOG_WARN("channelFile %d is old, discarding\n", channelFile.version);
             installDefaultChannels();
         } else {
             LOG_DEBUG("Loaded saved channelFile version %d\n", channelFile.version);
