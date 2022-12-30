@@ -221,6 +221,8 @@ ErrorCode Router::send(MeshPacket *p)
     if (p->which_payload_variant == MeshPacket_decoded_tag) {
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
 
+    bool shouldActuallyEncrypt = true;
+
 #if HAS_WIFI || HAS_ETHERNET
         if(moduleConfig.mqtt.enabled) {
             // check if we should send decrypted packets to mqtt
@@ -235,7 +237,6 @@ ErrorCode Router::send(MeshPacket *p)
             * => so we only decrypt mqtt if they have a custom mqtt server AND mqtt_encryption_enabled is FALSE
             */
 
-            bool shouldActuallyEncrypt = true;
             if (*moduleConfig.mqtt.address && !moduleConfig.mqtt.encryption_enabled) {
                 shouldActuallyEncrypt = false;
             }
@@ -255,7 +256,7 @@ ErrorCode Router::send(MeshPacket *p)
         }
 
 #if HAS_WIFI || HAS_ETHERNET
-        if(moduleConfig.mqtt.enabled) {
+        if (moduleConfig.mqtt.enabled) {
             // the packet is now encrypted.
             // check if we should send encrypted packets to mqtt
             if (mqtt && shouldActuallyEncrypt)
