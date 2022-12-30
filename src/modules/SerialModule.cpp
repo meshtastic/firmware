@@ -220,7 +220,6 @@ int32_t SerialModule::runOnce()
 
         return (10);
     } else {
-        DEBUG_MSG("Serial Module Disabled\n");
         return disable();
     }
 }
