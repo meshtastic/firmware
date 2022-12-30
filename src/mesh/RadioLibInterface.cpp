@@ -82,17 +82,17 @@ bool RadioLibInterface::canSendImmediately()
 
     if (busyTx || busyRx) {
         if (busyTx)
-            LOG_DEBUG("Can not send yet, busyTx\n");
+            LOG_WARN("Can not send yet, busyTx\n");
         // If we've been trying to send the same packet more than one minute and we haven't gotten a
         // TX IRQ from the radio, the radio is probably broken.
         if (busyTx && (millis() - lastTxStart > 60000)) {
-            LOG_DEBUG("Hardware Failure! busyTx for more than 60s\n");
+            LOG_ERROR("Hardware Failure! busyTx for more than 60s\n");
             RECORD_CRITICALERROR(CriticalErrorCode_TRANSMIT_FAILED);
             // reboot in 5 seconds when this condition occurs.
             rebootAtMsec = lastTxStart + 65000;
         }
         if (busyRx)
-            LOG_DEBUG("Can not send yet, busyRx\n");
+            LOG_WARN("Can not send yet, busyRx\n");
         return false;
     } else
         return true;
@@ -111,13 +111,13 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
 
             if (config.lora.region != Config_LoRaConfig_RegionCode_UNSET) {
                 if (disabled || !config.lora.tx_enabled) {
-                    LOG_DEBUG("send - !config.lora.tx_enabled\n");
+                    LOG_WARN("send - !config.lora.tx_enabled\n");
                     packetPool.release(p);
                     return ERRNO_DISABLED;
                 }
 
             } else {
-                LOG_DEBUG("send - lora tx disable because RegionCode_Unset\n");
+                LOG_WARN("send - lora tx disable because RegionCode_Unset\n");
                 packetPool.release(p);
                 return ERRNO_DISABLED;
             }
@@ -127,7 +127,7 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
 #else
 
     if (disabled || !config.lora.tx_enabled) {
-        LOG_DEBUG("send - !config.lora.tx_enabled\n");
+        LOG_WARN("send - !config.lora.tx_enabled\n");
         packetPool.release(p);
         return ERRNO_DISABLED;
     }
@@ -319,7 +319,7 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
 
         int state = iface->readData(radiobuf, length);
         if (state != RADIOLIB_ERR_NONE) {
-            LOG_DEBUG("ignoring received packet due to error=%d\n", state);
+            LOG_ERROR("ignoring received packet due to error=%d\n", state);
             rxBad++;
 
             airTime->logAirtime(RX_ALL_LOG, xmitMsec);
@@ -331,7 +331,7 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
 
             // check for short packets
             if (payloadLen < 0) {
-                LOG_DEBUG("ignoring received packet too short\n");
+                LOG_WARN("ignoring received packet too short\n");
                 rxBad++;
                 airTime->logAirtime(RX_ALL_LOG, xmitMsec);
             } else {
@@ -374,7 +374,7 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
     {
         printPacket("Starting low level send", txp);
         if (disabled || !config.lora.tx_enabled) {
-            LOG_DEBUG("startSend is dropping tx packet because we are disabled\n");
+            LOG_WARN("startSend is dropping tx packet because we are disabled\n");
             packetPool.release(txp);
         } else {
             setStandby(); // Cancel any already in process receives
@@ -385,7 +385,7 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
 
             int res = iface->startTransmit(radiobuf, numbytes);
             if (res != RADIOLIB_ERR_NONE) {
-                LOG_DEBUG("startTransmit failed, error=%d\n", res);
+                LOG_ERROR("startTransmit failed, error=%d\n", res);
                 RECORD_CRITICALERROR(CriticalErrorCode_RADIO_SPI_BUG);
 
                 // This send failed, but make sure to 'complete' it properly

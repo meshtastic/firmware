@@ -936,14 +936,14 @@ void Screen::handleSetOn(bool on)
 
     if (on != screenOn) {
         if (on) {
-            LOG_DEBUG("Turning on screen\n");
+            LOG_INFO("Turning on screen\n");
             dispdev.displayOn();
             dispdev.displayOn();
             enabled = true;
             setInterval(0); // Draw ASAP
             runASAP = true;
         } else {
-            LOG_DEBUG("Turning off screen\n");
+            LOG_INFO("Turning off screen\n");
             dispdev.displayOff();
             enabled = false;
         }
@@ -1056,7 +1056,7 @@ int32_t Screen::runOnce()
     // serialSinceMsec adjusts for additional serial wait time during nRF52 bootup
     static bool showingBootScreen = true;
     if (showingBootScreen && (millis() > (logo_timeout + serialSinceMsec))) {
-        LOG_DEBUG("Done with boot screen...\n");
+        LOG_INFO("Done with boot screen...\n");
         stopBootScreen();
         showingBootScreen = false;
     }
@@ -1065,7 +1065,7 @@ int32_t Screen::runOnce()
     if (strlen(oemStore.oem_text) > 0) {
         static bool showingOEMBootScreen = true;
         if (showingOEMBootScreen && (millis() > ((logo_timeout / 2) + serialSinceMsec))) {
-            LOG_DEBUG("Switch to OEM screen...\n");
+            LOG_INFO("Switch to OEM screen...\n");
             // Change frames.
             static FrameCallback bootOEMFrames[] = {drawOEMBootScreen};
             static const int bootOEMFrameCount = sizeof(bootOEMFrames) / sizeof(bootOEMFrames[0]);
@@ -1127,7 +1127,7 @@ int32_t Screen::runOnce()
             handleRebootScreen();
             break;
         default:
-            LOG_DEBUG("BUG: invalid cmd\n");
+            LOG_ERROR("Invalid screen cmd\n");
         }
     }
 

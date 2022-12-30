@@ -270,7 +270,7 @@ static int mem_test(uint32_t *_start, size_t len, bool doRead = true, bool doWri
         for (addr = start, val = pattern; addr < end; addr++) {
             readback = *addr;
             if (readback != val) {
-                LOG_DEBUG("Mem error @ 0x%08X: "
+                LOG_ERROR("Mem error @ 0x%08X: "
                        "found 0x%08lX, expected 0x%08lX\n",
                        addr, readback, val);
                 rcode++;

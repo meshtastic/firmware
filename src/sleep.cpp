@@ -90,7 +90,7 @@ void setLed(bool ledOn)
 
 void setGPSPower(bool on)
 {
-    LOG_DEBUG("Setting GPS power=%d\n", on);
+    LOG_INFO("Setting GPS power=%d\n", on);
 
 #ifdef HAS_PMU
     if (pmu_found && PMU){
@@ -136,7 +136,7 @@ void initDeepSleep()
     if (wakeCause == ESP_SLEEP_WAKEUP_TIMER)
         reason = "timeout";
 
-    LOG_DEBUG("booted, wake cause %d (boot count %d), reset_reason=%s\n", wakeCause, bootCount, reason);
+    LOG_INFO("Booted, wake cause %d (boot count %d), reset_reason=%s\n", wakeCause, bootCount, reason);
 #endif
 }
 
@@ -174,13 +174,13 @@ void doGPSpowersave(bool on)
     #ifdef HAS_PMU
     if (on)
     {
-        LOG_DEBUG("Turning GPS back on\n");
+        LOG_INFO("Turning GPS back on\n");
         gps->forceWake(1);
         setGPSPower(1);
     }
     else
     {
-        LOG_DEBUG("Turning off GPS chip\n");
+        LOG_INFO("Turning off GPS chip\n");
         notifyGPSSleep.notifyObservers(NULL);
         setGPSPower(0);
     }
@@ -188,12 +188,12 @@ void doGPSpowersave(bool on)
     #ifdef PIN_GPS_WAKE
     if (on)
     {
-        LOG_DEBUG("Waking GPS");
+        LOG_INFO("Waking GPS");
         gps->forceWake(1);
     }
     else
     {
-        LOG_DEBUG("GPS entering sleep");
+        LOG_INFO("GPS entering sleep");
         notifyGPSSleep.notifyObservers(NULL);
     }
     #endif
@@ -201,7 +201,7 @@ void doGPSpowersave(bool on)
 
 void doDeepSleep(uint64_t msecToWake)
 {
-    LOG_DEBUG("Entering deep sleep for %lu seconds\n", msecToWake / 1000);
+    LOG_INFO("Entering deep sleep for %lu seconds\n", msecToWake / 1000);
 
     // not using wifi yet, but once we are this is needed to shutoff the radio hw
     // esp_wifi_stop();
@@ -310,7 +310,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
 #ifdef BUTTON_PIN
     if (cause == ESP_SLEEP_WAKEUP_GPIO)
-        LOG_DEBUG("Exit light sleep gpio: btn=%d\n", !digitalRead(BUTTON_PIN));
+        LOG_INFO("Exit light sleep gpio: btn=%d\n", !digitalRead(BUTTON_PIN));
 #endif
 
     return cause;

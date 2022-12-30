@@ -139,7 +139,7 @@ class ButtonThread : public concurrency::OSThread
             // may wake the board immediatedly.
             if ((!shutdown_on_long_stop) && (millis() > 30 * 1000)) {
                 screen->startShutdownScreen();
-                LOG_DEBUG("Shutdown from long press");
+                LOG_INFO("Shutdown from long press");
                 playBeep();
 #ifdef PIN_LED1
                 ledOff(PIN_LED1);

@@ -50,12 +50,12 @@ void TraceRouteModule::appendMyID(RouteDiscovery* updated)
 
 void TraceRouteModule::printRoute(RouteDiscovery* r, uint32_t origin, uint32_t dest) 
 {
-    LOG_DEBUG("Route traced:\n");
-    LOG_DEBUG("0x%x --> ", origin);
+    LOG_INFO("Route traced:\n");
+    LOG_INFO("0x%x --> ", origin);
     for (uint8_t i=0; i<r->route_count; i++) {
-        LOG_DEBUG("0x%x --> ", r->route[i]); 
+        LOG_INFO("0x%x --> ", r->route[i]); 
     }
-    if (dest != NODENUM_BROADCAST) LOG_DEBUG("0x%x\n", dest); else LOG_DEBUG("...\n");
+    if (dest != NODENUM_BROADCAST) LOG_INFO("0x%x\n", dest); else LOG_INFO("...\n");
 }
 
 

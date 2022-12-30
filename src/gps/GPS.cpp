@@ -361,7 +361,7 @@ void GPS::setNumSatellites(uint8_t n)
 void GPS::setAwake(bool on)
 {
     if (!wakeAllowed && on) {
-        LOG_DEBUG("Inhibiting because !wakeAllowed\n");
+        LOG_WARN("Inhibiting because !wakeAllowed\n");
         on = false;
     }
 
@@ -516,7 +516,7 @@ void GPS::forceWake(bool on)
 /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
 int GPS::prepareSleep(void *unused)
 {
-    LOG_DEBUG("GPS prepare sleep!\n");
+    LOG_INFO("GPS prepare sleep!\n");
     forceWake(false);
 
     return 0;
@@ -525,7 +525,7 @@ int GPS::prepareSleep(void *unused)
 /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
 int GPS::prepareDeepSleep(void *unused)
 {
-    LOG_DEBUG("GPS deep sleep!\n");
+    LOG_INFO("GPS deep sleep!\n");
 
     // For deep sleep we also want abandon any lock attempts (because we want minimum power)
     getSleepTime();
@@ -568,7 +568,7 @@ GnssModel_t GPS::probe()
             if(index != -1){
                 ver = ver.substring(index);
                 if (ver.startsWith("$GPTXT,01,01,02")) {
-                    LOG_DEBUG("L76K GNSS init succeeded, using L76K GNSS Module\n");
+                    LOG_INFO("L76K GNSS init succeeded, using L76K GNSS Module\n");
                     return GNSS_MODEL_MTK;
                 }
             }
@@ -631,9 +631,9 @@ GnssModel_t GPS::probe()
     }
 
     if (strlen((char*)buffer)) {
-        LOG_DEBUG("UBlox GNSS init succeeded, using UBlox %s GNSS Module\n" , buffer);
+        LOG_INFO("UBlox GNSS init succeeded, using UBlox %s GNSS Module\n" , buffer);
     }else{
-        LOG_DEBUG("UBlox GNSS init succeeded, using UBlox GNSS Module\n");
+        LOG_INFO("UBlox GNSS init succeeded, using UBlox GNSS Module\n");
     }
 
     return GNSS_MODEL_UBLOX;

@@ -162,7 +162,7 @@ void EInkDisplay::setDetected(uint8_t detected)
 // Connect to the display
 bool EInkDisplay::connect()
 {
-    LOG_DEBUG("Doing EInk init\n");
+    LOG_INFO("Doing EInk init\n");
 
 #ifdef PIN_EINK_PWR_ON
     digitalWrite(PIN_EINK_PWR_ON, HIGH); // If we need to assert a pin to power external peripherals

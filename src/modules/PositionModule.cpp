@@ -32,7 +32,7 @@ bool PositionModule::handleReceivedProtobuf(const MeshPacket &mp, Position *pptr
     }
 
     // Log packet size and list of fields
-    LOG_DEBUG("POSITION node=%08x l=%d %s%s%s%s%s%s%s%s%s%s%s%s%s\n", getFrom(&mp), mp.decoded.payload.size,
+    LOG_INFO("POSITION node=%08x l=%d %s%s%s%s%s%s%s%s%s%s%s%s%s\n", getFrom(&mp), mp.decoded.payload.size,
               p.latitude_i ? "LAT " : "", p.longitude_i ? "LON " : "", p.altitude ? "MSL " : "", p.altitude_hae ? "HAE " : "",
               p.altitude_geoidal_separation ? "GEO " : "", p.PDOP ? "PDOP " : "", p.HDOP ? "HDOP " : "", p.VDOP ? "VDOP " : "",
               p.sats_in_view ? "SIV " : "", p.fix_quality ? "FXQ " : "", p.fix_type ? "FXT " : "", p.timestamp ? "PTS " : "",
@@ -109,12 +109,12 @@ MeshPacket *PositionModule::allocReply()
     // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS to include the time, so that gpsless
     // devices can get time.
     if (getRTCQuality() < RTCQualityDevice) {
-        LOG_DEBUG("Stripping time %u from position send\n", p.time);
+        LOG_INFO("Stripping time %u from position send\n", p.time);
         p.time = 0;
     } else
-        LOG_DEBUG("Providing time to mesh %u\n", p.time);
+        LOG_INFO("Providing time to mesh %u\n", p.time);
 
-    LOG_DEBUG("Position reply: time=%i, latI=%i, lonI=-%i\n", p.time, p.latitude_i, p.longitude_i);
+    LOG_INFO("Position reply: time=%i, latI=%i, lonI=-%i\n", p.time, p.latitude_i, p.longitude_i);
 
     return allocDataProtobuf(p);
 }
@@ -155,11 +155,11 @@ int32_t PositionModule::runOnce()
                 bool requestReplies = currentGeneration != radioGeneration;
                 currentGeneration = radioGeneration;
 
-                LOG_DEBUG("Sending pos@%x:6 to mesh (wantReplies=%d)\n", node->position.timestamp, requestReplies);
+                LOG_INFO("Sending pos@%x:6 to mesh (wantReplies=%d)\n", node->position.timestamp, requestReplies);
                 sendOurPosition(NODENUM_BROADCAST, requestReplies);
             }
         } else {
-            LOG_DEBUG("Channel utilization is >40 percent. Skipping this opportunity to send.\n");
+            LOG_WARN("Channel utilization is >40 percent. Skipping this opportunity to send.\n");
         }
 
     } else if (config.position.position_broadcast_smart_enabled) {
@@ -194,7 +194,7 @@ int32_t PositionModule::runOnce()
                     bool requestReplies = currentGeneration != radioGeneration;
                     currentGeneration = radioGeneration;
 
-                    LOG_DEBUG("Sending smart pos@%x:6 to mesh (wantReplies=%d, d=%d, dtt=%d, tt=%d)\n", node2->position.timestamp,
+                    LOG_INFO("Sending smart pos@%x:6 to mesh (wantReplies=%d, d=%d, dtt=%d, tt=%d)\n", node2->position.timestamp,
                               requestReplies, distance, distanceTravelThreshold, timeTravel);
                     sendOurPosition(NODENUM_BROADCAST, requestReplies);
 
@@ -209,7 +209,7 @@ int32_t PositionModule::runOnce()
                 }
             }
         } else {
-            LOG_DEBUG("Channel utilization is >25 percent. Skipping this opportunity to send.\n");
+            LOG_WARN("Channel utilization is >25 percent. Skipping this opportunity to send.\n");
         }
     }
 

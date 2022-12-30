@@ -108,9 +108,9 @@ bool SimRadio::canSendImmediately()
 
     if (busyTx || busyRx) {
         if (busyTx)
-            LOG_DEBUG("Can not send yet, busyTx\n");
+            LOG_WARN("Can not send yet, busyTx\n");
         if (busyRx)
-            LOG_DEBUG("Can not send yet, busyRx\n");
+            LOG_WARN("Can not send yet, busyRx\n");
         return false;
     } else
         return true;
@@ -199,7 +199,7 @@ void SimRadio::startSend(MeshPacket * txp)
         memcpy(&c.data.bytes, p->decoded.payload.bytes, p->decoded.payload.size);
         c.data.size = p->decoded.payload.size; 
     } else {
-        LOG_DEBUG("Payload size is larger than compressed message allows! Sending empty payload.\n");
+        LOG_WARN("Payload size is larger than compressed message allows! Sending empty payload.\n");
     }
     p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &Compressed_msg, &c);
     p->decoded.portnum = PortNum_SIMULATOR_APP;

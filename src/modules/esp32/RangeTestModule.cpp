@@ -53,10 +53,10 @@ int32_t RangeTestModule::runOnce()
             firstTime = 0;
 
             if (moduleConfig.range_test.sender) {
-                LOG_DEBUG("Initializing Range Test Module -- Sender\n");
+                LOG_INFO("Initializing Range Test Module -- Sender\n");
                 return (5000); // Sending first message 5 seconds after initilization.
             } else {
-                LOG_DEBUG("Initializing Range Test Module -- Receiver\n");
+                LOG_INFO("Initializing Range Test Module -- Receiver\n");
                 return (INT32_MAX);
                 // This thread does not need to run as a receiver
             }
@@ -65,19 +65,19 @@ int32_t RangeTestModule::runOnce()
 
             if (moduleConfig.range_test.sender) {
                 // If sender
-                LOG_DEBUG("Range Test Module - Sending heartbeat every %d ms\n", (senderHeartbeat));
+                LOG_INFO("Range Test Module - Sending heartbeat every %d ms\n", (senderHeartbeat));
 
-                LOG_DEBUG("gpsStatus->getLatitude()     %d\n", gpsStatus->getLatitude());
-                LOG_DEBUG("gpsStatus->getLongitude()    %d\n", gpsStatus->getLongitude());
-                LOG_DEBUG("gpsStatus->getHasLock()      %d\n", gpsStatus->getHasLock());
-                LOG_DEBUG("gpsStatus->getDOP()          %d\n", gpsStatus->getDOP());
-                LOG_DEBUG("fixed_position()             %d\n", config.position.fixed_position);
+                LOG_INFO("gpsStatus->getLatitude()     %d\n", gpsStatus->getLatitude());
+                LOG_INFO("gpsStatus->getLongitude()    %d\n", gpsStatus->getLongitude());
+                LOG_INFO("gpsStatus->getHasLock()      %d\n", gpsStatus->getHasLock());
+                LOG_INFO("gpsStatus->getDOP()          %d\n", gpsStatus->getDOP());
+                LOG_INFO("fixed_position()             %d\n", config.position.fixed_position);
 
                 // Only send packets if the channel is less than 25% utilized.
                 if (airTime->channelUtilizationPercent() < 25) {
                     rangeTestModuleRadio->sendPayload();
                 } else {
-                    LOG_DEBUG("rangeTest - Channel utilization is >25 percent. Skipping this opportunity to send.\n");
+                    LOG_WARN("RangeTest - Channel utilization is >25 percent. Skipping this opportunity to send.\n");
                 }
 
                 return (senderHeartbeat);
@@ -88,9 +88,8 @@ int32_t RangeTestModule::runOnce()
 
 
         }
-
     } else {
-        LOG_DEBUG("Range Test Module - Disabled\n");
+        LOG_INFO("Range Test Module - Disabled\n");
     }
 
 #endif
@@ -136,7 +135,7 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const MeshPacket &mp)
         /*
             auto &p = mp.decoded;
             LOG_DEBUG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s\n",
-                  nodeDB.getNodeNum(), mp.from, mp.to, mp.id, p.payload.size, p.payload.bytes);
+                  LOG_INFO.getNodeNum(), mp.from, mp.to, mp.id, p.payload.size, p.payload.bytes);
         */
 
         if (getFrom(&mp) != nodeDB.getNodeNum()) {
@@ -174,7 +173,7 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const MeshPacket &mp)
         }
 
     } else {
-        LOG_DEBUG("Range Test Module Disabled\n");
+        LOG_INFO("Range Test Module Disabled\n");
     }
 
 #endif
@@ -229,16 +228,16 @@ bool RangeTestModuleRadio::appendFile(const MeshPacket &mp)
         File fileToWrite = FSCom.open("/static/rangetest.csv", FILE_WRITE);
 
         if (!fileToWrite) {
-            LOG_DEBUG("There was an error opening the file for writing\n");
+            LOG_ERROR("There was an error opening the file for writing\n");
             return 0;
         }
 
         // Print the CSV header
         if (fileToWrite.println(
                 "time,from,sender name,sender lat,sender long,rx lat,rx long,rx elevation,rx snr,distance,hop limit,payload")) {
-            LOG_DEBUG("File was written\n");
+            LOG_INFO("File was written\n");
         } else {
-            LOG_DEBUG("File write failed\n");
+            LOG_ERROR("File write failed\n");
         }
 
         fileToWrite.close();
@@ -248,7 +247,7 @@ bool RangeTestModuleRadio::appendFile(const MeshPacket &mp)
     File fileToAppend = FSCom.open("/static/rangetest.csv", FILE_APPEND);
 
     if (!fileToAppend) {
-        LOG_DEBUG("There was an error opening the file for appending\n");
+        LOG_ERROR("There was an error opening the file for appending\n");
         return 0;
     }
 

@@ -86,7 +86,7 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
     }
 
     if (channelFile.channels_count != MAX_NUM_CHANNELS) {
-        LOG_DEBUG("Setting default channel and radio preferences!\n");
+        LOG_INFO("Setting default channel and radio preferences!\n");
 
         channels.initDefaults();
     }
@@ -114,7 +114,7 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
     initRegion();
 
     if (didFactoryReset) {
-        LOG_DEBUG("Rebooting due to factory reset");
+        LOG_INFO("Rebooting due to factory reset");
         screen->startRebootScreen();
         rebootAtMsec = millis() + (5 * 1000);
     }
@@ -124,7 +124,7 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
 
 bool NodeDB::factoryReset() 
 {
-    LOG_DEBUG("Performing factory reset!\n");
+    LOG_INFO("Performing factory reset!\n");
     // first, remove the "/prefs" (this removes most prefs)
     rmDir("/prefs");
     // second, install default state (this will deal with the duplicate mac address issue)
@@ -140,7 +140,7 @@ bool NodeDB::factoryReset()
 #endif
 #ifdef ARCH_NRF52
     Bluefruit.begin();
-    LOG_DEBUG("Clearing bluetooth bonds!\n");
+    LOG_INFO("Clearing bluetooth bonds!\n");
     bond_print_list(BLE_GAP_ROLE_PERIPH);
     bond_print_list(BLE_GAP_ROLE_CENTRAL);
     Bluefruit.Periph.clearBonds();
@@ -151,7 +151,7 @@ bool NodeDB::factoryReset()
 
 void NodeDB::installDefaultConfig()
 {
-    LOG_DEBUG("Installing default LocalConfig\n");
+    LOG_INFO("Installing default LocalConfig\n");
     memset(&config, 0, sizeof(LocalConfig));
     config.version = DEVICESTATE_CUR_VER;
     config.has_device = true;
@@ -376,7 +376,7 @@ bool NodeDB::loadProto(const char *filename, size_t protoSize, size_t objSize, c
     auto f = FSCom.open(filename, FILE_O_READ);
 
     if (f) {
-        LOG_DEBUG("Loading %s\n", filename);
+        LOG_INFO("Loading %s\n", filename);
         pb_istream_t stream = {&readcb, &f, protoSize};
 
         // LOG_DEBUG("Preload channel name=%s\n", channelSettings.name);
@@ -390,7 +390,7 @@ bool NodeDB::loadProto(const char *filename, size_t protoSize, size_t objSize, c
 
         f.close();
     } else {
-        LOG_DEBUG("No %s preferences found\n", filename);
+        LOG_INFO("No %s preferences found\n", filename);
     }
 #else
     LOG_ERROR("ERROR: Filesystem not implemented\n");
@@ -408,7 +408,7 @@ void NodeDB::loadFromDisk()
             LOG_WARN("Devicestate %d is old, discarding\n", devicestate.version);
             factoryReset();
         } else {
-            LOG_DEBUG("Loaded saved devicestate version %d\n", devicestate.version);
+            LOG_INFO("Loaded saved devicestate version %d\n", devicestate.version);
         }
     }
 
@@ -419,7 +419,7 @@ void NodeDB::loadFromDisk()
             LOG_WARN("config %d is old, discarding\n", config.version);
             installDefaultConfig();
         } else {
-            LOG_DEBUG("Loaded saved config version %d\n", config.version);
+            LOG_INFO("Loaded saved config version %d\n", config.version);
         }
     }
 
@@ -430,7 +430,7 @@ void NodeDB::loadFromDisk()
             LOG_WARN("moduleConfig %d is old, discarding\n", moduleConfig.version);
             installDefaultModuleConfig();
         } else {
-            LOG_DEBUG("Loaded saved moduleConfig version %d\n", moduleConfig.version);
+            LOG_INFO("Loaded saved moduleConfig version %d\n", moduleConfig.version);
         }
     }
 
@@ -441,12 +441,12 @@ void NodeDB::loadFromDisk()
             LOG_WARN("channelFile %d is old, discarding\n", channelFile.version);
             installDefaultChannels();
         } else {
-            LOG_DEBUG("Loaded saved channelFile version %d\n", channelFile.version);
+            LOG_INFO("Loaded saved channelFile version %d\n", channelFile.version);
         }
     }
 
     if (loadProto(oemConfigFile, OEMStore_size, sizeof(OEMStore), &OEMStore_msg, &oemStore))
-        LOG_DEBUG("Loaded OEMStore\n");
+        LOG_INFO("Loaded OEMStore\n");
 }
 
 /** Save a protobuf from a file, return true for success */
@@ -459,11 +459,11 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
     filenameTmp += ".tmp";
     auto f = FSCom.open(filenameTmp.c_str(), FILE_O_WRITE);
     if (f) {
-        LOG_DEBUG("Saving %s\n", filename);
+        LOG_INFO("Saving %s\n", filename);
         pb_ostream_t stream = {&writecb, &f, protoSize};
 
         if (!pb_encode(&stream, fields, dest_struct)) {
-            LOG_DEBUG("Error: can't encode protobuf %s\n", PB_GET_ERROR(&stream));
+            LOG_ERROR("Error: can't encode protobuf %s\n", PB_GET_ERROR(&stream));
         } else {
             okay = true;
         }
@@ -473,9 +473,9 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
         if (FSCom.exists(filename) && !FSCom.remove(filename))
             LOG_WARN("Can't remove old pref file\n");
         if (!renameFile(filenameTmp.c_str(), filename))
-            LOG_DEBUG("Error: can't rename new pref file\n");
+            LOG_ERROR("Error: can't rename new pref file\n");
     } else {
-        LOG_DEBUG("Can't write prefs\n");
+        LOG_ERROR("Can't write prefs\n");
 #ifdef ARCH_NRF52
         static uint8_t failedCounter = 0;
         failedCounter++;
@@ -487,7 +487,7 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
 #endif
     }
 #else
-    LOG_DEBUG("ERROR: Filesystem not implemented\n");
+    LOG_ERROR("ERROR: Filesystem not implemented\n");
 #endif
     return okay;
 }
@@ -599,7 +599,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p, RxSource src)
 
     if (src == RX_SRC_LOCAL) {
         // Local packet, fully authoritative
-        LOG_DEBUG("updatePosition LOCAL pos@%x, time=%u, latI=%d, lonI=%d, alt=%d\n", p.timestamp, p.time, p.latitude_i,
+        LOG_INFO("updatePosition LOCAL pos@%x, time=%u, latI=%d, lonI=%d, alt=%d\n", p.timestamp, p.time, p.latitude_i,
                   p.longitude_i, p.altitude);
         info->position = p;
 
@@ -615,7 +615,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p, RxSource src)
         // recorded based on the packet rxTime
         //
         // FIXME perhaps handle RX_SRC_USER separately?
-        LOG_DEBUG("updatePosition REMOTE node=0x%x time=%u, latI=%d, lonI=%d\n", nodeId, p.time, p.latitude_i, p.longitude_i);
+        LOG_INFO("updatePosition REMOTE node=0x%x time=%u, latI=%d, lonI=%d\n", nodeId, p.time, p.latitude_i, p.longitude_i);
 
         // First, back up fields that we want to protect from overwrite
         uint32_t tmp_time = info->position.time;
@@ -756,9 +756,9 @@ void recordCriticalError(CriticalErrorCode code, uint32_t address, const char *f
     String lcd = String("Critical error ") + code + "!\n";
     screen->print(lcd.c_str());
     if (filename)
-        LOG_DEBUG("NOTE! Recording critical error %d at %s:%lu\n", code, filename, address);
+        LOG_ERROR("NOTE! Recording critical error %d at %s:%lu\n", code, filename, address);
     else
-        LOG_DEBUG("NOTE! Recording critical error %d, address=0x%lx\n", code, address);
+        LOG_ERROR("NOTE! Recording critical error %d, address=0x%lx\n", code, address);
 
     // Record error to DB
     myNodeInfo.error_code = code;
@@ -767,7 +767,7 @@ void recordCriticalError(CriticalErrorCode code, uint32_t address, const char *f
 
     // Currently portuino is mostly used for simulation.  Make sue the user notices something really bad happend
 #ifdef ARCH_PORTDUINO
-    LOG_DEBUG("A critical failure occurred, portduino is exiting...");
+    LOG_ERROR("A critical failure occurred, portduino is exiting...");
     exit(2);
 #endif
 }

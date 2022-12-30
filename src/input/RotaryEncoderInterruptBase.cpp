@@ -28,7 +28,7 @@ void RotaryEncoderInterruptBase::init(
 
     this->rotaryLevelA = digitalRead(this->_pinA);
     this->rotaryLevelB = digitalRead(this->_pinB);
-    LOG_DEBUG("Rotary initialized (%d, %d, %d)\n", this->_pinA, this->_pinB, pinPress);
+    LOG_INFO("Rotary initialized (%d, %d, %d)\n", this->_pinA, this->_pinB, pinPress);
 }
 
 int32_t RotaryEncoderInterruptBase::runOnce()

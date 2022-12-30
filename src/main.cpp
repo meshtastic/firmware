@@ -256,7 +256,7 @@ void setup()
     Wire1.beginTransmission(PCF8563_RTC);
     if (Wire1.endTransmission() == 0){
         rtc_found = PCF8563_RTC;
-        LOG_DEBUG("PCF8563 RTC found\n");
+        LOG_INFO("PCF8563 RTC found\n");
     }
 #endif
 
@@ -378,7 +378,7 @@ void setup()
             delete rIf;
             rIf = NULL;
         } else {
-            LOG_DEBUG("RF95 Radio init succeeded, using RF95 radio\n");
+            LOG_INFO("RF95 Radio init succeeded, using RF95 radio\n");
         }
     }
 #endif
@@ -391,7 +391,7 @@ void setup()
             delete rIf;
             rIf = NULL;
         } else {
-            LOG_DEBUG("SX1280 Radio init succeeded, using SX1280 radio\n");
+            LOG_INFO("SX1280 Radio init succeeded, using SX1280 radio\n");
         }
     }
 #endif
@@ -404,7 +404,7 @@ void setup()
             delete rIf;
             rIf = NULL;
         } else {
-            LOG_DEBUG("SX1262 Radio init succeeded, using SX1262 radio\n");
+            LOG_INFO("SX1262 Radio init succeeded, using SX1262 radio\n");
         }
     }
 #endif
@@ -417,7 +417,7 @@ void setup()
             delete rIf;
             rIf = NULL;
         } else {
-            LOG_DEBUG("SX1268 Radio init succeeded, using SX1268 radio\n");
+            LOG_INFO("SX1268 Radio init succeeded, using SX1268 radio\n");
         }
     }
 #endif
@@ -430,7 +430,7 @@ void setup()
             delete rIf;
             rIf = NULL;
         } else {
-            LOG_DEBUG("LLCC68 Radio init succeeded, using LLCC68 radio\n");
+            LOG_INFO("LLCC68 Radio init succeeded, using LLCC68 radio\n");
         }
     }
 #endif
@@ -443,7 +443,7 @@ void setup()
             delete rIf;
             rIf = NULL;
         } else {
-            LOG_DEBUG("Using SIMULATED radio!\n");
+            LOG_INFO("Using SIMULATED radio!\n");
         }
     }
 #endif

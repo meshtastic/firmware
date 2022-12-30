@@ -47,7 +47,7 @@ void FloodingRouter::sniffReceived(const MeshPacket *p, const Routing *c)
                     traceRouteModule->updateRoute(tosend);
                 }
 
-                printPacket("Rebroadcasting received floodmsg to neighbors", p);
+                LOG_INFO("Rebroadcasting received floodmsg to neighbors", p);
                 // Note: we are careful to resend using the original senders node id
                 // We are careful not to call our hooked version of send() - because we don't want to check this again
                 Router::send(tosend);
