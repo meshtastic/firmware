@@ -33,9 +33,6 @@ class RedirectablePrint : public Print
      * If the provide format string ends with a newline we assume it is the final print of a single
      * log message.  Otherwise we assume more prints will come before the log message ends.  This
      * allows you to call logDebug a few times to build up a single log message line if you wish.
-     * 
-     * FIXME, eventually add log levels (INFO, WARN, ERROR) and subsystems.  Move into 
-     * a different class.
      */
     size_t logDebug(const char * format, ...)  __attribute__ ((format (printf, 2, 3)));
 

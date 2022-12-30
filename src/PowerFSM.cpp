@@ -32,7 +32,7 @@ static bool isPowered()
 
 static void sdsEnter()
 {
-    DEBUG_MSG("Enter state: SDS\n");
+    LOG_DEBUG("Enter state: SDS\n");
     // FIXME - make sure GPS and LORA radio are off first - because we want close to zero current draw
     doDeepSleep(getConfiguredOrDefaultMs(config.power.sds_secs));
 }
@@ -41,7 +41,7 @@ extern Power *power;
 
 static void shutdownEnter()
 {
-    DEBUG_MSG("Enter state: SHUTDOWN\n");
+    LOG_DEBUG("Enter state: SHUTDOWN\n");
     power->shutdown();
 }
 
@@ -51,16 +51,16 @@ static uint32_t secsSlept;
 
 static void lsEnter()
 {
-    DEBUG_MSG("lsEnter begin, ls_secs=%u\n", config.power.ls_secs);
+    LOG_DEBUG("lsEnter begin, ls_secs=%u\n", config.power.ls_secs);
     screen->setOn(false);
     secsSlept = 0; // How long have we been sleeping this time
 
-    // DEBUG_MSG("lsEnter end\n");
+    // LOG_DEBUG("lsEnter end\n");
 }
 
 static void lsIdle()
 {
-    // DEBUG_MSG("lsIdle begin ls_secs=%u\n", getPref_ls_secs());
+    // LOG_DEBUG("lsIdle begin ls_secs=%u\n", getPref_ls_secs());
 
 #ifdef ARCH_ESP32
 
@@ -82,7 +82,7 @@ static void lsIdle()
                 wakeCause2 = doLightSleep(1); // leave led on for 1ms
 
                 secsSlept += sleepTime;
-                // DEBUG_MSG("sleeping, flash led!\n");
+                // LOG_DEBUG("sleeping, flash led!\n");
                 break;
 
             case ESP_SLEEP_WAKEUP_UART:
@@ -93,7 +93,7 @@ static void lsIdle()
             default:
                 // We woke for some other reason (button press, device interrupt)
                 // uint64_t status = esp_sleep_get_ext1_wakeup_status();
-                DEBUG_MSG("wakeCause2 %d\n", wakeCause2);
+                LOG_DEBUG("wakeCause2 %d\n", wakeCause2);
 
 #ifdef BUTTON_PIN
                 bool pressed = !digitalRead(BUTTON_PIN);
@@ -117,7 +117,7 @@ static void lsIdle()
     } else {
         // Time to stop sleeping!
         setLed(false);
-        DEBUG_MSG("reached ls_secs, servicing loop()\n");
+        LOG_DEBUG("reached ls_secs, servicing loop()\n");
         powerFSM.trigger(EVENT_WAKE_TIMER);
     }
 #endif
@@ -125,7 +125,7 @@ static void lsIdle()
 
 static void lsExit()
 {
-    DEBUG_MSG("Exit state: LS\n");
+    LOG_DEBUG("Exit state: LS\n");
     // setGPSPower(true); // restore GPS power
     if (gps)
         gps->forceWake(true);
@@ -133,7 +133,7 @@ static void lsExit()
 
 static void nbEnter()
 {
-    DEBUG_MSG("Enter state: NB\n");
+    LOG_DEBUG("Enter state: NB\n");
     screen->setOn(false);
     setBluetoothEnable(false);
 
@@ -148,7 +148,7 @@ static void darkEnter()
 
 static void serialEnter()
 {
-    DEBUG_MSG("Enter state: SERIAL\n");
+    LOG_DEBUG("Enter state: SERIAL\n");
     setBluetoothEnable(false);
     screen->setOn(true);
     screen->print("Serial connected\n");
@@ -161,10 +161,10 @@ static void serialExit()
 
 static void powerEnter()
 {
-    DEBUG_MSG("Enter state: POWER\n");
+    LOG_DEBUG("Enter state: POWER\n");
     if (!isPowered()) {
         // If we got here, we are in the wrong state - we should be in powered, let that state ahndle things
-        DEBUG_MSG("Loss of power in Powered\n");
+        LOG_DEBUG("Loss of power in Powered\n");
         powerFSM.trigger(EVENT_POWER_DISCONNECTED);
     } else {
         screen->setOn(true);
@@ -177,7 +177,7 @@ static void powerIdle()
 {
     if (!isPowered()) {
         // If we got here, we are in the wrong state
-        DEBUG_MSG("Loss of power in Powered\n");
+        LOG_DEBUG("Loss of power in Powered\n");
         powerFSM.trigger(EVENT_POWER_DISCONNECTED);
     }
 }
@@ -191,7 +191,7 @@ static void powerExit()
 
 static void onEnter()
 {
-    DEBUG_MSG("Enter state: ON\n");
+    LOG_DEBUG("Enter state: ON\n");
     screen->setOn(true);
     setBluetoothEnable(true);
 
@@ -221,7 +221,7 @@ static void screenPress()
 
 static void bootEnter()
 {
-    DEBUG_MSG("Enter state: BOOT\n");
+    LOG_DEBUG("Enter state: BOOT\n");
 }
 
 State stateSHUTDOWN(shutdownEnter, NULL, NULL, "SHUTDOWN");
@@ -240,7 +240,7 @@ void PowerFSM_setup()
     bool isRouter = (config.device.role == Config_DeviceConfig_Role_ROUTER ? 1 : 0);
     bool hasPower = isPowered();
 
-    DEBUG_MSG("PowerFSM init, USB power=%d\n", hasPower ? 1 : 0);
+    LOG_DEBUG("PowerFSM init, USB power=%d\n", hasPower ? 1 : 0);
     powerFSM.add_timed_transition(&stateBOOT, hasPower ? &statePOWER : &stateON, 3 * 1000, NULL, "boot timeout");
 
     // wake timer expired or a packet arrived

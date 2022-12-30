@@ -106,30 +106,30 @@ CryptoKey Channels::getKey(ChannelIndex chIndex)
         k.length = channelSettings.psk.size;
         if (k.length == 0) {
             if (ch.role == Channel_Role_SECONDARY) {
-                DEBUG_MSG("Unset PSK for secondary channel %s. using primary key\n", ch.settings.name);
+                LOG_DEBUG("Unset PSK for secondary channel %s. using primary key\n", ch.settings.name);
                 k = getKey(primaryIndex);
             } else
-                DEBUG_MSG("Warning: User disabled encryption\n");
+                LOG_WARN("User disabled encryption\n");
         } else if (k.length == 1) {
             // Convert the short single byte variants of psk into variant that can be used more generally
 
             uint8_t pskIndex = k.bytes[0];
-            DEBUG_MSG("Expanding short PSK #%d\n", pskIndex);
+            LOG_DEBUG("Expanding short PSK #%d\n", pskIndex);
             if (pskIndex == 0)
                 k.length = 0; // Turn off encryption
             else if (oemStore.oem_aes_key.size > 1) {
                 // Use the OEM key
-                DEBUG_MSG("Using OEM Key with %d bytes\n", oemStore.oem_aes_key.size);
+                LOG_DEBUG("Using OEM Key with %d bytes\n", oemStore.oem_aes_key.size);
                 memcpy(k.bytes, oemStore.oem_aes_key.bytes , oemStore.oem_aes_key.size);
                 k.length = oemStore.oem_aes_key.size;
                 // Bump up the last byte of PSK as needed
                 uint8_t *last = k.bytes + oemStore.oem_aes_key.size - 1;
                 *last = *last + pskIndex - 1; // index of 1 means no change vs defaultPSK
                 if (k.length < 16) {
-                    DEBUG_MSG("Warning: OEM provided a too short AES128 key - padding\n");
+                    LOG_WARN("OEM provided a too short AES128 key - padding\n");
                     k.length = 16;
                 } else if (k.length < 32 && k.length != 16) {
-                    DEBUG_MSG("Warning: OEM provided a too short AES256 key - padding\n");
+                    LOG_WARN("OEM provided a too short AES256 key - padding\n");
                     k.length = 32;
                 }
             } else {
@@ -142,12 +142,12 @@ CryptoKey Channels::getKey(ChannelIndex chIndex)
         } else if (k.length < 16) {
             // Error! The user specified only the first few bits of an AES128 key.  So by convention we just pad the rest of the
             // key with zeros
-            DEBUG_MSG("Warning: User provided a too short AES128 key - padding\n");
+            LOG_WARN("User provided a too short AES128 key - padding\n");
             k.length = 16;
         } else if (k.length < 32 && k.length != 16) {
             // Error! The user specified only the first few bits of an AES256 key.  So by convention we just pad the rest of the
             // key with zeros
-            DEBUG_MSG("Warning: User provided a too short AES256 key - padding\n");
+            LOG_WARN("User provided a too short AES256 key - padding\n");
             k.length = 32;
         }
     }
@@ -308,11 +308,11 @@ const char *Channels::getPrimaryName()
 bool Channels::decryptForHash(ChannelIndex chIndex, ChannelHash channelHash)
 {
     if (chIndex > getNumChannels() || getHash(chIndex) != channelHash) {
-        // DEBUG_MSG("Skipping channel %d (hash %x) due to invalid hash/index, want=%x\n", chIndex, getHash(chIndex),
+        // LOG_DEBUG("Skipping channel %d (hash %x) due to invalid hash/index, want=%x\n", chIndex, getHash(chIndex),
         // channelHash);
         return false;
     } else {
-        DEBUG_MSG("Using channel %d (hash 0x%x)\n", chIndex, channelHash);
+        LOG_DEBUG("Using channel %d (hash 0x%x)\n", chIndex, channelHash);
         setCrypto(chIndex);
         return true;
     }

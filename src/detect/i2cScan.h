@@ -15,30 +15,30 @@ void printATECCInfo()
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
     atecc.readConfigZone(false);
 
-    DEBUG_MSG("ATECC608B Serial Number: ");
+    LOG_DEBUG("ATECC608B Serial Number: ");
     for (int i = 0 ; i < 9 ; i++) {
-        DEBUG_MSG("%02x",atecc.serialNumber[i]);
+        LOG_DEBUG("%02x",atecc.serialNumber[i]);
     }
 
-    DEBUG_MSG(", Rev Number: ");
+    LOG_DEBUG(", Rev Number: ");
     for (int i = 0 ; i < 4 ; i++) {
-        DEBUG_MSG("%02x",atecc.revisionNumber[i]);
+        LOG_DEBUG("%02x",atecc.revisionNumber[i]);
     }
-    DEBUG_MSG("\n");
+    LOG_DEBUG("\n");
 
-    DEBUG_MSG("ATECC608B Config %s",atecc.configLockStatus ? "Locked" : "Unlocked");
-    DEBUG_MSG(", Data %s",atecc.dataOTPLockStatus ? "Locked" : "Unlocked");
-    DEBUG_MSG(", Slot 0 %s\n",atecc.slot0LockStatus ? "Locked" : "Unlocked");
+    LOG_DEBUG("ATECC608B Config %s",atecc.configLockStatus ? "Locked" : "Unlocked");
+    LOG_DEBUG(", Data %s",atecc.dataOTPLockStatus ? "Locked" : "Unlocked");
+    LOG_DEBUG(", Slot 0 %s\n",atecc.slot0LockStatus ? "Locked" : "Unlocked");
 
     if (atecc.configLockStatus && atecc.dataOTPLockStatus && atecc.slot0LockStatus) {
         if (atecc.generatePublicKey() == false) {
-            DEBUG_MSG("ATECC608B Error generating public key\n");
+            LOG_DEBUG("ATECC608B Error generating public key\n");
         } else {
-            DEBUG_MSG("ATECC608B Public Key: ");
+            LOG_DEBUG("ATECC608B Public Key: ");
             for (int i = 0 ; i < 64 ; i++) {
-                DEBUG_MSG("%02x",atecc.publicKey64Bytes[i]);
+                LOG_DEBUG("%02x",atecc.publicKey64Bytes[i]);
             }
-            DEBUG_MSG("\n");
+            LOG_DEBUG("\n");
         }
     }
 #endif
@@ -51,7 +51,7 @@ uint16_t getRegisterValue(uint8_t address, uint8_t reg, uint8_t length) {
     Wire.endTransmission();
     delay(20);
     Wire.requestFrom(address, length);
-    DEBUG_MSG("Wire.available() = %d\n", Wire.available());
+    LOG_DEBUG("Wire.available() = %d\n", Wire.available());
     if (Wire.available() == 2) {
         // Read MSB, then LSB
         value = (uint16_t)Wire.read() << 8;  
@@ -86,7 +86,7 @@ uint8_t oled_probe(byte addr)
         }
         c++;
     } while ((r != r_prev) && (c < 4));
-    DEBUG_MSG("0x%x subtype probed in %i tries \n", r, c);
+    LOG_DEBUG("0x%x subtype probed in %i tries \n", r, c);
     return o_probe;
 }
 
@@ -99,7 +99,7 @@ void scanI2Cdevice()
         Wire.beginTransmission(addr);
         err = Wire.endTransmission();
         if (err == 0) {
-            DEBUG_MSG("I2C device found at address 0x%x\n", addr);
+            LOG_DEBUG("I2C device found at address 0x%x\n", addr);
 
             nDevices++;
 
@@ -107,20 +107,20 @@ void scanI2Cdevice()
                 screen_found = addr;
                 screen_model = oled_probe(addr);
                 if (screen_model == 1) {
-                    DEBUG_MSG("ssd1306 display found\n");
+                    LOG_DEBUG("ssd1306 display found\n");
                 } else if (screen_model == 2) {
-                    DEBUG_MSG("sh1106 display found\n");
+                    LOG_DEBUG("sh1106 display found\n");
                 } else {
-                    DEBUG_MSG("unknown display found\n");
+                    LOG_DEBUG("unknown display found\n");
                 }
             }
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
             if (addr == ATECC608B_ADDR) {
                 keystore_found = addr;
                 if (atecc.begin(keystore_found) == true) {
-                    DEBUG_MSG("ATECC608B initialized\n");
+                    LOG_DEBUG("ATECC608B initialized\n");
                 } else {
-                    DEBUG_MSG("ATECC608B initialization failed\n");
+                    LOG_DEBUG("ATECC608B initialization failed\n");
                 }
                 printATECCInfo();
             }
@@ -128,7 +128,7 @@ void scanI2Cdevice()
 #ifdef RV3028_RTC
             if (addr == RV3028_RTC){
                 rtc_found = addr;
-                DEBUG_MSG("RV3028 RTC found\n");
+                LOG_DEBUG("RV3028 RTC found\n");
                 Melopero_RV3028 rtc;
                 rtc.initI2C();
                 rtc.writeToRegister(0x35,0x07); // no Clkout
@@ -138,7 +138,7 @@ void scanI2Cdevice()
 #ifdef PCF8563_RTC
             if (addr == PCF8563_RTC){
                 rtc_found = addr;
-                DEBUG_MSG("PCF8563 RTC found\n");
+                LOG_DEBUG("PCF8563 RTC found\n");
             }
 #endif
             if (addr == CARDKB_ADDR) {
@@ -146,86 +146,86 @@ void scanI2Cdevice()
                 // Do we have the RAK14006 instead?
                 registerValue = getRegisterValue(addr, 0x04, 1);
                 if (registerValue == 0x02) { // KEYPAD_VERSION
-                    DEBUG_MSG("RAK14004 found\n");
+                    LOG_DEBUG("RAK14004 found\n");
                     kb_model = 0x02;
                 } else {
-                    DEBUG_MSG("m5 cardKB found\n");
+                    LOG_DEBUG("m5 cardKB found\n");
                     kb_model = 0x00;
                 }
             }
             if (addr == ST7567_ADDRESS) {
                 screen_found = addr;
-                DEBUG_MSG("st7567 display found\n");
+                LOG_DEBUG("st7567 display found\n");
             }
 #ifdef HAS_PMU
             if (addr == XPOWERS_AXP192_AXP2101_ADDRESS) {
                 pmu_found = true;
-                DEBUG_MSG("axp192/axp2101 PMU found\n");
+                LOG_DEBUG("axp192/axp2101 PMU found\n");
             }
 #endif
             if (addr == BME_ADDR || addr == BME_ADDR_ALTERNATE) {
                 registerValue = getRegisterValue(addr, 0xD0, 1); // GET_ID
                 if (registerValue == 0x61) {
-                    DEBUG_MSG("BME-680 sensor found at address 0x%x\n", (uint8_t)addr);
+                    LOG_DEBUG("BME-680 sensor found at address 0x%x\n", (uint8_t)addr);
                     nodeTelemetrySensorsMap[TelemetrySensorType_BME680] = addr;
                 } else if (registerValue == 0x60) {
-                    DEBUG_MSG("BME-280 sensor found at address 0x%x\n", (uint8_t)addr);
+                    LOG_DEBUG("BME-280 sensor found at address 0x%x\n", (uint8_t)addr);
                     nodeTelemetrySensorsMap[TelemetrySensorType_BME280] = addr;
                 } else {
-                    DEBUG_MSG("BMP-280 sensor found at address 0x%x\n", (uint8_t)addr);
+                    LOG_DEBUG("BMP-280 sensor found at address 0x%x\n", (uint8_t)addr);
                     nodeTelemetrySensorsMap[TelemetrySensorType_BMP280] = addr;
                 }
             }
             if (addr == INA_ADDR || addr == INA_ADDR_ALTERNATE) {
                 registerValue = getRegisterValue(addr, 0xFE, 2);
-                DEBUG_MSG("Register MFG_UID: 0x%x\n", registerValue);
+                LOG_DEBUG("Register MFG_UID: 0x%x\n", registerValue);
                 if (registerValue == 0x5449) {
-                    DEBUG_MSG("INA260 sensor found at address 0x%x\n", (uint8_t)addr);
+                    LOG_DEBUG("INA260 sensor found at address 0x%x\n", (uint8_t)addr);
                     nodeTelemetrySensorsMap[TelemetrySensorType_INA260] = addr;
                 } else { // Assume INA219 if INA260 ID is not found
-                    DEBUG_MSG("INA219 sensor found at address 0x%x\n", (uint8_t)addr);
+                    LOG_DEBUG("INA219 sensor found at address 0x%x\n", (uint8_t)addr);
                     nodeTelemetrySensorsMap[TelemetrySensorType_INA219] = addr;
                 }
             }
             if (addr == MCP9808_ADDR) {
                 nodeTelemetrySensorsMap[TelemetrySensorType_MCP9808] = addr;
-                DEBUG_MSG("MCP9808 sensor found\n");
+                LOG_DEBUG("MCP9808 sensor found\n");
             }
             if (addr == SHT31_ADDR) {
-                DEBUG_MSG("SHT31 sensor found\n");
+                LOG_DEBUG("SHT31 sensor found\n");
                 nodeTelemetrySensorsMap[TelemetrySensorType_SHT31] = addr;
             }
             if (addr == SHTC3_ADDR) {
-                DEBUG_MSG("SHTC3 sensor found\n");
+                LOG_DEBUG("SHTC3 sensor found\n");
                 nodeTelemetrySensorsMap[TelemetrySensorType_SHTC3] = addr;
             }
             if (addr == LPS22HB_ADDR || addr == LPS22HB_ADDR_ALT) {
-                DEBUG_MSG("LPS22HB sensor found\n");
+                LOG_DEBUG("LPS22HB sensor found\n");
                 nodeTelemetrySensorsMap[TelemetrySensorType_LPS22] = addr;
             }
 
             // High rate sensors, will be processed internally
             if (addr == QMC6310_ADDR) {
-                DEBUG_MSG("QMC6310 Highrate 3-Axis magnetic sensor found\n");
+                LOG_DEBUG("QMC6310 Highrate 3-Axis magnetic sensor found\n");
                 nodeTelemetrySensorsMap[TelemetrySensorType_QMC6310] = addr;
             }
             if (addr == QMI8658_ADDR) {
-                DEBUG_MSG("QMI8658 Highrate 6-Axis inertial measurement sensor found\n");
+                LOG_DEBUG("QMI8658 Highrate 6-Axis inertial measurement sensor found\n");
                 nodeTelemetrySensorsMap[TelemetrySensorType_QMI8658] = addr;
             }
             if (addr == QMC5883L_ADDR) {
-                DEBUG_MSG("QMC5883L Highrate 3-Axis magnetic sensor found\n");
+                LOG_DEBUG("QMC5883L Highrate 3-Axis magnetic sensor found\n");
                 nodeTelemetrySensorsMap[TelemetrySensorType_QMC5883L] = addr;
             }
         } else if (err == 4) {
-            DEBUG_MSG("Unknow error at address 0x%x\n", addr);
+            LOG_DEBUG("Unknow error at address 0x%x\n", addr);
         }
     }
 
     if (nDevices == 0)
-        DEBUG_MSG("No I2C devices found\n");
+        LOG_DEBUG("No I2C devices found\n");
     else
-        DEBUG_MSG("%i I2C devices found\n",nDevices);
+        LOG_DEBUG("%i I2C devices found\n",nDevices);
 }
 #else
 void scanI2Cdevice() {}

@@ -70,7 +70,7 @@ namespace meshtastic {
                 numTotal = newStatus->getNumTotal();
             }
             if(isDirty || newStatus->forceUpdate) {
-                DEBUG_MSG("Node status update: %d online, %d total\n", numOnline, numTotal);            
+                LOG_DEBUG("Node status update: %d online, %d total\n", numOnline, numTotal);            
                 onNewStatus.notifyObservers(this);
             }
             return 0;

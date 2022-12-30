@@ -13,26 +13,31 @@
 #define SERIAL_BAUD 115200 // Serial debug baud rate
 #endif
 
+#define LOG_LEVEL_DEBUG "DEBUG"
+#define LOG_LEVEL_INFO "INFO "
+#define LOG_LEVEL_WARN "WARN "
+#define LOG_LEVEL_ERROR "ERROR"
+
 #include "SerialConsole.h"
 
 #define DEBUG_PORT (*console) // Serial debug port
 
 #ifdef USE_SEGGER
-#define DEBUG_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
-#define INFO_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
-#define WARN_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
-#define ERROR_MSG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
+#define LOG_DEBUG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
+#define LOG_INFO(...) SEGGER_RTT_printf(0, __VA_ARGS__)
+#define LOG_WARN(...) SEGGER_RTT_printf(0, __VA_ARGS__)
+#define LOG_ERROR(...) SEGGER_RTT_printf(0, __VA_ARGS__)
 #else
 #ifdef DEBUG_PORT
-#define DEBUG_MSG(...) DEBUG_PORT.logDebug(__VA_ARGS__)
-#define INFO_MSG(...) DEBUG_PORT.logDebug(__VA_ARGS__)
-#define WARN_MSG(...) DEBUG_PORT.logDebug(__VA_ARGS__)
-#define ERROR_MSG(...) DEBUG_PORT.logDebug(__VA_ARGS__)
+#define LOG_DEBUG(...) DEBUG_PORT.logDebug(__VA_ARGS__)
+#define LOG_INFO(...) DEBUG_PORT.logDebug(__VA_ARGS__)
+#define LOG_WARN(...) DEBUG_PORT.logDebug(__VA_ARGS__)
+#define LOG_ERROR(...) DEBUG_PORT.logDebug(__VA_ARGS__)
 #else
-#define DEBUG_MSG(...)
-#define INFO_MSG(...)
-#define WARN_MSG(...)
-#define ERROR_MSG(...)
+#define LOG_DEBUG(...)
+#define LOG_INFO(...)
+#define LOG_WARN(...)
+#define LOG_ERROR(...)
 #endif
 #endif
 

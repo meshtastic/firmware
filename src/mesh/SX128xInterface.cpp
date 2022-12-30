@@ -49,10 +49,10 @@ bool SX128xInterface<T>::init()
 
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength);
     // \todo Display actual typename of the adapter, not just `SX128x`
-    DEBUG_MSG("SX128x init result %d\n", res);
+    LOG_DEBUG("SX128x init result %d\n", res);
 
     if((config.lora.region != Config_LoRaConfig_RegionCode_LORA_24) && (res == RADIOLIB_ERR_INVALID_FREQUENCY)) {
-        DEBUG_MSG("Warning: Radio chip only supports 2.4GHz LoRa. Adjusting Region and rebooting.\n");
+        LOG_WARN("Radio chip only supports 2.4GHz LoRa. Adjusting Region and rebooting.\n");
         config.lora.region = Config_LoRaConfig_RegionCode_LORA_24;
         nodeDB.saveToDisk(SEGMENT_CONFIG);
         delay(2000);
@@ -61,13 +61,13 @@ bool SX128xInterface<T>::init()
 #elif defined(ARCH_NRF52)
         NVIC_SystemReset();
 #else
-        DEBUG_MSG("FIXME implement reboot for this platform. Skipping for now.\n");
+        LOG_DEBUG("FIXME implement reboot for this platform. Skipping for now.\n");
 #endif
     }
 
-    DEBUG_MSG("Frequency set to %f\n", getFreq());    
-    DEBUG_MSG("Bandwidth set to %f\n", bw);    
-    DEBUG_MSG("Power output set to %d\n", power);    
+    LOG_DEBUG("Frequency set to %f\n", getFreq());    
+    LOG_DEBUG("Bandwidth set to %f\n", bw);    
+    LOG_DEBUG("Power output set to %d\n", power);    
 
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setCRC(2);
@@ -145,7 +145,7 @@ void SX128xInterface<T>::setStandby()
     int err = lora.standby();
 
     if (err != RADIOLIB_ERR_NONE)
-        DEBUG_MSG("SX128x standby failed with error %d\n", err);
+        LOG_DEBUG("SX128x standby failed with error %d\n", err);
 
     assert(err == RADIOLIB_ERR_NONE);
 
@@ -167,7 +167,7 @@ void SX128xInterface<T>::setStandby()
 template<typename T>
 void SX128xInterface<T>::addReceiveMetadata(MeshPacket *mp)
 {
-    // DEBUG_MSG("PacketStatus %x\n", lora.getPacketStatus());
+    // LOG_DEBUG("PacketStatus %x\n", lora.getPacketStatus());
     mp->rx_snr = lora.getSNR();
     mp->rx_rssi = lround(lora.getRSSI());
 }
@@ -248,7 +248,7 @@ bool SX128xInterface<T>::sleep()
 {
     // Not keeping config is busted - next time nrf52 board boots lora sending fails  tcxo related? - see datasheet
     // \todo Display actual typename of the adapter, not just `SX128x`
-    DEBUG_MSG("SX128x entering sleep mode (FIXME, don't keep config)\n");
+    LOG_DEBUG("SX128x entering sleep mode (FIXME, don't keep config)\n");
     setStandby(); // Stop any pending operations
 
     // turn off TCXO if it was powered

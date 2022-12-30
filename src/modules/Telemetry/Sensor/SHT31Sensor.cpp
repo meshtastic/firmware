@@ -10,7 +10,7 @@ SHT31Sensor::SHT31Sensor() :
 }
 
 int32_t SHT31Sensor::runOnce() {
-    DEBUG_MSG("Init sensor: %s\n", sensorName);
+    LOG_DEBUG("Init sensor: %s\n", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }

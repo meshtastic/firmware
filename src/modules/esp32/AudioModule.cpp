@@ -71,7 +71,7 @@ void run_codec2(void* parameter)
     // 4 bytes of header in each frame hex c0 de c2 plus the bitrate
     memcpy(audioModule->tx_encode_frame,&audioModule->tx_header,sizeof(audioModule->tx_header));
 
-    DEBUG_MSG("Starting codec2 task\n");
+    LOG_DEBUG("Starting codec2 task\n");
 
     while (true) {
         uint32_t tcount = ulTaskNotifyTake(pdFALSE, pdMS_TO_TICKS(10000));
@@ -86,7 +86,7 @@ void run_codec2(void* parameter)
 
                 if (audioModule->tx_encode_frame_index == (audioModule->encode_frame_size + sizeof(audioModule->tx_header)))
                 {
-                    DEBUG_MSG("Sending %d codec2 bytes\n", audioModule->encode_frame_size);
+                    LOG_DEBUG("Sending %d codec2 bytes\n", audioModule->encode_frame_size);
                     audioModule->sendPayload();
                     audioModule->tx_encode_frame_index = sizeof(audioModule->tx_header);
                 }
@@ -127,7 +127,7 @@ AudioModule::AudioModule() : SinglePortModule("AudioModule", PortNum_AUDIO_APP),
     // moduleConfig.audio.ptt_pin = 39;
 
     if ((moduleConfig.audio.codec2_enabled) && (myRegion->audioPermitted)) {
-        DEBUG_MSG("Setting up codec2 in mode %u", (moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1);
+        LOG_DEBUG("Setting up codec2 in mode %u", (moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1);
         codec2 = codec2_create((moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1);
         memcpy(tx_header.magic,c2_magic,sizeof(c2_magic));
         tx_header.mode = (moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1;
@@ -136,10 +136,10 @@ AudioModule::AudioModule() : SinglePortModule("AudioModule", PortNum_AUDIO_APP),
         encode_frame_num = (Constants_DATA_PAYLOAD_LEN - sizeof(tx_header)) / encode_codec_size;
         encode_frame_size = encode_frame_num * encode_codec_size; // max 233 bytes + 4 header bytes
         adc_buffer_size = codec2_samples_per_frame(codec2);
-        DEBUG_MSG(" using %d frames of %d bytes for a total payload length of %d bytes\n", encode_frame_num, encode_codec_size, encode_frame_size);
+        LOG_DEBUG(" using %d frames of %d bytes for a total payload length of %d bytes\n", encode_frame_num, encode_codec_size, encode_frame_size);
         xTaskCreate(&run_codec2, "codec2_task", 30000, NULL, 5, &codec2HandlerTask);
     } else {
-        DEBUG_MSG("Codec2 disabled (AudioModule %d, Region %s, permitted %d)\n", moduleConfig.audio.codec2_enabled, myRegion->name, myRegion->audioPermitted);
+        LOG_DEBUG("Codec2 disabled (AudioModule %d, Region %s, permitted %d)\n", moduleConfig.audio.codec2_enabled, myRegion->name, myRegion->audioPermitted);
     }
 }
 
@@ -173,7 +173,7 @@ int32_t AudioModule::runOnce()
         esp_err_t res;
         if (firstTime) {
             // Set up I2S Processor configuration. This will produce 16bit samples at 8 kHz instead of 12 from the ADC
-            DEBUG_MSG("Initializing I2S SD: %d DIN: %d WS: %d SCK: %d\n", moduleConfig.audio.i2s_sd, moduleConfig.audio.i2s_din, moduleConfig.audio.i2s_ws, moduleConfig.audio.i2s_sck);
+            LOG_DEBUG("Initializing I2S SD: %d DIN: %d WS: %d SCK: %d\n", moduleConfig.audio.i2s_sd, moduleConfig.audio.i2s_din, moduleConfig.audio.i2s_ws, moduleConfig.audio.i2s_sck);
             i2s_config_t i2s_config = {
                 .mode = (i2s_mode_t)(I2S_MODE_MASTER | (moduleConfig.audio.i2s_sd ? I2S_MODE_RX : 0) | (moduleConfig.audio.i2s_din ? I2S_MODE_TX : 0)),
                 .sample_rate = 8000,
@@ -189,7 +189,7 @@ int32_t AudioModule::runOnce()
             };
             res = i2s_driver_install(I2S_PORT, &i2s_config, 0, NULL);
             if(res != ESP_OK)
-                DEBUG_MSG("Failed to install I2S driver: %d\n", res);
+                LOG_DEBUG("Failed to install I2S driver: %d\n", res);
 
             const i2s_pin_config_t pin_config = {
                 .bck_io_num = moduleConfig.audio.i2s_sck,
@@ -199,16 +199,16 @@ int32_t AudioModule::runOnce()
             };
             res = i2s_set_pin(I2S_PORT, &pin_config);
             if(res != ESP_OK)
-                DEBUG_MSG("Failed to set I2S pin config: %d\n", res);
+                LOG_DEBUG("Failed to set I2S pin config: %d\n", res);
 
             res = i2s_start(I2S_PORT);
             if(res != ESP_OK)
-                DEBUG_MSG("Failed to start I2S: %d\n", res);
+                LOG_DEBUG("Failed to start I2S: %d\n", res);
             
             radio_state = RadioState::rx;
 
             // Configure PTT input
-            DEBUG_MSG("Initializing PTT on Pin %u\n", moduleConfig.audio.ptt_pin ? moduleConfig.audio.ptt_pin : PTT_PIN);
+            LOG_DEBUG("Initializing PTT on Pin %u\n", moduleConfig.audio.ptt_pin ? moduleConfig.audio.ptt_pin : PTT_PIN);
             pinMode(moduleConfig.audio.ptt_pin ? moduleConfig.audio.ptt_pin : PTT_PIN, INPUT);
 
             firstTime = false;
@@ -217,17 +217,17 @@ int32_t AudioModule::runOnce()
             // Check if PTT is pressed. TODO hook that into Onebutton/Interrupt drive.
             if (digitalRead(moduleConfig.audio.ptt_pin ? moduleConfig.audio.ptt_pin : PTT_PIN) == HIGH) {
                 if (radio_state == RadioState::rx) {
-                    DEBUG_MSG("PTT pressed, switching to TX\n");
+                    LOG_DEBUG("PTT pressed, switching to TX\n");
                     radio_state = RadioState::tx;
                     e.frameChanged = true;
                     this->notifyObservers(&e);
                 }
             } else {
                 if (radio_state == RadioState::tx) {
-                    DEBUG_MSG("PTT released, switching to RX\n");
+                    LOG_DEBUG("PTT released, switching to RX\n");
                     if (tx_encode_frame_index > sizeof(tx_header)) {
                         // Send the incomplete frame
-                        DEBUG_MSG("Sending %d codec2 bytes (incomplete)\n", tx_encode_frame_index);
+                        LOG_DEBUG("Sending %d codec2 bytes (incomplete)\n", tx_encode_frame_index);
                         sendPayload();
                     }
                     tx_encode_frame_index = sizeof(tx_header);
@@ -258,7 +258,7 @@ int32_t AudioModule::runOnce()
         }
         return 100;
     } else {
-        DEBUG_MSG("Audio Module Disabled\n");
+        LOG_DEBUG("Audio Module Disabled\n");
         return INT32_MAX;
     }
     
