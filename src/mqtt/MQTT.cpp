@@ -165,6 +165,7 @@ void MQTT::reconnect()
             serverAddr = server.c_str();
         }
         pubSub.setServer(serverAddr, serverPort);
+        pubSub.setBufferSize(512);
 
         LOG_INFO("Connecting to MQTT server %s, port: %d, username: %s, password: %s\n", serverAddr, serverPort, mqttUsername, mqttPassword);
         auto myStatus = (statusTopic + owner.id);
