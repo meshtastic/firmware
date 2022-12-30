@@ -255,10 +255,10 @@ static int mem_test(uint32_t *_start, size_t len, bool doRead = true, bool doWri
     int rcode = 0;
     incr = 1;
 
-    //DEBUG_MSG("memtest read=%d, write=%d\n", doRead, doWrite);
+    //LOG_DEBUG("memtest read=%d, write=%d\n", doRead, doWrite);
 
     if (doWrite) {
-        //DEBUG_MSG("writing\n");
+        //LOG_DEBUG("writing\n");
         for (addr = start, val = pattern; addr < end; addr++) {
             *addr = val;
             val += incr;
@@ -266,11 +266,11 @@ static int mem_test(uint32_t *_start, size_t len, bool doRead = true, bool doWri
     }
 
     if (doRead) {
-        //DEBUG_MSG("reading\n");
+        //LOG_DEBUG("reading\n");
         for (addr = start, val = pattern; addr < end; addr++) {
             readback = *addr;
             if (readback != val) {
-                DEBUG_MSG("Mem error @ 0x%08X: "
+                LOG_ERROR("Mem error @ 0x%08X: "
                        "found 0x%08lX, expected 0x%08lX\n",
                        addr, readback, val);
                 rcode++;
