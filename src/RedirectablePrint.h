@@ -34,7 +34,7 @@ class RedirectablePrint : public Print
      * log message.  Otherwise we assume more prints will come before the log message ends.  This
      * allows you to call logDebug a few times to build up a single log message line if you wish.
      */
-    size_t logDebug(const char * format, ...)  __attribute__ ((format (printf, 2, 3)));
+    size_t log(const char *logLevel, const char *format, ...) __attribute__ ((format (printf, 3, 4)));
 
     /** like printf but va_list based */
     size_t vprintf(const char *format, va_list arg);
