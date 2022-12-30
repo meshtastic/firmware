@@ -29,10 +29,10 @@
 #define LOG_ERROR(...) SEGGER_RTT_printf(0, __VA_ARGS__)
 #else
 #ifdef DEBUG_PORT
-#define LOG_DEBUG(...) DEBUG_PORT.logDebug(__VA_ARGS__)
-#define LOG_INFO(...) DEBUG_PORT.logDebug(__VA_ARGS__)
-#define LOG_WARN(...) DEBUG_PORT.logDebug(__VA_ARGS__)
-#define LOG_ERROR(...) DEBUG_PORT.logDebug(__VA_ARGS__)
+#define LOG_DEBUG(...) DEBUG_PORT.log(LOG_LEVEL_DEBUG, __VA_ARGS__)
+#define LOG_INFO(...) DEBUG_PORT.log(LOG_LEVEL_INFO, __VA_ARGS__)
+#define LOG_WARN(...) DEBUG_PORT.log(LOG_LEVEL_WARN, __VA_ARGS__)
+#define LOG_ERROR(...) DEBUG_PORT.log(LOG_LEVEL_ERROR, __VA_ARGS__)
 #else
 #define LOG_DEBUG(...)
 #define LOG_INFO(...)
