@@ -17,6 +17,7 @@
 #define LOG_LEVEL_INFO "INFO "
 #define LOG_LEVEL_WARN "WARN "
 #define LOG_LEVEL_ERROR "ERROR"
+#define LOG_LEVEL_TRACE "TRACE"
 
 #include "SerialConsole.h"
 
@@ -33,6 +34,7 @@
 #define LOG_INFO(...) DEBUG_PORT.log(LOG_LEVEL_INFO, __VA_ARGS__)
 #define LOG_WARN(...) DEBUG_PORT.log(LOG_LEVEL_WARN, __VA_ARGS__)
 #define LOG_ERROR(...) DEBUG_PORT.log(LOG_LEVEL_ERROR, __VA_ARGS__)
+#define LOG_TRACE(...) DEBUG_PORT.log(LOG_TRACE, __VA_ARGS__)
 #else
 #define LOG_DEBUG(...)
 #define LOG_INFO(...)
