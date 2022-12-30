@@ -82,9 +82,9 @@ void OSThread::run()
 #ifdef DEBUG_HEAP
     auto newHeap = ESP.getFreeHeap();
     if (newHeap < heap)
-        DEBUG_MSG("------ Thread %s leaked heap %d -> %d (%d) ------\n", ThreadName.c_str(), heap, newHeap, newHeap - heap);
+        LOG_DEBUG("------ Thread %s leaked heap %d -> %d (%d) ------\n", ThreadName.c_str(), heap, newHeap, newHeap - heap);
     if (heap < newHeap)
-        DEBUG_MSG("++++++ Thread %s freed heap %d -> %d (%d) ++++++\n", ThreadName.c_str(), heap, newHeap, newHeap - heap);
+        LOG_DEBUG("++++++ Thread %s freed heap %d -> %d (%d) ++++++\n", ThreadName.c_str(), heap, newHeap, newHeap - heap);
 #endif
 
     runned();
