@@ -67,8 +67,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
     if (!(moduleConfig.telemetry.environment_measurement_enabled ||
           moduleConfig.telemetry.environment_screen_enabled)) {
         // If this module is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
-        enabled = false;
-        return result;
+        return disable();
     }
 
     if (firstTime) {

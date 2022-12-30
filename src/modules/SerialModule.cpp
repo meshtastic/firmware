@@ -221,9 +221,7 @@ int32_t SerialModule::runOnce()
         return (10);
     } else {
         DEBUG_MSG("Serial Module Disabled\n");
-
-        enabled = false;
-        return INT32_MAX;
+        return disable();
     }
 }
 

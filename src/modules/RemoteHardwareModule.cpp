@@ -135,8 +135,7 @@ int32_t RemoteHardwareModule::runOnce()
         }
     } else {
         // No longer watching anything - stop using CPU
-        enabled = false;
-        return INT32_MAX;
+        return disable();
     }
 
     return 200; // Poll our GPIOs every 200ms (FIXME, make adjustable via protobuf arg)
