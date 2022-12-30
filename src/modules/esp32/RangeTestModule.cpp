@@ -94,8 +94,7 @@ int32_t RangeTestModule::runOnce()
     }
 
 #endif
-    enabled = false;
-    return (INT32_MAX);
+    return disable();
 }
 
 MeshPacket *RangeTestModuleRadio::allocReply()
