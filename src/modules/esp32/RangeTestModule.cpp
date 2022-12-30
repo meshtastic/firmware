@@ -82,7 +82,7 @@ int32_t RangeTestModule::runOnce()
 
                 return (senderHeartbeat);
             } else {
-                return (INT32_MAX);
+                return disable();
                 // This thread does not need to run as a receiver
             }
 
@@ -93,7 +93,7 @@ int32_t RangeTestModule::runOnce()
     }
 
 #endif
-    return (INT32_MAX);
+    return disable();
 }
 
 MeshPacket *RangeTestModuleRadio::allocReply()

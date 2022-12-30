@@ -220,9 +220,7 @@ int32_t SerialModule::runOnce()
 
         return (10);
     } else {
-        LOG_INFO("Serial Module Disabled\n");
-
-        return INT32_MAX;
+        return disable();
     }
 }
 
@@ -303,9 +301,6 @@ ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
                 }
             }
         }
-
-    } else {
-        LOG_INFO("Serial Module Disabled\n");
     }
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }

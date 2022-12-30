@@ -51,10 +51,14 @@ CannedMessageModule::CannedMessageModule()
         if ((this->splitConfiguredMessages() <= 0) && (cardkb_found != CARDKB_ADDR)) {
             LOG_INFO("CannedMessageModule: No messages are configured. Module is disabled\n");
             this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
+            disable();
         } else {
             LOG_INFO("CannedMessageModule is enabled\n");
             this->inputObserver.observe(inputBroker);
         }
+    } else {
+        this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
+        disable();
     }
 }
 
