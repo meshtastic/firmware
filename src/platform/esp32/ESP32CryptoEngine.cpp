@@ -46,7 +46,7 @@ class ESP32CryptoEngine : public CryptoEngine
             static uint8_t scratch[MAX_BLOCKSIZE];
             size_t nc_off = 0;
 
-            DEBUG_MSG("ESP32 crypt fr=%x, num=%x, numBytes=%d!\n", fromNode, (uint32_t) packetId, numBytes);
+            LOG_DEBUG("ESP32 crypt fr=%x, num=%x, numBytes=%d!\n", fromNode, (uint32_t) packetId, numBytes);
             initNonce(fromNode, packetId);
             assert(numBytes <= MAX_BLOCKSIZE);
             memcpy(scratch, bytes, numBytes);

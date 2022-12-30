@@ -10,7 +10,7 @@ BME680Sensor::BME680Sensor() :
 }
 
 int32_t BME680Sensor::runOnce() {
-    DEBUG_MSG("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s\n", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }

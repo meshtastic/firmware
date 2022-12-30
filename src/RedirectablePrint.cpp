@@ -58,7 +58,7 @@ size_t RedirectablePrint::vprintf(const char *format, va_list arg)
     return len;
 }
 
-size_t RedirectablePrint::logDebug(const char *format, ...)
+size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
 {
     size_t r = 0;
 
@@ -86,9 +86,9 @@ size_t RedirectablePrint::logDebug(const char *format, ...)
                 int min = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
                 int sec = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
 
-                r += printf("%02d:%02d:%02d %u ", hour, min, sec, millis() / 1000);
+                r += printf("%s | %02d:%02d:%02d %u ", logLevel, hour, min, sec, millis() / 1000);
             } else
-                r += printf("??:??:?? %u ", millis() / 1000);
+                r += printf("%s | ??:??:?? %u ", logLevel, millis() / 1000);
 
             auto thread = concurrency::OSThread::currentThread;
             if (thread) {
@@ -99,7 +99,6 @@ size_t RedirectablePrint::logDebug(const char *format, ...)
                 print("] ");
             }
         }
-
         r += vprintf(format, arg);
         va_end(arg);
 
