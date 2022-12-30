@@ -82,8 +82,7 @@ int32_t RangeTestModule::runOnce()
 
                 return (senderHeartbeat);
             } else {
-                enabled = false;
-                return (INT32_MAX);
+                return disable();
                 // This thread does not need to run as a receiver
             }
 

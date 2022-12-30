@@ -52,8 +52,7 @@ int32_t StoreForwardModule::runOnce()
         return (this->packetTimeMax);
     }
 #endif
-    enabled = false; // Client doesn't need periodical
-    return (INT32_MAX);
+    return disable();
 }
 
 /*
