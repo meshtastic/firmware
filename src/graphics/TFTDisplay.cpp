@@ -59,7 +59,7 @@ void TFTDisplay::setDetected(uint8_t detected)
 bool TFTDisplay::connect()
 {
     concurrency::LockGuard g(spiLock);
-    DEBUG_MSG("Doing TFT init\n");
+    LOG_INFO("Doing TFT init\n");
 
 #ifdef TFT_BL
     digitalWrite(TFT_BL, HIGH);

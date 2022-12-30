@@ -276,9 +276,9 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
     } else {
         // otherwise, just display the module frame that's aligned with the current frame
         module_frame = state->currentFrame;
-        // DEBUG_MSG("Screen is not in transition.  Frame: %d\n\n", module_frame);
+        // LOG_DEBUG("Screen is not in transition.  Frame: %d\n\n", module_frame);
     }
-    // DEBUG_MSG("Drawing Module Frame %d\n\n", module_frame);
+    // LOG_DEBUG("Drawing Module Frame %d\n\n", module_frame);
     MeshModule &pi = *moduleFrames.at(module_frame);
     pi.drawFrame(display, state, x, y);
 }
@@ -368,7 +368,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
 
     MeshPacket &mp = devicestate.rx_text_message;
     NodeInfo *node = nodeDB.getNode(getFrom(&mp));
-    // DEBUG_MSG("drawing text message from 0x%x: %s\n", mp.from,
+    // LOG_DEBUG("drawing text message from 0x%x: %s\n", mp.from,
     // mp.decoded.variant.data.decoded.bytes);
 
     // Demo for drawStringMaxWidth:
@@ -882,7 +882,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     if (!hasNodeHeading) {
         // direction to node is unknown so display question mark
         // Debug info for gps lock errors
-        // DEBUG_MSG("ourNode %d, ourPos %d, theirPos %d\n", !!ourNode, ourNode && hasPosition(ourNode), hasPosition(node));
+        // LOG_DEBUG("ourNode %d, ourPos %d, theirPos %d\n", !!ourNode, ourNode && hasPosition(ourNode), hasPosition(node));
         display->drawString(compassX - FONT_HEIGHT_SMALL / 4, compassY - FONT_HEIGHT_SMALL / 2, "?");
     }
     display->drawCircle(compassX, compassY, getCompassDiam(display) / 2);
@@ -936,14 +936,14 @@ void Screen::handleSetOn(bool on)
 
     if (on != screenOn) {
         if (on) {
-            DEBUG_MSG("Turning on screen\n");
+            LOG_INFO("Turning on screen\n");
             dispdev.displayOn();
             dispdev.displayOn();
             enabled = true;
             setInterval(0); // Draw ASAP
             runASAP = true;
         } else {
-            DEBUG_MSG("Turning off screen\n");
+            LOG_INFO("Turning off screen\n");
             dispdev.displayOff();
             enabled = false;
         }
@@ -1056,7 +1056,7 @@ int32_t Screen::runOnce()
     // serialSinceMsec adjusts for additional serial wait time during nRF52 bootup
     static bool showingBootScreen = true;
     if (showingBootScreen && (millis() > (logo_timeout + serialSinceMsec))) {
-        DEBUG_MSG("Done with boot screen...\n");
+        LOG_INFO("Done with boot screen...\n");
         stopBootScreen();
         showingBootScreen = false;
     }
@@ -1065,7 +1065,7 @@ int32_t Screen::runOnce()
     if (strlen(oemStore.oem_text) > 0) {
         static bool showingOEMBootScreen = true;
         if (showingOEMBootScreen && (millis() > ((logo_timeout / 2) + serialSinceMsec))) {
-            DEBUG_MSG("Switch to OEM screen...\n");
+            LOG_INFO("Switch to OEM screen...\n");
             // Change frames.
             static FrameCallback bootOEMFrames[] = {drawOEMBootScreen};
             static const int bootOEMFrameCount = sizeof(bootOEMFrames) / sizeof(bootOEMFrames[0]);
@@ -1127,7 +1127,7 @@ int32_t Screen::runOnce()
             handleRebootScreen();
             break;
         default:
-            DEBUG_MSG("BUG: invalid cmd\n");
+            LOG_ERROR("Invalid screen cmd\n");
         }
     }
 
@@ -1158,12 +1158,12 @@ int32_t Screen::runOnce()
         // standard screen loop handling here
         if (config.display.auto_screen_carousel_secs > 0 &&
             (millis() - lastScreenTransition) > (config.display.auto_screen_carousel_secs * 1000)) {
-            DEBUG_MSG("LastScreenTransition exceeded %ums transitioning to next frame\n", (millis() - lastScreenTransition));
+            LOG_DEBUG("LastScreenTransition exceeded %ums transitioning to next frame\n", (millis() - lastScreenTransition));
             handleOnPress();
         }
     }
 
-    // DEBUG_MSG("want fps %d, fixed=%d\n", targetFramerate,
+    // LOG_DEBUG("want fps %d, fixed=%d\n", targetFramerate,
     // ui.getUiState()->frameState); If we are scrolling we need to be called
     // soon, otherwise just 1 fps (to save CPU) We also ask to be called twice
     // as fast as we really need so that any rounding errors still result with
@@ -1194,7 +1194,7 @@ void Screen::drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiStat
 void Screen::setSSLFrames()
 {
     if (address_found) {
-        // DEBUG_MSG("showing SSL frames\n");
+        // LOG_DEBUG("showing SSL frames\n");
         static FrameCallback sslFrames[] = {drawSSLScreen};
         ui.setFrames(sslFrames, 1);
         ui.update();
@@ -1206,7 +1206,7 @@ void Screen::setSSLFrames()
 void Screen::setWelcomeFrames()
 {
     if (address_found) {
-        // DEBUG_MSG("showing Welcome frames\n");
+        // LOG_DEBUG("showing Welcome frames\n");
         ui.disableAllIndicators();
 
         static FrameCallback welcomeFrames[] = {drawWelcomeScreen};
@@ -1218,13 +1218,13 @@ void Screen::setWelcomeFrames()
 // restore our regular frame list
 void Screen::setFrames()
 {
-    DEBUG_MSG("showing standard frames\n");
+    LOG_DEBUG("showing standard frames\n");
     showingNormalScreen = true;
 
     moduleFrames = MeshModule::GetMeshModulesWithUIFrames();
-    DEBUG_MSG("Showing %d module frames\n", moduleFrames.size());
+    LOG_DEBUG("Showing %d module frames\n", moduleFrames.size());
     int totalFrameCount = MAX_NUM_NODES + NUM_EXTRA_FRAMES + moduleFrames.size();
-    DEBUG_MSG("Total frame count: %d\n", totalFrameCount);
+    LOG_DEBUG("Total frame count: %d\n", totalFrameCount);
 
     // We don't show the node info our our node (if we have it yet - we should)
     size_t numnodes = nodeStatus->getNumTotal();
@@ -1243,7 +1243,7 @@ void Screen::setFrames()
         normalFrames[numframes++] = drawModuleFrame;
     }
 
-    DEBUG_MSG("Added modules.  numframes: %d\n", numframes);
+    LOG_DEBUG("Added modules.  numframes: %d\n", numframes);
 
     // If we have a critical fault, show it first
     if (myNodeInfo.error_code)
@@ -1276,7 +1276,7 @@ void Screen::setFrames()
     }
 #endif
 
-    DEBUG_MSG("Finished building frames. numframes: %d\n", numframes);
+    LOG_DEBUG("Finished building frames. numframes: %d\n", numframes);
 
     ui.setFrames(normalFrames, numframes);
     ui.enableAllIndicators();
@@ -1289,7 +1289,7 @@ void Screen::setFrames()
 
 void Screen::handleStartBluetoothPinScreen(uint32_t pin)
 {
-    DEBUG_MSG("showing bluetooth screen\n");
+    LOG_DEBUG("showing bluetooth screen\n");
     showingNormalScreen = false;
 
     static FrameCallback btFrames[] = {drawFrameBluetooth};
@@ -1303,7 +1303,7 @@ void Screen::handleStartBluetoothPinScreen(uint32_t pin)
 
 void Screen::handleShutdownScreen()
 {
-    DEBUG_MSG("showing shutdown screen\n");
+    LOG_DEBUG("showing shutdown screen\n");
     showingNormalScreen = false;
 
     static FrameCallback shutdownFrames[] = {drawFrameShutdown};
@@ -1315,7 +1315,7 @@ void Screen::handleShutdownScreen()
 
 void Screen::handleRebootScreen()
 {
-    DEBUG_MSG("showing reboot screen\n");
+    LOG_DEBUG("showing reboot screen\n");
     showingNormalScreen = false;
 
     static FrameCallback rebootFrames[] = {drawFrameReboot};
@@ -1327,7 +1327,7 @@ void Screen::handleRebootScreen()
 
 void Screen::handleStartFirmwareUpdateScreen()
 {
-    DEBUG_MSG("showing firmware screen\n");
+    LOG_DEBUG("showing firmware screen\n");
     showingNormalScreen = false;
 
     static FrameCallback btFrames[] = {drawFrameFirmware};
@@ -1358,7 +1358,7 @@ void Screen::handlePrint(const char *text)
 {
     // the string passed into us probably has a newline, but that would confuse the logging system
     // so strip it
-    DEBUG_MSG("Screen: %.*s\n", strlen(text) - 1, text);
+    LOG_DEBUG("Screen: %.*s\n", strlen(text) - 1, text);
     if (!useDisplay || !showingNormalScreen)
         return;
 
@@ -1778,7 +1778,7 @@ void Screen::adjustBrightness()
 
 int Screen::handleStatusUpdate(const meshtastic::Status *arg)
 {
-    // DEBUG_MSG("Screen got status update %d\n", arg->getStatusType());
+    // LOG_DEBUG("Screen got status update %d\n", arg->getStatusType());
     switch (arg->getStatusType()) {
     case STATUS_TYPE_NODE:
         if (showingNormalScreen && nodeStatus->getLastNumTotal() != nodeStatus->getNumTotal()) {

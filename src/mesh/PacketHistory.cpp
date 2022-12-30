@@ -14,7 +14,7 @@ PacketHistory::PacketHistory()
 bool PacketHistory::wasSeenRecently(const MeshPacket *p, bool withUpdate)
 {
     if (p->id == 0) {
-        DEBUG_MSG("Ignoring message with zero id\n");
+        LOG_DEBUG("Ignoring message with zero id\n");
         return false; // Not a floodable message ID, so we don't care
     }
 
@@ -35,7 +35,7 @@ bool PacketHistory::wasSeenRecently(const MeshPacket *p, bool withUpdate)
     }
 
     if (seenRecently) {
-        DEBUG_MSG("Found existing packet record for fr=0x%x,to=0x%x,id=0x%x\n", p->from, p->to, p->id);
+        LOG_DEBUG("Found existing packet record for fr=0x%x,to=0x%x,id=0x%x\n", p->from, p->to, p->id);
     }
 
     if (withUpdate) {
@@ -61,7 +61,7 @@ bool PacketHistory::wasSeenRecently(const MeshPacket *p, bool withUpdate)
 void PacketHistory::clearExpiredRecentPackets() {
     uint32_t now = millis();
 
-    DEBUG_MSG("recentPackets size=%ld\n", recentPackets.size());
+    LOG_DEBUG("recentPackets size=%ld\n", recentPackets.size());
 
     for (auto it = recentPackets.begin(); it != recentPackets.end(); ) {
         if ((now - it->rxTimeMsec) >= FLOOD_EXPIRE_TIME) {
@@ -71,5 +71,5 @@ void PacketHistory::clearExpiredRecentPackets() {
         }
     }
 
-    DEBUG_MSG("recentPackets size=%ld (after clearing expired packets)\n", recentPackets.size());
+    LOG_DEBUG("recentPackets size=%ld (after clearing expired packets)\n", recentPackets.size());
 }

@@ -66,17 +66,17 @@ void enableSlowCLK()
     uint32_t cal_32k = CALIBRATE_ONE(RTC_CAL_32K_XTAL);
 
     if (cal_32k == 0) {
-        DEBUG_MSG("32K XTAL OSC has not started up\n");
+        LOG_DEBUG("32K XTAL OSC has not started up\n");
     } else {
         rtc_clk_slow_freq_set(RTC_SLOW_FREQ_32K_XTAL);
-        DEBUG_MSG("Switching RTC Source to 32.768Khz succeeded, using 32K XTAL\n");
+        LOG_DEBUG("Switching RTC Source to 32.768Khz succeeded, using 32K XTAL\n");
         CALIBRATE_ONE(RTC_CAL_RTC_MUX);
         CALIBRATE_ONE(RTC_CAL_32K_XTAL);
     }
     CALIBRATE_ONE(RTC_CAL_RTC_MUX);
     CALIBRATE_ONE(RTC_CAL_32K_XTAL);
     if (rtc_clk_slow_freq_get() != RTC_SLOW_FREQ_32K_XTAL) {
-        DEBUG_MSG("Warning: Failed to switch 32K XTAL RTC source to 32.768Khz !!! \n"); return;
+        LOG_WARN("Failed to switch 32K XTAL RTC source to 32.768Khz !!! \n"); return;
     }
 }
 #endif
@@ -85,21 +85,21 @@ void enableSlowCLK()
 void esp32Setup()
 {
     uint32_t seed = esp_random();
-    DEBUG_MSG("Setting random seed %u\n", seed);
+    LOG_DEBUG("Setting random seed %u\n", seed);
     randomSeed(seed); // ESP docs say this is fairly random
 
-    DEBUG_MSG("Total heap: %d\n", ESP.getHeapSize());
-    DEBUG_MSG("Free heap: %d\n", ESP.getFreeHeap());
-    DEBUG_MSG("Total PSRAM: %d\n", ESP.getPsramSize());
-    DEBUG_MSG("Free PSRAM: %d\n", ESP.getFreePsram());
+    LOG_DEBUG("Total heap: %d\n", ESP.getHeapSize());
+    LOG_DEBUG("Free heap: %d\n", ESP.getFreeHeap());
+    LOG_DEBUG("Total PSRAM: %d\n", ESP.getPsramSize());
+    LOG_DEBUG("Free PSRAM: %d\n", ESP.getFreePsram());
 
     nvs_stats_t nvs_stats;
     auto res = nvs_get_stats(NULL, &nvs_stats);
     assert(res == ESP_OK);
-    DEBUG_MSG("NVS: UsedEntries %d, FreeEntries %d, AllEntries %d, NameSpaces %d\n", nvs_stats.used_entries, nvs_stats.free_entries,
+    LOG_DEBUG("NVS: UsedEntries %d, FreeEntries %d, AllEntries %d, NameSpaces %d\n", nvs_stats.used_entries, nvs_stats.free_entries,
               nvs_stats.total_entries, nvs_stats.namespace_count);
 
-    DEBUG_MSG("Setup Preferences in Flash Storage\n");
+    LOG_DEBUG("Setup Preferences in Flash Storage\n");
 
     // Create object to store our persistant data
     Preferences preferences;
@@ -109,12 +109,12 @@ void esp32Setup()
     rebootCounter++;
     preferences.putUInt("rebootCounter", rebootCounter);
     preferences.end();
-    DEBUG_MSG("Number of Device Reboots: %d\n", rebootCounter);
+    LOG_DEBUG("Number of Device Reboots: %d\n", rebootCounter);
     String BLEOTA=BleOta::getOtaAppVersion();
     if (BLEOTA.isEmpty()) {
-        DEBUG_MSG("No OTA firmware available\n");
+        LOG_DEBUG("No OTA firmware available\n");
     }else{
-        DEBUG_MSG("OTA firmware version %s\n", BLEOTA.c_str());
+        LOG_DEBUG("OTA firmware version %s\n", BLEOTA.c_str());
     }
 
     // enableModemSleep();
@@ -141,13 +141,13 @@ void esp32Setup()
 uint32_t axpDebugRead()
 {
   axp.debugCharging();
-  DEBUG_MSG("vbus current %f\n", axp.getVbusCurrent());
-  DEBUG_MSG("charge current %f\n", axp.getBattChargeCurrent());
-  DEBUG_MSG("bat voltage %f\n", axp.getBattVoltage());
-  DEBUG_MSG("batt pct %d\n", axp.getBattPercentage());
-  DEBUG_MSG("is battery connected %d\n", axp.isBatteryConnect());
-  DEBUG_MSG("is USB connected %d\n", axp.isVBUSPlug());
-  DEBUG_MSG("is charging %d\n", axp.isChargeing());
+  LOG_DEBUG("vbus current %f\n", axp.getVbusCurrent());
+  LOG_DEBUG("charge current %f\n", axp.getBattChargeCurrent());
+  LOG_DEBUG("bat voltage %f\n", axp.getBattVoltage());
+  LOG_DEBUG("batt pct %d\n", axp.getBattPercentage());
+  LOG_DEBUG("is battery connected %d\n", axp.isBatteryConnect());
+  LOG_DEBUG("is USB connected %d\n", axp.isVBUSPlug());
+  LOG_DEBUG("is charging %d\n", axp.isChargeing());
 
   return 30 * 1000;
 }
