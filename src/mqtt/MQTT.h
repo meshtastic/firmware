@@ -53,6 +53,9 @@ class MQTT : private concurrency::OSThread
     bool connected();
     
   protected:
+
+    int reconnectCount = 0;
+    
     virtual int32_t runOnce() override;
 
   private:
