@@ -95,10 +95,10 @@ bool initEthernet()
 
         getMacAddr(mac); // FIXME use the BLE MAC for now...
 
-        if (config.network.eth_mode == Config_NetworkConfig_EthMode_DHCP) {
+        if (config.network.address_mode == Config_NetworkConfig_AddressMode_DHCP) {
             LOG_INFO("starting Ethernet DHCP\n");
             status = Ethernet.begin(mac);
-        } else if (config.network.eth_mode == Config_NetworkConfig_EthMode_STATIC) {
+        } else if (config.network.address_mode == Config_NetworkConfig_AddressMode_STATIC) {
             LOG_INFO("starting Ethernet Static\n");
             Ethernet.begin(mac, config.network.ipv4_config.ip, config.network.ipv4_config.dns, config.network.ipv4_config.subnet);
         } else {
