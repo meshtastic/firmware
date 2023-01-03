@@ -301,7 +301,6 @@ extern "C" {
 
 
 
-
 #define ModuleConfig_AudioConfig_bitrate_ENUMTYPE ModuleConfig_AudioConfig_Audio_Baud
 
 #define ModuleConfig_SerialConfig_baud_ENUMTYPE ModuleConfig_SerialConfig_Serial_Baud
