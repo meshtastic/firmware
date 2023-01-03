@@ -545,6 +545,23 @@ static void drawGPSpowerstat(OLEDDisplay *display, int16_t x, int16_t y, const G
 #endif
 }
 
+//Draw status when gps is disabled by PMU
+static void drawGPSpowerstat(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
+{
+#ifdef HAS_PMU    
+    String displayLine = "GPS disabled";
+    int16_t xPos = display->getStringWidth(displayLine);
+
+    if (!config.position.gps_enabled){
+        display->drawString(x + xPos, y, displayLine);
+#ifdef GPS_POWER_TOGGLE 
+        display->drawString(x + xPos, y - 2 + FONT_HEIGHT_SMALL, " by button");
+#endif
+        //display->drawString(x + xPos, y + 2, displayLine);
+    }
+#endif
+}
+
 static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
     String displayLine = "";

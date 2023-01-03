@@ -195,6 +195,10 @@ void scanI2Cdevice()
                 LOG_INFO("SHT31 sensor found\n");
                 nodeTelemetrySensorsMap[TelemetrySensorType_SHT31] = addr;
             }
+            if (addr == SHT31_ADDR) {
+                DEBUG_MSG("SHT31 sensor found\n");
+                nodeTelemetrySensorsMap[TelemetrySensorType_SHT31] = addr;
+            }
             if (addr == SHTC3_ADDR) {
                 LOG_INFO("SHTC3 sensor found\n");
                 nodeTelemetrySensorsMap[TelemetrySensorType_SHTC3] = addr;
