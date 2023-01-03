@@ -10,7 +10,7 @@ MCP9808Sensor::MCP9808Sensor() :
 }
 
 int32_t MCP9808Sensor::runOnce() {
-    DEBUG_MSG("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s\n", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
@@ -23,7 +23,7 @@ void MCP9808Sensor::setup() {
 }
 
 bool MCP9808Sensor::getMetrics(Telemetry *measurement) {
-    DEBUG_MSG("MCP9808Sensor::getMetrics\n");
+    LOG_DEBUG("MCP9808Sensor::getMetrics\n");
     measurement->variant.environment_metrics.temperature = mcp9808.readTempC();
     return true;
 }    

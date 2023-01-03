@@ -50,7 +50,9 @@ typedef enum _AdminMessage_ModuleConfigType {
     /* TODO: REPLACE */
     AdminMessage_ModuleConfigType_CANNEDMSG_CONFIG = 6,
     /* TODO: REPLACE */
-    AdminMessage_ModuleConfigType_AUDIO_CONFIG = 7
+    AdminMessage_ModuleConfigType_AUDIO_CONFIG = 7,
+    /* TODO: REPLACE */
+    AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG = 8
 } AdminMessage_ModuleConfigType;
 
 /* Struct definitions */
@@ -85,6 +87,10 @@ typedef struct _AdminMessage {
         bool get_device_metadata_request;
         /* Device metadata response */
         DeviceMetadata get_device_metadata_response;
+        /* Get the Ringtone in the response to this message. */
+        bool get_ringtone_request;
+        /* Get the Ringtone in the response to this message. */
+        char get_ringtone_response[231];
         /* Set the owner for this node */
         User set_owner;
         /* Set channels (using the new API).
@@ -99,6 +105,8 @@ typedef struct _AdminMessage {
         ModuleConfig set_module_config;
         /* Set the Canned Message Module messages text. */
         char set_canned_message_module_messages[201];
+        /* Set the ringtone for ExternalNotification. */
+        char set_ringtone_message[231];
         /* Begins an edit transaction for config, module config, owner, and channel settings changes
      This will delay the standard *implicit* save to the file system and subsequent reboot behavior until committed (commit_edit_settings) */
         bool begin_edit_settings;
@@ -139,8 +147,8 @@ extern "C" {
 #define _AdminMessage_ConfigType_ARRAYSIZE ((AdminMessage_ConfigType)(AdminMessage_ConfigType_BLUETOOTH_CONFIG+1))
 
 #define _AdminMessage_ModuleConfigType_MIN AdminMessage_ModuleConfigType_MQTT_CONFIG
-#define _AdminMessage_ModuleConfigType_MAX AdminMessage_ModuleConfigType_AUDIO_CONFIG
-#define _AdminMessage_ModuleConfigType_ARRAYSIZE ((AdminMessage_ModuleConfigType)(AdminMessage_ModuleConfigType_AUDIO_CONFIG+1))
+#define _AdminMessage_ModuleConfigType_MAX AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG
+#define _AdminMessage_ModuleConfigType_ARRAYSIZE ((AdminMessage_ModuleConfigType)(AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG+1))
 
 #define AdminMessage_payload_variant_get_config_request_ENUMTYPE AdminMessage_ConfigType
 #define AdminMessage_payload_variant_get_module_config_request_ENUMTYPE AdminMessage_ModuleConfigType
@@ -163,11 +171,14 @@ extern "C" {
 #define AdminMessage_get_canned_message_module_messages_response_tag 11
 #define AdminMessage_get_device_metadata_request_tag 12
 #define AdminMessage_get_device_metadata_response_tag 13
+#define AdminMessage_get_ringtone_request_tag    14
+#define AdminMessage_get_ringtone_response_tag   15
 #define AdminMessage_set_owner_tag               32
 #define AdminMessage_set_channel_tag             33
 #define AdminMessage_set_config_tag              34
 #define AdminMessage_set_module_config_tag       35
 #define AdminMessage_set_canned_message_module_messages_tag 36
+#define AdminMessage_set_ringtone_message_tag    37
 #define AdminMessage_begin_edit_settings_tag     64
 #define AdminMessage_commit_edit_settings_tag    65
 #define AdminMessage_confirm_set_channel_tag     66
@@ -193,11 +204,14 @@ X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,get_canned_message_module_me
 X(a, STATIC,   ONEOF,    STRING,   (payload_variant,get_canned_message_module_messages_response,get_canned_message_module_messages_response),  11) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,get_device_metadata_request,get_device_metadata_request),  12) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,get_device_metadata_response,get_device_metadata_response),  13) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,get_ringtone_request,get_ringtone_request),  14) \
+X(a, STATIC,   ONEOF,    STRING,   (payload_variant,get_ringtone_response,get_ringtone_response),  15) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_owner,set_owner),  32) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_channel,set_channel),  33) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_config,set_config),  34) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_module_config,set_module_config),  35) \
 X(a, STATIC,   ONEOF,    STRING,   (payload_variant,set_canned_message_module_messages,set_canned_message_module_messages),  36) \
+X(a, STATIC,   ONEOF,    STRING,   (payload_variant,set_ringtone_message,set_ringtone_message),  37) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,begin_edit_settings,begin_edit_settings),  64) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,commit_edit_settings,commit_edit_settings),  65) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,confirm_set_channel,confirm_set_channel),  66) \
@@ -226,7 +240,7 @@ extern const pb_msgdesc_t AdminMessage_msg;
 #define AdminMessage_fields &AdminMessage_msg
 
 /* Maximum encoded size of messages (where known) */
-#define AdminMessage_size                        204
+#define AdminMessage_size                        234
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -12,6 +12,9 @@ PB_BIND(ModuleConfig, ModuleConfig, AUTO)
 PB_BIND(ModuleConfig_MQTTConfig, ModuleConfig_MQTTConfig, AUTO)
 
 
+PB_BIND(ModuleConfig_RemoteHardwareConfig, ModuleConfig_RemoteHardwareConfig, AUTO)
+
+
 PB_BIND(ModuleConfig_AudioConfig, ModuleConfig_AudioConfig, AUTO)
 
 

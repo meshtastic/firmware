@@ -11,7 +11,7 @@ MeshPacket *ReplyModule::allocReply()
     auto req = *currentRequest;
     auto &p = req.decoded;
     // The incoming message is in p.payload
-    DEBUG_MSG("Received message from=0x%0x, id=%d, msg=%.*s\n", req.from, req.id, p.payload.size, p.payload.bytes);
+    LOG_INFO("Received message from=0x%0x, id=%d, msg=%.*s\n", req.from, req.id, p.payload.size, p.payload.bytes);
 
     screen->print("Sending reply\n");
 

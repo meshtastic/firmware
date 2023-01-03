@@ -5,6 +5,7 @@
 #include "Router.h"
 #include "buzz/buzz.h"
 #include "configuration.h"
+#include "mesh/generated/rtttl.pb.h"
 #include <Arduino.h>
 
 #ifndef PIN_BUZZER
@@ -26,11 +27,15 @@
 
 #define ASCII_BELL 0x07
 
+RTTTLConfig rtttlConfig;
+
 ExternalNotificationModule *externalNotificationModule;
 
 bool externalCurrentState[3] = {};
 
 uint32_t externalTurnedOn[3] = {};
+
+static const char *rtttlConfigFile = "/prefs/ringtone.proto";
 
 int32_t ExternalNotificationModule::runOnce()
 {
@@ -43,15 +48,15 @@ int32_t ExternalNotificationModule::runOnce()
         if (nagCycleCutoff < millis()) {
 #endif
             nagCycleCutoff = UINT32_MAX;
-            DEBUG_MSG("Turning off external notification: ");
+            LOG_INFO("Turning off external notification: ");
             for (int i = 0; i < 2; i++) {
                 if (getExternal(i)) {
                     setExternalOff(i);
                     externalTurnedOn[i] = 0;
-                    DEBUG_MSG("%d ", i);
+                    LOG_INFO("%d ", i);
                 }
             }
-            DEBUG_MSG("\n");
+            LOG_INFO("\n");
             return INT32_MAX; // save cycles till we're needed again
         }
 
@@ -81,7 +86,7 @@ int32_t ExternalNotificationModule::runOnce()
                 rtttl::play();
             } else if (nagCycleCutoff >= millis()) {
                 // start the song again if we have time left
-                rtttl::begin(config.device.buzzer_gpio, pwmRingtone);
+                rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
             }
         }
 #endif        
@@ -165,27 +170,31 @@ ExternalNotificationModule::ExternalNotificationModule()
     // moduleConfig.external_notification.nag_timeout = 300;
     
     if (moduleConfig.external_notification.enabled) {
+        if (!nodeDB.loadProto(rtttlConfigFile, RTTTLConfig_size, sizeof(RTTTLConfig), &RTTTLConfig_msg, &rtttlConfig)) {
+            memset(rtttlConfig.ringtone, 0, sizeof(rtttlConfig.ringtone));
+            strncpy(rtttlConfig.ringtone, "a:d=8,o=5,b=125:4d#6,a#,2d#6,16p,g#,4a#,4d#.,p,16g,16a#,d#6,a#,f6,2d#6,16p,c#.6,16c6,16a#,g#.,2a#", sizeof(rtttlConfig.ringtone));
+        }
 
-        DEBUG_MSG("Initializing External Notification Module\n");
+        LOG_INFO("Initializing External Notification Module\n");
 
         output = moduleConfig.external_notification.output
                         ? moduleConfig.external_notification.output
                         : EXT_NOTIFICATION_MODULE_OUTPUT;
 
         // Set the direction of a pin
-        DEBUG_MSG("Using Pin %i in digital mode\n", output);
+        LOG_INFO("Using Pin %i in digital mode\n", output);
         pinMode(output, OUTPUT);
         setExternalOff(0);
         externalTurnedOn[0] = 0;
         if(moduleConfig.external_notification.output_vibra) {
-            DEBUG_MSG("Using Pin %i for vibra motor\n", moduleConfig.external_notification.output_vibra);
+            LOG_INFO("Using Pin %i for vibra motor\n", moduleConfig.external_notification.output_vibra);
             pinMode(moduleConfig.external_notification.output_vibra, OUTPUT);
             setExternalOff(1);
             externalTurnedOn[1] = 0;
         }
         if(moduleConfig.external_notification.output_buzzer) {
             if (!moduleConfig.external_notification.use_pwm) {
-                DEBUG_MSG("Using Pin %i for buzzer\n", moduleConfig.external_notification.output_buzzer);
+                LOG_INFO("Using Pin %i for buzzer\n", moduleConfig.external_notification.output_buzzer);
                 pinMode(moduleConfig.external_notification.output_buzzer, OUTPUT);
                 setExternalOff(2);
                 externalTurnedOn[2] = 0;
@@ -194,12 +203,12 @@ ExternalNotificationModule::ExternalNotificationModule()
                     ? config.device.buzzer_gpio
                     : PIN_BUZZER;
                 // in PWM Mode we force the buzzer pin if it is set
-                DEBUG_MSG("Using Pin %i in PWM mode\n", config.device.buzzer_gpio);
+                LOG_INFO("Using Pin %i in PWM mode\n", config.device.buzzer_gpio);
             }
         }
     } else {
-        DEBUG_MSG("External Notification Module Disabled\n");
-        enabled = false;
+        LOG_INFO("External Notification Module Disabled\n");
+        disable();
     }
 }
 
@@ -220,7 +229,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
 
             if (moduleConfig.external_notification.alert_bell) {
                 if (containsBell) {
-                    DEBUG_MSG("externalNotificationModule - Notification Bell\n");
+                    LOG_INFO("externalNotificationModule - Notification Bell\n");
                     setExternalOn(0);
                     if (moduleConfig.external_notification.nag_timeout) {
                         nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
@@ -232,7 +241,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
 
             if (moduleConfig.external_notification.alert_bell_vibra) {
                 if (containsBell) {
-                    DEBUG_MSG("externalNotificationModule - Notification Bell (Vibra)\n");
+                    LOG_INFO("externalNotificationModule - Notification Bell (Vibra)\n");
                     setExternalOn(1);
                     if (moduleConfig.external_notification.nag_timeout) {
                         nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
@@ -244,12 +253,12 @@ ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
 
             if (moduleConfig.external_notification.alert_bell_buzzer) {
                 if (containsBell) {
-                    DEBUG_MSG("externalNotificationModule - Notification Bell (Buzzer)\n");
+                    LOG_INFO("externalNotificationModule - Notification Bell (Buzzer)\n");
                     if (!moduleConfig.external_notification.use_pwm) {
                         setExternalOn(2);
                     } else {
 #ifndef ARCH_PORTDUINO
-                        rtttl::begin(config.device.buzzer_gpio, pwmRingtone);
+                        rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
 #endif
                     }
                     if (moduleConfig.external_notification.nag_timeout) {
@@ -261,7 +270,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
             }
 
             if (moduleConfig.external_notification.alert_message) {
-                DEBUG_MSG("externalNotificationModule - Notification Module\n");
+                LOG_INFO("externalNotificationModule - Notification Module\n");
                 setExternalOn(0);
                 if (moduleConfig.external_notification.nag_timeout) {
                     nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
@@ -272,7 +281,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
 
             if (!moduleConfig.external_notification.use_pwm) {
                 if (moduleConfig.external_notification.alert_message_vibra) {
-                    DEBUG_MSG("externalNotificationModule - Notification Module (Vibra)\n");
+                    LOG_INFO("externalNotificationModule - Notification Module (Vibra)\n");
                     setExternalOn(1);
                     if (moduleConfig.external_notification.nag_timeout) {
                         nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
@@ -282,12 +291,12 @@ ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
                 }
 
                 if (moduleConfig.external_notification.alert_message_buzzer) {
-                    DEBUG_MSG("externalNotificationModule - Notification Module (Buzzer)\n");
+                    LOG_INFO("externalNotificationModule - Notification Module (Buzzer)\n");
                     if (!moduleConfig.external_notification.use_pwm) {
                         setExternalOn(2);
                     } else {
 #ifndef ARCH_PORTDUINO
-                        rtttl::begin(config.device.buzzer_gpio, pwmRingtone);
+                        rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
 #endif
                     }
                     if (moduleConfig.external_notification.nag_timeout) {
@@ -301,8 +310,66 @@ ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
         }
 
     } else {
-        DEBUG_MSG("External Notification Module Disabled\n");
+        LOG_INFO("External Notification Module Disabled\n");
     }
 
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
+}
+
+/**
+ * @brief An admin message arrived to AdminModule. We are asked whether we want to handle that.
+ *
+ * @param mp The mesh packet arrived.
+ * @param request The AdminMessage request extracted from the packet.
+ * @param response The prepared response
+ * @return AdminMessageHandleResult HANDLED if message was handled
+ *   HANDLED_WITH_RESULT if a result is also prepared.
+ */
+AdminMessageHandleResult ExternalNotificationModule::handleAdminMessageForModule(const MeshPacket &mp, AdminMessage *request, AdminMessage *response)
+{
+    AdminMessageHandleResult result;
+
+    switch (request->which_payload_variant) {
+    case AdminMessage_get_ringtone_request_tag:
+        LOG_INFO("Client is getting ringtone\n");
+        this->handleGetRingtone(mp, response);
+        result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
+        break;
+
+    case AdminMessage_set_ringtone_message_tag:
+        LOG_INFO("Client is setting ringtone\n");
+        this->handleSetRingtone(request->set_canned_message_module_messages);
+        result = AdminMessageHandleResult::HANDLED;
+        break;
+
+    default:
+        result = AdminMessageHandleResult::NOT_HANDLED;
+    }
+
+    return result;
+}
+
+void ExternalNotificationModule::handleGetRingtone(const MeshPacket &req, AdminMessage *response)
+{
+    LOG_INFO("*** handleGetRingtone\n");
+    assert(req.decoded.want_response);
+
+    response->which_payload_variant = AdminMessage_get_ringtone_response_tag;
+    strcpy(response->get_ringtone_response, rtttlConfig.ringtone);
+}
+
+
+void ExternalNotificationModule::handleSetRingtone(const char *from_msg)
+{
+    int changed = 0;
+
+    if (*from_msg) {
+        changed |= strcmp(rtttlConfig.ringtone, from_msg);
+        strcpy(rtttlConfig.ringtone, from_msg);
+        LOG_INFO("*** from_msg.text:%s\n", from_msg);
+    }
+
+    if (changed) {
+        nodeDB.saveProto(rtttlConfigFile, RTTTLConfig_size, &RTTTLConfig_msg, &rtttlConfig);
+    }
 }

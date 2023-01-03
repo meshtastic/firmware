@@ -22,8 +22,8 @@ int16_t RadioLibRF95::begin(float freq, float bw, uint8_t sf, uint8_t cr, uint8_
     // current limit was removed from module' ctor
     // override default value (60 mA)
     state = setCurrentLimit(currentLimit);
-    DEBUG_MSG("Current limit set to %f\n", currentLimit);
-    DEBUG_MSG("Current limit set result %d\n", state);
+    LOG_DEBUG("Current limit set to %f\n", currentLimit);
+    LOG_DEBUG("Current limit set result %d\n", state);
 
     // configure settings not accessible by API
     state = config();

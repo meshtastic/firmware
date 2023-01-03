@@ -33,7 +33,7 @@ class BluetoothPhoneAPI : public PhoneAPI
     {
         PhoneAPI::onNowHasData(fromRadioNum);
 
-        DEBUG_MSG("BLE notify fromNum\n");
+        LOG_INFO("BLE notify fromNum\n");
         fromNum.notify32(fromRadioNum);
     }
 
@@ -55,7 +55,7 @@ void onConnect(uint16_t conn_handle)
     char central_name[32] = {0};
     connection->getPeerName(central_name, sizeof(central_name));
 
-    DEBUG_MSG("BLE Connected to %s\n", central_name);
+    LOG_INFO("BLE Connected to %s\n", central_name);
 }
 
 /**
@@ -66,21 +66,21 @@ void onConnect(uint16_t conn_handle)
 void onDisconnect(uint16_t conn_handle, uint8_t reason)
 {
     // FIXME - we currently assume only one active connection
-    DEBUG_MSG("BLE Disconnected, reason = 0x%x\n", reason);
+    LOG_INFO("BLE Disconnected, reason = 0x%x\n", reason);
 }
 
 void onCccd(uint16_t conn_hdl, BLECharacteristic *chr, uint16_t cccd_value)
 {
     // Display the raw request packet
-    DEBUG_MSG("CCCD Updated: %u\n", cccd_value);
+    LOG_INFO("CCCD Updated: %u\n", cccd_value);
 
     // Check the characteristic this CCCD update is associated with in case
     // this handler is used for multiple CCCD records.
     if (chr->uuid == fromNum.uuid) {
         if (chr->notifyEnabled(conn_hdl)) {
-            DEBUG_MSG("fromNum 'Notify' enabled\n");
+            LOG_INFO("fromNum 'Notify' enabled\n");
         } else {
-            DEBUG_MSG("fromNum 'Notify' disabled\n");
+            LOG_INFO("fromNum 'Notify' disabled\n");
         }
     }
 }
@@ -135,14 +135,14 @@ void onFromRadioAuthorize(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_e
         // or make empty if the queue is empty
         fromRadio.write(fromRadioBytes, numBytes);
     } else {
-        // DEBUG_MSG("Ignoring successor read\n");
+        // LOG_INFO("Ignoring successor read\n");
     }
     authorizeRead(conn_hdl);
 }
 
 void onToRadioWrite(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *data, uint16_t len)
 {
-    DEBUG_MSG("toRadioWriteCb data %p, len %u\n", data, len);
+    LOG_INFO("toRadioWriteCb data %p, len %u\n", data, len);
 
     bluetoothPhoneAPI->handleToRadio(data, len);
 }
@@ -152,7 +152,7 @@ void onToRadioWrite(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *data, ui
  */
 void onFromNumAuthorize(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_evt_read_t *request)
 {
-    DEBUG_MSG("fromNumAuthorizeCb\n");
+    LOG_INFO("fromNumAuthorizeCb\n");
 
     authorizeRead(conn_hdl);
 }
@@ -204,14 +204,14 @@ static uint32_t configuredPasskey;
 void NRF52Bluetooth::shutdown()
 {
     // Shutdown bluetooth for minimum power draw
-    DEBUG_MSG("Disable NRF52 bluetooth\n");
+    LOG_INFO("Disable NRF52 bluetooth\n");
     Bluefruit.Advertising.stop();
 }
 
 void NRF52Bluetooth::setup()
 {
     // Initialise the Bluefruit module
-    DEBUG_MSG("Initialize the Bluefruit nRF52 module\n");
+    LOG_INFO("Initialize the Bluefruit nRF52 module\n");
     Bluefruit.autoConnLed(false);
     Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
     Bluefruit.begin();
@@ -225,7 +225,7 @@ void NRF52Bluetooth::setup()
         configuredPasskey = config.bluetooth.mode == Config_BluetoothConfig_PairingMode_FIXED_PIN ? 
             config.bluetooth.fixed_pin : random(100000, 999999);
         auto pinString = std::to_string(configuredPasskey);
-        DEBUG_MSG("Bluetooth pin set to '%i'\n", configuredPasskey);
+        LOG_INFO("Bluetooth pin set to '%i'\n", configuredPasskey);
         Bluefruit.Security.setPIN(pinString.c_str());
         Bluefruit.Security.setIOCaps(true, false, false);
         Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onPairingPasskey);
@@ -248,30 +248,30 @@ void NRF52Bluetooth::setup()
     bledfu.begin(); // Install the DFU helper
     
     // Configure and Start the Device Information Service
-    DEBUG_MSG("Configuring the Device Information Service\n");
+    LOG_INFO("Configuring the Device Information Service\n");
     bledis.setModel(optstr(HW_VERSION));
     bledis.setFirmwareRev(optstr(APP_VERSION));
     bledis.begin();
 
     // Start the BLE Battery Service and set it to 100%
-    DEBUG_MSG("Configuring the Battery Service\n");
+    LOG_INFO("Configuring the Battery Service\n");
     blebas.begin();
     blebas.write(0); // Unknown battery level for now
 
 
     // Setup the Heart Rate Monitor service using
     // BLEService and BLECharacteristic classes
-    DEBUG_MSG("Configuring the Mesh bluetooth service\n");
+    LOG_INFO("Configuring the Mesh bluetooth service\n");
     setupMeshService();
 
     // Supposedly debugging works with soft device if you disable advertising
     if (isSoftDeviceAllowed) 
     {
         // Setup the advertising packet(s)
-        DEBUG_MSG("Setting up the advertising payload(s)\n");
+        LOG_INFO("Setting up the advertising payload(s)\n");
         startAdv();
 
-        DEBUG_MSG("Advertising\n");
+        LOG_INFO("Advertising\n");
     }
 }
 
@@ -283,7 +283,7 @@ void updateBatteryLevel(uint8_t level)
 
 void NRF52Bluetooth::clearBonds()
 {
-    DEBUG_MSG("Clearing bluetooth bonds!\n");
+    LOG_INFO("Clearing bluetooth bonds!\n");
     bond_print_list(BLE_GAP_ROLE_PERIPH);
     bond_print_list(BLE_GAP_ROLE_CENTRAL);
 
@@ -293,12 +293,12 @@ void NRF52Bluetooth::clearBonds()
 
 void NRF52Bluetooth::onConnectionSecured(uint16_t conn_handle)
 {
-    DEBUG_MSG("BLE connection secured\n");
+    LOG_INFO("BLE connection secured\n");
 }
 
 bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passkey[6], bool match_request)
 {
-    DEBUG_MSG("BLE pairing process started with passkey %.3s %.3s\n", passkey, passkey+3);
+    LOG_INFO("BLE pairing process started with passkey %.3s %.3s\n", passkey, passkey+3);
     screen->startBluetoothPinScreen(configuredPasskey);
 
     if (match_request)
@@ -309,16 +309,16 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
             if (!Bluefruit.connected(conn_handle)) break;
         }
     }
-    DEBUG_MSG("BLE passkey pairing: match_request=%i\n", match_request);
+    LOG_INFO("BLE passkey pairing: match_request=%i\n", match_request);
     return true;
 }
 
 void NRF52Bluetooth::onPairingCompleted(uint16_t conn_handle, uint8_t auth_status)
 {
     if (auth_status == BLE_GAP_SEC_STATUS_SUCCESS)
-        DEBUG_MSG("BLE pairing success\n");
+        LOG_INFO("BLE pairing success\n");
     else
-        DEBUG_MSG("BLE pairing failed\n");
+        LOG_INFO("BLE pairing failed\n");
 
     screen->stopBluetoothPinScreen();
 }
