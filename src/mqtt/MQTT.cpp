@@ -274,9 +274,9 @@ void MQTT::onSend(const MeshPacket &mp, ChannelIndex chIndex)
         const char *channelId = channels.getGlobalId(chIndex); // FIXME, for now we just use the human name for the channel
 
         ServiceEnvelope env = ServiceEnvelope_init_default;
-        env->channel_id = (char *)channelId;
-        env->gateway_id = owner.id;
-        env->packet = (MeshPacket *)&mp;
+        env.channel_id = (char *)channelId;
+        env.gateway_id = owner.id;
+        env.packet = (MeshPacket *)&mp;
 
         // don't bother sending if not connected...
         if (pubSub.connected()) {
