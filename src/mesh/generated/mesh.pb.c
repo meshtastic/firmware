@@ -36,6 +36,9 @@ PB_BIND(MyNodeInfo, MyNodeInfo, AUTO)
 PB_BIND(LogRecord, LogRecord, AUTO)
 
 
+PB_BIND(QueueStatus, QueueStatus, AUTO)
+
+
 PB_BIND(FromRadio, FromRadio, 2)
 
 
