@@ -50,23 +50,23 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
      * Getters
      */
     case AdminMessage_get_owner_request_tag:
-        DEBUG_MSG("Client is getting owner\n");
+        LOG_INFO("Client is getting owner\n");
         handleGetOwner(mp);
         break;
 
     case AdminMessage_get_config_request_tag:
-        DEBUG_MSG("Client is getting config\n");
+        LOG_INFO("Client is getting config\n");
         handleGetConfig(mp, r->get_config_request);
         break;
 
     case AdminMessage_get_module_config_request_tag:
-        DEBUG_MSG("Client is getting module config\n");
+        LOG_INFO("Client is getting module config\n");
         handleGetModuleConfig(mp, r->get_module_config_request);
         break;
 
     case AdminMessage_get_channel_request_tag: {
         uint32_t i = r->get_channel_request - 1;
-        DEBUG_MSG("Client is getting channel %u\n", i);
+        LOG_INFO("Client is getting channel %u\n", i);
         if (i >= MAX_NUM_CHANNELS)
             myReply = allocErrorResponse(Routing_Error_BAD_REQUEST, &mp);
         else
@@ -78,22 +78,22 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
      * Setters
      */
     case AdminMessage_set_owner_tag:
-        DEBUG_MSG("Client is setting owner\n");
+        LOG_INFO("Client is setting owner\n");
         handleSetOwner(r->set_owner);
         break;
 
     case AdminMessage_set_config_tag:
-        DEBUG_MSG("Client is setting the config\n");
+        LOG_INFO("Client is setting the config\n");
         handleSetConfig(r->set_config);
         break;
 
     case AdminMessage_set_module_config_tag:
-        DEBUG_MSG("Client is setting the module config\n");
+        LOG_INFO("Client is setting the module config\n");
         handleSetModuleConfig(r->set_module_config);
         break;
 
     case AdminMessage_set_channel_tag:
-        DEBUG_MSG("Client is setting channel %d\n", r->set_channel.index);
+        LOG_INFO("Client is setting channel %d\n", r->set_channel.index);
         if (r->set_channel.index < 0 || r->set_channel.index >= (int)MAX_NUM_CHANNELS)
             myReply = allocErrorResponse(Routing_Error_BAD_REQUEST, &mp);
         else
@@ -111,15 +111,15 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
         int32_t s = r->reboot_ota_seconds;
 #ifdef ARCH_ESP32        
         if (BleOta::getOtaAppVersion().isEmpty()) {
-            DEBUG_MSG("No OTA firmware available, scheduling regular reboot in %d seconds\n", s);
+            LOG_INFO("No OTA firmware available, scheduling regular reboot in %d seconds\n", s);
             screen->startRebootScreen();
         }else{
             screen->startFirmwareUpdateScreen();
             BleOta::switchToOtaApp();
-            DEBUG_MSG("Rebooting to OTA in %d seconds\n", s);
+            LOG_INFO("Rebooting to OTA in %d seconds\n", s);
         }
 #else
-        DEBUG_MSG("Not on ESP32, scheduling regular reboot in %d seconds\n", s);
+        LOG_INFO("Not on ESP32, scheduling regular reboot in %d seconds\n", s);
         screen->startRebootScreen();
 #endif
         rebootAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
@@ -127,40 +127,40 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
     }
     case AdminMessage_shutdown_seconds_tag: {
         int32_t s = r->shutdown_seconds;
-        DEBUG_MSG("Shutdown in %d seconds\n", s);
+        LOG_INFO("Shutdown in %d seconds\n", s);
         shutdownAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
         break;
     }
     case AdminMessage_get_device_metadata_request_tag: {
-        DEBUG_MSG("Client is getting device metadata\n");
+        LOG_INFO("Client is getting device metadata\n");
         handleGetDeviceMetadata(mp);
         break;
     }
     case AdminMessage_factory_reset_tag: {
-        DEBUG_MSG("Initiating factory reset\n");
+        LOG_INFO("Initiating factory reset\n");
         nodeDB.factoryReset();
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     } case AdminMessage_nodedb_reset_tag: {
-        DEBUG_MSG("Initiating node-db reset\n");
+        LOG_INFO("Initiating node-db reset\n");
         nodeDB.resetNodes();
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
     case AdminMessage_begin_edit_settings_tag: {
-        DEBUG_MSG("Beginning transaction for editing settings\n");
+        LOG_INFO("Beginning transaction for editing settings\n");
         hasOpenEditTransaction = true;
         break;
     }
     case AdminMessage_commit_edit_settings_tag: {
-        DEBUG_MSG("Committing transaction for edited settings\n");
+        LOG_INFO("Committing transaction for edited settings\n");
         hasOpenEditTransaction = false;
         saveChanges(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
         break;
     }
 #ifdef ARCH_PORTDUINO
     case AdminMessage_exit_simulator_tag:
-        DEBUG_MSG("Exiting simulator\n");
+        LOG_INFO("Exiting simulator\n");
         _exit(0);
         break;
 #endif
@@ -172,10 +172,10 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
         if (handleResult == AdminMessageHandleResult::HANDLED_WITH_RESPONSE) {
             myReply = allocDataProtobuf(res);
         } else if (mp.decoded.want_response) {
-            DEBUG_MSG("We did not responded to a request that wanted a respond. req.variant=%d\n", r->which_payload_variant);
+            LOG_DEBUG("We did not responded to a request that wanted a respond. req.variant=%d\n", r->which_payload_variant);
         } else if (handleResult != AdminMessageHandleResult::HANDLED) {
             // Probably a message sent by us or sent to our local node.  FIXME, we should avoid scanning these messages
-            DEBUG_MSG("Ignoring nonrelevant admin %d\n", r->which_payload_variant);
+            LOG_INFO("Ignoring nonrelevant admin %d\n", r->which_payload_variant);
         }
         break;
     }
@@ -229,7 +229,7 @@ void AdminModule::handleSetConfig(const Config &c)
 
     switch (c.which_payload_variant) {
         case Config_device_tag:
-            DEBUG_MSG("Setting config: Device\n");
+            LOG_INFO("Setting config: Device\n");
             config.has_device = true;
             config.device = c.payload_variant.device;
             // If we're setting router role for the first time, install its intervals
@@ -240,29 +240,29 @@ void AdminModule::handleSetConfig(const Config &c)
             }
             break;
         case Config_position_tag:
-            DEBUG_MSG("Setting config: Position\n");
+            LOG_INFO("Setting config: Position\n");
             config.has_position = true;
             config.position = c.payload_variant.position;
             // Save nodedb as well in case we got a fixed position packet
             saveChanges(SEGMENT_DEVICESTATE, false);
             break;
         case Config_power_tag:
-            DEBUG_MSG("Setting config: Power\n");
+            LOG_INFO("Setting config: Power\n");
             config.has_power = true;
             config.power = c.payload_variant.power;
             break;
         case Config_network_tag:
-            DEBUG_MSG("Setting config: WiFi\n");
+            LOG_INFO("Setting config: WiFi\n");
             config.has_network = true;
             config.network = c.payload_variant.network;
             break;
         case Config_display_tag:
-            DEBUG_MSG("Setting config: Display\n");
+            LOG_INFO("Setting config: Display\n");
             config.has_display = true;
             config.display = c.payload_variant.display;
             break;
         case Config_lora_tag:
-            DEBUG_MSG("Setting config: LoRa\n");
+            LOG_INFO("Setting config: LoRa\n");
             config.has_lora = true;
             config.lora = c.payload_variant.lora;
             if (isRegionUnset && 
@@ -271,7 +271,7 @@ void AdminModule::handleSetConfig(const Config &c)
             }
             break;
         case Config_bluetooth_tag:
-            DEBUG_MSG("Setting config: Bluetooth\n");
+            LOG_INFO("Setting config: Bluetooth\n");
             config.has_bluetooth = true;
             config.bluetooth = c.payload_variant.bluetooth;
             break;
@@ -284,47 +284,52 @@ void AdminModule::handleSetModuleConfig(const ModuleConfig &c)
 {
     switch (c.which_payload_variant) {
         case ModuleConfig_mqtt_tag:
-            DEBUG_MSG("Setting module config: MQTT\n");
+            LOG_INFO("Setting module config: MQTT\n");
             moduleConfig.has_mqtt = true;
             moduleConfig.mqtt = c.payload_variant.mqtt;
             break;
         case ModuleConfig_serial_tag:
-            DEBUG_MSG("Setting module config: Serial\n");
+            LOG_INFO("Setting module config: Serial\n");
             moduleConfig.has_serial = true;
             moduleConfig.serial = c.payload_variant.serial;
             break;
         case ModuleConfig_external_notification_tag:
-            DEBUG_MSG("Setting module config: External Notification\n");
+            LOG_INFO("Setting module config: External Notification\n");
             moduleConfig.has_external_notification = true;
             moduleConfig.external_notification = c.payload_variant.external_notification;
             break;
         case ModuleConfig_store_forward_tag:
-            DEBUG_MSG("Setting module config: Store & Forward\n");
+            LOG_INFO("Setting module config: Store & Forward\n");
             moduleConfig.has_store_forward = true;
             moduleConfig.store_forward = c.payload_variant.store_forward;
             break;
         case ModuleConfig_range_test_tag:
-            DEBUG_MSG("Setting module config: Range Test\n");
+            LOG_INFO("Setting module config: Range Test\n");
             moduleConfig.has_range_test = true;
             moduleConfig.range_test = c.payload_variant.range_test;
             break;
         case ModuleConfig_telemetry_tag:
-            DEBUG_MSG("Setting module config: Telemetry\n");
+            LOG_INFO("Setting module config: Telemetry\n");
             moduleConfig.has_telemetry = true;
             moduleConfig.telemetry = c.payload_variant.telemetry;
             break;
         case ModuleConfig_canned_message_tag:
-            DEBUG_MSG("Setting module config: Canned Message\n");
+            LOG_INFO("Setting module config: Canned Message\n");
             moduleConfig.has_canned_message = true;
             moduleConfig.canned_message = c.payload_variant.canned_message;
             break;
         case ModuleConfig_audio_tag:
-            DEBUG_MSG("Setting module config: Audio\n");
+            LOG_INFO("Setting module config: Audio\n");
             moduleConfig.has_audio = true;
             moduleConfig.audio = c.payload_variant.audio;
             break;
+        case ModuleConfig_remote_hardware_tag:
+            LOG_INFO("Setting module config: Remote Hardware\n");
+            moduleConfig.has_remote_hardware = true;
+            moduleConfig.remote_hardware = c.payload_variant.remote_hardware;
+            break;
     }
-    
+
     saveChanges(SEGMENT_MODULECONFIG);
 }
 
@@ -358,38 +363,38 @@ void AdminModule::handleGetConfig(const MeshPacket &req, const uint32_t configTy
     if (req.decoded.want_response) {
         switch (configType) {
         case AdminMessage_ConfigType_DEVICE_CONFIG:
-            DEBUG_MSG("Getting config: Device\n");
+            LOG_INFO("Getting config: Device\n");
             res.get_config_response.which_payload_variant = Config_device_tag;
             res.get_config_response.payload_variant.device = config.device;
             break;
         case AdminMessage_ConfigType_POSITION_CONFIG:
-            DEBUG_MSG("Getting config: Position\n");
+            LOG_INFO("Getting config: Position\n");
             res.get_config_response.which_payload_variant = Config_position_tag;
             res.get_config_response.payload_variant.position = config.position;
             break;
         case AdminMessage_ConfigType_POWER_CONFIG:
-            DEBUG_MSG("Getting config: Power\n");
+            LOG_INFO("Getting config: Power\n");
             res.get_config_response.which_payload_variant = Config_power_tag;
             res.get_config_response.payload_variant.power = config.power;
             break;
         case AdminMessage_ConfigType_NETWORK_CONFIG:
-            DEBUG_MSG("Getting config: Network\n");
+            LOG_INFO("Getting config: Network\n");
             res.get_config_response.which_payload_variant = Config_network_tag;
             res.get_config_response.payload_variant.network = config.network;
             writeSecret(res.get_config_response.payload_variant.network.wifi_psk, config.network.wifi_psk);
             break;
         case AdminMessage_ConfigType_DISPLAY_CONFIG:
-            DEBUG_MSG("Getting config: Display\n");
+            LOG_INFO("Getting config: Display\n");
             res.get_config_response.which_payload_variant = Config_display_tag;
             res.get_config_response.payload_variant.display = config.display;
             break;
         case AdminMessage_ConfigType_LORA_CONFIG:
-            DEBUG_MSG("Getting config: LoRa\n");
+            LOG_INFO("Getting config: LoRa\n");
             res.get_config_response.which_payload_variant = Config_lora_tag;
             res.get_config_response.payload_variant.lora = config.lora;
             break;
         case AdminMessage_ConfigType_BLUETOOTH_CONFIG:
-            DEBUG_MSG("Getting config: Bluetooth\n");
+            LOG_INFO("Getting config: Bluetooth\n");
             res.get_config_response.which_payload_variant = Config_bluetooth_tag;
             res.get_config_response.payload_variant.bluetooth = config.bluetooth;
             break;
@@ -413,45 +418,50 @@ void AdminModule::handleGetModuleConfig(const MeshPacket &req, const uint32_t co
     if (req.decoded.want_response) {
         switch (configType) {
         case AdminMessage_ModuleConfigType_MQTT_CONFIG:
-            DEBUG_MSG("Getting module config: MQTT\n");
+            LOG_INFO("Getting module config: MQTT\n");
             res.get_module_config_response.which_payload_variant = ModuleConfig_mqtt_tag;
             res.get_module_config_response.payload_variant.mqtt = moduleConfig.mqtt;
             break;
         case AdminMessage_ModuleConfigType_SERIAL_CONFIG:
-            DEBUG_MSG("Getting module config: Serial\n");
+            LOG_INFO("Getting module config: Serial\n");
             res.get_module_config_response.which_payload_variant = ModuleConfig_serial_tag;
             res.get_module_config_response.payload_variant.serial = moduleConfig.serial;
             break;
         case AdminMessage_ModuleConfigType_EXTNOTIF_CONFIG:
-            DEBUG_MSG("Getting module config: External Notification\n");
+            LOG_INFO("Getting module config: External Notification\n");
             res.get_module_config_response.which_payload_variant = ModuleConfig_external_notification_tag;
             res.get_module_config_response.payload_variant.external_notification =
                 moduleConfig.external_notification;
             break;
         case AdminMessage_ModuleConfigType_STOREFORWARD_CONFIG:
-            DEBUG_MSG("Getting module config: Store & Forward\n");
+            LOG_INFO("Getting module config: Store & Forward\n");
             res.get_module_config_response.which_payload_variant = ModuleConfig_store_forward_tag;
             res.get_module_config_response.payload_variant.store_forward = moduleConfig.store_forward;
             break;
         case AdminMessage_ModuleConfigType_RANGETEST_CONFIG:
-            DEBUG_MSG("Getting module config: Range Test\n");
+            LOG_INFO("Getting module config: Range Test\n");
             res.get_module_config_response.which_payload_variant = ModuleConfig_range_test_tag;
             res.get_module_config_response.payload_variant.range_test = moduleConfig.range_test;
             break;
         case AdminMessage_ModuleConfigType_TELEMETRY_CONFIG:
-            DEBUG_MSG("Getting module config: Telemetry\n");
+            LOG_INFO("Getting module config: Telemetry\n");
             res.get_module_config_response.which_payload_variant = ModuleConfig_telemetry_tag;
             res.get_module_config_response.payload_variant.telemetry = moduleConfig.telemetry;
             break;
         case AdminMessage_ModuleConfigType_CANNEDMSG_CONFIG:
-            DEBUG_MSG("Getting module config: Canned Message\n");
+            LOG_INFO("Getting module config: Canned Message\n");
             res.get_module_config_response.which_payload_variant = ModuleConfig_canned_message_tag;
             res.get_module_config_response.payload_variant.canned_message = moduleConfig.canned_message;
             break;
         case AdminMessage_ModuleConfigType_AUDIO_CONFIG:
-            DEBUG_MSG("Getting module config: Audio\n");
+            LOG_INFO("Getting module config: Audio\n");
             res.get_module_config_response.which_payload_variant = ModuleConfig_audio_tag;
             res.get_module_config_response.payload_variant.audio = moduleConfig.audio;
+            break;
+        case AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG:
+            LOG_INFO("Getting module config: Remote Hardware\n");
+            res.get_module_config_response.which_payload_variant = ModuleConfig_remote_hardware_tag;
+            res.get_module_config_response.payload_variant.remote_hardware = moduleConfig.remote_hardware;
             break;
         }
 
@@ -496,7 +506,7 @@ void AdminModule::handleGetChannel(const MeshPacket &req, uint32_t channelIndex)
 
 void AdminModule::reboot(int32_t seconds) 
 {
-    DEBUG_MSG("Rebooting in %d seconds\n", seconds);
+    LOG_INFO("Rebooting in %d seconds\n", seconds);
     screen->startRebootScreen();
     rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
 }
@@ -504,10 +514,10 @@ void AdminModule::reboot(int32_t seconds)
 void AdminModule::saveChanges(int saveWhat, bool shouldReboot) 
 {
     if (!hasOpenEditTransaction) {
-        DEBUG_MSG("Saving changes to disk\n");
+        LOG_INFO("Saving changes to disk\n");
         service.reloadConfig(saveWhat); // Calls saveToDisk among other things
     } else {
-        DEBUG_MSG("Delaying save of changes to disk until the open transaction is committed\n");
+        LOG_INFO("Delaying save of changes to disk until the open transaction is committed\n");
     }
     if (shouldReboot)
     {

@@ -13,12 +13,12 @@ InterruptableDelay::~InterruptableDelay() {}
  */
 bool InterruptableDelay::delay(uint32_t msec)
 {
-    // DEBUG_MSG("delay %u ", msec);
+    // LOG_DEBUG("delay %u ", msec);
 
     // sem take will return false if we timed out (i.e. were not interrupted)
     bool r = semaphore.take(msec);
 
-    // DEBUG_MSG("interrupt=%d\n", r);
+    // LOG_DEBUG("interrupt=%d\n", r);
     return !r;
 }
 

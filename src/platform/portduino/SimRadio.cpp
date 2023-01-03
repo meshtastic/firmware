@@ -22,7 +22,7 @@ ErrorCode SimRadio::send(MeshPacket *p)
 
     // set (random) transmit delay to let others reconfigure their radio,
     // to avoid collisions and implement timing-based flooding
-    DEBUG_MSG("Set random delay before transmitting.\n");
+    LOG_DEBUG("Set random delay before transmitting.\n");
     setTransmitDelay();
     return res;
 }
@@ -42,7 +42,7 @@ void SimRadio::setTransmitDelay()
         startTransmitTimer(true);
     } else {
         // If there is a SNR, start a timer scaled based on that SNR.
-        DEBUG_MSG("rx_snr found. hop_limit:%d rx_snr:%f\n", p->hop_limit, p->rx_snr);
+        LOG_DEBUG("rx_snr found. hop_limit:%d rx_snr:%f\n", p->hop_limit, p->rx_snr);
         startTransmitTimerSNR(p->rx_snr);
     }
 }
@@ -52,11 +52,11 @@ void SimRadio::startTransmitTimer(bool withDelay)
     // If we have work to do and the timer wasn't already scheduled, schedule it now
     if (!txQueue.empty()) {
         uint32_t delayMsec = !withDelay ? 1 : getTxDelayMsec();
-        // DEBUG_MSG("xmit timer %d\n", delay);
+        // LOG_DEBUG("xmit timer %d\n", delay);
         delay(delayMsec);
         onNotify(TRANSMIT_DELAY_COMPLETED);
     } else {
-        DEBUG_MSG("TX QUEUE EMPTY!\n");
+        LOG_DEBUG("TX QUEUE EMPTY!\n");
     }
 }
 
@@ -65,7 +65,7 @@ void SimRadio::startTransmitTimerSNR(float snr)
     // If we have work to do and the timer wasn't already scheduled, schedule it now
     if (!txQueue.empty()) {
         uint32_t delayMsec = getTxDelayMsecWeighted(snr);
-        // DEBUG_MSG("xmit timer %d\n", delay);
+        // LOG_DEBUG("xmit timer %d\n", delay);
         delay(delayMsec);
         onNotify(TRANSMIT_DELAY_COMPLETED);
     }
@@ -92,7 +92,7 @@ void SimRadio::completeSending()
 
         // We are done sending that packet, release it
         packetPool.release(p);
-        // DEBUG_MSG("Done with send\n");
+        // LOG_DEBUG("Done with send\n");
     }
 }
 
@@ -108,9 +108,9 @@ bool SimRadio::canSendImmediately()
 
     if (busyTx || busyRx) {
         if (busyTx)
-            DEBUG_MSG("Can not send yet, busyTx\n");
+            LOG_WARN("Can not send yet, busyTx\n");
         if (busyRx)
-            DEBUG_MSG("Can not send yet, busyRx\n");
+            LOG_WARN("Can not send yet, busyRx\n");
         return false;
     } else
         return true;
@@ -134,7 +134,7 @@ bool SimRadio::cancelSending(NodeNum from, PacketId id)
         packetPool.release(p); // free the packet we just removed
 
     bool result = (p != NULL);
-    DEBUG_MSG("cancelSending id=0x%x, removed=%d\n", id, result);
+    LOG_DEBUG("cancelSending id=0x%x, removed=%d\n", id, result);
     return result;
 }
 
@@ -144,24 +144,24 @@ void SimRadio::onNotify(uint32_t notification)
     switch (notification) {
     case ISR_TX:
         handleTransmitInterrupt();
-        DEBUG_MSG("tx complete - starting timer\n");
+        LOG_DEBUG("tx complete - starting timer\n");
         startTransmitTimer(); 
         break;
     case ISR_RX:
-        DEBUG_MSG("rx complete - starting timer\n");
+        LOG_DEBUG("rx complete - starting timer\n");
         break;
     case TRANSMIT_DELAY_COMPLETED:
-        DEBUG_MSG("delay done\n");
+        LOG_DEBUG("delay done\n");
 
         // If we are not currently in receive mode, then restart the random delay (this can happen if the main thread
         // has placed the unit into standby)  FIXME, how will this work if the chipset is in sleep mode?
         if (!txQueue.empty()) {
             if (!canSendImmediately()) {
-                // DEBUG_MSG("Currently Rx/Tx-ing: set random delay\n");
+                // LOG_DEBUG("Currently Rx/Tx-ing: set random delay\n");
                 setTransmitDelay(); // currently Rx/Tx-ing: reset random delay
             } else {
                 if (isChannelActive()) { // check if there is currently a LoRa packet on the channel
-                    // DEBUG_MSG("Channel is active: set random delay\n");
+                    // LOG_DEBUG("Channel is active: set random delay\n");
                     setTransmitDelay(); // reset random delay
                 } else {
                     // Send any outgoing packets we have ready
@@ -177,7 +177,7 @@ void SimRadio::onNotify(uint32_t notification)
                 }
             }
         } else {
-            // DEBUG_MSG("done with txqueue\n");
+            // LOG_DEBUG("done with txqueue\n");
         }
         break; 
     default:
@@ -194,12 +194,12 @@ void SimRadio::startSend(MeshPacket * txp)
     perhapsDecode(p);
     Compressed c = Compressed_init_default;
     c.portnum = p->decoded.portnum; 
-    // DEBUG_MSG("Sending back to simulator with portNum %d\n", p->decoded.portnum); 
+    // LOG_DEBUG("Sending back to simulator with portNum %d\n", p->decoded.portnum); 
     if (p->decoded.payload.size <= sizeof(c.data.bytes)) {
         memcpy(&c.data.bytes, p->decoded.payload.bytes, p->decoded.payload.size);
         c.data.size = p->decoded.payload.size; 
     } else {
-        DEBUG_MSG("Payload size is larger than compressed message allows! Sending empty payload.\n");
+        LOG_WARN("Payload size is larger than compressed message allows! Sending empty payload.\n");
     }
     p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &Compressed_msg, &c);
     p->decoded.portnum = PortNum_SIMULATOR_APP;
@@ -218,7 +218,7 @@ void SimRadio::startReceive(MeshPacket *p) {
 
 void SimRadio::handleReceiveInterrupt(MeshPacket *p)
 {
-    DEBUG_MSG("HANDLE RECEIVE INTERRUPT\n");
+    LOG_DEBUG("HANDLE RECEIVE INTERRUPT\n");
     uint32_t xmitMsec;
     assert(isReceiving);
     isReceiving = false;
@@ -226,7 +226,7 @@ void SimRadio::handleReceiveInterrupt(MeshPacket *p)
     // read the number of actually received bytes
     size_t length = getPacketLength(p);
     xmitMsec = getPacketTime(length);
-    // DEBUG_MSG("Payload size %d vs length (includes header) %d\n", p->decoded.payload.size, length);
+    // LOG_DEBUG("Payload size %d vs length (includes header) %d\n", p->decoded.payload.size, length);
 
     MeshPacket *mp = packetPool.allocCopy(*p); // keep a copy in packtPool
     mp->which_payload_variant = MeshPacket_decoded_tag; // Mark that the payload is already decoded 

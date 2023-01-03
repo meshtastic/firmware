@@ -276,9 +276,9 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
     } else {
         // otherwise, just display the module frame that's aligned with the current frame
         module_frame = state->currentFrame;
-        // DEBUG_MSG("Screen is not in transition.  Frame: %d\n\n", module_frame);
+        // LOG_DEBUG("Screen is not in transition.  Frame: %d\n\n", module_frame);
     }
-    // DEBUG_MSG("Drawing Module Frame %d\n\n", module_frame);
+    // LOG_DEBUG("Drawing Module Frame %d\n\n", module_frame);
     MeshModule &pi = *moduleFrames.at(module_frame);
     pi.drawFrame(display, state, x, y);
 }
@@ -368,7 +368,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
 
     MeshPacket &mp = devicestate.rx_text_message;
     NodeInfo *node = nodeDB.getNode(getFrom(&mp));
-    // DEBUG_MSG("drawing text message from 0x%x: %s\n", mp.from,
+    // LOG_DEBUG("drawing text message from 0x%x: %s\n", mp.from,
     // mp.decoded.variant.data.decoded.bytes);
 
     // Demo for drawStringMaxWidth:
@@ -376,10 +376,14 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     // be wrapped. Currently only spaces and "-" are allowed for wrapping
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
-    display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-    display->setColor(BLACK);
+    if (config.display.displaymode == Config_DisplayConfig_DisplayMode_INVERTED) {
+        display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+        display->setColor(BLACK);
+    }
     display->drawStringf(0 + x, 0 + y, tempBuf, "From: %s", (node && node->has_user) ? node->user.short_name : "???");
-    display->drawStringf(1 + x, 0 + y, tempBuf, "From: %s", (node && node->has_user) ? node->user.short_name : "???");
+    if(config.display.heading_bold) {
+        display->drawStringf(1 + x, 0 + y, tempBuf, "From: %s", (node && node->has_user) ? node->user.short_name : "???");
+    }
     display->setColor(WHITE);
     snprintf(tempBuf, sizeof(tempBuf), "%s", mp.decoded.payload.bytes);
     display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), tempBuf);
@@ -395,7 +399,7 @@ static void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char *
     int xo = x, yo = y;
     while (*f) {
         display->drawString(xo, yo, *f);
-        if (display->getColor() == BLACK)
+        if ((display->getColor() == BLACK) && config.display.heading_bold)
             display->drawString(xo + 1, yo, *f);
 
         display->setColor(WHITE);
@@ -473,7 +477,8 @@ static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, NodeStatus *no
     display->drawFastImage(x, y, 8, 8, imgUser);
 #endif
     display->drawString(x + 10, y - 2, usersString);
-    display->drawString(x + 11, y - 2, usersString);
+    if(config.display.heading_bold)
+        display->drawString(x + 11, y - 2, usersString);
 }
 
 // Draw GPS status summary
@@ -482,18 +487,21 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
     if (config.position.fixed_position) {
         // GPS coordinates are currently fixed
         display->drawString(x - 1, y - 2, "Fixed GPS");
-        display->drawString(x, y - 2, "Fixed GPS");
+        if(config.display.heading_bold)
+            display->drawString(x, y - 2, "Fixed GPS");
         return;
     }
     if (!gps->getIsConnected()) {
         display->drawString(x, y - 2, "No GPS");
-        display->drawString(x + 1, y - 2, "No GPS");
+        if(config.display.heading_bold)
+            display->drawString(x + 1, y - 2, "No GPS");
         return;
     }
     display->drawFastImage(x, y, 6, 8, gps->getHasLock() ? imgPositionSolid : imgPositionEmpty);
     if (!gps->getHasLock()) {
         display->drawString(x + 8, y - 2, "No sats");
-        display->drawString(x + 9, y - 2, "No sats");
+        if(config.display.heading_bold)
+            display->drawString(x + 9, y - 2, "No sats");
         return;
     } else {
         char satsString[3];
@@ -515,6 +523,8 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
         // Draw the number of satellites
         sprintf(satsString, "%u", gps->getNumSatellites());
         display->drawString(x + 34, y - 2, satsString);
+        if(config.display.heading_bold)
+            display->drawString(x + 35, y - 2, satsString);
     }
 }
 
@@ -697,17 +707,22 @@ static bool hasPosition(NodeInfo *n)
 static uint16_t getCompassDiam(OLEDDisplay *display)
 {
     uint16_t diam = 0;
+    uint16_t offset = 0;
+
+    if (config.display.displaymode != Config_DisplayConfig_DisplayMode_DEFAULT)
+        offset = FONT_HEIGHT_SMALL;
+
     // get the smaller of the 2 dimensions and subtract 20
-    if(display->getWidth() > (display->getHeight() - FONT_HEIGHT_SMALL)) {
-        diam = display->getHeight() - FONT_HEIGHT_SMALL;
+    if(display->getWidth() > (display->getHeight() - offset)) {
+        diam = display->getHeight() - offset;
         // if 2/3 of the other size would be smaller, use that
         if (diam > (display->getWidth() * 2 / 3)) {
             diam = display->getWidth() * 2 / 3;
         }
     } else {
         diam = display->getWidth();
-        if (diam > ((display->getHeight() - FONT_HEIGHT_SMALL) * 2 / 3)) {
-            diam = (display->getHeight() - FONT_HEIGHT_SMALL) * 2 / 3;
+        if (diam > ((display->getHeight() - offset) * 2 / 3)) {
+            diam = (display->getHeight() - offset) * 2 / 3;
         }
     }
     
@@ -787,7 +802,9 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     // The coordinates define the left starting point of the text
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+    if (config.display.displaymode == Config_DisplayConfig_DisplayMode_INVERTED) {
+        display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+    }
 
     const char *username = node->has_user ? node->user.long_name : "Unknown Name";
 
@@ -817,9 +834,16 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     strcpy(distStr, "? km"); // might not have location data
     NodeInfo *ourNode = nodeDB.getNode(nodeDB.getNodeNum());
     const char *fields[] = {username, distStr, signalStr, lastStr, NULL};
+    int16_t compassX = 0, compassY = 0;
 
     // coordinates for the center of the compass/circle
-    int16_t compassX = x + SCREEN_WIDTH - getCompassDiam(display) / 2 - 5, compassY = y + FONT_HEIGHT_SMALL + (SCREEN_HEIGHT - FONT_HEIGHT_SMALL) / 2;
+    if (config.display.displaymode == Config_DisplayConfig_DisplayMode_DEFAULT) {
+        compassX = x + SCREEN_WIDTH - getCompassDiam(display) / 2 - 5;
+        compassY = y + SCREEN_HEIGHT / 2;
+    } else {
+        compassX = x + SCREEN_WIDTH - getCompassDiam(display) / 2 - 5;
+        compassY = y + FONT_HEIGHT_SMALL + (SCREEN_HEIGHT - FONT_HEIGHT_SMALL) / 2;
+    }
     bool hasNodeHeading = false;
 
     if (ourNode && hasPosition(ourNode)) {
@@ -855,14 +879,17 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             drawNodeHeading(display, compassX, compassY, bearingToOther);
         }
     }
-    if (!hasNodeHeading)
+    if (!hasNodeHeading) {
         // direction to node is unknown so display question mark
         // Debug info for gps lock errors
-        // DEBUG_MSG("ourNode %d, ourPos %d, theirPos %d\n", !!ourNode, ourNode && hasPosition(ourNode), hasPosition(node));
+        // LOG_DEBUG("ourNode %d, ourPos %d, theirPos %d\n", !!ourNode, ourNode && hasPosition(ourNode), hasPosition(node));
         display->drawString(compassX - FONT_HEIGHT_SMALL / 4, compassY - FONT_HEIGHT_SMALL / 2, "?");
+    }
     display->drawCircle(compassX, compassY, getCompassDiam(display) / 2);
 
-    display->setColor(BLACK);
+    if (config.display.displaymode == Config_DisplayConfig_DisplayMode_INVERTED) {
+        display->setColor(BLACK);
+    }
     // Must be after distStr is populated
     drawColumns(display, x, y, fields);
 }
@@ -909,14 +936,14 @@ void Screen::handleSetOn(bool on)
 
     if (on != screenOn) {
         if (on) {
-            DEBUG_MSG("Turning on screen\n");
+            LOG_INFO("Turning on screen\n");
             dispdev.displayOn();
             dispdev.displayOn();
             enabled = true;
             setInterval(0); // Draw ASAP
             runASAP = true;
         } else {
-            DEBUG_MSG("Turning off screen\n");
+            LOG_INFO("Turning off screen\n");
             dispdev.displayOff();
             enabled = false;
         }
@@ -1029,7 +1056,7 @@ int32_t Screen::runOnce()
     // serialSinceMsec adjusts for additional serial wait time during nRF52 bootup
     static bool showingBootScreen = true;
     if (showingBootScreen && (millis() > (logo_timeout + serialSinceMsec))) {
-        DEBUG_MSG("Done with boot screen...\n");
+        LOG_INFO("Done with boot screen...\n");
         stopBootScreen();
         showingBootScreen = false;
     }
@@ -1038,7 +1065,7 @@ int32_t Screen::runOnce()
     if (strlen(oemStore.oem_text) > 0) {
         static bool showingOEMBootScreen = true;
         if (showingOEMBootScreen && (millis() > ((logo_timeout / 2) + serialSinceMsec))) {
-            DEBUG_MSG("Switch to OEM screen...\n");
+            LOG_INFO("Switch to OEM screen...\n");
             // Change frames.
             static FrameCallback bootOEMFrames[] = {drawOEMBootScreen};
             static const int bootOEMFrameCount = sizeof(bootOEMFrames) / sizeof(bootOEMFrames[0]);
@@ -1100,7 +1127,7 @@ int32_t Screen::runOnce()
             handleRebootScreen();
             break;
         default:
-            DEBUG_MSG("BUG: invalid cmd\n");
+            LOG_ERROR("Invalid screen cmd\n");
         }
     }
 
@@ -1131,12 +1158,12 @@ int32_t Screen::runOnce()
         // standard screen loop handling here
         if (config.display.auto_screen_carousel_secs > 0 &&
             (millis() - lastScreenTransition) > (config.display.auto_screen_carousel_secs * 1000)) {
-            DEBUG_MSG("LastScreenTransition exceeded %ums transitioning to next frame\n", (millis() - lastScreenTransition));
+            LOG_DEBUG("LastScreenTransition exceeded %ums transitioning to next frame\n", (millis() - lastScreenTransition));
             handleOnPress();
         }
     }
 
-    // DEBUG_MSG("want fps %d, fixed=%d\n", targetFramerate,
+    // LOG_DEBUG("want fps %d, fixed=%d\n", targetFramerate,
     // ui.getUiState()->frameState); If we are scrolling we need to be called
     // soon, otherwise just 1 fps (to save CPU) We also ask to be called twice
     // as fast as we really need so that any rounding errors still result with
@@ -1167,7 +1194,7 @@ void Screen::drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiStat
 void Screen::setSSLFrames()
 {
     if (address_found) {
-        // DEBUG_MSG("showing SSL frames\n");
+        // LOG_DEBUG("showing SSL frames\n");
         static FrameCallback sslFrames[] = {drawSSLScreen};
         ui.setFrames(sslFrames, 1);
         ui.update();
@@ -1179,7 +1206,7 @@ void Screen::setSSLFrames()
 void Screen::setWelcomeFrames()
 {
     if (address_found) {
-        // DEBUG_MSG("showing Welcome frames\n");
+        // LOG_DEBUG("showing Welcome frames\n");
         ui.disableAllIndicators();
 
         static FrameCallback welcomeFrames[] = {drawWelcomeScreen};
@@ -1191,13 +1218,13 @@ void Screen::setWelcomeFrames()
 // restore our regular frame list
 void Screen::setFrames()
 {
-    DEBUG_MSG("showing standard frames\n");
+    LOG_DEBUG("showing standard frames\n");
     showingNormalScreen = true;
 
     moduleFrames = MeshModule::GetMeshModulesWithUIFrames();
-    DEBUG_MSG("Showing %d module frames\n", moduleFrames.size());
+    LOG_DEBUG("Showing %d module frames\n", moduleFrames.size());
     int totalFrameCount = MAX_NUM_NODES + NUM_EXTRA_FRAMES + moduleFrames.size();
-    DEBUG_MSG("Total frame count: %d\n", totalFrameCount);
+    LOG_DEBUG("Total frame count: %d\n", totalFrameCount);
 
     // We don't show the node info our our node (if we have it yet - we should)
     size_t numnodes = nodeStatus->getNumTotal();
@@ -1216,7 +1243,7 @@ void Screen::setFrames()
         normalFrames[numframes++] = drawModuleFrame;
     }
 
-    DEBUG_MSG("Added modules.  numframes: %d\n", numframes);
+    LOG_DEBUG("Added modules.  numframes: %d\n", numframes);
 
     // If we have a critical fault, show it first
     if (myNodeInfo.error_code)
@@ -1249,7 +1276,7 @@ void Screen::setFrames()
     }
 #endif
 
-    DEBUG_MSG("Finished building frames. numframes: %d\n", numframes);
+    LOG_DEBUG("Finished building frames. numframes: %d\n", numframes);
 
     ui.setFrames(normalFrames, numframes);
     ui.enableAllIndicators();
@@ -1262,7 +1289,7 @@ void Screen::setFrames()
 
 void Screen::handleStartBluetoothPinScreen(uint32_t pin)
 {
-    DEBUG_MSG("showing bluetooth screen\n");
+    LOG_DEBUG("showing bluetooth screen\n");
     showingNormalScreen = false;
 
     static FrameCallback btFrames[] = {drawFrameBluetooth};
@@ -1276,7 +1303,7 @@ void Screen::handleStartBluetoothPinScreen(uint32_t pin)
 
 void Screen::handleShutdownScreen()
 {
-    DEBUG_MSG("showing shutdown screen\n");
+    LOG_DEBUG("showing shutdown screen\n");
     showingNormalScreen = false;
 
     static FrameCallback shutdownFrames[] = {drawFrameShutdown};
@@ -1288,7 +1315,7 @@ void Screen::handleShutdownScreen()
 
 void Screen::handleRebootScreen()
 {
-    DEBUG_MSG("showing reboot screen\n");
+    LOG_DEBUG("showing reboot screen\n");
     showingNormalScreen = false;
 
     static FrameCallback rebootFrames[] = {drawFrameReboot};
@@ -1300,7 +1327,7 @@ void Screen::handleRebootScreen()
 
 void Screen::handleStartFirmwareUpdateScreen()
 {
-    DEBUG_MSG("showing firmware screen\n");
+    LOG_DEBUG("showing firmware screen\n");
     showingNormalScreen = false;
 
     static FrameCallback btFrames[] = {drawFrameFirmware};
@@ -1331,7 +1358,7 @@ void Screen::handlePrint(const char *text)
 {
     // the string passed into us probably has a newline, but that would confuse the logging system
     // so strip it
-    DEBUG_MSG("Screen: %.*s\n", strlen(text) - 1, text);
+    LOG_DEBUG("Screen: %.*s\n", strlen(text) - 1, text);
     if (!useDisplay || !showingNormalScreen)
         return;
 
@@ -1372,8 +1399,10 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     // The coordinates define the left starting point of the text
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-    display->setColor(BLACK);
+    if (config.display.displaymode == Config_DisplayConfig_DisplayMode_INVERTED) {
+        display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+        display->setColor(BLACK);
+    }
 
     char channelStr[20];
     {
@@ -1383,12 +1412,25 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
 
     // Display power status
-    if (powerStatus->getHasBattery())
-        drawBattery(display, x + 1, y + 3, imgBattery, powerStatus);
-    else if (powerStatus->knowsUSB())
-        display->drawFastImage(x + 1, y + 3, 16, 8, powerStatus->getHasUSB() ? imgUSB : imgPower);
+    if (powerStatus->getHasBattery()) {
+        if (config.display.displaymode == Config_DisplayConfig_DisplayMode_DEFAULT) {
+            drawBattery(display, x , y + 2, imgBattery, powerStatus);
+        } else {
+            drawBattery(display, x + 1, y + 3, imgBattery, powerStatus);
+        }
+    } else if (powerStatus->knowsUSB()) {
+        if (config.display.displaymode == Config_DisplayConfig_DisplayMode_DEFAULT) {
+            display->drawFastImage(x, y + 2, 16, 8, powerStatus->getHasUSB() ? imgUSB : imgPower);
+        } else {
+            display->drawFastImage(x + 1, y + 3, 16, 8, powerStatus->getHasUSB() ? imgUSB : imgPower);
+        }
+    }
     // Display nodes status
-    drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 3, nodeStatus);
+    if (config.display.displaymode == Config_DisplayConfig_DisplayMode_DEFAULT) {
+        drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 2, nodeStatus);
+    } else {
+        drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 3, nodeStatus);
+    }
     // Display GPS status
     if (!config.position.gps_enabled){
         int16_t yPos = y + 2;
@@ -1397,8 +1439,11 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 #endif
         drawGPSpowerstat(display, x, yPos, gpsStatus);
     } else {
-        drawGPS(display, x + (SCREEN_WIDTH * 0.63), y + 2, gpsStatus);
-        drawGPS(display, x + (SCREEN_WIDTH * 0.63), y + 3, gpsStatus);
+        if (config.display.displaymode == Config_DisplayConfig_DisplayMode_DEFAULT) {
+            drawGPS(display, x + (SCREEN_WIDTH * 0.63), y + 2, gpsStatus);
+        } else {
+            drawGPS(display, x + (SCREEN_WIDTH * 0.63), y + 3, gpsStatus);
+        }
     }
 
     display->setColor(WHITE);
@@ -1458,23 +1503,29 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
     // The coordinates define the left starting point of the text
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-    display->setColor(BLACK);
+    if (config.display.displaymode == Config_DisplayConfig_DisplayMode_INVERTED) {
+        display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+        display->setColor(BLACK);
+    }
 
     if (WiFi.status() != WL_CONNECTED) {
         display->drawString(x, y, String("WiFi: Not Connected"));
-        display->drawString(x + 1, y, String("WiFi: Not Connected"));
+        if(config.display.heading_bold)
+            display->drawString(x + 1, y, String("WiFi: Not Connected"));
     } else {
         display->drawString(x, y, String("WiFi: Connected"));
-        display->drawString(x + 1, y, String("WiFi: Connected"));
+        if(config.display.heading_bold)
+            display->drawString(x + 1, y, String("WiFi: Connected"));
 
         display->drawString(x + SCREEN_WIDTH - display->getStringWidth("RSSI " + String(WiFi.RSSI())), y,
                             "RSSI " + String(WiFi.RSSI()));
-        display->drawString(x + SCREEN_WIDTH - display->getStringWidth("RSSI " + String(WiFi.RSSI())) - 1, y,
-                            "RSSI " + String(WiFi.RSSI()));
+        if(config.display.heading_bold) {
+            display->drawString(x + SCREEN_WIDTH - display->getStringWidth("RSSI " + String(WiFi.RSSI())) - 1, y,
+                                "RSSI " + String(WiFi.RSSI()));
+        }
     }
 
-        display->setColor(WHITE);
+    display->setColor(WHITE);
 
     /*
     - WL_CONNECTED: assigned when connected to a WiFi network;
@@ -1584,8 +1635,10 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     // The coordinates define the left starting point of the text
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
-    display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-    display->setColor(BLACK);
+    if (config.display.displaymode == Config_DisplayConfig_DisplayMode_INVERTED) {
+        display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+        display->setColor(BLACK);
+    }
 
     char batStr[20];
     if (powerStatus->getHasBattery()) {
@@ -1597,11 +1650,13 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 
         // Line 1
         display->drawString(x, y, batStr);
-        display->drawString(x + 1, y, batStr);
+        if(config.display.heading_bold)
+            display->drawString(x + 1, y, batStr);
     } else {
         // Line 1
         display->drawString(x, y, String("USB"));
-        display->drawString(x + 1, y, String("USB"));
+        if(config.display.heading_bold)
+            display->drawString(x + 1, y, String("USB"));
     }
 
     auto mode = "";
@@ -1634,7 +1689,8 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     }
 
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(mode), y, mode);
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(mode) - 1, y, mode);
+    if(config.display.heading_bold)
+        display->drawString(x + SCREEN_WIDTH - display->getStringWidth(mode) - 1, y, mode);
 
     // Line 2
     uint32_t currentMillis = millis();
@@ -1722,7 +1778,7 @@ void Screen::adjustBrightness()
 
 int Screen::handleStatusUpdate(const meshtastic::Status *arg)
 {
-    // DEBUG_MSG("Screen got status update %d\n", arg->getStatusType());
+    // LOG_DEBUG("Screen got status update %d\n", arg->getStatusType());
     switch (arg->getStatusType()) {
     case STATUS_TYPE_NODE:
         if (showingNormalScreen && nodeStatus->getLastNumTotal() != nodeStatus->getNumTotal()) {

@@ -27,7 +27,7 @@ class CrossPlatformCryptoEngine : public CryptoEngine
     virtual void setKey(const CryptoKey &k) override
     {
         CryptoEngine::setKey(k);
-        DEBUG_MSG("Installing AES%d key!\n", key.length * 8);
+        LOG_DEBUG("Installing AES%d key!\n", key.length * 8);
         if (ctr) {
             delete ctr;
             ctr = NULL;
@@ -54,7 +54,7 @@ class CrossPlatformCryptoEngine : public CryptoEngine
             static uint8_t scratch[MAX_BLOCKSIZE];
             //size_t nc_off = 0;
 
-            // DEBUG_MSG("ESP32 encrypt!\n");
+            // LOG_DEBUG("ESP32 encrypt!\n");
             initNonce(fromNode, packetId);
             assert(numBytes <= MAX_BLOCKSIZE);
             memcpy(scratch, bytes, numBytes);

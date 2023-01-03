@@ -67,7 +67,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
     if (!(moduleConfig.telemetry.environment_measurement_enabled ||
           moduleConfig.telemetry.environment_screen_enabled)) {
         // If this module is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
-        return result;
+        return disable();
     }
 
     if (firstTime) {
@@ -75,7 +75,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
         firstTime = 0;
 
         if (moduleConfig.telemetry.environment_measurement_enabled) {
-            DEBUG_MSG("Environment Telemetry: Initializing\n");
+            LOG_INFO("Environment Telemetry: Initializing\n");
             // it's possible to have this module enabled, only for displaying values on the screen.
             // therefore, we should only enable the sensor loop if measurement is also enabled
             if (bmp280Sensor.hasSensor()) 
@@ -162,7 +162,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, &Telemetry_msg, &lastMeasurement)) {
         display->setFont(FONT_SMALL);
         display->drawString(x, y += fontHeight(FONT_MEDIUM), "Measurement Error");
-        DEBUG_MSG("Unable to decode last packet");
+        LOG_ERROR("Unable to decode last packet");
         return;
     }
 
@@ -187,7 +187,7 @@ bool EnvironmentTelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Te
     if (t->which_variant == Telemetry_environment_metrics_tag) {
         const char *sender = getSenderShortName(mp);
 
-        DEBUG_MSG("(Received from %s): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f, voltage=%f\n",
+        LOG_INFO("(Received from %s): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f, voltage=%f\n",
             sender,
             t->variant.environment_metrics.barometric_pressure,
             t->variant.environment_metrics.current,
@@ -234,7 +234,7 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     if (ina260Sensor.hasSensor())
         ina260Sensor.getMetrics(&m);
 
-   DEBUG_MSG("(Sending): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f, voltage=%f\n",
+   LOG_INFO("(Sending): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f, voltage=%f\n",
         m.variant.environment_metrics.barometric_pressure,
         m.variant.environment_metrics.current,
         m.variant.environment_metrics.gas_resistance,
@@ -251,10 +251,10 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 
     lastMeasurementPacket = packetPool.allocCopy(*p);
     if (phoneOnly) {
-        DEBUG_MSG("Sending packet to phone\n");
+        LOG_INFO("Sending packet to phone\n");
         service.sendToPhone(p);
     } else {
-        DEBUG_MSG("Sending packet to mesh\n");
+        LOG_INFO("Sending packet to mesh\n");
         service.sendToMesh(p, RX_SRC_LOCAL, true);
     }
     return true;

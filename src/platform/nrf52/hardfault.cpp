@@ -5,7 +5,7 @@
 
 enum { r0, r1, r2, r3, r12, lr, pc, psr };
 
-// we can't use the regular DEBUG_MSG for these crash dumps because it depends on threading still being running.  Instead use the
+// we can't use the regular LOG_DEBUG for these crash dumps because it depends on threading still being running.  Instead use the
 // segger in memory tool
 #define FAULT_MSG(...) SEGGER_MSG(__VA_ARGS__)
 

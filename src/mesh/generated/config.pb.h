@@ -60,12 +60,12 @@ typedef enum _Config_PositionConfig_PositionFlags {
     Config_PositionConfig_PositionFlags_SPEED = 512
 } Config_PositionConfig_PositionFlags;
 
-typedef enum _Config_NetworkConfig_EthMode {
+typedef enum _Config_NetworkConfig_AddressMode {
     /* obtain ip address via DHCP */
-    Config_NetworkConfig_EthMode_DHCP = 0,
+    Config_NetworkConfig_AddressMode_DHCP = 0,
     /* use static ip address */
-    Config_NetworkConfig_EthMode_STATIC = 1
-} Config_NetworkConfig_EthMode;
+    Config_NetworkConfig_AddressMode_STATIC = 1
+} Config_NetworkConfig_AddressMode;
 
 /* How the GPS coordinates are displayed on the OLED screen. */
 typedef enum _Config_DisplayConfig_GpsCoordinateFormat {
@@ -107,6 +107,17 @@ typedef enum _Config_DisplayConfig_OledType {
     /* Default / Auto */
     Config_DisplayConfig_OledType_OLED_SH1106 = 2
 } Config_DisplayConfig_OledType;
+
+typedef enum _Config_DisplayConfig_DisplayMode {
+    /* Default. The old style for the 128x64 OLED screen */
+    Config_DisplayConfig_DisplayMode_DEFAULT = 0,
+    /* Rearrange display elements to cater for bicolor OLED displays */
+    Config_DisplayConfig_DisplayMode_TWOCOLOR = 1,
+    /* Same as TwoColor, but with inverted top bar. Not so good for Epaper displays */
+    Config_DisplayConfig_DisplayMode_INVERTED = 2,
+    /* TFT Full Color Displays (not implemented yet) */
+    Config_DisplayConfig_DisplayMode_COLOR = 3
+} Config_DisplayConfig_DisplayMode;
 
 typedef enum _Config_LoRaConfig_RegionCode {
     /* Region is not set */
@@ -281,7 +292,7 @@ typedef struct _Config_NetworkConfig {
     /* Enable Ethernet */
     bool eth_enabled;
     /* acquire an address via DHCP or assign static */
-    Config_NetworkConfig_EthMode eth_mode;
+    Config_NetworkConfig_AddressMode address_mode;
     /* struct to keep static address */
     bool has_ipv4_config;
     Config_NetworkConfig_IpV4Config ipv4_config;
@@ -306,6 +317,10 @@ typedef struct _Config_DisplayConfig {
     Config_DisplayConfig_DisplayUnits units;
     /* Override auto-detect in screen */
     Config_DisplayConfig_OledType oled;
+    /* Display Mode */
+    Config_DisplayConfig_DisplayMode displaymode;
+    /* Print first line in pseudo-bold? FALSE is original style, TRUE is bold */
+    bool heading_bold;
 } Config_DisplayConfig;
 
 /* Lora Config */
@@ -401,9 +416,9 @@ extern "C" {
 #define _Config_PositionConfig_PositionFlags_MAX Config_PositionConfig_PositionFlags_SPEED
 #define _Config_PositionConfig_PositionFlags_ARRAYSIZE ((Config_PositionConfig_PositionFlags)(Config_PositionConfig_PositionFlags_SPEED+1))
 
-#define _Config_NetworkConfig_EthMode_MIN Config_NetworkConfig_EthMode_DHCP
-#define _Config_NetworkConfig_EthMode_MAX Config_NetworkConfig_EthMode_STATIC
-#define _Config_NetworkConfig_EthMode_ARRAYSIZE ((Config_NetworkConfig_EthMode)(Config_NetworkConfig_EthMode_STATIC+1))
+#define _Config_NetworkConfig_AddressMode_MIN Config_NetworkConfig_AddressMode_DHCP
+#define _Config_NetworkConfig_AddressMode_MAX Config_NetworkConfig_AddressMode_STATIC
+#define _Config_NetworkConfig_AddressMode_ARRAYSIZE ((Config_NetworkConfig_AddressMode)(Config_NetworkConfig_AddressMode_STATIC+1))
 
 #define _Config_DisplayConfig_GpsCoordinateFormat_MIN Config_DisplayConfig_GpsCoordinateFormat_DEC
 #define _Config_DisplayConfig_GpsCoordinateFormat_MAX Config_DisplayConfig_GpsCoordinateFormat_OSGR
@@ -416,6 +431,10 @@ extern "C" {
 #define _Config_DisplayConfig_OledType_MIN Config_DisplayConfig_OledType_OLED_AUTO
 #define _Config_DisplayConfig_OledType_MAX Config_DisplayConfig_OledType_OLED_SH1106
 #define _Config_DisplayConfig_OledType_ARRAYSIZE ((Config_DisplayConfig_OledType)(Config_DisplayConfig_OledType_OLED_SH1106+1))
+
+#define _Config_DisplayConfig_DisplayMode_MIN Config_DisplayConfig_DisplayMode_DEFAULT
+#define _Config_DisplayConfig_DisplayMode_MAX Config_DisplayConfig_DisplayMode_COLOR
+#define _Config_DisplayConfig_DisplayMode_ARRAYSIZE ((Config_DisplayConfig_DisplayMode)(Config_DisplayConfig_DisplayMode_COLOR+1))
 
 #define _Config_LoRaConfig_RegionCode_MIN Config_LoRaConfig_RegionCode_UNSET
 #define _Config_LoRaConfig_RegionCode_MAX Config_LoRaConfig_RegionCode_LORA_24
@@ -434,12 +453,13 @@ extern "C" {
 
 
 
-#define Config_NetworkConfig_eth_mode_ENUMTYPE Config_NetworkConfig_EthMode
+#define Config_NetworkConfig_address_mode_ENUMTYPE Config_NetworkConfig_AddressMode
 
 
 #define Config_DisplayConfig_gps_format_ENUMTYPE Config_DisplayConfig_GpsCoordinateFormat
 #define Config_DisplayConfig_units_ENUMTYPE Config_DisplayConfig_DisplayUnits
 #define Config_DisplayConfig_oled_ENUMTYPE Config_DisplayConfig_OledType
+#define Config_DisplayConfig_displaymode_ENUMTYPE Config_DisplayConfig_DisplayMode
 
 #define Config_LoRaConfig_modem_preset_ENUMTYPE Config_LoRaConfig_ModemPreset
 #define Config_LoRaConfig_region_ENUMTYPE Config_LoRaConfig_RegionCode
@@ -452,18 +472,18 @@ extern "C" {
 #define Config_DeviceConfig_init_default         {_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0}
 #define Config_PositionConfig_init_default       {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_default          {0, 0, 0, 0, 0, 0, 0, 0}
-#define Config_NetworkConfig_init_default        {0, "", "", "", 0, _Config_NetworkConfig_EthMode_MIN, false, Config_NetworkConfig_IpV4Config_init_default}
+#define Config_NetworkConfig_init_default        {0, "", "", "", 0, _Config_NetworkConfig_AddressMode_MIN, false, Config_NetworkConfig_IpV4Config_init_default}
 #define Config_NetworkConfig_IpV4Config_init_default {0, 0, 0, 0}
-#define Config_DisplayConfig_init_default        {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _Config_DisplayConfig_DisplayUnits_MIN, _Config_DisplayConfig_OledType_MIN}
+#define Config_DisplayConfig_init_default        {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _Config_DisplayConfig_DisplayUnits_MIN, _Config_DisplayConfig_OledType_MIN, _Config_DisplayConfig_DisplayMode_MIN, 0}
 #define Config_LoRaConfig_init_default           {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, {0, 0, 0}}
 #define Config_BluetoothConfig_init_default      {0, _Config_BluetoothConfig_PairingMode_MIN, 0}
 #define Config_init_zero                         {0, {Config_DeviceConfig_init_zero}}
 #define Config_DeviceConfig_init_zero            {_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0}
 #define Config_PositionConfig_init_zero          {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_zero             {0, 0, 0, 0, 0, 0, 0, 0}
-#define Config_NetworkConfig_init_zero           {0, "", "", "", 0, _Config_NetworkConfig_EthMode_MIN, false, Config_NetworkConfig_IpV4Config_init_zero}
+#define Config_NetworkConfig_init_zero           {0, "", "", "", 0, _Config_NetworkConfig_AddressMode_MIN, false, Config_NetworkConfig_IpV4Config_init_zero}
 #define Config_NetworkConfig_IpV4Config_init_zero {0, 0, 0, 0}
-#define Config_DisplayConfig_init_zero           {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _Config_DisplayConfig_DisplayUnits_MIN, _Config_DisplayConfig_OledType_MIN}
+#define Config_DisplayConfig_init_zero           {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _Config_DisplayConfig_DisplayUnits_MIN, _Config_DisplayConfig_OledType_MIN, _Config_DisplayConfig_DisplayMode_MIN, 0}
 #define Config_LoRaConfig_init_zero              {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, {0, 0, 0}}
 #define Config_BluetoothConfig_init_zero         {0, _Config_BluetoothConfig_PairingMode_MIN, 0}
 
@@ -499,7 +519,7 @@ extern "C" {
 #define Config_NetworkConfig_wifi_psk_tag        4
 #define Config_NetworkConfig_ntp_server_tag      5
 #define Config_NetworkConfig_eth_enabled_tag     6
-#define Config_NetworkConfig_eth_mode_tag        7
+#define Config_NetworkConfig_address_mode_tag    7
 #define Config_NetworkConfig_ipv4_config_tag     8
 #define Config_DisplayConfig_screen_on_secs_tag  1
 #define Config_DisplayConfig_gps_format_tag      2
@@ -508,6 +528,8 @@ extern "C" {
 #define Config_DisplayConfig_flip_screen_tag     5
 #define Config_DisplayConfig_units_tag           6
 #define Config_DisplayConfig_oled_tag            7
+#define Config_DisplayConfig_displaymode_tag     8
+#define Config_DisplayConfig_heading_bold_tag    9
 #define Config_LoRaConfig_use_preset_tag         1
 #define Config_LoRaConfig_modem_preset_tag       2
 #define Config_LoRaConfig_bandwidth_tag          3
@@ -591,7 +613,7 @@ X(a, STATIC,   SINGULAR, STRING,   wifi_ssid,         3) \
 X(a, STATIC,   SINGULAR, STRING,   wifi_psk,          4) \
 X(a, STATIC,   SINGULAR, STRING,   ntp_server,        5) \
 X(a, STATIC,   SINGULAR, BOOL,     eth_enabled,       6) \
-X(a, STATIC,   SINGULAR, UENUM,    eth_mode,          7) \
+X(a, STATIC,   SINGULAR, UENUM,    address_mode,      7) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  ipv4_config,       8)
 #define Config_NetworkConfig_CALLBACK NULL
 #define Config_NetworkConfig_DEFAULT NULL
@@ -612,7 +634,9 @@ X(a, STATIC,   SINGULAR, UINT32,   auto_screen_carousel_secs,   3) \
 X(a, STATIC,   SINGULAR, BOOL,     compass_north_top,   4) \
 X(a, STATIC,   SINGULAR, BOOL,     flip_screen,       5) \
 X(a, STATIC,   SINGULAR, UENUM,    units,             6) \
-X(a, STATIC,   SINGULAR, UENUM,    oled,              7)
+X(a, STATIC,   SINGULAR, UENUM,    oled,              7) \
+X(a, STATIC,   SINGULAR, UENUM,    displaymode,       8) \
+X(a, STATIC,   SINGULAR, BOOL,     heading_bold,      9)
 #define Config_DisplayConfig_CALLBACK NULL
 #define Config_DisplayConfig_DEFAULT NULL
 
@@ -664,7 +688,7 @@ extern const pb_msgdesc_t Config_BluetoothConfig_msg;
 /* Maximum encoded size of messages (where known) */
 #define Config_BluetoothConfig_size              10
 #define Config_DeviceConfig_size                 18
-#define Config_DisplayConfig_size                22
+#define Config_DisplayConfig_size                26
 #define Config_LoRaConfig_size                   70
 #define Config_NetworkConfig_IpV4Config_size     20
 #define Config_NetworkConfig_size                161

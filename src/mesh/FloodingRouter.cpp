@@ -32,7 +32,7 @@ void FloodingRouter::sniffReceived(const MeshPacket *p, const Routing *c)
     bool isAck = ((c && c->error_reason == Routing_Error_NONE)); // consider only ROUTING_APP message without error as ACK
     if (isAck && p->to != getNodeNum()) {
         // do not flood direct message that is ACKed 
-        DEBUG_MSG("Receiving an ACK not for me, but don't need to rebroadcast this direct message anymore.\n");
+        LOG_DEBUG("Receiving an ACK not for me, but don't need to rebroadcast this direct message anymore.\n");
         Router::cancelSending(p->to, p->decoded.request_id);   // cancel rebroadcast for this DM
     } 
     if ((p->to != getNodeNum()) && (p->hop_limit > 0) && (getFrom(p) != getNodeNum())) {
@@ -47,17 +47,17 @@ void FloodingRouter::sniffReceived(const MeshPacket *p, const Routing *c)
                     traceRouteModule->updateRoute(tosend);
                 }
 
-                printPacket("Rebroadcasting received floodmsg to neighbors", p);
+                LOG_INFO("Rebroadcasting received floodmsg to neighbors", p);
                 // Note: we are careful to resend using the original senders node id
                 // We are careful not to call our hooked version of send() - because we don't want to check this again
                 Router::send(tosend);
 
             } else {
-                DEBUG_MSG("Not rebroadcasting. Role = Role_ClientMute\n");
+                LOG_DEBUG("Not rebroadcasting. Role = Role_ClientMute\n");
             }
 
         } else {
-            DEBUG_MSG("Ignoring a simple (0 id) broadcast\n");
+            LOG_DEBUG("Ignoring a simple (0 id) broadcast\n");
         }
     }
 
