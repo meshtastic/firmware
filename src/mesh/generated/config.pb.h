@@ -60,12 +60,12 @@ typedef enum _Config_PositionConfig_PositionFlags {
     Config_PositionConfig_PositionFlags_SPEED = 512
 } Config_PositionConfig_PositionFlags;
 
-typedef enum _Config_NetworkConfig_EthMode {
+typedef enum _Config_NetworkConfig_AddressMode {
     /* obtain ip address via DHCP */
-    Config_NetworkConfig_EthMode_DHCP = 0,
+    Config_NetworkConfig_AddressMode_DHCP = 0,
     /* use static ip address */
-    Config_NetworkConfig_EthMode_STATIC = 1
-} Config_NetworkConfig_EthMode;
+    Config_NetworkConfig_AddressMode_STATIC = 1
+} Config_NetworkConfig_AddressMode;
 
 /* How the GPS coordinates are displayed on the OLED screen. */
 typedef enum _Config_DisplayConfig_GpsCoordinateFormat {
@@ -292,7 +292,7 @@ typedef struct _Config_NetworkConfig {
     /* Enable Ethernet */
     bool eth_enabled;
     /* acquire an address via DHCP or assign static */
-    Config_NetworkConfig_EthMode eth_mode;
+    Config_NetworkConfig_AddressMode address_mode;
     /* struct to keep static address */
     bool has_ipv4_config;
     Config_NetworkConfig_IpV4Config ipv4_config;
@@ -416,9 +416,9 @@ extern "C" {
 #define _Config_PositionConfig_PositionFlags_MAX Config_PositionConfig_PositionFlags_SPEED
 #define _Config_PositionConfig_PositionFlags_ARRAYSIZE ((Config_PositionConfig_PositionFlags)(Config_PositionConfig_PositionFlags_SPEED+1))
 
-#define _Config_NetworkConfig_EthMode_MIN Config_NetworkConfig_EthMode_DHCP
-#define _Config_NetworkConfig_EthMode_MAX Config_NetworkConfig_EthMode_STATIC
-#define _Config_NetworkConfig_EthMode_ARRAYSIZE ((Config_NetworkConfig_EthMode)(Config_NetworkConfig_EthMode_STATIC+1))
+#define _Config_NetworkConfig_AddressMode_MIN Config_NetworkConfig_AddressMode_DHCP
+#define _Config_NetworkConfig_AddressMode_MAX Config_NetworkConfig_AddressMode_STATIC
+#define _Config_NetworkConfig_AddressMode_ARRAYSIZE ((Config_NetworkConfig_AddressMode)(Config_NetworkConfig_AddressMode_STATIC+1))
 
 #define _Config_DisplayConfig_GpsCoordinateFormat_MIN Config_DisplayConfig_GpsCoordinateFormat_DEC
 #define _Config_DisplayConfig_GpsCoordinateFormat_MAX Config_DisplayConfig_GpsCoordinateFormat_OSGR
@@ -453,7 +453,7 @@ extern "C" {
 
 
 
-#define Config_NetworkConfig_eth_mode_ENUMTYPE Config_NetworkConfig_EthMode
+#define Config_NetworkConfig_address_mode_ENUMTYPE Config_NetworkConfig_AddressMode
 
 
 #define Config_DisplayConfig_gps_format_ENUMTYPE Config_DisplayConfig_GpsCoordinateFormat
@@ -472,7 +472,7 @@ extern "C" {
 #define Config_DeviceConfig_init_default         {_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0}
 #define Config_PositionConfig_init_default       {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_default          {0, 0, 0, 0, 0, 0, 0, 0}
-#define Config_NetworkConfig_init_default        {0, "", "", "", 0, _Config_NetworkConfig_EthMode_MIN, false, Config_NetworkConfig_IpV4Config_init_default}
+#define Config_NetworkConfig_init_default        {0, "", "", "", 0, _Config_NetworkConfig_AddressMode_MIN, false, Config_NetworkConfig_IpV4Config_init_default}
 #define Config_NetworkConfig_IpV4Config_init_default {0, 0, 0, 0}
 #define Config_DisplayConfig_init_default        {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _Config_DisplayConfig_DisplayUnits_MIN, _Config_DisplayConfig_OledType_MIN, _Config_DisplayConfig_DisplayMode_MIN, 0}
 #define Config_LoRaConfig_init_default           {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, {0, 0, 0}}
@@ -481,7 +481,7 @@ extern "C" {
 #define Config_DeviceConfig_init_zero            {_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0}
 #define Config_PositionConfig_init_zero          {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_zero             {0, 0, 0, 0, 0, 0, 0, 0}
-#define Config_NetworkConfig_init_zero           {0, "", "", "", 0, _Config_NetworkConfig_EthMode_MIN, false, Config_NetworkConfig_IpV4Config_init_zero}
+#define Config_NetworkConfig_init_zero           {0, "", "", "", 0, _Config_NetworkConfig_AddressMode_MIN, false, Config_NetworkConfig_IpV4Config_init_zero}
 #define Config_NetworkConfig_IpV4Config_init_zero {0, 0, 0, 0}
 #define Config_DisplayConfig_init_zero           {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _Config_DisplayConfig_DisplayUnits_MIN, _Config_DisplayConfig_OledType_MIN, _Config_DisplayConfig_DisplayMode_MIN, 0}
 #define Config_LoRaConfig_init_zero              {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, {0, 0, 0}}
@@ -519,7 +519,7 @@ extern "C" {
 #define Config_NetworkConfig_wifi_psk_tag        4
 #define Config_NetworkConfig_ntp_server_tag      5
 #define Config_NetworkConfig_eth_enabled_tag     6
-#define Config_NetworkConfig_eth_mode_tag        7
+#define Config_NetworkConfig_address_mode_tag    7
 #define Config_NetworkConfig_ipv4_config_tag     8
 #define Config_DisplayConfig_screen_on_secs_tag  1
 #define Config_DisplayConfig_gps_format_tag      2
@@ -613,7 +613,7 @@ X(a, STATIC,   SINGULAR, STRING,   wifi_ssid,         3) \
 X(a, STATIC,   SINGULAR, STRING,   wifi_psk,          4) \
 X(a, STATIC,   SINGULAR, STRING,   ntp_server,        5) \
 X(a, STATIC,   SINGULAR, BOOL,     eth_enabled,       6) \
-X(a, STATIC,   SINGULAR, UENUM,    eth_mode,          7) \
+X(a, STATIC,   SINGULAR, UENUM,    address_mode,      7) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  ipv4_config,       8)
 #define Config_NetworkConfig_CALLBACK NULL
 #define Config_NetworkConfig_DEFAULT NULL
