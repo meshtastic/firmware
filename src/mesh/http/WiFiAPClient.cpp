@@ -169,7 +169,7 @@ bool initWifi()
             WiFi.onEvent(WiFiEvent);
             WiFi.setAutoReconnect(false);
             WiFi.setSleep(false);
-            if (config.network.eth_mode == Config_NetworkConfig_EthMode_STATIC && config.network.ipv4_config.ip != 0) {
+            if (config.network.address_mode == Config_NetworkConfig_AddressMode_STATIC && config.network.ipv4_config.ip != 0) {
                 WiFi.config(config.network.ipv4_config.ip,
                             config.network.ipv4_config.gateway,
                             config.network.ipv4_config.subnet,

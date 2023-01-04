@@ -148,6 +148,11 @@ void Router::setReceivedMessage()
     runASAP = true;
 }
 
+QueueStatus Router::getQueueStatus()
+{
+    return iface->getQueueStatus();
+}
+
 ErrorCode Router::sendLocal(MeshPacket *p, RxSource src)
 {
     // No need to deliver externally if the destination is the local node

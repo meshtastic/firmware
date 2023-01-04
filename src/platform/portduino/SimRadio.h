@@ -45,6 +45,9 @@ class SimRadio : public RadioInterface
      */
     virtual void startReceive(MeshPacket *p);
 
+    QueueStatus getQueueStatus() override;
+
+
   protected: 
     /// are _trying_ to receive a packet currently (note - we might just be waiting for one)
     bool isReceiving = false;
