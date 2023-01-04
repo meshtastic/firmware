@@ -20,9 +20,7 @@ void consolePrintf(const char *format, ...)
     va_start(arg, format);
     console->vprintf(format, arg);
     va_end(arg);
-#ifdef ARCH_ESP32
     console->flush();
-#endif
 }
 
 SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), concurrency::OSThread("SerialConsole")
@@ -49,6 +47,10 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), con
 int32_t SerialConsole::runOnce()
 {
     return runOncePart();
+}
+
+void SerialConsole::flush() {
+    Port.flush();
 }
 
 // For the serial port we can't really detect if any client is on the other side, so instead just look for recent messages

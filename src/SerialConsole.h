@@ -26,6 +26,8 @@ class SerialConsole : public StreamAPI, public RedirectablePrint, private concur
 
     virtual int32_t runOnce() override;
 
+    void flush();
+
   protected:
 
     /// Check the current underlying physical link to see if the client is currently connected
