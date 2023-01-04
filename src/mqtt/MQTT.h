@@ -13,6 +13,8 @@
 #include <EthernetClient.h>
 #endif
 
+#define MAX_MQTT_QUEUE 32
+
 /**
  * Our wrapper/singleton for sending/receiving MQTT "udp" packets.  This object isolates the MQTT protocol implementation from
  * the two components that use it: MQTTPlugin and MQTTSimInterface.
@@ -53,9 +55,10 @@ class MQTT : private concurrency::OSThread
     bool connected();
     
   protected:
+    PointerQueue<ServiceEnvelope> mqttQueue;
 
     int reconnectCount = 0;
-    
+
     virtual int32_t runOnce() override;
 
   private:
