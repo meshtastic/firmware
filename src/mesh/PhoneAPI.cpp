@@ -50,6 +50,7 @@ void PhoneAPI::close()
 
         unobserve(&service.fromNumChanged);
         releasePhonePacket(); // Don't leak phone packets on shutdown
+        releaseQueueStatusPhonePacket();
 
         onConnectionChanged(false);
     }
@@ -282,14 +283,19 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     case STATE_SEND_PACKETS:
         // Do we have a message from the mesh?
         LOG_INFO("getFromRadio=STATE_SEND_PACKETS\n");
-        if (packetForPhone) {
+        if (queueStatusPacketForPhone) {
+
+            fromRadioScratch.which_payload_variant = FromRadio_queueStatus_tag;
+            fromRadioScratch.queueStatus = *queueStatusPacketForPhone;
+            releaseQueueStatusPhonePacket();
+        } else if (packetForPhone) {
             printPacket("phone downloaded packet", packetForPhone);
 
             // Encapsulate as a FromRadio packet
             fromRadioScratch.which_payload_variant = FromRadio_packet_tag;
             fromRadioScratch.packet = *packetForPhone;
+            releasePhonePacket();
         }
-        releasePhonePacket();
         break;
 
     default:
@@ -322,6 +328,14 @@ void PhoneAPI::releasePhonePacket()
     }
 }
 
+void PhoneAPI::releaseQueueStatusPhonePacket()
+{
+    if (queueStatusPacketForPhone) {
+        service.releaseQueueStatusToPool(queueStatusPacketForPhone);
+        queueStatusPacketForPhone = NULL;
+    }
+}
+
 /**
  * Return true if we have data available to send to the phone
  */
@@ -342,9 +356,15 @@ bool PhoneAPI::available()
         return true; // Always say we have something, because we might need to advance our state machine
 
     case STATE_SEND_PACKETS: {
+        if (!queueStatusPacketForPhone)
+            queueStatusPacketForPhone = service.getQueueStatusForPhone();
+        bool hasPacket = !!queueStatusPacketForPhone;
+        if (hasPacket)
+            return true;
+
         if (!packetForPhone)
             packetForPhone = service.getForPhone();
-        bool hasPacket = !!packetForPhone;
+        hasPacket = !!packetForPhone;
         // LOG_DEBUG("available hasPacket=%d\n", hasPacket);
         return hasPacket;
     }

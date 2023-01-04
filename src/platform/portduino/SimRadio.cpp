@@ -215,6 +215,16 @@ void SimRadio::startReceive(MeshPacket *p) {
     handleReceiveInterrupt(p);
 }
 
+QueueStatus SimRadio::getQueueStatus()
+{
+    QueueStatus qs;
+
+    qs.res = qs.mesh_packet_id = 0;
+    qs.free = txQueue.getFree();
+    qs.maxlen = txQueue.getMaxLen();
+
+    return qs;
+}
 
 void SimRadio::handleReceiveInterrupt(MeshPacket *p)
 {
