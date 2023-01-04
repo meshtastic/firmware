@@ -622,12 +622,12 @@ typedef struct _LogRecord {
 } LogRecord;
 
 typedef struct _QueueStatus {
-    /* Last attempt to queue status */
-    uint32_t res;
+    /* Last attempt to queue status, ErrorCode */
+    int8_t res;
     /* Free entries in the outgoing queue */
-    uint32_t free;
+    uint8_t free;
     /* Maximum entries in the outgoing queue */
-    uint32_t maxlen;
+    uint8_t maxlen;
     /* What was mesh packet id that generated this response? */
     uint32_t mesh_packet_id;
 } QueueStatus;
@@ -1044,7 +1044,7 @@ X(a, STATIC,   SINGULAR, UENUM,    level,             4)
 #define LogRecord_DEFAULT NULL
 
 #define QueueStatus_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UINT32,   res,               1) \
+X(a, STATIC,   SINGULAR, INT32,    res,               1) \
 X(a, STATIC,   SINGULAR, UINT32,   free,              2) \
 X(a, STATIC,   SINGULAR, UINT32,   maxlen,            3) \
 X(a, STATIC,   SINGULAR, UINT32,   mesh_packet_id,    4)
@@ -1128,7 +1128,7 @@ extern const pb_msgdesc_t Compressed_msg;
 #define MyNodeInfo_size                          179
 #define NodeInfo_size                            258
 #define Position_size                            137
-#define QueueStatus_size                         24
+#define QueueStatus_size                         23
 #define RouteDiscovery_size                      40
 #define Routing_size                             42
 #define ToRadio_size                             324
