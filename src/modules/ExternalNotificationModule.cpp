@@ -42,26 +42,22 @@ int32_t ExternalNotificationModule::runOnce()
     if (!moduleConfig.external_notification.enabled) {
         return INT32_MAX; // we don't need this thread here...
     } else {
-#ifndef ARCH_PORTDUINO
         if ((nagCycleCutoff < millis()) && !rtttl::isPlaying()) {
-#else
-        if (nagCycleCutoff < millis()) {
-#endif
+            // let the song finish if we reach timeout
             nagCycleCutoff = UINT32_MAX;
             LOG_INFO("Turning off external notification: ");
             for (int i = 0; i < 2; i++) {
-                if (getExternal(i)) {
-                    setExternalOff(i);
-                    externalTurnedOn[i] = 0;
-                    LOG_INFO("%d ", i);
-                }
+                setExternalOff(i);
+                externalTurnedOn[i] = 0;
+                LOG_INFO("%d ", i);
             }
             LOG_INFO("\n");
+            isNagging = false;
             return INT32_MAX; // save cycles till we're needed again
         }
 
         // If the output is turned on, turn it back off after the given period of time.
-        if (nagCycleCutoff != UINT32_MAX) {
+        if (isNagging) {
             if (externalTurnedOn[0] + (moduleConfig.external_notification.output_ms
                                     ? moduleConfig.external_notification.output_ms
                                     : EXT_NOTIFICATION_MODULE_OUTPUT_MS) < millis()) {
@@ -80,16 +76,14 @@ int32_t ExternalNotificationModule::runOnce()
         }
 
         // now let the PWM buzzer play
-#ifndef ARCH_PORTDUINO
         if (moduleConfig.external_notification.use_pwm) {
             if (rtttl::isPlaying()) {
                 rtttl::play();
-            } else if (nagCycleCutoff >= millis()) {
+            } else if (isNagging && (nagCycleCutoff >= millis())) {
                 // start the song again if we have time left
                 rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
             }
         }
-#endif        
         return 25;
     }
 }
@@ -140,10 +134,9 @@ bool ExternalNotificationModule::getExternal(uint8_t index)
 }
 
 void ExternalNotificationModule::stopNow() {
-#ifndef ARCH_PORTDUINO    
     rtttl::stop();
-#endif    
     nagCycleCutoff = 1; // small value
+    isNagging = false;
     setIntervalFromNow(0);
 }
 
@@ -230,6 +223,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
             if (moduleConfig.external_notification.alert_bell) {
                 if (containsBell) {
                     LOG_INFO("externalNotificationModule - Notification Bell\n");
+                    isNagging = true;
                     setExternalOn(0);
                     if (moduleConfig.external_notification.nag_timeout) {
                         nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
@@ -242,6 +236,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
             if (moduleConfig.external_notification.alert_bell_vibra) {
                 if (containsBell) {
                     LOG_INFO("externalNotificationModule - Notification Bell (Vibra)\n");
+                    isNagging = true;
                     setExternalOn(1);
                     if (moduleConfig.external_notification.nag_timeout) {
                         nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
@@ -254,12 +249,11 @@ ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
             if (moduleConfig.external_notification.alert_bell_buzzer) {
                 if (containsBell) {
                     LOG_INFO("externalNotificationModule - Notification Bell (Buzzer)\n");
+                    isNagging = true;
                     if (!moduleConfig.external_notification.use_pwm) {
                         setExternalOn(2);
                     } else {
-#ifndef ARCH_PORTDUINO
                         rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
-#endif
                     }
                     if (moduleConfig.external_notification.nag_timeout) {
                         nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
@@ -271,6 +265,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
 
             if (moduleConfig.external_notification.alert_message) {
                 LOG_INFO("externalNotificationModule - Notification Module\n");
+                isNagging = true;
                 setExternalOn(0);
                 if (moduleConfig.external_notification.nag_timeout) {
                     nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
@@ -279,33 +274,33 @@ ProcessMessage ExternalNotificationModule::handleReceived(const MeshPacket &mp)
                 }
             }
 
-            if (!moduleConfig.external_notification.use_pwm) {
-                if (moduleConfig.external_notification.alert_message_vibra) {
-                    LOG_INFO("externalNotificationModule - Notification Module (Vibra)\n");
-                    setExternalOn(1);
-                    if (moduleConfig.external_notification.nag_timeout) {
-                        nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
-                    } else {
-                        nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
-                    }
-                }
-
-                if (moduleConfig.external_notification.alert_message_buzzer) {
-                    LOG_INFO("externalNotificationModule - Notification Module (Buzzer)\n");
-                    if (!moduleConfig.external_notification.use_pwm) {
-                        setExternalOn(2);
-                    } else {
-#ifndef ARCH_PORTDUINO
-                        rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
-#endif
-                    }
-                    if (moduleConfig.external_notification.nag_timeout) {
-                        nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
-                    } else {
-                        nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
-                    }
+            
+            if (moduleConfig.external_notification.alert_message_vibra) {
+                LOG_INFO("externalNotificationModule - Notification Module (Vibra)\n");
+                isNagging = true;
+                setExternalOn(1);
+                if (moduleConfig.external_notification.nag_timeout) {
+                    nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
+                } else {
+                    nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
                 }
             }
+
+            if (moduleConfig.external_notification.alert_message_buzzer) {
+                LOG_INFO("externalNotificationModule - Notification Module (Buzzer)\n");
+                isNagging = true;
+                if (!moduleConfig.external_notification.use_pwm) {
+                    setExternalOn(2);
+                } else {
+                    rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
+                }
+                if (moduleConfig.external_notification.nag_timeout) {
+                    nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
+                } else {
+                    nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
+                }
+            }
+            
             setIntervalFromNow(0); // run once so we know if we should do something
         }
 
