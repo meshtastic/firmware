@@ -158,6 +158,17 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
 #endif
     }
 
+QueueStatus RadioLibInterface::getQueueStatus()
+{
+    QueueStatus qs;
+
+    qs.res = qs.mesh_packet_id = 0;
+    qs.free = txQueue.getFree();
+    qs.maxlen = txQueue.getMaxLen();
+
+    return qs;
+}
+
     bool RadioLibInterface::canSleep()
     {
         bool res = txQueue.empty();
