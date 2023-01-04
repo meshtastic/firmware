@@ -5,6 +5,18 @@
 #include "configuration.h"
 #ifndef ARCH_PORTDUINO
 #include <NonBlockingRtttl.h>
+#else
+// Noop class for portduino.
+class rtttl 
+{
+  public:
+    explicit rtttl() {}
+    static bool isPlaying() { return false; }
+    static void play() {}
+    static void begin(byte a, const char * b) {};
+    static void stop() {}
+    static bool done() { return true; }
+};
 #endif
 #include <Arduino.h>
 #include <functional>
@@ -38,6 +50,8 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
     virtual ProcessMessage handleReceived(const MeshPacket &mp) override;
 
     virtual int32_t runOnce() override;
+
+    bool isNagging = false;
 
     virtual AdminMessageHandleResult handleAdminMessageForModule(const MeshPacket &mp, AdminMessage *request, AdminMessage *response) override;
 };
