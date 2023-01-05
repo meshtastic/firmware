@@ -238,8 +238,30 @@ ProcessMessage StoreForwardModule::handleReceived(const MeshPacket &mp)
         if ((getFrom(&mp) != nodeDB.getNodeNum()) || (config.device.role == Config_DeviceConfig_Role_ROUTER_CLIENT)) {
 
             if ((mp.decoded.portnum == PortNum_TEXT_MESSAGE_APP) && is_server) {
-                storeForwardModule->historyAdd(mp);
-                LOG_INFO("*** S&F stored. Message history contains %u records now.\n", this->packetHistoryCurrent);
+                auto &p = mp.decoded;
+                if ((p.payload.bytes[0] == 'S') && (p.payload.bytes[1] == 'F') && (p.payload.bytes[2] == 0x00)) {
+                    LOG_DEBUG("*** Legacy Request to send\n");
+
+                    // Send the last 60 minutes of messages.
+                    if (this->busy) {
+                        storeForwardModule->sendMessage(getFrom(&mp), StoreAndForward_RequestResponse_ROUTER_BUSY);
+                        LOG_INFO("*** S&F - Busy. Try again shortly.\n");
+                        MeshPacket *pr = allocReply();
+                        pr->to = getFrom(&mp);
+                        pr->priority = MeshPacket_Priority_MIN;
+                        pr->want_ack = false;
+                        pr->decoded.want_response = false;
+                        pr->decoded.portnum = PortNum_TEXT_MESSAGE_APP;
+                        memcpy(pr->decoded.payload.bytes, "** S&F - Busy. Try again shortly.", Constants_DATA_PAYLOAD_LEN);
+                        pr->decoded.payload.size = sizeof(pr->decoded.payload.bytes);
+                        service.sendToMesh(pr);
+                    } else {
+                        storeForwardModule->historySend(historyReturnWindow * 60000, getFrom(&mp));
+                    }
+                } else {
+                    storeForwardModule->historyAdd(mp);
+                    LOG_INFO("*** S&F stored. Message history contains %u records now.\n", this->packetHistoryCurrent);
+                }
 
             } else if (mp.decoded.portnum == PortNum_STORE_FORWARD_APP) {
                 auto &p = mp.decoded;
