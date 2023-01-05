@@ -239,7 +239,7 @@ ProcessMessage StoreForwardModule::handleReceived(const MeshPacket &mp)
         // The router node should not be sending messages as a client. Unless he is a ROUTER_CLIENT
         if ((getFrom(&mp) != nodeDB.getNodeNum()) || (config.device.role == Config_DeviceConfig_Role_ROUTER_CLIENT)) {
 
-            if (mp.decoded.portnum == PortNum_TEXT_MESSAGE_APP) {
+            if ((mp.decoded.portnum == PortNum_TEXT_MESSAGE_APP) && is_server) {
                 storeForwardModule->historyAdd(mp);
                 LOG_INFO("*** S&F stored. Message history contains %u records now.\n", this->packetHistoryCurrent);
 
