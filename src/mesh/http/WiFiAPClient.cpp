@@ -182,7 +182,7 @@ bool initWifi()
 
             WiFi.onEvent(
                 [](WiFiEvent_t event, WiFiEventInfo_t info) {
-                    LOG_WARN("WiFi lost connection. Reason: %s", info.wifi_sta_disconnected.reason);
+                    LOG_WARN("WiFi lost connection. Reason: %d", info.wifi_sta_disconnected.reason);
 
                     /*
                         If we are disconnected from the AP for some reason,
