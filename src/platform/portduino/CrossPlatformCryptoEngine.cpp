@@ -50,12 +50,9 @@ class CrossPlatformCryptoEngine : public CryptoEngine
     virtual void encrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes) override
     {
         if (key.length > 0) {
-            //uint8_t stream_block[16];
-            static uint8_t scratch[MAX_BLOCKSIZE];
-            //size_t nc_off = 0;
-
             initNonce(fromNode, packetId);
             if (numBytes <= MAX_BLOCKSIZE) {
+                static uint8_t scratch[MAX_BLOCKSIZE];
                 memcpy(scratch, bytes, numBytes);
                 memset(scratch + numBytes, 0,
                    sizeof(scratch) - numBytes); // Fill rest of buffer with zero (in case cypher looks at it)
