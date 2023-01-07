@@ -1,12 +1,8 @@
 #include <NeoPixelBus.h>
 
-// For OLED LCD
+// 0.96" OLED
 #define I2C_SDA         22
 #define I2C_SCL         32
-
-//#undef I2C_SDA
-//#undef I2C_SCL
-//#define HAS_SCREEN 0
 
 // NO GPS
 #undef GPS_RX_PIN
