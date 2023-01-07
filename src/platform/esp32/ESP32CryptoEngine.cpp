@@ -42,13 +42,12 @@ class ESP32CryptoEngine : public CryptoEngine
     virtual void encrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes) override
     {
         if (key.length > 0) {
-            uint8_t stream_block[16];
-            size_t nc_off = 0;
-
             LOG_DEBUG("ESP32 crypt fr=%x, num=%x, numBytes=%d!\n", fromNode, (uint32_t) packetId, numBytes);
             initNonce(fromNode, packetId);
             if (numBytes <= MAX_BLOCKSIZE) {
                 static uint8_t scratch[MAX_BLOCKSIZE];
+                uint8_t stream_block[16];
+                size_t nc_off = 0;
                 memcpy(scratch, bytes, numBytes);
                 memset(scratch + numBytes, 0,
                    sizeof(scratch) - numBytes); // Fill rest of buffer with zero (in case cypher looks at it)
