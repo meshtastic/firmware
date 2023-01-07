@@ -171,7 +171,7 @@ void fsInit()
     if (!FSBegin())
     {
         LOG_ERROR("Filesystem mount Failed.\n");
-        assert(0); // FIXME - report failure to phone
+        // assert(0); This auto-formats the partition, so no need to fail here.
     }
 #ifdef ARCH_ESP32
     LOG_DEBUG("Filesystem files (%d/%d Bytes):\n", FSCom.usedBytes(), FSCom.totalBytes());
