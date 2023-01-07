@@ -198,7 +198,7 @@ Channel &Channels::getByIndex(ChannelIndex chIndex)
     } else {
         LOG_ERROR("Invalid channel index %d > %d, malformed packet received?\n", chIndex , channelFile.channels_count);
 
-        Channel *ch = (Channel *)malloc(sizeof(Channel));
+        static Channel *ch = (Channel *)malloc(sizeof(Channel));
         memset(ch, 0, sizeof(Channel));
         // ch.index -1 means we don't know the channel locally and need to look it up by settings.name
         // not sure this is handled right everywhere
