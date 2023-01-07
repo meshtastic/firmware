@@ -54,16 +54,18 @@ class CrossPlatformCryptoEngine : public CryptoEngine
             static uint8_t scratch[MAX_BLOCKSIZE];
             //size_t nc_off = 0;
 
-            // LOG_DEBUG("ESP32 encrypt!\n");
             initNonce(fromNode, packetId);
-            assert(numBytes <= MAX_BLOCKSIZE);
-            memcpy(scratch, bytes, numBytes);
-            memset(scratch + numBytes, 0,
+            if (numBytes <= MAX_BLOCKSIZE) {
+                memcpy(scratch, bytes, numBytes);
+                memset(scratch + numBytes, 0,
                    sizeof(scratch) - numBytes); // Fill rest of buffer with zero (in case cypher looks at it)
 
-            ctr->setIV(nonce, sizeof(nonce));
-            ctr->setCounterSize(4);
-            ctr->encrypt(bytes, scratch, numBytes);
+                ctr->setIV(nonce, sizeof(nonce));
+                ctr->setCounterSize(4);
+                ctr->encrypt(bytes, scratch, numBytes);
+            } else {
+                LOG_ERROR("Packet too large for crypto engine: %d. noop encryption!\n", numBytes);
+            }
         }
     }
 
