@@ -25,7 +25,12 @@ bool SX128xInterface<T>::init()
     digitalWrite(SX128X_POWER_EN, HIGH);
     pinMode(SX128X_POWER_EN, OUTPUT);
 #endif
-
+  
+#ifdef RF95_FAN_EN
+    pinMode(RF95_FAN_EN, OUTPUT);
+    digitalWrite(RF95_FAN_EN, 1);
+#endif
+  
 #if defined(SX128X_RXEN) && (SX128X_RXEN != RADIOLIB_NC) // set not rx or tx mode
     digitalWrite(SX128X_RXEN, LOW); // Set low before becoming an output
     pinMode(SX128X_RXEN, OUTPUT);
