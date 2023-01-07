@@ -170,7 +170,7 @@ void fsInit()
 #ifdef FSCom
     if (!FSBegin())
     {
-        LOG_ERROR("Filesystem mount Failed. Formatting...\n");
+        LOG_ERROR("Filesystem mount Failed.\n");
         assert(0); // FIXME - report failure to phone
     }
 #ifdef ARCH_ESP32
