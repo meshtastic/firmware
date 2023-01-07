@@ -4,7 +4,6 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Router.h"
-#include "assert.h"
 #include "configuration.h"
 #include "main.h"
 #include "sleep.h"

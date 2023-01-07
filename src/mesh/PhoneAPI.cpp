@@ -6,7 +6,6 @@
 #include "PowerFSM.h"
 #include "RadioInterface.h"
 #include "configuration.h"
-#include <assert.h>
 
 #if FromRadio_size > MAX_TO_FROM_RADIO_SIZE
 #error FromRadio is too big
@@ -209,6 +208,8 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.config.which_payload_variant = Config_bluetooth_tag;
             fromRadioScratch.config.payload_variant.bluetooth = config.bluetooth;
             break;
+        default:
+            LOG_ERROR("Unknown config type %d\n", config_state);
         }
         // NOTE: The phone app needs to know the ls_secs value so it can properly expect sleep behavior.
         // So even if we internally use 0 to represent 'use default' we still need to send the value we are
@@ -262,6 +263,8 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.moduleConfig.which_payload_variant = ModuleConfig_remote_hardware_tag;
             fromRadioScratch.moduleConfig.payload_variant.remote_hardware = moduleConfig.remote_hardware;
             break;
+        default:
+            LOG_ERROR("Unknown module config type %d\n", config_state);
         }
 
         config_state++;
@@ -299,7 +302,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         break;
 
     default:
-        assert(0); // unexpected state - FIXME, make an error code and reboot
+        LOG_ERROR("getFromRadio unexpected state %d\n", state);
     }
 
     // Do we have a message from the mesh?
@@ -369,7 +372,7 @@ bool PhoneAPI::available()
         return hasPacket;
     }
     default:
-        assert(0); // unexpected state - FIXME, make an error code and reboot
+        LOG_ERROR("PhoneAPI::available unexpected state %d\n", state);
     }
 
     return false;

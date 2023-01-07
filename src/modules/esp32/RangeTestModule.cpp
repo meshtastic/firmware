@@ -9,7 +9,6 @@
 #include "gps/GeoCoord.h"
 #include <Arduino.h>
 #include <FSCommon.h>
-//#include <assert.h>
 
 /*
     As a sender, I can send packets every n seconds. These packets include an incremented PacketID.
