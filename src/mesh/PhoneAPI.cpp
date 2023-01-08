@@ -6,6 +6,7 @@
 #include "PowerFSM.h"
 #include "RadioInterface.h"
 #include "configuration.h"
+#include "xmodem.h"
 #include <assert.h>
 
 #if FromRadio_size > MAX_TO_FROM_RADIO_SIZE
@@ -90,6 +91,10 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
         case ToRadio_disconnect_tag:
             LOG_INFO("Disconnecting from phone\n");
             close();
+            break;
+        case ToRadio_xmodemPacket_tag:
+            LOG_INFO("Got xmodem packet\n");
+            xModem.handlePacket(toRadioScratch.xmodemPacket);
             break;
         default:
             // Ignore nop messages
@@ -284,10 +289,14 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         // Do we have a message from the mesh?
         LOG_INFO("getFromRadio=STATE_SEND_PACKETS\n");
         if (queueStatusPacketForPhone) {
-
             fromRadioScratch.which_payload_variant = FromRadio_queueStatus_tag;
             fromRadioScratch.queueStatus = *queueStatusPacketForPhone;
             releaseQueueStatusPhonePacket();
+        } else if (xmodemPacketForPhone) {
+            fromRadioScratch.which_payload_variant = FromRadio_xmodemPacket_tag;
+            fromRadioScratch.xmodemPacket = *xmodemPacketForPhone;
+            free(xmodemPacketForPhone);
+            xmodemPacketForPhone = NULL;
         } else if (packetForPhone) {
             printPacket("phone downloaded packet", packetForPhone);
 
@@ -350,6 +359,7 @@ bool PhoneAPI::available()
     case STATE_SEND_MODULECONFIG:
     case STATE_SEND_COMPLETE_ID:
         return true;
+        
     case STATE_SEND_NODEINFO:
         if (!nodeInfoForPhone)
             nodeInfoForPhone = nodeDB.readNextInfo();
@@ -359,6 +369,12 @@ bool PhoneAPI::available()
         if (!queueStatusPacketForPhone)
             queueStatusPacketForPhone = service.getQueueStatusForPhone();
         bool hasPacket = !!queueStatusPacketForPhone;
+        if (hasPacket)
+            return true;
+
+        if (!xmodemPacketForPhone)
+            xmodemPacketForPhone = xModem.getForPhone();
+        hasPacket = !!packetForPhone;
         if (hasPacket)
             return true;
 
