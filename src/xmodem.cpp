@@ -1,9 +1,11 @@
 /***********************************************************************************************************************
- * XMODEM implementation with YMODEM support
+ * based on XMODEM implementation by Georges Menie (www.menie.org)
  ***********************************************************************************************************************
  * Copyright 2001-2019 Georges Menie (www.menie.org)
- * Modified by Thuffir in 2019
  * All rights reserved.
+ * 
+ * Adapted for protobuf encapsulation. this is not really Xmodem any more.
+ * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
