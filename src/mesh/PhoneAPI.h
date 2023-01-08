@@ -42,6 +42,9 @@ class PhoneAPI : public Observer<uint32_t> // FIXME, we shouldn't be inheriting 
     /// downloads it
     MeshPacket *packetForPhone = NULL;
 
+    // file transfer packets destined for phone. Push it to the queue then free it.
+    XModem *xmodemPacketForPhone = NULL;
+
     // Keep QueueStatus packet just as packetForPhone
     QueueStatus *queueStatusPacketForPhone = NULL;
 
