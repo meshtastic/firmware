@@ -86,9 +86,6 @@ class PhoneAPI : public Observer<uint32_t> // FIXME, we shouldn't be inheriting 
 
     void setInitialState() { state = STATE_SEND_MY_INFO; }
 
-    /// emit a debugging log character, FIXME - implement
-    void debugOut(char c) { }
-
   protected:
     /// Our fromradio packet while it is being assembled
     FromRadio fromRadioScratch = {};
