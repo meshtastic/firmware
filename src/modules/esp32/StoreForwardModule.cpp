@@ -392,7 +392,7 @@ bool StoreForwardModule::handleReceivedProtobuf(const MeshPacket &mp, StoreAndFo
             break;
 
         default:
-            assert(0); // unexpected state - FIXME, make an error code and reboot
+            assert(0); // unexpected state
     }
     return true; // There's no need for others to look at this message.
 }

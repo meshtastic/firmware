@@ -372,7 +372,6 @@ QueueStatus RadioLibInterface::getQueueStatus()
 
                 printPacket("Lora RX", mp);
 
-                // xmitMsec = getPacketTime(mp);
                 airTime->logAirtime(RX_LOG, xmitMsec);
 
                 deliverToReceiver(mp);

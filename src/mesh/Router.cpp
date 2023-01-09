@@ -39,6 +39,8 @@ static MemoryDynamic<MeshPacket> staticPool;
 
 Allocator<MeshPacket> &packetPool = staticPool;
 
+static uint8_t bytes[MAX_RHPACKETLEN];
+
 /**
  * Constructor
  *
@@ -94,8 +96,7 @@ PacketId generatePacketId()
     static uint32_t i; // Note: trying to keep this in noinit didn't help for working across reboots
     static bool didInit = false;
 
-    assert(sizeof(PacketId) == 4 || sizeof(PacketId) == 1);                // only supported values
-    uint32_t numPacketId = sizeof(PacketId) == 1 ? UINT8_MAX : UINT32_MAX; // 0 is consider invalid
+    uint32_t numPacketId = UINT32_MAX;
 
     if (!didInit) {
         didInit = true;
@@ -191,7 +192,11 @@ void printBytes(const char *label, const uint8_t *p, size_t numbytes)
  */
 ErrorCode Router::send(MeshPacket *p)
 {
-    assert(p->to != nodeDB.getNodeNum()); // should have already been handled by sendLocal
+    if (p->to == nodeDB.getNodeNum()) {
+        LOG_ERROR("BUG! send() called with packet destined for local node!\n");
+        packetPool.release(p);
+        return Routing_Error_BAD_REQUEST;
+    } // should have already been handled by sendLocal
 
     // Abort sending if we are violating the duty cycle
     if (!config.lora.override_duty_cycle && myRegion->dutyCycle != 100) {
@@ -286,7 +291,6 @@ bool Router::cancelSending(NodeNum from, PacketId id)
  */
 void Router::sniffReceived(const MeshPacket *p, const Routing *c)
 {
-    LOG_DEBUG("FIXME-update-db Sniffing packet\n");
     // FIXME, update nodedb here for any packet that passes through us
 }
 
@@ -305,7 +309,6 @@ bool perhapsDecode(MeshPacket *p)
         // Try to use this hash/channel pair
         if (channels.decryptForHash(chIndex, p->channel)) {
             // Try to decrypt the packet if we can
-            static uint8_t bytes[MAX_RHPACKETLEN];
             size_t rawSize = p->encrypted.size;
             assert(rawSize <= sizeof(bytes));
             memcpy(bytes, p->encrypted.bytes,
@@ -324,14 +327,6 @@ bool perhapsDecode(MeshPacket *p)
                 // parsing was successful
                 p->which_payload_variant = MeshPacket_decoded_tag; // change type to decoded
                 p->channel = chIndex;                             // change to store the index instead of the hash
-
-                /*
-                if (p->decoded.portnum == PortNum_TEXT_MESSAGE_APP) {
-                    LOG_DEBUG("\n\n** TEXT_MESSAGE_APP\n");
-                } else if (p->decoded.portnum == PortNum_TEXT_MESSAGE_COMPRESSED_APP) {
-                    LOG_DEBUG("\n\n** PortNum_TEXT_MESSAGE_COMPRESSED_APP\n");
-                }
-                */
 
                 // Decompress if needed. jm
                 if (p->decoded.portnum == PortNum_TEXT_MESSAGE_COMPRESSED_APP) {
@@ -368,7 +363,6 @@ Routing_Error perhapsEncode(MeshPacket *p)
 {
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == MeshPacket_decoded_tag) {
-        static uint8_t bytes[MAX_RHPACKETLEN]; // we have to use a scratch buffer because a union
 
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &Data_msg, &p->decoded);
 

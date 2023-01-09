@@ -163,7 +163,7 @@ static void waitEnterSleep()
     }
 
     // Code that still needs to be moved into notifyObservers
-    Serial.flush();            // send all our characters before we stop cpu clock
+    console->flush();            // send all our characters before we stop cpu clock
     setBluetoothEnable(false); // has to be off before calling light sleep
 
     notifySleep.notifyObservers(NULL);
