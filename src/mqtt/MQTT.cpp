@@ -207,14 +207,17 @@ void MQTT::reconnect()
 
             sendSubscriptions();
         } else {
-            LOG_ERROR("Failed to contact MQTT server (%d/10)...\n",reconnectCount);
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
-            if (reconnectCount > 9) {
+            LOG_ERROR("Failed to contact MQTT server (%d/5)...\n",reconnectCount + 1);
+            if (reconnectCount >= 4) {
                 needReconnect = true;
-                wifiReconnect->setIntervalFromNow(1000);
+                wifiReconnect->setIntervalFromNow(0);
+                reconnectCount = 0;
+            } else {
+                reconnectCount++;
             }
+            
 #endif
-            reconnectCount++;
         }
     }
 }
@@ -284,7 +287,6 @@ int32_t MQTT::runOnce()
 
                     String topic = cryptTopic + env->channel_id + "/" + owner.id;
                     LOG_INFO("publish %s, %u bytes from queue\n", topic.c_str(), numBytes);
-                    
 
                     pubSub.publish(topic.c_str(), bytes, numBytes, false);
 
@@ -299,7 +301,7 @@ int32_t MQTT::runOnce()
                     }
                     mqttPool.release(env);
                 }
-                return 20;
+                return 200;
             } else {
                 return 30000;
             }
