@@ -25,7 +25,7 @@ typedef enum _XModem_Control {
 typedef PB_BYTES_ARRAY_T(128) XModem_buffer_t;
 typedef struct _XModem {
     XModem_Control control;
-    uint8_t seq;
+    uint16_t seq;
     uint16_t crc16;
     XModem_buffer_t buffer;
 } XModem;
@@ -68,7 +68,7 @@ extern const pb_msgdesc_t XModem_msg;
 #define XModem_fields &XModem_msg
 
 /* Maximum encoded size of messages (where known) */
-#define XModem_size                              140
+#define XModem_size                              141
 
 #ifdef __cplusplus
 } /* extern "C" */

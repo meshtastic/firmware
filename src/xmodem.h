@@ -56,7 +56,7 @@ class XModemAdapter
 
         int retrans = MAXRETRANS;
 
-        unsigned char packetno = 0;
+        uint16_t packetno = 0;
 
 #ifdef ARCH_NRF52
         File file = File(FSCom);
