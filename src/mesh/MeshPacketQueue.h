@@ -2,7 +2,6 @@
 
 #include "MeshTypes.h"
 
-#include <assert.h>
 #include <queue>
 
 
