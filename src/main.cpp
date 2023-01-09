@@ -36,12 +36,12 @@
 #endif
 
 #if HAS_WIFI
-#include "mesh/wifi/WiFiServerAPI.h"
+#include "mesh/api/WiFiServerAPI.h"
 #include "mqtt/MQTT.h"
 #endif
 
 #if HAS_ETHERNET
-#include "mesh/eth/ethServerAPI.h"
+#include "mesh/api/ethServerAPI.h"
 #include "mqtt/MQTT.h"
 #endif
 

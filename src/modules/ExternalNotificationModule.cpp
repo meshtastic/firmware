@@ -347,10 +347,10 @@ AdminMessageHandleResult ExternalNotificationModule::handleAdminMessageForModule
 void ExternalNotificationModule::handleGetRingtone(const MeshPacket &req, AdminMessage *response)
 {
     LOG_INFO("*** handleGetRingtone\n");
-    assert(req.decoded.want_response);
-
-    response->which_payload_variant = AdminMessage_get_ringtone_response_tag;
-    strcpy(response->get_ringtone_response, rtttlConfig.ringtone);
+    if(req.decoded.want_response) {
+        response->which_payload_variant = AdminMessage_get_ringtone_response_tag;
+        strcpy(response->get_ringtone_response, rtttlConfig.ringtone);
+    } // Don't send anything if not instructed to. Better than asserting.
 }
 
 
