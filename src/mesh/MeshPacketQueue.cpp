@@ -1,5 +1,6 @@
 #include "configuration.h"
 #include "MeshPacketQueue.h"
+#include <assert.h>
 
 #include <algorithm>
 
