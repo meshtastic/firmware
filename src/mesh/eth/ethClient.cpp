@@ -5,7 +5,7 @@
 #include <SPI.h>
 #include <RAK13800_W5100S.h>
 #include "target_specific.h"
-#include "mesh/eth/ethServerAPI.h"
+#include "mesh/api/ethServerAPI.h"
 #include "mqtt/MQTT.h"
 
 #ifndef DISABLE_NTP
