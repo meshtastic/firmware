@@ -41,6 +41,9 @@
 class XModemAdapter
 {
     public:
+        // Called when we put a fragment in the outgoing memory
+        Observable<uint32_t> packetReady;
+
         XModemAdapter();
 
         void handlePacket(XModem xmodemPacket);

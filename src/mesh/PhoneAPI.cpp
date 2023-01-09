@@ -33,6 +33,7 @@ void PhoneAPI::handleStartConfig()
     if (!isConnected()) {
         onConnectionChanged(true);
         observe(&service.fromNumChanged);
+        observe(&xModem.packetReady);
     }
 
     // even if we were already connected - restart our state machine
@@ -50,6 +51,7 @@ void PhoneAPI::close()
         state = STATE_SEND_NOTHING;
 
         unobserve(&service.fromNumChanged);
+        unobserve(&xModem.packetReady);
         releasePhonePacket(); // Don't leak phone packets on shutdown
         releaseQueueStatusPhonePacket();
 
