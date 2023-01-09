@@ -3,7 +3,6 @@
 #include "RTC.h"
 #include "configuration.h"
 #include "sleep.h"
-#include <assert.h>
 
 // If we have a serial GPS port it will not be null
 #ifdef GPS_SERIAL_NUM

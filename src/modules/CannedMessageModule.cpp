@@ -549,10 +549,10 @@ AdminMessageHandleResult CannedMessageModule::handleAdminMessageForModule(const 
 void CannedMessageModule::handleGetCannedMessageModuleMessages(const MeshPacket &req, AdminMessage *response)
 {
     LOG_DEBUG("*** handleGetCannedMessageModuleMessages\n");
-    assert(req.decoded.want_response);
-
-    response->which_payload_variant = AdminMessage_get_canned_message_module_messages_response_tag;
-    strcpy(response->get_canned_message_module_messages_response, cannedMessageModuleConfig.messages);
+    if(req.decoded.want_response) {
+        response->which_payload_variant = AdminMessage_get_canned_message_module_messages_response_tag;
+        strcpy(response->get_canned_message_module_messages_response, cannedMessageModuleConfig.messages);
+    } // Don't send anything if not instructed to. Better than asserting.
 }
 
 

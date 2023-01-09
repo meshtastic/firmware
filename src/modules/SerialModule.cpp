@@ -7,8 +7,6 @@
 #include "configuration.h"
 #include <Arduino.h>
 
-#include <assert.h>
-
 /*
     SerialModule
         A simple interface to send messages over the mesh network by sending strings

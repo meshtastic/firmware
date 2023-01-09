@@ -191,9 +191,20 @@ void Channels::onConfigChanged()
 
 Channel &Channels::getByIndex(ChannelIndex chIndex)
 {
-    assert(chIndex < channelFile.channels_count); // This should be equal to MAX_NUM_CHANNELS
-    Channel *ch = channelFile.channels + chIndex;
-    return *ch;
+    // remove this assert cause malformed packets can make our firmware reboot here.
+    if (chIndex < channelFile.channels_count) { // This should be equal to MAX_NUM_CHANNELS
+        Channel *ch = channelFile.channels + chIndex;
+        return *ch;
+    } else {
+        LOG_ERROR("Invalid channel index %d > %d, malformed packet received?\n", chIndex , channelFile.channels_count);
+
+        static Channel *ch = (Channel *)malloc(sizeof(Channel));
+        memset(ch, 0, sizeof(Channel));
+        // ch.index -1 means we don't know the channel locally and need to look it up by settings.name
+        // not sure this is handled right everywhere
+        ch->index = -1;
+        return *ch;
+    }
 }
 
 Channel &Channels::getByName(const char* chName)
