@@ -3,7 +3,6 @@
 #include <string>
 
 #include "GPS.h"
-//#include "MeshBluetoothService.h"
 #include "../concurrency/Periodic.h"
 #include "BluetoothCommon.h" // needed for updateBatteryLevel, FIXME, eventually when we pull mesh out into a lib we shouldn't be whacking bluetooth from here
 #include "MeshService.h"
@@ -61,7 +60,6 @@ Allocator<QueueStatus> &queueStatusPool = staticQueueStatusPool;
 MeshService::MeshService() : toPhoneQueue(MAX_RX_TOPHONE), toPhoneQueueStatusQueue(MAX_RX_TOPHONE)
 {
     lastQueueStatus = { 0, 0, 16, 0 };
-    // assert(MAX_RX_TOPHONE == 32); // FIXME, delete this, just checking my clever macro
 }
 
 void MeshService::init()
@@ -261,7 +259,7 @@ void MeshService::sendToPhone(MeshPacket *p)
 
     MeshPacket *copied = packetPool.allocCopy(*p);
     perhapsDecode(copied);
-    assert(toPhoneQueue.enqueue(copied, 0)); // FIXME, instead of failing for full queue, delete the oldest mssages
+    assert(toPhoneQueue.enqueue(copied, 0));
     fromNum++;
 }
 
