@@ -38,6 +38,8 @@ class RedirectablePrint : public Print
 
     /** like printf but va_list based */
     size_t vprintf(const char *format, va_list arg);
+
+    void hexDump(const char *logLevel, unsigned char *buf, uint16_t len);
 };
 
 class NoopPrint : public Print

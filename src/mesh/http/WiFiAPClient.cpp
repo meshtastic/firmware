@@ -5,7 +5,7 @@
 #include "configuration.h"
 #include "main.h"
 #include "mesh/http/WebServer.h"
-#include "mesh/wifi/WiFiServerAPI.h"
+#include "mesh/api/WiFiServerAPI.h"
 #include "mqtt/MQTT.h"
 #include "target_specific.h"
 #include <ESPmDNS.h>
