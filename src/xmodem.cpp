@@ -66,6 +66,7 @@ int XModemAdapter::check(const pb_byte_t *buf, int sz, unsigned short tcrc)
 void XModemAdapter::sendControl(XModem_Control c) {
     memset(xmodemStore, 0, XModem_size);
     xmodemStore->control = c;
+    packetReady.notifyObservers(packetno);
 }
 
 XModem *XModemAdapter::getForPhone()
@@ -106,6 +107,7 @@ void XModemAdapter::handlePacket(XModem xmodemPacket)
                         xmodemStore->seq = packetno;
                         xmodemStore->buffer.size = file.read(xmodemStore->buffer.bytes, sizeof(XModem_buffer_t::bytes));
                         xmodemStore->crc16 = crc16_ccitt(xmodemStore->buffer.bytes, xmodemStore->buffer.size);
+                        packetReady.notifyObservers(packetno);
                         break;
                     }
                     sendControl(XModem_Control_NAK);
@@ -167,6 +169,7 @@ void XModemAdapter::handlePacket(XModem xmodemPacket)
                     isEOT = true;
                     // send EOT on next Ack
                 }
+                packetReady.notifyObservers(packetno);
             } else {
                 // just received something weird.
                 sendControl(XModem_Control_CAN);
@@ -191,6 +194,7 @@ void XModemAdapter::handlePacket(XModem xmodemPacket)
                     isEOT = true;
                     // send EOT on next Ack
                 }
+                packetReady.notifyObservers(packetno);
             } else {
                 // just received something weird.
                 sendControl(XModem_Control_CAN);
