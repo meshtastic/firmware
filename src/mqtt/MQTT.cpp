@@ -43,9 +43,20 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
         JSONValue *json_value = JSON::Parse(payloadStr);
         if (json_value != NULL) {
             LOG_INFO("JSON Received on MQTT, parsing..\n");
+
             // check if it is a valid envelope
             JSONObject json;
             json = json_value->AsObject();
+
+            // parse the channel name from the topic string
+            char *ptr = strtok(topic, "/");
+            for (int i = 0; i < 3; i++) {
+                ptr = strtok(NULL, "/");
+            }
+            LOG_DEBUG("Looking for Channel name: %s\n", ptr);
+            Channel sendChannel = channels.getByName(ptr);
+            LOG_DEBUG("Found Channel name: %s (Index %d)\n", channels.getGlobalId(sendChannel.settings.channel_num), sendChannel.settings.channel_num);
+
             if ((json.find("sender") != json.end()) && (json.find("payload") != json.end()) && (json.find("type") != json.end()) && json["type"]->IsString() && (json["type"]->AsString().compare("sendtext") == 0)) {
                 // this is a valid envelope
                 if (json["payload"]->IsString() && json["type"]->IsString() && (json["sender"]->AsString().compare(owner.id) != 0)) {
@@ -55,13 +66,18 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
                     // construct protobuf data packet using TEXT_MESSAGE, send it to the mesh
                     MeshPacket *p = router->allocForSending();
                     p->decoded.portnum = PortNum_TEXT_MESSAGE_APP;
-                    if (jsonPayloadStr.length() <= sizeof(p->decoded.payload.bytes)) {
-                        memcpy(p->decoded.payload.bytes, jsonPayloadStr.c_str(), jsonPayloadStr.length());
-                        p->decoded.payload.size = jsonPayloadStr.length();
-                        MeshPacket *packet = packetPool.allocCopy(*p);
-                        service.sendToMesh(packet, RX_SRC_LOCAL);
+                    p->channel = sendChannel.settings.channel_num;
+                    if (sendChannel.settings.downlink_enabled) {
+                        if (jsonPayloadStr.length() <= sizeof(p->decoded.payload.bytes)) {
+                            memcpy(p->decoded.payload.bytes, jsonPayloadStr.c_str(), jsonPayloadStr.length());
+                            p->decoded.payload.size = jsonPayloadStr.length();
+                            MeshPacket *packet = packetPool.allocCopy(*p);
+                            service.sendToMesh(packet, RX_SRC_LOCAL);
+                        } else {
+                            LOG_WARN("Received MQTT json payload too long, dropping\n");
+                        }
                     } else {
-                        LOG_WARN("Received MQTT json payload too long, dropping\n");
+                        LOG_WARN("Received MQTT json payload on channel %s, but downlink is disabled, dropping\n", sendChannel.settings.name);
                     }
                 } else {
                     LOG_DEBUG("JSON Ignoring downlink message we originally sent.\n");
@@ -80,9 +96,13 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
                     // construct protobuf data packet using POSITION, send it to the mesh
                     MeshPacket *p = router->allocForSending();
                     p->decoded.portnum = PortNum_POSITION_APP;
-                    p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &Position_msg, &pos); //make the Data protobuf from position
-                    service.sendToMesh(p, RX_SRC_LOCAL);
-
+                    p->channel = sendChannel.settings.channel_num;
+                    if (sendChannel.settings.downlink_enabled) {
+                        p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &Position_msg, &pos); //make the Data protobuf from position
+                        service.sendToMesh(p, RX_SRC_LOCAL);
+                    } else {
+                        LOG_WARN("Received MQTT json payload on channel %s, but downlink is disabled, dropping\n", sendChannel.settings.name);
+                    }
                 } else {
                     LOG_DEBUG("JSON Ignoring downlink message we originally sent.\n");
                 }
