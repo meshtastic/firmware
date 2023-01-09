@@ -105,7 +105,7 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
 }
 
 void RedirectablePrint::hexDump(const char *logLevel, unsigned char *buf, uint16_t len) {
-  char alphabet[17] = "0123456789abcdef";
+  const char alphabet[17] = "0123456789abcdef";
   log(logLevel, "   +------------------------------------------------+ +----------------+\n");
   log(logLevel, "   |.0 .1 .2 .3 .4 .5 .6 .7 .8 .9 .a .b .c .d .e .f | |      ASCII     |\n");
   for (uint16_t i = 0; i < len; i += 16) {
