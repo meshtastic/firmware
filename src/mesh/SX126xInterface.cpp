@@ -70,7 +70,7 @@ bool SX126xInterface<T>::init()
 #if defined(SX126X_TXEN) && (SX126X_TXEN != RADIOLIB_NC)
     // lora.begin sets Dio2 as RF switch control, which is not true if we are manually controlling RX and TX
     if (res == RADIOLIB_ERR_NONE)
-        res = lora.setDio2AsRfSwitch(false);
+        res = lora.setDio2AsRfSwitch(true);
 #endif
 
 #if 0
