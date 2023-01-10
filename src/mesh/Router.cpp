@@ -200,14 +200,18 @@ ErrorCode Router::send(MeshPacket *p)
 
     // Abort sending if we are violating the duty cycle
     if (!config.lora.override_duty_cycle && myRegion->dutyCycle < 100) {
-      float hourlyTxPercent = airTime->utilizationTXPercent();
-      if (hourlyTxPercent > myRegion->dutyCycle) {
-          uint8_t silentMinutes = airTime->getSilentMinutes(hourlyTxPercent, myRegion->dutyCycle); 
-          LOG_WARN("Duty cycle limit exceeded. Aborting send for now, you can send again in %d minutes.\n", silentMinutes);
-          Routing_Error err = Routing_Error_DUTY_CYCLE_LIMIT;
-          abortSendAndNak(err, p);
-          return err;
-      }
+        float hourlyTxPercent = airTime->utilizationTXPercent();
+        if (hourlyTxPercent > myRegion->dutyCycle) {
+            uint8_t silentMinutes = airTime->getSilentMinutes(hourlyTxPercent, myRegion->dutyCycle); 
+            LOG_WARN("Duty cycle limit exceeded. Aborting send for now, you can send again in %d minutes.\n", silentMinutes);
+            Routing_Error err = Routing_Error_DUTY_CYCLE_LIMIT;
+            if (getFrom(p) == nodeDB.getNodeNum()) {  // only send NAK to API, not to the mesh
+                abortSendAndNak(err, p);
+            } else {
+                packetPool.release(p);
+            }
+            return err;
+        }
     }
 
     // PacketId nakId = p->decoded.which_ackVariant == SubPacket_fail_id_tag ? p->decoded.ackVariant.fail_id : 0;
