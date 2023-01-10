@@ -199,7 +199,7 @@ ErrorCode Router::send(MeshPacket *p)
     } // should have already been handled by sendLocal
 
     // Abort sending if we are violating the duty cycle
-    if (!config.lora.override_duty_cycle && myRegion->dutyCycle != 100) {
+    if (!config.lora.override_duty_cycle && myRegion->dutyCycle < 100) {
       float hourlyTxPercent = airTime->utilizationTXPercent();
       if (hourlyTxPercent > myRegion->dutyCycle) {
           uint8_t silentMinutes = airTime->getSilentMinutes(hourlyTxPercent, myRegion->dutyCycle); 
