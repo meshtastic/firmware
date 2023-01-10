@@ -42,6 +42,9 @@ class PhoneAPI : public Observer<uint32_t> // FIXME, we shouldn't be inheriting 
     /// downloads it
     MeshPacket *packetForPhone = NULL;
 
+    // Keep QueueStatus packet just as packetForPhone
+    QueueStatus *queueStatusPacketForPhone = NULL;
+
     /// We temporarily keep the nodeInfo here between the call to available and getFromRadio
     const NodeInfo *nodeInfoForPhone = NULL;
 
@@ -83,9 +86,6 @@ class PhoneAPI : public Observer<uint32_t> // FIXME, we shouldn't be inheriting 
 
     void setInitialState() { state = STATE_SEND_MY_INFO; }
 
-    /// emit a debugging log character, FIXME - implement
-    void debugOut(char c) { }
-
   protected:
     /// Our fromradio packet while it is being assembled
     FromRadio fromRadioScratch = {};
@@ -114,6 +114,8 @@ class PhoneAPI : public Observer<uint32_t> // FIXME, we shouldn't be inheriting 
 
   private:
     void releasePhonePacket();
+
+    void releaseQueueStatusPhonePacket();
 
     /// begin a new connection
     void handleStartConfig();

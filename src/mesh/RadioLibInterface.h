@@ -153,6 +153,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     virtual void startSend(MeshPacket *txp);
 
+    QueueStatus getQueueStatus();
+
   protected:
 
     /** Do any hardware setup needed on entry into send configuration for the radio.  Subclasses can customize */

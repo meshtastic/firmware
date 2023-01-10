@@ -5,7 +5,7 @@
 #include "configuration.h"
 #include "main.h"
 #include "mesh/http/WebServer.h"
-#include "mesh/wifi/WiFiServerAPI.h"
+#include "mesh/api/WiFiServerAPI.h"
 #include "mqtt/MQTT.h"
 #include "target_specific.h"
 #include <ESPmDNS.h>
@@ -182,7 +182,7 @@ bool initWifi()
 
             WiFi.onEvent(
                 [](WiFiEvent_t event, WiFiEventInfo_t info) {
-                    LOG_WARN("WiFi lost connection. Reason: %s", info.wifi_sta_disconnected.reason);
+                    LOG_WARN("WiFi lost connection. Reason: %d", info.wifi_sta_disconnected.reason);
 
                     /*
                         If we are disconnected from the AP for some reason,

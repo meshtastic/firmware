@@ -3,7 +3,6 @@
 #include <string>
 
 #include "GPS.h"
-//#include "MeshBluetoothService.h"
 #include "../concurrency/Periodic.h"
 #include "BluetoothCommon.h" // needed for updateBatteryLevel, FIXME, eventually when we pull mesh out into a lib we shouldn't be whacking bluetooth from here
 #include "MeshService.h"
@@ -52,11 +51,15 @@ FIXME in the initial proof of concept we just skip the entire want/deny flow and
 
 MeshService service;
 
+static MemoryDynamic<QueueStatus> staticQueueStatusPool;
+
+Allocator<QueueStatus> &queueStatusPool = staticQueueStatusPool;
+
 #include "Router.h"
 
-MeshService::MeshService() : toPhoneQueue(MAX_RX_TOPHONE)
+MeshService::MeshService() : toPhoneQueue(MAX_RX_TOPHONE), toPhoneQueueStatusQueue(MAX_RX_TOPHONE)
 {
-    // assert(MAX_RX_TOPHONE == 32); // FIXME, delete this, just checking my clever macro
+    lastQueueStatus = { 0, 0, 16, 0 };
 }
 
 void MeshService::init()
@@ -83,6 +86,11 @@ int MeshService::handleFromRadio(const MeshPacket *mp)
 /// Do idle processing (mostly processing messages which have been queued from the radio)
 void MeshService::loop()
 {
+    if (lastQueueStatus.free == 0) { // check if there is now free space in TX queue
+        QueueStatus qs = router->getQueueStatus();
+        if (qs.free != lastQueueStatus.free)
+            (void)sendQueueStatusToPhone(qs, 0, 0);
+    }
     if (oldFromNum != fromNum) { // We don't want to generate extra notifies for multiple new packets
         fromNumChanged.notifyObservers(fromNum);
         oldFromNum = fromNum;
@@ -179,12 +187,43 @@ bool MeshService::cancelSending(PacketId id)
     return router->cancelSending(nodeDB.getNodeNum(), id);
 }
 
+ErrorCode MeshService::sendQueueStatusToPhone(const QueueStatus &qs, ErrorCode res, uint32_t mesh_packet_id)
+{
+    QueueStatus *copied = queueStatusPool.allocCopy(qs);
+
+    copied->res = res;
+    copied->mesh_packet_id = mesh_packet_id;
+
+    if (toPhoneQueueStatusQueue.numFree() == 0) {
+        LOG_DEBUG("NOTE: tophone queue status queue is full, discarding oldest\n");
+        QueueStatus *d = toPhoneQueueStatusQueue.dequeuePtr(0);
+        if (d)
+            releaseQueueStatusToPool(d);
+    }
+
+    lastQueueStatus = *copied;
+
+    res = toPhoneQueueStatusQueue.enqueue(copied, 0);
+    fromNum++;
+
+    return res ? ERRNO_OK : ERRNO_UNKNOWN;
+}
+
 void MeshService::sendToMesh(MeshPacket *p, RxSource src, bool ccToPhone)
 {
+    uint32_t mesh_packet_id = p->id;
     nodeDB.updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
 
     // Note: We might return !OK if our fifo was full, at that point the only option we have is to drop it
-    router->sendLocal(p, src);
+    ErrorCode res = router->sendLocal(p, src);
+
+    /* NOTE(pboldin): Prepare and send QueueStatus message to the phone as a
+     * high-priority message. */
+    QueueStatus qs = router->getQueueStatus();
+    ErrorCode r = sendQueueStatusToPhone(qs, res, mesh_packet_id);
+    if (r != ERRNO_OK) {
+        LOG_DEBUG("Can't send status to phone");
+    }
 
     if (ccToPhone) {
         sendToPhone(p);
@@ -220,7 +259,7 @@ void MeshService::sendToPhone(MeshPacket *p)
 
     MeshPacket *copied = packetPool.allocCopy(*p);
     perhapsDecode(copied);
-    assert(toPhoneQueue.enqueue(copied, 0)); // FIXME, instead of failing for full queue, delete the oldest mssages
+    assert(toPhoneQueue.enqueue(copied, 0));
     fromNum++;
 }
 

@@ -215,12 +215,27 @@ void SimRadio::startReceive(MeshPacket *p) {
     handleReceiveInterrupt(p);
 }
 
+QueueStatus SimRadio::getQueueStatus()
+{
+    QueueStatus qs;
+
+    qs.res = qs.mesh_packet_id = 0;
+    qs.free = txQueue.getFree();
+    qs.maxlen = txQueue.getMaxLen();
+
+    return qs;
+}
 
 void SimRadio::handleReceiveInterrupt(MeshPacket *p)
 {
     LOG_DEBUG("HANDLE RECEIVE INTERRUPT\n");
     uint32_t xmitMsec;
-    assert(isReceiving);
+
+    if (!isReceiving) {
+        LOG_DEBUG("*** WAS_ASSERT *** handleReceiveInterrupt called when not in receive mode\n");
+        return;
+    }
+
     isReceiving = false;
 
     // read the number of actually received bytes

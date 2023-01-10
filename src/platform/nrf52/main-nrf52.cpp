@@ -172,6 +172,9 @@ void cpuDeepSleep(uint64_t msecToWake)
     Serial1.end();
 #endif
     setBluetoothEnable(false);
+#ifdef RAK4630
+    digitalWrite(PIN_3V3_EN, LOW);
+#endif
     // FIXME, use system off mode with ram retention for key state?
     // FIXME, use non-init RAM per
     // https://devzone.nordicsemi.com/f/nordic-q-a/48919/ram-retention-settings-with-softdevice-enabled
