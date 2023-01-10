@@ -197,6 +197,8 @@ ErrorCode Router::send(MeshPacket *p)
           Routing_Error err = Routing_Error_DUTY_CYCLE_LIMIT;
           if (getFrom(p) == nodeDB.getNodeNum()) {  // only send NAK to API, not to mesh
               abortSendAndNak(err, p);
+          } else {
+              packetPool.release(p);
           }
           return err;
         }
