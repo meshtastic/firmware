@@ -210,7 +210,7 @@ Channel &Channels::getByIndex(ChannelIndex chIndex)
 Channel &Channels::getByName(const char* chName)
 {
     for (ChannelIndex i = 0; i < getNumChannels(); i++) {
-        if (strcasecmp(channelFile.channels[i].settings.name, chName) == 0) {
+        if (strcasecmp(getGlobalId(i), chName) == 0) {
             return channelFile.channels[i];
         }
     }
