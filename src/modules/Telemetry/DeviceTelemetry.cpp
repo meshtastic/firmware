@@ -17,7 +17,7 @@ int32_t DeviceTelemetryModule::runOnce()
     uint32_t now = millis();
     if ((lastSentToMesh == 0 || 
         (now - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.telemetry.device_update_interval)) &&
-        airTime->channelUtilizationPercent() < max_channel_util_percent) {
+        airTime->isTxAllowedChannelUtil() && airTime->isTxAllowedAirUtil()) {
         sendTelemetry();
         lastSentToMesh = now;
     } else if (service.isToPhoneQueueEmpty()) {

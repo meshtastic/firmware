@@ -117,6 +117,31 @@ float AirTime::utilizationTXPercent()
     return (float(sum) / float(MS_IN_HOUR)) * 100;
 }
 
+bool AirTime::isTxAllowedChannelUtil(bool polite)
+{
+    uint8_t percentage = (polite ? polite_channel_util_percent : max_channel_util_percent); 
+    if (channelUtilizationPercent() < percentage) {
+        return true; 
+    } else {
+        LOG_WARN("Channel utilization is >%d percent. Skipping this opportunity to send.\n", percentage);
+        return false;
+    }
+}
+
+
+bool AirTime::isTxAllowedAirUtil() 
+{
+    if (!config.lora.override_duty_cycle && myRegion->dutyCycle < 100) {
+        if (utilizationTXPercent() < polite_tx_util_percent) {
+            return true; 
+        } else {
+            LOG_WARN("Tx air utilization is >%d percent. Skipping this opportunity to send.\n", polite_tx_util_percent);
+            return false;
+        }
+    }
+    return true;
+}
+
 // Get the amount of minutes we have to be silent before we can send again
 uint8_t AirTime::getSilentMinutes(float txPercent, float dutyCycle) 
 {  
