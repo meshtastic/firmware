@@ -280,8 +280,7 @@ NodeInfo *MeshService::refreshMyNodeInfo()
     node->last_heard =
         getValidTime(RTCQualityFromNet); // This nodedb timestamp might be stale, so update it if our clock is kinda valid
 
-    // For the time in the position field, only set that if we have a real GPS clock
-    position.time = getValidTime(RTCQualityGPS);
+    position.time = getValidTime(RTCQualityFromNet);
 
     updateBatteryLevel(powerStatus->getBatteryChargePercent());
 
