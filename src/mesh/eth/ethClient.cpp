@@ -5,7 +5,7 @@
 #include <SPI.h>
 #include <RAK13800_W5100S.h>
 #include "target_specific.h"
-#include "mesh/eth/ethServerAPI.h"
+#include "mesh/api/ethServerAPI.h"
 #include "mqtt/MQTT.h"
 
 #ifndef DISABLE_NTP
@@ -94,6 +94,7 @@ bool initEthernet()
         //        createSSLCert();
 
         getMacAddr(mac); // FIXME use the BLE MAC for now...
+	mac[0] &= 0xfe; // Make sure this is not a multicast MAC
 
         if (config.network.address_mode == Config_NetworkConfig_AddressMode_DHCP) {
             LOG_INFO("starting Ethernet DHCP\n");

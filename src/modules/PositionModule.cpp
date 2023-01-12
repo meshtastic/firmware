@@ -144,7 +144,7 @@ int32_t PositionModule::runOnce()
     if (lastGpsSend == 0 || (now - lastGpsSend) >= intervalMs) {
 
         // Only send packets if the channel is less than 40% utilized.
-        if (airTime->channelUtilizationPercent() < max_channel_util_percent) {
+        if (airTime->isTxAllowedChannelUtil()) {
             if (node->has_position && (node->position.latitude_i != 0 || node->position.longitude_i != 0)) {
                 lastGpsSend = now;
 
@@ -158,14 +158,12 @@ int32_t PositionModule::runOnce()
                 LOG_INFO("Sending pos@%x:6 to mesh (wantReplies=%d)\n", node->position.timestamp, requestReplies);
                 sendOurPosition(NODENUM_BROADCAST, requestReplies);
             }
-        } else {
-            LOG_WARN("Channel utilization is >40 percent. Skipping this opportunity to send.\n");
         }
 
     } else if (config.position.position_broadcast_smart_enabled) {
 
         // Only send packets if the channel is less than 25% utilized.
-        if (airTime->channelUtilizationPercent() < polite_channel_util_percent) {
+        if (airTime->isTxAllowedChannelUtil(true)) {
 
             NodeInfo *node2 = service.refreshMyNodeInfo(); // should guarantee there is now a position
 
@@ -208,8 +206,6 @@ int32_t PositionModule::runOnce()
                     lastGpsSend = now;
                 }
             }
-        } else {
-            LOG_WARN("Channel utilization is >25 percent. Skipping this opportunity to send.\n");
         }
     }
 

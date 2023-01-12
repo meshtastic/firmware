@@ -115,6 +115,13 @@ class RadioInterface
      */
     virtual ErrorCode send(MeshPacket *p) = 0;
 
+    /** Return TX queue status */
+    virtual QueueStatus getQueueStatus() {
+        QueueStatus qs;
+        qs.res = qs.mesh_packet_id = qs.free = qs.maxlen = 0;
+        return qs;
+    }
+
     /** Attempt to cancel a previously sent packet.  Returns true if a packet was found we could cancel */
     virtual bool cancelSending(NodeNum from, PacketId id) { return false; }
 

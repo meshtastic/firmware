@@ -84,6 +84,8 @@ typedef enum _HardwareModel {
     HardwareModel_HELTEC_V3 = 43,
     /* New Heltec Wireless Stick Lite with ESP32-S3 CPU */
     HardwareModel_HELTEC_WSL_V3 = 44,
+    /* New BETAFPV ELRS Micro TX Module 2.4G with ESP32 CPU */
+    HardwareModel_BETAFPV_2400_TX = 45,
     /* Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits. */
     HardwareModel_PRIVATE_HW = 255
 } HardwareModel;
@@ -439,9 +441,10 @@ typedef struct _Waypoint {
     bool locked;
     /* Name of the waypoint - max 30 chars */
     char name[30];
-    /* *
- Description of the waypoint - max 100 chars */
+    /* Description of the waypoint - max 100 chars */
     char description[100];
+    /* Designator icon for the waypoint in the form of a unicode emoji */
+    uint32_t icon;
 } Waypoint;
 
 typedef PB_BYTES_ARRAY_T(256) MeshPacket_encrypted_t;
@@ -621,6 +624,17 @@ typedef struct _LogRecord {
     LogRecord_Level level;
 } LogRecord;
 
+typedef struct _QueueStatus {
+    /* Last attempt to queue status, ErrorCode */
+    int8_t res;
+    /* Free entries in the outgoing queue */
+    uint8_t free;
+    /* Maximum entries in the outgoing queue */
+    uint8_t maxlen;
+    /* What was mesh packet id that generated this response? */
+    uint32_t mesh_packet_id;
+} QueueStatus;
+
 /* Packets from the radio to the phone will appear on the fromRadio characteristic.
  It will support READ and NOTIFY. When a new packet arrives the device will BLE notify?
  It will sit in that descriptor until consumed by the phone,
@@ -657,6 +671,8 @@ typedef struct _FromRadio {
         ModuleConfig moduleConfig;
         /* One packet is sent for each channel */
         Channel channel;
+        /* Queue status info */
+        QueueStatus queueStatus;
     };
 } FromRadio;
 
@@ -755,6 +771,7 @@ extern "C" {
 
 
 
+
 #define Compressed_portnum_ENUMTYPE PortNum
 
 
@@ -764,11 +781,12 @@ extern "C" {
 #define RouteDiscovery_init_default              {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_default                     {0, {RouteDiscovery_init_default}}
 #define Data_init_default                        {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
-#define Waypoint_init_default                    {0, 0, 0, 0, 0, "", ""}
+#define Waypoint_init_default                    {0, 0, 0, 0, 0, "", "", 0}
 #define MeshPacket_init_default                  {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
 #define NodeInfo_init_default                    {0, false, User_init_default, false, Position_init_default, 0, 0, false, DeviceMetrics_init_default}
 #define MyNodeInfo_init_default                  {0, 0, 0, "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
 #define LogRecord_init_default                   {"", 0, "", _LogRecord_Level_MIN}
+#define QueueStatus_init_default                 {0, 0, 0, 0}
 #define FromRadio_init_default                   {0, 0, {MeshPacket_init_default}}
 #define ToRadio_init_default                     {0, {MeshPacket_init_default}}
 #define Compressed_init_default                  {_PortNum_MIN, {0, {0}}}
@@ -777,11 +795,12 @@ extern "C" {
 #define RouteDiscovery_init_zero                 {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define Routing_init_zero                        {0, {RouteDiscovery_init_zero}}
 #define Data_init_zero                           {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
-#define Waypoint_init_zero                       {0, 0, 0, 0, 0, "", ""}
+#define Waypoint_init_zero                       {0, 0, 0, 0, 0, "", "", 0}
 #define MeshPacket_init_zero                     {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
 #define NodeInfo_init_zero                       {0, false, User_init_zero, false, Position_init_zero, 0, 0, false, DeviceMetrics_init_zero}
 #define MyNodeInfo_init_zero                     {0, 0, 0, "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
 #define LogRecord_init_zero                      {"", 0, "", _LogRecord_Level_MIN}
+#define QueueStatus_init_zero                    {0, 0, 0, 0}
 #define FromRadio_init_zero                      {0, 0, {MeshPacket_init_zero}}
 #define ToRadio_init_zero                        {0, {MeshPacket_init_zero}}
 #define Compressed_init_zero                     {_PortNum_MIN, {0, {0}}}
@@ -834,6 +853,7 @@ extern "C" {
 #define Waypoint_locked_tag                      5
 #define Waypoint_name_tag                        6
 #define Waypoint_description_tag                 7
+#define Waypoint_icon_tag                        8
 #define MeshPacket_from_tag                      1
 #define MeshPacket_to_tag                        2
 #define MeshPacket_channel_tag                   3
@@ -873,6 +893,10 @@ extern "C" {
 #define LogRecord_time_tag                       2
 #define LogRecord_source_tag                     3
 #define LogRecord_level_tag                      4
+#define QueueStatus_res_tag                      1
+#define QueueStatus_free_tag                     2
+#define QueueStatus_maxlen_tag                   3
+#define QueueStatus_mesh_packet_id_tag           4
 #define FromRadio_id_tag                         1
 #define FromRadio_packet_tag                     2
 #define FromRadio_my_info_tag                    3
@@ -883,6 +907,7 @@ extern "C" {
 #define FromRadio_rebooted_tag                   8
 #define FromRadio_moduleConfig_tag               9
 #define FromRadio_channel_tag                    10
+#define FromRadio_queueStatus_tag                11
 #define ToRadio_packet_tag                       1
 #define ToRadio_want_config_id_tag               3
 #define ToRadio_disconnect_tag                   4
@@ -959,7 +984,8 @@ X(a, STATIC,   SINGULAR, SFIXED32, longitude_i,       3) \
 X(a, STATIC,   SINGULAR, UINT32,   expire,            4) \
 X(a, STATIC,   SINGULAR, BOOL,     locked,            5) \
 X(a, STATIC,   SINGULAR, STRING,   name,              6) \
-X(a, STATIC,   SINGULAR, STRING,   description,       7)
+X(a, STATIC,   SINGULAR, STRING,   description,       7) \
+X(a, STATIC,   SINGULAR, FIXED32,  icon,              8)
 #define Waypoint_CALLBACK NULL
 #define Waypoint_DEFAULT NULL
 
@@ -1022,6 +1048,14 @@ X(a, STATIC,   SINGULAR, UENUM,    level,             4)
 #define LogRecord_CALLBACK NULL
 #define LogRecord_DEFAULT NULL
 
+#define QueueStatus_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, INT32,    res,               1) \
+X(a, STATIC,   SINGULAR, UINT32,   free,              2) \
+X(a, STATIC,   SINGULAR, UINT32,   maxlen,            3) \
+X(a, STATIC,   SINGULAR, UINT32,   mesh_packet_id,    4)
+#define QueueStatus_CALLBACK NULL
+#define QueueStatus_DEFAULT NULL
+
 #define FromRadio_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   id,                1) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,packet,packet),   2) \
@@ -1032,7 +1066,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,log_record,log_record),   6)
 X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,config_complete_id,config_complete_id),   7) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,rebooted,rebooted),   8) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,moduleConfig,moduleConfig),   9) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,channel,channel),  10)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,channel,channel),  10) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,queueStatus,queueStatus),  11)
 #define FromRadio_CALLBACK NULL
 #define FromRadio_DEFAULT NULL
 #define FromRadio_payload_variant_packet_MSGTYPE MeshPacket
@@ -1042,6 +1077,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,channel,channel),  10)
 #define FromRadio_payload_variant_log_record_MSGTYPE LogRecord
 #define FromRadio_payload_variant_moduleConfig_MSGTYPE ModuleConfig
 #define FromRadio_payload_variant_channel_MSGTYPE Channel
+#define FromRadio_payload_variant_queueStatus_MSGTYPE QueueStatus
 
 #define ToRadio_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,packet,packet),   1) \
@@ -1067,6 +1103,7 @@ extern const pb_msgdesc_t MeshPacket_msg;
 extern const pb_msgdesc_t NodeInfo_msg;
 extern const pb_msgdesc_t MyNodeInfo_msg;
 extern const pb_msgdesc_t LogRecord_msg;
+extern const pb_msgdesc_t QueueStatus_msg;
 extern const pb_msgdesc_t FromRadio_msg;
 extern const pb_msgdesc_t ToRadio_msg;
 extern const pb_msgdesc_t Compressed_msg;
@@ -1082,6 +1119,7 @@ extern const pb_msgdesc_t Compressed_msg;
 #define NodeInfo_fields &NodeInfo_msg
 #define MyNodeInfo_fields &MyNodeInfo_msg
 #define LogRecord_fields &LogRecord_msg
+#define QueueStatus_fields &QueueStatus_msg
 #define FromRadio_fields &FromRadio_msg
 #define ToRadio_fields &ToRadio_msg
 #define Compressed_fields &Compressed_msg
@@ -1095,11 +1133,12 @@ extern const pb_msgdesc_t Compressed_msg;
 #define MyNodeInfo_size                          179
 #define NodeInfo_size                            258
 #define Position_size                            137
+#define QueueStatus_size                         23
 #define RouteDiscovery_size                      40
 #define Routing_size                             42
 #define ToRadio_size                             324
 #define User_size                                77
-#define Waypoint_size                            156
+#define Waypoint_size                            161
 
 #ifdef __cplusplus
 } /* extern "C" */

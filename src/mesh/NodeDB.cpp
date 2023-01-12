@@ -1,5 +1,4 @@
 #include "configuration.h"
-#include <assert.h>
 
 #include "Channels.h"
 #include "CryptoEngine.h"
