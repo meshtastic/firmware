@@ -444,7 +444,7 @@ typedef struct _Waypoint {
     /* Description of the waypoint - max 100 chars */
     char description[100];
     /* Designator icon for the waypoint in the form of a unicode emoji */
-    uint32_t emoji;
+    uint32_t icon;
 } Waypoint;
 
 typedef PB_BYTES_ARRAY_T(256) MeshPacket_encrypted_t;
@@ -853,7 +853,7 @@ extern "C" {
 #define Waypoint_locked_tag                      5
 #define Waypoint_name_tag                        6
 #define Waypoint_description_tag                 7
-#define Waypoint_emoji_tag                       8
+#define Waypoint_icon_tag                        8
 #define MeshPacket_from_tag                      1
 #define MeshPacket_to_tag                        2
 #define MeshPacket_channel_tag                   3
@@ -985,7 +985,7 @@ X(a, STATIC,   SINGULAR, UINT32,   expire,            4) \
 X(a, STATIC,   SINGULAR, BOOL,     locked,            5) \
 X(a, STATIC,   SINGULAR, STRING,   name,              6) \
 X(a, STATIC,   SINGULAR, STRING,   description,       7) \
-X(a, STATIC,   SINGULAR, FIXED32,  emoji,             8)
+X(a, STATIC,   SINGULAR, FIXED32,  icon,              8)
 #define Waypoint_CALLBACK NULL
 #define Waypoint_DEFAULT NULL
 
