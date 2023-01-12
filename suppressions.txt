@@ -42,4 +42,3 @@ postfixOperator:*/mqtt/*
 // these two caused issues
 missingOverride
 virtualCallInConstructor
-
