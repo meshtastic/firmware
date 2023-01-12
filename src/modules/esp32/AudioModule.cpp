@@ -8,8 +8,6 @@
 #include "Router.h"
 #include "FSCommon.h"
 
-#include <assert.h>
-
 #ifdef OLED_RU
 #include "graphics/fonts/OLEDDisplayFontsRU.h"
 #endif

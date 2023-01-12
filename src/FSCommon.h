@@ -17,7 +17,7 @@
 // RP2040
 #include "LittleFS.h"
 #define FSCom LittleFS
-#define FSBegin() FSCom.begin()
+#define FSBegin() FSCom.begin() // set autoformat
 #define FILE_O_WRITE "w"
 #define FILE_O_READ "r"
 #endif
@@ -26,7 +26,7 @@
 // ESP32 version
 #include "LittleFS.h"
 #define FSCom LittleFS
-#define FSBegin() FSCom.begin(true)
+#define FSBegin() FSCom.begin(true) // format on failure
 #define FILE_O_WRITE "w"
 #define FILE_O_READ "r"
 #endif
@@ -35,7 +35,7 @@
 // NRF52 version
 #include "InternalFileSystem.h"
 #define FSCom InternalFS
-#define FSBegin() FSCom.begin()
+#define FSBegin() FSCom.begin() // InternalFS formats on failure
 using namespace Adafruit_LittleFS_Namespace;
 #endif
 

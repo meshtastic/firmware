@@ -9,7 +9,6 @@
 #include "gps/GeoCoord.h"
 #include <Arduino.h>
 #include <FSCommon.h>
-//#include <assert.h>
 
 /*
     As a sender, I can send packets every n seconds. These packets include an incremented PacketID.
@@ -74,10 +73,8 @@ int32_t RangeTestModule::runOnce()
                 LOG_INFO("fixed_position()             %d\n", config.position.fixed_position);
 
                 // Only send packets if the channel is less than 25% utilized.
-                if (airTime->channelUtilizationPercent() < 25) {
+                if (airTime->isTxAllowedChannelUtil(true)) {
                     rangeTestModuleRadio->sendPayload();
-                } else {
-                    LOG_WARN("RangeTest - Channel utilization is >25 percent. Skipping this opportunity to send.\n");
                 }
 
                 return (senderHeartbeat);

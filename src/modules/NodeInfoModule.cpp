@@ -65,8 +65,10 @@ int32_t NodeInfoModule::runOnce()
     bool requestReplies = currentGeneration != radioGeneration;
     currentGeneration = radioGeneration;
 
-    LOG_INFO("Sending our nodeinfo to mesh (wantReplies=%d)\n", requestReplies);
-    sendOurNodeInfo(NODENUM_BROADCAST, requestReplies); // Send our info (don't request replies)
+    if (airTime->isTxAllowedAirUtil()) {
+        LOG_INFO("Sending our nodeinfo to mesh (wantReplies=%d)\n", requestReplies);
+        sendOurNodeInfo(NODENUM_BROADCAST, requestReplies); // Send our info (don't request replies)
+    }
 
     return default_broadcast_interval_secs * 1000;
 }

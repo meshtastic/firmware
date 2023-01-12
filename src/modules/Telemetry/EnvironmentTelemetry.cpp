@@ -107,7 +107,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
         uint32_t now = millis();
         if ((lastSentToMesh == 0 || 
             (now - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval)) && 
-            airTime->channelUtilizationPercent() < max_channel_util_percent) {
+            airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
             lastSentToMesh = now;
         } else if (service.isToPhoneQueueEmpty()) {
