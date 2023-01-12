@@ -1,21 +1,21 @@
 #pragma once
 
 #include "StreamAPI.h"
-#include <WiFi.h>
 
 /**
  * Provides both debug printing and, if the client starts sending protobufs to us, switches to send/receive protobufs
  * (and starts dropping debug printing - FIXME, eventually those prints should be encapsulated in protobufs).
  */
-class WiFiServerAPI : public StreamAPI, private concurrency::OSThread
+template<class T>
+class ServerAPI : public StreamAPI, private concurrency::OSThread
 {
   private:
-    WiFiClient client;
+    T client;
 
   public:
-    explicit WiFiServerAPI(WiFiClient &_client);
+    explicit ServerAPI(T &_client);
 
-    virtual ~WiFiServerAPI();
+    virtual ~ServerAPI();
 
     /// override close to also shutdown the TCP link
     virtual void close();
@@ -34,25 +34,21 @@ class WiFiServerAPI : public StreamAPI, private concurrency::OSThread
 /**
  * Listens for incoming connections and does accepts and creates instances of WiFiServerAPI as needed
  */
-class WiFiServerPort : public WiFiServer, private concurrency::OSThread
+template<class T, class U>
+class APIServerPort : public U, private concurrency::OSThread
 {
     /** The currently open port
      *
      * FIXME: We currently only allow one open TCP connection at a time, because we depend on the loop() call in this class to
      * delegate to the worker.  Once coroutines are implemented we can relax this restriction.
      */
-    WiFiServerAPI *openAPI = NULL;
+    T *openAPI = NULL;
 
   public:
-    explicit WiFiServerPort(int port);
+    explicit APIServerPort(int port);
 
     void init();
 
-    /// If an api server is running, we try to spit out debug 'serial' characters there
-    static void debugOut(char c);
-    
   protected:
     int32_t runOnce() override;
 };
-
-void initApiServer(int port=4403);

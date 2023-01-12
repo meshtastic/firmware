@@ -73,10 +73,8 @@ int32_t RangeTestModule::runOnce()
                 LOG_INFO("fixed_position()             %d\n", config.position.fixed_position);
 
                 // Only send packets if the channel is less than 25% utilized.
-                if (airTime->channelUtilizationPercent() < 25) {
+                if (airTime->isTxAllowedChannelUtil(true)) {
                     rangeTestModuleRadio->sendPayload();
-                } else {
-                    LOG_WARN("RangeTest - Channel utilization is >25 percent. Skipping this opportunity to send.\n");
                 }
 
                 return (senderHeartbeat);

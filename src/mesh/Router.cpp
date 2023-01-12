@@ -138,7 +138,7 @@ void Router::sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelI
 void Router::abortSendAndNak(Routing_Error err, MeshPacket *p)
 {
     LOG_ERROR("Error=%d, returning NAK and dropping packet.\n", err);
-    sendAckNak(Routing_Error_NO_INTERFACE, getFrom(p), p->id, p->channel);
+    sendAckNak(err, getFrom(p), p->id, p->channel);
     packetPool.release(p);
 }
 
@@ -199,15 +199,19 @@ ErrorCode Router::send(MeshPacket *p)
     } // should have already been handled by sendLocal
 
     // Abort sending if we are violating the duty cycle
-    if (!config.lora.override_duty_cycle && myRegion->dutyCycle != 100) {
-      float hourlyTxPercent = airTime->utilizationTXPercent();
-      if (hourlyTxPercent > myRegion->dutyCycle) {
-          uint8_t silentMinutes = airTime->getSilentMinutes(hourlyTxPercent, myRegion->dutyCycle); 
-          LOG_WARN("Duty cycle limit exceeded. Aborting send for now, you can send again in %d minutes.\n", silentMinutes);
-          Routing_Error err = Routing_Error_DUTY_CYCLE_LIMIT;
-          abortSendAndNak(err, p);
-          return err;
-      }
+    if (!config.lora.override_duty_cycle && myRegion->dutyCycle < 100) {
+        float hourlyTxPercent = airTime->utilizationTXPercent();
+        if (hourlyTxPercent > myRegion->dutyCycle) {
+            uint8_t silentMinutes = airTime->getSilentMinutes(hourlyTxPercent, myRegion->dutyCycle); 
+            LOG_WARN("Duty cycle limit exceeded. Aborting send for now, you can send again in %d minutes.\n", silentMinutes);
+            Routing_Error err = Routing_Error_DUTY_CYCLE_LIMIT;
+            if (getFrom(p) == nodeDB.getNodeNum()) {  // only send NAK to API, not to the mesh
+                abortSendAndNak(err, p);
+            } else {
+                packetPool.release(p);
+            }
+            return err;
+        }
     }
 
     // PacketId nakId = p->decoded.which_ackVariant == SubPacket_fail_id_tag ? p->decoded.ackVariant.fail_id : 0;
