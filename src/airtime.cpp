@@ -132,7 +132,7 @@ bool AirTime::isTxAllowedChannelUtil(bool polite)
 bool AirTime::isTxAllowedAirUtil() 
 {
     if (!config.lora.override_duty_cycle && myRegion->dutyCycle < 100) {
-        if (utilizationTXPercent() < polite_tx_util_percent) {
+        if (utilizationTXPercent() < myRegion->dutyCycle * polite_tx_util_percent / 100) {
             return true; 
         } else {
             LOG_WARN("Tx air utilization is >%d percent. Skipping this opportunity to send.\n", polite_tx_util_percent);
