@@ -55,10 +55,9 @@ class MQTT : private concurrency::OSThread
     bool connected();
     
   protected:
-    PointerQueue<ServiceEnvelope> mqttQueue;
 
     int reconnectCount = 0;
-
+    
     virtual int32_t runOnce() override;
 
   private:
