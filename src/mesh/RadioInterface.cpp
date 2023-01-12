@@ -105,13 +105,13 @@ const RegionInfo regions[] = {
         433,05-434,7 Mhz 10 mW
         https://nkrzi.gov.ua/images/upload/256/5810/PDF_UUZ_19_01_2016.pdf
     */
-    RDEF(UA_433, 433.0f, 434.0f, 100, 0, 12, true, false, false),
+    RDEF(UA_433, 433.0f, 434.7f, 10, 0, 10, true, false, false),
 
     /*
         868,0-868,6 Mhz 25 mW
         https://nkrzi.gov.ua/images/upload/256/5810/PDF_UUZ_19_01_2016.pdf
     */
-    RDEF(UA_868, 868.1f, 868.5f, 100, 0, 14, true, false, false),
+    RDEF(UA_868, 868.0f, 868.6f, 1, 0, 14, true, false, false),
 
     /*
         This needs to be last. Same as US.
