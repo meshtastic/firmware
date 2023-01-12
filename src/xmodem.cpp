@@ -36,6 +36,7 @@ XModemAdapter xModem;
 
 XModemAdapter::XModemAdapter()
 {
+    xmodemStore = (XModem*)malloc(XModem_size);
 }
 
 unsigned short XModemAdapter::crc16_ccitt(const pb_byte_t *buffer, int length)
@@ -66,6 +67,7 @@ int XModemAdapter::check(const pb_byte_t *buf, int sz, unsigned short tcrc)
 void XModemAdapter::sendControl(XModem_Control c) {
     memset(xmodemStore, 0, XModem_size);
     xmodemStore->control = c;
+    LOG_DEBUG("XModem: Notify Sending control %d.\n", c);
     packetReady.notifyObservers(packetno);
 }
 
@@ -98,6 +100,7 @@ void XModemAdapter::handlePacket(XModem xmodemPacket)
                     isReceiving = false;
                     break;
                 } else { // Transmit this file from Flash
+                    LOG_INFO("XModem: Transmitting file %s\n", filename);
                     file = FSCom.open(filename, FILE_O_READ);
                     if (file) {
                         packetno = 1;
@@ -107,6 +110,11 @@ void XModemAdapter::handlePacket(XModem xmodemPacket)
                         xmodemStore->seq = packetno;
                         xmodemStore->buffer.size = file.read(xmodemStore->buffer.bytes, sizeof(XModem_buffer_t::bytes));
                         xmodemStore->crc16 = crc16_ccitt(xmodemStore->buffer.bytes, xmodemStore->buffer.size);
+                        LOG_DEBUG("XModem: STX Notify Sending packet %d, %d Bytes.\n", packetno, xmodemStore->buffer.size);
+                        if (xmodemStore->buffer.size < sizeof(XModem_buffer_t::bytes)) {
+                            isEOT = true;
+                            // send EOT on next Ack
+                        }
                         packetReady.notifyObservers(packetno);
                         break;
                     }
@@ -154,6 +162,7 @@ void XModemAdapter::handlePacket(XModem xmodemPacket)
                 if (isEOT) {
                     sendControl(XModem_Control_EOT);
                     file.close();
+                    LOG_INFO("XModem: Finished sending file %s\n", filename);
                     isTransmitting = false;
                     isEOT = false;
                     break;
@@ -165,6 +174,7 @@ void XModemAdapter::handlePacket(XModem xmodemPacket)
                 xmodemStore->seq = packetno;
                 xmodemStore->buffer.size = file.read(xmodemStore->buffer.bytes, sizeof(XModem_buffer_t::bytes));
                 xmodemStore->crc16 = crc16_ccitt(xmodemStore->buffer.bytes, xmodemStore->buffer.size);
+                LOG_DEBUG("XModem: ACK Notify Sending packet %d, %d Bytes.\n", packetno, xmodemStore->buffer.size);
                 if (xmodemStore->buffer.size < sizeof(XModem_buffer_t::bytes)) {
                     isEOT = true;
                     // send EOT on next Ack
@@ -181,6 +191,7 @@ void XModemAdapter::handlePacket(XModem xmodemPacket)
                 if (--retrans <= 0) {
                     sendControl(XModem_Control_CAN);
                     file.close();
+                    LOG_INFO("XModem: Retransmit timeout, cancelling file %s\n", filename);
                     isTransmitting = false;
                     break;
                 }
@@ -190,6 +201,7 @@ void XModemAdapter::handlePacket(XModem xmodemPacket)
                 file.seek((packetno-1) * sizeof(XModem_buffer_t::bytes));
                 xmodemStore->buffer.size = file.read(xmodemStore->buffer.bytes, sizeof(XModem_buffer_t::bytes));
                 xmodemStore->crc16 = crc16_ccitt(xmodemStore->buffer.bytes, xmodemStore->buffer.size);
+                LOG_DEBUG("XModem: NAK Notify Sending packet %d, %d Bytes.\n", packetno, xmodemStore->buffer.size);
                 if (xmodemStore->buffer.size < sizeof(XModem_buffer_t::bytes)) {
                     isEOT = true;
                     // send EOT on next Ack
