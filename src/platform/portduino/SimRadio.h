@@ -2,7 +2,7 @@
 
 #include "RadioInterface.h"
 #include "MeshPacketQueue.h"
-#include "wifi/WiFiServerAPI.h"
+#include "api/WiFiServerAPI.h"
 
 #include <RadioLib.h>
 

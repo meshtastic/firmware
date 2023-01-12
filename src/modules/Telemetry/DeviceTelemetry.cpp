@@ -13,11 +13,10 @@
 
 int32_t DeviceTelemetryModule::runOnce()
 {
-#ifndef ARCH_PORTDUINO
     uint32_t now = millis();
     if ((lastSentToMesh == 0 || 
         (now - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.telemetry.device_update_interval)) &&
-        airTime->channelUtilizationPercent() < max_channel_util_percent) {
+        airTime->isTxAllowedChannelUtil() && airTime->isTxAllowedAirUtil()) {
         sendTelemetry();
         lastSentToMesh = now;
     } else if (service.isToPhoneQueueEmpty()) {
@@ -26,7 +25,6 @@ int32_t DeviceTelemetryModule::runOnce()
         sendTelemetry(NODENUM_BROADCAST, true);
     }
     return sendToPhoneIntervalMs;
-#endif
 }
 
 bool DeviceTelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Telemetry *t)

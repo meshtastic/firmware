@@ -80,7 +80,7 @@ typedef struct _ModuleConfig_MQTTConfig {
     bool enabled;
     /* The server to use for our MQTT global message gateway feature.
  If not set, the default server will be used */
-    char address[32];
+    char address[64];
     /* MQTT username to use (most useful for a custom MQTT server).
  If using a custom server, this will be honoured even if empty.
  If using the default server, this will only be honoured if set, otherwise the device will use the default username */
@@ -553,13 +553,13 @@ extern const pb_msgdesc_t ModuleConfig_CannedMessageConfig_msg;
 #define ModuleConfig_AudioConfig_size            19
 #define ModuleConfig_CannedMessageConfig_size    49
 #define ModuleConfig_ExternalNotificationConfig_size 40
-#define ModuleConfig_MQTTConfig_size             169
+#define ModuleConfig_MQTTConfig_size             201
 #define ModuleConfig_RangeTestConfig_size        10
 #define ModuleConfig_RemoteHardwareConfig_size   2
 #define ModuleConfig_SerialConfig_size           26
 #define ModuleConfig_StoreForwardConfig_size     22
 #define ModuleConfig_TelemetryConfig_size        18
-#define ModuleConfig_size                        172
+#define ModuleConfig_size                        204
 
 #ifdef __cplusplus
 } /* extern "C" */
