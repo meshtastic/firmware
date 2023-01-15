@@ -33,13 +33,16 @@ jobs:
           - board: m5stack-coreink
           - board: tbeam-s3-core
           - board: tlora-t3s3-v1
-          
+
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - name: Build base
         id: base
         uses: ./.github/actions/setup-base
+
+      - name: Trunk Check
+        uses: trunk-io/trunk-action@v1
 
       - name: Check ${{ matrix.board }}
         run: bin/check-all.sh ${{ matrix.board }}
@@ -132,11 +135,11 @@ jobs:
           path: |
             release/device-*.sh
             release/device-*.bat
-      
+
       - name: Docker login
         if: ${{ github.event_name == 'workflow_dispatch' }}
         uses: docker/login-action@v2
-        with: 
+        with:
           username: meshtastic
           password: ${{ secrets.DOCKER_TOKEN }}
 
@@ -152,7 +155,7 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: meshtastic/device-simulator:latest
-      
+
   after-checks:
     runs-on: ubuntu-latest
     needs: [check]
