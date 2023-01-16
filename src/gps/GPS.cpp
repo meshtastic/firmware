@@ -623,7 +623,7 @@ GnssModel_t GPS::probe()
         //tips: extensionNo field is 0 on some 6M GNSS modules
         for (int i = 0; i < info.extensionNo; ++i) {
             if (!strncmp(info.extension[i], "OD=", 3)) {
-                strcpy((char *)buffer, &(info.extension[i][3]));
+                strncpy((char *)buffer, &(info.extension[i][3]), sizeof(buffer));
                 LOG_DEBUG("GetModel:%s\n",(char *)buffer);
             }
         }
