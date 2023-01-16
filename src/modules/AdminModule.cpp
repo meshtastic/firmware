@@ -24,10 +24,10 @@ bool hasOpenEditTransaction;
 static const char *secretReserved = "sekrit";
 
 /// If buf is the reserved secret word, replace the buffer with currentVal
-static void writeSecret(char *buf, const char *currentVal)
+static void writeSecret(char *buf, size_t bufsz, const char *currentVal)
 {
     if (strcmp(buf, secretReserved) == 0) {
-        strncpy(buf, currentVal, sizeof(buf));
+        strncpy(buf, currentVal, bufsz);
     }
 }
 
@@ -381,7 +381,7 @@ void AdminModule::handleGetConfig(const MeshPacket &req, const uint32_t configTy
             LOG_INFO("Getting config: Network\n");
             res.get_config_response.which_payload_variant = Config_network_tag;
             res.get_config_response.payload_variant.network = config.network;
-            writeSecret(res.get_config_response.payload_variant.network.wifi_psk, config.network.wifi_psk);
+            writeSecret(res.get_config_response.payload_variant.network.wifi_psk, sizeof(res.get_config_response.payload_variant.network.wifi_psk), config.network.wifi_psk);
             break;
         case AdminMessage_ConfigType_DISPLAY_CONFIG:
             LOG_INFO("Getting config: Display\n");
