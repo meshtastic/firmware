@@ -84,7 +84,7 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
     uint8_t defaultpskIndex = 1;
     channelSettings.psk.bytes[0] = defaultpskIndex;
     channelSettings.psk.size = 1;
-    strcpy(channelSettings.name, "");
+    strncpy(channelSettings.name, "", sizeof(channelSettings.name));
 
     ch.has_settings = true;
     ch.role = Channel_Role_PRIMARY;

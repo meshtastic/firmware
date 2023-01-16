@@ -349,7 +349,7 @@ void ExternalNotificationModule::handleGetRingtone(const MeshPacket &req, AdminM
     LOG_INFO("*** handleGetRingtone\n");
     if(req.decoded.want_response) {
         response->which_payload_variant = AdminMessage_get_ringtone_response_tag;
-        strcpy(response->get_ringtone_response, rtttlConfig.ringtone);
+        strncpy(response->get_ringtone_response, rtttlConfig.ringtone, sizeof(response->get_ringtone_response));
     } // Don't send anything if not instructed to. Better than asserting.
 }
 
@@ -360,7 +360,7 @@ void ExternalNotificationModule::handleSetRingtone(const char *from_msg)
 
     if (*from_msg) {
         changed |= strcmp(rtttlConfig.ringtone, from_msg);
-        strcpy(rtttlConfig.ringtone, from_msg);
+        strncpy(rtttlConfig.ringtone, from_msg, sizeof(rtttlConfig.ringtone));
         LOG_INFO("*** from_msg.text:%s\n", from_msg);
     }
 
