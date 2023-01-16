@@ -9,6 +9,7 @@
 #include "module_config.pb.h"
 #include "portnums.pb.h"
 #include "telemetry.pb.h"
+#include "xmodem.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.
@@ -437,8 +438,9 @@ typedef struct _Waypoint {
     int32_t longitude_i;
     /* Time the waypoint is to expire (epoch) */
     uint32_t expire;
-    /* If true, only allow the original sender to update the waypoint. */
-    bool locked;
+    /* If greater than zero, treat the value as a nodenum only allowing them to update the waypoint.
+ If zero, the waypoint is open to be edited by any member of the mesh. */
+    uint32_t locked_to;
     /* Name of the waypoint - max 30 chars */
     char name[30];
     /* Description of the waypoint - max 100 chars */
@@ -673,6 +675,8 @@ typedef struct _FromRadio {
         Channel channel;
         /* Queue status info */
         QueueStatus queueStatus;
+        /* File Transfer Chunk */
+        XModem xmodemPacket;
     };
 } FromRadio;
 
@@ -696,6 +700,7 @@ typedef struct _ToRadio {
      This is useful for serial links where there is no hardware/protocol based notification that the client has dropped the link.
      (Sending this message is optional for clients) */
         bool disconnect;
+        XModem xmodemPacket;
     };
 } ToRadio;
 
@@ -850,7 +855,7 @@ extern "C" {
 #define Waypoint_latitude_i_tag                  2
 #define Waypoint_longitude_i_tag                 3
 #define Waypoint_expire_tag                      4
-#define Waypoint_locked_tag                      5
+#define Waypoint_locked_to_tag                   5
 #define Waypoint_name_tag                        6
 #define Waypoint_description_tag                 7
 #define Waypoint_icon_tag                        8
@@ -908,9 +913,11 @@ extern "C" {
 #define FromRadio_moduleConfig_tag               9
 #define FromRadio_channel_tag                    10
 #define FromRadio_queueStatus_tag                11
+#define FromRadio_xmodemPacket_tag               12
 #define ToRadio_packet_tag                       1
 #define ToRadio_want_config_id_tag               3
 #define ToRadio_disconnect_tag                   4
+#define ToRadio_xmodemPacket_tag                 5
 #define Compressed_portnum_tag                   1
 #define Compressed_data_tag                      2
 
@@ -982,7 +989,7 @@ X(a, STATIC,   SINGULAR, UINT32,   id,                1) \
 X(a, STATIC,   SINGULAR, SFIXED32, latitude_i,        2) \
 X(a, STATIC,   SINGULAR, SFIXED32, longitude_i,       3) \
 X(a, STATIC,   SINGULAR, UINT32,   expire,            4) \
-X(a, STATIC,   SINGULAR, BOOL,     locked,            5) \
+X(a, STATIC,   SINGULAR, UINT32,   locked_to,         5) \
 X(a, STATIC,   SINGULAR, STRING,   name,              6) \
 X(a, STATIC,   SINGULAR, STRING,   description,       7) \
 X(a, STATIC,   SINGULAR, FIXED32,  icon,              8)
@@ -1067,7 +1074,8 @@ X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,config_complete_id,config_co
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,rebooted,rebooted),   8) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,moduleConfig,moduleConfig),   9) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,channel,channel),  10) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,queueStatus,queueStatus),  11)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,queueStatus,queueStatus),  11) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,xmodemPacket,xmodemPacket),  12)
 #define FromRadio_CALLBACK NULL
 #define FromRadio_DEFAULT NULL
 #define FromRadio_payload_variant_packet_MSGTYPE MeshPacket
@@ -1078,14 +1086,17 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,queueStatus,queueStatus),  1
 #define FromRadio_payload_variant_moduleConfig_MSGTYPE ModuleConfig
 #define FromRadio_payload_variant_channel_MSGTYPE Channel
 #define FromRadio_payload_variant_queueStatus_MSGTYPE QueueStatus
+#define FromRadio_payload_variant_xmodemPacket_MSGTYPE XModem
 
 #define ToRadio_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,packet,packet),   1) \
 X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,want_config_id,want_config_id),   3) \
-X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,disconnect,disconnect),   4)
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,disconnect,disconnect),   4) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,xmodemPacket,xmodemPacket),   5)
 #define ToRadio_CALLBACK NULL
 #define ToRadio_DEFAULT NULL
 #define ToRadio_payload_variant_packet_MSGTYPE MeshPacket
+#define ToRadio_payload_variant_xmodemPacket_MSGTYPE XModem
 
 #define Compressed_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    portnum,           1) \
@@ -1138,7 +1149,7 @@ extern const pb_msgdesc_t Compressed_msg;
 #define Routing_size                             42
 #define ToRadio_size                             324
 #define User_size                                77
-#define Waypoint_size                            161
+#define Waypoint_size                            165
 
 #ifdef __cplusplus
 } /* extern "C" */
