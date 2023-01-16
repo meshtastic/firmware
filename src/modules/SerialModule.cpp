@@ -200,7 +200,7 @@ int32_t SerialModule::runOnce()
                 // in NMEA mode send out GGA every 2 seconds, Don't read from Port
                 if (millis() - lastNmeaTime > 2000) {
                     lastNmeaTime = millis();
-                    printGGA(outbuf, nodeDB.getNode(myNodeInfo.my_node_num)->position);
+                    printGGA(outbuf, sizeof(outbuf), nodeDB.getNode(myNodeInfo.my_node_num)->position);
                     Serial2.printf("%s", outbuf);
                 }
             } else {
@@ -293,7 +293,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
                         decoded = &scratch;
                     }
                     // send position packet as WPL to the serial port
-                    printWPL(outbuf, *decoded, nodeDB.getNode(getFrom(&mp))->user.long_name);
+                    printWPL(outbuf, sizeof(outbuf), *decoded, nodeDB.getNode(getFrom(&mp))->user.long_name);
                     Serial2.printf("%s", outbuf);
                 }
             }

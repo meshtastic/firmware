@@ -265,10 +265,10 @@ void NodeDB::installDefaultDeviceState()
 
     // Set default owner name
     pickNewNodeNum(); // based on macaddr now
-    sprintf(owner.long_name, "Meshtastic %02x%02x", ourMacAddr[4], ourMacAddr[5]);
-    sprintf(owner.short_name, "%02x%02x", ourMacAddr[4], ourMacAddr[5]);
+    snprintf(owner.long_name, sizeof(owner.long_name), "Meshtastic %02x%02x", ourMacAddr[4], ourMacAddr[5]);
+    snprintf(owner.short_name, sizeof(owner.short_name), "%02x%02x", ourMacAddr[4], ourMacAddr[5]);
 
-    sprintf(owner.id, "!%08x", getNodeNum()); // Default node ID now based on nodenum
+    snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum()); // Default node ID now based on nodenum
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
 }
 
