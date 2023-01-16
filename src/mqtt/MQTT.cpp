@@ -478,7 +478,7 @@ std::string MQTT::downstreamPacketToJson(MeshPacket *mp)
                 msgPayload["name"] = new JSONValue(decoded->name);
                 msgPayload["description"] = new JSONValue(decoded->description);
                 msgPayload["expire"] = new JSONValue((int)decoded->expire);
-                msgPayload["locked_to"] = new JSONValue(decoded->locked_to);
+                msgPayload["locked_to"] = new JSONValue((int)decoded->locked_to);
                 msgPayload["latitude_i"] = new JSONValue((int)decoded->latitude_i);
                 msgPayload["longitude_i"] = new JSONValue((int)decoded->longitude_i);
                 jsonObj["payload"] = new JSONValue(msgPayload);
