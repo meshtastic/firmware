@@ -27,7 +27,7 @@ static const char *secretReserved = "sekrit";
 static void writeSecret(char *buf, const char *currentVal)
 {
     if (strcmp(buf, secretReserved) == 0) {
-        strcpy(buf, currentVal);
+        strncpy(buf, currentVal, sizeof(buf));
     }
 }
 
@@ -199,15 +199,15 @@ void AdminModule::handleSetOwner(const User &o)
 
     if (*o.long_name) {
         changed |= strcmp(owner.long_name, o.long_name);
-        strcpy(owner.long_name, o.long_name);
+        strncpy(owner.long_name, o.long_name, sizeof(owner.long_name));
     }
     if (*o.short_name) {
         changed |= strcmp(owner.short_name, o.short_name);
-        strcpy(owner.short_name, o.short_name);
+        strncpy(owner.short_name, o.short_name, sizeof(owner.short_name));
     }
     if (*o.id) {
         changed |= strcmp(owner.id, o.id);
-        strcpy(owner.id, o.id);
+        strncpy(owner.id, o.id, sizeof(owner.id));
     }
     if (owner.is_licensed != o.is_licensed) {
         changed = 1;
