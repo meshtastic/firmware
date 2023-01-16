@@ -4,7 +4,6 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Router.h"
-#include "assert.h"
 #include "configuration.h"
 #include "main.h"
 #include "sleep.h"
@@ -111,6 +110,8 @@ const RegionInfo regions[] = {
 
 const RegionInfo *myRegion;
 
+static uint8_t bytes[MAX_RHPACKETLEN];
+
 void initRegion()
 {
     const RegionInfo *r = regions;
@@ -164,17 +165,19 @@ uint32_t RadioInterface::getPacketTime(uint32_t pl)
 
 uint32_t RadioInterface::getPacketTime(MeshPacket *p)
 {
-    assert(p->which_payload_variant == MeshPacket_encrypted_tag); // It should have already been encoded by now
-    uint32_t pl = p->encrypted.size + sizeof(PacketHeader);
-
+    uint32_t pl = 0;
+    if(p->which_payload_variant == MeshPacket_encrypted_tag) {
+        pl = p->encrypted.size + sizeof(PacketHeader);
+    } else {
+        size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &Data_msg, &p->decoded);
+        pl = numbytes + sizeof(PacketHeader);
+    }
     return getPacketTime(pl);
 }
 
 /** The delay to use for retransmitting dropped packets */
 uint32_t RadioInterface::getRetransmissionMsec(const MeshPacket *p)
 {
-    assert(slotTimeMsec); // Better be non zero
-    static uint8_t bytes[MAX_RHPACKETLEN];
     size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &Data_msg, &p->decoded);
     uint32_t packetAirtime = getPacketTime(numbytes + sizeof(PacketHeader));
     // Make sure enough time has elapsed for this packet to be sent and an ACK is received.
@@ -271,9 +274,6 @@ void printPacket(const char *prefix, const MeshPacket *p)
 RadioInterface::RadioInterface()
 {
     assert(sizeof(PacketHeader) == 16); // make sure the compiler did what we expected
-
-    // Can't print strings this early - serial not setup yet
-    // LOG_DEBUG("Set meshradio defaults name=%s\n", channelSettings.name);
 }
 
 bool RadioInterface::reconfigure()
@@ -384,7 +384,7 @@ void RadioInterface::applyModemConfig()
             cr = 8;
             sf = 10;
             break;
-        case Config_LoRaConfig_ModemPreset_LONG_FAST:
+        default: // Config_LoRaConfig_ModemPreset_LONG_FAST is default. Gracefully use this is preset is something illegal.
             bw = (myRegion->wideLora) ? 812.5 : 250;
             cr = 8;
             sf = 11;
@@ -399,8 +399,6 @@ void RadioInterface::applyModemConfig()
             cr = 8;
             sf = 12;
             break;
-        default:
-            assert(0); // Unknown enum
         }
     } else {
         sf = loraConfig.spread_factor;
@@ -422,7 +420,6 @@ void RadioInterface::applyModemConfig()
     }
 
     power = loraConfig.tx_power;
-    assert(myRegion); // Should have been found in init
 
     if ((power == 0) || ((power > myRegion->powerLimit) && !devicestate.owner.is_licensed))
         power = myRegion->powerLimit;
@@ -502,7 +499,10 @@ size_t RadioInterface::beginSending(MeshPacket *p)
     h->to = p->to;
     h->id = p->id;
     h->channel = p->channel;
-    assert(p->hop_limit <= HOP_MAX);
+    if (p->hop_limit > HOP_MAX) {
+        LOG_WARN("hop limit %d is too high, setting to %d\n", p->hop_limit, HOP_MAX);
+        p->hop_limit = HOP_MAX;
+    }
     h->flags = p->hop_limit | (p->want_ack ? PACKET_FLAGS_WANT_ACK_MASK : 0);
 
     // if the sender nodenum is zero, that means uninitialized

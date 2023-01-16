@@ -5,7 +5,7 @@
 #include "configuration.h"
 #include "main.h"
 #include "mesh/http/WebServer.h"
-#include "mesh/wifi/WiFiServerAPI.h"
+#include "mesh/api/WiFiServerAPI.h"
 #include "mqtt/MQTT.h"
 #include "target_specific.h"
 #include <ESPmDNS.h>
@@ -55,11 +55,13 @@ static int32_t reconnectWiFi()
 
         // Make sure we clear old connection credentials
         WiFi.disconnect(false, true);
-
         LOG_INFO("Reconnecting to WiFi access point %s\n",wifiName);
 
-        WiFi.mode(WIFI_MODE_STA);
-        WiFi.begin(wifiName, wifiPsw);
+        delay(5000);
+
+        if (!WiFi.isConnected()) {
+            WiFi.begin(wifiName, wifiPsw);
+        }
     }
 
 #ifndef DISABLE_NTP
@@ -162,12 +164,12 @@ bool initWifi()
         if (*wifiName) {
             uint8_t dmac[6];
             getMacAddr(dmac);
-            sprintf(ourHost, "Meshtastic-%02x%02x", dmac[4], dmac[5]);
+            snprintf(ourHost, sizeof(ourHost), "Meshtastic-%02x%02x", dmac[4], dmac[5]);
 
             WiFi.mode(WIFI_MODE_STA);
             WiFi.setHostname(ourHost);
             WiFi.onEvent(WiFiEvent);
-            WiFi.setAutoReconnect(false);
+            WiFi.setAutoReconnect(true);
             WiFi.setSleep(false);
             if (config.network.address_mode == Config_NetworkConfig_AddressMode_STATIC && config.network.ipv4_config.ip != 0) {
                 WiFi.config(config.network.ipv4_config.ip,
@@ -182,7 +184,8 @@ bool initWifi()
 
             WiFi.onEvent(
                 [](WiFiEvent_t event, WiFiEventInfo_t info) {
-                    LOG_WARN("WiFi lost connection. Reason: %s", info.wifi_sta_disconnected.reason);
+
+                    LOG_WARN("WiFi lost connection. Reason: %d\n", info.wifi_sta_disconnected.reason);
 
                     /*
                         If we are disconnected from the AP for some reason,

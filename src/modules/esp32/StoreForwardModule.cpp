@@ -21,7 +21,7 @@ int32_t StoreForwardModule::runOnce()
         // Send out the message queue.
         if (this->busy) {
             // Only send packets if the channel is less than 25% utilized.
-            if (airTime->channelUtilizationPercent() < polite_channel_util_percent) {
+            if (airTime->isTxAllowedChannelUtil(true)) {
                 storeForwardModule->sendPayload(this->busyTo, this->packetHistoryTXQueue_index);
                 if (this->packetHistoryTXQueue_index == packetHistoryTXQueue_size) {
                     // Tell the client we're done sending
@@ -34,12 +34,10 @@ int32_t StoreForwardModule::runOnce()
                 } else {
                     this->packetHistoryTXQueue_index++;
                 }
-            } else {
-                LOG_WARN("*** Channel utilization is too high. Retrying later.\n");
             }
             LOG_DEBUG("*** SF bitrate = %f bytes / sec\n", myNodeInfo.bitrate);
 
-        } else if ((millis() - lastHeartbeat > (heartbeatInterval * 1000)) && (airTime->channelUtilizationPercent() < polite_channel_util_percent)) {
+        } else if ((millis() - lastHeartbeat > (heartbeatInterval * 1000)) && airTime->isTxAllowedChannelUtil(true)) {
             lastHeartbeat = millis();
             LOG_INFO("*** Sending heartbeat\n");
             StoreAndForward sf = StoreAndForward_init_zero;
@@ -414,7 +412,7 @@ bool StoreForwardModule::handleReceivedProtobuf(const MeshPacket &mp, StoreAndFo
             break;
 
         default:
-            assert(0); // unexpected state - FIXME, make an error code and reboot
+            assert(0); // unexpected state
     }
     return true; // There's no need for others to look at this message.
 }

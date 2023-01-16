@@ -36,12 +36,12 @@
 #endif
 
 #if HAS_WIFI
-#include "mesh/wifi/WiFiServerAPI.h"
+#include "mesh/api/WiFiServerAPI.h"
 #include "mqtt/MQTT.h"
 #endif
 
 #if HAS_ETHERNET
-#include "mesh/eth/ethServerAPI.h"
+#include "mesh/api/ethServerAPI.h"
 #include "mqtt/MQTT.h"
 #endif
 
@@ -110,12 +110,12 @@ const char *getDeviceName()
 
     // Meshtastic_ab3c or Shortname_abcd
     static char name[20];
-    sprintf(name, "%02x%02x", dmac[4], dmac[5]);
+    snprintf(name, sizeof(name), "%02x%02x", dmac[4], dmac[5]);
     // if the shortname exists and is NOT the new default of ab3c, use it for BLE name.
     if ((owner.short_name != NULL) && (strcmp(owner.short_name, name) != 0)) {
-        sprintf(name, "%s_%02x%02x", owner.short_name, dmac[4], dmac[5]);
+        snprintf(name, sizeof(name), "%s_%02x%02x", owner.short_name, dmac[4], dmac[5]);
     } else {
-        sprintf(name, "Meshtastic_%02x%02x", dmac[4], dmac[5]);
+        snprintf(name, sizeof(name), "Meshtastic_%02x%02x", dmac[4], dmac[5]);
     }
     return name;
 }
@@ -239,7 +239,7 @@ void setup()
 #ifdef RAK4630
     // We need to enable 3.3V periphery in order to scan it
     pinMode(PIN_3V3_EN, OUTPUT);
-    digitalWrite(PIN_3V3_EN, 1);
+    digitalWrite(PIN_3V3_EN, HIGH);
 #endif
 
     // Currently only the tbeam has a PMU

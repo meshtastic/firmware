@@ -80,7 +80,7 @@ void listDir(const char * dirname, uint8_t levels, boolean del = false)
                 listDir(file.path(), levels -1, del);
                 if(del) { 
                     LOG_DEBUG("Removing %s\n", file.path());
-                    strcpy(buffer, file.path());
+                    strncpy(buffer, file.path(), sizeof(buffer));
                     file.close();
                     FSCom.rmdir(buffer);
                 } else {
@@ -90,7 +90,7 @@ void listDir(const char * dirname, uint8_t levels, boolean del = false)
                 listDir(file.name(), levels -1, del);
                 if(del) { 
                     LOG_DEBUG("Removing %s\n", file.name());
-                    strcpy(buffer, file.name());
+                    strncpy(buffer, file.name(), sizeof(buffer));
                     file.close();
                     FSCom.rmdir(buffer);
                 } else {
@@ -105,7 +105,7 @@ void listDir(const char * dirname, uint8_t levels, boolean del = false)
 #ifdef ARCH_ESP32
             if(del) {
                 LOG_DEBUG("Deleting %s\n", file.path());
-                strcpy(buffer, file.path());
+                strncpy(buffer, file.path(), sizeof(buffer));
                 file.close();
                 FSCom.remove(buffer);
             } else {
@@ -115,7 +115,7 @@ void listDir(const char * dirname, uint8_t levels, boolean del = false)
 #elif (defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
             if(del) {
                 LOG_DEBUG("Deleting %s\n", file.name());
-                strcpy(buffer, file.name());
+                strncpy(buffer, file.name(), sizeof(buffer));
                 file.close();
                 FSCom.remove(buffer);
             } else {
@@ -132,7 +132,7 @@ void listDir(const char * dirname, uint8_t levels, boolean del = false)
 #ifdef ARCH_ESP32    
     if(del) { 
         LOG_DEBUG("Removing %s\n", root.path());
-        strcpy(buffer, root.path());
+        strncpy(buffer, root.path(), sizeof(buffer));
         root.close();
         FSCom.rmdir(buffer);
     } else {
@@ -141,7 +141,7 @@ void listDir(const char * dirname, uint8_t levels, boolean del = false)
 #elif (defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
     if(del) { 
         LOG_DEBUG("Removing %s\n", root.name());
-        strcpy(buffer, root.name());
+        strncpy(buffer, root.name(), sizeof(buffer));
         root.close();
         FSCom.rmdir(buffer);
     } else {
@@ -170,8 +170,8 @@ void fsInit()
 #ifdef FSCom
     if (!FSBegin())
     {
-        LOG_ERROR("Filesystem mount Failed. Formatting...\n");
-        assert(0); // FIXME - report failure to phone
+        LOG_ERROR("Filesystem mount Failed.\n");
+        // assert(0); This auto-formats the partition, so no need to fail here.
     }
 #ifdef ARCH_ESP32
     LOG_DEBUG("Filesystem files (%d/%d Bytes):\n", FSCom.usedBytes(), FSCom.totalBytes());
