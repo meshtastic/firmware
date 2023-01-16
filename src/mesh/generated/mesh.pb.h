@@ -700,6 +700,7 @@ typedef struct _ToRadio {
      This is useful for serial links where there is no hardware/protocol based notification that the client has dropped the link.
      (Sending this message is optional for clients) */
         bool disconnect;
+        /* File Transfer Chunk */
         XModem xmodemPacket;
     };
 } ToRadio;
