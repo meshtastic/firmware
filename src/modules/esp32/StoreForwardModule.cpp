@@ -252,8 +252,8 @@ ProcessMessage StoreForwardModule::handleReceived(const MeshPacket &mp)
                         pr->want_ack = false;
                         pr->decoded.want_response = false;
                         pr->decoded.portnum = PortNum_TEXT_MESSAGE_APP;
-                        memcpy(pr->decoded.payload.bytes, "** S&F - Busy. Try again shortly.", Constants_DATA_PAYLOAD_LEN);
-                        pr->decoded.payload.size = sizeof(pr->decoded.payload.bytes);
+                        memcpy(pr->decoded.payload.bytes, "** S&F - Busy. Try again shortly.", 34);
+                        pr->decoded.payload.size = 34;
                         service.sendToMesh(pr);
                     } else {
                         storeForwardModule->historySend(historyReturnWindow * 60000, getFrom(&mp));
