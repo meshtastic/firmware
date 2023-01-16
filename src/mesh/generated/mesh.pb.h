@@ -438,8 +438,9 @@ typedef struct _Waypoint {
     int32_t longitude_i;
     /* Time the waypoint is to expire (epoch) */
     uint32_t expire;
-    /* If true, only allow the original sender to update the waypoint. */
-    bool locked;
+    /* If greater than zero, treat the value as a nodenum only allowing them to update the waypoint.
+ If zero, the waypoint is open to be edited by any member of the mesh. */
+    uint32_t locked_to;
     /* Name of the waypoint - max 30 chars */
     char name[30];
     /* Description of the waypoint - max 100 chars */
@@ -855,7 +856,7 @@ extern "C" {
 #define Waypoint_latitude_i_tag                  2
 #define Waypoint_longitude_i_tag                 3
 #define Waypoint_expire_tag                      4
-#define Waypoint_locked_tag                      5
+#define Waypoint_locked_to_tag                   5
 #define Waypoint_name_tag                        6
 #define Waypoint_description_tag                 7
 #define Waypoint_icon_tag                        8
@@ -989,7 +990,7 @@ X(a, STATIC,   SINGULAR, UINT32,   id,                1) \
 X(a, STATIC,   SINGULAR, SFIXED32, latitude_i,        2) \
 X(a, STATIC,   SINGULAR, SFIXED32, longitude_i,       3) \
 X(a, STATIC,   SINGULAR, UINT32,   expire,            4) \
-X(a, STATIC,   SINGULAR, BOOL,     locked,            5) \
+X(a, STATIC,   SINGULAR, UINT32,   locked_to,         5) \
 X(a, STATIC,   SINGULAR, STRING,   name,              6) \
 X(a, STATIC,   SINGULAR, STRING,   description,       7) \
 X(a, STATIC,   SINGULAR, FIXED32,  icon,              8)
@@ -1149,7 +1150,7 @@ extern const pb_msgdesc_t Compressed_msg;
 #define Routing_size                             42
 #define ToRadio_size                             324
 #define User_size                                77
-#define Waypoint_size                            161
+#define Waypoint_size                            165
 
 #ifdef __cplusplus
 } /* extern "C" */

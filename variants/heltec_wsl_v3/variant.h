@@ -1,7 +1,6 @@
 #define LED_PIN LED
 
 #define HAS_SCREEN 0
-#define HAS_GPS 0
 
 #define VEXT_ENABLE Vext // active low, powers the oled display and the lora antenna boost
 #define BUTTON_PIN 0

@@ -75,7 +75,7 @@ int CannedMessageModule::splitConfiguredMessages()
     int i = 0;
 
     // collect all the message parts
-    strcpy(this->messageStore, cannedMessageModuleConfig.messages);
+    strncpy(this->messageStore, cannedMessageModuleConfig.messages, sizeof(this->messageStore));
 
     // The first message points to the beginning of the store.
     this->messages[messageIndex++] = this->messageStore;
@@ -454,7 +454,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         }
         display->drawStringf(0 + x, 0 + y, buffer, "To: %s", cannedMessageModule->getNodeName(this->dest));
         // used chars right aligned
-        sprintf(buffer, "%d left", Constants_DATA_PAYLOAD_LEN - this->freetext.length());
+        snprintf(buffer, sizeof(buffer), "%d left", Constants_DATA_PAYLOAD_LEN - this->freetext.length());
         display->drawString(x + display->getWidth() - display->getStringWidth(buffer), y + 0, buffer);
         if (this->destSelect) {
             display->drawString(x + display->getWidth() - display->getStringWidth(buffer) - 1, y + 0, buffer);
@@ -551,7 +551,7 @@ void CannedMessageModule::handleGetCannedMessageModuleMessages(const MeshPacket 
     LOG_DEBUG("*** handleGetCannedMessageModuleMessages\n");
     if(req.decoded.want_response) {
         response->which_payload_variant = AdminMessage_get_canned_message_module_messages_response_tag;
-        strcpy(response->get_canned_message_module_messages_response, cannedMessageModuleConfig.messages);
+        strncpy(response->get_canned_message_module_messages_response, cannedMessageModuleConfig.messages, sizeof(response->get_canned_message_module_messages_response));
     } // Don't send anything if not instructed to. Better than asserting.
 }
 
@@ -562,7 +562,7 @@ void CannedMessageModule::handleSetCannedMessageModuleMessages(const char *from_
 
     if (*from_msg) {
         changed |= strcmp(cannedMessageModuleConfig.messages, from_msg);
-        strcpy(cannedMessageModuleConfig.messages, from_msg);
+        strncpy(cannedMessageModuleConfig.messages, from_msg, sizeof(cannedMessageModuleConfig.messages));
         LOG_DEBUG("*** from_msg.text:%s\n", from_msg);
     }
 

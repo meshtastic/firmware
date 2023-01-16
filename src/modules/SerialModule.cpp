@@ -61,7 +61,8 @@ SerialModuleRadio *serialModuleRadio;
 
 SerialModule::SerialModule() : StreamAPI(&Serial2), concurrency::OSThread("SerialModule") {}
 
-char serialStringChar[Constants_DATA_PAYLOAD_LEN];
+char serialBytes[Constants_DATA_PAYLOAD_LEN];
+size_t serialPayloadSize;
 
 SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
 {
@@ -199,19 +200,13 @@ int32_t SerialModule::runOnce()
                 // in NMEA mode send out GGA every 2 seconds, Don't read from Port
                 if (millis() - lastNmeaTime > 2000) {
                     lastNmeaTime = millis();
-                    printGGA(outbuf, nodeDB.getNode(myNodeInfo.my_node_num)->position);
+                    printGGA(outbuf, sizeof(outbuf), nodeDB.getNode(myNodeInfo.my_node_num)->position);
                     Serial2.printf("%s", outbuf);
                 }
             } else {
-                String serialString;
-
                 while (Serial2.available()) {
-                    serialString = Serial2.readString();
-                    serialString.toCharArray(serialStringChar, Constants_DATA_PAYLOAD_LEN);
-
+                    serialPayloadSize = Serial2.readBytes(serialBytes, Constants_DATA_PAYLOAD_LEN);
                     serialModuleRadio->sendPayload();
-
-                    LOG_INFO("Received: %s\n", serialStringChar);
                 }
             }
         }
@@ -231,14 +226,18 @@ MeshPacket *SerialModuleRadio::allocReply()
 
 void SerialModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 {
+    Channel *ch = (boundChannel != NULL) ? &channels.getByName(boundChannel) : NULL;
     MeshPacket *p = allocReply();
     p->to = dest;
+    if (ch != NULL) {
+        p->channel = ch->index;
+    }
     p->decoded.want_response = wantReplies;
 
     p->want_ack = ACK;
 
-    p->decoded.payload.size = strlen(serialStringChar); // You must specify how many bytes are in the reply
-    memcpy(p->decoded.payload.bytes, serialStringChar, p->decoded.payload.size);
+    p->decoded.payload.size = serialPayloadSize; // You must specify how many bytes are in the reply
+    memcpy(p->decoded.payload.bytes, serialBytes, p->decoded.payload.size);
 
     service.sendToMesh(p);
 }
@@ -294,7 +293,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const MeshPacket &mp)
                         decoded = &scratch;
                     }
                     // send position packet as WPL to the serial port
-                    printWPL(outbuf, *decoded, nodeDB.getNode(getFrom(&mp))->user.long_name);
+                    printWPL(outbuf, sizeof(outbuf), *decoded, nodeDB.getNode(getFrom(&mp))->user.long_name);
                     Serial2.printf("%s", outbuf);
                 }
             }
