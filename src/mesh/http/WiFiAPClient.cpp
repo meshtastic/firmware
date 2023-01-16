@@ -164,7 +164,7 @@ bool initWifi()
         if (*wifiName) {
             uint8_t dmac[6];
             getMacAddr(dmac);
-            sprintf(ourHost, "Meshtastic-%02x%02x", dmac[4], dmac[5]);
+            snprintf(ourHost, sizeof(ourHost), "Meshtastic-%02x%02x", dmac[4], dmac[5]);
 
             WiFi.mode(WIFI_MODE_STA);
             WiFi.setHostname(ourHost);
