@@ -16,10 +16,10 @@
  * -------------------------------------------
  */
 
-uint32_t printWPL(char *buf, const Position &pos, const char *name)
+uint32_t printWPL(char *buf, size_t bufsz, const Position &pos, const char *name)
 {
     GeoCoord geoCoord(pos.latitude_i,pos.longitude_i,pos.altitude);
-    uint32_t len = sprintf(buf, "$GNWPL,%02d%07.4f,%c,%03d%07.4f,%c,%s",
+    uint32_t len = snprintf(buf, bufsz, "$GNWPL,%02d%07.4f,%c,%03d%07.4f,%c,%s",
         geoCoord.getDMSLatDeg(),
         (abs(geoCoord.getLatitude()) - geoCoord.getDMSLatDeg() * 1e+7) * 6e-6,
         geoCoord.getDMSLatCP(),
@@ -31,7 +31,7 @@ uint32_t printWPL(char *buf, const Position &pos, const char *name)
     for (uint32_t i = 1; i < len; i++) {
         chk ^= buf[i];
     }
-    len += sprintf(buf + len, "*%02X\r\n", chk);
+    len += snprintf(buf + len, bufsz - len, "*%02X\r\n", chk);
     return len;
 }
 
@@ -59,10 +59,10 @@ uint32_t printWPL(char *buf, const Position &pos, const char *name)
  * -------------------------------------------
  */
 
-uint32_t printGGA(char *buf, const Position &pos)
+uint32_t printGGA(char *buf, size_t bufsz, const Position &pos)
 {
     GeoCoord geoCoord(pos.latitude_i,pos.longitude_i,pos.altitude);
-    uint32_t len = sprintf(buf, "$GNGGA,%06u.%03u,%02d%07.4f,%c,%03d%07.4f,%c,%u,%02u,%04u,%04d,%c,%04d,%c,%d,%04d",
+    uint32_t len = snprintf(buf, bufsz, "$GNGGA,%06u.%03u,%02d%07.4f,%c,%03d%07.4f,%c,%u,%02u,%04u,%04d,%c,%04d,%c,%d,%04d",
         pos.time / 1000,
         pos.time % 1000,
         geoCoord.getDMSLatDeg(),
@@ -85,6 +85,6 @@ uint32_t printGGA(char *buf, const Position &pos)
     for (uint32_t i = 1; i < len; i++) {
         chk ^= buf[i];
     }
-    len += sprintf(buf + len, "*%02X\r\n", chk);
+    len += snprintf(buf + len, bufsz - len, "*%02X\r\n", chk);
     return len;
 }

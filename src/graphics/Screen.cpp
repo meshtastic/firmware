@@ -470,7 +470,7 @@ static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *img
 static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, NodeStatus *nodeStatus)
 {
     char usersString[20];
-    sprintf(usersString, "%d/%d", nodeStatus->getNumOnline(), nodeStatus->getNumTotal());
+    snprintf(usersString, sizeof(usersString), "%d/%d", nodeStatus->getNumOnline(), nodeStatus->getNumTotal());
 #if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)
     display->drawFastImage(x, y + 3, 8, 8, imgUser);
 #else
@@ -521,7 +521,7 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
         display->drawFastImage(x + 24, y, 8, 8, imgSatellite);
 
         // Draw the number of satellites
-        sprintf(satsString, "%u", gps->getNumSatellites());
+        snprintf(satsString, sizeof(satsString), "%u", gps->getNumSatellites());
         display->drawString(x + 34, y - 2, satsString);
         if(config.display.heading_bold)
             display->drawString(x + 35, y - 2, satsString);
@@ -582,21 +582,21 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
         if (gpsFormat != Config_DisplayConfig_GpsCoordinateFormat_DMS) {
             char coordinateLine[22];
             if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_DEC) { // Decimal Degrees
-                sprintf(coordinateLine, "%f %f", geoCoord.getLatitude() * 1e-7, geoCoord.getLongitude() * 1e-7);
+                snprintf(coordinateLine, sizeof(coordinateLine), "%f %f", geoCoord.getLatitude() * 1e-7, geoCoord.getLongitude() * 1e-7);
             } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_UTM) { // Universal Transverse Mercator
-                sprintf(coordinateLine, "%2i%1c %06u %07u", geoCoord.getUTMZone(), geoCoord.getUTMBand(),
+                snprintf(coordinateLine, sizeof(coordinateLine), "%2i%1c %06u %07u", geoCoord.getUTMZone(), geoCoord.getUTMBand(),
                         geoCoord.getUTMEasting(), geoCoord.getUTMNorthing());
             } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_MGRS) { // Military Grid Reference System
-                sprintf(coordinateLine, "%2i%1c %1c%1c %05u %05u", geoCoord.getMGRSZone(), geoCoord.getMGRSBand(),
+                snprintf(coordinateLine, sizeof(coordinateLine), "%2i%1c %1c%1c %05u %05u", geoCoord.getMGRSZone(), geoCoord.getMGRSBand(),
                         geoCoord.getMGRSEast100k(), geoCoord.getMGRSNorth100k(), geoCoord.getMGRSEasting(),
                         geoCoord.getMGRSNorthing());
             } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_OLC) { // Open Location Code
                 geoCoord.getOLCCode(coordinateLine);
             } else if (gpsFormat == Config_DisplayConfig_GpsCoordinateFormat_OSGR) { // Ordnance Survey Grid Reference
                 if (geoCoord.getOSGRE100k() == 'I' || geoCoord.getOSGRN100k() == 'I') // OSGR is only valid around the UK region
-                    sprintf(coordinateLine, "%s", "Out of Boundary");
+                    snprintf(coordinateLine, sizeof(coordinateLine), "%s", "Out of Boundary");
                 else
-                    sprintf(coordinateLine, "%1c%1c %05u %05u", geoCoord.getOSGRE100k(), geoCoord.getOSGRN100k(),
+                    snprintf(coordinateLine, sizeof(coordinateLine), "%1c%1c %05u %05u", geoCoord.getOSGRE100k(), geoCoord.getOSGRN100k(),
                             geoCoord.getOSGREasting(), geoCoord.getOSGRNorthing());
             }
 
@@ -614,9 +614,9 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
         } else {
             char latLine[22];
             char lonLine[22];
-            sprintf(latLine, "%2i° %2i' %2u\" %1c", geoCoord.getDMSLatDeg(), geoCoord.getDMSLatMin(), geoCoord.getDMSLatSec(),
+            snprintf(latLine, sizeof(latLine), "%2i° %2i' %2u\" %1c", geoCoord.getDMSLatDeg(), geoCoord.getDMSLatMin(), geoCoord.getDMSLatSec(),
                     geoCoord.getDMSLatCP());
-            sprintf(lonLine, "%3i° %2i' %2u\" %1c", geoCoord.getDMSLonDeg(), geoCoord.getDMSLonMin(), geoCoord.getDMSLonSec(),
+            snprintf(lonLine, sizeof(lonLine), "%3i° %2i' %2u\" %1c", geoCoord.getDMSLonDeg(), geoCoord.getDMSLonMin(), geoCoord.getDMSLonSec(),
                     geoCoord.getDMSLonCP());
             display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(latLine))) / 2, y - FONT_HEIGHT_SMALL * 1, latLine);
             display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(lonLine))) / 2, y, lonLine);
@@ -831,7 +831,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     }
 
     static char distStr[20];
-    strcpy(distStr, "? km"); // might not have location data
+    strncpy(distStr, "? km", sizeof(distStr)); // might not have location data
     NodeInfo *ourNode = nodeDB.getNode(nodeDB.getNodeNum());
     const char *fields[] = {username, distStr, signalStr, lastStr, NULL};
     int16_t compassX = 0, compassY = 0;
@@ -1010,7 +1010,7 @@ void Screen::setup()
     // Get our hardware ID
     uint8_t dmac[6];
     getMacAddr(dmac);
-    sprintf(ourId, "%02x%02x", dmac[4], dmac[5]);
+    snprintf(ourId, sizeof(ourId), "%02x%02x", dmac[4], dmac[5]);
 
     // Turn on the display.
     handleSetOn(true);
@@ -1738,7 +1738,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 
     // Display Channel Utilization
     char chUtil[13];
-    sprintf(chUtil, "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
+    snprintf(chUtil, sizeof(chUtil), "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), y + FONT_HEIGHT_SMALL * 1, chUtil);
 if (config.position.gps_enabled) {
     // Line 3

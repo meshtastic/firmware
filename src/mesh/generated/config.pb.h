@@ -147,7 +147,11 @@ typedef enum _Config_LoRaConfig_RegionCode {
     /* Thailand */
     Config_LoRaConfig_RegionCode_TH = 12,
     /* WLAN Band */
-    Config_LoRaConfig_RegionCode_LORA_24 = 13
+    Config_LoRaConfig_RegionCode_LORA_24 = 13,
+    /* Ukraine 433mhz */
+    Config_LoRaConfig_RegionCode_UA_433 = 14,
+    /* Ukraine 868mhz */
+    Config_LoRaConfig_RegionCode_UA_868 = 15
 } Config_LoRaConfig_RegionCode;
 
 /* Standard predefined channel settings
@@ -437,8 +441,8 @@ extern "C" {
 #define _Config_DisplayConfig_DisplayMode_ARRAYSIZE ((Config_DisplayConfig_DisplayMode)(Config_DisplayConfig_DisplayMode_COLOR+1))
 
 #define _Config_LoRaConfig_RegionCode_MIN Config_LoRaConfig_RegionCode_UNSET
-#define _Config_LoRaConfig_RegionCode_MAX Config_LoRaConfig_RegionCode_LORA_24
-#define _Config_LoRaConfig_RegionCode_ARRAYSIZE ((Config_LoRaConfig_RegionCode)(Config_LoRaConfig_RegionCode_LORA_24+1))
+#define _Config_LoRaConfig_RegionCode_MAX Config_LoRaConfig_RegionCode_UA_868
+#define _Config_LoRaConfig_RegionCode_ARRAYSIZE ((Config_LoRaConfig_RegionCode)(Config_LoRaConfig_RegionCode_UA_868+1))
 
 #define _Config_LoRaConfig_ModemPreset_MIN Config_LoRaConfig_ModemPreset_LONG_FAST
 #define _Config_LoRaConfig_ModemPreset_MAX Config_LoRaConfig_ModemPreset_SHORT_FAST
