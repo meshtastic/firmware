@@ -197,6 +197,18 @@ void doGPSpowersave(bool on)
         notifyGPSSleep.notifyObservers(NULL);
     }
     #endif
+    #ifdef PIN_GPS_EN
+    if (on)
+    {
+        LOG_INFO("Turning GPS/3.3v rail on");
+        digitalWrite(PIN_GPS_EN, 1);
+    }
+    else
+    {
+        LOG_INFO("Turning GPS/3.3v rail off");
+        digitalWrite(PIN_GPS_EN,0);
+    }
+    #endif
 }
 
 void doDeepSleep(uint64_t msecToWake)
