@@ -162,6 +162,7 @@ void NodeDB::installDefaultConfig()
     config.has_bluetooth = true;
     config.lora.tx_enabled = true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
     config.lora.override_duty_cycle = false; 
+    config.lora.sx126x_rx_boosted_gain = false;
     config.lora.region = Config_LoRaConfig_RegionCode_UNSET;
     config.lora.modem_preset = Config_LoRaConfig_ModemPreset_LONG_FAST;
     config.lora.hop_limit = HOP_RELIABLE;
