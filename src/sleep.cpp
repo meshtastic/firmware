@@ -206,6 +206,7 @@ void doGPSpowersave(bool on)
     else
     {
         LOG_INFO("Turning GPS/3.3v rail off");
+        notifyGPSSleep.notifyObservers(NULL);
         digitalWrite(PIN_GPS_EN,0);
     }
     #endif
