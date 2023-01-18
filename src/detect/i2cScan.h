@@ -1,11 +1,11 @@
 #include "../configuration.h"
 #include "../main.h"
-#include <Wire.h>
 #include "mesh/generated/meshtastic/telemetry.pb.h"
+#include <Wire.h>
 
 // AXP192 and AXP2101 have the same device address, we just need to identify it in Power.cpp
 #ifndef XPOWERS_AXP192_AXP2101_ADDRESS
-#define XPOWERS_AXP192_AXP2101_ADDRESS      0x34
+#define XPOWERS_AXP192_AXP2101_ADDRESS 0x34
 #endif
 
 #if HAS_WIRE
@@ -16,27 +16,27 @@ void printATECCInfo()
     atecc.readConfigZone(false);
 
     LOG_DEBUG("ATECC608B Serial Number: ");
-    for (int i = 0 ; i < 9 ; i++) {
-        LOG_DEBUG("%02x",atecc.serialNumber[i]);
+    for (int i = 0; i < 9; i++) {
+        LOG_DEBUG("%02x", atecc.serialNumber[i]);
     }
 
     LOG_DEBUG(", Rev Number: ");
-    for (int i = 0 ; i < 4 ; i++) {
-        LOG_DEBUG("%02x",atecc.revisionNumber[i]);
+    for (int i = 0; i < 4; i++) {
+        LOG_DEBUG("%02x", atecc.revisionNumber[i]);
     }
     LOG_DEBUG("\n");
 
-    LOG_DEBUG("ATECC608B Config %s",atecc.configLockStatus ? "Locked" : "Unlocked");
-    LOG_DEBUG(", Data %s",atecc.dataOTPLockStatus ? "Locked" : "Unlocked");
-    LOG_DEBUG(", Slot 0 %s\n",atecc.slot0LockStatus ? "Locked" : "Unlocked");
+    LOG_DEBUG("ATECC608B Config %s", atecc.configLockStatus ? "Locked" : "Unlocked");
+    LOG_DEBUG(", Data %s", atecc.dataOTPLockStatus ? "Locked" : "Unlocked");
+    LOG_DEBUG(", Slot 0 %s\n", atecc.slot0LockStatus ? "Locked" : "Unlocked");
 
     if (atecc.configLockStatus && atecc.dataOTPLockStatus && atecc.slot0LockStatus) {
         if (atecc.generatePublicKey() == false) {
             LOG_DEBUG("ATECC608B Error generating public key\n");
         } else {
             LOG_DEBUG("ATECC608B Public Key: ");
-            for (int i = 0 ; i < 64 ; i++) {
-                LOG_DEBUG("%02x",atecc.publicKey64Bytes[i]);
+            for (int i = 0; i < 64; i++) {
+                LOG_DEBUG("%02x", atecc.publicKey64Bytes[i]);
             }
             LOG_DEBUG("\n");
         }
@@ -44,7 +44,8 @@ void printATECCInfo()
 #endif
 }
 
-uint16_t getRegisterValue(uint8_t address, uint8_t reg, uint8_t length) {
+uint16_t getRegisterValue(uint8_t address, uint8_t reg, uint8_t length)
+{
     uint16_t value = 0x00;
     Wire.beginTransmission(address);
     Wire.write(reg);
@@ -54,7 +55,7 @@ uint16_t getRegisterValue(uint8_t address, uint8_t reg, uint8_t length) {
     LOG_DEBUG("Wire.available() = %d\n", Wire.available());
     if (Wire.available() == 2) {
         // Read MSB, then LSB
-        value = (uint16_t)Wire.read() << 8;  
+        value = (uint16_t)Wire.read() << 8;
         value |= Wire.read();
     } else if (Wire.available()) {
         value = Wire.read();
@@ -81,7 +82,7 @@ uint8_t oled_probe(byte addr)
 
         if (r == 0x08 || r == 0x00) {
             o_probe = 2; // SH1106
-        } else if ( r == 0x03 || r == 0x04 || r == 0x06 || r == 0x07) {
+        } else if (r == 0x03 || r == 0x04 || r == 0x06 || r == 0x07) {
             o_probe = 1; // SSD1306
         }
         c++;
@@ -126,17 +127,17 @@ void scanI2Cdevice()
             }
 #endif
 #ifdef RV3028_RTC
-            if (addr == RV3028_RTC){
+            if (addr == RV3028_RTC) {
                 rtc_found = addr;
                 LOG_INFO("RV3028 RTC found\n");
                 Melopero_RV3028 rtc;
                 rtc.initI2C();
-                rtc.writeToRegister(0x35,0x07); // no Clkout
-                rtc.writeToRegister(0x37,0xB4);
+                rtc.writeToRegister(0x35, 0x07); // no Clkout
+                rtc.writeToRegister(0x37, 0xB4);
             }
 #endif
 #ifdef PCF8563_RTC
-            if (addr == PCF8563_RTC){
+            if (addr == PCF8563_RTC) {
                 rtc_found = addr;
                 LOG_INFO("PCF8563 RTC found\n");
             }
@@ -225,7 +226,7 @@ void scanI2Cdevice()
     if (nDevices == 0)
         LOG_INFO("No I2C devices found\n");
     else
-        LOG_INFO("%i I2C devices found\n",nDevices);
+        LOG_INFO("%i I2C devices found\n", nDevices);
 }
 #else
 void scanI2Cdevice() {}

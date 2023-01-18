@@ -9,18 +9,17 @@
 #include "main.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
-#include "MeshService.h"
 
 // Sensors
-#include "Sensor/BMP280Sensor.h"
 #include "Sensor/BME280Sensor.h"
 #include "Sensor/BME680Sensor.h"
-#include "Sensor/MCP9808Sensor.h"
-#include "Sensor/INA260Sensor.h"
+#include "Sensor/BMP280Sensor.h"
 #include "Sensor/INA219Sensor.h"
-#include "Sensor/SHTC3Sensor.h"
+#include "Sensor/INA260Sensor.h"
 #include "Sensor/LPS22HBSensor.h"
+#include "Sensor/MCP9808Sensor.h"
 #include "Sensor/SHT31Sensor.h"
+#include "Sensor/SHTC3Sensor.h"
 
 BMP280Sensor bmp280Sensor;
 BME280Sensor bme280Sensor;
@@ -59,13 +58,12 @@ int32_t EnvironmentTelemetryModule::runOnce()
         Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
     */
-   
+
     // moduleConfig.telemetry.environment_measurement_enabled = 1;
     // moduleConfig.telemetry.environment_screen_enabled = 1;
     // moduleConfig.telemetry.environment_update_interval = 45;
 
-    if (!(moduleConfig.telemetry.environment_measurement_enabled ||
-          moduleConfig.telemetry.environment_screen_enabled)) {
+    if (!(moduleConfig.telemetry.environment_measurement_enabled || moduleConfig.telemetry.environment_screen_enabled)) {
         // If this module is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
         return disable();
     }
@@ -78,15 +76,15 @@ int32_t EnvironmentTelemetryModule::runOnce()
             LOG_INFO("Environment Telemetry: Initializing\n");
             // it's possible to have this module enabled, only for displaying values on the screen.
             // therefore, we should only enable the sensor loop if measurement is also enabled
-            if (bmp280Sensor.hasSensor()) 
+            if (bmp280Sensor.hasSensor())
                 result = bmp280Sensor.runOnce();
-            if (bme280Sensor.hasSensor()) 
+            if (bme280Sensor.hasSensor())
                 result = bme280Sensor.runOnce();
-            if (bme680Sensor.hasSensor()) 
+            if (bme680Sensor.hasSensor())
                 result = bme680Sensor.runOnce();
-            if (mcp9808Sensor.hasSensor()) 
+            if (mcp9808Sensor.hasSensor())
                 result = mcp9808Sensor.runOnce();
-            if (ina260Sensor.hasSensor()) 
+            if (ina260Sensor.hasSensor())
                 result = ina260Sensor.runOnce();
             if (ina219Sensor.hasSensor())
                 result = ina219Sensor.runOnce();
@@ -105,8 +103,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
             return result;
 
         uint32_t now = millis();
-        if ((lastSentToMesh == 0 || 
-            (now - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval)) && 
+        if ((lastSentToMesh == 0 ||
+             (now - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval)) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
             lastSentToMesh = now;
@@ -173,13 +171,15 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     }
     display->drawString(x, y += fontHeight(FONT_MEDIUM) - 2, "From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
     display->drawString(x, y += fontHeight(FONT_SMALL) - 2,
-        "Temp/Hum: " + last_temp + " / " + String(lastMeasurement.variant.environment_metrics.relative_humidity, 0) + "%");
+                        "Temp/Hum: " + last_temp + " / " +
+                            String(lastMeasurement.variant.environment_metrics.relative_humidity, 0) + "%");
     if (lastMeasurement.variant.environment_metrics.barometric_pressure != 0)
         display->drawString(x, y += fontHeight(FONT_SMALL),
-            "Press: " + String(lastMeasurement.variant.environment_metrics.barometric_pressure, 0) + "hPA");
+                            "Press: " + String(lastMeasurement.variant.environment_metrics.barometric_pressure, 0) + "hPA");
     if (lastMeasurement.variant.environment_metrics.voltage != 0)
         display->drawString(x, y += fontHeight(FONT_SMALL),
-            "Volt/Cur: " + String(lastMeasurement.variant.environment_metrics.voltage, 0) + "V / " + String(lastMeasurement.variant.environment_metrics.current, 0) + "mA");
+                            "Volt/Cur: " + String(lastMeasurement.variant.environment_metrics.voltage, 0) + "V / " +
+                                String(lastMeasurement.variant.environment_metrics.current, 0) + "mA");
 }
 
 bool EnvironmentTelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Telemetry *t)
@@ -187,14 +187,11 @@ bool EnvironmentTelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Te
     if (t->which_variant == Telemetry_environment_metrics_tag) {
         const char *sender = getSenderShortName(mp);
 
-        LOG_INFO("(Received from %s): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f, voltage=%f\n",
-            sender,
-            t->variant.environment_metrics.barometric_pressure,
-            t->variant.environment_metrics.current,
-            t->variant.environment_metrics.gas_resistance,
-            t->variant.environment_metrics.relative_humidity,
-            t->variant.environment_metrics.temperature,
-            t->variant.environment_metrics.voltage);
+        LOG_INFO("(Received from %s): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, "
+                 "temperature=%f, voltage=%f\n",
+                 sender, t->variant.environment_metrics.barometric_pressure, t->variant.environment_metrics.current,
+                 t->variant.environment_metrics.gas_resistance, t->variant.environment_metrics.relative_humidity,
+                 t->variant.environment_metrics.temperature, t->variant.environment_metrics.voltage);
 
         lastMeasurementPacket = packetPool.allocCopy(mp);
     }
@@ -234,13 +231,11 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     if (ina260Sensor.hasSensor())
         ina260Sensor.getMetrics(&m);
 
-   LOG_INFO("(Sending): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f, voltage=%f\n",
-        m.variant.environment_metrics.barometric_pressure,
-        m.variant.environment_metrics.current,
-        m.variant.environment_metrics.gas_resistance,
-        m.variant.environment_metrics.relative_humidity,
-        m.variant.environment_metrics.temperature,
-        m.variant.environment_metrics.voltage);
+    LOG_INFO(
+        "(Sending): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f, voltage=%f\n",
+        m.variant.environment_metrics.barometric_pressure, m.variant.environment_metrics.current,
+        m.variant.environment_metrics.gas_resistance, m.variant.environment_metrics.relative_humidity,
+        m.variant.environment_metrics.temperature, m.variant.environment_metrics.voltage);
 
     sensor_read_error_count = 0;
 

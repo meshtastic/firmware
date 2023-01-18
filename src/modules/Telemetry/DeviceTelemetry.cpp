@@ -9,13 +9,12 @@
 #include "main.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
-#include "MeshService.h"
 
 int32_t DeviceTelemetryModule::runOnce()
 {
     uint32_t now = millis();
-    if ((lastSentToMesh == 0 || 
-        (now - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.telemetry.device_update_interval)) &&
+    if ((lastSentToMesh == 0 ||
+         (now - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.telemetry.device_update_interval)) &&
         airTime->isTxAllowedChannelUtil() && airTime->isTxAllowedAirUtil()) {
         sendTelemetry();
         lastSentToMesh = now;
@@ -31,13 +30,10 @@ bool DeviceTelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Telemet
 {
     if (t->which_variant == Telemetry_device_metrics_tag) {
         const char *sender = getSenderShortName(mp);
-    
-        LOG_INFO("(Received from %s): air_util_tx=%f, channel_utilization=%f, battery_level=%i, voltage=%f\n",
-            sender,
-            t->variant.device_metrics.air_util_tx,
-            t->variant.device_metrics.channel_utilization,
-            t->variant.device_metrics.battery_level,
-            t->variant.device_metrics.voltage);
+
+        LOG_INFO("(Received from %s): air_util_tx=%f, channel_utilization=%f, battery_level=%i, voltage=%f\n", sender,
+                 t->variant.device_metrics.air_util_tx, t->variant.device_metrics.channel_utilization,
+                 t->variant.device_metrics.battery_level, t->variant.device_metrics.voltage);
 
         lastMeasurementPacket = packetPool.allocCopy(mp);
 
@@ -58,11 +54,9 @@ bool DeviceTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     t.variant.device_metrics.channel_utilization = myNodeInfo.channel_utilization;
     t.variant.device_metrics.voltage = powerStatus->getBatteryVoltageMv() / 1000.0;
 
-    LOG_INFO("(Sending): air_util_tx=%f, channel_utilization=%f, battery_level=%i, voltage=%f\n", 
-        t.variant.device_metrics.air_util_tx,
-        t.variant.device_metrics.channel_utilization,
-        t.variant.device_metrics.battery_level,
-        t.variant.device_metrics.voltage);
+    LOG_INFO("(Sending): air_util_tx=%f, channel_utilization=%f, battery_level=%i, voltage=%f\n",
+             t.variant.device_metrics.air_util_tx, t.variant.device_metrics.channel_utilization,
+             t.variant.device_metrics.battery_level, t.variant.device_metrics.voltage);
 
     MeshPacket *p = allocDataProtobuf(t);
     p->to = dest;

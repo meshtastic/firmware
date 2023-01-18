@@ -66,12 +66,12 @@ class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<
     */
     virtual bool wantPacket(const MeshPacket *p) override
     {
-        switch(p->decoded.portnum) {
-            case PortNum_TEXT_MESSAGE_APP:
-            case PortNum_STORE_FORWARD_APP:
-                return true;
-            default:
-                return false;
+        switch (p->decoded.portnum) {
+        case PortNum_TEXT_MESSAGE_APP:
+        case PortNum_STORE_FORWARD_APP:
+            return true;
+        default:
+            return false;
         }
     }
 
@@ -79,10 +79,10 @@ class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<
     void populatePSRAM();
 
     // S&F Defaults
-    uint32_t historyReturnMax = 250; // 250 records
+    uint32_t historyReturnMax = 250;    // 250 records
     uint32_t historyReturnWindow = 240; // 4 hours
-    uint32_t records = 0; // Calculated
-    bool heartbeat = false; // No heartbeat.
+    uint32_t records = 0;               // Calculated
+    bool heartbeat = false;             // No heartbeat.
 
     // stats
     uint32_t requests = 0;
@@ -100,7 +100,6 @@ class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<
     */
     virtual ProcessMessage handleReceived(const MeshPacket &mp) override;
     virtual bool handleReceivedProtobuf(const MeshPacket &mp, StoreAndForward *p);
-
 };
 
 extern StoreForwardModule *storeForwardModule;
