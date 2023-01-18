@@ -6,7 +6,7 @@
 #include "airtime.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
-#include "mesh/generated/storeforward.pb.h"
+#include "mesh/generated/meshtastic/storeforward.pb.h"
 #include "modules/ModuleDev.h"
 #include <Arduino.h>
 #include <iterator>

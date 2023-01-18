@@ -4,7 +4,7 @@
 
 #include "concurrency/OSThread.h"
 #include "mesh/Channels.h"
-#include "mesh/generated/mqtt.pb.h"
+#include "mesh/generated/meshtastic/mqtt.pb.h"
 #include <PubSubClient.h>
 #if HAS_WIFI
 #include <WiFiClient.h>

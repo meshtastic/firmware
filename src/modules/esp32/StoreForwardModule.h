@@ -2,7 +2,7 @@
 
 #include "ProtobufModule.h"
 #include "concurrency/OSThread.h"
-#include "mesh/generated/storeforward.pb.h"
+#include "mesh/generated/meshtastic/storeforward.pb.h"
 
 #include "configuration.h"
 #include <Arduino.h>

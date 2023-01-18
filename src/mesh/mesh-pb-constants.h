@@ -1,9 +1,9 @@
 #pragma once
 
-#include "mesh/generated/mesh.pb.h"
-#include "mesh/generated/localonly.pb.h"
-#include "mesh/generated/deviceonly.pb.h"
-#include "mesh/generated/admin.pb.h"
+#include "mesh/generated/meshtastic/mesh.pb.h"
+#include "mesh/generated/meshtastic/localonly.pb.h"
+#include "mesh/generated/meshtastic/deviceonly.pb.h"
+#include "mesh/generated/meshtastic/admin.pb.h"
 
 // this file defines constants which come from mesh.options
 

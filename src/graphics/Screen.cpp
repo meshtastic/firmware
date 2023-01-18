@@ -33,7 +33,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "mesh/Channels.h"
-#include "mesh/generated/deviceonly.pb.h"
+#include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "modules/TextMessageModule.h"
 #include "modules/ExternalNotificationModule.h"
 #include "sleep.h"

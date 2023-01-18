@@ -5,7 +5,7 @@
 #include "NodeDB.h"
 #include "MeshService.h"
 #include "PowerFSM.h" // neede for button bypass
-#include "mesh/generated/cannedmessages.pb.h"
+#include "mesh/generated/meshtastic/cannedmessages.pb.h"
 
 #ifdef OLED_RU
 #include "graphics/fonts/OLEDDisplayFontsRU.h"
