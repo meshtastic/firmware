@@ -4,7 +4,7 @@
 
 #include "concurrency/OSThread.h"
 #include "mesh/Channels.h"
-#include "mesh/generated/mqtt.pb.h"
+#include "mesh/generated/meshtastic/mqtt.pb.h"
 #include <PubSubClient.h>
 #if HAS_WIFI
 #include <WiFiClient.h>
@@ -53,7 +53,7 @@ class MQTT : private concurrency::OSThread
     void reconnect();
 
     bool connected();
-    
+
   protected:
     PointerQueue<ServiceEnvelope> mqttQueue;
 
@@ -80,7 +80,7 @@ class MQTT : private concurrency::OSThread
     std::string downstreamPacketToJson(MeshPacket *mp);
 
     /// Return 0 if sleep is okay, veto sleep if we are connected to pubsub server
-    // int preflightSleepCb(void *unused = NULL) { return pubSub.connected() ? 1 : 0; }    
+    // int preflightSleepCb(void *unused = NULL) { return pubSub.connected() ? 1 : 0; }
 };
 
 void mqttInit();
