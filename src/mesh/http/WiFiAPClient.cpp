@@ -39,6 +39,9 @@ unsigned long lastrun_ntp = 0;
 
 bool needReconnect = true; // If we create our reconnector, run it once at the beginning
 
+WiFiUDP syslogClient;
+Syslog syslog(syslogClient);
+
 Periodic *wifiReconnect;
 
 static int32_t reconnectWiFi()
@@ -135,6 +138,26 @@ static void onNetworkConnected()
         timeClient.setUpdateInterval(60 * 60); // Update once an hour
 #endif
 
+        if(config.network.rsyslog_server[0]) {
+            LOG_INFO("Starting Syslog client\n");
+            // Defaults
+            int serverPort = 514;
+            const char *serverAddr = moduleConfig.mqtt.address;
+            String server = String(serverAddr);
+            int delimIndex = server.indexOf(':');
+            if (delimIndex > 0) {
+                String port = server.substring(delimIndex + 1, server.length());
+                server[delimIndex] = 0;
+                serverPort = port.toInt();
+                serverAddr = server.c_str();
+            }
+            syslog.server(serverAddr, serverPort);
+            syslog.deviceHostname(WiFi.getHostname());
+            syslog.appName("Meshtastic");
+            syslog.defaultPriority(LOGLEVEL_USER);
+            syslog.enable();
+        }
+
         initWebServer();
         initApiServer();
 
@@ -225,6 +248,7 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case ARDUINO_EVENT_WIFI_STA_STOP:
         LOG_INFO("WiFi station stopped\n");
+        syslog.disable();
         break;
     case ARDUINO_EVENT_WIFI_STA_CONNECTED:
         LOG_INFO("Connected to access point\n");
@@ -232,6 +256,7 @@ static void WiFiEvent(WiFiEvent_t event)
     case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
         LOG_INFO("Disconnected from WiFi access point\n");
         WiFi.disconnect(false, true);
+        syslog.disable();
         needReconnect = true;
         wifiReconnect->setIntervalFromNow(1000);
         break;
@@ -248,6 +273,7 @@ static void WiFiEvent(WiFiEvent_t event)
     case ARDUINO_EVENT_WIFI_STA_LOST_IP:
         LOG_INFO("Lost IP address and IP address is reset to 0\n");
         WiFi.disconnect(false, true);
+        syslog.disable();
         needReconnect = true;
         wifiReconnect->setIntervalFromNow(1000);
         break;
