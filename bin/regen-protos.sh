@@ -13,6 +13,7 @@ cd protobufs
 cd ../src/mesh/generated/meshtastic
 sed -i 's/#include "meshtastic/#include "./g' *
 
+sed -i 's/meshtastic_//g' *
 
 #echo "Regenerating protobuf documentation - if you see an error message"
 #echo "you can ignore it unless doing a new protobuf release to github."
