@@ -4,8 +4,8 @@
 #ifndef PB_MESHTASTIC_MESHTASTIC_LOCALONLY_PB_H_INCLUDED
 #define PB_MESHTASTIC_MESHTASTIC_LOCALONLY_PB_H_INCLUDED
 #include <pb.h>
-#include "meshtastic/config.pb.h"
-#include "meshtastic/module_config.pb.h"
+#include "./config.pb.h"
+#include "./module_config.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.
