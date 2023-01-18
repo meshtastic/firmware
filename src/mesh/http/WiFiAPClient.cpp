@@ -1,17 +1,17 @@
+#include "mesh/http/WiFiAPClient.h"
 #include "NodeDB.h"
 #include "RTC.h"
 #include "concurrency/Periodic.h"
-#include "mesh/http/WiFiAPClient.h"
 #include "configuration.h"
 #include "main.h"
-#include "mesh/http/WebServer.h"
 #include "mesh/api/WiFiServerAPI.h"
+#include "mesh/http/WebServer.h"
 #include "mqtt/MQTT.h"
 #include "target_specific.h"
 #include <ESPmDNS.h>
-#include <esp_wifi.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
+#include <esp_wifi.h>
 
 #ifndef DISABLE_NTP
 #include <NTPClient.h>
@@ -50,7 +50,7 @@ static int32_t reconnectWiFi()
     const char *wifiPsw = config.network.wifi_psk;
 
     if (config.network.wifi_enabled && needReconnect) {
-        
+
         if (!*wifiPsw) // Treat empty password as no password
             wifiPsw = NULL;
 
@@ -58,7 +58,7 @@ static int32_t reconnectWiFi()
 
         // Make sure we clear old connection credentials
         WiFi.disconnect(false, true);
-        LOG_INFO("Reconnecting to WiFi access point %s\n",wifiName);
+        LOG_INFO("Reconnecting to WiFi access point %s\n", wifiName);
 
         delay(5000);
 
@@ -69,7 +69,7 @@ static int32_t reconnectWiFi()
 
 #ifndef DISABLE_NTP
     if (WiFi.isConnected() && (((millis() - lastrun_ntp) > 43200000) || (lastrun_ntp == 0))) { // every 12 hours
-        LOG_DEBUG("Updating NTP time from %s\n",config.network.ntp_server);
+        LOG_DEBUG("Updating NTP time from %s\n", config.network.ntp_server);
         if (timeClient.update()) {
             LOG_DEBUG("NTP Request Success - Setting RTCQualityNTP if needed\n");
 
@@ -138,7 +138,7 @@ static void onNetworkConnected()
         timeClient.setUpdateInterval(60 * 60); // Update once an hour
 #endif
 
-        if(config.network.rsyslog_server[0]) {
+        if (config.network.rsyslog_server[0]) {
             LOG_INFO("Starting Syslog client\n");
             // Defaults
             int serverPort = 514;
@@ -195,10 +195,8 @@ bool initWifi()
             WiFi.setAutoReconnect(true);
             WiFi.setSleep(false);
             if (config.network.address_mode == Config_NetworkConfig_AddressMode_STATIC && config.network.ipv4_config.ip != 0) {
-                WiFi.config(config.network.ipv4_config.ip,
-                            config.network.ipv4_config.gateway,
-                            config.network.ipv4_config.subnet,
-                            config.network.ipv4_config.dns, 
+                WiFi.config(config.network.ipv4_config.ip, config.network.ipv4_config.gateway, config.network.ipv4_config.subnet,
+                            config.network.ipv4_config.dns,
                             config.network.ipv4_config.dns); // Wifi wants two DNS servers... set both to the same value
             }
 
@@ -207,7 +205,6 @@ bool initWifi()
 
             WiFi.onEvent(
                 [](WiFiEvent_t event, WiFiEventInfo_t info) {
-
                     LOG_WARN("WiFi lost connection. Reason: %d\n", info.wifi_sta_disconnected.reason);
 
                     /*

@@ -24,218 +24,234 @@ SOFTWARE.*/
 
 #include "DebugConfiguration.h"
 
-Syslog::Syslog(UDP &client) {
-  this->_client = &client;
-  this->_server = NULL;
-  this->_port = 0;
-  this->_deviceHostname = SYSLOG_NILVALUE;
-  this->_appName = SYSLOG_NILVALUE;
-  this->_priDefault = LOGLEVEL_KERN;
+Syslog::Syslog(UDP &client)
+{
+    this->_client = &client;
+    this->_server = NULL;
+    this->_port = 0;
+    this->_deviceHostname = SYSLOG_NILVALUE;
+    this->_appName = SYSLOG_NILVALUE;
+    this->_priDefault = LOGLEVEL_KERN;
 }
 
-Syslog &Syslog::server(const char* server, uint16_t port) {
-  this->_server = server;
-  this->_port = port;
-  return *this;
+Syslog &Syslog::server(const char *server, uint16_t port)
+{
+    this->_server = server;
+    this->_port = port;
+    return *this;
 }
 
-Syslog &Syslog::server(IPAddress ip, uint16_t port) {
-  this->_ip = ip;
-  this->_server = NULL;
-  this->_port = port;
-  return *this;
+Syslog &Syslog::server(IPAddress ip, uint16_t port)
+{
+    this->_ip = ip;
+    this->_server = NULL;
+    this->_port = port;
+    return *this;
 }
 
-Syslog &Syslog::deviceHostname(const char* deviceHostname) {
-  this->_deviceHostname = (deviceHostname == NULL) ? SYSLOG_NILVALUE : deviceHostname;
-  return *this;
+Syslog &Syslog::deviceHostname(const char *deviceHostname)
+{
+    this->_deviceHostname = (deviceHostname == NULL) ? SYSLOG_NILVALUE : deviceHostname;
+    return *this;
 }
 
-Syslog &Syslog::appName(const char* appName) {
-  this->_appName = (appName == NULL) ? SYSLOG_NILVALUE : appName;
-  return *this;
+Syslog &Syslog::appName(const char *appName)
+{
+    this->_appName = (appName == NULL) ? SYSLOG_NILVALUE : appName;
+    return *this;
 }
 
-Syslog &Syslog::defaultPriority(uint16_t pri) {
-  this->_priDefault = pri;
-  return *this;
+Syslog &Syslog::defaultPriority(uint16_t pri)
+{
+    this->_priDefault = pri;
+    return *this;
 }
 
-Syslog &Syslog::logMask(uint8_t priMask) {
-  this->_priMask = priMask;
-  return *this;
+Syslog &Syslog::logMask(uint8_t priMask)
+{
+    this->_priMask = priMask;
+    return *this;
 }
 
-void Syslog::enable() {
-  this->_enabled = true;
+void Syslog::enable()
+{
+    this->_enabled = true;
 }
 
-void Syslog::disable() {
-  this->_enabled = false;
+void Syslog::disable()
+{
+    this->_enabled = false;
 }
 
 bool Syslog::isEnabled()
 {
-  return this->_enabled;
+    return this->_enabled;
 }
 
-bool Syslog::log(uint16_t pri, const __FlashStringHelper *message) {
-  return this->_sendLog(pri, message);
+bool Syslog::log(uint16_t pri, const __FlashStringHelper *message)
+{
+    return this->_sendLog(pri, message);
 }
 
-bool Syslog::log(uint16_t pri, const String &message) {
-  return this->_sendLog(pri, message.c_str());
+bool Syslog::log(uint16_t pri, const String &message)
+{
+    return this->_sendLog(pri, message.c_str());
 }
 
-bool Syslog::log(uint16_t pri, const char *message) {
-  return this->_sendLog(pri, message);
+bool Syslog::log(uint16_t pri, const char *message)
+{
+    return this->_sendLog(pri, message);
 }
 
-bool Syslog::vlogf(uint16_t pri, const char *fmt, va_list args) {
-  char *message;
-  size_t initialLen;
-  size_t len;
-  bool result;
+bool Syslog::vlogf(uint16_t pri, const char *fmt, va_list args)
+{
+    char *message;
+    size_t initialLen;
+    size_t len;
+    bool result;
 
-  initialLen = strlen(fmt);
+    initialLen = strlen(fmt);
 
-  message = new char[initialLen + 1];
+    message = new char[initialLen + 1];
 
-  len = vsnprintf(message, initialLen + 1, fmt, args);
-  if (len > initialLen) {
+    len = vsnprintf(message, initialLen + 1, fmt, args);
+    if (len > initialLen) {
+        delete[] message;
+        message = new char[len + 1];
+
+        vsnprintf(message, len + 1, fmt, args);
+    }
+
+    result = this->_sendLog(pri, message);
+
     delete[] message;
-    message = new char[len + 1];
-
-    vsnprintf(message, len + 1, fmt, args);
-  }
-
-  result = this->_sendLog(pri, message);
-
-  delete[] message;
-  return result;
+    return result;
 }
 
-bool Syslog::vlogf_P(uint16_t pri, PGM_P fmt_P, va_list args) {
-  char *message;
-  size_t initialLen;
-  size_t len;
-  bool result;
+bool Syslog::vlogf_P(uint16_t pri, PGM_P fmt_P, va_list args)
+{
+    char *message;
+    size_t initialLen;
+    size_t len;
+    bool result;
 
-  initialLen = strlen_P(fmt_P);
+    initialLen = strlen_P(fmt_P);
 
-  message = new char[initialLen + 1];
+    message = new char[initialLen + 1];
 
-  len = vsnprintf_P(message, initialLen + 1, fmt_P, args);
-  if (len > initialLen) {
+    len = vsnprintf_P(message, initialLen + 1, fmt_P, args);
+    if (len > initialLen) {
+        delete[] message;
+        message = new char[len + 1];
+
+        vsnprintf(message, len + 1, fmt_P, args);
+    }
+
+    result = this->_sendLog(pri, message);
+
     delete[] message;
-    message = new char[len + 1];
-
-    vsnprintf(message, len + 1, fmt_P, args);
-  }
-
-  result = this->_sendLog(pri, message);
-
-  delete[] message;
-  return result;
+    return result;
 }
 
+bool Syslog::logf(uint16_t pri, const char *fmt, ...)
+{
+    va_list args;
+    bool result;
 
-bool Syslog::logf(uint16_t pri, const char *fmt, ...) {
-  va_list args;
-  bool result;
-
-  va_start(args, fmt);
-  result = this->vlogf(pri, fmt, args);
-  va_end(args);
-  return result;
+    va_start(args, fmt);
+    result = this->vlogf(pri, fmt, args);
+    va_end(args);
+    return result;
 }
 
-bool Syslog::logf_P(uint16_t pri, PGM_P fmt_P, ...) {
-  va_list args;
-  bool result;
+bool Syslog::logf_P(uint16_t pri, PGM_P fmt_P, ...)
+{
+    va_list args;
+    bool result;
 
-  va_start(args, fmt_P);
-  result = this->vlogf_P(pri, fmt_P, args);
-  va_end(args);
-  return result;
+    va_start(args, fmt_P);
+    result = this->vlogf_P(pri, fmt_P, args);
+    va_end(args);
+    return result;
 }
 
-inline bool Syslog::_sendLog(uint16_t pri, const char *message) {
-  int result;
+inline bool Syslog::_sendLog(uint16_t pri, const char *message)
+{
+    int result;
 
-  if (!this->_enabled)
-    return false;
+    if (!this->_enabled)
+        return false;
 
-  if ((this->_server == NULL && this->_ip == INADDR_NONE) || this->_port == 0)
-    return false;
+    if ((this->_server == NULL && this->_ip == INADDR_NONE) || this->_port == 0)
+        return false;
 
-  // Check priority against priMask values.
-  if ((LOG_MASK(LOG_PRI(pri)) & this->_priMask) == 0)
+    // Check priority against priMask values.
+    if ((LOG_MASK(LOG_PRI(pri)) & this->_priMask) == 0)
+        return true;
+
+    // Set default facility if none specified.
+    if ((pri & LOG_FACMASK) == 0)
+        pri = LOG_MAKEPRI(LOG_FAC(this->_priDefault), pri);
+
+    if (this->_server != NULL) {
+        result = this->_client->beginPacket(this->_server, this->_port);
+    } else {
+        result = this->_client->beginPacket(this->_ip, this->_port);
+    }
+
+    if (result != 1)
+        return false;
+
+    this->_client->print('<');
+    this->_client->print(pri);
+    this->_client->print(F(">1 - "));
+    this->_client->print(this->_deviceHostname);
+    this->_client->print(' ');
+    this->_client->print(this->_appName);
+    this->_client->print(F(" - - - \xEF\xBB\xBF"));
+    this->_client->print(F("[0]: "));
+    this->_client->print(message);
+    this->_client->endPacket();
+
     return true;
-
-  // Set default facility if none specified.
-  if ((pri & LOG_FACMASK) == 0)
-    pri = LOG_MAKEPRI(LOG_FAC(this->_priDefault), pri);
-
-  if (this->_server != NULL) {
-    result = this->_client->beginPacket(this->_server, this->_port);
-  } else {
-    result = this->_client->beginPacket(this->_ip, this->_port);
-  }
-
-  if (result != 1)
-    return false;
-
-  this->_client->print('<');
-  this->_client->print(pri);
-  this->_client->print(F(">1 - "));
-  this->_client->print(this->_deviceHostname);
-  this->_client->print(' ');
-  this->_client->print(this->_appName);
-  this->_client->print(F(" - - - \xEF\xBB\xBF"));
-  this->_client->print(F("[0]: "));
-  this->_client->print(message);
-  this->_client->endPacket();
-
-  return true;
 }
 
-inline bool Syslog::_sendLog(uint16_t pri, const __FlashStringHelper *message) {
-  int result;
+inline bool Syslog::_sendLog(uint16_t pri, const __FlashStringHelper *message)
+{
+    int result;
 
-  if (!this->_enabled)
-    return false;
+    if (!this->_enabled)
+        return false;
 
-  if ((this->_server == NULL && this->_ip == INADDR_NONE) || this->_port == 0)
-    return false;
+    if ((this->_server == NULL && this->_ip == INADDR_NONE) || this->_port == 0)
+        return false;
 
-  // Check priority against priMask values.
-  if ((LOG_MASK(LOG_PRI(pri)) & this->_priMask) == 0)
+    // Check priority against priMask values.
+    if ((LOG_MASK(LOG_PRI(pri)) & this->_priMask) == 0)
+        return true;
+
+    // Set default facility if none specified.
+    if ((pri & LOG_FACMASK) == 0)
+        pri = LOG_MAKEPRI(LOG_FAC(this->_priDefault), pri);
+
+    if (this->_server != NULL) {
+        result = this->_client->beginPacket(this->_server, this->_port);
+    } else {
+        result = this->_client->beginPacket(this->_ip, this->_port);
+    }
+
+    if (result != 1)
+        return false;
+
+    this->_client->print('<');
+    this->_client->print(pri);
+    this->_client->print(F(">1 - "));
+    this->_client->print(this->_deviceHostname);
+    this->_client->print(' ');
+    this->_client->print(this->_appName);
+    this->_client->print(F(" - - - \xEF\xBB\xBF"));
+    this->_client->print(message);
+    this->_client->endPacket();
+
     return true;
-
-  // Set default facility if none specified.
-  if ((pri & LOG_FACMASK) == 0)
-    pri = LOG_MAKEPRI(LOG_FAC(this->_priDefault), pri);
-
-  if (this->_server != NULL) {
-    result = this->_client->beginPacket(this->_server, this->_port);
-  } else {
-    result = this->_client->beginPacket(this->_ip, this->_port);
-  }
-
-  if (result != 1)
-    return false;
-
-  this->_client->print('<');
-  this->_client->print(pri);
-  this->_client->print(F(">1 - "));
-  this->_client->print(this->_deviceHostname);
-  this->_client->print(' ');
-  this->_client->print(this->_appName);
-  this->_client->print(F(" - - - \xEF\xBB\xBF"));
-  this->_client->print(message);
-  this->_client->endPacket();
-
-
-  return true;
 }
