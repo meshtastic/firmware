@@ -12,8 +12,8 @@ class EnvironmentTelemetryModule : private concurrency::OSThread, public Protobu
         : concurrency::OSThread("EnvironmentTelemetryModule"),
           ProtobufModule("EnvironmentTelemetry", PortNum_TELEMETRY_APP, &Telemetry_msg)
     {
-      lastMeasurementPacket = nullptr;
-      setIntervalFromNow(10 * 1000);
+        lastMeasurementPacket = nullptr;
+        setIntervalFromNow(10 * 1000);
     }
     virtual bool wantUIFrame() override;
 #if !HAS_SCREEN
