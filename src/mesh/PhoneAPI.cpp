@@ -157,7 +157,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
         if (info) {
             LOG_INFO("Sending nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s\n", info->num, info->last_heard, info->user.id,
-                      info->user.long_name);
+                     info->user.long_name);
             fromRadioScratch.which_payload_variant = FromRadio_node_info_tag;
             fromRadioScratch.node_info = *info;
             // Stay in current state until done sending nodeinfos
@@ -364,7 +364,7 @@ bool PhoneAPI::available()
     case STATE_SEND_MODULECONFIG:
     case STATE_SEND_COMPLETE_ID:
         return true;
-        
+
     case STATE_SEND_NODEINFO:
         if (!nodeInfoForPhone)
             nodeInfoForPhone = nodeDB.readNextInfo();
