@@ -47,7 +47,7 @@ class XModemAdapter
         XModemAdapter();
 
         void handlePacket(XModem xmodemPacket);
-        XModem *getForPhone();
+        XModem getForPhone();
 
     private:
         bool isReceiving = false;
@@ -67,7 +67,7 @@ class XModemAdapter
         char filename[sizeof(XModem_buffer_t::bytes)] = {0};
 
     protected:
-        XModem *xmodemStore = NULL;
+        XModem xmodemStore = XModem_init_zero;
         unsigned short crc16_ccitt(const pb_byte_t *buffer, int length);
         int check(const pb_byte_t *buf, int sz, unsigned short tcrc);
         void sendControl(XModem_Control c);
