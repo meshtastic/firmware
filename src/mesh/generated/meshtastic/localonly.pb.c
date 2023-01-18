@@ -6,10 +6,10 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
-PB_BIND(meshtastic_LocalConfig, meshtastic_LocalConfig, 2)
+PB_BIND(LocalConfig, LocalConfig, 2)
 
 
-PB_BIND(meshtastic_LocalModuleConfig, meshtastic_LocalModuleConfig, 2)
+PB_BIND(LocalModuleConfig, LocalModuleConfig, 2)
 
 
 

@@ -11,10 +11,10 @@
 
 /* Struct definitions */
 /* Canned message module configuration. */
-typedef struct _meshtastic_CannedMessageModuleConfig {
+typedef struct _CannedMessageModuleConfig {
     /* Predefined messages for canned message module separated by '|' characters. */
     char messages[201];
-} meshtastic_CannedMessageModuleConfig;
+} CannedMessageModuleConfig;
 
 
 #ifdef __cplusplus
@@ -22,25 +22,25 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define meshtastic_CannedMessageModuleConfig_init_default {""}
-#define meshtastic_CannedMessageModuleConfig_init_zero {""}
+#define CannedMessageModuleConfig_init_default {""}
+#define CannedMessageModuleConfig_init_zero {""}
 
 /* Field tags (for use in manual encoding/decoding) */
-#define meshtastic_CannedMessageModuleConfig_messages_tag 1
+#define CannedMessageModuleConfig_messages_tag 1
 
 /* Struct field encoding specification for nanopb */
-#define meshtastic_CannedMessageModuleConfig_FIELDLIST(X, a) \
+#define CannedMessageModuleConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   messages,          1)
-#define meshtastic_CannedMessageModuleConfig_CALLBACK NULL
-#define meshtastic_CannedMessageModuleConfig_DEFAULT NULL
+#define CannedMessageModuleConfig_CALLBACK NULL
+#define CannedMessageModuleConfig_DEFAULT NULL
 
-extern const pb_msgdesc_t meshtastic_CannedMessageModuleConfig_msg;
+extern const pb_msgdesc_t CannedMessageModuleConfig_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
-#define meshtastic_CannedMessageModuleConfig_fields &meshtastic_CannedMessageModuleConfig_msg
+#define CannedMessageModuleConfig_fields &CannedMessageModuleConfig_msg
 
 /* Maximum encoded size of messages (where known) */
-#define meshtastic_CannedMessageModuleConfig_size 203
+#define CannedMessageModuleConfig_size 203
 
 #ifdef __cplusplus
 } /* extern "C" */
