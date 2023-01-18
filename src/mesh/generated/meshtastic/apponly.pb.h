@@ -17,14 +17,14 @@
  any SECONDARY channels.
  No DISABLED channels are included.
  This abstraction is used only on the the 'app side' of the world (ie python, javascript and android etc) to show a group of Channels as a (long) URL */
-typedef struct _meshtastic_ChannelSet {
+typedef struct _ChannelSet {
     /* Channel list with settings */
     pb_size_t settings_count;
-    meshtastic_ChannelSettings settings[8];
+    ChannelSettings settings[8];
     /* LoRa config */
     bool has_lora_config;
-    meshtastic_Config_LoRaConfig lora_config;
-} meshtastic_ChannelSet;
+    Config_LoRaConfig lora_config;
+} ChannelSet;
 
 
 #ifdef __cplusplus
@@ -32,29 +32,29 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define meshtastic_ChannelSet_init_default       {0, {meshtastic_ChannelSettings_init_default, meshtastic_ChannelSettings_init_default, meshtastic_ChannelSettings_init_default, meshtastic_ChannelSettings_init_default, meshtastic_ChannelSettings_init_default, meshtastic_ChannelSettings_init_default, meshtastic_ChannelSettings_init_default, meshtastic_ChannelSettings_init_default}, false, meshtastic_Config_LoRaConfig_init_default}
-#define meshtastic_ChannelSet_init_zero          {0, {meshtastic_ChannelSettings_init_zero, meshtastic_ChannelSettings_init_zero, meshtastic_ChannelSettings_init_zero, meshtastic_ChannelSettings_init_zero, meshtastic_ChannelSettings_init_zero, meshtastic_ChannelSettings_init_zero, meshtastic_ChannelSettings_init_zero, meshtastic_ChannelSettings_init_zero}, false, meshtastic_Config_LoRaConfig_init_zero}
+#define ChannelSet_init_default       {0, {ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default, ChannelSettings_init_default}, false, Config_LoRaConfig_init_default}
+#define ChannelSet_init_zero          {0, {ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero, ChannelSettings_init_zero}, false, Config_LoRaConfig_init_zero}
 
 /* Field tags (for use in manual encoding/decoding) */
-#define meshtastic_ChannelSet_settings_tag       1
-#define meshtastic_ChannelSet_lora_config_tag    2
+#define ChannelSet_settings_tag       1
+#define ChannelSet_lora_config_tag    2
 
 /* Struct field encoding specification for nanopb */
-#define meshtastic_ChannelSet_FIELDLIST(X, a) \
+#define ChannelSet_FIELDLIST(X, a) \
 X(a, STATIC,   REPEATED, MESSAGE,  settings,          1) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  lora_config,       2)
-#define meshtastic_ChannelSet_CALLBACK NULL
-#define meshtastic_ChannelSet_DEFAULT NULL
-#define meshtastic_ChannelSet_settings_MSGTYPE meshtastic_ChannelSettings
-#define meshtastic_ChannelSet_lora_config_MSGTYPE meshtastic_Config_LoRaConfig
+#define ChannelSet_CALLBACK NULL
+#define ChannelSet_DEFAULT NULL
+#define ChannelSet_settings_MSGTYPE ChannelSettings
+#define ChannelSet_lora_config_MSGTYPE Config_LoRaConfig
 
-extern const pb_msgdesc_t meshtastic_ChannelSet_msg;
+extern const pb_msgdesc_t ChannelSet_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
-#define meshtastic_ChannelSet_fields &meshtastic_ChannelSet_msg
+#define ChannelSet_fields &ChannelSet_msg
 
 /* Maximum encoded size of messages (where known) */
-#define meshtastic_ChannelSet_size               584
+#define ChannelSet_size               584
 
 #ifdef __cplusplus
 } /* extern "C" */

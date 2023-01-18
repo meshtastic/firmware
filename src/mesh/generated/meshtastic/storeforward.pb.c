@@ -6,16 +6,16 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
-PB_BIND(meshtastic_StoreAndForward, meshtastic_StoreAndForward, AUTO)
+PB_BIND(StoreAndForward, StoreAndForward, AUTO)
 
 
-PB_BIND(meshtastic_StoreAndForward_Statistics, meshtastic_StoreAndForward_Statistics, AUTO)
+PB_BIND(StoreAndForward_Statistics, StoreAndForward_Statistics, AUTO)
 
 
-PB_BIND(meshtastic_StoreAndForward_History, meshtastic_StoreAndForward_History, AUTO)
+PB_BIND(StoreAndForward_History, StoreAndForward_History, AUTO)
 
 
-PB_BIND(meshtastic_StoreAndForward_Heartbeat, meshtastic_StoreAndForward_Heartbeat, AUTO)
+PB_BIND(StoreAndForward_Heartbeat, StoreAndForward_Heartbeat, AUTO)
 
 
 

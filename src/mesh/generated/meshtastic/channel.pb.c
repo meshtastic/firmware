@@ -6,10 +6,10 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
-PB_BIND(meshtastic_ChannelSettings, meshtastic_ChannelSettings, AUTO)
+PB_BIND(ChannelSettings, ChannelSettings, AUTO)
 
 
-PB_BIND(meshtastic_Channel, meshtastic_Channel, AUTO)
+PB_BIND(Channel, Channel, AUTO)
 
 
 

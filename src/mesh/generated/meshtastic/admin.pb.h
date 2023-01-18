@@ -16,69 +16,69 @@
 
 /* Enum definitions */
 /* TODO: REPLACE */
-typedef enum _meshtastic_AdminMessage_ConfigType {
+typedef enum _AdminMessage_ConfigType {
     /* TODO: REPLACE */
-    meshtastic_AdminMessage_ConfigType_DEVICE_CONFIG = 0,
+    AdminMessage_ConfigType_DEVICE_CONFIG = 0,
     /* TODO: REPLACE */
-    meshtastic_AdminMessage_ConfigType_POSITION_CONFIG = 1,
+    AdminMessage_ConfigType_POSITION_CONFIG = 1,
     /* TODO: REPLACE */
-    meshtastic_AdminMessage_ConfigType_POWER_CONFIG = 2,
+    AdminMessage_ConfigType_POWER_CONFIG = 2,
     /* TODO: REPLACE */
-    meshtastic_AdminMessage_ConfigType_NETWORK_CONFIG = 3,
+    AdminMessage_ConfigType_NETWORK_CONFIG = 3,
     /* TODO: REPLACE */
-    meshtastic_AdminMessage_ConfigType_DISPLAY_CONFIG = 4,
+    AdminMessage_ConfigType_DISPLAY_CONFIG = 4,
     /* TODO: REPLACE */
-    meshtastic_AdminMessage_ConfigType_LORA_CONFIG = 5,
+    AdminMessage_ConfigType_LORA_CONFIG = 5,
     /* TODO: REPLACE */
-    meshtastic_AdminMessage_ConfigType_BLUETOOTH_CONFIG = 6
-} meshtastic_AdminMessage_ConfigType;
+    AdminMessage_ConfigType_BLUETOOTH_CONFIG = 6
+} AdminMessage_ConfigType;
 
 /* TODO: REPLACE */
-typedef enum _meshtastic_AdminMessage_ModuleConfigType {
+typedef enum _AdminMessage_ModuleConfigType {
     /* TODO: REPLACE */
-    meshtastic_AdminMessage_ModuleConfigType_MQTT_CONFIG = 0,
+    AdminMessage_ModuleConfigType_MQTT_CONFIG = 0,
     /* TODO: REPLACE */
-    meshtastic_AdminMessage_ModuleConfigType_SERIAL_CONFIG = 1,
+    AdminMessage_ModuleConfigType_SERIAL_CONFIG = 1,
     /* TODO: REPLACE */
-    meshtastic_AdminMessage_ModuleConfigType_EXTNOTIF_CONFIG = 2,
+    AdminMessage_ModuleConfigType_EXTNOTIF_CONFIG = 2,
     /* TODO: REPLACE */
-    meshtastic_AdminMessage_ModuleConfigType_STOREFORWARD_CONFIG = 3,
+    AdminMessage_ModuleConfigType_STOREFORWARD_CONFIG = 3,
     /* TODO: REPLACE */
-    meshtastic_AdminMessage_ModuleConfigType_RANGETEST_CONFIG = 4,
+    AdminMessage_ModuleConfigType_RANGETEST_CONFIG = 4,
     /* TODO: REPLACE */
-    meshtastic_AdminMessage_ModuleConfigType_TELEMETRY_CONFIG = 5,
+    AdminMessage_ModuleConfigType_TELEMETRY_CONFIG = 5,
     /* TODO: REPLACE */
-    meshtastic_AdminMessage_ModuleConfigType_CANNEDMSG_CONFIG = 6,
+    AdminMessage_ModuleConfigType_CANNEDMSG_CONFIG = 6,
     /* TODO: REPLACE */
-    meshtastic_AdminMessage_ModuleConfigType_AUDIO_CONFIG = 7,
+    AdminMessage_ModuleConfigType_AUDIO_CONFIG = 7,
     /* TODO: REPLACE */
-    meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG = 8
-} meshtastic_AdminMessage_ModuleConfigType;
+    AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG = 8
+} AdminMessage_ModuleConfigType;
 
 /* Struct definitions */
 /* This message is handled by the Admin module and is responsible for all settings/channel read/write operations.
  This message is used to do settings operations to both remote AND local nodes.
  (Prior to 1.2 these operations were done via special ToRadio operations) */
-typedef struct _meshtastic_AdminMessage {
+typedef struct _AdminMessage {
     pb_size_t which_payload_variant;
     union {
         /* Send the specified channel in the response to this message
      NOTE: This field is sent with the channel index + 1 (to ensure we never try to send 'zero' - which protobufs treats as not present) */
         uint32_t get_channel_request;
         /* TODO: REPLACE */
-        meshtastic_Channel get_channel_response;
+        Channel get_channel_response;
         /* Send the current owner data in the response to this message. */
         bool get_owner_request;
         /* TODO: REPLACE */
-        meshtastic_User get_owner_response;
+        User get_owner_response;
         /* Ask for the following config data to be sent */
-        meshtastic_AdminMessage_ConfigType get_config_request;
+        AdminMessage_ConfigType get_config_request;
         /* Send the current Config in the response to this message. */
-        meshtastic_Config get_config_response;
+        Config get_config_response;
         /* Ask for the following config data to be sent */
-        meshtastic_AdminMessage_ModuleConfigType get_module_config_request;
+        AdminMessage_ModuleConfigType get_module_config_request;
         /* Send the current Config in the response to this message. */
-        meshtastic_ModuleConfig get_module_config_response;
+        ModuleConfig get_module_config_response;
         /* Get the Canned Message Module messages in the response to this message. */
         bool get_canned_message_module_messages_request;
         /* Get the Canned Message Module messages in the response to this message. */
@@ -86,23 +86,23 @@ typedef struct _meshtastic_AdminMessage {
         /* Request the node to send device metadata (firmware, protobuf version, etc) */
         bool get_device_metadata_request;
         /* Device metadata response */
-        meshtastic_DeviceMetadata get_device_metadata_response;
+        DeviceMetadata get_device_metadata_response;
         /* Get the Ringtone in the response to this message. */
         bool get_ringtone_request;
         /* Get the Ringtone in the response to this message. */
         char get_ringtone_response[231];
         /* Set the owner for this node */
-        meshtastic_User set_owner;
+        User set_owner;
         /* Set channels (using the new API).
      A special channel is the "primary channel".
      The other records are secondary channels.
      Note: only one channel can be marked as primary.
      If the client sets a particular channel to be primary, the previous channel will be set to SECONDARY automatically. */
-        meshtastic_Channel set_channel;
+        Channel set_channel;
         /* Set the current Config */
-        meshtastic_Config set_config;
+        Config set_config;
         /* Set the current Config */
-        meshtastic_ModuleConfig set_module_config;
+        ModuleConfig set_module_config;
         /* Set the Canned Message Module messages text. */
         char set_canned_message_module_messages[201];
         /* Set the ringtone for ExternalNotification. */
@@ -134,7 +134,7 @@ typedef struct _meshtastic_AdminMessage {
         /* Tell the node to reset the nodedb. */
         int32_t nodedb_reset;
     };
-} meshtastic_AdminMessage;
+} AdminMessage;
 
 
 #ifdef __cplusplus
@@ -142,56 +142,56 @@ extern "C" {
 #endif
 
 /* Helper constants for enums */
-#define _meshtastic_AdminMessage_ConfigType_MIN meshtastic_AdminMessage_ConfigType_DEVICE_CONFIG
-#define _meshtastic_AdminMessage_ConfigType_MAX meshtastic_AdminMessage_ConfigType_BLUETOOTH_CONFIG
-#define _meshtastic_AdminMessage_ConfigType_ARRAYSIZE ((meshtastic_AdminMessage_ConfigType)(meshtastic_AdminMessage_ConfigType_BLUETOOTH_CONFIG+1))
+#define _AdminMessage_ConfigType_MIN AdminMessage_ConfigType_DEVICE_CONFIG
+#define _AdminMessage_ConfigType_MAX AdminMessage_ConfigType_BLUETOOTH_CONFIG
+#define _AdminMessage_ConfigType_ARRAYSIZE ((AdminMessage_ConfigType)(AdminMessage_ConfigType_BLUETOOTH_CONFIG+1))
 
-#define _meshtastic_AdminMessage_ModuleConfigType_MIN meshtastic_AdminMessage_ModuleConfigType_MQTT_CONFIG
-#define _meshtastic_AdminMessage_ModuleConfigType_MAX meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG
-#define _meshtastic_AdminMessage_ModuleConfigType_ARRAYSIZE ((meshtastic_AdminMessage_ModuleConfigType)(meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG+1))
+#define _AdminMessage_ModuleConfigType_MIN AdminMessage_ModuleConfigType_MQTT_CONFIG
+#define _AdminMessage_ModuleConfigType_MAX AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG
+#define _AdminMessage_ModuleConfigType_ARRAYSIZE ((AdminMessage_ModuleConfigType)(AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG+1))
 
-#define meshtastic_AdminMessage_payload_variant_get_config_request_ENUMTYPE meshtastic_AdminMessage_ConfigType
-#define meshtastic_AdminMessage_payload_variant_get_module_config_request_ENUMTYPE meshtastic_AdminMessage_ModuleConfigType
+#define AdminMessage_payload_variant_get_config_request_ENUMTYPE AdminMessage_ConfigType
+#define AdminMessage_payload_variant_get_module_config_request_ENUMTYPE AdminMessage_ModuleConfigType
 
 
 /* Initializer values for message structs */
-#define meshtastic_AdminMessage_init_default     {0, {0}}
-#define meshtastic_AdminMessage_init_zero        {0, {0}}
+#define AdminMessage_init_default     {0, {0}}
+#define AdminMessage_init_zero        {0, {0}}
 
 /* Field tags (for use in manual encoding/decoding) */
-#define meshtastic_AdminMessage_get_channel_request_tag 1
-#define meshtastic_AdminMessage_get_channel_response_tag 2
-#define meshtastic_AdminMessage_get_owner_request_tag 3
-#define meshtastic_AdminMessage_get_owner_response_tag 4
-#define meshtastic_AdminMessage_get_config_request_tag 5
-#define meshtastic_AdminMessage_get_config_response_tag 6
-#define meshtastic_AdminMessage_get_module_config_request_tag 7
-#define meshtastic_AdminMessage_get_module_config_response_tag 8
-#define meshtastic_AdminMessage_get_canned_message_module_messages_request_tag 10
-#define meshtastic_AdminMessage_get_canned_message_module_messages_response_tag 11
-#define meshtastic_AdminMessage_get_device_metadata_request_tag 12
-#define meshtastic_AdminMessage_get_device_metadata_response_tag 13
-#define meshtastic_AdminMessage_get_ringtone_request_tag 14
-#define meshtastic_AdminMessage_get_ringtone_response_tag 15
-#define meshtastic_AdminMessage_set_owner_tag    32
-#define meshtastic_AdminMessage_set_channel_tag  33
-#define meshtastic_AdminMessage_set_config_tag   34
-#define meshtastic_AdminMessage_set_module_config_tag 35
-#define meshtastic_AdminMessage_set_canned_message_module_messages_tag 36
-#define meshtastic_AdminMessage_set_ringtone_message_tag 37
-#define meshtastic_AdminMessage_begin_edit_settings_tag 64
-#define meshtastic_AdminMessage_commit_edit_settings_tag 65
-#define meshtastic_AdminMessage_confirm_set_channel_tag 66
-#define meshtastic_AdminMessage_confirm_set_radio_tag 67
-#define meshtastic_AdminMessage_reboot_ota_seconds_tag 95
-#define meshtastic_AdminMessage_exit_simulator_tag 96
-#define meshtastic_AdminMessage_reboot_seconds_tag 97
-#define meshtastic_AdminMessage_shutdown_seconds_tag 98
-#define meshtastic_AdminMessage_factory_reset_tag 99
-#define meshtastic_AdminMessage_nodedb_reset_tag 100
+#define AdminMessage_get_channel_request_tag 1
+#define AdminMessage_get_channel_response_tag 2
+#define AdminMessage_get_owner_request_tag 3
+#define AdminMessage_get_owner_response_tag 4
+#define AdminMessage_get_config_request_tag 5
+#define AdminMessage_get_config_response_tag 6
+#define AdminMessage_get_module_config_request_tag 7
+#define AdminMessage_get_module_config_response_tag 8
+#define AdminMessage_get_canned_message_module_messages_request_tag 10
+#define AdminMessage_get_canned_message_module_messages_response_tag 11
+#define AdminMessage_get_device_metadata_request_tag 12
+#define AdminMessage_get_device_metadata_response_tag 13
+#define AdminMessage_get_ringtone_request_tag 14
+#define AdminMessage_get_ringtone_response_tag 15
+#define AdminMessage_set_owner_tag    32
+#define AdminMessage_set_channel_tag  33
+#define AdminMessage_set_config_tag   34
+#define AdminMessage_set_module_config_tag 35
+#define AdminMessage_set_canned_message_module_messages_tag 36
+#define AdminMessage_set_ringtone_message_tag 37
+#define AdminMessage_begin_edit_settings_tag 64
+#define AdminMessage_commit_edit_settings_tag 65
+#define AdminMessage_confirm_set_channel_tag 66
+#define AdminMessage_confirm_set_radio_tag 67
+#define AdminMessage_reboot_ota_seconds_tag 95
+#define AdminMessage_exit_simulator_tag 96
+#define AdminMessage_reboot_seconds_tag 97
+#define AdminMessage_shutdown_seconds_tag 98
+#define AdminMessage_factory_reset_tag 99
+#define AdminMessage_nodedb_reset_tag 100
 
 /* Struct field encoding specification for nanopb */
-#define meshtastic_AdminMessage_FIELDLIST(X, a) \
+#define AdminMessage_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,get_channel_request,get_channel_request),   1) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,get_channel_response,get_channel_response),   2) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,get_owner_request,get_owner_request),   3) \
@@ -222,25 +222,25 @@ X(a, STATIC,   ONEOF,    INT32,    (payload_variant,reboot_seconds,reboot_second
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,shutdown_seconds,shutdown_seconds),  98) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,factory_reset,factory_reset),  99) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,nodedb_reset,nodedb_reset), 100)
-#define meshtastic_AdminMessage_CALLBACK NULL
-#define meshtastic_AdminMessage_DEFAULT NULL
-#define meshtastic_AdminMessage_payload_variant_get_channel_response_MSGTYPE meshtastic_Channel
-#define meshtastic_AdminMessage_payload_variant_get_owner_response_MSGTYPE meshtastic_User
-#define meshtastic_AdminMessage_payload_variant_get_config_response_MSGTYPE meshtastic_Config
-#define meshtastic_AdminMessage_payload_variant_get_module_config_response_MSGTYPE meshtastic_ModuleConfig
-#define meshtastic_AdminMessage_payload_variant_get_device_metadata_response_MSGTYPE meshtastic_DeviceMetadata
-#define meshtastic_AdminMessage_payload_variant_set_owner_MSGTYPE meshtastic_User
-#define meshtastic_AdminMessage_payload_variant_set_channel_MSGTYPE meshtastic_Channel
-#define meshtastic_AdminMessage_payload_variant_set_config_MSGTYPE meshtastic_Config
-#define meshtastic_AdminMessage_payload_variant_set_module_config_MSGTYPE meshtastic_ModuleConfig
+#define AdminMessage_CALLBACK NULL
+#define AdminMessage_DEFAULT NULL
+#define AdminMessage_payload_variant_get_channel_response_MSGTYPE Channel
+#define AdminMessage_payload_variant_get_owner_response_MSGTYPE User
+#define AdminMessage_payload_variant_get_config_response_MSGTYPE Config
+#define AdminMessage_payload_variant_get_module_config_response_MSGTYPE ModuleConfig
+#define AdminMessage_payload_variant_get_device_metadata_response_MSGTYPE DeviceMetadata
+#define AdminMessage_payload_variant_set_owner_MSGTYPE User
+#define AdminMessage_payload_variant_set_channel_MSGTYPE Channel
+#define AdminMessage_payload_variant_set_config_MSGTYPE Config
+#define AdminMessage_payload_variant_set_module_config_MSGTYPE ModuleConfig
 
-extern const pb_msgdesc_t meshtastic_AdminMessage_msg;
+extern const pb_msgdesc_t AdminMessage_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
-#define meshtastic_AdminMessage_fields &meshtastic_AdminMessage_msg
+#define AdminMessage_fields &AdminMessage_msg
 
 /* Maximum encoded size of messages (where known) */
-#define meshtastic_AdminMessage_size             234
+#define AdminMessage_size             234
 
 #ifdef __cplusplus
 } /* extern "C" */

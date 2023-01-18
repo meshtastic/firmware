@@ -6,7 +6,7 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
-PB_BIND(meshtastic_AdminMessage, meshtastic_AdminMessage, 2)
+PB_BIND(AdminMessage, AdminMessage, 2)
 
 
 
