@@ -115,11 +115,11 @@ jobs:
       #- name: Build for native
       #  run: platformio run -e native
       #- name: Integration test
-       # run: |
-          #.pio/build/native/program 
-          #& sleep 20 # 5 seconds was not enough
-          #echo "Simulator started, launching python test..."
-          #python3 -c 'from meshtastic.test import testSimulator; testSimulator()'
+      # run: |
+      #.pio/build/native/program
+      #& sleep 20 # 5 seconds was not enough
+      #echo "Simulator started, launching python test..."
+      #python3 -c 'from meshtastic.test import testSimulator; testSimulator()'
 
       - name: Build Native
         run: bin/build-native.sh
