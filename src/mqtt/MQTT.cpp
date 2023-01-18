@@ -5,8 +5,8 @@
 #include "main.h"
 #include "mesh/Channels.h"
 #include "mesh/Router.h"
-#include "mesh/generated/mqtt.pb.h"
-#include "mesh/generated/telemetry.pb.h"
+#include "mesh/generated/meshtastic/mqtt.pb.h"
+#include "mesh/generated/meshtastic/telemetry.pb.h"
 #include "mesh/http/WiFiAPClient.h"
 #include "sleep.h"
 #if HAS_WIFI

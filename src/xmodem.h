@@ -33,7 +33,7 @@
 #pragma once
 
 #include "configuration.h"
-#include "mesh/generated/xmodem.pb.h"
+#include "mesh/generated/meshtastic/xmodem.pb.h"
 #include "FSCommon.h"
 
 #define MAXRETRANS 25

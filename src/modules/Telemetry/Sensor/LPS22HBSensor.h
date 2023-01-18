@@ -1,4 +1,4 @@
-#include "../mesh/generated/telemetry.pb.h"
+#include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
 #include <Adafruit_LPS2X.h>
 #include <Adafruit_Sensor.h>

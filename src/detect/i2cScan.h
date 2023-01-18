@@ -1,7 +1,7 @@
 #include "../configuration.h"
 #include "../main.h"
 #include <Wire.h>
-#include "mesh/generated/telemetry.pb.h"
+#include "mesh/generated/meshtastic/telemetry.pb.h"
 
 // AXP192 and AXP2101 have the same device address, we just need to identify it in Power.cpp
 #ifndef XPOWERS_AXP192_AXP2101_ADDRESS
