@@ -5,7 +5,7 @@
 #include "Router.h"
 #include "buzz/buzz.h"
 #include "configuration.h"
-#include "mesh/generated/rtttl.pb.h"
+#include "mesh/generated/meshtastic/rtttl.pb.h"
 #include <Arduino.h>
 
 #ifndef PIN_BUZZER

@@ -1,4 +1,4 @@
-#include "../mesh/generated/telemetry.pb.h"
+#include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "configuration.h"
 #include "TelemetrySensor.h"
 #include "BMP280Sensor.h"
