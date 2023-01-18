@@ -300,6 +300,8 @@ typedef struct _Config_NetworkConfig {
     /* struct to keep static address */
     bool has_ipv4_config;
     Config_NetworkConfig_IpV4Config ipv4_config;
+    /* rsyslog Server and Port */
+    char rsyslog_server[33];
 } Config_NetworkConfig;
 
 /* Display Config */
@@ -476,7 +478,7 @@ extern "C" {
 #define Config_DeviceConfig_init_default {_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0}
 #define Config_PositionConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0}
-#define Config_NetworkConfig_init_default {0, "", "", "", 0, _Config_NetworkConfig_AddressMode_MIN, false, Config_NetworkConfig_IpV4Config_init_default}
+#define Config_NetworkConfig_init_default {0, "", "", "", 0, _Config_NetworkConfig_AddressMode_MIN, false, Config_NetworkConfig_IpV4Config_init_default, ""}
 #define Config_NetworkConfig_IpV4Config_init_default {0, 0, 0, 0}
 #define Config_DisplayConfig_init_default {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _Config_DisplayConfig_DisplayUnits_MIN, _Config_DisplayConfig_OledType_MIN, _Config_DisplayConfig_DisplayMode_MIN, 0}
 #define Config_LoRaConfig_init_default {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, {0, 0, 0}}
@@ -485,7 +487,7 @@ extern "C" {
 #define Config_DeviceConfig_init_zero {_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0}
 #define Config_PositionConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define Config_PowerConfig_init_zero  {0, 0, 0, 0, 0, 0, 0, 0}
-#define Config_NetworkConfig_init_zero {0, "", "", "", 0, _Config_NetworkConfig_AddressMode_MIN, false, Config_NetworkConfig_IpV4Config_init_zero}
+#define Config_NetworkConfig_init_zero {0, "", "", "", 0, _Config_NetworkConfig_AddressMode_MIN, false, Config_NetworkConfig_IpV4Config_init_zero, ""}
 #define Config_NetworkConfig_IpV4Config_init_zero {0, 0, 0, 0}
 #define Config_DisplayConfig_init_zero {0, _Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _Config_DisplayConfig_DisplayUnits_MIN, _Config_DisplayConfig_OledType_MIN, _Config_DisplayConfig_DisplayMode_MIN, 0}
 #define Config_LoRaConfig_init_zero   {0, _Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, {0, 0, 0}}
@@ -525,6 +527,7 @@ extern "C" {
 #define Config_NetworkConfig_eth_enabled_tag 6
 #define Config_NetworkConfig_address_mode_tag 7
 #define Config_NetworkConfig_ipv4_config_tag 8
+#define Config_NetworkConfig_rsyslog_server_tag 9
 #define Config_DisplayConfig_screen_on_secs_tag 1
 #define Config_DisplayConfig_gps_format_tag 2
 #define Config_DisplayConfig_auto_screen_carousel_secs_tag 3
@@ -618,7 +621,8 @@ X(a, STATIC,   SINGULAR, STRING,   wifi_psk,          4) \
 X(a, STATIC,   SINGULAR, STRING,   ntp_server,        5) \
 X(a, STATIC,   SINGULAR, BOOL,     eth_enabled,       6) \
 X(a, STATIC,   SINGULAR, UENUM,    address_mode,      7) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  ipv4_config,       8)
+X(a, STATIC,   OPTIONAL, MESSAGE,  ipv4_config,       8) \
+X(a, STATIC,   SINGULAR, STRING,   rsyslog_server,    9)
 #define Config_NetworkConfig_CALLBACK NULL
 #define Config_NetworkConfig_DEFAULT NULL
 #define Config_NetworkConfig_ipv4_config_MSGTYPE Config_NetworkConfig_IpV4Config
@@ -695,10 +699,10 @@ extern const pb_msgdesc_t Config_BluetoothConfig_msg;
 #define Config_DisplayConfig_size     26
 #define Config_LoRaConfig_size        70
 #define Config_NetworkConfig_IpV4Config_size 20
-#define Config_NetworkConfig_size     161
+#define Config_NetworkConfig_size     195
 #define Config_PositionConfig_size    42
 #define Config_PowerConfig_size       43
-#define Config_size                   164
+#define Config_size                   198
 
 #ifdef __cplusplus
 } /* extern "C" */
