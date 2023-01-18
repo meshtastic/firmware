@@ -1,5 +1,5 @@
 #ifndef SYSLOG_H
-#define SYSLOG_H 
+#define SYSLOG_H
 
 // DEBUG LED
 #ifndef LED_INVERTED
@@ -17,10 +17,10 @@
 #endif
 
 #define MESHTASTIC_LOG_LEVEL_DEBUG "DEBUG"
-#define MESHTASTIC_LOG_LEVEL_INFO  "INFO "
-#define MESHTASTIC_LOG_LEVEL_WARN  "WARN "
+#define MESHTASTIC_LOG_LEVEL_INFO "INFO "
+#define MESHTASTIC_LOG_LEVEL_WARN "WARN "
 #define MESHTASTIC_LOG_LEVEL_ERROR "ERROR"
-#define MESHTASTIC_LOG_LEVEL_CRIT  "CRIT "
+#define MESHTASTIC_LOG_LEVEL_CRIT "CRIT "
 #define MESHTASTIC_LOG_LEVEL_TRACE "TRACE"
 
 #include "SerialConsole.h"
@@ -54,49 +54,49 @@
 
 #define SYSLOG_NILVALUE "-"
 
-#define SYSLOG_CRIT  2 /* critical conditions */
-#define SYSLOG_ERR   3 /* error conditions */
-#define SYSLOG_WARN  4 /* warning conditions */
-#define SYSLOG_INFO  6 /* informational */
+#define SYSLOG_CRIT 2  /* critical conditions */
+#define SYSLOG_ERR 3   /* error conditions */
+#define SYSLOG_WARN 4  /* warning conditions */
+#define SYSLOG_INFO 6  /* informational */
 #define SYSLOG_DEBUG 7 /* debug-level messages */
 // trace does not go out to syslog (yet?)
 
-#define LOG_PRIMASK 0x07  /* mask to extract priority part (internal) */
-        /* extract priority */
-#define LOG_PRI(p)  ((p) & LOG_PRIMASK)
+#define LOG_PRIMASK 0x07 /* mask to extract priority part (internal) */
+                         /* extract priority */
+#define LOG_PRI(p) ((p)&LOG_PRIMASK)
 #define LOG_MAKEPRI(fac, pri) (((fac) << 3) | (pri))
 
 /* facility codes */
-#define LOGLEVEL_KERN  (0<<3)  /* kernel messages */
-#define LOGLEVEL_USER  (1<<3)  /* random user-level messages */
-#define LOGLEVEL_MAIL  (2<<3)  /* mail system */
-#define LOGLEVEL_DAEMON  (3<<3)  /* system daemons */
-#define LOGLEVEL_AUTH  (4<<3)  /* security/authorization messages */
-#define LOGLEVEL_SYSLOG  (5<<3)  /* messages generated internally by syslogd */
-#define LOGLEVEL_LPR   (6<<3)  /* line printer subsystem */
-#define LOGLEVEL_NEWS  (7<<3)  /* network news subsystem */
-#define LOGLEVEL_UUCP  (8<<3)  /* UUCP subsystem */
-#define LOGLEVEL_CRON  (9<<3)  /* clock daemon */
-#define LOGLEVEL_AUTHPRIV  (10<<3) /* security/authorization messages (private) */
-#define LOGLEVEL_FTP   (11<<3) /* ftp daemon */
+#define LOGLEVEL_KERN (0 << 3)      /* kernel messages */
+#define LOGLEVEL_USER (1 << 3)      /* random user-level messages */
+#define LOGLEVEL_MAIL (2 << 3)      /* mail system */
+#define LOGLEVEL_DAEMON (3 << 3)    /* system daemons */
+#define LOGLEVEL_AUTH (4 << 3)      /* security/authorization messages */
+#define LOGLEVEL_SYSLOG (5 << 3)    /* messages generated internally by syslogd */
+#define LOGLEVEL_LPR (6 << 3)       /* line printer subsystem */
+#define LOGLEVEL_NEWS (7 << 3)      /* network news subsystem */
+#define LOGLEVEL_UUCP (8 << 3)      /* UUCP subsystem */
+#define LOGLEVEL_CRON (9 << 3)      /* clock daemon */
+#define LOGLEVEL_AUTHPRIV (10 << 3) /* security/authorization messages (private) */
+#define LOGLEVEL_FTP (11 << 3)      /* ftp daemon */
 
 /* other codes through 15 reserved for system use */
-#define LOGLEVEL_LOCAL0  (16<<3) /* reserved for local use */
-#define LOGLEVEL_LOCAL1  (17<<3) /* reserved for local use */
-#define LOGLEVEL_LOCAL2  (18<<3) /* reserved for local use */
-#define LOGLEVEL_LOCAL3  (19<<3) /* reserved for local use */
-#define LOGLEVEL_LOCAL4  (20<<3) /* reserved for local use */
-#define LOGLEVEL_LOCAL5  (21<<3) /* reserved for local use */
-#define LOGLEVEL_LOCAL6  (22<<3) /* reserved for local use */
-#define LOGLEVEL_LOCAL7  (23<<3) /* reserved for local use */
+#define LOGLEVEL_LOCAL0 (16 << 3) /* reserved for local use */
+#define LOGLEVEL_LOCAL1 (17 << 3) /* reserved for local use */
+#define LOGLEVEL_LOCAL2 (18 << 3) /* reserved for local use */
+#define LOGLEVEL_LOCAL3 (19 << 3) /* reserved for local use */
+#define LOGLEVEL_LOCAL4 (20 << 3) /* reserved for local use */
+#define LOGLEVEL_LOCAL5 (21 << 3) /* reserved for local use */
+#define LOGLEVEL_LOCAL6 (22 << 3) /* reserved for local use */
+#define LOGLEVEL_LOCAL7 (23 << 3) /* reserved for local use */
 
-#define LOG_NFACILITIES 24  /* current number of facilities */
-#define LOG_FACMASK 0x03f8  /* mask to extract facility part */
-                            /* facility of pri */
-#define LOG_FAC(p)  (((p) & LOG_FACMASK) >> 3)
+#define LOG_NFACILITIES 24 /* current number of facilities */
+#define LOG_FACMASK 0x03f8 /* mask to extract facility part */
+                           /* facility of pri */
+#define LOG_FAC(p) (((p)&LOG_FACMASK) >> 3)
 
-#define LOG_MASK(pri)  (1 << (pri))	/* mask for one priority */
-#define LOG_UPTO(pri)  ((1 << ((pri)+1)) - 1)	/* all priorities through pri */
+#define LOG_MASK(pri) (1 << (pri))             /* mask for one priority */
+#define LOG_UPTO(pri) ((1 << ((pri) + 1)) - 1) /* all priorities through pri */
 
 // -----------------------------------------------------------------------------
 // AXP192 (Rev1-specific options)
@@ -108,14 +108,15 @@
 // Default Bluetooth PIN
 #define defaultBLEPin 123456
 
-class Syslog {
+class Syslog
+{
   private:
-    UDP* _client;
+    UDP *_client;
     IPAddress _ip;
-    const char* _server;
+    const char *_server;
     uint16_t _port;
-    const char* _deviceHostname;
-    const char* _appName;
+    const char *_deviceHostname;
+    const char *_appName;
     uint16_t _priDefault;
     uint8_t _priMask = 0xff;
     bool _enabled = false;
@@ -126,10 +127,10 @@ class Syslog {
   public:
     Syslog(UDP &client);
 
-    Syslog &server(const char* server, uint16_t port);
+    Syslog &server(const char *server, uint16_t port);
     Syslog &server(IPAddress ip, uint16_t port);
-    Syslog &deviceHostname(const char* deviceHostname);
-    Syslog &appName(const char* appName);
+    Syslog &deviceHostname(const char *deviceHostname);
+    Syslog &appName(const char *appName);
     Syslog &defaultPriority(uint16_t pri = LOGLEVEL_KERN);
     Syslog &logMask(uint8_t priMask);
 
@@ -143,7 +144,7 @@ class Syslog {
 
     bool vlogf(uint16_t pri, const char *fmt, va_list args) __attribute__((format(printf, 3, 0)));
     bool vlogf_P(uint16_t pri, PGM_P fmt_P, va_list args) __attribute__((format(printf, 3, 0)));
-    
+
     bool logf(uint16_t pri, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
 
     bool logf_P(uint16_t pri, PGM_P fmt_P, ...) __attribute__((format(printf, 3, 4)));
