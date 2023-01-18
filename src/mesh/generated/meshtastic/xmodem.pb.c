@@ -6,7 +6,7 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
-PB_BIND(meshtastic_XModem, meshtastic_XModem, AUTO)
+PB_BIND(XModem, XModem, AUTO)
 
 
 

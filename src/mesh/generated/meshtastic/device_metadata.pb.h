@@ -12,7 +12,7 @@
 
 /* Struct definitions */
 /* Device metadata response */
-typedef struct _meshtastic_DeviceMetadata {
+typedef struct _DeviceMetadata {
     /* Device firmware version string */
     char firmware_version[18];
     /* Device state version */
@@ -26,10 +26,10 @@ typedef struct _meshtastic_DeviceMetadata {
     /* Indicates that the device has an ethernet peripheral */
     bool hasEthernet;
     /* Indicates that the device's role in the mesh */
-    meshtastic_Config_DeviceConfig_Role role;
+    Config_DeviceConfig_Role role;
     /* Indicates the device's current enabled position flags */
-    meshtastic_Config_PositionConfig_PositionFlags position_flags;
-} meshtastic_DeviceMetadata;
+    Config_PositionConfig_PositionFlags position_flags;
+} DeviceMetadata;
 
 
 #ifdef __cplusplus
@@ -37,21 +37,21 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, _meshtastic_Config_PositionConfig_PositionFlags_MIN}
-#define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, _meshtastic_Config_PositionConfig_PositionFlags_MIN}
+#define DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _Config_DeviceConfig_Role_MIN, _Config_PositionConfig_PositionFlags_MIN}
+#define DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _Config_DeviceConfig_Role_MIN, _Config_PositionConfig_PositionFlags_MIN}
 
 /* Field tags (for use in manual encoding/decoding) */
-#define meshtastic_DeviceMetadata_firmware_version_tag 1
-#define meshtastic_DeviceMetadata_device_state_version_tag 2
-#define meshtastic_DeviceMetadata_canShutdown_tag 3
-#define meshtastic_DeviceMetadata_hasWifi_tag    4
-#define meshtastic_DeviceMetadata_hasBluetooth_tag 5
-#define meshtastic_DeviceMetadata_hasEthernet_tag 6
-#define meshtastic_DeviceMetadata_role_tag       7
-#define meshtastic_DeviceMetadata_position_flags_tag 8
+#define DeviceMetadata_firmware_version_tag 1
+#define DeviceMetadata_device_state_version_tag 2
+#define DeviceMetadata_canShutdown_tag 3
+#define DeviceMetadata_hasWifi_tag    4
+#define DeviceMetadata_hasBluetooth_tag 5
+#define DeviceMetadata_hasEthernet_tag 6
+#define DeviceMetadata_role_tag       7
+#define DeviceMetadata_position_flags_tag 8
 
 /* Struct field encoding specification for nanopb */
-#define meshtastic_DeviceMetadata_FIELDLIST(X, a) \
+#define DeviceMetadata_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   firmware_version,   1) \
 X(a, STATIC,   SINGULAR, UINT32,   device_state_version,   2) \
 X(a, STATIC,   SINGULAR, BOOL,     canShutdown,       3) \
@@ -60,16 +60,16 @@ X(a, STATIC,   SINGULAR, BOOL,     hasBluetooth,      5) \
 X(a, STATIC,   SINGULAR, BOOL,     hasEthernet,       6) \
 X(a, STATIC,   SINGULAR, UENUM,    role,              7) \
 X(a, STATIC,   SINGULAR, UENUM,    position_flags,    8)
-#define meshtastic_DeviceMetadata_CALLBACK NULL
-#define meshtastic_DeviceMetadata_DEFAULT NULL
+#define DeviceMetadata_CALLBACK NULL
+#define DeviceMetadata_DEFAULT NULL
 
-extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
+extern const pb_msgdesc_t DeviceMetadata_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
-#define meshtastic_DeviceMetadata_fields &meshtastic_DeviceMetadata_msg
+#define DeviceMetadata_fields &DeviceMetadata_msg
 
 /* Maximum encoded size of messages (where known) */
-#define meshtastic_DeviceMetadata_size           38
+#define DeviceMetadata_size           38
 
 #ifdef __cplusplus
 } /* extern "C" */
