@@ -6,7 +6,7 @@
 #include "airtime.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
-#include "mesh/generated/storeforward.pb.h"
+#include "mesh/generated/meshtastic/storeforward.pb.h"
 #include "modules/ModuleDev.h"
 #include <Arduino.h>
 #include <iterator>
@@ -63,7 +63,8 @@ void StoreForwardModule::populatePSRAM()
         https://learn.upesy.com/en/programmation/psram.html#psram-tab
     */
 
-    LOG_DEBUG("*** Before PSRAM initilization: heap %d/%d PSRAM %d/%d\n", ESP.getFreeHeap(), ESP.getHeapSize(), ESP.getFreePsram(), ESP.getPsramSize());
+    LOG_DEBUG("*** Before PSRAM initilization: heap %d/%d PSRAM %d/%d\n", ESP.getFreeHeap(), ESP.getHeapSize(),
+              ESP.getFreePsram(), ESP.getPsramSize());
 
     this->packetHistoryTXQueue =
         static_cast<PacketHistoryStruct *>(ps_calloc(this->historyReturnMax, sizeof(PacketHistoryStruct)));
@@ -76,7 +77,8 @@ void StoreForwardModule::populatePSRAM()
 
     this->packetHistory = static_cast<PacketHistoryStruct *>(ps_calloc(numberOfPackets, sizeof(PacketHistoryStruct)));
 
-    LOG_DEBUG("*** After PSRAM initilization: heap %d/%d PSRAM %d/%d\n", ESP.getFreeHeap(), ESP.getHeapSize(), ESP.getFreePsram(), ESP.getPsramSize());
+    LOG_DEBUG("*** After PSRAM initilization: heap %d/%d PSRAM %d/%d\n", ESP.getFreeHeap(), ESP.getHeapSize(), ESP.getFreePsram(),
+              ESP.getPsramSize());
     LOG_DEBUG("*** numberOfPackets for packetHistory - %u\n", numberOfPackets);
 }
 
@@ -296,123 +298,125 @@ bool StoreForwardModule::handleReceivedProtobuf(const MeshPacket &mp, StoreAndFo
     requests++;
 
     switch (p->rr) {
-        case StoreAndForward_RequestResponse_CLIENT_ERROR:
-        case StoreAndForward_RequestResponse_CLIENT_ABORT:
-            if(is_server) {
-                // stop sending stuff, the client wants to abort or has another error
-                if ((this->busy) && (this->busyTo == getFrom(&mp))) {
-                    LOG_ERROR("*** Client in ERROR or ABORT requested\n");
-                    this->packetHistoryTXQueue_index = 0;
-                    this->busy = false;
-                }
+    case StoreAndForward_RequestResponse_CLIENT_ERROR:
+    case StoreAndForward_RequestResponse_CLIENT_ABORT:
+        if (is_server) {
+            // stop sending stuff, the client wants to abort or has another error
+            if ((this->busy) && (this->busyTo == getFrom(&mp))) {
+                LOG_ERROR("*** Client in ERROR or ABORT requested\n");
+                this->packetHistoryTXQueue_index = 0;
+                this->busy = false;
             }
-            break;
+        }
+        break;
 
-        case StoreAndForward_RequestResponse_CLIENT_HISTORY:
-            if(is_server) {
-                requests_history++;
-                LOG_INFO("*** Client Request to send HISTORY\n");
-                // Send the last 60 minutes of messages.
-                if (this->busy) {
-                    storeForwardModule->sendMessage(getFrom(&mp), StoreAndForward_RequestResponse_ROUTER_BUSY);
-                    LOG_INFO("*** S&F - Busy. Try again shortly.\n");
+    case StoreAndForward_RequestResponse_CLIENT_HISTORY:
+        if (is_server) {
+            requests_history++;
+            LOG_INFO("*** Client Request to send HISTORY\n");
+            // Send the last 60 minutes of messages.
+            if (this->busy) {
+                storeForwardModule->sendMessage(getFrom(&mp), StoreAndForward_RequestResponse_ROUTER_BUSY);
+                LOG_INFO("*** S&F - Busy. Try again shortly.\n");
+            } else {
+                if ((p->which_variant == StoreAndForward_history_tag) && (p->variant.history.window > 0)) {
+                    storeForwardModule->historySend(p->variant.history.window * 60000, getFrom(&mp)); // window is in minutes
                 } else {
-                    if ((p->which_variant == StoreAndForward_history_tag) && (p->variant.history.window > 0)){
-                        storeForwardModule->historySend(p->variant.history.window * 60000, getFrom(&mp)); // window is in minutes
-                    } else {
-                        storeForwardModule->historySend(historyReturnWindow * 60000, getFrom(&mp)); // defaults to 4 hours
-                    }
+                    storeForwardModule->historySend(historyReturnWindow * 60000, getFrom(&mp)); // defaults to 4 hours
                 }
             }
-            break;
+        }
+        break;
 
-        case StoreAndForward_RequestResponse_CLIENT_PING:
-            if(is_server) {
-                LOG_INFO("*** StoreAndForward_RequestResponse_CLIENT_PING\n");
-                // respond with a ROUTER PONG
-                storeForwardModule->sendMessage(getFrom(&mp), StoreAndForward_RequestResponse_ROUTER_PONG);
+    case StoreAndForward_RequestResponse_CLIENT_PING:
+        if (is_server) {
+            LOG_INFO("*** StoreAndForward_RequestResponse_CLIENT_PING\n");
+            // respond with a ROUTER PONG
+            storeForwardModule->sendMessage(getFrom(&mp), StoreAndForward_RequestResponse_ROUTER_PONG);
+        }
+        break;
+
+    case StoreAndForward_RequestResponse_CLIENT_PONG:
+        if (is_server) {
+            LOG_INFO("*** StoreAndForward_RequestResponse_CLIENT_PONG\n");
+            // The Client is alive, update NodeDB
+            nodeDB.updateFrom(mp);
+        }
+        break;
+
+    case StoreAndForward_RequestResponse_CLIENT_STATS:
+        if (is_server) {
+            LOG_INFO("*** Client Request to send STATS\n");
+            if (this->busy) {
+                storeForwardModule->sendMessage(getFrom(&mp), StoreAndForward_RequestResponse_ROUTER_BUSY);
+                LOG_INFO("*** S&F - Busy. Try again shortly.\n");
+            } else {
+                storeForwardModule->statsSend(getFrom(&mp));
             }
-            break;
+        }
+        break;
 
-        case StoreAndForward_RequestResponse_CLIENT_PONG:
-            if(is_server) {
-                LOG_INFO("*** StoreAndForward_RequestResponse_CLIENT_PONG\n");
-                // The Client is alive, update NodeDB
-                nodeDB.updateFrom(mp);
+    case StoreAndForward_RequestResponse_ROUTER_ERROR:
+    case StoreAndForward_RequestResponse_ROUTER_BUSY:
+        if (is_client) {
+            LOG_DEBUG("*** StoreAndForward_RequestResponse_ROUTER_BUSY\n");
+            // retry in messages_saved * packetTimeMax ms
+            retry_delay =
+                millis() + packetHistoryCurrent * packetTimeMax * (StoreAndForward_RequestResponse_ROUTER_ERROR ? 2 : 1);
+        }
+        break;
+
+    case StoreAndForward_RequestResponse_ROUTER_PONG:
+    // A router responded, this is equal to receiving a heartbeat
+    case StoreAndForward_RequestResponse_ROUTER_HEARTBEAT:
+        if (is_client) {
+            // register heartbeat and interval
+            if (p->which_variant == StoreAndForward_heartbeat_tag) {
+                heartbeatInterval = p->variant.heartbeat.period;
             }
-            break;
+            lastHeartbeat = millis();
+            LOG_INFO("*** StoreAndForward Heartbeat received\n");
+        }
+        break;
 
-        case StoreAndForward_RequestResponse_CLIENT_STATS:
-            if(is_server) {
-                LOG_INFO("*** Client Request to send STATS\n");
-                if (this->busy) {
-                    storeForwardModule->sendMessage(getFrom(&mp), StoreAndForward_RequestResponse_ROUTER_BUSY);
-                    LOG_INFO("*** S&F - Busy. Try again shortly.\n");
-                } else {
-                    storeForwardModule->statsSend(getFrom(&mp));
-                }
+    case StoreAndForward_RequestResponse_ROUTER_PING:
+        if (is_client) {
+            LOG_DEBUG("*** StoreAndForward_RequestResponse_ROUTER_PING\n");
+            // respond with a CLIENT PONG
+            storeForwardModule->sendMessage(getFrom(&mp), StoreAndForward_RequestResponse_CLIENT_PONG);
+        }
+        break;
+
+    case StoreAndForward_RequestResponse_ROUTER_STATS:
+        if (is_client) {
+            LOG_DEBUG("*** Router Response STATS\n");
+            // These fields only have informational purpose on a client. Fill them to consume later.
+            if (p->which_variant == StoreAndForward_stats_tag) {
+                this->packetHistoryMax = p->variant.stats.messages_total;
+                this->packetHistoryCurrent = p->variant.stats.messages_saved;
+                this->records = p->variant.stats.messages_max;
+                this->requests = p->variant.stats.requests;
+                this->requests_history = p->variant.stats.requests_history;
+                this->heartbeat = p->variant.stats.heartbeat;
+                this->historyReturnMax = p->variant.stats.return_max;
+                this->historyReturnWindow = p->variant.stats.return_window;
             }
-            break;
+        }
+        break;
 
-        case StoreAndForward_RequestResponse_ROUTER_ERROR:
-        case StoreAndForward_RequestResponse_ROUTER_BUSY:
-            if(is_client) {
-                LOG_DEBUG("*** StoreAndForward_RequestResponse_ROUTER_BUSY\n");
-                // retry in messages_saved * packetTimeMax ms
-                retry_delay = millis() + packetHistoryCurrent * packetTimeMax * (StoreAndForward_RequestResponse_ROUTER_ERROR ? 2 : 1);
+    case StoreAndForward_RequestResponse_ROUTER_HISTORY:
+        if (is_client) {
+            // These fields only have informational purpose on a client. Fill them to consume later.
+            if (p->which_variant == StoreAndForward_history_tag) {
+                this->historyReturnWindow = p->variant.history.window / 60000;
+                LOG_INFO("*** Router Response HISTORY - Sending %d messages from last %d minutes\n",
+                         p->variant.history.history_messages, this->historyReturnWindow);
             }
-            break;
+        }
+        break;
 
-        case StoreAndForward_RequestResponse_ROUTER_PONG:
-        // A router responded, this is equal to receiving a heartbeat
-        case StoreAndForward_RequestResponse_ROUTER_HEARTBEAT:
-            if(is_client) {
-                // register heartbeat and interval
-                if (p->which_variant == StoreAndForward_heartbeat_tag) {
-                    heartbeatInterval = p->variant.heartbeat.period;
-                }
-                lastHeartbeat = millis();
-                LOG_INFO("*** StoreAndForward Heartbeat received\n");
-            }
-            break;
-
-        case StoreAndForward_RequestResponse_ROUTER_PING:
-            if(is_client) {
-                LOG_DEBUG("*** StoreAndForward_RequestResponse_ROUTER_PING\n");
-                // respond with a CLIENT PONG
-                storeForwardModule->sendMessage(getFrom(&mp), StoreAndForward_RequestResponse_CLIENT_PONG);
-            }
-            break;
-
-        case StoreAndForward_RequestResponse_ROUTER_STATS:
-            if(is_client) {
-                LOG_DEBUG("*** Router Response STATS\n");
-                // These fields only have informational purpose on a client. Fill them to consume later.
-                if (p->which_variant == StoreAndForward_stats_tag) {
-                    this->packetHistoryMax = p->variant.stats.messages_total;
-                    this->packetHistoryCurrent = p->variant.stats.messages_saved;
-                    this->records = p->variant.stats.messages_max;
-                    this->requests = p->variant.stats.requests;
-                    this->requests_history = p->variant.stats.requests_history;
-                    this->heartbeat = p->variant.stats.heartbeat;
-                    this->historyReturnMax = p->variant.stats.return_max;
-                    this->historyReturnWindow = p->variant.stats.return_window;
-                }
-            }
-            break;
-
-        case StoreAndForward_RequestResponse_ROUTER_HISTORY:
-            if(is_client) {
-                // These fields only have informational purpose on a client. Fill them to consume later.
-                if (p->which_variant == StoreAndForward_history_tag) {
-                    this->historyReturnWindow = p->variant.history.window / 60000;
-                    LOG_INFO("*** Router Response HISTORY - Sending %d messages from last %d minutes\n", p->variant.history.history_messages, this->historyReturnWindow);
-                }
-            }
-            break;
-
-        default:
-            assert(0); // unexpected state
+    default:
+        assert(0); // unexpected state
     }
     return true; // There's no need for others to look at this message.
 }
@@ -437,7 +441,8 @@ StoreForwardModule::StoreForwardModule()
     if (moduleConfig.store_forward.enabled) {
 
         // Router
-        if ((config.device.role == Config_DeviceConfig_Role_ROUTER) || (config.device.role == Config_DeviceConfig_Role_ROUTER_CLIENT)) {
+        if ((config.device.role == Config_DeviceConfig_Role_ROUTER) ||
+            (config.device.role == Config_DeviceConfig_Role_ROUTER_CLIENT)) {
             LOG_INFO("*** Initializing Store & Forward Module in Router mode\n");
             if (ESP.getPsramSize() > 0) {
                 if (ESP.getFreePsram() >= 1024 * 1024) {
@@ -474,7 +479,8 @@ StoreForwardModule::StoreForwardModule()
 
             // Client
         }
-        if ((config.device.role == Config_DeviceConfig_Role_CLIENT) || (config.device.role == Config_DeviceConfig_Role_ROUTER_CLIENT)) {
+        if ((config.device.role == Config_DeviceConfig_Role_CLIENT) ||
+            (config.device.role == Config_DeviceConfig_Role_ROUTER_CLIENT)) {
             is_client = true;
             LOG_INFO("*** Initializing Store & Forward Module in Client mode\n");
         }

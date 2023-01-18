@@ -1,5 +1,5 @@
 #pragma once
-#include "../mesh/generated/telemetry.pb.h"
+#include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "NodeDB.h"
 #include "ProtobufModule.h"
 #include <OLEDDisplay.h>
@@ -11,8 +11,8 @@ class DeviceTelemetryModule : private concurrency::OSThread, public ProtobufModu
     DeviceTelemetryModule()
         : concurrency::OSThread("DeviceTelemetryModule"), ProtobufModule("DeviceTelemetry", PortNum_TELEMETRY_APP, &Telemetry_msg)
     {
-      lastMeasurementPacket = nullptr;
-      setIntervalFromNow(10 * 1000);
+        lastMeasurementPacket = nullptr;
+        setIntervalFromNow(10 * 1000);
     }
     virtual bool wantUIFrame() { return false; }
 

@@ -109,11 +109,11 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
     }
     case AdminMessage_reboot_ota_seconds_tag: {
         int32_t s = r->reboot_ota_seconds;
-#ifdef ARCH_ESP32        
+#ifdef ARCH_ESP32
         if (BleOta::getOtaAppVersion().isEmpty()) {
             LOG_INFO("No OTA firmware available, scheduling regular reboot in %d seconds\n", s);
             screen->startRebootScreen();
-        }else{
+        } else {
             screen->startFirmwareUpdateScreen();
             BleOta::switchToOtaApp();
             LOG_INFO("Rebooting to OTA in %d seconds\n", s);
@@ -141,7 +141,8 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
         nodeDB.factoryReset();
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
-    } case AdminMessage_nodedb_reset_tag: {
+    }
+    case AdminMessage_nodedb_reset_tag: {
         LOG_INFO("Initiating node-db reset\n");
         nodeDB.resetNodes();
         reboot(DEFAULT_REBOOT_SECONDS);
@@ -179,7 +180,7 @@ bool AdminModule::handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *r)
         }
         break;
     }
-    
+
     // If asked for a response and it is not yet set, generate an 'ACK' response
     if (mp.decoded.want_response && !myReply) {
         myReply = allocErrorResponse(Routing_Error_NONE, &mp);
@@ -213,7 +214,7 @@ void AdminModule::handleSetOwner(const User &o)
         changed = 1;
         licensed_changed = true;
         owner.is_licensed = o.is_licensed;
-        config.lora.override_duty_cycle = owner.is_licensed; // override duty cycle for licensed operators 
+        config.lora.override_duty_cycle = owner.is_licensed; // override duty cycle for licensed operators
     }
 
     if (changed) { // If nothing really changed, don't broadcast on the network or write to flash
@@ -228,106 +229,104 @@ void AdminModule::handleSetConfig(const Config &c)
     bool isRegionUnset = (config.lora.region == Config_LoRaConfig_RegionCode_UNSET);
 
     switch (c.which_payload_variant) {
-        case Config_device_tag:
-            LOG_INFO("Setting config: Device\n");
-            config.has_device = true;
-            config.device = c.payload_variant.device;
-            // If we're setting router role for the first time, install its intervals
-            if (!isRouter &&
-                c.payload_variant.device.role == Config_DeviceConfig_Role_ROUTER) {
-                nodeDB.initConfigIntervals();
-                nodeDB.initModuleConfigIntervals();
-            }
-            break;
-        case Config_position_tag:
-            LOG_INFO("Setting config: Position\n");
-            config.has_position = true;
-            config.position = c.payload_variant.position;
-            // Save nodedb as well in case we got a fixed position packet
-            saveChanges(SEGMENT_DEVICESTATE, false);
-            break;
-        case Config_power_tag:
-            LOG_INFO("Setting config: Power\n");
-            config.has_power = true;
-            config.power = c.payload_variant.power;
-            break;
-        case Config_network_tag:
-            LOG_INFO("Setting config: WiFi\n");
-            config.has_network = true;
-            config.network = c.payload_variant.network;
-            break;
-        case Config_display_tag:
-            LOG_INFO("Setting config: Display\n");
-            config.has_display = true;
-            config.display = c.payload_variant.display;
-            break;
-        case Config_lora_tag:
-            LOG_INFO("Setting config: LoRa\n");
-            config.has_lora = true;
-            config.lora = c.payload_variant.lora;
-            if (isRegionUnset && 
-                config.lora.region > Config_LoRaConfig_RegionCode_UNSET) {
-                config.lora.tx_enabled = true;
-            }
-            break;
-        case Config_bluetooth_tag:
-            LOG_INFO("Setting config: Bluetooth\n");
-            config.has_bluetooth = true;
-            config.bluetooth = c.payload_variant.bluetooth;
-            break;
+    case Config_device_tag:
+        LOG_INFO("Setting config: Device\n");
+        config.has_device = true;
+        config.device = c.payload_variant.device;
+        // If we're setting router role for the first time, install its intervals
+        if (!isRouter && c.payload_variant.device.role == Config_DeviceConfig_Role_ROUTER) {
+            nodeDB.initConfigIntervals();
+            nodeDB.initModuleConfigIntervals();
+        }
+        break;
+    case Config_position_tag:
+        LOG_INFO("Setting config: Position\n");
+        config.has_position = true;
+        config.position = c.payload_variant.position;
+        // Save nodedb as well in case we got a fixed position packet
+        saveChanges(SEGMENT_DEVICESTATE, false);
+        break;
+    case Config_power_tag:
+        LOG_INFO("Setting config: Power\n");
+        config.has_power = true;
+        config.power = c.payload_variant.power;
+        break;
+    case Config_network_tag:
+        LOG_INFO("Setting config: WiFi\n");
+        config.has_network = true;
+        config.network = c.payload_variant.network;
+        break;
+    case Config_display_tag:
+        LOG_INFO("Setting config: Display\n");
+        config.has_display = true;
+        config.display = c.payload_variant.display;
+        break;
+    case Config_lora_tag:
+        LOG_INFO("Setting config: LoRa\n");
+        config.has_lora = true;
+        config.lora = c.payload_variant.lora;
+        if (isRegionUnset && config.lora.region > Config_LoRaConfig_RegionCode_UNSET) {
+            config.lora.tx_enabled = true;
+        }
+        break;
+    case Config_bluetooth_tag:
+        LOG_INFO("Setting config: Bluetooth\n");
+        config.has_bluetooth = true;
+        config.bluetooth = c.payload_variant.bluetooth;
+        break;
     }
-    
+
     saveChanges(SEGMENT_CONFIG);
 }
 
 void AdminModule::handleSetModuleConfig(const ModuleConfig &c)
 {
     switch (c.which_payload_variant) {
-        case ModuleConfig_mqtt_tag:
-            LOG_INFO("Setting module config: MQTT\n");
-            moduleConfig.has_mqtt = true;
-            moduleConfig.mqtt = c.payload_variant.mqtt;
-            break;
-        case ModuleConfig_serial_tag:
-            LOG_INFO("Setting module config: Serial\n");
-            moduleConfig.has_serial = true;
-            moduleConfig.serial = c.payload_variant.serial;
-            break;
-        case ModuleConfig_external_notification_tag:
-            LOG_INFO("Setting module config: External Notification\n");
-            moduleConfig.has_external_notification = true;
-            moduleConfig.external_notification = c.payload_variant.external_notification;
-            break;
-        case ModuleConfig_store_forward_tag:
-            LOG_INFO("Setting module config: Store & Forward\n");
-            moduleConfig.has_store_forward = true;
-            moduleConfig.store_forward = c.payload_variant.store_forward;
-            break;
-        case ModuleConfig_range_test_tag:
-            LOG_INFO("Setting module config: Range Test\n");
-            moduleConfig.has_range_test = true;
-            moduleConfig.range_test = c.payload_variant.range_test;
-            break;
-        case ModuleConfig_telemetry_tag:
-            LOG_INFO("Setting module config: Telemetry\n");
-            moduleConfig.has_telemetry = true;
-            moduleConfig.telemetry = c.payload_variant.telemetry;
-            break;
-        case ModuleConfig_canned_message_tag:
-            LOG_INFO("Setting module config: Canned Message\n");
-            moduleConfig.has_canned_message = true;
-            moduleConfig.canned_message = c.payload_variant.canned_message;
-            break;
-        case ModuleConfig_audio_tag:
-            LOG_INFO("Setting module config: Audio\n");
-            moduleConfig.has_audio = true;
-            moduleConfig.audio = c.payload_variant.audio;
-            break;
-        case ModuleConfig_remote_hardware_tag:
-            LOG_INFO("Setting module config: Remote Hardware\n");
-            moduleConfig.has_remote_hardware = true;
-            moduleConfig.remote_hardware = c.payload_variant.remote_hardware;
-            break;
+    case ModuleConfig_mqtt_tag:
+        LOG_INFO("Setting module config: MQTT\n");
+        moduleConfig.has_mqtt = true;
+        moduleConfig.mqtt = c.payload_variant.mqtt;
+        break;
+    case ModuleConfig_serial_tag:
+        LOG_INFO("Setting module config: Serial\n");
+        moduleConfig.has_serial = true;
+        moduleConfig.serial = c.payload_variant.serial;
+        break;
+    case ModuleConfig_external_notification_tag:
+        LOG_INFO("Setting module config: External Notification\n");
+        moduleConfig.has_external_notification = true;
+        moduleConfig.external_notification = c.payload_variant.external_notification;
+        break;
+    case ModuleConfig_store_forward_tag:
+        LOG_INFO("Setting module config: Store & Forward\n");
+        moduleConfig.has_store_forward = true;
+        moduleConfig.store_forward = c.payload_variant.store_forward;
+        break;
+    case ModuleConfig_range_test_tag:
+        LOG_INFO("Setting module config: Range Test\n");
+        moduleConfig.has_range_test = true;
+        moduleConfig.range_test = c.payload_variant.range_test;
+        break;
+    case ModuleConfig_telemetry_tag:
+        LOG_INFO("Setting module config: Telemetry\n");
+        moduleConfig.has_telemetry = true;
+        moduleConfig.telemetry = c.payload_variant.telemetry;
+        break;
+    case ModuleConfig_canned_message_tag:
+        LOG_INFO("Setting module config: Canned Message\n");
+        moduleConfig.has_canned_message = true;
+        moduleConfig.canned_message = c.payload_variant.canned_message;
+        break;
+    case ModuleConfig_audio_tag:
+        LOG_INFO("Setting module config: Audio\n");
+        moduleConfig.has_audio = true;
+        moduleConfig.audio = c.payload_variant.audio;
+        break;
+    case ModuleConfig_remote_hardware_tag:
+        LOG_INFO("Setting module config: Remote Hardware\n");
+        moduleConfig.has_remote_hardware = true;
+        moduleConfig.remote_hardware = c.payload_variant.remote_hardware;
+        break;
     }
 
     saveChanges(SEGMENT_MODULECONFIG);
@@ -381,7 +380,8 @@ void AdminModule::handleGetConfig(const MeshPacket &req, const uint32_t configTy
             LOG_INFO("Getting config: Network\n");
             res.get_config_response.which_payload_variant = Config_network_tag;
             res.get_config_response.payload_variant.network = config.network;
-            writeSecret(res.get_config_response.payload_variant.network.wifi_psk, sizeof(res.get_config_response.payload_variant.network.wifi_psk), config.network.wifi_psk);
+            writeSecret(res.get_config_response.payload_variant.network.wifi_psk,
+                        sizeof(res.get_config_response.payload_variant.network.wifi_psk), config.network.wifi_psk);
             break;
         case AdminMessage_ConfigType_DISPLAY_CONFIG:
             LOG_INFO("Getting config: Display\n");
@@ -430,8 +430,7 @@ void AdminModule::handleGetModuleConfig(const MeshPacket &req, const uint32_t co
         case AdminMessage_ModuleConfigType_EXTNOTIF_CONFIG:
             LOG_INFO("Getting module config: External Notification\n");
             res.get_module_config_response.which_payload_variant = ModuleConfig_external_notification_tag;
-            res.get_module_config_response.payload_variant.external_notification =
-                moduleConfig.external_notification;
+            res.get_module_config_response.payload_variant.external_notification = moduleConfig.external_notification;
             break;
         case AdminMessage_ModuleConfigType_STOREFORWARD_CONFIG:
             LOG_INFO("Getting module config: Store & Forward\n");
@@ -477,9 +476,10 @@ void AdminModule::handleGetModuleConfig(const MeshPacket &req, const uint32_t co
     }
 }
 
-void AdminModule::handleGetDeviceMetadata(const MeshPacket &req) {
+void AdminModule::handleGetDeviceMetadata(const MeshPacket &req)
+{
     AdminMessage r = AdminMessage_init_default;
-    
+
     DeviceMetadata deviceMetadata;
     strncpy(deviceMetadata.firmware_version, myNodeInfo.firmware_version, 18);
     deviceMetadata.device_state_version = DEVICESTATE_CUR_VER;
@@ -487,6 +487,8 @@ void AdminModule::handleGetDeviceMetadata(const MeshPacket &req) {
     deviceMetadata.hasBluetooth = HAS_BLUETOOTH;
     deviceMetadata.hasWifi = HAS_WIFI;
     deviceMetadata.hasEthernet = HAS_ETHERNET;
+    deviceMetadata.role = config.device.role;
+    deviceMetadata.position_flags = config.position.position_flags;
 
     r.get_device_metadata_response = deviceMetadata;
     r.which_payload_variant = AdminMessage_get_device_metadata_response_tag;
@@ -504,14 +506,14 @@ void AdminModule::handleGetChannel(const MeshPacket &req, uint32_t channelIndex)
     }
 }
 
-void AdminModule::reboot(int32_t seconds) 
+void AdminModule::reboot(int32_t seconds)
 {
     LOG_INFO("Rebooting in %d seconds\n", seconds);
     screen->startRebootScreen();
     rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
 }
 
-void AdminModule::saveChanges(int saveWhat, bool shouldReboot) 
+void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
 {
     if (!hasOpenEditTransaction) {
         LOG_INFO("Saving changes to disk\n");
@@ -519,8 +521,7 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
     } else {
         LOG_INFO("Delaying save of changes to disk until the open transaction is committed\n");
     }
-    if (shouldReboot)
-    {
+    if (shouldReboot) {
         reboot(DEFAULT_REBOOT_SECONDS);
     }
 }

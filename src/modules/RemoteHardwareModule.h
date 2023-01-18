@@ -1,7 +1,7 @@
 #pragma once
 #include "ProtobufModule.h"
-#include "mesh/generated/remote_hardware.pb.h"
 #include "concurrency/OSThread.h"
+#include "mesh/generated/meshtastic/remote_hardware.pb.h"
 
 /**
  * A module that provides easy low-level remote access to device hardware.
@@ -9,13 +9,14 @@
 class RemoteHardwareModule : public ProtobufModule<HardwareMessage>, private concurrency::OSThread
 {
     /// The current set of GPIOs we've been asked to watch for changes
-    uint64_t watchGpios = 0; 
+    uint64_t watchGpios = 0;
 
     /// The previously read value of watched pins
     uint64_t previousWatch = 0;
 
     /// The timestamp of our last watch event (we throttle watches to 1 change every 30 seconds)
     uint32_t lastWatchMsec = 0;
+
   public:
     /** Constructor
      * name is for debugging output
@@ -32,7 +33,7 @@ class RemoteHardwareModule : public ProtobufModule<HardwareMessage>, private con
     /**
      * Periodically read the gpios we have been asked to WATCH, if they have changed,
      * broadcast a message with the change information.
-     * 
+     *
      * The method that will be called each time our thread gets a chance to run
      *
      * Returns desired period for next invocation (or RUN_SAME for no change)
