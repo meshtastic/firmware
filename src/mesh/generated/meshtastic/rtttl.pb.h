@@ -11,10 +11,10 @@
 
 /* Struct definitions */
 /* Canned message module configuration. */
-typedef struct _meshtastic_RTTTLConfig {
+typedef struct _RTTTLConfig {
     /* Ringtone for PWM Buzzer in RTTTL Format. */
     char ringtone[230];
-} meshtastic_RTTTLConfig;
+} RTTTLConfig;
 
 
 #ifdef __cplusplus
@@ -22,25 +22,25 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define meshtastic_RTTTLConfig_init_default      {""}
-#define meshtastic_RTTTLConfig_init_zero         {""}
+#define RTTTLConfig_init_default      {""}
+#define RTTTLConfig_init_zero         {""}
 
 /* Field tags (for use in manual encoding/decoding) */
-#define meshtastic_RTTTLConfig_ringtone_tag      1
+#define RTTTLConfig_ringtone_tag      1
 
 /* Struct field encoding specification for nanopb */
-#define meshtastic_RTTTLConfig_FIELDLIST(X, a) \
+#define RTTTLConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   ringtone,          1)
-#define meshtastic_RTTTLConfig_CALLBACK NULL
-#define meshtastic_RTTTLConfig_DEFAULT NULL
+#define RTTTLConfig_CALLBACK NULL
+#define RTTTLConfig_DEFAULT NULL
 
-extern const pb_msgdesc_t meshtastic_RTTTLConfig_msg;
+extern const pb_msgdesc_t RTTTLConfig_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
-#define meshtastic_RTTTLConfig_fields &meshtastic_RTTTLConfig_msg
+#define RTTTLConfig_fields &RTTTLConfig_msg
 
 /* Maximum encoded size of messages (where known) */
-#define meshtastic_RTTTLConfig_size              232
+#define RTTTLConfig_size              232
 
 #ifdef __cplusplus
 } /* extern "C" */

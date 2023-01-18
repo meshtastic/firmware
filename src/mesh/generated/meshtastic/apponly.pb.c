@@ -6,7 +6,7 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
-PB_BIND(meshtastic_ChannelSet, meshtastic_ChannelSet, 2)
+PB_BIND(ChannelSet, ChannelSet, 2)
 
 
 

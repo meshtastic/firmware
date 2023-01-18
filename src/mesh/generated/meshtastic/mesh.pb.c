@@ -6,46 +6,46 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
-PB_BIND(meshtastic_Position, meshtastic_Position, AUTO)
+PB_BIND(Position, Position, AUTO)
 
 
-PB_BIND(meshtastic_User, meshtastic_User, AUTO)
+PB_BIND(User, User, AUTO)
 
 
-PB_BIND(meshtastic_RouteDiscovery, meshtastic_RouteDiscovery, AUTO)
+PB_BIND(RouteDiscovery, RouteDiscovery, AUTO)
 
 
-PB_BIND(meshtastic_Routing, meshtastic_Routing, AUTO)
+PB_BIND(Routing, Routing, AUTO)
 
 
-PB_BIND(meshtastic_Data, meshtastic_Data, 2)
+PB_BIND(Data, Data, 2)
 
 
-PB_BIND(meshtastic_Waypoint, meshtastic_Waypoint, AUTO)
+PB_BIND(Waypoint, Waypoint, AUTO)
 
 
-PB_BIND(meshtastic_MeshPacket, meshtastic_MeshPacket, 2)
+PB_BIND(MeshPacket, MeshPacket, 2)
 
 
-PB_BIND(meshtastic_NodeInfo, meshtastic_NodeInfo, AUTO)
+PB_BIND(NodeInfo, NodeInfo, AUTO)
 
 
-PB_BIND(meshtastic_MyNodeInfo, meshtastic_MyNodeInfo, AUTO)
+PB_BIND(MyNodeInfo, MyNodeInfo, AUTO)
 
 
-PB_BIND(meshtastic_LogRecord, meshtastic_LogRecord, AUTO)
+PB_BIND(LogRecord, LogRecord, AUTO)
 
 
-PB_BIND(meshtastic_QueueStatus, meshtastic_QueueStatus, AUTO)
+PB_BIND(QueueStatus, QueueStatus, AUTO)
 
 
-PB_BIND(meshtastic_FromRadio, meshtastic_FromRadio, 2)
+PB_BIND(FromRadio, FromRadio, 2)
 
 
-PB_BIND(meshtastic_ToRadio, meshtastic_ToRadio, 2)
+PB_BIND(ToRadio, ToRadio, 2)
 
 
-PB_BIND(meshtastic_Compressed, meshtastic_Compressed, AUTO)
+PB_BIND(Compressed, Compressed, AUTO)
 
 
 

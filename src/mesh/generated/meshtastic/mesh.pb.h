@@ -20,179 +20,179 @@
  bin/build-all.sh script.
  Because they will be used to find firmware filenames in the android app for OTA updates.
  To match the old style filenames, _ is converted to -, p is converted to . */
-typedef enum _meshtastic_HardwareModel {
+typedef enum _HardwareModel {
     /* TODO: REPLACE */
-    meshtastic_HardwareModel_UNSET = 0,
+    HardwareModel_UNSET = 0,
     /* TODO: REPLACE */
-    meshtastic_HardwareModel_TLORA_V2 = 1,
+    HardwareModel_TLORA_V2 = 1,
     /* TODO: REPLACE */
-    meshtastic_HardwareModel_TLORA_V1 = 2,
+    HardwareModel_TLORA_V1 = 2,
     /* TODO: REPLACE */
-    meshtastic_HardwareModel_TLORA_V2_1_1P6 = 3,
+    HardwareModel_TLORA_V2_1_1P6 = 3,
     /* TODO: REPLACE */
-    meshtastic_HardwareModel_TBEAM = 4,
+    HardwareModel_TBEAM = 4,
     /* The original heltec WiFi_Lora_32_V2, which had battery voltage sensing hooked to GPIO 13
  (see HELTEC_V2 for the new version). */
-    meshtastic_HardwareModel_HELTEC_V2_0 = 5,
+    HardwareModel_HELTEC_V2_0 = 5,
     /* TODO: REPLACE */
-    meshtastic_HardwareModel_TBEAM_V0P7 = 6,
+    HardwareModel_TBEAM_V0P7 = 6,
     /* TODO: REPLACE */
-    meshtastic_HardwareModel_T_ECHO = 7,
+    HardwareModel_T_ECHO = 7,
     /* TODO: REPLACE */
-    meshtastic_HardwareModel_TLORA_V1_1P3 = 8,
+    HardwareModel_TLORA_V1_1P3 = 8,
     /* TODO: REPLACE */
-    meshtastic_HardwareModel_RAK4631 = 9,
+    HardwareModel_RAK4631 = 9,
     /* The new version of the heltec WiFi_Lora_32_V2 board that has battery sensing hooked to GPIO 37.
  Sadly they did not update anything on the silkscreen to identify this board */
-    meshtastic_HardwareModel_HELTEC_V2_1 = 10,
+    HardwareModel_HELTEC_V2_1 = 10,
     /* Ancient heltec WiFi_Lora_32 board */
-    meshtastic_HardwareModel_HELTEC_V1 = 11,
+    HardwareModel_HELTEC_V1 = 11,
     /* New T-BEAM with ESP32-S3 CPU */
-    meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE = 12,
+    HardwareModel_LILYGO_TBEAM_S3_CORE = 12,
     /* RAK WisBlock ESP32 core: https://docs.rakwireless.com/Product-Categories/WisBlock/RAK11200/Overview/ */
-    meshtastic_HardwareModel_RAK11200 = 13,
+    HardwareModel_RAK11200 = 13,
     /* B&Q Consulting Nano Edition G1: https://uniteng.com/wiki/doku.php?id=meshtastic:nano */
-    meshtastic_HardwareModel_NANO_G1 = 14,
+    HardwareModel_NANO_G1 = 14,
     /* TODO: REPLACE */
-    meshtastic_HardwareModel_TLORA_V2_1_1P8 = 15,
+    HardwareModel_TLORA_V2_1_1P8 = 15,
     /* TODO: REPLACE */
-    meshtastic_HardwareModel_TLORA_T3_S3 = 16,
+    HardwareModel_TLORA_T3_S3 = 16,
     /* B&Q Consulting Station Edition G1: https://uniteng.com/wiki/doku.php?id=meshtastic:station */
-    meshtastic_HardwareModel_STATION_G1 = 25,
+    HardwareModel_STATION_G1 = 25,
     /* Less common/prototype boards listed here (needs one more byte over the air) */
-    meshtastic_HardwareModel_LORA_RELAY_V1 = 32,
+    HardwareModel_LORA_RELAY_V1 = 32,
     /* TODO: REPLACE */
-    meshtastic_HardwareModel_NRF52840DK = 33,
+    HardwareModel_NRF52840DK = 33,
     /* TODO: REPLACE */
-    meshtastic_HardwareModel_PPR = 34,
+    HardwareModel_PPR = 34,
     /* TODO: REPLACE */
-    meshtastic_HardwareModel_GENIEBLOCKS = 35,
+    HardwareModel_GENIEBLOCKS = 35,
     /* TODO: REPLACE */
-    meshtastic_HardwareModel_NRF52_UNKNOWN = 36,
+    HardwareModel_NRF52_UNKNOWN = 36,
     /* TODO: REPLACE */
-    meshtastic_HardwareModel_PORTDUINO = 37,
+    HardwareModel_PORTDUINO = 37,
     /* The simulator built into the android app */
-    meshtastic_HardwareModel_ANDROID_SIM = 38,
+    HardwareModel_ANDROID_SIM = 38,
     /* Custom DIY device based on @NanoVHF schematics: https://github.com/NanoVHF/Meshtastic-DIY/tree/main/Schematics */
-    meshtastic_HardwareModel_DIY_V1 = 39,
+    HardwareModel_DIY_V1 = 39,
     /* nRF52840 Dongle : https://www.nordicsemi.com/Products/Development-hardware/nrf52840-dongle/ */
-    meshtastic_HardwareModel_NRF52840_PCA10059 = 40,
+    HardwareModel_NRF52840_PCA10059 = 40,
     /* Custom Disaster Radio esp32 v3 device https://github.com/sudomesh/disaster-radio/tree/master/hardware/board_esp32_v3 */
-    meshtastic_HardwareModel_DR_DEV = 41,
+    HardwareModel_DR_DEV = 41,
     /* M5 esp32 based MCU modules with enclosure, TFT and LORA Shields. All Variants (Basic, Core, Fire, Core2, Paper) https://m5stack.com/ */
-    meshtastic_HardwareModel_M5STACK = 42,
+    HardwareModel_M5STACK = 42,
     /* New Heltec LoRA32 with ESP32-S3 CPU */
-    meshtastic_HardwareModel_HELTEC_V3 = 43,
+    HardwareModel_HELTEC_V3 = 43,
     /* New Heltec Wireless Stick Lite with ESP32-S3 CPU */
-    meshtastic_HardwareModel_HELTEC_WSL_V3 = 44,
+    HardwareModel_HELTEC_WSL_V3 = 44,
     /* New BETAFPV ELRS Micro TX Module 2.4G with ESP32 CPU */
-    meshtastic_HardwareModel_BETAFPV_2400_TX = 45,
+    HardwareModel_BETAFPV_2400_TX = 45,
     /* Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits. */
-    meshtastic_HardwareModel_PRIVATE_HW = 255
-} meshtastic_HardwareModel;
+    HardwareModel_PRIVATE_HW = 255
+} HardwareModel;
 
 /* Shared constants between device and phone */
-typedef enum _meshtastic_Constants {
+typedef enum _Constants {
     /* First enum must be zero, and we are just using this enum to
  pass int constants between two very different environments */
-    meshtastic_Constants_ZERO = 0,
+    Constants_ZERO = 0,
     /* From mesh.options
  note: this payload length is ONLY the bytes that are sent inside of the Data protobuf (excluding protobuf overhead). The 16 byte header is
  outside of this envelope */
-    meshtastic_Constants_DATA_PAYLOAD_LEN = 237
-} meshtastic_Constants;
+    Constants_DATA_PAYLOAD_LEN = 237
+} Constants;
 
 /* Error codes for critical errors
  The device might report these fault codes on the screen.
  If you encounter a fault code, please post on the meshtastic.discourse.group
  and we'll try to help. */
-typedef enum _meshtastic_CriticalErrorCode {
+typedef enum _CriticalErrorCode {
     /* TODO: REPLACE */
-    meshtastic_CriticalErrorCode_NONE = 0,
+    CriticalErrorCode_NONE = 0,
     /* A software bug was detected while trying to send lora */
-    meshtastic_CriticalErrorCode_TX_WATCHDOG = 1,
+    CriticalErrorCode_TX_WATCHDOG = 1,
     /* A software bug was detected on entry to sleep */
-    meshtastic_CriticalErrorCode_SLEEP_ENTER_WAIT = 2,
+    CriticalErrorCode_SLEEP_ENTER_WAIT = 2,
     /* No Lora radio hardware could be found */
-    meshtastic_CriticalErrorCode_NO_RADIO = 3,
+    CriticalErrorCode_NO_RADIO = 3,
     /* Not normally used */
-    meshtastic_CriticalErrorCode_UNSPECIFIED = 4,
+    CriticalErrorCode_UNSPECIFIED = 4,
     /* We failed while configuring a UBlox GPS */
-    meshtastic_CriticalErrorCode_UBLOX_UNIT_FAILED = 5,
+    CriticalErrorCode_UBLOX_UNIT_FAILED = 5,
     /* This board was expected to have a power management chip and it is missing or broken */
-    meshtastic_CriticalErrorCode_NO_AXP192 = 6,
+    CriticalErrorCode_NO_AXP192 = 6,
     /* The channel tried to set a radio setting which is not supported by this chipset,
  radio comms settings are now undefined. */
-    meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING = 7,
+    CriticalErrorCode_INVALID_RADIO_SETTING = 7,
     /* Radio transmit hardware failure. We sent data to the radio chip, but it didn't
  reply with an interrupt. */
-    meshtastic_CriticalErrorCode_TRANSMIT_FAILED = 8,
+    CriticalErrorCode_TRANSMIT_FAILED = 8,
     /* We detected that the main CPU voltage dropped below the minumum acceptable value */
-    meshtastic_CriticalErrorCode_BROWNOUT = 9,
+    CriticalErrorCode_BROWNOUT = 9,
     /* Selftest of SX1262 radio chip failed */
-    meshtastic_CriticalErrorCode_SX1262_FAILURE = 10,
+    CriticalErrorCode_SX1262_FAILURE = 10,
     /* A (likely software but possibly hardware) failure was detected while trying to send packets.
  If this occurs on your board, please post in the forum so that we can ask you to collect some information to allow fixing this bug */
-    meshtastic_CriticalErrorCode_RADIO_SPI_BUG = 11
-} meshtastic_CriticalErrorCode;
+    CriticalErrorCode_RADIO_SPI_BUG = 11
+} CriticalErrorCode;
 
 /* How the location was acquired: manual, onboard GPS, external (EUD) GPS */
-typedef enum _meshtastic_Position_LocSource {
+typedef enum _Position_LocSource {
     /* TODO: REPLACE */
-    meshtastic_Position_LocSource_LOC_UNSET = 0,
+    Position_LocSource_LOC_UNSET = 0,
     /* TODO: REPLACE */
-    meshtastic_Position_LocSource_LOC_MANUAL = 1,
+    Position_LocSource_LOC_MANUAL = 1,
     /* TODO: REPLACE */
-    meshtastic_Position_LocSource_LOC_INTERNAL = 2,
+    Position_LocSource_LOC_INTERNAL = 2,
     /* TODO: REPLACE */
-    meshtastic_Position_LocSource_LOC_EXTERNAL = 3
-} meshtastic_Position_LocSource;
+    Position_LocSource_LOC_EXTERNAL = 3
+} Position_LocSource;
 
 /* How the altitude was acquired: manual, GPS int/ext, etc
  Default: same as location_source if present */
-typedef enum _meshtastic_Position_AltSource {
+typedef enum _Position_AltSource {
     /* TODO: REPLACE */
-    meshtastic_Position_AltSource_ALT_UNSET = 0,
+    Position_AltSource_ALT_UNSET = 0,
     /* TODO: REPLACE */
-    meshtastic_Position_AltSource_ALT_MANUAL = 1,
+    Position_AltSource_ALT_MANUAL = 1,
     /* TODO: REPLACE */
-    meshtastic_Position_AltSource_ALT_INTERNAL = 2,
+    Position_AltSource_ALT_INTERNAL = 2,
     /* TODO: REPLACE */
-    meshtastic_Position_AltSource_ALT_EXTERNAL = 3,
+    Position_AltSource_ALT_EXTERNAL = 3,
     /* TODO: REPLACE */
-    meshtastic_Position_AltSource_ALT_BAROMETRIC = 4
-} meshtastic_Position_AltSource;
+    Position_AltSource_ALT_BAROMETRIC = 4
+} Position_AltSource;
 
 /* A failure in delivering a message (usually used for routing control messages, but might be provided in addition to ack.fail_id to provide
  details on the type of failure). */
-typedef enum _meshtastic_Routing_Error {
+typedef enum _Routing_Error {
     /* This message is not a failure */
-    meshtastic_Routing_Error_NONE = 0,
+    Routing_Error_NONE = 0,
     /* Our node doesn't have a route to the requested destination anymore. */
-    meshtastic_Routing_Error_NO_ROUTE = 1,
+    Routing_Error_NO_ROUTE = 1,
     /* We received a nak while trying to forward on your behalf */
-    meshtastic_Routing_Error_GOT_NAK = 2,
+    Routing_Error_GOT_NAK = 2,
     /* TODO: REPLACE */
-    meshtastic_Routing_Error_TIMEOUT = 3,
+    Routing_Error_TIMEOUT = 3,
     /* No suitable interface could be found for delivering this packet */
-    meshtastic_Routing_Error_NO_INTERFACE = 4,
+    Routing_Error_NO_INTERFACE = 4,
     /* We reached the max retransmission count (typically for naive flood routing) */
-    meshtastic_Routing_Error_MAX_RETRANSMIT = 5,
+    Routing_Error_MAX_RETRANSMIT = 5,
     /* No suitable channel was found for sending this packet (i.e. was requested channel index disabled?) */
-    meshtastic_Routing_Error_NO_CHANNEL = 6,
+    Routing_Error_NO_CHANNEL = 6,
     /* The packet was too big for sending (exceeds interface MTU after encoding) */
-    meshtastic_Routing_Error_TOO_LARGE = 7,
+    Routing_Error_TOO_LARGE = 7,
     /* The request had want_response set, the request reached the destination node, but no service on that node wants to send a response
  (possibly due to bad channel permissions) */
-    meshtastic_Routing_Error_NO_RESPONSE = 8,
+    Routing_Error_NO_RESPONSE = 8,
     /* Cannot send currently because duty cycle regulations will be violated. */
-    meshtastic_Routing_Error_DUTY_CYCLE_LIMIT = 9,
+    Routing_Error_DUTY_CYCLE_LIMIT = 9,
     /* The application layer service on the remote node received your request, but considered your request somehow invalid */
-    meshtastic_Routing_Error_BAD_REQUEST = 32,
+    Routing_Error_BAD_REQUEST = 32,
     /* The application layer service on the remote node received your request, but considered your request not authorized
  (i.e you did not send the request on the required bound channel) */
-    meshtastic_Routing_Error_NOT_AUTHORIZED = 33
-} meshtastic_Routing_Error;
+    Routing_Error_NOT_AUTHORIZED = 33
+} Routing_Error;
 
 /* The priority of this message for sending.
  Higher priorities are sent first (when managing the transmit queue).
@@ -212,57 +212,57 @@ typedef enum _meshtastic_Routing_Error {
  So I bit the bullet and implemented a new (internal - not sent over the air)
  field in MeshPacket called ‘priority’.
  And the transmission queue in the router object is now a priority queue. */
-typedef enum _meshtastic_MeshPacket_Priority {
+typedef enum _MeshPacket_Priority {
     /* Treated as Priority.DEFAULT */
-    meshtastic_MeshPacket_Priority_UNSET = 0,
+    MeshPacket_Priority_UNSET = 0,
     /* TODO: REPLACE */
-    meshtastic_MeshPacket_Priority_MIN = 1,
+    MeshPacket_Priority_MIN = 1,
     /* Background position updates are sent with very low priority -
  if the link is super congested they might not go out at all */
-    meshtastic_MeshPacket_Priority_BACKGROUND = 10,
+    MeshPacket_Priority_BACKGROUND = 10,
     /* This priority is used for most messages that don't have a priority set */
-    meshtastic_MeshPacket_Priority_DEFAULT = 64,
+    MeshPacket_Priority_DEFAULT = 64,
     /* If priority is unset but the message is marked as want_ack,
  assume it is important and use a slightly higher priority */
-    meshtastic_MeshPacket_Priority_RELIABLE = 70,
+    MeshPacket_Priority_RELIABLE = 70,
     /* Ack/naks are sent with very high priority to ensure that retransmission
  stops as soon as possible */
-    meshtastic_MeshPacket_Priority_ACK = 120,
+    MeshPacket_Priority_ACK = 120,
     /* TODO: REPLACE */
-    meshtastic_MeshPacket_Priority_MAX = 127
-} meshtastic_MeshPacket_Priority;
+    MeshPacket_Priority_MAX = 127
+} MeshPacket_Priority;
 
 /* Identify if this is a delayed packet */
-typedef enum _meshtastic_MeshPacket_Delayed {
+typedef enum _MeshPacket_Delayed {
     /* If unset, the message is being sent in real time. */
-    meshtastic_MeshPacket_Delayed_NO_DELAY = 0,
+    MeshPacket_Delayed_NO_DELAY = 0,
     /* The message is delayed and was originally a broadcast */
-    meshtastic_MeshPacket_Delayed_DELAYED_BROADCAST = 1,
+    MeshPacket_Delayed_DELAYED_BROADCAST = 1,
     /* The message is delayed and was originally a direct message */
-    meshtastic_MeshPacket_Delayed_DELAYED_DIRECT = 2
-} meshtastic_MeshPacket_Delayed;
+    MeshPacket_Delayed_DELAYED_DIRECT = 2
+} MeshPacket_Delayed;
 
 /* Log levels, chosen to match python logging conventions. */
-typedef enum _meshtastic_LogRecord_Level {
+typedef enum _LogRecord_Level {
     /* Log levels, chosen to match python logging conventions. */
-    meshtastic_LogRecord_Level_UNSET = 0,
+    LogRecord_Level_UNSET = 0,
     /* Log levels, chosen to match python logging conventions. */
-    meshtastic_LogRecord_Level_CRITICAL = 50,
+    LogRecord_Level_CRITICAL = 50,
     /* Log levels, chosen to match python logging conventions. */
-    meshtastic_LogRecord_Level_ERROR = 40,
+    LogRecord_Level_ERROR = 40,
     /* Log levels, chosen to match python logging conventions. */
-    meshtastic_LogRecord_Level_WARNING = 30,
+    LogRecord_Level_WARNING = 30,
     /* Log levels, chosen to match python logging conventions. */
-    meshtastic_LogRecord_Level_INFO = 20,
+    LogRecord_Level_INFO = 20,
     /* Log levels, chosen to match python logging conventions. */
-    meshtastic_LogRecord_Level_DEBUG = 10,
+    LogRecord_Level_DEBUG = 10,
     /* Log levels, chosen to match python logging conventions. */
-    meshtastic_LogRecord_Level_TRACE = 5
-} meshtastic_LogRecord_Level;
+    LogRecord_Level_TRACE = 5
+} LogRecord_Level;
 
 /* Struct definitions */
 /* a gps position */
-typedef struct _meshtastic_Position {
+typedef struct _Position {
     /* The new preferred location encoding, multiply by 1e-7 to get degrees
  in floating point */
     int32_t latitude_i;
@@ -277,9 +277,9 @@ typedef struct _meshtastic_Position {
  seconds since 1970 */
     uint32_t time;
     /* TODO: REPLACE */
-    meshtastic_Position_LocSource location_source;
+    Position_LocSource location_source;
     /* TODO: REPLACE */
-    meshtastic_Position_AltSource altitude_source;
+    Position_AltSource altitude_source;
     /* Positional timestamp (actual timestamp of GPS solution) in integer epoch seconds */
     uint32_t timestamp;
     /* Pos. timestamp milliseconds adjustment (rarely available or required) */
@@ -327,7 +327,7 @@ typedef struct _meshtastic_Position {
     /* A sequence number, incremented with each Position message to help
    detect lost updates if needed */
     uint32_t seq_number;
-} meshtastic_Position;
+} Position;
 
 /* Broadcast when a newly powered mesh node wants to find a node num it can use
  Sent from the phone over bluetooth to set the user id for the owner of this node.
@@ -349,7 +349,7 @@ typedef struct _meshtastic_Position {
  A few nodenums are reserved and will never be requested:
  0xff - broadcast
  0 through 3 - for future use */
-typedef struct _meshtastic_User {
+typedef struct _User {
     /* A globally unique ID string for this user.
  In the case of Signal that would mean +16504442323, for the default macaddr derived id it would be !<8 hexidecimal bytes>.
  Note: app developers are encouraged to also use the following standard
@@ -367,43 +367,43 @@ typedef struct _meshtastic_User {
  Starting in 1.2.11 moved to hw_model enum in the NodeInfo object.
  Apps will still need the string here for older builds
  (so OTA update can find the right image), but if the enum is available it will be used instead. */
-    meshtastic_HardwareModel hw_model;
+    HardwareModel hw_model;
     /* In some regions Ham radio operators have different bandwidth limitations than others.
  If this user is a licensed operator, set this flag.
  Also, "long_name" should be their licence number. */
     bool is_licensed;
-} meshtastic_User;
+} User;
 
 /* A message used in our Dynamic Source Routing protocol (RFC 4728 based) */
-typedef struct _meshtastic_RouteDiscovery {
+typedef struct _RouteDiscovery {
     /* The list of nodenums this packet has visited so far */
     pb_size_t route_count;
     uint32_t route[8];
-} meshtastic_RouteDiscovery;
+} RouteDiscovery;
 
 /* A Routing control Data packet handled by the routing module */
-typedef struct _meshtastic_Routing {
+typedef struct _Routing {
     pb_size_t which_variant;
     union {
         /* A route request going from the requester */
-        meshtastic_RouteDiscovery route_request;
+        RouteDiscovery route_request;
         /* A route reply */
-        meshtastic_RouteDiscovery route_reply;
+        RouteDiscovery route_reply;
         /* A failure in delivering a message (usually used for routing control messages, but might be provided
      in addition to ack.fail_id to provide details on the type of failure). */
-        meshtastic_Routing_Error error_reason;
+        Routing_Error error_reason;
     };
-} meshtastic_Routing;
+} Routing;
 
-typedef PB_BYTES_ARRAY_T(237) meshtastic_Data_payload_t;
+typedef PB_BYTES_ARRAY_T(237) Data_payload_t;
 /* (Formerly called SubPacket)
  The payload portion fo a packet, this is the actual bytes that are sent
  inside a radio packet (because from/to are broken out by the comms library) */
-typedef struct _meshtastic_Data {
+typedef struct _Data {
     /* Formerly named typ and of type Type */
-    meshtastic_PortNum portnum;
+    PortNum portnum;
     /* TODO: REPLACE */
-    meshtastic_Data_payload_t payload;
+    Data_payload_t payload;
     /* Not normally used, but for testing a sender can request that recipient
  responds in kind (i.e. if it received a position, it should unicast back it's position).
  Note: that if you set this on a broadcast you will receive many replies. */
@@ -426,10 +426,10 @@ typedef struct _meshtastic_Data {
     /* Defaults to false. If true, then what is in the payload should be treated as an emoji like giving
  a message a heart or poop emoji. */
     uint32_t emoji;
-} meshtastic_Data;
+} Data;
 
 /* Waypoint message, used to share arbitrary locations across the mesh */
-typedef struct _meshtastic_Waypoint {
+typedef struct _Waypoint {
     /* Id of the waypoint */
     uint32_t id;
     /* latitude_i */
@@ -447,13 +447,13 @@ typedef struct _meshtastic_Waypoint {
     char description[100];
     /* Designator icon for the waypoint in the form of a unicode emoji */
     uint32_t icon;
-} meshtastic_Waypoint;
+} Waypoint;
 
-typedef PB_BYTES_ARRAY_T(256) meshtastic_MeshPacket_encrypted_t;
+typedef PB_BYTES_ARRAY_T(256) MeshPacket_encrypted_t;
 /* A packet envelope sent/received over the mesh
  only payload_variant is sent in the payload portion of the LORA packet.
  The other fields are either not sent at all, or sent in the special 16 byte LORA header. */
-typedef struct _meshtastic_MeshPacket {
+typedef struct _MeshPacket {
     /* The sending node number.
  Note: Our crypto implementation uses this field as well.
  See [crypto](/docs/overview/encryption) for details.
@@ -473,9 +473,9 @@ typedef struct _meshtastic_MeshPacket {
     pb_size_t which_payload_variant;
     union {
         /* TODO: REPLACE */
-        meshtastic_Data decoded;
+        Data decoded;
         /* TODO: REPLACE */
-        meshtastic_MeshPacket_encrypted_t encrypted;
+        MeshPacket_encrypted_t encrypted;
     };
     /* A unique ID for this packet.
  Always 0 for no-ack packets or non broadcast packets (and therefore take zero bytes of space).
@@ -514,12 +514,12 @@ typedef struct _meshtastic_MeshPacket {
     bool want_ack;
     /* The priority of this message for sending.
  See MeshPacket.Priority description for more details. */
-    meshtastic_MeshPacket_Priority priority;
+    MeshPacket_Priority priority;
     /* rssi of received packet. Only sent to phone for dispay purposes. */
     int32_t rx_rssi;
     /* Describe if this message is delayed */
-    meshtastic_MeshPacket_Delayed delayed;
-} meshtastic_MeshPacket;
+    MeshPacket_Delayed delayed;
+} MeshPacket;
 
 /* The bluetooth to device link:
  Old BTLE protocol docs from TODO, merge in above and make real docs...
@@ -537,16 +537,16 @@ typedef struct _meshtastic_MeshPacket {
  level etc) SET_CONFIG (switches device to a new set of radio params and
  preshared key, drops all existing nodes, force our node to rejoin this new group)
  Full information about a node on the mesh */
-typedef struct _meshtastic_NodeInfo {
+typedef struct _NodeInfo {
     /* The node number */
     uint32_t num;
     /* The user info for this node */
     bool has_user;
-    meshtastic_User user;
+    User user;
     /* This position data. Note: before 1.2.14 we would also store the last time we've heard from this node in position.time, that is no longer true.
  Position.time now indicates the last time we received a POSITION from that node. */
     bool has_position;
-    meshtastic_Position position;
+    Position position;
     /* Returns the Signal-to-noise ratio (SNR) of the last received message,
  as measured by the receiver. Return SNR of the last received message in dB */
     float snr;
@@ -554,13 +554,13 @@ typedef struct _meshtastic_NodeInfo {
     uint32_t last_heard;
     /* The latest device metrics for the node. */
     bool has_device_metrics;
-    meshtastic_DeviceMetrics device_metrics;
-} meshtastic_NodeInfo;
+    DeviceMetrics device_metrics;
+} NodeInfo;
 
 /* Unique local debugging info for this node
  Note: we don't include position or the user info, because that will come in the
  Sent to the phone in response to WantNodes. */
-typedef struct _meshtastic_MyNodeInfo {
+typedef struct _MyNodeInfo {
     /* Tells the phone what our node number is, default starting value is
  lowbyte of macaddr, but it will be fixed if that is already in use */
     uint32_t my_node_num;
@@ -577,7 +577,7 @@ typedef struct _meshtastic_MyNodeInfo {
  This field will be cleared after the phone reads MyNodeInfo
  (i.e. it will only be reported once)
  a numeric error code to go with error message, zero means no error */
-    meshtastic_CriticalErrorCode error_code;
+    CriticalErrorCode error_code;
     /* A numeric error address (nonzero if available) */
     uint32_t error_address;
     /* The total number of errors this node has ever encountered
@@ -608,14 +608,14 @@ typedef struct _meshtastic_MyNodeInfo {
     float channel_utilization;
     /* Percent of airtime for transmission used within the last hour. */
     float air_util_tx;
-} meshtastic_MyNodeInfo;
+} MyNodeInfo;
 
 /* Debug output from the device.
  To minimize the size of records inside the device code, if a time/source/level is not set
  on the message it is assumed to be a continuation of the previously sent message.
  This allows the device code to use fixed maxlen 64 byte strings for messages,
  and then extend as needed by emitting multiple records. */
-typedef struct _meshtastic_LogRecord {
+typedef struct _LogRecord {
     /* Log levels, chosen to match python logging conventions. */
     char message[64];
     /* Seconds since 1970 - or 0 for unknown/unset */
@@ -623,10 +623,10 @@ typedef struct _meshtastic_LogRecord {
     /* Usually based on thread name - if known */
     char source[8];
     /* Not yet set */
-    meshtastic_LogRecord_Level level;
-} meshtastic_LogRecord;
+    LogRecord_Level level;
+} LogRecord;
 
-typedef struct _meshtastic_QueueStatus {
+typedef struct _QueueStatus {
     /* Last attempt to queue status, ErrorCode */
     int8_t res;
     /* Free entries in the outgoing queue */
@@ -635,30 +635,30 @@ typedef struct _meshtastic_QueueStatus {
     uint8_t maxlen;
     /* What was mesh packet id that generated this response? */
     uint32_t mesh_packet_id;
-} meshtastic_QueueStatus;
+} QueueStatus;
 
 /* Packets from the radio to the phone will appear on the fromRadio characteristic.
  It will support READ and NOTIFY. When a new packet arrives the device will BLE notify?
  It will sit in that descriptor until consumed by the phone,
  at which point the next item in the FIFO will be populated. */
-typedef struct _meshtastic_FromRadio {
+typedef struct _FromRadio {
     /* The packet id, used to allow the phone to request missing read packets from the FIFO,
  see our bluetooth docs */
     uint32_t id;
     pb_size_t which_payload_variant;
     union {
         /* Log levels, chosen to match python logging conventions. */
-        meshtastic_MeshPacket packet;
+        MeshPacket packet;
         /* Tells the phone what our node number is, can be -1 if we've not yet joined a mesh.
      NOTE: This ID must not change - to keep (minimal) compatibility with <1.2 version of android apps. */
-        meshtastic_MyNodeInfo my_info;
+        MyNodeInfo my_info;
         /* One packet is sent for each node in the on radio DB
      starts over with the first node in our DB */
-        meshtastic_NodeInfo node_info;
+        NodeInfo node_info;
         /* Include a part of the config (was: RadioConfig radio) */
-        meshtastic_Config config;
+        Config config;
         /* Set to send debug console output over our protobuf stream */
-        meshtastic_LogRecord log_record;
+        LogRecord log_record;
         /* Sent as true once the device has finished sending all of the responses to want_config
      recipient should check if this ID matches our original request nonce, if
      not, it means your config responses haven't started yet.
@@ -670,23 +670,23 @@ typedef struct _meshtastic_FromRadio {
      NOTE: This ID must not change - to keep (minimal) compatibility with <1.2 version of android apps. */
         bool rebooted;
         /* Include module config */
-        meshtastic_ModuleConfig moduleConfig;
+        ModuleConfig moduleConfig;
         /* One packet is sent for each channel */
-        meshtastic_Channel channel;
+        Channel channel;
         /* Queue status info */
-        meshtastic_QueueStatus queueStatus;
+        QueueStatus queueStatus;
         /* File Transfer Chunk */
-        meshtastic_XModem xmodemPacket;
+        XModem xmodemPacket;
     };
-} meshtastic_FromRadio;
+} FromRadio;
 
 /* Packets/commands to the radio will be written (reliably) to the toRadio characteristic.
  Once the write completes the phone can assume it is handled. */
-typedef struct _meshtastic_ToRadio {
+typedef struct _ToRadio {
     pb_size_t which_payload_variant;
     union {
         /* Send this packet on the mesh */
-        meshtastic_MeshPacket packet;
+        MeshPacket packet;
         /* Phone wants radio to send full node db to the phone, This is
      typically the first packet sent to the radio when the phone gets a
      bluetooth connection. The radio will respond by sending back a
@@ -700,18 +700,18 @@ typedef struct _meshtastic_ToRadio {
      This is useful for serial links where there is no hardware/protocol based notification that the client has dropped the link.
      (Sending this message is optional for clients) */
         bool disconnect;
-        meshtastic_XModem xmodemPacket;
+        XModem xmodemPacket;
     };
-} meshtastic_ToRadio;
+} ToRadio;
 
-typedef PB_BYTES_ARRAY_T(237) meshtastic_Compressed_data_t;
+typedef PB_BYTES_ARRAY_T(237) Compressed_data_t;
 /* Compressed message payload */
-typedef struct _meshtastic_Compressed {
+typedef struct _Compressed {
     /* PortNum to determine the how to handle the compressed payload. */
-    meshtastic_PortNum portnum;
+    PortNum portnum;
     /* Compressed data. */
-    meshtastic_Compressed_data_t data;
-} meshtastic_Compressed;
+    Compressed_data_t data;
+} Compressed;
 
 
 #ifdef __cplusplus
@@ -719,210 +719,210 @@ extern "C" {
 #endif
 
 /* Helper constants for enums */
-#define _meshtastic_HardwareModel_MIN meshtastic_HardwareModel_UNSET
-#define _meshtastic_HardwareModel_MAX meshtastic_HardwareModel_PRIVATE_HW
-#define _meshtastic_HardwareModel_ARRAYSIZE ((meshtastic_HardwareModel)(meshtastic_HardwareModel_PRIVATE_HW+1))
+#define _HardwareModel_MIN HardwareModel_UNSET
+#define _HardwareModel_MAX HardwareModel_PRIVATE_HW
+#define _HardwareModel_ARRAYSIZE ((HardwareModel)(HardwareModel_PRIVATE_HW+1))
 
-#define _meshtastic_Constants_MIN meshtastic_Constants_ZERO
-#define _meshtastic_Constants_MAX meshtastic_Constants_DATA_PAYLOAD_LEN
-#define _meshtastic_Constants_ARRAYSIZE ((meshtastic_Constants)(meshtastic_Constants_DATA_PAYLOAD_LEN+1))
+#define _Constants_MIN Constants_ZERO
+#define _Constants_MAX Constants_DATA_PAYLOAD_LEN
+#define _Constants_ARRAYSIZE ((Constants)(Constants_DATA_PAYLOAD_LEN+1))
 
-#define _meshtastic_CriticalErrorCode_MIN meshtastic_CriticalErrorCode_NONE
-#define _meshtastic_CriticalErrorCode_MAX meshtastic_CriticalErrorCode_RADIO_SPI_BUG
-#define _meshtastic_CriticalErrorCode_ARRAYSIZE ((meshtastic_CriticalErrorCode)(meshtastic_CriticalErrorCode_RADIO_SPI_BUG+1))
+#define _CriticalErrorCode_MIN CriticalErrorCode_NONE
+#define _CriticalErrorCode_MAX CriticalErrorCode_RADIO_SPI_BUG
+#define _CriticalErrorCode_ARRAYSIZE ((CriticalErrorCode)(CriticalErrorCode_RADIO_SPI_BUG+1))
 
-#define _meshtastic_Position_LocSource_MIN meshtastic_Position_LocSource_LOC_UNSET
-#define _meshtastic_Position_LocSource_MAX meshtastic_Position_LocSource_LOC_EXTERNAL
-#define _meshtastic_Position_LocSource_ARRAYSIZE ((meshtastic_Position_LocSource)(meshtastic_Position_LocSource_LOC_EXTERNAL+1))
+#define _Position_LocSource_MIN Position_LocSource_LOC_UNSET
+#define _Position_LocSource_MAX Position_LocSource_LOC_EXTERNAL
+#define _Position_LocSource_ARRAYSIZE ((Position_LocSource)(Position_LocSource_LOC_EXTERNAL+1))
 
-#define _meshtastic_Position_AltSource_MIN meshtastic_Position_AltSource_ALT_UNSET
-#define _meshtastic_Position_AltSource_MAX meshtastic_Position_AltSource_ALT_BAROMETRIC
-#define _meshtastic_Position_AltSource_ARRAYSIZE ((meshtastic_Position_AltSource)(meshtastic_Position_AltSource_ALT_BAROMETRIC+1))
+#define _Position_AltSource_MIN Position_AltSource_ALT_UNSET
+#define _Position_AltSource_MAX Position_AltSource_ALT_BAROMETRIC
+#define _Position_AltSource_ARRAYSIZE ((Position_AltSource)(Position_AltSource_ALT_BAROMETRIC+1))
 
-#define _meshtastic_Routing_Error_MIN meshtastic_Routing_Error_NONE
-#define _meshtastic_Routing_Error_MAX meshtastic_Routing_Error_NOT_AUTHORIZED
-#define _meshtastic_Routing_Error_ARRAYSIZE ((meshtastic_Routing_Error)(meshtastic_Routing_Error_NOT_AUTHORIZED+1))
+#define _Routing_Error_MIN Routing_Error_NONE
+#define _Routing_Error_MAX Routing_Error_NOT_AUTHORIZED
+#define _Routing_Error_ARRAYSIZE ((Routing_Error)(Routing_Error_NOT_AUTHORIZED+1))
 
-#define _meshtastic_MeshPacket_Priority_MIN meshtastic_MeshPacket_Priority_UNSET
-#define _meshtastic_MeshPacket_Priority_MAX meshtastic_MeshPacket_Priority_MAX
-#define _meshtastic_MeshPacket_Priority_ARRAYSIZE ((meshtastic_MeshPacket_Priority)(meshtastic_MeshPacket_Priority_MAX+1))
+#define _MeshPacket_Priority_MIN MeshPacket_Priority_UNSET
+#define _MeshPacket_Priority_MAX MeshPacket_Priority_MAX
+#define _MeshPacket_Priority_ARRAYSIZE ((MeshPacket_Priority)(MeshPacket_Priority_MAX+1))
 
-#define _meshtastic_MeshPacket_Delayed_MIN meshtastic_MeshPacket_Delayed_NO_DELAY
-#define _meshtastic_MeshPacket_Delayed_MAX meshtastic_MeshPacket_Delayed_DELAYED_DIRECT
-#define _meshtastic_MeshPacket_Delayed_ARRAYSIZE ((meshtastic_MeshPacket_Delayed)(meshtastic_MeshPacket_Delayed_DELAYED_DIRECT+1))
+#define _MeshPacket_Delayed_MIN MeshPacket_Delayed_NO_DELAY
+#define _MeshPacket_Delayed_MAX MeshPacket_Delayed_DELAYED_DIRECT
+#define _MeshPacket_Delayed_ARRAYSIZE ((MeshPacket_Delayed)(MeshPacket_Delayed_DELAYED_DIRECT+1))
 
-#define _meshtastic_LogRecord_Level_MIN meshtastic_LogRecord_Level_UNSET
-#define _meshtastic_LogRecord_Level_MAX meshtastic_LogRecord_Level_CRITICAL
-#define _meshtastic_LogRecord_Level_ARRAYSIZE ((meshtastic_LogRecord_Level)(meshtastic_LogRecord_Level_CRITICAL+1))
+#define _LogRecord_Level_MIN LogRecord_Level_UNSET
+#define _LogRecord_Level_MAX LogRecord_Level_CRITICAL
+#define _LogRecord_Level_ARRAYSIZE ((LogRecord_Level)(LogRecord_Level_CRITICAL+1))
 
-#define meshtastic_Position_location_source_ENUMTYPE meshtastic_Position_LocSource
-#define meshtastic_Position_altitude_source_ENUMTYPE meshtastic_Position_AltSource
+#define Position_location_source_ENUMTYPE Position_LocSource
+#define Position_altitude_source_ENUMTYPE Position_AltSource
 
-#define meshtastic_User_hw_model_ENUMTYPE meshtastic_HardwareModel
-
-
-#define meshtastic_Routing_variant_error_reason_ENUMTYPE meshtastic_Routing_Error
-
-#define meshtastic_Data_portnum_ENUMTYPE meshtastic_PortNum
+#define User_hw_model_ENUMTYPE HardwareModel
 
 
-#define meshtastic_MeshPacket_priority_ENUMTYPE meshtastic_MeshPacket_Priority
-#define meshtastic_MeshPacket_delayed_ENUMTYPE meshtastic_MeshPacket_Delayed
+#define Routing_variant_error_reason_ENUMTYPE Routing_Error
+
+#define Data_portnum_ENUMTYPE PortNum
 
 
-#define meshtastic_MyNodeInfo_error_code_ENUMTYPE meshtastic_CriticalErrorCode
-
-#define meshtastic_LogRecord_level_ENUMTYPE meshtastic_LogRecord_Level
-
+#define MeshPacket_priority_ENUMTYPE MeshPacket_Priority
+#define MeshPacket_delayed_ENUMTYPE MeshPacket_Delayed
 
 
+#define MyNodeInfo_error_code_ENUMTYPE CriticalErrorCode
 
-#define meshtastic_Compressed_portnum_ENUMTYPE meshtastic_PortNum
+#define LogRecord_level_ENUMTYPE LogRecord_Level
+
+
+
+
+#define Compressed_portnum_ENUMTYPE PortNum
 
 
 /* Initializer values for message structs */
-#define meshtastic_Position_init_default         {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define meshtastic_User_init_default             {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0}
-#define meshtastic_RouteDiscovery_init_default   {0, {0, 0, 0, 0, 0, 0, 0, 0}}
-#define meshtastic_Routing_init_default          {0, {meshtastic_RouteDiscovery_init_default}}
-#define meshtastic_Data_init_default             {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
-#define meshtastic_Waypoint_init_default         {0, 0, 0, 0, 0, "", "", 0}
-#define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN}
-#define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default}
-#define meshtastic_MyNodeInfo_init_default       {0, 0, 0, "", _meshtastic_CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
-#define meshtastic_LogRecord_init_default        {"", 0, "", _meshtastic_LogRecord_Level_MIN}
-#define meshtastic_QueueStatus_init_default      {0, 0, 0, 0}
-#define meshtastic_FromRadio_init_default        {0, 0, {meshtastic_MeshPacket_init_default}}
-#define meshtastic_ToRadio_init_default          {0, {meshtastic_MeshPacket_init_default}}
-#define meshtastic_Compressed_init_default       {_meshtastic_PortNum_MIN, {0, {0}}}
-#define meshtastic_Position_init_zero            {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define meshtastic_User_init_zero                {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0}
-#define meshtastic_RouteDiscovery_init_zero      {0, {0, 0, 0, 0, 0, 0, 0, 0}}
-#define meshtastic_Routing_init_zero             {0, {meshtastic_RouteDiscovery_init_zero}}
-#define meshtastic_Data_init_zero                {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
-#define meshtastic_Waypoint_init_zero            {0, 0, 0, 0, 0, "", "", 0}
-#define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN}
-#define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero}
-#define meshtastic_MyNodeInfo_init_zero          {0, 0, 0, "", _meshtastic_CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
-#define meshtastic_LogRecord_init_zero           {"", 0, "", _meshtastic_LogRecord_Level_MIN}
-#define meshtastic_QueueStatus_init_zero         {0, 0, 0, 0}
-#define meshtastic_FromRadio_init_zero           {0, 0, {meshtastic_MeshPacket_init_zero}}
-#define meshtastic_ToRadio_init_zero             {0, {meshtastic_MeshPacket_init_zero}}
-#define meshtastic_Compressed_init_zero          {_meshtastic_PortNum_MIN, {0, {0}}}
+#define Position_init_default         {0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define User_init_default             {"", "", "", {0}, _HardwareModel_MIN, 0}
+#define RouteDiscovery_init_default   {0, {0, 0, 0, 0, 0, 0, 0, 0}}
+#define Routing_init_default          {0, {RouteDiscovery_init_default}}
+#define Data_init_default             {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
+#define Waypoint_init_default         {0, 0, 0, 0, 0, "", "", 0}
+#define MeshPacket_init_default       {0, 0, 0, 0, {Data_init_default}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
+#define NodeInfo_init_default         {0, false, User_init_default, false, Position_init_default, 0, 0, false, DeviceMetrics_init_default}
+#define MyNodeInfo_init_default       {0, 0, 0, "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
+#define LogRecord_init_default        {"", 0, "", _LogRecord_Level_MIN}
+#define QueueStatus_init_default      {0, 0, 0, 0}
+#define FromRadio_init_default        {0, 0, {MeshPacket_init_default}}
+#define ToRadio_init_default          {0, {MeshPacket_init_default}}
+#define Compressed_init_default       {_PortNum_MIN, {0, {0}}}
+#define Position_init_zero            {0, 0, 0, 0, _Position_LocSource_MIN, _Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define User_init_zero                {"", "", "", {0}, _HardwareModel_MIN, 0}
+#define RouteDiscovery_init_zero      {0, {0, 0, 0, 0, 0, 0, 0, 0}}
+#define Routing_init_zero             {0, {RouteDiscovery_init_zero}}
+#define Data_init_zero                {_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
+#define Waypoint_init_zero            {0, 0, 0, 0, 0, "", "", 0}
+#define MeshPacket_init_zero          {0, 0, 0, 0, {Data_init_zero}, 0, 0, 0, 0, 0, _MeshPacket_Priority_MIN, 0, _MeshPacket_Delayed_MIN}
+#define NodeInfo_init_zero            {0, false, User_init_zero, false, Position_init_zero, 0, 0, false, DeviceMetrics_init_zero}
+#define MyNodeInfo_init_zero          {0, 0, 0, "", _CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
+#define LogRecord_init_zero           {"", 0, "", _LogRecord_Level_MIN}
+#define QueueStatus_init_zero         {0, 0, 0, 0}
+#define FromRadio_init_zero           {0, 0, {MeshPacket_init_zero}}
+#define ToRadio_init_zero             {0, {MeshPacket_init_zero}}
+#define Compressed_init_zero          {_PortNum_MIN, {0, {0}}}
 
 /* Field tags (for use in manual encoding/decoding) */
-#define meshtastic_Position_latitude_i_tag       1
-#define meshtastic_Position_longitude_i_tag      2
-#define meshtastic_Position_altitude_tag         3
-#define meshtastic_Position_time_tag             4
-#define meshtastic_Position_location_source_tag  5
-#define meshtastic_Position_altitude_source_tag  6
-#define meshtastic_Position_timestamp_tag        7
-#define meshtastic_Position_timestamp_millis_adjust_tag 8
-#define meshtastic_Position_altitude_hae_tag     9
-#define meshtastic_Position_altitude_geoidal_separation_tag 10
-#define meshtastic_Position_PDOP_tag             11
-#define meshtastic_Position_HDOP_tag             12
-#define meshtastic_Position_VDOP_tag             13
-#define meshtastic_Position_gps_accuracy_tag     14
-#define meshtastic_Position_ground_speed_tag     15
-#define meshtastic_Position_ground_track_tag     16
-#define meshtastic_Position_fix_quality_tag      17
-#define meshtastic_Position_fix_type_tag         18
-#define meshtastic_Position_sats_in_view_tag     19
-#define meshtastic_Position_sensor_id_tag        20
-#define meshtastic_Position_next_update_tag      21
-#define meshtastic_Position_seq_number_tag       22
-#define meshtastic_User_id_tag                   1
-#define meshtastic_User_long_name_tag            2
-#define meshtastic_User_short_name_tag           3
-#define meshtastic_User_macaddr_tag              4
-#define meshtastic_User_hw_model_tag             5
-#define meshtastic_User_is_licensed_tag          6
-#define meshtastic_RouteDiscovery_route_tag      1
-#define meshtastic_Routing_route_request_tag     1
-#define meshtastic_Routing_route_reply_tag       2
-#define meshtastic_Routing_error_reason_tag      3
-#define meshtastic_Data_portnum_tag              1
-#define meshtastic_Data_payload_tag              2
-#define meshtastic_Data_want_response_tag        3
-#define meshtastic_Data_dest_tag                 4
-#define meshtastic_Data_source_tag               5
-#define meshtastic_Data_request_id_tag           6
-#define meshtastic_Data_reply_id_tag             7
-#define meshtastic_Data_emoji_tag                8
-#define meshtastic_Waypoint_id_tag               1
-#define meshtastic_Waypoint_latitude_i_tag       2
-#define meshtastic_Waypoint_longitude_i_tag      3
-#define meshtastic_Waypoint_expire_tag           4
-#define meshtastic_Waypoint_locked_to_tag        5
-#define meshtastic_Waypoint_name_tag             6
-#define meshtastic_Waypoint_description_tag      7
-#define meshtastic_Waypoint_icon_tag             8
-#define meshtastic_MeshPacket_from_tag           1
-#define meshtastic_MeshPacket_to_tag             2
-#define meshtastic_MeshPacket_channel_tag        3
-#define meshtastic_MeshPacket_decoded_tag        4
-#define meshtastic_MeshPacket_encrypted_tag      5
-#define meshtastic_MeshPacket_id_tag             6
-#define meshtastic_MeshPacket_rx_time_tag        7
-#define meshtastic_MeshPacket_rx_snr_tag         8
-#define meshtastic_MeshPacket_hop_limit_tag      9
-#define meshtastic_MeshPacket_want_ack_tag       10
-#define meshtastic_MeshPacket_priority_tag       11
-#define meshtastic_MeshPacket_rx_rssi_tag        12
-#define meshtastic_MeshPacket_delayed_tag        13
-#define meshtastic_NodeInfo_num_tag              1
-#define meshtastic_NodeInfo_user_tag             2
-#define meshtastic_NodeInfo_position_tag         3
-#define meshtastic_NodeInfo_snr_tag              4
-#define meshtastic_NodeInfo_last_heard_tag       5
-#define meshtastic_NodeInfo_device_metrics_tag   6
-#define meshtastic_MyNodeInfo_my_node_num_tag    1
-#define meshtastic_MyNodeInfo_has_gps_tag        2
-#define meshtastic_MyNodeInfo_max_channels_tag   3
-#define meshtastic_MyNodeInfo_firmware_version_tag 4
-#define meshtastic_MyNodeInfo_error_code_tag     5
-#define meshtastic_MyNodeInfo_error_address_tag  6
-#define meshtastic_MyNodeInfo_error_count_tag    7
-#define meshtastic_MyNodeInfo_reboot_count_tag   8
-#define meshtastic_MyNodeInfo_bitrate_tag        9
-#define meshtastic_MyNodeInfo_message_timeout_msec_tag 10
-#define meshtastic_MyNodeInfo_min_app_version_tag 11
-#define meshtastic_MyNodeInfo_air_period_tx_tag  12
-#define meshtastic_MyNodeInfo_air_period_rx_tag  13
-#define meshtastic_MyNodeInfo_has_wifi_tag       14
-#define meshtastic_MyNodeInfo_channel_utilization_tag 15
-#define meshtastic_MyNodeInfo_air_util_tx_tag    16
-#define meshtastic_LogRecord_message_tag         1
-#define meshtastic_LogRecord_time_tag            2
-#define meshtastic_LogRecord_source_tag          3
-#define meshtastic_LogRecord_level_tag           4
-#define meshtastic_QueueStatus_res_tag           1
-#define meshtastic_QueueStatus_free_tag          2
-#define meshtastic_QueueStatus_maxlen_tag        3
-#define meshtastic_QueueStatus_mesh_packet_id_tag 4
-#define meshtastic_FromRadio_id_tag              1
-#define meshtastic_FromRadio_packet_tag          2
-#define meshtastic_FromRadio_my_info_tag         3
-#define meshtastic_FromRadio_node_info_tag       4
-#define meshtastic_FromRadio_config_tag          5
-#define meshtastic_FromRadio_log_record_tag      6
-#define meshtastic_FromRadio_config_complete_id_tag 7
-#define meshtastic_FromRadio_rebooted_tag        8
-#define meshtastic_FromRadio_moduleConfig_tag    9
-#define meshtastic_FromRadio_channel_tag         10
-#define meshtastic_FromRadio_queueStatus_tag     11
-#define meshtastic_FromRadio_xmodemPacket_tag    12
-#define meshtastic_ToRadio_packet_tag            1
-#define meshtastic_ToRadio_want_config_id_tag    3
-#define meshtastic_ToRadio_disconnect_tag        4
-#define meshtastic_ToRadio_xmodemPacket_tag      5
-#define meshtastic_Compressed_portnum_tag        1
-#define meshtastic_Compressed_data_tag           2
+#define Position_latitude_i_tag       1
+#define Position_longitude_i_tag      2
+#define Position_altitude_tag         3
+#define Position_time_tag             4
+#define Position_location_source_tag  5
+#define Position_altitude_source_tag  6
+#define Position_timestamp_tag        7
+#define Position_timestamp_millis_adjust_tag 8
+#define Position_altitude_hae_tag     9
+#define Position_altitude_geoidal_separation_tag 10
+#define Position_PDOP_tag             11
+#define Position_HDOP_tag             12
+#define Position_VDOP_tag             13
+#define Position_gps_accuracy_tag     14
+#define Position_ground_speed_tag     15
+#define Position_ground_track_tag     16
+#define Position_fix_quality_tag      17
+#define Position_fix_type_tag         18
+#define Position_sats_in_view_tag     19
+#define Position_sensor_id_tag        20
+#define Position_next_update_tag      21
+#define Position_seq_number_tag       22
+#define User_id_tag                   1
+#define User_long_name_tag            2
+#define User_short_name_tag           3
+#define User_macaddr_tag              4
+#define User_hw_model_tag             5
+#define User_is_licensed_tag          6
+#define RouteDiscovery_route_tag      1
+#define Routing_route_request_tag     1
+#define Routing_route_reply_tag       2
+#define Routing_error_reason_tag      3
+#define Data_portnum_tag              1
+#define Data_payload_tag              2
+#define Data_want_response_tag        3
+#define Data_dest_tag                 4
+#define Data_source_tag               5
+#define Data_request_id_tag           6
+#define Data_reply_id_tag             7
+#define Data_emoji_tag                8
+#define Waypoint_id_tag               1
+#define Waypoint_latitude_i_tag       2
+#define Waypoint_longitude_i_tag      3
+#define Waypoint_expire_tag           4
+#define Waypoint_locked_to_tag        5
+#define Waypoint_name_tag             6
+#define Waypoint_description_tag      7
+#define Waypoint_icon_tag             8
+#define MeshPacket_from_tag           1
+#define MeshPacket_to_tag             2
+#define MeshPacket_channel_tag        3
+#define MeshPacket_decoded_tag        4
+#define MeshPacket_encrypted_tag      5
+#define MeshPacket_id_tag             6
+#define MeshPacket_rx_time_tag        7
+#define MeshPacket_rx_snr_tag         8
+#define MeshPacket_hop_limit_tag      9
+#define MeshPacket_want_ack_tag       10
+#define MeshPacket_priority_tag       11
+#define MeshPacket_rx_rssi_tag        12
+#define MeshPacket_delayed_tag        13
+#define NodeInfo_num_tag              1
+#define NodeInfo_user_tag             2
+#define NodeInfo_position_tag         3
+#define NodeInfo_snr_tag              4
+#define NodeInfo_last_heard_tag       5
+#define NodeInfo_device_metrics_tag   6
+#define MyNodeInfo_my_node_num_tag    1
+#define MyNodeInfo_has_gps_tag        2
+#define MyNodeInfo_max_channels_tag   3
+#define MyNodeInfo_firmware_version_tag 4
+#define MyNodeInfo_error_code_tag     5
+#define MyNodeInfo_error_address_tag  6
+#define MyNodeInfo_error_count_tag    7
+#define MyNodeInfo_reboot_count_tag   8
+#define MyNodeInfo_bitrate_tag        9
+#define MyNodeInfo_message_timeout_msec_tag 10
+#define MyNodeInfo_min_app_version_tag 11
+#define MyNodeInfo_air_period_tx_tag  12
+#define MyNodeInfo_air_period_rx_tag  13
+#define MyNodeInfo_has_wifi_tag       14
+#define MyNodeInfo_channel_utilization_tag 15
+#define MyNodeInfo_air_util_tx_tag    16
+#define LogRecord_message_tag         1
+#define LogRecord_time_tag            2
+#define LogRecord_source_tag          3
+#define LogRecord_level_tag           4
+#define QueueStatus_res_tag           1
+#define QueueStatus_free_tag          2
+#define QueueStatus_maxlen_tag        3
+#define QueueStatus_mesh_packet_id_tag 4
+#define FromRadio_id_tag              1
+#define FromRadio_packet_tag          2
+#define FromRadio_my_info_tag         3
+#define FromRadio_node_info_tag       4
+#define FromRadio_config_tag          5
+#define FromRadio_log_record_tag      6
+#define FromRadio_config_complete_id_tag 7
+#define FromRadio_rebooted_tag        8
+#define FromRadio_moduleConfig_tag    9
+#define FromRadio_channel_tag         10
+#define FromRadio_queueStatus_tag     11
+#define FromRadio_xmodemPacket_tag    12
+#define ToRadio_packet_tag            1
+#define ToRadio_want_config_id_tag    3
+#define ToRadio_disconnect_tag        4
+#define ToRadio_xmodemPacket_tag      5
+#define Compressed_portnum_tag        1
+#define Compressed_data_tag           2
 
 /* Struct field encoding specification for nanopb */
-#define meshtastic_Position_FIELDLIST(X, a) \
+#define Position_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, SFIXED32, latitude_i,        1) \
 X(a, STATIC,   SINGULAR, SFIXED32, longitude_i,       2) \
 X(a, STATIC,   SINGULAR, INT32,    altitude,          3) \
@@ -945,34 +945,34 @@ X(a, STATIC,   SINGULAR, UINT32,   sats_in_view,     19) \
 X(a, STATIC,   SINGULAR, UINT32,   sensor_id,        20) \
 X(a, STATIC,   SINGULAR, UINT32,   next_update,      21) \
 X(a, STATIC,   SINGULAR, UINT32,   seq_number,       22)
-#define meshtastic_Position_CALLBACK NULL
-#define meshtastic_Position_DEFAULT NULL
+#define Position_CALLBACK NULL
+#define Position_DEFAULT NULL
 
-#define meshtastic_User_FIELDLIST(X, a) \
+#define User_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   id,                1) \
 X(a, STATIC,   SINGULAR, STRING,   long_name,         2) \
 X(a, STATIC,   SINGULAR, STRING,   short_name,        3) \
 X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, macaddr,           4) \
 X(a, STATIC,   SINGULAR, UENUM,    hw_model,          5) \
 X(a, STATIC,   SINGULAR, BOOL,     is_licensed,       6)
-#define meshtastic_User_CALLBACK NULL
-#define meshtastic_User_DEFAULT NULL
+#define User_CALLBACK NULL
+#define User_DEFAULT NULL
 
-#define meshtastic_RouteDiscovery_FIELDLIST(X, a) \
+#define RouteDiscovery_FIELDLIST(X, a) \
 X(a, STATIC,   REPEATED, FIXED32,  route,             1)
-#define meshtastic_RouteDiscovery_CALLBACK NULL
-#define meshtastic_RouteDiscovery_DEFAULT NULL
+#define RouteDiscovery_CALLBACK NULL
+#define RouteDiscovery_DEFAULT NULL
 
-#define meshtastic_Routing_FIELDLIST(X, a) \
+#define Routing_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,route_request,route_request),   1) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,route_reply,route_reply),   2) \
 X(a, STATIC,   ONEOF,    UENUM,    (variant,error_reason,error_reason),   3)
-#define meshtastic_Routing_CALLBACK NULL
-#define meshtastic_Routing_DEFAULT NULL
-#define meshtastic_Routing_variant_route_request_MSGTYPE meshtastic_RouteDiscovery
-#define meshtastic_Routing_variant_route_reply_MSGTYPE meshtastic_RouteDiscovery
+#define Routing_CALLBACK NULL
+#define Routing_DEFAULT NULL
+#define Routing_variant_route_request_MSGTYPE RouteDiscovery
+#define Routing_variant_route_reply_MSGTYPE RouteDiscovery
 
-#define meshtastic_Data_FIELDLIST(X, a) \
+#define Data_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    portnum,           1) \
 X(a, STATIC,   SINGULAR, BYTES,    payload,           2) \
 X(a, STATIC,   SINGULAR, BOOL,     want_response,     3) \
@@ -981,10 +981,10 @@ X(a, STATIC,   SINGULAR, FIXED32,  source,            5) \
 X(a, STATIC,   SINGULAR, FIXED32,  request_id,        6) \
 X(a, STATIC,   SINGULAR, FIXED32,  reply_id,          7) \
 X(a, STATIC,   SINGULAR, FIXED32,  emoji,             8)
-#define meshtastic_Data_CALLBACK NULL
-#define meshtastic_Data_DEFAULT NULL
+#define Data_CALLBACK NULL
+#define Data_DEFAULT NULL
 
-#define meshtastic_Waypoint_FIELDLIST(X, a) \
+#define Waypoint_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   id,                1) \
 X(a, STATIC,   SINGULAR, SFIXED32, latitude_i,        2) \
 X(a, STATIC,   SINGULAR, SFIXED32, longitude_i,       3) \
@@ -993,10 +993,10 @@ X(a, STATIC,   SINGULAR, UINT32,   locked_to,         5) \
 X(a, STATIC,   SINGULAR, STRING,   name,              6) \
 X(a, STATIC,   SINGULAR, STRING,   description,       7) \
 X(a, STATIC,   SINGULAR, FIXED32,  icon,              8)
-#define meshtastic_Waypoint_CALLBACK NULL
-#define meshtastic_Waypoint_DEFAULT NULL
+#define Waypoint_CALLBACK NULL
+#define Waypoint_DEFAULT NULL
 
-#define meshtastic_MeshPacket_FIELDLIST(X, a) \
+#define MeshPacket_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, FIXED32,  from,              1) \
 X(a, STATIC,   SINGULAR, FIXED32,  to,                2) \
 X(a, STATIC,   SINGULAR, UINT32,   channel,           3) \
@@ -1010,24 +1010,24 @@ X(a, STATIC,   SINGULAR, BOOL,     want_ack,         10) \
 X(a, STATIC,   SINGULAR, UENUM,    priority,         11) \
 X(a, STATIC,   SINGULAR, INT32,    rx_rssi,          12) \
 X(a, STATIC,   SINGULAR, UENUM,    delayed,          13)
-#define meshtastic_MeshPacket_CALLBACK NULL
-#define meshtastic_MeshPacket_DEFAULT NULL
-#define meshtastic_MeshPacket_payload_variant_decoded_MSGTYPE meshtastic_Data
+#define MeshPacket_CALLBACK NULL
+#define MeshPacket_DEFAULT NULL
+#define MeshPacket_payload_variant_decoded_MSGTYPE Data
 
-#define meshtastic_NodeInfo_FIELDLIST(X, a) \
+#define NodeInfo_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   num,               1) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  user,              2) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  position,          3) \
 X(a, STATIC,   SINGULAR, FLOAT,    snr,               4) \
 X(a, STATIC,   SINGULAR, FIXED32,  last_heard,        5) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  device_metrics,    6)
-#define meshtastic_NodeInfo_CALLBACK NULL
-#define meshtastic_NodeInfo_DEFAULT NULL
-#define meshtastic_NodeInfo_user_MSGTYPE meshtastic_User
-#define meshtastic_NodeInfo_position_MSGTYPE meshtastic_Position
-#define meshtastic_NodeInfo_device_metrics_MSGTYPE meshtastic_DeviceMetrics
+#define NodeInfo_CALLBACK NULL
+#define NodeInfo_DEFAULT NULL
+#define NodeInfo_user_MSGTYPE User
+#define NodeInfo_position_MSGTYPE Position
+#define NodeInfo_device_metrics_MSGTYPE DeviceMetrics
 
-#define meshtastic_MyNodeInfo_FIELDLIST(X, a) \
+#define MyNodeInfo_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   my_node_num,       1) \
 X(a, STATIC,   SINGULAR, BOOL,     has_gps,           2) \
 X(a, STATIC,   SINGULAR, UINT32,   max_channels,      3) \
@@ -1044,26 +1044,26 @@ X(a, STATIC,   REPEATED, UINT32,   air_period_rx,    13) \
 X(a, STATIC,   SINGULAR, BOOL,     has_wifi,         14) \
 X(a, STATIC,   SINGULAR, FLOAT,    channel_utilization,  15) \
 X(a, STATIC,   SINGULAR, FLOAT,    air_util_tx,      16)
-#define meshtastic_MyNodeInfo_CALLBACK NULL
-#define meshtastic_MyNodeInfo_DEFAULT NULL
+#define MyNodeInfo_CALLBACK NULL
+#define MyNodeInfo_DEFAULT NULL
 
-#define meshtastic_LogRecord_FIELDLIST(X, a) \
+#define LogRecord_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   message,           1) \
 X(a, STATIC,   SINGULAR, FIXED32,  time,              2) \
 X(a, STATIC,   SINGULAR, STRING,   source,            3) \
 X(a, STATIC,   SINGULAR, UENUM,    level,             4)
-#define meshtastic_LogRecord_CALLBACK NULL
-#define meshtastic_LogRecord_DEFAULT NULL
+#define LogRecord_CALLBACK NULL
+#define LogRecord_DEFAULT NULL
 
-#define meshtastic_QueueStatus_FIELDLIST(X, a) \
+#define QueueStatus_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, INT32,    res,               1) \
 X(a, STATIC,   SINGULAR, UINT32,   free,              2) \
 X(a, STATIC,   SINGULAR, UINT32,   maxlen,            3) \
 X(a, STATIC,   SINGULAR, UINT32,   mesh_packet_id,    4)
-#define meshtastic_QueueStatus_CALLBACK NULL
-#define meshtastic_QueueStatus_DEFAULT NULL
+#define QueueStatus_CALLBACK NULL
+#define QueueStatus_DEFAULT NULL
 
-#define meshtastic_FromRadio_FIELDLIST(X, a) \
+#define FromRadio_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   id,                1) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,packet,packet),   2) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,my_info,my_info),   3) \
@@ -1076,80 +1076,80 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,moduleConfig,moduleConfig), 
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,channel,channel),  10) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,queueStatus,queueStatus),  11) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,xmodemPacket,xmodemPacket),  12)
-#define meshtastic_FromRadio_CALLBACK NULL
-#define meshtastic_FromRadio_DEFAULT NULL
-#define meshtastic_FromRadio_payload_variant_packet_MSGTYPE meshtastic_MeshPacket
-#define meshtastic_FromRadio_payload_variant_my_info_MSGTYPE meshtastic_MyNodeInfo
-#define meshtastic_FromRadio_payload_variant_node_info_MSGTYPE meshtastic_NodeInfo
-#define meshtastic_FromRadio_payload_variant_config_MSGTYPE meshtastic_Config
-#define meshtastic_FromRadio_payload_variant_log_record_MSGTYPE meshtastic_LogRecord
-#define meshtastic_FromRadio_payload_variant_moduleConfig_MSGTYPE meshtastic_ModuleConfig
-#define meshtastic_FromRadio_payload_variant_channel_MSGTYPE meshtastic_Channel
-#define meshtastic_FromRadio_payload_variant_queueStatus_MSGTYPE meshtastic_QueueStatus
-#define meshtastic_FromRadio_payload_variant_xmodemPacket_MSGTYPE meshtastic_XModem
+#define FromRadio_CALLBACK NULL
+#define FromRadio_DEFAULT NULL
+#define FromRadio_payload_variant_packet_MSGTYPE MeshPacket
+#define FromRadio_payload_variant_my_info_MSGTYPE MyNodeInfo
+#define FromRadio_payload_variant_node_info_MSGTYPE NodeInfo
+#define FromRadio_payload_variant_config_MSGTYPE Config
+#define FromRadio_payload_variant_log_record_MSGTYPE LogRecord
+#define FromRadio_payload_variant_moduleConfig_MSGTYPE ModuleConfig
+#define FromRadio_payload_variant_channel_MSGTYPE Channel
+#define FromRadio_payload_variant_queueStatus_MSGTYPE QueueStatus
+#define FromRadio_payload_variant_xmodemPacket_MSGTYPE XModem
 
-#define meshtastic_ToRadio_FIELDLIST(X, a) \
+#define ToRadio_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,packet,packet),   1) \
 X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,want_config_id,want_config_id),   3) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,disconnect,disconnect),   4) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,xmodemPacket,xmodemPacket),   5)
-#define meshtastic_ToRadio_CALLBACK NULL
-#define meshtastic_ToRadio_DEFAULT NULL
-#define meshtastic_ToRadio_payload_variant_packet_MSGTYPE meshtastic_MeshPacket
-#define meshtastic_ToRadio_payload_variant_xmodemPacket_MSGTYPE meshtastic_XModem
+#define ToRadio_CALLBACK NULL
+#define ToRadio_DEFAULT NULL
+#define ToRadio_payload_variant_packet_MSGTYPE MeshPacket
+#define ToRadio_payload_variant_xmodemPacket_MSGTYPE XModem
 
-#define meshtastic_Compressed_FIELDLIST(X, a) \
+#define Compressed_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    portnum,           1) \
 X(a, STATIC,   SINGULAR, BYTES,    data,              2)
-#define meshtastic_Compressed_CALLBACK NULL
-#define meshtastic_Compressed_DEFAULT NULL
+#define Compressed_CALLBACK NULL
+#define Compressed_DEFAULT NULL
 
-extern const pb_msgdesc_t meshtastic_Position_msg;
-extern const pb_msgdesc_t meshtastic_User_msg;
-extern const pb_msgdesc_t meshtastic_RouteDiscovery_msg;
-extern const pb_msgdesc_t meshtastic_Routing_msg;
-extern const pb_msgdesc_t meshtastic_Data_msg;
-extern const pb_msgdesc_t meshtastic_Waypoint_msg;
-extern const pb_msgdesc_t meshtastic_MeshPacket_msg;
-extern const pb_msgdesc_t meshtastic_NodeInfo_msg;
-extern const pb_msgdesc_t meshtastic_MyNodeInfo_msg;
-extern const pb_msgdesc_t meshtastic_LogRecord_msg;
-extern const pb_msgdesc_t meshtastic_QueueStatus_msg;
-extern const pb_msgdesc_t meshtastic_FromRadio_msg;
-extern const pb_msgdesc_t meshtastic_ToRadio_msg;
-extern const pb_msgdesc_t meshtastic_Compressed_msg;
+extern const pb_msgdesc_t Position_msg;
+extern const pb_msgdesc_t User_msg;
+extern const pb_msgdesc_t RouteDiscovery_msg;
+extern const pb_msgdesc_t Routing_msg;
+extern const pb_msgdesc_t Data_msg;
+extern const pb_msgdesc_t Waypoint_msg;
+extern const pb_msgdesc_t MeshPacket_msg;
+extern const pb_msgdesc_t NodeInfo_msg;
+extern const pb_msgdesc_t MyNodeInfo_msg;
+extern const pb_msgdesc_t LogRecord_msg;
+extern const pb_msgdesc_t QueueStatus_msg;
+extern const pb_msgdesc_t FromRadio_msg;
+extern const pb_msgdesc_t ToRadio_msg;
+extern const pb_msgdesc_t Compressed_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
-#define meshtastic_Position_fields &meshtastic_Position_msg
-#define meshtastic_User_fields &meshtastic_User_msg
-#define meshtastic_RouteDiscovery_fields &meshtastic_RouteDiscovery_msg
-#define meshtastic_Routing_fields &meshtastic_Routing_msg
-#define meshtastic_Data_fields &meshtastic_Data_msg
-#define meshtastic_Waypoint_fields &meshtastic_Waypoint_msg
-#define meshtastic_MeshPacket_fields &meshtastic_MeshPacket_msg
-#define meshtastic_NodeInfo_fields &meshtastic_NodeInfo_msg
-#define meshtastic_MyNodeInfo_fields &meshtastic_MyNodeInfo_msg
-#define meshtastic_LogRecord_fields &meshtastic_LogRecord_msg
-#define meshtastic_QueueStatus_fields &meshtastic_QueueStatus_msg
-#define meshtastic_FromRadio_fields &meshtastic_FromRadio_msg
-#define meshtastic_ToRadio_fields &meshtastic_ToRadio_msg
-#define meshtastic_Compressed_fields &meshtastic_Compressed_msg
+#define Position_fields &Position_msg
+#define User_fields &User_msg
+#define RouteDiscovery_fields &RouteDiscovery_msg
+#define Routing_fields &Routing_msg
+#define Data_fields &Data_msg
+#define Waypoint_fields &Waypoint_msg
+#define MeshPacket_fields &MeshPacket_msg
+#define NodeInfo_fields &NodeInfo_msg
+#define MyNodeInfo_fields &MyNodeInfo_msg
+#define LogRecord_fields &LogRecord_msg
+#define QueueStatus_fields &QueueStatus_msg
+#define FromRadio_fields &FromRadio_msg
+#define ToRadio_fields &ToRadio_msg
+#define Compressed_fields &Compressed_msg
 
 /* Maximum encoded size of messages (where known) */
-#define meshtastic_Compressed_size               243
-#define meshtastic_Data_size                     270
-#define meshtastic_FromRadio_size                330
-#define meshtastic_LogRecord_size                81
-#define meshtastic_MeshPacket_size               321
-#define meshtastic_MyNodeInfo_size               179
-#define meshtastic_NodeInfo_size                 258
-#define meshtastic_Position_size                 137
-#define meshtastic_QueueStatus_size              23
-#define meshtastic_RouteDiscovery_size           40
-#define meshtastic_Routing_size                  42
-#define meshtastic_ToRadio_size                  324
-#define meshtastic_User_size                     77
-#define meshtastic_Waypoint_size                 165
+#define Compressed_size               243
+#define Data_size                     270
+#define FromRadio_size                330
+#define LogRecord_size                81
+#define MeshPacket_size               321
+#define MyNodeInfo_size               179
+#define NodeInfo_size                 258
+#define Position_size                 137
+#define QueueStatus_size              23
+#define RouteDiscovery_size           40
+#define Routing_size                  42
+#define ToRadio_size                  324
+#define User_size                     77
+#define Waypoint_size                 165
 
 #ifdef __cplusplus
 } /* extern "C" */

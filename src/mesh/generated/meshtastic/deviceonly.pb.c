@@ -6,13 +6,13 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
-PB_BIND(meshtastic_DeviceState, meshtastic_DeviceState, 4)
+PB_BIND(DeviceState, DeviceState, 4)
 
 
-PB_BIND(meshtastic_ChannelFile, meshtastic_ChannelFile, 2)
+PB_BIND(ChannelFile, ChannelFile, 2)
 
 
-PB_BIND(meshtastic_OEMStore, meshtastic_OEMStore, 2)
+PB_BIND(OEMStore, OEMStore, 2)
 
 
 
