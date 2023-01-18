@@ -3,9 +3,9 @@
  ***********************************************************************************************************************
  * Copyright 2001-2019 Georges Menie (www.menie.org)
  * All rights reserved.
- * 
+ *
  * Adapted for protobuf encapsulation. this is not really Xmodem any more.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *
@@ -32,45 +32,45 @@
 
 #pragma once
 
+#include "FSCommon.h"
 #include "configuration.h"
 #include "mesh/generated/meshtastic/xmodem.pb.h"
-#include "FSCommon.h"
 
 #define MAXRETRANS 25
 
 class XModemAdapter
 {
-    public:
-        // Called when we put a fragment in the outgoing memory
-        Observable<uint32_t> packetReady;
+  public:
+    // Called when we put a fragment in the outgoing memory
+    Observable<uint32_t> packetReady;
 
-        XModemAdapter();
+    XModemAdapter();
 
-        void handlePacket(XModem xmodemPacket);
-        XModem *getForPhone();
+    void handlePacket(XModem xmodemPacket);
+    XModem *getForPhone();
 
-    private:
-        bool isReceiving = false;
-        bool isTransmitting = false;
-        bool isEOT = false;
+  private:
+    bool isReceiving = false;
+    bool isTransmitting = false;
+    bool isEOT = false;
 
-        int retrans = MAXRETRANS;
+    int retrans = MAXRETRANS;
 
-        uint16_t packetno = 0;
+    uint16_t packetno = 0;
 
 #ifdef ARCH_NRF52
-        File file = File(FSCom);
+    File file = File(FSCom);
 #else
-        File file;
+    File file;
 #endif
 
-        char filename[sizeof(XModem_buffer_t::bytes)] = {0};
+    char filename[sizeof(XModem_buffer_t::bytes)] = {0};
 
-    protected:
-        XModem *xmodemStore = NULL;
-        unsigned short crc16_ccitt(const pb_byte_t *buffer, int length);
-        int check(const pb_byte_t *buf, int sz, unsigned short tcrc);
-        void sendControl(XModem_Control c);
+  protected:
+    XModem *xmodemStore = NULL;
+    unsigned short crc16_ccitt(const pb_byte_t *buffer, int length);
+    int check(const pb_byte_t *buf, int sz, unsigned short tcrc);
+    void sendControl(XModem_Control c);
 };
 
 extern XModemAdapter xModem;
