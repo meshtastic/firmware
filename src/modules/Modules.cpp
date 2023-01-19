@@ -18,9 +18,9 @@
 #include "modules/Telemetry/EnvironmentTelemetry.h"
 #endif
 #ifdef ARCH_ESP32
+#include "modules/esp32/AudioModule.h"
 #include "modules/esp32/RangeTestModule.h"
 #include "modules/esp32/StoreForwardModule.h"
-#include "modules/esp32/AudioModule.h"
 #endif
 #if defined(ARCH_ESP32) || defined(ARCH_NRF52)
 #include "modules/ExternalNotificationModule.h"
