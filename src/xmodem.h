@@ -40,37 +40,37 @@
 
 class XModemAdapter
 {
-public:
-  // Called when we put a fragment in the outgoing memory
-  Observable<uint32_t> packetReady;
+  public:
+    // Called when we put a fragment in the outgoing memory
+    Observable<uint32_t> packetReady;
 
-  XModemAdapter();
+    XModemAdapter();
 
-  void handlePacket(XModem xmodemPacket);
-  XModem *getForPhone();
+    void handlePacket(XModem xmodemPacket);
+    XModem *getForPhone();
 
-private:
-  bool isReceiving = false;
-  bool isTransmitting = false;
-  bool isEOT = false;
+  private:
+    bool isReceiving = false;
+    bool isTransmitting = false;
+    bool isEOT = false;
 
-  int retrans = MAXRETRANS;
+    int retrans = MAXRETRANS;
 
-  uint16_t packetno = 0;
+    uint16_t packetno = 0;
 
 #if defined(ARCH_NRF52)
-  File file = File(FSCom);
+    File file = File(FSCom);
 #else
-  File file;
+    File file;
 #endif
 
-  char filename[sizeof(XModem_buffer_t::bytes)] = {0};
+    char filename[sizeof(XModem_buffer_t::bytes)] = {0};
 
-protected:
-  XModem *xmodemStore = NULL;
-  unsigned short crc16_ccitt(const pb_byte_t *buffer, int length);
-  int check(const pb_byte_t *buf, int sz, unsigned short tcrc);
-  void sendControl(XModem_Control c);
+  protected:
+    XModem *xmodemStore = NULL;
+    unsigned short crc16_ccitt(const pb_byte_t *buffer, int length);
+    int check(const pb_byte_t *buf, int sz, unsigned short tcrc);
+    void sendControl(XModem_Control c);
 };
 
 extern XModemAdapter xModem;
