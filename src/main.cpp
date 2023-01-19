@@ -305,6 +305,10 @@ void setup()
     if (config.display.oled != Config_DisplayConfig_OledType_OLED_AUTO)
         screen_model = config.display.oled;
 
+#if defined(USE_SH1107)
+    screen_model = Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of 128x128
+#endif
+
     // Init our SPI controller (must be before screen and lora)
     initSPI();
 #ifndef ARCH_ESP32

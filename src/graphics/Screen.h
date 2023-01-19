@@ -34,7 +34,7 @@ class Screen
 
 #ifdef USE_ST7567
 #include <ST7567Wire.h>
-#elif defined(USE_SH1106)
+#elif defined(USE_SH1106) || defined(USE_SH1107)
 #include <SH1106Wire.h>
 #elif defined(USE_SSD1306)
 #include <SSD1306Wire.h>
@@ -342,10 +342,7 @@ class Screen : public concurrency::OSThread
 
     /// Display device
 
-// #ifdef RAK4630
-//     EInkDisplay dispdev;
-//     AutoOLEDWire dispdev_oled;
-#ifdef USE_SH1106
+#if defined(USE_SH1106) || defined(USE_SH1107)
     SH1106Wire dispdev;
 #elif defined(USE_SSD1306)
     SSD1306Wire dispdev;
