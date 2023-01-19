@@ -87,7 +87,7 @@ uint8_t rtc_found;
 
 // Keystore Chips
 uint8_t keystore_found;
-#ifndef ARCH_PORTDUINO
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 ATECCX08A atecc;
 #endif
 
@@ -98,7 +98,7 @@ uint32_t serialSinceMsec;
 bool pmu_found;
 
 // Array map of sensor types (as array index) and i2c address as value we'll find in the i2c scan
-uint8_t nodeTelemetrySensorsMap[_TelemetrySensorType_MAX + 1] = { 0 }; // one is enough, missing elements will be initialized to 0 anyway.
+uint8_t nodeTelemetrySensorsMap[_TelemetrySensorType_MAX + 1] = {0}; // one is enough, missing elements will be initialized to 0 anyway.
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
 
@@ -112,9 +112,12 @@ const char *getDeviceName()
     static char name[20];
     snprintf(name, sizeof(name), "%02x%02x", dmac[4], dmac[5]);
     // if the shortname exists and is NOT the new default of ab3c, use it for BLE name.
-    if ((owner.short_name != NULL) && (strcmp(owner.short_name, name) != 0)) {
+    if ((owner.short_name != NULL) && (strcmp(owner.short_name, name) != 0))
+    {
         snprintf(name, sizeof(name), "%s_%02x%02x", owner.short_name, dmac[4], dmac[5]);
-    } else {
+    }
+    else
+    {
         snprintf(name, sizeof(name), "Meshtastic_%02x%02x", dmac[4], dmac[5]);
     }
     return name;
@@ -169,7 +172,7 @@ void setup()
 #endif
 
 #ifdef DEBUG_PORT
-        consoleInit(); // Set serial baud rate and init our mesh console
+    consoleInit(); // Set serial baud rate and init our mesh console
 #endif
 
     serialSinceMsec = millis();
@@ -249,12 +252,12 @@ void setup()
     powerStatus->observe(&power->newStatus);
     power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
 
-
 #ifdef LILYGO_TBEAM_S3_CORE
     // In T-Beam-S3-core, the I2C device cannot be scanned before power initialization, otherwise the device will be stuck
     // PCF8563 RTC in tbeam-s3 uses Wire1 to share I2C bus
     Wire1.beginTransmission(PCF8563_RTC);
-    if (Wire1.endTransmission() == 0){
+    if (Wire1.endTransmission() == 0)
+    {
         rtc_found = PCF8563_RTC;
         LOG_INFO("PCF8563 RTC found\n");
     }
@@ -354,9 +357,11 @@ void setup()
     // We have now loaded our saved preferences from flash
 
     // ONCE we will factory reset the GPS for bug #327
-    if (gps && !devicestate.did_gps_reset) {
+    if (gps && !devicestate.did_gps_reset)
+    {
         LOG_WARN("GPS FactoryReset requested\n");
-        if (gps->factoryReset()) { // If we don't succeed try again next time
+        if (gps->factoryReset())
+        { // If we don't succeed try again next time
             devicestate.did_gps_reset = true;
             nodeDB.saveToDisk(SEGMENT_DEVICESTATE);
         }
@@ -371,95 +376,121 @@ void setup()
     // radio init MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
 
 #if defined(RF95_IRQ)
-    if (!rIf) {
+    if (!rIf)
+    {
         rIf = new RF95Interface(RF95_NSS, RF95_IRQ, RF95_RESET, SPI);
-        if (!rIf->init()) {
+        if (!rIf->init())
+        {
             LOG_WARN("Failed to find RF95 radio\n");
             delete rIf;
             rIf = NULL;
-        } else {
+        }
+        else
+        {
             LOG_INFO("RF95 Radio init succeeded, using RF95 radio\n");
         }
     }
 #endif
 
 #if defined(USE_SX1280)
-    if (!rIf) {
+    if (!rIf)
+    {
         rIf = new SX1280Interface(SX128X_CS, SX128X_DIO1, SX128X_RESET, SX128X_BUSY, SPI);
-        if (!rIf->init()) {
+        if (!rIf->init())
+        {
             LOG_WARN("Failed to find SX1280 radio\n");
             delete rIf;
             rIf = NULL;
-        } else {
+        }
+        else
+        {
             LOG_INFO("SX1280 Radio init succeeded, using SX1280 radio\n");
         }
     }
 #endif
 
 #if defined(USE_SX1262)
-    if (!rIf) {
+    if (!rIf)
+    {
         rIf = new SX1262Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
-        if (!rIf->init()) {
+        if (!rIf->init())
+        {
             LOG_WARN("Failed to find SX1262 radio\n");
             delete rIf;
             rIf = NULL;
-        } else {
+        }
+        else
+        {
             LOG_INFO("SX1262 Radio init succeeded, using SX1262 radio\n");
         }
     }
 #endif
 
 #if defined(USE_SX1268)
-    if (!rIf) {
+    if (!rIf)
+    {
         rIf = new SX1268Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
-        if (!rIf->init()) {
+        if (!rIf->init())
+        {
             LOG_WARN("Failed to find SX1268 radio\n");
             delete rIf;
             rIf = NULL;
-        } else {
+        }
+        else
+        {
             LOG_INFO("SX1268 Radio init succeeded, using SX1268 radio\n");
         }
     }
 #endif
 
 #if defined(USE_LLCC68)
-    if (!rIf) {
+    if (!rIf)
+    {
         rIf = new LLCC68Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
-        if (!rIf->init()) {
+        if (!rIf->init())
+        {
             LOG_WARN("Failed to find LLCC68 radio\n");
             delete rIf;
             rIf = NULL;
-        } else {
+        }
+        else
+        {
             LOG_INFO("LLCC68 Radio init succeeded, using LLCC68 radio\n");
         }
     }
 #endif
 
 #ifdef ARCH_PORTDUINO
-    if (!rIf) {
+    if (!rIf)
+    {
         rIf = new SimRadio;
-        if (!rIf->init()) {
+        if (!rIf->init())
+        {
             LOG_WARN("Failed to find simulated radio\n");
             delete rIf;
             rIf = NULL;
-        } else {
+        }
+        else
+        {
             LOG_INFO("Using SIMULATED radio!\n");
         }
     }
 #endif
 
-// check if the radio chip matches the selected region
+    // check if the radio chip matches the selected region
 
-if((config.lora.region == Config_LoRaConfig_RegionCode_LORA_24) && (!rIf->wideLora())){
-    LOG_WARN("Radio chip does not support 2.4GHz LoRa. Reverting to unset.\n");
-    config.lora.region = Config_LoRaConfig_RegionCode_UNSET;
-    nodeDB.saveToDisk(SEGMENT_CONFIG);
-    if(!rIf->reconfigure()) {
-        LOG_WARN("Reconfigure failed, rebooting\n");
-        screen->startRebootScreen();
-        rebootAtMsec = millis() + 5000;
+    if ((config.lora.region == Config_LoRaConfig_RegionCode_LORA_24) && (!rIf->wideLora()))
+    {
+        LOG_WARN("Radio chip does not support 2.4GHz LoRa. Reverting to unset.\n");
+        config.lora.region = Config_LoRaConfig_RegionCode_UNSET;
+        nodeDB.saveToDisk(SEGMENT_CONFIG);
+        if (!rIf->reconfigure())
+        {
+            LOG_WARN("Reconfigure failed, rebooting\n");
+            screen->startRebootScreen();
+            rebootAtMsec = millis() + 5000;
+        }
     }
-}
 
 #if HAS_WIFI || HAS_ETHERNET
     mqttInit();
@@ -487,7 +518,8 @@ if((config.lora.region == Config_LoRaConfig_RegionCode_LORA_24) && (!rIf->wideLo
 
     if (!rIf)
         RECORD_CRITICALERROR(CriticalErrorCode_NO_RADIO);
-    else {
+    else
+    {
         router->addInterface(rIf);
 
         // Calculate and save the bit rate to myNodeInfo
@@ -532,7 +564,8 @@ void loop()
 
 #ifdef DEBUG_STACK
     static uint32_t lastPrint = 0;
-    if (millis() - lastPrint > 10 * 1000L) {
+    if (millis() - lastPrint > 10 * 1000L)
+    {
         lastPrint = millis();
         meshtastic::printThreadInfo("main");
     }
@@ -550,7 +583,8 @@ void loop()
                   mainController.nextThread->tillRun(millis())); */
 
     // We want to sleep as long as possible here - because it saves power
-    if (!runASAP && loopCanSleep()) {
+    if (!runASAP && loopCanSleep())
+    {
         // if(delayMsec > 100) LOG_DEBUG("sleeping %ld\n", delayMsec);
         mainDelay.delay(delayMsec);
     }
