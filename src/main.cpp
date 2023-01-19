@@ -3,12 +3,12 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "ReliableRouter.h"
 #include "airtime.h"
 #include "buzz.h"
 #include "configuration.h"
 #include "error.h"
 #include "power.h"
-#include "ReliableRouter.h"
 // #include "debug.h"
 #include "FSCommon.h"
 #include "RTC.h"
@@ -27,8 +27,8 @@
 #include <Wire.h>
 // #include <driver/rtc_io.h>
 
-#include "mesh/http/WiFiAPClient.h"
 #include "mesh/eth/ethClient.h"
+#include "mesh/http/WiFiAPClient.h"
 
 #ifdef ARCH_ESP32
 #include "mesh/http/WebServer.h"
@@ -98,7 +98,8 @@ uint32_t serialSinceMsec;
 bool pmu_found;
 
 // Array map of sensor types (as array index) and i2c address as value we'll find in the i2c scan
-uint8_t nodeTelemetrySensorsMap[_TelemetrySensorType_MAX + 1] = { 0 }; // one is enough, missing elements will be initialized to 0 anyway.
+uint8_t nodeTelemetrySensorsMap[_TelemetrySensorType_MAX + 1] = {
+    0}; // one is enough, missing elements will be initialized to 0 anyway.
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
 
@@ -169,7 +170,7 @@ void setup()
 #endif
 
 #ifdef DEBUG_PORT
-        consoleInit(); // Set serial baud rate and init our mesh console
+    consoleInit(); // Set serial baud rate and init our mesh console
 #endif
 
     serialSinceMsec = millis();
@@ -249,12 +250,11 @@ void setup()
     powerStatus->observe(&power->newStatus);
     power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
 
-
 #ifdef LILYGO_TBEAM_S3_CORE
     // In T-Beam-S3-core, the I2C device cannot be scanned before power initialization, otherwise the device will be stuck
     // PCF8563 RTC in tbeam-s3 uses Wire1 to share I2C bus
     Wire1.beginTransmission(PCF8563_RTC);
-    if (Wire1.endTransmission() == 0){
+    if (Wire1.endTransmission() == 0) {
         rtc_found = PCF8563_RTC;
         LOG_INFO("PCF8563 RTC found\n");
     }
@@ -452,18 +452,18 @@ void setup()
     }
 #endif
 
-// check if the radio chip matches the selected region
+    // check if the radio chip matches the selected region
 
-if((config.lora.region == Config_LoRaConfig_RegionCode_LORA_24) && (!rIf->wideLora())){
-    LOG_WARN("Radio chip does not support 2.4GHz LoRa. Reverting to unset.\n");
-    config.lora.region = Config_LoRaConfig_RegionCode_UNSET;
-    nodeDB.saveToDisk(SEGMENT_CONFIG);
-    if(!rIf->reconfigure()) {
-        LOG_WARN("Reconfigure failed, rebooting\n");
-        screen->startRebootScreen();
-        rebootAtMsec = millis() + 5000;
+    if ((config.lora.region == Config_LoRaConfig_RegionCode_LORA_24) && (!rIf->wideLora())) {
+        LOG_WARN("Radio chip does not support 2.4GHz LoRa. Reverting to unset.\n");
+        config.lora.region = Config_LoRaConfig_RegionCode_UNSET;
+        nodeDB.saveToDisk(SEGMENT_CONFIG);
+        if (!rIf->reconfigure()) {
+            LOG_WARN("Reconfigure failed, rebooting\n");
+            screen->startRebootScreen();
+            rebootAtMsec = millis() + 5000;
+        }
     }
-}
 
 #if HAS_WIFI || HAS_ETHERNET
     mqttInit();

@@ -7,15 +7,15 @@
 namespace graphics
 {
 // Noop class for boards without screen.
-class Screen 
+class Screen
 {
   public:
-    explicit Screen(char){}
+    explicit Screen(char) {}
     void onPress() {}
     void setup() {}
     void setOn(bool) {}
-    void print(const char*){}
-    void adjustBrightness(){}
+    void print(const char *) {}
+    void adjustBrightness() {}
     void doDeepSleep() {}
     void forceDisplay() {}
     void startBluetoothPinScreen(uint32_t pin) {}
@@ -23,7 +23,7 @@ class Screen
     void startRebootScreen() {}
     void startFirmwareUpdateScreen() {}
 };
-}
+} // namespace graphics
 
 #else
 #include <cstring>
@@ -49,9 +49,9 @@ class Screen
 #include "commands.h"
 #include "concurrency/LockGuard.h"
 #include "concurrency/OSThread.h"
+#include "mesh/MeshModule.h"
 #include "power.h"
 #include <string>
-#include "mesh/MeshModule.h"
 
 // 0 to 255, though particular variants might define different defaults
 #ifndef BRIGHTNESS_DEFAULT
@@ -132,13 +132,14 @@ class Screen : public concurrency::OSThread
     void setOn(bool on)
     {
         if (!on)
-            handleSetOn(false); // We handle off commands immediately, because they might be called because the CPU is shutting down
+            handleSetOn(
+                false); // We handle off commands immediately, because they might be called because the CPU is shutting down
         else
             enqueueCmd(ScreenCmd{.cmd = on ? Cmd::SET_ON : Cmd::SET_OFF});
     }
 
     /**
-     * Prepare the display for the unit going to the lowest power mode possible.  Most screens will just 
+     * Prepare the display for the unit going to the lowest power mode possible.  Most screens will just
      * poweroff, but eink screens will show a "I'm sleeping" graphic, possibly with a QR code
      */
     void doDeepSleep();
@@ -223,29 +224,33 @@ class Screen : public concurrency::OSThread
         LASTCHAR = ch;
 
         switch (last) { // conversion depending on first UTF8-character
-            case 0xC2: {
-                SKIPREST = false;
-                return (uint8_t)ch;
-            }
-            case 0xC3: {
-                SKIPREST = false;
-                return (uint8_t)(ch | 0xC0);
-            }
-            // map UTF-8 cyrillic chars to it Windows-1251 (CP-1251) ASCII codes
-            // note: in this case we must use compatible font - provided ArialMT_Plain_10/16/24 by 'ThingPulse/esp8266-oled-ssd1306' library
-            // have empty chars for non-latin ASCII symbols
-            case 0xD0: {
-                SKIPREST = false;
-                if (ch == 129) return (uint8_t)(168); // Ё
-                if (ch > 143 && ch < 192) return (uint8_t)(ch + 48);
-                break;
-            }
-            case 0xD1: {
-                SKIPREST = false;
-                if (ch == 145) return (uint8_t)(184); // ё
-                if (ch > 127 && ch < 144) return (uint8_t)(ch + 112);
-                break;
-            }
+        case 0xC2: {
+            SKIPREST = false;
+            return (uint8_t)ch;
+        }
+        case 0xC3: {
+            SKIPREST = false;
+            return (uint8_t)(ch | 0xC0);
+        }
+        // map UTF-8 cyrillic chars to it Windows-1251 (CP-1251) ASCII codes
+        // note: in this case we must use compatible font - provided ArialMT_Plain_10/16/24 by 'ThingPulse/esp8266-oled-ssd1306'
+        // library have empty chars for non-latin ASCII symbols
+        case 0xD0: {
+            SKIPREST = false;
+            if (ch == 129)
+                return (uint8_t)(168); // Ё
+            if (ch > 143 && ch < 192)
+                return (uint8_t)(ch + 48);
+            break;
+        }
+        case 0xD1: {
+            SKIPREST = false;
+            if (ch == 145)
+                return (uint8_t)(184); // ё
+            if (ch > 127 && ch < 144)
+                return (uint8_t)(ch + 112);
+            break;
+        }
         }
 
         // We want to strip out prefix chars for two-byte char formats
