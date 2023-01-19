@@ -42,7 +42,7 @@ void setupModules()
     waypointModule = new WaypointModule();
     textMessageModule = new TextMessageModule();
     traceRouteModule = new TraceRouteModule();
-    
+
     // Note: if the rest of meshtastic doesn't need to explicitly use your module, you do not need to assign the instance
     // to a global variable.
 
