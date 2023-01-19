@@ -347,8 +347,8 @@ QueueStatus RadioLibInterface::getQueueStatus()
                 airTime->logAirtime(RX_ALL_LOG, xmitMsec);
             } else {
                 const PacketHeader *h = (PacketHeader *)radiobuf;
-                if (h->from == 0) // altered packed with "from == 0" can do Remote Node Administration without permission
-                {
+                if (h->from == 0) { // altered packed with "from == 0" can do Remote Node Administration without permission
+                
                     LOG_WARN("ignoring received packet without sender\n");
                     return;
                 }
