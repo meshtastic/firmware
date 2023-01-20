@@ -22,7 +22,7 @@ void TFTDisplay::display(void)
 {
     concurrency::LockGuard g(spiLock);
 
-    uint16_t x,y;
+    uint16_t x, y;
 
     for (y = 0; y < displayHeight; y++) {
         for (x = 0; x < displayWidth; x++) {
