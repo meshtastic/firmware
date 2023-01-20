@@ -5,15 +5,15 @@
 #include "main.h"
 #include "mesh/Channels.h"
 #include "mesh/Router.h"
-#include "mesh/generated/mqtt.pb.h"
-#include "mesh/generated/telemetry.pb.h"
+#include "mesh/generated/meshtastic/mqtt.pb.h"
+#include "mesh/generated/meshtastic/telemetry.pb.h"
 #include "mesh/http/WiFiAPClient.h"
 #include "sleep.h"
 #if HAS_WIFI
 #include <WiFi.h>
 #endif
-#include <assert.h>
 #include "mqtt/JSON.h"
+#include <assert.h>
 
 MQTT *mqtt;
 
@@ -55,11 +55,15 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
             }
             LOG_DEBUG("Looking for Channel name: %s\n", ptr);
             Channel sendChannel = channels.getByName(ptr);
-            LOG_DEBUG("Found Channel name: %s (Index %d)\n", channels.getGlobalId(sendChannel.settings.channel_num), sendChannel.settings.channel_num);
+            LOG_DEBUG("Found Channel name: %s (Index %d)\n", channels.getGlobalId(sendChannel.settings.channel_num),
+                      sendChannel.settings.channel_num);
 
-            if ((json.find("sender") != json.end()) && (json.find("payload") != json.end()) && (json.find("type") != json.end()) && json["type"]->IsString() && (json["type"]->AsString().compare("sendtext") == 0)) {
+            if ((json.find("sender") != json.end()) && (json.find("payload") != json.end()) &&
+                (json.find("type") != json.end()) && json["type"]->IsString() &&
+                (json["type"]->AsString().compare("sendtext") == 0)) {
                 // this is a valid envelope
-                if (json["payload"]->IsString() && json["type"]->IsString() && (json["sender"]->AsString().compare(owner.id) != 0)) {
+                if (json["payload"]->IsString() && json["type"]->IsString() &&
+                    (json["sender"]->AsString().compare(owner.id) != 0)) {
                     std::string jsonPayloadStr = json["payload"]->AsString();
                     LOG_INFO("JSON payload %s, length %u\n", jsonPayloadStr.c_str(), jsonPayloadStr.length());
 
@@ -77,16 +81,20 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
                             LOG_WARN("Received MQTT json payload too long, dropping\n");
                         }
                     } else {
-                        LOG_WARN("Received MQTT json payload on channel %s, but downlink is disabled, dropping\n", sendChannel.settings.name);
+                        LOG_WARN("Received MQTT json payload on channel %s, but downlink is disabled, dropping\n",
+                                 sendChannel.settings.name);
                     }
                 } else {
                     LOG_DEBUG("JSON Ignoring downlink message we originally sent.\n");
                 }
-            } else if ((json.find("sender") != json.end()) && (json.find("payload") != json.end()) && (json.find("type") != json.end()) && json["type"]->IsString() && (json["type"]->AsString().compare("sendposition") == 0)) {
-                //invent the "sendposition" type for a valid envelope
-                if (json["payload"]->IsObject() && json["type"]->IsString() && (json["sender"]->AsString().compare(owner.id) != 0)) {
+            } else if ((json.find("sender") != json.end()) && (json.find("payload") != json.end()) &&
+                       (json.find("type") != json.end()) && json["type"]->IsString() &&
+                       (json["type"]->AsString().compare("sendposition") == 0)) {
+                // invent the "sendposition" type for a valid envelope
+                if (json["payload"]->IsObject() && json["type"]->IsString() &&
+                    (json["sender"]->AsString().compare(owner.id) != 0)) {
                     JSONObject posit;
-                    posit = json["payload"]->AsObject(); //get nested JSON Position
+                    posit = json["payload"]->AsObject(); // get nested JSON Position
                     Position pos = Position_init_default;
                     pos.latitude_i = posit["latitude_i"]->AsNumber();
                     pos.longitude_i = posit["longitude_i"]->AsNumber();
@@ -98,15 +106,17 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
                     p->decoded.portnum = PortNum_POSITION_APP;
                     p->channel = sendChannel.settings.channel_num;
                     if (sendChannel.settings.downlink_enabled) {
-                        p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &Position_msg, &pos); //make the Data protobuf from position
+                        p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes),
+                                                                     &Position_msg, &pos); // make the Data protobuf from position
                         service.sendToMesh(p, RX_SRC_LOCAL);
                     } else {
-                        LOG_WARN("Received MQTT json payload on channel %s, but downlink is disabled, dropping\n", sendChannel.settings.name);
+                        LOG_WARN("Received MQTT json payload on channel %s, but downlink is disabled, dropping\n",
+                                 sendChannel.settings.name);
                     }
                 } else {
                     LOG_DEBUG("JSON Ignoring downlink message we originally sent.\n");
                 }
-            } else{
+            } else {
                 LOG_ERROR("JSON Received payload on MQTT but not a valid envelope\n");
             }
         } else {
@@ -118,7 +128,7 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
         if (!pb_decode_from_bytes(payload, length, &ServiceEnvelope_msg, &e)) {
             LOG_ERROR("Invalid MQTT service envelope, topic %s, len %u!\n", topic, length);
             return;
-        }else {
+        } else {
             if (strcmp(e.gateway_id, owner.id) == 0)
                 LOG_INFO("Ignoring downlink message we originally sent.\n");
             else {
@@ -148,7 +158,7 @@ void mqttInit()
 
 MQTT::MQTT() : concurrency::OSThread("mqtt"), pubSub(mqttClient), mqttQueue(MAX_MQTT_QUEUE)
 {
-    if(moduleConfig.mqtt.enabled) {
+    if (moduleConfig.mqtt.enabled) {
 
         assert(!mqtt);
         mqtt = this;
@@ -170,7 +180,7 @@ void MQTT::reconnect()
 {
     if (wantsLink()) {
         // Defaults
-        int serverPort = 1883;  
+        int serverPort = 1883;
         const char *serverAddr = default_mqtt_address;
         const char *mqttUsername = default_mqtt_username;
         const char *mqttPassword = default_mqtt_password;
@@ -192,7 +202,8 @@ void MQTT::reconnect()
         pubSub.setServer(serverAddr, serverPort);
         pubSub.setBufferSize(512);
 
-        LOG_INFO("Connecting to MQTT server %s, port: %d, username: %s, password: %s\n", serverAddr, serverPort, mqttUsername, mqttPassword);
+        LOG_INFO("Connecting to MQTT server %s, port: %d, username: %s, password: %s\n", serverAddr, serverPort, mqttUsername,
+                 mqttPassword);
         auto myStatus = (statusTopic + owner.id);
         bool connected = pubSub.connect(owner.id, mqttUsername, mqttPassword, myStatus.c_str(), 1, true, "offline");
         if (connected) {
@@ -208,7 +219,7 @@ void MQTT::reconnect()
             sendSubscriptions();
         } else {
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
-            LOG_ERROR("Failed to contact MQTT server (%d/5)...\n",reconnectCount + 1);
+            LOG_ERROR("Failed to contact MQTT server (%d/5)...\n", reconnectCount + 1);
             if (reconnectCount >= 4) {
                 needReconnect = true;
                 wifiReconnect->setIntervalFromNow(0);
@@ -216,7 +227,7 @@ void MQTT::reconnect()
             } else {
                 reconnectCount++;
             }
-            
+
 #endif
         }
     }
@@ -267,7 +278,7 @@ bool MQTT::wantsLink() const
 
 int32_t MQTT::runOnce()
 {
-    if(!moduleConfig.mqtt.enabled) {
+    if (!moduleConfig.mqtt.enabled) {
         return disable();
     }
     bool wantConnection = wantsLink();
@@ -277,7 +288,8 @@ int32_t MQTT::runOnce()
         if (wantConnection) {
             reconnect();
 
-            // If we succeeded, empty the queue one by one and start reading rapidly, else try again in 30 seconds (TCP connections are EXPENSIVE so try rarely)
+            // If we succeeded, empty the queue one by one and start reading rapidly, else try again in 30 seconds (TCP
+            // connections are EXPENSIVE so try rarely)
             if (pubSub.connected()) {
                 if (!mqttQueue.isEmpty()) {
                     // FIXME - this size calculation is super sloppy, but it will go away once we dynamically alloc meshpackets
@@ -295,7 +307,8 @@ int32_t MQTT::runOnce()
                         auto jsonString = this->downstreamPacketToJson(env->packet);
                         if (jsonString.length() != 0) {
                             String topicJson = jsonTopic + env->channel_id + "/" + owner.id;
-                            LOG_INFO("JSON publish message to %s, %u bytes: %s\n", topicJson.c_str(), jsonString.length(), jsonString.c_str());
+                            LOG_INFO("JSON publish message to %s, %u bytes: %s\n", topicJson.c_str(), jsonString.length(),
+                                     jsonString.c_str());
                             pubSub.publish(topicJson.c_str(), jsonString.c_str(), false);
                         }
                     }
@@ -348,7 +361,8 @@ void MQTT::onSend(const MeshPacket &mp, ChannelIndex chIndex)
                 auto jsonString = this->downstreamPacketToJson((MeshPacket *)&mp);
                 if (jsonString.length() != 0) {
                     String topicJson = jsonTopic + channelId + "/" + owner.id;
-                    LOG_INFO("JSON publish message to %s, %u bytes: %s\n", topicJson.c_str(), jsonString.length(), jsonString.c_str());
+                    LOG_INFO("JSON publish message to %s, %u bytes: %s\n", topicJson.c_str(), jsonString.length(),
+                             jsonString.c_str());
                     pubSub.publish(topicJson.c_str(), jsonString.c_str(), false);
                 }
             }
@@ -453,11 +467,17 @@ std::string MQTT::downstreamPacketToJson(MeshPacket *mp)
             memset(&scratch, 0, sizeof(scratch));
             if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &Position_msg, &scratch)) {
                 decoded = &scratch;
-                if((int)decoded->time){msgPayload["time"] = new JSONValue((int)decoded->time);}
-                if ((int)decoded->timestamp){msgPayload["timestamp"] = new JSONValue((int)decoded->timestamp);}
+                if ((int)decoded->time) {
+                    msgPayload["time"] = new JSONValue((int)decoded->time);
+                }
+                if ((int)decoded->timestamp) {
+                    msgPayload["timestamp"] = new JSONValue((int)decoded->timestamp);
+                }
                 msgPayload["latitude_i"] = new JSONValue((int)decoded->latitude_i);
                 msgPayload["longitude_i"] = new JSONValue((int)decoded->longitude_i);
-                if((int)decoded->altitude){msgPayload["altitude"] = new JSONValue((int)decoded->altitude);}
+                if ((int)decoded->altitude) {
+                    msgPayload["altitude"] = new JSONValue((int)decoded->altitude);
+                }
                 jsonObj["payload"] = new JSONValue(msgPayload);
             } else {
                 LOG_ERROR("Error decoding protobuf for position message!\n");

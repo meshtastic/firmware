@@ -1,9 +1,9 @@
 #pragma once
 
-#include "mesh/generated/mesh.pb.h"
-#include "mesh/generated/localonly.pb.h"
-#include "mesh/generated/deviceonly.pb.h"
-#include "mesh/generated/admin.pb.h"
+#include "mesh/generated/meshtastic/admin.pb.h"
+#include "mesh/generated/meshtastic/deviceonly.pb.h"
+#include "mesh/generated/meshtastic/localonly.pb.h"
+#include "mesh/generated/meshtastic/mesh.pb.h"
 
 // this file defines constants which come from mesh.options
 
@@ -11,8 +11,8 @@
 #define member_size(type, member) sizeof(((type *)0)->member)
 
 /// max number of packets which can be waiting for delivery to android - note, this value comes from mesh.options protobuf
-// FIXME - max_count is actually 32 but we save/load this as one long string of preencoded MeshPacket bytes - not a big array in RAM
-// #define MAX_RX_TOPHONE (member_size(DeviceState, receive_queue) / member_size(DeviceState, receive_queue[0]))
+// FIXME - max_count is actually 32 but we save/load this as one long string of preencoded MeshPacket bytes - not a big array in
+// RAM #define MAX_RX_TOPHONE (member_size(DeviceState, receive_queue) / member_size(DeviceState, receive_queue[0]))
 #define MAX_RX_TOPHONE 32
 
 /// max number of nodes allowed in the mesh
@@ -36,7 +36,7 @@ bool writecb(pb_ostream_t *stream, const uint8_t *buf, size_t count);
 
 /** is_in_repeated is a macro/function that returns true if a specified word appears in a repeated protobuf array.
  * It relies on the following naming conventions from nanopb:
- * 
+ *
  * pb_size_t ignore_incoming_count;
  * uint32_t ignore_incoming[3];
  */

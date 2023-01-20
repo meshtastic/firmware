@@ -1,5 +1,5 @@
 #pragma once
-#include "../mesh/generated/telemetry.pb.h"
+#include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "NodeDB.h"
 #include "main.h"
 
@@ -19,7 +19,8 @@ class TelemetrySensor
     TelemetrySensorType sensorType;
     unsigned status;
 
-    int32_t initI2CSensor() {
+    int32_t initI2CSensor()
+    {
         if (!status) {
             LOG_WARN("Could not connect to detected %s sensor.\n Removing from nodeTelemetrySensorsMap.\n", sensorName);
             nodeTelemetrySensorsMap[sensorType] = 0;
@@ -32,9 +33,7 @@ class TelemetrySensor
     virtual void setup();
 
   public:
-    bool hasSensor() { 
-        return sensorType < sizeof(nodeTelemetrySensorsMap) && nodeTelemetrySensorsMap[sensorType] > 0; 
-    }
+    bool hasSensor() { return sensorType < sizeof(nodeTelemetrySensorsMap) && nodeTelemetrySensorsMap[sensorType] > 0; }
 
     virtual int32_t runOnce() = 0;
     virtual bool getMetrics(Telemetry *measurement) = 0;
