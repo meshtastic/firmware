@@ -43,6 +43,7 @@ Periodic *wifiReconnect;
 
 static int32_t reconnectWiFi()
 {
+    int connectionAttempts = 0;
     const char *wifiName = config.network.wifi_ssid;
     const char *wifiPsw = config.network.wifi_psk;
 
@@ -84,8 +85,14 @@ static int32_t reconnectWiFi()
 #endif
 
     if (config.network.wifi_enabled && !WiFi.isConnected()) {
+        connectionAttempts++;
+        //After 120 seconds it of no connection to wifi it will disable wifi
+        if(connectionAttempts > 24) {
+            deinitWifi();
+        }
         return 1000; // check once per second
     } else {
+        connectionAttempts = 0;
         return 300000; // every 5 minutes
     }
 }
