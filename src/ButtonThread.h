@@ -115,8 +115,7 @@ class ButtonThread : public concurrency::OSThread
     {
         // LOG_DEBUG("press!\n");
 #ifdef BUTTON_PIN
-        if ((BUTTON_PIN != moduleConfig.canned_message.inputbroker_pin_press) ||
-            !moduleConfig.canned_message.enabled) {
+        if ((BUTTON_PIN != moduleConfig.canned_message.inputbroker_pin_press) || !moduleConfig.canned_message.enabled) {
             powerFSM.trigger(EVENT_PRESS);
         }
 #endif
@@ -144,10 +143,10 @@ class ButtonThread : public concurrency::OSThread
 #ifdef PIN_LED1
                 ledOff(PIN_LED1);
 #endif
-#ifdef PIN_LED2        
+#ifdef PIN_LED2
                 ledOff(PIN_LED2);
 #endif
-#ifdef PIN_LED3        
+#ifdef PIN_LED3
                 ledOff(PIN_LED3);
 #endif
                 shutdown_on_long_stop = true;
@@ -160,28 +159,25 @@ class ButtonThread : public concurrency::OSThread
 
     static void userButtonDoublePressed()
     {
-    #if defined(USE_EINK) && defined(PIN_EINK_EN)
+#if defined(USE_EINK) && defined(PIN_EINK_EN)
         digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
-    #endif
-    #if defined(GPS_POWER_TOGGLE)
-        if(config.position.gps_enabled)
-        {
-        LOG_DEBUG("Flag set to false for gps power\n");
-        } 
-        else 
-        {
-        LOG_DEBUG("Flag set to true to restore power\n");
-        }
-    config.position.gps_enabled = !(config.position.gps_enabled);
-    doGPSpowersave(config.position.gps_enabled);
-    #endif
+#endif
+        screen->print("Sent ad-hoc ping\n");
+        service.refreshMyNodeInfo();
+        service.sendNetworkPing(NODENUM_BROADCAST, true);
     }
 
     static void userButtonMultiPressed()
     {
-        screen->print("Sent ad-hoc ping\n");
-        service.refreshMyNodeInfo();
-        service.sendNetworkPing(NODENUM_BROADCAST, true);
+#if defined(GPS_POWER_TOGGLE)
+        if (config.position.gps_enabled) {
+            LOG_DEBUG("Flag set to false for gps power\n");
+        } else {
+            LOG_DEBUG("Flag set to true to restore power\n");
+        }
+        config.position.gps_enabled = !(config.position.gps_enabled);
+        doGPSpowersave(config.position.gps_enabled);
+#endif
     }
 
     static void userButtonPressedLongStart()

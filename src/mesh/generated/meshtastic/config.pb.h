@@ -105,7 +105,9 @@ typedef enum _Config_DisplayConfig_OledType {
     /* Default / Auto */
     Config_DisplayConfig_OledType_OLED_SSD1306 = 1,
     /* Default / Auto */
-    Config_DisplayConfig_OledType_OLED_SH1106 = 2
+    Config_DisplayConfig_OledType_OLED_SH1106 = 2,
+    /* Can not be auto detected but set by proto. Used for 128x128 screens */
+    Config_DisplayConfig_OledType_OLED_SH1107 = 3
 } Config_DisplayConfig_OledType;
 
 typedef enum _Config_DisplayConfig_DisplayMode {
@@ -435,8 +437,8 @@ extern "C" {
 #define _Config_DisplayConfig_DisplayUnits_ARRAYSIZE ((Config_DisplayConfig_DisplayUnits)(Config_DisplayConfig_DisplayUnits_IMPERIAL+1))
 
 #define _Config_DisplayConfig_OledType_MIN Config_DisplayConfig_OledType_OLED_AUTO
-#define _Config_DisplayConfig_OledType_MAX Config_DisplayConfig_OledType_OLED_SH1106
-#define _Config_DisplayConfig_OledType_ARRAYSIZE ((Config_DisplayConfig_OledType)(Config_DisplayConfig_OledType_OLED_SH1106+1))
+#define _Config_DisplayConfig_OledType_MAX Config_DisplayConfig_OledType_OLED_SH1107
+#define _Config_DisplayConfig_OledType_ARRAYSIZE ((Config_DisplayConfig_OledType)(Config_DisplayConfig_OledType_OLED_SH1107+1))
 
 #define _Config_DisplayConfig_DisplayMode_MIN Config_DisplayConfig_DisplayMode_DEFAULT
 #define _Config_DisplayConfig_DisplayMode_MAX Config_DisplayConfig_DisplayMode_COLOR
