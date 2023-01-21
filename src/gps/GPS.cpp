@@ -438,6 +438,8 @@ int32_t GPS::runOnce()
                 LOG_DEBUG("GPS is not communicating, trying factory reset on next bootup.\n");
                 devicestate.did_gps_reset = false;
                 nodeDB.saveDeviceStateToDisk();
+                prepareDeepSleep();
+                forceWake(false);
             }
         }
     }
