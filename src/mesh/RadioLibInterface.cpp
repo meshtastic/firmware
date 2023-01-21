@@ -347,9 +347,13 @@ QueueStatus RadioLibInterface::getQueueStatus()
                 airTime->logAirtime(RX_ALL_LOG, xmitMsec);
             } else {
                 const PacketHeader *h = (PacketHeader *)radiobuf;
-
                 rxGood++;
-
+                // altered packet with "from == 0" can do Remote Node Administration without permission
+                if (h->from == 0) {
+                    LOG_WARN("ignoring received packet without sender\n");
+                    return;
+                }
+                
                 // Note: we deliver _all_ packets to our router (i.e. our interface is intentionally promiscuous).
                 // This allows the router and other apps on our node to sniff packets (usually routing) between other
                 // nodes.
