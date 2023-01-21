@@ -134,14 +134,14 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
 {
 #ifdef ARCH_PORTDUINO
     // Simulates device is receiving a packet via the LoRa chip
-    if (p.decoded.portnum == PortNum_SIMULATOR_APP) {
+    if (p.decoded.portnum == meshtastic_PortNum_SIMULATOR_APP) {
         // Simulator packet (=Compressed packet) is encapsulated in a MeshPacket, so need to unwrap first
-        Compressed scratch;
-        Compressed *decoded = NULL;
-        if (p.which_payload_variant == MeshPacket_decoded_tag) {
+        meshtastic_Compressed scratch;
+        meshtastic_Compressed *decoded = NULL;
+        if (p.which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
             memset(&scratch, 0, sizeof(scratch));
             p.decoded.payload.size =
-                pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &Compressed_msg, &scratch);
+                pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_Compressed_msg, &scratch);
             if (p.decoded.payload.size) {
                 decoded = &scratch;
                 // Extract the original payload and replace
