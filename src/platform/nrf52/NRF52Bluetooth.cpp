@@ -168,7 +168,8 @@ void setupMeshService(void)
     // any characteristic(s) within that service definition.. Calling .begin() on
     // a BLECharacteristic will cause it to be added to the last BLEService that
     // was 'begin()'ed!
-    auto secMode = config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN ? SECMODE_OPEN : SECMODE_ENC_NO_MITM;
+    auto secMode =
+        config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN ? SECMODE_OPEN : SECMODE_ENC_NO_MITM;
 
     fromNum.setProperties(CHR_PROPS_NOTIFY | CHR_PROPS_READ);
     fromNum.setPermission(secMode, SECMODE_NO_ACCESS); // FIXME, secure this!!!
@@ -226,8 +227,9 @@ void NRF52Bluetooth::setup()
     Bluefruit.ScanResponse.clearData();
 
     if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
-        configuredPasskey = config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN ? config.bluetooth.fixed_pin
-                                                                                                  : random(100000, 999999);
+        configuredPasskey = config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN
+                                ? config.bluetooth.fixed_pin
+                                : random(100000, 999999);
         auto pinString = std::to_string(configuredPasskey);
         LOG_INFO("Bluetooth pin set to '%i'\n", configuredPasskey);
         Bluefruit.Security.setPIN(pinString.c_str());

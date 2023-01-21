@@ -68,7 +68,8 @@ class MeshModule
 
     static std::vector<MeshModule *> GetMeshModulesWithUIFrames();
     static void observeUIEvents(Observer<const UIFrameEvent *> *observer);
-    static AdminMessageHandleResult handleAdminMessageForAllPlugins(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
+    static AdminMessageHandleResult handleAdminMessageForAllPlugins(const meshtastic_MeshPacket &mp,
+                                                                    meshtastic_AdminMessage *request,
                                                                     meshtastic_AdminMessage *response);
 #if HAS_SCREEN
     virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -171,7 +172,8 @@ class MeshModule
      *   HANDLED if message was handled
      *   HANDLED_WITH_RESPONSE if a response is also prepared and to be sent.
      */
-    virtual AdminMessageHandleResult handleAdminMessageForModule(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
+    virtual AdminMessageHandleResult handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
+                                                                 meshtastic_AdminMessage *request,
                                                                  meshtastic_AdminMessage *response)
     {
         return AdminMessageHandleResult::NOT_HANDLED;

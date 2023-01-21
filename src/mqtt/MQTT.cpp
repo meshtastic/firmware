@@ -106,8 +106,9 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
                     p->decoded.portnum = meshtastic_PortNum_POSITION_APP;
                     p->channel = sendChannel.settings.channel_num;
                     if (sendChannel.settings.downlink_enabled) {
-                        p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes),
-                                                                     &meshtastic_Position_msg, &pos); // make the Data protobuf from position
+                        p->decoded.payload.size =
+                            pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes),
+                                               &meshtastic_Position_msg, &pos); // make the Data protobuf from position
                         service.sendToMesh(p, RX_SRC_LOCAL);
                     } else {
                         LOG_WARN("Received MQTT json payload on channel %s, but downlink is disabled, dropping\n",
