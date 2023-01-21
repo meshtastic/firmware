@@ -36,19 +36,19 @@
 
 // This string must exactly match the case used in release file names or the android updater won't work
 #ifdef ARDUINO_NRF52840_PCA10056
-#define HW_VENDOR HardwareModel_NRF52840DK
+#define HW_VENDOR meshtastic_HardwareModel_NRF52840DK
 #elif defined(ARDUINO_NRF52840_PPR)
-#define HW_VENDOR HardwareModel_PPR
+#define HW_VENDOR meshtastic_HardwareModel_PPR
 #elif defined(RAK4630)
-#define HW_VENDOR HardwareModel_RAK4631
+#define HW_VENDOR meshtastic_HardwareModel_RAK4631
 #elif defined(TTGO_T_ECHO)
-#define HW_VENDOR HardwareModel_T_ECHO
+#define HW_VENDOR meshtastic_HardwareModel_T_ECHO
 #elif defined(NORDIC_PCA10059)
-#define HW_VENDOR HardwareModel_NRF52840_PCA10059
+#define HW_VENDOR meshtastic_HardwareModel_NRF52840_PCA10059
 #elif defined(PRIVATE_HW) || defined(FEATHER_DIY)
-#define HW_VENDOR HardwareModel_PRIVATE_HW
+#define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #else
-#define HW_VENDOR HardwareModel_NRF52_UNKNOWN
+#define HW_VENDOR meshtastic_HardwareModel_NRF52_UNKNOWN
 #endif
 
 //

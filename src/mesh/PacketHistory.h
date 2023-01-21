@@ -41,5 +41,5 @@ class PacketHistory
      *
      * @param withUpdate if true and not found we add an entry to recentPackets
      */
-    bool wasSeenRecently(const MeshPacket *p, bool withUpdate = true);
+    bool wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpdate = true);
 };

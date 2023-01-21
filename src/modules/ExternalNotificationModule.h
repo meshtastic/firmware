@@ -40,7 +40,7 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
 
     void stopNow();
 
-    void handleGetRingtone(const MeshPacket &req, AdminMessage *response);
+    void handleGetRingtone(const meshtastic_MeshPacket &req, meshtastic_AdminMessage *response);
     void handleSetRingtone(const char *from_msg);
 
   protected:
@@ -48,14 +48,14 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
     @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for
     it
     */
-    virtual ProcessMessage handleReceived(const MeshPacket &mp) override;
+    virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
 
     virtual int32_t runOnce() override;
 
     bool isNagging = false;
 
-    virtual AdminMessageHandleResult handleAdminMessageForModule(const MeshPacket &mp, AdminMessage *request,
-                                                                 AdminMessage *response) override;
+    virtual AdminMessageHandleResult handleAdminMessageForModule(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
+                                                                 meshtastic_AdminMessage *response) override;
 };
 
 extern ExternalNotificationModule *externalNotificationModule;

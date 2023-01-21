@@ -486,7 +486,7 @@ int32_t GPS::runOnce()
                 if (hasValidLocation) {
                     LOG_DEBUG("hasValidLocation FALLING EDGE (last read: %d)\n", gotLoc);
                 }
-                p = Position_init_default;
+                p = meshtastic_Position_init_default;
                 hasValidLocation = false;
             }
 

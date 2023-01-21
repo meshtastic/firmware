@@ -13,5 +13,5 @@ class INA260Sensor : virtual public TelemetrySensor
   public:
     INA260Sensor();
     virtual int32_t runOnce() override;
-    virtual bool getMetrics(Telemetry *measurement) override;
+    virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
 };

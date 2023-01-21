@@ -5,14 +5,14 @@
 #include <algorithm>
 
 /// @return the priority of the specified packet
-inline uint32_t getPriority(const MeshPacket *p)
+inline uint32_t getPriority(const meshtastic_MeshPacket *p)
 {
     auto pri = p->priority;
     return pri;
 }
 
 /// @return "true" if "p1" is ordered before "p2"
-bool CompareMeshPacketFunc(const MeshPacket *p1, const MeshPacket *p2)
+bool CompareMeshPacketFunc(const meshtastic_MeshPacket *p1, const meshtastic_MeshPacket *p2)
 {
     assert(p1 && p2);
     auto p1p = getPriority(p1), p2p = getPriority(p2);
@@ -34,21 +34,21 @@ bool MeshPacketQueue::empty()
 /**
  * Some clients might not properly set priority, therefore we fix it here.
  */
-void fixPriority(MeshPacket *p)
+void fixPriority(meshtastic_MeshPacket *p)
 {
     // We might receive acks from other nodes (and since generated remotely, they won't have priority assigned.  Check for that
     // and fix it
-    if (p->priority == MeshPacket_Priority_UNSET) {
+    if (p->priority == meshtastic_MeshPacket_Priority_UNSET) {
         // if acks give high priority
         // if a reliable message give a bit higher default priority
-        p->priority = (p->decoded.portnum == PortNum_ROUTING_APP)
-                          ? MeshPacket_Priority_ACK
-                          : (p->want_ack ? MeshPacket_Priority_RELIABLE : MeshPacket_Priority_DEFAULT);
+        p->priority = (p->decoded.portnum == meshtastic_PortNum_ROUTING_APP)
+                          ? meshtastic_MeshPacket_Priority_ACK
+                          : (p->want_ack ? meshtastic_MeshPacket_Priority_RELIABLE : meshtastic_MeshPacket_Priority_DEFAULT);
     }
 }
 
 /** enqueue a packet, return false if full */
-bool MeshPacketQueue::enqueue(MeshPacket *p)
+bool MeshPacketQueue::enqueue(meshtastic_MeshPacket *p)
 {
     fixPriority(p);
 
@@ -62,7 +62,7 @@ bool MeshPacketQueue::enqueue(MeshPacket *p)
     return true;
 }
 
-MeshPacket *MeshPacketQueue::dequeue()
+meshtastic_MeshPacket *MeshPacketQueue::dequeue()
 {
     if (empty()) {
         return NULL;
@@ -75,7 +75,7 @@ MeshPacket *MeshPacketQueue::dequeue()
     return p;
 }
 
-MeshPacket *MeshPacketQueue::getFront()
+meshtastic_MeshPacket *MeshPacketQueue::getFront()
 {
     if (empty()) {
         return NULL;
@@ -86,7 +86,7 @@ MeshPacket *MeshPacketQueue::getFront()
 }
 
 /** Attempt to find and remove a packet from this queue.  Returns a pointer to the removed packet, or NULL if not found */
-MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id)
+meshtastic_MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id)
 {
     for (auto it = queue.begin(); it != queue.end(); it++) {
         auto p = (*it);
@@ -101,7 +101,7 @@ MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id)
 }
 
 /** Attempt to find and remove a packet from this queue.  Returns the packet which was removed from the queue */
-bool MeshPacketQueue::replaceLowerPriorityPacket(MeshPacket *p)
+bool MeshPacketQueue::replaceLowerPriorityPacket(meshtastic_MeshPacket *p)
 {
     std::sort_heap(queue.begin(), queue.end(), &CompareMeshPacketFunc); // sort ascending based on priority (0 -> 127)
 

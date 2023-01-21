@@ -63,7 +63,7 @@ template <class T> class SX126xInterface : public RadioLibInterface
     /**
      * Add SNR data to received messages
      */
-    virtual void addReceiveMetadata(MeshPacket *mp) override;
+    virtual void addReceiveMetadata(meshtastic_MeshPacket *mp) override;
 
     virtual void setStandby() override;
 

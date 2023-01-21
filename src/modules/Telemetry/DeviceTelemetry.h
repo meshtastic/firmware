@@ -5,11 +5,11 @@
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
-class DeviceTelemetryModule : private concurrency::OSThread, public ProtobufModule<Telemetry>
+class DeviceTelemetryModule : private concurrency::OSThread, public ProtobufModule<meshtastic_Telemetry>
 {
   public:
     DeviceTelemetryModule()
-        : concurrency::OSThread("DeviceTelemetryModule"), ProtobufModule("DeviceTelemetry", PortNum_TELEMETRY_APP, &Telemetry_msg)
+        : concurrency::OSThread("DeviceTelemetryModule"), ProtobufModule("DeviceTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
         lastMeasurementPacket = nullptr;
         setIntervalFromNow(10 * 1000);
@@ -20,7 +20,7 @@ class DeviceTelemetryModule : private concurrency::OSThread, public ProtobufModu
     /** Called to handle a particular incoming message
     @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
     */
-    virtual bool handleReceivedProtobuf(const MeshPacket &mp, Telemetry *p) override;
+    virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *p) override;
     virtual int32_t runOnce() override;
     /**
      * Send our Telemetry into the mesh
@@ -30,5 +30,5 @@ class DeviceTelemetryModule : private concurrency::OSThread, public ProtobufModu
   private:
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute
     uint32_t lastSentToMesh = 0;
-    const MeshPacket *lastMeasurementPacket;
+    const meshtastic_MeshPacket *lastMeasurementPacket;
 };

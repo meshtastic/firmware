@@ -102,7 +102,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy, SPIClass &spi,
                       PhysicalLayer *iface = NULL);
 
-    virtual ErrorCode send(MeshPacket *p) override;
+    virtual ErrorCode send(meshtastic_MeshPacket *p) override;
 
     /**
      * Return true if we think the board can go to sleep (i.e. our tx queue is empty, we are not sending or receiving)
@@ -150,9 +150,9 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** start an immediate transmit
      *  This method is virtual so subclasses can hook as needed, subclasses should not call directly
      */
-    virtual void startSend(MeshPacket *txp);
+    virtual void startSend(meshtastic_MeshPacket *txp);
 
-    QueueStatus getQueueStatus();
+    meshtastic_QueueStatus getQueueStatus();
 
   protected:
     /** Do any hardware setup needed on entry into send configuration for the radio.  Subclasses can customize */
@@ -173,7 +173,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /**
      * Add SNR data to received messages
      */
-    virtual void addReceiveMetadata(MeshPacket *mp) = 0;
+    virtual void addReceiveMetadata(meshtastic_MeshPacket *mp) = 0;
 
     virtual void setStandby() = 0;
 };

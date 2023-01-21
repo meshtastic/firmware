@@ -64,12 +64,12 @@ class MeshModule
 
     /** For use only by MeshService
      */
-    static void callPlugins(const MeshPacket &mp, RxSource src = RX_SRC_RADIO);
+    static void callPlugins(const meshtastic_MeshPacket &mp, RxSource src = RX_SRC_RADIO);
 
     static std::vector<MeshModule *> GetMeshModulesWithUIFrames();
     static void observeUIEvents(Observer<const UIFrameEvent *> *observer);
-    static AdminMessageHandleResult handleAdminMessageForAllPlugins(const MeshPacket &mp, AdminMessage *request,
-                                                                    AdminMessage *response);
+    static AdminMessageHandleResult handleAdminMessageForAllPlugins(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
+                                                                    meshtastic_AdminMessage *response);
 #if HAS_SCREEN
     virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
     {
@@ -108,12 +108,12 @@ class MeshModule
      * Note: this can be static because we are guaranteed to be processing only one
      * plumodulegin at a time.
      */
-    static const MeshPacket *currentRequest;
+    static const meshtastic_MeshPacket *currentRequest;
 
     /**
      * If your handler wants to send a response, simply set currentReply and it will be sent at the end of response handling.
      */
-    MeshPacket *myReply = NULL;
+    meshtastic_MeshPacket *myReply = NULL;
 
     /**
      * Initialize your module.  This setup function is called once after all hardware and mesh protocol layers have
@@ -124,14 +124,14 @@ class MeshModule
     /**
      * @return true if you want to receive the specified portnum
      */
-    virtual bool wantPacket(const MeshPacket *p) = 0;
+    virtual bool wantPacket(const meshtastic_MeshPacket *p) = 0;
 
     /** Called to handle a particular incoming message
 
     @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for
     it
     */
-    virtual ProcessMessage handleReceived(const MeshPacket &mp)
+    virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp)
     {
         return ProcessMessage::CONTINUE;
     }
@@ -142,7 +142,7 @@ class MeshModule
      * Note: most implementers don't need to override this, instead: If while handling a request you have a reply, just set
      * the protected reply field in this instance.
      * */
-    virtual MeshPacket *allocReply();
+    virtual meshtastic_MeshPacket *allocReply();
 
     /***
      * @return true if you want to be alloced a UI screen frame
@@ -156,10 +156,10 @@ class MeshModule
         return NULL;
     }
 
-    MeshPacket *allocAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex);
+    meshtastic_MeshPacket *allocAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex);
 
     /// Send an error response for the specified packet.
-    MeshPacket *allocErrorResponse(Routing_Error err, const MeshPacket *p);
+    meshtastic_MeshPacket *allocErrorResponse(meshtastic_Routing_Error err, const meshtastic_MeshPacket *p);
 
     /**
      * @brief An admin message arrived to AdminModule. Module was asked whether it want to handle the request.
@@ -171,8 +171,8 @@ class MeshModule
      *   HANDLED if message was handled
      *   HANDLED_WITH_RESPONSE if a response is also prepared and to be sent.
      */
-    virtual AdminMessageHandleResult handleAdminMessageForModule(const MeshPacket &mp, AdminMessage *request,
-                                                                 AdminMessage *response)
+    virtual AdminMessageHandleResult handleAdminMessageForModule(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
+                                                                 meshtastic_AdminMessage *response)
     {
         return AdminMessageHandleResult::NOT_HANDLED;
     };
@@ -182,7 +182,7 @@ class MeshModule
      * If any of the current chain of modules has already sent a reply, it will be here.  This is useful to allow
      * the RoutingModule to avoid sending redundant acks
      */
-    static MeshPacket *currentReply;
+    static meshtastic_MeshPacket *currentReply;
 
     friend class ReliableRouter;
 
@@ -190,10 +190,10 @@ class MeshModule
      * so that subclasses can (optionally) send a response back to the original sender.  This method calls allocReply()
      * to generate the reply message, and if !NULL that message will be delivered to whoever sent req
      */
-    void sendResponse(const MeshPacket &req);
+    void sendResponse(const meshtastic_MeshPacket &req);
 };
 
 /** set the destination and packet parameters of packet p intended as a reply to a particular "to" packet
  * This ensures that if the request packet was sent reliably, the reply is sent that way as well.
  */
-void setReplyTo(MeshPacket *p, const MeshPacket &to);
+void setReplyTo(meshtastic_MeshPacket *p, const meshtastic_MeshPacket &to);

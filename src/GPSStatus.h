@@ -22,13 +22,13 @@ class GPSStatus : public Status
 
     bool isPowerSaving = false; // Are we in power saving state
 
-    Position p = Position_init_default;
+    meshtastic_Position p = meshtastic_Position_init_default;
 
   public:
     GPSStatus() { statusType = STATUS_TYPE_GPS; }
 
     // preferred method
-    GPSStatus(bool hasLock, bool isConnected, bool isPowerSaving, const Position &pos) : Status()
+    GPSStatus(bool hasLock, bool isConnected, bool isPowerSaving, const meshtastic_Position &pos) : Status()
     {
         this->hasLock = hasLock;
         this->isConnected = isConnected;
@@ -55,7 +55,7 @@ class GPSStatus : public Status
 #ifdef GPS_EXTRAVERBOSE
             LOG_WARN("Using fixed latitude\n");
 #endif
-            NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
+            meshtastic_NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
             return node->position.latitude_i;
         } else {
             return p.latitude_i;
@@ -68,7 +68,7 @@ class GPSStatus : public Status
 #ifdef GPS_EXTRAVERBOSE
             LOG_WARN("Using fixed longitude\n");
 #endif
-            NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
+            meshtastic_NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
             return node->position.longitude_i;
         } else {
             return p.longitude_i;
@@ -81,7 +81,7 @@ class GPSStatus : public Status
 #ifdef GPS_EXTRAVERBOSE
             LOG_WARN("Using fixed altitude\n");
 #endif
-            NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
+            meshtastic_NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
             return node->position.altitude;
         } else {
             return p.altitude;

@@ -115,7 +115,7 @@ void run_codec2(void *parameter)
     }
 }
 
-AudioModule::AudioModule() : SinglePortModule("AudioModule", PortNum_AUDIO_APP), concurrency::OSThread("AudioModule")
+AudioModule::AudioModule() : SinglePortModule("AudioModule", meshtastic_PortNum_AUDIO_APP), concurrency::OSThread("AudioModule")
 {
     // moduleConfig.audio.codec2_enabled = true;
     // moduleConfig.audio.i2s_ws = 13;
@@ -132,7 +132,7 @@ AudioModule::AudioModule() : SinglePortModule("AudioModule", PortNum_AUDIO_APP),
         tx_header.mode = (moduleConfig.audio.bitrate ? moduleConfig.audio.bitrate : AUDIO_MODULE_MODE) - 1;
         codec2_set_lpc_post_filter(codec2, 1, 0, 0.8, 0.2);
         encode_codec_size = (codec2_bits_per_frame(codec2) + 7) / 8;
-        encode_frame_num = (Constants_DATA_PAYLOAD_LEN - sizeof(tx_header)) / encode_codec_size;
+        encode_frame_num = (meshtastic_Constants_DATA_PAYLOAD_LEN - sizeof(tx_header)) / encode_codec_size;
         encode_frame_size = encode_frame_num * encode_codec_size; // max 233 bytes + 4 header bytes
         adc_buffer_size = codec2_samples_per_frame(codec2);
         LOG_INFO(" using %d frames of %d bytes for a total payload length of %d bytes\n", encode_frame_num, encode_codec_size,
@@ -263,7 +263,7 @@ int32_t AudioModule::runOnce()
     }
 }
 
-MeshPacket *AudioModule::allocReply()
+meshtastic_MeshPacket *AudioModule::allocReply()
 {
     auto reply = allocDataPacket();
     return reply;
@@ -279,12 +279,12 @@ bool AudioModule::shouldDraw()
 
 void AudioModule::sendPayload(NodeNum dest, bool wantReplies)
 {
-    MeshPacket *p = allocReply();
+    meshtastic_MeshPacket *p = allocReply();
     p->to = dest;
     p->decoded.want_response = wantReplies;
 
     p->want_ack = false;                   // Audio is shoot&forget. No need to wait for ACKs.
-    p->priority = MeshPacket_Priority_MAX; // Audio is important, because realtime
+    p->priority = meshtastic_MeshPacket_Priority_MAX; // Audio is important, because realtime
 
     p->decoded.payload.size = tx_encode_frame_index;
     memcpy(p->decoded.payload.bytes, tx_encode_frame, p->decoded.payload.size);
@@ -292,7 +292,7 @@ void AudioModule::sendPayload(NodeNum dest, bool wantReplies)
     service.sendToMesh(p);
 }
 
-ProcessMessage AudioModule::handleReceived(const MeshPacket &mp)
+ProcessMessage AudioModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
     if ((moduleConfig.audio.codec2_enabled) && (myRegion->audioPermitted)) {
         auto &p = mp.decoded;

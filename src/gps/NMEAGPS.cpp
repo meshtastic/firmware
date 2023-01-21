@@ -159,7 +159,7 @@ bool NMEAGPS::lookForLocation()
         return false;
     }
 
-    p.location_source = Position_LocSource_LOC_INTERNAL;
+    p.location_source = meshtastic_Position_LocSource_LOC_INTERNAL;
 
     // Dilution of precision (an accuracy metric) is reported in 10^2 units, so we need to scale down when we use it
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS

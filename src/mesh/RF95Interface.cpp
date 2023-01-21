@@ -104,15 +104,15 @@ bool RF95Interface::reconfigure()
     // configure publicly accessible settings
     int err = lora->setSpreadingFactor(sf);
     if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(CriticalErrorCode_INVALID_RADIO_SETTING);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
     err = lora->setBandwidth(bw);
     if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(CriticalErrorCode_INVALID_RADIO_SETTING);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
     err = lora->setCodingRate(cr);
     if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(CriticalErrorCode_INVALID_RADIO_SETTING);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
     err = lora->setSyncWord(syncWord);
     assert(err == RADIOLIB_ERR_NONE);
@@ -125,14 +125,14 @@ bool RF95Interface::reconfigure()
 
     err = lora->setFrequency(getFreq());
     if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(CriticalErrorCode_INVALID_RADIO_SETTING);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
     if (power > MAX_POWER) // This chip has lower power limits than some
         power = MAX_POWER;
 
     err = lora->setOutputPower(power);
     if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(CriticalErrorCode_INVALID_RADIO_SETTING);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
     startReceive(); // restart receiving
 
@@ -142,7 +142,7 @@ bool RF95Interface::reconfigure()
 /**
  * Add SNR data to received messages
  */
-void RF95Interface::addReceiveMetadata(MeshPacket *mp)
+void RF95Interface::addReceiveMetadata(meshtastic_MeshPacket *mp)
 {
     mp->rx_snr = lora->getSNR();
     mp->rx_rssi = lround(lora->getRSSI());

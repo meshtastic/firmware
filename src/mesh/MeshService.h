@@ -14,7 +14,7 @@
 #include "../platform/portduino/SimRadio.h"
 #endif
 
-extern Allocator<QueueStatus> &queueStatusPool;
+extern Allocator<meshtastic_QueueStatus> &queueStatusPool;
 
 /**
  * Top level app for this service.  keeps the mesh, the radio config and the queue of received packets.
@@ -29,13 +29,13 @@ class MeshService
     /// FIXME, change to a DropOldestQueue and keep a count of the number of dropped packets to ensure
     /// we never hang because android hasn't been there in a while
     /// FIXME - save this to flash on deep sleep
-    PointerQueue<MeshPacket> toPhoneQueue;
+    PointerQueue<meshtastic_MeshPacket> toPhoneQueue;
 
     // keep list of QueueStatus packets to be send to the phone
-    PointerQueue<QueueStatus> toPhoneQueueStatusQueue;
+    PointerQueue<meshtastic_QueueStatus> toPhoneQueueStatusQueue;
 
     // This holds the last QueueStatus send
-    QueueStatus lastQueueStatus;
+    meshtastic_QueueStatus lastQueueStatus;
 
     /// The current nonce for the newest packet which has been queued for the phone
     uint32_t fromNum = 0;
@@ -59,23 +59,23 @@ class MeshService
 
     /// Return the next packet destined to the phone.  FIXME, somehow use fromNum to allow the phone to retry the
     /// last few packets if needs to.
-    MeshPacket *getForPhone() { return toPhoneQueue.dequeuePtr(0); }
+    meshtastic_MeshPacket *getForPhone() { return toPhoneQueue.dequeuePtr(0); }
 
     /// Allows the bluetooth handler to free packets after they have been sent
-    void releaseToPool(MeshPacket *p) { packetPool.release(p); }
+    void releaseToPool(meshtastic_MeshPacket *p) { packetPool.release(p); }
 
     /// Return the next QueueStatus packet destined to the phone.
-    QueueStatus *getQueueStatusForPhone() { return toPhoneQueueStatusQueue.dequeuePtr(0); }
+    meshtastic_QueueStatus *getQueueStatusForPhone() { return toPhoneQueueStatusQueue.dequeuePtr(0); }
 
     // Release QueueStatus packet to pool
-    void releaseQueueStatusToPool(QueueStatus *p) { queueStatusPool.release(p); }
+    void releaseQueueStatusToPool(meshtastic_QueueStatus *p) { queueStatusPool.release(p); }
 
     /**
      *  Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)
      * Called by PhoneAPI.handleToRadio.  Note: p is a scratch buffer, this function is allowed to write to it but it can not keep
      * a reference
      */
-    void handleToRadio(MeshPacket &p);
+    void handleToRadio(meshtastic_MeshPacket &p);
 
     /** The radioConfig object just changed, call this to force the hw to change to the new settings
      * @return true if client devices should be sent a new set of radio configs
@@ -92,16 +92,16 @@ class MeshService
     /// Send a packet into the mesh - note p must have been allocated from packetPool.  We will return it to that pool after
     /// sending. This is the ONLY function you should use for sending messages into the mesh, because it also updates the nodedb
     /// cache
-    void sendToMesh(MeshPacket *p, RxSource src = RX_SRC_LOCAL, bool ccToPhone = false);
+    void sendToMesh(meshtastic_MeshPacket *p, RxSource src = RX_SRC_LOCAL, bool ccToPhone = false);
 
     /** Attempt to cancel a previously sent packet from this _local_ node.  Returns true if a packet was found we could cancel */
     bool cancelSending(PacketId id);
 
     /// Pull the latest power and time info into my nodeinfo
-    NodeInfo *refreshMyNodeInfo();
+    meshtastic_NodeInfo *refreshMyNodeInfo();
 
     /// Send a packet to the phone
-    void sendToPhone(MeshPacket *p);
+    void sendToPhone(meshtastic_MeshPacket *p);
 
     bool isToPhoneQueueEmpty();
 
@@ -112,10 +112,10 @@ class MeshService
 
     /// Handle a packet that just arrived from the radio.  This method does _ReliableRouternot_ free the provided packet.  If it
     /// needs to keep the packet around it makes a copy
-    int handleFromRadio(const MeshPacket *p);
+    int handleFromRadio(const meshtastic_MeshPacket *p);
     friend class RoutingModule;
 
-    ErrorCode sendQueueStatusToPhone(const QueueStatus &qs, ErrorCode res, uint32_t mesh_packet_id);
+    ErrorCode sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, ErrorCode res, uint32_t mesh_packet_id);
 };
 
 extern MeshService service;

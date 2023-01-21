@@ -41,18 +41,18 @@ class PhoneAPI
 
     /// We temporarily keep the packet here between the call to available and getFromRadio.  We will free it after the phone
     /// downloads it
-    MeshPacket *packetForPhone = NULL;
+    meshtastic_MeshPacket *packetForPhone = NULL;
 
     // file transfer packets destined for phone. Push it to the queue then free it.
-    XModem *xmodemPacketForPhone = NULL;
+    meshtastic_XModem *xmodemPacketForPhone = NULL;
 
     // Keep QueueStatus packet just as packetForPhone
-    QueueStatus *queueStatusPacketForPhone = NULL;
+    meshtastic_QueueStatus *queueStatusPacketForPhone = NULL;
 
     /// We temporarily keep the nodeInfo here between the call to available and getFromRadio
-    const NodeInfo *nodeInfoForPhone = NULL;
+    const meshtastic_NodeInfo *nodeInfoForPhone = NULL;
 
-    ToRadio toRadioScratch = {0}; // this is a static scratch object, any data must be copied elsewhere before returning
+    meshtastic_ToRadio toRadioScratch = {0}; // this is a static scratch object, any data must be copied elsewhere before returning
 
     /// Use to ensure that clients don't get confused about old messages from the radio
     uint32_t config_nonce = 0;
@@ -92,7 +92,7 @@ class PhoneAPI
 
   protected:
     /// Our fromradio packet while it is being assembled
-    FromRadio fromRadioScratch = {};
+    meshtastic_FromRadio fromRadioScratch = {};
 
     /** the last msec we heard from the client on the other side of this link */
     uint32_t lastContactMsec = 0;
@@ -128,7 +128,7 @@ class PhoneAPI
      * Handle a packet that the phone wants us to send.  We can write to it but can not keep a reference to it
      * @return true true if a packet was queued for sending
      */
-    bool handleToRadioPacket(MeshPacket &p);
+    bool handleToRadioPacket(meshtastic_MeshPacket &p);
 
     /// If the mesh service tells us fromNum has changed, tell the phone
     virtual int onNotify(uint32_t newValue) override;
