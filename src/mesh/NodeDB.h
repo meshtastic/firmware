@@ -46,7 +46,7 @@ class NodeDB
     uint32_t readPointer = 0;
 
   public:
-    bool updateGUI = false;            // we think the gui should definitely be redrawn, screen will clear this once handled
+    bool updateGUI = false; // we think the gui should definitely be redrawn, screen will clear this once handled
     meshtastic_NodeInfo *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
     Observable<const meshtastic::NodeStatus *> newStatus;
 
@@ -182,7 +182,8 @@ extern NodeDB nodeDB;
 // Our delay functions check for this for times that should never expire
 #define NODE_DELAY_FOREVER 0xffffffff
 
-#define IF_ROUTER(routerVal, normalVal) ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER) ? (routerVal) : (normalVal))
+#define IF_ROUTER(routerVal, normalVal)                                                                                          \
+    ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER) ? (routerVal) : (normalVal))
 
 #define ONE_DAY 24 * 60 * 60
 

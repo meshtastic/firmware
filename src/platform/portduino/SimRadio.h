@@ -24,7 +24,7 @@ class SimRadio : public RadioInterface
      */
     static SimRadio *instance;
 
-    virtual ErrorCode send(MeshPacket *p) override;
+    virtual ErrorCode send(meshtastic_MeshPacket *p) override;
 
     /** can we detect a LoRa preamble on the current channel? */
     virtual bool isChannelActive();
@@ -42,9 +42,9 @@ class SimRadio : public RadioInterface
      *
      * External functions can call this method to wake the device from sleep.
      */
-    virtual void startReceive(MeshPacket *p);
+    virtual void startReceive(meshtastic_MeshPacket *p);
 
-    QueueStatus getQueueStatus() override;
+    meshtastic_QueueStatus getQueueStatus() override;
 
   protected:
     /// are _trying_ to receive a packet currently (note - we might just be waiting for one)
@@ -60,15 +60,15 @@ class SimRadio : public RadioInterface
     void startTransmitTimerSNR(float snr);
 
     void handleTransmitInterrupt();
-    void handleReceiveInterrupt(MeshPacket *p);
+    void handleReceiveInterrupt(meshtastic_MeshPacket *p);
 
     void onNotify(uint32_t notification);
 
     // start an immediate transmit
-    virtual void startSend(MeshPacket *txp);
+    virtual void startSend(meshtastic_MeshPacket *txp);
 
     // derive packet length
-    size_t getPacketLength(MeshPacket *p);
+    size_t getPacketLength(meshtastic_MeshPacket *p);
 
     int16_t readData(uint8_t *str, size_t len);
 

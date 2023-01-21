@@ -592,7 +592,7 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
                          geoCoord.getMGRSEasting(), geoCoord.getMGRSNorthing());
             } else if (gpsFormat == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OLC) { // Open Location Code
                 geoCoord.getOLCCode(coordinateLine);
-            } else if (gpsFormat == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OSGR) {  // Ordnance Survey Grid Reference
+            } else if (gpsFormat == meshtastic_Config_DisplayConfig_GpsCoordinateFormat_OSGR) { // Ordnance Survey Grid Reference
                 if (geoCoord.getOSGRE100k() == 'I' || geoCoord.getOSGRN100k() == 'I') // OSGR is only valid around the UK region
                     snprintf(coordinateLine, sizeof(coordinateLine), "%s", "Out of Boundary");
                 else
@@ -910,7 +910,8 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 // #else
 Screen::Screen(uint8_t address, int sda, int scl)
     : OSThread("Screen"), cmdQueue(32),
-      dispdev(address, sda, scl, screen_model == meshtastic_Config_DisplayConfig_OledType_OLED_SH1107 ? GEOMETRY_128_128 : GEOMETRY_128_64),
+      dispdev(address, sda, scl,
+              screen_model == meshtastic_Config_DisplayConfig_OledType_OLED_SH1107 ? GEOMETRY_128_128 : GEOMETRY_128_64),
       ui(&dispdev)
 {
     address_found = address;
@@ -1756,7 +1757,8 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), y + FONT_HEIGHT_SMALL * 1, chUtil);
     if (config.position.gps_enabled) {
         // Line 3
-        if (config.display.gps_format != meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DMS) // if DMS then don't draw altitude
+        if (config.display.gps_format !=
+            meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DMS) // if DMS then don't draw altitude
             drawGPSAltitude(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
 
         // Line 4

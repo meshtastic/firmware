@@ -44,7 +44,8 @@ meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, Nod
     // auto p = allocDataProtobuf(c);
     meshtastic_MeshPacket *p = router->allocForSending();
     p->decoded.portnum = meshtastic_PortNum_ROUTING_APP;
-    p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Routing_msg, &c);
+    p->decoded.payload.size =
+        pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Routing_msg, &c);
 
     p->priority = meshtastic_MeshPacket_Priority_ACK;
 
@@ -248,7 +249,8 @@ void MeshModule::observeUIEvents(Observer<const UIFrameEvent *> *observer)
     }
 }
 
-AdminMessageHandleResult MeshModule::handleAdminMessageForAllPlugins(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
+AdminMessageHandleResult MeshModule::handleAdminMessageForAllPlugins(const meshtastic_MeshPacket &mp,
+                                                                     meshtastic_AdminMessage *request,
                                                                      meshtastic_AdminMessage *response)
 {
     AdminMessageHandleResult handled = AdminMessageHandleResult::NOT_HANDLED;

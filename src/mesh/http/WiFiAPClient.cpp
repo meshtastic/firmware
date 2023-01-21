@@ -171,7 +171,8 @@ bool initWifi()
             WiFi.onEvent(WiFiEvent);
             WiFi.setAutoReconnect(true);
             WiFi.setSleep(false);
-            if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_STATIC && config.network.ipv4_config.ip != 0) {
+            if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_STATIC &&
+                config.network.ipv4_config.ip != 0) {
                 WiFi.config(config.network.ipv4_config.ip, config.network.ipv4_config.gateway, config.network.ipv4_config.subnet,
                             config.network.ipv4_config.dns,
                             config.network.ipv4_config.dns); // Wifi wants two DNS servers... set both to the same value
