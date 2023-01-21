@@ -143,7 +143,7 @@ void ExternalNotificationModule::stopNow()
 
 ExternalNotificationModule::ExternalNotificationModule()
     : SinglePortModule("ExternalNotificationModule", meshtastic_PortNum_TEXT_MESSAGE_APP), concurrency::OSThread(
-                                                                                    "ExternalNotificationModule")
+                                                                                               "ExternalNotificationModule")
 {
     /*
         Uncomment the preferences below if you want to use the module
@@ -164,7 +164,8 @@ ExternalNotificationModule::ExternalNotificationModule()
     // moduleConfig.external_notification.nag_timeout = 300;
 
     if (moduleConfig.external_notification.enabled) {
-        if (!nodeDB.loadProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, sizeof(meshtastic_RTTTLConfig), &meshtastic_RTTTLConfig_msg, &rtttlConfig)) {
+        if (!nodeDB.loadProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, sizeof(meshtastic_RTTTLConfig),
+                              &meshtastic_RTTTLConfig_msg, &rtttlConfig)) {
             memset(rtttlConfig.ringtone, 0, sizeof(rtttlConfig.ringtone));
             strncpy(rtttlConfig.ringtone,
                     "a:d=8,o=5,b=125:4d#6,a#,2d#6,16p,g#,4a#,4d#.,p,16g,16a#,d#6,a#,f6,2d#6,16p,c#.6,16c6,16a#,g#.,2a#",
@@ -319,7 +320,8 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
  * @return AdminMessageHandleResult HANDLED if message was handled
  *   HANDLED_WITH_RESULT if a result is also prepared.
  */
-AdminMessageHandleResult ExternalNotificationModule::handleAdminMessageForModule(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
+AdminMessageHandleResult ExternalNotificationModule::handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
+                                                                                 meshtastic_AdminMessage *request,
                                                                                  meshtastic_AdminMessage *response)
 {
     AdminMessageHandleResult result;

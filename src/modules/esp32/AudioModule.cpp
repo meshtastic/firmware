@@ -283,7 +283,7 @@ void AudioModule::sendPayload(NodeNum dest, bool wantReplies)
     p->to = dest;
     p->decoded.want_response = wantReplies;
 
-    p->want_ack = false;                   // Audio is shoot&forget. No need to wait for ACKs.
+    p->want_ack = false;                              // Audio is shoot&forget. No need to wait for ACKs.
     p->priority = meshtastic_MeshPacket_Priority_MAX; // Audio is important, because realtime
 
     p->decoded.payload.size = tx_encode_frame_index;

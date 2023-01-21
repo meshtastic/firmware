@@ -29,7 +29,8 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 
 void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c)
 {
-    bool isAck = ((c && c->error_reason == meshtastic_Routing_Error_NONE)); // consider only ROUTING_APP message without error as ACK
+    bool isAck =
+        ((c && c->error_reason == meshtastic_Routing_Error_NONE)); // consider only ROUTING_APP message without error as ACK
     if (isAck && p->to != getNodeNum()) {
         // do not flood direct message that is ACKed
         LOG_DEBUG("Receiving an ACK not for me, but don't need to rebroadcast this direct message anymore.\n");

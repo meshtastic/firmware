@@ -179,8 +179,8 @@ void NodeDB::installDefaultConfig()
 #else
     bool hasScreen = screen_found;
 #endif
-    config.bluetooth.mode =
-        hasScreen ? meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN : meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN;
+    config.bluetooth.mode = hasScreen ? meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN
+                                      : meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN;
     // for backward compat, default position flags are ALT+MSL
     config.position.position_flags =
         (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL);
@@ -403,7 +403,8 @@ bool NodeDB::loadProto(const char *filename, size_t protoSize, size_t objSize, c
 void NodeDB::loadFromDisk()
 {
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
-    if (!loadProto(prefFileName, meshtastic_DeviceState_size, sizeof(meshtastic_DeviceState), &meshtastic_DeviceState_msg, &devicestate)) {
+    if (!loadProto(prefFileName, meshtastic_DeviceState_size, sizeof(meshtastic_DeviceState), &meshtastic_DeviceState_msg,
+                   &devicestate)) {
         installDefaultDeviceState(); // Our in RAM copy might now be corrupt
     } else {
         if (devicestate.version < DEVICESTATE_MIN_VER) {
@@ -414,7 +415,8 @@ void NodeDB::loadFromDisk()
         }
     }
 
-    if (!loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig), &meshtastic_LocalConfig_msg, &config)) {
+    if (!loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig), &meshtastic_LocalConfig_msg,
+                   &config)) {
         installDefaultConfig(); // Our in RAM copy might now be corrupt
     } else {
         if (config.version < DEVICESTATE_MIN_VER) {
@@ -425,8 +427,8 @@ void NodeDB::loadFromDisk()
         }
     }
 
-    if (!loadProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, sizeof(meshtastic_LocalModuleConfig), &meshtastic_LocalModuleConfig_msg,
-                   &moduleConfig)) {
+    if (!loadProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, sizeof(meshtastic_LocalModuleConfig),
+                   &meshtastic_LocalModuleConfig_msg, &moduleConfig)) {
         installDefaultModuleConfig(); // Our in RAM copy might now be corrupt
     } else {
         if (moduleConfig.version < DEVICESTATE_MIN_VER) {
@@ -437,7 +439,8 @@ void NodeDB::loadFromDisk()
         }
     }
 
-    if (!loadProto(channelFileName, meshtastic_ChannelFile_size, sizeof(meshtastic_ChannelFile), &meshtastic_ChannelFile_msg, &channelFile)) {
+    if (!loadProto(channelFileName, meshtastic_ChannelFile_size, sizeof(meshtastic_ChannelFile), &meshtastic_ChannelFile_msg,
+                   &channelFile)) {
         installDefaultChannels(); // Our in RAM copy might now be corrupt
     } else {
         if (channelFile.version < DEVICESTATE_MIN_VER) {

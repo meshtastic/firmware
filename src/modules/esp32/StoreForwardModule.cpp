@@ -361,8 +361,8 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
         if (is_client) {
             LOG_DEBUG("*** StoreAndForward_RequestResponse_ROUTER_BUSY\n");
             // retry in messages_saved * packetTimeMax ms
-            retry_delay =
-                millis() + packetHistoryCurrent * packetTimeMax * (meshtastic_StoreAndForward_RequestResponse_ROUTER_ERROR ? 2 : 1);
+            retry_delay = millis() + packetHistoryCurrent * packetTimeMax *
+                                         (meshtastic_StoreAndForward_RequestResponse_ROUTER_ERROR ? 2 : 1);
         }
         break;
 
@@ -422,7 +422,8 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
 }
 
 StoreForwardModule::StoreForwardModule()
-    : concurrency::OSThread("StoreForwardModule"), ProtobufModule("StoreForward", meshtastic_PortNum_STORE_FORWARD_APP, &meshtastic_StoreAndForward_msg)
+    : concurrency::OSThread("StoreForwardModule"),
+      ProtobufModule("StoreForward", meshtastic_PortNum_STORE_FORWARD_APP, &meshtastic_StoreAndForward_msg)
 {
 
 #ifdef ARCH_ESP32

@@ -29,8 +29,8 @@ void TraceRouteModule::updateRoute(meshtastic_MeshPacket *p)
         printRoute(updated, p->from, NODENUM_BROADCAST);
 
         // Set updated route to the payload of the to be flooded packet
-        p->decoded.payload.size =
-            pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_RouteDiscovery_msg, updated);
+        p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes),
+                                                     &meshtastic_RouteDiscovery_msg, updated);
     }
 }
 
@@ -79,7 +79,8 @@ meshtastic_MeshPacket *TraceRouteModule::allocReply()
     return reply;
 }
 
-TraceRouteModule::TraceRouteModule() : ProtobufModule("traceroute", meshtastic_PortNum_TRACEROUTE_APP, &meshtastic_RouteDiscovery_msg)
+TraceRouteModule::TraceRouteModule()
+    : ProtobufModule("traceroute", meshtastic_PortNum_TRACEROUTE_APP, &meshtastic_RouteDiscovery_msg)
 {
     ourPortNum = meshtastic_PortNum_TRACEROUTE_APP;
 }

@@ -483,8 +483,9 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 
 void CannedMessageModule::loadProtoForModule()
 {
-    if (!nodeDB.loadProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size, sizeof(meshtastic_CannedMessageModuleConfig),
-                          &meshtastic_CannedMessageModuleConfig_msg, &cannedMessageModuleConfig)) {
+    if (!nodeDB.loadProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,
+                          sizeof(meshtastic_CannedMessageModuleConfig), &meshtastic_CannedMessageModuleConfig_msg,
+                          &cannedMessageModuleConfig)) {
         installDefaultCannedMessageModuleConfig();
     }
 }
@@ -503,8 +504,8 @@ bool CannedMessageModule::saveProtoForModule()
     FS.mkdir("/prefs");
 #endif
 
-    okay &= nodeDB.saveProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size, &meshtastic_CannedMessageModuleConfig_msg,
-                             &cannedMessageModuleConfig);
+    okay &= nodeDB.saveProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,
+                             &meshtastic_CannedMessageModuleConfig_msg, &cannedMessageModuleConfig);
 
     return okay;
 }
@@ -526,7 +527,8 @@ void CannedMessageModule::installDefaultCannedMessageModuleConfig()
  * @return AdminMessageHandleResult HANDLED if message was handled
  *   HANDLED_WITH_RESULT if a result is also prepared.
  */
-AdminMessageHandleResult CannedMessageModule::handleAdminMessageForModule(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
+AdminMessageHandleResult CannedMessageModule::handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
+                                                                          meshtastic_AdminMessage *request,
                                                                           meshtastic_AdminMessage *response)
 {
     AdminMessageHandleResult result;
@@ -551,7 +553,8 @@ AdminMessageHandleResult CannedMessageModule::handleAdminMessageForModule(const 
     return result;
 }
 
-void CannedMessageModule::handleGetCannedMessageModuleMessages(const meshtastic_MeshPacket &req, meshtastic_AdminMessage *response)
+void CannedMessageModule::handleGetCannedMessageModuleMessages(const meshtastic_MeshPacket &req,
+                                                               meshtastic_AdminMessage *response)
 {
     LOG_DEBUG("*** handleGetCannedMessageModuleMessages\n");
     if (req.decoded.want_response) {

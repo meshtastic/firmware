@@ -9,7 +9,8 @@ class DeviceTelemetryModule : private concurrency::OSThread, public ProtobufModu
 {
   public:
     DeviceTelemetryModule()
-        : concurrency::OSThread("DeviceTelemetryModule"), ProtobufModule("DeviceTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
+        : concurrency::OSThread("DeviceTelemetryModule"),
+          ProtobufModule("DeviceTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
         lastMeasurementPacket = nullptr;
         setIntervalFromNow(10 * 1000);

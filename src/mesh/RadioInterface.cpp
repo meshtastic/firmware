@@ -13,7 +13,7 @@
 
 #define RDEF(name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted, frequency_switching, wide_lora)      \
     {                                                                                                                            \
-        meshtastic_Config_LoRaConfig_RegionCode_##name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted,            \
+        meshtastic_Config_LoRaConfig_RegionCode_##name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted, \
             frequency_switching, wide_lora, #name                                                                                \
     }
 
@@ -226,7 +226,8 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(float snr)
     uint32_t delay = 0;
     uint8_t CWsize = map(snr, SNR_MIN, SNR_MAX, CWmin, CWmax);
     // LOG_DEBUG("rx_snr of %f so setting CWsize to:%d\n", snr, CWsize);
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER || config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT) {
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+        config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT) {
         delay = random(0, 2 * CWsize) * slotTimeMsec;
         LOG_DEBUG("rx_snr found in packet. As a router, setting tx delay:%d\n", delay);
     } else {

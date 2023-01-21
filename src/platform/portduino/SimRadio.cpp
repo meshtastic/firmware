@@ -9,7 +9,7 @@ SimRadio::SimRadio()
 
 SimRadio *SimRadio::instance;
 
-ErrorCode SimRadio::send(MeshPacket *p)
+ErrorCode SimRadio::send(meshtastic_MeshPacket *p)
 {
     printPacket("enqueuing for send", p);
 
@@ -29,7 +29,7 @@ ErrorCode SimRadio::send(MeshPacket *p)
 
 void SimRadio::setTransmitDelay()
 {
-    MeshPacket *p = txQueue.getFront();
+    meshtastic_MeshPacket *p = txQueue.getFront();
     // We want all sending/receiving to be done by our daemon thread.
     // We use a delay here because this packet might have been sent in response to a packet we just received.
     // So we want to make sure the other side has had a chance to reconfigure its radio.
@@ -163,7 +163,7 @@ void SimRadio::onNotify(uint32_t notification)
                     setTransmitDelay(); // reset random delay
                 } else {
                     // Send any outgoing packets we have ready
-                    MeshPacket *txp = txQueue.dequeue();
+                    meshtastic_MeshPacket *txp = txQueue.dequeue();
                     assert(txp);
                     startSend(txp);
                     // Packet has been sent, count it toward our TX airtime utilization.
@@ -188,9 +188,9 @@ void SimRadio::startSend(MeshPacket *txp)
 {
     printPacket("Starting low level send", txp);
     size_t numbytes = beginSending(txp);
-    MeshPacket *p = packetPool.allocCopy(*txp);
+    meshtastic_MeshPacket *p = packetPool.allocCopy(*txp);
     perhapsDecode(p);
-    Compressed c = Compressed_init_default;
+    meshtastic_Compressed c = meshtastic_Compressed_init_default;
     c.portnum = p->decoded.portnum;
     // LOG_DEBUG("Sending back to simulator with portNum %d\n", p->decoded.portnum);
     if (p->decoded.payload.size <= sizeof(c.data.bytes)) {
@@ -199,8 +199,9 @@ void SimRadio::startSend(MeshPacket *txp)
     } else {
         LOG_WARN("Payload size is larger than compressed message allows! Sending empty payload.\n");
     }
-    p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &Compressed_msg, &c);
-    p->decoded.portnum = PortNum_SIMULATOR_APP;
+    p->decoded.payload.size =
+        pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Compressed_msg, &c);
+    p->decoded.portnum = meshtastic_PortNum_SIMULATOR_APP;
     service.sendToPhone(p); // Sending back to simulator
 }
 
@@ -213,9 +214,9 @@ void SimRadio::startReceive(MeshPacket *p)
     handleReceiveInterrupt(p);
 }
 
-QueueStatus SimRadio::getQueueStatus()
+meshtastic_QueueStatus SimRadio::getQueueStatus()
 {
-    QueueStatus qs;
+    meshtastic_QueueStatus qs;
 
     qs.res = qs.mesh_packet_id = 0;
     qs.free = txQueue.getFree();
@@ -224,7 +225,7 @@ QueueStatus SimRadio::getQueueStatus()
     return qs;
 }
 
-void SimRadio::handleReceiveInterrupt(MeshPacket *p)
+void SimRadio::handleReceiveInterrupt(meshtastic_MeshPacket *p)
 {
     LOG_DEBUG("HANDLE RECEIVE INTERRUPT\n");
     uint32_t xmitMsec;
@@ -241,8 +242,8 @@ void SimRadio::handleReceiveInterrupt(MeshPacket *p)
     xmitMsec = getPacketTime(length);
     // LOG_DEBUG("Payload size %d vs length (includes header) %d\n", p->decoded.payload.size, length);
 
-    MeshPacket *mp = packetPool.allocCopy(*p);          // keep a copy in packtPool
-    mp->which_payload_variant = MeshPacket_decoded_tag; // Mark that the payload is already decoded
+    meshtastic_MeshPacket *mp = packetPool.allocCopy(*p);          // keep a copy in packtPool
+    mp->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // Mark that the payload is already decoded
 
     printPacket("Lora RX", mp);
 
@@ -251,7 +252,7 @@ void SimRadio::handleReceiveInterrupt(MeshPacket *p)
     deliverToReceiver(mp);
 }
 
-size_t SimRadio::getPacketLength(MeshPacket *mp)
+size_t SimRadio::getPacketLength(meshtastic_MeshPacket *mp)
 {
     auto &p = mp->decoded;
     return (size_t)p.payload.size + sizeof(PacketHeader);

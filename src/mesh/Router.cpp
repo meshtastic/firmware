@@ -330,7 +330,7 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
             } else {
                 // parsing was successful
                 p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
-                p->channel = chIndex;                              // change to store the index instead of the hash
+                p->channel = chIndex;                                         // change to store the index instead of the hash
 
                 // Decompress if needed. jm
                 if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP) {
