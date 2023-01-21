@@ -9,7 +9,7 @@ FloodingRouter::FloodingRouter() {}
  * later free() the packet to pool.  This routine is not allowed to stall.
  * If the txmit queue is full it might return an error
  */
-ErrorCode FloodingRouter::send(MeshPacket *p)
+ErrorCode FloodingRouter::send(meshtastic_MeshPacket *p)
 {
     // Add any messages _we_ send to the seen message list (so we will ignore all retransmissions we see)
     wasSeenRecently(p); // FIXME, move this to a sniffSent method
@@ -17,7 +17,7 @@ ErrorCode FloodingRouter::send(MeshPacket *p)
     return Router::send(p);
 }
 
-bool FloodingRouter::shouldFilterReceived(const MeshPacket *p)
+bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 {
     if (wasSeenRecently(p)) { // Note: this will also add a recent packet record
         printPacket("Ignoring incoming msg, because we've already seen it", p);
@@ -27,23 +27,24 @@ bool FloodingRouter::shouldFilterReceived(const MeshPacket *p)
     return Router::shouldFilterReceived(p);
 }
 
-void FloodingRouter::sniffReceived(const MeshPacket *p, const Routing *c)
+void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c)
 {
-    bool isAck = ((c && c->error_reason == Routing_Error_NONE)); // consider only ROUTING_APP message without error as ACK
+    bool isAck =
+        ((c && c->error_reason == meshtastic_Routing_Error_NONE)); // consider only ROUTING_APP message without error as ACK
     if (isAck && p->to != getNodeNum()) {
-        // do not flood direct message that is ACKed 
+        // do not flood direct message that is ACKed
         LOG_DEBUG("Receiving an ACK not for me, but don't need to rebroadcast this direct message anymore.\n");
-        Router::cancelSending(p->to, p->decoded.request_id);   // cancel rebroadcast for this DM
-    } 
+        Router::cancelSending(p->to, p->decoded.request_id); // cancel rebroadcast for this DM
+    }
     if ((p->to != getNodeNum()) && (p->hop_limit > 0) && (getFrom(p) != getNodeNum())) {
         if (p->id != 0) {
-            if (config.device.role != Config_DeviceConfig_Role_CLIENT_MUTE) {
-                MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
+            if (config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE) {
+                meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
 
                 tosend->hop_limit--; // bump down the hop count
 
                 // If it is a traceRoute request, update the route that it went via me
-                if (p->which_payload_variant == MeshPacket_decoded_tag && traceRouteModule->wantPacket(p)) {
+                if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && traceRouteModule->wantPacket(p)) {
                     traceRouteModule->updateRoute(tosend);
                 }
 

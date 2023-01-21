@@ -1,5 +1,5 @@
-#include "configuration.h"
 #include "BluetoothCommon.h"
+#include "configuration.h"
 
 // NRF52 wants these constants as byte arrays
 // Generated here https://yupana-engineering.com/online-uuid-to-c-array-converter - but in REVERSE BYTE ORDER

@@ -9,8 +9,8 @@
  */
 class WiFiServerAPI : public ServerAPI<WiFiClient>
 {
-    public:
-        explicit WiFiServerAPI(WiFiClient &_client);
+  public:
+    explicit WiFiServerAPI(WiFiClient &_client);
 };
 
 /**
@@ -18,8 +18,8 @@ class WiFiServerAPI : public ServerAPI<WiFiClient>
  */
 class WiFiServerPort : public APIServerPort<WiFiServerAPI, WiFiServer>
 {
-    public:
-        explicit WiFiServerPort(int port);
+  public:
+    explicit WiFiServerPort(int port);
 };
 
-void initApiServer(int port=4403);
+void initApiServer(int port = 4403);

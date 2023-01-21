@@ -29,7 +29,6 @@ class SerialConsole : public StreamAPI, public RedirectablePrint, private concur
     void flush();
 
   protected:
-
     /// Check the current underlying physical link to see if the client is currently connected
     virtual bool checkIsConnected() override;
 };

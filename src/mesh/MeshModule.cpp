@@ -1,20 +1,20 @@
-#include "configuration.h"
 #include "MeshModule.h"
 #include "Channels.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "configuration.h"
 #include "modules/RoutingModule.h"
 #include <assert.h>
 
 std::vector<MeshModule *> *MeshModule::modules;
 
-const MeshPacket *MeshModule::currentRequest;
+const meshtastic_MeshPacket *MeshModule::currentRequest;
 
 /**
  * If any of the current chain of modules has already sent a reply, it will be here.  This is useful to allow
  * the RoutingPlugin to avoid sending redundant acks
  */
-MeshPacket *MeshModule::currentReply;
+meshtastic_MeshPacket *MeshModule::currentReply;
 
 MeshModule::MeshModule(const char *_name) : name(_name)
 {
@@ -32,21 +32,22 @@ MeshModule::~MeshModule()
     assert(0); // FIXME - remove from list of modules once someone needs this feature
 }
 
-MeshPacket *MeshModule::allocAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex)
+meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex)
 {
-    Routing c = Routing_init_default;
+    meshtastic_Routing c = meshtastic_Routing_init_default;
 
     c.error_reason = err;
-    c.which_variant = Routing_error_reason_tag;
+    c.which_variant = meshtastic_Routing_error_reason_tag;
 
     // Now that we have moded sendAckNak up one level into the class heirarchy we can no longer assume we are a RoutingPlugin
     // So we manually call pb_encode_to_bytes and specify routing port number
     // auto p = allocDataProtobuf(c);
-    MeshPacket *p = router->allocForSending();
-    p->decoded.portnum = PortNum_ROUTING_APP;
-    p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &Routing_msg, &c);
+    meshtastic_MeshPacket *p = router->allocForSending();
+    p->decoded.portnum = meshtastic_PortNum_ROUTING_APP;
+    p->decoded.payload.size =
+        pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Routing_msg, &c);
 
-    p->priority = MeshPacket_Priority_ACK;
+    p->priority = meshtastic_MeshPacket_Priority_ACK;
 
     p->hop_limit = config.lora.hop_limit; // Flood ACK back to original sender
     p->to = to;
@@ -57,7 +58,7 @@ MeshPacket *MeshModule::allocAckNak(Routing_Error err, NodeNum to, PacketId idFr
     return p;
 }
 
-MeshPacket *MeshModule::allocErrorResponse(Routing_Error err, const MeshPacket *p)
+meshtastic_MeshPacket *MeshModule::allocErrorResponse(meshtastic_Routing_Error err, const meshtastic_MeshPacket *p)
 {
     auto r = allocAckNak(err, getFrom(p), p->id, p->channel);
 
@@ -66,13 +67,13 @@ MeshPacket *MeshModule::allocErrorResponse(Routing_Error err, const MeshPacket *
     return r;
 }
 
-void MeshModule::callPlugins(const MeshPacket &mp, RxSource src)
+void MeshModule::callPlugins(const meshtastic_MeshPacket &mp, RxSource src)
 {
     // LOG_DEBUG("In call modules\n");
     bool moduleFound = false;
 
     // We now allow **encrypted** packets to pass through the modules
-    bool isDecoded = mp.which_payload_variant == MeshPacket_decoded_tag;
+    bool isDecoded = mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag;
 
     currentReply = NULL; // No reply yet
 
@@ -101,13 +102,13 @@ void MeshModule::callPlugins(const MeshPacket &mp, RxSource src)
             moduleFound = true;
 
             /// received channel (or NULL if not decoded)
-            Channel *ch = isDecoded ? &channels.getByIndex(mp.channel) : NULL;
+            meshtastic_Channel *ch = isDecoded ? &channels.getByIndex(mp.channel) : NULL;
 
             /// Is the channel this packet arrived on acceptable? (security check)
             /// Note: we can't know channel names for encrypted packets, so those are NEVER sent to boundChannel modules
 
-            /// Also: if a packet comes in on the local PC interface, we don't check for bound channels, because it is TRUSTED and it needs to
-            /// to be able to fetch the initial admin packets without yet knowing any channels.
+            /// Also: if a packet comes in on the local PC interface, we don't check for bound channels, because it is TRUSTED and
+            /// it needs to to be able to fetch the initial admin packets without yet knowing any channels.
 
             bool rxChannelOk = !pi.boundChannel || (mp.from == 0) || (strcasecmp(ch->settings.name, pi.boundChannel) == 0);
 
@@ -117,7 +118,7 @@ void MeshModule::callPlugins(const MeshPacket &mp, RxSource src)
 
                 if (mp.decoded.want_response) {
                     printPacket("packet on wrong channel, returning error", &mp);
-                    currentReply = pi.allocErrorResponse(Routing_Error_NOT_AUTHORIZED, &mp);
+                    currentReply = pi.allocErrorResponse(meshtastic_Routing_Error_NOT_AUTHORIZED, &mp);
                 } else
                     printPacket("packet on wrong channel, but can't respond", &mp);
             } else {
@@ -161,7 +162,7 @@ void MeshModule::callPlugins(const MeshPacket &mp, RxSource src)
             printPacket("Sending response", currentReply);
             service.sendToMesh(currentReply);
             currentReply = NULL;
-        } else if(mp.from != ourNodeNum) {
+        } else if (mp.from != ourNodeNum) {
             // Note: if the message started with the local node we don't want to send a no response reply
 
             // No one wanted to reply to this requst, tell the requster that happened
@@ -170,17 +171,16 @@ void MeshModule::callPlugins(const MeshPacket &mp, RxSource src)
             // SECURITY NOTE! I considered sending back a different error code if we didn't find the psk (i.e. !isDecoded)
             // but opted NOT TO.  Because it is not a good idea to let remote nodes 'probe' to find out which PSKs were "good" vs
             // bad.
-            routingModule->sendAckNak(Routing_Error_NO_RESPONSE, getFrom(&mp), mp.id, mp.channel);
+            routingModule->sendAckNak(meshtastic_Routing_Error_NO_RESPONSE, getFrom(&mp), mp.id, mp.channel);
         }
     }
 
     if (!moduleFound)
-        LOG_DEBUG("No modules interested in portnum=%d, src=%s\n",
-                    mp.decoded.portnum,
-                    (src == RX_SRC_LOCAL) ? "LOCAL":"REMOTE");
+        LOG_DEBUG("No modules interested in portnum=%d, src=%s\n", mp.decoded.portnum,
+                  (src == RX_SRC_LOCAL) ? "LOCAL" : "REMOTE");
 }
 
-MeshPacket *MeshModule::allocReply()
+meshtastic_MeshPacket *MeshModule::allocReply()
 {
     auto r = myReply;
     myReply = NULL; // Only use each reply once
@@ -191,7 +191,7 @@ MeshPacket *MeshModule::allocReply()
  * so that subclasses can (optionally) send a response back to the original sender.  Implementing this method
  * is optional
  */
-void MeshModule::sendResponse(const MeshPacket &req)
+void MeshModule::sendResponse(const meshtastic_MeshPacket &req)
 {
     auto r = allocReply();
     if (r) {
@@ -206,16 +206,16 @@ void MeshModule::sendResponse(const MeshPacket &req)
 /** set the destination and packet parameters of packet p intended as a reply to a particular "to" packet
  * This ensures that if the request packet was sent reliably, the reply is sent that way as well.
  */
-void setReplyTo(MeshPacket *p, const MeshPacket &to)
+void setReplyTo(meshtastic_MeshPacket *p, const meshtastic_MeshPacket &to)
 {
-    assert(p->which_payload_variant == MeshPacket_decoded_tag); // Should already be set by now
+    assert(p->which_payload_variant == meshtastic_MeshPacket_decoded_tag); // Should already be set by now
     p->to = getFrom(&to);    // Make sure that if we are sending to the local node, we use our local node addr, not 0
     p->channel = to.channel; // Use the same channel that the request came in on
 
     // No need for an ack if we are just delivering locally (it just generates an ignored ack)
     p->want_ack = (to.from != 0) ? to.want_ack : false;
-    if (p->priority == MeshPacket_Priority_UNSET)
-        p->priority = MeshPacket_Priority_RELIABLE;
+    if (p->priority == meshtastic_MeshPacket_Priority_UNSET)
+        p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
     p->decoded.request_id = to.id;
 }
 
@@ -235,14 +235,12 @@ std::vector<MeshModule *> MeshModule::GetMeshModulesWithUIFrames()
     return modulesWithUIFrames;
 }
 
-void MeshModule::observeUIEvents(
-    Observer<const UIFrameEvent *> *observer)
+void MeshModule::observeUIEvents(Observer<const UIFrameEvent *> *observer)
 {
     if (modules) {
         for (auto i = modules->begin(); i != modules->end(); ++i) {
             auto &pi = **i;
-            Observable<const UIFrameEvent *> *observable =
-                pi.getUIFrameObservable();
+            Observable<const UIFrameEvent *> *observable = pi.getUIFrameObservable();
             if (observable != NULL) {
                 LOG_DEBUG("Module wants a UI Frame\n");
                 observer->observe(observable);
@@ -251,24 +249,20 @@ void MeshModule::observeUIEvents(
     }
 }
 
-AdminMessageHandleResult MeshModule::handleAdminMessageForAllPlugins(const MeshPacket &mp, AdminMessage *request, AdminMessage *response)
+AdminMessageHandleResult MeshModule::handleAdminMessageForAllPlugins(const meshtastic_MeshPacket &mp,
+                                                                     meshtastic_AdminMessage *request,
+                                                                     meshtastic_AdminMessage *response)
 {
     AdminMessageHandleResult handled = AdminMessageHandleResult::NOT_HANDLED;
     if (modules) {
         for (auto i = modules->begin(); i != modules->end(); ++i) {
             auto &pi = **i;
             AdminMessageHandleResult h = pi.handleAdminMessageForModule(mp, request, response);
-            if (h == AdminMessageHandleResult::HANDLED_WITH_RESPONSE)
-            {
+            if (h == AdminMessageHandleResult::HANDLED_WITH_RESPONSE) {
                 // In case we have a response it always has priority.
-                LOG_DEBUG("Reply prepared by module '%s' of variant: %d\n",
-                    pi.name,
-                    response->which_payload_variant);
+                LOG_DEBUG("Reply prepared by module '%s' of variant: %d\n", pi.name, response->which_payload_variant);
                 handled = h;
-            }
-            else if ((handled != AdminMessageHandleResult::HANDLED_WITH_RESPONSE) &&
-                (h == AdminMessageHandleResult::HANDLED))
-            {
+            } else if ((handled != AdminMessageHandleResult::HANDLED_WITH_RESPONSE) && (h == AdminMessageHandleResult::HANDLED)) {
                 // In case the message is handled it should be populated, but will not overwrite
                 //   a result with response.
                 handled = h;

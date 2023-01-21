@@ -2,9 +2,9 @@
 #include <assert.h>
 #include <string>
 
-#include "GPS.h"
 #include "../concurrency/Periodic.h"
 #include "BluetoothCommon.h" // needed for updateBatteryLevel, FIXME, eventually when we pull mesh out into a lib we shouldn't be whacking bluetooth from here
+#include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
@@ -51,15 +51,15 @@ FIXME in the initial proof of concept we just skip the entire want/deny flow and
 
 MeshService service;
 
-static MemoryDynamic<QueueStatus> staticQueueStatusPool;
+static MemoryDynamic<meshtastic_QueueStatus> staticQueueStatusPool;
 
-Allocator<QueueStatus> &queueStatusPool = staticQueueStatusPool;
+Allocator<meshtastic_QueueStatus> &queueStatusPool = staticQueueStatusPool;
 
 #include "Router.h"
 
 MeshService::MeshService() : toPhoneQueue(MAX_RX_TOPHONE), toPhoneQueueStatusQueue(MAX_RX_TOPHONE)
 {
-    lastQueueStatus = { 0, 0, 16, 0 };
+    lastQueueStatus = {0, 0, 16, 0};
 }
 
 void MeshService::init()
@@ -71,14 +71,14 @@ void MeshService::init()
         gpsObserver.observe(&gps->newStatus);
 }
 
-int MeshService::handleFromRadio(const MeshPacket *mp)
+int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
 {
     powerFSM.trigger(EVENT_PACKET_FOR_PHONE); // Possibly keep the node from sleeping
 
     printPacket("Forwarding to phone", mp);
     nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
 
-    sendToPhone((MeshPacket *)mp);
+    sendToPhone((meshtastic_MeshPacket *)mp);
 
     return 0;
 }
@@ -87,7 +87,7 @@ int MeshService::handleFromRadio(const MeshPacket *mp)
 void MeshService::loop()
 {
     if (lastQueueStatus.free == 0) { // check if there is now free space in TX queue
-        QueueStatus qs = router->getQueueStatus();
+        meshtastic_QueueStatus qs = router->getQueueStatus();
         if (qs.free != lastQueueStatus.free)
             (void)sendQueueStatusToPhone(qs, 0, 0);
     }
@@ -130,31 +130,32 @@ void MeshService::reloadOwner(bool shouldSave)
  * Called by PhoneAPI.handleToRadio.  Note: p is a scratch buffer, this function is allowed to write to it but it can not keep a
  * reference
  */
-void MeshService::handleToRadio(MeshPacket &p)
+void MeshService::handleToRadio(meshtastic_MeshPacket &p)
 {
-    #ifdef ARCH_PORTDUINO    
+#ifdef ARCH_PORTDUINO
     // Simulates device is receiving a packet via the LoRa chip
-    if (p.decoded.portnum == PortNum_SIMULATOR_APP) {
+    if (p.decoded.portnum == meshtastic_PortNum_SIMULATOR_APP) {
         // Simulator packet (=Compressed packet) is encapsulated in a MeshPacket, so need to unwrap first
-        Compressed scratch;
-        Compressed *decoded = NULL;
-        if (p.which_payload_variant == MeshPacket_decoded_tag) {
+        meshtastic_Compressed scratch;
+        meshtastic_Compressed *decoded = NULL;
+        if (p.which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
             memset(&scratch, 0, sizeof(scratch));
-            p.decoded.payload.size = pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &Compressed_msg, &scratch);
+            p.decoded.payload.size =
+                pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &meshtastic_Compressed_msg, &scratch);
             if (p.decoded.payload.size) {
                 decoded = &scratch;
                 // Extract the original payload and replace
                 memcpy(&p.decoded.payload, &decoded->data, sizeof(decoded->data));
-                // Switch the port from PortNum_SIMULATOR_APP back to the original PortNum 
+                // Switch the port from PortNum_SIMULATOR_APP back to the original PortNum
                 p.decoded.portnum = decoded->portnum;
             } else
                 LOG_ERROR("Error decoding protobuf for simulator message!\n");
         }
         // Let SimRadio receive as if it did via its LoRa chip
-        SimRadio::instance->startReceive(&p); 
-        return; 
+        SimRadio::instance->startReceive(&p);
+        return;
     }
-    #endif
+#endif
     if (p.from != 0) { // We don't let phones assign nodenums to their sent messages
         LOG_WARN("phone tried to pick a nodenum, we don't allow that.\n");
         p.from = 0;
@@ -187,16 +188,16 @@ bool MeshService::cancelSending(PacketId id)
     return router->cancelSending(nodeDB.getNodeNum(), id);
 }
 
-ErrorCode MeshService::sendQueueStatusToPhone(const QueueStatus &qs, ErrorCode res, uint32_t mesh_packet_id)
+ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, ErrorCode res, uint32_t mesh_packet_id)
 {
-    QueueStatus *copied = queueStatusPool.allocCopy(qs);
+    meshtastic_QueueStatus *copied = queueStatusPool.allocCopy(qs);
 
     copied->res = res;
     copied->mesh_packet_id = mesh_packet_id;
 
     if (toPhoneQueueStatusQueue.numFree() == 0) {
         LOG_DEBUG("NOTE: tophone queue status queue is full, discarding oldest\n");
-        QueueStatus *d = toPhoneQueueStatusQueue.dequeuePtr(0);
+        meshtastic_QueueStatus *d = toPhoneQueueStatusQueue.dequeuePtr(0);
         if (d)
             releaseQueueStatusToPool(d);
     }
@@ -209,7 +210,7 @@ ErrorCode MeshService::sendQueueStatusToPhone(const QueueStatus &qs, ErrorCode r
     return res ? ERRNO_OK : ERRNO_UNKNOWN;
 }
 
-void MeshService::sendToMesh(MeshPacket *p, RxSource src, bool ccToPhone)
+void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPhone)
 {
     uint32_t mesh_packet_id = p->id;
     nodeDB.updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
@@ -219,7 +220,7 @@ void MeshService::sendToMesh(MeshPacket *p, RxSource src, bool ccToPhone)
 
     /* NOTE(pboldin): Prepare and send QueueStatus message to the phone as a
      * high-priority message. */
-    QueueStatus qs = router->getQueueStatus();
+    meshtastic_QueueStatus qs = router->getQueueStatus();
     ErrorCode r = sendQueueStatusToPhone(qs, res, mesh_packet_id);
     if (r != ERRNO_OK) {
         LOG_DEBUG("Can't send status to phone");
@@ -232,7 +233,7 @@ void MeshService::sendToMesh(MeshPacket *p, RxSource src, bool ccToPhone)
 
 void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
 {
-    NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
+    meshtastic_NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
     assert(node);
 
     if (node->has_position && (node->position.latitude_i != 0 || node->position.longitude_i != 0)) {
@@ -248,24 +249,24 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
     }
 }
 
-void MeshService::sendToPhone(MeshPacket *p)
+void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 {
     if (toPhoneQueue.numFree() == 0) {
         LOG_WARN("ToPhone queue is full, discarding oldest\n");
-        MeshPacket *d = toPhoneQueue.dequeuePtr(0);
+        meshtastic_MeshPacket *d = toPhoneQueue.dequeuePtr(0);
         if (d)
             releaseToPool(d);
     }
 
-    MeshPacket *copied = packetPool.allocCopy(*p);
+    meshtastic_MeshPacket *copied = packetPool.allocCopy(*p);
     perhapsDecode(copied);
     assert(toPhoneQueue.enqueue(copied, 0));
     fromNum++;
 }
 
-NodeInfo *MeshService::refreshMyNodeInfo()
+meshtastic_NodeInfo *MeshService::refreshMyNodeInfo()
 {
-    NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
+    meshtastic_NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
     assert(node);
 
     // We might not have a position yet for our local node, in that case, at least try to send the time
@@ -274,7 +275,7 @@ NodeInfo *MeshService::refreshMyNodeInfo()
         node->has_position = true;
     }
 
-    Position &position = node->position;
+    meshtastic_Position &position = node->position;
 
     // Update our local node info with our time (even if we don't decide to update anyone else)
     node->last_heard =
@@ -290,8 +291,8 @@ NodeInfo *MeshService::refreshMyNodeInfo()
 int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
 {
     // Update our local node info with our position (even if we don't decide to update anyone else)
-    NodeInfo *node = refreshMyNodeInfo();
-    Position pos = Position_init_default;
+    meshtastic_NodeInfo *node = refreshMyNodeInfo();
+    meshtastic_Position pos = meshtastic_Position_init_default;
 
     if (newStatus->getHasLock()) {
         // load data from GPS object, will add timestamp + battery further down
@@ -323,7 +324,7 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
     return 0;
 }
 
-bool MeshService::isToPhoneQueueEmpty() 
+bool MeshService::isToPhoneQueueEmpty()
 {
     return toPhoneQueue.isEmpty();
 }
