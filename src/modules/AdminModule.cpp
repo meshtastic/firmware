@@ -160,7 +160,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
 #ifdef ARCH_PORTDUINO
-    case AdminMessage_exit_simulator_tag:
+    case meshtastic_AdminMessage_exit_simulator_tag:
         LOG_INFO("Exiting simulator\n");
         _exit(0);
         break;
