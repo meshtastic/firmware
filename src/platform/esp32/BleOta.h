@@ -1,6 +1,7 @@
 #ifndef BLEOTA_H
 #define BLEOTA_H
 
+#include <Arduino.h>
 #include <functional>
 
 class BleOta
