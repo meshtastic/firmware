@@ -38,7 +38,7 @@ bool ReliableRouter::shouldFilterReceived(const MeshPacket *p)
         // the original sending process.
 
         // This "optimization", does save lots of airtime. For DMs, you also get a real ACK back
-	// from the intended recipient.
+        // from the intended recipient.
         auto key = GlobalPacketId(getFrom(p), p->id);
         auto old = findPendingPacket(key);
         if (old) {
@@ -54,9 +54,9 @@ bool ReliableRouter::shouldFilterReceived(const MeshPacket *p)
     }
 
     /* Resend implicit ACKs for repeated packets (assuming the original packet was sent with HOP_RELIABLE)
-    * this way if an implicit ACK is dropped and a packet is resent we'll rebroadcast again.
-    * Resending real ACKs is omitted, as you might receive a packet multiple times due to flooding and 
-    * flooding this ACK back to the original sender already adds redundancy. */ 
+     * this way if an implicit ACK is dropped and a packet is resent we'll rebroadcast again.
+     * Resending real ACKs is omitted, as you might receive a packet multiple times due to flooding and
+     * flooding this ACK back to the original sender already adds redundancy. */
     if (wasSeenRecently(p, false) && p->hop_limit == HOP_RELIABLE && !MeshModule::currentReply && p->to != nodeDB.getNodeNum()) {
         // retransmission on broadcast has hop_limit still equal to HOP_RELIABLE
         LOG_DEBUG("Resending implicit ack for a repeated floodmsg\n");
@@ -88,12 +88,11 @@ void ReliableRouter::sniffReceived(const MeshPacket *p, const Routing *c)
         if (p->want_ack) {
             if (MeshModule::currentReply)
                 LOG_DEBUG("Some other module has replied to this message, no need for a 2nd ack\n");
+            else if (p->which_payload_variant == MeshPacket_decoded_tag)
+                sendAckNak(Routing_Error_NONE, getFrom(p), p->id, p->channel);
             else
-                if (p->which_payload_variant == MeshPacket_decoded_tag)
-                    sendAckNak(Routing_Error_NONE, getFrom(p), p->id, p->channel);
-                else
-                    // Send a 'NO_CHANNEL' error on the primary channel if want_ack packet destined for us cannot be decoded
-                    sendAckNak(Routing_Error_NO_CHANNEL, getFrom(p), p->id, channels.getPrimaryIndex());
+                // Send a 'NO_CHANNEL' error on the primary channel if want_ack packet destined for us cannot be decoded
+                sendAckNak(Routing_Error_NO_CHANNEL, getFrom(p), p->id, channels.getPrimaryIndex());
         }
 
         // We consider an ack to be either a !routing packet with a request ID or a routing packet with !error

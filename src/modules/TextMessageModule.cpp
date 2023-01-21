@@ -1,7 +1,7 @@
-#include "configuration.h"
 #include "TextMessageModule.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "configuration.h"
 
 TextMessageModule *textMessageModule;
 

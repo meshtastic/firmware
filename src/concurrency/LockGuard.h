@@ -2,7 +2,8 @@
 
 #include "Lock.h"
 
-namespace concurrency {
+namespace concurrency
+{
 
 /**
  * @brief RAII lock guard

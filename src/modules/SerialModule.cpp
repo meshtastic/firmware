@@ -1,8 +1,8 @@
 #include "SerialModule.h"
 #include "MeshService.h"
+#include "NMEAWPL.h"
 #include "NodeDB.h"
 #include "RTC.h"
-#include "NMEAWPL.h"
 #include "Router.h"
 #include "configuration.h"
 #include <Arduino.h>
@@ -67,19 +67,18 @@ size_t serialPayloadSize;
 SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
 {
 
-    switch (moduleConfig.serial.mode)
-    {
-        case ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG:
-            ourPortNum = PortNum_TEXT_MESSAGE_APP;
-            break;
-        case ModuleConfig_SerialConfig_Serial_Mode_NMEA:
-            ourPortNum = PortNum_POSITION_APP;
-            break;
-        default:
-            ourPortNum = PortNum_SERIAL_APP;
-            // restrict to the serial channel for rx
-            boundChannel = Channels::serialChannel;
-            break;
+    switch (moduleConfig.serial.mode) {
+    case ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG:
+        ourPortNum = PortNum_TEXT_MESSAGE_APP;
+        break;
+    case ModuleConfig_SerialConfig_Serial_Mode_NMEA:
+        ourPortNum = PortNum_POSITION_APP;
+        break;
+    default:
+        ourPortNum = PortNum_SERIAL_APP;
+        // restrict to the serial channel for rx
+        boundChannel = Channels::serialChannel;
+        break;
     }
 }
 
@@ -161,7 +160,7 @@ int32_t SerialModule::runOnce()
                 baud = 921600;
             }
 
-#ifdef ARCH_ESP32 
+#ifdef ARCH_ESP32
             Serial2.setRxBufferSize(RX_BUFFER);
 
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {

@@ -6,12 +6,12 @@
 #if defined(ARCH_ESP32)
 #include "NodeDB.h"
 #include <Arduino.h>
-#include <driver/i2s.h>
-#include <functional>
-#include <codec2.h>
 #include <ButterworthFilter.h>
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
+#include <codec2.h>
+#include <driver/i2s.h>
+#include <functional>
 
 enum RadioState { standby, rx, tx };
 
@@ -47,7 +47,7 @@ class AudioModule : public SinglePortModule, public Observable<const UIFrameEven
     int encode_frame_size = 0;
     volatile RadioState radio_state = RadioState::rx;
 
-    struct CODEC2* codec2 = NULL;
+    struct CODEC2 *codec2 = NULL;
     // int16_t sample;
 
     AudioModule();
@@ -68,16 +68,16 @@ class AudioModule : public SinglePortModule, public Observable<const UIFrameEven
     virtual MeshPacket *allocReply() override;
 
     virtual bool wantUIFrame() override { return this->shouldDraw(); }
-    virtual Observable<const UIFrameEvent *>* getUIFrameObservable() override { return this; }
+    virtual Observable<const UIFrameEvent *> *getUIFrameObservable() override { return this; }
 #if !HAS_SCREEN
     void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-#else    
-    virtual void drawFrame(
-        OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;
+#else
+    virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;
 #endif
 
     /** Called to handle a particular incoming message
-     * @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for it
+     * @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered
+     * for it
      */
     virtual ProcessMessage handleReceived(const MeshPacket &mp) override;
 };

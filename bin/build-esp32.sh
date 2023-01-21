@@ -2,8 +2,8 @@
 
 set -e
 
-VERSION=`bin/buildinfo.py long`
-SHORT_VERSION=`bin/buildinfo.py short`
+VERSION=$(bin/buildinfo.py long)
+SHORT_VERSION=$(bin/buildinfo.py short)
 
 OUTDIR=release/
 
@@ -11,7 +11,7 @@ rm -f $OUTDIR/firmware*
 rm -r $OUTDIR/* || true
 
 # Important to pull latest version of libs into all device flavors, otherwise some devices might be stale
-platformio pkg update 
+platformio pkg update
 
 echo "Building for $1 with $PLATFORMIO_BUILD_FLAGS"
 rm -f .pio/build/$1/firmware.*

@@ -25,14 +25,13 @@ class PositionModule : public ProtobufModule<Position>, private concurrency::OST
      * name is for debugging output
      */
     PositionModule();
-    
+
     /**
      * Send our position into the mesh
      */
     void sendOurPosition(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
 
   protected:
-
     /** Called to handle a particular incoming message
 
     @return true if you've guaranteed you've handled this message and no other handlers should be considered for it

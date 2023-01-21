@@ -2,9 +2,9 @@
 #include <assert.h>
 #include <string>
 
-#include "GPS.h"
 #include "../concurrency/Periodic.h"
 #include "BluetoothCommon.h" // needed for updateBatteryLevel, FIXME, eventually when we pull mesh out into a lib we shouldn't be whacking bluetooth from here
+#include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
@@ -59,7 +59,7 @@ Allocator<QueueStatus> &queueStatusPool = staticQueueStatusPool;
 
 MeshService::MeshService() : toPhoneQueue(MAX_RX_TOPHONE), toPhoneQueueStatusQueue(MAX_RX_TOPHONE)
 {
-    lastQueueStatus = { 0, 0, 16, 0 };
+    lastQueueStatus = {0, 0, 16, 0};
 }
 
 void MeshService::init()
@@ -132,7 +132,7 @@ void MeshService::reloadOwner(bool shouldSave)
  */
 void MeshService::handleToRadio(MeshPacket &p)
 {
-    #ifdef ARCH_PORTDUINO    
+#ifdef ARCH_PORTDUINO
     // Simulates device is receiving a packet via the LoRa chip
     if (p.decoded.portnum == PortNum_SIMULATOR_APP) {
         // Simulator packet (=Compressed packet) is encapsulated in a MeshPacket, so need to unwrap first
@@ -140,21 +140,22 @@ void MeshService::handleToRadio(MeshPacket &p)
         Compressed *decoded = NULL;
         if (p.which_payload_variant == MeshPacket_decoded_tag) {
             memset(&scratch, 0, sizeof(scratch));
-            p.decoded.payload.size = pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &Compressed_msg, &scratch);
+            p.decoded.payload.size =
+                pb_decode_from_bytes(p.decoded.payload.bytes, p.decoded.payload.size, &Compressed_msg, &scratch);
             if (p.decoded.payload.size) {
                 decoded = &scratch;
                 // Extract the original payload and replace
                 memcpy(&p.decoded.payload, &decoded->data, sizeof(decoded->data));
-                // Switch the port from PortNum_SIMULATOR_APP back to the original PortNum 
+                // Switch the port from PortNum_SIMULATOR_APP back to the original PortNum
                 p.decoded.portnum = decoded->portnum;
             } else
                 LOG_ERROR("Error decoding protobuf for simulator message!\n");
         }
         // Let SimRadio receive as if it did via its LoRa chip
-        SimRadio::instance->startReceive(&p); 
-        return; 
+        SimRadio::instance->startReceive(&p);
+        return;
     }
-    #endif
+#endif
     if (p.from != 0) { // We don't let phones assign nodenums to their sent messages
         LOG_WARN("phone tried to pick a nodenum, we don't allow that.\n");
         p.from = 0;
@@ -323,7 +324,7 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
     return 0;
 }
 
-bool MeshService::isToPhoneQueueEmpty() 
+bool MeshService::isToPhoneQueueEmpty()
 {
     return toPhoneQueue.isEmpty();
 }

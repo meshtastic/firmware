@@ -120,7 +120,7 @@ CryptoKey Channels::getKey(ChannelIndex chIndex)
             else if (oemStore.oem_aes_key.size > 1) {
                 // Use the OEM key
                 LOG_DEBUG("Using OEM Key with %d bytes\n", oemStore.oem_aes_key.size);
-                memcpy(k.bytes, oemStore.oem_aes_key.bytes , oemStore.oem_aes_key.size);
+                memcpy(k.bytes, oemStore.oem_aes_key.bytes, oemStore.oem_aes_key.size);
                 k.length = oemStore.oem_aes_key.size;
                 // Bump up the last byte of PSK as needed
                 uint8_t *last = k.bytes + oemStore.oem_aes_key.size - 1;
@@ -196,7 +196,7 @@ Channel &Channels::getByIndex(ChannelIndex chIndex)
         Channel *ch = channelFile.channels + chIndex;
         return *ch;
     } else {
-        LOG_ERROR("Invalid channel index %d > %d, malformed packet received?\n", chIndex , channelFile.channels_count);
+        LOG_ERROR("Invalid channel index %d > %d, malformed packet received?\n", chIndex, channelFile.channels_count);
 
         static Channel *ch = (Channel *)malloc(sizeof(Channel));
         memset(ch, 0, sizeof(Channel));
@@ -207,7 +207,7 @@ Channel &Channels::getByIndex(ChannelIndex chIndex)
     }
 }
 
-Channel &Channels::getByName(const char* chName)
+Channel &Channels::getByName(const char *chName)
 {
     for (ChannelIndex i = 0; i < getNumChannels(); i++) {
         if (strcasecmp(getGlobalId(i), chName) == 0) {
@@ -267,8 +267,7 @@ const char *Channels::getName(size_t chIndex)
                 channelName = "Invalid";
                 break;
             }
-        }
-        else {
+        } else {
             channelName = "Custom";
         }
     }

@@ -58,7 +58,8 @@ class NodeDB
     void init();
 
     /// write to flash
-    void saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS), saveChannelsToDisk(), saveDeviceStateToDisk();
+    void saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS),
+        saveChannelsToDisk(), saveDeviceStateToDisk();
 
     /** Reinit radio config if needed, because either:
      * a) sometimes a buggy android app might send us bogus settings or
@@ -122,7 +123,7 @@ class NodeDB
     size_t getNumOnlineNodes();
 
     void initConfigIntervals(), initModuleConfigIntervals(), resetNodes();
-    
+
     bool factoryReset();
 
     bool loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, void *dest_struct);
@@ -140,13 +141,11 @@ class NodeDB
         newStatus.notifyObservers(&status);
     }
 
-
     /// read our db from flash
     void loadFromDisk();
 
     /// Reinit device state from scratch (not loading from disk)
-    void installDefaultDeviceState(), installDefaultChannels(), installDefaultConfig(),
-        installDefaultModuleConfig();
+    void installDefaultDeviceState(), installDefaultChannels(), installDefaultConfig(), installDefaultModuleConfig();
 };
 
 /**
@@ -203,13 +202,15 @@ extern NodeDB nodeDB;
 
 inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval)
 {
-    if (configuredInterval > 0) return configuredInterval * 1000;
+    if (configuredInterval > 0)
+        return configuredInterval * 1000;
     return default_broadcast_interval_secs * 1000;
 }
 
 inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t defaultInterval)
 {
-    if (configuredInterval > 0) return configuredInterval * 1000;
+    if (configuredInterval > 0)
+        return configuredInterval * 1000;
     return defaultInterval * 1000;
 }
 
@@ -218,4 +219,7 @@ inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t d
  */
 extern uint32_t radioGeneration;
 
-#define Module_Config_size (ModuleConfig_CannedMessageConfig_size + ModuleConfig_ExternalNotificationConfig_size + ModuleConfig_MQTTConfig_size + ModuleConfig_RangeTestConfig_size + ModuleConfig_SerialConfig_size + ModuleConfig_StoreForwardConfig_size + ModuleConfig_TelemetryConfig_size + ModuleConfig_size)
+#define Module_Config_size                                                                                                       \
+    (ModuleConfig_CannedMessageConfig_size + ModuleConfig_ExternalNotificationConfig_size + ModuleConfig_MQTTConfig_size +       \
+     ModuleConfig_RangeTestConfig_size + ModuleConfig_SerialConfig_size + ModuleConfig_StoreForwardConfig_size +                 \
+     ModuleConfig_TelemetryConfig_size + ModuleConfig_size)
