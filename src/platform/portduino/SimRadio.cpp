@@ -184,7 +184,7 @@ void SimRadio::onNotify(uint32_t notification)
 }
 
 /** start an immediate transmit */
-void SimRadio::startSend(MeshPacket *txp)
+void SimRadio::startSend(meshtastic_MeshPacket *txp)
 {
     printPacket("Starting low level send", txp);
     size_t numbytes = beginSending(txp);
@@ -205,7 +205,7 @@ void SimRadio::startSend(MeshPacket *txp)
     service.sendToPhone(p); // Sending back to simulator
 }
 
-void SimRadio::startReceive(MeshPacket *p)
+void SimRadio::startReceive(meshtastic_MeshPacket *p)
 {
     isReceiving = true;
     size_t length = getPacketLength(p);
