@@ -7,7 +7,7 @@ on:
         required: true
         type: string
 
-jobs: 
+jobs:
   build-esp32:
     runs-on: ubuntu-latest
     steps:
@@ -31,7 +31,7 @@ jobs:
 
       - name: Remove debug flags for release
         if: ${{ github.event_name == 'workflow_dispatch' }}
-        run: | 
+        run: |
           sed -i '/DDEBUG_HEAP/d' ./arch/esp32/esp32.ini
           sed -i '/DDEBUG_HEAP/d' ./arch/esp32/esp32s2.ini
           sed -i '/DDEBUG_HEAP/d' ./arch/esp32/esp32s3.ini
@@ -46,7 +46,7 @@ jobs:
           file: "firmware.bin"
           target: "release/bleota.bin"
           token: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Get release version string
         shell: bash
         run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
