@@ -1,8 +1,8 @@
-#include "configuration.h"
 #include "MeshModule.h"
 #include "Channels.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "configuration.h"
 #include "modules/RoutingModule.h"
 #include <assert.h>
 
@@ -106,8 +106,8 @@ void MeshModule::callPlugins(const MeshPacket &mp, RxSource src)
             /// Is the channel this packet arrived on acceptable? (security check)
             /// Note: we can't know channel names for encrypted packets, so those are NEVER sent to boundChannel modules
 
-            /// Also: if a packet comes in on the local PC interface, we don't check for bound channels, because it is TRUSTED and it needs to
-            /// to be able to fetch the initial admin packets without yet knowing any channels.
+            /// Also: if a packet comes in on the local PC interface, we don't check for bound channels, because it is TRUSTED and
+            /// it needs to to be able to fetch the initial admin packets without yet knowing any channels.
 
             bool rxChannelOk = !pi.boundChannel || (mp.from == 0) || (strcasecmp(ch->settings.name, pi.boundChannel) == 0);
 
@@ -161,7 +161,7 @@ void MeshModule::callPlugins(const MeshPacket &mp, RxSource src)
             printPacket("Sending response", currentReply);
             service.sendToMesh(currentReply);
             currentReply = NULL;
-        } else if(mp.from != ourNodeNum) {
+        } else if (mp.from != ourNodeNum) {
             // Note: if the message started with the local node we don't want to send a no response reply
 
             // No one wanted to reply to this requst, tell the requster that happened
@@ -175,9 +175,8 @@ void MeshModule::callPlugins(const MeshPacket &mp, RxSource src)
     }
 
     if (!moduleFound)
-        LOG_DEBUG("No modules interested in portnum=%d, src=%s\n",
-                    mp.decoded.portnum,
-                    (src == RX_SRC_LOCAL) ? "LOCAL":"REMOTE");
+        LOG_DEBUG("No modules interested in portnum=%d, src=%s\n", mp.decoded.portnum,
+                  (src == RX_SRC_LOCAL) ? "LOCAL" : "REMOTE");
 }
 
 MeshPacket *MeshModule::allocReply()
@@ -235,14 +234,12 @@ std::vector<MeshModule *> MeshModule::GetMeshModulesWithUIFrames()
     return modulesWithUIFrames;
 }
 
-void MeshModule::observeUIEvents(
-    Observer<const UIFrameEvent *> *observer)
+void MeshModule::observeUIEvents(Observer<const UIFrameEvent *> *observer)
 {
     if (modules) {
         for (auto i = modules->begin(); i != modules->end(); ++i) {
             auto &pi = **i;
-            Observable<const UIFrameEvent *> *observable =
-                pi.getUIFrameObservable();
+            Observable<const UIFrameEvent *> *observable = pi.getUIFrameObservable();
             if (observable != NULL) {
                 LOG_DEBUG("Module wants a UI Frame\n");
                 observer->observe(observable);
@@ -251,24 +248,19 @@ void MeshModule::observeUIEvents(
     }
 }
 
-AdminMessageHandleResult MeshModule::handleAdminMessageForAllPlugins(const MeshPacket &mp, AdminMessage *request, AdminMessage *response)
+AdminMessageHandleResult MeshModule::handleAdminMessageForAllPlugins(const MeshPacket &mp, AdminMessage *request,
+                                                                     AdminMessage *response)
 {
     AdminMessageHandleResult handled = AdminMessageHandleResult::NOT_HANDLED;
     if (modules) {
         for (auto i = modules->begin(); i != modules->end(); ++i) {
             auto &pi = **i;
             AdminMessageHandleResult h = pi.handleAdminMessageForModule(mp, request, response);
-            if (h == AdminMessageHandleResult::HANDLED_WITH_RESPONSE)
-            {
+            if (h == AdminMessageHandleResult::HANDLED_WITH_RESPONSE) {
                 // In case we have a response it always has priority.
-                LOG_DEBUG("Reply prepared by module '%s' of variant: %d\n",
-                    pi.name,
-                    response->which_payload_variant);
+                LOG_DEBUG("Reply prepared by module '%s' of variant: %d\n", pi.name, response->which_payload_variant);
                 handled = h;
-            }
-            else if ((handled != AdminMessageHandleResult::HANDLED_WITH_RESPONSE) &&
-                (h == AdminMessageHandleResult::HANDLED))
-            {
+            } else if ((handled != AdminMessageHandleResult::HANDLED_WITH_RESPONSE) && (h == AdminMessageHandleResult::HANDLED)) {
                 // In case the message is handled it should be populated, but will not overwrite
                 //   a result with response.
                 handled = h;

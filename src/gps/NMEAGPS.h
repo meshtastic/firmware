@@ -12,14 +12,14 @@
 class NMEAGPS : public GPS
 {
     TinyGPSPlus reader;
-    uint8_t fixQual = 0;  // fix quality from GPGGA
+    uint8_t fixQual = 0; // fix quality from GPGGA
 
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
     // (20210908) TinyGps++ can only read the GPGSA "FIX TYPE" field
     // via optional feature "custom fields", currently disabled (bug #525)
-    TinyGPSCustom gsafixtype;  // custom extract fix type from GPGSA
-    TinyGPSCustom gsapdop;     // custom extract PDOP from GPGSA
-    uint8_t fixType = 0;  // fix type from GPGSA
+    TinyGPSCustom gsafixtype; // custom extract fix type from GPGSA
+    TinyGPSCustom gsapdop;    // custom extract PDOP from GPGSA
+    uint8_t fixType = 0;      // fix type from GPGSA
 #endif
 
   public:
@@ -29,9 +29,9 @@ class NMEAGPS : public GPS
 
   protected:
     /** Subclasses should look for serial rx characters here and feed it to their GPS parser
-     * 
+     *
      * Return true if we received a valid message from the GPS
-    */
+     */
     virtual bool whileIdle() override;
 
     /**

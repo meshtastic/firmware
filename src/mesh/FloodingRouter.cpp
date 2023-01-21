@@ -31,10 +31,10 @@ void FloodingRouter::sniffReceived(const MeshPacket *p, const Routing *c)
 {
     bool isAck = ((c && c->error_reason == Routing_Error_NONE)); // consider only ROUTING_APP message without error as ACK
     if (isAck && p->to != getNodeNum()) {
-        // do not flood direct message that is ACKed 
+        // do not flood direct message that is ACKed
         LOG_DEBUG("Receiving an ACK not for me, but don't need to rebroadcast this direct message anymore.\n");
-        Router::cancelSending(p->to, p->decoded.request_id);   // cancel rebroadcast for this DM
-    } 
+        Router::cancelSending(p->to, p->decoded.request_id); // cancel rebroadcast for this DM
+    }
     if ((p->to != getNodeNum()) && (p->hop_limit > 0) && (getFrom(p) != getNodeNum())) {
         if (p->id != 0) {
             if (config.device.role != Config_DeviceConfig_Role_CLIENT_MUTE) {

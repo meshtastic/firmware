@@ -33,10 +33,10 @@ bool PositionModule::handleReceivedProtobuf(const MeshPacket &mp, Position *pptr
 
     // Log packet size and list of fields
     LOG_INFO("POSITION node=%08x l=%d %s%s%s%s%s%s%s%s%s%s%s%s%s\n", getFrom(&mp), mp.decoded.payload.size,
-              p.latitude_i ? "LAT " : "", p.longitude_i ? "LON " : "", p.altitude ? "MSL " : "", p.altitude_hae ? "HAE " : "",
-              p.altitude_geoidal_separation ? "GEO " : "", p.PDOP ? "PDOP " : "", p.HDOP ? "HDOP " : "", p.VDOP ? "VDOP " : "",
-              p.sats_in_view ? "SIV " : "", p.fix_quality ? "FXQ " : "", p.fix_type ? "FXT " : "", p.timestamp ? "PTS " : "",
-              p.time ? "TIME " : "");
+             p.latitude_i ? "LAT " : "", p.longitude_i ? "LON " : "", p.altitude ? "MSL " : "", p.altitude_hae ? "HAE " : "",
+             p.altitude_geoidal_separation ? "GEO " : "", p.PDOP ? "PDOP " : "", p.HDOP ? "HDOP " : "", p.VDOP ? "VDOP " : "",
+             p.sats_in_view ? "SIV " : "", p.fix_quality ? "FXQ " : "", p.fix_type ? "FXT " : "", p.timestamp ? "PTS " : "",
+             p.time ? "TIME " : "");
 
     if (p.time) {
         struct timeval tv;
@@ -140,7 +140,8 @@ int32_t PositionModule::runOnce()
 
     // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();
-    uint32_t intervalMs = config.position.position_broadcast_secs > 0 ? config.position.position_broadcast_secs * 1000 : default_broadcast_interval_secs * 1000;
+    uint32_t intervalMs = config.position.position_broadcast_secs > 0 ? config.position.position_broadcast_secs * 1000
+                                                                      : default_broadcast_interval_secs * 1000;
     if (lastGpsSend == 0 || (now - lastGpsSend) >= intervalMs) {
 
         // Only send packets if the channel is less than 40% utilized.
@@ -193,7 +194,7 @@ int32_t PositionModule::runOnce()
                     currentGeneration = radioGeneration;
 
                     LOG_INFO("Sending smart pos@%x:6 to mesh (wantReplies=%d, d=%d, dtt=%d, tt=%d)\n", node2->position.timestamp,
-                              requestReplies, distance, distanceTravelThreshold, timeTravel);
+                             requestReplies, distance, distanceTravelThreshold, timeTravel);
                     sendOurPosition(NODENUM_BROADCAST, requestReplies);
 
                     // Set the current coords as our last ones, after we've compared distance with current and decided to send

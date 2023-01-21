@@ -1,9 +1,9 @@
-#include "SX126xInterface.h"
 #include "SX126xInterface.cpp"
-#include "SX128xInterface.h"
+#include "SX126xInterface.h"
 #include "SX128xInterface.cpp"
-#include "api/ServerAPI.h"
+#include "SX128xInterface.h"
 #include "api/ServerAPI.cpp"
+#include "api/ServerAPI.h"
 
 // We need this declaration for proper linking in derived classes
 template class SX126xInterface<SX1262>;

@@ -1,9 +1,9 @@
-#include "configuration.h"
 #include "RemoteHardwareModule.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
 #include "Router.h"
+#include "configuration.h"
 #include "main.h"
 
 #define NUM_GPIOS 64
@@ -32,7 +32,7 @@ static uint64_t digitalReads(uint64_t mask)
     // The Arduino docs show to run pinMode(). But, when testing, found it is best not to.
     // If the line below is uncommented, read will flip the pin to the default of the second
     // argument in pinModes(), which will make the read turn the PIN "on".
-    //pinModes(mask, INPUT_PULLUP);
+    // pinModes(mask, INPUT_PULLUP);
 
     for (uint64_t i = 0; i < NUM_GPIOS; i++) {
         uint64_t m = 1 << i;
@@ -48,7 +48,7 @@ static uint64_t digitalReads(uint64_t mask)
 
 RemoteHardwareModule::RemoteHardwareModule()
     : ProtobufModule("remotehardware", PortNum_REMOTE_HARDWARE_APP, &HardwareMessage_msg), concurrency::OSThread(
-                                                                                                 "RemoteHardwareModule")
+                                                                                               "RemoteHardwareModule")
 {
 }
 
@@ -93,9 +93,10 @@ bool RemoteHardwareModule::handleReceivedProtobuf(const MeshPacket &req, Hardwar
 
         case HardwareMessage_Type_WATCH_GPIOS: {
             watchGpios = p.gpio_mask;
-            lastWatchMsec = 0;           // Force a new publish soon
-            previousWatch = ~watchGpios; // generate a 'previous' value which is guaranteed to not match (to force an initial publish)
-            enabled = true;              // Let our thread run at least once
+            lastWatchMsec = 0; // Force a new publish soon
+            previousWatch =
+                ~watchGpios; // generate a 'previous' value which is guaranteed to not match (to force an initial publish)
+            enabled = true;  // Let our thread run at least once
             LOG_INFO("Now watching GPIOs 0x%llx\n", watchGpios);
             break;
         }

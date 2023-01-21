@@ -25,7 +25,7 @@
 
 const uint32_t g_ADigitalPinMap[] = {
     25, // D0  SPI_MISO
-    24, // D1  SPI_NSS 
+    24, // D1  SPI_NSS
     23, // D2  SPI_SCK
     4,  // D3  VBAT
     11, // D4  DIO1
@@ -39,14 +39,14 @@ const uint32_t g_ADigitalPinMap[] = {
     10, // D12 LED1 GREEN
     17, // D13 LED2 RED
     9,  // D14 BUZZER
-    7,  // D15 BUTTON1   
+    7,  // D15 BUTTON1
 };
 
 #include <initializer_list>
 void initVariant()
 {
-  for (int i : {PIN_LED1, PIN_LED2}) {
-    pinMode(i, OUTPUT);
-    ledOff(i);
-  }
+    for (int i : {PIN_LED1, PIN_LED2}) {
+        pinMode(i, OUTPUT);
+        ledOff(i);
+    }
 }

@@ -40,7 +40,7 @@ class Power : private concurrency::OSThread
 
   private:
     uint8_t low_voltage_counter;
-#ifdef DEBUG_HEAP    
+#ifdef DEBUG_HEAP
     uint32_t lastheap;
 #endif
 };

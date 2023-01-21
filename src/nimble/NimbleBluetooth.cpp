@@ -1,11 +1,11 @@
-#include "configuration.h"
 #include "NimbleBluetooth.h"
 #include "BluetoothCommon.h"
 #include "PowerFSM.h"
-#include "sleep.h"
+#include "configuration.h"
 #include "main.h"
 #include "mesh/PhoneAPI.h"
 #include "mesh/mesh-pb-constants.h"
+#include "sleep.h"
 #include <NimBLEDevice.h>
 
 NimBLECharacteristic *fromNumCharacteristic;
@@ -18,12 +18,12 @@ class BluetoothPhoneAPI : public PhoneAPI
     /**
      * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
      */
-    virtual void onNowHasData(uint32_t fromRadioNum) 
+    virtual void onNowHasData(uint32_t fromRadioNum)
     {
         PhoneAPI::onNowHasData(fromRadioNum);
 
         LOG_INFO("BLE notify fromNum\n");
-        
+
         uint8_t val[4];
         put_le32(val, fromRadioNum);
 
@@ -32,10 +32,7 @@ class BluetoothPhoneAPI : public PhoneAPI
     }
 
     /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected() 
-    {
-        return bleServer && bleServer->getConnectedCount() > 0;
-    }
+    virtual bool checkIsConnected() { return bleServer && bleServer->getConnectedCount() > 0; }
 };
 
 static BluetoothPhoneAPI *bluetoothPhoneAPI;
@@ -43,19 +40,21 @@ static BluetoothPhoneAPI *bluetoothPhoneAPI;
  * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
  */
 
-class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks 
+class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
 {
-    virtual void onWrite(NimBLECharacteristic *pCharacteristic) {
+    virtual void onWrite(NimBLECharacteristic *pCharacteristic)
+    {
         LOG_INFO("To Radio onwrite\n");
         auto val = pCharacteristic->getValue();
-        
+
         bluetoothPhoneAPI->handleToRadio(val.data(), val.length());
     }
 };
 
-class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks 
+class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
 {
-    virtual void onRead(NimBLECharacteristic *pCharacteristic) {
+    virtual void onRead(NimBLECharacteristic *pCharacteristic)
+    {
         LOG_INFO("From Radio onread\n");
         uint8_t fromRadioBytes[FromRadio_size];
         size_t numBytes = bluetoothPhoneAPI->getFromRadio(fromRadioBytes);
@@ -66,15 +65,16 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
     }
 };
 
-class NimbleBluetoothServerCallback : public NimBLEServerCallbacks 
+class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 {
-    virtual uint32_t onPassKeyRequest() {
+    virtual uint32_t onPassKeyRequest()
+    {
         uint32_t passkey = config.bluetooth.fixed_pin;
-        
+
         if (config.bluetooth.mode == Config_BluetoothConfig_PairingMode_RANDOM_PIN) {
             LOG_INFO("Using random passkey\n");
             // This is the passkey to be entered on peer - we pick a number >100,000 to ensure 6 digits
-            passkey = random(100000, 999999); 
+            passkey = random(100000, 999999);
         }
         LOG_INFO("*** Enter passkey %d on the peer side ***\n", passkey);
 
@@ -85,7 +85,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         return passkey;
     }
 
-    virtual void onAuthenticationComplete(ble_gap_conn_desc *desc) 
+    virtual void onAuthenticationComplete(ble_gap_conn_desc *desc)
     {
         LOG_INFO("BLE authentication complete\n");
 
@@ -96,10 +96,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         // bluetoothPhoneAPI->setInitialState();
     }
 
-    virtual void onDisconnect(NimBLEServer* pServer, ble_gap_conn_desc *desc)
-     {
-        LOG_INFO("BLE disconnect\n");
-    }
+    virtual void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc) { LOG_INFO("BLE disconnect\n"); }
 };
 
 static NimbleBluetoothToRadioCallback *toRadioCallbacks;
@@ -109,7 +106,7 @@ void NimbleBluetooth::shutdown()
 {
     // Shutdown bluetooth for minimum power draw
     LOG_INFO("Disable bluetooth\n");
-    //Bluefruit.Advertising.stop();
+    // Bluefruit.Advertising.stop();
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->reset();
     pAdvertising->stop();
@@ -135,7 +132,7 @@ void NimbleBluetooth::setup()
         NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
     }
     bleServer = NimBLEDevice::createServer();
-    
+
     NimbleBluetoothServerCallback *serverCallbacks = new NimbleBluetoothServerCallback();
     bleServer->setCallbacks(serverCallbacks, true);
 
@@ -143,7 +140,7 @@ void NimbleBluetooth::setup()
     startAdvertising();
 }
 
-void NimbleBluetooth::setupService() 
+void NimbleBluetooth::setupService()
 {
     NimBLEService *bleService = bleServer->createService(MESH_SERVICE_UUID);
     NimBLECharacteristic *ToRadioCharacteristic;
@@ -153,11 +150,14 @@ void NimbleBluetooth::setupService()
         ToRadioCharacteristic = bleService->createCharacteristic(TORADIO_UUID, NIMBLE_PROPERTY::WRITE);
         FromRadioCharacteristic = bleService->createCharacteristic(FROMRADIO_UUID, NIMBLE_PROPERTY::READ);
         fromNumCharacteristic = bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ);
-    }
-    else {
-        ToRadioCharacteristic = bleService->createCharacteristic(TORADIO_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_AUTHEN | NIMBLE_PROPERTY::WRITE_ENC);
-        FromRadioCharacteristic = bleService->createCharacteristic(FROMRADIO_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
-        fromNumCharacteristic = bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
+    } else {
+        ToRadioCharacteristic = bleService->createCharacteristic(
+            TORADIO_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_AUTHEN | NIMBLE_PROPERTY::WRITE_ENC);
+        FromRadioCharacteristic = bleService->createCharacteristic(
+            FROMRADIO_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
+        fromNumCharacteristic =
+            bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ |
+                                                               NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
     }
     bluetoothPhoneAPI = new BluetoothPhoneAPI();
 
@@ -170,7 +170,7 @@ void NimbleBluetooth::setupService()
     bleService->start();
 }
 
-void NimbleBluetooth::startAdvertising() 
+void NimbleBluetooth::startAdvertising()
 {
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->reset();
@@ -181,7 +181,7 @@ void NimbleBluetooth::startAdvertising()
 /// Given a level between 0-100, update the BLE attribute
 void updateBatteryLevel(uint8_t level)
 {
-    //blebas.write(level);
+    // blebas.write(level);
 }
 
 void NimbleBluetooth::clearBonds()
@@ -190,7 +190,7 @@ void NimbleBluetooth::clearBonds()
     NimBLEDevice::deleteAllBonds();
 }
 
-void clearNVS() 
+void clearNVS()
 {
     NimBLEDevice::deleteAllBonds();
 #ifdef ARCH_ESP32

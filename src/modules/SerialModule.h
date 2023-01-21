@@ -1,11 +1,11 @@
 #pragma once
 
+#include "MeshModule.h"
+#include "Router.h"
 #include "SinglePortModule.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include <Arduino.h>
-#include "MeshModule.h"
-#include "Router.h"
 #include <functional>
 
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(TTGO_T_ECHO) && !defined(CONFIG_IDF_TARGET_ESP32S2)
@@ -50,7 +50,8 @@ class SerialModuleRadio : public MeshModule
 
     /** Called to handle a particular incoming message
 
-    @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for it
+    @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for
+    it
     */
     virtual ProcessMessage handleReceived(const MeshPacket &mp) override;
 
@@ -66,7 +67,6 @@ class SerialModuleRadio : public MeshModule
 
         return p;
     }
-
 };
 
 extern SerialModuleRadio *serialModuleRadio;

@@ -1,11 +1,11 @@
 #include "configuration.h"
+#include <Adafruit_nRFCrypto.h>
 #include <SPI.h>
 #include <Wire.h>
 #include <assert.h>
 #include <ble_gap.h>
 #include <memory.h>
 #include <stdio.h>
-#include <Adafruit_nRFCrypto.h>
 // #include <Adafruit_USBD_Device.h>
 #include "NodeDB.h"
 
@@ -22,7 +22,8 @@ static inline void debugger_break(void)
                    "mov pc, lr\n\t");
 }
 
-bool loopCanSleep() {
+bool loopCanSleep()
+{
     // turn off sleep only while connected via USB
     // return true;
     return !Serial; // the bool operator on the nrf52 serial class returns true if connected to a PC currently
@@ -77,7 +78,7 @@ void setBluetoothEnable(bool on)
                 else {
                     nrf52Bluetooth = new NRF52Bluetooth();
                     nrf52Bluetooth->setup();
-                    
+
                     // We delay brownout init until after BLE because BLE starts soft device
                     initBrownout();
                 }
@@ -148,7 +149,7 @@ void nrf52Setup()
     // Init random seed
     union seedParts {
         uint32_t seed32;
-        uint8_t  seed8[4];
+        uint8_t seed8[4];
     } seed;
     nRFCrypto.begin();
     nRFCrypto.Random.generate(seed.seed8, sizeof(seed.seed8));
@@ -192,7 +193,8 @@ void cpuDeepSleep(uint64_t msecToWake)
     }
 }
 
-void clearBonds() {
+void clearBonds()
+{
     if (!nrf52Bluetooth) {
         nrf52Bluetooth = new NRF52Bluetooth();
         nrf52Bluetooth->setup();

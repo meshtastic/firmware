@@ -13,9 +13,9 @@
 #include "error.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
+#include <ErriezCRC32.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
-#include <ErriezCRC32.h>
 
 #ifdef ARCH_ESP32
 #include "mesh/http/WiFiAPClient.h"
@@ -81,7 +81,7 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
     radioGeneration++;
 
     if (factory_reset) {
-       didFactoryReset = factoryReset();
+        didFactoryReset = factoryReset();
     }
 
     if (channelFile.channels_count != MAX_NUM_CHANNELS) {
@@ -121,7 +121,7 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
     return didFactoryReset;
 }
 
-bool NodeDB::factoryReset() 
+bool NodeDB::factoryReset()
 {
     LOG_INFO("Performing factory reset!\n");
     // first, remove the "/prefs" (this removes most prefs)
@@ -160,8 +160,9 @@ void NodeDB::installDefaultConfig()
     config.has_power = true;
     config.has_network = true;
     config.has_bluetooth = true;
-    config.lora.tx_enabled = true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
-    config.lora.override_duty_cycle = false; 
+    config.lora.tx_enabled =
+        true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
+    config.lora.override_duty_cycle = false;
     config.lora.region = Config_LoRaConfig_RegionCode_UNSET;
     config.lora.modem_preset = Config_LoRaConfig_ModemPreset_LONG_FAST;
     config.lora.hop_limit = HOP_RELIABLE;
@@ -178,14 +179,16 @@ void NodeDB::installDefaultConfig()
 #else
     bool hasScreen = screen_found;
 #endif
-    config.bluetooth.mode = hasScreen ? Config_BluetoothConfig_PairingMode_RANDOM_PIN : Config_BluetoothConfig_PairingMode_FIXED_PIN;
+    config.bluetooth.mode =
+        hasScreen ? Config_BluetoothConfig_PairingMode_RANDOM_PIN : Config_BluetoothConfig_PairingMode_FIXED_PIN;
     // for backward compat, default position flags are ALT+MSL
-    config.position.position_flags = (Config_PositionConfig_PositionFlags_ALTITUDE | Config_PositionConfig_PositionFlags_ALTITUDE_MSL);
-    
+    config.position.position_flags =
+        (Config_PositionConfig_PositionFlags_ALTITUDE | Config_PositionConfig_PositionFlags_ALTITUDE_MSL);
+
     initConfigIntervals();
 }
 
-void NodeDB::initConfigIntervals() 
+void NodeDB::initConfigIntervals()
 {
     config.position.gps_update_interval = default_gps_update_interval;
     config.position.gps_attempt_time = default_gps_attempt_time;
@@ -196,7 +199,7 @@ void NodeDB::initConfigIntervals()
     config.power.min_wake_secs = default_min_wake_secs;
     config.power.sds_secs = default_sds_secs;
     config.power.wait_bluetooth_secs = default_wait_bluetooth_secs;
-    
+
     config.display.screen_on_secs = default_screen_on_secs;
 }
 
@@ -204,7 +207,7 @@ void NodeDB::installDefaultModuleConfig()
 {
     LOG_INFO("Installing default ModuleConfig\n");
     memset(&moduleConfig, 0, sizeof(ModuleConfig));
-    
+
     moduleConfig.version = DEVICESTATE_CUR_VER;
     moduleConfig.has_mqtt = true;
     moduleConfig.has_range_test = true;
@@ -221,7 +224,7 @@ void NodeDB::installDefaultModuleConfig()
     initModuleConfigIntervals();
 }
 
-void NodeDB::initModuleConfigIntervals() 
+void NodeDB::initModuleConfigIntervals()
 {
     moduleConfig.telemetry.device_update_interval = default_broadcast_interval_secs;
     moduleConfig.telemetry.environment_update_interval = default_broadcast_interval_secs;
@@ -247,7 +250,7 @@ void NodeDB::installDefaultDeviceState()
     memset(&devicestate, 0, sizeof(DeviceState));
 
     *numNodes = 0;
-    
+
     // init our devicestate with valid flags so protobuf writing/reading will work
     devicestate.has_my_node = true;
     devicestate.has_owner = true;
@@ -285,7 +288,8 @@ void NodeDB::init()
 
     myNodeInfo.max_channels = MAX_NUM_CHANNELS; // tell others the max # of channels we can understand
 
-    myNodeInfo.error_code = CriticalErrorCode_NONE; // For the error code, only show values from this boot (discard value from flash)
+    myNodeInfo.error_code =
+        CriticalErrorCode_NONE; // For the error code, only show values from this boot (discard value from flash)
     myNodeInfo.error_address = 0;
 
     // likewise - we always want the app requirements to come from the running appload
@@ -364,7 +368,6 @@ static const char *moduleConfigFileName = "/prefs/module.proto";
 static const char *channelFileName = "/prefs/channels.proto";
 static const char *oemConfigFile = "/oem/oem.proto";
 
-
 /** Load a protobuf from a file, return true for success */
 bool NodeDB::loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, void *dest_struct)
 {
@@ -422,7 +425,8 @@ void NodeDB::loadFromDisk()
         }
     }
 
-    if (!loadProto(moduleConfigFileName, LocalModuleConfig_size, sizeof(LocalModuleConfig), &LocalModuleConfig_msg, &moduleConfig)) {
+    if (!loadProto(moduleConfigFileName, LocalModuleConfig_size, sizeof(LocalModuleConfig), &LocalModuleConfig_msg,
+                   &moduleConfig)) {
         installDefaultModuleConfig(); // Our in RAM copy might now be corrupt
     } else {
         if (moduleConfig.version < DEVICESTATE_MIN_VER) {
@@ -478,9 +482,9 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
 #ifdef ARCH_NRF52
         static uint8_t failedCounter = 0;
         failedCounter++;
-        if(failedCounter >= 2){
+        if (failedCounter >= 2) {
             FSCom.format();
-            //After formatting, the device needs to be restarted
+            // After formatting, the device needs to be restarted
             nodeDB.resetRadioConfig(true);
         }
 #endif
@@ -501,7 +505,7 @@ void NodeDB::saveChannelsToDisk()
     }
 }
 
-void NodeDB::saveDeviceStateToDisk() 
+void NodeDB::saveDeviceStateToDisk()
 {
     if (!devicestate.no_save) {
 #ifdef FSCom
@@ -599,7 +603,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const Position &p, RxSource src)
     if (src == RX_SRC_LOCAL) {
         // Local packet, fully authoritative
         LOG_INFO("updatePosition LOCAL pos@%x, time=%u, latI=%d, lonI=%d, alt=%d\n", p.timestamp, p.time, p.latitude_i,
-                  p.longitude_i, p.altitude);
+                 p.longitude_i, p.altitude);
         info->position = p;
 
     } else if ((p.time > 0) && !p.latitude_i && !p.longitude_i && !p.timestamp && !p.location_source) {

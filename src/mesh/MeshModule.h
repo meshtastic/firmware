@@ -10,15 +10,14 @@
 #endif
 
 /** handleReceived return enumeration
- * 
+ *
  * Use ProcessMessage::CONTINUE to allows other modules to process a message.
- * 
+ *
  * Use ProcessMessage::STOP to stop further message processing.
  */
-enum class ProcessMessage
-{
-  CONTINUE = 0,
-  STOP = 1,
+enum class ProcessMessage {
+    CONTINUE = 0,
+    STOP = 1,
 };
 
 /**
@@ -27,8 +26,7 @@ enum class ProcessMessage
  * If response is also prepared for the request, then HANDLED_WITH_RESPONSE
  * should be returned.
  */
-enum class AdminMessageHandleResult
-{
+enum class AdminMessageHandleResult {
     NOT_HANDLED = 0,
     HANDLED = 1,
     HANDLED_WITH_RESPONSE = 2,
@@ -70,10 +68,13 @@ class MeshModule
 
     static std::vector<MeshModule *> GetMeshModulesWithUIFrames();
     static void observeUIEvents(Observer<const UIFrameEvent *> *observer);
-    static AdminMessageHandleResult handleAdminMessageForAllPlugins(
-        const MeshPacket &mp, AdminMessage *request, AdminMessage *response);
+    static AdminMessageHandleResult handleAdminMessageForAllPlugins(const MeshPacket &mp, AdminMessage *request,
+                                                                    AdminMessage *response);
 #if HAS_SCREEN
-    virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) { return; }
+    virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+    {
+        return;
+    }
 #endif
   protected:
     const char *name;
@@ -127,9 +128,13 @@ class MeshModule
 
     /** Called to handle a particular incoming message
 
-    @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for it
+    @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for
+    it
     */
-    virtual ProcessMessage handleReceived(const MeshPacket &mp) { return ProcessMessage::CONTINUE; }
+    virtual ProcessMessage handleReceived(const MeshPacket &mp)
+    {
+        return ProcessMessage::CONTINUE;
+    }
 
     /** Messages can be received that have the want_response bit set.  If set, this callback will be invoked
      * so that subclasses can (optionally) send a response back to the original sender.
@@ -142,26 +147,35 @@ class MeshModule
     /***
      * @return true if you want to be alloced a UI screen frame
      */
-    virtual bool wantUIFrame() { return false; }
-    virtual Observable<const UIFrameEvent *>* getUIFrameObservable() { return NULL; }
+    virtual bool wantUIFrame()
+    {
+        return false;
+    }
+    virtual Observable<const UIFrameEvent *> *getUIFrameObservable()
+    {
+        return NULL;
+    }
 
     MeshPacket *allocAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex);
 
     /// Send an error response for the specified packet.
     MeshPacket *allocErrorResponse(Routing_Error err, const MeshPacket *p);
 
-  /**
-   * @brief An admin message arrived to AdminModule. Module was asked whether it want to handle the request.
-   * 
-   * @param mp The mesh packet arrived.
-   * @param request The AdminMessage request extracted from the packet.
-   * @param response The prepared response
-   * @return AdminMessageHandleResult
-   *   HANDLED if message was handled
-   *   HANDLED_WITH_RESPONSE if a response is also prepared and to be sent.
-   */
-    virtual AdminMessageHandleResult handleAdminMessageForModule(
-        const MeshPacket &mp, AdminMessage *request, AdminMessage *response) { return AdminMessageHandleResult::NOT_HANDLED; };
+    /**
+     * @brief An admin message arrived to AdminModule. Module was asked whether it want to handle the request.
+     *
+     * @param mp The mesh packet arrived.
+     * @param request The AdminMessage request extracted from the packet.
+     * @param response The prepared response
+     * @return AdminMessageHandleResult
+     *   HANDLED if message was handled
+     *   HANDLED_WITH_RESPONSE if a response is also prepared and to be sent.
+     */
+    virtual AdminMessageHandleResult handleAdminMessageForModule(const MeshPacket &mp, AdminMessage *request,
+                                                                 AdminMessage *response)
+    {
+        return AdminMessageHandleResult::NOT_HANDLED;
+    };
 
   private:
     /**
