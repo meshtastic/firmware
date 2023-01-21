@@ -19,8 +19,8 @@ static BLEDfu bledfu; // DFU software update helper service
 // This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in
 // proccess at once
 // static uint8_t trBytes[_max(_max(_max(_max(ToRadio_size, RadioConfig_size), User_size), MyNodeInfo_size), FromRadio_size)];
-static uint8_t fromRadioBytes[FromRadio_size];
-static uint8_t toRadioBytes[ToRadio_size];
+static uint8_t fromRadioBytes[meshtastic_FromRadio_size];
+static uint8_t toRadioBytes[meshtastic_ToRadio_size];
 
 static uint16_t connectionHandle;
 
@@ -168,7 +168,7 @@ void setupMeshService(void)
     // any characteristic(s) within that service definition.. Calling .begin() on
     // a BLECharacteristic will cause it to be added to the last BLEService that
     // was 'begin()'ed!
-    auto secMode = config.bluetooth.mode == Config_BluetoothConfig_PairingMode_NO_PIN ? SECMODE_OPEN : SECMODE_ENC_NO_MITM;
+    auto secMode = config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN ? SECMODE_OPEN : SECMODE_ENC_NO_MITM;
 
     fromNum.setProperties(CHR_PROPS_NOTIFY | CHR_PROPS_READ);
     fromNum.setPermission(secMode, SECMODE_NO_ACCESS); // FIXME, secure this!!!
@@ -225,8 +225,8 @@ void NRF52Bluetooth::setup()
     Bluefruit.Advertising.clearData();
     Bluefruit.ScanResponse.clearData();
 
-    if (config.bluetooth.mode != Config_BluetoothConfig_PairingMode_NO_PIN) {
-        configuredPasskey = config.bluetooth.mode == Config_BluetoothConfig_PairingMode_FIXED_PIN ? config.bluetooth.fixed_pin
+    if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
+        configuredPasskey = config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN ? config.bluetooth.fixed_pin
                                                                                                   : random(100000, 999999);
         auto pinString = std::to_string(configuredPasskey);
         LOG_INFO("Bluetooth pin set to '%i'\n", configuredPasskey);

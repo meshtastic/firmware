@@ -98,7 +98,7 @@ uint32_t serialSinceMsec;
 bool pmu_found;
 
 // Array map of sensor types (as array index) and i2c address as value we'll find in the i2c scan
-uint8_t nodeTelemetrySensorsMap[_TelemetrySensorType_MAX + 1] = {
+uint8_t nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1] = {
     0}; // one is enough, missing elements will be initialized to 0 anyway.
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
@@ -302,7 +302,7 @@ void setup()
     playStartMelody();
 
     // fixed screen override?
-    if (config.display.oled != Config_DisplayConfig_OledType_OLED_AUTO)
+    if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)
         screen_model = config.display.oled;
 
 #if defined(USE_SH1107)
@@ -341,7 +341,7 @@ void setup()
     // Do this after service.init (because that clears error_code)
 #ifdef HAS_PMU
     if (!pmu_found)
-        RECORD_CRITICALERROR(CriticalErrorCode_NO_AXP192); // Record a hardware fault for missing hardware
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_AXP192); // Record a hardware fault for missing hardware
 #endif
 
         // Don't call screen setup until after nodedb is setup (because we need
@@ -454,9 +454,9 @@ void setup()
 
     // check if the radio chip matches the selected region
 
-    if ((config.lora.region == Config_LoRaConfig_RegionCode_LORA_24) && (!rIf->wideLora())) {
+    if ((config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && (!rIf->wideLora())) {
         LOG_WARN("Radio chip does not support 2.4GHz LoRa. Reverting to unset.\n");
-        config.lora.region = Config_LoRaConfig_RegionCode_UNSET;
+        config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
         nodeDB.saveToDisk(SEGMENT_CONFIG);
         if (!rIf->reconfigure()) {
             LOG_WARN("Reconfigure failed, rebooting\n");
@@ -490,13 +490,13 @@ void setup()
     airTime = new AirTime();
 
     if (!rIf)
-        RECORD_CRITICALERROR(CriticalErrorCode_NO_RADIO);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_RADIO);
     else {
         router->addInterface(rIf);
 
         // Calculate and save the bit rate to myNodeInfo
         // TODO: This needs to be added what ever method changes the channel from the phone.
-        myNodeInfo.bitrate = (float(Constants_DATA_PAYLOAD_LEN) / (float(rIf->getPacketTime(Constants_DATA_PAYLOAD_LEN)))) * 1000;
+        myNodeInfo.bitrate = (float(meshtastic_Constants_DATA_PAYLOAD_LEN) / (float(rIf->getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN)))) * 1000;
         LOG_DEBUG("myNodeInfo.bitrate = %f bytes / sec\n", myNodeInfo.bitrate);
     }
 

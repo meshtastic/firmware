@@ -47,19 +47,19 @@ static uint64_t digitalReads(uint64_t mask)
 }
 
 RemoteHardwareModule::RemoteHardwareModule()
-    : ProtobufModule("remotehardware", PortNum_REMOTE_HARDWARE_APP, &HardwareMessage_msg), concurrency::OSThread(
+    : ProtobufModule("remotehardware", meshtastic_PortNum_REMOTE_HARDWARE_APP, &meshtastic_HardwareMessage_msg), concurrency::OSThread(
                                                                                                "RemoteHardwareModule")
 {
 }
 
-bool RemoteHardwareModule::handleReceivedProtobuf(const MeshPacket &req, HardwareMessage *pptr)
+bool RemoteHardwareModule::handleReceivedProtobuf(const meshtastic_MeshPacket &req, meshtastic_HardwareMessage *pptr)
 {
     if (moduleConfig.remote_hardware.enabled) {
         auto p = *pptr;
         LOG_INFO("Received RemoteHardware typ=%d\n", p.type);
 
         switch (p.type) {
-        case HardwareMessage_Type_WRITE_GPIOS:
+        case meshtastic_HardwareMessage_Type_WRITE_GPIOS:
             // Print notification to LCD screen
             screen->print("Write GPIOs\n");
 
@@ -73,7 +73,7 @@ bool RemoteHardwareModule::handleReceivedProtobuf(const MeshPacket &req, Hardwar
 
             break;
 
-        case HardwareMessage_Type_READ_GPIOS: {
+        case meshtastic_HardwareMessage_Type_READ_GPIOS: {
             // Print notification to LCD screen
             if (screen)
                 screen->print("Read GPIOs\n");
@@ -81,17 +81,17 @@ bool RemoteHardwareModule::handleReceivedProtobuf(const MeshPacket &req, Hardwar
             uint64_t res = digitalReads(p.gpio_mask);
 
             // Send the reply
-            HardwareMessage r = HardwareMessage_init_default;
-            r.type = HardwareMessage_Type_READ_GPIOS_REPLY;
+            meshtastic_HardwareMessage r = meshtastic_HardwareMessage_init_default;
+            r.type = meshtastic_HardwareMessage_Type_READ_GPIOS_REPLY;
             r.gpio_value = res;
             r.gpio_mask = p.gpio_mask;
-            MeshPacket *p2 = allocDataProtobuf(r);
+            meshtastic_MeshPacket *p2 = allocDataProtobuf(r);
             setReplyTo(p2, req);
             myReply = p2;
             break;
         }
 
-        case HardwareMessage_Type_WATCH_GPIOS: {
+        case meshtastic_HardwareMessage_Type_WATCH_GPIOS: {
             watchGpios = p.gpio_mask;
             lastWatchMsec = 0; // Force a new publish soon
             previousWatch =
@@ -101,8 +101,8 @@ bool RemoteHardwareModule::handleReceivedProtobuf(const MeshPacket &req, Hardwar
             break;
         }
 
-        case HardwareMessage_Type_READ_GPIOS_REPLY:
-        case HardwareMessage_Type_GPIOS_CHANGED:
+        case meshtastic_HardwareMessage_Type_READ_GPIOS_REPLY:
+        case meshtastic_HardwareMessage_Type_GPIOS_CHANGED:
             break; // Ignore - we might see our own replies
 
         default:
@@ -127,10 +127,10 @@ int32_t RemoteHardwareModule::runOnce()
                 LOG_INFO("Broadcasting GPIOS 0x%llx changed!\n", curVal);
 
                 // Something changed!  Tell the world with a broadcast message
-                HardwareMessage r = HardwareMessage_init_default;
-                r.type = HardwareMessage_Type_GPIOS_CHANGED;
+                meshtastic_HardwareMessage r = meshtastic_HardwareMessage_init_default;
+                r.type = meshtastic_HardwareMessage_Type_GPIOS_CHANGED;
                 r.gpio_value = curVal;
-                MeshPacket *p = allocDataProtobuf(r);
+                meshtastic_MeshPacket *p = allocDataProtobuf(r);
                 service.sendToMesh(p);
             }
         }

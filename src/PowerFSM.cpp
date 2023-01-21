@@ -16,7 +16,7 @@ static bool isPowered()
     return true;
 #endif
 
-    bool isRouter = (config.device.role == Config_DeviceConfig_Role_ROUTER ? 1 : 0);
+    bool isRouter = (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ? 1 : 0);
 
     // If we are not a router and we already have AC power go to POWER state after init, otherwise go to ON
     // We assume routers might be powered all the time, but from a low current (solar) source
@@ -238,7 +238,7 @@ Fsm powerFSM(&stateBOOT);
 
 void PowerFSM_setup()
 {
-    bool isRouter = (config.device.role == Config_DeviceConfig_Role_ROUTER ? 1 : 0);
+    bool isRouter = (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ? 1 : 0);
     bool hasPower = isPowered();
 
     LOG_INFO("PowerFSM init, USB power=%d\n", hasPower ? 1 : 0);

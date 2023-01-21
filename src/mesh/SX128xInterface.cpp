@@ -55,9 +55,9 @@ template <typename T> bool SX128xInterface<T>::init()
     // \todo Display actual typename of the adapter, not just `SX128x`
     LOG_INFO("SX128x init result %d\n", res);
 
-    if ((config.lora.region != Config_LoRaConfig_RegionCode_LORA_24) && (res == RADIOLIB_ERR_INVALID_FREQUENCY)) {
+    if ((config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && (res == RADIOLIB_ERR_INVALID_FREQUENCY)) {
         LOG_WARN("Radio chip only supports 2.4GHz LoRa. Adjusting Region and rebooting.\n");
-        config.lora.region = Config_LoRaConfig_RegionCode_LORA_24;
+        config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_LORA_24;
         nodeDB.saveToDisk(SEGMENT_CONFIG);
         delay(2000);
 #if defined(ARCH_ESP32)
@@ -92,15 +92,15 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
     // configure publicly accessible settings
     int err = lora.setSpreadingFactor(sf);
     if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(CriticalErrorCode_INVALID_RADIO_SETTING);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
     err = lora.setBandwidth(bw);
     if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(CriticalErrorCode_INVALID_RADIO_SETTING);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
     err = lora.setCodingRate(cr);
     if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(CriticalErrorCode_INVALID_RADIO_SETTING);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
     // Hmm - seems to lower SNR when the signal levels are high.  Leaving off for now...
     // TODO: Confirm gain registers are okay now
@@ -115,7 +115,7 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
 
     err = lora.setFrequency(getFreq());
     if (err != RADIOLIB_ERR_NONE)
-        RECORD_CRITICALERROR(CriticalErrorCode_INVALID_RADIO_SETTING);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
     if (power > SX128X_MAX_POWER) // This chip has lower power limits than some
         power = SX128X_MAX_POWER;
@@ -164,7 +164,7 @@ template <typename T> void SX128xInterface<T>::setStandby()
 /**
  * Add SNR data to received messages
  */
-template <typename T> void SX128xInterface<T>::addReceiveMetadata(MeshPacket *mp)
+template <typename T> void SX128xInterface<T>::addReceiveMetadata(meshtastic_MeshPacket *mp)
 {
     // LOG_DEBUG("PacketStatus %x\n", lora.getPacketStatus());
     mp->rx_snr = lora.getSNR();

@@ -5,7 +5,7 @@
 
 WaypointModule *waypointModule;
 
-ProcessMessage WaypointModule::handleReceived(const MeshPacket &mp)
+ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
     auto &p = mp.decoded;
     LOG_INFO("Received waypoint msg from=0x%0x, id=0x%x, msg=%.*s\n", mp.from, mp.id, p.payload.size, p.payload.bytes);

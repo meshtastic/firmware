@@ -16,7 +16,7 @@
  * -------------------------------------------
  */
 
-uint32_t printWPL(char *buf, size_t bufsz, const Position &pos, const char *name)
+uint32_t printWPL(char *buf, size_t bufsz, const meshtastic_Position &pos, const char *name)
 {
     GeoCoord geoCoord(pos.latitude_i, pos.longitude_i, pos.altitude);
     uint32_t len = snprintf(buf, bufsz, "$GNWPL,%02d%07.4f,%c,%03d%07.4f,%c,%s", geoCoord.getDMSLatDeg(),
@@ -53,7 +53,7 @@ uint32_t printWPL(char *buf, size_t bufsz, const Position &pos, const char *name
  * -------------------------------------------
  */
 
-uint32_t printGGA(char *buf, size_t bufsz, const Position &pos)
+uint32_t printGGA(char *buf, size_t bufsz, const meshtastic_Position &pos)
 {
     GeoCoord geoCoord(pos.latitude_i, pos.longitude_i, pos.altitude);
     uint32_t len =

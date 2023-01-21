@@ -10,13 +10,13 @@
 PositionModule *positionModule;
 
 PositionModule::PositionModule()
-    : ProtobufModule("position", PortNum_POSITION_APP, &Position_msg), concurrency::OSThread("PositionModule")
+    : ProtobufModule("position", meshtastic_PortNum_POSITION_APP, &meshtastic_Position_msg), concurrency::OSThread("PositionModule")
 {
     isPromiscuous = true;          // We always want to update our nodedb, even if we are sniffing on others
     setIntervalFromNow(60 * 1000); // Send our initial position 60 seconds after we start (to give GPS time to setup)
 }
 
-bool PositionModule::handleReceivedProtobuf(const MeshPacket &mp, Position *pptr)
+bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Position *pptr)
 {
     auto p = *pptr;
 
@@ -53,9 +53,9 @@ bool PositionModule::handleReceivedProtobuf(const MeshPacket &mp, Position *pptr
     return false; // Let others look at this message also if they want
 }
 
-MeshPacket *PositionModule::allocReply()
+meshtastic_MeshPacket *PositionModule::allocReply()
 {
-    NodeInfo *node = service.refreshMyNodeInfo(); // should guarantee there is now a position
+    meshtastic_NodeInfo *node = service.refreshMyNodeInfo(); // should guarantee there is now a position
     assert(node->has_position);
 
     node->position.seq_number++;
@@ -65,44 +65,44 @@ MeshPacket *PositionModule::allocReply()
     uint32_t pos_flags = config.position.position_flags;
 
     // Populate a Position struct with ONLY the requested fields
-    Position p = Position_init_default; //   Start with an empty structure
+    meshtastic_Position p = meshtastic_Position_init_default; //   Start with an empty structure
 
     // lat/lon are unconditionally included - IF AVAILABLE!
     p.latitude_i = node->position.latitude_i;
     p.longitude_i = node->position.longitude_i;
     p.time = node->position.time;
 
-    if (pos_flags & Config_PositionConfig_PositionFlags_ALTITUDE) {
-        if (pos_flags & Config_PositionConfig_PositionFlags_ALTITUDE_MSL)
+    if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE) {
+        if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL)
             p.altitude = node->position.altitude;
         else
             p.altitude_hae = node->position.altitude_hae;
 
-        if (pos_flags & Config_PositionConfig_PositionFlags_GEOIDAL_SEPARATION)
+        if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_GEOIDAL_SEPARATION)
             p.altitude_geoidal_separation = node->position.altitude_geoidal_separation;
     }
 
-    if (pos_flags & Config_PositionConfig_PositionFlags_DOP) {
-        if (pos_flags & Config_PositionConfig_PositionFlags_HVDOP) {
+    if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_DOP) {
+        if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_HVDOP) {
             p.HDOP = node->position.HDOP;
             p.VDOP = node->position.VDOP;
         } else
             p.PDOP = node->position.PDOP;
     }
 
-    if (pos_flags & Config_PositionConfig_PositionFlags_SATINVIEW)
+    if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_SATINVIEW)
         p.sats_in_view = node->position.sats_in_view;
 
-    if (pos_flags & Config_PositionConfig_PositionFlags_TIMESTAMP)
+    if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_TIMESTAMP)
         p.timestamp = node->position.timestamp;
 
-    if (pos_flags & Config_PositionConfig_PositionFlags_SEQ_NO)
+    if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_SEQ_NO)
         p.seq_number = node->position.seq_number;
 
-    if (pos_flags & Config_PositionConfig_PositionFlags_HEADING)
+    if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_HEADING)
         p.ground_track = node->position.ground_track;
 
-    if (pos_flags & Config_PositionConfig_PositionFlags_SPEED)
+    if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_SPEED)
         p.ground_speed = node->position.ground_speed;
 
     // Strip out any time information before sending packets to other nodes - to keep the wire size small (and because other
@@ -125,10 +125,10 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies)
     if (prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
         service.cancelSending(prevPacketId);
 
-    MeshPacket *p = allocReply();
+    meshtastic_MeshPacket *p = allocReply();
     p->to = dest;
     p->decoded.want_response = wantReplies;
-    p->priority = MeshPacket_Priority_BACKGROUND;
+    p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
     prevPacketId = p->id;
 
     service.sendToMesh(p, RX_SRC_LOCAL, true);
@@ -136,7 +136,7 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies)
 
 int32_t PositionModule::runOnce()
 {
-    NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
+    meshtastic_NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
 
     // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();
@@ -166,7 +166,7 @@ int32_t PositionModule::runOnce()
         // Only send packets if the channel is less than 25% utilized.
         if (airTime->isTxAllowedChannelUtil(true)) {
 
-            NodeInfo *node2 = service.refreshMyNodeInfo(); // should guarantee there is now a position
+            meshtastic_NodeInfo *node2 = service.refreshMyNodeInfo(); // should guarantee there is now a position
 
             if (node2->has_position && (node2->position.latitude_i != 0 || node2->position.longitude_i != 0)) {
                 // The minimum distance to travel before we are able to send a new position packet.

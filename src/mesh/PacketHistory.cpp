@@ -11,7 +11,7 @@ PacketHistory::PacketHistory()
 /**
  * Update recentBroadcasts and return true if we have already seen this packet
  */
-bool PacketHistory::wasSeenRecently(const MeshPacket *p, bool withUpdate)
+bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpdate)
 {
     if (p->id == 0) {
         LOG_DEBUG("Ignoring message with zero id\n");

@@ -4,7 +4,7 @@
 
 TraceRouteModule *traceRouteModule;
 
-bool TraceRouteModule::handleReceivedProtobuf(const MeshPacket &mp, RouteDiscovery *r)
+bool TraceRouteModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_RouteDiscovery *r)
 {
     // Only handle a response
     if (mp.decoded.request_id) {
@@ -14,15 +14,15 @@ bool TraceRouteModule::handleReceivedProtobuf(const MeshPacket &mp, RouteDiscove
     return false; // let it be handled by RoutingModule
 }
 
-void TraceRouteModule::updateRoute(MeshPacket *p)
+void TraceRouteModule::updateRoute(meshtastic_MeshPacket *p)
 {
     auto &incoming = p->decoded;
     // Only append an ID for the request (one way)
     if (!incoming.request_id) {
-        RouteDiscovery scratch;
-        RouteDiscovery *updated = NULL;
+        meshtastic_RouteDiscovery scratch;
+        meshtastic_RouteDiscovery *updated = NULL;
         memset(&scratch, 0, sizeof(scratch));
-        pb_decode_from_bytes(incoming.payload.bytes, incoming.payload.size, &RouteDiscovery_msg, &scratch);
+        pb_decode_from_bytes(incoming.payload.bytes, incoming.payload.size, &meshtastic_RouteDiscovery_msg, &scratch);
         updated = &scratch;
 
         appendMyID(updated);
@@ -30,11 +30,11 @@ void TraceRouteModule::updateRoute(MeshPacket *p)
 
         // Set updated route to the payload of the to be flooded packet
         p->decoded.payload.size =
-            pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &RouteDiscovery_msg, updated);
+            pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_RouteDiscovery_msg, updated);
     }
 }
 
-void TraceRouteModule::appendMyID(RouteDiscovery *updated)
+void TraceRouteModule::appendMyID(meshtastic_RouteDiscovery *updated)
 {
     // Length of route array can normally not be exceeded due to the max. hop_limit of 7
     if (updated->route_count < sizeof(updated->route) / sizeof(updated->route[0])) {
@@ -45,7 +45,7 @@ void TraceRouteModule::appendMyID(RouteDiscovery *updated)
     }
 }
 
-void TraceRouteModule::printRoute(RouteDiscovery *r, uint32_t origin, uint32_t dest)
+void TraceRouteModule::printRoute(meshtastic_RouteDiscovery *r, uint32_t origin, uint32_t dest)
 {
     LOG_INFO("Route traced:\n");
     LOG_INFO("0x%x --> ", origin);
@@ -58,28 +58,28 @@ void TraceRouteModule::printRoute(RouteDiscovery *r, uint32_t origin, uint32_t d
         LOG_INFO("...\n");
 }
 
-MeshPacket *TraceRouteModule::allocReply()
+meshtastic_MeshPacket *TraceRouteModule::allocReply()
 {
     assert(currentRequest);
 
     // Copy the payload of the current request
     auto req = *currentRequest;
     auto &p = req.decoded;
-    RouteDiscovery scratch;
-    RouteDiscovery *updated = NULL;
+    meshtastic_RouteDiscovery scratch;
+    meshtastic_RouteDiscovery *updated = NULL;
     memset(&scratch, 0, sizeof(scratch));
-    pb_decode_from_bytes(p.payload.bytes, p.payload.size, &RouteDiscovery_msg, &scratch);
+    pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_RouteDiscovery_msg, &scratch);
     updated = &scratch;
 
     printRoute(updated, req.from, req.to);
 
     // Create a MeshPacket with this payload and set it as the reply
-    MeshPacket *reply = allocDataProtobuf(*updated);
+    meshtastic_MeshPacket *reply = allocDataProtobuf(*updated);
 
     return reply;
 }
 
-TraceRouteModule::TraceRouteModule() : ProtobufModule("traceroute", PortNum_TRACEROUTE_APP, &RouteDiscovery_msg)
+TraceRouteModule::TraceRouteModule() : ProtobufModule("traceroute", meshtastic_PortNum_TRACEROUTE_APP, &meshtastic_RouteDiscovery_msg)
 {
-    ourPortNum = PortNum_TRACEROUTE_APP;
+    ourPortNum = meshtastic_PortNum_TRACEROUTE_APP;
 }

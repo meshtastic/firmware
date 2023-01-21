@@ -39,12 +39,12 @@ extern uint8_t cardkb_found;
 
 static const char *cannedMessagesConfigFile = "/prefs/cannedConf.proto";
 
-CannedMessageModuleConfig cannedMessageModuleConfig;
+meshtastic_CannedMessageModuleConfig cannedMessageModuleConfig;
 
 CannedMessageModule *cannedMessageModule;
 
 CannedMessageModule::CannedMessageModule()
-    : SinglePortModule("canned", PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("CannedMessageModule")
+    : SinglePortModule("canned", meshtastic_PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("CannedMessageModule")
 {
     if (moduleConfig.canned_message.enabled) {
         this->loadProtoForModule();
@@ -122,17 +122,17 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     }
 
     bool validEvent = false;
-    if (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_UP)) {
+    if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP)) {
         LOG_DEBUG("Canned message event UP\n");
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_UP;
         validEvent = true;
     }
-    if (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_DOWN)) {
+    if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN)) {
         LOG_DEBUG("Canned message event DOWN\n");
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_DOWN;
         validEvent = true;
     }
-    if (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_SELECT)) {
+    if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT)) {
         LOG_DEBUG("Canned message event Select\n");
         // when inactive, call the onebutton shortpress instead. Activate Module only on up/down
         if ((this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED)) {
@@ -143,15 +143,15 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             validEvent = true;
         }
     }
-    if (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL)) {
+    if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL)) {
         LOG_DEBUG("Canned message event Cancel\n");
         // emulate a timeout. Same result
         this->lastTouchMillis = 0;
         validEvent = true;
     }
-    if ((event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_BACK)) ||
-        (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) ||
-        (event->inputEvent == static_cast<char>(ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT))) {
+    if ((event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK)) ||
+        (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) ||
+        (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT))) {
         LOG_DEBUG("Canned message event (%x)\n", event->kbchar);
         if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
             // pass the pressed key
@@ -192,7 +192,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
 void CannedMessageModule::sendText(NodeNum dest, const char *message, bool wantReplies)
 {
-    MeshPacket *p = allocDataPacket();
+    meshtastic_MeshPacket *p = allocDataPacket();
     p->to = dest;
     p->want_ack = true;
     p->decoded.payload.size = strlen(message);
@@ -360,9 +360,9 @@ int32_t CannedMessageModule::runOnce()
                     this->freetext.substring(0, this->cursor) + this->payload + this->freetext.substring(this->cursor);
             }
             this->cursor += 1;
-            if (this->freetext.length() > Constants_DATA_PAYLOAD_LEN) {
-                this->cursor = Constants_DATA_PAYLOAD_LEN;
-                this->freetext = this->freetext.substring(0, Constants_DATA_PAYLOAD_LEN);
+            if (this->freetext.length() > meshtastic_Constants_DATA_PAYLOAD_LEN) {
+                this->cursor = meshtastic_Constants_DATA_PAYLOAD_LEN;
+                this->freetext = this->freetext.substring(0, meshtastic_Constants_DATA_PAYLOAD_LEN);
             }
             break;
         }
@@ -398,7 +398,7 @@ const char *CannedMessageModule::getNodeName(NodeNum node)
     if (node == NODENUM_BROADCAST) {
         return "Broadcast";
     } else {
-        NodeInfo *info = nodeDB.getNode(node);
+        meshtastic_NodeInfo *info = nodeDB.getNode(node);
         if (info != NULL) {
             return info->user.long_name;
         } else {
@@ -457,7 +457,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         }
         display->drawStringf(0 + x, 0 + y, buffer, "To: %s", cannedMessageModule->getNodeName(this->dest));
         // used chars right aligned
-        snprintf(buffer, sizeof(buffer), "%d left", Constants_DATA_PAYLOAD_LEN - this->freetext.length());
+        snprintf(buffer, sizeof(buffer), "%d left", meshtastic_Constants_DATA_PAYLOAD_LEN - this->freetext.length());
         display->drawString(x + display->getWidth() - display->getStringWidth(buffer), y + 0, buffer);
         if (this->destSelect) {
             display->drawString(x + display->getWidth() - display->getStringWidth(buffer) - 1, y + 0, buffer);
@@ -483,8 +483,8 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 
 void CannedMessageModule::loadProtoForModule()
 {
-    if (!nodeDB.loadProto(cannedMessagesConfigFile, CannedMessageModuleConfig_size, sizeof(CannedMessageModuleConfig),
-                          &CannedMessageModuleConfig_msg, &cannedMessageModuleConfig)) {
+    if (!nodeDB.loadProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size, sizeof(meshtastic_CannedMessageModuleConfig),
+                          &meshtastic_CannedMessageModuleConfig_msg, &cannedMessageModuleConfig)) {
         installDefaultCannedMessageModuleConfig();
     }
 }
@@ -503,7 +503,7 @@ bool CannedMessageModule::saveProtoForModule()
     FS.mkdir("/prefs");
 #endif
 
-    okay &= nodeDB.saveProto(cannedMessagesConfigFile, CannedMessageModuleConfig_size, &CannedMessageModuleConfig_msg,
+    okay &= nodeDB.saveProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size, &meshtastic_CannedMessageModuleConfig_msg,
                              &cannedMessageModuleConfig);
 
     return okay;
@@ -526,19 +526,19 @@ void CannedMessageModule::installDefaultCannedMessageModuleConfig()
  * @return AdminMessageHandleResult HANDLED if message was handled
  *   HANDLED_WITH_RESULT if a result is also prepared.
  */
-AdminMessageHandleResult CannedMessageModule::handleAdminMessageForModule(const MeshPacket &mp, AdminMessage *request,
-                                                                          AdminMessage *response)
+AdminMessageHandleResult CannedMessageModule::handleAdminMessageForModule(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
+                                                                          meshtastic_AdminMessage *response)
 {
     AdminMessageHandleResult result;
 
     switch (request->which_payload_variant) {
-    case AdminMessage_get_canned_message_module_messages_request_tag:
+    case meshtastic_AdminMessage_get_canned_message_module_messages_request_tag:
         LOG_DEBUG("Client is getting radio canned messages\n");
         this->handleGetCannedMessageModuleMessages(mp, response);
         result = AdminMessageHandleResult::HANDLED_WITH_RESPONSE;
         break;
 
-    case AdminMessage_set_canned_message_module_messages_tag:
+    case meshtastic_AdminMessage_set_canned_message_module_messages_tag:
         LOG_DEBUG("Client is setting radio canned messages\n");
         this->handleSetCannedMessageModuleMessages(request->set_canned_message_module_messages);
         result = AdminMessageHandleResult::HANDLED;
@@ -551,11 +551,11 @@ AdminMessageHandleResult CannedMessageModule::handleAdminMessageForModule(const 
     return result;
 }
 
-void CannedMessageModule::handleGetCannedMessageModuleMessages(const MeshPacket &req, AdminMessage *response)
+void CannedMessageModule::handleGetCannedMessageModuleMessages(const meshtastic_MeshPacket &req, meshtastic_AdminMessage *response)
 {
     LOG_DEBUG("*** handleGetCannedMessageModuleMessages\n");
     if (req.decoded.want_response) {
-        response->which_payload_variant = AdminMessage_get_canned_message_module_messages_response_tag;
+        response->which_payload_variant = meshtastic_AdminMessage_get_canned_message_module_messages_response_tag;
         strncpy(response->get_canned_message_module_messages_response, cannedMessageModuleConfig.messages,
                 sizeof(response->get_canned_message_module_messages_response));
     } // Don't send anything if not instructed to. Better than asserting.

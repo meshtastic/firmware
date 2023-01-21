@@ -168,13 +168,13 @@ void scanI2Cdevice()
                 registerValue = getRegisterValue(addr, 0xD0, 1); // GET_ID
                 if (registerValue == 0x61) {
                     LOG_INFO("BME-680 sensor found at address 0x%x\n", (uint8_t)addr);
-                    nodeTelemetrySensorsMap[TelemetrySensorType_BME680] = addr;
+                    nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_BME680] = addr;
                 } else if (registerValue == 0x60) {
                     LOG_INFO("BME-280 sensor found at address 0x%x\n", (uint8_t)addr);
-                    nodeTelemetrySensorsMap[TelemetrySensorType_BME280] = addr;
+                    nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_BME280] = addr;
                 } else {
                     LOG_INFO("BMP-280 sensor found at address 0x%x\n", (uint8_t)addr);
-                    nodeTelemetrySensorsMap[TelemetrySensorType_BMP280] = addr;
+                    nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_BMP280] = addr;
                 }
             }
             if (addr == INA_ADDR || addr == INA_ADDR_ALTERNATE) {
@@ -182,41 +182,41 @@ void scanI2Cdevice()
                 LOG_DEBUG("Register MFG_UID: 0x%x\n", registerValue);
                 if (registerValue == 0x5449) {
                     LOG_INFO("INA260 sensor found at address 0x%x\n", (uint8_t)addr);
-                    nodeTelemetrySensorsMap[TelemetrySensorType_INA260] = addr;
+                    nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260] = addr;
                 } else { // Assume INA219 if INA260 ID is not found
                     LOG_INFO("INA219 sensor found at address 0x%x\n", (uint8_t)addr);
-                    nodeTelemetrySensorsMap[TelemetrySensorType_INA219] = addr;
+                    nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219] = addr;
                 }
             }
             if (addr == MCP9808_ADDR) {
-                nodeTelemetrySensorsMap[TelemetrySensorType_MCP9808] = addr;
+                nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MCP9808] = addr;
                 LOG_INFO("MCP9808 sensor found\n");
             }
             if (addr == SHT31_ADDR) {
                 LOG_INFO("SHT31 sensor found\n");
-                nodeTelemetrySensorsMap[TelemetrySensorType_SHT31] = addr;
+                nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_SHT31] = addr;
             }
             if (addr == SHTC3_ADDR) {
                 LOG_INFO("SHTC3 sensor found\n");
-                nodeTelemetrySensorsMap[TelemetrySensorType_SHTC3] = addr;
+                nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_SHTC3] = addr;
             }
             if (addr == LPS22HB_ADDR || addr == LPS22HB_ADDR_ALT) {
                 LOG_INFO("LPS22HB sensor found\n");
-                nodeTelemetrySensorsMap[TelemetrySensorType_LPS22] = addr;
+                nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_LPS22] = addr;
             }
 
             // High rate sensors, will be processed internally
             if (addr == QMC6310_ADDR) {
                 LOG_INFO("QMC6310 Highrate 3-Axis magnetic sensor found\n");
-                nodeTelemetrySensorsMap[TelemetrySensorType_QMC6310] = addr;
+                nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_QMC6310] = addr;
             }
             if (addr == QMI8658_ADDR) {
                 LOG_INFO("QMI8658 Highrate 6-Axis inertial measurement sensor found\n");
-                nodeTelemetrySensorsMap[TelemetrySensorType_QMI8658] = addr;
+                nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_QMI8658] = addr;
             }
             if (addr == QMC5883L_ADDR) {
                 LOG_INFO("QMC5883L Highrate 3-Axis magnetic sensor found\n");
-                nodeTelemetrySensorsMap[TelemetrySensorType_QMC5883L] = addr;
+                nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_QMC5883L] = addr;
             }
         } else if (err == 4) {
             LOG_ERROR("Unknow error at address 0x%x\n", addr);

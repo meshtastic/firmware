@@ -8,7 +8,7 @@
 class TelemetrySensor
 {
   protected:
-    TelemetrySensor(TelemetrySensorType sensorType, const char *sensorName)
+    TelemetrySensor(meshtastic_TelemetrySensorType sensorType, const char *sensorName)
     {
         this->sensorName = sensorName;
         this->sensorType = sensorType;
@@ -16,7 +16,7 @@ class TelemetrySensor
     }
 
     const char *sensorName;
-    TelemetrySensorType sensorType;
+    meshtastic_TelemetrySensorType sensorType;
     unsigned status;
 
     int32_t initI2CSensor()
@@ -36,5 +36,5 @@ class TelemetrySensor
     bool hasSensor() { return sensorType < sizeof(nodeTelemetrySensorsMap) && nodeTelemetrySensorsMap[sensorType] > 0; }
 
     virtual int32_t runOnce() = 0;
-    virtual bool getMetrics(Telemetry *measurement) = 0;
+    virtual bool getMetrics(meshtastic_Telemetry *measurement) = 0;
 };

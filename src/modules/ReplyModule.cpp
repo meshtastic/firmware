@@ -5,7 +5,7 @@
 
 #include <assert.h>
 
-MeshPacket *ReplyModule::allocReply()
+meshtastic_MeshPacket *ReplyModule::allocReply()
 {
     assert(currentRequest); // should always be !NULL
     auto req = *currentRequest;

@@ -5,13 +5,13 @@
 /**
  * Text message handling for meshtastic - draws on the OLED display the most recent received message
  */
-class TextMessageModule : public SinglePortModule, public Observable<const MeshPacket *>
+class TextMessageModule : public SinglePortModule, public Observable<const meshtastic_MeshPacket *>
 {
   public:
     /** Constructor
      * name is for debugging output
      */
-    TextMessageModule() : SinglePortModule("text", PortNum_TEXT_MESSAGE_APP) {}
+    TextMessageModule() : SinglePortModule("text", meshtastic_PortNum_TEXT_MESSAGE_APP) {}
 
   protected:
     /** Called to handle a particular incoming message
@@ -19,7 +19,7 @@ class TextMessageModule : public SinglePortModule, public Observable<const MeshP
     @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for
     it
     */
-    virtual ProcessMessage handleReceived(const MeshPacket &mp) override;
+    virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
 };
 
 extern TextMessageModule *textMessageModule;
