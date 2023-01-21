@@ -56,7 +56,7 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
     virtual void onRead(NimBLECharacteristic *pCharacteristic)
     {
         LOG_INFO("From Radio onread\n");
-        uint8_t fromRadioBytes[FromRadio_size];
+        uint8_t fromRadioBytes[meshtastic_FromRadio_size];
         size_t numBytes = bluetoothPhoneAPI->getFromRadio(fromRadioBytes);
 
         std::string fromRadioByteString(fromRadioBytes, fromRadioBytes + numBytes);
@@ -71,7 +71,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
     {
         uint32_t passkey = config.bluetooth.fixed_pin;
 
-        if (config.bluetooth.mode == Config_BluetoothConfig_PairingMode_RANDOM_PIN) {
+        if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN) {
             LOG_INFO("Using random passkey\n");
             // This is the passkey to be entered on peer - we pick a number >100,000 to ensure 6 digits
             passkey = random(100000, 999999);
@@ -127,7 +127,7 @@ void NimbleBluetooth::setup()
     NimBLEDevice::init(getDeviceName());
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
 
-    if (config.bluetooth.mode != Config_BluetoothConfig_PairingMode_NO_PIN) {
+    if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
         NimBLEDevice::setSecurityAuth(true, true, true);
         NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
     }
@@ -146,7 +146,7 @@ void NimbleBluetooth::setupService()
     NimBLECharacteristic *ToRadioCharacteristic;
     NimBLECharacteristic *FromRadioCharacteristic;
     // Define the characteristics that the app is looking for
-    if (config.bluetooth.mode == Config_BluetoothConfig_PairingMode_NO_PIN) {
+    if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
         ToRadioCharacteristic = bleService->createCharacteristic(TORADIO_UUID, NIMBLE_PROPERTY::WRITE);
         FromRadioCharacteristic = bleService->createCharacteristic(FROMRADIO_UUID, NIMBLE_PROPERTY::READ);
         fromNumCharacteristic = bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ);

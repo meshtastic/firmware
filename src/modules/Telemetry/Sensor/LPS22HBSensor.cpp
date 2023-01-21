@@ -5,7 +5,7 @@
 #include <Adafruit_LPS2X.h>
 #include <Adafruit_Sensor.h>
 
-LPS22HBSensor::LPS22HBSensor() : TelemetrySensor(TelemetrySensorType_LPS22, "LPS22HB") {}
+LPS22HBSensor::LPS22HBSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_LPS22, "LPS22HB") {}
 
 int32_t LPS22HBSensor::runOnce()
 {
@@ -22,7 +22,7 @@ void LPS22HBSensor::setup()
     lps22hb.setDataRate(LPS22_RATE_10_HZ);
 }
 
-bool LPS22HBSensor::getMetrics(Telemetry *measurement)
+bool LPS22HBSensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     sensors_event_t temp;
     sensors_event_t pressure;

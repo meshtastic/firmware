@@ -54,7 +54,7 @@ class GPS : private concurrency::OSThread
     /** If !NULL we will use this serial port to construct our GPS */
     static HardwareSerial *_serial_gps;
 
-    Position p = Position_init_default;
+    meshtastic_Position p = meshtastic_Position_init_default;
 
     GPS() : concurrency::OSThread("GPS") {}
 

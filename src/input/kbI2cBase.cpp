@@ -70,35 +70,35 @@ int32_t KbI2cBase::runOnce()
         while (Wire.available()) {
             char c = Wire.read();
             InputEvent e;
-            e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+            e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
             e.source = this->_originName;
             switch (c) {
             case 0x1b: // ESC
-                e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL;
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL;
                 break;
             case 0x08: // Back
-                e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_BACK;
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK;
                 e.kbchar = c;
                 break;
             case 0xb5: // Up
-                e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_UP;
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP;
                 break;
             case 0xb6: // Down
-                e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_DOWN;
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN;
                 break;
             case 0xb4: // Left
-                e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_LEFT;
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT;
                 e.kbchar = c;
                 break;
             case 0xb7: // Right
-                e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
                 e.kbchar = c;
                 break;
             case 0x0d: // Enter
-                e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
                 break;
             case 0x00: // nopress
-                e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
                 break;
             default: // all other keys
                 e.inputEvent = ANYKEY;
@@ -106,7 +106,7 @@ int32_t KbI2cBase::runOnce()
                 break;
             }
 
-            if (e.inputEvent != ModuleConfig_CannedMessageConfig_InputEventChar_NONE) {
+            if (e.inputEvent != meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE) {
                 this->notifyObservers(&e);
             }
         }

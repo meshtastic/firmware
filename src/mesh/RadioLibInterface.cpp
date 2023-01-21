@@ -87,7 +87,7 @@ bool RadioLibInterface::canSendImmediately()
         // TX IRQ from the radio, the radio is probably broken.
         if (busyTx && (millis() - lastTxStart > 60000)) {
             LOG_ERROR("Hardware Failure! busyTx for more than 60s\n");
-            RECORD_CRITICALERROR(CriticalErrorCode_TRANSMIT_FAILED);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_TRANSMIT_FAILED);
             // reboot in 5 seconds when this condition occurs.
             rebootAtMsec = lastTxStart + 65000;
         }
@@ -101,15 +101,15 @@ bool RadioLibInterface::canSendImmediately()
 /// Send a packet (possibly by enquing in a private fifo).  This routine will
 /// later free() the packet to pool.  This routine is not allowed to stall because it is called from
 /// bluetooth comms code.  If the txmit queue is empty it might return an error
-ErrorCode RadioLibInterface::send(MeshPacket *p)
+ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
 {
 
 #ifndef DISABLE_WELCOME_UNSET
 
-    if (config.lora.region != Config_LoRaConfig_RegionCode_UNSET) {
+    if (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
         if (disabled || !config.lora.tx_enabled) {
 
-            if (config.lora.region != Config_LoRaConfig_RegionCode_UNSET) {
+            if (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
                 if (disabled || !config.lora.tx_enabled) {
                     LOG_WARN("send - !config.lora.tx_enabled\n");
                     packetPool.release(p);
@@ -158,9 +158,9 @@ ErrorCode RadioLibInterface::send(MeshPacket *p)
 #endif
 }
 
-QueueStatus RadioLibInterface::getQueueStatus()
+meshtastic_QueueStatus RadioLibInterface::getQueueStatus()
 {
-    QueueStatus qs;
+    meshtastic_QueueStatus qs;
 
     qs.res = qs.mesh_packet_id = 0;
     qs.free = txQueue.getFree();
@@ -227,7 +227,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
                     setTransmitDelay(); // reset random delay
                 } else {
                     // Send any outgoing packets we have ready
-                    MeshPacket *txp = txQueue.dequeue();
+                    meshtastic_MeshPacket *txp = txQueue.dequeue();
                     assert(txp);
                     startSend(txp);
 
@@ -247,7 +247,7 @@ void RadioLibInterface::onNotify(uint32_t notification)
 
 void RadioLibInterface::setTransmitDelay()
 {
-    MeshPacket *p = txQueue.getFront();
+    meshtastic_MeshPacket *p = txQueue.getFront();
     // We want all sending/receiving to be done by our daemon thread.
     // We use a delay here because this packet might have been sent in response to a packet we just received.
     // So we want to make sure the other side has had a chance to reconfigure its radio.
@@ -358,7 +358,7 @@ void RadioLibInterface::handleReceiveInterrupt()
             // Note: we deliver _all_ packets to our router (i.e. our interface is intentionally promiscuous).
             // This allows the router and other apps on our node to sniff packets (usually routing) between other
             // nodes.
-            MeshPacket *mp = packetPool.allocZeroed();
+            meshtastic_MeshPacket *mp = packetPool.allocZeroed();
 
             mp->from = h->from;
             mp->to = h->to;
@@ -370,7 +370,7 @@ void RadioLibInterface::handleReceiveInterrupt()
 
             addReceiveMetadata(mp);
 
-            mp->which_payload_variant = MeshPacket_encrypted_tag; // Mark that the payload is still encrypted at this point
+            mp->which_payload_variant = meshtastic_MeshPacket_encrypted_tag; // Mark that the payload is still encrypted at this point
             assert(((uint32_t)payloadLen) <= sizeof(mp->encrypted.bytes));
             memcpy(mp->encrypted.bytes, payload, payloadLen);
             mp->encrypted.size = payloadLen;
@@ -385,7 +385,7 @@ void RadioLibInterface::handleReceiveInterrupt()
 }
 
 /** start an immediate transmit */
-void RadioLibInterface::startSend(MeshPacket *txp)
+void RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 {
     printPacket("Starting low level send", txp);
     if (disabled || !config.lora.tx_enabled) {
@@ -401,7 +401,7 @@ void RadioLibInterface::startSend(MeshPacket *txp)
         int res = iface->startTransmit(radiobuf, numbytes);
         if (res != RADIOLIB_ERR_NONE) {
             LOG_ERROR("startTransmit failed, error=%d\n", res);
-            RECORD_CRITICALERROR(CriticalErrorCode_RADIO_SPI_BUG);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_RADIO_SPI_BUG);
 
             // This send failed, but make sure to 'complete' it properly
             completeSending();

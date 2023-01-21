@@ -28,13 +28,13 @@ struct c2_header {
 #define I2S_PORT I2S_NUM_0
 
 #define AUDIO_MODULE_RX_BUFFER 128
-#define AUDIO_MODULE_MODE ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700
+#define AUDIO_MODULE_MODE meshtastic_ModuleConfig_AudioConfig_Audio_Baud_CODEC2_700
 
 class AudioModule : public SinglePortModule, public Observable<const UIFrameEvent *>, private concurrency::OSThread
 {
   public:
-    unsigned char rx_encode_frame[Constants_DATA_PAYLOAD_LEN] = {};
-    unsigned char tx_encode_frame[Constants_DATA_PAYLOAD_LEN] = {};
+    unsigned char rx_encode_frame[meshtastic_Constants_DATA_PAYLOAD_LEN] = {};
+    unsigned char tx_encode_frame[meshtastic_Constants_DATA_PAYLOAD_LEN] = {};
     c2_header tx_header = {};
     int16_t speech[ADC_BUFFER_SIZE_MAX] = {};
     int16_t output_buffer[ADC_BUFFER_SIZE_MAX] = {};
@@ -65,7 +65,7 @@ class AudioModule : public SinglePortModule, public Observable<const UIFrameEven
 
     virtual int32_t runOnce() override;
 
-    virtual MeshPacket *allocReply() override;
+    virtual meshtastic_MeshPacket *allocReply() override;
 
     virtual bool wantUIFrame() override { return this->shouldDraw(); }
     virtual Observable<const UIFrameEvent *> *getUIFrameObservable() override { return this; }
@@ -79,7 +79,7 @@ class AudioModule : public SinglePortModule, public Observable<const UIFrameEven
      * @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered
      * for it
      */
-    virtual ProcessMessage handleReceived(const MeshPacket &mp) override;
+    virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
 };
 
 extern AudioModule *audioModule;

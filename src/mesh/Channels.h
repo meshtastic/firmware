@@ -34,18 +34,18 @@ class Channels
     /// Well known channel names
     static const char *adminChannel, *gpioChannel, *serialChannel;
 
-    const ChannelSettings &getPrimary() { return getByIndex(getPrimaryIndex()).settings; }
+    const meshtastic_ChannelSettings &getPrimary() { return getByIndex(getPrimaryIndex()).settings; }
 
     /** Return the Channel for a specified index */
-    Channel &getByIndex(ChannelIndex chIndex);
+    meshtastic_Channel &getByIndex(ChannelIndex chIndex);
 
     /** Return the Channel for a specified name, return primary if not found. */
-    Channel &getByName(const char *chName);
+    meshtastic_Channel &getByName(const char *chName);
 
     /** Using the index inside the channel, update the specified channel's settings and role.  If this channel is being promoted
      * to be primary, force all other channels to be secondary.
      */
-    void setChannel(const Channel &c);
+    void setChannel(const meshtastic_Channel &c);
 
     /** Return a human friendly name for this channel (and expand any short strings as needed)
      */
@@ -124,7 +124,7 @@ class Channels
     /**
      * Validate a channel, fixing any errors as needed
      */
-    Channel &fixupChannel(ChannelIndex chIndex);
+    meshtastic_Channel &fixupChannel(ChannelIndex chIndex);
 
     /**
      * Write a default channel to the specified channel index

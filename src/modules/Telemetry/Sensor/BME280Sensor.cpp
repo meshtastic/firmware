@@ -5,7 +5,7 @@
 #include <Adafruit_BME280.h>
 #include <typeinfo>
 
-BME280Sensor::BME280Sensor() : TelemetrySensor(TelemetrySensorType_BME280, "BME280") {}
+BME280Sensor::BME280Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_BME280, "BME280") {}
 
 int32_t BME280Sensor::runOnce()
 {
@@ -26,7 +26,7 @@ int32_t BME280Sensor::runOnce()
 
 void BME280Sensor::setup() {}
 
-bool BME280Sensor::getMetrics(Telemetry *measurement)
+bool BME280Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     LOG_DEBUG("BME280Sensor::getMetrics\n");
     bme280.takeForcedMeasurement();

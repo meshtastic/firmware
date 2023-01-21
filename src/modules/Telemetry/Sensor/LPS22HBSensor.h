@@ -14,5 +14,5 @@ class LPS22HBSensor : virtual public TelemetrySensor
   public:
     LPS22HBSensor();
     virtual int32_t runOnce() override;
-    virtual bool getMetrics(Telemetry *measurement) override;
+    virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
 };

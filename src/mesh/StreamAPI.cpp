@@ -112,11 +112,11 @@ void StreamAPI::emitRebooted()
 {
     // In case we send a FromRadio packet
     memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
-    fromRadioScratch.which_payload_variant = FromRadio_rebooted_tag;
+    fromRadioScratch.which_payload_variant = meshtastic_FromRadio_rebooted_tag;
     fromRadioScratch.rebooted = true;
 
     // LOG_DEBUG("Emitting reboot packet for serial shell\n");
-    emitTxBuffer(pb_encode_to_bytes(txBuf + HEADER_LEN, FromRadio_size, &FromRadio_msg, &fromRadioScratch));
+    emitTxBuffer(pb_encode_to_bytes(txBuf + HEADER_LEN, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratch));
 }
 
 /// Hookable to find out when connection changes

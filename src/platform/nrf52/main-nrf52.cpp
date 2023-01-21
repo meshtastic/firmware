@@ -109,7 +109,7 @@ void checkSDEvents()
         while (NRF_SUCCESS == sd_evt_get(&evt)) {
             switch (evt) {
             case NRF_EVT_POWER_FAILURE_WARNING:
-                RECORD_CRITICALERROR(CriticalErrorCode_BROWNOUT);
+                RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_BROWNOUT);
                 break;
 
             default:
@@ -119,7 +119,7 @@ void checkSDEvents()
         }
     } else {
         if (NRF_POWER->EVENTS_POFWARN)
-            RECORD_CRITICALERROR(CriticalErrorCode_BROWNOUT);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_BROWNOUT);
     }
 }
 
