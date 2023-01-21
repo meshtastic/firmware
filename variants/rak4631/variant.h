@@ -176,13 +176,35 @@ static const uint8_t SCK = PIN_SPI_SCK;
  */
 
 // RAK4630 LoRa module
+
+/* Setup of the SX1262 LoRa module ( https://docs.rakwireless.com/Product-Categories/WisBlock/RAK4631/Datasheet/ )
+
+P1.10 	NSS 	SPI NSS (Arduino GPIO number 42)
+P1.11 	SCK 	SPI CLK (Arduino GPIO number 43)
+P1.12 	MOSI 	SPI MOSI (Arduino GPIO number 44)
+P1.13 	MISO 	SPI MISO (Arduino GPIO number 45)
+P1.14 	BUSY 	BUSY signal (Arduino GPIO number 46)
+P1.15 	DIO1 	DIO1 event interrupt (Arduino GPIO number 47)
+P1.06 	NRESET 	NRESET manual reset of the SX1262 (Arduino GPIO number 38)
+
+Important for successful SX1262 initialization:
+
+* Setup DIO2 to control the antenna switch
+* Setup DIO3 to control the TCXO power supply
+* Setup the SX1262 to use it's DCDC regulator and not the LDO
+* RAK4630 schematics show GPIO P1.07 connected to the antenna switch, but it should not be initialized, as DIO2 will do the control of the antenna switch
+
+SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
+
+*/
+
 #define USE_SX1262
 #define SX126X_CS (42)
 #define SX126X_DIO1 (47)
 #define SX126X_BUSY (46)
 #define SX126X_RESET (38)
-#define SX126X_TXEN (39)
-#define SX126X_RXEN (37)
+// #define SX126X_TXEN (39)
+// #define SX126X_RXEN (37)
 #define SX126X_E22 // DIO2 controlls an antenna switch and the TCXO voltage is controlled by DIO3
 
 // enables 3.3V periphery like GPS or IO Module
