@@ -1,8 +1,11 @@
+#include "SimpleAllocator.h"
 #include "assert.h"
 #include "configuration.h"
-#include "SimpleAllocator.h"
 
-SimpleAllocator::SimpleAllocator() { reset(); }
+SimpleAllocator::SimpleAllocator()
+{
+    reset();
+}
 
 void *SimpleAllocator::alloc(size_t size)
 {
@@ -14,7 +17,10 @@ void *SimpleAllocator::alloc(size_t size)
     return res;
 }
 
-void SimpleAllocator::reset() { nextFree = 0; }
+void SimpleAllocator::reset()
+{
+    nextFree = 0;
+}
 
 void *operator new(size_t size, SimpleAllocator &p)
 {

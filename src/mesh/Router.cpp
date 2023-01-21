@@ -1,8 +1,8 @@
 #include "Router.h"
 #include "Channels.h"
 #include "CryptoEngine.h"
-#include "NodeDB.h"
 #include "MeshRadio.h"
+#include "NodeDB.h"
 #include "RTC.h"
 #include "configuration.h"
 #include "main.h"
@@ -202,10 +202,10 @@ ErrorCode Router::send(MeshPacket *p)
     if (!config.lora.override_duty_cycle && myRegion->dutyCycle < 100) {
         float hourlyTxPercent = airTime->utilizationTXPercent();
         if (hourlyTxPercent > myRegion->dutyCycle) {
-            uint8_t silentMinutes = airTime->getSilentMinutes(hourlyTxPercent, myRegion->dutyCycle); 
+            uint8_t silentMinutes = airTime->getSilentMinutes(hourlyTxPercent, myRegion->dutyCycle);
             LOG_WARN("Duty cycle limit exceeded. Aborting send for now, you can send again in %d minutes.\n", silentMinutes);
             Routing_Error err = Routing_Error_DUTY_CYCLE_LIMIT;
-            if (getFrom(p) == nodeDB.getNodeNum()) {  // only send NAK to API, not to the mesh
+            if (getFrom(p) == nodeDB.getNodeNum()) { // only send NAK to API, not to the mesh
                 abortSendAndNak(err, p);
             } else {
                 packetPool.release(p);
@@ -235,21 +235,21 @@ ErrorCode Router::send(MeshPacket *p)
     if (p->which_payload_variant == MeshPacket_decoded_tag) {
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
 
-    bool shouldActuallyEncrypt = true;
+        bool shouldActuallyEncrypt = true;
 
 #if HAS_WIFI || HAS_ETHERNET
-        if(moduleConfig.mqtt.enabled) {
+        if (moduleConfig.mqtt.enabled) {
             // check if we should send decrypted packets to mqtt
 
             // truth table:
             /* mqtt_server  mqtt_encryption_enabled should_encrypt
-            *    not set                        0              1
-            *    not set                        1              1
-            *        set                        0              0
-            *        set                        1              1
-            *
-            * => so we only decrypt mqtt if they have a custom mqtt server AND mqtt_encryption_enabled is FALSE
-            */
+             *    not set                        0              1
+             *    not set                        1              1
+             *        set                        0              0
+             *        set                        1              1
+             *
+             * => so we only decrypt mqtt if they have a custom mqtt server AND mqtt_encryption_enabled is FALSE
+             */
 
             if (*moduleConfig.mqtt.address && !moduleConfig.mqtt.encryption_enabled) {
                 shouldActuallyEncrypt = false;
@@ -330,7 +330,7 @@ bool perhapsDecode(MeshPacket *p)
             } else {
                 // parsing was successful
                 p->which_payload_variant = MeshPacket_decoded_tag; // change type to decoded
-                p->channel = chIndex;                             // change to store the index instead of the hash
+                p->channel = chIndex;                              // change to store the index instead of the hash
 
                 // Decompress if needed. jm
                 if (p->decoded.portnum == PortNum_TEXT_MESSAGE_COMPRESSED_APP) {

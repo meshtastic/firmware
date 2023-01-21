@@ -152,7 +152,7 @@ void createSSLCert()
                     if (millis() / 1000 >= 3) {
                         screen->setSSLFrames();
                     }
-#endif                    
+#endif
                 }
                 runLoop = false;
             } else {
@@ -165,7 +165,8 @@ void createSSLCert()
 
 WebServerThread *webServerThread;
 
-WebServerThread::WebServerThread() : concurrency::OSThread("WebServerThread") {
+WebServerThread::WebServerThread() : concurrency::OSThread("WebServerThread")
+{
     if (!config.network.wifi_enabled) {
         disable();
     }

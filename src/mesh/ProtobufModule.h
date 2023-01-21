@@ -22,8 +22,6 @@ template <class T> class ProtobufModule : protected SinglePortModule
     }
 
   protected:
-
-
     /**
      * Handle a received message, the data field in the message is already decoded and is provided
      *
@@ -62,7 +60,8 @@ template <class T> class ProtobufModule : protected SinglePortModule
   private:
     /** Called to handle a particular incoming message
 
-    @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for it
+    @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for
+    it
     */
     virtual ProcessMessage handleReceived(const MeshPacket &mp) override
     {
@@ -70,8 +69,7 @@ template <class T> class ProtobufModule : protected SinglePortModule
         // it would be better to update even if the message was destined to others.
 
         auto &p = mp.decoded;
-        LOG_INFO("Received %s from=0x%0x, id=0x%x, portnum=%d, payloadlen=%d\n", name, mp.from, mp.id, p.portnum,
-                  p.payload.size);
+        LOG_INFO("Received %s from=0x%0x, id=0x%x, portnum=%d, payloadlen=%d\n", name, mp.from, mp.id, p.portnum, p.payload.size);
 
         T scratch;
         T *decoded = NULL;

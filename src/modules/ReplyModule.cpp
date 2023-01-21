@@ -1,6 +1,6 @@
-#include "configuration.h"
 #include "ReplyModule.h"
 #include "MeshService.h"
+#include "configuration.h"
 #include "main.h"
 
 #include <assert.h>
@@ -16,7 +16,7 @@ MeshPacket *ReplyModule::allocReply()
     screen->print("Sending reply\n");
 
     const char *replyStr = "Message Received";
-    auto reply = allocDataPacket();                      // Allocate a packet for sending
+    auto reply = allocDataPacket();                 // Allocate a packet for sending
     reply->decoded.payload.size = strlen(replyStr); // You must specify how many bytes are in the reply
     memcpy(reply->decoded.payload.bytes, replyStr, reply->decoded.payload.size);
 

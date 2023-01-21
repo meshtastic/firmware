@@ -82,8 +82,6 @@ int32_t RangeTestModule::runOnce()
                 return disable();
                 // This thread does not need to run as a receiver
             }
-
-
         }
     } else {
         LOG_INFO("Range Test Module - Disabled\n");

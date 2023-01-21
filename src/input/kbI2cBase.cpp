@@ -12,32 +12,32 @@ KbI2cBase::KbI2cBase(const char *name) : concurrency::OSThread(name)
 
 uint8_t read_from_14004(uint8_t reg, uint8_t *data, uint8_t length)
 {
-  uint8_t readflag = 0;
-  Wire.beginTransmission(CARDKB_ADDR);
-  Wire.write(reg);
-  Wire.endTransmission();    // stop transmitting
-  delay(20);
-  Wire.requestFrom(CARDKB_ADDR, (int)length);
-  int i = 0;
-  while ( Wire.available() ) // slave may send less than requested
-  {
-    data[i++] = Wire.read(); // receive a byte as a proper uint8_t
-    readflag = 1;
-  }
-  return readflag;
+    uint8_t readflag = 0;
+    Wire.beginTransmission(CARDKB_ADDR);
+    Wire.write(reg);
+    Wire.endTransmission(); // stop transmitting
+    delay(20);
+    Wire.requestFrom(CARDKB_ADDR, (int)length);
+    int i = 0;
+    while (Wire.available()) // slave may send less than requested
+    {
+        data[i++] = Wire.read(); // receive a byte as a proper uint8_t
+        readflag = 1;
+    }
+    return readflag;
 }
 
 void write_to_14004(uint8_t reg, uint8_t data)
 {
-  Wire.beginTransmission(CARDKB_ADDR);
-  Wire.write(reg);
-  Wire.write(data);
-  Wire.endTransmission();    // stop transmitting
+    Wire.beginTransmission(CARDKB_ADDR);
+    Wire.write(reg);
+    Wire.write(data);
+    Wire.endTransmission(); // stop transmitting
 }
 
 int32_t KbI2cBase::runOnce()
 {
-    if (cardkb_found != CARDKB_ADDR){
+    if (cardkb_found != CARDKB_ADDR) {
         // Input device is not detected.
         return INT32_MAX;
     }
@@ -48,7 +48,7 @@ int32_t KbI2cBase::runOnce()
         uint8_t PrintDataBuf = 0;
         if (read_from_14004(0x01, rDataBuf, 0x04) == 1) {
             for (uint8_t aCount = 0; aCount < 0x04; aCount++) {
-                for (uint8_t bCount = 0; bCount < 0x04; bCount++ ) {
+                for (uint8_t bCount = 0; bCount < 0x04; bCount++) {
                     if (((rDataBuf[aCount] >> bCount) & 0x01) == 0x01) {
                         PrintDataBuf = aCount * 0x04 + bCount + 1;
                     }
@@ -97,7 +97,7 @@ int32_t KbI2cBase::runOnce()
             case 0x0d: // Enter
                 e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
                 break;
-            case 0x00: //nopress
+            case 0x00: // nopress
                 e.inputEvent = ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
                 break;
             default: // all other keys

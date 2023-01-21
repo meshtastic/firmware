@@ -1,5 +1,5 @@
-#include "configuration.h"
 #include "MeshPacketQueue.h"
+#include "configuration.h"
 #include <assert.h>
 
 #include <algorithm>
@@ -26,7 +26,8 @@ bool CompareMeshPacketFunc(const MeshPacket *p1, const MeshPacket *p2)
 
 MeshPacketQueue::MeshPacketQueue(size_t _maxLen) : maxLen(_maxLen) {}
 
-bool MeshPacketQueue::empty() {
+bool MeshPacketQueue::empty()
+{
     return queue.empty();
 }
 
@@ -40,8 +41,9 @@ void fixPriority(MeshPacket *p)
     if (p->priority == MeshPacket_Priority_UNSET) {
         // if acks give high priority
         // if a reliable message give a bit higher default priority
-        p->priority = (p->decoded.portnum == PortNum_ROUTING_APP) ? MeshPacket_Priority_ACK :
-                          (p->want_ack ? MeshPacket_Priority_RELIABLE : MeshPacket_Priority_DEFAULT);
+        p->priority = (p->decoded.portnum == PortNum_ROUTING_APP)
+                          ? MeshPacket_Priority_ACK
+                          : (p->want_ack ? MeshPacket_Priority_RELIABLE : MeshPacket_Priority_DEFAULT);
     }
 }
 
@@ -99,7 +101,8 @@ MeshPacket *MeshPacketQueue::remove(NodeNum from, PacketId id)
 }
 
 /** Attempt to find and remove a packet from this queue.  Returns the packet which was removed from the queue */
-bool MeshPacketQueue::replaceLowerPriorityPacket(MeshPacket *p) {
+bool MeshPacketQueue::replaceLowerPriorityPacket(MeshPacket *p)
+{
     std::sort_heap(queue.begin(), queue.end(), &CompareMeshPacketFunc); // sort ascending based on priority (0 -> 127)
 
     // find first packet which does not compare less (in priority) than parameter packet
@@ -119,7 +122,7 @@ bool MeshPacketQueue::replaceLowerPriorityPacket(MeshPacket *p) {
 
     if (getPriority(p) > getPriority(*low)) {
         packetPool.release(*low); // deallocate and drop the packet we're replacing
-        *low = p; // replace low-pri packet at this position with incoming packet with higher priority
+        *low = p;                 // replace low-pri packet at this position with incoming packet with higher priority
     }
 
     std::make_heap(queue.begin(), queue.end(), &CompareMeshPacketFunc);

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-set -e 
+set -e
 
 echo "This script is only for developers who are publishing new builds on github.  Most users don't need it"
 
-VERSION=`bin/buildinfo.py long`
+VERSION=$(bin/buildinfo.py long)
 
 # Must have a V prefix to trigger github
 git tag "v${VERSION}"
