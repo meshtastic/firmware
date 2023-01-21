@@ -21,16 +21,16 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define DEVICESTATE_CUR_VER 20
 #define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
 
-extern DeviceState devicestate;
-extern ChannelFile channelFile;
-extern MyNodeInfo &myNodeInfo;
-extern LocalConfig config;
-extern LocalModuleConfig moduleConfig;
-extern OEMStore oemStore;
-extern User &owner;
+extern meshtastic_DeviceState devicestate;
+extern meshtastic_ChannelFile channelFile;
+extern meshtastic_MyNodeInfo &myNodeInfo;
+extern meshtastic_LocalConfig config;
+extern meshtastic_LocalModuleConfig moduleConfig;
+extern meshtastic_OEMStore oemStore;
+extern meshtastic_User &owner;
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
-uint32_t sinceLastSeen(const NodeInfo *n);
+uint32_t sinceLastSeen(const meshtastic_NodeInfo *n);
 
 class NodeDB
 {
@@ -40,14 +40,14 @@ class NodeDB
     // Eventually use a smarter datastructure
     // HashMap<NodeNum, NodeInfo> nodes;
     // Note: these two references just point into our static array we serialize to/from disk
-    NodeInfo *nodes;
+    meshtastic_NodeInfo *nodes;
     pb_size_t *numNodes;
 
     uint32_t readPointer = 0;
 
   public:
-    bool updateGUI = false;            // we think the gui should definitely be redrawn, screen will clear this once handled
-    NodeInfo *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
+    bool updateGUI = false; // we think the gui should definitely be redrawn, screen will clear this once handled
+    meshtastic_NodeInfo *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
     Observable<const meshtastic::NodeStatus *> newStatus;
 
     /// don't do mesh based algoritm for node id assignment (initially)
@@ -58,7 +58,8 @@ class NodeDB
     void init();
 
     /// write to flash
-    void saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS), saveChannelsToDisk(), saveDeviceStateToDisk();
+    void saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS),
+        saveChannelsToDisk(), saveDeviceStateToDisk();
 
     /** Reinit radio config if needed, because either:
      * a) sometimes a buggy android app might send us bogus settings or
@@ -70,19 +71,19 @@ class NodeDB
 
     /// given a subpacket sniffed from the network, update our DB state
     /// we updateGUI and updateGUIforNode if we think our this change is big enough for a redraw
-    void updateFrom(const MeshPacket &p);
+    void updateFrom(const meshtastic_MeshPacket &p);
 
     /** Update position info for this node based on received position data
      */
-    void updatePosition(uint32_t nodeId, const Position &p, RxSource src = RX_SRC_RADIO);
+    void updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSource src = RX_SRC_RADIO);
 
     /** Update telemetry info for this node based on received metrics
      */
-    void updateTelemetry(uint32_t nodeId, const Telemetry &t, RxSource src = RX_SRC_RADIO);
+    void updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxSource src = RX_SRC_RADIO);
 
     /** Update user info for this node based on received user data
      */
-    void updateUser(uint32_t nodeId, const User &p);
+    void updateUser(uint32_t nodeId, const meshtastic_User &p);
 
     /// @return our node number
     NodeNum getNodeNum() { return myNodeInfo.my_node_num; }
@@ -104,15 +105,15 @@ class NodeDB
     void resetReadPointer() { readPointer = 0; }
 
     /// Allow the bluetooth layer to read our next nodeinfo record, or NULL if done reading
-    const NodeInfo *readNextInfo();
+    const meshtastic_NodeInfo *readNextInfo();
 
     /// pick a provisional nodenum we hope no one is using
     void pickNewNodeNum();
 
     /// Find a node in our DB, return null for missing
-    NodeInfo *getNode(NodeNum n);
+    meshtastic_NodeInfo *getNode(NodeNum n);
 
-    NodeInfo *getNodeByIndex(size_t x)
+    meshtastic_NodeInfo *getNodeByIndex(size_t x)
     {
         assert(x < *numNodes);
         return &nodes[x];
@@ -122,7 +123,7 @@ class NodeDB
     size_t getNumOnlineNodes();
 
     void initConfigIntervals(), initModuleConfigIntervals(), resetNodes();
-    
+
     bool factoryReset();
 
     bool loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, void *dest_struct);
@@ -130,7 +131,7 @@ class NodeDB
 
   private:
     /// Find a node in our DB, create an empty NodeInfo if missing
-    NodeInfo *getOrCreateNode(NodeNum n);
+    meshtastic_NodeInfo *getOrCreateNode(NodeNum n);
 
     /// Notify observers of changes to the DB
     void notifyObservers(bool forceUpdate = false)
@@ -140,13 +141,11 @@ class NodeDB
         newStatus.notifyObservers(&status);
     }
 
-
     /// read our db from flash
     void loadFromDisk();
 
     /// Reinit device state from scratch (not loading from disk)
-    void installDefaultDeviceState(), installDefaultChannels(), installDefaultConfig(),
-        installDefaultModuleConfig();
+    void installDefaultDeviceState(), installDefaultChannels(), installDefaultConfig(), installDefaultModuleConfig();
 };
 
 /**
@@ -183,7 +182,8 @@ extern NodeDB nodeDB;
 // Our delay functions check for this for times that should never expire
 #define NODE_DELAY_FOREVER 0xffffffff
 
-#define IF_ROUTER(routerVal, normalVal) ((config.device.role == Config_DeviceConfig_Role_ROUTER) ? (routerVal) : (normalVal))
+#define IF_ROUTER(routerVal, normalVal)                                                                                          \
+    ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER) ? (routerVal) : (normalVal))
 
 #define ONE_DAY 24 * 60 * 60
 
@@ -203,13 +203,15 @@ extern NodeDB nodeDB;
 
 inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval)
 {
-    if (configuredInterval > 0) return configuredInterval * 1000;
+    if (configuredInterval > 0)
+        return configuredInterval * 1000;
     return default_broadcast_interval_secs * 1000;
 }
 
 inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t defaultInterval)
 {
-    if (configuredInterval > 0) return configuredInterval * 1000;
+    if (configuredInterval > 0)
+        return configuredInterval * 1000;
     return defaultInterval * 1000;
 }
 
@@ -218,4 +220,7 @@ inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t d
  */
 extern uint32_t radioGeneration;
 
-#define Module_Config_size (ModuleConfig_CannedMessageConfig_size + ModuleConfig_ExternalNotificationConfig_size + ModuleConfig_MQTTConfig_size + ModuleConfig_RangeTestConfig_size + ModuleConfig_SerialConfig_size + ModuleConfig_StoreForwardConfig_size + ModuleConfig_TelemetryConfig_size + ModuleConfig_size)
+#define Module_Config_size                                                                                                       \
+    (ModuleConfig_CannedMessageConfig_size + ModuleConfig_ExternalNotificationConfig_size + ModuleConfig_MQTTConfig_size +       \
+     ModuleConfig_RangeTestConfig_size + ModuleConfig_SerialConfig_size + ModuleConfig_StoreForwardConfig_size +                 \
+     ModuleConfig_TelemetryConfig_size + ModuleConfig_size)

@@ -27,15 +27,16 @@ int32_t StreamAPI::readStream()
     } else {
         while (stream->available()) { // Currently we never want to block
             int cInt = stream->read();
-            if(cInt < 0)
-                break; // We ran out of characters (even though available said otherwise) - this can happen on rf52 adafruit arduino
+            if (cInt < 0)
+                break; // We ran out of characters (even though available said otherwise) - this can happen on rf52 adafruit
+                       // arduino
 
-            uint8_t c = (uint8_t) cInt;
+            uint8_t c = (uint8_t)cInt;
 
             // Use the read pointer for a little state machine, first look for framing, then length bytes, then payload
             size_t ptr = rxPtr;
 
-            rxPtr++; // assume we will probably advance the rxPtr
+            rxPtr++;        // assume we will probably advance the rxPtr
             rxBuf[ptr] = c; // store all bytes (including framing)
 
             // console->printf("rxPtr %d ptr=%d c=0x%x\n", rxPtr, ptr, c);
@@ -58,9 +59,9 @@ int32_t StreamAPI::readStream()
                         rxPtr = 0; // length is bogus, restart search for framing
                 }
 
-                if (rxPtr != 0) // Is packet still considered 'good'?
+                if (rxPtr != 0)                        // Is packet still considered 'good'?
                     if (ptr + 1 >= len + HEADER_LEN) { // have we received all of the payload?
-                        rxPtr = 0; // start over again on the next packet
+                        rxPtr = 0;                     // start over again on the next packet
 
                         // If we didn't just fail the packet and we now have the right # of bytes, parse it
                         handleToRadio(rxBuf + HEADER_LEN, len);
@@ -111,11 +112,11 @@ void StreamAPI::emitRebooted()
 {
     // In case we send a FromRadio packet
     memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
-    fromRadioScratch.which_payload_variant = FromRadio_rebooted_tag;
+    fromRadioScratch.which_payload_variant = meshtastic_FromRadio_rebooted_tag;
     fromRadioScratch.rebooted = true;
 
     // LOG_DEBUG("Emitting reboot packet for serial shell\n");
-    emitTxBuffer(pb_encode_to_bytes(txBuf + HEADER_LEN, FromRadio_size, &FromRadio_msg, &fromRadioScratch));
+    emitTxBuffer(pb_encode_to_bytes(txBuf + HEADER_LEN, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratch));
 }
 
 /// Hookable to find out when connection changes

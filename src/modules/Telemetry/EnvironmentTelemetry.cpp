@@ -118,7 +118,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
 #endif
 }
 
-uint32_t GetTimeSinceMeshPacket(const MeshPacket *mp)
+uint32_t GetTimeSinceMeshPacket(const meshtastic_MeshPacket *mp)
 {
     uint32_t now = getTime();
 
@@ -151,13 +151,13 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
         return;
     }
 
-    Telemetry lastMeasurement;
+    meshtastic_Telemetry lastMeasurement;
 
     uint32_t agoSecs = GetTimeSinceMeshPacket(lastMeasurementPacket);
     const char *lastSender = getSenderShortName(*lastMeasurementPacket);
 
     auto &p = lastMeasurementPacket->decoded;
-    if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, &Telemetry_msg, &lastMeasurement)) {
+    if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &lastMeasurement)) {
         display->setFont(FONT_SMALL);
         display->drawString(x, y += fontHeight(FONT_MEDIUM), "Measurement Error");
         LOG_ERROR("Unable to decode last packet");
@@ -182,9 +182,9 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
                                 String(lastMeasurement.variant.environment_metrics.current, 0) + "mA");
 }
 
-bool EnvironmentTelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Telemetry *t)
+bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
 {
-    if (t->which_variant == Telemetry_environment_metrics_tag) {
+    if (t->which_variant == meshtastic_Telemetry_environment_metrics_tag) {
         const char *sender = getSenderShortName(mp);
 
         LOG_INFO("(Received from %s): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, "
@@ -201,9 +201,9 @@ bool EnvironmentTelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Te
 
 bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 {
-    Telemetry m;
+    meshtastic_Telemetry m;
     m.time = getTime();
-    m.which_variant = Telemetry_environment_metrics_tag;
+    m.which_variant = meshtastic_Telemetry_environment_metrics_tag;
 
     m.variant.environment_metrics.barometric_pressure = 0;
     m.variant.environment_metrics.current = 0;
@@ -239,10 +239,10 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 
     sensor_read_error_count = 0;
 
-    MeshPacket *p = allocDataProtobuf(m);
+    meshtastic_MeshPacket *p = allocDataProtobuf(m);
     p->to = dest;
     p->decoded.want_response = false;
-    p->priority = MeshPacket_Priority_MIN;
+    p->priority = meshtastic_MeshPacket_Priority_MIN;
 
     lastMeasurementPacket = packetPool.allocCopy(*p);
     if (phoneOnly) {

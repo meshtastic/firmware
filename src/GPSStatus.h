@@ -20,15 +20,15 @@ class GPSStatus : public Status
     bool hasLock = false;     // default to false, until we complete our first read
     bool isConnected = false; // Do we have a GPS we are talking to
 
-    bool isPowerSaving = false; //Are we in power saving state
+    bool isPowerSaving = false; // Are we in power saving state
 
-    Position p = Position_init_default;
+    meshtastic_Position p = meshtastic_Position_init_default;
 
   public:
     GPSStatus() { statusType = STATUS_TYPE_GPS; }
 
     // preferred method
-    GPSStatus(bool hasLock, bool isConnected, bool isPowerSaving, const Position &pos) : Status()
+    GPSStatus(bool hasLock, bool isConnected, bool isPowerSaving, const meshtastic_Position &pos) : Status()
     {
         this->hasLock = hasLock;
         this->isConnected = isConnected;
@@ -47,7 +47,7 @@ class GPSStatus : public Status
 
     bool getIsConnected() const { return isConnected; }
 
-    bool getIsPowerSaving() const { return isPowerSaving;}
+    bool getIsPowerSaving() const { return isPowerSaving; }
 
     int32_t getLatitude() const
     {
@@ -55,7 +55,7 @@ class GPSStatus : public Status
 #ifdef GPS_EXTRAVERBOSE
             LOG_WARN("Using fixed latitude\n");
 #endif
-            NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
+            meshtastic_NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
             return node->position.latitude_i;
         } else {
             return p.latitude_i;
@@ -68,7 +68,7 @@ class GPSStatus : public Status
 #ifdef GPS_EXTRAVERBOSE
             LOG_WARN("Using fixed longitude\n");
 #endif
-            NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
+            meshtastic_NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
             return node->position.longitude_i;
         } else {
             return p.longitude_i;
@@ -81,29 +81,38 @@ class GPSStatus : public Status
 #ifdef GPS_EXTRAVERBOSE
             LOG_WARN("Using fixed altitude\n");
 #endif
-            NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
+            meshtastic_NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
             return node->position.altitude;
         } else {
             return p.altitude;
         }
     }
 
-    uint32_t getDOP() const { return p.PDOP; }
+    uint32_t getDOP() const
+    {
+        return p.PDOP;
+    }
 
-    uint32_t getHeading() const { return p.ground_track; }
+    uint32_t getHeading() const
+    {
+        return p.ground_track;
+    }
 
-    uint32_t getNumSatellites() const { return p.sats_in_view; }
+    uint32_t getNumSatellites() const
+    {
+        return p.sats_in_view;
+    }
 
     bool matches(const GPSStatus *newStatus) const
     {
 #ifdef GPS_EXTRAVERBOSE
         LOG_DEBUG("GPSStatus.match() new pos@%x to old pos@%x\n", newStatus->p.pos_timestamp, p.pos_timestamp);
 #endif
-        return (newStatus->hasLock != hasLock || newStatus->isConnected != isConnected || newStatus->isPowerSaving !=isPowerSaving ||
-                newStatus->p.latitude_i != p.latitude_i || newStatus->p.longitude_i != p.longitude_i ||
-                newStatus->p.altitude != p.altitude || newStatus->p.altitude_hae != p.altitude_hae ||
-                newStatus->p.PDOP != p.PDOP || newStatus->p.ground_track != p.ground_track ||
-                newStatus->p.ground_speed != p.ground_speed ||
+        return (newStatus->hasLock != hasLock || newStatus->isConnected != isConnected ||
+                newStatus->isPowerSaving != isPowerSaving || newStatus->p.latitude_i != p.latitude_i ||
+                newStatus->p.longitude_i != p.longitude_i || newStatus->p.altitude != p.altitude ||
+                newStatus->p.altitude_hae != p.altitude_hae || newStatus->p.PDOP != p.PDOP ||
+                newStatus->p.ground_track != p.ground_track || newStatus->p.ground_speed != p.ground_speed ||
                 newStatus->p.sats_in_view != p.sats_in_view);
     }
 

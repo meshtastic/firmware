@@ -28,7 +28,7 @@ class RangeTestModuleRadio : public SinglePortModule
     uint32_t lastRxID = 0;
 
   public:
-    RangeTestModuleRadio() : SinglePortModule("RangeTestModuleRadio", PortNum_TEXT_MESSAGE_APP)
+    RangeTestModuleRadio() : SinglePortModule("RangeTestModuleRadio", meshtastic_PortNum_TEXT_MESSAGE_APP)
     {
         loopbackOk = true; // Allow locally generated messages to loop back to the client
     }
@@ -41,7 +41,7 @@ class RangeTestModuleRadio : public SinglePortModule
     /**
      * Append range test data to the file on the Filesystem
      */
-    bool appendFile(const MeshPacket &mp);
+    bool appendFile(const meshtastic_MeshPacket &mp);
 
     /**
      * Kevin's magical calculation of two points to meters.
@@ -49,14 +49,14 @@ class RangeTestModuleRadio : public SinglePortModule
     float latLongToMeter(double lat_a, double lng_a, double lat_b, double lng_b);
 
   protected:
-    virtual MeshPacket *allocReply() override;
+    virtual meshtastic_MeshPacket *allocReply() override;
 
     /** Called to handle a particular incoming message
 
     @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for
     it
     */
-    virtual ProcessMessage handleReceived(const MeshPacket &mp) override;
+    virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
 };
 
 extern RangeTestModuleRadio *rangeTestModuleRadio;

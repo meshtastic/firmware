@@ -40,8 +40,8 @@ using namespace Adafruit_LittleFS_Namespace;
 #endif
 
 void fsInit();
-bool copyFile(const char* from, const char* to);
-bool renameFile(const char* pathFrom, const char* pathTo);
-void listDir(const char * dirname, uint8_t levels, boolean del);
-void rmDir(const char * dirname);
+bool copyFile(const char *from, const char *to);
+bool renameFile(const char *pathFrom, const char *pathTo);
+void listDir(const char *dirname, uint8_t levels, boolean del);
+void rmDir(const char *dirname);
 void setupSDCard();

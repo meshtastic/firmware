@@ -2,11 +2,11 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include "concurrency/Periodic.h"
-#include <SPI.h>
-#include <RAK13800_W5100S.h>
-#include "target_specific.h"
 #include "mesh/api/ethServerAPI.h"
 #include "mqtt/MQTT.h"
+#include "target_specific.h"
+#include <RAK13800_W5100S.h>
+#include <SPI.h>
 
 #ifndef DISABLE_NTP
 #include <NTPClient.h>
@@ -35,7 +35,7 @@ static int32_t reconnectETH()
             LOG_INFO("Starting NTP time client\n");
             timeClient.begin();
             timeClient.setUpdateInterval(60 * 60); // Update once an hour
-#endif            
+#endif
             // initWebServer();
             initApiServer();
 
@@ -50,7 +50,7 @@ static int32_t reconnectETH()
 
 #ifndef DISABLE_NTP
     if (isEthernetAvailable() && (ntp_renew < millis())) {
-	    
+
         LOG_INFO("Updating NTP time from %s\n", config.network.ntp_server);
         if (timeClient.update()) {
             LOG_DEBUG("NTP Request Success - Setting RTCQualityNTP if needed\n");
@@ -80,12 +80,12 @@ bool initEthernet()
 
 #ifdef PIN_ETHERNET_RESET
         pinMode(PIN_ETHERNET_RESET, OUTPUT);
-        digitalWrite(PIN_ETHERNET_RESET, LOW);  // Reset Time.
+        digitalWrite(PIN_ETHERNET_RESET, LOW); // Reset Time.
         delay(100);
-        digitalWrite(PIN_ETHERNET_RESET, HIGH);  // Reset Time.
+        digitalWrite(PIN_ETHERNET_RESET, HIGH); // Reset Time.
 #endif
 
-        Ethernet.init( ETH_SPI_PORT, PIN_ETHERNET_SS );
+        Ethernet.init(ETH_SPI_PORT, PIN_ETHERNET_SS);
 
         uint8_t mac[6];
 
@@ -94,12 +94,12 @@ bool initEthernet()
         //        createSSLCert();
 
         getMacAddr(mac); // FIXME use the BLE MAC for now...
-	mac[0] &= 0xfe; // Make sure this is not a multicast MAC
+        mac[0] &= 0xfe;  // Make sure this is not a multicast MAC
 
-        if (config.network.address_mode == Config_NetworkConfig_AddressMode_DHCP) {
+        if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_DHCP) {
             LOG_INFO("starting Ethernet DHCP\n");
             status = Ethernet.begin(mac);
-        } else if (config.network.address_mode == Config_NetworkConfig_AddressMode_STATIC) {
+        } else if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_STATIC) {
             LOG_INFO("starting Ethernet Static\n");
             Ethernet.begin(mac, config.network.ipv4_config.ip, config.network.ipv4_config.dns, config.network.ipv4_config.subnet);
         } else {
@@ -114,15 +114,19 @@ bool initEthernet()
             } else if (Ethernet.linkStatus() == LinkOFF) {
                 LOG_ERROR("Ethernet cable is not connected.\n");
                 return false;
-            } else{
+            } else {
                 LOG_ERROR("Unknown Ethernet error.\n");
                 return false;
             }
         } else {
-            LOG_INFO("Local IP %u.%u.%u.%u\n",Ethernet.localIP()[0], Ethernet.localIP()[1], Ethernet.localIP()[2], Ethernet.localIP()[3]);
-            LOG_INFO("Subnet Mask %u.%u.%u.%u\n",Ethernet.subnetMask()[0], Ethernet.subnetMask()[1], Ethernet.subnetMask()[2], Ethernet.subnetMask()[3]);
-            LOG_INFO("Gateway IP %u.%u.%u.%u\n",Ethernet.gatewayIP()[0], Ethernet.gatewayIP()[1], Ethernet.gatewayIP()[2], Ethernet.gatewayIP()[3]);
-            LOG_INFO("DNS Server IP %u.%u.%u.%u\n",Ethernet.dnsServerIP()[0], Ethernet.dnsServerIP()[1], Ethernet.dnsServerIP()[2], Ethernet.dnsServerIP()[3]);
+            LOG_INFO("Local IP %u.%u.%u.%u\n", Ethernet.localIP()[0], Ethernet.localIP()[1], Ethernet.localIP()[2],
+                     Ethernet.localIP()[3]);
+            LOG_INFO("Subnet Mask %u.%u.%u.%u\n", Ethernet.subnetMask()[0], Ethernet.subnetMask()[1], Ethernet.subnetMask()[2],
+                     Ethernet.subnetMask()[3]);
+            LOG_INFO("Gateway IP %u.%u.%u.%u\n", Ethernet.gatewayIP()[0], Ethernet.gatewayIP()[1], Ethernet.gatewayIP()[2],
+                     Ethernet.gatewayIP()[3]);
+            LOG_INFO("DNS Server IP %u.%u.%u.%u\n", Ethernet.dnsServerIP()[0], Ethernet.dnsServerIP()[1],
+                     Ethernet.dnsServerIP()[2], Ethernet.dnsServerIP()[3]);
         }
 
         ethEvent = new Periodic("ethConnect", reconnectETH);
@@ -135,7 +139,8 @@ bool initEthernet()
     }
 }
 
-bool isEthernetAvailable() {
+bool isEthernetAvailable()
+{
 
     if (!config.network.eth_enabled) {
         return false;

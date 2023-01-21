@@ -19,16 +19,12 @@
       "sd_fwid": "0x00B7"
     }
   },
-  "connectivity": [
-    "bluetooth"
-  ],
+  "connectivity": ["bluetooth"],
   "debug": {
     "jlink_device": "nRF52832_xxAA",
     "svd_path": "nrf52.svd"
   },
-  "frameworks": [
-    "arduino"
-  ],
+  "frameworks": ["arduino"],
   "name": "lora ISP4520",
   "upload": {
     "maximum_ram_size": 65536,
@@ -36,12 +32,7 @@
     "require_upload_port": true,
     "speed": 115200,
     "protocol": "nrfutil",
-    "protocols": [
-      "jlink",
-      "nrfjprog",
-      "nrfutil",
-      "stlink"
-    ]
+    "protocols": ["jlink", "nrfjprog", "nrfutil", "stlink"]
   },
   "url": "",
   "vendor": "PsiSoft"
