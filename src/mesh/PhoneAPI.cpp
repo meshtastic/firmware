@@ -376,10 +376,9 @@ bool PhoneAPI::available()
         if (hasPacket)
             return true;
 
-        if (xmodemPacketForPhone.control != meshtastic_XModem_Control_NUL)
+        if (xmodemPacketForPhone.control == meshtastic_XModem_Control_NUL)
             xmodemPacketForPhone = xModem.getForPhone();
-        hasPacket = !!packetForPhone;
-        if (hasPacket)
+        if (xmodemPacketForPhone.control != meshtastic_XModem_Control_NUL)
             return true;
 
         if (!packetForPhone)
