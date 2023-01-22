@@ -1,6 +1,6 @@
 #include "configuration.h"
-#include <stdio.h>
 #include <pico/unique_id.h>
+#include <stdio.h>
 
 void setBluetoothEnable(bool on)
 {

@@ -1,11 +1,11 @@
-#include "configuration.h"
 #include "TextMessageModule.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "configuration.h"
 
 TextMessageModule *textMessageModule;
 
-ProcessMessage TextMessageModule::handleReceived(const MeshPacket &mp)
+ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
     auto &p = mp.decoded;
     LOG_INFO("Received text msg from=0x%0x, id=0x%x, msg=%.*s\n", mp.from, mp.id, p.payload.size, p.payload.bytes);

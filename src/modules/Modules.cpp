@@ -18,9 +18,9 @@
 #include "modules/Telemetry/EnvironmentTelemetry.h"
 #endif
 #ifdef ARCH_ESP32
+#include "modules/esp32/AudioModule.h"
 #include "modules/esp32/RangeTestModule.h"
 #include "modules/esp32/StoreForwardModule.h"
-#include "modules/esp32/AudioModule.h"
 #endif
 #if defined(ARCH_ESP32) || defined(ARCH_NRF52)
 #include "modules/ExternalNotificationModule.h"
@@ -42,7 +42,7 @@ void setupModules()
     waypointModule = new WaypointModule();
     textMessageModule = new TextMessageModule();
     traceRouteModule = new TraceRouteModule();
-    
+
     // Note: if the rest of meshtastic doesn't need to explicitly use your module, you do not need to assign the instance
     // to a global variable.
 

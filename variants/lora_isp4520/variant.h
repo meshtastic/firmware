@@ -33,7 +33,7 @@
 // Number of pins defined in PinDescription array
 #define PINS_COUNT (16)
 #define NUM_DIGITAL_PINS (16)
-#define NUM_ANALOG_INPUTS (1) 
+#define NUM_ANALOG_INPUTS (1)
 #define NUM_ANALOG_OUTPUTS (1)
 
 /*
@@ -41,7 +41,7 @@
  */
 #define SPI_INTERFACES_COUNT 1
 
-// These are in arduino pin numbers, 
+// These are in arduino pin numbers,
 // translation in g_ADigitalPinMap in variants.cpp
 #define PIN_SPI_MISO (0)
 #define PIN_SPI_MOSI (9)
@@ -54,9 +54,9 @@
 
 // GPIOs the SX1262 is connected
 #define USE_SX1262
-#define SX126X_CS 1    // aka SPI_NSS
+#define SX126X_CS 1 // aka SPI_NSS
 #define SX126X_DIO1 (4)
-#define SX126X_BUSY (5) 
+#define SX126X_BUSY (5)
 #define SX126X_RESET (6)
 
 /*
@@ -80,7 +80,7 @@
 /*
  * Buttons
  */
-#define PIN_BUTTON1 (15) 
+#define PIN_BUTTON1 (15)
 #define PIN_BUTTON2 (7)
 #define PIN_BUTTON3 (8)
 

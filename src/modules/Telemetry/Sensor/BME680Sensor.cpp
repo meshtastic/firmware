@@ -4,7 +4,7 @@
 #include "configuration.h"
 #include <Adafruit_BME680.h>
 
-BME680Sensor::BME680Sensor() : TelemetrySensor(TelemetrySensorType_BME680, "BME680") {}
+BME680Sensor::BME680Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_BME680, "BME680") {}
 
 int32_t BME680Sensor::runOnce()
 {
@@ -19,7 +19,7 @@ int32_t BME680Sensor::runOnce()
 
 void BME680Sensor::setup() {}
 
-bool BME680Sensor::getMetrics(Telemetry *measurement)
+bool BME680Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     bme680.performReading();
     measurement->variant.environment_metrics.temperature = bme680.temperature;

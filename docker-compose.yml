@@ -8,6 +8,6 @@ services:
       replicas: 4
     networks:
       - mesh
-    
+
 networks:
   mesh:

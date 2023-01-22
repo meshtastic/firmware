@@ -1,5 +1,5 @@
-#include "configuration.h"
 #include "OSThread.h"
+#include "configuration.h"
 #include <assert.h>
 
 namespace concurrency
@@ -76,7 +76,7 @@ void OSThread::run()
 {
 #ifdef DEBUG_HEAP
     auto heap = ESP.getFreeHeap();
-#endif    
+#endif
     currentThread = this;
     auto newDelay = runOnce();
 #ifdef DEBUG_HEAP
@@ -95,11 +95,11 @@ void OSThread::run()
     currentThread = NULL;
 }
 
-int32_t OSThread::disable() 
+int32_t OSThread::disable()
 {
     enabled = false;
     setInterval(INT32_MAX);
-    
+
     return INT32_MAX;
 }
 

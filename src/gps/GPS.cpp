@@ -295,6 +295,7 @@ bool GPS::setup()
         notifyDeepSleepObserver.observe(&notifyDeepSleep);
         notifyGPSSleepObserver.observe(&notifyGPSSleep);
     }
+
     if (config.position.gps_enabled == false && config.position.fixed_position == false) {
         setAwake(false);
         doGPSpowersave(false);
@@ -489,7 +490,7 @@ int32_t GPS::runOnce()
                 if (hasValidLocation) {
                     LOG_DEBUG("hasValidLocation FALLING EDGE (last read: %d)\n", gotLoc);
                 }
-                p = Position_init_default;
+                p = meshtastic_Position_init_default;
                 hasValidLocation = false;
             }
 

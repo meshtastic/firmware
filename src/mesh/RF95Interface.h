@@ -13,8 +13,8 @@ class RF95Interface : public RadioLibInterface
 
   public:
     RF95Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, SPIClass &spi);
-    
-    //TODO: Verify that this irq flag works with RFM95 / SX1276 radios the way it used to
+
+    // TODO: Verify that this irq flag works with RFM95 / SX1276 radios the way it used to
     bool isIRQPending() override { return lora->getIRQFlags() & RADIOLIB_SX127X_MASK_IRQ_FLAG_VALID_HEADER; }
 
     /// Initialise the Driver transport hardware and software.
@@ -55,7 +55,7 @@ class RF95Interface : public RadioLibInterface
     /**
      * Add SNR data to received messages
      */
-    virtual void addReceiveMetadata(MeshPacket *mp) override;
+    virtual void addReceiveMetadata(meshtastic_MeshPacket *mp) override;
 
     virtual void setStandby() override;
 
