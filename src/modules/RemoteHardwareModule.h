@@ -6,7 +6,7 @@
 /**
  * A module that provides easy low-level remote access to device hardware.
  */
-class RemoteHardwareModule : public ProtobufModule<HardwareMessage>, private concurrency::OSThread
+class RemoteHardwareModule : public ProtobufModule<meshtastic_HardwareMessage>, private concurrency::OSThread
 {
     /// The current set of GPIOs we've been asked to watch for changes
     uint64_t watchGpios = 0;
@@ -28,7 +28,7 @@ class RemoteHardwareModule : public ProtobufModule<HardwareMessage>, private con
 
     @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
     */
-    virtual bool handleReceivedProtobuf(const MeshPacket &mp, HardwareMessage *p) override;
+    virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_HardwareMessage *p) override;
 
     /**
      * Periodically read the gpios we have been asked to WATCH, if they have changed,

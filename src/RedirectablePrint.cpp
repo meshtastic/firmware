@@ -1,12 +1,12 @@
-#include "configuration.h"
 #include "RedirectablePrint.h"
-#include "RTC.h"
 #include "NodeDB.h"
+#include "RTC.h"
 #include "concurrency/OSThread.h"
+#include "configuration.h"
 #include <assert.h>
+#include <cstring>
 #include <sys/time.h>
 #include <time.h>
-#include <cstring>
 
 /**
  * A printer that doesn't go anywhere
@@ -42,7 +42,8 @@ size_t RedirectablePrint::vprintf(const char *format, va_list arg)
     size_t len = vsnprintf(printBuf, sizeof(printBuf), format, copy);
     va_end(copy);
 
-    // If the resulting string is longer than sizeof(printBuf)-1 characters, the remaining characters are still counted for the return value
+    // If the resulting string is longer than sizeof(printBuf)-1 characters, the remaining characters are still counted for the
+    // return value
 
     if (len > sizeof(printBuf) - 1) {
         len = sizeof(printBuf) - 1;
@@ -104,30 +105,34 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
     return r;
 }
 
-void RedirectablePrint::hexDump(const char *logLevel, unsigned char *buf, uint16_t len) {
-  const char alphabet[17] = "0123456789abcdef";
-  log(logLevel, "   +------------------------------------------------+ +----------------+\n");
-  log(logLevel, "   |.0 .1 .2 .3 .4 .5 .6 .7 .8 .9 .a .b .c .d .e .f | |      ASCII     |\n");
-  for (uint16_t i = 0; i < len; i += 16) {
-    if (i % 128 == 0)
-      log(logLevel, "   +------------------------------------------------+ +----------------+\n");
-    char s[] = "|                                                | |                |\n";
-    uint8_t ix = 1, iy = 52;
-    for (uint8_t j = 0; j < 16; j++) {
-      if (i + j < len) {
-        uint8_t c = buf[i + j];
-        s[ix++] = alphabet[(c >> 4) & 0x0F];
-        s[ix++] = alphabet[c & 0x0F];
-        ix++;
-        if (c > 31 && c < 128) s[iy++] = c;
-        else s[iy++] = '.';
-      }
+void RedirectablePrint::hexDump(const char *logLevel, unsigned char *buf, uint16_t len)
+{
+    const char alphabet[17] = "0123456789abcdef";
+    log(logLevel, "   +------------------------------------------------+ +----------------+\n");
+    log(logLevel, "   |.0 .1 .2 .3 .4 .5 .6 .7 .8 .9 .a .b .c .d .e .f | |      ASCII     |\n");
+    for (uint16_t i = 0; i < len; i += 16) {
+        if (i % 128 == 0)
+            log(logLevel, "   +------------------------------------------------+ +----------------+\n");
+        char s[] = "|                                                | |                |\n";
+        uint8_t ix = 1, iy = 52;
+        for (uint8_t j = 0; j < 16; j++) {
+            if (i + j < len) {
+                uint8_t c = buf[i + j];
+                s[ix++] = alphabet[(c >> 4) & 0x0F];
+                s[ix++] = alphabet[c & 0x0F];
+                ix++;
+                if (c > 31 && c < 128)
+                    s[iy++] = c;
+                else
+                    s[iy++] = '.';
+            }
+        }
+        uint8_t index = i / 16;
+        if (i < 256)
+            log(logLevel, " ");
+        log(logLevel, "%02x", index);
+        log(logLevel, ".");
+        log(logLevel, s);
     }
-    uint8_t index = i / 16;
-    if (i < 256) log(logLevel, " ");
-    log(logLevel, "%02x",index); 
-    log(logLevel, ".");
-    log(logLevel, s);
-  }
-  log(logLevel, "   +------------------------------------------------+ +----------------+\n");
+    log(logLevel, "   +------------------------------------------------+ +----------------+\n");
 }

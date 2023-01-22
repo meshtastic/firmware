@@ -6,9 +6,9 @@
 
   \brief Derived class for %RFM95 modules. Overrides some methods from SX1278 due to different parameter ranges.
 */
-class RadioLibRF95: public SX1278 {
+class RadioLibRF95 : public SX1278
+{
   public:
-
     // constructor
 
     /*!
@@ -16,7 +16,7 @@ class RadioLibRF95: public SX1278 {
 
       \param mod Instance of Module that will be used to communicate with the %LoRa chip.
     */
-    explicit RadioLibRF95(Module* mod);
+    explicit RadioLibRF95(Module *mod);
 
     // basic methods
 
@@ -31,19 +31,21 @@ class RadioLibRF95: public SX1278 {
 
       \param cr %LoRa link coding rate denominator. Allowed values range from 5 to 8.
 
-      \param syncWord %LoRa sync word. Can be used to distinguish different networks. Note that value 0x34 is reserved for LoRaWAN networks.
+      \param syncWord %LoRa sync word. Can be used to distinguish different networks. Note that value 0x34 is reserved for LoRaWAN
+      networks.
 
       \param power Transmission output power in dBm. Allowed values range from 2 to 17 dBm.
 
-      \param preambleLength Length of %LoRa transmission preamble in symbols. The actual preamble length is 4.25 symbols longer than the set number.
-      Allowed values range from 6 to 65535.
+      \param preambleLength Length of %LoRa transmission preamble in symbols. The actual preamble length is 4.25 symbols longer
+      than the set number. Allowed values range from 6 to 65535.
 
-      \param gain Gain of receiver LNA (low-noise amplifier). Can be set to any integer in range 1 to 6 where 1 is the highest gain.
-      Set to 0 to enable automatic gain control (recommended).
+      \param gain Gain of receiver LNA (low-noise amplifier). Can be set to any integer in range 1 to 6 where 1 is the highest
+      gain. Set to 0 to enable automatic gain control (recommended).
 
       \returns \ref status_codes
     */
-    int16_t begin(float freq = 915.0, float bw = 125.0, uint8_t sf = 9, uint8_t cr = 7, uint8_t syncWord = RADIOLIB_SX127X_SYNC_WORD, int8_t power = 17, uint16_t preambleLength = 8, uint8_t gain = 0);
+    int16_t begin(float freq = 915.0, float bw = 125.0, uint8_t sf = 9, uint8_t cr = 7,
+                  uint8_t syncWord = RADIOLIB_SX127X_SYNC_WORD, int8_t power = 17, uint16_t preambleLength = 8, uint8_t gain = 0);
 
     // configuration methods
 
@@ -60,11 +62,10 @@ class RadioLibRF95: public SX1278 {
     bool isReceiving();
 
     /// For debugging
-    uint8_t readReg(uint8_t addr); 
+    uint8_t readReg(uint8_t addr);
 
   protected:
     // since default current limit for SX126x/127x in updated RadioLib is 60mA
     // use the previous value
     float currentLimit = 100;
 };
-

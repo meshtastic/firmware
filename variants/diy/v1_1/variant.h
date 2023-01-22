@@ -19,8 +19,8 @@
 // In transmitting, set TXEN as high communication level，RXEN pin is low level;
 // In receiving, set RXEN as high communication level, TXEN is lowlevel;
 // Before powering off, set TXEN、RXEN as low level.
-#define LORA_RXEN 14  // Input - RF switch RX control, connecting external MCU IO, valid in high level
-#define LORA_TXEN 13  // Input - RF switch TX control, connecting external MCU IO or DIO2, valid in high level
+#define LORA_RXEN 14 // Input - RF switch RX control, connecting external MCU IO, valid in high level
+#define LORA_TXEN 13 // Input - RF switch TX control, connecting external MCU IO or DIO2, valid in high level
 
 #undef RF95_SCK
 #define RF95_SCK 18

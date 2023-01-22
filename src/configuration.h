@@ -27,10 +27,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <Arduino.h>
 
 #ifdef RV3028_RTC
-    #include "Melopero_RV3028.h"
+#include "Melopero_RV3028.h"
 #endif
 #ifdef PCF8563_RTC
-    #include "pcf8563.h"
+#include "pcf8563.h"
 #endif
 
 // -----------------------------------------------------------------------------
@@ -42,7 +42,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #error APP_VERSION must be set by the build environment
 #endif
 
-// FIXME: This is still needed by the Bluetooth Stack and needs to be replaced by something better. Remnant of the old versioning system.
+// FIXME: This is still needed by the Bluetooth Stack and needs to be replaced by something better. Remnant of the old versioning
+// system.
 #ifndef HW_VERSION
 #define HW_VERSION "1.0"
 #endif
@@ -64,13 +65,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // Nop definition for these attributes that are specific to ESP32
 #ifndef EXT_RAM_ATTR
-    #define EXT_RAM_ATTR
+#define EXT_RAM_ATTR
 #endif
 #ifndef IRAM_ATTR
-    #define IRAM_ATTR
+#define IRAM_ATTR
 #endif
 #ifndef RTC_DATA_ATTR
-    #define RTC_DATA_ATTR
+#define RTC_DATA_ATTR
 #endif
 
 // -----------------------------------------------------------------------------
@@ -80,7 +81,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Disable use of the NTP library and related features
 // #define DISABLE_NTP
 
-// Disable the welcome screen and allow 
+// Disable the welcome screen and allow
 //#define DISABLE_WELCOME_UNSET
 
 // -----------------------------------------------------------------------------
@@ -135,49 +136,49 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 /* Step #1: offer chance for variant-specific defines */
 #include "variant.h"
 
-/* Step #2: follow with defines common to the architecture; 
+/* Step #2: follow with defines common to the architecture;
    also enable HAS_ option not specifically disabled by variant.h */
 #include "architecture.h"
 
 /* Step #3: mop up with disabled values for HAS_ options not handled by the above two */
 
 #ifndef HAS_WIFI
-    #define HAS_WIFI 0
+#define HAS_WIFI 0
 #endif
 #ifndef HAS_ETHERNET
-    #define HAS_ETHERNET 0
+#define HAS_ETHERNET 0
 #endif
 #ifndef HAS_SCREEN
-    #define HAS_SCREEN 0
+#define HAS_SCREEN 0
 #endif
 #ifndef HAS_WIRE
-    #define HAS_WIRE 0
+#define HAS_WIRE 0
 #endif
 #ifndef HAS_GPS
-    #define HAS_GPS 0
+#define HAS_GPS 0
 #endif
 #ifndef HAS_BUTTON
-    #define HAS_BUTTON 0
+#define HAS_BUTTON 0
 #endif
 #ifndef HAS_TELEMETRY
-    #define HAS_TELEMETRY 0
+#define HAS_TELEMETRY 0
 #endif
 #ifndef HAS_RADIO
-    #define HAS_RADIO 0
+#define HAS_RADIO 0
 #endif
 #ifndef HAS_RTC
-    #define HAS_RTC 0
+#define HAS_RTC 0
 #endif
 #ifndef HAS_CPU_SHUTDOWN
-    #define HAS_CPU_SHUTDOWN 0
+#define HAS_CPU_SHUTDOWN 0
 #endif
 #ifndef HAS_BLUETOOTH
-    #define HAS_BLUETOOTH 0
+#define HAS_BLUETOOTH 0
 #endif
 
-#include "RF95Configuration.h"
 #include "DebugConfiguration.h"
+#include "RF95Configuration.h"
 
 #ifndef HW_VENDOR
-    #error HW_VENDOR must be defined
+#error HW_VENDOR must be defined
 #endif
