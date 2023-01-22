@@ -25,8 +25,8 @@
 #define USE_RF95
 #define LORA_DIO0 36 // a No connect on the SX1262 module
 #define LORA_RESET 26
-#define LORA_DIO1 RADIOLIB_NC// Not really used
-#define LORA_DIO2 RADIOLIB_NC// Not really used
+#define LORA_DIO1 RADIOLIB_NC // Not really used
+#define LORA_DIO2 RADIOLIB_NC // Not really used
 
 // This board has different GPS pins than all other boards
 #undef GPS_RX_PIN

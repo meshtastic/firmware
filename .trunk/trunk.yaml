@@ -8,16 +8,17 @@ plugins:
       uri: https://github.com/trunk-io/plugins
 lint:
   enabled:
+    - git-diff-check
+    - gitleaks@8.15.2
+    - clang-format@14.0.0
+    - prettier@2.8.3
+  disabled:
     - shellcheck@0.9.0
     - shfmt@3.5.0
     - oxipng@8.0.0
     - actionlint@1.6.22
-    - git-diff-check
-    - gitleaks@8.15.2
     - markdownlint@0.33.0
     - hadolint@2.12.0
-    - clang-format@14.0.0
-    - prettier@2.8.3
     - svgo@3.0.2
 runtimes:
   enabled:

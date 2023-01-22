@@ -1,5 +1,5 @@
-#include "configuration.h"
 #include "CryptoEngine.h"
+#include "configuration.h"
 
 void CryptoEngine::setKey(const CryptoKey &k)
 {

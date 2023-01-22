@@ -19,9 +19,9 @@ typedef uint32_t PacketId; // A packet sequence number
  * Source of a received message
  */
 enum RxSource {
-    RX_SRC_LOCAL,  // message was generated locally
-    RX_SRC_RADIO,   // message was received from radio mesh
-    RX_SRC_USER    // message was received from end-user device
+    RX_SRC_LOCAL, // message was generated locally
+    RX_SRC_RADIO, // message was received from radio mesh
+    RX_SRC_USER   // message was received from end-user device
 };
 
 /**
@@ -39,10 +39,10 @@ enum RxSource {
 typedef int ErrorCode;
 
 /// Alloc and free packets to our global, ISR safe pool
-extern Allocator<MeshPacket> &packetPool;
+extern Allocator<meshtastic_MeshPacket> &packetPool;
 
 /**
  * Most (but not always) of the time we want to treat packets 'from' the local phone (where from == 0), as if they originated on
  * the local node. If from is zero this function returns our node number instead
  */
-NodeNum getFrom(const MeshPacket *p);
+NodeNum getFrom(const meshtastic_MeshPacket *p);

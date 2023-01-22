@@ -1,12 +1,12 @@
-#include "configuration.h"
 #include "NMEAGPS.h"
 #include "RTC.h"
+#include "configuration.h"
 
 #include <TinyGPS++.h>
 
 // GPS solutions older than this will be rejected - see TinyGPSDatum::age()
-#define GPS_SOL_EXPIRY_MS 5000   // in millis. give 1 second time to combine different sentences. NMEA Frequency isn't higher anyway
-#define NMEA_MSG_GXGSA "GNGSA"  // GSA message (GPGSA, GNGSA etc)
+#define GPS_SOL_EXPIRY_MS 5000 // in millis. give 1 second time to combine different sentences. NMEA Frequency isn't higher anyway
+#define NMEA_MSG_GXGSA "GNGSA" // GSA message (GPGSA, GNGSA etc)
 
 static int32_t toDegInt(RawDegrees d)
 {
@@ -20,19 +20,18 @@ static int32_t toDegInt(RawDegrees d)
 bool NMEAGPS::factoryReset()
 {
 #ifdef PIN_GPS_REINIT
-    //The L76K GNSS on the T-Echo requires the RESET pin to be pulled LOW
+    // The L76K GNSS on the T-Echo requires the RESET pin to be pulled LOW
     digitalWrite(PIN_GPS_REINIT, 0);
     pinMode(PIN_GPS_REINIT, OUTPUT);
-    delay(150); //The L76K datasheet calls for at least 100MS delay
+    delay(150); // The L76K datasheet calls for at least 100MS delay
     digitalWrite(PIN_GPS_REINIT, 1);
-#endif  
+#endif
 
     // send the UBLOX Factory Reset Command regardless of detect state, something is very wrong, just assume it's UBLOX.
     // Factory Reset
-    byte _message_reset[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF,
-        0xFB, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0xFF, 0xFF, 0x00, 0x00, 0x17, 0x2B, 0x7E};
-    _serial_gps->write(_message_reset,sizeof(_message_reset));
+    byte _message_reset[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF, 0xFB, 0x00, 0x00, 0x00,
+                             0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x17, 0x2B, 0x7E};
+    _serial_gps->write(_message_reset, sizeof(_message_reset));
     delay(1000);
     return true;
 }
@@ -40,7 +39,7 @@ bool NMEAGPS::factoryReset()
 bool NMEAGPS::setupGPS()
 {
     GPS::setupGPS();
-    
+
 #ifdef PIN_GPS_PPS
     // pulse per second
     // FIXME - move into shared GPS code
@@ -84,8 +83,9 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         t.tm_mon = d.month() - 1;
         t.tm_year = d.year() - 1900;
         t.tm_isdst = false;
-        if (t.tm_mon > -1){
-            LOG_DEBUG("NMEA GPS time %02d-%02d-%02d %02d:%02d:%02d\n", d.year(), d.month(), t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
+        if (t.tm_mon > -1) {
+            LOG_DEBUG("NMEA GPS time %02d-%02d-%02d %02d:%02d:%02d\n", d.year(), d.month(), t.tm_mday, t.tm_hour, t.tm_min,
+                      t.tm_sec);
             perhapsSetRTC(RTCQualityGPS, t);
             return true;
         } else
@@ -102,47 +102,44 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
  */
 bool NMEAGPS::lookForLocation()
 {
-    // By default, TinyGPS++ does not parse GPGSA lines, which give us 
+    // By default, TinyGPS++ does not parse GPGSA lines, which give us
     //   the 2D/3D fixType (see NMEAGPS.h)
     // At a minimum, use the fixQuality indicator in GPGGA (FIXME?)
     fixQual = reader.fixQuality();
 
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-    fixType = atoi(gsafixtype.value());  // will set to zero if no data
+    fixType = atoi(gsafixtype.value()); // will set to zero if no data
     // LOG_DEBUG("FIX QUAL=%d, TYPE=%d\n", fixQual, fixType);
 #endif
 
     // check if GPS has an acceptable lock
-    if (! hasLock())
+    if (!hasLock())
         return false;
 
 #ifdef GPS_EXTRAVERBOSE
-    LOG_DEBUG("AGE: LOC=%d FIX=%d DATE=%d TIME=%d\n", 
-                reader.location.age(), 
+    LOG_DEBUG("AGE: LOC=%d FIX=%d DATE=%d TIME=%d\n", reader.location.age(),
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-                gsafixtype.age(),
+              gsafixtype.age(),
 #else
-                0,
+              0,
 #endif
-                reader.date.age(), reader.time.age());
-#endif  // GPS_EXTRAVERBOSE
+              reader.date.age(), reader.time.age());
+#endif // GPS_EXTRAVERBOSE
 
     // check if a complete GPS solution set is available for reading
     //   tinyGPSDatum::age() also includes isValid() test
     // FIXME
-    if (! ((reader.location.age() < GPS_SOL_EXPIRY_MS) &&
+    if (!((reader.location.age() < GPS_SOL_EXPIRY_MS) &&
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-            (gsafixtype.age() < GPS_SOL_EXPIRY_MS) &&
+          (gsafixtype.age() < GPS_SOL_EXPIRY_MS) &&
 #endif
-            (reader.time.age() < GPS_SOL_EXPIRY_MS) &&
-            (reader.date.age() < GPS_SOL_EXPIRY_MS)))
-    {
+          (reader.time.age() < GPS_SOL_EXPIRY_MS) && (reader.date.age() < GPS_SOL_EXPIRY_MS))) {
         LOG_WARN("SOME data is TOO OLD: LOC %u, TIME %u, DATE %u\n", reader.location.age(), reader.time.age(), reader.date.age());
         return false;
     }
 
     // Is this a new point or are we re-reading the previous one?
-    if (! reader.location.isUpdated())
+    if (!reader.location.isUpdated())
         return false;
 
     // We know the solution is fresh and valid, so just read the data
@@ -150,19 +147,19 @@ bool NMEAGPS::lookForLocation()
 
     // Bail out EARLY to avoid overwriting previous good data (like #857)
     if (toDegInt(loc.lat) > 900000000) {
-#ifdef GPS_EXTRAVERBOSE        
-        LOG_DEBUG("Bail out EARLY on LAT %i\n",toDegInt(loc.lat));
+#ifdef GPS_EXTRAVERBOSE
+        LOG_DEBUG("Bail out EARLY on LAT %i\n", toDegInt(loc.lat));
 #endif
         return false;
     }
     if (toDegInt(loc.lng) > 1800000000) {
-#ifdef GPS_EXTRAVERBOSE        
-        LOG_DEBUG("Bail out EARLY on LNG %i\n",toDegInt(loc.lng));
+#ifdef GPS_EXTRAVERBOSE
+        LOG_DEBUG("Bail out EARLY on LNG %i\n", toDegInt(loc.lng));
 #endif
         return false;
     }
 
-    p.location_source = Position_LocSource_LOC_INTERNAL;
+    p.location_source = meshtastic_Position_LocSource_LOC_INTERNAL;
 
     // Dilution of precision (an accuracy metric) is reported in 10^2 units, so we need to scale down when we use it
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
@@ -209,11 +206,11 @@ bool NMEAGPS::lookForLocation()
     }
 
     if (reader.course.isUpdated() && reader.course.isValid()) {
-        if (reader.course.value() < 36000) {  // sanity check
-            p.ground_track = reader.course.value() * 1e3; // Scale the heading (in degrees * 10^-2) to match the expected degrees * 10^-5
+        if (reader.course.value() < 36000) { // sanity check
+            p.ground_track =
+                reader.course.value() * 1e3; // Scale the heading (in degrees * 10^-2) to match the expected degrees * 10^-5
         } else {
-            LOG_WARN("BOGUS course.value() REJECTED: %d\n",
-                        reader.course.value());
+            LOG_WARN("BOGUS course.value() REJECTED: %d\n", reader.course.value());
         }
     }
 
@@ -224,14 +221,13 @@ bool NMEAGPS::lookForLocation()
     return true;
 }
 
-
 bool NMEAGPS::hasLock()
 {
     // Using GPGGA fix quality indicator
     if (fixQual >= 1 && fixQual <= 5) {
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
         // Use GPGSA fix type 2D/3D (better) if available
-        if (fixType == 3 || fixType == 0)  // zero means "no data received"
+        if (fixType == 3 || fixType == 0) // zero means "no data received"
 #endif
             return true;
     }

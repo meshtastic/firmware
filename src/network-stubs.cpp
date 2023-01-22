@@ -2,13 +2,15 @@
 
 #if (HAS_WIFI == 0)
 
-bool initWifi() {
+bool initWifi()
+{
     return false;
 }
 
 void deinitWifi() {}
 
-bool isWifiAvailable() {
+bool isWifiAvailable()
+{
     return false;
 }
 
@@ -16,11 +18,13 @@ bool isWifiAvailable() {
 
 #if (HAS_ETHERNET == 0)
 
-bool initEthernet() {
+bool initEthernet()
+{
     return false;
 }
 
-bool isEthernetAvailable() {
+bool isEthernetAvailable()
+{
     return false;
 }
 

@@ -44,8 +44,8 @@ extern "C" {
 
 // LEDs
 #define PIN_LED1 (0 + 14) // 13 red (confirmed on 1.0 board)
-#define PIN_LED2 (0 + 15) // 14 blue 
-#define PIN_LED3 (0 + 13) // 15 green 
+#define PIN_LED2 (0 + 15) // 14 blue
+#define PIN_LED3 (0 + 13) // 15 green
 
 #define LED_RED PIN_LED3
 #define LED_BLUE PIN_LED1
@@ -61,7 +61,7 @@ extern "C" {
  * Buttons
  */
 #define PIN_BUTTON1 (32 + 10)
-#define PIN_BUTTON2 (0 + 18) // 0.18 is labeled on the board as RESET but we configure it in the bootloader as a regular GPIO
+#define PIN_BUTTON2 (0 + 18)      // 0.18 is labeled on the board as RESET but we configure it in the bootloader as a regular GPIO
 #define PIN_BUTTON_TOUCH (0 + 11) // 0.11 is the soft touch button on T-Echo
 
 /*
@@ -112,8 +112,8 @@ External serial flash WP25R1635FZUIL0
 #define PIN_QSPI_CS (32 + 15)
 #define PIN_QSPI_IO0 (32 + 12) // MOSI if using two bit interface
 #define PIN_QSPI_IO1 (32 + 13) // MISO if using two bit interface
-#define PIN_QSPI_IO2 (0 + 7) // WP if using two bit interface (i.e. not used)
-#define PIN_QSPI_IO3 (0 + 5) // HOLD if using two bit interface (i.e. not used)
+#define PIN_QSPI_IO2 (0 + 7)   // WP if using two bit interface (i.e. not used)
+#define PIN_QSPI_IO3 (0 + 5)   // HOLD if using two bit interface (i.e. not used)
 
 // On-board QSPI Flash
 #define EXTERNAL_FLASH_DEVICES MX25R1635F
@@ -154,7 +154,7 @@ External serial flash WP25R1635FZUIL0
 #define PIN_EINK_MOSI (0 + 29) // also called SDI
 
 // Controls power for the eink display - Board power is enabled either by VBUS from USB or the CPU asserting PWR_ON
-// FIXME - I think this is actually just the board power enable - it enables power to the CPU also 
+// FIXME - I think this is actually just the board power enable - it enables power to the CPU also
 #define PIN_EINK_PWR_ON (0 + 12)
 
 #define USE_EINK
@@ -174,8 +174,8 @@ External serial flash WP25R1635FZUIL0
 #define PIN_GPS_WAKE (32 + 2) // An output to wake GPS, low means allow sleep, high means force wake
 // Seems to be missing on this new board
 // #define PIN_GPS_PPS (32 + 4)  // Pulse per second input from the GPS
-#define PIN_GPS_TX (32 + 9)   // This is for bits going TOWARDS the CPU
-#define PIN_GPS_RX (32 + 8)   // This is for bits going TOWARDS the GPS
+#define PIN_GPS_TX (32 + 9) // This is for bits going TOWARDS the CPU
+#define PIN_GPS_RX (32 + 8) // This is for bits going TOWARDS the GPS
 
 #define GPS_THREAD_INTERVAL 50
 
@@ -217,7 +217,7 @@ External serial flash WP25R1635FZUIL0
 #undef AREF_VOLTAGE
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
-#define ADC_MULTIPLIER VBAT_DIVIDER_COMP 
+#define ADC_MULTIPLIER VBAT_DIVIDER_COMP
 #define VBAT_RAW_TO_SCALED(x) (REAL_VBAT_MV_PER_LSB * x)
 
 #define HAS_RTC 1

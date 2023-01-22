@@ -3,15 +3,16 @@
 #include <Adafruit_LPS2X.h>
 #include <Adafruit_Sensor.h>
 
-class LPS22HBSensor : virtual public TelemetrySensor {
-private:
+class LPS22HBSensor : virtual public TelemetrySensor
+{
+  private:
     Adafruit_LPS22 lps22hb;
 
-protected:
+  protected:
     virtual void setup() override;
-    
-public:
+
+  public:
     LPS22HBSensor();
     virtual int32_t runOnce() override;
-    virtual bool getMetrics(Telemetry *measurement) override;
-};    
+    virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+};
