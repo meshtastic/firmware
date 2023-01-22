@@ -87,7 +87,7 @@ uint8_t rtc_found;
 
 // Keystore Chips
 uint8_t keystore_found;
-#ifndef ARCH_PORTDUINO
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 ATECCX08A atecc;
 #endif
 
