@@ -297,11 +297,10 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_queueStatus_tag;
             fromRadioScratch.queueStatus = *queueStatusPacketForPhone;
             releaseQueueStatusPhonePacket();
-        } else if (xmodemPacketForPhone) {
+        } else if (xmodemPacketForPhone.control != meshtastic_XModem_Control_NUL) {
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_xmodemPacket_tag;
-            fromRadioScratch.xmodemPacket = *xmodemPacketForPhone;
-            free(xmodemPacketForPhone);
-            xmodemPacketForPhone = NULL;
+            fromRadioScratch.xmodemPacket = xmodemPacketForPhone;
+            xmodemPacketForPhone = meshtastic_XModem_init_zero;
         } else if (packetForPhone) {
             printPacket("phone downloaded packet", packetForPhone);
 
@@ -377,7 +376,7 @@ bool PhoneAPI::available()
         if (hasPacket)
             return true;
 
-        if (!xmodemPacketForPhone)
+        if (xmodemPacketForPhone.control != meshtastic_XModem_Control_NUL)
             xmodemPacketForPhone = xModem.getForPhone();
         hasPacket = !!packetForPhone;
         if (hasPacket)
