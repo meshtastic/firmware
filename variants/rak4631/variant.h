@@ -136,7 +136,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 
 // Controls power for the eink display - Board power is enabled either by VBUS from USB or the CPU asserting PWR_ON
 // FIXME - I think this is actually just the board power enable - it enables power to the CPU also
-//#define PIN_EINK_PWR_ON (-1)
+// #define PIN_EINK_PWR_ON (-1)
 
 // #define USE_EINK
 
