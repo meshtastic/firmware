@@ -34,7 +34,8 @@
 #include "WVariant.h"
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif // __cplusplus
 
 // Number of pins defined in PinDescription array
@@ -55,9 +56,9 @@ extern "C" {
 
 #define LED_STATE_ON 1 // State when LED is litted
 
-/*
- * Buttons
- */
+  /*
+   * Buttons
+   */
 
 #define PIN_BUTTON1 9 // Pin for button on E-ink button module or IO expansion
 #define BUTTON_NEED_PULLUP
@@ -77,14 +78,14 @@ extern "C" {
 #define PIN_A6 (0xff)
 #define PIN_A7 (0xff)
 
-static const uint8_t A0 = PIN_A0;
-static const uint8_t A1 = PIN_A1;
-static const uint8_t A2 = PIN_A2;
-static const uint8_t A3 = PIN_A3;
-static const uint8_t A4 = PIN_A4;
-static const uint8_t A5 = PIN_A5;
-static const uint8_t A6 = PIN_A6;
-static const uint8_t A7 = PIN_A7;
+  static const uint8_t A0 = PIN_A0;
+  static const uint8_t A1 = PIN_A1;
+  static const uint8_t A2 = PIN_A2;
+  static const uint8_t A3 = PIN_A3;
+  static const uint8_t A4 = PIN_A4;
+  static const uint8_t A5 = PIN_A5;
+  static const uint8_t A6 = PIN_A6;
+  static const uint8_t A7 = PIN_A7;
 #define ADC_RESOLUTION 14
 
 // Other pins
@@ -92,7 +93,7 @@ static const uint8_t A7 = PIN_A7;
 #define PIN_NFC1 (9)
 #define PIN_NFC2 (10)
 
-static const uint8_t AREF = PIN_AREF;
+  static const uint8_t AREF = PIN_AREF;
 
 /*
  * Serial interfaces
@@ -117,14 +118,14 @@ static const uint8_t AREF = PIN_AREF;
 #define PIN_SPI1_MOSI (30) // (0 + 30)
 #define PIN_SPI1_SCK (3)   // (0 + 3)
 
-static const uint8_t SS = 42;
-static const uint8_t MOSI = PIN_SPI_MOSI;
-static const uint8_t MISO = PIN_SPI_MISO;
-static const uint8_t SCK = PIN_SPI_SCK;
+  static const uint8_t SS = 42;
+  static const uint8_t MOSI = PIN_SPI_MOSI;
+  static const uint8_t MISO = PIN_SPI_MISO;
+  static const uint8_t SCK = PIN_SPI_SCK;
 
-/*
- * eink display pins
- */
+  /*
+   * eink display pins
+   */
 
 #define PIN_EINK_EN (32 + 2) // (0 + 2) Note: this is really just backlight power
 #define PIN_EINK_CS (0 + 26)
@@ -136,7 +137,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 
 // Controls power for the eink display - Board power is enabled either by VBUS from USB or the CPU asserting PWR_ON
 // FIXME - I think this is actually just the board power enable - it enables power to the CPU also
-//#define PIN_EINK_PWR_ON (-1)
+// #define PIN_EINK_PWR_ON (-1)
 
 // #define USE_EINK
 
