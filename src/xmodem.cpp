@@ -34,9 +34,7 @@
 
 XModemAdapter xModem;
 
-XModemAdapter::XModemAdapter()
-{
-}
+XModemAdapter::XModemAdapter() {}
 
 unsigned short XModemAdapter::crc16_ccitt(const pb_byte_t *buffer, int length)
 {
@@ -63,7 +61,8 @@ int XModemAdapter::check(const pb_byte_t *buf, int sz, unsigned short tcrc)
         return 0;
 }
 
-void XModemAdapter::sendControl(meshtastic_XModem_Control c) {
+void XModemAdapter::sendControl(meshtastic_XModem_Control c)
+{
     xmodemStore = meshtastic_XModem_init_zero;
     xmodemStore.control = c;
     LOG_DEBUG("XModem: Notify Sending control %d.\n", c);
@@ -77,44 +76,18 @@ meshtastic_XModem XModemAdapter::getForPhone()
 
 void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
 {
-    switch(xmodemPacket.control) {
-        case meshtastic_XModem_Control_SOH:
-        case meshtastic_XModem_Control_STX:
-            if ((xmodemPacket.seq == 0) && !isReceiving && !isTransmitting) {
-                // NULL packet has the destination filename
-                memcpy(filename, &xmodemPacket.buffer.bytes, xmodemPacket.buffer.size);
-                if(xmodemPacket.control == meshtastic_XModem_Control_SOH) { // Receive this file and put to Flash
-                    file = FSCom.open(filename, FILE_O_WRITE);
-                    if(file) {
-                        sendControl(meshtastic_XModem_Control_ACK);
-                        isReceiving = true;
-                        packetno = 1;
-                        break;
-                    }
-                    sendControl(meshtastic_XModem_Control_NAK);
-                    isReceiving = false;
-                    break;
-                } else { // Transmit this file from Flash
-                    LOG_INFO("XModem: Transmitting file %s\n", filename);
-                    file = FSCom.open(filename, FILE_O_READ);
-                    if (file) {
-                        packetno = 1;
-                        isTransmitting = true;
-                        xmodemStore = meshtastic_XModem_init_zero;
-                        xmodemStore.control = meshtastic_XModem_Control_SOH;
-                        xmodemStore.seq = packetno;
-                        xmodemStore.buffer.size = file.read(xmodemStore.buffer.bytes, sizeof(meshtastic_XModem_buffer_t::bytes));
-                        xmodemStore.crc16 = crc16_ccitt(xmodemStore.buffer.bytes, xmodemStore.buffer.size);
-                        LOG_DEBUG("XModem: STX Notify Sending packet %d, %d Bytes.\n", packetno, xmodemStore.buffer.size);
-                        if (xmodemStore.buffer.size < sizeof(meshtastic_XModem_buffer_t::bytes)) {
-                            isEOT = true;
-                            // send EOT on next Ack
-                        }
-                        packetReady.notifyObservers(packetno);
-                        break;
-                    }
-                    sendControl(meshtastic_XModem_Control_NAK);
-                    isTransmitting = false;
+    switch (xmodemPacket.control) {
+    case meshtastic_XModem_Control_SOH:
+    case meshtastic_XModem_Control_STX:
+        if ((xmodemPacket.seq == 0) && !isReceiving && !isTransmitting) {
+            // NULL packet has the destination filename
+            memcpy(filename, &xmodemPacket.buffer.bytes, xmodemPacket.buffer.size);
+            if (xmodemPacket.control == meshtastic_XModem_Control_SOH) { // Receive this file and put to Flash
+                file = FSCom.open(filename, FILE_O_WRITE);
+                if (file) {
+                    sendControl(meshtastic_XModem_Control_ACK);
+                    isReceiving = true;
+                    packetno = 1;
                     break;
                 }
                 sendControl(meshtastic_XModem_Control_NAK);
@@ -126,7 +99,7 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
                 if (file) {
                     packetno = 1;
                     isTransmitting = true;
-                    memset(xmodemStore, 0, meshtastic_XModem_size);
+                    xmodemStore = meshtastic_XModem_init_zero;
                     xmodemStore.control = meshtastic_XModem_Control_SOH;
                     xmodemStore.seq = packetno;
                     xmodemStore.buffer.size = file.read(xmodemStore.buffer.bytes, sizeof(meshtastic_XModem_buffer_t::bytes));
@@ -143,72 +116,54 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
                 isTransmitting = false;
                 break;
             }
-        } else {
-            if (isReceiving) {
-                // normal file data packet
-                if ((xmodemPacket.seq == packetno) &&
-                    check(xmodemPacket.buffer.bytes, xmodemPacket.buffer.size, xmodemPacket.crc16)) {
-                    // valid packet
-                    file.write(xmodemPacket.buffer.bytes, xmodemPacket.buffer.size);
-                    sendControl(meshtastic_XModem_Control_ACK);
-                    packetno++;
-                    break;
-                }
-                retrans = MAXRETRANS; // reset retransmit counter
-                packetno++;
-                xmodemStore = XModem_init_zero;
-                xmodemStore.control = XModem_Control_SOH;
+            sendControl(meshtastic_XModem_Control_NAK);
+            isReceiving = false;
+            break;
+        } else { // Transmit this file from Flash
+            LOG_INFO("XModem: Transmitting file %s\n", filename);
+            file = FSCom.open(filename, FILE_O_READ);
+            if (file) {
+                packetno = 1;
+                isTransmitting = true;
+                memset(xmodemStore, 0, meshtastic_XModem_size);
+                xmodemStore.control = meshtastic_XModem_Control_SOH;
                 xmodemStore.seq = packetno;
-                xmodemStore.buffer.size = file.read(xmodemStore.buffer.bytes, sizeof(XModem_buffer_t::bytes));
+                xmodemStore.buffer.size = file.read(xmodemStore.buffer.bytes, sizeof(meshtastic_XModem_buffer_t::bytes));
                 xmodemStore.crc16 = crc16_ccitt(xmodemStore.buffer.bytes, xmodemStore.buffer.size);
-                LOG_DEBUG("XModem: ACK Notify Sending packet %d, %d Bytes.\n", packetno, xmodemStore.buffer.size);
-                if (xmodemStore.buffer.size < sizeof(XModem_buffer_t::bytes)) {
+                LOG_DEBUG("XModem: STX Notify Sending packet %d, %d Bytes.\n", packetno, xmodemStore.buffer.size);
+                if (xmodemStore.buffer.size < sizeof(meshtastic_XModem_buffer_t::bytes)) {
                     isEOT = true;
                     // send EOT on next Ack
                 }
                 packetReady.notifyObservers(packetno);
-            } else {
-                // just received something weird.
-                sendControl(meshtastic_XModem_Control_CAN);
-                isTransmitting = false;
                 break;
             }
+            sendControl(meshtastic_XModem_Control_NAK);
+            isTransmitting = false;
             break;
-        case meshtastic_XModem_Control_NAK:
-            // Negative acknowledge. Send the same buffer again
-            if (isTransmitting) {
-                if (--retrans <= 0) {
-                    sendControl(XModem_Control_CAN);
-                    file.close();
-                    LOG_INFO("XModem: Retransmit timeout, cancelling file %s\n", filename);
-                    isTransmitting = false;
-                    break;
-                }
-                xmodemStore = XModem_init_zero;
-                xmodemStore.control = XModem_Control_SOH;
-                xmodemStore.seq = packetno;
-                file.seek((packetno-1) * sizeof(XModem_buffer_t::bytes));
-                xmodemStore.buffer.size = file.read(xmodemStore.buffer.bytes, sizeof(XModem_buffer_t::bytes));
-                xmodemStore.crc16 = crc16_ccitt(xmodemStore.buffer.bytes, xmodemStore.buffer.size);
-                LOG_DEBUG("XModem: NAK Notify Sending packet %d, %d Bytes.\n", packetno, xmodemStore.buffer.size);
-                if (xmodemStore.buffer.size < sizeof(XModem_buffer_t::bytes)) {
-                    isEOT = true;
-                    // send EOT on next Ack
-                }
-                packetReady.notifyObservers(packetno);
-            } else {
-                // just received something weird.
-                sendControl(XModem_Control_CAN);
+        }
+    }
+    else
+    {
+        if (isReceiving) {
+            // normal file data packet
+            if ((xmodemPacket.seq == packetno) &&
+                check(xmodemPacket.buffer.bytes, xmodemPacket.buffer.size, xmodemPacket.crc16)) {
+                // valid packet
+                file.write(xmodemPacket.buffer.bytes, xmodemPacket.buffer.size);
+                sendControl(meshtastic_XModem_Control_ACK);
+                packetno++;
+                break;
             }
             retrans = MAXRETRANS; // reset retransmit counter
             packetno++;
-            memset(xmodemStore, 0, meshtastic_XModem_size);
-            xmodemStore.control = meshtastic_XModem_Control_SOH;
+            xmodemStore = XModem_init_zero;
+            xmodemStore.control = XModem_Control_SOH;
             xmodemStore.seq = packetno;
-            xmodemStore.buffer.size = file.read(xmodemStore.buffer.bytes, sizeof(meshtastic_XModem_buffer_t::bytes));
+            xmodemStore.buffer.size = file.read(xmodemStore.buffer.bytes, sizeof(XModem_buffer_t::bytes));
             xmodemStore.crc16 = crc16_ccitt(xmodemStore.buffer.bytes, xmodemStore.buffer.size);
             LOG_DEBUG("XModem: ACK Notify Sending packet %d, %d Bytes.\n", packetno, xmodemStore.buffer.size);
-            if (xmodemStore.buffer.size < sizeof(meshtastic_XModem_buffer_t::bytes)) {
+            if (xmodemStore.buffer.size < sizeof(XModem_buffer_t::bytes)) {
                 isEOT = true;
                 // send EOT on next Ack
             }
@@ -216,37 +171,85 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
         } else {
             // just received something weird.
             sendControl(meshtastic_XModem_Control_CAN);
+            isTransmitting = false;
+            break;
         }
         break;
     case meshtastic_XModem_Control_NAK:
         // Negative acknowledge. Send the same buffer again
         if (isTransmitting) {
             if (--retrans <= 0) {
-                sendControl(meshtastic_XModem_Control_CAN);
+                sendControl(XModem_Control_CAN);
                 file.close();
                 LOG_INFO("XModem: Retransmit timeout, cancelling file %s\n", filename);
                 isTransmitting = false;
                 break;
             }
-            memset(xmodemStore, 0, meshtastic_XModem_size);
-            xmodemStore.control = meshtastic_XModem_Control_SOH;
+            xmodemStore = XModem_init_zero;
+            xmodemStore.control = XModem_Control_SOH;
             xmodemStore.seq = packetno;
-            file.seek((packetno - 1) * sizeof(meshtastic_XModem_buffer_t::bytes));
-            xmodemStore.buffer.size = file.read(xmodemStore.buffer.bytes, sizeof(meshtastic_XModem_buffer_t::bytes));
+            file.seek((packetno - 1) * sizeof(XModem_buffer_t::bytes));
+            xmodemStore.buffer.size = file.read(xmodemStore.buffer.bytes, sizeof(XModem_buffer_t::bytes));
             xmodemStore.crc16 = crc16_ccitt(xmodemStore.buffer.bytes, xmodemStore.buffer.size);
             LOG_DEBUG("XModem: NAK Notify Sending packet %d, %d Bytes.\n", packetno, xmodemStore.buffer.size);
-            if (xmodemStore.buffer.size < sizeof(meshtastic_XModem_buffer_t::bytes)) {
+            if (xmodemStore.buffer.size < sizeof(XModem_buffer_t::bytes)) {
                 isEOT = true;
                 // send EOT on next Ack
             }
             packetReady.notifyObservers(packetno);
         } else {
             // just received something weird.
-            sendControl(meshtastic_XModem_Control_CAN);
+            sendControl(XModem_Control_CAN);
         }
-        break;
-    default:
-        // Unknown control character
-        break;
+        retrans = MAXRETRANS; // reset retransmit counter
+        packetno++;
+        memset(xmodemStore, 0, meshtastic_XModem_size);
+        xmodemStore.control = meshtastic_XModem_Control_SOH;
+        xmodemStore.seq = packetno;
+        xmodemStore.buffer.size = file.read(xmodemStore.buffer.bytes, sizeof(meshtastic_XModem_buffer_t::bytes));
+        xmodemStore.crc16 = crc16_ccitt(xmodemStore.buffer.bytes, xmodemStore.buffer.size);
+        LOG_DEBUG("XModem: ACK Notify Sending packet %d, %d Bytes.\n", packetno, xmodemStore.buffer.size);
+        if (xmodemStore.buffer.size < sizeof(meshtastic_XModem_buffer_t::bytes)) {
+            isEOT = true;
+            // send EOT on next Ack
+        }
+        packetReady.notifyObservers(packetno);
     }
+    else
+    {
+        // just received something weird.
+        sendControl(meshtastic_XModem_Control_CAN);
+    }
+    break;
+case meshtastic_XModem_Control_NAK:
+    // Negative acknowledge. Send the same buffer again
+    if (isTransmitting) {
+        if (--retrans <= 0) {
+            sendControl(meshtastic_XModem_Control_CAN);
+            file.close();
+            LOG_INFO("XModem: Retransmit timeout, cancelling file %s\n", filename);
+            isTransmitting = false;
+            break;
+        }
+        memset(xmodemStore, 0, meshtastic_XModem_size);
+        xmodemStore.control = meshtastic_XModem_Control_SOH;
+        xmodemStore.seq = packetno;
+        file.seek((packetno - 1) * sizeof(meshtastic_XModem_buffer_t::bytes));
+        xmodemStore.buffer.size = file.read(xmodemStore.buffer.bytes, sizeof(meshtastic_XModem_buffer_t::bytes));
+        xmodemStore.crc16 = crc16_ccitt(xmodemStore.buffer.bytes, xmodemStore.buffer.size);
+        LOG_DEBUG("XModem: NAK Notify Sending packet %d, %d Bytes.\n", packetno, xmodemStore.buffer.size);
+        if (xmodemStore.buffer.size < sizeof(meshtastic_XModem_buffer_t::bytes)) {
+            isEOT = true;
+            // send EOT on next Ack
+        }
+        packetReady.notifyObservers(packetno);
+    } else {
+        // just received something weird.
+        sendControl(meshtastic_XModem_Control_CAN);
+    }
+    break;
+default:
+    // Unknown control character
+    break;
+}
 }

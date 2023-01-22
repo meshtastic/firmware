@@ -46,8 +46,8 @@ class XModemAdapter
 
     XModemAdapter();
 
-        void handlePacket(meshtastic_XModem xmodemPacket);
-        meshtastic_XModem getForPhone();
+    void handlePacket(meshtastic_XModem xmodemPacket);
+    meshtastic_XModem getForPhone();
 
   private:
     bool isReceiving = false;
@@ -66,11 +66,11 @@ class XModemAdapter
 
     char filename[sizeof(meshtastic_XModem_buffer_t::bytes)] = {0};
 
-    protected:
-        meshtastic_XModem xmodemStore = meshtastic_XModem_init_zero;
-        unsigned short crc16_ccitt(const pb_byte_t *buffer, int length);
-        int check(const pb_byte_t *buf, int sz, unsigned short tcrc);
-        void sendControl(meshtastic_XModem_Control c);
+  protected:
+    meshtastic_XModem xmodemStore = meshtastic_XModem_init_zero;
+    unsigned short crc16_ccitt(const pb_byte_t *buffer, int length);
+    int check(const pb_byte_t *buf, int sz, unsigned short tcrc);
+    void sendControl(meshtastic_XModem_Control c);
 };
 
 extern XModemAdapter xModem;
