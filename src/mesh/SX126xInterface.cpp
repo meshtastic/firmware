@@ -72,7 +72,8 @@ template <typename T> bool SX126xInterface<T>::init()
         res = lora.setDio2AsRfSwitch(false);
 #endif
 #ifdef SX126X_E22
-    // E22 Emulation explicitly requires DIO2 as RF switch, so set it to TRUE again for good measure. In case somebody defines SX126X_TX for an E22 Module
+    // E22 Emulation explicitly requires DIO2 as RF switch, so set it to TRUE again for good measure. In case somebody defines
+    // SX126X_TX for an E22 Module
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setDio2AsRfSwitch(true);
 #endif
