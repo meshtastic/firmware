@@ -44,7 +44,7 @@ class PhoneAPI
     meshtastic_MeshPacket *packetForPhone = NULL;
 
     // file transfer packets destined for phone. Push it to the queue then free it.
-    meshtastic_XModem *xmodemPacketForPhone = NULL;
+    meshtastic_XModem xmodemPacketForPhone = meshtastic_XModem_init_zero;
 
     // Keep QueueStatus packet just as packetForPhone
     meshtastic_QueueStatus *queueStatusPacketForPhone = NULL;
