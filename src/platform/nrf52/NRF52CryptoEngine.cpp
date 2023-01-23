@@ -1,7 +1,7 @@
-#include "configuration.h"
 #include "CryptoEngine.h"
-#include <Adafruit_nRFCrypto.h>
 #include "aes-256/tiny-aes.h"
+#include "configuration.h"
+#include <Adafruit_nRFCrypto.h>
 class NRF52CryptoEngine : public CryptoEngine
 {
   public:
@@ -17,20 +17,20 @@ class NRF52CryptoEngine : public CryptoEngine
     virtual void encrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes) override
     {
         if (key.length > 16) {
-            LOG_DEBUG("Software encrypt fr=%x, num=%x, numBytes=%d!\n", fromNode, (uint32_t) packetId, numBytes);
+            LOG_DEBUG("Software encrypt fr=%x, num=%x, numBytes=%d!\n", fromNode, (uint32_t)packetId, numBytes);
             AES_ctx ctx;
             initNonce(fromNode, packetId);
             AES_init_ctx_iv(&ctx, key.bytes, nonce);
             AES_CTR_xcrypt_buffer(&ctx, bytes, numBytes);
         } else if (key.length > 0) {
-            LOG_DEBUG("nRF52 encrypt fr=%x, num=%x, numBytes=%d!\n", fromNode, (uint32_t) packetId, numBytes);
+            LOG_DEBUG("nRF52 encrypt fr=%x, num=%x, numBytes=%d!\n", fromNode, (uint32_t)packetId, numBytes);
             nRFCrypto.begin();
             nRFCrypto_AES ctx;
             uint8_t myLen = ctx.blockLen(numBytes);
             char encBuf[myLen] = {0};
             initNonce(fromNode, packetId);
             ctx.begin();
-            ctx.Process((char*)bytes, numBytes, nonce, key.bytes, key.length, encBuf, ctx.encryptFlag, ctx.ctrMode);
+            ctx.Process((char *)bytes, numBytes, nonce, key.bytes, key.length, encBuf, ctx.encryptFlag, ctx.ctrMode);
             ctx.end();
             nRFCrypto.end();
             memcpy(bytes, encBuf, numBytes);

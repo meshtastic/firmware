@@ -3,12 +3,12 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "ReliableRouter.h"
 #include "airtime.h"
 #include "buzz.h"
 #include "configuration.h"
 #include "error.h"
 #include "power.h"
-#include "ReliableRouter.h"
 // #include "debug.h"
 #include "FSCommon.h"
 #include "RTC.h"
@@ -27,8 +27,8 @@
 #include <Wire.h>
 // #include <driver/rtc_io.h>
 
-#include "mesh/http/WiFiAPClient.h"
 #include "mesh/eth/ethClient.h"
+#include "mesh/http/WiFiAPClient.h"
 
 #ifdef ARCH_ESP32
 #include "mesh/http/WebServer.h"
@@ -87,7 +87,7 @@ uint8_t rtc_found;
 
 // Keystore Chips
 uint8_t keystore_found;
-#ifndef ARCH_PORTDUINO
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 ATECCX08A atecc;
 #endif
 
@@ -98,7 +98,8 @@ uint32_t serialSinceMsec;
 bool pmu_found;
 
 // Array map of sensor types (as array index) and i2c address as value we'll find in the i2c scan
-uint8_t nodeTelemetrySensorsMap[_TelemetrySensorType_MAX + 1] = { 0 }; // one is enough, missing elements will be initialized to 0 anyway.
+uint8_t nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1] = {
+    0}; // one is enough, missing elements will be initialized to 0 anyway.
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
 
@@ -169,7 +170,7 @@ void setup()
 #endif
 
 #ifdef DEBUG_PORT
-        consoleInit(); // Set serial baud rate and init our mesh console
+    consoleInit(); // Set serial baud rate and init our mesh console
 #endif
 
     serialSinceMsec = millis();
@@ -249,12 +250,11 @@ void setup()
     powerStatus->observe(&power->newStatus);
     power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
 
-
 #ifdef LILYGO_TBEAM_S3_CORE
     // In T-Beam-S3-core, the I2C device cannot be scanned before power initialization, otherwise the device will be stuck
     // PCF8563 RTC in tbeam-s3 uses Wire1 to share I2C bus
     Wire1.beginTransmission(PCF8563_RTC);
-    if (Wire1.endTransmission() == 0){
+    if (Wire1.endTransmission() == 0) {
         rtc_found = PCF8563_RTC;
         LOG_INFO("PCF8563 RTC found\n");
     }
@@ -302,8 +302,12 @@ void setup()
     playStartMelody();
 
     // fixed screen override?
-    if (config.display.oled != Config_DisplayConfig_OledType_OLED_AUTO)
+    if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)
         screen_model = config.display.oled;
+
+#if defined(USE_SH1107)
+    screen_model = Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of 128x128
+#endif
 
     // Init our SPI controller (must be before screen and lora)
     initSPI();
@@ -337,7 +341,7 @@ void setup()
     // Do this after service.init (because that clears error_code)
 #ifdef HAS_PMU
     if (!pmu_found)
-        RECORD_CRITICALERROR(CriticalErrorCode_NO_AXP192); // Record a hardware fault for missing hardware
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_AXP192); // Record a hardware fault for missing hardware
 #endif
 
         // Don't call screen setup until after nodedb is setup (because we need
@@ -448,18 +452,18 @@ void setup()
     }
 #endif
 
-// check if the radio chip matches the selected region
+    // check if the radio chip matches the selected region
 
-if((config.lora.region == Config_LoRaConfig_RegionCode_LORA_24) && (!rIf->wideLora())){
-    LOG_WARN("Radio chip does not support 2.4GHz LoRa. Reverting to unset.\n");
-    config.lora.region = Config_LoRaConfig_RegionCode_UNSET;
-    nodeDB.saveToDisk(SEGMENT_CONFIG);
-    if(!rIf->reconfigure()) {
-        LOG_WARN("Reconfigure failed, rebooting\n");
-        screen->startRebootScreen();
-        rebootAtMsec = millis() + 5000;
+    if ((config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && (!rIf->wideLora())) {
+        LOG_WARN("Radio chip does not support 2.4GHz LoRa. Reverting to unset.\n");
+        config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+        nodeDB.saveToDisk(SEGMENT_CONFIG);
+        if (!rIf->reconfigure()) {
+            LOG_WARN("Reconfigure failed, rebooting\n");
+            screen->startRebootScreen();
+            rebootAtMsec = millis() + 5000;
+        }
     }
-}
 
 #if HAS_WIFI || HAS_ETHERNET
     mqttInit();
@@ -486,13 +490,15 @@ if((config.lora.region == Config_LoRaConfig_RegionCode_LORA_24) && (!rIf->wideLo
     airTime = new AirTime();
 
     if (!rIf)
-        RECORD_CRITICALERROR(CriticalErrorCode_NO_RADIO);
+        RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_RADIO);
     else {
         router->addInterface(rIf);
 
         // Calculate and save the bit rate to myNodeInfo
         // TODO: This needs to be added what ever method changes the channel from the phone.
-        myNodeInfo.bitrate = (float(Constants_DATA_PAYLOAD_LEN) / (float(rIf->getPacketTime(Constants_DATA_PAYLOAD_LEN)))) * 1000;
+        myNodeInfo.bitrate =
+            (float(meshtastic_Constants_DATA_PAYLOAD_LEN) / (float(rIf->getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN)))) *
+            1000;
         LOG_DEBUG("myNodeInfo.bitrate = %f bytes / sec\n", myNodeInfo.bitrate);
     }
 

@@ -10,7 +10,7 @@ template <class T> class Observable;
  */
 template <class T> class Observer
 {
-  std::list<Observable<T> *> observed;
+    std::list<Observable<T> *> observed;
 
   public:
     virtual ~Observer();
@@ -87,7 +87,7 @@ template <class T> class Observable
 template <class T> Observer<T>::~Observer()
 {
     for (typename std::list<Observable<T> *>::const_iterator iterator = observed.begin(); iterator != observed.end();
-        ++iterator) {
+         ++iterator) {
         (*iterator)->removeObserver(this);
     }
     observed.clear();

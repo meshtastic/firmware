@@ -1,4 +1,2 @@
-#include "configuration.h"
 #include "ProtobufModule.h"
-
-
+#include "configuration.h"

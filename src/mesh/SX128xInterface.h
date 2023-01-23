@@ -6,8 +6,7 @@
  * \brief Adapter for SX128x radio family. Implements common logic for child classes.
  * \tparam T RadioLib module type for SX128x: SX1280.
  */
-template<class T>
-class SX128xInterface : public RadioLibInterface
+template <class T> class SX128xInterface : public RadioLibInterface
 {
   public:
     SX128xInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy, SPIClass &spi);
@@ -30,9 +29,8 @@ class SX128xInterface : public RadioLibInterface
     bool isIRQPending() override { return lora.getIrqStatus() != 0; }
 
   protected:
-
     /**
-     * Specific module instance 
+     * Specific module instance
      */
     T lora;
 
@@ -65,7 +63,7 @@ class SX128xInterface : public RadioLibInterface
     /**
      * Add SNR data to received messages
      */
-    virtual void addReceiveMetadata(MeshPacket *mp) override;
+    virtual void addReceiveMetadata(meshtastic_MeshPacket *mp) override;
 
     virtual void setStandby() override;
 

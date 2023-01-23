@@ -1,7 +1,7 @@
 #pragma once
 
-#include "configuration.h"
 #include "concurrency/Periodic.h"
+#include "configuration.h"
 #include <Arduino.h>
 #include <functional>
 

@@ -55,7 +55,7 @@ class CrossPlatformCryptoEngine : public CryptoEngine
                 static uint8_t scratch[MAX_BLOCKSIZE];
                 memcpy(scratch, bytes, numBytes);
                 memset(scratch + numBytes, 0,
-                   sizeof(scratch) - numBytes); // Fill rest of buffer with zero (in case cypher looks at it)
+                       sizeof(scratch) - numBytes); // Fill rest of buffer with zero (in case cypher looks at it)
 
                 ctr->setIV(nonce, sizeof(nonce));
                 ctr->setCounterSize(4);

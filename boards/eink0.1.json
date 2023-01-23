@@ -7,12 +7,7 @@
     "cpu": "cortex-m4",
     "extra_flags": "-DARDUINO_NRF52840_TTGO_EINK -DNRF52840_XXAA",
     "f_cpu": "64000000L",
-    "hwids": [
-      [
-        "0x239A",
-        "0x4405"
-      ]
-    ],
+    "hwids": [["0x239A", "0x4405"]],
     "usb_product": "TTGO_eink",
     "mcu": "nrf52840",
     "variant": "eink0.1",
@@ -30,19 +25,13 @@
       "settings_addr": "0xFF000"
     }
   },
-  "connectivity": [
-    "bluetooth"
-  ],
+  "connectivity": ["bluetooth"],
   "debug": {
     "jlink_device": "nRF52840_xxAA",
-    "onboard_tools": [
-      "jlink"
-    ],
+    "onboard_tools": ["jlink"],
     "svd_path": "nrf52840.svd"
   },
-  "frameworks": [
-    "arduino"
-  ],
+  "frameworks": ["arduino"],
   "name": "TTGO eink (Adafruit BSP)",
   "upload": {
     "maximum_ram_size": 248832,
@@ -50,11 +39,7 @@
     "require_upload_port": true,
     "speed": 115200,
     "protocol": "jlink",
-    "protocols": [
-      "jlink",
-      "nrfjprog",
-      "stlink"
-    ]
+    "protocols": ["jlink", "nrfjprog", "stlink"]
   },
   "url": "FIXME",
   "vendor": "TTGO"

@@ -1,6 +1,6 @@
 #include "buzz.h"
-#include "configuration.h"
 #include "NodeDB.h"
+#include "configuration.h"
 
 #if !defined(ARCH_ESP32) && !defined(ARCH_RP2040) && !defined(ARCH_PORTDUINO)
 #include "Tone.h"
@@ -11,8 +11,8 @@ extern "C" void delay(uint32_t dwMs);
 #endif
 
 struct ToneDuration {
-  int frequency_khz;
-  int duration_ms;
+    int frequency_khz;
+    int duration_ms;
 };
 
 // Some common frequencies.
@@ -30,40 +30,39 @@ struct ToneDuration {
 #define NOTE_B3 247
 #define NOTE_CS4 277
 
-const int DURATION_1_8 = 125;  // 1/8 note
-const int DURATION_1_4 = 250;  // 1/4 note
+const int DURATION_1_8 = 125; // 1/8 note
+const int DURATION_1_4 = 250; // 1/4 note
 
-void playTones(const ToneDuration *tone_durations, int size) {
+void playTones(const ToneDuration *tone_durations, int size)
+{
 #ifdef PIN_BUZZER
-  if (!config.device.buzzer_gpio)
-    config.device.buzzer_gpio = PIN_BUZZER;
+    if (!config.device.buzzer_gpio)
+        config.device.buzzer_gpio = PIN_BUZZER;
 #endif
-  if (config.device.buzzer_gpio) {
-    for (int i = 0; i < size; i++) {
-      const auto &tone_duration = tone_durations[i];
-      tone(config.device.buzzer_gpio, tone_duration.frequency_khz, tone_duration.duration_ms);
-      // to distinguish the notes, set a minimum time between them.
-      delay(1.3 * tone_duration.duration_ms);
+    if (config.device.buzzer_gpio) {
+        for (int i = 0; i < size; i++) {
+            const auto &tone_duration = tone_durations[i];
+            tone(config.device.buzzer_gpio, tone_duration.frequency_khz, tone_duration.duration_ms);
+            // to distinguish the notes, set a minimum time between them.
+            delay(1.3 * tone_duration.duration_ms);
+        }
     }
-  }
 }
 
-
-void playBeep() {
-  ToneDuration melody[] = {{NOTE_B3, DURATION_1_4}};
-  playTones(melody, sizeof(melody) / sizeof(ToneDuration));
+void playBeep()
+{
+    ToneDuration melody[] = {{NOTE_B3, DURATION_1_4}};
+    playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }
 
-void playStartMelody() {
-  ToneDuration melody[] = {{NOTE_FS3, DURATION_1_8},
-                           {NOTE_AS3, DURATION_1_8},
-                           {NOTE_CS4, DURATION_1_4}};
-  playTones(melody, sizeof(melody) / sizeof(ToneDuration));
+void playStartMelody()
+{
+    ToneDuration melody[] = {{NOTE_FS3, DURATION_1_8}, {NOTE_AS3, DURATION_1_8}, {NOTE_CS4, DURATION_1_4}};
+    playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }
 
-void playShutdownMelody() {
-  ToneDuration melody[] = {{NOTE_CS4, DURATION_1_8},
-                           {NOTE_AS3, DURATION_1_8},
-                           {NOTE_FS3, DURATION_1_4}};
-  playTones(melody, sizeof(melody) / sizeof(ToneDuration));
+void playShutdownMelody()
+{
+    ToneDuration melody[] = {{NOTE_CS4, DURATION_1_8}, {NOTE_AS3, DURATION_1_8}, {NOTE_FS3, DURATION_1_4}};
+    playTones(melody, sizeof(melody) / sizeof(ToneDuration));
 }

@@ -17,26 +17,26 @@ class EInkDisplay : public OLEDDisplay
     /// How often should we update the display
     /// thereafter we do once per 5 minutes
     uint32_t slowUpdateMsec = 5 * 60 * 1000;
-    
+
   public:
     /* constructor
     FIXME - the parameters are not used, just a temporary hack to keep working like the old displays
     */
-    EInkDisplay(uint8_t address, int sda, int scl);
+    EInkDisplay(uint8_t address, int sda, int scl, uint8_t screen_model);
 
     // Write the buffer to the display memory (for eink we only do this occasionally)
     virtual void display(void) override;
 
     /**
      * Force a display update if we haven't drawn within the specified msecLimit
-     * 
+     *
      * @return true if we did draw the screen
      */
     bool forceDisplay(uint32_t msecLimit = 1000);
 
     /**
      * shim to make the abstraction happy
-     * 
+     *
      */
     void setDetected(uint8_t detected);
 
@@ -50,5 +50,3 @@ class EInkDisplay : public OLEDDisplay
     // Connect to the display
     virtual bool connect() override;
 };
-
-
