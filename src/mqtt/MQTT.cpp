@@ -53,10 +53,8 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
             for (int i = 0; i < 3; i++) {
                 ptr = strtok(NULL, "/");
             }
-            LOG_DEBUG("Looking for Channel name: %s\n", ptr);
             meshtastic_Channel sendChannel = channels.getByName(ptr);
-            LOG_DEBUG("Found Channel name: %s (Index %d)\n", channels.getGlobalId(sendChannel.settings.channel_num),
-                      sendChannel.settings.channel_num);
+            LOG_DEBUG("Found Channel name: %s (Index %d)\n", channels.getGlobalId(sendChannel.index), sendChannel.index);
 
             if ((json.find("sender") != json.end()) && (json.find("payload") != json.end()) &&
                 (json.find("type") != json.end()) && json["type"]->IsString() &&
@@ -70,7 +68,7 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
                     // construct protobuf data packet using TEXT_MESSAGE, send it to the mesh
                     meshtastic_MeshPacket *p = router->allocForSending();
                     p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
-                    p->channel = sendChannel.settings.channel_num;
+                    p->channel = sendChannel.index;
                     if (sendChannel.settings.downlink_enabled) {
                         if (jsonPayloadStr.length() <= sizeof(p->decoded.payload.bytes)) {
                             memcpy(p->decoded.payload.bytes, jsonPayloadStr.c_str(), jsonPayloadStr.length());
@@ -104,7 +102,7 @@ void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
                     // construct protobuf data packet using POSITION, send it to the mesh
                     meshtastic_MeshPacket *p = router->allocForSending();
                     p->decoded.portnum = meshtastic_PortNum_POSITION_APP;
-                    p->channel = sendChannel.settings.channel_num;
+                    p->channel = sendChannel.index;
                     if (sendChannel.settings.downlink_enabled) {
                         p->decoded.payload.size =
                             pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes),
