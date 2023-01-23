@@ -378,8 +378,10 @@ bool PhoneAPI::available()
 
         if (xmodemPacketForPhone.control == meshtastic_XModem_Control_NUL)
             xmodemPacketForPhone = xModem.getForPhone();
-        if (xmodemPacketForPhone.control != meshtastic_XModem_Control_NUL)
+        if (xmodemPacketForPhone.control != meshtastic_XModem_Control_NUL) {
+            xModem.resetForPhone();
             return true;
+        }
 
         if (!packetForPhone)
             packetForPhone = service.getForPhone();
