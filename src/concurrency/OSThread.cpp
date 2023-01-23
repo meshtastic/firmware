@@ -1,5 +1,7 @@
 #include "OSThread.h"
 #include "configuration.h"
+#include "main.h"
+#include "screen.h"
 #include <assert.h>
 
 namespace concurrency
@@ -85,6 +87,12 @@ void OSThread::run()
         LOG_DEBUG("------ Thread %s leaked heap %d -> %d (%d) ------\n", ThreadName.c_str(), heap, newHeap, newHeap - heap);
     if (heap < newHeap)
         LOG_DEBUG("++++++ Thread %s freed heap %d -> %d (%d) ++++++\n", ThreadName.c_str(), heap, newHeap, newHeap - heap);
+
+    if (newHeap < 10000) {
+        LOG_DEBUG("\n\n====== heap too low [10000] -> reboot in 5s ======\n\n");
+        screen->startRebootScreen();
+        rebootAtMsec = millis() + 5000;
+    }
 #endif
 
     runned();
