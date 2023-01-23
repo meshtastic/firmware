@@ -1,7 +1,9 @@
 #include "OSThread.h"
 #include "configuration.h"
+#ifdef DEBUG_HEAP
+#include "graphics/Screen.h"
 #include "main.h"
-#include "screen.h"
+#endif
 #include <assert.h>
 
 namespace concurrency
