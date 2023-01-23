@@ -34,10 +34,7 @@
 
 XModemAdapter xModem;
 
-XModemAdapter::XModemAdapter()
-{
-    xmodemStore = (meshtastic_XModem *)malloc(meshtastic_XModem_size);
-}
+XModemAdapter::XModemAdapter() {}
 
 unsigned short XModemAdapter::crc16_ccitt(const pb_byte_t *buffer, int length)
 {
@@ -66,19 +63,15 @@ int XModemAdapter::check(const pb_byte_t *buf, int sz, unsigned short tcrc)
 
 void XModemAdapter::sendControl(meshtastic_XModem_Control c)
 {
-    memset(xmodemStore, 0, meshtastic_XModem_size);
-    xmodemStore->control = c;
+    xmodemStore = meshtastic_XModem_init_zero;
+    xmodemStore.control = c;
     LOG_DEBUG("XModem: Notify Sending control %d.\n", c);
     packetReady.notifyObservers(packetno);
 }
 
-meshtastic_XModem *XModemAdapter::getForPhone()
+meshtastic_XModem XModemAdapter::getForPhone()
 {
-    if (xmodemStore) {
-        return xmodemStore;
-    } else {
-        return NULL;
-    }
+    return xmodemStore;
 }
 
 void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
@@ -106,13 +99,13 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
                 if (file) {
                     packetno = 1;
                     isTransmitting = true;
-                    memset(xmodemStore, 0, meshtastic_XModem_size);
-                    xmodemStore->control = meshtastic_XModem_Control_SOH;
-                    xmodemStore->seq = packetno;
-                    xmodemStore->buffer.size = file.read(xmodemStore->buffer.bytes, sizeof(meshtastic_XModem_buffer_t::bytes));
-                    xmodemStore->crc16 = crc16_ccitt(xmodemStore->buffer.bytes, xmodemStore->buffer.size);
-                    LOG_DEBUG("XModem: STX Notify Sending packet %d, %d Bytes.\n", packetno, xmodemStore->buffer.size);
-                    if (xmodemStore->buffer.size < sizeof(meshtastic_XModem_buffer_t::bytes)) {
+                    xmodemStore = meshtastic_XModem_init_zero;
+                    xmodemStore.control = meshtastic_XModem_Control_SOH;
+                    xmodemStore.seq = packetno;
+                    xmodemStore.buffer.size = file.read(xmodemStore.buffer.bytes, sizeof(meshtastic_XModem_buffer_t::bytes));
+                    xmodemStore.crc16 = crc16_ccitt(xmodemStore.buffer.bytes, xmodemStore.buffer.size);
+                    LOG_DEBUG("XModem: STX Notify Sending packet %d, %d Bytes.\n", packetno, xmodemStore.buffer.size);
+                    if (xmodemStore.buffer.size < sizeof(meshtastic_XModem_buffer_t::bytes)) {
                         isEOT = true;
                         // send EOT on next Ack
                     }
@@ -171,13 +164,13 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
             }
             retrans = MAXRETRANS; // reset retransmit counter
             packetno++;
-            memset(xmodemStore, 0, meshtastic_XModem_size);
-            xmodemStore->control = meshtastic_XModem_Control_SOH;
-            xmodemStore->seq = packetno;
-            xmodemStore->buffer.size = file.read(xmodemStore->buffer.bytes, sizeof(meshtastic_XModem_buffer_t::bytes));
-            xmodemStore->crc16 = crc16_ccitt(xmodemStore->buffer.bytes, xmodemStore->buffer.size);
-            LOG_DEBUG("XModem: ACK Notify Sending packet %d, %d Bytes.\n", packetno, xmodemStore->buffer.size);
-            if (xmodemStore->buffer.size < sizeof(meshtastic_XModem_buffer_t::bytes)) {
+            xmodemStore = meshtastic_XModem_init_zero;
+            xmodemStore.control = meshtastic_XModem_Control_SOH;
+            xmodemStore.seq = packetno;
+            xmodemStore.buffer.size = file.read(xmodemStore.buffer.bytes, sizeof(meshtastic_XModem_buffer_t::bytes));
+            xmodemStore.crc16 = crc16_ccitt(xmodemStore.buffer.bytes, xmodemStore.buffer.size);
+            LOG_DEBUG("XModem: ACK Notify Sending packet %d, %d Bytes.\n", packetno, xmodemStore.buffer.size);
+            if (xmodemStore.buffer.size < sizeof(meshtastic_XModem_buffer_t::bytes)) {
                 isEOT = true;
                 // send EOT on next Ack
             }
@@ -197,14 +190,14 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
                 isTransmitting = false;
                 break;
             }
-            memset(xmodemStore, 0, meshtastic_XModem_size);
-            xmodemStore->control = meshtastic_XModem_Control_SOH;
-            xmodemStore->seq = packetno;
+            xmodemStore = meshtastic_XModem_init_zero;
+            xmodemStore.control = meshtastic_XModem_Control_SOH;
+            xmodemStore.seq = packetno;
             file.seek((packetno - 1) * sizeof(meshtastic_XModem_buffer_t::bytes));
-            xmodemStore->buffer.size = file.read(xmodemStore->buffer.bytes, sizeof(meshtastic_XModem_buffer_t::bytes));
-            xmodemStore->crc16 = crc16_ccitt(xmodemStore->buffer.bytes, xmodemStore->buffer.size);
-            LOG_DEBUG("XModem: NAK Notify Sending packet %d, %d Bytes.\n", packetno, xmodemStore->buffer.size);
-            if (xmodemStore->buffer.size < sizeof(meshtastic_XModem_buffer_t::bytes)) {
+            xmodemStore.buffer.size = file.read(xmodemStore.buffer.bytes, sizeof(meshtastic_XModem_buffer_t::bytes));
+            xmodemStore.crc16 = crc16_ccitt(xmodemStore.buffer.bytes, xmodemStore.buffer.size);
+            LOG_DEBUG("XModem: NAK Notify Sending packet %d, %d Bytes.\n", packetno, xmodemStore.buffer.size);
+            if (xmodemStore.buffer.size < sizeof(meshtastic_XModem_buffer_t::bytes)) {
                 isEOT = true;
                 // send EOT on next Ack
             }
