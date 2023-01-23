@@ -1,5 +1,9 @@
-#include "configuration.h"
 #include "OSThread.h"
+#include "configuration.h"
+#ifdef DEBUG_HEAP
+#include "graphics/Screen.h"
+#include "main.h"
+#endif
 #include <assert.h>
 
 namespace concurrency
@@ -76,7 +80,7 @@ void OSThread::run()
 {
 #ifdef DEBUG_HEAP
     auto heap = ESP.getFreeHeap();
-#endif    
+#endif
     currentThread = this;
     auto newDelay = runOnce();
 #ifdef DEBUG_HEAP
@@ -85,6 +89,12 @@ void OSThread::run()
         LOG_DEBUG("------ Thread %s leaked heap %d -> %d (%d) ------\n", ThreadName.c_str(), heap, newHeap, newHeap - heap);
     if (heap < newHeap)
         LOG_DEBUG("++++++ Thread %s freed heap %d -> %d (%d) ++++++\n", ThreadName.c_str(), heap, newHeap, newHeap - heap);
+
+    if (newHeap < 10000) {
+        LOG_DEBUG("\n\n====== heap too low [10000] -> reboot in 5s ======\n\n");
+        screen->startRebootScreen();
+        rebootAtMsec = millis() + 5000;
+    }
 #endif
 
     runned();
@@ -95,11 +105,11 @@ void OSThread::run()
     currentThread = NULL;
 }
 
-int32_t OSThread::disable() 
+int32_t OSThread::disable()
 {
     enabled = false;
     setInterval(INT32_MAX);
-    
+
     return INT32_MAX;
 }
 

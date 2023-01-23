@@ -1,16 +1,13 @@
-#include "configuration.h"
 #include "UpDownInterruptBase.h"
+#include "configuration.h"
 
-UpDownInterruptBase::UpDownInterruptBase(
-    const char *name)
+UpDownInterruptBase::UpDownInterruptBase(const char *name)
 {
     this->_originName = name;
 }
 
-void UpDownInterruptBase::init(
-    uint8_t pinDown, uint8_t pinUp, uint8_t pinPress,
-    char eventDown, char eventUp, char eventPressed,
-    void (*onIntDown)(), void (*onIntUp)(), void (*onIntPress)())
+void UpDownInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinPress, char eventDown, char eventUp, char eventPressed,
+                               void (*onIntDown)(), void (*onIntUp)(), void (*onIntPress)())
 {
     this->_pinDown = pinDown;
     this->_pinUp = pinUp;
@@ -26,8 +23,7 @@ void UpDownInterruptBase::init(
     attachInterrupt(this->_pinDown, onIntDown, RISING);
     attachInterrupt(this->_pinUp, onIntUp, RISING);
 
-    LOG_DEBUG("GPIO initialized (%d, %d, %d)\n",
-        this->_pinDown, this->_pinUp, pinPress);
+    LOG_DEBUG("GPIO initialized (%d, %d, %d)\n", this->_pinDown, this->_pinUp, pinPress);
 }
 
 void UpDownInterruptBase::intPressHandler()

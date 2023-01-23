@@ -6,13 +6,13 @@
 #include "mesh/http/ContentHelper.h"
 #include "mesh/http/WebServer.h"
 #include "mesh/http/WiFiAPClient.h"
+#include "mqtt/JSON.h"
 #include "power.h"
 #include "sleep.h"
 #include <FSCommon.h>
 #include <HTTPBodyParser.hpp>
 #include <HTTPMultipartBodyParser.hpp>
 #include <HTTPURLEncodedBodyParser.hpp>
-#include "mqtt/JSON.h"
 
 #ifdef ARCH_ESP32
 #include "esp_task_wdt.h"
@@ -321,7 +321,7 @@ void handleFsBrowseStatic(HTTPRequest *req, HTTPResponse *res)
 
     res->print(value->Stringify().c_str());
 
-	delete value;
+    delete value;
 }
 
 void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
@@ -336,7 +336,7 @@ void handleFsDeleteStatic(HTTPRequest *req, HTTPResponse *res)
         std::string pathDelete = "/" + paramValDelete;
         if (FSCom.remove(pathDelete.c_str())) {
             LOG_INFO("%s\n", pathDelete.c_str());
-            JSONObject jsonObjOuter; 
+            JSONObject jsonObjOuter;
             jsonObjOuter["status"] = new JSONValue("ok");
             JSONValue *value = new JSONValue(jsonObjOuter);
             res->print(value->Stringify().c_str());

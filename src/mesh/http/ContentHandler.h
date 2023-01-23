@@ -1,6 +1,5 @@
 #pragma once
 
-
 void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer);
 
 // Declare some handler functions for the various URLs on the server
@@ -22,7 +21,6 @@ void handleAdmin(HTTPRequest *req, HTTPResponse *res);
 void handleAdminSettings(HTTPRequest *req, HTTPResponse *res);
 void handleAdminSettingsApply(HTTPRequest *req, HTTPResponse *res);
 
-
 // Interface to the PhoneAPI to access the protobufs with messages
 class HttpAPI : public PhoneAPI
 {
@@ -34,7 +32,6 @@ class HttpAPI : public PhoneAPI
     // Nothing here yet
 
   protected:
-
     /// Check the current underlying physical link to see if the client is currently connected
     virtual bool checkIsConnected() override { return true; } // FIXME, be smarter about this
 };

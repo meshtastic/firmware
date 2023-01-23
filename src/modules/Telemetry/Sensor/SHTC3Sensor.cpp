@@ -4,7 +4,7 @@
 #include "configuration.h"
 #include <Adafruit_SHTC3.h>
 
-SHTC3Sensor::SHTC3Sensor() : TelemetrySensor(TelemetrySensorType_SHTC3, "SHTC3") {}
+SHTC3Sensor::SHTC3Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SHTC3, "SHTC3") {}
 
 int32_t SHTC3Sensor::runOnce()
 {
@@ -21,7 +21,7 @@ void SHTC3Sensor::setup()
     // Set up oversampling and filter initialization
 }
 
-bool SHTC3Sensor::getMetrics(Telemetry *measurement)
+bool SHTC3Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     sensors_event_t humidity, temp;
     shtc3.getEvent(&humidity, &temp);

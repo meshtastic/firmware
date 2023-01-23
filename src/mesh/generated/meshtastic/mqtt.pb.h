@@ -4,7 +4,7 @@
 #ifndef PB_MESHTASTIC_MESHTASTIC_MQTT_PB_H_INCLUDED
 #define PB_MESHTASTIC_MESHTASTIC_MQTT_PB_H_INCLUDED
 #include <pb.h>
-#include "./mesh.pb.h"
+#include "meshtastic/mesh.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.
@@ -12,16 +12,16 @@
 
 /* Struct definitions */
 /* This message wraps a MeshPacket with extra metadata about the sender and how it arrived. */
-typedef struct _ServiceEnvelope {
+typedef struct _meshtastic_ServiceEnvelope {
     /* The (probably encrypted) packet */
-    struct _MeshPacket *packet;
+    struct _meshtastic_MeshPacket *packet;
     /* The global channel ID it was sent on */
     char *channel_id;
     /* The sending gateway node ID. Can we use this to authenticate/prevent fake
  nodeid impersonation for senders? - i.e. use gateway/mesh id (which is authenticated) + local node id as
  the globally trusted nodenum */
     char *gateway_id;
-} ServiceEnvelope;
+} meshtastic_ServiceEnvelope;
 
 
 #ifdef __cplusplus
@@ -29,30 +29,30 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define ServiceEnvelope_init_default  {NULL, NULL, NULL}
-#define ServiceEnvelope_init_zero     {NULL, NULL, NULL}
+#define meshtastic_ServiceEnvelope_init_default  {NULL, NULL, NULL}
+#define meshtastic_ServiceEnvelope_init_zero     {NULL, NULL, NULL}
 
 /* Field tags (for use in manual encoding/decoding) */
-#define ServiceEnvelope_packet_tag    1
-#define ServiceEnvelope_channel_id_tag 2
-#define ServiceEnvelope_gateway_id_tag 3
+#define meshtastic_ServiceEnvelope_packet_tag    1
+#define meshtastic_ServiceEnvelope_channel_id_tag 2
+#define meshtastic_ServiceEnvelope_gateway_id_tag 3
 
 /* Struct field encoding specification for nanopb */
-#define ServiceEnvelope_FIELDLIST(X, a) \
+#define meshtastic_ServiceEnvelope_FIELDLIST(X, a) \
 X(a, POINTER,  OPTIONAL, MESSAGE,  packet,            1) \
 X(a, POINTER,  SINGULAR, STRING,   channel_id,        2) \
 X(a, POINTER,  SINGULAR, STRING,   gateway_id,        3)
-#define ServiceEnvelope_CALLBACK NULL
-#define ServiceEnvelope_DEFAULT NULL
-#define ServiceEnvelope_packet_MSGTYPE MeshPacket
+#define meshtastic_ServiceEnvelope_CALLBACK NULL
+#define meshtastic_ServiceEnvelope_DEFAULT NULL
+#define meshtastic_ServiceEnvelope_packet_MSGTYPE meshtastic_MeshPacket
 
-extern const pb_msgdesc_t ServiceEnvelope_msg;
+extern const pb_msgdesc_t meshtastic_ServiceEnvelope_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
-#define ServiceEnvelope_fields &ServiceEnvelope_msg
+#define meshtastic_ServiceEnvelope_fields &meshtastic_ServiceEnvelope_msg
 
 /* Maximum encoded size of messages (where known) */
-/* ServiceEnvelope_size depends on runtime parameters */
+/* meshtastic_ServiceEnvelope_size depends on runtime parameters */
 
 #ifdef __cplusplus
 } /* extern "C" */

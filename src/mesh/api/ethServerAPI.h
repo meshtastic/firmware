@@ -9,8 +9,8 @@
  */
 class ethServerAPI : public ServerAPI<EthernetClient>
 {
-    public:
-        explicit ethServerAPI(EthernetClient &_client);
+  public:
+    explicit ethServerAPI(EthernetClient &_client);
 };
 
 /**
@@ -18,8 +18,8 @@ class ethServerAPI : public ServerAPI<EthernetClient>
  */
 class ethServerPort : public APIServerPort<ethServerAPI, EthernetServer>
 {
-    public:
-        explicit ethServerPort(int port);
+  public:
+    explicit ethServerPort(int port);
 };
 
-void initApiServer(int port=4403);
+void initApiServer(int port = 4403);

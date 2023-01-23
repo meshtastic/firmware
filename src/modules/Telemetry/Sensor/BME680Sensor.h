@@ -13,5 +13,5 @@ class BME680Sensor : virtual public TelemetrySensor
   public:
     BME680Sensor();
     virtual int32_t runOnce() override;
-    virtual bool getMetrics(Telemetry *measurement) override;
+    virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
 };

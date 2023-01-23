@@ -4,7 +4,7 @@
 #define I2C_SCL 22
 
 #define BUTTON_PIN 39
-#define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+#define BATTERY_PIN 35    // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Module.
 
 #define USE_RF95

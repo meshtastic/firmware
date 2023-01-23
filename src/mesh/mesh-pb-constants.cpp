@@ -13,7 +13,8 @@ size_t pb_encode_to_bytes(uint8_t *destbuf, size_t destbufsize, const pb_msgdesc
     pb_ostream_t stream = pb_ostream_from_buffer(destbuf, destbufsize);
     if (!pb_encode(&stream, fields, src_struct)) {
         LOG_ERROR("Panic: can't encode protobuf reason='%s'\n", PB_GET_ERROR(&stream));
-        assert(0); // If this asser fails it probably means you made a field too large for the max limits specified in mesh.options
+        assert(
+            0); // If this asser fails it probably means you made a field too large for the max limits specified in mesh.options
     } else {
         return stream.bytes_written;
     }
