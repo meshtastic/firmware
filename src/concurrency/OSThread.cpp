@@ -4,7 +4,6 @@
 #include "graphics/Screen.h"
 #endif
 #include "main.h"
-#endif
 #include <assert.h>
 
 namespace concurrency
