@@ -12,7 +12,7 @@
         A simple interface to send messages over the mesh network by sending strings
         over a serial port.
 
-        Default is to use RX GPIO 16 and TX GPIO 17.
+        There are no PIN defaults, you have to enable the second serial port yourself.
 
     Need help with this module? Post your question on the Meshtastic Discourse:
        https://meshtastic.discourse.group
@@ -46,8 +46,6 @@
 
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(TTGO_T_ECHO) && !defined(CONFIG_IDF_TARGET_ESP32S2)
 
-#define RXD2 16
-#define TXD2 17
 #define RX_BUFFER 128
 #define TIMEOUT 250
 #define BAUD 38400
@@ -102,7 +100,7 @@ int32_t SerialModule::runOnce()
     // moduleConfig.serial.timeout = 1000;
     // moduleConfig.serial.echo = 1;
 
-    if (moduleConfig.serial.enabled) {
+    if (moduleConfig.serial.enabled && moduleConfig.serial.rxd && moduleConfig.serial.txd) {
 
         if (firstTime) {
 
@@ -165,9 +163,6 @@ int32_t SerialModule::runOnce()
 
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
                 Serial2.begin(baud, SERIAL_8N1, moduleConfig.serial.rxd, moduleConfig.serial.txd);
-
-            } else {
-                Serial2.begin(baud, SERIAL_8N1, RXD2, TXD2);
             }
 #else
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd)
