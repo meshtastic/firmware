@@ -1,4 +1,5 @@
 #include "SX126xInterface.h"
+#include "mesh/NodeDB.h"
 #include "configuration.h"
 #include "error.h"
 
@@ -77,6 +78,14 @@ template <typename T> bool SX126xInterface<T>::init()
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setDio2AsRfSwitch(true);
 #endif
+
+if (config.lora.sx126x_rx_boosted_gain) {
+    uint16_t result = lora.setRxBoostedGainMode(true);
+    LOG_INFO("Set Rx Boosted Gain mode; result: %d\n", result);
+} else {
+    uint16_t result = lora.setRxBoostedGainMode(false);
+    LOG_INFO("Set Rx Power Saving Gain mode; result: %d\n", result);
+}
 
 #if 0
     // Read/write a register we are not using (only used for FSK mode) to test SPI comms
