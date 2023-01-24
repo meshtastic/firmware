@@ -54,7 +54,7 @@ extern const pb_msgdesc_t meshtastic_ChannelSet_msg;
 #define meshtastic_ChannelSet_fields &meshtastic_ChannelSet_msg
 
 /* Maximum encoded size of messages (where known) */
-#define meshtastic_ChannelSet_size               584
+#define meshtastic_ChannelSet_size               586
 
 #ifdef __cplusplus
 } /* extern "C" */
