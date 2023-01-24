@@ -1,6 +1,6 @@
-#include "configuration.h"
 #include "CryptoEngine.h"
 #include "aes.hpp"
+#include "configuration.h"
 
 class STM32WLCryptoEngine : public CryptoEngine
 {

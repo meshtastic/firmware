@@ -1,11 +1,11 @@
 #pragma once
 
+#include "MeshModule.h"
+#include "Router.h"
 #include "SinglePortModule.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include <Arduino.h>
-#include "MeshModule.h"
-#include "Router.h"
 #include <functional>
 
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(TTGO_T_ECHO) && !defined(CONFIG_IDF_TARGET_ESP32S2)
@@ -46,27 +46,27 @@ class SerialModuleRadio : public MeshModule
     void sendPayload(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
 
   protected:
-    virtual MeshPacket *allocReply() override;
+    virtual meshtastic_MeshPacket *allocReply() override;
 
     /** Called to handle a particular incoming message
 
-    @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for it
+    @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for
+    it
     */
-    virtual ProcessMessage handleReceived(const MeshPacket &mp) override;
+    virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
 
-    PortNum ourPortNum;
+    meshtastic_PortNum ourPortNum;
 
-    virtual bool wantPacket(const MeshPacket *p) override { return p->decoded.portnum == ourPortNum; }
+    virtual bool wantPacket(const meshtastic_MeshPacket *p) override { return p->decoded.portnum == ourPortNum; }
 
-    MeshPacket *allocDataPacket()
+    meshtastic_MeshPacket *allocDataPacket()
     {
         // Update our local node info with our position (even if we don't decide to update anyone else)
-        MeshPacket *p = router->allocForSending();
+        meshtastic_MeshPacket *p = router->allocForSending();
         p->decoded.portnum = ourPortNum;
 
         return p;
     }
-
 };
 
 extern SerialModuleRadio *serialModuleRadio;

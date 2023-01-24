@@ -49,7 +49,8 @@ int32_t SerialConsole::runOnce()
     return runOncePart();
 }
 
-void SerialConsole::flush() {
+void SerialConsole::flush()
+{
     Port.flush();
 }
 
@@ -74,7 +75,7 @@ bool SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
         canWrite = true;
 
         return StreamAPI::handleToRadio(buf, len);
-    }else{
+    } else {
         return false;
     }
 }

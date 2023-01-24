@@ -1,11 +1,13 @@
 #ifndef BLEOTA_H
 #define BLEOTA_H
 
+#include <Arduino.h>
 #include <functional>
 
-class BleOta {
+class BleOta
+{
   public:
-    explicit BleOta() {};
+    explicit BleOta(){};
 
     static String getOtaAppVersion();
     static bool switchToOtaApp();
@@ -15,4 +17,4 @@ class BleOta {
     static const esp_partition_t *findEspOtaAppPartition();
 };
 
-#endif //BLEOTA_H
+#endif // BLEOTA_H

@@ -82,8 +82,6 @@ int32_t RangeTestModule::runOnce()
                 return disable();
                 // This thread does not need to run as a receiver
             }
-
-
         }
     } else {
         LOG_INFO("Range Test Module - Disabled\n");
@@ -93,7 +91,7 @@ int32_t RangeTestModule::runOnce()
     return disable();
 }
 
-MeshPacket *RangeTestModuleRadio::allocReply()
+meshtastic_MeshPacket *RangeTestModuleRadio::allocReply()
 {
 
     auto reply = allocDataPacket(); // Allocate a packet for sending
@@ -103,7 +101,7 @@ MeshPacket *RangeTestModuleRadio::allocReply()
 
 void RangeTestModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 {
-    MeshPacket *p = allocReply();
+    meshtastic_MeshPacket *p = allocReply();
     p->to = dest;
     p->decoded.want_response = wantReplies;
 
@@ -123,7 +121,7 @@ void RangeTestModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
     powerFSM.trigger(EVENT_CONTACT_FROM_PHONE);
 }
 
-ProcessMessage RangeTestModuleRadio::handleReceived(const MeshPacket &mp)
+ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket &mp)
 {
 #ifdef ARCH_ESP32
 
@@ -178,11 +176,11 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const MeshPacket &mp)
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }
 
-bool RangeTestModuleRadio::appendFile(const MeshPacket &mp)
+bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
 {
     auto &p = mp.decoded;
 
-    NodeInfo *n = nodeDB.getNode(getFrom(&mp));
+    meshtastic_NodeInfo *n = nodeDB.getNode(getFrom(&mp));
     /*
         LOG_DEBUG("-----------------------------------------\n");
         LOG_DEBUG("p.payload.bytes  \"%s\"\n", p.payload.bytes);

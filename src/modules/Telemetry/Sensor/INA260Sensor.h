@@ -1,17 +1,17 @@
-#include "../mesh/generated/telemetry.pb.h"
+#include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
 #include <Adafruit_INA260.h>
 
-
-class INA260Sensor : virtual public TelemetrySensor {
-private:
+class INA260Sensor : virtual public TelemetrySensor
+{
+  private:
     Adafruit_INA260 ina260 = Adafruit_INA260();
 
-protected:
+  protected:
     virtual void setup() override;
-    
-public:
+
+  public:
     INA260Sensor();
     virtual int32_t runOnce() override;
-    virtual bool getMetrics(Telemetry *measurement) override;
-};    
+    virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+};
