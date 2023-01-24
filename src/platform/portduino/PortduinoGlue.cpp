@@ -23,7 +23,6 @@ void cpuDeepSleep(uint64_t msecs)
 
 void updateBatteryLevel(uint8_t level) NOT_IMPLEMENTED("updateBatteryLevel");
 
-
 /** a simulated pin for busted IRQ hardware
  * Porduino helper class to do this i2c based polling:
  */
@@ -51,34 +50,35 @@ class PolledIrqPin : public GPIOPin
 
 static GPIOPin *loraIrq;
 
-int TCPPort = 4403; 
+int TCPPort = 4403;
 
-static error_t parse_opt(int key, char *arg, struct argp_state *state) {
-  switch (key) {
-  case 'p':
-    if (sscanf(arg, "%d", &TCPPort) < 1)
-        return ARGP_ERR_UNKNOWN; 
-    else
-        printf("Using TCP port %d\n", TCPPort);
-    break;
-  case ARGP_KEY_ARG:
+static error_t parse_opt(int key, char *arg, struct argp_state *state)
+{
+    switch (key) {
+    case 'p':
+        if (sscanf(arg, "%d", &TCPPort) < 1)
+            return ARGP_ERR_UNKNOWN;
+        else
+            printf("Using TCP port %d\n", TCPPort);
+        break;
+    case ARGP_KEY_ARG:
+        return 0;
+    default:
+        return ARGP_ERR_UNKNOWN;
+    }
     return 0;
-  default:
-    return ARGP_ERR_UNKNOWN;
-  }
-  return 0;
 }
 
-void portduinoCustomInit() {
+void portduinoCustomInit()
+{
     static struct argp_option options[] = {{"port", 'p', "PORT", 0, "The TCP port to use."}, {0}};
-    static void *childArguments; 
+    static void *childArguments;
     static char doc[] = "Meshtastic native build.";
     static char args_doc[] = "...";
     static struct argp argp = {options, parse_opt, args_doc, doc, 0, 0, 0};
     const struct argp_child child = {&argp, OPTION_ARG_OPTIONAL, 0, 0};
     portduinoAddArguments(child, childArguments);
 }
-
 
 /** apps run under portduino can optionally define a portduinoSetup() to
  * use portduino specific init code (such as gpioBind) to setup portduino on their host machine,
@@ -89,9 +89,9 @@ void portduinoSetup()
     printf("Setting up Meshtastic on Portduino...\n");
 
 #ifdef PORTDUINO_LINUX_HARDWARE
-    SPI.begin(); // We need to create SPI 
+    SPI.begin(); // We need to create SPI
     bool usePineLora = !spiChip->isSimulated();
-    if(usePineLora) {
+    if (usePineLora) {
         printf("Connecting to PineLora board...\n");
 
         // FIXME: remove this hack once interrupts are confirmed to work on new pine64 board
@@ -110,8 +110,7 @@ void portduinoSetup()
         auto loraCs = new LinuxGPIOPin(SX126X_CS, "ch341", "cs0", "loraCs");
         loraCs->setSilent();
         gpioBind(loraCs);
-    }
-    else 
+    } else
 #endif
 
     {

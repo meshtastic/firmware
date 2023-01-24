@@ -51,25 +51,25 @@ class RadioInterface
     CallbackObserver<RadioInterface, void *> notifyDeepSleepObserver =
         CallbackObserver<RadioInterface, void *>(this, &RadioInterface::notifyDeepSleepCb);
 
-
   protected:
     bool disabled = false;
 
     float bw = 125;
     uint8_t sf = 9;
     uint8_t cr = 7;
-    /** Slottime is the minimum time to wait, consisting of: 
-      - CAD duration (maximum of SX126x and SX127x);  
-      - roundtrip air propagation time (assuming max. 30km between nodes); 
+    /** Slottime is the minimum time to wait, consisting of:
+      - CAD duration (maximum of SX126x and SX127x);
+      - roundtrip air propagation time (assuming max. 30km between nodes);
       - Tx/Rx turnaround time (maximum of SX126x and SX127x);
       - MAC processing time (measured on T-beam) */
-    uint32_t slotTimeMsec = 8.5 * pow(2, sf)/bw + 0.2 + 0.4 + 7;
+    uint32_t slotTimeMsec = 8.5 * pow(2, sf) / bw + 0.2 + 0.4 + 7;
     uint16_t preambleLength = 32; // 8 is default, but we use longer to increase the amount of sleep time when receiving
-    const uint32_t PROCESSING_TIME_MSEC = 4500;  // time to construct, process and construct a packet again (empirically determined)
-    const uint8_t CWmin = 2;  // minimum CWsize
-    const uint8_t CWmax = 8;  // maximum CWsize 
+    const uint32_t PROCESSING_TIME_MSEC =
+        4500;                // time to construct, process and construct a packet again (empirically determined)
+    const uint8_t CWmin = 2; // minimum CWsize
+    const uint8_t CWmax = 8; // maximum CWsize
 
-    MeshPacket *sendingPacket = NULL; // The packet we are currently sending
+    meshtastic_MeshPacket *sendingPacket = NULL; // The packet we are currently sending
     uint32_t lastTxStart = 0L;
 
     /**
@@ -80,7 +80,7 @@ class RadioInterface
     /**
      * Enqueue a received packet for the registered receiver
      */
-    void deliverToReceiver(MeshPacket *p);
+    void deliverToReceiver(meshtastic_MeshPacket *p);
 
   public:
     /** pool is the pool we will alloc our rx packets from
@@ -113,11 +113,12 @@ class RadioInterface
      * later free() the packet to pool.  This routine is not allowed to stall.
      * If the txmit queue is full it might return an error
      */
-    virtual ErrorCode send(MeshPacket *p) = 0;
+    virtual ErrorCode send(meshtastic_MeshPacket *p) = 0;
 
     /** Return TX queue status */
-    virtual QueueStatus getQueueStatus() {
-        QueueStatus qs;
+    virtual meshtastic_QueueStatus getQueueStatus()
+    {
+        meshtastic_QueueStatus qs;
         qs.res = qs.mesh_packet_id = qs.free = qs.maxlen = 0;
         return qs;
     }
@@ -138,14 +139,13 @@ class RadioInterface
     virtual bool reconfigure();
 
     /** The delay to use for retransmitting dropped packets */
-    uint32_t getRetransmissionMsec(const MeshPacket *p);
+    uint32_t getRetransmissionMsec(const meshtastic_MeshPacket *p);
 
     /** The delay to use when we want to send something */
     uint32_t getTxDelayMsec();
 
     /** The delay to use when we want to flood a message. Use a weighted scale based on SNR */
     uint32_t getTxDelayMsecWeighted(float snr);
-
 
     /**
      * Calculate airtime per
@@ -154,7 +154,7 @@ class RadioInterface
      *
      * @return num msecs for the packet
      */
-    uint32_t getPacketTime(MeshPacket *p);
+    uint32_t getPacketTime(meshtastic_MeshPacket *p);
     uint32_t getPacketTime(uint32_t totalPacketLen);
 
     /**
@@ -182,7 +182,7 @@ class RadioInterface
      *
      * Used as the first step of
      */
-    size_t beginSending(MeshPacket *p);
+    size_t beginSending(meshtastic_MeshPacket *p);
 
     /**
      * Some regulatory regions limit xmit power.
@@ -220,6 +220,5 @@ class RadioInterface
     }
 };
 
-
 /// Debug printing for packets
-void printPacket(const char *prefix, const MeshPacket *p);
+void printPacket(const char *prefix, const meshtastic_MeshPacket *p);

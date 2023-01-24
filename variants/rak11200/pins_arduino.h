@@ -11,10 +11,10 @@
 #define digitalPinToInterrupt(p) (((p) < 40) ? (p) : -1)
 #define digitalPinHasPWM(p) (p < 34)
 
-#define LED_GREEN              12
-#define LED_BLUE             2
+#define LED_GREEN 12
+#define LED_BLUE 2
 
-#define LED_BUILTIN          LED_GREEN
+#define LED_BUILTIN LED_GREEN
 
 static const uint8_t TX = 1;
 static const uint8_t RX = 3;

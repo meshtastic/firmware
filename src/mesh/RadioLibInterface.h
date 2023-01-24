@@ -1,8 +1,8 @@
 #pragma once
 
-#include "concurrency/NotifiedWorkerThread.h"
-#include "RadioInterface.h"
 #include "MeshPacketQueue.h"
+#include "RadioInterface.h"
+#include "concurrency/NotifiedWorkerThread.h"
 
 #include <RadioLib.h>
 
@@ -39,7 +39,7 @@ class LockingModule : public Module
         : Module(cs, irq, rst, gpio, spi, spiSettings)
     {
     }
-    
+
     void SPIbeginTransaction() override;
     void SPIendTransaction() override;
 };
@@ -62,17 +62,16 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     MeshPacketQueue txQueue = MeshPacketQueue(MAX_TX_QUEUE);
 
   protected:
-
     /**
-     * We use a meshtastic sync word, but hashed with the Channel name.  For releases before 1.2 we used 0x12 (or for very old loads 0x14)
-     * Note: do not use 0x34 - that is reserved for lorawan
-     * 
-     * We now use 0x2b (so that someday we can possibly use NOT 2b - because that would be funny pun).  We will be staying with this code
-     * for a long time.
+     * We use a meshtastic sync word, but hashed with the Channel name.  For releases before 1.2 we used 0x12 (or for very old
+     * loads 0x14) Note: do not use 0x34 - that is reserved for lorawan
+     *
+     * We now use 0x2b (so that someday we can possibly use NOT 2b - because that would be funny pun).  We will be staying with
+     * this code for a long time.
      */
     const uint8_t syncWord = 0x2b;
-    
-    float currentLimit = 100;   // 100mA OCP - Should be acceptable for RFM95/SX127x chipset.  
+
+    float currentLimit = 100; // 100mA OCP - Should be acceptable for RFM95/SX127x chipset.
 
     LockingModule module; // The HW interface to the radio
 
@@ -103,7 +102,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy, SPIClass &spi,
                       PhysicalLayer *iface = NULL);
 
-    virtual ErrorCode send(MeshPacket *p) override;
+    virtual ErrorCode send(meshtastic_MeshPacket *p) override;
 
     /**
      * Return true if we think the board can go to sleep (i.e. our tx queue is empty, we are not sending or receiving)
@@ -131,8 +130,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     virtual bool cancelSending(NodeNum from, PacketId id) override;
 
   private:
-    /** if we have something waiting to send, start a short (random) timer so we can come check for collision before actually doing
-     * the transmit */
+    /** if we have something waiting to send, start a short (random) timer so we can come check for collision before actually
+     * doing the transmit */
     void setTransmitDelay();
 
     /** random timer with certain min. and max. settings */
@@ -151,12 +150,11 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /** start an immediate transmit
      *  This method is virtual so subclasses can hook as needed, subclasses should not call directly
      */
-    virtual void startSend(MeshPacket *txp);
+    virtual void startSend(meshtastic_MeshPacket *txp);
 
-    QueueStatus getQueueStatus();
+    meshtastic_QueueStatus getQueueStatus();
 
   protected:
-
     /** Do any hardware setup needed on entry into send configuration for the radio.  Subclasses can customize */
     virtual void configHardwareForSend() {}
 
@@ -175,7 +173,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     /**
      * Add SNR data to received messages
      */
-    virtual void addReceiveMetadata(MeshPacket *mp) = 0;
+    virtual void addReceiveMetadata(meshtastic_MeshPacket *mp) = 0;
 
     virtual void setStandby() = 0;
 };
