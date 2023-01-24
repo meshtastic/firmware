@@ -74,6 +74,11 @@ meshtastic_XModem XModemAdapter::getForPhone()
     return xmodemStore;
 }
 
+void XModemAdapter::resetForPhone()
+{
+    xmodemStore = meshtastic_XModem_init_zero;
+}
+
 void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
 {
     switch (xmodemPacket.control) {

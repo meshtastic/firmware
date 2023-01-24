@@ -48,6 +48,7 @@ class XModemAdapter
 
     void handlePacket(meshtastic_XModem xmodemPacket);
     meshtastic_XModem getForPhone();
+    void resetForPhone();
 
   private:
     bool isReceiving = false;

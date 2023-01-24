@@ -295,7 +295,8 @@ bool GPS::setup()
         notifyDeepSleepObserver.observe(&notifyDeepSleep);
         notifyGPSSleepObserver.observe(&notifyGPSSleep);
     }
-    if (config.position.gps_enabled == false) {
+
+    if (config.position.gps_enabled == false && config.position.fixed_position == false) {
         setAwake(false);
         doGPSpowersave(false);
     }
@@ -402,7 +403,8 @@ uint32_t GPS::getSleepTime() const
     uint32_t t = config.position.gps_update_interval;
     bool gps_enabled = config.position.gps_enabled;
 
-    if (!gps_enabled)
+    // We'll not need the GPS thread to wake up again after first acq. with fixed position.
+    if (!gps_enabled || config.position.fixed_position)
         t = UINT32_MAX; // Sleep forever now
 
     if (t == UINT32_MAX)
@@ -437,6 +439,7 @@ int32_t GPS::runOnce()
                 LOG_DEBUG("GPS is not communicating, trying factory reset on next bootup.\n");
                 devicestate.did_gps_reset = false;
                 nodeDB.saveDeviceStateToDisk();
+                disable(); // Stop the GPS thread as it can do nothing useful until next reboot.
             }
         }
     }
@@ -498,6 +501,14 @@ int32_t GPS::runOnce()
     // If state has changed do a publish
     publishUpdate();
 
+    if (!(fixeddelayCtr >= 20) && config.position.fixed_position && hasValidLocation) {
+        fixeddelayCtr++;
+        // LOG_DEBUG("Our delay counter is %d\n", fixeddelayCtr);
+        if (fixeddelayCtr >= 20) {
+            doGPSpowersave(false);
+            forceWake(false);
+        }
+    }
     // 9600bps is approx 1 byte per msec, so considering our buffer size we never need to wake more often than 200ms
     // if not awake we can run super infrquently (once every 5 secs?) to see if we need to wake.
     return isAwake ? GPS_THREAD_INTERVAL : 5000;
