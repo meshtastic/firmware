@@ -39,6 +39,7 @@ cstyleCast
 noExplicitConstructor:*/mqtt/*
 postfixOperator:*/mqtt/*
 
+
 // these two caused issues
 missingOverride
 virtualCallInConstructor
