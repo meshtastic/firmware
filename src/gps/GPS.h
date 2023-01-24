@@ -168,6 +168,9 @@ class GPS : private concurrency::OSThread
 
     int getAck(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t requestedID);
 
+    // delay counter to allow more sats before fixed position stops GPS thread
+    uint8_t fixeddelayCtr = 0;
+
   protected:
     GnssModel_t gnssModel = GNSS_MODEL_UNKONW;
 };
