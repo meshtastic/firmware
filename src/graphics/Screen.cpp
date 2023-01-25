@@ -380,10 +380,13 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
         display->setColor(BLACK);
     }
 
-    if(config.display.heading_bold) {
-        display->drawStringf(1 + x, 0 + y, tempBuf, "           From: %s", (node && node->has_user) ? node->user.short_name : "???");
-    }
     tm *tm = localtime(reinterpret_cast<const time_t *>(&mp.rx_time));
+
+    if(config.display.heading_bold) {
+        display->drawStringf(1 + x, 0 + y, tempBuf, "[%02d:%02d:%02d] From: %s",
+			tm->tm_hour, tm->tm_min, tm->tm_sec,
+			(node && node->has_user) ? node->user.short_name : "???");
+    }
     display->drawStringf(0 + x, 0 + y, tempBuf, "[%02d:%02d:%02d] From: %s",
 		    tm->tm_hour, tm->tm_min, tm->tm_sec,
 		    (node && node->has_user) ? node->user.short_name : "???");
