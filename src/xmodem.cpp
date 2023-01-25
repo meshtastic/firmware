@@ -54,11 +54,7 @@ unsigned short XModemAdapter::crc16_ccitt(const pb_byte_t *buffer, int length)
 
 int XModemAdapter::check(const pb_byte_t *buf, int sz, unsigned short tcrc)
 {
-    unsigned short crc = crc16_ccitt(buf, sz);
-    if (crc == tcrc)
-        return 1;
-    else
-        return 0;
+    return crc16_ccitt(buf, sz) == tcrc;
 }
 
 void XModemAdapter::sendControl(meshtastic_XModem_Control c)
