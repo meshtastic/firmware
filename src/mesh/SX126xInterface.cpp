@@ -26,15 +26,6 @@ template <typename T> bool SX126xInterface<T>::init()
     pinMode(SX126X_POWER_EN, OUTPUT);
 #endif
 
-#if defined(SX126X_RXEN) && (SX126X_RXEN != RADIOLIB_NC) // set not rx or tx mode
-    digitalWrite(SX126X_RXEN, LOW);                      // Set low before becoming an output
-    pinMode(SX126X_RXEN, OUTPUT);
-#endif
-#if defined(SX126X_TXEN) && (SX126X_TXEN != RADIOLIB_NC)
-    digitalWrite(SX126X_TXEN, LOW);
-    pinMode(SX126X_TXEN, OUTPUT);
-#endif
-
 #ifndef SX126X_E22
     float tcxoVoltage = 0; // None - we use an XTAL
 #else
@@ -188,13 +179,6 @@ template <typename T> void SX126xInterface<T>::setStandby()
 
     assert(err == RADIOLIB_ERR_NONE);
 
-    // #if defined(SX126X_RXEN) && (SX126X_RXEN != RADIOLIB_NC) // we have RXEN/TXEN control - turn off RX and TX power
-    //     digitalWrite(SX126X_RXEN, LOW);
-    // #endif
-    // #if defined(SX126X_TXEN) && (SX126X_TXEN != RADIOLIB_NC)
-    //     digitalWrite(SX126X_TXEN, LOW);
-    // #endif
-
     isReceiving = false; // If we were receiving, not any more
     disableInterrupt();
     completeSending(); // If we were sending, not anymore
@@ -214,13 +198,6 @@ template <typename T> void SX126xInterface<T>::addReceiveMetadata(meshtastic_Mes
  */
 template <typename T> void SX126xInterface<T>::configHardwareForSend()
 {
-    // #if defined(SX126X_TXEN) && (SX126X_TXEN != RADIOLIB_NC) // we have RXEN/TXEN control - turn on TX power / off RX power
-    //     digitalWrite(SX126X_TXEN, HIGH);
-    // #endif
-    // #if defined(SX126X_RXEN) && (SX126X_RXEN != RADIOLIB_NC)
-    //     digitalWrite(SX126X_RXEN, LOW);
-    // #endif
-
     RadioLibInterface::configHardwareForSend();
 }
 
@@ -234,13 +211,6 @@ template <typename T> void SX126xInterface<T>::startReceive()
 #else
 
     setStandby();
-
-    // #if defined(SX126X_RXEN) && (SX126X_RXEN != RADIOLIB_NC) // we have RXEN/TXEN control - turn on RX power / off TX power
-    //     digitalWrite(SX126X_RXEN, HIGH);
-    // #endif
-    // #if defined(SX126X_TXEN) && (SX126X_TXEN != RADIOLIB_NC)
-    //     digitalWrite(SX126X_TXEN, LOW);
-    // #endif
 
     // int err = lora.startReceive();
     int err = lora.startReceiveDutyCycleAuto(); // We use a 32 bit preamble so this should save some power by letting radio sit in
