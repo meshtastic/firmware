@@ -19,7 +19,8 @@ SX126xInterface<T>::SX126xInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq,
 /// Initialise the Driver transport hardware and software.
 /// Make sure the Driver is properly configured before calling init().
 /// \return true if initialisation succeeded.
-template <typename T> bool SX126xInterface<T>::init()
+template <typename T>
+bool SX126xInterface<T>::init()
 {
 #ifdef SX126X_POWER_EN
     digitalWrite(SX126X_POWER_EN, HIGH);
@@ -67,11 +68,6 @@ template <typename T> bool SX126xInterface<T>::init()
     LOG_DEBUG("Current limit set to %f\n", currentLimit);
     LOG_DEBUG("Current limit set result %d\n", res);
 
-#if defined(SX126X_TXEN) && (SX126X_TXEN != RADIOLIB_NC)
-    // lora.begin sets Dio2 as RF switch control, which is not true if we are manually controlling RX and TX
-    if (res == RADIOLIB_ERR_NONE)
-        res = lora.setDio2AsRfSwitch(false);
-#endif
 #ifdef SX126X_E22
     // E22 Emulation explicitly requires DIO2 as RF switch, so set it to TRUE again for good measure. In case somebody defines
     // SX126X_TX for an E22 Module
@@ -79,13 +75,25 @@ template <typename T> bool SX126xInterface<T>::init()
         res = lora.setDio2AsRfSwitch(true);
 #endif
 
-if (config.lora.sx126x_rx_boosted_gain) {
-    uint16_t result = lora.setRxBoostedGainMode(true);
-    LOG_INFO("Set Rx Boosted Gain mode; result: %d\n", result);
-} else {
-    uint16_t result = lora.setRxBoostedGainMode(false);
-    LOG_INFO("Set Rx Power Saving Gain mode; result: %d\n", result);
-}
+#if defined(SX126X_TXEN) && (SX126X_TXEN != RADIOLIB_NC)
+    // lora.begin sets Dio2 as RF switch control, which is not true if we are manually controlling RX and TX
+    if (res == RADIOLIB_ERR_NONE)
+    {
+        res = lora.setDio2AsRfSwitch(false);
+        lora.setRfSwitchPins(SX126X_RXEN, SX126X_TXEN);
+    }
+#endif
+
+    if (config.lora.sx126x_rx_boosted_gain)
+    {
+        uint16_t result = lora.setRxBoostedGainMode(true);
+        LOG_INFO("Set Rx Boosted Gain mode; result: %d\n", result);
+    }
+    else
+    {
+        uint16_t result = lora.setRxBoostedGainMode(false);
+        LOG_INFO("Set Rx Power Saving Gain mode; result: %d\n", result);
+    }
 
 #if 0
     // Read/write a register we are not using (only used for FSK mode) to test SPI comms
@@ -120,7 +128,8 @@ if (config.lora.sx126x_rx_boosted_gain) {
     return res == RADIOLIB_ERR_NONE;
 }
 
-template <typename T> bool SX126xInterface<T>::reconfigure()
+template <typename T>
+bool SX126xInterface<T>::reconfigure()
 {
     RadioLibInterface::reconfigure();
 
@@ -169,12 +178,14 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
     return RADIOLIB_ERR_NONE;
 }
 
-template <typename T> void INTERRUPT_ATTR SX126xInterface<T>::disableInterrupt()
+template <typename T>
+void INTERRUPT_ATTR SX126xInterface<T>::disableInterrupt()
 {
     lora.clearDio1Action();
 }
 
-template <typename T> void SX126xInterface<T>::setStandby()
+template <typename T>
+void SX126xInterface<T>::setStandby()
 {
     checkNotification(); // handle any pending interrupts before we force standby
 
@@ -185,12 +196,12 @@ template <typename T> void SX126xInterface<T>::setStandby()
 
     assert(err == RADIOLIB_ERR_NONE);
 
-#if defined(SX126X_RXEN) && (SX126X_RXEN != RADIOLIB_NC) // we have RXEN/TXEN control - turn off RX and TX power
-    digitalWrite(SX126X_RXEN, LOW);
-#endif
-#if defined(SX126X_TXEN) && (SX126X_TXEN != RADIOLIB_NC)
-    digitalWrite(SX126X_TXEN, LOW);
-#endif
+    // #if defined(SX126X_RXEN) && (SX126X_RXEN != RADIOLIB_NC) // we have RXEN/TXEN control - turn off RX and TX power
+    //     digitalWrite(SX126X_RXEN, LOW);
+    // #endif
+    // #if defined(SX126X_TXEN) && (SX126X_TXEN != RADIOLIB_NC)
+    //     digitalWrite(SX126X_TXEN, LOW);
+    // #endif
 
     isReceiving = false; // If we were receiving, not any more
     disableInterrupt();
@@ -200,7 +211,8 @@ template <typename T> void SX126xInterface<T>::setStandby()
 /**
  * Add SNR data to received messages
  */
-template <typename T> void SX126xInterface<T>::addReceiveMetadata(meshtastic_MeshPacket *mp)
+template <typename T>
+void SX126xInterface<T>::addReceiveMetadata(meshtastic_MeshPacket *mp)
 {
     // LOG_DEBUG("PacketStatus %x\n", lora.getPacketStatus());
     mp->rx_snr = lora.getSNR();
@@ -209,14 +221,15 @@ template <typename T> void SX126xInterface<T>::addReceiveMetadata(meshtastic_Mes
 
 /** We override to turn on transmitter power as needed.
  */
-template <typename T> void SX126xInterface<T>::configHardwareForSend()
+template <typename T>
+void SX126xInterface<T>::configHardwareForSend()
 {
-#if defined(SX126X_TXEN) && (SX126X_TXEN != RADIOLIB_NC) // we have RXEN/TXEN control - turn on TX power / off RX power
-    digitalWrite(SX126X_TXEN, HIGH);
-#endif
-#if defined(SX126X_RXEN) && (SX126X_RXEN != RADIOLIB_NC)
-    digitalWrite(SX126X_RXEN, LOW);
-#endif
+    // #if defined(SX126X_TXEN) && (SX126X_TXEN != RADIOLIB_NC) // we have RXEN/TXEN control - turn on TX power / off RX power
+    //     digitalWrite(SX126X_TXEN, HIGH);
+    // #endif
+    // #if defined(SX126X_RXEN) && (SX126X_RXEN != RADIOLIB_NC)
+    //     digitalWrite(SX126X_RXEN, LOW);
+    // #endif
 
     RadioLibInterface::configHardwareForSend();
 }
@@ -224,7 +237,8 @@ template <typename T> void SX126xInterface<T>::configHardwareForSend()
 // For power draw measurements, helpful to force radio to stay sleeping
 // #define SLEEP_ONLY
 
-template <typename T> void SX126xInterface<T>::startReceive()
+template <typename T>
+void SX126xInterface<T>::startReceive()
 {
 #ifdef SLEEP_ONLY
     sleep();
@@ -232,12 +246,12 @@ template <typename T> void SX126xInterface<T>::startReceive()
 
     setStandby();
 
-#if defined(SX126X_RXEN) && (SX126X_RXEN != RADIOLIB_NC) // we have RXEN/TXEN control - turn on RX power / off TX power
-    digitalWrite(SX126X_RXEN, HIGH);
-#endif
-#if defined(SX126X_TXEN) && (SX126X_TXEN != RADIOLIB_NC)
-    digitalWrite(SX126X_TXEN, LOW);
-#endif
+    // #if defined(SX126X_RXEN) && (SX126X_RXEN != RADIOLIB_NC) // we have RXEN/TXEN control - turn on RX power / off TX power
+    //     digitalWrite(SX126X_RXEN, HIGH);
+    // #endif
+    // #if defined(SX126X_TXEN) && (SX126X_TXEN != RADIOLIB_NC)
+    //     digitalWrite(SX126X_TXEN, LOW);
+    // #endif
 
     // int err = lora.startReceive();
     int err = lora.startReceiveDutyCycleAuto(); // We use a 32 bit preamble so this should save some power by letting radio sit in
@@ -252,7 +266,8 @@ template <typename T> void SX126xInterface<T>::startReceive()
 }
 
 /** Could we send right now (i.e. either not actively receving or transmitting)? */
-template <typename T> bool SX126xInterface<T>::isChannelActive()
+template <typename T>
+bool SX126xInterface<T>::isChannelActive()
 {
     // check if we can detect a LoRa preamble on the current channel
     int16_t result;
@@ -268,7 +283,8 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
 }
 
 /** Could we send right now (i.e. either not actively receving or transmitting)? */
-template <typename T> bool SX126xInterface<T>::isActivelyReceiving()
+template <typename T>
+bool SX126xInterface<T>::isActivelyReceiving()
 {
     // The IRQ status will be cleared when we start our read operation.  Check if we've started a header, but haven't yet
     // received and handled the interrupt for reading the packet/handling errors.
@@ -285,7 +301,8 @@ template <typename T> bool SX126xInterface<T>::isActivelyReceiving()
     return hasPreamble;
 }
 
-template <typename T> bool SX126xInterface<T>::sleep()
+template <typename T>
+bool SX126xInterface<T>::sleep()
 {
     // Not keeping config is busted - next time nrf52 board boots lora sending fails  tcxo related? - see datasheet
     // \todo Display actual typename of the adapter, not just `SX126x`
