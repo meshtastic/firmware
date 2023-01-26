@@ -1,7 +1,7 @@
 #include "SX126xInterface.h"
-#include "mesh/NodeDB.h"
 #include "configuration.h"
 #include "error.h"
+#include "mesh/NodeDB.h"
 
 // Particular boards might define a different max power based on what their hardware can do
 #ifndef SX126X_MAX_POWER
@@ -24,15 +24,6 @@ template <typename T> bool SX126xInterface<T>::init()
 #ifdef SX126X_POWER_EN
     digitalWrite(SX126X_POWER_EN, HIGH);
     pinMode(SX126X_POWER_EN, OUTPUT);
-#endif
-
-#if defined(SX126X_RXEN) && (SX126X_RXEN != RADIOLIB_NC) // set not rx or tx mode
-    digitalWrite(SX126X_RXEN, LOW);                      // Set low before becoming an output
-    pinMode(SX126X_RXEN, OUTPUT);
-#endif
-#if defined(SX126X_TXEN) && (SX126X_TXEN != RADIOLIB_NC)
-    digitalWrite(SX126X_TXEN, LOW);
-    pinMode(SX126X_TXEN, OUTPUT);
 #endif
 
 #ifndef SX126X_E22
@@ -67,11 +58,6 @@ template <typename T> bool SX126xInterface<T>::init()
     LOG_DEBUG("Current limit set to %f\n", currentLimit);
     LOG_DEBUG("Current limit set result %d\n", res);
 
-#if defined(SX126X_TXEN) && (SX126X_TXEN != RADIOLIB_NC)
-    // lora.begin sets Dio2 as RF switch control, which is not true if we are manually controlling RX and TX
-    if (res == RADIOLIB_ERR_NONE)
-        res = lora.setDio2AsRfSwitch(false);
-#endif
 #ifdef SX126X_E22
     // E22 Emulation explicitly requires DIO2 as RF switch, so set it to TRUE again for good measure. In case somebody defines
     // SX126X_TX for an E22 Module
@@ -79,13 +65,21 @@ template <typename T> bool SX126xInterface<T>::init()
         res = lora.setDio2AsRfSwitch(true);
 #endif
 
-if (config.lora.sx126x_rx_boosted_gain) {
-    uint16_t result = lora.setRxBoostedGainMode(true);
-    LOG_INFO("Set Rx Boosted Gain mode; result: %d\n", result);
-} else {
-    uint16_t result = lora.setRxBoostedGainMode(false);
-    LOG_INFO("Set Rx Power Saving Gain mode; result: %d\n", result);
-}
+#if defined(SX126X_TXEN) && (SX126X_TXEN != RADIOLIB_NC)
+    // lora.begin sets Dio2 as RF switch control, which is not true if we are manually controlling RX and TX
+    if (res == RADIOLIB_ERR_NONE) {
+        res = lora.setDio2AsRfSwitch(false);
+        lora.setRfSwitchPins(SX126X_RXEN, SX126X_TXEN);
+    }
+#endif
+
+    if (config.lora.sx126x_rx_boosted_gain) {
+        uint16_t result = lora.setRxBoostedGainMode(true);
+        LOG_INFO("Set Rx Boosted Gain mode; result: %d\n", result);
+    } else {
+        uint16_t result = lora.setRxBoostedGainMode(false);
+        LOG_INFO("Set Rx Power Saving Gain mode; result: %d\n", result);
+    }
 
 #if 0
     // Read/write a register we are not using (only used for FSK mode) to test SPI comms
@@ -185,13 +179,6 @@ template <typename T> void SX126xInterface<T>::setStandby()
 
     assert(err == RADIOLIB_ERR_NONE);
 
-#if defined(SX126X_RXEN) && (SX126X_RXEN != RADIOLIB_NC) // we have RXEN/TXEN control - turn off RX and TX power
-    digitalWrite(SX126X_RXEN, LOW);
-#endif
-#if defined(SX126X_TXEN) && (SX126X_TXEN != RADIOLIB_NC)
-    digitalWrite(SX126X_TXEN, LOW);
-#endif
-
     isReceiving = false; // If we were receiving, not any more
     disableInterrupt();
     completeSending(); // If we were sending, not anymore
@@ -211,13 +198,6 @@ template <typename T> void SX126xInterface<T>::addReceiveMetadata(meshtastic_Mes
  */
 template <typename T> void SX126xInterface<T>::configHardwareForSend()
 {
-#if defined(SX126X_TXEN) && (SX126X_TXEN != RADIOLIB_NC) // we have RXEN/TXEN control - turn on TX power / off RX power
-    digitalWrite(SX126X_TXEN, HIGH);
-#endif
-#if defined(SX126X_RXEN) && (SX126X_RXEN != RADIOLIB_NC)
-    digitalWrite(SX126X_RXEN, LOW);
-#endif
-
     RadioLibInterface::configHardwareForSend();
 }
 
@@ -231,13 +211,6 @@ template <typename T> void SX126xInterface<T>::startReceive()
 #else
 
     setStandby();
-
-#if defined(SX126X_RXEN) && (SX126X_RXEN != RADIOLIB_NC) // we have RXEN/TXEN control - turn on RX power / off TX power
-    digitalWrite(SX126X_RXEN, HIGH);
-#endif
-#if defined(SX126X_TXEN) && (SX126X_TXEN != RADIOLIB_NC)
-    digitalWrite(SX126X_TXEN, LOW);
-#endif
 
     // int err = lora.startReceive();
     int err = lora.startReceiveDutyCycleAuto(); // We use a 32 bit preamble so this should save some power by letting radio sit in
