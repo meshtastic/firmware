@@ -206,6 +206,7 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define SX126X_RESET (38)
 // #define SX126X_TXEN (39)
 // #define SX126X_RXEN (37)
+#define SX126X_POWER_EN (37)
 #define SX126X_E22 // DIO2 controlls an antenna switch and the TCXO voltage is controlled by DIO3
 
 // enables 3.3V periphery like GPS or IO Module
