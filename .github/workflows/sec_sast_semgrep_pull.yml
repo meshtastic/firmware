@@ -1,17 +1,14 @@
 ---
 name: Semgrep Differential Scan
-on:
-  pull_request
+on: pull_request
 
 jobs:
-
   semgrep-diff:
     runs-on: ubuntu-latest
     container:
       image: returntocorp/semgrep
 
     steps:
-
       # step 1
       - name: clone application source code
         uses: actions/checkout@v3
