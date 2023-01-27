@@ -112,13 +112,6 @@ typedef struct _meshtastic_AdminMessage {
         bool begin_edit_settings;
         /* Commits an open transaction for any edits made to config, module config, owner, and channel settings */
         bool commit_edit_settings;
-        /* Setting channels/radio config remotely carries the risk that you might send an invalid config and the radio never talks to your mesh again.
-     Therefore if setting either of these properties remotely, you must send a confirm_xxx message within 10 minutes.
-     If you fail to do so, the radio will assume loss of comms and revert your changes.
-     These messages are optional when changing the local node. */
-        bool confirm_set_channel;
-        /* TODO: REPLACE */
-        bool confirm_set_radio;
         /* Tell the node to reboot into the OTA Firmware in this many seconds (or <0 to cancel reboot)
      Only Implemented for ESP32 Devices. This needs to be issued to send a new main firmware via bluetooth. */
         int32_t reboot_ota_seconds;
@@ -181,8 +174,6 @@ extern "C" {
 #define meshtastic_AdminMessage_set_ringtone_message_tag 37
 #define meshtastic_AdminMessage_begin_edit_settings_tag 64
 #define meshtastic_AdminMessage_commit_edit_settings_tag 65
-#define meshtastic_AdminMessage_confirm_set_channel_tag 66
-#define meshtastic_AdminMessage_confirm_set_radio_tag 67
 #define meshtastic_AdminMessage_reboot_ota_seconds_tag 95
 #define meshtastic_AdminMessage_exit_simulator_tag 96
 #define meshtastic_AdminMessage_reboot_seconds_tag 97
@@ -214,8 +205,6 @@ X(a, STATIC,   ONEOF,    STRING,   (payload_variant,set_canned_message_module_me
 X(a, STATIC,   ONEOF,    STRING,   (payload_variant,set_ringtone_message,set_ringtone_message),  37) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,begin_edit_settings,begin_edit_settings),  64) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,commit_edit_settings,commit_edit_settings),  65) \
-X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,confirm_set_channel,confirm_set_channel),  66) \
-X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,confirm_set_radio,confirm_set_radio),  67) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,reboot_ota_seconds,reboot_ota_seconds),  95) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,exit_simulator,exit_simulator),  96) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,reboot_seconds,reboot_seconds),  97) \
