@@ -28,7 +28,7 @@ body:
       description: What LoRa IC does the board have?
     validations:
       required: true
-      
+
   - type: input
     id: link
     attributes:
