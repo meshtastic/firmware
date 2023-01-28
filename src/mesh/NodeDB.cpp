@@ -240,6 +240,7 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
     } else if (role == meshtastic_Config_DeviceConfig_Role_TRACKER) {
         config.position.position_broadcast_smart_enabled = false;
         config.position.position_broadcast_secs = 120;
+        config.position.gps_update_interval = 60;
     }
 }
 
