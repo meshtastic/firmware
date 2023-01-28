@@ -84,6 +84,7 @@ class Router : protected concurrency::OSThread
 
   protected:
     friend class RoutingModule;
+    friend class RepeaterModule;
 
     /**
      * Should this incoming filter be dropped?
