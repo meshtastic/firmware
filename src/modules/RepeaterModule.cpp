@@ -9,7 +9,7 @@ RepeaterModule *repeaterModule;
 
 bool RepeaterModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Routing *r)
 {
-    printPacket("Repeater rebroadcasting", &mp);
+    printPacket("Repeater rebroadcasting message", &mp);
     meshtastic_MeshPacket *p = const_cast<meshtastic_MeshPacket *>(&mp);
     router->send(p);
     return true;
