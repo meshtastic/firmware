@@ -24,6 +24,8 @@ bool RoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mesh
 
 meshtastic_MeshPacket *RoutingModule::allocReply()
 {
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER)
+        return NULL;
     assert(currentRequest);
 
     // We only consider making replies if the request was a legit routing packet (not just something we were sniffing)

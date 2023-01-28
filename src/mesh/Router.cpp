@@ -367,7 +367,6 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 {
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
-
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded);
 
         // Only allow encryption on the text message app.
