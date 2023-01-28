@@ -129,7 +129,10 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies)
     meshtastic_MeshPacket *p = allocReply();
     p->to = dest;
     p->decoded.want_response = wantReplies;
-    p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER)
+        p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+    else
+        p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
     prevPacketId = p->id;
 
     service.sendToMesh(p, RX_SRC_LOCAL, true);
@@ -161,7 +164,6 @@ int32_t PositionModule::runOnce()
                 sendOurPosition(NODENUM_BROADCAST, requestReplies);
             }
         }
-
     } else if (config.position.position_broadcast_smart_enabled) {
 
         // Only send packets if the channel is less than 25% utilized.
