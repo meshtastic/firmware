@@ -14,6 +14,8 @@ class RepeaterModule : public ProtobufModule<meshtastic_Routing>
     RepeaterModule();
 
   protected:
+    friend class Router;
+
     /** Called to handle a particular incoming message
 
     @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
