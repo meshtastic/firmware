@@ -453,7 +453,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
         else
             printPacket("handleReceived(REMOTE)", p);
     } else {
-        printPacket("packet decoding failed (no PSK?)", p);
+        printPacket("packet decoding failed or skipped (no PSK?)", p);
     }
 
     // call modules here
