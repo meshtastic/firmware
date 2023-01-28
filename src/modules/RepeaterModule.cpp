@@ -12,8 +12,7 @@ bool RepeaterModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     printPacket("Repeater observed message", &mp);
     router->sniffReceived(&mp, r);
 
-    if ((mp.to == NODENUM_BROADCAST || mp.to == nodeDB.getNodeNum()) && (mp.from != 0))
-    {
+    if ((mp.to == NODENUM_BROADCAST || mp.to == nodeDB.getNodeNum()) && (mp.from != 0)) {
         printPacket("Delivering rx packet", &mp);
         service.handleFromRadio(&mp);
     }
