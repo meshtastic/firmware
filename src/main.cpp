@@ -310,6 +310,10 @@ void setup()
     // but we need to do this after main cpu iniot (esp32setup), because we need the random seed set
     nodeDB.init();
 
+    // If we're taking on the repeater role, use flood router
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER)
+        router = new FloodingRouter();
+
     playStartMelody();
 
     // fixed screen override?
