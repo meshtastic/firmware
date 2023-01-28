@@ -192,12 +192,6 @@ void printBytes(const char *label, const uint8_t *p, size_t numbytes)
  */
 ErrorCode Router::send(meshtastic_MeshPacket *p)
 {
-    // Skip the normal ceremony for repeaters
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
-        assert(iface);
-        return iface->send(p);
-    }
-
     if (p->to == nodeDB.getNodeNum()) {
         LOG_ERROR("BUG! send() called with packet destined for local node!\n");
         packetPool.release(p);
