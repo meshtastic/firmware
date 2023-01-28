@@ -55,9 +55,10 @@ class RadioInterface
   protected:
     bool disabled = false;
 
-    float bw = 125;
-    uint8_t sf = 9;
-    uint8_t cr = 7;
+    float bw = 250;
+    uint8_t sf = 11;
+    uint8_t cr = 8;
+
     /** Slottime is the minimum time to wait, consisting of: 
       - CAD duration (maximum of SX126x and SX127x);  
       - roundtrip air propagation time (assuming max. 30km between nodes); 

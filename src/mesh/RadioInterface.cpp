@@ -114,7 +114,7 @@ const RegionInfo *myRegion;
 void initRegion()
 {
     const RegionInfo *r = regions;
-    for (; r->code != Config_LoRaConfig_RegionCode_UNSET && r->code != config.lora.region; r++)
+    for (; r->code != Config_LoRaConfig_RegionCode_UNSET && r->code != Config_LoRaConfig_RegionCode_EU_868; r++)  // TODO remove hardcoded region
         ;
     myRegion = r;
     LOG_INFO("Wanted region %d, using %s\n", config.lora.region, r->name);

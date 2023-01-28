@@ -31,6 +31,10 @@
 #define FILE_O_READ "r"
 #endif
 
+// #if defined(ARCH_STM32WL)
+// TODO
+// #endif
+
 #if defined(ARCH_NRF52)
 // NRF52 version
 #include "InternalFileSystem.h"

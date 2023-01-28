@@ -48,6 +48,7 @@
 #include "LLCC68Interface.h"
 #include "RF95Interface.h"
 #include "SX1262Interface.h"
+#include "STM32WLE5JCInterface.h"
 #include "SX1268Interface.h"
 #include "SX1280Interface.h"
 #if !HAS_RADIO && defined(ARCH_PORTDUINO)
@@ -87,7 +88,7 @@ uint8_t rtc_found;
 
 // Keystore Chips
 uint8_t keystore_found;
-#ifndef ARCH_PORTDUINO
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 ATECCX08A atecc;
 #endif
 
@@ -405,6 +406,19 @@ void setup()
             rIf = NULL;
         } else {
             LOG_INFO("SX1262 Radio init succeeded, using SX1262 radio\n");
+        }
+    }
+#endif
+
+#if defined(USE_STM32WLx)
+    if (!rIf) {
+        rIf = new STM32WLE5JCInterface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI); 
+        if (!rIf->init()) {
+            LOG_WARN("Failed to find STM32WL radio\n");
+            delete rIf;
+            rIf = NULL;
+        } else {
+            LOG_INFO("STM32WL Radio init succeeded, using STM32WL radio\n");
         }
     }
 #endif
