@@ -225,6 +225,24 @@ void NodeDB::installDefaultModuleConfig()
     initModuleConfigIntervals();
 }
 
+void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
+{
+    if (role == meshtastic_Config_DeviceConfig_Role_ROUTER) {
+        initConfigIntervals();
+        initModuleConfigIntervals();
+    } else if (role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
+        config.display.screen_on_secs = 1;
+        meshtastic_Channel &ch = channels.getByIndex(channels.getPrimaryIndex());
+        meshtastic_ChannelSettings &channelSettings = ch.settings;
+        uint8_t defaultpskIndex = 1;
+        channelSettings.psk.bytes[0] = defaultpskIndex;
+        channelSettings.psk.size = 1;
+    } else if (role == meshtastic_Config_DeviceConfig_Role_TRACKER) {
+        config.position.position_broadcast_smart_enabled = false;
+        config.position.position_broadcast_secs = 120;
+    }
+}
+
 void NodeDB::initModuleConfigIntervals()
 {
     moduleConfig.telemetry.device_update_interval = default_broadcast_interval_secs;
@@ -609,13 +627,11 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
         LOG_INFO("updatePosition LOCAL pos@%x, time=%u, latI=%d, lonI=%d, alt=%d\n", p.timestamp, p.time, p.latitude_i,
                  p.longitude_i, p.altitude);
         info->position = p;
-
     } else if ((p.time > 0) && !p.latitude_i && !p.longitude_i && !p.timestamp && !p.location_source) {
         // FIXME SPECIAL TIME SETTING PACKET FROM EUD TO RADIO
         // (stop-gap fix for issue #900)
         LOG_DEBUG("updatePosition SPECIAL time setting time=%u\n", p.time);
         info->position.time = p.time;
-
     } else {
         // Be careful to only update fields that have been set by the REMOTE sender
         // A lot of position reports don't have time populated.  In that case, be careful to not blow away the time we

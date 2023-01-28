@@ -225,7 +225,7 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
 
 void AdminModule::handleSetConfig(const meshtastic_Config &c)
 {
-    bool isRouter = (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER);
+    auto existingRole = config.device.role;
     bool isRegionUnset = (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);
 
     switch (c.which_payload_variant) {
@@ -234,10 +234,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         config.has_device = true;
         config.device = c.payload_variant.device;
         // If we're setting router role for the first time, install its intervals
-        if (!isRouter && c.payload_variant.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER) {
-            nodeDB.initConfigIntervals();
-            nodeDB.initModuleConfigIntervals();
-        }
+        if (existingRole != c.payload_variant.device.role)
+            nodeDB.installRoleDefaults(c.payload_variant.device.role);
         break;
     case meshtastic_Config_position_tag:
         LOG_INFO("Setting config: Position\n");
