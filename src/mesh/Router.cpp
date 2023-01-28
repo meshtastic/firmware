@@ -300,8 +300,8 @@ void Router::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Rout
 
 bool perhapsDecode(meshtastic_MeshPacket *p)
 {
-
-    // LOG_DEBUG("\n\n** perhapsDecode payloadVariant - %d\n\n", p->which_payloadVariant);
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER)
+        return false;
 
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag)
         return true; // If packet was already decoded just return
@@ -453,7 +453,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
         else
             printPacket("handleReceived(REMOTE)", p);
     } else {
-        printPacket("packet decoding failed (no PSK?)", p);
+        printPacket("packet decoding failed or skipped (no PSK?)", p);
     }
 
     // call modules here
