@@ -82,9 +82,8 @@ void setupModules()
 
         // NOTE! This module must be added LAST because it likes to check for replies from other modules and avoid sending extra
         // acks
-        routingModule = new RoutingModule();
     } else {
         adminModule = new AdminModule();
-        repeaterModule = new RepeaterModule();
     }
+    routingModule = new RoutingModule();
 }
