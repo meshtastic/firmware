@@ -190,7 +190,6 @@ bool GPS::setupGPS()
             // Switch to Vehicle Mode, since SoftRF enables Aviation < 2g
             _serial_gps->write("$PCAS11,3*1E\r\n");
             delay(250);
-
         } else if (gnssModel == GNSS_MODEL_UBLOX) {
 
             /*
@@ -429,6 +428,10 @@ void GPS::publishUpdate()
 
 int32_t GPS::runOnce()
 {
+    // Repeaters have no need for GPS
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER)
+        disable();
+
     if (whileIdle()) {
         // if we have received valid NMEA claim we are connected
         setConnected();
