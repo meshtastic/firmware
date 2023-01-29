@@ -26,13 +26,26 @@ typedef enum _meshtastic_Config_DeviceConfig_Role {
    Mesh packets will prefer to be routed over this node. The Router Client can be used as both a Router and an app connected Client. */
     meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT = 3,
     /* Repeater device role
-   Mesh packets will simply be rebroadcasted over this node. Nodes under this role node will not originate NodeInfo, Position, Telemetry
-   or any other packet type. They will simply rebroadcast any mesh packets on the same frequency, channel num, spread factory, and coding rate. */
+   Mesh packets will simply be rebroadcasted over this node. Nodes configured with this role will not originate NodeInfo, Position, Telemetry
+   or any other packet type. They will simply rebroadcast any mesh packets on the same frequency, channel num, spread factor, and coding rate. */
     meshtastic_Config_DeviceConfig_Role_REPEATER = 4,
     /* Tracker device role
-   Position Mesh packets for will be higher priority and sent more frequently by default. */
+   Position Mesh packets will be prioritized higher and sent more frequently by default. */
     meshtastic_Config_DeviceConfig_Role_TRACKER = 5
 } meshtastic_Config_DeviceConfig_Role;
+
+/* Defines the device's behavior for how messages are rebroadcast */
+typedef enum _meshtastic_Config_DeviceConfig_RebroadcastMode {
+    /* Default behavior.
+ Rebroadcast any observed message, if it was on our private channel or from another mesh with the same lora params. */
+    meshtastic_Config_DeviceConfig_RebroadcastMode_ALL = 0,
+    /* Same as behavior as ALL but skips packet decoding and simply rebroadcasts them.
+ Only available in Repeater role. Setting this on any other roles will result in ALL behavior. */
+    meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING = 1,
+    /* Ignores observed messages from foreign meshes that are open or those which it cannot decrypt.
+ Only rebroadcasts message on the nodes local primary / secondary channels. */
+    meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY = 2
+} meshtastic_Config_DeviceConfig_RebroadcastMode;
 
 /* Bit field of boolean configuration options, indicating which optional
    fields to include when assembling POSITION messages
@@ -210,6 +223,8 @@ typedef struct _meshtastic_Config_DeviceConfig {
     /* For boards without a PWM buzzer, this is the pin number that will be used
  Defaults to PIN_BUZZER if defined. */
     uint32_t buzzer_gpio;
+    /* Sets the role of node */
+    meshtastic_Config_DeviceConfig_RebroadcastMode rebroadcast_mode;
 } meshtastic_Config_DeviceConfig;
 
 /* Position Config */
@@ -432,6 +447,10 @@ extern "C" {
 #define _meshtastic_Config_DeviceConfig_Role_MAX meshtastic_Config_DeviceConfig_Role_TRACKER
 #define _meshtastic_Config_DeviceConfig_Role_ARRAYSIZE ((meshtastic_Config_DeviceConfig_Role)(meshtastic_Config_DeviceConfig_Role_TRACKER+1))
 
+#define _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN meshtastic_Config_DeviceConfig_RebroadcastMode_ALL
+#define _meshtastic_Config_DeviceConfig_RebroadcastMode_MAX meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY
+#define _meshtastic_Config_DeviceConfig_RebroadcastMode_ARRAYSIZE ((meshtastic_Config_DeviceConfig_RebroadcastMode)(meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY+1))
+
 #define _meshtastic_Config_PositionConfig_PositionFlags_MIN meshtastic_Config_PositionConfig_PositionFlags_UNSET
 #define _meshtastic_Config_PositionConfig_PositionFlags_MAX meshtastic_Config_PositionConfig_PositionFlags_SPEED
 #define _meshtastic_Config_PositionConfig_PositionFlags_ARRAYSIZE ((meshtastic_Config_PositionConfig_PositionFlags)(meshtastic_Config_PositionConfig_PositionFlags_SPEED+1))
@@ -470,6 +489,7 @@ extern "C" {
 
 
 #define meshtastic_Config_DeviceConfig_role_ENUMTYPE meshtastic_Config_DeviceConfig_Role
+#define meshtastic_Config_DeviceConfig_rebroadcast_mode_ENUMTYPE meshtastic_Config_DeviceConfig_RebroadcastMode
 
 
 
@@ -489,7 +509,7 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_Config_init_default           {0, {meshtastic_Config_DeviceConfig_init_default}}
-#define meshtastic_Config_DeviceConfig_init_default {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0}
+#define meshtastic_Config_DeviceConfig_init_default {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN}
 #define meshtastic_Config_PositionConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_PowerConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_default {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_default, ""}
@@ -498,7 +518,7 @@ extern "C" {
 #define meshtastic_Config_LoRaConfig_init_default {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}}
 #define meshtastic_Config_BluetoothConfig_init_default {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0}
 #define meshtastic_Config_init_zero              {0, {meshtastic_Config_DeviceConfig_init_zero}}
-#define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0}
+#define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN}
 #define meshtastic_Config_PositionConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_PowerConfig_init_zero  {0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_zero {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_zero, ""}
@@ -513,6 +533,7 @@ extern "C" {
 #define meshtastic_Config_DeviceConfig_debug_log_enabled_tag 3
 #define meshtastic_Config_DeviceConfig_button_gpio_tag 4
 #define meshtastic_Config_DeviceConfig_buzzer_gpio_tag 5
+#define meshtastic_Config_DeviceConfig_rebroadcast_mode_tag 6
 #define meshtastic_Config_PositionConfig_position_broadcast_secs_tag 1
 #define meshtastic_Config_PositionConfig_position_broadcast_smart_enabled_tag 2
 #define meshtastic_Config_PositionConfig_fixed_position_tag 3
@@ -600,7 +621,8 @@ X(a, STATIC,   SINGULAR, UENUM,    role,              1) \
 X(a, STATIC,   SINGULAR, BOOL,     serial_enabled,    2) \
 X(a, STATIC,   SINGULAR, BOOL,     debug_log_enabled,   3) \
 X(a, STATIC,   SINGULAR, UINT32,   button_gpio,       4) \
-X(a, STATIC,   SINGULAR, UINT32,   buzzer_gpio,       5)
+X(a, STATIC,   SINGULAR, UINT32,   buzzer_gpio,       5) \
+X(a, STATIC,   SINGULAR, UENUM,    rebroadcast_mode,   6)
 #define meshtastic_Config_DeviceConfig_CALLBACK NULL
 #define meshtastic_Config_DeviceConfig_DEFAULT NULL
 
@@ -711,7 +733,7 @@ extern const pb_msgdesc_t meshtastic_Config_BluetoothConfig_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define meshtastic_Config_BluetoothConfig_size   10
-#define meshtastic_Config_DeviceConfig_size      18
+#define meshtastic_Config_DeviceConfig_size      20
 #define meshtastic_Config_DisplayConfig_size     26
 #define meshtastic_Config_LoRaConfig_size        72
 #define meshtastic_Config_NetworkConfig_IpV4Config_size 20
