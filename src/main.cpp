@@ -128,6 +128,17 @@ static int32_t ledBlinker()
 
     setLed(ledOn);
 
+#ifdef ARCH_ESP32
+    auto newHeap = ESP.getFreeHeap();
+    if (newHeap < 11000) {
+        LOG_DEBUG("\n\n====== heap too low [11000] -> reboot in 1s ======\n\n");
+#ifdef HAS_SCREEN
+        screen->startRebootScreen();
+#endif
+        rebootAtMsec = millis() + 900;
+    }
+#endif
+
     // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
     return powerStatus->getIsCharging() ? 1000 : (ledOn ? 1 : 1000);
 }
@@ -298,6 +309,10 @@ void setup()
     // We do this as early as possible because this loads preferences from flash
     // but we need to do this after main cpu iniot (esp32setup), because we need the random seed set
     nodeDB.init();
+
+    // If we're taking on the repeater role, use flood router
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER)
+        router = new FloodingRouter();
 
     playStartMelody();
 

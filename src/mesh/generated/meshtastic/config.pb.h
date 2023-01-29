@@ -19,11 +19,19 @@ typedef enum _meshtastic_Config_DeviceConfig_Role {
     meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE = 1,
     /* Router device role.
    Mesh packets will prefer to be routed over this node. This node will not be used by client apps. 
-   The wifi/ble radios and the oled screen will be put to sleep. */
+   The wifi/ble radios and the oled screen will be put to sleep.
+   This mode may still potentially have higher power usage due to it's preference in message rebroadcasting on the mesh. */
     meshtastic_Config_DeviceConfig_Role_ROUTER = 2,
     /* Router Client device role
    Mesh packets will prefer to be routed over this node. The Router Client can be used as both a Router and an app connected Client. */
-    meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT = 3
+    meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT = 3,
+    /* Repeater device role
+   Mesh packets will simply be rebroadcasted over this node. Nodes under this role node will not originate NodeInfo, Position, Telemetry
+   or any other packet type. They will simply rebroadcast any mesh packets on the same frequency, channel num, spread factory, and coding rate. */
+    meshtastic_Config_DeviceConfig_Role_REPEATER = 4,
+    /* Tracker device role
+   Position Mesh packets for will be higher priority and sent more frequently by default. */
+    meshtastic_Config_DeviceConfig_Role_TRACKER = 5
 } meshtastic_Config_DeviceConfig_Role;
 
 /* Bit field of boolean configuration options, indicating which optional
@@ -172,7 +180,9 @@ typedef enum _meshtastic_Config_LoRaConfig_ModemPreset {
     /* Short Range - Slow */
     meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW = 5,
     /* Short Range - Fast */
-    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST = 6
+    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST = 6,
+    /* Long Range - Moderately Fast */
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE = 7
 } meshtastic_Config_LoRaConfig_ModemPreset;
 
 typedef enum _meshtastic_Config_BluetoothConfig_PairingMode {
@@ -419,8 +429,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_Config_DeviceConfig_Role_MIN meshtastic_Config_DeviceConfig_Role_CLIENT
-#define _meshtastic_Config_DeviceConfig_Role_MAX meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT
-#define _meshtastic_Config_DeviceConfig_Role_ARRAYSIZE ((meshtastic_Config_DeviceConfig_Role)(meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT+1))
+#define _meshtastic_Config_DeviceConfig_Role_MAX meshtastic_Config_DeviceConfig_Role_TRACKER
+#define _meshtastic_Config_DeviceConfig_Role_ARRAYSIZE ((meshtastic_Config_DeviceConfig_Role)(meshtastic_Config_DeviceConfig_Role_TRACKER+1))
 
 #define _meshtastic_Config_PositionConfig_PositionFlags_MIN meshtastic_Config_PositionConfig_PositionFlags_UNSET
 #define _meshtastic_Config_PositionConfig_PositionFlags_MAX meshtastic_Config_PositionConfig_PositionFlags_SPEED
@@ -451,8 +461,8 @@ extern "C" {
 #define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_UA_868+1))
 
 #define _meshtastic_Config_LoRaConfig_ModemPreset_MIN meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST
-#define _meshtastic_Config_LoRaConfig_ModemPreset_MAX meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST
-#define _meshtastic_Config_LoRaConfig_ModemPreset_ARRAYSIZE ((meshtastic_Config_LoRaConfig_ModemPreset)(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST+1))
+#define _meshtastic_Config_LoRaConfig_ModemPreset_MAX meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE
+#define _meshtastic_Config_LoRaConfig_ModemPreset_ARRAYSIZE ((meshtastic_Config_LoRaConfig_ModemPreset)(meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE+1))
 
 #define _meshtastic_Config_BluetoothConfig_PairingMode_MIN meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN
 #define _meshtastic_Config_BluetoothConfig_PairingMode_MAX meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN
