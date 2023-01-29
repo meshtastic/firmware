@@ -610,7 +610,6 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
             } else {
                 display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(coordinateLine))) / 2, y, coordinateLine);
             }
-
         } else {
             char latLine[22];
             char lonLine[22];
@@ -1694,6 +1693,9 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
         break;
     case meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST:
         mode = "LongF";
+        break;
+    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
+        mode = "LongM";
         break;
     case meshtastic_Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW:
         mode = "VeryL";
