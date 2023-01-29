@@ -61,7 +61,7 @@ void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
     }
 
     if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY) {
-        LOG_DEBUG("Cancelling rebroadcast from node of a foreign mesh, due to local only rebroadcast mode\n");
+        LOG_DEBUG("Cancelling rebroadcast of message from node on a foreign mesh, due to local only rebroadcast mode\n");
         Router::cancelSending(p->to, p->decoded.request_id);
     }
     // handle the packet as normal
