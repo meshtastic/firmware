@@ -300,8 +300,6 @@ void Router::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Rout
 
 bool perhapsDecode(meshtastic_MeshPacket *p)
 {
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER)
-        return false;
 
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag)
         return true; // If packet was already decoded just return
