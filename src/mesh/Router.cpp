@@ -301,8 +301,6 @@ void Router::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Rout
 bool perhapsDecode(meshtastic_MeshPacket *p)
 {
 
-    // LOG_DEBUG("\n\n** perhapsDecode payloadVariant - %d\n\n", p->which_payloadVariant);
-
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag)
         return true; // If packet was already decoded just return
 
@@ -367,7 +365,6 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 {
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
-
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded);
 
         // Only allow encryption on the text message app.
@@ -454,7 +451,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
         else
             printPacket("handleReceived(REMOTE)", p);
     } else {
-        printPacket("packet decoding failed (no PSK?)", p);
+        printPacket("packet decoding failed or skipped (no PSK?)", p);
     }
 
     // call modules here

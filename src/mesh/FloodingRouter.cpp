@@ -48,15 +48,13 @@ void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                     traceRouteModule->updateRoute(tosend);
                 }
 
-                LOG_INFO("Rebroadcasting received floodmsg to neighbors", p);
+                LOG_INFO("Rebroadcasting received floodmsg to neighbors\n");
                 // Note: we are careful to resend using the original senders node id
                 // We are careful not to call our hooked version of send() - because we don't want to check this again
                 Router::send(tosend);
-
             } else {
                 LOG_DEBUG("Not rebroadcasting. Role = Role_ClientMute\n");
             }
-
         } else {
             LOG_DEBUG("Ignoring a simple (0 id) broadcast\n");
         }
