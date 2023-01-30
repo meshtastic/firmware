@@ -46,5 +46,5 @@ void RoutingModule::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketI
 RoutingModule::RoutingModule() : ProtobufModule("routing", meshtastic_PortNum_ROUTING_APP, &meshtastic_Routing_msg)
 {
     isPromiscuous = true;
-    encryptedOk = true;
+    encryptedOk = config.device.rebroadcast_mode != meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY;
 }
