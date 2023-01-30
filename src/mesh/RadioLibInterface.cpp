@@ -108,20 +108,15 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
 
     if (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
         if (disabled || !config.lora.tx_enabled) {
-
-            if (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
-                if (disabled || !config.lora.tx_enabled) {
-                    LOG_WARN("send - !config.lora.tx_enabled\n");
-                    packetPool.release(p);
-                    return ERRNO_DISABLED;
-                }
-
-            } else {
-                LOG_WARN("send - lora tx disable because RegionCode_Unset\n");
-                packetPool.release(p);
-                return ERRNO_DISABLED;
-            }
+            LOG_WARN("send - !config.lora.tx_enabled\n");
+            packetPool.release(p);
+            return ERRNO_DISABLED;
         }
+
+    } else {
+        LOG_WARN("send - lora tx disable because RegionCode_Unset\n");
+        packetPool.release(p);
+        return ERRNO_DISABLED;
     }
 
 #else
