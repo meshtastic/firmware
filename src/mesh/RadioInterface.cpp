@@ -461,10 +461,16 @@ void RadioInterface::applyModemConfig()
     // New frequency selection formula
     float freq = myRegion->freqStart + (bw / 2000) + (channel_num * (bw / 1000));
 
-    saveChannelNum(channel_num);
-    saveFreq(freq + config.lora.frequency_offset);
+    // override if we have a verbatim frequency
+    if (loraConfig.override_frequency) {
+        freq = loraConfig.override_frequency;
+        channel_num = -1;
+    }
 
-    LOG_INFO("Radio freq=%.3f, config.lora.frequency_offset=%.3f\n", freq, config.lora.frequency_offset);
+    saveChannelNum(channel_num);
+    saveFreq(freq + loraConfig.frequency_offset);
+
+    LOG_INFO("Radio freq=%.3f, config.lora.frequency_offset=%.3f\n", freq, loraConfig.frequency_offset);
     LOG_INFO("Set radio: region=%s, name=%s, config=%u, ch=%d, power=%d\n", myRegion->name, channelName, loraConfig.modem_preset,
              channel_num, power);
     LOG_INFO("Radio myRegion->freqStart -> myRegion->freqEnd: %f -> %f (%f mhz)\n", myRegion->freqStart, myRegion->freqEnd,
