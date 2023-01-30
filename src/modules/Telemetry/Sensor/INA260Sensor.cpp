@@ -4,7 +4,7 @@
 #include "configuration.h"
 #include <Adafruit_INA260.h>
 
-INA260Sensor::INA260Sensor() : TelemetrySensor(TelemetrySensorType_INA260, "INA260") {}
+INA260Sensor::INA260Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_INA260, "INA260") {}
 
 int32_t INA260Sensor::runOnce()
 {
@@ -18,7 +18,7 @@ int32_t INA260Sensor::runOnce()
 
 void INA260Sensor::setup() {}
 
-bool INA260Sensor::getMetrics(Telemetry *measurement)
+bool INA260Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     // mV conversion to V
     measurement->variant.environment_metrics.voltage = ina260.readBusVoltage() / 1000;

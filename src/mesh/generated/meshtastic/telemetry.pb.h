@@ -11,38 +11,38 @@
 
 /* Enum definitions */
 /* TODO: REPLACE */
-typedef enum _TelemetrySensorType {
+typedef enum _meshtastic_TelemetrySensorType {
     /* No external telemetry sensor explicitly set */
-    TelemetrySensorType_SENSOR_UNSET = 0,
+    meshtastic_TelemetrySensorType_SENSOR_UNSET = 0,
     /* High accuracy temperature, pressure, humidity */
-    TelemetrySensorType_BME280 = 1,
+    meshtastic_TelemetrySensorType_BME280 = 1,
     /* High accuracy temperature, pressure, humidity, and air resistance */
-    TelemetrySensorType_BME680 = 2,
+    meshtastic_TelemetrySensorType_BME680 = 2,
     /* Very high accuracy temperature */
-    TelemetrySensorType_MCP9808 = 3,
+    meshtastic_TelemetrySensorType_MCP9808 = 3,
     /* Moderate accuracy current and voltage */
-    TelemetrySensorType_INA260 = 4,
+    meshtastic_TelemetrySensorType_INA260 = 4,
     /* Moderate accuracy current and voltage */
-    TelemetrySensorType_INA219 = 5,
+    meshtastic_TelemetrySensorType_INA219 = 5,
     /* High accuracy temperature and pressure */
-    TelemetrySensorType_BMP280 = 6,
+    meshtastic_TelemetrySensorType_BMP280 = 6,
     /* High accuracy temperature and humidity */
-    TelemetrySensorType_SHTC3 = 7,
+    meshtastic_TelemetrySensorType_SHTC3 = 7,
     /* High accuracy pressure */
-    TelemetrySensorType_LPS22 = 8,
+    meshtastic_TelemetrySensorType_LPS22 = 8,
     /* 3-Axis magnetic sensor */
-    TelemetrySensorType_QMC6310 = 9,
+    meshtastic_TelemetrySensorType_QMC6310 = 9,
     /* 6-Axis inertial measurement sensor */
-    TelemetrySensorType_QMI8658 = 10,
+    meshtastic_TelemetrySensorType_QMI8658 = 10,
     /* 3-Axis magnetic sensor */
-    TelemetrySensorType_QMC5883L = 11,
+    meshtastic_TelemetrySensorType_QMC5883L = 11,
     /* High accuracy temperature and humidity */
-    TelemetrySensorType_SHT31 = 12
-} TelemetrySensorType;
+    meshtastic_TelemetrySensorType_SHT31 = 12
+} meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
 /* Key native device metrics such as battery level */
-typedef struct _DeviceMetrics {
+typedef struct _meshtastic_DeviceMetrics {
     /* 1-100 (0 means powered) */
     uint32_t battery_level;
     /* Voltage measured */
@@ -51,10 +51,10 @@ typedef struct _DeviceMetrics {
     float channel_utilization;
     /* Percent of airtime for transmission used within the last hour. */
     float air_util_tx;
-} DeviceMetrics;
+} meshtastic_DeviceMetrics;
 
 /* Weather station or other environmental metrics */
-typedef struct _EnvironmentMetrics {
+typedef struct _meshtastic_EnvironmentMetrics {
     /* Temperature measured */
     float temperature;
     /* Relative humidity percent measured */
@@ -67,10 +67,10 @@ typedef struct _EnvironmentMetrics {
     float voltage;
     /* Current measured */
     float current;
-} EnvironmentMetrics;
+} meshtastic_EnvironmentMetrics;
 
 /* Types of Measurements the telemetry module is equipped to handle */
-typedef struct _Telemetry {
+typedef struct _meshtastic_Telemetry {
     /* This is usually not sent over the mesh (to save space), but it is sent
  from the phone so that the local device can set its RTC If it is sent over
  the mesh (because there are devices on the mesh without GPS), it will only
@@ -80,11 +80,11 @@ typedef struct _Telemetry {
     pb_size_t which_variant;
     union {
         /* Key native device metrics such as battery level */
-        DeviceMetrics device_metrics;
+        meshtastic_DeviceMetrics device_metrics;
         /* Weather station or other environmental metrics */
-        EnvironmentMetrics environment_metrics;
+        meshtastic_EnvironmentMetrics environment_metrics;
     } variant;
-} Telemetry;
+} meshtastic_Telemetry;
 
 
 #ifdef __cplusplus
@@ -92,78 +92,78 @@ extern "C" {
 #endif
 
 /* Helper constants for enums */
-#define _TelemetrySensorType_MIN TelemetrySensorType_SENSOR_UNSET
-#define _TelemetrySensorType_MAX TelemetrySensorType_SHT31
-#define _TelemetrySensorType_ARRAYSIZE ((TelemetrySensorType)(TelemetrySensorType_SHT31+1))
+#define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_SHT31
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_SHT31+1))
 
 
 
 
 
 /* Initializer values for message structs */
-#define DeviceMetrics_init_default    {0, 0, 0, 0}
-#define EnvironmentMetrics_init_default {0, 0, 0, 0, 0, 0}
-#define Telemetry_init_default        {0, 0, {DeviceMetrics_init_default}}
-#define DeviceMetrics_init_zero       {0, 0, 0, 0}
-#define EnvironmentMetrics_init_zero  {0, 0, 0, 0, 0, 0}
-#define Telemetry_init_zero           {0, 0, {DeviceMetrics_init_zero}}
+#define meshtastic_DeviceMetrics_init_default    {0, 0, 0, 0}
+#define meshtastic_EnvironmentMetrics_init_default {0, 0, 0, 0, 0, 0}
+#define meshtastic_Telemetry_init_default        {0, 0, {meshtastic_DeviceMetrics_init_default}}
+#define meshtastic_DeviceMetrics_init_zero       {0, 0, 0, 0}
+#define meshtastic_EnvironmentMetrics_init_zero  {0, 0, 0, 0, 0, 0}
+#define meshtastic_Telemetry_init_zero           {0, 0, {meshtastic_DeviceMetrics_init_zero}}
 
 /* Field tags (for use in manual encoding/decoding) */
-#define DeviceMetrics_battery_level_tag 1
-#define DeviceMetrics_voltage_tag     2
-#define DeviceMetrics_channel_utilization_tag 3
-#define DeviceMetrics_air_util_tx_tag 4
-#define EnvironmentMetrics_temperature_tag 1
-#define EnvironmentMetrics_relative_humidity_tag 2
-#define EnvironmentMetrics_barometric_pressure_tag 3
-#define EnvironmentMetrics_gas_resistance_tag 4
-#define EnvironmentMetrics_voltage_tag 5
-#define EnvironmentMetrics_current_tag 6
-#define Telemetry_time_tag            1
-#define Telemetry_device_metrics_tag  2
-#define Telemetry_environment_metrics_tag 3
+#define meshtastic_DeviceMetrics_battery_level_tag 1
+#define meshtastic_DeviceMetrics_voltage_tag     2
+#define meshtastic_DeviceMetrics_channel_utilization_tag 3
+#define meshtastic_DeviceMetrics_air_util_tx_tag 4
+#define meshtastic_EnvironmentMetrics_temperature_tag 1
+#define meshtastic_EnvironmentMetrics_relative_humidity_tag 2
+#define meshtastic_EnvironmentMetrics_barometric_pressure_tag 3
+#define meshtastic_EnvironmentMetrics_gas_resistance_tag 4
+#define meshtastic_EnvironmentMetrics_voltage_tag 5
+#define meshtastic_EnvironmentMetrics_current_tag 6
+#define meshtastic_Telemetry_time_tag            1
+#define meshtastic_Telemetry_device_metrics_tag  2
+#define meshtastic_Telemetry_environment_metrics_tag 3
 
 /* Struct field encoding specification for nanopb */
-#define DeviceMetrics_FIELDLIST(X, a) \
+#define meshtastic_DeviceMetrics_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   battery_level,     1) \
 X(a, STATIC,   SINGULAR, FLOAT,    voltage,           2) \
 X(a, STATIC,   SINGULAR, FLOAT,    channel_utilization,   3) \
 X(a, STATIC,   SINGULAR, FLOAT,    air_util_tx,       4)
-#define DeviceMetrics_CALLBACK NULL
-#define DeviceMetrics_DEFAULT NULL
+#define meshtastic_DeviceMetrics_CALLBACK NULL
+#define meshtastic_DeviceMetrics_DEFAULT NULL
 
-#define EnvironmentMetrics_FIELDLIST(X, a) \
+#define meshtastic_EnvironmentMetrics_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, FLOAT,    temperature,       1) \
 X(a, STATIC,   SINGULAR, FLOAT,    relative_humidity,   2) \
 X(a, STATIC,   SINGULAR, FLOAT,    barometric_pressure,   3) \
 X(a, STATIC,   SINGULAR, FLOAT,    gas_resistance,    4) \
 X(a, STATIC,   SINGULAR, FLOAT,    voltage,           5) \
 X(a, STATIC,   SINGULAR, FLOAT,    current,           6)
-#define EnvironmentMetrics_CALLBACK NULL
-#define EnvironmentMetrics_DEFAULT NULL
+#define meshtastic_EnvironmentMetrics_CALLBACK NULL
+#define meshtastic_EnvironmentMetrics_DEFAULT NULL
 
-#define Telemetry_FIELDLIST(X, a) \
+#define meshtastic_Telemetry_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, FIXED32,  time,              1) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,device_metrics,variant.device_metrics),   2) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,environment_metrics,variant.environment_metrics),   3)
-#define Telemetry_CALLBACK NULL
-#define Telemetry_DEFAULT NULL
-#define Telemetry_variant_device_metrics_MSGTYPE DeviceMetrics
-#define Telemetry_variant_environment_metrics_MSGTYPE EnvironmentMetrics
+#define meshtastic_Telemetry_CALLBACK NULL
+#define meshtastic_Telemetry_DEFAULT NULL
+#define meshtastic_Telemetry_variant_device_metrics_MSGTYPE meshtastic_DeviceMetrics
+#define meshtastic_Telemetry_variant_environment_metrics_MSGTYPE meshtastic_EnvironmentMetrics
 
-extern const pb_msgdesc_t DeviceMetrics_msg;
-extern const pb_msgdesc_t EnvironmentMetrics_msg;
-extern const pb_msgdesc_t Telemetry_msg;
+extern const pb_msgdesc_t meshtastic_DeviceMetrics_msg;
+extern const pb_msgdesc_t meshtastic_EnvironmentMetrics_msg;
+extern const pb_msgdesc_t meshtastic_Telemetry_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
-#define DeviceMetrics_fields &DeviceMetrics_msg
-#define EnvironmentMetrics_fields &EnvironmentMetrics_msg
-#define Telemetry_fields &Telemetry_msg
+#define meshtastic_DeviceMetrics_fields &meshtastic_DeviceMetrics_msg
+#define meshtastic_EnvironmentMetrics_fields &meshtastic_EnvironmentMetrics_msg
+#define meshtastic_Telemetry_fields &meshtastic_Telemetry_msg
 
 /* Maximum encoded size of messages (where known) */
-#define DeviceMetrics_size            21
-#define EnvironmentMetrics_size       30
-#define Telemetry_size                37
+#define meshtastic_DeviceMetrics_size            21
+#define meshtastic_EnvironmentMetrics_size       30
+#define meshtastic_Telemetry_size                37
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -5,12 +5,11 @@
 #define MATRIXKEY 0xFE
 
 typedef struct _InputEvent {
-    const char* source;
+    const char *source;
     char inputEvent;
     char kbchar;
 } InputEvent;
-class InputBroker :
-    public Observable<const InputEvent *>
+class InputBroker : public Observable<const InputEvent *>
 {
     CallbackObserver<InputBroker, const InputEvent *> inputEventObserver =
         CallbackObserver<InputBroker, const InputEvent *>(this, &InputBroker::handleInputEvent);

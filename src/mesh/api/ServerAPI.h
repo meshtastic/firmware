@@ -6,8 +6,7 @@
  * Provides both debug printing and, if the client starts sending protobufs to us, switches to send/receive protobufs
  * (and starts dropping debug printing - FIXME, eventually those prints should be encapsulated in protobufs).
  */
-template<class T>
-class ServerAPI : public StreamAPI, private concurrency::OSThread
+template <class T> class ServerAPI : public StreamAPI, private concurrency::OSThread
 {
   private:
     T client;
@@ -34,8 +33,7 @@ class ServerAPI : public StreamAPI, private concurrency::OSThread
 /**
  * Listens for incoming connections and does accepts and creates instances of WiFiServerAPI as needed
  */
-template<class T, class U>
-class APIServerPort : public U, private concurrency::OSThread
+template <class T, class U> class APIServerPort : public U, private concurrency::OSThread
 {
     /** The currently open port
      *

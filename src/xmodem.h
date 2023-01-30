@@ -46,8 +46,9 @@ class XModemAdapter
 
     XModemAdapter();
 
-    void handlePacket(XModem xmodemPacket);
-    XModem *getForPhone();
+    void handlePacket(meshtastic_XModem xmodemPacket);
+    meshtastic_XModem getForPhone();
+    void resetForPhone();
 
   private:
     bool isReceiving = false;
@@ -58,19 +59,19 @@ class XModemAdapter
 
     uint16_t packetno = 0;
 
-#ifdef ARCH_NRF52
+#if defined(ARCH_NRF52)
     File file = File(FSCom);
 #else
     File file;
 #endif
 
-    char filename[sizeof(XModem_buffer_t::bytes)] = {0};
+    char filename[sizeof(meshtastic_XModem_buffer_t::bytes)] = {0};
 
   protected:
-    XModem *xmodemStore = NULL;
+    meshtastic_XModem xmodemStore = meshtastic_XModem_init_zero;
     unsigned short crc16_ccitt(const pb_byte_t *buffer, int length);
     int check(const pb_byte_t *buf, int sz, unsigned short tcrc);
-    void sendControl(XModem_Control c);
+    void sendControl(meshtastic_XModem_Control c);
 };
 
 extern XModemAdapter xModem;

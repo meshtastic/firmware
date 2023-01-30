@@ -120,10 +120,10 @@ bool initEthernet()
         getMacAddr(mac); // FIXME use the BLE MAC for now...
         mac[0] &= 0xfe;  // Make sure this is not a multicast MAC
 
-        if (config.network.address_mode == Config_NetworkConfig_AddressMode_DHCP) {
+        if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_DHCP) {
             LOG_INFO("starting Ethernet DHCP\n");
             status = Ethernet.begin(mac);
-        } else if (config.network.address_mode == Config_NetworkConfig_AddressMode_STATIC) {
+        } else if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_STATIC) {
             LOG_INFO("starting Ethernet Static\n");
             Ethernet.begin(mac, config.network.ipv4_config.ip, config.network.ipv4_config.dns, config.network.ipv4_config.subnet);
         } else {

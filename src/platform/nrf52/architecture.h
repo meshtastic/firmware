@@ -6,28 +6,28 @@
 // defaults for NRF52 architecture
 //
 #ifndef HAS_BLUETOOTH
-    #define HAS_BLUETOOTH 1
+#define HAS_BLUETOOTH 1
 #endif
 #ifndef HAS_SCREEN
-    #define HAS_SCREEN 1
+#define HAS_SCREEN 1
 #endif
 #ifndef HAS_WIRE
-    #define HAS_WIRE 1
+#define HAS_WIRE 1
 #endif
 #ifndef HAS_GPS
-    #define HAS_GPS 1
+#define HAS_GPS 1
 #endif
 #ifndef HAS_BUTTON
-    #define HAS_BUTTON 1
+#define HAS_BUTTON 1
 #endif
 #ifndef HAS_TELEMETRY
-    #define HAS_TELEMETRY 1
+#define HAS_TELEMETRY 1
 #endif
 #ifndef HAS_RADIO
-    #define HAS_RADIO 1
+#define HAS_RADIO 1
 #endif
 #ifdef HAS_CPU_SHUTDOWN
-    #define HAS_CPU_SHUTDOWN 1
+#define HAS_CPU_SHUTDOWN 1
 #endif
 
 //
@@ -36,19 +36,19 @@
 
 // This string must exactly match the case used in release file names or the android updater won't work
 #ifdef ARDUINO_NRF52840_PCA10056
-    #define HW_VENDOR HardwareModel_NRF52840DK
+#define HW_VENDOR meshtastic_HardwareModel_NRF52840DK
 #elif defined(ARDUINO_NRF52840_PPR)
-    #define HW_VENDOR HardwareModel_PPR
+#define HW_VENDOR meshtastic_HardwareModel_PPR
 #elif defined(RAK4630)
-    #define HW_VENDOR HardwareModel_RAK4631
+#define HW_VENDOR meshtastic_HardwareModel_RAK4631
 #elif defined(TTGO_T_ECHO)
-    #define HW_VENDOR HardwareModel_T_ECHO
+#define HW_VENDOR meshtastic_HardwareModel_T_ECHO
 #elif defined(NORDIC_PCA10059)
-    #define HW_VENDOR HardwareModel_NRF52840_PCA10059
+#define HW_VENDOR meshtastic_HardwareModel_NRF52840_PCA10059
 #elif defined(PRIVATE_HW) || defined(FEATHER_DIY)
-    #define HW_VENDOR HardwareModel_PRIVATE_HW
+#define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #else
-    #define HW_VENDOR HardwareModel_NRF52_UNKNOWN
+#define HW_VENDOR meshtastic_HardwareModel_NRF52_UNKNOWN
 #endif
 
 //

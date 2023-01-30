@@ -1,5 +1,5 @@
-#include "configuration.h"
 #include "PacketHistory.h"
+#include "configuration.h"
 #include "mesh-pb-constants.h"
 
 PacketHistory::PacketHistory()
@@ -11,7 +11,7 @@ PacketHistory::PacketHistory()
 /**
  * Update recentBroadcasts and return true if we have already seen this packet
  */
-bool PacketHistory::wasSeenRecently(const MeshPacket *p, bool withUpdate)
+bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpdate)
 {
     if (p->id == 0) {
         LOG_DEBUG("Ignoring message with zero id\n");
@@ -26,10 +26,10 @@ bool PacketHistory::wasSeenRecently(const MeshPacket *p, bool withUpdate)
     r.rxTimeMsec = now;
 
     auto found = recentPackets.find(r);
-    bool seenRecently = (found != recentPackets.end());  // found not equal to .end() means packet was seen recently
+    bool seenRecently = (found != recentPackets.end()); // found not equal to .end() means packet was seen recently
 
     if (seenRecently && (now - found->rxTimeMsec) >= FLOOD_EXPIRE_TIME) { // Check whether found packet has already expired
-        recentPackets.erase(found);  // Erase and pretend packet has not been seen recently
+        recentPackets.erase(found);                                       // Erase and pretend packet has not been seen recently
         found = recentPackets.end();
         seenRecently = false;
     }
@@ -58,12 +58,13 @@ bool PacketHistory::wasSeenRecently(const MeshPacket *p, bool withUpdate)
 /**
  * Iterate through all recent packets, and remove all older than FLOOD_EXPIRE_TIME
  */
-void PacketHistory::clearExpiredRecentPackets() {
+void PacketHistory::clearExpiredRecentPackets()
+{
     uint32_t now = millis();
 
     LOG_DEBUG("recentPackets size=%ld\n", recentPackets.size());
 
-    for (auto it = recentPackets.begin(); it != recentPackets.end(); ) {
+    for (auto it = recentPackets.begin(); it != recentPackets.end();) {
         if ((now - it->rxTimeMsec) >= FLOOD_EXPIRE_TIME) {
             it = recentPackets.erase(it); // erase returns iterator pointing to element immediately following the one erased
         } else {

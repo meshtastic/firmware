@@ -9,9 +9,7 @@
     "product_line": "STM32WLE5xx"
   },
   "debug": {
-    "default_tools": [
-      "stlink"
-    ],
+    "default_tools": ["stlink"],
     "jlink_device": "STM32WLE5CC",
     "openocd_target": "stm32wlx",
     "svd_path": "STM32WLE5_CM4.svd"
@@ -22,9 +20,7 @@
     "maximum_ram_size": 65536,
     "maximum_size": 262144,
     "protocol": "cmsis-dap",
-    "protocols": [
-      "cmsis-dap"
-    ]
+    "protocols": ["cmsis-dap"]
   },
   "url": "https://www.st.com/en/microcontrollers-microprocessors/stm32wl-series.html",
   "vendor": "ST"

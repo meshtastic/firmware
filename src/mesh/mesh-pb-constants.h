@@ -16,10 +16,10 @@
 #define MAX_RX_TOPHONE 32
 
 /// max number of nodes allowed in the mesh
-#define MAX_NUM_NODES (member_size(DeviceState, node_db) / member_size(DeviceState, node_db[0]))
+#define MAX_NUM_NODES (member_size(meshtastic_DeviceState, node_db) / member_size(meshtastic_DeviceState, node_db[0]))
 
 /// Max number of channels allowed
-#define MAX_NUM_CHANNELS (member_size(ChannelFile, channels) / member_size(ChannelFile, channels[0]))
+#define MAX_NUM_CHANNELS (member_size(meshtastic_ChannelFile, channels) / member_size(meshtastic_ChannelFile, channels[0]))
 
 /// helper function for encoding a record as a protobuf, any failures to encode are fatal and we will panic
 /// returns the encoded packet size

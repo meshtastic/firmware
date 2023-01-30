@@ -1,5 +1,5 @@
-#include "configuration.h"
 #include "RadioLibRF95.h"
+#include "configuration.h"
 
 #define RF95_CHIP_VERSION 0x12
 #define RF95_ALT_VERSION 0x11 // Supposedly some versions of the chip have id 0x11
@@ -7,11 +7,10 @@
 // From datasheet but radiolib doesn't know anything about this
 #define SX127X_REG_TCXO 0x4B
 
-
 RadioLibRF95::RadioLibRF95(Module *mod) : SX1278(mod) {}
 
-int16_t RadioLibRF95::begin(float freq, float bw, uint8_t sf, uint8_t cr, uint8_t syncWord, int8_t power,
-                            uint16_t preambleLength, uint8_t gain)
+int16_t RadioLibRF95::begin(float freq, float bw, uint8_t sf, uint8_t cr, uint8_t syncWord, int8_t power, uint16_t preambleLength,
+                            uint8_t gain)
 {
     // execute common part
     int16_t state = SX127x::begin(RF95_CHIP_VERSION, syncWord, preambleLength);

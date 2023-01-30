@@ -25,22 +25,22 @@
 
 const uint32_t g_ADigitalPinMap[] = {
     // D0 .. D13
-    25, // D0  is P0.25 (UART TX)
-    24, // D1  is P0.24 (UART RX
-    10, // D2  is P0.10 (NFC2)
-    47, // D3  is P1.15 (LED1)
+    25,        // D0  is P0.25 (UART TX)
+    24,        // D1  is P0.24 (UART RX
+    10,        // D2  is P0.10 (NFC2)
+    47,        // D3  is P1.15 (LED1)
     (32 + 10), // D4  is P1.10 (LED2)
-    40, // D5  is P1.08
-    7,  // D6  is P0.07
-    34, // D7  is P1.02 (Switch)
-    16, // D8  is P0.16 (NeoPixel)
-    26, // D9  is P0.26 D_RS (IPS data/command control)
-    27, // D10 is P0.27
-    6,  // D11 is P0.06 D_RES (IPS display reset)
-    8,  // D12 is P0.08 D_CS (IPS display chip select)
-    41, // D13 is P0.23 BLT (IPS display backlight)
-    4,  // D14 is P0.04 SX1262 RXEN
-    5,  // D15 is P0.05 BOOST_EN (5V buck converter enable for the the radio power)
+    40,        // D5  is P1.08
+    7,         // D6  is P0.07
+    34,        // D7  is P1.02 (Switch)
+    16,        // D8  is P0.16 (NeoPixel)
+    26,        // D9  is P0.26 D_RS (IPS data/command control)
+    27,        // D10 is P0.27
+    6,         // D11 is P0.06 D_RES (IPS display reset)
+    8,         // D12 is P0.08 D_CS (IPS display chip select)
+    41,        // D13 is P0.23 BLT (IPS display backlight)
+    4,         // D14 is P0.04 SX1262 RXEN
+    5,         // D15 is P0.05 BOOST_EN (5V buck converter enable for the the radio power)
 
     // D14 .. D21 (aka A0 .. A7)
     30, // D16 is P0.30 (A0)
@@ -77,7 +77,7 @@ const uint32_t g_ADigitalPinMap[] = {
     // 32, // P1.00 is SWO   (attached to debug header)
 
     // D29-D43
-    32 + 12,      // D29 P0.27 E22-SX1262 DIO1
+    32 + 12, // D29 P0.27 E22-SX1262 DIO1
     28,      // D30 P0.28 E22-SX1262 DIO2
     30,      // D31 P0.30 E22-SX1262 TXEN
     35,      // D32 P1.03 E22-SX1262 NSS

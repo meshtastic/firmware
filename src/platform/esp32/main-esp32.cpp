@@ -10,18 +10,19 @@
 #include "mesh/http/WiFiAPClient.h"
 
 #include "sleep.h"
+#include "soc/rtc.h"
 #include "target_specific.h"
 #include "utils.h"
 #include <Preferences.h>
 #include <driver/rtc_io.h>
 #include <nvs.h>
 #include <nvs_flash.h>
-#include "soc/rtc.h"
 
 #if !defined(CONFIG_IDF_TARGET_ESP32S2)
 NimbleBluetooth *nimbleBluetooth;
 
-void setBluetoothEnable(bool on) {
+void setBluetoothEnable(bool on)
+{
 
     if (!isWifiAvailable() && config.bluetooth.enabled == true) {
         if (!nimbleBluetooth) {
@@ -35,8 +36,8 @@ void setBluetoothEnable(bool on) {
     }
 }
 #else
-void setBluetoothEnable(bool on) { }
-void updateBatteryLevel(uint8_t level) { }
+void setBluetoothEnable(bool on) {}
+void updateBatteryLevel(uint8_t level) {}
 #endif
 
 void getMacAddr(uint8_t *dmac)
@@ -76,11 +77,11 @@ void enableSlowCLK()
     CALIBRATE_ONE(RTC_CAL_RTC_MUX);
     CALIBRATE_ONE(RTC_CAL_32K_XTAL);
     if (rtc_clk_slow_freq_get() != RTC_SLOW_FREQ_32K_XTAL) {
-        LOG_WARN("Failed to switch 32K XTAL RTC source to 32.768Khz !!! \n"); return;
+        LOG_WARN("Failed to switch 32K XTAL RTC source to 32.768Khz !!! \n");
+        return;
     }
 }
 #endif
-
 
 void esp32Setup()
 {
@@ -96,8 +97,8 @@ void esp32Setup()
     nvs_stats_t nvs_stats;
     auto res = nvs_get_stats(NULL, &nvs_stats);
     assert(res == ESP_OK);
-    LOG_DEBUG("NVS: UsedEntries %d, FreeEntries %d, AllEntries %d, NameSpaces %d\n", nvs_stats.used_entries, nvs_stats.free_entries,
-              nvs_stats.total_entries, nvs_stats.namespace_count);
+    LOG_DEBUG("NVS: UsedEntries %d, FreeEntries %d, AllEntries %d, NameSpaces %d\n", nvs_stats.used_entries,
+              nvs_stats.free_entries, nvs_stats.total_entries, nvs_stats.namespace_count);
 
     LOG_DEBUG("Setup Preferences in Flash Storage\n");
 
@@ -110,10 +111,10 @@ void esp32Setup()
     preferences.putUInt("rebootCounter", rebootCounter);
     preferences.end();
     LOG_DEBUG("Number of Device Reboots: %d\n", rebootCounter);
-    String BLEOTA=BleOta::getOtaAppVersion();
+    String BLEOTA = BleOta::getOtaAppVersion();
     if (BLEOTA.isEmpty()) {
         LOG_DEBUG("No OTA firmware available\n");
-    }else{
+    } else {
         LOG_DEBUG("OTA firmware version %s\n", BLEOTA.c_str());
     }
 
@@ -154,7 +155,6 @@ uint32_t axpDebugRead()
 
 Periodic axpDebugOutput(axpDebugRead);
 #endif
-
 
 /// loop code specific to ESP32 targets
 void esp32Loop()
