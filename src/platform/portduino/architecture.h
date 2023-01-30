@@ -10,7 +10,7 @@
 // set HW_VENDOR
 //
 
-#define HW_VENDOR HardwareModel_PORTDUINO
+#define HW_VENDOR meshtastic_HardwareModel_PORTDUINO
 
 #define HAS_RTC 1
 #define HAS_WIFI 1

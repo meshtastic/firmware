@@ -4,19 +4,18 @@
 #include "Observer.h"
 #include "concurrency/OSThread.h"
 
-
-struct uBloxGnssModelInfo { 
-    char    swVersion[30];
-    char    hwVersion[10];
+struct uBloxGnssModelInfo {
+    char swVersion[30];
+    char hwVersion[10];
     uint8_t extensionNo;
-    char    extension[10][30];
-} ;
+    char extension[10][30];
+};
 
-typedef enum{
-  GNSS_MODEL_MTK,
-  GNSS_MODEL_UBLOX,
-  GNSS_MODEL_UNKONW,
-}GnssModel_t;
+typedef enum {
+    GNSS_MODEL_MTK,
+    GNSS_MODEL_UBLOX,
+    GNSS_MODEL_UNKONW,
+} GnssModel_t;
 
 // Generate a string representation of DOP
 const char *getDOPString(uint32_t dop);
@@ -55,7 +54,7 @@ class GPS : private concurrency::OSThread
     /** If !NULL we will use this serial port to construct our GPS */
     static HardwareSerial *_serial_gps;
 
-    Position p = Position_init_default;
+    meshtastic_Position p = meshtastic_Position_init_default;
 
     GPS() : concurrency::OSThread("GPS") {}
 
@@ -78,7 +77,7 @@ class GPS : private concurrency::OSThread
     /// Return true if we are connected to a GPS
     bool isConnected() const { return hasGPS; }
 
-    bool isPowerSaving() const { return !config.position.gps_enabled;}
+    bool isPowerSaving() const { return !config.position.gps_enabled; }
 
     /**
      * Restart our lock attempt - try to get and broadcast a GPS reading ASAP
@@ -164,17 +163,20 @@ class GPS : private concurrency::OSThread
 
     virtual int32_t runOnce() override;
 
-  // Get GNSS model
+    // Get GNSS model
     GnssModel_t probe();
 
     int getAck(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t requestedID);
+
+    // delay counter to allow more sats before fixed position stops GPS thread
+    uint8_t fixeddelayCtr = 0;
 
   protected:
     GnssModel_t gnssModel = GNSS_MODEL_UNKONW;
 };
 
-// Creates an instance of the GPS class. 
+// Creates an instance of the GPS class.
 // Returns the new instance or null if the GPS is not present.
-GPS* createGps();
+GPS *createGps();
 
 extern GPS *gps;

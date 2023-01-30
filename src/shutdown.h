@@ -13,7 +13,7 @@ void powerCommandsCheck()
 #elif defined(ARCH_NRF52)
         NVIC_SystemReset();
 #else
-        rebootAtMsec = -1; 
+        rebootAtMsec = -1;
         LOG_WARN("FIXME implement reboot for this platform. Skipping for now.\n");
 #endif
     }
@@ -25,10 +25,10 @@ void powerCommandsCheck()
 #ifdef PIN_LED1
         ledOff(PIN_LED1);
 #endif
-#ifdef PIN_LED2        
+#ifdef PIN_LED2
         ledOff(PIN_LED2);
 #endif
-#ifdef PIN_LED3        
+#ifdef PIN_LED3
         ledOff(PIN_LED3);
 #endif
     }

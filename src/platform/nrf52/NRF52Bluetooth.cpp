@@ -1,6 +1,6 @@
-#include "configuration.h"
 #include "NRF52Bluetooth.h"
 #include "BluetoothCommon.h"
+#include "configuration.h"
 #include "main.h"
 #include "mesh/PhoneAPI.h"
 #include "mesh/mesh-pb-constants.h"
@@ -19,8 +19,8 @@ static BLEDfu bledfu; // DFU software update helper service
 // This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in
 // proccess at once
 // static uint8_t trBytes[_max(_max(_max(_max(ToRadio_size, RadioConfig_size), User_size), MyNodeInfo_size), FromRadio_size)];
-static uint8_t fromRadioBytes[FromRadio_size];
-static uint8_t toRadioBytes[ToRadio_size];
+static uint8_t fromRadioBytes[meshtastic_FromRadio_size];
+static uint8_t toRadioBytes[meshtastic_ToRadio_size];
 
 static uint16_t connectionHandle;
 
@@ -38,7 +38,8 @@ class BluetoothPhoneAPI : public PhoneAPI
     }
 
     /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected() override {
+    virtual bool checkIsConnected() override
+    {
         BLEConnection *connection = Bluefruit.Connection(connectionHandle);
         return connection->connected();
     }
@@ -167,11 +168,13 @@ void setupMeshService(void)
     // any characteristic(s) within that service definition.. Calling .begin() on
     // a BLECharacteristic will cause it to be added to the last BLEService that
     // was 'begin()'ed!
-    auto secMode = config.bluetooth.mode == Config_BluetoothConfig_PairingMode_NO_PIN ? SECMODE_OPEN : SECMODE_ENC_NO_MITM;
+    auto secMode =
+        config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN ? SECMODE_OPEN : SECMODE_ENC_NO_MITM;
 
     fromNum.setProperties(CHR_PROPS_NOTIFY | CHR_PROPS_READ);
     fromNum.setPermission(secMode, SECMODE_NO_ACCESS); // FIXME, secure this!!!
-    fromNum.setFixedLen(0); // Variable len (either 0 or 4)  FIXME consider changing protocol so it is fixed 4 byte len, where 0 means empty
+    fromNum.setFixedLen(
+        0); // Variable len (either 0 or 4)  FIXME consider changing protocol so it is fixed 4 byte len, where 0 means empty
     fromNum.setMaxLen(4);
     fromNum.setCccdWriteCallback(onCccd); // Optionally capture CCCD updates
     // We don't yet need to hook the fromNum auth callback
@@ -180,9 +183,11 @@ void setupMeshService(void)
     fromNum.begin();
 
     fromRadio.setProperties(CHR_PROPS_READ);
-    fromRadio.setPermission(secMode, SECMODE_NO_ACCESS); 
+    fromRadio.setPermission(secMode, SECMODE_NO_ACCESS);
     fromRadio.setMaxLen(sizeof(fromRadioBytes));
-    fromRadio.setReadAuthorizeCallback(onFromRadioAuthorize, false); // We don't call this callback via the adafruit queue, because we can safely run in the BLE context
+    fromRadio.setReadAuthorizeCallback(
+        onFromRadioAuthorize,
+        false); // We don't call this callback via the adafruit queue, because we can safely run in the BLE context
     fromRadio.setBuffer(fromRadioBytes, sizeof(fromRadioBytes)); // we preallocate our fromradio buffer so we won't waste space
     // for two copies
     fromRadio.begin();
@@ -193,7 +198,7 @@ void setupMeshService(void)
     toRadio.setMaxLen(512);
     toRadio.setBuffer(toRadioBytes, sizeof(toRadioBytes));
     // We don't call this callback via the adafruit queue, because we can safely run in the BLE context
-    toRadio.setWriteCallback(onToRadioWrite, false); 
+    toRadio.setWriteCallback(onToRadioWrite, false);
     toRadio.begin();
 }
 
@@ -221,9 +226,10 @@ void NRF52Bluetooth::setup()
     Bluefruit.Advertising.clearData();
     Bluefruit.ScanResponse.clearData();
 
-    if (config.bluetooth.mode != Config_BluetoothConfig_PairingMode_NO_PIN) {
-        configuredPasskey = config.bluetooth.mode == Config_BluetoothConfig_PairingMode_FIXED_PIN ? 
-            config.bluetooth.fixed_pin : random(100000, 999999);
+    if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
+        configuredPasskey = config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN
+                                ? config.bluetooth.fixed_pin
+                                : random(100000, 999999);
         auto pinString = std::to_string(configuredPasskey);
         LOG_INFO("Bluetooth pin set to '%i'\n", configuredPasskey);
         Bluefruit.Security.setPIN(pinString.c_str());
@@ -232,8 +238,7 @@ void NRF52Bluetooth::setup()
         Bluefruit.Security.setPairCompleteCallback(NRF52Bluetooth::onPairingCompleted);
         Bluefruit.Security.setSecuredCallback(NRF52Bluetooth::onConnectionSecured);
         meshBleService.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
-    }
-    else {
+    } else {
         Bluefruit.Security.setIOCaps(false, false, false);
         meshBleService.setPermission(SECMODE_OPEN, SECMODE_OPEN);
     }
@@ -246,7 +251,7 @@ void NRF52Bluetooth::setup()
 
     bledfu.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
     bledfu.begin(); // Install the DFU helper
-    
+
     // Configure and Start the Device Information Service
     LOG_INFO("Configuring the Device Information Service\n");
     bledis.setModel(optstr(HW_VERSION));
@@ -258,15 +263,13 @@ void NRF52Bluetooth::setup()
     blebas.begin();
     blebas.write(0); // Unknown battery level for now
 
-
     // Setup the Heart Rate Monitor service using
     // BLEService and BLECharacteristic classes
     LOG_INFO("Configuring the Mesh bluetooth service\n");
     setupMeshService();
 
     // Supposedly debugging works with soft device if you disable advertising
-    if (isSoftDeviceAllowed) 
-    {
+    if (isSoftDeviceAllowed) {
         // Setup the advertising packet(s)
         LOG_INFO("Setting up the advertising payload(s)\n");
         startAdv();
@@ -298,15 +301,14 @@ void NRF52Bluetooth::onConnectionSecured(uint16_t conn_handle)
 
 bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passkey[6], bool match_request)
 {
-    LOG_INFO("BLE pairing process started with passkey %.3s %.3s\n", passkey, passkey+3);
+    LOG_INFO("BLE pairing process started with passkey %.3s %.3s\n", passkey, passkey + 3);
     screen->startBluetoothPinScreen(configuredPasskey);
 
-    if (match_request)
-    {
+    if (match_request) {
         uint32_t start_time = millis();
-        while(millis() < start_time + 30000)
-        {
-            if (!Bluefruit.connected(conn_handle)) break;
+        while (millis() < start_time + 30000) {
+            if (!Bluefruit.connected(conn_handle))
+                break;
         }
     }
     LOG_INFO("BLE passkey pairing: match_request=%i\n", match_request);

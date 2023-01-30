@@ -65,7 +65,6 @@ extern "C" {
 #define PIN_BUTTON3 24
 #define PIN_BUTTON4 25
 
-
 /*
  * Analog pins
  */
@@ -116,14 +115,14 @@ static const uint8_t AREF = PIN_AREF;
 
 #define PIN_SPI1_MISO (29) // (0 + 29)
 #define PIN_SPI1_MOSI (30) // (0 + 30)
-#define PIN_SPI1_SCK  (3) // (0 + 3)
+#define PIN_SPI1_SCK (3)   // (0 + 3)
 
 static const uint8_t SS = 42;
 static const uint8_t MOSI = PIN_SPI_MOSI;
 static const uint8_t MISO = PIN_SPI_MISO;
 static const uint8_t SCK = PIN_SPI_SCK;
 
-  /*
+/*
  * eink display pins
  */
 
@@ -136,8 +135,8 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_EINK_MOSI (0 + 30) // also called SDI
 
 // Controls power for the eink display - Board power is enabled either by VBUS from USB or the CPU asserting PWR_ON
-// FIXME - I think this is actually just the board power enable - it enables power to the CPU also 
-//#define PIN_EINK_PWR_ON (-1)
+// FIXME - I think this is actually just the board power enable - it enables power to the CPU also
+// #define PIN_EINK_PWR_ON (-1)
 
 #define USE_EINK
 
@@ -173,7 +172,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
    SW1       <->  P0.01 (Arduino GPIO number 1)
    A0        <->  P0.04/AIN2 (Arduino Analog A2
    A1        <->  P0.31/AIN7 (Arduino Analog A7
-   SPI_CS    <->  P0.26 (Arduino GPIO number 26) 
+   SPI_CS    <->  P0.26 (Arduino GPIO number 26)
  */
 
 // RAK4630 LoRa module
@@ -182,8 +181,9 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define SX126X_DIO1 (47)
 #define SX126X_BUSY (46)
 #define SX126X_RESET (38)
-#define SX126X_TXEN (39)
-#define SX126X_RXEN (37)
+// #define SX126X_TXEN (39)
+// #define SX126X_RXEN (37)
+#define SX126X_POWER_EN (37)
 #define SX126X_E22 // DIO2 controlls an antenna switch and the TCXO voltage is controlled by DIO3
 
 // enables 3.3V periphery like GPS or IO Module
@@ -203,7 +203,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define GPS_TX_PIN PIN_SERIAL1_TX
 
 // RAK12002 RTC Module
-#define RV3028_RTC (uint8_t) 0b1010010
+#define RV3028_RTC (uint8_t)0b1010010
 
 // Battery
 // The battery sense is hooked to pin A0 (5)
@@ -222,7 +222,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #undef AREF_VOLTAGE
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
-#define ADC_MULTIPLIER VBAT_DIVIDER_COMP //REAL_VBAT_MV_PER_LSB
+#define ADC_MULTIPLIER VBAT_DIVIDER_COMP // REAL_VBAT_MV_PER_LSB
 #define VBAT_RAW_TO_SCALED(x) (REAL_VBAT_MV_PER_LSB * x)
 
 #define HAS_RTC 1
