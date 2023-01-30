@@ -7,13 +7,13 @@
 #include <NonBlockingRtttl.h>
 #else
 // Noop class for portduino.
-class rtttl 
+class rtttl
 {
   public:
     explicit rtttl() {}
     static bool isPlaying() { return false; }
     static void play() {}
-    static void begin(byte a, const char * b) {};
+    static void begin(byte a, const char *b){};
     static void stop() {}
     static bool done() { return true; }
 };
@@ -27,7 +27,7 @@ class rtttl
  */
 class ExternalNotificationModule : public SinglePortModule, private concurrency::OSThread
 {
-  uint32_t output = 0;
+    uint32_t output = 0;
 
   public:
     ExternalNotificationModule();
@@ -45,7 +45,8 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
 
   protected:
     /** Called to handle a particular incoming message
-    @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for it
+    @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for
+    it
     */
     virtual ProcessMessage handleReceived(const MeshPacket &mp) override;
 
@@ -53,7 +54,8 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
 
     bool isNagging = false;
 
-    virtual AdminMessageHandleResult handleAdminMessageForModule(const MeshPacket &mp, AdminMessage *request, AdminMessage *response) override;
+    virtual AdminMessageHandleResult handleAdminMessageForModule(const MeshPacket &mp, AdminMessage *request,
+                                                                 AdminMessage *response) override;
 };
 
 extern ExternalNotificationModule *externalNotificationModule;

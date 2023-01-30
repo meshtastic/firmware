@@ -1,8 +1,8 @@
 #pragma once
 
-#include "concurrency/NotifiedWorkerThread.h"
-#include "RadioInterface.h"
 #include "MeshPacketQueue.h"
+#include "RadioInterface.h"
+#include "concurrency/NotifiedWorkerThread.h"
 
 #include <RadioLib.h>
 
@@ -12,7 +12,6 @@
 #else
 #define INTERRUPT_ATTR
 #endif
-
 
 #if !defined(USE_STM32WLx)
 /**
@@ -41,7 +40,7 @@ class LockingModule : public Module
         : Module(cs, irq, rst, gpio, spi, spiSettings)
     {
     }
-    
+
     void SPIbeginTransaction() override;
     void SPIendTransaction() override;
 };
@@ -63,8 +62,7 @@ class LockingModule : public STM32WLx_Module
     void SPIbeginTransaction() override;
     void SPIendTransaction() override;
 };
-#endif  // !defined(USE_STM32WLx)
-
+#endif // !defined(USE_STM32WLx)
 
 class RadioLibInterface : public RadioInterface, protected concurrency::NotifiedWorkerThread
 {
@@ -84,20 +82,19 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     MeshPacketQueue txQueue = MeshPacketQueue(MAX_TX_QUEUE);
 
   protected:
-
     /**
-     * We use a meshtastic sync word, but hashed with the Channel name.  For releases before 1.2 we used 0x12 (or for very old loads 0x14)
-     * Note: do not use 0x34 - that is reserved for lorawan
-     * 
-     * We now use 0x2b (so that someday we can possibly use NOT 2b - because that would be funny pun).  We will be staying with this code
-     * for a long time.
+     * We use a meshtastic sync word, but hashed with the Channel name.  For releases before 1.2 we used 0x12 (or for very old
+     * loads 0x14) Note: do not use 0x34 - that is reserved for lorawan
+     *
+     * We now use 0x2b (so that someday we can possibly use NOT 2b - because that would be funny pun).  We will be staying with
+     * this code for a long time.
      */
     const uint8_t syncWord = 0x2b;
-    
-    float currentLimit = 100;   // 100mA OCP - Should be acceptable for RFM95/SX127x chipset.  
+
+    float currentLimit = 100; // 100mA OCP - Should be acceptable for RFM95/SX127x chipset.
 
     LockingModule module; // The HW interface to the radio
-    
+
     /**
      * provides lowest common denominator RadioLib API
      */
@@ -153,8 +150,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     virtual bool cancelSending(NodeNum from, PacketId id) override;
 
   private:
-    /** if we have something waiting to send, start a short (random) timer so we can come check for collision before actually doing
-     * the transmit */
+    /** if we have something waiting to send, start a short (random) timer so we can come check for collision before actually
+     * doing the transmit */
     void setTransmitDelay();
 
     /** random timer with certain min. and max. settings */
@@ -176,7 +173,6 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     virtual void startSend(MeshPacket *txp);
 
   protected:
-
     /** Do any hardware setup needed on entry into send configuration for the radio.  Subclasses can customize */
     virtual void configHardwareForSend() {}
 

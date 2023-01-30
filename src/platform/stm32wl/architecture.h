@@ -7,7 +7,7 @@
 //
 
 #ifndef HAS_RADIO
-    #define HAS_RADIO 1
+#define HAS_RADIO 1
 #endif
 
 //
@@ -15,12 +15,11 @@
 //
 
 #ifndef HW_VENDOR
-    #define HW_VENDOR HardwareModel_PRIVATE_HW
+#define HW_VENDOR HardwareModel_PRIVATE_HW
 #endif
 
 /* virtual pins */
-#define SX126X_CS    1000
-#define SX126X_DIO1  1001
+#define SX126X_CS 1000
+#define SX126X_DIO1 1001
 #define SX126X_RESET 1003
-#define SX126X_BUSY  1004
-
+#define SX126X_BUSY 1004

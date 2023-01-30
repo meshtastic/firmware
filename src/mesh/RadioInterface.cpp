@@ -12,10 +12,10 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 
-#define RDEF(name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted, frequency_switching, wide_lora)                 \
+#define RDEF(name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted, frequency_switching, wide_lora)      \
     {                                                                                                                            \
         Config_LoRaConfig_RegionCode_##name, freq_start, freq_end, duty_cycle, spacing, power_limit, audio_permitted,            \
-            frequency_switching, wide_lora, #name                                                                                           \
+            frequency_switching, wide_lora, #name                                                                                \
     }
 
 const RegionInfo regions[] = {
@@ -39,9 +39,9 @@ const RegionInfo regions[] = {
 
         Special Note:
         The link above describes LoRaWAN's band plan, stating a power limit of 16 dBm. This is their own suggested specification,
-        we do not need to follow it. The European Union regulations clearly state that the power limit for this frequency range is 500 mW, or 27 dBm.
-        It also states that we can use interference avoidance and spectrum access techniques to avoid a duty cycle.
-        (Please refer to section 4.21 in the following document)
+        we do not need to follow it. The European Union regulations clearly state that the power limit for this frequency range is
+       500 mW, or 27 dBm. It also states that we can use interference avoidance and spectrum access techniques to avoid a duty
+       cycle. (Please refer to section 4.21 in the following document)
         https://ec.europa.eu/growth/tools-databases/tris/index.cfm/ro/search/?trisaction=search.detail&year=2021&num=528&dLang=EN
      */
     RDEF(EU_868, 869.4f, 869.65f, 10, 0, 27, false, false, false),
@@ -114,7 +114,8 @@ const RegionInfo *myRegion;
 void initRegion()
 {
     const RegionInfo *r = regions;
-    for (; r->code != Config_LoRaConfig_RegionCode_UNSET && r->code != Config_LoRaConfig_RegionCode_EU_868; r++)  // TODO remove hardcoded region
+    for (; r->code != Config_LoRaConfig_RegionCode_UNSET && r->code != Config_LoRaConfig_RegionCode_EU_868;
+         r++) // TODO remove hardcoded region
         ;
     myRegion = r;
     LOG_INFO("Wanted region %d, using %s\n", config.lora.region, r->name);
@@ -182,7 +183,7 @@ uint32_t RadioInterface::getRetransmissionMsec(const MeshPacket *p)
     float channelUtil = airTime->channelUtilizationPercent();
     uint8_t CWsize = map(channelUtil, 0, 100, CWmin, CWmax);
     // Assuming we pick max. of CWsize and there will be a receiver with SNR at half the range
-    return 2*packetAirtime + (pow(2, CWsize) + pow(2, int((CWmax+CWmin)/2))) * slotTimeMsec + PROCESSING_TIME_MSEC;
+    return 2 * packetAirtime + (pow(2, CWsize) + pow(2, int((CWmax + CWmin) / 2))) * slotTimeMsec + PROCESSING_TIME_MSEC;
 }
 
 /** The delay to use when we want to send something */
@@ -211,9 +212,8 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(float snr)
     uint32_t delay = 0;
     uint8_t CWsize = map(snr, SNR_MIN, SNR_MAX, CWmin, CWmax);
     // LOG_DEBUG("rx_snr of %f so setting CWsize to:%d\n", snr, CWsize);
-    if (config.device.role == Config_DeviceConfig_Role_ROUTER ||
-        config.device.role == Config_DeviceConfig_Role_ROUTER_CLIENT) {
-        delay = random(0, 2*CWsize) * slotTimeMsec;
+    if (config.device.role == Config_DeviceConfig_Role_ROUTER || config.device.role == Config_DeviceConfig_Role_ROUTER_CLIENT) {
+        delay = random(0, 2 * CWsize) * slotTimeMsec;
         LOG_DEBUG("rx_snr found in packet. As a router, setting tx delay:%d\n", delay);
     } else {
         delay = random(0, pow(2, CWsize)) * slotTimeMsec;
@@ -444,14 +444,16 @@ void RadioInterface::applyModemConfig()
     // float freq = myRegion->freqStart + ((((myRegion->freqEnd - myRegion->freqStart) / numChannels) / 2) * channel_num);
 
     // New frequency selection formula
-    float freq = myRegion->freqStart + (bw / 2000) + ( channel_num * (bw / 1000));
+    float freq = myRegion->freqStart + (bw / 2000) + (channel_num * (bw / 1000));
 
     saveChannelNum(channel_num);
     saveFreq(freq + config.lora.frequency_offset);
 
     LOG_INFO("Radio freq=%.3f, config.lora.frequency_offset=%.3f\n", freq, config.lora.frequency_offset);
-    LOG_INFO("Set radio: region=%s, name=%s, config=%u, ch=%d, power=%d\n", myRegion->name, channelName, loraConfig.modem_preset, channel_num, power);
-    LOG_INFO("Radio myRegion->freqStart -> myRegion->freqEnd: %f -> %f (%f mhz)\n", myRegion->freqStart, myRegion->freqEnd, myRegion->freqEnd - myRegion->freqStart);
+    LOG_INFO("Set radio: region=%s, name=%s, config=%u, ch=%d, power=%d\n", myRegion->name, channelName, loraConfig.modem_preset,
+             channel_num, power);
+    LOG_INFO("Radio myRegion->freqStart -> myRegion->freqEnd: %f -> %f (%f mhz)\n", myRegion->freqStart, myRegion->freqEnd,
+             myRegion->freqEnd - myRegion->freqStart);
     LOG_INFO("Radio myRegion->numChannels: %d x %.3fkHz\n", numChannels, bw);
     LOG_INFO("Radio channel_num: %d\n", channel_num);
     LOG_INFO("Radio frequency: %f\n", getFreq());
@@ -476,7 +478,6 @@ void RadioInterface::limitPower()
 
     LOG_INFO("Set radio: final power level=%d\n", power);
 }
-
 
 void RadioInterface::deliverToReceiver(MeshPacket *p)
 {
