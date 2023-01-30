@@ -178,12 +178,9 @@ uint32_t RadioInterface::getPacketTime(uint32_t pl)
 uint32_t RadioInterface::getPacketTime(meshtastic_MeshPacket *p)
 {
     uint32_t pl = 0;
-    if (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag)
-    {
+    if (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag) {
         pl = p->encrypted.size + sizeof(PacketHeader);
-    }
-    else
-    {
+    } else {
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded);
         pl = numbytes + sizeof(PacketHeader);
     }
@@ -231,13 +228,10 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(float snr)
     // LOG_DEBUG("rx_snr of %f so setting CWsize to:%d\n", snr, CWsize);
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
         config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT ||
-        config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER)
-    {
+        config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
         delay = random(0, 2 * CWsize) * slotTimeMsec;
         LOG_DEBUG("rx_snr found in packet. As a router, setting tx delay:%d\n", delay);
-    }
-    else
-    {
+    } else {
         delay = random(0, pow(2, CWsize)) * slotTimeMsec;
         LOG_DEBUG("rx_snr found in packet. Setting tx delay:%d\n", delay);
     }
@@ -249,8 +243,7 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
 {
     LOG_DEBUG("%s (id=0x%08x fr=0x%02x to=0x%02x, WantAck=%d, HopLim=%d Ch=0x%x", prefix, p->id, p->from & 0xff, p->to & 0xff,
               p->want_ack, p->hop_limit, p->channel);
-    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag)
-    {
+    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         auto &s = p->decoded;
 
         LOG_DEBUG(" Portnum=%d", s.portnum);
@@ -272,22 +265,17 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
             LOG_DEBUG(" successId=%08x", s.ackVariant.success_id);
         else if (s.which_ackVariant == SubPacket_fail_id_tag)
             LOG_DEBUG(" failId=%08x", s.ackVariant.fail_id); */
-    }
-    else
-    {
+    } else {
         LOG_DEBUG(" encrypted");
     }
 
-    if (p->rx_time != 0)
-    {
+    if (p->rx_time != 0) {
         LOG_DEBUG(" rxtime=%u", p->rx_time);
     }
-    if (p->rx_snr != 0.0)
-    {
+    if (p->rx_snr != 0.0) {
         LOG_DEBUG(" rxSNR=%g", p->rx_snr);
     }
-    if (p->rx_rssi != 0)
-    {
+    if (p->rx_rssi != 0) {
         LOG_DEBUG(" rxRSSI=%i", p->rx_rssi);
     }
     if (p->priority != 0)
@@ -386,11 +374,9 @@ void RadioInterface::applyModemConfig()
     // Set up default configuration
     // No Sync Words in LORA mode
     meshtastic_Config_LoRaConfig &loraConfig = config.lora;
-    if (loraConfig.use_preset)
-    {
+    if (loraConfig.use_preset) {
 
-        switch (loraConfig.modem_preset)
-        {
+        switch (loraConfig.modem_preset) {
         case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
             bw = (myRegion->wideLora) ? 812.5 : 250;
             cr = 8;
@@ -432,9 +418,7 @@ void RadioInterface::applyModemConfig()
             sf = 12;
             break;
         }
-    }
-    else
-    {
+    } else {
         sf = loraConfig.spread_factor;
         cr = loraConfig.coding_rate;
         bw = loraConfig.bandwidth;
@@ -502,8 +486,7 @@ void RadioInterface::limitPower()
     if (myRegion->powerLimit)
         maxPower = myRegion->powerLimit;
 
-    if ((power > maxPower) && !devicestate.owner.is_licensed)
-    {
+    if ((power > maxPower) && !devicestate.owner.is_licensed) {
         LOG_INFO("Lowering transmit power because of regulatory limits\n");
         power = maxPower;
     }
@@ -535,8 +518,7 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
     h->to = p->to;
     h->id = p->id;
     h->channel = p->channel;
-    if (p->hop_limit > HOP_MAX)
-    {
+    if (p->hop_limit > HOP_MAX) {
         LOG_WARN("hop limit %d is too high, setting to %d\n", p->hop_limit, HOP_MAX);
         p->hop_limit = HOP_MAX;
     }
