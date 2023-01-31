@@ -113,7 +113,7 @@
 #endif // HAS_ETHERNET
 
 #if HAS_WIFI
-#include <wifi.h>
+#include <WiFi.h>
 #endif // HAS_WIFI
 
 #if HAS_WIFI || HAS_ETHERNET

@@ -23,6 +23,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.*/
 
 #include "configuration.h"
+
 #include "DebugConfiguration.h"
 
 #if HAS_WIFI || HAS_ETHERNET
