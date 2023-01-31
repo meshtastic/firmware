@@ -22,7 +22,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.*/
 
+#include "configuration.h"
 #include "DebugConfiguration.h"
+
+#if HAS_WIFI || HAS_ETHERNET
 
 Syslog::Syslog(UDP &client)
 {
@@ -219,3 +222,5 @@ inline bool Syslog::_sendLog(uint16_t pri, const __FlashStringHelper *message)
 
     return true;
 }
+
+#endif

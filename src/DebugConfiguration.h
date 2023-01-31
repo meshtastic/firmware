@@ -110,7 +110,13 @@
 
 #if HAS_ETHERNET
 #include <RAK13800_W5100S.h>
-#endif
+#endif // HAS_ETHERNET
+
+#if HAS_WIFI
+#include <wifi.h>
+#endif // HAS_WIFI
+
+#if HAS_WIFI || HAS_ETHERNET
 
 class Syslog
 {
@@ -151,4 +157,6 @@ class Syslog
     bool logf(uint16_t pri, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
 };
 
-#endif
+#endif // HAS_ETHERNET || HAS_WIFI
+
+#endif // SYSLOG_H
