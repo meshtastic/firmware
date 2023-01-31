@@ -108,6 +108,10 @@
 // Default Bluetooth PIN
 #define defaultBLEPin 123456
 
+#if HAS_ETHERNET
+#include <RAK13800_W5100S.h>
+#endif
+
 class Syslog
 {
   private:
@@ -125,7 +129,7 @@ class Syslog
     bool _sendLog(uint16_t pri, const __FlashStringHelper *message);
 
   public:
-    Syslog(UDP &client);
+    explicit Syslog(UDP &client);
 
     Syslog &server(const char *server, uint16_t port);
     Syslog &server(IPAddress ip, uint16_t port);
@@ -143,11 +147,8 @@ class Syslog
     bool log(uint16_t pri, const char *message);
 
     bool vlogf(uint16_t pri, const char *fmt, va_list args) __attribute__((format(printf, 3, 0)));
-    bool vlogf_P(uint16_t pri, PGM_P fmt_P, va_list args) __attribute__((format(printf, 3, 0)));
 
     bool logf(uint16_t pri, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
-
-    bool logf_P(uint16_t pri, PGM_P fmt_P, ...) __attribute__((format(printf, 3, 4)));
 };
 
 #endif

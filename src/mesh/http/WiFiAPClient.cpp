@@ -152,7 +152,7 @@ static void onNetworkConnected()
                 serverAddr = server.c_str();
             }
             syslog.server(serverAddr, serverPort);
-            syslog.deviceHostname(WiFi.getHostname());
+            syslog.deviceHostname(getDeviceName());
             syslog.appName("Meshtastic");
             syslog.defaultPriority(LOGLEVEL_USER);
             syslog.enable();

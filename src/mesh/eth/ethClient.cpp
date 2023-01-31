@@ -2,6 +2,7 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include "concurrency/Periodic.h"
+#include "main.h"
 #include "mesh/api/ethServerAPI.h"
 #include "mqtt/MQTT.h"
 #include "target_specific.h"
@@ -54,7 +55,7 @@ static int32_t reconnectETH()
                     serverAddr = server.c_str();
                 }
                 syslog.server(serverAddr, serverPort);
-                syslog.deviceHostname(WiFi.getHostname());
+                syslog.deviceHostname(getDeviceName());
                 syslog.appName("Meshtastic");
                 syslog.defaultPriority(LOGLEVEL_USER);
                 syslog.enable();

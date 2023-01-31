@@ -128,31 +128,6 @@ bool Syslog::vlogf(uint16_t pri, const char *fmt, va_list args)
     return result;
 }
 
-bool Syslog::vlogf_P(uint16_t pri, PGM_P fmt_P, va_list args)
-{
-    char *message;
-    size_t initialLen;
-    size_t len;
-    bool result;
-
-    initialLen = strlen_P(fmt_P);
-
-    message = new char[initialLen + 1];
-
-    len = vsnprintf_P(message, initialLen + 1, fmt_P, args);
-    if (len > initialLen) {
-        delete[] message;
-        message = new char[len + 1];
-
-        vsnprintf(message, len + 1, fmt_P, args);
-    }
-
-    result = this->_sendLog(pri, message);
-
-    delete[] message;
-    return result;
-}
-
 bool Syslog::logf(uint16_t pri, const char *fmt, ...)
 {
     va_list args;
@@ -160,17 +135,6 @@ bool Syslog::logf(uint16_t pri, const char *fmt, ...)
 
     va_start(args, fmt);
     result = this->vlogf(pri, fmt, args);
-    va_end(args);
-    return result;
-}
-
-bool Syslog::logf_P(uint16_t pri, PGM_P fmt_P, ...)
-{
-    va_list args;
-    bool result;
-
-    va_start(args, fmt_P);
-    result = this->vlogf_P(pri, fmt_P, args);
     va_end(args);
     return result;
 }
