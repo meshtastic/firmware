@@ -1,8 +1,4 @@
 {
   "editor.formatOnSave": true,
-  "editor.defaultFormatter": "trunk.io",
-  "githubPullRequests.ignoredPullRequestBranches": ["master"],
-  "files.associations": {
-    "*.tcc": "cpp"
-  }
+  "editor.defaultFormatter": "trunk.io"
 }
