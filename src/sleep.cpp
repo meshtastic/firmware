@@ -298,9 +298,18 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     if (pmu_found)
         gpio_wakeup_enable((gpio_num_t)PMU_IRQ, GPIO_INTR_LOW_LEVEL); // pmu irq
 #endif
-    assert(esp_sleep_enable_gpio_wakeup() == ESP_OK);
-    assert(esp_sleep_enable_timer_wakeup(sleepUsec) == ESP_OK);
-    assert(esp_light_sleep_start() == ESP_OK);
+    auto res = esp_sleep_enable_gpio_wakeup();
+    if (res != ESP_OK)
+        LOG_DEBUG("esp_sleep_enable_gpio_wakeup result %d\n", res);
+    assert(res == ESP_OK);
+    res = esp_sleep_enable_timer_wakeup(sleepUsec);
+    if (res != ESP_OK)
+        LOG_DEBUG("esp_sleep_enable_timer_wakeup result %d\n", res);
+    assert(res == ESP_OK);
+    res = esp_light_sleep_start();
+    if (res != ESP_OK)
+        LOG_DEBUG("esp_light_sleep_start result %d\n", res);
+    assert(res == ESP_OK);
 
     esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
 #ifdef BUTTON_PIN
