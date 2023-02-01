@@ -13,6 +13,8 @@
  */
 NoopPrint noopPrint;
 
+extern Syslog syslog;
+
 void RedirectablePrint::setDestination(Print *_dest)
 {
     assert(_dest);
@@ -96,6 +98,32 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
             }
         }
         r += vprintf(format, arg);
+
+        // if syslog is in use, collect the log messages and send them to syslog
+        if (syslog.isEnabled()) {
+            int ll = 0;
+            switch (logLevel[0]) {
+            case 'D':
+                ll = SYSLOG_DEBUG;
+                break;
+            case 'I':
+                ll = SYSLOG_INFO;
+                break;
+            case 'W':
+                ll = SYSLOG_WARN;
+                break;
+            case 'E':
+                ll = SYSLOG_ERR;
+                break;
+            case 'C':
+                ll = SYSLOG_CRIT;
+                break;
+            default:
+                ll = 0;
+            }
+            syslog.vlogf(ll, format, arg);
+        }
+
         va_end(arg);
 
         isContinuationMessage = !hasNewline;

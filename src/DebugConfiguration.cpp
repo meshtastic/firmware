@@ -92,21 +92,6 @@ bool Syslog::isEnabled()
     return this->_enabled;
 }
 
-bool Syslog::log(uint16_t pri, const __FlashStringHelper *message)
-{
-    return this->_sendLog(pri, message);
-}
-
-bool Syslog::log(uint16_t pri, const String &message)
-{
-    return this->_sendLog(pri, message.c_str());
-}
-
-bool Syslog::log(uint16_t pri, const char *message)
-{
-    return this->_sendLog(pri, message);
-}
-
 bool Syslog::vlogf(uint16_t pri, const char *fmt, va_list args)
 {
     char *message;
@@ -129,17 +114,6 @@ bool Syslog::vlogf(uint16_t pri, const char *fmt, va_list args)
     result = this->_sendLog(pri, message);
 
     delete[] message;
-    return result;
-}
-
-bool Syslog::logf(uint16_t pri, const char *fmt, ...)
-{
-    va_list args;
-    bool result;
-
-    va_start(args, fmt);
-    result = this->vlogf(pri, fmt, args);
-    va_end(args);
     return result;
 }
 
@@ -178,46 +152,6 @@ inline bool Syslog::_sendLog(uint16_t pri, const char *message)
     this->_client->print(this->_appName);
     this->_client->print(F(" - - - \xEF\xBB\xBF"));
     this->_client->print(F("[0]: "));
-    this->_client->print(message);
-    this->_client->endPacket();
-
-    return true;
-}
-
-inline bool Syslog::_sendLog(uint16_t pri, const __FlashStringHelper *message)
-{
-    int result;
-
-    if (!this->_enabled)
-        return false;
-
-    if ((this->_server == NULL && this->_ip == INADDR_NONE) || this->_port == 0)
-        return false;
-
-    // Check priority against priMask values.
-    if ((LOG_MASK(LOG_PRI(pri)) & this->_priMask) == 0)
-        return true;
-
-    // Set default facility if none specified.
-    if ((pri & LOG_FACMASK) == 0)
-        pri = LOG_MAKEPRI(LOG_FAC(this->_priDefault), pri);
-
-    if (this->_server != NULL) {
-        result = this->_client->beginPacket(this->_server, this->_port);
-    } else {
-        result = this->_client->beginPacket(this->_ip, this->_port);
-    }
-
-    if (result != 1)
-        return false;
-
-    this->_client->print('<');
-    this->_client->print(pri);
-    this->_client->print(F(">1 - "));
-    this->_client->print(this->_deviceHostname);
-    this->_client->print(' ');
-    this->_client->print(this->_appName);
-    this->_client->print(F(" - - - \xEF\xBB\xBF"));
     this->_client->print(message);
     this->_client->endPacket();
 

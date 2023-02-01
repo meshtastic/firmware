@@ -132,7 +132,6 @@ class Syslog
     bool _enabled = false;
 
     bool _sendLog(uint16_t pri, const char *message);
-    bool _sendLog(uint16_t pri, const __FlashStringHelper *message);
 
   public:
     explicit Syslog(UDP &client);
@@ -148,13 +147,7 @@ class Syslog
     void disable();
     bool isEnabled();
 
-    bool log(uint16_t pri, const __FlashStringHelper *message);
-    bool log(uint16_t pri, const String &message);
-    bool log(uint16_t pri, const char *message);
-
     bool vlogf(uint16_t pri, const char *fmt, va_list args) __attribute__((format(printf, 3, 0)));
-
-    bool logf(uint16_t pri, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
 };
 
 #endif // HAS_ETHERNET || HAS_WIFI
