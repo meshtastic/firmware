@@ -91,7 +91,7 @@
 #elif defined(TLORA_T3S3_V1)
 #define HW_VENDOR meshtastic_HardwareModel_TLORA_T3_S3
 #elif defined(BETAFPV_2400_TX)
-#define HW_VENDOR HardwareModel_BETAFPV_2400_TX
+#define HW_VENDOR meshtastic_HardwareModel_BETAFPV_2400_TX
 #endif
 
 //
