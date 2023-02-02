@@ -1,26 +1,24 @@
-#include "configuration.h"
 #include "FSCommon.h"
+#include "configuration.h"
 
 #ifdef HAS_SDCARD
-#include <SPI.h>
 #include <SD.h>
+#include <SPI.h>
 
-
-#ifdef SDCARD_USE_SPI1  
+#ifdef SDCARD_USE_SPI1
 SPIClass SPI1(HSPI);
 #define SDHandler SPI1
 #endif
 
+#endif // HAS_SDCARD
 
-#endif  //HAS_SDCARD
-
-bool copyFile(const char* from, const char* to)
+bool copyFile(const char *from, const char *to)
 {
 #ifdef FSCom
     unsigned char cbuffer[16];
-   
+
     File f1 = FSCom.open(from, FILE_O_READ);
-    if (!f1){
+    if (!f1) {
         LOG_ERROR("Failed to open source file %s\n", from);
         return false;
     }
@@ -30,92 +28,92 @@ bool copyFile(const char* from, const char* to)
         LOG_ERROR("Failed to open destination file %s\n", to);
         return false;
     }
-   
+
     while (f1.available() > 0) {
         byte i = f1.read(cbuffer, 16);
         f2.write(cbuffer, i);
     }
-   
+
     f2.close();
     f1.close();
     return true;
 #endif
 }
 
-bool renameFile(const char* pathFrom, const char* pathTo)
+bool renameFile(const char *pathFrom, const char *pathTo)
 {
 #ifdef FSCom
 #ifdef ARCH_ESP32
     // rename was fixed for ESP32 IDF LittleFS in April
     return FSCom.rename(pathFrom, pathTo);
 #else
-    if (copyFile(pathFrom, pathTo) && FSCom.remove(pathFrom) ) {
+    if (copyFile(pathFrom, pathTo) && FSCom.remove(pathFrom)) {
         return true;
-    } else{
+    } else {
         return false;
     }
 #endif
 #endif
 }
 
-void listDir(const char * dirname, uint8_t levels, boolean del = false)
+void listDir(const char *dirname, uint8_t levels, boolean del = false)
 {
 #ifdef FSCom
 #if (defined(ARCH_ESP32) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
     char buffer[255];
 #endif
     File root = FSCom.open(dirname, FILE_O_READ);
-    if(!root){
+    if (!root) {
         return;
     }
-    if(!root.isDirectory()){
+    if (!root.isDirectory()) {
         return;
     }
 
     File file = root.openNextFile();
-    while(file){
-        if(file.isDirectory() && !String(file.name()).endsWith(".")) {
-            if(levels){
+    while (file) {
+        if (file.isDirectory() && !String(file.name()).endsWith(".")) {
+            if (levels) {
 #ifdef ARCH_ESP32
-                listDir(file.path(), levels -1, del);
-                if(del) { 
+                listDir(file.path(), levels - 1, del);
+                if (del) {
                     LOG_DEBUG("Removing %s\n", file.path());
-                    strcpy(buffer, file.path());
+                    strncpy(buffer, file.path(), sizeof(buffer));
                     file.close();
                     FSCom.rmdir(buffer);
                 } else {
                     file.close();
                 }
 #elif (defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
-                listDir(file.name(), levels -1, del);
-                if(del) { 
+                listDir(file.name(), levels - 1, del);
+                if (del) {
                     LOG_DEBUG("Removing %s\n", file.name());
-                    strcpy(buffer, file.name());
+                    strncpy(buffer, file.name(), sizeof(buffer));
                     file.close();
                     FSCom.rmdir(buffer);
                 } else {
                     file.close();
-                }                
+                }
 #else
-                listDir(file.name(), levels -1, del);
+                listDir(file.name(), levels - 1, del);
                 file.close();
 #endif
             }
         } else {
 #ifdef ARCH_ESP32
-            if(del) {
+            if (del) {
                 LOG_DEBUG("Deleting %s\n", file.path());
-                strcpy(buffer, file.path());
+                strncpy(buffer, file.path(), sizeof(buffer));
                 file.close();
                 FSCom.remove(buffer);
             } else {
-            LOG_DEBUG(" %s (%i Bytes)\n", file.path(), file.size());
+                LOG_DEBUG(" %s (%i Bytes)\n", file.path(), file.size());
                 file.close();
             }
 #elif (defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
-            if(del) {
+            if (del) {
                 LOG_DEBUG("Deleting %s\n", file.name());
-                strcpy(buffer, file.name());
+                strncpy(buffer, file.name(), sizeof(buffer));
                 file.close();
                 FSCom.remove(buffer);
             } else {
@@ -125,23 +123,23 @@ void listDir(const char * dirname, uint8_t levels, boolean del = false)
 #else
             LOG_DEBUG(" %s (%i Bytes)\n", file.name(), file.size());
             file.close();
-#endif            
+#endif
         }
         file = root.openNextFile();
     }
-#ifdef ARCH_ESP32    
-    if(del) { 
+#ifdef ARCH_ESP32
+    if (del) {
         LOG_DEBUG("Removing %s\n", root.path());
-        strcpy(buffer, root.path());
+        strncpy(buffer, root.path(), sizeof(buffer));
         root.close();
         FSCom.rmdir(buffer);
     } else {
         root.close();
     }
 #elif (defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
-    if(del) { 
+    if (del) {
         LOG_DEBUG("Removing %s\n", root.name());
-        strcpy(buffer, root.name());
+        strncpy(buffer, root.name(), sizeof(buffer));
         root.close();
         FSCom.rmdir(buffer);
     } else {
@@ -153,7 +151,7 @@ void listDir(const char * dirname, uint8_t levels, boolean del = false)
 #endif
 }
 
-void rmDir(const char * dirname)
+void rmDir(const char *dirname)
 {
 #ifdef FSCom
 #if (defined(ARCH_ESP32) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
@@ -168,10 +166,9 @@ void rmDir(const char * dirname)
 void fsInit()
 {
 #ifdef FSCom
-    if (!FSBegin())
-    {
-        LOG_ERROR("Filesystem mount Failed. Formatting...\n");
-        assert(0); // FIXME - report failure to phone
+    if (!FSBegin()) {
+        LOG_ERROR("Filesystem mount Failed.\n");
+        // assert(0); This auto-formats the partition, so no need to fail here.
     }
 #ifdef ARCH_ESP32
     LOG_DEBUG("Filesystem files (%d/%d Bytes):\n", FSCom.usedBytes(), FSCom.totalBytes());
@@ -182,7 +179,6 @@ void fsInit()
 #endif
 }
 
-
 void setupSDCard()
 {
 #ifdef HAS_SDCARD
@@ -190,12 +186,12 @@ void setupSDCard()
 
     if (!SD.begin(SDCARD_CS, SDHandler)) {
         LOG_DEBUG("No SD_MMC card detected\n");
-        return ;
+        return;
     }
     uint8_t cardType = SD.cardType();
     if (cardType == CARD_NONE) {
         LOG_DEBUG("No SD_MMC card attached\n");
-        return ;
+        return;
     }
     LOG_DEBUG("SD_MMC Card Type: ");
     if (cardType == CARD_MMC) {
@@ -214,6 +210,3 @@ void setupSDCard()
     LOG_DEBUG("Used space: %llu MB\n", SD.usedBytes() / (1024 * 1024));
 #endif
 }
-
-
-

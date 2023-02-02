@@ -16,22 +16,18 @@
  * -------------------------------------------
  */
 
-uint32_t printWPL(char *buf, const Position &pos, const char *name)
+uint32_t printWPL(char *buf, size_t bufsz, const meshtastic_Position &pos, const char *name)
 {
-    GeoCoord geoCoord(pos.latitude_i,pos.longitude_i,pos.altitude);
-    uint32_t len = sprintf(buf, "$GNWPL,%02d%07.4f,%c,%03d%07.4f,%c,%s",
-        geoCoord.getDMSLatDeg(),
-        (abs(geoCoord.getLatitude()) - geoCoord.getDMSLatDeg() * 1e+7) * 6e-6,
-        geoCoord.getDMSLatCP(),
-        geoCoord.getDMSLonDeg(),
-        (abs(geoCoord.getLongitude()) - geoCoord.getDMSLonDeg() * 1e+7) * 6e-6,
-        geoCoord.getDMSLonCP(),
-        name);
+    GeoCoord geoCoord(pos.latitude_i, pos.longitude_i, pos.altitude);
+    uint32_t len = snprintf(buf, bufsz, "$GNWPL,%02d%07.4f,%c,%03d%07.4f,%c,%s", geoCoord.getDMSLatDeg(),
+                            (abs(geoCoord.getLatitude()) - geoCoord.getDMSLatDeg() * 1e+7) * 6e-6, geoCoord.getDMSLatCP(),
+                            geoCoord.getDMSLonDeg(), (abs(geoCoord.getLongitude()) - geoCoord.getDMSLonDeg() * 1e+7) * 6e-6,
+                            geoCoord.getDMSLonCP(), name);
     uint32_t chk = 0;
     for (uint32_t i = 1; i < len; i++) {
         chk ^= buf[i];
     }
-    len += sprintf(buf + len, "*%02X\r\n", chk);
+    len += snprintf(buf + len, bufsz - len, "*%02X\r\n", chk);
     return len;
 }
 
@@ -51,40 +47,26 @@ uint32_t printWPL(char *buf, const Position &pos, const char *name)
  *  8 Horizontal Dilution of precision (meters)
  *  9 Antenna Altitude above/below mean-sea-level (geoid) (in meters)
  * 10 Units of antenna altitude, meters
- * 11 Geoidal separation, the difference between the WGS-84 earth ellipsoid and mean-sea-level (geoid), "-" means mean-sea-level below ellipsoid
- * 12 Units of geoidal separation, meters
- * 13 Age of differential GPS data, time in seconds since last SC104 type 1 or 9 update, null field when DGPS is not used
- * 14 Differential reference station ID, 0000-1023
- * 15 Checksum
+ * 11 Geoidal separation, the difference between the WGS-84 earth ellipsoid and mean-sea-level (geoid), "-" means mean-sea-level
+ * below ellipsoid 12 Units of geoidal separation, meters 13 Age of differential GPS data, time in seconds since last SC104 type 1
+ * or 9 update, null field when DGPS is not used 14 Differential reference station ID, 0000-1023 15 Checksum
  * -------------------------------------------
  */
 
-uint32_t printGGA(char *buf, const Position &pos)
+uint32_t printGGA(char *buf, size_t bufsz, const meshtastic_Position &pos)
 {
-    GeoCoord geoCoord(pos.latitude_i,pos.longitude_i,pos.altitude);
-    uint32_t len = sprintf(buf, "$GNGGA,%06u.%03u,%02d%07.4f,%c,%03d%07.4f,%c,%u,%02u,%04u,%04d,%c,%04d,%c,%d,%04d",
-        pos.time / 1000,
-        pos.time % 1000,
-        geoCoord.getDMSLatDeg(),
-        (abs(geoCoord.getLatitude()) - geoCoord.getDMSLatDeg() * 1e+7) * 6e-6,
-        geoCoord.getDMSLatCP(),
-        geoCoord.getDMSLonDeg(),
-        (abs(geoCoord.getLongitude()) - geoCoord.getDMSLonDeg() * 1e+7) * 6e-6,
-        geoCoord.getDMSLonCP(),
-        pos.fix_type,
-        pos.sats_in_view,
-        pos.HDOP,
-        geoCoord.getAltitude(),
-        'M',
-        pos.altitude_geoidal_separation,
-        'M',
-        0,
-        0);
+    GeoCoord geoCoord(pos.latitude_i, pos.longitude_i, pos.altitude);
+    uint32_t len =
+        snprintf(buf, bufsz, "$GNGGA,%06u.%03u,%02d%07.4f,%c,%03d%07.4f,%c,%u,%02u,%04u,%04d,%c,%04d,%c,%d,%04d", pos.time / 1000,
+                 pos.time % 1000, geoCoord.getDMSLatDeg(), (abs(geoCoord.getLatitude()) - geoCoord.getDMSLatDeg() * 1e+7) * 6e-6,
+                 geoCoord.getDMSLatCP(), geoCoord.getDMSLonDeg(),
+                 (abs(geoCoord.getLongitude()) - geoCoord.getDMSLonDeg() * 1e+7) * 6e-6, geoCoord.getDMSLonCP(), pos.fix_type,
+                 pos.sats_in_view, pos.HDOP, geoCoord.getAltitude(), 'M', pos.altitude_geoidal_separation, 'M', 0, 0);
 
     uint32_t chk = 0;
     for (uint32_t i = 1; i < len; i++) {
         chk ^= buf[i];
     }
-    len += sprintf(buf + len, "*%02X\r\n", chk);
+    len += snprintf(buf + len, bufsz - len, "*%02X\r\n", chk);
     return len;
 }

@@ -4,15 +4,16 @@
 
 // GPS
 #undef GPS_RX_PIN
-#define GPS_RX_PIN 15
-//#undef GPS_TX_PIN
-//#define GPS_TX_PIN 12 // not connected
+#undef GPS_TX_PIN
+#define GPS_RX_PIN 12
+#define GPS_TX_PIN 15
+#define GPS_UBLOX
 
-#define BUTTON_PIN 39 // The middle button GPIO on the T-Beam
-#define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+#define BUTTON_PIN 39       // The middle button GPIO on the T-Beam
+#define BATTERY_PIN 35      // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define ADC_MULTIPLIER 1.85 // (R1 = 470k, R2 = 680k)
-#define EXT_NOTIFY_OUT 12 // Overridden default pin to use for Ext Notify Module (#975).
-#define LED_PIN 2 // add status LED (compatible with core-pcb and DIY targets)
+#define EXT_NOTIFY_OUT 12   // Overridden default pin to use for Ext Notify Module (#975).
+#define LED_PIN 2           // add status LED (compatible with core-pcb and DIY targets)
 
 #define LORA_DIO0 26  // a No connect on the SX1262/SX1268 module
 #define LORA_RESET 23 // RST for SX1276, and for SX1262/SX1268
@@ -42,6 +43,9 @@
 // RX/TX for RFM95/SX127x
 #define RF95_RXEN 14
 #define RF95_TXEN 13
+
+// Set lora.tx_power to 13 for Hydra or other E22 900M30S target due to PA
+#define SX126X_MAX_POWER 22
 
 #ifdef EBYTE_E22
 // Internally the TTGO module hooks the SX126x-DIO2 in to control the TX/RX switch

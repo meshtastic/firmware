@@ -4,7 +4,7 @@
 /**
  * Admin module for admin messages
  */
-class AdminModule : public ProtobufModule<AdminMessage>
+class AdminModule : public ProtobufModule<meshtastic_AdminMessage>
 {
   public:
     /** Constructor
@@ -17,7 +17,7 @@ class AdminModule : public ProtobufModule<AdminMessage>
 
     @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
     */
-    virtual bool handleReceivedProtobuf(const MeshPacket &mp, AdminMessage *p) override;
+    virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *p) override;
 
   private:
     bool hasOpenEditTransaction = false;
@@ -26,19 +26,19 @@ class AdminModule : public ProtobufModule<AdminMessage>
     /**
      * Getters
      */
-    void handleGetOwner(const MeshPacket &req);
-    void handleGetConfig(const MeshPacket &req, uint32_t configType);
-    void handleGetModuleConfig(const MeshPacket &req, uint32_t configType);
-    void handleGetChannel(const MeshPacket &req, uint32_t channelIndex);
-    void handleGetDeviceMetadata(const MeshPacket &req);
+    void handleGetOwner(const meshtastic_MeshPacket &req);
+    void handleGetConfig(const meshtastic_MeshPacket &req, uint32_t configType);
+    void handleGetModuleConfig(const meshtastic_MeshPacket &req, uint32_t configType);
+    void handleGetChannel(const meshtastic_MeshPacket &req, uint32_t channelIndex);
+    void handleGetDeviceMetadata(const meshtastic_MeshPacket &req);
 
     /**
      * Setters
      */
-    void handleSetOwner(const User &o);
-    void handleSetChannel(const Channel &cc);
-    void handleSetConfig(const Config &c);
-    void handleSetModuleConfig(const ModuleConfig &c);
+    void handleSetOwner(const meshtastic_User &o);
+    void handleSetChannel(const meshtastic_Channel &cc);
+    void handleSetConfig(const meshtastic_Config &c);
+    void handleSetModuleConfig(const meshtastic_ModuleConfig &c);
     void handleSetChannel();
     void reboot(int32_t seconds);
 };

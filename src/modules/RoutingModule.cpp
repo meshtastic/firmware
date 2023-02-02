@@ -1,13 +1,13 @@
-#include "configuration.h"
 #include "RoutingModule.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Router.h"
+#include "configuration.h"
 #include "main.h"
 
 RoutingModule *routingModule;
 
-bool RoutingModule::handleReceivedProtobuf(const MeshPacket &mp, Routing *r)
+bool RoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Routing *r)
 {
     printPacket("Routing sniffing", &mp);
     router->sniffReceived(&mp, r);
@@ -22,27 +22,29 @@ bool RoutingModule::handleReceivedProtobuf(const MeshPacket &mp, Routing *r)
     return false; // Let others look at this message also if they want
 }
 
-MeshPacket *RoutingModule::allocReply()
+meshtastic_MeshPacket *RoutingModule::allocReply()
 {
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER)
+        return NULL;
     assert(currentRequest);
 
     // We only consider making replies if the request was a legit routing packet (not just something we were sniffing)
-    if (currentRequest->decoded.portnum == PortNum_ROUTING_APP) {
+    if (currentRequest->decoded.portnum == meshtastic_PortNum_ROUTING_APP) {
         assert(0); // 1.2 refactoring fixme, Not sure if anything needs this yet?
         // return allocDataProtobuf(u);
     }
     return NULL;
 }
 
-void RoutingModule::sendAckNak(Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex)
+void RoutingModule::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex)
 {
     auto p = allocAckNak(err, to, idFrom, chIndex);
 
     router->sendLocal(p); // we sometimes send directly to the local node
 }
 
-RoutingModule::RoutingModule() : ProtobufModule("routing", PortNum_ROUTING_APP, &Routing_msg)
+RoutingModule::RoutingModule() : ProtobufModule("routing", meshtastic_PortNum_ROUTING_APP, &meshtastic_Routing_msg)
 {
     isPromiscuous = true;
-    encryptedOk = true;
+    encryptedOk = config.device.rebroadcast_mode != meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY;
 }

@@ -6,7 +6,6 @@
  * Our adapter for SX1280 radios
  */
 
-
 class SX1280Interface : public SX128xInterface<SX1280>
 {
   public:

@@ -1,6 +1,6 @@
 {
   "build": {
-    "arduino":{
+    "arduino": {
       "ldscript": "esp32_out.ld"
     },
     "core": "esp32",
@@ -11,26 +11,14 @@
     "mcu": "esp32",
     "variant": "WisCore_RAK11200_Board"
   },
-  "connectivity": [
-    "wifi",
-    "bluetooth",
-    "ethernet",
-    "can"
-  ],
-  "frameworks": [
-    "arduino",
-    "espidf"
-  ],
+  "connectivity": ["wifi", "bluetooth", "ethernet", "can"],
+  "frameworks": ["arduino", "espidf"],
   "name": "WisCore RAK11200 Board",
   "upload": {
     "flash_size": "4MB",
     "maximum_ram_size": 327680,
     "maximum_size": 4194304,
-    "protocols": [
-      "esptool",
-      "espota",
-      "ftdi"
-    ],
+    "protocols": ["esptool", "espota", "ftdi"],
     "require_upload_port": true,
     "speed": 460800
   },

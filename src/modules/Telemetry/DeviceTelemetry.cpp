@@ -1,5 +1,5 @@
 #include "DeviceTelemetry.h"
-#include "../mesh/generated/telemetry.pb.h"
+#include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
@@ -9,15 +9,13 @@
 #include "main.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
-#include "MeshService.h"
 
 int32_t DeviceTelemetryModule::runOnce()
 {
-#ifndef ARCH_PORTDUINO
     uint32_t now = millis();
-    if ((lastSentToMesh == 0 || 
-        (now - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.telemetry.device_update_interval)) &&
-        airTime->channelUtilizationPercent() < max_channel_util_percent) {
+    if ((lastSentToMesh == 0 ||
+         (now - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.telemetry.device_update_interval)) &&
+        airTime->isTxAllowedChannelUtil() && airTime->isTxAllowedAirUtil()) {
         sendTelemetry();
         lastSentToMesh = now;
     } else if (service.isToPhoneQueueEmpty()) {
@@ -26,20 +24,16 @@ int32_t DeviceTelemetryModule::runOnce()
         sendTelemetry(NODENUM_BROADCAST, true);
     }
     return sendToPhoneIntervalMs;
-#endif
 }
 
-bool DeviceTelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Telemetry *t)
+bool DeviceTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
 {
-    if (t->which_variant == Telemetry_device_metrics_tag) {
+    if (t->which_variant == meshtastic_Telemetry_device_metrics_tag) {
         const char *sender = getSenderShortName(mp);
-    
-        LOG_INFO("(Received from %s): air_util_tx=%f, channel_utilization=%f, battery_level=%i, voltage=%f\n",
-            sender,
-            t->variant.device_metrics.air_util_tx,
-            t->variant.device_metrics.channel_utilization,
-            t->variant.device_metrics.battery_level,
-            t->variant.device_metrics.voltage);
+
+        LOG_INFO("(Received from %s): air_util_tx=%f, channel_utilization=%f, battery_level=%i, voltage=%f\n", sender,
+                 t->variant.device_metrics.air_util_tx, t->variant.device_metrics.channel_utilization,
+                 t->variant.device_metrics.battery_level, t->variant.device_metrics.voltage);
 
         lastMeasurementPacket = packetPool.allocCopy(mp);
 
@@ -50,26 +44,24 @@ bool DeviceTelemetryModule::handleReceivedProtobuf(const MeshPacket &mp, Telemet
 
 bool DeviceTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 {
-    Telemetry t;
+    meshtastic_Telemetry t;
 
     t.time = getTime();
-    t.which_variant = Telemetry_device_metrics_tag;
+    t.which_variant = meshtastic_Telemetry_device_metrics_tag;
 
     t.variant.device_metrics.air_util_tx = myNodeInfo.air_util_tx;
     t.variant.device_metrics.battery_level = powerStatus->getBatteryChargePercent();
     t.variant.device_metrics.channel_utilization = myNodeInfo.channel_utilization;
     t.variant.device_metrics.voltage = powerStatus->getBatteryVoltageMv() / 1000.0;
 
-    LOG_INFO("(Sending): air_util_tx=%f, channel_utilization=%f, battery_level=%i, voltage=%f\n", 
-        t.variant.device_metrics.air_util_tx,
-        t.variant.device_metrics.channel_utilization,
-        t.variant.device_metrics.battery_level,
-        t.variant.device_metrics.voltage);
+    LOG_INFO("(Sending): air_util_tx=%f, channel_utilization=%f, battery_level=%i, voltage=%f\n",
+             t.variant.device_metrics.air_util_tx, t.variant.device_metrics.channel_utilization,
+             t.variant.device_metrics.battery_level, t.variant.device_metrics.voltage);
 
-    MeshPacket *p = allocDataProtobuf(t);
+    meshtastic_MeshPacket *p = allocDataProtobuf(t);
     p->to = dest;
     p->decoded.want_response = false;
-    p->priority = MeshPacket_Priority_MIN;
+    p->priority = meshtastic_MeshPacket_Priority_MIN;
 
     lastMeasurementPacket = packetPool.allocCopy(*p);
     nodeDB.updateTelemetry(nodeDB.getNodeNum(), t, RX_SRC_LOCAL);
