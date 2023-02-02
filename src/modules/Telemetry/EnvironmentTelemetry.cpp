@@ -193,6 +193,10 @@ bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPac
                  t->variant.environment_metrics.gas_resistance, t->variant.environment_metrics.relative_humidity,
                  t->variant.environment_metrics.temperature, t->variant.environment_metrics.voltage);
 
+        // release previous packet before occupying a new spot
+        if (lastMeasurementPacket != nullptr)
+            packetPool.release(lastMeasurementPacket);
+
         lastMeasurementPacket = packetPool.allocCopy(mp);
     }
 
@@ -243,6 +247,10 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     p->to = dest;
     p->decoded.want_response = false;
     p->priority = meshtastic_MeshPacket_Priority_MIN;
+
+    // release previous packet before occupying a new spot
+    if (lastMeasurementPacket != nullptr)
+        packetPool.release(lastMeasurementPacket);
 
     lastMeasurementPacket = packetPool.allocCopy(*p);
     if (phoneOnly) {
