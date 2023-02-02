@@ -5,6 +5,7 @@
 #define PB_MESHTASTIC_MESHTASTIC_DEVICEONLY_PB_H_INCLUDED
 #include <pb.h>
 #include "meshtastic/channel.pb.h"
+#include "meshtastic/localonly.pb.h"
 #include "meshtastic/mesh.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
@@ -85,6 +86,12 @@ typedef struct _meshtastic_OEMStore {
     char oem_text[40];
     /* The default device encryption key, 16 or 32 byte */
     meshtastic_OEMStore_oem_aes_key_t oem_aes_key;
+    /* A Preset LocalConfig to apply during factory reset */
+    bool has_oem_local_config;
+    meshtastic_LocalConfig oem_local_config;
+    /* A Preset LocalModuleConfig to apply during factory reset */
+    bool has_oem_local_module_config;
+    meshtastic_LocalModuleConfig oem_local_module_config;
 } meshtastic_OEMStore;
 
 
@@ -105,10 +112,10 @@ extern "C" {
 /* Initializer values for message structs */
 #define meshtastic_DeviceState_init_default      {false, meshtastic_MyNodeInfo_init_default, false, meshtastic_User_init_default, 0, {meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default, meshtastic_NodeInfo_init_default}, 0, {meshtastic_MeshPacket_init_default}, false, meshtastic_MeshPacket_init_default, 0, 0, 0}
 #define meshtastic_ChannelFile_init_default      {0, {meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default}, 0}
-#define meshtastic_OEMStore_init_default         {0, 0, {0, {0}}, _meshtastic_ScreenFonts_MIN, "", {0, {0}}}
+#define meshtastic_OEMStore_init_default         {0, 0, {0, {0}}, _meshtastic_ScreenFonts_MIN, "", {0, {0}}, false, meshtastic_LocalConfig_init_default, false, meshtastic_LocalModuleConfig_init_default}
 #define meshtastic_DeviceState_init_zero         {false, meshtastic_MyNodeInfo_init_zero, false, meshtastic_User_init_zero, 0, {meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero, meshtastic_NodeInfo_init_zero}, 0, {meshtastic_MeshPacket_init_zero}, false, meshtastic_MeshPacket_init_zero, 0, 0, 0}
 #define meshtastic_ChannelFile_init_zero         {0, {meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero}, 0}
-#define meshtastic_OEMStore_init_zero            {0, 0, {0, {0}}, _meshtastic_ScreenFonts_MIN, "", {0, {0}}}
+#define meshtastic_OEMStore_init_zero            {0, 0, {0, {0}}, _meshtastic_ScreenFonts_MIN, "", {0, {0}}, false, meshtastic_LocalConfig_init_zero, false, meshtastic_LocalModuleConfig_init_zero}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_DeviceState_my_node_tag       2
@@ -127,6 +134,8 @@ extern "C" {
 #define meshtastic_OEMStore_oem_font_tag         4
 #define meshtastic_OEMStore_oem_text_tag         5
 #define meshtastic_OEMStore_oem_aes_key_tag      6
+#define meshtastic_OEMStore_oem_local_config_tag 7
+#define meshtastic_OEMStore_oem_local_module_config_tag 8
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_DeviceState_FIELDLIST(X, a) \
@@ -159,9 +168,13 @@ X(a, STATIC,   SINGULAR, UINT32,   oem_icon_height,   2) \
 X(a, STATIC,   SINGULAR, BYTES,    oem_icon_bits,     3) \
 X(a, STATIC,   SINGULAR, UENUM,    oem_font,          4) \
 X(a, STATIC,   SINGULAR, STRING,   oem_text,          5) \
-X(a, STATIC,   SINGULAR, BYTES,    oem_aes_key,       6)
+X(a, STATIC,   SINGULAR, BYTES,    oem_aes_key,       6) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  oem_local_config,   7) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  oem_local_module_config,   8)
 #define meshtastic_OEMStore_CALLBACK NULL
 #define meshtastic_OEMStore_DEFAULT NULL
+#define meshtastic_OEMStore_oem_local_config_MSGTYPE meshtastic_LocalConfig
+#define meshtastic_OEMStore_oem_local_module_config_MSGTYPE meshtastic_LocalModuleConfig
 
 extern const pb_msgdesc_t meshtastic_DeviceState_msg;
 extern const pb_msgdesc_t meshtastic_ChannelFile_msg;
@@ -175,7 +188,7 @@ extern const pb_msgdesc_t meshtastic_OEMStore_msg;
 /* Maximum encoded size of messages (where known) */
 #define meshtastic_ChannelFile_size              638
 #define meshtastic_DeviceState_size              21800
-#define meshtastic_OEMStore_size                 2140
+#define meshtastic_OEMStore_size                 2992
 
 #ifdef __cplusplus
 } /* extern "C" */
