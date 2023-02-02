@@ -103,8 +103,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
             return result;
 
         uint32_t now = millis();
-        if ((lastSentToMesh == 0 ||
-             (now - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval)) &&
+        if (((lastSentToMesh == 0) ||
+             ((now - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval))) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
             lastSentToMesh = now;
