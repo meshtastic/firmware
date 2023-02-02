@@ -537,23 +537,31 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
 
     meshtastic_DeviceConnectionStatus conn;
 
-    conn.has_wifi = HAS_WIFI;
 #if HAS_WIFI
+    conn.has_wifi = true;
     conn.wifi.status.status.is_connected = WiFi.status() != WL_CONNECTED;
     strncpy(conn.wifi.ssid, config.network.wifi_ssid, 33);
     if (conn.wifi.status.status.is_connected)
     {
+        conn.wifi.rssi = WiFi.RSSI();
         conn.wifi.status.status.ip_address = WiFi.localIP();
         conn.wifi.status.status.is_mqtt_connected = mqtt && mqtt->connected();
         conn.wifi.status.status.is_syslog_connected = false; // FIXME wire this up
     }
 #endif
 
-    conn.has_bluetooth = HAS_BLUETOOTH;
-#if HAS_BLUETOOTH
-
+#if HAS_ETHERNET
+    conn.has_ethernet = true;
+    // conn.ethernet.
 #endif
-    conn.has_ethernet = HAS_ETHERNET;
+
+#if HAS_BLUETOOTH
+    conn.has_bluetooth = HAS_BLUETOOTH;
+    // nimbleBluetooth->
+    // #if ARCH_ESP32
+
+    // #elif
+#endif
 
     conn.has_serial = true; // No serial-less devices
 
