@@ -1,5 +1,5 @@
-name: 'Setup Build Base Composite Action'
-description: 'Base build actions for Meshtastic Platform IO steps'
+name: "Setup Build Base Composite Action"
+description: "Base build actions for Meshtastic Platform IO steps"
 
 runs:
   using: "composite"
@@ -10,7 +10,7 @@ runs:
         submodules: "recursive"
         ref: ${{github.event.pull_request.head.ref}}
         repository: ${{github.event.pull_request.head.repo.full_name}}
-    
+
     - name: Install cppcheck
       shell: bash
       run: |

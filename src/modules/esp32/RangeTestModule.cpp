@@ -9,7 +9,6 @@
 #include "gps/GeoCoord.h"
 #include <Arduino.h>
 #include <FSCommon.h>
-//#include <assert.h>
 
 /*
     As a sender, I can send packets every n seconds. These packets include an incremented PacketID.
@@ -74,10 +73,8 @@ int32_t RangeTestModule::runOnce()
                 LOG_INFO("fixed_position()             %d\n", config.position.fixed_position);
 
                 // Only send packets if the channel is less than 25% utilized.
-                if (airTime->channelUtilizationPercent() < 25) {
+                if (airTime->isTxAllowedChannelUtil(true)) {
                     rangeTestModuleRadio->sendPayload();
-                } else {
-                    LOG_WARN("RangeTest - Channel utilization is >25 percent. Skipping this opportunity to send.\n");
                 }
 
                 return (senderHeartbeat);
@@ -85,8 +82,6 @@ int32_t RangeTestModule::runOnce()
                 return disable();
                 // This thread does not need to run as a receiver
             }
-
-
         }
     } else {
         LOG_INFO("Range Test Module - Disabled\n");
@@ -96,7 +91,7 @@ int32_t RangeTestModule::runOnce()
     return disable();
 }
 
-MeshPacket *RangeTestModuleRadio::allocReply()
+meshtastic_MeshPacket *RangeTestModuleRadio::allocReply()
 {
 
     auto reply = allocDataPacket(); // Allocate a packet for sending
@@ -106,7 +101,7 @@ MeshPacket *RangeTestModuleRadio::allocReply()
 
 void RangeTestModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 {
-    MeshPacket *p = allocReply();
+    meshtastic_MeshPacket *p = allocReply();
     p->to = dest;
     p->decoded.want_response = wantReplies;
 
@@ -126,7 +121,7 @@ void RangeTestModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
     powerFSM.trigger(EVENT_CONTACT_FROM_PHONE);
 }
 
-ProcessMessage RangeTestModuleRadio::handleReceived(const MeshPacket &mp)
+ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket &mp)
 {
 #ifdef ARCH_ESP32
 
@@ -181,11 +176,11 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const MeshPacket &mp)
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }
 
-bool RangeTestModuleRadio::appendFile(const MeshPacket &mp)
+bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
 {
     auto &p = mp.decoded;
 
-    NodeInfo *n = nodeDB.getNode(getFrom(&mp));
+    meshtastic_NodeInfo *n = nodeDB.getNode(getFrom(&mp));
     /*
         LOG_DEBUG("-----------------------------------------\n");
         LOG_DEBUG("p.payload.bytes  \"%s\"\n", p.payload.bytes);

@@ -29,7 +29,8 @@ Observable<void *> preflightSleep;
 
 /// Called to tell observers we are now entering sleep and you should prepare.  Must return 0
 /// notifySleep will be called for light or deep sleep, notifyDeepSleep is only called for deep sleep
-/// notifyGPSSleep will be called when config.position.gps_enabled is set to 0 or from buttonthread when GPS_POWER_TOGGLE is enabled.
+/// notifyGPSSleep will be called when config.position.gps_enabled is set to 0 or from buttonthread when GPS_POWER_TOGGLE is
+/// enabled.
 Observable<void *> notifySleep, notifyDeepSleep;
 Observable<void *> notifyGPSSleep;
 
@@ -93,14 +94,14 @@ void setGPSPower(bool on)
     LOG_INFO("Setting GPS power=%d\n", on);
 
 #ifdef HAS_PMU
-    if (pmu_found && PMU){
+    if (pmu_found && PMU) {
         uint8_t model = PMU->getChipModel();
-        if(model == XPOWERS_AXP2101){
+        if (model == XPOWERS_AXP2101) {
             // t-beam-s3-core GNSS  power channel
             on ? PMU->enablePowerOutput(XPOWERS_ALDO4) : PMU->disablePowerOutput(XPOWERS_ALDO4);
-        }else if(model == XPOWERS_AXP192){
+        } else if (model == XPOWERS_AXP192) {
             // t-beam GNSS  power channel
-            on ? PMU->enablePowerOutput(XPOWERS_LDO3)  : PMU->disablePowerOutput(XPOWERS_LDO3);         
+            on ? PMU->enablePowerOutput(XPOWERS_LDO3) : PMU->disablePowerOutput(XPOWERS_LDO3);
         }
     }
 #endif
@@ -156,14 +157,14 @@ static void waitEnterSleep()
         delay(100); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
 
         if (millis() - now > 30 * 1000) { // If we wait too long just report an error and go to sleep
-            RECORD_CRITICALERROR(CriticalErrorCode_SLEEP_ENTER_WAIT);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_SLEEP_ENTER_WAIT);
             assert(0); // FIXME - for now we just restart, need to fix bug #167
             break;
         }
     }
 
     // Code that still needs to be moved into notifyObservers
-    Serial.flush();            // send all our characters before we stop cpu clock
+    console->flush();          // send all our characters before we stop cpu clock
     setBluetoothEnable(false); // has to be off before calling light sleep
 
     notifySleep.notifyObservers(NULL);
@@ -171,32 +172,26 @@ static void waitEnterSleep()
 
 void doGPSpowersave(bool on)
 {
-    #ifdef HAS_PMU
-    if (on)
-    {
+#ifdef HAS_PMU
+    if (on) {
         LOG_INFO("Turning GPS back on\n");
         gps->forceWake(1);
         setGPSPower(1);
-    }
-    else
-    {
+    } else {
         LOG_INFO("Turning off GPS chip\n");
         notifyGPSSleep.notifyObservers(NULL);
         setGPSPower(0);
     }
-    #endif
-    #ifdef PIN_GPS_WAKE
-    if (on)
-    {
+#endif
+#ifdef PIN_GPS_WAKE
+    if (on) {
         LOG_INFO("Waking GPS");
         gps->forceWake(1);
-    }
-    else
-    {
+    } else {
         LOG_INFO("GPS entering sleep");
         notifyGPSSleep.notifyObservers(NULL);
     }
-    #endif
+#endif
 }
 
 void doDeepSleep(uint64_t msecToWake)
@@ -239,10 +234,10 @@ void doDeepSleep(uint64_t msecToWake)
         // all the time.
 
         uint8_t model = PMU->getChipModel();
-        if(model == XPOWERS_AXP2101){
+        if (model == XPOWERS_AXP2101) {
             PMU->disablePowerOutput(XPOWERS_ALDO3); // lora radio power channel
-        }else if(model == XPOWERS_AXP192){
-            PMU->disablePowerOutput(XPOWERS_LDO2);  // lora radio power channel
+        } else if (model == XPOWERS_AXP192) {
+            PMU->disablePowerOutput(XPOWERS_LDO2); // lora radio power channel
         }
     }
 #endif
@@ -303,9 +298,18 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     if (pmu_found)
         gpio_wakeup_enable((gpio_num_t)PMU_IRQ, GPIO_INTR_LOW_LEVEL); // pmu irq
 #endif
-    assert(esp_sleep_enable_gpio_wakeup() == ESP_OK);
-    assert(esp_sleep_enable_timer_wakeup(sleepUsec) == ESP_OK);
-    assert(esp_light_sleep_start() == ESP_OK);
+    auto res = esp_sleep_enable_gpio_wakeup();
+    if (res != ESP_OK)
+        LOG_DEBUG("esp_sleep_enable_gpio_wakeup result %d\n", res);
+    assert(res == ESP_OK);
+    res = esp_sleep_enable_timer_wakeup(sleepUsec);
+    if (res != ESP_OK)
+        LOG_DEBUG("esp_sleep_enable_timer_wakeup result %d\n", res);
+    assert(res == ESP_OK);
+    res = esp_light_sleep_start();
+    if (res != ESP_OK)
+        LOG_DEBUG("esp_light_sleep_start result %d\n", res);
+    assert(res == ESP_OK);
 
     esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
 #ifdef BUTTON_PIN
@@ -328,7 +332,6 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 void enableModemSleep()
 {
     static esp_pm_config_esp32_t esp32_config; // filled with zeros because bss
-
 
 #if CONFIG_IDF_TARGET_ESP32S3
     esp32_config.max_freq_mhz = CONFIG_ESP32S3_DEFAULT_CPU_FREQ_MHZ;

@@ -8,7 +8,7 @@
 *       www.segger.com     Support: support@segger.com               *
 *                                                                    *
 **********************************************************************
- 
+
 ----------------------------------------------------------------------
 File    : JLINK_MONITOR.h
 Purpose : Header file of debug monitor for J-Link monitor mode debug on Cortex-M devices.
@@ -18,9 +18,9 @@ Purpose : Header file of debug monitor for J-Link monitor mode debug on Cortex-M
 #ifndef JLINK_MONITOR_H
 #define JLINK_MONITOR_H
 
-void JLINK_MONITOR_OnExit  (void);
-void JLINK_MONITOR_OnEnter (void);
-void JLINK_MONITOR_OnPoll  (void);
+void JLINK_MONITOR_OnExit(void);
+void JLINK_MONITOR_OnEnter(void);
+void JLINK_MONITOR_OnPoll(void);
 
 #endif
 

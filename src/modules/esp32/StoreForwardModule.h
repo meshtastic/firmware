@@ -2,7 +2,7 @@
 
 #include "ProtobufModule.h"
 #include "concurrency/OSThread.h"
-#include "mesh/generated/storeforward.pb.h"
+#include "mesh/generated/meshtastic/storeforward.pb.h"
 
 #include "configuration.h"
 #include <Arduino.h>
@@ -14,15 +14,15 @@ struct PacketHistoryStruct {
     uint32_t from;
     uint8_t channel;
     bool ack;
-    uint8_t payload[Constants_DATA_PAYLOAD_LEN];
+    uint8_t payload[meshtastic_Constants_DATA_PAYLOAD_LEN];
     pb_size_t payload_size;
 };
 
-class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<StoreAndForward>
+class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<meshtastic_StoreAndForward>
 {
     bool busy = 0;
     uint32_t busyTo = 0;
-    char routerMessage[Constants_DATA_PAYLOAD_LEN] = {0};
+    char routerMessage[meshtastic_Constants_DATA_PAYLOAD_LEN] = {0};
 
     PacketHistoryStruct *packetHistory = 0;
     uint32_t packetHistoryCurrent = 0;
@@ -47,7 +47,7 @@ class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<
      Update our local reference of when we last saw that node.
      @return 0 if we have never seen that node before otherwise return the last time we saw the node.
      */
-    void historyAdd(const MeshPacket &mp);
+    void historyAdd(const meshtastic_MeshPacket &mp);
     void statsSend(uint32_t to);
     void historySend(uint32_t msAgo, uint32_t to);
 
@@ -57,21 +57,21 @@ class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<
      * Send our payload into the mesh
      */
     void sendPayload(NodeNum dest = NODENUM_BROADCAST, uint32_t packetHistory_index = 0);
-    void sendMessage(NodeNum dest, StoreAndForward &payload);
-    void sendMessage(NodeNum dest, StoreAndForward_RequestResponse rr);
+    void sendMessage(NodeNum dest, meshtastic_StoreAndForward &payload);
+    void sendMessage(NodeNum dest, meshtastic_StoreAndForward_RequestResponse rr);
 
-    virtual MeshPacket *allocReply() override;
+    virtual meshtastic_MeshPacket *allocReply() override;
     /*
       -Override the wantPacket method.
     */
-    virtual bool wantPacket(const MeshPacket *p) override
+    virtual bool wantPacket(const meshtastic_MeshPacket *p) override
     {
-        switch(p->decoded.portnum) {
-            case PortNum_TEXT_MESSAGE_APP:
-            case PortNum_STORE_FORWARD_APP:
-                return true;
-            default:
-                return false;
+        switch (p->decoded.portnum) {
+        case meshtastic_PortNum_TEXT_MESSAGE_APP:
+        case meshtastic_PortNum_STORE_FORWARD_APP:
+            return true;
+        default:
+            return false;
         }
     }
 
@@ -79,10 +79,10 @@ class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<
     void populatePSRAM();
 
     // S&F Defaults
-    uint32_t historyReturnMax = 250; // 250 records
+    uint32_t historyReturnMax = 250;    // 250 records
     uint32_t historyReturnWindow = 240; // 4 hours
-    uint32_t records = 0; // Calculated
-    bool heartbeat = false; // No heartbeat.
+    uint32_t records = 0;               // Calculated
+    bool heartbeat = false;             // No heartbeat.
 
     // stats
     uint32_t requests = 0;
@@ -98,9 +98,8 @@ class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<
     @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for
     it
     */
-    virtual ProcessMessage handleReceived(const MeshPacket &mp) override;
-    virtual bool handleReceivedProtobuf(const MeshPacket &mp, StoreAndForward *p);
-
+    virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
+    virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_StoreAndForward *p);
 };
 
 extern StoreForwardModule *storeForwardModule;

@@ -1,7 +1,6 @@
-#include "configuration.h"
 #include "NotifiedWorkerThread.h"
+#include "configuration.h"
 #include "main.h"
-#include <assert.h>
 
 namespace concurrency
 {
@@ -81,11 +80,9 @@ void NotifiedWorkerThread::checkNotification()
     }
 }
 
-
-
 int32_t NotifiedWorkerThread::runOnce()
 {
-    enabled = false;  // Only run once per notification
+    enabled = false; // Only run once per notification
     checkNotification();
 
     return RUN_SAME;

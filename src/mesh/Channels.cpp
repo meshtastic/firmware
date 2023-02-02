@@ -45,23 +45,23 @@ int16_t Channels::generateHash(ChannelIndex channelNum)
 /**
  * Validate a channel, fixing any errors as needed
  */
-Channel &Channels::fixupChannel(ChannelIndex chIndex)
+meshtastic_Channel &Channels::fixupChannel(ChannelIndex chIndex)
 {
-    Channel &ch = getByIndex(chIndex);
+    meshtastic_Channel &ch = getByIndex(chIndex);
 
     ch.index = chIndex; // Preinit the index so it be ready to share with the phone (we'll never change it later)
 
     if (!ch.has_settings) {
         // No settings! Must disable and skip
-        ch.role = Channel_Role_DISABLED;
+        ch.role = meshtastic_Channel_Role_DISABLED;
         memset(&ch.settings, 0, sizeof(ch.settings));
         ch.has_settings = true;
     } else {
-        ChannelSettings &channelSettings = ch.settings;
+        meshtastic_ChannelSettings &meshtastic_channelSettings = ch.settings;
 
         // Convert the old string "Default" to our new short representation
-        if (strcmp(channelSettings.name, "Default") == 0)
-            *channelSettings.name = '\0';
+        if (strcmp(meshtastic_channelSettings.name, "Default") == 0)
+            *meshtastic_channelSettings.name = '\0';
     }
 
     hashes[chIndex] = generateHash(chIndex);
@@ -74,38 +74,38 @@ Channel &Channels::fixupChannel(ChannelIndex chIndex)
  */
 void Channels::initDefaultChannel(ChannelIndex chIndex)
 {
-    Channel &ch = getByIndex(chIndex);
-    ChannelSettings &channelSettings = ch.settings;
-    Config_LoRaConfig &loraConfig = config.lora;
+    meshtastic_Channel &ch = getByIndex(chIndex);
+    meshtastic_ChannelSettings &channelSettings = ch.settings;
+    meshtastic_Config_LoRaConfig &loraConfig = config.lora;
 
-    loraConfig.modem_preset = Config_LoRaConfig_ModemPreset_LONG_FAST; // Default to Long Range & Fast
+    loraConfig.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST; // Default to Long Range & Fast
     loraConfig.use_preset = true;
     loraConfig.tx_power = 0; // default
     uint8_t defaultpskIndex = 1;
     channelSettings.psk.bytes[0] = defaultpskIndex;
     channelSettings.psk.size = 1;
-    strcpy(channelSettings.name, "");
+    strncpy(channelSettings.name, "", sizeof(channelSettings.name));
 
     ch.has_settings = true;
-    ch.role = Channel_Role_PRIMARY;
+    ch.role = meshtastic_Channel_Role_PRIMARY;
 }
 
 CryptoKey Channels::getKey(ChannelIndex chIndex)
 {
-    Channel &ch = getByIndex(chIndex);
-    const ChannelSettings &channelSettings = ch.settings;
+    meshtastic_Channel &ch = getByIndex(chIndex);
+    const meshtastic_ChannelSettings &channelSettings = ch.settings;
     assert(ch.has_settings);
 
     CryptoKey k;
     memset(k.bytes, 0, sizeof(k.bytes)); // In case the user provided a short key, we want to pad the rest with zeros
 
-    if (ch.role == Channel_Role_DISABLED) {
+    if (ch.role == meshtastic_Channel_Role_DISABLED) {
         k.length = -1; // invalid
     } else {
         memcpy(k.bytes, channelSettings.psk.bytes, channelSettings.psk.size);
         k.length = channelSettings.psk.size;
         if (k.length == 0) {
-            if (ch.role == Channel_Role_SECONDARY) {
+            if (ch.role == meshtastic_Channel_Role_SECONDARY) {
                 LOG_DEBUG("Unset PSK for secondary channel %s. using primary key\n", ch.settings.name);
                 k = getKey(primaryIndex);
             } else
@@ -120,7 +120,7 @@ CryptoKey Channels::getKey(ChannelIndex chIndex)
             else if (oemStore.oem_aes_key.size > 1) {
                 // Use the OEM key
                 LOG_DEBUG("Using OEM Key with %d bytes\n", oemStore.oem_aes_key.size);
-                memcpy(k.bytes, oemStore.oem_aes_key.bytes , oemStore.oem_aes_key.size);
+                memcpy(k.bytes, oemStore.oem_aes_key.bytes, oemStore.oem_aes_key.size);
                 k.length = oemStore.oem_aes_key.size;
                 // Bump up the last byte of PSK as needed
                 uint8_t *last = k.bytes + oemStore.oem_aes_key.size - 1;
@@ -182,24 +182,35 @@ void Channels::onConfigChanged()
 {
     // Make sure the phone hasn't mucked anything up
     for (int i = 0; i < channelFile.channels_count; i++) {
-        Channel &ch = fixupChannel(i);
+        meshtastic_Channel &ch = fixupChannel(i);
 
-        if (ch.role == Channel_Role_PRIMARY)
+        if (ch.role == meshtastic_Channel_Role_PRIMARY)
             primaryIndex = i;
     }
 }
 
-Channel &Channels::getByIndex(ChannelIndex chIndex)
+meshtastic_Channel &Channels::getByIndex(ChannelIndex chIndex)
 {
-    assert(chIndex < channelFile.channels_count); // This should be equal to MAX_NUM_CHANNELS
-    Channel *ch = channelFile.channels + chIndex;
-    return *ch;
+    // remove this assert cause malformed packets can make our firmware reboot here.
+    if (chIndex < channelFile.channels_count) { // This should be equal to MAX_NUM_CHANNELS
+        meshtastic_Channel *ch = channelFile.channels + chIndex;
+        return *ch;
+    } else {
+        LOG_ERROR("Invalid channel index %d > %d, malformed packet received?\n", chIndex, channelFile.channels_count);
+
+        static meshtastic_Channel *ch = (meshtastic_Channel *)malloc(sizeof(meshtastic_Channel));
+        memset(ch, 0, sizeof(meshtastic_Channel));
+        // ch.index -1 means we don't know the channel locally and need to look it up by settings.name
+        // not sure this is handled right everywhere
+        ch->index = -1;
+        return *ch;
+    }
 }
 
-Channel &Channels::getByName(const char* chName)
+meshtastic_Channel &Channels::getByName(const char *chName)
 {
     for (ChannelIndex i = 0; i < getNumChannels(); i++) {
-        if (strcasecmp(channelFile.channels[i].settings.name, chName) == 0) {
+        if (strcasecmp(getGlobalId(i), chName) == 0) {
             return channelFile.channels[i];
         }
     }
@@ -207,15 +218,15 @@ Channel &Channels::getByName(const char* chName)
     return getByIndex(getPrimaryIndex());
 }
 
-void Channels::setChannel(const Channel &c)
+void Channels::setChannel(const meshtastic_Channel &c)
 {
-    Channel &old = getByIndex(c.index);
+    meshtastic_Channel &old = getByIndex(c.index);
 
     // if this is the new primary, demote any existing roles
-    if (c.role == Channel_Role_PRIMARY)
+    if (c.role == meshtastic_Channel_Role_PRIMARY)
         for (int i = 0; i < getNumChannels(); i++)
-            if (channelFile.channels[i].role == Channel_Role_PRIMARY)
-                channelFile.channels[i].role = Channel_Role_SECONDARY;
+            if (channelFile.channels[i].role == meshtastic_Channel_Role_PRIMARY)
+                channelFile.channels[i].role = meshtastic_Channel_Role_SECONDARY;
 
     old = c; // slam in the new settings/role
 }
@@ -223,7 +234,7 @@ void Channels::setChannel(const Channel &c)
 const char *Channels::getName(size_t chIndex)
 {
     // Convert the short "" representation for Default into a usable string
-    const ChannelSettings &channelSettings = getByIndex(chIndex).settings;
+    const meshtastic_ChannelSettings &channelSettings = getByIndex(chIndex).settings;
     const char *channelName = channelSettings.name;
     if (!*channelName) { // emptystring
         // Per mesh.proto spec, if bandwidth is specified we must ignore modemPreset enum, we assume that in that case
@@ -231,33 +242,32 @@ const char *Channels::getName(size_t chIndex)
 
         if (config.lora.use_preset) {
             switch (config.lora.modem_preset) {
-            case Config_LoRaConfig_ModemPreset_SHORT_SLOW:
+            case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
                 channelName = "ShortSlow";
                 break;
-            case Config_LoRaConfig_ModemPreset_SHORT_FAST:
+            case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
                 channelName = "ShortFast";
                 break;
-            case Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
+            case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
                 channelName = "MediumSlow";
                 break;
-            case Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
+            case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
                 channelName = "MediumFast";
                 break;
-            case Config_LoRaConfig_ModemPreset_LONG_SLOW:
+            case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
                 channelName = "LongSlow";
                 break;
-            case Config_LoRaConfig_ModemPreset_LONG_FAST:
+            case meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST:
                 channelName = "LongFast";
                 break;
-            case Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW:
+            case meshtastic_Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW:
                 channelName = "VLongSlow";
                 break;
             default:
                 channelName = "Invalid";
                 break;
             }
-        }
-        else {
+        } else {
             channelName = "Custom";
         }
     }

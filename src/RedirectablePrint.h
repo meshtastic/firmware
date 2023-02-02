@@ -29,15 +29,17 @@ class RedirectablePrint : public Print
 
     /**
      * Debug logging print message
-     * 
+     *
      * If the provide format string ends with a newline we assume it is the final print of a single
      * log message.  Otherwise we assume more prints will come before the log message ends.  This
      * allows you to call logDebug a few times to build up a single log message line if you wish.
      */
-    size_t log(const char *logLevel, const char *format, ...) __attribute__ ((format (printf, 3, 4)));
+    size_t log(const char *logLevel, const char *format, ...) __attribute__((format(printf, 3, 4)));
 
     /** like printf but va_list based */
     size_t vprintf(const char *format, va_list arg);
+
+    void hexDump(const char *logLevel, unsigned char *buf, uint16_t len);
 };
 
 class NoopPrint : public Print

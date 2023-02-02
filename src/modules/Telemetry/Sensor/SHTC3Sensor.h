@@ -1,16 +1,17 @@
-#include "../mesh/generated/telemetry.pb.h"
+#include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
 #include <Adafruit_SHTC3.h>
 
-class SHTC3Sensor : virtual public TelemetrySensor {
-private:
+class SHTC3Sensor : virtual public TelemetrySensor
+{
+  private:
     Adafruit_SHTC3 shtc3 = Adafruit_SHTC3();
 
-protected:
+  protected:
     virtual void setup() override;
-    
-public:
+
+  public:
     SHTC3Sensor();
     virtual int32_t runOnce() override;
-    virtual bool getMetrics(Telemetry *measurement) override;
-};    
+    virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+};

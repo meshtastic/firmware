@@ -2,7 +2,6 @@
 
 #include "../freertosinc.h"
 
-
 #ifdef HAS_FREE_RTOS
 #include "concurrency/BinarySemaphoreFreeRTOS.h"
 #define BinarySemaphore BinarySemaphoreFreeRTOS
