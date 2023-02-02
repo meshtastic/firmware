@@ -13,8 +13,8 @@
 int32_t DeviceTelemetryModule::runOnce()
 {
     uint32_t now = millis();
-    if ((lastSentToMesh == 0 ||
-         (now - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.telemetry.device_update_interval)) &&
+    if (((lastSentToMesh == 0) ||
+         ((now - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.telemetry.device_update_interval))) &&
         airTime->isTxAllowedChannelUtil() && airTime->isTxAllowedAirUtil()) {
         sendTelemetry();
         lastSentToMesh = now;
@@ -34,8 +34,6 @@ bool DeviceTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
         LOG_INFO("(Received from %s): air_util_tx=%f, channel_utilization=%f, battery_level=%i, voltage=%f\n", sender,
                  t->variant.device_metrics.air_util_tx, t->variant.device_metrics.channel_utilization,
                  t->variant.device_metrics.battery_level, t->variant.device_metrics.voltage);
-
-        lastMeasurementPacket = packetPool.allocCopy(mp);
 
         nodeDB.updateTelemetry(getFrom(&mp), *t, RX_SRC_RADIO);
     }
@@ -63,7 +61,6 @@ bool DeviceTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     p->decoded.want_response = false;
     p->priority = meshtastic_MeshPacket_Priority_MIN;
 
-    lastMeasurementPacket = packetPool.allocCopy(*p);
     nodeDB.updateTelemetry(nodeDB.getNodeNum(), t, RX_SRC_LOCAL);
     if (phoneOnly) {
         LOG_INFO("Sending packet to phone\n");
