@@ -13,6 +13,10 @@
 #include "unistd.h"
 #endif
 
+#if HAS_WIFI || HAS_ETHERNET
+#include "mqtt/MQTT.h"
+#endif
+
 #define DEFAULT_REBOOT_SECONDS 5
 
 AdminModule *adminModule;
@@ -531,24 +535,29 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
 {
     meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
 
-    meshtastic_DeviceConnectionStatus connectionStatus;
+    meshtastic_DeviceConnectionStatus conn;
 
-    connectionStatus.has_wifi = HAS_WIFI;
+    conn.has_wifi = HAS_WIFI;
 #if HAS_WIFI
-    connectionStatus.wifi.status.status.is_connected = WiFi.status() != WL_CONNECTED;
-    strncpy(connectionStatus.wifi.ssid, config.network.wifi_ssid, 33);
-    connectionStatus.wifi.status.status.is_syslog_connected = false; // FIXME wire this up
+    conn.wifi.status.status.is_connected = WiFi.status() != WL_CONNECTED;
+    strncpy(conn.wifi.ssid, config.network.wifi_ssid, 33);
+    if (conn.wifi.status.status.is_connected)
+    {
+        conn.wifi.status.status.ip_address = WiFi.localIP();
+        conn.wifi.status.status.is_mqtt_connected = mqtt && mqtt->connected();
+        conn.wifi.status.status.is_syslog_connected = false; // FIXME wire this up
+    }
 #endif
 
-    connectionStatus.has_bluetooth = HAS_BLUETOOTH;
+    conn.has_bluetooth = HAS_BLUETOOTH;
 #if HAS_BLUETOOTH
 
 #endif
-    connectionStatus.has_ethernet = HAS_ETHERNET;
+    conn.has_ethernet = HAS_ETHERNET;
 
-    connectionStatus.has_serial = true; // No serial-less devices
+    conn.has_serial = true; // No serial-less devices
 
-    r.get_device_connection_status_response = connectionStatus;
+    r.get_device_connection_status_response = conn;
     r.which_payload_variant = meshtastic_AdminMessage_get_device_connection_status_response_tag;
     myReply = allocDataProtobuf(r);
 }
