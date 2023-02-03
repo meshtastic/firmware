@@ -33,7 +33,8 @@ static const char *secretReserved = "sekrit";
 /// If buf is the reserved secret word, replace the buffer with currentVal
 static void writeSecret(char *buf, size_t bufsz, const char *currentVal)
 {
-    if (strcmp(buf, secretReserved) == 0) {
+    if (strcmp(buf, secretReserved) == 0)
+    {
         strncpy(buf, currentVal, bufsz);
     }
 }
@@ -51,7 +52,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     bool handled = false;
     assert(r);
 
-    switch (r->which_payload_variant) {
+    switch (r->which_payload_variant)
+    {
 
     /**
      * Getters
@@ -71,7 +73,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         handleGetModuleConfig(mp, r->get_module_config_request);
         break;
 
-    case meshtastic_AdminMessage_get_channel_request_tag: {
+    case meshtastic_AdminMessage_get_channel_request_tag:
+    {
         uint32_t i = r->get_channel_request - 1;
         LOG_INFO("Client is getting channel %u\n", i);
         if (i >= MAX_NUM_CHANNELS)
@@ -110,17 +113,22 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     /**
      * Other
      */
-    case meshtastic_AdminMessage_reboot_seconds_tag: {
+    case meshtastic_AdminMessage_reboot_seconds_tag:
+    {
         reboot(r->reboot_seconds);
         break;
     }
-    case meshtastic_AdminMessage_reboot_ota_seconds_tag: {
+    case meshtastic_AdminMessage_reboot_ota_seconds_tag:
+    {
         int32_t s = r->reboot_ota_seconds;
 #ifdef ARCH_ESP32
-        if (BleOta::getOtaAppVersion().isEmpty()) {
+        if (BleOta::getOtaAppVersion().isEmpty())
+        {
             LOG_INFO("No OTA firmware available, scheduling regular reboot in %d seconds\n", s);
             screen->startRebootScreen();
-        } else {
+        }
+        else
+        {
             screen->startFirmwareUpdateScreen();
             BleOta::switchToOtaApp();
             LOG_INFO("Rebooting to OTA in %d seconds\n", s);
@@ -132,41 +140,48 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         rebootAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
         break;
     }
-    case meshtastic_AdminMessage_shutdown_seconds_tag: {
+    case meshtastic_AdminMessage_shutdown_seconds_tag:
+    {
         int32_t s = r->shutdown_seconds;
         LOG_INFO("Shutdown in %d seconds\n", s);
         shutdownAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
         break;
     }
-    case meshtastic_AdminMessage_get_device_metadata_request_tag: {
+    case meshtastic_AdminMessage_get_device_metadata_request_tag:
+    {
         LOG_INFO("Client is getting device metadata\n");
         handleGetDeviceMetadata(mp);
         break;
     }
-    case meshtastic_AdminMessage_factory_reset_tag: {
+    case meshtastic_AdminMessage_factory_reset_tag:
+    {
         LOG_INFO("Initiating factory reset\n");
         nodeDB.factoryReset();
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
-    case meshtastic_AdminMessage_nodedb_reset_tag: {
+    case meshtastic_AdminMessage_nodedb_reset_tag:
+    {
         LOG_INFO("Initiating node-db reset\n");
         nodeDB.resetNodes();
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
-    case meshtastic_AdminMessage_begin_edit_settings_tag: {
+    case meshtastic_AdminMessage_begin_edit_settings_tag:
+    {
         LOG_INFO("Beginning transaction for editing settings\n");
         hasOpenEditTransaction = true;
         break;
     }
-    case meshtastic_AdminMessage_commit_edit_settings_tag: {
+    case meshtastic_AdminMessage_commit_edit_settings_tag:
+    {
         LOG_INFO("Committing transaction for edited settings\n");
         hasOpenEditTransaction = false;
         saveChanges(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
         break;
     }
-    case meshtastic_AdminMessage_get_device_connection_status_request_tag: {
+    case meshtastic_AdminMessage_get_device_connection_status_request_tag:
+    {
         LOG_INFO("Client is getting device connection status\n");
         handleGetDeviceConnectionStatus(mp);
         break;
@@ -182,11 +197,16 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         meshtastic_AdminMessage res = meshtastic_AdminMessage_init_default;
         AdminMessageHandleResult handleResult = MeshModule::handleAdminMessageForAllPlugins(mp, r, &res);
 
-        if (handleResult == AdminMessageHandleResult::HANDLED_WITH_RESPONSE) {
+        if (handleResult == AdminMessageHandleResult::HANDLED_WITH_RESPONSE)
+        {
             myReply = allocDataProtobuf(res);
-        } else if (mp.decoded.want_response) {
+        }
+        else if (mp.decoded.want_response)
+        {
             LOG_DEBUG("We did not responded to a request that wanted a respond. req.variant=%d\n", r->which_payload_variant);
-        } else if (handleResult != AdminMessageHandleResult::HANDLED) {
+        }
+        else if (handleResult != AdminMessageHandleResult::HANDLED)
+        {
             // Probably a message sent by us or sent to our local node.  FIXME, we should avoid scanning these messages
             LOG_INFO("Ignoring nonrelevant admin %d\n", r->which_payload_variant);
         }
@@ -194,7 +214,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
 
     // If asked for a response and it is not yet set, generate an 'ACK' response
-    if (mp.decoded.want_response && !myReply) {
+    if (mp.decoded.want_response && !myReply)
+    {
         myReply = allocErrorResponse(meshtastic_Routing_Error_NONE, &mp);
     }
 
@@ -210,26 +231,31 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
     int changed = 0;
     bool licensed_changed = false;
 
-    if (*o.long_name) {
+    if (*o.long_name)
+    {
         changed |= strcmp(owner.long_name, o.long_name);
         strncpy(owner.long_name, o.long_name, sizeof(owner.long_name));
     }
-    if (*o.short_name) {
+    if (*o.short_name)
+    {
         changed |= strcmp(owner.short_name, o.short_name);
         strncpy(owner.short_name, o.short_name, sizeof(owner.short_name));
     }
-    if (*o.id) {
+    if (*o.id)
+    {
         changed |= strcmp(owner.id, o.id);
         strncpy(owner.id, o.id, sizeof(owner.id));
     }
-    if (owner.is_licensed != o.is_licensed) {
+    if (owner.is_licensed != o.is_licensed)
+    {
         changed = 1;
         licensed_changed = true;
         owner.is_licensed = o.is_licensed;
         config.lora.override_duty_cycle = owner.is_licensed; // override duty cycle for licensed operators
     }
 
-    if (changed) { // If nothing really changed, don't broadcast on the network or write to flash
+    if (changed)
+    { // If nothing really changed, don't broadcast on the network or write to flash
         service.reloadOwner(!hasOpenEditTransaction);
         licensed_changed ? saveChanges(SEGMENT_CONFIG | SEGMENT_DEVICESTATE) : saveChanges(SEGMENT_DEVICESTATE);
     }
@@ -240,7 +266,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
     auto existingRole = config.device.role;
     bool isRegionUnset = (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);
 
-    switch (c.which_payload_variant) {
+    switch (c.which_payload_variant)
+    {
     case meshtastic_Config_device_tag:
         LOG_INFO("Setting config: Device\n");
         config.has_device = true;
@@ -275,7 +302,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         LOG_INFO("Setting config: LoRa\n");
         config.has_lora = true;
         config.lora = c.payload_variant.lora;
-        if (isRegionUnset && config.lora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+        if (isRegionUnset && config.lora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET)
+        {
             config.lora.tx_enabled = true;
         }
         break;
@@ -291,7 +319,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 
 void AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
 {
-    switch (c.which_payload_variant) {
+    switch (c.which_payload_variant)
+    {
     case meshtastic_ModuleConfig_mqtt_tag:
         LOG_INFO("Setting module config: MQTT\n");
         moduleConfig.has_mqtt = true;
@@ -355,7 +384,8 @@ void AdminModule::handleSetChannel(const meshtastic_Channel &cc)
 
 void AdminModule::handleGetOwner(const meshtastic_MeshPacket &req)
 {
-    if (req.decoded.want_response) {
+    if (req.decoded.want_response)
+    {
         // We create the reply here
         meshtastic_AdminMessage res = meshtastic_AdminMessage_init_default;
         res.get_owner_response = owner;
@@ -369,8 +399,10 @@ void AdminModule::handleGetConfig(const meshtastic_MeshPacket &req, const uint32
 {
     meshtastic_AdminMessage res = meshtastic_AdminMessage_init_default;
 
-    if (req.decoded.want_response) {
-        switch (configType) {
+    if (req.decoded.want_response)
+    {
+        switch (configType)
+        {
         case meshtastic_AdminMessage_ConfigType_DEVICE_CONFIG:
             LOG_INFO("Getting config: Device\n");
             res.get_config_response.which_payload_variant = meshtastic_Config_device_tag;
@@ -425,8 +457,10 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
 {
     meshtastic_AdminMessage res = meshtastic_AdminMessage_init_default;
 
-    if (req.decoded.want_response) {
-        switch (configType) {
+    if (req.decoded.want_response)
+    {
+        switch (configType)
+        {
         case meshtastic_AdminMessage_ModuleConfigType_MQTT_CONFIG:
             LOG_INFO("Getting module config: MQTT\n");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_mqtt_tag;
@@ -512,7 +546,7 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
 
     meshtastic_DeviceConnectionStatus conn;
 
-    conn.wifi = meshtastic_WifiConnectionStatus_init_default;
+    conn.wifi = {0};
 #if HAS_WIFI
     conn.has_wifi = true;
     conn.wifi.has_status = true;
@@ -522,7 +556,8 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     conn.wifi.status.is_connected = WiFi.status() != WL_CONNECTED;
 #endif
     strncpy(conn.wifi.ssid, config.network.wifi_ssid, 33);
-    if (conn.wifi.status.is_connected) {
+    if (conn.wifi.status.is_connected)
+    {
         conn.wifi.rssi = WiFi.RSSI();
         conn.wifi.status.ip_address = WiFi.localIP();
         conn.wifi.status.is_mqtt_connected = mqtt && mqtt->connected();
@@ -532,16 +567,19 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     conn.has_wifi = false;
 #endif
 
-    conn.ethernet = meshtastic_EthernetConnectionStatus_init_default;
+    conn.ethernet = {0};
 #if HAS_ETHERNET
     conn.has_ethernet = true;
     conn.ethernet.has_status = true;
-    if (Ethernet.linkStatus() == LinkON) {
+    if (Ethernet.linkStatus() == LinkON)
+    {
         conn.ethernet.status.is_connected = true;
         conn.ethernet.status.ip_address = Ethernet.localIP();
         conn.ethernet.status.is_mqtt_connected = mqtt && mqtt->connected();
         conn.ethernet.status.is_syslog_connected = false; // FIXME wire this up
-    } else {
+    }
+    else
+    {
         conn.ethernet.status.is_connected = false;
     }
 #else
@@ -569,7 +607,8 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
 
 void AdminModule::handleGetChannel(const meshtastic_MeshPacket &req, uint32_t channelIndex)
 {
-    if (req.decoded.want_response) {
+    if (req.decoded.want_response)
+    {
         // We create the reply here
         meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
         r.get_channel_response = channels.getByIndex(channelIndex);
@@ -587,13 +626,17 @@ void AdminModule::reboot(int32_t seconds)
 
 void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
 {
-    if (!hasOpenEditTransaction) {
+    if (!hasOpenEditTransaction)
+    {
         LOG_INFO("Saving changes to disk\n");
         service.reloadConfig(saveWhat); // Calls saveToDisk among other things
-    } else {
+    }
+    else
+    {
         LOG_INFO("Delaying save of changes to disk until the open transaction is committed\n");
     }
-    if (shouldReboot) {
+    if (shouldReboot)
+    {
         reboot(DEFAULT_REBOOT_SECONDS);
     }
 }
