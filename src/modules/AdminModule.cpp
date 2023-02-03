@@ -512,6 +512,7 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
 
     meshtastic_DeviceConnectionStatus conn;
 
+    conn.wifi = meshtastic_WifiConnectionStatus_init_default;
 #if HAS_WIFI
     conn.has_wifi = true;
     conn.wifi.has_status = true;
@@ -531,6 +532,7 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     conn.has_wifi = false;
 #endif
 
+    conn.ethernet = meshtastic_EthernetConnectionStatus_init_default;
 #if HAS_ETHERNET
     conn.has_ethernet = true;
     conn.ethernet.has_status = true;
@@ -560,7 +562,7 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     conn.serial.is_connected = powerFSM.getState() == &stateSERIAL;
     conn.serial.baud = SERIAL_BAUD;
 
-    r.get_device_connection_status_response = conn; // cppcheck-suppress [uninitStructMember,uninitvar]
+    r.get_device_connection_status_response = conn;
     r.which_payload_variant = meshtastic_AdminMessage_get_device_connection_status_response_tag;
     myReply = allocDataProtobuf(r);
 }
