@@ -9,6 +9,7 @@
 #include "meshtastic/device_metadata.pb.h"
 #include "meshtastic/mesh.pb.h"
 #include "meshtastic/module_config.pb.h"
+#include "meshtastic/connection_status.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.
@@ -91,6 +92,10 @@ typedef struct _meshtastic_AdminMessage {
         bool get_ringtone_request;
         /* Get the Ringtone in the response to this message. */
         char get_ringtone_response[231];
+        /* Request the node to send it's connection status */
+        bool get_device_connection_status_request;
+        /* Device connection status response */
+        meshtastic_DeviceConnectionStatus get_device_connection_status_response;
         /* Set the owner for this node */
         meshtastic_User set_owner;
         /* Set channels (using the new API).
@@ -166,6 +171,8 @@ extern "C" {
 #define meshtastic_AdminMessage_get_device_metadata_response_tag 13
 #define meshtastic_AdminMessage_get_ringtone_request_tag 14
 #define meshtastic_AdminMessage_get_ringtone_response_tag 15
+#define meshtastic_AdminMessage_get_device_connection_status_request_tag 16
+#define meshtastic_AdminMessage_get_device_connection_status_response_tag 17
 #define meshtastic_AdminMessage_set_owner_tag    32
 #define meshtastic_AdminMessage_set_channel_tag  33
 #define meshtastic_AdminMessage_set_config_tag   34
@@ -197,6 +204,8 @@ X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,get_device_metadata_request,
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,get_device_metadata_response,get_device_metadata_response),  13) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,get_ringtone_request,get_ringtone_request),  14) \
 X(a, STATIC,   ONEOF,    STRING,   (payload_variant,get_ringtone_response,get_ringtone_response),  15) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,get_device_connection_status_request,get_device_connection_status_request),  16) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,get_device_connection_status_response,get_device_connection_status_response),  17) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_owner,set_owner),  32) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_channel,set_channel),  33) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_config,set_config),  34) \
@@ -218,6 +227,7 @@ X(a, STATIC,   ONEOF,    INT32,    (payload_variant,nodedb_reset,nodedb_reset), 
 #define meshtastic_AdminMessage_payload_variant_get_config_response_MSGTYPE meshtastic_Config
 #define meshtastic_AdminMessage_payload_variant_get_module_config_response_MSGTYPE meshtastic_ModuleConfig
 #define meshtastic_AdminMessage_payload_variant_get_device_metadata_response_MSGTYPE meshtastic_DeviceMetadata
+#define meshtastic_AdminMessage_payload_variant_get_device_connection_status_response_MSGTYPE meshtastic_DeviceConnectionStatus
 #define meshtastic_AdminMessage_payload_variant_set_owner_MSGTYPE meshtastic_User
 #define meshtastic_AdminMessage_payload_variant_set_channel_MSGTYPE meshtastic_Channel
 #define meshtastic_AdminMessage_payload_variant_set_config_MSGTYPE meshtastic_Config
