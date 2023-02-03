@@ -515,7 +515,11 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
 #if HAS_WIFI
     conn.has_wifi = true;
     conn.wifi.has_status = true;
+#ifdef ARCH_PORTDUINO
+    conn.wifi.status.is_connected = true;
+#elif
     conn.wifi.status.is_connected = WiFi.status() != WL_CONNECTED;
+#endif
     strncpy(conn.wifi.ssid, config.network.wifi_ssid, 33);
     if (conn.wifi.status.is_connected) {
         conn.wifi.rssi = WiFi.RSSI();
