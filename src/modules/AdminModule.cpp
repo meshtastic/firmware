@@ -560,8 +560,7 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     conn.serial.is_connected = powerFSM.getState() == &stateSERIAL;
     conn.serial.baud = SERIAL_BAUD;
 
-    // cppcheck-suppress uninitStructMember
-    r.get_device_connection_status_response = conn;
+    r.get_device_connection_status_response = conn; // cppcheck-suppress [uninitStructMember,uninitvar]
     r.which_payload_variant = meshtastic_AdminMessage_get_device_connection_status_response_tag;
     myReply = allocDataProtobuf(r);
 }
