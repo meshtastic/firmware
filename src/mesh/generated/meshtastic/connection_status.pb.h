@@ -22,23 +22,23 @@ typedef struct _meshtastic_NetworkConnectionStatus {
     bool is_syslog_connected;
 } meshtastic_NetworkConnectionStatus;
 
+/* WiFi connection status */
+typedef struct _meshtastic_WifiConnectionStatus {
+    /* Connection status */
+    bool has_status;
+    meshtastic_NetworkConnectionStatus status;
+    /* WiFi access point ssid */
+    char ssid[33];
+    /* Rssi of wireless connection */
+    int32_t rssi;
+} meshtastic_WifiConnectionStatus;
+
 /* Ethernet connection status */
 typedef struct _meshtastic_EthernetConnectionStatus {
     /* Connection status */
     bool has_status;
     meshtastic_NetworkConnectionStatus status;
 } meshtastic_EthernetConnectionStatus;
-
-/* WiFi connection status */
-typedef struct _meshtastic_WifiConnectionStatus {
-    /* Connection status */
-    bool has_status;
-    meshtastic_EthernetConnectionStatus status;
-    /* WiFi access point ssid */
-    char ssid[33];
-    /* Rssi of wireless connection */
-    int32_t rssi;
-} meshtastic_WifiConnectionStatus;
 
 /* Bluetooth connection status */
 typedef struct _meshtastic_BluetoothConnectionStatus {
@@ -80,13 +80,13 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_DeviceConnectionStatus_init_default {false, meshtastic_WifiConnectionStatus_init_default, false, meshtastic_EthernetConnectionStatus_init_default, false, meshtastic_BluetoothConnectionStatus_init_default, false, meshtastic_SerialConnectionStatus_init_default}
-#define meshtastic_WifiConnectionStatus_init_default {false, meshtastic_EthernetConnectionStatus_init_default, "", 0}
+#define meshtastic_WifiConnectionStatus_init_default {false, meshtastic_NetworkConnectionStatus_init_default, "", 0}
 #define meshtastic_EthernetConnectionStatus_init_default {false, meshtastic_NetworkConnectionStatus_init_default}
 #define meshtastic_NetworkConnectionStatus_init_default {0, 0, 0, 0}
 #define meshtastic_BluetoothConnectionStatus_init_default {0, 0, 0}
 #define meshtastic_SerialConnectionStatus_init_default {0, 0}
 #define meshtastic_DeviceConnectionStatus_init_zero {false, meshtastic_WifiConnectionStatus_init_zero, false, meshtastic_EthernetConnectionStatus_init_zero, false, meshtastic_BluetoothConnectionStatus_init_zero, false, meshtastic_SerialConnectionStatus_init_zero}
-#define meshtastic_WifiConnectionStatus_init_zero {false, meshtastic_EthernetConnectionStatus_init_zero, "", 0}
+#define meshtastic_WifiConnectionStatus_init_zero {false, meshtastic_NetworkConnectionStatus_init_zero, "", 0}
 #define meshtastic_EthernetConnectionStatus_init_zero {false, meshtastic_NetworkConnectionStatus_init_zero}
 #define meshtastic_NetworkConnectionStatus_init_zero {0, 0, 0, 0}
 #define meshtastic_BluetoothConnectionStatus_init_zero {0, 0, 0}
@@ -97,10 +97,10 @@ extern "C" {
 #define meshtastic_NetworkConnectionStatus_is_connected_tag 2
 #define meshtastic_NetworkConnectionStatus_is_mqtt_connected_tag 3
 #define meshtastic_NetworkConnectionStatus_is_syslog_connected_tag 4
-#define meshtastic_EthernetConnectionStatus_status_tag 1
 #define meshtastic_WifiConnectionStatus_status_tag 1
 #define meshtastic_WifiConnectionStatus_ssid_tag 2
 #define meshtastic_WifiConnectionStatus_rssi_tag 3
+#define meshtastic_EthernetConnectionStatus_status_tag 1
 #define meshtastic_BluetoothConnectionStatus_pin_tag 1
 #define meshtastic_BluetoothConnectionStatus_rssi_tag 2
 #define meshtastic_BluetoothConnectionStatus_is_connected_tag 3
@@ -130,7 +130,7 @@ X(a, STATIC,   SINGULAR, STRING,   ssid,              2) \
 X(a, STATIC,   SINGULAR, INT32,    rssi,              3)
 #define meshtastic_WifiConnectionStatus_CALLBACK NULL
 #define meshtastic_WifiConnectionStatus_DEFAULT NULL
-#define meshtastic_WifiConnectionStatus_status_MSGTYPE meshtastic_EthernetConnectionStatus
+#define meshtastic_WifiConnectionStatus_status_MSGTYPE meshtastic_NetworkConnectionStatus
 
 #define meshtastic_EthernetConnectionStatus_FIELDLIST(X, a) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  status,            1)
@@ -176,11 +176,11 @@ extern const pb_msgdesc_t meshtastic_SerialConnectionStatus_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define meshtastic_BluetoothConnectionStatus_size 19
-#define meshtastic_DeviceConnectionStatus_size   108
+#define meshtastic_DeviceConnectionStatus_size   106
 #define meshtastic_EthernetConnectionStatus_size 13
 #define meshtastic_NetworkConnectionStatus_size  11
 #define meshtastic_SerialConnectionStatus_size   8
-#define meshtastic_WifiConnectionStatus_size     60
+#define meshtastic_WifiConnectionStatus_size     58
 
 #ifdef __cplusplus
 } /* extern "C" */
