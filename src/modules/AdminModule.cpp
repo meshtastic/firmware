@@ -541,6 +541,7 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
 #endif
 #ifdef ARCH_ESP32
     conn.bluetooth.is_connected = nimbleBluetooth->isConnected();
+    conn.bluetooth.rssi = nimbleBluetooth->getRssi();
 #elif defined(ARCH_NRF52)
     conn.bluetooth.is_connected = nrf52Bluetooth->isConnected();
 #endif
