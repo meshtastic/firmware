@@ -213,6 +213,16 @@ void NRF52Bluetooth::shutdown()
     Bluefruit.Advertising.stop();
 }
 
+bool NRF52Bluetooth::isConnected()
+{
+    return Bluefruit.connected(connectionHandle);
+}
+
+int NRF52Bluetooth::getRssi()
+{
+    return 0; // FIXME figure out where to source this
+}
+
 void NRF52Bluetooth::setup()
 {
     // Initialise the Bluefruit module

@@ -18,3 +18,13 @@ extern const uint8_t MESH_SERVICE_UUID_16[], TORADIO_UUID_16[16u], FROMRADIO_UUI
 
 /// Given a level between 0-100, update the BLE attribute
 void updateBatteryLevel(uint8_t level);
+
+class BluetoothApi
+{
+  public:
+    virtual void setup();
+    virtual void shutdown();
+    virtual void clearBonds();
+    virtual bool isConnected();
+    virtual int getRssi() = 0;
+};
