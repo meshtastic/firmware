@@ -527,10 +527,10 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
 #if HAS_ETHERNET
     conn.has_ethernet = true;
     if (Ethernet.linkStatus() == LinkON) {
-        conn.conn.ethernet.status.is_connected = true;
-        conn.conn.ethernet.status.ip_address = Ethernet.localIP();
-        conn.wifi.status.status.is_mqtt_connected = mqtt && mqtt->connected();
-        conn.wifi.status.status.is_syslog_connected = false; // FIXME wire this up
+        conn.ethernet.status.is_connected = true;
+        conn.ethernet.status.ip_address = Ethernet.localIP();
+        conn.ethernet.status.status.is_mqtt_connected = mqtt && mqtt->connected();
+        conn.ethernet.status.status.is_syslog_connected = false; // FIXME wire this up
     }
     conn.conn.ethernet.status.is_connected = false;
 #endif
