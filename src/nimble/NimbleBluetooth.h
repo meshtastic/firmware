@@ -1,12 +1,15 @@
 #pragma once
+#include "BluetoothCommon.h"
 
-class NimbleBluetooth
+class NimbleBluetooth : BluetoothApi
 {
   public:
     void setup();
     void shutdown();
     void clearBonds();
     bool isActive();
+    bool isConnected();
+    int getRssi();
 
   private:
     void setupService();

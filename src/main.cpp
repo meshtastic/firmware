@@ -33,6 +33,12 @@
 #ifdef ARCH_ESP32
 #include "mesh/http/WebServer.h"
 #include "nimble/NimbleBluetooth.h"
+NimbleBluetooth *nimbleBluetooth;
+#endif
+
+#ifdef ARCH_NRF52
+#include "NRF52Bluetooth.h"
+NRF52Bluetooth *nrf52Bluetooth;
 #endif
 
 #if HAS_WIFI
