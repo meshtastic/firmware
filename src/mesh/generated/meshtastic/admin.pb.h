@@ -57,6 +57,18 @@ typedef enum _meshtastic_AdminMessage_ModuleConfigType {
 } meshtastic_AdminMessage_ModuleConfigType;
 
 /* Struct definitions */
+/* Parameters for setting up Meshtastic for ameteur radio usage */
+typedef struct _meshtastic_HamParameters {
+    /* Amateur radio call sign, eg. KD2ABC */
+    char call_sign[8];
+    /* Transmit power in dBm at the LoRA transceiver, not including any amplification */
+    int32_t tx_power;
+    /* The selected frequency of LoRA operation
+ Please respect your local laws, regulations, and band plans.
+ Ensure your radio is capable of operating of the selected frequency before setting this. */
+    float frequency;
+} meshtastic_HamParameters;
+
 /* This message is handled by the Admin module and is responsible for all settings/channel read/write operations.
  This message is used to do settings operations to both remote AND local nodes.
  (Prior to 1.2 these operations were done via special ToRadio operations) */
@@ -96,6 +108,8 @@ typedef struct _meshtastic_AdminMessage {
         bool get_device_connection_status_request;
         /* Device connection status response */
         meshtastic_DeviceConnectionStatus get_device_connection_status_response;
+        /* Setup a node for licensed amateur (ham) radio operation */
+        meshtastic_HamParameters set_ham_mode;
         /* Set the owner for this node */
         meshtastic_User set_owner;
         /* Set channels (using the new API).
@@ -152,11 +166,17 @@ extern "C" {
 #define meshtastic_AdminMessage_payload_variant_get_module_config_request_ENUMTYPE meshtastic_AdminMessage_ModuleConfigType
 
 
+
 /* Initializer values for message structs */
 #define meshtastic_AdminMessage_init_default     {0, {0}}
+#define meshtastic_HamParameters_init_default    {"", 0, 0}
 #define meshtastic_AdminMessage_init_zero        {0, {0}}
+#define meshtastic_HamParameters_init_zero       {"", 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
+#define meshtastic_HamParameters_call_sign_tag   1
+#define meshtastic_HamParameters_tx_power_tag    2
+#define meshtastic_HamParameters_frequency_tag   3
 #define meshtastic_AdminMessage_get_channel_request_tag 1
 #define meshtastic_AdminMessage_get_channel_response_tag 2
 #define meshtastic_AdminMessage_get_owner_request_tag 3
@@ -173,6 +193,7 @@ extern "C" {
 #define meshtastic_AdminMessage_get_ringtone_response_tag 15
 #define meshtastic_AdminMessage_get_device_connection_status_request_tag 16
 #define meshtastic_AdminMessage_get_device_connection_status_response_tag 17
+#define meshtastic_AdminMessage_set_ham_mode_tag 18
 #define meshtastic_AdminMessage_set_owner_tag    32
 #define meshtastic_AdminMessage_set_channel_tag  33
 #define meshtastic_AdminMessage_set_config_tag   34
@@ -206,6 +227,7 @@ X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,get_ringtone_request,get_rin
 X(a, STATIC,   ONEOF,    STRING,   (payload_variant,get_ringtone_response,get_ringtone_response),  15) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,get_device_connection_status_request,get_device_connection_status_request),  16) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,get_device_connection_status_response,get_device_connection_status_response),  17) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_ham_mode,set_ham_mode),  18) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_owner,set_owner),  32) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_channel,set_channel),  33) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_config,set_config),  34) \
@@ -228,18 +250,29 @@ X(a, STATIC,   ONEOF,    INT32,    (payload_variant,nodedb_reset,nodedb_reset), 
 #define meshtastic_AdminMessage_payload_variant_get_module_config_response_MSGTYPE meshtastic_ModuleConfig
 #define meshtastic_AdminMessage_payload_variant_get_device_metadata_response_MSGTYPE meshtastic_DeviceMetadata
 #define meshtastic_AdminMessage_payload_variant_get_device_connection_status_response_MSGTYPE meshtastic_DeviceConnectionStatus
+#define meshtastic_AdminMessage_payload_variant_set_ham_mode_MSGTYPE meshtastic_HamParameters
 #define meshtastic_AdminMessage_payload_variant_set_owner_MSGTYPE meshtastic_User
 #define meshtastic_AdminMessage_payload_variant_set_channel_MSGTYPE meshtastic_Channel
 #define meshtastic_AdminMessage_payload_variant_set_config_MSGTYPE meshtastic_Config
 #define meshtastic_AdminMessage_payload_variant_set_module_config_MSGTYPE meshtastic_ModuleConfig
 
+#define meshtastic_HamParameters_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, STRING,   call_sign,         1) \
+X(a, STATIC,   SINGULAR, INT32,    tx_power,          2) \
+X(a, STATIC,   SINGULAR, FLOAT,    frequency,         3)
+#define meshtastic_HamParameters_CALLBACK NULL
+#define meshtastic_HamParameters_DEFAULT NULL
+
 extern const pb_msgdesc_t meshtastic_AdminMessage_msg;
+extern const pb_msgdesc_t meshtastic_HamParameters_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_AdminMessage_fields &meshtastic_AdminMessage_msg
+#define meshtastic_HamParameters_fields &meshtastic_HamParameters_msg
 
 /* Maximum encoded size of messages (where known) */
 #define meshtastic_AdminMessage_size             234
+#define meshtastic_HamParameters_size            25
 
 #ifdef __cplusplus
 } /* extern "C" */
