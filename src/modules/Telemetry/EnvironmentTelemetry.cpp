@@ -118,6 +118,16 @@ int32_t EnvironmentTelemetryModule::runOnce()
 #endif
 }
 
+bool EnvironmentTelemetryModule::wantUIFrame()
+{
+    return moduleConfig.telemetry.environment_screen_enabled;
+}
+
+float EnvironmentTelemetryModule::CelsiusToFahrenheit(float c)
+{
+    return (c * 9) / 5 + 32;
+}
+
 uint32_t GetTimeSinceMeshPacket(const meshtastic_MeshPacket *mp)
 {
     uint32_t now = getTime();
@@ -128,16 +138,6 @@ uint32_t GetTimeSinceMeshPacket(const meshtastic_MeshPacket *mp)
         delta = 0;
 
     return delta;
-}
-
-bool EnvironmentTelemetryModule::wantUIFrame()
-{
-    return moduleConfig.telemetry.environment_screen_enabled;
-}
-
-float EnvironmentTelemetryModule::CelsiusToFahrenheit(float c)
-{
-    return (c * 9) / 5 + 32;
 }
 
 void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
