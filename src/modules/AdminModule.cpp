@@ -610,7 +610,7 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
     config.lora.tx_power = p.tx_power;
     config.lora.override_frequency = p.frequency;
 
-    service.reloadOwner(!hasOpenEditTransaction);
+    service.reloadOwner(false);
     service.reloadConfig(SEGMENT_CONFIG | SEGMENT_DEVICESTATE);
 }
 
