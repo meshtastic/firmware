@@ -131,7 +131,7 @@ class Syslog
     uint8_t _priMask = 0xff;
     bool _enabled = false;
 
-    bool _sendLog(uint16_t pri, const char *message);
+    bool _sendLog(uint16_t pri, const char *appName, const char *message);
 
   public:
     explicit Syslog(UDP &client);
@@ -148,6 +148,7 @@ class Syslog
     bool isEnabled();
 
     bool vlogf(uint16_t pri, const char *fmt, va_list args) __attribute__((format(printf, 3, 0)));
+    bool vlogf(uint16_t pri, const char *appName, const char *fmt, va_list args) __attribute__((format(printf, 3, 0)));
 };
 
 #endif // HAS_ETHERNET || HAS_WIFI

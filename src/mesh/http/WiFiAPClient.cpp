@@ -142,7 +142,7 @@ static void onNetworkConnected()
             LOG_INFO("Starting Syslog client\n");
             // Defaults
             int serverPort = 514;
-            const char *serverAddr = moduleConfig.mqtt.address;
+            const char *serverAddr = config.network.rsyslog_server;
             String server = String(serverAddr);
             int delimIndex = server.indexOf(':');
             if (delimIndex > 0) {

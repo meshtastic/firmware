@@ -40,7 +40,11 @@ Syslog::Syslog(UDP &client)
 
 Syslog &Syslog::server(const char *server, uint16_t port)
 {
-    this->_server = server;
+    if (this->_ip.fromString(server)) {
+        this->_server = NULL;
+    } else {
+        this->_server = server;
+    }
     this->_port = port;
     return *this;
 }
@@ -94,6 +98,11 @@ bool Syslog::isEnabled()
 
 bool Syslog::vlogf(uint16_t pri, const char *fmt, va_list args)
 {
+    return this->vlogf(pri, this->_appName, fmt, args);
+}
+
+bool Syslog::vlogf(uint16_t pri, const char *appName, const char *fmt, va_list args)
+{
     char *message;
     size_t initialLen;
     size_t len;
@@ -111,13 +120,13 @@ bool Syslog::vlogf(uint16_t pri, const char *fmt, va_list args)
         vsnprintf(message, len + 1, fmt, args);
     }
 
-    result = this->_sendLog(pri, message);
+    result = this->_sendLog(pri, appName, message);
 
     delete[] message;
     return result;
 }
 
-inline bool Syslog::_sendLog(uint16_t pri, const char *message)
+inline bool Syslog::_sendLog(uint16_t pri, const char *appName, const char *message)
 {
     int result;
 
@@ -149,9 +158,11 @@ inline bool Syslog::_sendLog(uint16_t pri, const char *message)
     this->_client->print(F(">1 - "));
     this->_client->print(this->_deviceHostname);
     this->_client->print(' ');
-    this->_client->print(this->_appName);
+    this->_client->print(appName);
     this->_client->print(F(" - - - \xEF\xBB\xBF"));
-    this->_client->print(F("[0]: "));
+    this->_client->print(F("["));
+    this->_client->print(int(millis() / 1000));
+    this->_client->print(F("]: "));
     this->_client->print(message);
     this->_client->endPacket();
 
