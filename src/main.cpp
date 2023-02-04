@@ -276,7 +276,6 @@ void setup()
         LOG_INFO("PCF8563 RTC found\n");
     }
 #endif
-
     // We need to scan here to decide if we have a screen for nodeDB.init()
     scanI2Cdevice();
 
