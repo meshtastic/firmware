@@ -124,7 +124,12 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
             default:
                 ll = 0;
             }
-            syslog.vlogf(ll, format, arg);
+            auto thread = concurrency::OSThread::currentThread;
+            if (thread) {
+                syslog.vlogf(ll, thread->ThreadName.c_str(), format, arg);
+            } else {
+                syslog.vlogf(ll, format, arg);
+            }
         }
 #endif
 
