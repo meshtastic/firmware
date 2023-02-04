@@ -78,7 +78,7 @@ static void lsIdle()
             case ESP_SLEEP_WAKEUP_TIMER:
                 // Normal case: timer expired, we should just go back to sleep ASAP
 
-                setLed(true);                 // briefly turn on led
+                setLed(true);                   // briefly turn on led
                 wakeCause2 = doLightSleep(100); // leave led on for 1ms
 
                 secsSlept += sleepTime;
