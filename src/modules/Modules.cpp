@@ -14,6 +14,7 @@
 #include "modules/TraceRouteModule.h"
 #include "modules/WaypointModule.h"
 #if HAS_TELEMETRY
+#include "modules/Telemetry/AirQualityTelemetry.h"
 #include "modules/Telemetry/DeviceTelemetry.h"
 #include "modules/Telemetry/EnvironmentTelemetry.h"
 #endif
@@ -63,6 +64,9 @@ void setupModules()
 #if HAS_TELEMETRY
         new DeviceTelemetryModule();
         new EnvironmentTelemetryModule();
+        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_PMSA003I] > 0) {
+            new AirQualityTelemetryModule();
+        }
 #endif
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(TTGO_T_ECHO) && !defined(CONFIG_IDF_TARGET_ESP32S2)
         new SerialModule();
