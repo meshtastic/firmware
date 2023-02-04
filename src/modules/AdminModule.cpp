@@ -106,6 +106,10 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         else
             handleSetChannel(r->set_channel);
         break;
+    case meshtastic_AdminMessage_set_ham_mode_tag:
+        LOG_INFO("Client is setting ham mode\n");
+        handleSetHamMode(r->set_ham_mode);
+        break;
 
     /**
      * Other
@@ -596,6 +600,18 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
     if (shouldReboot) {
         reboot(DEFAULT_REBOOT_SECONDS);
     }
+}
+
+void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
+{
+    strncpy(owner.long_name, p.call_sign, sizeof(owner.long_name));
+    owner.is_licensed = true;
+    config.lora.override_duty_cycle = true;
+    config.lora.tx_power = p.tx_power;
+    config.lora.override_frequency = p.frequency;
+
+    service.reloadOwner(!hasOpenEditTransaction);
+    service.reloadConfig(SEGMENT_CONFIG | SEGMENT_DEVICESTATE);
 }
 
 AdminModule::AdminModule() : ProtobufModule("Admin", meshtastic_PortNum_ADMIN_APP, &meshtastic_AdminMessage_msg)

@@ -43,6 +43,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>
     void handleSetConfig(const meshtastic_Config &c);
     void handleSetModuleConfig(const meshtastic_ModuleConfig &c);
     void handleSetChannel();
+    void handleSetHamMode(const meshtastic_HamParameters &req);
     void reboot(int32_t seconds);
 };
 
