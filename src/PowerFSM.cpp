@@ -79,7 +79,7 @@ static void lsIdle()
                 // Normal case: timer expired, we should just go back to sleep ASAP
 
                 setLed(true);                 // briefly turn on led
-                wakeCause2 = doLightSleep(1); // leave led on for 1ms
+                wakeCause2 = doLightSleep(100); // leave led on for 1ms
 
                 secsSlept += sleepTime;
                 // LOG_INFO("sleeping, flash led!\n");
