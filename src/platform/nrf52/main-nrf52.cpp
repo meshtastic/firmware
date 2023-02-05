@@ -8,9 +8,8 @@
 #include <stdio.h>
 // #include <Adafruit_USBD_Device.h>
 #include "NodeDB.h"
-
-#include "NRF52Bluetooth.h"
 #include "error.h"
+#include "main.h"
 
 #ifdef BQ25703A_ADDR
 #include "BQ25713.h"
@@ -62,8 +61,6 @@ static void initBrownout()
 
     // We don't bother with setting up brownout if soft device is disabled - because during production we always use softdevice
 }
-
-NRF52Bluetooth *nrf52Bluetooth;
 
 static bool bleOn = false;
 static const bool useSoftDevice = true; // Set to false for easier debugging

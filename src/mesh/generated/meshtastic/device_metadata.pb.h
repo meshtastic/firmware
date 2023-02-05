@@ -5,6 +5,7 @@
 #define PB_MESHTASTIC_MESHTASTIC_DEVICE_METADATA_PB_H_INCLUDED
 #include <pb.h>
 #include "meshtastic/config.pb.h"
+#include "meshtastic/mesh.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.
@@ -29,6 +30,8 @@ typedef struct _meshtastic_DeviceMetadata {
     meshtastic_Config_DeviceConfig_Role role;
     /* Indicates the device's current enabled position flags */
     uint32_t position_flags;
+    /* Device hardware model */
+    meshtastic_HardwareModel hw_model;
 } meshtastic_DeviceMetadata;
 
 
@@ -37,8 +40,8 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0}
-#define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0}
+#define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN}
+#define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_DeviceMetadata_firmware_version_tag 1
@@ -49,6 +52,7 @@ extern "C" {
 #define meshtastic_DeviceMetadata_hasEthernet_tag 6
 #define meshtastic_DeviceMetadata_role_tag       7
 #define meshtastic_DeviceMetadata_position_flags_tag 8
+#define meshtastic_DeviceMetadata_hw_model_tag   9
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_DeviceMetadata_FIELDLIST(X, a) \
@@ -59,7 +63,8 @@ X(a, STATIC,   SINGULAR, BOOL,     hasWifi,           4) \
 X(a, STATIC,   SINGULAR, BOOL,     hasBluetooth,      5) \
 X(a, STATIC,   SINGULAR, BOOL,     hasEthernet,       6) \
 X(a, STATIC,   SINGULAR, UENUM,    role,              7) \
-X(a, STATIC,   SINGULAR, UINT32,   position_flags,    8)
+X(a, STATIC,   SINGULAR, UINT32,   position_flags,    8) \
+X(a, STATIC,   SINGULAR, UENUM,    hw_model,          9)
 #define meshtastic_DeviceMetadata_CALLBACK NULL
 #define meshtastic_DeviceMetadata_DEFAULT NULL
 
@@ -69,7 +74,7 @@ extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
 #define meshtastic_DeviceMetadata_fields &meshtastic_DeviceMetadata_msg
 
 /* Maximum encoded size of messages (where known) */
-#define meshtastic_DeviceMetadata_size           41
+#define meshtastic_DeviceMetadata_size           44
 
 #ifdef __cplusplus
 } /* extern "C" */

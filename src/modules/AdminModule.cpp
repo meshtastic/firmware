@@ -2,15 +2,22 @@
 #include "Channels.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PowerFSM.h"
 #ifdef ARCH_ESP32
 #include "BleOta.h"
 #endif
 #include "Router.h"
 #include "configuration.h"
 #include "main.h"
-
+#ifdef ARCH_NRF52
+#include "main.h"
+#endif
 #ifdef ARCH_PORTDUINO
 #include "unistd.h"
+#endif
+
+#if HAS_WIFI || HAS_ETHERNET
+#include "mqtt/MQTT.h"
 #endif
 
 #define DEFAULT_REBOOT_SECONDS 5
@@ -99,6 +106,10 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         else
             handleSetChannel(r->set_channel);
         break;
+    case meshtastic_AdminMessage_set_ham_mode_tag:
+        LOG_INFO("Client is setting ham mode\n");
+        handleSetHamMode(r->set_ham_mode);
+        break;
 
     /**
      * Other
@@ -157,6 +168,11 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         LOG_INFO("Committing transaction for edited settings\n");
         hasOpenEditTransaction = false;
         saveChanges(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
+        break;
+    }
+    case meshtastic_AdminMessage_get_device_connection_status_request_tag: {
+        LOG_INFO("Client is getting device connection status\n");
+        handleGetDeviceConnectionStatus(mp);
         break;
     }
 #ifdef ARCH_PORTDUINO
@@ -487,9 +503,71 @@ void AdminModule::handleGetDeviceMetadata(const meshtastic_MeshPacket &req)
     deviceMetadata.hasEthernet = HAS_ETHERNET;
     deviceMetadata.role = config.device.role;
     deviceMetadata.position_flags = config.position.position_flags;
+    deviceMetadata.hw_model = HW_VENDOR;
 
     r.get_device_metadata_response = deviceMetadata;
     r.which_payload_variant = meshtastic_AdminMessage_get_device_metadata_response_tag;
+    myReply = allocDataProtobuf(r);
+}
+
+void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &req)
+{
+    meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
+
+    meshtastic_DeviceConnectionStatus conn;
+
+    conn.wifi = {0};
+#if HAS_WIFI
+    conn.has_wifi = true;
+    conn.wifi.has_status = true;
+#ifdef ARCH_PORTDUINO
+    conn.wifi.status.is_connected = true;
+#else
+    conn.wifi.status.is_connected = WiFi.status() != WL_CONNECTED;
+#endif
+    strncpy(conn.wifi.ssid, config.network.wifi_ssid, 33);
+    if (conn.wifi.status.is_connected) {
+        conn.wifi.rssi = WiFi.RSSI();
+        conn.wifi.status.ip_address = WiFi.localIP();
+        conn.wifi.status.is_mqtt_connected = mqtt && mqtt->connected();
+        conn.wifi.status.is_syslog_connected = false; // FIXME wire this up
+    }
+#else
+    conn.has_wifi = false;
+#endif
+
+    conn.ethernet = {0};
+#if HAS_ETHERNET
+    conn.has_ethernet = true;
+    conn.ethernet.has_status = true;
+    if (Ethernet.linkStatus() == LinkON) {
+        conn.ethernet.status.is_connected = true;
+        conn.ethernet.status.ip_address = Ethernet.localIP();
+        conn.ethernet.status.is_mqtt_connected = mqtt && mqtt->connected();
+        conn.ethernet.status.is_syslog_connected = false; // FIXME wire this up
+    } else {
+        conn.ethernet.status.is_connected = false;
+    }
+#else
+    conn.has_ethernet = false;
+#endif
+
+#if HAS_BLUETOOTH
+    conn.has_bluetooth = true;
+    conn.bluetooth.pin = config.bluetooth.fixed_pin;
+#endif
+#ifdef ARCH_ESP32
+    conn.bluetooth.is_connected = nimbleBluetooth->isConnected();
+    conn.bluetooth.rssi = nimbleBluetooth->getRssi();
+#elif defined(ARCH_NRF52)
+    conn.bluetooth.is_connected = nrf52Bluetooth->isConnected();
+#endif
+    conn.has_serial = true; // No serial-less devices
+    conn.serial.is_connected = powerFSM.getState() == &stateSERIAL;
+    conn.serial.baud = SERIAL_BAUD;
+
+    r.get_device_connection_status_response = conn;
+    r.which_payload_variant = meshtastic_AdminMessage_get_device_connection_status_response_tag;
     myReply = allocDataProtobuf(r);
 }
 
@@ -522,6 +600,18 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
     if (shouldReboot) {
         reboot(DEFAULT_REBOOT_SECONDS);
     }
+}
+
+void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
+{
+    strncpy(owner.long_name, p.call_sign, sizeof(owner.long_name));
+    owner.is_licensed = true;
+    config.lora.override_duty_cycle = true;
+    config.lora.tx_power = p.tx_power;
+    config.lora.override_frequency = p.frequency;
+
+    service.reloadOwner(false);
+    service.reloadConfig(SEGMENT_CONFIG | SEGMENT_DEVICESTATE);
 }
 
 AdminModule::AdminModule() : ProtobufModule("Admin", meshtastic_PortNum_ADMIN_APP, &meshtastic_AdminMessage_msg)
