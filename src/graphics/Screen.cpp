@@ -70,7 +70,7 @@ static char btPIN[16] = "888888";
 
 uint32_t logo_timeout = 5000; // 4 seconds for EACH logo
 
-uint32_t hours_in_month = 730; // 730 hours in a month
+uint32_t hours_in_month = 730;
 
 // This image definition is here instead of images.h because it's modified dynamically by the drawBattery function
 uint8_t imgBattery[16] = {0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0xE7, 0x3C};
@@ -797,9 +797,6 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     else if (agoSecs < 120 * 60) // last 2 hrs
         snprintf(lastStr, sizeof(lastStr), "%u minutes ago", agoSecs / 60);
     else {
-
-        uint32_t hours_in_month = 730;
-
         // Only show hours ago if it's been less than 6 months. Otherwise, we may have bad
         //   data.
         if ((agoSecs / 60 / 60) < (hours_in_month * 6)) {
