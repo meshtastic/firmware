@@ -19,11 +19,9 @@
 #include <nvs_flash.h>
 
 #if !defined(CONFIG_IDF_TARGET_ESP32S2)
-NimbleBluetooth *nimbleBluetooth;
 
 void setBluetoothEnable(bool on)
 {
-
     if (!isWifiAvailable() && config.bluetooth.enabled == true) {
         if (!nimbleBluetooth) {
             nimbleBluetooth = new NimbleBluetooth();

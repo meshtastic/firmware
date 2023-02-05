@@ -32,6 +32,9 @@ extern meshtastic_User &owner;
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
 uint32_t sinceLastSeen(const meshtastic_NodeInfo *n);
 
+/// Given a packet, return how many seconds in the past (vs now) it was received
+uint32_t sinceReceived(const meshtastic_MeshPacket *p);
+
 class NodeDB
 {
     // NodeNum provisionalNodeNum; // if we are trying to find a node num this is our current attempt
