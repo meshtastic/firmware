@@ -73,17 +73,17 @@ typedef struct _meshtastic_EnvironmentMetrics {
 
 /* Air quality metrics */
 typedef struct _meshtastic_AirQualityMetrics {
-    /* Standard PM1.0 */
+    /* Concentration Units Standard PM1.0 */
     uint32_t pm10_standard;
-    /* Standard PM2.5 */
+    /* Concentration Units Standard PM2.5 */
     uint32_t pm25_standard;
-    /* Standard PM10.0 */
+    /* Concentration Units Standard PM10.0 */
     uint32_t pm100_standard;
-    /* Environmental PM1.0 */
+    /* Concentration Units Environmental PM1.0 */
     uint32_t pm10_environmental;
-    /* Environmental PM2.5 */
+    /* Concentration Units Environmental PM2.5 */
     uint32_t pm25_environmental;
-    /* Environmental PM10.0 */
+    /* Concentration Units Environmental PM10.0 */
     uint32_t pm100_environmental;
     /* 0.3um Particle Count */
     uint32_t particles_03um;
