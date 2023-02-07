@@ -117,7 +117,6 @@
 #endif // HAS_WIFI
 
 #if HAS_WIFI || HAS_ETHERNET
-#include <Syslog.h>
 
 class Syslog
 {
