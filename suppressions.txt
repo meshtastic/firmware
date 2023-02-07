@@ -43,3 +43,4 @@ postfixOperator:*/mqtt/*
 missingOverride
 virtualCallInConstructor
 
+passedByValue:*/RedirectablePrint.h
