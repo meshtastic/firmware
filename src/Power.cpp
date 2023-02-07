@@ -7,6 +7,12 @@
 #include "sleep.h"
 #include "utils.h"
 
+#ifdef DEBUG_HEAP_MQTT
+#include "mqtt/MQTT.h"
+#include "target_specific.h"
+#include <WiFi.h>
+#endif
+
 #ifdef HAS_PMU
 #include "XPowersAXP192.tpp"
 #include "XPowersAXP2101.tpp"
@@ -311,6 +317,25 @@ void Power::readPowerStatus()
                       ESP.getFreeHeap() - lastheap, running, concurrency::mainController.size(false));
             lastheap = ESP.getFreeHeap();
         }
+#ifdef DEBUG_HEAP_MQTT
+        if (mqtt) {
+            // send MQTT-Packet with Heap-Size
+            uint8_t dmac[6];
+            getMacAddr(dmac); // Get our hardware ID
+            char mac[18];
+            sprintf(mac, "!%02x%02x%02x%02x", dmac[2], dmac[3], dmac[4], dmac[5]);
+            auto newHeap = ESP.getFreeHeap();
+            std::string heapTopic = "msh/2/heap/" + std::string(mac);
+            std::string heapString = std::to_string(newHeap);
+            mqtt->pubSub.publish(heapTopic.c_str(), heapString.c_str(), false);
+            // auto fragHeap = ESP.getHeapFragmentation();
+            auto wifiRSSI = WiFi.RSSI();
+            heapTopic = "msh/2/wifi/" + std::string(mac);
+            std::string wifiString = std::to_string(wifiRSSI);
+            mqtt->pubSub.publish(heapTopic.c_str(), wifiString.c_str(), false);
+        }
+#endif
+
 #endif
 
 // If we have a battery at all and it is less than 10% full, force deep sleep if we have more than 3 low readings in a row

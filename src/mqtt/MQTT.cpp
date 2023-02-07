@@ -15,6 +15,8 @@
 #include "mqtt/JSON.h"
 #include <assert.h>
 
+const int reconnectMax = 5;
+
 MQTT *mqtt;
 
 std::string statusTopic = "msh/2/stat/";
@@ -218,15 +220,13 @@ void MQTT::reconnect()
             sendSubscriptions();
         } else {
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
-            LOG_ERROR("Failed to contact MQTT server (%d/5)...\n", reconnectCount + 1);
-            if (reconnectCount >= 4) {
+            reconnectCount++;
+            LOG_ERROR("Failed to contact MQTT server (%d/%d)...\n", reconnectCount, reconnectMax);
+            if (reconnectCount >= reconnectMax) {
                 needReconnect = true;
                 wifiReconnect->setIntervalFromNow(0);
                 reconnectCount = 0;
-            } else {
-                reconnectCount++;
             }
-
 #endif
         }
     }
