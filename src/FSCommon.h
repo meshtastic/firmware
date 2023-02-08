@@ -13,6 +13,10 @@
 #define FILE_O_READ "r"
 #endif
 
+// #if defined(ARCH_STM32WL)
+// TODO
+// #endif
+
 #if defined(ARCH_RP2040)
 // RP2040
 #include "LittleFS.h"
