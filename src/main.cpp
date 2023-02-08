@@ -56,6 +56,9 @@ NRF52Bluetooth *nrf52Bluetooth;
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
 #include "SX1280Interface.h"
+#ifdef ARCH_STM32WL
+#include "STM32WLE5JCInterface.h"
+#endif
 #if !HAS_RADIO && defined(ARCH_PORTDUINO)
 #include "platform/portduino/SimRadio.h"
 #endif
@@ -393,6 +396,18 @@ void setup()
 #endif
 
     // radio init MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
+#if defined(USE_STM32WLx)
+    if (!rIf) {
+        rIf = new STM32WLE5JCInterface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
+        if (!rIf->init()) {
+            LOG_WARN("Failed to find STM32WL radio\n");
+            delete rIf;
+            rIf = NULL;
+        } else {
+            LOG_INFO("STM32WL Radio init succeeded, using STM32WL radio\n");
+        }
+    }
+#endif
 
 #if !HAS_RADIO && defined(ARCH_PORTDUINO)
     if (!rIf) {
