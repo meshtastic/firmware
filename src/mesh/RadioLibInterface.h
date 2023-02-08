@@ -13,6 +13,7 @@
 #define INTERRUPT_ATTR
 #endif
 
+#if !defined(USE_STM32WLx)
 /**
  * A wrapper for the RadioLib Module class, that adds mutex for SPI bus access
  */
@@ -43,6 +44,24 @@ class LockingModule : public Module
     void SPIbeginTransaction() override;
     void SPIendTransaction() override;
 };
+#else
+/**
+ * A wrapper for the RadioLib STM32WLx_Module class, that doesn't connect any pins as they are virtual
+ */
+class LockingModule : public STM32WLx_Module
+{
+  public:
+    // STM32WLx uses virtual pins and has a separate SUBGHZ SPI
+    LockingModule(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE gpio, SPIClass &spi,
+                  SPISettings spiSettings)
+        : STM32WLx_Module()
+    {
+    }
+
+    void SPIbeginTransaction() override;
+    void SPIendTransaction() override;
+};
+#endif
 
 class RadioLibInterface : public RadioInterface, protected concurrency::NotifiedWorkerThread
 {
