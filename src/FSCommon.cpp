@@ -61,7 +61,29 @@ void listDir(const char *dirname, uint8_t levels, boolean del = false)
 #ifdef FSCom
 #if (defined(ARCH_ESP32) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
     char buffer[255];
+#elif defined(ARCH_STM32WL)
+    // Interate through EEPROM
+    OSFS::result r = OSFS::checkLibVersion();
+    if (r != OSFS::result::NO_ERROR)
+        return;
+    OSFS::fileHeader workingHeader;
+    uint16_t workingAddress = OSFS::startOfEEPROM + sizeof(OSFS::FSInfo);
+    while (true) {
+        OSFS::result r = readNBytesChk(workingAddress, sizeof(OSFS::fileHeader), &workingHeader);
+        if (r != OSFS::result::NO_ERROR)
+            return;
+        if (!isDeletedFile(workingHeader)) {
+            // DEBUG_MSG("  %s (%i Bytes)\n", workingHeader.fileID, workingHeader.fileSize);
+        }
+        if (workingHeader.nextFile == 0) {
+            return;
+        }
+        workingAddress = workingHeader.nextFile;
+    }
+    return;
+#else
 #endif
+#ifndef ARCH_STM32WL
     File root = FSCom.open(dirname, FILE_O_READ);
     if (!root) {
         return;
@@ -147,6 +169,7 @@ void listDir(const char *dirname, uint8_t levels, boolean del = false)
     }
 #else
     root.close();
+#endif
 #endif
 #endif
 }
