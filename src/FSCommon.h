@@ -13,9 +13,13 @@
 #define FILE_O_READ "r"
 #endif
 
-// #if defined(ARCH_STM32WL)
-// TODO
-// #endif
+#if defined(ARCH_STM32WL)
+#include "STM32WLFS.h"
+#define FSCom STM32WLFS
+#define FSBegin() FSCom.begin()
+#define FILE_O_WRITE "w"
+#define FILE_O_READ "r"
+#endif
 
 #if defined(ARCH_RP2040)
 // RP2040
