@@ -70,6 +70,8 @@ static char btPIN[16] = "888888";
 
 uint32_t logo_timeout = 5000; // 4 seconds for EACH logo
 
+uint32_t hours_in_month = 730;
+
 // This image definition is here instead of images.h because it's modified dynamically by the drawBattery function
 uint8_t imgBattery[16] = {0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0xE7, 0x3C};
 
@@ -380,13 +382,17 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
         display->setColor(BLACK);
     }
 
-    tm *tm = localtime(reinterpret_cast<const time_t *>(&mp.rx_time));
+    uint32_t seconds = sinceReceived(&mp);
+    uint32_t minutes = seconds / 60;
+    uint32_t hours = minutes / 60;
+    uint32_t days = hours / 24;
 
     if (config.display.heading_bold) {
-        display->drawStringf(1 + x, 0 + y, tempBuf, "[%02d:%02d:%02d] From: %s", tm->tm_hour, tm->tm_min, tm->tm_sec,
+        display->drawStringf(1 + x, 0 + y, tempBuf, "%s ago from %s",
+                             screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
                              (node && node->has_user) ? node->user.short_name : "???");
     }
-    display->drawStringf(0 + x, 0 + y, tempBuf, "[%02d:%02d:%02d] From: %s", tm->tm_hour, tm->tm_min, tm->tm_sec,
+    display->drawStringf(0 + x, 0 + y, tempBuf, "%s ago from %s", screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
                          (node && node->has_user) ? node->user.short_name : "???");
 
     display->setColor(WHITE);
@@ -416,38 +422,6 @@ static void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char *
         f++;
     }
 }
-
-#if 0
-    /// Draw a series of fields in a row, wrapping to multiple rows if needed
-    /// @return the max y we ended up printing to
-    static uint32_t drawRows(OLEDDisplay *display, int16_t x, int16_t y, const char **fields)
-    {
-        // The coordinates define the left starting point of the text
-        display->setTextAlignment(TEXT_ALIGN_LEFT);
-
-        const char **f = fields;
-        int xo = x, yo = y;
-        const int COLUMNS = 2; // hardwired for two columns per row....
-        int col = 0;           // track which column we are on
-        while (*f) {
-            display->drawString(xo, yo, *f);
-            xo += SCREEN_WIDTH / COLUMNS;
-            // Wrap to next row, if needed.
-            if (++col >= COLUMNS) {
-                xo = x;
-                yo += FONT_HEIGHT_SMALL;
-                col = 0;
-            }
-            f++;
-        }
-        if (col != 0) {
-            // Include last incomplete line in our total.
-            yo += FONT_HEIGHT_SMALL;
-        }
-
-        return yo;
-    }
-#endif
 
 // Draw power bars or a charging indicator on an image of a battery, determined by battery charge voltage or percentage.
 static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *imgBuffer, const PowerStatus *powerStatus)
@@ -823,9 +797,6 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     else if (agoSecs < 120 * 60) // last 2 hrs
         snprintf(lastStr, sizeof(lastStr), "%u minutes ago", agoSecs / 60);
     else {
-
-        uint32_t hours_in_month = 730;
-
         // Only show hours ago if it's been less than 6 months. Otherwise, we may have bad
         //   data.
         if ((agoSecs / 60 / 60) < (hours_in_month * 6)) {
@@ -1365,6 +1336,23 @@ void Screen::blink()
     dispdev.setBrightness(brightness);
 }
 
+std::string Screen::drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint32_t seconds)
+{
+    std::string uptime;
+
+    if (days > (hours_in_month * 6))
+        uptime = "?";
+    else if (days >= 2)
+        uptime = std::to_string(days) + "d";
+    else if (hours >= 2)
+        uptime = std::to_string(hours) + "h";
+    else if (minutes >= 1)
+        uptime = std::to_string(minutes) + "m";
+    else
+        uptime = std::to_string(seconds) + "s";
+    return uptime;
+}
+
 void Screen::handlePrint(const char *text)
 {
     // the string passed into us probably has a newline, but that would confuse the logging system
@@ -1729,15 +1717,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     display->setColor(WHITE);
 
     // Show uptime as days, hours, minutes OR seconds
-    String uptime;
-    if (days >= 2)
-        uptime += String(days) + "d ";
-    else if (hours >= 2)
-        uptime += String(hours) + "h ";
-    else if (minutes >= 1)
-        uptime += String(minutes) + "m ";
-    else
-        uptime += String(seconds) + "s ";
+    std::string uptime = screen->drawTimeDelta(days, hours, minutes, seconds);
 
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice);
     if (rtc_sec > 0) {
@@ -1752,12 +1732,12 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
         int min = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
         int sec = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
 
-        char timebuf[9];
-        snprintf(timebuf, sizeof(timebuf), "%02d:%02d:%02d", hour, min, sec);
+        char timebuf[10];
+        snprintf(timebuf, sizeof(timebuf), " %02d:%02d:%02d", hour, min, sec);
         uptime += timebuf;
     }
 
-    display->drawString(x, y + FONT_HEIGHT_SMALL * 1, uptime);
+    display->drawString(x, y + FONT_HEIGHT_SMALL * 1, uptime.c_str());
 
     // Display Channel Utilization
     char chUtil[13];

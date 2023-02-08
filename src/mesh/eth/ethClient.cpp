@@ -2,6 +2,7 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include "concurrency/Periodic.h"
+#include "main.h"
 #include "mesh/api/ethServerAPI.h"
 #include "mqtt/MQTT.h"
 #include "target_specific.h"
@@ -16,6 +17,9 @@ EthernetUDP ntpUDP;
 NTPClient timeClient(ntpUDP, config.network.ntp_server);
 uint32_t ntp_renew = 0;
 #endif
+
+EthernetUDP syslogClient;
+Syslog syslog(syslogClient);
 
 bool ethStartupComplete = 0;
 
@@ -36,6 +40,27 @@ static int32_t reconnectETH()
             timeClient.begin();
             timeClient.setUpdateInterval(60 * 60); // Update once an hour
 #endif
+
+            if (config.network.rsyslog_server[0]) {
+                LOG_INFO("Starting Syslog client\n");
+                // Defaults
+                int serverPort = 514;
+                const char *serverAddr = config.network.rsyslog_server;
+                String server = String(serverAddr);
+                int delimIndex = server.indexOf(':');
+                if (delimIndex > 0) {
+                    String port = server.substring(delimIndex + 1, server.length());
+                    server[delimIndex] = 0;
+                    serverPort = port.toInt();
+                    serverAddr = server.c_str();
+                }
+                syslog.server(serverAddr, serverPort);
+                syslog.deviceHostname(getDeviceName());
+                syslog.appName("Meshtastic");
+                syslog.defaultPriority(LOGLEVEL_USER);
+                syslog.enable();
+            }
+
             // initWebServer();
             initApiServer();
 
@@ -143,10 +168,13 @@ bool isEthernetAvailable()
 {
 
     if (!config.network.eth_enabled) {
+        syslog.disable();
         return false;
     } else if (Ethernet.hardwareStatus() == EthernetNoHardware) {
+        syslog.disable();
         return false;
     } else if (Ethernet.linkStatus() == LinkOFF) {
+        syslog.disable();
         return false;
     } else {
         return true;

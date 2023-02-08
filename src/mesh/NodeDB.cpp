@@ -599,6 +599,17 @@ uint32_t sinceLastSeen(const meshtastic_NodeInfo *n)
     return delta;
 }
 
+uint32_t sinceReceived(const meshtastic_MeshPacket *p)
+{
+    uint32_t now = getTime();
+
+    int delta = (int)(now - p->rx_time);
+    if (delta < 0) // our clock must be slightly off still - not set from GPS yet
+        delta = 0;
+
+    return delta;
+}
+
 #define NUM_ONLINE_SECS (60 * 60 * 2) // 2 hrs to consider someone offline
 
 size_t NodeDB::getNumOnlineNodes()
