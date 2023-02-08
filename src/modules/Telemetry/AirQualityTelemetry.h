@@ -1,26 +1,20 @@
 #pragma once
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "Adafruit_PM25AQI.h"
 #include "NodeDB.h"
 #include "ProtobufModule.h"
-#include <OLEDDisplay.h>
-#include <OLEDDisplayUi.h>
 
-class EnvironmentTelemetryModule : private concurrency::OSThread, public ProtobufModule<meshtastic_Telemetry>
+class AirQualityTelemetryModule : private concurrency::OSThread, public ProtobufModule<meshtastic_Telemetry>
 {
   public:
-    EnvironmentTelemetryModule()
-        : concurrency::OSThread("EnvironmentTelemetryModule"),
-          ProtobufModule("EnvironmentTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
+    AirQualityTelemetryModule()
+        : concurrency::OSThread("AirQualityTelemetryModule"),
+          ProtobufModule("AirQualityTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
         lastMeasurementPacket = nullptr;
         setIntervalFromNow(10 * 1000);
+        aqi = Adafruit_PM25AQI();
     }
-    virtual bool wantUIFrame() override;
-#if !HAS_SCREEN
-    void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
-#else
-    virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;
-#endif
 
   protected:
     /** Called to handle a particular incoming message
@@ -34,10 +28,10 @@ class EnvironmentTelemetryModule : private concurrency::OSThread, public Protobu
     bool sendTelemetry(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
 
   private:
-    float CelsiusToFahrenheit(float c);
+    Adafruit_PM25AQI aqi;
+    PM25_AQI_Data data = {0};
     bool firstTime = 1;
     meshtastic_MeshPacket *lastMeasurementPacket;
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute
     uint32_t lastSentToMesh = 0;
-    uint32_t sensor_read_error_count = 0;
 };

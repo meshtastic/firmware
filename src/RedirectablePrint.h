@@ -2,6 +2,7 @@
 
 #include <Print.h>
 #include <stdarg.h>
+#include <string>
 
 /**
  * A Printable that can be switched to squirt its bytes to a different sink.
@@ -40,6 +41,8 @@ class RedirectablePrint : public Print
     size_t vprintf(const char *format, va_list arg);
 
     void hexDump(const char *logLevel, unsigned char *buf, uint16_t len);
+
+    std::string mt_sprintf(const std::string fmt_str, ...);
 };
 
 class NoopPrint : public Print

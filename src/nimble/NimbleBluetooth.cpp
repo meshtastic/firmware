@@ -93,7 +93,6 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
             passkeyShowing = false;
             screen->stopBluetoothPinScreen();
         }
-        // bluetoothPhoneAPI->setInitialState();
     }
 
     virtual void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc) { LOG_INFO("BLE disconnect\n"); }
@@ -117,6 +116,21 @@ bool NimbleBluetooth::isActive()
     return bleServer;
 }
 
+bool NimbleBluetooth::isConnected()
+{
+    return bleServer->getConnectedCount() > 0;
+}
+
+int NimbleBluetooth::getRssi()
+{
+    if (bleServer && isConnected()) {
+        auto service = bleServer->getServiceByUUID(MESH_SERVICE_UUID);
+        uint16_t handle = service->getHandle();
+        return NimBLEDevice::getClientByID(handle)->getRssi();
+    }
+    return 0; // FIXME figure out where to source this
+}
+
 void NimbleBluetooth::setup()
 {
     // Uncomment for testing
@@ -135,7 +149,6 @@ void NimbleBluetooth::setup()
 
     NimbleBluetoothServerCallback *serverCallbacks = new NimbleBluetoothServerCallback();
     bleServer->setCallbacks(serverCallbacks, true);
-
     setupService();
     startAdvertising();
 }
