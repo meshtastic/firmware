@@ -610,8 +610,16 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
     config.lora.tx_power = p.tx_power;
     config.lora.override_frequency = p.frequency;
 
+    // Remove PSK of primary channel for plaintext amateur usage
+    auto primaryChannel = channels.getByIndex(channels.getPrimaryIndex());
+    auto &channelSettings = ch.settings;
+    channelSettings.psk.bytes[0] = 0;
+    channelSettings.psk.size = 0;
+    channels.setChannel(primaryChannel);
+    channels.onConfigChanged();
+
     service.reloadOwner(false);
-    service.reloadConfig(SEGMENT_CONFIG | SEGMENT_DEVICESTATE);
+    service.reloadConfig(SEGMENT_CONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
 }
 
 AdminModule::AdminModule() : ProtobufModule("Admin", meshtastic_PortNum_ADMIN_APP, &meshtastic_AdminMessage_msg)
