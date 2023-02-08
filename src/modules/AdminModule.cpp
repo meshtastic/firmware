@@ -609,6 +609,9 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
     config.lora.override_duty_cycle = true;
     config.lora.tx_power = p.tx_power;
     config.lora.override_frequency = p.frequency;
+    // Set node info broadcast interval to 10 minutes
+    // For FCC minimum call-sign announcement
+    config.device.node_info_broadcast_secs = 600;
 
     // Remove PSK of primary channel for plaintext amateur usage
     auto primaryChannel = channels.getByIndex(channels.getPrimaryIndex());
