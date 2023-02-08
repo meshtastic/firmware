@@ -15,7 +15,7 @@
 //
 
 #ifndef HW_VENDOR
-#define HW_VENDOR HardwareModel_PRIVATE_HW
+#define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #endif
 
 /* virtual pins */
