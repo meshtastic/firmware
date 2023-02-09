@@ -226,6 +226,7 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
         strncpy(owner.id, o.id, sizeof(owner.id));
     }
     if (owner.is_licensed != o.is_licensed) {
+        changed = 1;
         owner.is_licensed = o.is_licensed;
     }
 
