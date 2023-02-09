@@ -604,6 +604,7 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
 
 void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
 {
+    // Set call sign and override lora limitations for licensed use
     strncpy(owner.long_name, p.call_sign, sizeof(owner.long_name));
     owner.is_licensed = true;
     config.lora.override_duty_cycle = true;
@@ -613,6 +614,7 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
     // For FCC minimum call-sign announcement
     config.device.node_info_broadcast_secs = 600;
 
+    config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY;
     // Remove PSK of primary channel for plaintext amateur usage
     auto primaryChannel = channels.getByIndex(channels.getPrimaryIndex());
     auto &channelSettings = primaryChannel.settings;
