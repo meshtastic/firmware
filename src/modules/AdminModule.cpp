@@ -615,7 +615,7 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
 
     // Remove PSK of primary channel for plaintext amateur usage
     auto primaryChannel = channels.getByIndex(channels.getPrimaryIndex());
-    auto &channelSettings = ch.settings;
+    auto &channelSettings = primaryChannel.settings;
     channelSettings.psk.bytes[0] = 0;
     channelSettings.psk.size = 0;
     channels.setChannel(primaryChannel);
