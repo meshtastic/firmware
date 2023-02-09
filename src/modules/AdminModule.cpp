@@ -212,7 +212,6 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 void AdminModule::handleSetOwner(const meshtastic_User &o)
 {
     int changed = 0;
-    bool licensed_changed = false;
 
     if (*o.long_name) {
         changed |= strcmp(owner.long_name, o.long_name);
@@ -228,14 +227,12 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
     }
     if (owner.is_licensed != o.is_licensed) {
         changed = 1;
-        licensed_changed = true;
         owner.is_licensed = o.is_licensed;
-        config.lora.override_duty_cycle = owner.is_licensed; // override duty cycle for licensed operators
     }
 
     if (changed) { // If nothing really changed, don't broadcast on the network or write to flash
         service.reloadOwner(!hasOpenEditTransaction);
-        licensed_changed ? saveChanges(SEGMENT_CONFIG | SEGMENT_DEVICESTATE) : saveChanges(SEGMENT_DEVICESTATE);
+        saveChanges(SEGMENT_DEVICESTATE);
     }
 }
 
@@ -604,14 +601,27 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
 
 void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
 {
+    // Set call sign and override lora limitations for licensed use
     strncpy(owner.long_name, p.call_sign, sizeof(owner.long_name));
     owner.is_licensed = true;
     config.lora.override_duty_cycle = true;
     config.lora.tx_power = p.tx_power;
     config.lora.override_frequency = p.frequency;
+    // Set node info broadcast interval to 10 minutes
+    // For FCC minimum call-sign announcement
+    config.device.node_info_broadcast_secs = 600;
+
+    config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY;
+    // Remove PSK of primary channel for plaintext amateur usage
+    auto primaryChannel = channels.getByIndex(channels.getPrimaryIndex());
+    auto &channelSettings = primaryChannel.settings;
+    channelSettings.psk.bytes[0] = 0;
+    channelSettings.psk.size = 0;
+    channels.setChannel(primaryChannel);
+    channels.onConfigChanged();
 
     service.reloadOwner(false);
-    service.reloadConfig(SEGMENT_CONFIG | SEGMENT_DEVICESTATE);
+    service.reloadConfig(SEGMENT_CONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
 }
 
 AdminModule::AdminModule() : ProtobufModule("Admin", meshtastic_PortNum_ADMIN_APP, &meshtastic_AdminMessage_msg)
