@@ -8,5 +8,12 @@
 
 #define HW_VENDOR meshtastic_HardwareModel_PORTDUINO
 
-#define HAS_RTC 1
+#ifndef HAS_WIFI
 #define HAS_WIFI 1
+#endif
+#ifndef HAS_RTC
+#define HAS_RTC 1
+#endif
+#ifndef HAS_TELEMETRY
+#define HAS_TELEMETRY 1
+#endif
