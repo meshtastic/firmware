@@ -132,7 +132,7 @@ void MeshService::reloadOwner(bool shouldSave)
  */
 void MeshService::handleToRadio(meshtastic_MeshPacket &p)
 {
-#ifdef ARCH_PORTDUINO
+#if defined(ARCH_PORTDUINO) && !HAS_RADIO
     // Simulates device is receiving a packet via the LoRa chip
     if (p.decoded.portnum == meshtastic_PortNum_SIMULATOR_APP) {
         // Simulator packet (=Compressed packet) is encapsulated in a MeshPacket, so need to unwrap first
