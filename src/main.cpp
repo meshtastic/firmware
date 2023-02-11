@@ -394,6 +394,19 @@ void setup()
 
     // radio init MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
 
+#if !HAS_RADIO && defined(ARCH_PORTDUINO)
+    if (!rIf) {
+        rIf = new SimRadio;
+        if (!rIf->init()) {
+            LOG_WARN("Failed to find simulated radio\n");
+            delete rIf;
+            rIf = NULL;
+        } else {
+            LOG_INFO("Using SIMULATED radio!\n");
+        }
+    }
+#endif
+
 #if defined(RF95_IRQ)
     if (!rIf) {
         rIf = new RF95Interface(RF95_NSS, RF95_IRQ, RF95_RESET, SPI);
@@ -455,19 +468,6 @@ void setup()
             rIf = NULL;
         } else {
             LOG_INFO("LLCC68 Radio init succeeded, using LLCC68 radio\n");
-        }
-    }
-#endif
-
-#ifdef ARCH_PORTDUINO
-    if (!rIf) {
-        rIf = new SimRadio;
-        if (!rIf->init()) {
-            LOG_WARN("Failed to find simulated radio\n");
-            delete rIf;
-            rIf = NULL;
-        } else {
-            LOG_INFO("Using SIMULATED radio!\n");
         }
     }
 #endif
