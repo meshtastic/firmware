@@ -75,9 +75,13 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
 {
     powerFSM.trigger(EVENT_PACKET_FOR_PHONE); // Possibly keep the node from sleeping
 
-    printPacket("Forwarding to phone", mp);
     nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
+    if (!nodeDB.getNode(mp->from)->has_user) {
+        LOG_INFO("Heard a node we don't know, sending NodeInfo and asking for a response.\n");
+        nodeInfoModule->sendOurNodeInfo(mp->from, true);
+    }
 
+    printPacket("Forwarding to phone", mp);
     sendToPhone((meshtastic_MeshPacket *)mp);
 
     return 0;
