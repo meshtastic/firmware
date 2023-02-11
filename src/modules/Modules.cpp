@@ -17,8 +17,8 @@
 #include "modules/Telemetry/DeviceTelemetry.h"
 #endif
 #if HAS_SENSOR
-#include "modules/Telemetry/EnvironmentTelemetry.h"
 #include "modules/Telemetry/AirQualityTelemetry.h"
+#include "modules/Telemetry/EnvironmentTelemetry.h"
 #endif
 #ifdef ARCH_ESP32
 #include "modules/esp32/AudioModule.h"
