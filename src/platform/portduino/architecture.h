@@ -3,10 +3,6 @@
 #define ARCH_PORTDUINO
 
 //
-// defaults for NRF52 architecture
-//
-
-//
 // set HW_VENDOR
 //
 
