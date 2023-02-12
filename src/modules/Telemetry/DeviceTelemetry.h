@@ -12,7 +12,7 @@ class DeviceTelemetryModule : private concurrency::OSThread, public ProtobufModu
         : concurrency::OSThread("DeviceTelemetryModule"),
           ProtobufModule("DeviceTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
-        setIntervalFromNow(10 * 1000);
+        setIntervalFromNow(45 * 1000); // Wait until NodeInfo is sent
     }
     virtual bool wantUIFrame() { return false; }
 

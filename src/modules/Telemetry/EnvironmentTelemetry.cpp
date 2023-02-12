@@ -52,7 +52,6 @@ SHT31Sensor sht31Sensor;
 
 int32_t EnvironmentTelemetryModule::runOnce()
 {
-#ifndef ARCH_PORTDUINO
     int32_t result = INT32_MAX;
     /*
         Uncomment the preferences below if you want to use the module
@@ -115,7 +114,6 @@ int32_t EnvironmentTelemetryModule::runOnce()
         }
     }
     return sendToPhoneIntervalMs;
-#endif
 }
 
 bool EnvironmentTelemetryModule::wantUIFrame()
