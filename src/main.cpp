@@ -537,6 +537,21 @@ uint32_t shutdownAtMsec; // If not zero we will shutdown at this time (used to s
 // This will supress the current delay and instead try to run ASAP.
 bool runASAP;
 
+extern meshtastic_DeviceMetadata getDeviceMetadata()
+{
+    meshtastic_DeviceMetadata deviceMetadata;
+    strncpy(deviceMetadata.firmware_version, myNodeInfo.firmware_version, 18);
+    deviceMetadata.device_state_version = DEVICESTATE_CUR_VER;
+    deviceMetadata.canShutdown = pmu_found || HAS_CPU_SHUTDOWN;
+    deviceMetadata.hasBluetooth = HAS_BLUETOOTH;
+    deviceMetadata.hasWifi = HAS_WIFI;
+    deviceMetadata.hasEthernet = HAS_ETHERNET;
+    deviceMetadata.role = config.device.role;
+    deviceMetadata.position_flags = config.position.position_flags;
+    deviceMetadata.hw_model = HW_VENDOR;
+    return deviceMetadata;
+}
+
 void loop()
 {
     runASAP = false;

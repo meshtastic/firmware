@@ -6,6 +6,7 @@
 #include "PowerFSM.h"
 #include "RadioInterface.h"
 #include "configuration.h"
+#include "main.h"
 #include "xmodem.h"
 
 #if FromRadio_size > MAX_TO_FROM_RADIO_SIZE
