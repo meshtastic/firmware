@@ -277,11 +277,15 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         config_state++;
         // Advance when we have sent all of our ModuleConfig objects
         if (config_state > (_meshtastic_AdminMessage_ModuleConfigType_MAX + 1)) {
-            state = STATE_SEND_COMPLETE_ID;
+            state = STATE_SEND_METADATA;
             config_state = 0;
         }
         break;
-
+    case STATE_SEND_METADATA:
+        fromRadioScratch.which_payload_variant = meshtastic_FromRadio_metadata_tag;
+        fromRadioScratch.metadata = getDeviceMetadata();
+        state = STATE_SEND_COMPLETE_ID;
+        break;
     case STATE_SEND_COMPLETE_ID:
         LOG_INFO("getFromRadio=STATE_SEND_COMPLETE_ID\n");
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_config_complete_id_tag;

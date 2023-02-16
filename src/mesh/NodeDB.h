@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Observer.h"
+#include "main.h"
 #include <Arduino.h>
 #include <assert.h>
 
@@ -229,3 +230,18 @@ extern uint32_t radioGeneration;
     (ModuleConfig_CannedMessageConfig_size + ModuleConfig_ExternalNotificationConfig_size + ModuleConfig_MQTTConfig_size +       \
      ModuleConfig_RangeTestConfig_size + ModuleConfig_SerialConfig_size + ModuleConfig_StoreForwardConfig_size +                 \
      ModuleConfig_TelemetryConfig_size + ModuleConfig_size)
+
+inline meshtastic_DeviceMetadata getDeviceMetadata()
+{
+    meshtastic_DeviceMetadata deviceMetadata;
+    strncpy(deviceMetadata.firmware_version, myNodeInfo.firmware_version, 18);
+    deviceMetadata.device_state_version = DEVICESTATE_CUR_VER;
+    deviceMetadata.canShutdown = pmu_found || HAS_CPU_SHUTDOWN;
+    deviceMetadata.hasBluetooth = HAS_BLUETOOTH;
+    deviceMetadata.hasWifi = HAS_WIFI;
+    deviceMetadata.hasEthernet = HAS_ETHERNET;
+    deviceMetadata.role = config.device.role;
+    deviceMetadata.position_flags = config.position.position_flags;
+    deviceMetadata.hw_model = HW_VENDOR;
+    return deviceMetadata;
+}
