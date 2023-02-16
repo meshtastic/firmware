@@ -11,7 +11,6 @@
 #include "RTC.h"
 #include "Router.h"
 #include "error.h"
-#include "main.h"
 #include "mesh-pb-constants.h"
 #include <ErriezCRC32.h>
 #include <pb_decode.h>
