@@ -77,6 +77,8 @@ void MeshModule::callPlugins(const meshtastic_MeshPacket &mp, RxSource src)
 
     currentReply = NULL; // No reply yet
 
+    bool ignoreRequest = false; // No module asked to ignore the request yet
+
     // Was this message directed to us specifically?  Will be false if we are sniffing someone elses packets
     auto ourNodeNum = nodeDB.getNodeNum();
     bool toUs = mp.to == NODENUM_BROADCAST || mp.to == ourNodeNum;
@@ -135,7 +137,8 @@ void MeshModule::callPlugins(const meshtastic_MeshPacket &mp, RxSource src)
                 // any other node.
                 if (mp.decoded.want_response && toUs && (getFrom(&mp) != ourNodeNum || mp.to == ourNodeNum) && !currentReply) {
                     pi.sendResponse(mp);
-                    LOG_INFO("Module '%s' sent a response\n", pi.name);
+                    ignoreRequest = ignoreRequest || pi.ignoreRequest; // If at least one module asks it, we may ignore a request
+                    LOG_INFO("Asked module '%s' to send a response\n", pi.name);
                 } else {
                     LOG_DEBUG("Module '%s' considered\n", pi.name);
                 }
@@ -162,8 +165,9 @@ void MeshModule::callPlugins(const meshtastic_MeshPacket &mp, RxSource src)
             printPacket("Sending response", currentReply);
             service.sendToMesh(currentReply);
             currentReply = NULL;
-        } else if (mp.from != ourNodeNum) {
-            // Note: if the message started with the local node we don't want to send a no response reply
+        } else if (mp.from != ourNodeNum && !ignoreRequest) {
+            // Note: if the message started with the local node or a module asked to ignore the request, we don't want to send a
+            // no response reply
 
             // No one wanted to reply to this requst, tell the requster that happened
             LOG_DEBUG("No one responded, send a nak\n");
