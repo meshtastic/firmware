@@ -121,6 +121,7 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
  *      STATE_SEND_NODEINFO, // states progress in this order as the device sends to the client
         STATE_SEND_CONFIG,
         STATE_SEND_MODULE_CONFIG,
+        STATE_SEND_METADATA,
         STATE_SEND_COMPLETE_ID,
         STATE_SEND_PACKETS // send packets or debug strings
  */
@@ -366,6 +367,7 @@ bool PhoneAPI::available()
     case STATE_SEND_CHANNELS:
     case STATE_SEND_CONFIG:
     case STATE_SEND_MODULECONFIG:
+    case STATE_SEND_METADATA:
     case STATE_SEND_COMPLETE_ID:
         return true;
 
