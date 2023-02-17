@@ -50,6 +50,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "fonts/OLEDDisplayFontsRU.h"
 #endif
 
+#ifdef OLED_UA
+#include "fonts/OLEDDisplayFontsUA.h"
+#endif
+
 using namespace meshtastic; /** @todo remove */
 
 namespace graphics
