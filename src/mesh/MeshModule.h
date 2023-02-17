@@ -94,6 +94,9 @@ class MeshModule
      * flag */
     bool encryptedOk = false;
 
+    /* We allow modules to ignore a request without sending an error if they have a specific reason for it. */
+    bool ignoreRequest = false;
+
     /** If a bound channel name is set, we will only accept received packets that come in on that channel.
      * A special exception (FIXME, not sure if this is a good idea) - packets that arrive on the local interface
      * are allowed on any channel (this lets the local user do anything).

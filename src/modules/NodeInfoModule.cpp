@@ -34,20 +34,32 @@ void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies)
         service.cancelSending(prevPacketId);
 
     meshtastic_MeshPacket *p = allocReply();
-    p->to = dest;
-    p->decoded.want_response = wantReplies;
-    p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
-    prevPacketId = p->id;
+    if (p) { // Check whether we didn't ignore it
+        p->to = dest;
+        p->decoded.want_response = wantReplies;
+        p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+        prevPacketId = p->id;
 
-    service.sendToMesh(p);
+        service.sendToMesh(p);
+    }
 }
 
 meshtastic_MeshPacket *NodeInfoModule::allocReply()
 {
-    meshtastic_User &u = owner;
+    uint32_t now = millis();
+    // If we sent our NodeInfo less than 1 min. ago, don't send it again as it may be still underway.
+    if (lastSentToMesh && (now - lastSentToMesh) < 60 * 1000) {
+        LOG_DEBUG("Sending NodeInfo will be ignored since we just sent it.\n");
+        ignoreRequest = true; // Mark it as ignored for MeshModule
+        return NULL;
+    } else {
+        ignoreRequest = false; // Don't ignore requests anymore
+        meshtastic_User &u = owner;
 
-    LOG_INFO("sending owner %s/%s/%s\n", u.id, u.long_name, u.short_name);
-    return allocDataProtobuf(u);
+        LOG_INFO("sending owner %s/%s/%s\n", u.id, u.long_name, u.short_name);
+        lastSentToMesh = now;
+        return allocDataProtobuf(u);
+    }
 }
 
 NodeInfoModule::NodeInfoModule()
