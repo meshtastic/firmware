@@ -75,9 +75,13 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
 {
     powerFSM.trigger(EVENT_PACKET_FOR_PHONE); // Possibly keep the node from sleeping
 
-    printPacket("Forwarding to phone", mp);
     nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
+    if (!nodeDB.getNode(mp->from)->has_user && nodeInfoModule) {
+        LOG_INFO("Heard a node we don't know, sending NodeInfo and asking for a response.\n");
+        nodeInfoModule->sendOurNodeInfo(mp->from, true);
+    }
 
+    printPacket("Forwarding to phone", mp);
     sendToPhone((meshtastic_MeshPacket *)mp);
 
     return 0;
@@ -132,7 +136,7 @@ void MeshService::reloadOwner(bool shouldSave)
  */
 void MeshService::handleToRadio(meshtastic_MeshPacket &p)
 {
-#ifdef ARCH_PORTDUINO
+#if defined(ARCH_PORTDUINO) && !HAS_RADIO
     // Simulates device is receiving a packet via the LoRa chip
     if (p.decoded.portnum == meshtastic_PortNum_SIMULATOR_APP) {
         // Simulator packet (=Compressed packet) is encapsulated in a MeshPacket, so need to unwrap first

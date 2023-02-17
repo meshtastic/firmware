@@ -170,6 +170,8 @@ void NodeDB::installDefaultConfig()
     config.lora.hop_limit = HOP_RELIABLE;
     config.position.gps_enabled = true;
     config.position.position_broadcast_smart_enabled = true;
+    if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER)
+        config.device.node_info_broadcast_secs = 3 * 60 * 60;
     config.device.serial_enabled = true;
     resetRadioConfig();
     strncpy(config.network.ntp_server, "0.pool.ntp.org", 32);
