@@ -63,7 +63,7 @@ class RadioInterface
       - Tx/Rx turnaround time (maximum of SX126x and SX127x);
       - MAC processing time (measured on T-beam) */
     uint32_t slotTimeMsec = 8.5 * pow(2, sf) / bw + 0.2 + 0.4 + 7;
-    uint16_t preambleLength = 32; // 8 is default, but we use longer to increase the amount of sleep time when receiving
+    uint16_t preambleLength = 16; // 8 is default, but we use longer to increase the amount of sleep time when receiving
     const uint32_t PROCESSING_TIME_MSEC =
         4500;                // time to construct, process and construct a packet again (empirically determined)
     const uint8_t CWmin = 2; // minimum CWsize
