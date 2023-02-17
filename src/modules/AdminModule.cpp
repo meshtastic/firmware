@@ -603,6 +603,7 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
 {
     // Set call sign and override lora limitations for licensed use
     strncpy(owner.long_name, p.call_sign, sizeof(owner.long_name));
+    strncpy(owner.short_name, p.short_name, sizeof(owner.short_name));
     owner.is_licensed = true;
     config.lora.override_duty_cycle = true;
     config.lora.tx_power = p.tx_power;

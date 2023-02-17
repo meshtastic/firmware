@@ -67,6 +67,8 @@ typedef struct _meshtastic_HamParameters {
  Please respect your local laws, regulations, and band plans.
  Ensure your radio is capable of operating of the selected frequency before setting this. */
     float frequency;
+    /* Optional short name of user */
+    char short_name[6];
 } meshtastic_HamParameters;
 
 /* This message is handled by the Admin module and is responsible for all settings/channel read/write operations.
@@ -169,14 +171,15 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_AdminMessage_init_default     {0, {0}}
-#define meshtastic_HamParameters_init_default    {"", 0, 0}
+#define meshtastic_HamParameters_init_default    {"", 0, 0, ""}
 #define meshtastic_AdminMessage_init_zero        {0, {0}}
-#define meshtastic_HamParameters_init_zero       {"", 0, 0}
+#define meshtastic_HamParameters_init_zero       {"", 0, 0, ""}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_HamParameters_call_sign_tag   1
 #define meshtastic_HamParameters_tx_power_tag    2
 #define meshtastic_HamParameters_frequency_tag   3
+#define meshtastic_HamParameters_short_name_tag  4
 #define meshtastic_AdminMessage_get_channel_request_tag 1
 #define meshtastic_AdminMessage_get_channel_response_tag 2
 #define meshtastic_AdminMessage_get_owner_request_tag 3
@@ -259,7 +262,8 @@ X(a, STATIC,   ONEOF,    INT32,    (payload_variant,nodedb_reset,nodedb_reset), 
 #define meshtastic_HamParameters_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   call_sign,         1) \
 X(a, STATIC,   SINGULAR, INT32,    tx_power,          2) \
-X(a, STATIC,   SINGULAR, FLOAT,    frequency,         3)
+X(a, STATIC,   SINGULAR, FLOAT,    frequency,         3) \
+X(a, STATIC,   SINGULAR, STRING,   short_name,        4)
 #define meshtastic_HamParameters_CALLBACK NULL
 #define meshtastic_HamParameters_DEFAULT NULL
 
@@ -272,7 +276,7 @@ extern const pb_msgdesc_t meshtastic_HamParameters_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define meshtastic_AdminMessage_size             234
-#define meshtastic_HamParameters_size            25
+#define meshtastic_HamParameters_size            32
 
 #ifdef __cplusplus
 } /* extern "C" */
