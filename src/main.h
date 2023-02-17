@@ -4,6 +4,7 @@
 #include "NodeStatus.h"
 #include "PowerStatus.h"
 #include "graphics/Screen.h"
+#include "memGet.h"
 #include "mesh/generated/meshtastic/telemetry.pb.h"
 #include <map>
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
