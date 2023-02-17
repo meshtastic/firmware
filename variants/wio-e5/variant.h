@@ -13,7 +13,7 @@ Do not expect a working Meshtastic device with this target.
 #define _VARIANT_WIOE5_
 
 // Arduino/PlatformIO support for SUBGHZSPI is not currently available
-//#define USE_SX1262
+// #define USE_SX1262
 
 #ifdef USE_SX1262
 #define HAS_RADIO 1
