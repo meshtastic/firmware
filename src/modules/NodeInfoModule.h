@@ -35,6 +35,9 @@ class NodeInfoModule : public ProtobufModule<meshtastic_User>, private concurren
 
     /** Does our periodic broadcast */
     virtual int32_t runOnce() override;
+
+  private:
+    uint32_t lastSentToMesh = 0; // Last time we sent our NodeInfo to the mesh
 };
 
 extern NodeInfoModule *nodeInfoModule;

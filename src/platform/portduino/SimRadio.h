@@ -3,10 +3,11 @@
 #include "MeshPacketQueue.h"
 #include "RadioInterface.h"
 #include "api/WiFiServerAPI.h"
+#include "concurrency/NotifiedWorkerThread.h"
 
 #include <RadioLib.h>
 
-class SimRadio : public RadioInterface
+class SimRadio : public RadioInterface, protected concurrency::NotifiedWorkerThread
 {
     enum PendingISR { ISR_NONE = 0, ISR_RX, ISR_TX, TRANSMIT_DELAY_COMPLETED };
 
