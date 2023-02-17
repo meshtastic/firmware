@@ -110,7 +110,11 @@ static uint16_t displayWidth, displayHeight;
 #ifdef OLED_RU
 #define FONT_SMALL ArialMT_Plain_10_RU
 #else
+#ifdef OLED_UA
+#define FONT_SMALL ArialMT_Plain_10_UA
+#else
 #define FONT_SMALL ArialMT_Plain_10 // Height: 13
+#endif
 #endif
 #define FONT_MEDIUM ArialMT_Plain_16 // Height: 19
 #define FONT_LARGE ArialMT_Plain_24  // Height: 28
