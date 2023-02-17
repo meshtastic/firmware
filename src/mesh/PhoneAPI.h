@@ -26,6 +26,7 @@ class PhoneAPI
         STATE_SEND_CHANNELS,     // Send all channels
         STATE_SEND_CONFIG,       // Replacement for the old Radioconfig
         STATE_SEND_MODULECONFIG, // Send Module specific config
+        STATE_SEND_METADATA,
         STATE_SEND_COMPLETE_ID,
         STATE_SEND_PACKETS // send packets or debug strings
     };
