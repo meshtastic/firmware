@@ -57,9 +57,13 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_TLORA_V2_1_1P8 = 15,
     /* TODO: REPLACE */
     meshtastic_HardwareModel_TLORA_T3_S3 = 16,
+    /* B&Q Consulting Nano G1 Explorer: https://wiki.uniteng.com/en/meshtastic/nano-g1-explorer */
+    meshtastic_HardwareModel_NANO_G1_EXPLORER = 17,
     /* B&Q Consulting Station Edition G1: https://uniteng.com/wiki/doku.php?id=meshtastic:station */
     meshtastic_HardwareModel_STATION_G1 = 25,
-    /* Less common/prototype boards listed here (needs one more byte over the air) */
+    /* ---------------------------------------------------------------------------
+ Less common/prototype boards listed here (needs one more byte over the air)
+ --------------------------------------------------------------------------- */
     meshtastic_HardwareModel_LORA_RELAY_V1 = 32,
     /* TODO: REPLACE */
     meshtastic_HardwareModel_NRF52840DK = 33,
@@ -89,9 +93,9 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_BETAFPV_2400_TX = 45,
     /* BetaFPV ExpressLRS "Nano" TX Module 900MHz with ESP32 CPU */
     meshtastic_HardwareModel_BETAFPV_900_NANO_TX = 46,
-    /* B&Q Consulting Nano G1 Explorer: https://wiki.uniteng.com/en/meshtastic/nano-g1-explorer */
-    meshtastic_HardwareModel_NANO_G1_EXPLORER = 47,
-    /* Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits. */
+    /* ------------------------------------------------------------------------------------------------------------------------------------------
+ Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
+ ------------------------------------------------------------------------------------------------------------------------------------------ */
     meshtastic_HardwareModel_PRIVATE_HW = 255
 } meshtastic_HardwareModel;
 
