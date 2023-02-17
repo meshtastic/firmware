@@ -622,10 +622,10 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
 
     // data->memory
     JSONObject jsonObjMemory;
-    jsonObjMemory["heap_total"] = new JSONValue((int)ESP.getHeapSize());
-    jsonObjMemory["heap_free"] = new JSONValue((int)ESP.getFreeHeap());
-    jsonObjMemory["psram_total"] = new JSONValue((int)ESP.getPsramSize());
-    jsonObjMemory["psram_free"] = new JSONValue((int)ESP.getFreePsram());
+    jsonObjMemory["heap_total"] = new JSONValue((int)memGet.getHeapSize());
+    jsonObjMemory["heap_free"] = new JSONValue((int)memGet.getFreeHeap());
+    jsonObjMemory["psram_total"] = new JSONValue((int)memGet.getPsramSize());
+    jsonObjMemory["psram_free"] = new JSONValue((int)memGet.getFreePsram());
     jsonObjMemory["fs_total"] = new JSONValue((int)FSCom.totalBytes());
     jsonObjMemory["fs_used"] = new JSONValue((int)FSCom.usedBytes());
     jsonObjMemory["fs_free"] = new JSONValue(int(FSCom.totalBytes() - FSCom.usedBytes()));

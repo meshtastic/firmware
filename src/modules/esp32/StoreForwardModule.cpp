@@ -5,6 +5,7 @@
 #include "Router.h"
 #include "airtime.h"
 #include "configuration.h"
+#include "memGet.h"
 #include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/storeforward.pb.h"
 #include "modules/ModuleDev.h"
@@ -63,8 +64,8 @@ void StoreForwardModule::populatePSRAM()
         https://learn.upesy.com/en/programmation/psram.html#psram-tab
     */
 
-    LOG_DEBUG("*** Before PSRAM initilization: heap %d/%d PSRAM %d/%d\n", ESP.getFreeHeap(), ESP.getHeapSize(),
-              ESP.getFreePsram(), ESP.getPsramSize());
+    LOG_DEBUG("*** Before PSRAM initilization: heap %d/%d PSRAM %d/%d\n", memGet.getFreeHeap(), memGet.getHeapSize(),
+              memGet.getFreePsram(), memGet.getPsramSize());
 
     this->packetHistoryTXQueue =
         static_cast<PacketHistoryStruct *>(ps_calloc(this->historyReturnMax, sizeof(PacketHistoryStruct)));
@@ -72,13 +73,14 @@ void StoreForwardModule::populatePSRAM()
     /* Use a maximum of 2/3 the available PSRAM unless otherwise specified.
         Note: This needs to be done after every thing that would use PSRAM
     */
-    uint32_t numberOfPackets = (this->records ? this->records : (((ESP.getFreePsram() / 3) * 2) / sizeof(PacketHistoryStruct)));
+    uint32_t numberOfPackets =
+        (this->records ? this->records : (((memGet.getFreePsram() / 3) * 2) / sizeof(PacketHistoryStruct)));
     this->records = numberOfPackets;
 
     this->packetHistory = static_cast<PacketHistoryStruct *>(ps_calloc(numberOfPackets, sizeof(PacketHistoryStruct)));
 
-    LOG_DEBUG("*** After PSRAM initilization: heap %d/%d PSRAM %d/%d\n", ESP.getFreeHeap(), ESP.getHeapSize(), ESP.getFreePsram(),
-              ESP.getPsramSize());
+    LOG_DEBUG("*** After PSRAM initilization: heap %d/%d PSRAM %d/%d\n", memGet.getFreeHeap(), memGet.getHeapSize(),
+              memGet.getFreePsram(), memGet.getPsramSize());
     LOG_DEBUG("*** numberOfPackets for packetHistory - %u\n", numberOfPackets);
 }
 
@@ -445,8 +447,8 @@ StoreForwardModule::StoreForwardModule()
         if ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER) ||
             (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT)) {
             LOG_INFO("*** Initializing Store & Forward Module in Router mode\n");
-            if (ESP.getPsramSize() > 0) {
-                if (ESP.getFreePsram() >= 1024 * 1024) {
+            if (memGet.getPsramSize() > 0) {
+                if (memGet.getFreePsram() >= 1024 * 1024) {
 
                     // Do the startup here
 
