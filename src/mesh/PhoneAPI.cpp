@@ -6,6 +6,7 @@
 #include "PowerFSM.h"
 #include "RadioInterface.h"
 #include "configuration.h"
+#include "main.h"
 #include "xmodem.h"
 
 #if FromRadio_size > MAX_TO_FROM_RADIO_SIZE
@@ -120,6 +121,7 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
  *      STATE_SEND_NODEINFO, // states progress in this order as the device sends to the client
         STATE_SEND_CONFIG,
         STATE_SEND_MODULE_CONFIG,
+        STATE_SEND_METADATA,
         STATE_SEND_COMPLETE_ID,
         STATE_SEND_PACKETS // send packets or debug strings
  */
@@ -277,11 +279,15 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         config_state++;
         // Advance when we have sent all of our ModuleConfig objects
         if (config_state > (_meshtastic_AdminMessage_ModuleConfigType_MAX + 1)) {
-            state = STATE_SEND_COMPLETE_ID;
+            state = STATE_SEND_METADATA;
             config_state = 0;
         }
         break;
-
+    case STATE_SEND_METADATA:
+        fromRadioScratch.which_payload_variant = meshtastic_FromRadio_metadata_tag;
+        fromRadioScratch.metadata = getDeviceMetadata();
+        state = STATE_SEND_COMPLETE_ID;
+        break;
     case STATE_SEND_COMPLETE_ID:
         LOG_INFO("getFromRadio=STATE_SEND_COMPLETE_ID\n");
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_config_complete_id_tag;
@@ -361,6 +367,7 @@ bool PhoneAPI::available()
     case STATE_SEND_CHANNELS:
     case STATE_SEND_CONFIG:
     case STATE_SEND_MODULECONFIG:
+    case STATE_SEND_METADATA:
     case STATE_SEND_COMPLETE_ID:
         return true;
 
