@@ -490,19 +490,7 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
 void AdminModule::handleGetDeviceMetadata(const meshtastic_MeshPacket &req)
 {
     meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
-
-    meshtastic_DeviceMetadata deviceMetadata;
-    strncpy(deviceMetadata.firmware_version, myNodeInfo.firmware_version, 18);
-    deviceMetadata.device_state_version = DEVICESTATE_CUR_VER;
-    deviceMetadata.canShutdown = pmu_found || HAS_CPU_SHUTDOWN;
-    deviceMetadata.hasBluetooth = HAS_BLUETOOTH;
-    deviceMetadata.hasWifi = HAS_WIFI;
-    deviceMetadata.hasEthernet = HAS_ETHERNET;
-    deviceMetadata.role = config.device.role;
-    deviceMetadata.position_flags = config.position.position_flags;
-    deviceMetadata.hw_model = HW_VENDOR;
-
-    r.get_device_metadata_response = deviceMetadata;
+    r.get_device_metadata_response = getDeviceMetadata();
     r.which_payload_variant = meshtastic_AdminMessage_get_device_metadata_response_tag;
     myReply = allocDataProtobuf(r);
 }
@@ -603,6 +591,7 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
 {
     // Set call sign and override lora limitations for licensed use
     strncpy(owner.long_name, p.call_sign, sizeof(owner.long_name));
+    strncpy(owner.short_name, p.short_name, sizeof(owner.short_name));
     owner.is_licensed = true;
     config.lora.override_duty_cycle = true;
     config.lora.tx_power = p.tx_power;

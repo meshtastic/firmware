@@ -392,6 +392,19 @@ void setup()
 
     // radio init MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
 
+#if !HAS_RADIO && defined(ARCH_PORTDUINO)
+    if (!rIf) {
+        rIf = new SimRadio;
+        if (!rIf->init()) {
+            LOG_WARN("Failed to find simulated radio\n");
+            delete rIf;
+            rIf = NULL;
+        } else {
+            LOG_INFO("Using SIMULATED radio!\n");
+        }
+    }
+#endif
+
 #if defined(RF95_IRQ)
     if (!rIf) {
         rIf = new RF95Interface(RF95_NSS, RF95_IRQ, RF95_RESET, SPI);
@@ -453,19 +466,6 @@ void setup()
             rIf = NULL;
         } else {
             LOG_INFO("LLCC68 Radio init succeeded, using LLCC68 radio\n");
-        }
-    }
-#endif
-
-#ifdef ARCH_PORTDUINO
-    if (!rIf) {
-        rIf = new SimRadio;
-        if (!rIf->init()) {
-            LOG_WARN("Failed to find simulated radio\n");
-            delete rIf;
-            rIf = NULL;
-        } else {
-            LOG_INFO("Using SIMULATED radio!\n");
         }
     }
 #endif
@@ -534,6 +534,21 @@ uint32_t shutdownAtMsec; // If not zero we will shutdown at this time (used to s
 // If a thread does something that might need for it to be rescheduled ASAP it can set this flag
 // This will supress the current delay and instead try to run ASAP.
 bool runASAP;
+
+extern meshtastic_DeviceMetadata getDeviceMetadata()
+{
+    meshtastic_DeviceMetadata deviceMetadata;
+    strncpy(deviceMetadata.firmware_version, myNodeInfo.firmware_version, 18);
+    deviceMetadata.device_state_version = DEVICESTATE_CUR_VER;
+    deviceMetadata.canShutdown = pmu_found || HAS_CPU_SHUTDOWN;
+    deviceMetadata.hasBluetooth = HAS_BLUETOOTH;
+    deviceMetadata.hasWifi = HAS_WIFI;
+    deviceMetadata.hasEthernet = HAS_ETHERNET;
+    deviceMetadata.role = config.device.role;
+    deviceMetadata.position_flags = config.position.position_flags;
+    deviceMetadata.hw_model = HW_VENDOR;
+    return deviceMetadata;
+}
 
 void loop()
 {

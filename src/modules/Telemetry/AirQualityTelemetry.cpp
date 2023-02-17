@@ -10,7 +10,6 @@
 
 int32_t AirQualityTelemetryModule::runOnce()
 {
-#ifndef ARCH_PORTDUINO
     int32_t result = INT32_MAX;
     /*
         Uncomment the preferences below if you want to use the module
@@ -55,7 +54,6 @@ int32_t AirQualityTelemetryModule::runOnce()
         }
     }
     return sendToPhoneIntervalMs;
-#endif
 }
 
 bool AirQualityTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
