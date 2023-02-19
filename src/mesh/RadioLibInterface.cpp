@@ -389,8 +389,6 @@ void RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
         LOG_WARN("startSend is dropping tx packet because we are disabled\n");
         packetPool.release(txp);
     } else {
-        setStandby(); // Cancel any already in process receives
-
         configHardwareForSend(); // must be after setStandby
 
         size_t numbytes = beginSending(txp);
