@@ -219,7 +219,8 @@ void RadioLibInterface::onNotify(uint32_t notification)
             } else {
                 if (isChannelActive()) { // check if there is currently a LoRa packet on the channel
                     // LOG_DEBUG("Channel is active: set random delay\n");
-                    setTransmitDelay(); // reset random delay
+                    startReceive(); // try receiving this packet, afterwards we'll be trying to transmit again
+                    break;
                 } else {
                     // Send any outgoing packets we have ready
                     meshtastic_MeshPacket *txp = txQueue.dequeue();
