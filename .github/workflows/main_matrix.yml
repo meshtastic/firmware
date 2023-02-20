@@ -92,16 +92,16 @@ jobs:
     with:
       board: ${{ matrix.board }}
 
-  build-rpi2040:
-    strategy:
-      fail-fast: false
-      max-parallel: 2
-      matrix:
-        include:
-          - board: pico
-    uses: ./.github/workflows/build_rpi2040.yml
-    with:
-      board: ${{ matrix.board }}
+  # build-rpi2040:
+  #   strategy:
+  #     fail-fast: false
+  #     max-parallel: 2
+  #     matrix:
+  #       include:
+  #         - board: pico
+  #   uses: ./.github/workflows/build_rpi2040.yml
+  #   with:
+  #     board: ${{ matrix.board }}
 
   build-native:
     runs-on: ubuntu-latest
