@@ -407,7 +407,7 @@ void setup()
 
 #if defined(RF95_IRQ)
     if (!rIf) {
-        rIf = new RF95Interface(RF95_NSS, RF95_IRQ, RF95_RESET, SPI);
+        rIf = new RF95Interface(RF95_NSS, RF95_IRQ, RF95_RESET, RF95_DIO1, SPI);
         if (!rIf->init()) {
             LOG_WARN("Failed to find RF95 radio\n");
             delete rIf;
