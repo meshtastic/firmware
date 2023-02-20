@@ -235,11 +235,6 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
         initModuleConfigIntervals();
     } else if (role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
         config.display.screen_on_secs = 1;
-        meshtastic_Channel &ch = channels.getByIndex(channels.getPrimaryIndex());
-        meshtastic_ChannelSettings &channelSettings = ch.settings;
-        uint8_t defaultpskIndex = 1;
-        channelSettings.psk.bytes[0] = defaultpskIndex;
-        channelSettings.psk.size = 1;
     } else if (role == meshtastic_Config_DeviceConfig_Role_TRACKER) {
         config.position.position_broadcast_smart_enabled = false;
         config.position.position_broadcast_secs = 120;
