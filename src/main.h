@@ -61,3 +61,5 @@ extern uint32_t serialSinceMsec;
 extern bool runASAP;
 
 void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop(), clearBonds();
+
+meshtastic_DeviceMetadata getDeviceMetadata();

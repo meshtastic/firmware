@@ -57,9 +57,13 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_TLORA_V2_1_1P8 = 15,
     /* TODO: REPLACE */
     meshtastic_HardwareModel_TLORA_T3_S3 = 16,
+    /* B&Q Consulting Nano G1 Explorer: https://wiki.uniteng.com/en/meshtastic/nano-g1-explorer */
+    meshtastic_HardwareModel_NANO_G1_EXPLORER = 17,
     /* B&Q Consulting Station Edition G1: https://uniteng.com/wiki/doku.php?id=meshtastic:station */
     meshtastic_HardwareModel_STATION_G1 = 25,
-    /* Less common/prototype boards listed here (needs one more byte over the air) */
+    /* ---------------------------------------------------------------------------
+ Less common/prototype boards listed here (needs one more byte over the air)
+ --------------------------------------------------------------------------- */
     meshtastic_HardwareModel_LORA_RELAY_V1 = 32,
     /* TODO: REPLACE */
     meshtastic_HardwareModel_NRF52840DK = 33,
@@ -87,7 +91,11 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_HELTEC_WSL_V3 = 44,
     /* New BETAFPV ELRS Micro TX Module 2.4G with ESP32 CPU */
     meshtastic_HardwareModel_BETAFPV_2400_TX = 45,
-    /* Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits. */
+    /* BetaFPV ExpressLRS "Nano" TX Module 900MHz with ESP32 CPU */
+    meshtastic_HardwareModel_BETAFPV_900_NANO_TX = 46,
+    /* ------------------------------------------------------------------------------------------------------------------------------------------
+ Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
+ ------------------------------------------------------------------------------------------------------------------------------------------ */
     meshtastic_HardwareModel_PRIVATE_HW = 255
 } meshtastic_HardwareModel;
 
@@ -637,6 +645,61 @@ typedef struct _meshtastic_QueueStatus {
     uint32_t mesh_packet_id;
 } meshtastic_QueueStatus;
 
+/* Packets/commands to the radio will be written (reliably) to the toRadio characteristic.
+ Once the write completes the phone can assume it is handled. */
+typedef struct _meshtastic_ToRadio {
+    pb_size_t which_payload_variant;
+    union {
+        /* Send this packet on the mesh */
+        meshtastic_MeshPacket packet;
+        /* Phone wants radio to send full node db to the phone, This is
+     typically the first packet sent to the radio when the phone gets a
+     bluetooth connection. The radio will respond by sending back a
+     MyNodeInfo, a owner, a radio config and a series of
+     FromRadio.node_infos, and config_complete
+     the integer you write into this field will be reported back in the
+     config_complete_id response this allows clients to never be confused by
+     a stale old partially sent config. */
+        uint32_t want_config_id;
+        /* Tell API server we are disconnecting now.
+     This is useful for serial links where there is no hardware/protocol based notification that the client has dropped the link.
+     (Sending this message is optional for clients) */
+        bool disconnect;
+        meshtastic_XModem xmodemPacket;
+    };
+} meshtastic_ToRadio;
+
+typedef PB_BYTES_ARRAY_T(237) meshtastic_Compressed_data_t;
+/* Compressed message payload */
+typedef struct _meshtastic_Compressed {
+    /* PortNum to determine the how to handle the compressed payload. */
+    meshtastic_PortNum portnum;
+    /* Compressed data. */
+    meshtastic_Compressed_data_t data;
+} meshtastic_Compressed;
+
+/* Device metadata response */
+typedef struct _meshtastic_DeviceMetadata {
+    /* Device firmware version string */
+    char firmware_version[18];
+    /* Device state version */
+    uint32_t device_state_version;
+    /* Indicates whether the device can shutdown CPU natively or via power management chip */
+    bool canShutdown;
+    /* Indicates that the device has native wifi capability */
+    bool hasWifi;
+    /* Indicates that the device has native bluetooth capability */
+    bool hasBluetooth;
+    /* Indicates that the device has an ethernet peripheral */
+    bool hasEthernet;
+    /* Indicates that the device's role in the mesh */
+    meshtastic_Config_DeviceConfig_Role role;
+    /* Indicates the device's current enabled position flags */
+    uint32_t position_flags;
+    /* Device hardware model */
+    meshtastic_HardwareModel hw_model;
+} meshtastic_DeviceMetadata;
+
 /* Packets from the radio to the phone will appear on the fromRadio characteristic.
  It will support READ and NOTIFY. When a new packet arrives the device will BLE notify?
  It will sit in that descriptor until consumed by the phone,
@@ -677,41 +740,10 @@ typedef struct _meshtastic_FromRadio {
         meshtastic_QueueStatus queueStatus;
         /* File Transfer Chunk */
         meshtastic_XModem xmodemPacket;
+        /* Device metadata message */
+        meshtastic_DeviceMetadata metadata;
     };
 } meshtastic_FromRadio;
-
-/* Packets/commands to the radio will be written (reliably) to the toRadio characteristic.
- Once the write completes the phone can assume it is handled. */
-typedef struct _meshtastic_ToRadio {
-    pb_size_t which_payload_variant;
-    union {
-        /* Send this packet on the mesh */
-        meshtastic_MeshPacket packet;
-        /* Phone wants radio to send full node db to the phone, This is
-     typically the first packet sent to the radio when the phone gets a
-     bluetooth connection. The radio will respond by sending back a
-     MyNodeInfo, a owner, a radio config and a series of
-     FromRadio.node_infos, and config_complete
-     the integer you write into this field will be reported back in the
-     config_complete_id response this allows clients to never be confused by
-     a stale old partially sent config. */
-        uint32_t want_config_id;
-        /* Tell API server we are disconnecting now.
-     This is useful for serial links where there is no hardware/protocol based notification that the client has dropped the link.
-     (Sending this message is optional for clients) */
-        bool disconnect;
-        meshtastic_XModem xmodemPacket;
-    };
-} meshtastic_ToRadio;
-
-typedef PB_BYTES_ARRAY_T(237) meshtastic_Compressed_data_t;
-/* Compressed message payload */
-typedef struct _meshtastic_Compressed {
-    /* PortNum to determine the how to handle the compressed payload. */
-    meshtastic_PortNum portnum;
-    /* Compressed data. */
-    meshtastic_Compressed_data_t data;
-} meshtastic_Compressed;
 
 
 #ifdef __cplusplus
@@ -779,6 +811,9 @@ extern "C" {
 
 #define meshtastic_Compressed_portnum_ENUMTYPE meshtastic_PortNum
 
+#define meshtastic_DeviceMetadata_role_ENUMTYPE meshtastic_Config_DeviceConfig_Role
+#define meshtastic_DeviceMetadata_hw_model_ENUMTYPE meshtastic_HardwareModel
+
 
 /* Initializer values for message structs */
 #define meshtastic_Position_init_default         {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -795,6 +830,7 @@ extern "C" {
 #define meshtastic_FromRadio_init_default        {0, 0, {meshtastic_MeshPacket_init_default}}
 #define meshtastic_ToRadio_init_default          {0, {meshtastic_MeshPacket_init_default}}
 #define meshtastic_Compressed_init_default       {_meshtastic_PortNum_MIN, {0, {0}}}
+#define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN}
 #define meshtastic_Position_init_zero            {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_User_init_zero                {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0}
 #define meshtastic_RouteDiscovery_init_zero      {0, {0, 0, 0, 0, 0, 0, 0, 0}}
@@ -809,6 +845,7 @@ extern "C" {
 #define meshtastic_FromRadio_init_zero           {0, 0, {meshtastic_MeshPacket_init_zero}}
 #define meshtastic_ToRadio_init_zero             {0, {meshtastic_MeshPacket_init_zero}}
 #define meshtastic_Compressed_init_zero          {_meshtastic_PortNum_MIN, {0, {0}}}
+#define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_Position_latitude_i_tag       1
@@ -902,6 +939,21 @@ extern "C" {
 #define meshtastic_QueueStatus_free_tag          2
 #define meshtastic_QueueStatus_maxlen_tag        3
 #define meshtastic_QueueStatus_mesh_packet_id_tag 4
+#define meshtastic_ToRadio_packet_tag            1
+#define meshtastic_ToRadio_want_config_id_tag    3
+#define meshtastic_ToRadio_disconnect_tag        4
+#define meshtastic_ToRadio_xmodemPacket_tag      5
+#define meshtastic_Compressed_portnum_tag        1
+#define meshtastic_Compressed_data_tag           2
+#define meshtastic_DeviceMetadata_firmware_version_tag 1
+#define meshtastic_DeviceMetadata_device_state_version_tag 2
+#define meshtastic_DeviceMetadata_canShutdown_tag 3
+#define meshtastic_DeviceMetadata_hasWifi_tag    4
+#define meshtastic_DeviceMetadata_hasBluetooth_tag 5
+#define meshtastic_DeviceMetadata_hasEthernet_tag 6
+#define meshtastic_DeviceMetadata_role_tag       7
+#define meshtastic_DeviceMetadata_position_flags_tag 8
+#define meshtastic_DeviceMetadata_hw_model_tag   9
 #define meshtastic_FromRadio_id_tag              1
 #define meshtastic_FromRadio_packet_tag          2
 #define meshtastic_FromRadio_my_info_tag         3
@@ -914,12 +966,7 @@ extern "C" {
 #define meshtastic_FromRadio_channel_tag         10
 #define meshtastic_FromRadio_queueStatus_tag     11
 #define meshtastic_FromRadio_xmodemPacket_tag    12
-#define meshtastic_ToRadio_packet_tag            1
-#define meshtastic_ToRadio_want_config_id_tag    3
-#define meshtastic_ToRadio_disconnect_tag        4
-#define meshtastic_ToRadio_xmodemPacket_tag      5
-#define meshtastic_Compressed_portnum_tag        1
-#define meshtastic_Compressed_data_tag           2
+#define meshtastic_FromRadio_metadata_tag        13
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_Position_FIELDLIST(X, a) \
@@ -1075,7 +1122,8 @@ X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,rebooted,rebooted),   8) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,moduleConfig,moduleConfig),   9) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,channel,channel),  10) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,queueStatus,queueStatus),  11) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,xmodemPacket,xmodemPacket),  12)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,xmodemPacket,xmodemPacket),  12) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,metadata,metadata),  13)
 #define meshtastic_FromRadio_CALLBACK NULL
 #define meshtastic_FromRadio_DEFAULT NULL
 #define meshtastic_FromRadio_payload_variant_packet_MSGTYPE meshtastic_MeshPacket
@@ -1087,6 +1135,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,xmodemPacket,xmodemPacket), 
 #define meshtastic_FromRadio_payload_variant_channel_MSGTYPE meshtastic_Channel
 #define meshtastic_FromRadio_payload_variant_queueStatus_MSGTYPE meshtastic_QueueStatus
 #define meshtastic_FromRadio_payload_variant_xmodemPacket_MSGTYPE meshtastic_XModem
+#define meshtastic_FromRadio_payload_variant_metadata_MSGTYPE meshtastic_DeviceMetadata
 
 #define meshtastic_ToRadio_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,packet,packet),   1) \
@@ -1104,6 +1153,19 @@ X(a, STATIC,   SINGULAR, BYTES,    data,              2)
 #define meshtastic_Compressed_CALLBACK NULL
 #define meshtastic_Compressed_DEFAULT NULL
 
+#define meshtastic_DeviceMetadata_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, STRING,   firmware_version,   1) \
+X(a, STATIC,   SINGULAR, UINT32,   device_state_version,   2) \
+X(a, STATIC,   SINGULAR, BOOL,     canShutdown,       3) \
+X(a, STATIC,   SINGULAR, BOOL,     hasWifi,           4) \
+X(a, STATIC,   SINGULAR, BOOL,     hasBluetooth,      5) \
+X(a, STATIC,   SINGULAR, BOOL,     hasEthernet,       6) \
+X(a, STATIC,   SINGULAR, UENUM,    role,              7) \
+X(a, STATIC,   SINGULAR, UINT32,   position_flags,    8) \
+X(a, STATIC,   SINGULAR, UENUM,    hw_model,          9)
+#define meshtastic_DeviceMetadata_CALLBACK NULL
+#define meshtastic_DeviceMetadata_DEFAULT NULL
+
 extern const pb_msgdesc_t meshtastic_Position_msg;
 extern const pb_msgdesc_t meshtastic_User_msg;
 extern const pb_msgdesc_t meshtastic_RouteDiscovery_msg;
@@ -1118,6 +1180,7 @@ extern const pb_msgdesc_t meshtastic_QueueStatus_msg;
 extern const pb_msgdesc_t meshtastic_FromRadio_msg;
 extern const pb_msgdesc_t meshtastic_ToRadio_msg;
 extern const pb_msgdesc_t meshtastic_Compressed_msg;
+extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_Position_fields &meshtastic_Position_msg
@@ -1134,10 +1197,12 @@ extern const pb_msgdesc_t meshtastic_Compressed_msg;
 #define meshtastic_FromRadio_fields &meshtastic_FromRadio_msg
 #define meshtastic_ToRadio_fields &meshtastic_ToRadio_msg
 #define meshtastic_Compressed_fields &meshtastic_Compressed_msg
+#define meshtastic_DeviceMetadata_fields &meshtastic_DeviceMetadata_msg
 
 /* Maximum encoded size of messages (where known) */
 #define meshtastic_Compressed_size               243
 #define meshtastic_Data_size                     270
+#define meshtastic_DeviceMetadata_size           44
 #define meshtastic_FromRadio_size                330
 #define meshtastic_LogRecord_size                81
 #define meshtastic_MeshPacket_size               321

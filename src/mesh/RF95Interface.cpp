@@ -11,8 +11,9 @@
 
 #define POWER_DEFAULT 17 // How much power to use if the user hasn't set a power level
 
-RF95Interface::RF95Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, SPIClass &spi)
-    : RadioLibInterface(cs, irq, rst, RADIOLIB_NC, spi)
+RF95Interface::RF95Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy,
+                             SPIClass &spi)
+    : RadioLibInterface(cs, irq, rst, busy, spi)
 {
     // FIXME - we assume devices never get destroyed
 }
@@ -67,18 +68,11 @@ bool RF95Interface::init()
 #endif
     setTransmitEnable(false);
 
-    int res = lora->begin(getFreq(), bw, sf, cr, syncWord, power, currentLimit, preambleLength);
+    int res = lora->begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength);
     LOG_INFO("RF95 init result %d\n", res);
-
     LOG_INFO("Frequency set to %f\n", getFreq());
     LOG_INFO("Bandwidth set to %f\n", bw);
     LOG_INFO("Power output set to %d\n", power);
-
-    // current limit was removed from module' ctor
-    // override default value (60 mA)
-    res = lora->setCurrentLimit(currentLimit);
-    LOG_DEBUG("Current limit set to %f\n", currentLimit);
-    LOG_DEBUG("Current limit set result %d\n", res);
 
     if (res == RADIOLIB_ERR_NONE)
         res = lora->setCRC(RADIOLIB_SX126X_LORA_CRC_ON);
