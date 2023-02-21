@@ -151,7 +151,8 @@ bool ReliableRouter::stopRetransmission(GlobalPacketId key)
         // remove the 'original' (identified by originator and packet->id) from the txqueue and free it
         cancelSending(getFrom(old->packet), old->packet->id);
         // now free the pooled copy for retransmission too. tryfix for #2228
-        packetPool.release(old->packet);
+        if (old->packet)
+            packetPool.release(old->packet);
         return true;
     } else
         return false;
