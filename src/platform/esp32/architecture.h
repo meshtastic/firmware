@@ -95,6 +95,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_TLORA_T3_S3
 #elif defined(BETAFPV_2400_TX)
 #define HW_VENDOR meshtastic_HardwareModel_BETAFPV_2400_TX
+#elif defined(NANO_G1_EXPLORER)
+#define HW_VENDOR meshtastic_HardwareModel_NANO_G1_EXPLORER
 #endif
 
 //

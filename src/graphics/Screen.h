@@ -240,6 +240,12 @@ class Screen : public concurrency::OSThread
         // library have empty chars for non-latin ASCII symbols
         case 0xD0: {
             SKIPREST = false;
+            if (ch == 132)
+                return (uint8_t)(170); // Є
+            if (ch == 134)
+                return (uint8_t)(178); // І
+            if (ch == 135)
+                return (uint8_t)(175); // Ї
             if (ch == 129)
                 return (uint8_t)(168); // Ё
             if (ch > 143 && ch < 192)
@@ -248,10 +254,24 @@ class Screen : public concurrency::OSThread
         }
         case 0xD1: {
             SKIPREST = false;
+            if (ch == 148)
+                return (uint8_t)(186); // є
+            if (ch == 150)
+                return (uint8_t)(179); // і
+            if (ch == 151)
+                return (uint8_t)(191); // ї
             if (ch == 145)
                 return (uint8_t)(184); // ё
             if (ch > 127 && ch < 144)
                 return (uint8_t)(ch + 112);
+            break;
+        }
+        case 0xD2: {
+            SKIPREST = false;
+            if (ch == 144)
+                return (uint8_t)(165); // Ґ
+            if (ch == 145)
+                return (uint8_t)(180); // ґ
             break;
         }
         }
