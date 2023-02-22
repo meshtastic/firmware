@@ -13,14 +13,6 @@
 
 #undef GPS_SERIAL_NUM
 
-// #define I2C_SDA 20
-// #define I2C_SCL 21
-
-#define PIN_LED1 23
-#define PIN_LED2 24
-
-#undef PIN_LED
-#define PIN_LED PIN_LED1
 #define LED_CONN PIN_LED2
 
 #define BUTTON_PIN 9
@@ -39,8 +31,8 @@
 #undef RF95_NSS
 
 #define RF95_SCK 10
-#define RF95_MISO 12
 #define RF95_MOSI 11
+#define RF95_MISO 12
 #define RF95_NSS 13
 
 #define LORA_DIO0 RADIOLIB_NC
