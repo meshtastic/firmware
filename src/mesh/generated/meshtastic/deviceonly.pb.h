@@ -188,7 +188,7 @@ extern const pb_msgdesc_t meshtastic_OEMStore_msg;
 /* Maximum encoded size of messages (where known) */
 #define meshtastic_ChannelFile_size              638
 #define meshtastic_DeviceState_size              21800
-#define meshtastic_OEMStore_size                 2998
+#define meshtastic_OEMStore_size                 3006
 
 #ifdef __cplusplus
 } /* extern "C" */
