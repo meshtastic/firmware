@@ -222,6 +222,11 @@ typedef struct _meshtastic_ModuleConfig_TelemetryConfig {
     /* We'll always read the sensor in Celsius, but sometimes we might want to
  display the results in Fahrenheit as a "user preference". */
     bool environment_display_fahrenheit;
+    /* Enable/Disable the air quality metrics */
+    bool air_quality_enabled;
+    /* Interval in seconds of how often we should try to send our
+ air quality metrics to the mesh */
+    uint32_t air_quality_interval;
 } meshtastic_ModuleConfig_TelemetryConfig;
 
 /* TODO: REPLACE */
@@ -325,7 +330,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_default {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_RangeTestConfig_init_default {0, 0, 0}
-#define meshtastic_ModuleConfig_TelemetryConfig_init_default {0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_TelemetryConfig_init_default {0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define meshtastic_ModuleConfig_init_zero        {0, {meshtastic_ModuleConfig_MQTTConfig_init_zero}}
 #define meshtastic_ModuleConfig_MQTTConfig_init_zero {0, "", "", "", 0, 0}
@@ -335,7 +340,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_zero {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_RangeTestConfig_init_zero {0, 0, 0}
-#define meshtastic_ModuleConfig_TelemetryConfig_init_zero {0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_TelemetryConfig_init_zero {0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -387,6 +392,8 @@ extern "C" {
 #define meshtastic_ModuleConfig_TelemetryConfig_environment_measurement_enabled_tag 3
 #define meshtastic_ModuleConfig_TelemetryConfig_environment_screen_enabled_tag 4
 #define meshtastic_ModuleConfig_TelemetryConfig_environment_display_fahrenheit_tag 5
+#define meshtastic_ModuleConfig_TelemetryConfig_air_quality_enabled_tag 6
+#define meshtastic_ModuleConfig_TelemetryConfig_air_quality_interval_tag 7
 #define meshtastic_ModuleConfig_CannedMessageConfig_rotary1_enabled_tag 1
 #define meshtastic_ModuleConfig_CannedMessageConfig_inputbroker_pin_a_tag 2
 #define meshtastic_ModuleConfig_CannedMessageConfig_inputbroker_pin_b_tag 3
@@ -507,7 +514,9 @@ X(a, STATIC,   SINGULAR, UINT32,   device_update_interval,   1) \
 X(a, STATIC,   SINGULAR, UINT32,   environment_update_interval,   2) \
 X(a, STATIC,   SINGULAR, BOOL,     environment_measurement_enabled,   3) \
 X(a, STATIC,   SINGULAR, BOOL,     environment_screen_enabled,   4) \
-X(a, STATIC,   SINGULAR, BOOL,     environment_display_fahrenheit,   5)
+X(a, STATIC,   SINGULAR, BOOL,     environment_display_fahrenheit,   5) \
+X(a, STATIC,   SINGULAR, BOOL,     air_quality_enabled,   6) \
+X(a, STATIC,   SINGULAR, UINT32,   air_quality_interval,   7)
 #define meshtastic_ModuleConfig_TelemetryConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_TelemetryConfig_DEFAULT NULL
 
@@ -558,7 +567,7 @@ extern const pb_msgdesc_t meshtastic_ModuleConfig_CannedMessageConfig_msg;
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_size 2
 #define meshtastic_ModuleConfig_SerialConfig_size 26
 #define meshtastic_ModuleConfig_StoreForwardConfig_size 22
-#define meshtastic_ModuleConfig_TelemetryConfig_size 18
+#define meshtastic_ModuleConfig_TelemetryConfig_size 26
 #define meshtastic_ModuleConfig_size             204
 
 #ifdef __cplusplus
