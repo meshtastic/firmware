@@ -246,6 +246,7 @@ void NodeDB::initModuleConfigIntervals()
 {
     moduleConfig.telemetry.device_update_interval = default_broadcast_interval_secs;
     moduleConfig.telemetry.environment_update_interval = default_broadcast_interval_secs;
+    moduleConfig.telemetry.air_quality_interval = default_broadcast_interval_secs;
 }
 
 void NodeDB::installDefaultChannels()
