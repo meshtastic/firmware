@@ -16,9 +16,9 @@ int32_t AirQualityTelemetryModule::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
 
-    // moduleConfig.telemetry.environment_measurement_enabled = 1;
+    // moduleConfig.telemetry.air_quality_enabled = 1;
 
-    if (!(moduleConfig.telemetry.environment_measurement_enabled)) {
+    if (!(moduleConfig.telemetry.air_quality_enabled)) {
         // If this module is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
         return disable();
     }
@@ -27,7 +27,7 @@ int32_t AirQualityTelemetryModule::runOnce()
         // This is the first time the OSThread library has called this function, so do some setup
         firstTime = 0;
 
-        if (moduleConfig.telemetry.environment_measurement_enabled) {
+        if (moduleConfig.telemetry.air_quality_enabled) {
             LOG_INFO("Air quality Telemetry: Initializing\n");
             if (!aqi.begin_I2C()) {
                 LOG_WARN("Could not establish i2c connection to AQI sensor\n");
@@ -38,12 +38,12 @@ int32_t AirQualityTelemetryModule::runOnce()
         return result;
     } else {
         // if we somehow got to a second run of this module with measurement disabled, then just wait forever
-        if (!moduleConfig.telemetry.environment_measurement_enabled)
+        if (!moduleConfig.telemetry.air_quality_enabled)
             return result;
 
         uint32_t now = millis();
         if (((lastSentToMesh == 0) ||
-             ((now - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval))) &&
+             ((now - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.telemetry.air_quality_interval))) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
             lastSentToMesh = now;
