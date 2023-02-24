@@ -178,7 +178,7 @@ void cpuDeepSleep(uint64_t msecToWake)
 
     Note: we don't isolate pins that are used for the LORA, LED, i2c, spi or the wake button
     */
-#if SOC_RTCIO_HOLD_SUPPORTED   
+#if SOC_RTCIO_HOLD_SUPPORTED
     static const uint8_t rtcGpios[] = {/* 0, */ 2,
     /* 4, */
 #ifndef USE_JTAG
@@ -189,7 +189,6 @@ void cpuDeepSleep(uint64_t msecToWake)
                                        32,           33, 34, 35,
                                        36,           37
                                        /* 38, 39 */};
-
 
     for (int i = 0; i < sizeof(rtcGpios); i++)
         rtc_gpio_isolate((gpio_num_t)rtcGpios[i]);
