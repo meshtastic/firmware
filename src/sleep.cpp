@@ -61,13 +61,15 @@ void setCPUFast(bool on)
          *     all WiFi use cases.
          * (Added: Dec 23, 2021 by Jm Casler)
          */
+#ifndef CONFIG_IDF_TARGET_ESP32C3
         LOG_DEBUG("Setting CPU to 240mhz because WiFi is in use.\n");
         setCpuFrequencyMhz(240);
+#endif
         return;
     }
 
 // The Heltec LORA32 V1 runs at 26 MHz base frequency and doesn't react well to switching to 80 MHz...
-#ifndef ARDUINO_HELTEC_WIFI_LORA_32
+#if !defined(ARDUINO_HELTEC_WIFI_LORA_32) && !defined(CONFIG_IDF_TARGET_ESP32C3)
     setCpuFrequencyMhz(on ? 240 : 80);
 #endif
 
