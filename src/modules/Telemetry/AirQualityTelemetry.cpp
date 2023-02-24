@@ -108,7 +108,10 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     meshtastic_MeshPacket *p = allocDataProtobuf(m);
     p->to = dest;
     p->decoded.want_response = false;
-    p->priority = meshtastic_MeshPacket_Priority_MIN;
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
+        p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+    else
+        p->priority = meshtastic_MeshPacket_Priority_MIN;
 
     // release previous packet before occupying a new spot
     if (lastMeasurementPacket != nullptr)
