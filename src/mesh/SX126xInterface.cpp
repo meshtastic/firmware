@@ -232,7 +232,7 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
 
     setStandby();
     result = lora.scanChannel();
-    if (result == RADIOLIB_PREAMBLE_DETECTED)
+    if (result == RADIOLIB_LORA_DETECTED)
         return true;
 
     assert(result != RADIOLIB_ERR_WRONG_MODEM);
