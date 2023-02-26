@@ -43,14 +43,7 @@ class RangeTestModuleRadio : public SinglePortModule
      */
     bool appendFile(const meshtastic_MeshPacket &mp);
 
-    /**
-     * Kevin's magical calculation of two points to meters.
-     */
-    float latLongToMeter(double lat_a, double lng_a, double lat_b, double lng_b);
-
   protected:
-    virtual meshtastic_MeshPacket *allocReply() override;
-
     /** Called to handle a particular incoming message
 
     @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for
