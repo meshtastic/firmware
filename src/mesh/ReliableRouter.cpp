@@ -24,6 +24,15 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
         startRetransmission(copy);
     }
 
+    /* If we have pending retransmissions, add the airtime of this packet to it, because during that time we cannot receive an
+       (implicit) ACK. Otherwise, we might retransmit too early.
+     */
+    for (auto i = pending.begin(); i != pending.end(); i++) {
+        if (i->first.id != p->id) {
+            i->second.nextTxMsec += iface->getPacketTime(p);
+        }
+    }
+
     return FloodingRouter::send(p);
 }
 
@@ -51,6 +60,15 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
         } else {
             LOG_DEBUG("didn't find pending packet\n");
         }
+    }
+
+    /* At this point we have already deleted the pending retransmission if this packet was an (implicit) ACK to it.
+       Now for all other pending retransmissions, we have to add the airtime of this received packet to the retransmission timer,
+       because while receiving this packet, we could not have received an (implicit) ACK for it.
+       If we don't add this, we will likely retransmit too early.
+    */
+    for (auto i = pending.begin(); i != pending.end(); i++) {
+        i->second.nextTxMsec += iface->getPacketTime(p);
     }
 
     /* Resend implicit ACKs for repeated packets (assuming the original packet was sent with HOP_RELIABLE)
