@@ -524,10 +524,6 @@ static void drawGPSpowerstat(OLEDDisplay *display, int16_t x, int16_t y, const G
 
     if (!config.position.gps_enabled) {
         display->drawString(x + xPos, y, displayLine);
-#ifdef GPS_POWER_TOGGLE
-        display->drawString(x + xPos, y - 2 + FONT_HEIGHT_SMALL, " by button");
-#endif
-        // display->drawString(x + xPos, y + 2, displayLine);
     }
 #endif
 }
@@ -1440,11 +1436,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
     // Display GPS status
     if (!config.position.gps_enabled) {
-        int16_t yPos = y + 2;
-#ifdef GPS_POWER_TOGGLE
-        yPos = (y + 10 + FONT_HEIGHT_SMALL);
-#endif
-        drawGPSpowerstat(display, x, yPos, gpsStatus);
+        drawGPSpowerstat(display, x, y + 2, gpsStatus);
     } else {
         if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
             drawGPS(display, x + (SCREEN_WIDTH * 0.63), y + 2, gpsStatus);
@@ -1761,6 +1753,9 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
         drawGPScoordinates(display, x, y + FONT_HEIGHT_SMALL * 3, gpsStatus);
     } else {
         drawGPSpowerstat(display, x - (SCREEN_WIDTH / 4), y + FONT_HEIGHT_SMALL * 2, gpsStatus);
+#ifdef GPS_POWER_TOGGLE
+        display->drawString(x + 30, (y + FONT_HEIGHT_SMALL * 3), " by button");
+#endif
     }
     /* Display a heartbeat pixel that blinks every time the frame is redrawn */
 #ifdef SHOW_REDRAWS
