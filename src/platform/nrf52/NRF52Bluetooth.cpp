@@ -109,16 +109,10 @@ void startAdv(void)
      * For recommended advertising interval
      * https://developer.apple.com/library/content/qa/qa1931/_index.html
      */
-    Bluefruit.Advertising.setStopCallback(onStopAdvertising);
     Bluefruit.Advertising.restartOnDisconnect(true);
     Bluefruit.Advertising.setInterval(32, 244); // in unit of 0.625 ms
     Bluefruit.Advertising.setFastTimeout(30);   // number of seconds in fast mode
     Bluefruit.Advertising.start(0); // 0 = Don't stop advertising after n seconds.  FIXME, we should stop advertising after X
-}
-
-void onStopAdvertising(void)
-{
-    LOG_DEBUG("Stopped BLE advertising\n");
 }
 
 // Just ack that the caller is allowed to read
