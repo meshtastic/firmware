@@ -154,7 +154,7 @@ class RadioInterface
      *
      * @return num msecs for the packet
      */
-    uint32_t getPacketTime(meshtastic_MeshPacket *p);
+    uint32_t getPacketTime(const meshtastic_MeshPacket *p);
     uint32_t getPacketTime(uint32_t totalPacketLen);
 
     /**
