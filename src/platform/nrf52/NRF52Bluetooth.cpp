@@ -92,12 +92,12 @@ void startAdv(void)
     Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
 
     // IncludeService UUID
-    // Bluefruit.ScanResponse.addService(meshBleService);
+    Bluefruit.ScanResponse.addService(meshBleService);
     Bluefruit.ScanResponse.addTxPower();
     Bluefruit.ScanResponse.addName();
 
     // Include Name
-    // Bluefruit.Advertising.addName();
+    Bluefruit.Advertising.addName();
     Bluefruit.Advertising.addService(meshBleService);
 
     /* Start Advertising
