@@ -44,7 +44,8 @@ void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                 tosend->hop_limit--; // bump down the hop count
 
                 // If it is a traceRoute request, update the route that it went via me
-                if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && traceRouteModule->wantPacket(p)) {
+                if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && traceRouteModule &&
+                    traceRouteModule->wantPacket(p)) {
                     traceRouteModule->updateRoute(tosend);
                 }
 
