@@ -28,26 +28,30 @@
 #define RF95_MISO 3
 #define RF95_MOSI 6
 #define RF95_NSS 7
-
 #define LORA_RESET 8
-#define LORA_DIO0 9
-#define LORA_DIO1 9
-#define LORA_DIO2 33 // SX1262 BUSY
-#define LORA_DIO3 34 // Not connected on PCB, but internally on the TTGO SX1262, if DIO3 is high the TXCO is enabled
 
+// per SX1276_Receive_Interrupt/utilities.h
+#define LORA_DIO0 9
+#define LORA_DIO1 33 // TCXO_EN ?
+#define LORA_DIO2 34
+#define LORA_RXEN 21
+#define LORA_TXEN 10
+
+// per SX1262_Receive_Interrupt/utilities.h
 #ifdef USE_SX1262
-#define SX126X_CS RF95_NSS // FIXME - we really should define LORA_CS instead
+#define SX126X_CS RF95_NSS
 #define SX126X_DIO1 33
 #define SX126X_BUSY 34
 #define SX126X_RESET LORA_RESET
-//#define SX126X_RXEN 21
-//#define SX126X_TXEN 10
 #define SX126X_E22
 #endif
 
+// per SX128x_Receive_Interrupt/utilities.h
 #ifdef USE_SX1280
 #define SX128X_CS RF95_NSS
-#define SX128X_DIO1 LORA_DIO1
+#define SX128X_DIO1 9
+#define SX128X_DIO2 33
+#define SX128X_DIO3 34
 #define SX128X_BUSY 36
 #define SX128X_RESET LORA_RESET
 #define SX128X_RXEN 21
