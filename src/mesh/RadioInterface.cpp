@@ -175,7 +175,7 @@ uint32_t RadioInterface::getPacketTime(uint32_t pl)
     return msecs;
 }
 
-uint32_t RadioInterface::getPacketTime(meshtastic_MeshPacket *p)
+uint32_t RadioInterface::getPacketTime(const meshtastic_MeshPacket *p)
 {
     uint32_t pl = 0;
     if (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag) {
