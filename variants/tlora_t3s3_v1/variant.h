@@ -37,11 +37,12 @@
 
 #ifdef USE_SX1262
 #define SX126X_CS RF95_NSS // FIXME - we really should define LORA_CS instead
-#define SX126X_DIO1 LORA_DIO1
-#define SX126X_BUSY 36
+#define SX126X_DIO1 33
+#define SX126X_BUSY 34
 #define SX126X_RESET LORA_RESET
-#define SX126X_RXEN 21
-#define SX126X_TXEN 10
+//#define SX126X_RXEN 21
+//#define SX126X_TXEN 10
+#define SX126X_E22
 #endif
 
 #ifdef USE_SX1280
