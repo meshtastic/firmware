@@ -422,19 +422,6 @@ void setup()
     }
 #endif
 
-#if defined(USE_SX1280)
-    if (!rIf) {
-        rIf = new SX1280Interface(SX128X_CS, SX128X_DIO1, SX128X_RESET, SX128X_BUSY, SPI);
-        if (!rIf->init()) {
-            LOG_WARN("Failed to find SX1280 radio\n");
-            delete rIf;
-            rIf = NULL;
-        } else {
-            LOG_INFO("SX1280 Radio init succeeded, using SX1280 radio\n");
-        }
-    }
-#endif
-
 #if defined(USE_SX1262)
     if (!rIf) {
         rIf = new SX1262Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
@@ -470,6 +457,19 @@ void setup()
             rIf = NULL;
         } else {
             LOG_INFO("LLCC68 Radio init succeeded, using LLCC68 radio\n");
+        }
+    }
+#endif
+
+#if defined(USE_SX1280)
+    if (!rIf) {
+        rIf = new SX1280Interface(SX128X_CS, SX128X_DIO1, SX128X_RESET, SX128X_BUSY, SPI);
+        if (!rIf->init()) {
+            LOG_WARN("Failed to find SX1280 radio\n");
+            delete rIf;
+            rIf = NULL;
+        } else {
+            LOG_INFO("SX1280 Radio init succeeded, using SX1280 radio\n");
         }
     }
 #endif
