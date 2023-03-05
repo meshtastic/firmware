@@ -216,7 +216,7 @@ template <typename T> void SX128xInterface<T>::startReceive()
 #endif
 }
 
-/** Could we send right now (i.e. either not actively receving or transmitting)? */
+/** Is the channel currently active? */
 template <typename T> bool SX128xInterface<T>::isChannelActive()
 {
     // check if we can detect a LoRa preamble on the current channel

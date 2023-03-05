@@ -225,7 +225,7 @@ template <typename T> void SX126xInterface<T>::startReceive()
 #endif
 }
 
-/** Could we send right now (i.e. either not actively receving or transmitting)? */
+/** Is the channel currently active? */
 template <typename T> bool SX126xInterface<T>::isChannelActive()
 {
     // check if we can detect a LoRa preamble on the current channel
@@ -246,8 +246,6 @@ template <typename T> bool SX126xInterface<T>::isActivelyReceiving()
 {
     // The IRQ status will be cleared when we start our read operation.  Check if we've started a header, but haven't yet
     // received and handled the interrupt for reading the packet/handling errors.
-    // FIXME: it would be better to check for preamble, but we currently have our ISR not set to fire for packets that
-    // never even get a valid header, so we don't want preamble to get set and stay set due to noise on the network.
 
     uint16_t irq = lora.getIrqStatus();
     bool headerValid = (irq & RADIOLIB_SX126X_IRQ_HEADER_VALID);
