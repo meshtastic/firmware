@@ -12,14 +12,8 @@
     "extra_flags": "-DARDUINO_GENERIC_RP2040 -DRASPBERRY_PI_PICO -DARDUINO_ARCH_RP2040 -DUSBD_MAX_POWER_MA=250",
     "f_cpu": "133000000L",
     "hwids": [
-      [
-        "0x2E8A",
-        "0x00C0"
-      ],
-      [
-        "0x2E8A",
-        "0x000A"
-      ]
+      ["0x2E8A", "0x00C0"],
+      ["0x2E8A", "0x000A"]
     ],
     "mcu": "rp2040",
     "variant": "WisBlock_RAK11300_Board"
@@ -29,9 +23,7 @@
     "openocd_target": "rp2040.cfg",
     "svd_path": "rp2040.svd"
   },
-  "frameworks": [
-    "arduino"
-  ],
+  "frameworks": ["arduino"],
   "name": "WisBlock RAK11300",
   "upload": {
     "maximum_ram_size": 270336,
@@ -41,12 +33,7 @@
     "use_1200bps_touch": true,
     "wait_for_upload_port": false,
     "protocol": "picotool",
-    "protocols": [
-      "cmsis-dap",
-      "raspberrypi-swd",
-      "picotool",
-      "picoprobe"
-    ]
+    "protocols": ["cmsis-dap", "raspberrypi-swd", "picotool", "picoprobe"]
   },
   "url": "https://docs.rakwireless.com/",
   "vendor": "RAKwireless"

@@ -23,10 +23,10 @@ static const uint8_t A2 = PIN_A2;
 static const uint8_t A3 = PIN_A3;
 
 // LEDs
-#define PIN_LED        (23u)
-#define PIN_LED1       PIN_LED
-#define PIN_LED2       (24u)
-#define LED_BUILTIN    PIN_LED
+#define PIN_LED (23u)
+#define PIN_LED1 PIN_LED
+#define PIN_LED2 (24u)
+#define LED_BUILTIN PIN_LED
 
 #define ADC_RESOLUTION 12
 
@@ -38,26 +38,26 @@ static const uint8_t A3 = PIN_A3;
 #define PIN_SERIAL2_RX (5ul)
 
 // SPI
-#define PIN_SPI0_MISO  (12u)
-#define PIN_SPI0_MOSI  (11u)
-#define PIN_SPI0_SCK   (10u)
-#define PIN_SPI0_SS    (13u)
+#define PIN_SPI0_MISO (12u)
+#define PIN_SPI0_MOSI (11u)
+#define PIN_SPI0_SCK (10u)
+#define PIN_SPI0_SS (13u)
 
-#define PIN_SPI1_MISO  (16u)
-#define PIN_SPI1_MOSI  (19u)
-#define PIN_SPI1_SCK   (18u)
-#define PIN_SPI1_SS    (17u)
+#define PIN_SPI1_MISO (16u)
+#define PIN_SPI1_MOSI (19u)
+#define PIN_SPI1_SCK (18u)
+#define PIN_SPI1_SS (17u)
 
 // Wire
-#define PIN_WIRE0_SDA  (2u)
-#define PIN_WIRE0_SCL  (3u)
+#define PIN_WIRE0_SDA (2u)
+#define PIN_WIRE0_SCL (3u)
 
-#define PIN_WIRE1_SDA  (20u)
-#define PIN_WIRE1_SCL  (21u)
+#define PIN_WIRE1_SDA (20u)
+#define PIN_WIRE1_SCL (21u)
 
 #define SERIAL_HOWMANY (3u)
-#define SPI_HOWMANY    (2u)
-#define WIRE_HOWMANY   (2u)
+#define SPI_HOWMANY (2u)
+#define WIRE_HOWMANY (2u)
 
 static const uint8_t SS = PIN_SPI0_SS;
 static const uint8_t MOSI = PIN_SPI0_MOSI;
