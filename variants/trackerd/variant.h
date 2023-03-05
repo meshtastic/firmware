@@ -20,7 +20,7 @@
 #define LORA_DIO1 33
 #define LORA_DIO2 32 // Not really used
 
-#define BATTERY_PIN 35           // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+#define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 
 // Battery
 // The battery sense is hooked to pin A0 (4)
