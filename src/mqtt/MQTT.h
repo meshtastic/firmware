@@ -30,12 +30,14 @@ class MQTT : private concurrency::OSThread
 #if HAS_ETHERNET
     EthernetClient mqttClient;
 #endif
+#if !defined(DEBUG_HEAP_MQTT)
     PubSubClient pubSub;
 
-    // instead we supress sleep from our runOnce() callback
-    // CallbackObserver<MQTT, void *> preflightSleepObserver = CallbackObserver<MQTT, void *>(this, &MQTT::preflightSleepCb);
-
   public:
+#else
+  public:
+    PubSubClient pubSub;
+#endif
     MQTT();
 
     /**
