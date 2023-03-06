@@ -54,7 +54,7 @@ typedef struct _meshtastic_DeviceState {
     /* Used only during development.
  Indicates developer is testing and changes should never be saved to flash. */
     bool no_save;
-    /* Some GPSes seem to have bogus settings from the factory, so we always do one factory reset. */
+    /* Some GPS receivers seem to have bogus settings from the factory, so we always do one factory reset. */
     bool did_gps_reset;
 } meshtastic_DeviceState;
 
@@ -72,13 +72,13 @@ typedef struct _meshtastic_ChannelFile {
 typedef PB_BYTES_ARRAY_T(2048) meshtastic_OEMStore_oem_icon_bits_t;
 typedef PB_BYTES_ARRAY_T(32) meshtastic_OEMStore_oem_aes_key_t;
 /* This can be used for customizing the firmware distribution. If populated,
- show a secondary bootup screen with cuatom logo and text for 2.5 seconds. */
+ show a secondary bootup screen with custom logo and text for 2.5 seconds. */
 typedef struct _meshtastic_OEMStore {
     /* The Logo width in Px */
     uint32_t oem_icon_width;
     /* The Logo height in Px */
     uint32_t oem_icon_height;
-    /* The Logo in xbm bytechar format */
+    /* The Logo in XBM bytechar format */
     meshtastic_OEMStore_oem_icon_bits_t oem_icon_bits;
     /* Use this font for the OEM text. */
     meshtastic_ScreenFonts oem_font;

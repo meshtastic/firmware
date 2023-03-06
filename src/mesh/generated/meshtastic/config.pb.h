@@ -152,7 +152,7 @@ typedef enum _meshtastic_Config_LoRaConfig_RegionCode {
     meshtastic_Config_LoRaConfig_RegionCode_US = 1,
     /* European Union 433mhz */
     meshtastic_Config_LoRaConfig_RegionCode_EU_433 = 2,
-    /* European Union 433mhz */
+    /* European Union 868mhz */
     meshtastic_Config_LoRaConfig_RegionCode_EU_868 = 3,
     /* China */
     meshtastic_Config_LoRaConfig_RegionCode_CN = 4,
@@ -202,11 +202,11 @@ typedef enum _meshtastic_Config_LoRaConfig_ModemPreset {
 } meshtastic_Config_LoRaConfig_ModemPreset;
 
 typedef enum _meshtastic_Config_BluetoothConfig_PairingMode {
-    /* Device generates a random pin that will be shown on the screen of the device for pairing */
+    /* Device generates a random PIN that will be shown on the screen of the device for pairing */
     meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN = 0,
-    /* Device requires a specified fixed pin for pairing */
+    /* Device requires a specified fixed PIN for pairing */
     meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN = 1,
-    /* Device requires no pin for pairing */
+    /* Device requires no PIN for pairing */
     meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN = 2
 } meshtastic_Config_BluetoothConfig_PairingMode;
 
@@ -364,7 +364,7 @@ typedef struct _meshtastic_Config_DisplayConfig {
 
 /* Lora Config */
 typedef struct _meshtastic_Config_LoRaConfig {
-    /* When enabled, the `modem_preset` fields will be adheared to, else the `bandwidth`/`spread_factor`/`coding_rate`
+    /* When enabled, the `modem_preset` fields will be adhered to, else the `bandwidth`/`spread_factor`/`coding_rate`
  will be taked from their respective manually defined fields */
     bool use_preset;
     /* Either modem_config or bandwidth/spreading/coding will be specified - NOT BOTH.
@@ -395,12 +395,12 @@ typedef struct _meshtastic_Config_LoRaConfig {
     /* Disable TX from the LoRa radio. Useful for hot-swapping antennas and other tests.
  Defaults to false */
     bool tx_enabled;
-    /* If zero then, use default max legal continuous power (ie. something that won't
+    /* If zero, then use default max legal continuous power (ie. something that won't
  burn out the radio hardware)
  In most cases you should use zero here.
  Units are in dBm. */
     int8_t tx_power;
-    /* This is controlling the actual hardware frequency the radio is transmitting on.
+    /* This controls the actual hardware frequency the radio transmits on.
  Most users should never need to be exposed to this field/concept.
  A channel number between 1 and NUM_CHANNELS (whatever the max is in the current region).
  If ZERO then the rule is "use the old channel name hash based
@@ -422,7 +422,7 @@ typedef struct _meshtastic_Config_LoRaConfig {
     float override_frequency;
     /* For testing it is useful sometimes to force a node to never listen to
  particular other nodes (simulating radio out of range). All nodenums listed
- in ignore_incoming will have packets they send droped on receive (by router.cpp) */
+ in ignore_incoming will have packets they send dropped on receive (by router.cpp) */
     pb_size_t ignore_incoming_count;
     uint32_t ignore_incoming[3];
 } meshtastic_Config_LoRaConfig;
@@ -432,7 +432,7 @@ typedef struct _meshtastic_Config_BluetoothConfig {
     bool enabled;
     /* Determines the pairing strategy for the device */
     meshtastic_Config_BluetoothConfig_PairingMode mode;
-    /* Specified pin for PairingMode.FixedPin */
+    /* Specified PIN for PairingMode.FixedPin */
     uint32_t fixed_pin;
 } meshtastic_Config_BluetoothConfig;
 
