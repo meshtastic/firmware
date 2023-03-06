@@ -212,9 +212,10 @@ template <typename T> void SX126xInterface<T>::startReceive()
 
     setStandby();
 
-    // int err = lora.startReceive();
-    int err = lora.startReceiveDutyCycleAuto(); // We use a 32 bit preamble so this should save some power by letting radio sit in
-                                                // standby mostly.
+    // We use a 16 bit preamble so this should save some power by letting radio sit in standby mostly.
+    // Furthermore, we need the HEADER_VALID IRQ flag to detect whether we are actively receiving
+    int err =
+        lora.startReceiveDutyCycleAuto(preambleLength, 8, RADIOLIB_SX126X_IRQ_RX_DEFAULT | RADIOLIB_SX126X_IRQ_HEADER_VALID);
     assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = true;
@@ -224,7 +225,7 @@ template <typename T> void SX126xInterface<T>::startReceive()
 #endif
 }
 
-/** Could we send right now (i.e. either not actively receving or transmitting)? */
+/** Is the channel currently active? */
 template <typename T> bool SX126xInterface<T>::isChannelActive()
 {
     // check if we can detect a LoRa preamble on the current channel
@@ -245,17 +246,12 @@ template <typename T> bool SX126xInterface<T>::isActivelyReceiving()
 {
     // The IRQ status will be cleared when we start our read operation.  Check if we've started a header, but haven't yet
     // received and handled the interrupt for reading the packet/handling errors.
-    // FIXME: it would be better to check for preamble, but we currently have our ISR not set to fire for packets that
-    // never even get a valid header, so we don't want preamble to get set and stay set due to noise on the network.
 
     uint16_t irq = lora.getIrqStatus();
-    bool hasPreamble = (irq & RADIOLIB_SX126X_IRQ_HEADER_VALID);
+    bool headerValid = (irq & RADIOLIB_SX126X_IRQ_HEADER_VALID);
 
-    // this is not correct - often always true - need to add an extra conditional
-    // size_t bytesPending = lora.getPacketLength();
-
-    // if (hasPreamble) LOG_DEBUG("rx hasPreamble\n");
-    return hasPreamble;
+    // if (headerValid) LOG_DEBUG("rx headerValid\n");
+    return headerValid;
 }
 
 template <typename T> bool SX126xInterface<T>::sleep()
