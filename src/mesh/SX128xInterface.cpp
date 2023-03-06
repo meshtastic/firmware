@@ -203,7 +203,9 @@ template <typename T> void SX128xInterface<T>::startReceive()
     digitalWrite(SX128X_TXEN, LOW);
 #endif
 
-    int err = lora.startReceive();
+    // We use the HEADER_VALID IRQ flag to detect whether we are actively receiving
+    int err =
+        lora.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF, RADIOLIB_SX128X_IRQ_RX_DEFAULT | RADIOLIB_SX128X_IRQ_HEADER_VALID);
 
     assert(err == RADIOLIB_ERR_NONE);
 
@@ -214,7 +216,7 @@ template <typename T> void SX128xInterface<T>::startReceive()
 #endif
 }
 
-/** Could we send right now (i.e. either not actively receving or transmitting)? */
+/** Is the channel currently active? */
 template <typename T> bool SX128xInterface<T>::isChannelActive()
 {
     // check if we can detect a LoRa preamble on the current channel
@@ -234,8 +236,8 @@ template <typename T> bool SX128xInterface<T>::isChannelActive()
 template <typename T> bool SX128xInterface<T>::isActivelyReceiving()
 {
     uint16_t irq = lora.getIrqStatus();
-    bool hasPreamble = (irq & RADIOLIB_SX128X_IRQ_HEADER_VALID);
-    return hasPreamble;
+    bool hasHeader = (irq & RADIOLIB_SX128X_IRQ_HEADER_VALID);
+    return hasHeader;
 }
 
 template <typename T> bool SX128xInterface<T>::sleep()
