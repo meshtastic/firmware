@@ -17,7 +17,8 @@
 #include "concurrency/Periodic.h"
 #include "detect/axpDebug.h"
 #include "detect/einkScan.h"
-#include "detect/i2cScan.h"
+#include "detect/ScanI2C.h"
+#include "detect/ScanI2CTwoWire.h"
 #include "graphics/Screen.h"
 #include "main.h"
 #include "modules/Modules.h"
@@ -25,6 +26,8 @@
 #include "sleep.h"
 #include "target_specific.h"
 #include <Wire.h>
+#include <memory>
+#include "mesh/generated/meshtastic/config.pb.h"
 // #include <driver/rtc_io.h>
 
 #include "mesh/eth/ethClient.h"
@@ -79,20 +82,20 @@ meshtastic::GPSStatus *gpsStatus = new meshtastic::GPSStatus();
 // Global Node status
 meshtastic::NodeStatus *nodeStatus = new meshtastic::NodeStatus();
 
+// Scan for I2C Devices
+
 /// The I2C address of our display (if found)
-uint8_t screen_found;
-uint8_t screen_model;
+ScanI2C::DeviceAddress screen_found;
+meshtastic_Config_DisplayConfig_OledType screen_model;
 
 // The I2C address of the cardkb or RAK14004 (if found)
-uint8_t cardkb_found;
+ScanI2C::DeviceAddress cardkb_found;
 // 0x02 for RAK14004 and 0x00 for cardkb
 uint8_t kb_model;
 
 // The I2C address of the RTC Module (if found)
-uint8_t rtc_found;
+ScanI2C::DeviceAddress rtc_found;
 
-// Keystore Chips
-uint8_t keystore_found;
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 ATECCX08A atecc;
 #endif
@@ -235,14 +238,20 @@ void setup()
 
     router = new ReliableRouter();
 
+    std::unique_ptr<ScanI2C> i2cScanner;
+
 #ifdef I2C_SDA1
     Wire1.begin(I2C_SDA1, I2C_SCL1);
 #endif
 
 #ifdef I2C_SDA
     Wire.begin(I2C_SDA, I2C_SCL);
+    i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire(Wire));
 #elif HAS_WIRE
     Wire.begin();
+    i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire(Wire));
+#else
+    i2cScanner = std::unique_ptr<ScanI2C>(new ScanI2C());
 #endif
 
 #ifdef PIN_LCD_RESET
@@ -277,7 +286,80 @@ void setup()
     }
 #endif
     // We need to scan here to decide if we have a screen for nodeDB.init()
-    scanI2Cdevice();
+    i2cScanner->scanDevices();
+
+    auto screenInfo = i2cScanner->firstScreen();
+    screen_found = screenInfo.type != ScanI2C::DeviceType::NONE ? screenInfo.address : 0;
+
+    if (screen_found) {
+        switch (screenInfo.type) {
+            case ScanI2C::DeviceType::SCREEN_SH1106:
+                screen_model = meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_SH1106;
+                break;
+            case ScanI2C::DeviceType::SCREEN_SSD1306:
+                screen_model = meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_SSD1306;
+                break;
+            case ScanI2C::DeviceType::SCREEN_ST7567:
+            case ScanI2C::DeviceType::SCREEN_UNKNOWN:
+            default:
+                screen_model = meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;
+        }
+    }
+
+#define UPDATE_FROM_SCANNER(FIND_FN)
+
+    auto rtc_info = i2cScanner->firstRTC();
+    rtc_found = rtc_info.type != ScanI2C::DeviceType::NONE ? rtc_info.address : rtc_found;
+
+    auto kb_info = i2cScanner->firstKeyboard();
+
+    if (kb_info.type != ScanI2C::DeviceType::NONE) {
+        cardkb_found = kb_info.address;
+        switch (kb_info.type) {
+            case ScanI2C::DeviceType::RAK14004:
+                kb_model = 0x02;
+                break;
+            case ScanI2C::DeviceType::CARDKB:
+            default:
+                // use this as default since it's also just zero
+                kb_model = 0x00;
+        }
+    }
+
+    pmu_found = i2cScanner->exists(ScanI2C::DeviceType::PMU_AXP192_AXP2101);
+
+    /*
+     * There are a bunch of sensors that have no further logic than to be found and stuffed into the
+     * nodeTelemetrySensorsMap singleton. This wraps that logic in a temporary scope to declare the temporary field
+     * "found".
+     */
+
+#define STRING(S) #S
+
+#define SCANNER_TO_SENSORS_MAP(SCANNER_T, PB_T)             \
+    {   auto found = i2cScanner->find(SCANNER_T);           \
+        if (found.type != ScanI2C::DeviceType::NONE) {      \
+            nodeTelemetrySensorsMap[PB_T] = found.address;  \
+            LOG_DEBUG("found i2c sensor %s", STRING(PB_T));     \
+        }                                                   \
+    }
+
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::BME_680, meshtastic_TelemetrySensorType_BME680)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::BME_280, meshtastic_TelemetrySensorType_BME280)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::BMP_280, meshtastic_TelemetrySensorType_BMP280)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::INA260, meshtastic_TelemetrySensorType_INA260)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::INA219, meshtastic_TelemetrySensorType_INA219)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::MCP9808, meshtastic_TelemetrySensorType_MCP9808)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::MCP9808, meshtastic_TelemetrySensorType_MCP9808)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::SHT31, meshtastic_TelemetrySensorType_SHT31)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::SHTC3, meshtastic_TelemetrySensorType_SHTC3)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::LPS22HB, meshtastic_TelemetrySensorType_LPS22)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::QMC6310, meshtastic_TelemetrySensorType_QMC6310)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::QMI8658, meshtastic_TelemetrySensorType_QMI8658)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::QMC5883L, meshtastic_TelemetrySensorType_QMC5883L)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::PMSA0031, meshtastic_TelemetrySensorType_PMSA003I)
+
+    i2cScanner.reset();
 
 #ifdef HAS_SDCARD
     setupSDCard();

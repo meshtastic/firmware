@@ -5,7 +5,9 @@
 #include "PowerStatus.h"
 #include "graphics/Screen.h"
 #include "mesh/generated/meshtastic/telemetry.pb.h"
+#include "mesh/generated/meshtastic/config.pb.h"
 #include <map>
+#include "detect/ScanI2C.h"
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 #include <SparkFun_ATECCX08a_Arduino_Library.h>
 #endif
@@ -18,12 +20,12 @@ extern NimbleBluetooth *nimbleBluetooth;
 extern NRF52Bluetooth *nrf52Bluetooth;
 #endif
 
-extern uint8_t screen_found;
-extern uint8_t screen_model;
-extern uint8_t cardkb_found;
+extern ScanI2C::DeviceAddress screen_found;
+extern meshtastic_Config_DisplayConfig_OledType screen_model;
+extern ScanI2C::DeviceAddress cardkb_found;
 extern uint8_t kb_model;
-extern uint8_t rtc_found;
-extern uint8_t keystore_found;
+extern ScanI2C::DeviceAddress rtc_found;
+extern ScanI2C::DeviceAddress keystore_found;
 
 extern bool eink_found;
 extern bool pmu_found;
