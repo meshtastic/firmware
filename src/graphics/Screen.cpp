@@ -937,10 +937,13 @@ void Screen::setup()
     useDisplay = true;
 
 #ifdef AutoOLEDWire_h
-    if (screen_model == meshtastic_Config_DisplayConfig_OledType_OLED_SH1107)
-        screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1106;
     dispdev.setDetected(screen_model);
 #endif
+
+#ifdef USE_SH1107_128_64
+    dispdev.setSubtype(7);
+#endif
+
 
     // Initialising the UI will init the display too.
     ui.init();
