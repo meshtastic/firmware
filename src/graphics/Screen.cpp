@@ -944,7 +944,6 @@ void Screen::setup()
     dispdev.setSubtype(7);
 #endif
 
-
     // Initialising the UI will init the display too.
     ui.init();
 
