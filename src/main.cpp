@@ -177,7 +177,8 @@ __attribute__((weak, noinline)) bool loopCanSleep()
 void setup()
 {
     concurrency::hasBeenSetup = true;
-    meshtastic_Config_DisplayConfig_OledType screen_model;
+    meshtastic_Config_DisplayConfig_OledType screen_model =
+        meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;
     OLEDDISPLAY_GEOMETRY screen_geometry = GEOMETRY_128_64;
 
 #ifdef SEGGER_STDOUT_CH

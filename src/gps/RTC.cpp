@@ -1,6 +1,6 @@
 #include "RTC.h"
-#include "../detect/ScanI2C.h"
 #include "configuration.h"
+#include "detect/ScanI2C.h"
 #include "main.h"
 #include <sys/time.h>
 #include <time.h>
@@ -24,7 +24,11 @@ void readFromRTC()
     if (rtc_found.address == RV3028_RTC) {
         uint32_t now = millis();
         Melopero_RV3028 rtc;
+#ifdef I2C_SDA1
+        rtc.initI2C(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
+#else
         rtc.initI2C();
+#endif
         tm t;
         t.tm_year = rtc.getYear() - 1900;
         t.tm_mon = rtc.getMonth() - 1;
@@ -47,14 +51,11 @@ void readFromRTC()
         PCF8563_Class rtc;
 
 #ifdef I2C_SDA1
-        if (rtc_found.port == ScanI2C::I2CPort::WIRE1) {
-            rtc.begin(Wire1);
-        } else {
+        rtc.begin(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
+#else
+        rtc.begin();
 #endif
-            rtc.begin(Wire);
-#ifdef I2C_SDA1
-        }
-#endif
+
         auto tc = rtc.getDateTime();
         tm t;
         t.tm_year = tc.year - 1900;
@@ -111,7 +112,11 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
 #ifdef RV3028_RTC
         if (rtc_found.address == RV3028_RTC) {
             Melopero_RV3028 rtc;
+#ifdef I2C_SDA1
+            rtc.initI2C(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
+#else
             rtc.initI2C();
+#endif
             tm *t = localtime(&tv->tv_sec);
             rtc.setTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_wday, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
             LOG_DEBUG("RV3028_RTC setTime %02d-%02d-%02d %02d:%02d:%02d %ld\n", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
@@ -122,15 +127,10 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
             PCF8563_Class rtc;
 
 #ifdef I2C_SDA1
-            if (rtc_found.port == ScanI2C::I2CPort::WIRE1) {
-                rtc.begin(Wire1);
-            } else {
+            rtc.begin(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
+#else
+            rtc.begin();
 #endif
-                rtc.begin(Wire);
-#ifdef I2C_SDA1
-            }
-#endif
-
             tm *t = localtime(&tv->tv_sec);
             rtc.setDateTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
             LOG_DEBUG("PCF8563_RTC setDateTime %02d-%02d-%02d %02d:%02d:%02d %ld\n", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
