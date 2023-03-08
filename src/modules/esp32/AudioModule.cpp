@@ -13,7 +13,7 @@
 #endif
 
 #ifdef OLED_UA
-#include "grahics/fonts/OLEDDisplayFontsUA.h"
+#include "graphics/fonts/OLEDDisplayFontsUA.h"
 #endif
 
 /*

@@ -8,11 +8,11 @@
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
 
 #ifdef OLED_RU
-#include "grahics/pfonts/OLEDDisplayFontsRU.h"
+#include "graphics/fonts/OLEDDisplayFontsRU.h"
 #endif
 
 #ifdef OLED_UA
-#include "grahics/fonts/OLEDDisplayFontsUA.h"
+#include "graphics/fonts/OLEDDisplayFontsUA.h"
 #endif
 
 #if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)

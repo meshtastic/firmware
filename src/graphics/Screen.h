@@ -4,6 +4,7 @@
 
 #if !HAS_SCREEN
 #include "power.h"
+#include <OLEDDisplay.h>
 namespace graphics
 {
 // Noop class for boards without screen.
@@ -24,7 +25,6 @@ class Screen
     void startFirmwareUpdateScreen() {}
 };
 } // namespace graphics
-
 #else
 #include <cstring>
 
