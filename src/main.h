@@ -21,7 +21,6 @@ extern NRF52Bluetooth *nrf52Bluetooth;
 #endif
 
 extern ScanI2C::DeviceAddress screen_found;
-extern meshtastic_Config_DisplayConfig_OledType screen_model;
 extern ScanI2C::DeviceAddress cardkb_found;
 extern uint8_t kb_model;
 extern ScanI2C::DeviceAddress rtc_found;

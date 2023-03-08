@@ -86,7 +86,6 @@ meshtastic::NodeStatus *nodeStatus = new meshtastic::NodeStatus();
 
 /// The I2C address of our display (if found)
 ScanI2C::DeviceAddress screen_found = ScanI2C::ADDRESS_NONE;
-meshtastic_Config_DisplayConfig_OledType screen_model;
 
 // The I2C address of the cardkb or RAK14004 (if found)
 ScanI2C::DeviceAddress cardkb_found = ScanI2C::ADDRESS_NONE;
@@ -178,6 +177,8 @@ __attribute__((weak, noinline)) bool loopCanSleep()
 void setup()
 {
     concurrency::hasBeenSetup = true;
+    meshtastic_Config_DisplayConfig_OledType screen_model;
+    OLEDDISPLAY_GEOMETRY screen_geometry = GEOMETRY_128_64;
 
 #ifdef SEGGER_STDOUT_CH
     auto mode = false ? SEGGER_RTT_MODE_BLOCK_IF_FIFO_FULL : SEGGER_RTT_MODE_NO_BLOCK_TRIM;
@@ -420,7 +421,12 @@ void setup()
         screen_model = config.display.oled;
 
 #if defined(USE_SH1107)
-    screen_model = Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of 128x128
+    screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of 128x128
+    display_geometry = GEOMETRY_128_128;
+#endif
+
+#if defined(USE_SH1107_128_64)
+    screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
 #endif
 
     // Init our SPI controller (must be before screen and lora)
@@ -434,7 +440,7 @@ void setup()
 #endif
 
     // Initialize the screen first so we can show the logo while we start up everything else.
-    screen = new graphics::Screen(screen_found);
+    screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
 
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 

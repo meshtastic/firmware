@@ -3,6 +3,8 @@
 #include "configuration.h"
 
 #include "detect/ScanI2C.h"
+#include <OLEDDisplay.h>
+#include "mesh/generated/meshtastic/config.pb.h"
 
 #if !HAS_SCREEN
 #include "power.h"
@@ -12,7 +14,7 @@ namespace graphics
 class Screen
 {
   public:
-    explicit Screen(ScanI2C::DeviceAddress) {}
+    explicit Screen(ScanI2C::DeviceAddress,meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
     void onPress() {}
     void setup() {}
     void setOn(bool) {}
@@ -26,7 +28,6 @@ class Screen
     void startFirmwareUpdateScreen() {}
 };
 } // namespace graphics
-
 #else
 #include <cstring>
 
@@ -36,7 +37,7 @@ class Screen
 
 #ifdef USE_ST7567
 #include <ST7567Wire.h>
-#elif defined(USE_SH1106) || defined(USE_SH1107)
+#elif defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SH1107_128_64)
 #include <SH1106Wire.h>
 #elif defined(USE_SSD1306)
 #include <SSD1306Wire.h>
@@ -118,12 +119,14 @@ class Screen : public concurrency::OSThread
         CallbackObserver<Screen, const UIFrameEvent *>(this, &Screen::handleUIFrameEvent);
 
   public:
-    explicit Screen(ScanI2C::DeviceAddress);
+    explicit Screen(ScanI2C::DeviceAddress,meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
 
     Screen(const Screen &) = delete;
     Screen &operator=(const Screen &) = delete;
 
     ScanI2C::DeviceAddress address_found;
+    meshtastic_Config_DisplayConfig_OledType model;
+    OLEDDISPLAY_GEOMETRY geometry;
 
     /// Initializes the UI, turns on the display, starts showing boot screen.
     //
@@ -372,7 +375,7 @@ class Screen : public concurrency::OSThread
 
     /// Display device
 
-#if defined(USE_SH1106) || defined(USE_SH1107)
+#if defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SH1107_128_64)
     SH1106Wire dispdev;
 #elif defined(USE_SSD1306)
     SSD1306Wire dispdev;
