@@ -887,9 +887,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 // }
 // #else
 Screen::Screen(uint8_t address, int sda, int scl)
-    : OSThread("Screen"), cmdQueue(32),
-      dispdev(address, sda, scl, screen_geometry),
-      ui(&dispdev)
+    : OSThread("Screen"), cmdQueue(32), dispdev(address, sda, scl, screen_geometry), ui(&dispdev)
 {
     address_found = address;
     cmdQueue.setReader(this);
