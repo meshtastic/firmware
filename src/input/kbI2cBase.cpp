@@ -1,6 +1,6 @@
 #include "kbI2cBase.h"
-#include "configuration.h"
 
+#include "configuration.h"
 #include "detect/ScanI2C.h"
 
 extern ScanI2C::DeviceAddress cardkb_found;
@@ -49,9 +49,11 @@ int32_t KbI2cBase::runOnce()
     if (!i2cBus) {
         switch (cardkb_found.port) {
             case ScanI2C::WIRE1:
+#ifdef I2C_SDA1
                 LOG_DEBUG("Using I2C Bus 1 (the second one)\n");
                 i2cBus = &Wire1;
                 break;
+#endif
             case ScanI2C::WIRE:
                 LOG_DEBUG("Using I2C Bus 0 (the first one)\n");
                 i2cBus = &Wire;

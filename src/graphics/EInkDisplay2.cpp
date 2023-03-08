@@ -41,7 +41,7 @@
 
 GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT> *adafruitDisplay;
 
-EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl, HW_I2C i2cBus)
+EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY geometry, HW_I2C i2cBus)
 {
 #if defined(TTGO_T_ECHO)
     setGeometry(GEOMETRY_RAWMODE, TECHO_DISPLAY_MODEL::WIDTH, TECHO_DISPLAY_MODEL::HEIGHT);

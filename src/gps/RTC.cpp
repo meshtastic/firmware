@@ -46,11 +46,15 @@ void readFromRTC()
         uint32_t now = millis();
         PCF8563_Class rtc;
 
+#ifdef I2C_SDA1
         if (rtc_found.port == ScanI2C::I2CPort::WIRE1) {
             rtc.begin(Wire1);
         } else {
+#endif
             rtc.begin(Wire);
+#ifdef I2C_SDA1
         }
+#endif
         auto tc = rtc.getDateTime();
         tm t;
         t.tm_year = tc.year - 1900;

@@ -1,9 +1,10 @@
 #include "ScanI2CTwoWire.h"
 
-#include "../concurrency/LockGuard.h"
+#include "concurrency/LockGuard.h"
+#include "configuration.h"
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
-#include "../main.h" // atecc
+#include "main.h" // atecc
 #endif
 
 // AXP192 and AXP2101 have the same device address, we just need to identify it in Power.cpp
@@ -51,7 +52,7 @@ ScanI2C::DeviceType ScanI2CTwoWire::probeOLED(ScanI2C::DeviceAddress addr) const
     do {
         r_prev = r;
         i2cBus->beginTransmission(addr.address);
-        i2cBus->write(0x00);
+        i2cBus->write((uint8_t) 0x00);
         i2cBus->endTransmission();
         i2cBus->requestFrom((int)addr.address, 1);
         if (i2cBus->available()) {
@@ -150,12 +151,19 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
     uint16_t registerValue = 0x00;
     ScanI2C::DeviceType type;
     TwoWire * i2cBus;
+#ifdef RV3028_RTC
+    Melopero_RV3028 rtc;
+#endif
 
+#ifdef I2C_SDA1
     if (port == I2CPort::WIRE1) {
         i2cBus = &Wire1;
     } else {
+#endif
         i2cBus = &Wire;
+#ifdef I2C_SDA1
     }
+#endif
 
     for (addr.address = 1; addr.address < 127; addr.address++) {
         i2cBus->beginTransmission(addr.address);
@@ -186,8 +194,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                         //foundDevices[addr] = RTC_RV3028;
                         type = RTC_RV3028;
                         LOG_INFO("RV3028 RTC found\n");
-                        Melopero_RV3028 rtc;
-                        rtc.initI2C();
+                        rtc.initI2C(*i2cBus);
                         rtc.writeToRegister(0x35, 0x07); // no Clkout
                         rtc.writeToRegister(0x37, 0xB4);
                         break;
@@ -213,7 +220,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                 SCAN_SIMPLE_CASE(ST7567_ADDRESS, SCREEN_ST7567, "st7567 display found\n")
 
 #ifdef HAS_PMU
-                    SCAN_SIMPLE_CASE(XPOWERS_AXP192_AXP2101_ADDRESS, PMU_AXP192_AXP2101, "axp192/axp2101 PMU found\n")
+                SCAN_SIMPLE_CASE(XPOWERS_AXP192_AXP2101_ADDRESS, PMU_AXP192_AXP2101, "axp192/axp2101 PMU found\n")
 #endif
                 case BME_ADDR:
                 case BME_ADDR_ALTERNATE:
@@ -266,7 +273,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
             }
 
         } else if (err == 4) {
-            LOG_ERROR("Unknow error at address 0x%x\n", addr);
+            LOG_ERROR("Unknown error at address 0x%x\n", addr);
         }
 
         // Check if a type was found for the enumerated device - save, if so
@@ -282,7 +289,11 @@ TwoWire *ScanI2CTwoWire::fetchI2CBus(ScanI2C::DeviceAddress address) const
     if (address.port == ScanI2C::I2CPort::WIRE1) {
         return &Wire;
     } else {
+#ifdef I2C_SDA1
         return &Wire1;
+#else
+        return &Wire;
+#endif
     }
 }
 

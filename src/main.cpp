@@ -286,7 +286,6 @@ void setup()
     Wire.begin(I2C_SDA, I2C_SCL);
     i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
 #elif HAS_WIRE
-    i2cScanner->scanDevices();
     i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
 #endif
 
