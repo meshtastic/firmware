@@ -5,8 +5,8 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h" // neede for button bypass
-#include "mesh/generated/meshtastic/cannedmessages.pb.h"
 #include "detect/ScanI2C.h"
+#include "mesh/generated/meshtastic/cannedmessages.pb.h"
 
 #include "main.h" // for cardkb_found
 

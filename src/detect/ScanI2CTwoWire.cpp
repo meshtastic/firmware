@@ -14,10 +14,9 @@
 
 ScanI2C::FoundDevice ScanI2CTwoWire::find(ScanI2C::DeviceType type) const
 {
-    concurrency::LockGuard guard((concurrency::Lock *) &lock);
+    concurrency::LockGuard guard((concurrency::Lock *)&lock);
 
-    return exists(type) ?
-           ScanI2C::FoundDevice(type, deviceAddresses.at(type)) : DEVICE_NONE;
+    return exists(type) ? ScanI2C::FoundDevice(type, deviceAddresses.at(type)) : DEVICE_NONE;
 }
 
 bool ScanI2CTwoWire::exists(ScanI2C::DeviceType type) const
@@ -27,10 +26,9 @@ bool ScanI2CTwoWire::exists(ScanI2C::DeviceType type) const
 
 ScanI2C::FoundDevice ScanI2CTwoWire::firstOfOrNONE(size_t count, DeviceType types[]) const
 {
-    concurrency::LockGuard guard((concurrency::Lock *) &lock);
+    concurrency::LockGuard guard((concurrency::Lock *)&lock);
 
-    for (size_t k = 0; k < count; k++ )
-    {
+    for (size_t k = 0; k < count; k++) {
         ScanI2C::DeviceType current = types[k];
 
         if (exists(current)) {
@@ -43,16 +41,16 @@ ScanI2C::FoundDevice ScanI2CTwoWire::firstOfOrNONE(size_t count, DeviceType type
 
 ScanI2C::DeviceType ScanI2CTwoWire::probeOLED(ScanI2C::DeviceAddress addr) const
 {
-    TwoWire * i2cBus = fetchI2CBus(addr);
+    TwoWire *i2cBus = fetchI2CBus(addr);
 
     uint8_t r = 0;
     uint8_t r_prev = 0;
     uint8_t c = 0;
-    ScanI2C::DeviceType  o_probe = ScanI2C::DeviceType::SCREEN_UNKNOWN;
+    ScanI2C::DeviceType o_probe = ScanI2C::DeviceType::SCREEN_UNKNOWN;
     do {
         r_prev = r;
         i2cBus->beginTransmission(addr.address);
-        i2cBus->write((uint8_t) 0x00);
+        i2cBus->write((uint8_t)0x00);
         i2cBus->endTransmission();
         i2cBus->requestFrom((int)addr.address, 1);
         if (i2cBus->available()) {
@@ -107,10 +105,8 @@ void ScanI2CTwoWire::printATECCInfo() const
 #endif
 }
 
-uint16_t ScanI2CTwoWire::getRegisterValue(
-        const ScanI2CTwoWire::RegisterLocation & registerLocation,
-        ScanI2CTwoWire::ResponseWidth responseWidth
-) const
+uint16_t ScanI2CTwoWire::getRegisterValue(const ScanI2CTwoWire::RegisterLocation &registerLocation,
+                                          ScanI2CTwoWire::ResponseWidth responseWidth) const
 {
     uint16_t value = 0x00;
     TwoWire *i2cBus = fetchI2CBus(registerLocation.i2cAddress);
@@ -131,16 +127,15 @@ uint16_t ScanI2CTwoWire::getRegisterValue(
     return value;
 }
 
-#define SCAN_SIMPLE_CASE(ADDR, T, ...)      \
-                case ADDR:                  \
-                    LOG_INFO(__VA_ARGS__);  \
-                    type = T;               \
-                    break;
-
+#define SCAN_SIMPLE_CASE(ADDR, T, ...)                                                                                           \
+    case ADDR:                                                                                                                   \
+        LOG_INFO(__VA_ARGS__);                                                                                                   \
+        type = T;                                                                                                                \
+        break;
 
 void ScanI2CTwoWire::scanPort(I2CPort port)
 {
-    concurrency::LockGuard guard((concurrency::Lock *) &lock);
+    concurrency::LockGuard guard((concurrency::Lock *)&lock);
 
     LOG_DEBUG("Scanning for i2c devices on port %d\n", port);
 
@@ -150,7 +145,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
 
     uint16_t registerValue = 0x00;
     ScanI2C::DeviceType type;
-    TwoWire * i2cBus;
+    TwoWire *i2cBus;
 #ifdef RV3028_RTC
     Melopero_RV3028 rtc;
 #endif
@@ -173,103 +168,102 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
             LOG_DEBUG("I2C device found at address 0x%x\n", addr.address);
 
             switch (addr.address) {
-                case SSD1306_ADDRESS:
-                    type = probeOLED(addr);
-                    break;
+            case SSD1306_ADDRESS:
+                type = probeOLED(addr);
+                break;
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
-                case ATECC608B_ADDR:
-                    type = ATECC608B;
-                    if (atecc.begin(addr.address) == true) {
-                        LOG_INFO("ATECC608B initialized\n");
-                    } else {
-                        LOG_WARN("ATECC608B initialization failed\n");
-                    }
-                    printATECCInfo();
-                    break;
+            case ATECC608B_ADDR:
+                type = ATECC608B;
+                if (atecc.begin(addr.address) == true) {
+                    LOG_INFO("ATECC608B initialized\n");
+                } else {
+                    LOG_WARN("ATECC608B initialization failed\n");
+                }
+                printATECCInfo();
+                break;
 #endif
 
 #ifdef RV3028_RTC
-                case RV3028_RTC:
-                        //foundDevices[addr] = RTC_RV3028;
-                        type = RTC_RV3028;
-                        LOG_INFO("RV3028 RTC found\n");
-                        rtc.initI2C(*i2cBus);
-                        rtc.writeToRegister(0x35, 0x07); // no Clkout
-                        rtc.writeToRegister(0x37, 0xB4);
-                        break;
+            case RV3028_RTC:
+                // foundDevices[addr] = RTC_RV3028;
+                type = RTC_RV3028;
+                LOG_INFO("RV3028 RTC found\n");
+                rtc.initI2C(*i2cBus);
+                rtc.writeToRegister(0x35, 0x07); // no Clkout
+                rtc.writeToRegister(0x37, 0xB4);
+                break;
 #endif
 
 #ifdef PCF8563_RTC
                 SCAN_SIMPLE_CASE(PCF8563_RTC, RTC_PCF8563, "PCF8563 RTC found\n")
 #endif
 
-                case CARDKB_ADDR:
-                    // Do we have the RAK14006 instead?
-                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x04), 1);
-                    if (registerValue == 0x02) {
-                        // KEYPAD_VERSION
-                        LOG_INFO("RAK14004 found\n");
-                        type = RAK14004;
-                    } else {
-                        LOG_INFO("m5 cardKB found\n");
-                        type = CARDKB;
-                    }
-                    break;
+            case CARDKB_ADDR:
+                // Do we have the RAK14006 instead?
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x04), 1);
+                if (registerValue == 0x02) {
+                    // KEYPAD_VERSION
+                    LOG_INFO("RAK14004 found\n");
+                    type = RAK14004;
+                } else {
+                    LOG_INFO("m5 cardKB found\n");
+                    type = CARDKB;
+                }
+                break;
 
                 SCAN_SIMPLE_CASE(ST7567_ADDRESS, SCREEN_ST7567, "st7567 display found\n")
 
 #ifdef HAS_PMU
                 SCAN_SIMPLE_CASE(XPOWERS_AXP192_AXP2101_ADDRESS, PMU_AXP192_AXP2101, "axp192/axp2101 PMU found\n")
 #endif
-                case BME_ADDR:
-                case BME_ADDR_ALTERNATE:
-                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xD0), 1); // GET_ID
-                    switch (registerValue) {
-                        case 0x61:
-                            LOG_INFO("BME-680 sensor found at address 0x%x\n", (uint8_t) addr.address);
-                            type = BME_680;
-                            break;
-                        case 0x60:
-                            LOG_INFO("BME-280 sensor found at address 0x%x\n", (uint8_t) addr.address);
-                            type = BME_280;
-                            break;
-                        default:
-                            LOG_INFO("BMP-280 sensor found at address 0x%x\n", (uint8_t) addr.address);
-                            type = BMP_280;
-                    }
+            case BME_ADDR:
+            case BME_ADDR_ALTERNATE:
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xD0), 1); // GET_ID
+                switch (registerValue) {
+                case 0x61:
+                    LOG_INFO("BME-680 sensor found at address 0x%x\n", (uint8_t)addr.address);
+                    type = BME_680;
                     break;
+                case 0x60:
+                    LOG_INFO("BME-280 sensor found at address 0x%x\n", (uint8_t)addr.address);
+                    type = BME_280;
+                    break;
+                default:
+                    LOG_INFO("BMP-280 sensor found at address 0x%x\n", (uint8_t)addr.address);
+                    type = BMP_280;
+                }
+                break;
 
-                case INA_ADDR:
-                case INA_ADDR_ALTERNATE:
-                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
-                    LOG_DEBUG("Register MFG_UID: 0x%x\n", registerValue);
-                    if (registerValue == 0x5449) {
-                        LOG_INFO("INA260 sensor found at address 0x%x\n", (uint8_t) addr.address);
-                        type = INA260;
-                    } else { // Assume INA219 if INA260 ID is not found
-                        LOG_INFO("INA219 sensor found at address 0x%x\n", (uint8_t) addr.address);
-                        type = INA219;
-                    }
-                    break;
+            case INA_ADDR:
+            case INA_ADDR_ALTERNATE:
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
+                LOG_DEBUG("Register MFG_UID: 0x%x\n", registerValue);
+                if (registerValue == 0x5449) {
+                    LOG_INFO("INA260 sensor found at address 0x%x\n", (uint8_t)addr.address);
+                    type = INA260;
+                } else { // Assume INA219 if INA260 ID is not found
+                    LOG_INFO("INA219 sensor found at address 0x%x\n", (uint8_t)addr.address);
+                    type = INA219;
+                }
+                break;
 
                 SCAN_SIMPLE_CASE(MCP9808_ADDR, MCP9808, "MCP9808 sensor found\n")
 
                 SCAN_SIMPLE_CASE(SHT31_ADDR, SHT31, "SHT31 sensor found\n")
                 SCAN_SIMPLE_CASE(SHTC3_ADDR, SHTC3, "SHTC3 sensor found\n")
 
-                case LPS22HB_ADDR_ALT:
+            case LPS22HB_ADDR_ALT:
                 SCAN_SIMPLE_CASE(LPS22HB_ADDR, LPS22HB, "LPS22HB sensor found\n")
 
                 SCAN_SIMPLE_CASE(QMC6310_ADDR, QMC6310, "QMC6310 Highrate 3-Axis magnetic sensor found\n")
-                SCAN_SIMPLE_CASE(QMI8658_ADDR, QMI8658,
-                                 "QMI8658 Highrate 6-Axis inertial measurement sensor found\n")
+                SCAN_SIMPLE_CASE(QMI8658_ADDR, QMI8658, "QMI8658 Highrate 6-Axis inertial measurement sensor found\n")
                 SCAN_SIMPLE_CASE(QMC5883L_ADDR, QMC5883L, "QMC5883L Highrate 3-Axis magnetic sensor found\n")
 
                 SCAN_SIMPLE_CASE(PMSA0031_ADDR, PMSA0031, "PMSA0031 air quality sensor found\n")
 
-                default:
-                    LOG_INFO("Device found at address 0x%x was not able to be enumerated\n", addr.address);
+            default:
+                LOG_INFO("Device found at address 0x%x was not able to be enumerated\n", addr.address);
             }
 
         } else if (err == 4) {
@@ -297,6 +291,7 @@ TwoWire *ScanI2CTwoWire::fetchI2CBus(ScanI2C::DeviceAddress address) const
     }
 }
 
-size_t ScanI2CTwoWire::countDevices() const {
+size_t ScanI2CTwoWire::countDevices() const
+{
     return foundDevices.size();
 }

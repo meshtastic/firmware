@@ -2,8 +2,8 @@
 
 #include <map>
 #include <memory>
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #include <Wire.h>
 
@@ -13,7 +13,7 @@
 
 class ScanI2CTwoWire : public ScanI2C
 {
-public:
+  public:
     void scanPort(ScanI2C::I2CPort) override;
 
     ScanI2C::FoundDevice find(ScanI2C::DeviceType) const override;
@@ -22,19 +22,18 @@ public:
 
     size_t countDevices() const override;
 
-protected:
+  protected:
     FoundDevice firstOfOrNONE(size_t, DeviceType[]) const override;
 
-private:
-
-    typedef struct RegisterLocation
-    {
+  private:
+    typedef struct RegisterLocation {
         DeviceAddress i2cAddress;
         RegisterAddress registerAddress;
 
-        RegisterLocation(DeviceAddress deviceAddress, RegisterAddress registerAddress) :
-            i2cAddress(deviceAddress), registerAddress(registerAddress)
-        {}
+        RegisterLocation(DeviceAddress deviceAddress, RegisterAddress registerAddress)
+            : i2cAddress(deviceAddress), registerAddress(registerAddress)
+        {
+        }
 
     } RegisterLocation;
 
@@ -55,4 +54,3 @@ private:
 
     TwoWire *fetchI2CBus(ScanI2C::DeviceAddress) const;
 };
-

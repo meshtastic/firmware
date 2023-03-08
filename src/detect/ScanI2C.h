@@ -1,12 +1,12 @@
 #pragma once
 
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
-class ScanI2C {
-public:
-     typedef enum DeviceType
-    {
+class ScanI2C
+{
+  public:
+    typedef enum DeviceType {
         NONE,
         SCREEN_SSD1306,
         SCREEN_SH1106,
@@ -33,31 +33,28 @@ public:
         PMSA0031,
     } DeviceType;
 
-    //typedef uint8_t DeviceAddress;
-    typedef enum I2CPort
-    {
+    // typedef uint8_t DeviceAddress;
+    typedef enum I2CPort {
         NO_I2C,
         WIRE,
         WIRE1,
     } I2CPort;
 
-    typedef struct DeviceAddress
-    {
+    typedef struct DeviceAddress {
         I2CPort port;
         uint8_t address;
 
         explicit DeviceAddress(I2CPort port, uint8_t address);
         DeviceAddress();
 
-        bool operator < (const DeviceAddress& other) const;
+        bool operator<(const DeviceAddress &other) const;
     } DeviceAddress;
 
     static const DeviceAddress ADDRESS_NONE;
 
     typedef uint8_t RegisterAddress;
 
-    typedef struct FoundDevice
-    {
+    typedef struct FoundDevice {
         DeviceType type;
         DeviceAddress address;
 
@@ -66,8 +63,7 @@ public:
 
     static const FoundDevice DEVICE_NONE;
 
-public:
-
+  public:
     ScanI2C();
 
     virtual void scanPort(ScanI2C::I2CPort);
@@ -89,11 +85,9 @@ public:
 
     virtual size_t countDevices() const;
 
-protected:
-
+  protected:
     virtual FoundDevice firstOfOrNONE(size_t, DeviceType[]) const;
 
-private:
-
+  private:
     bool shouldSuppressScreen = false;
 };

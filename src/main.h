@@ -3,11 +3,11 @@
 #include "GPSStatus.h"
 #include "NodeStatus.h"
 #include "PowerStatus.h"
-#include "graphics/Screen.h"
-#include "mesh/generated/meshtastic/telemetry.pb.h"
-#include "mesh/generated/meshtastic/config.pb.h"
-#include <map>
 #include "detect/ScanI2C.h"
+#include "graphics/Screen.h"
+#include "mesh/generated/meshtastic/config.pb.h"
+#include "mesh/generated/meshtastic/telemetry.pb.h"
+#include <map>
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 #include <SparkFun_ATECCX08a_Arduino_Library.h>
 #endif

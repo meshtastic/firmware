@@ -888,16 +888,11 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 // #else
 
 Screen::Screen(ScanI2C::DeviceAddress address)
-: concurrency::OSThread("Screen"),
-  address_found(address),
-  cmdQueue(32),
-  dispdev(address.address,
-          -1,
-          -1,
-          screen_model == meshtastic_Config_DisplayConfig_OledType_OLED_SH1107 ? GEOMETRY_128_128 : GEOMETRY_128_64,
-          (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE
-  ),
-  ui(&dispdev)
+    : concurrency::OSThread("Screen"), address_found(address), cmdQueue(32),
+      dispdev(address.address, -1, -1,
+              screen_model == meshtastic_Config_DisplayConfig_OledType_OLED_SH1107 ? GEOMETRY_128_128 : GEOMETRY_128_64,
+              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE),
+      ui(&dispdev)
 {
     cmdQueue.setReader(this);
 }

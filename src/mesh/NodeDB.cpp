@@ -1,5 +1,6 @@
 #include "configuration.h"
 
+#include "../detect/ScanI2C.h"
 #include "Channels.h"
 #include "CryptoEngine.h"
 #include "FSCommon.h"
@@ -16,7 +17,6 @@
 #include <ErriezCRC32.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
-#include "../detect/ScanI2C.h"
 
 #ifdef ARCH_ESP32
 #include "mesh/http/WiFiAPClient.h"

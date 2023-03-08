@@ -15,19 +15,19 @@
 #include "SPILock.h"
 #include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
-#include "detect/axpDebug.h"
-#include "detect/einkScan.h"
 #include "detect/ScanI2C.h"
 #include "detect/ScanI2CTwoWire.h"
+#include "detect/axpDebug.h"
+#include "detect/einkScan.h"
 #include "graphics/Screen.h"
 #include "main.h"
+#include "mesh/generated/meshtastic/config.pb.h"
 #include "modules/Modules.h"
 #include "shutdown.h"
 #include "sleep.h"
 #include "target_specific.h"
 #include <Wire.h>
 #include <memory>
-#include "mesh/generated/meshtastic/config.pb.h"
 // #include <driver/rtc_io.h>
 
 #include "mesh/eth/ethClient.h"
@@ -274,7 +274,6 @@ void setup()
     // accessories
     auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
 
-
     LOG_INFO("Scanning for i2c devices...\n");
 
 #ifdef I2C_SDA1
@@ -296,7 +295,6 @@ void setup()
         LOG_INFO("%i I2C devices found\n", i2cCount);
     }
 
-
 #ifdef ARCH_ESP32
     // Don't init display if we don't have one or we are waking headless due to a timer event
     if (wakeCause == ESP_SLEEP_WAKEUP_TIMER) {
@@ -310,16 +308,16 @@ void setup()
 
     if (screen_found.port != ScanI2C::I2CPort::NO_I2C) {
         switch (screenInfo.type) {
-            case ScanI2C::DeviceType::SCREEN_SH1106:
-                screen_model = meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_SH1106;
-                break;
-            case ScanI2C::DeviceType::SCREEN_SSD1306:
-                screen_model = meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_SSD1306;
-                break;
-            case ScanI2C::DeviceType::SCREEN_ST7567:
-            case ScanI2C::DeviceType::SCREEN_UNKNOWN:
-            default:
-                screen_model = meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;
+        case ScanI2C::DeviceType::SCREEN_SH1106:
+            screen_model = meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_SH1106;
+            break;
+        case ScanI2C::DeviceType::SCREEN_SSD1306:
+            screen_model = meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_SSD1306;
+            break;
+        case ScanI2C::DeviceType::SCREEN_ST7567:
+        case ScanI2C::DeviceType::SCREEN_UNKNOWN:
+        default:
+            screen_model = meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;
         }
     }
 
@@ -333,13 +331,13 @@ void setup()
     if (kb_info.type != ScanI2C::DeviceType::NONE) {
         cardkb_found = kb_info.address;
         switch (kb_info.type) {
-            case ScanI2C::DeviceType::RAK14004:
-                kb_model = 0x02;
-                break;
-            case ScanI2C::DeviceType::CARDKB:
-            default:
-                // use this as default since it's also just zero
-                kb_model = 0x00;
+        case ScanI2C::DeviceType::RAK14004:
+            kb_model = 0x02;
+            break;
+        case ScanI2C::DeviceType::CARDKB:
+        default:
+            // use this as default since it's also just zero
+            kb_model = 0x00;
         }
     }
 
@@ -353,12 +351,13 @@ void setup()
 
 #define STRING(S) #S
 
-#define SCANNER_TO_SENSORS_MAP(SCANNER_T, PB_T)                     \
-    {   auto found = i2cScanner->find(SCANNER_T);                   \
-        if (found.type != ScanI2C::DeviceType::NONE) {              \
-            nodeTelemetrySensorsMap[PB_T] = found.address.address;  \
-            LOG_DEBUG("found i2c sensor %s\n", STRING(PB_T));         \
-        }                                                           \
+#define SCANNER_TO_SENSORS_MAP(SCANNER_T, PB_T)                                                                                  \
+    {                                                                                                                            \
+        auto found = i2cScanner->find(SCANNER_T);                                                                                \
+        if (found.type != ScanI2C::DeviceType::NONE) {                                                                           \
+            nodeTelemetrySensorsMap[PB_T] = found.address.address;                                                               \
+            LOG_DEBUG("found i2c sensor %s\n", STRING(PB_T));                                                                    \
+        }                                                                                                                        \
     }
 
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::BME_680, meshtastic_TelemetrySensorType_BME680)

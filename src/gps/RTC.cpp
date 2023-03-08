@@ -1,9 +1,9 @@
 #include "RTC.h"
+#include "../detect/ScanI2C.h"
 #include "configuration.h"
 #include "main.h"
 #include <sys/time.h>
 #include <time.h>
-#include "../detect/ScanI2C.h"
 
 static RTCQuality currentQuality = RTCQualityNone;
 

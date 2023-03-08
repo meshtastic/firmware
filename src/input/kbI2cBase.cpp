@@ -11,7 +11,7 @@ KbI2cBase::KbI2cBase(const char *name) : concurrency::OSThread(name)
     this->_originName = name;
 }
 
-uint8_t read_from_14004(TwoWire * i2cBus, uint8_t reg, uint8_t *data, uint8_t length)
+uint8_t read_from_14004(TwoWire *i2cBus, uint8_t reg, uint8_t *data, uint8_t length)
 {
     uint8_t readflag = 0;
     i2cBus->beginTransmission(CARDKB_ADDR);
@@ -48,19 +48,19 @@ int32_t KbI2cBase::runOnce()
 
     if (!i2cBus) {
         switch (cardkb_found.port) {
-            case ScanI2C::WIRE1:
+        case ScanI2C::WIRE1:
 #ifdef I2C_SDA1
-                LOG_DEBUG("Using I2C Bus 1 (the second one)\n");
-                i2cBus = &Wire1;
-                break;
+            LOG_DEBUG("Using I2C Bus 1 (the second one)\n");
+            i2cBus = &Wire1;
+            break;
 #endif
-            case ScanI2C::WIRE:
-                LOG_DEBUG("Using I2C Bus 0 (the first one)\n");
-                i2cBus = &Wire;
-                break;
-            case ScanI2C::NO_I2C:
-            default:
-                i2cBus = 0;
+        case ScanI2C::WIRE:
+            LOG_DEBUG("Using I2C Bus 0 (the first one)\n");
+            i2cBus = &Wire;
+            break;
+        case ScanI2C::NO_I2C:
+        default:
+            i2cBus = 0;
         }
     }
 
