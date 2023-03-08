@@ -121,11 +121,15 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
         if (rtc_found.address == PCF8563_RTC) {
             PCF8563_Class rtc;
 
+#ifdef I2C_SDA1
             if (rtc_found.port == ScanI2C::I2CPort::WIRE1) {
                 rtc.begin(Wire1);
             } else {
+#endif
                 rtc.begin(Wire);
+#ifdef I2C_SDA1
             }
+#endif
 
             tm *t = localtime(&tv->tv_sec);
             rtc.setDateTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
