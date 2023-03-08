@@ -886,13 +886,19 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 //     }
 // }
 // #else
-Screen::Screen(uint8_t address, int sda, int scl)
-    : OSThread("Screen"), cmdQueue(32),
-      dispdev(address, sda, scl,
-              screen_model == meshtastic_Config_DisplayConfig_OledType_OLED_SH1107 ? GEOMETRY_128_128 : GEOMETRY_128_64),
-      ui(&dispdev)
+
+Screen::Screen(ScanI2C::DeviceAddress address)
+: concurrency::OSThread("Screen"),
+  address_found(address),
+  cmdQueue(32),
+  dispdev(address.address,
+          -1,
+          -1,
+          screen_model == meshtastic_Config_DisplayConfig_OledType_OLED_SH1107 ? GEOMETRY_128_128 : GEOMETRY_128_64,
+          (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE
+  ),
+  ui(&dispdev)
 {
-    address_found = address;
     cmdQueue.setReader(this);
 }
 // #endif
@@ -1177,7 +1183,7 @@ void Screen::drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiStat
  * it is expected that this will be used during the boot phase */
 void Screen::setSSLFrames()
 {
-    if (address_found) {
+    if (address_found.address) {
         // LOG_DEBUG("showing SSL frames\n");
         static FrameCallback sslFrames[] = {drawSSLScreen};
         ui.setFrames(sslFrames, 1);
@@ -1189,7 +1195,7 @@ void Screen::setSSLFrames()
  * it is expected that this will be used during the boot phase */
 void Screen::setWelcomeFrames()
 {
-    if (address_found) {
+    if (address_found.address) {
         // LOG_DEBUG("showing Welcome frames\n");
         ui.disableAllIndicators();
 

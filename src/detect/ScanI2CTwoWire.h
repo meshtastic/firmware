@@ -14,13 +14,13 @@
 class ScanI2CTwoWire : public ScanI2C
 {
 public:
-    explicit ScanI2CTwoWire(TwoWire &);
-
-    void scanDevices() override;
+    void scanPort(ScanI2C::I2CPort) override;
 
     ScanI2C::FoundDevice find(ScanI2C::DeviceType) const override;
 
     bool exists(ScanI2C::DeviceType) const override;
+
+    size_t countDevices() const override;
 
 protected:
     FoundDevice firstOfOrNONE(size_t, DeviceType[]) const override;
@@ -40,8 +40,6 @@ private:
 
     typedef uint8_t ResponseWidth;
 
-    TwoWire &i2cBus;
-
     std::map<ScanI2C::DeviceAddress, ScanI2C::DeviceType> foundDevices;
 
     // note: prone to overwriting if multiple devices of a type are added at different addresses (rare?)
@@ -53,7 +51,8 @@ private:
 
     uint16_t getRegisterValue(const RegisterLocation &, ResponseWidth) const;
 
-    uint8_t probeOLED(ScanI2C::DeviceAddress) const;
+    DeviceType probeOLED(ScanI2C::DeviceAddress) const;
 
+    TwoWire *fetchI2CBus(ScanI2C::DeviceAddress) const;
 };
 

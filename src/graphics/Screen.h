@@ -2,6 +2,8 @@
 
 #include "configuration.h"
 
+#include "detect/ScanI2C.h"
+
 #if !HAS_SCREEN
 #include "power.h"
 namespace graphics
@@ -10,7 +12,7 @@ namespace graphics
 class Screen
 {
   public:
-    explicit Screen(char) {}
+    explicit Screen(ScanI2C::DeviceAddress) {}
     void onPress() {}
     void setup() {}
     void setOn(bool) {}
@@ -116,12 +118,12 @@ class Screen : public concurrency::OSThread
         CallbackObserver<Screen, const UIFrameEvent *>(this, &Screen::handleUIFrameEvent);
 
   public:
-    explicit Screen(uint8_t address, int sda = -1, int scl = -1);
+    explicit Screen(ScanI2C::DeviceAddress);
 
     Screen(const Screen &) = delete;
     Screen &operator=(const Screen &) = delete;
 
-    uint8_t address_found;
+    ScanI2C::DeviceAddress address_found;
 
     /// Initializes the UI, turns on the display, starts showing boot screen.
     //

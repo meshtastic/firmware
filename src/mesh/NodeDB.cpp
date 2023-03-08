@@ -16,6 +16,7 @@
 #include <ErriezCRC32.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
+#include "../detect/ScanI2C.h"
 
 #ifdef ARCH_ESP32
 #include "mesh/http/WiFiAPClient.h"
@@ -181,7 +182,7 @@ void NodeDB::installDefaultConfig()
 #if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER)
     bool hasScreen = true;
 #else
-    bool hasScreen = screen_found;
+    bool hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
 #endif
     config.bluetooth.mode = hasScreen ? meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN
                                       : meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN;

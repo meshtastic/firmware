@@ -85,16 +85,16 @@ meshtastic::NodeStatus *nodeStatus = new meshtastic::NodeStatus();
 // Scan for I2C Devices
 
 /// The I2C address of our display (if found)
-ScanI2C::DeviceAddress screen_found;
+ScanI2C::DeviceAddress screen_found = ScanI2C::ADDRESS_NONE;
 meshtastic_Config_DisplayConfig_OledType screen_model;
 
 // The I2C address of the cardkb or RAK14004 (if found)
-ScanI2C::DeviceAddress cardkb_found;
+ScanI2C::DeviceAddress cardkb_found = ScanI2C::ADDRESS_NONE;
 // 0x02 for RAK14004 and 0x00 for cardkb
 uint8_t kb_model;
 
 // The I2C address of the RTC Module (if found)
-ScanI2C::DeviceAddress rtc_found;
+ScanI2C::DeviceAddress rtc_found = ScanI2C::ADDRESS_NONE;
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 ATECCX08A atecc;
@@ -238,20 +238,14 @@ void setup()
 
     router = new ReliableRouter();
 
-    std::unique_ptr<ScanI2C> i2cScanner;
-
 #ifdef I2C_SDA1
     Wire1.begin(I2C_SDA1, I2C_SCL1);
 #endif
 
 #ifdef I2C_SDA
     Wire.begin(I2C_SDA, I2C_SCL);
-    i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire(Wire));
 #elif HAS_WIRE
     Wire.begin();
-    i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire(Wire));
-#else
-    i2cScanner = std::unique_ptr<ScanI2C>(new ScanI2C());
 #endif
 
 #ifdef PIN_LCD_RESET
@@ -270,28 +264,52 @@ void setup()
 #endif
 
     // Currently only the tbeam has a PMU
-    // PMU initialization needs to be placed before scanI2Cdevice
+    // PMU initialization needs to be placed before i2c scanning
     power = new Power();
     power->setStatusHandler(powerStatus);
     powerStatus->observe(&power->newStatus);
     power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
 
-#ifdef LILYGO_TBEAM_S3_CORE
-    // In T-Beam-S3-core, the I2C device cannot be scanned before power initialization, otherwise the device will be stuck
-    // PCF8563 RTC in tbeam-s3 uses Wire1 to share I2C bus
-    Wire1.beginTransmission(PCF8563_RTC);
-    if (Wire1.endTransmission() == 0) {
-        rtc_found = PCF8563_RTC;
-        LOG_INFO("PCF8563 RTC found\n");
+    // We need to scan here to decide if we have a screen for nodeDB.init() and because power has been applied to
+    // accessories
+    auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
+
+
+    LOG_INFO("Scanning for i2c devices...\n");
+
+#ifdef I2C_SDA1
+    Wire1.begin(I2C_SDA1, I2C_SCL1);
+    i2cScanner->scanPort(ScanI2C::I2CPort::WIRE1);
+#endif
+
+#ifdef I2C_SDA
+    Wire.begin(I2C_SDA, I2C_SCL);
+    i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
+#elif HAS_WIRE
+    i2cScanner->scanDevices();
+    i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
+#endif
+
+    auto i2cCount = i2cScanner->countDevices();
+    if (i2cCount == 0) {
+        LOG_INFO("No I2C devices found\n");
+    } else {
+        LOG_INFO("%i I2C devices found\n", i2cCount);
+    }
+
+
+#ifdef ARCH_ESP32
+    // Don't init display if we don't have one or we are waking headless due to a timer event
+    if (wakeCause == ESP_SLEEP_WAKEUP_TIMER) {
+        LOG_DEBUG("suppress screen wake because this is a headless timer wakeup");
+        i2cScanner->setSuppressScreen();
     }
 #endif
-    // We need to scan here to decide if we have a screen for nodeDB.init()
-    i2cScanner->scanDevices();
 
     auto screenInfo = i2cScanner->firstScreen();
-    screen_found = screenInfo.type != ScanI2C::DeviceType::NONE ? screenInfo.address : 0;
+    screen_found = screenInfo.type != ScanI2C::DeviceType::NONE ? screenInfo.address : ScanI2C::ADDRESS_NONE;
 
-    if (screen_found) {
+    if (screen_found.port != ScanI2C::I2CPort::NO_I2C) {
         switch (screenInfo.type) {
             case ScanI2C::DeviceType::SCREEN_SH1106:
                 screen_model = meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_SH1106;
@@ -336,12 +354,12 @@ void setup()
 
 #define STRING(S) #S
 
-#define SCANNER_TO_SENSORS_MAP(SCANNER_T, PB_T)             \
-    {   auto found = i2cScanner->find(SCANNER_T);           \
-        if (found.type != ScanI2C::DeviceType::NONE) {      \
-            nodeTelemetrySensorsMap[PB_T] = found.address;  \
-            LOG_DEBUG("found i2c sensor %s", STRING(PB_T));     \
-        }                                                   \
+#define SCANNER_TO_SENSORS_MAP(SCANNER_T, PB_T)                     \
+    {   auto found = i2cScanner->find(SCANNER_T);                   \
+        if (found.type != ScanI2C::DeviceType::NONE) {              \
+            nodeTelemetrySensorsMap[PB_T] = found.address.address;  \
+            LOG_DEBUG("found i2c sensor %s\n", STRING(PB_T));         \
+        }                                                           \
     }
 
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::BME_680, meshtastic_TelemetrySensorType_BME680)
@@ -383,10 +401,6 @@ void setup()
     LOG_INFO("Meshtastic hwvendor=%d, swver=%s\n", HW_VENDOR, optstr(APP_VERSION));
 
 #ifdef ARCH_ESP32
-    // Don't init display if we don't have one or we are waking headless due to a timer event
-    if (wakeCause == ESP_SLEEP_WAKEUP_TIMER)
-        screen_found = 0; // forget we even have the hardware
-
     esp32Setup();
 #endif
 
@@ -451,7 +465,7 @@ void setup()
 #if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER)
     screen->setup();
 #else
-    if (screen_found)
+    if (screen_found.port != ScanI2C::I2CPort::NO_I2C)
         screen->setup();
 #endif
 
