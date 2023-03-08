@@ -3,8 +3,8 @@
 #include "configuration.h"
 
 #include "detect/ScanI2C.h"
-#include <OLEDDisplay.h>
 #include "mesh/generated/meshtastic/config.pb.h"
+#include <OLEDDisplay.h>
 
 #if !HAS_SCREEN
 #include "power.h"
@@ -14,7 +14,7 @@ namespace graphics
 class Screen
 {
   public:
-    explicit Screen(ScanI2C::DeviceAddress,meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
+    explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
     void onPress() {}
     void setup() {}
     void setOn(bool) {}
@@ -119,7 +119,7 @@ class Screen : public concurrency::OSThread
         CallbackObserver<Screen, const UIFrameEvent *>(this, &Screen::handleUIFrameEvent);
 
   public:
-    explicit Screen(ScanI2C::DeviceAddress,meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
+    explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
 
     Screen(const Screen &) = delete;
     Screen &operator=(const Screen &) = delete;

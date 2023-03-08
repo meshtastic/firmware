@@ -886,15 +886,10 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 //     }
 // }
 // #else
-Screen::Screen(
-        ScanI2C::DeviceAddress address,
-        meshtastic_Config_DisplayConfig_OledType screenType,
-        OLEDDISPLAY_GEOMETRY geometry
-) : concurrency::OSThread("Screen"), address_found(address), model(screenType), geometry(geometry), cmdQueue(32),
-    dispdev(address.address, -1, -1,
-            geometry,
-            (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE),
-    ui(&dispdev)
+Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_OledType screenType, OLEDDISPLAY_GEOMETRY geometry)
+    : concurrency::OSThread("Screen"), address_found(address), model(screenType), geometry(geometry), cmdQueue(32),
+      dispdev(address.address, -1, -1, geometry, (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE),
+      ui(&dispdev)
 {
     cmdQueue.setReader(this);
 }
@@ -1829,5 +1824,3 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 #else
 graphics::Screen::Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY) {}
 #endif // HAS_SCREEN
-
-
