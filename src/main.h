@@ -20,6 +20,7 @@ extern NRF52Bluetooth *nrf52Bluetooth;
 
 extern uint8_t screen_found;
 extern uint8_t screen_model;
+extern OLEDDISPLAY_GEOMETRY screen_geometry;
 extern uint8_t cardkb_found;
 extern uint8_t kb_model;
 extern uint8_t rtc_found;

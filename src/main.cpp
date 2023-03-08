@@ -82,6 +82,7 @@ meshtastic::NodeStatus *nodeStatus = new meshtastic::NodeStatus();
 /// The I2C address of our display (if found)
 uint8_t screen_found;
 uint8_t screen_model;
+OLEDDISPLAY_GEOMETRY screen_geometry = GEOMETRY_128_64;
 
 // The I2C address of the cardkb or RAK14004 (if found)
 uint8_t cardkb_found;
@@ -326,7 +327,12 @@ void setup()
         screen_model = config.display.oled;
 
 #if defined(USE_SH1107)
-    screen_model = Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of 128x128
+    screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of 128x128
+    display_geometry = GEOMETRY_128_128;
+#endif
+
+#if defined(USE_SH1107_128_64)
+    screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
 #endif
 
     // Init our SPI controller (must be before screen and lora)
