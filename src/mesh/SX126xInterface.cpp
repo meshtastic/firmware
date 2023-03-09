@@ -212,10 +212,9 @@ template <typename T> void SX126xInterface<T>::startReceive()
 
     setStandby();
 
-    // We use a 16 bit preamble so this should save some power by letting radio sit in standby mostly.
     // Furthermore, we need the HEADER_VALID IRQ flag to detect whether we are actively receiving
     int err =
-        lora.startReceiveDutyCycleAuto(preambleLength, 8, RADIOLIB_SX126X_IRQ_RX_DEFAULT | RADIOLIB_SX126X_IRQ_HEADER_VALID);
+        lora.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_SX126X_IRQ_RX_DEFAULT | RADIOLIB_SX126X_IRQ_HEADER_VALID);
     assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = true;
