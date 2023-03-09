@@ -2,16 +2,19 @@
 
 #include "configuration.h"
 
+#include "detect/ScanI2C.h"
+#include "mesh/generated/meshtastic/config.pb.h"
+#include <OLEDDisplay.h>
+
 #if !HAS_SCREEN
 #include "power.h"
-#include <OLEDDisplay.h>
 namespace graphics
 {
 // Noop class for boards without screen.
 class Screen
 {
   public:
-    explicit Screen(char) {}
+    explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
     void onPress() {}
     void setup() {}
     void setOn(bool) {}
@@ -116,12 +119,14 @@ class Screen : public concurrency::OSThread
         CallbackObserver<Screen, const UIFrameEvent *>(this, &Screen::handleUIFrameEvent);
 
   public:
-    explicit Screen(uint8_t address, int sda = -1, int scl = -1);
+    explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
 
     Screen(const Screen &) = delete;
     Screen &operator=(const Screen &) = delete;
 
-    uint8_t address_found;
+    ScanI2C::DeviceAddress address_found;
+    meshtastic_Config_DisplayConfig_OledType model;
+    OLEDDISPLAY_GEOMETRY geometry;
 
     /// Initializes the UI, turns on the display, starts showing boot screen.
     //

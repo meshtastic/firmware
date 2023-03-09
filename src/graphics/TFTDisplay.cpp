@@ -8,7 +8,7 @@
 
 static TFT_eSPI tft = TFT_eSPI(); // Invoke library, pins defined in User_Setup.h
 
-TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY screen_geometry)
+TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY geometry, HW_I2C i2cBus)
 {
 #ifdef SCREEN_ROTATE
     setGeometry(GEOMETRY_RAWMODE, TFT_HEIGHT, TFT_WIDTH);

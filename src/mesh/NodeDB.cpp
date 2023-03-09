@@ -1,5 +1,6 @@
 #include "configuration.h"
 
+#include "../detect/ScanI2C.h"
 #include "Channels.h"
 #include "CryptoEngine.h"
 #include "FSCommon.h"
@@ -181,7 +182,7 @@ void NodeDB::installDefaultConfig()
 #if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER)
     bool hasScreen = true;
 #else
-    bool hasScreen = screen_found;
+    bool hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
 #endif
     config.bluetooth.mode = hasScreen ? meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN
                                       : meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN;
