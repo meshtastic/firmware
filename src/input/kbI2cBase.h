@@ -2,6 +2,7 @@
 
 #include "InputBroker.h"
 #include "SinglePortModule.h" // TODO: what header file to include?
+#include "Wire.h"
 
 class KbI2cBase : public Observable<const InputEvent *>, public concurrency::OSThread
 {
@@ -13,4 +14,6 @@ class KbI2cBase : public Observable<const InputEvent *>, public concurrency::OST
 
   private:
     const char *_originName;
+
+    TwoWire *i2cBus = 0;
 };

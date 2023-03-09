@@ -3,7 +3,9 @@
 #include "GPSStatus.h"
 #include "NodeStatus.h"
 #include "PowerStatus.h"
+#include "detect/ScanI2C.h"
 #include "graphics/Screen.h"
+#include "mesh/generated/meshtastic/config.pb.h"
 #include "mesh/generated/meshtastic/telemetry.pb.h"
 #include <map>
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
@@ -18,13 +20,10 @@ extern NimbleBluetooth *nimbleBluetooth;
 extern NRF52Bluetooth *nrf52Bluetooth;
 #endif
 
-extern uint8_t screen_found;
-extern uint8_t screen_model;
-extern OLEDDISPLAY_GEOMETRY screen_geometry;
-extern uint8_t cardkb_found;
+extern ScanI2C::DeviceAddress screen_found;
+extern ScanI2C::DeviceAddress cardkb_found;
 extern uint8_t kb_model;
-extern uint8_t rtc_found;
-extern uint8_t keystore_found;
+extern ScanI2C::DeviceAddress rtc_found;
 
 extern bool eink_found;
 extern bool pmu_found;

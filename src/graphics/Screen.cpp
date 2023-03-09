@@ -19,6 +19,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
+#include "Screen.h"
 #include "configuration.h"
 #if HAS_SCREEN
 #include <OLEDDisplay.h>
@@ -26,7 +27,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "Screen.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
 #include "graphics/images.h"
@@ -886,10 +886,11 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 //     }
 // }
 // #else
-Screen::Screen(uint8_t address, int sda, int scl)
-    : OSThread("Screen"), cmdQueue(32), dispdev(address, sda, scl, screen_geometry), ui(&dispdev)
+Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_OledType screenType, OLEDDISPLAY_GEOMETRY geometry)
+    : concurrency::OSThread("Screen"), address_found(address), model(screenType), geometry(geometry), cmdQueue(32),
+      dispdev(address.address, -1, -1, geometry, (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE),
+      ui(&dispdev)
 {
-    address_found = address;
     cmdQueue.setReader(this);
 }
 // #endif
@@ -937,7 +938,7 @@ void Screen::setup()
     useDisplay = true;
 
 #ifdef AutoOLEDWire_h
-    dispdev.setDetected(screen_model);
+    dispdev.setDetected(model);
 #endif
 
 #ifdef USE_SH1107_128_64
@@ -1176,7 +1177,7 @@ void Screen::drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiStat
  * it is expected that this will be used during the boot phase */
 void Screen::setSSLFrames()
 {
-    if (address_found) {
+    if (address_found.address) {
         // LOG_DEBUG("showing SSL frames\n");
         static FrameCallback sslFrames[] = {drawSSLScreen};
         ui.setFrames(sslFrames, 1);
@@ -1188,7 +1189,7 @@ void Screen::setSSLFrames()
  * it is expected that this will be used during the boot phase */
 void Screen::setWelcomeFrames()
 {
-    if (address_found) {
+    if (address_found.address) {
         // LOG_DEBUG("showing Welcome frames\n");
         ui.disableAllIndicators();
 
@@ -1820,5 +1821,6 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 }
 
 } // namespace graphics
-
+#else
+graphics::Screen::Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY) {}
 #endif // HAS_SCREEN
