@@ -51,7 +51,7 @@ bool DeviceTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 
     t.variant.device_metrics.air_util_tx = myNodeInfo.air_util_tx;
     if (powerStatus->getHasUSB()) {
-        t.variant.device_metrics.battery_level = ;
+        t.variant.device_metrics.battery_level = MAGIC_USB_BATTERY_LEVEL;
     } else {
         t.variant.device_metrics.battery_level = powerStatus->getBatteryChargePercent();
     }
