@@ -213,8 +213,9 @@ template <typename T> void SX126xInterface<T>::startReceive()
     setStandby();
 
     // Furthermore, we need the HEADER_VALID IRQ flag to detect whether we are actively receiving
-    int err =
-        lora.startReceive(RADIOLIB_SX126X_RX_TIMEOUT_INF, RADIOLIB_SX126X_IRQ_RX_DEFAULT | RADIOLIB_SX126X_IRQ_HEADER_VALID);
+    int err = lora.startReceiveDutyCycleAuto(preambleLength, 8,
+                                             RADIOLIB_SX126X_IRQ_RX_DEFAULT | RADIOLIB_SX126X_IRQ_HEADER_VALID |
+                                                 RADIOLIB_SX126X_IRQ_RADIOLIB_PREAMBLE_DETECTED);
     assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = true;
@@ -247,7 +248,7 @@ template <typename T> bool SX126xInterface<T>::isActivelyReceiving()
     // received and handled the interrupt for reading the packet/handling errors.
 
     uint16_t irq = lora.getIrqStatus();
-    bool headerValid = (irq & RADIOLIB_SX126X_IRQ_HEADER_VALID);
+    bool headerValid = (irq & (RADIOLIB_SX126X_IRQ_HEADER_VALID | RADIOLIB_SX126X_IRQ_RADIOLIB_PREAMBLE_DETECTED));
 
     // if (headerValid) LOG_DEBUG("rx headerValid\n");
     return headerValid;
