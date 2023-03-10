@@ -33,5 +33,4 @@
 #define BATTERY_SENSE_SAMPLES 15 // Set the number of samples, It has an effect of increasing sensitivity.
 #define ADC_MULTIPLIER 2
 
-//#define USE_SH1107    // Finally we will use SH1107 128x64 resolution driver, because SH1106 will shift the screen by 2 lines.
-#define USE_SH1106
+#define USE_SH1107_128_64
