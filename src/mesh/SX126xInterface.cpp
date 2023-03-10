@@ -180,6 +180,7 @@ template <typename T> void SX126xInterface<T>::setStandby()
     assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = false; // If we were receiving, not any more
+    activeReceiveStart = 0;
     disableInterrupt();
     completeSending(); // If we were sending, not anymore
 }
@@ -249,6 +250,19 @@ template <typename T> bool SX126xInterface<T>::isActivelyReceiving()
 
     uint16_t irq = lora.getIrqStatus();
     bool headerValid = (irq & (RADIOLIB_SX126X_IRQ_HEADER_VALID | RADIOLIB_SX126X_IRQ_RADIOLIB_PREAMBLE_DETECTED));
+
+    if (headerValid) {
+        uint32_t now = millis();
+        if (!activeReceiveStart) {
+            activeReceiveStart = now;
+            LOG_DEBUG("Setting new activeReceivestart %d\n", activeReceiveStart);
+        } else if (now - activeReceiveStart > getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader))) {
+            lora.clearIrqStatus(RADIOLIB_SX126X_IRQ_HEADER_VALID | RADIOLIB_SX126X_IRQ_RADIOLIB_PREAMBLE_DETECTED);
+            activeReceiveStart = 0;
+            LOG_DEBUG("Clear IRQ status at time %d\n", now);
+            return false;
+        }
+    }
 
     // if (headerValid) LOG_DEBUG("rx headerValid\n");
     return headerValid;
