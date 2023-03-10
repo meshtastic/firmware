@@ -27,9 +27,9 @@ typedef struct _meshtastic_WifiConnectionStatus {
     /* Connection status */
     bool has_status;
     meshtastic_NetworkConnectionStatus status;
-    /* WiFi access point ssid */
+    /* WiFi access point SSID */
     char ssid[33];
-    /* Rssi of wireless connection */
+    /* RSSI of wireless connection */
     int32_t rssi;
 } meshtastic_WifiConnectionStatus;
 
@@ -42,9 +42,9 @@ typedef struct _meshtastic_EthernetConnectionStatus {
 
 /* Bluetooth connection status */
 typedef struct _meshtastic_BluetoothConnectionStatus {
-    /* The pairing pin for bluetooth */
+    /* The pairing PIN for bluetooth */
     uint32_t pin;
-    /* Rssi of bluetooth connection */
+    /* RSSI of bluetooth connection */
     int32_t rssi;
     /* Whether the device has an active connection or not */
     bool is_connected;
@@ -52,7 +52,7 @@ typedef struct _meshtastic_BluetoothConnectionStatus {
 
 /* Serial connection status */
 typedef struct _meshtastic_SerialConnectionStatus {
-    /* The serial baud rate */
+    /* Serial baud rate */
     uint32_t baud;
     /* Whether the device has an active connection or not */
     bool is_connected;
