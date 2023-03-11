@@ -1,8 +1,8 @@
 #pragma once
 
 #include "InputBroker.h"
-#include "concurrency/OSThread.h"
 #include "Wire.h"
+#include "concurrency/OSThread.h"
 
 class KbI2cBase : public Observable<const InputEvent *>, public concurrency::OSThread
 {
