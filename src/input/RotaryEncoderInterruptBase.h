@@ -2,7 +2,7 @@
 
 #include "InputBroker.h"
 #include "concurrency/OSThread.h"
-#include "mesh/generated/meshtastic/module_config.pb.h"
+#include "mesh/NodeDB.h"
 
 enum RotaryEncoderInterruptBaseStateType { ROTARY_EVENT_OCCURRED, ROTARY_EVENT_CLEARED };
 
