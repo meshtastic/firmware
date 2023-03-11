@@ -45,7 +45,7 @@ typedef enum _meshtastic_TelemetrySensorType {
 /* Struct definitions */
 /* Key native device metrics such as battery level */
 typedef struct _meshtastic_DeviceMetrics {
-    /* 1-100 (0 means powered) */
+    /* 0-100 (>100 means powered) */
     uint32_t battery_level;
     /* Voltage measured */
     float voltage;
