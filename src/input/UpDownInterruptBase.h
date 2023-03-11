@@ -1,7 +1,7 @@
 #pragma once
 
 #include "InputBroker.h"
-#include "mesh/nodeDB.h"
+#include "mesh/NodeDB.h"
 
 class UpDownInterruptBase : public Observable<const InputEvent *>
 {

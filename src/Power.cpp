@@ -14,7 +14,7 @@
 #endif
 
 #ifndef DELAY_FOREVER
-#define DELAY_FOREVER   portMAX_DELAY
+#define DELAY_FOREVER portMAX_DELAY
 #endif
 
 #ifdef HAS_PMU
