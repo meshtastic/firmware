@@ -210,8 +210,6 @@ class RadioInterface
      */
     void applyModemConfig();
 
-    uint32_t getPreambleTime();
-
     /// Return 0 if sleep is okay
     int preflightSleepCb(void *unused = NULL) { return canSleep() ? 0 : 1; }
 
