@@ -63,7 +63,9 @@ class RadioInterface
       - Tx/Rx turnaround time (maximum of SX126x and SX127x);
       - MAC processing time (measured on T-beam) */
     uint32_t slotTimeMsec = 8.5 * pow(2, sf) / bw + 0.2 + 0.4 + 7;
-    uint16_t preambleLength = 16; // 8 is default, but we use longer to increase the amount of sleep time when receiving
+    uint16_t preambleLength = 16;      // 8 is default, but we use longer to increase the amount of sleep time when receiving
+    uint32_t preambleTimeMsec = 165;   // calculated on startup, this is the default for LongFast
+    uint32_t maxPacketTimeMsec = 3246; // calculated on startup, this is the default for LongFast
     const uint32_t PROCESSING_TIME_MSEC =
         4500;                // time to construct, process and construct a packet again (empirically determined)
     const uint8_t CWmin = 2; // minimum CWsize
@@ -207,6 +209,8 @@ class RadioInterface
      * These paramaters will be pull from the channelSettings global
      */
     void applyModemConfig();
+
+    uint32_t getPreambleTime();
 
     /// Return 0 if sleep is okay
     int preflightSleepCb(void *unused = NULL) { return canSleep() ? 0 : 1; }

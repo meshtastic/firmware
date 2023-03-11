@@ -213,10 +213,11 @@ template <typename T> void SX126xInterface<T>::startReceive()
 
     setStandby();
 
-    // Furthermore, we need the HEADER_VALID IRQ flag to detect whether we are actively receiving
+    // We use a 16 bit preamble so this should save some power by letting radio sit in standby mostly.
+    // Furthermore, we need the PREAMBLE_DETECTED and HEADER_VALID IRQ flag to detect whether we are actively receiving
     int err = lora.startReceiveDutyCycleAuto(preambleLength, 8,
-                                             RADIOLIB_SX126X_IRQ_RX_DEFAULT | RADIOLIB_SX126X_IRQ_HEADER_VALID |
-                                                 RADIOLIB_SX126X_IRQ_RADIOLIB_PREAMBLE_DETECTED);
+                                             RADIOLIB_SX126X_IRQ_RX_DEFAULT | RADIOLIB_SX126X_IRQ_RADIOLIB_PREAMBLE_DETECTED |
+                                                 RADIOLIB_SX126X_IRQ_HEADER_VALID);
     assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = true;
@@ -249,23 +250,27 @@ template <typename T> bool SX126xInterface<T>::isActivelyReceiving()
     // received and handled the interrupt for reading the packet/handling errors.
 
     uint16_t irq = lora.getIrqStatus();
-    bool headerValid = (irq & (RADIOLIB_SX126X_IRQ_HEADER_VALID | RADIOLIB_SX126X_IRQ_RADIOLIB_PREAMBLE_DETECTED));
-
-    if (headerValid) {
+    bool detected = (irq & (RADIOLIB_SX126X_IRQ_HEADER_VALID | RADIOLIB_SX126X_IRQ_RADIOLIB_PREAMBLE_DETECTED));
+    // Handle false detections
+    if (detected) {
         uint32_t now = millis();
         if (!activeReceiveStart) {
             activeReceiveStart = now;
-            LOG_DEBUG("Setting new activeReceivestart %d\n", activeReceiveStart);
-        } else if (now - activeReceiveStart > getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader))) {
-            lora.clearIrqStatus(RADIOLIB_SX126X_IRQ_HEADER_VALID | RADIOLIB_SX126X_IRQ_RADIOLIB_PREAMBLE_DETECTED);
+        } else if ((now - activeReceiveStart > 2 * preambleTimeMsec) && !(irq & RADIOLIB_SX126X_IRQ_HEADER_VALID)) {
+            // The HEADER_VALID flag should be set by now if it was really a packet, so ignore PREAMBLE_DETECTED flag
             activeReceiveStart = 0;
-            LOG_DEBUG("Clear IRQ status at time %d\n", now);
+            LOG_DEBUG("Ignore false preamble detection.\n");
+            return false;
+        } else if (now - activeReceiveStart > maxPacketTimeMsec) {
+            // We should have gotten an RX_DONE IRQ by now if it was really a packet, so ignore HEADER_VALID flag
+            activeReceiveStart = 0;
+            LOG_DEBUG("Ignore false header detection.\n");
             return false;
         }
     }
 
-    // if (headerValid) LOG_DEBUG("rx headerValid\n");
-    return headerValid;
+    // if (detected) LOG_DEBUG("rx detected\n");
+    return detected;
 }
 
 template <typename T> bool SX126xInterface<T>::sleep()
