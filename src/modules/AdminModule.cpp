@@ -20,7 +20,7 @@
 #include "mqtt/MQTT.h"
 #endif
 
-#define DEFAULT_REBOOT_SECONDS 5
+#define DEFAULT_REBOOT_SECONDS 7
 
 AdminModule *adminModule;
 bool hasOpenEditTransaction;

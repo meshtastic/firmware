@@ -18,7 +18,7 @@ class TFTDisplay : public OLEDDisplay
     /* constructor
     FIXME - the parameters are not used, just a temporary hack to keep working like the old displays
     */
-    TFTDisplay(uint8_t address, int sda, int scl, uint8_t screen_model);
+    TFTDisplay(uint8_t, int, int, OLEDDISPLAY_GEOMETRY, HW_I2C);
 
     // Write the buffer to the display memory
     virtual void display(void) override;
