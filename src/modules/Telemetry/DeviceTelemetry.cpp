@@ -17,13 +17,10 @@ int32_t DeviceTelemetryModule::runOnce()
     uint32_t now = millis();
     if (((lastSentToMesh == 0) ||
          ((now - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.telemetry.device_update_interval))) &&
-        airTime->isTxAllowedChannelUtil() && airTime->isTxAllowedAirUtil())
-    {
+        airTime->isTxAllowedChannelUtil() && airTime->isTxAllowedAirUtil()) {
         sendTelemetry();
         lastSentToMesh = now;
-    }
-    else if (service.isToPhoneQueueEmpty())
-    {
+    } else if (service.isToPhoneQueueEmpty()) {
         // Just send to phone when it's not our time to send to mesh yet
         // Only send while queue is empty (phone assumed connected)
         sendTelemetry(NODENUM_BROADCAST, true);
@@ -33,8 +30,7 @@ int32_t DeviceTelemetryModule::runOnce()
 
 bool DeviceTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
 {
-    if (t->which_variant == meshtastic_Telemetry_device_metrics_tag)
-    {
+    if (t->which_variant == meshtastic_Telemetry_device_metrics_tag) {
         const char *sender = getSenderShortName(mp);
 
         LOG_INFO("(Received from %s): air_util_tx=%f, channel_utilization=%f, battery_level=%i, voltage=%f\n", sender,
@@ -54,12 +50,9 @@ bool DeviceTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     t.which_variant = meshtastic_Telemetry_device_metrics_tag;
 
     t.variant.device_metrics.air_util_tx = myNodeInfo.air_util_tx;
-    if (powerStatus->getIsCharging())
-    {
+    if (powerStatus->getIsCharging()) {
         t.variant.device_metrics.battery_level = MAGIC_USB_BATTERY_LEVEL;
-    }
-    else
-    {
+    } else {
         t.variant.device_metrics.battery_level = powerStatus->getBatteryChargePercent();
     }
 
@@ -76,13 +69,10 @@ bool DeviceTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     p->priority = meshtastic_MeshPacket_Priority_MIN;
 
     nodeDB.updateTelemetry(nodeDB.getNodeNum(), t, RX_SRC_LOCAL);
-    if (phoneOnly)
-    {
+    if (phoneOnly) {
         LOG_INFO("Sending packet to phone\n");
         service.sendToPhone(p);
-    }
-    else
-    {
+    } else {
         LOG_INFO("Sending packet to mesh\n");
         service.sendToMesh(p, RX_SRC_LOCAL, true);
     }
