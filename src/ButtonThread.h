@@ -123,9 +123,6 @@ class ButtonThread : public concurrency::OSThread
     static void userButtonPressedLong()
     {
         // LOG_DEBUG("Long press!\n");
-#ifdef ARCH_ESP32
-        screen->adjustBrightness();
-#endif
         // If user button is held down for 5 seconds, shutdown the device.
         if ((millis() - longPressTime > 5 * 1000) && (longPressTime > 0)) {
 #ifdef HAS_PMU
