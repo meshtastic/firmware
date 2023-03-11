@@ -1,7 +1,7 @@
 #pragma once
 
 #include "InputBroker.h"
-#include "SinglePortModule.h" // TODO: what header file to include?
+#include "concurrency/OSThread.h"
 #include "Wire.h"
 
 class KbI2cBase : public Observable<const InputEvent *>, public concurrency::OSThread
