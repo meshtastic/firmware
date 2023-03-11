@@ -133,7 +133,7 @@ class ButtonThread : public concurrency::OSThread
                 setLed(false);
                 power->shutdown();
             }
-#elif defined(ARCH_NRF52)
+#elif defined(ARCH_NRF52) || defined(ARCH_ESP32)
             // Do actual shutdown when button released, otherwise the button release
             // may wake the board immediatedly.
             if ((!shutdown_on_long_stop) && (millis() > 30 * 1000)) {
