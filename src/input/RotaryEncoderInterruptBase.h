@@ -1,7 +1,8 @@
 #pragma once
 
 #include "InputBroker.h"
-#include "SinglePortModule.h" // TODO: what header file to include?
+#include "concurrency/OSThread.h"
+#include "mesh/generated/meshtastic/module_config.pb.h"
 
 enum RotaryEncoderInterruptBaseStateType { ROTARY_EVENT_OCCURRED, ROTARY_EVENT_CLEARED };
 
