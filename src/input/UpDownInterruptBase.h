@@ -1,7 +1,7 @@
 #pragma once
 
 #include "InputBroker.h"
-#include "SinglePortModule.h" // TODO: what header file to include?
+#include "mesh/NodeDB.h"
 
 class UpDownInterruptBase : public Observable<const InputEvent *>
 {
