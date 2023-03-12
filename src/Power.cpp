@@ -13,6 +13,10 @@
 #include <WiFi.h>
 #endif
 
+#ifndef DELAY_FOREVER
+#define DELAY_FOREVER portMAX_DELAY
+#endif
+
 #ifdef HAS_PMU
 #include "XPowersAXP192.tpp"
 #include "XPowersAXP2101.tpp"
@@ -256,16 +260,24 @@ void Power::shutdown()
     digitalWrite(PIN_EINK_EN, LOW); // power off backlight first
 #endif
 
-#ifdef HAS_PMU
     LOG_INFO("Shutting down\n");
+
+#ifdef HAS_PMU
     if (PMU) {
         PMU->setChargingLedMode(XPOWERS_CHG_LED_OFF);
-        PMU->shutdown();
     }
-#elif defined(ARCH_NRF52)
-    playBeep();
+#endif
+
+#if defined(ARCH_NRF52) || defined(ARCH_ESP32)
+#ifdef PIN_LED1
     ledOff(PIN_LED1);
+#endif
+#ifdef PIN_LED2
     ledOff(PIN_LED2);
+#endif
+#ifdef PIN_LED3
+    ledOff(PIN_LED2);
+#endif
     doDeepSleep(DELAY_FOREVER);
 #endif
 }

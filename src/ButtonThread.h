@@ -123,9 +123,6 @@ class ButtonThread : public concurrency::OSThread
     static void userButtonPressedLong()
     {
         // LOG_DEBUG("Long press!\n");
-#ifdef ARCH_ESP32
-        screen->adjustBrightness();
-#endif
         // If user button is held down for 5 seconds, shutdown the device.
         if ((millis() - longPressTime > 5 * 1000) && (longPressTime > 0)) {
 #ifdef HAS_PMU
@@ -133,7 +130,7 @@ class ButtonThread : public concurrency::OSThread
                 setLed(false);
                 power->shutdown();
             }
-#elif defined(ARCH_NRF52)
+#elif defined(ARCH_NRF52) || defined(ARCH_ESP32)
             // Do actual shutdown when button released, otherwise the button release
             // may wake the board immediatedly.
             if ((!shutdown_on_long_stop) && (millis() > 30 * 1000)) {
