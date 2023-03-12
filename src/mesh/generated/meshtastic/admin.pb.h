@@ -135,7 +135,7 @@ typedef struct _meshtastic_AdminMessage {
         /* Tell the node to reboot into the OTA Firmware in this many seconds (or <0 to cancel reboot)
      Only Implemented for ESP32 Devices. This needs to be issued to send a new main firmware via bluetooth. */
         int32_t reboot_ota_seconds;
-        /* This message is only supported for the simulator porduino build.
+        /* This message is only supported for the simulator Portduino build.
      If received the simulator will exit successfully. */
         bool exit_simulator;
         /* Tell the node to reboot in this many seconds (or <0 to cancel reboot) */
