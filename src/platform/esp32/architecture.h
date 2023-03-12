@@ -36,6 +36,9 @@
 #ifndef HAS_RTC
 #define HAS_RTC 1
 #endif
+#ifndef HAS_CPU_SHUTDOWN
+#define HAS_CPU_SHUTDOWN 1
+#endif
 
 #if defined(HAS_AXP192) || defined(HAS_AXP2101)
 #define HAS_PMU
