@@ -157,6 +157,7 @@ template <typename T> void SX128xInterface<T>::setStandby()
 #endif
 
     isReceiving = false; // If we were receiving, not any more
+    activeReceiveStart = 0;
     disableInterrupt();
     completeSending(); // If we were sending, not anymore
 }
@@ -203,9 +204,10 @@ template <typename T> void SX128xInterface<T>::startReceive()
     digitalWrite(SX128X_TXEN, LOW);
 #endif
 
-    // We use the HEADER_VALID IRQ flag to detect whether we are actively receiving
-    int err =
-        lora.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF, RADIOLIB_SX128X_IRQ_RX_DEFAULT | RADIOLIB_SX128X_IRQ_HEADER_VALID);
+    // We use the PREAMBLE_DETECTED and HEADER_VALID IRQ flag to detect whether we are actively receiving
+    int err = lora.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF, RADIOLIB_SX128X_IRQ_RX_DEFAULT |
+                                                                    RADIOLIB_SX128X_IRQ_RADIOLIB_PREAMBLE_DETECTED |
+                                                                    RADIOLIB_SX128X_IRQ_HEADER_VALID);
 
     assert(err == RADIOLIB_ERR_NONE);
 
@@ -236,8 +238,27 @@ template <typename T> bool SX128xInterface<T>::isChannelActive()
 template <typename T> bool SX128xInterface<T>::isActivelyReceiving()
 {
     uint16_t irq = lora.getIrqStatus();
-    bool hasHeader = (irq & RADIOLIB_SX128X_IRQ_HEADER_VALID);
-    return hasHeader;
+    bool detected = (irq & (RADIOLIB_SX128X_IRQ_HEADER_VALID | RADIOLIB_SX128X_IRQ_RADIOLIB_PREAMBLE_DETECTED));
+
+    // Handle false detections
+    if (detected) {
+        uint32_t now = millis();
+        if (!activeReceiveStart) {
+            activeReceiveStart = now;
+        } else if ((now - activeReceiveStart > 2 * preambleTimeMsec) && !(irq & RADIOLIB_SX128X_IRQ_HEADER_VALID)) {
+            // The HEADER_VALID flag should be set by now if it was really a packet, so ignore PREAMBLE_DETECTED flag
+            activeReceiveStart = 0;
+            LOG_DEBUG("Ignore false preamble detection.\n");
+            return false;
+        } else if (now - activeReceiveStart > maxPacketTimeMsec) {
+            // We should have gotten an RX_DONE IRQ by now if it was really a packet, so ignore HEADER_VALID flag
+            activeReceiveStart = 0;
+            LOG_DEBUG("Ignore false header detection.\n");
+            return false;
+        }
+    }
+
+    return detected;
 }
 
 template <typename T> bool SX128xInterface<T>::sleep()
