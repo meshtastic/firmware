@@ -231,7 +231,7 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
     }
 
     if (ccToPhone) {
-        sendToPhone(p);
+        sendToPhone(packetPool.allocCopy(*p));
     }
 }
 
@@ -262,9 +262,8 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
             releaseToPool(d);
     }
 
-    meshtastic_MeshPacket *copied = packetPool.allocCopy(*p);
-    perhapsDecode(copied);
-    assert(toPhoneQueue.enqueue(copied, 0));
+    perhapsDecode(p);
+    assert(toPhoneQueue.enqueue(p, 0));
     fromNum++;
 }
 
