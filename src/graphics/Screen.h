@@ -25,6 +25,7 @@ class Screen
     void startBluetoothPinScreen(uint32_t pin) {}
     void stopBluetoothPinScreen() {}
     void startRebootScreen() {}
+    void startShutdownScreen() {}
     void startFirmwareUpdateScreen() {}
 };
 } // namespace graphics
