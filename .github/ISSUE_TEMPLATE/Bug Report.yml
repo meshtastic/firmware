@@ -32,6 +32,7 @@ body:
       options:
         - Not Applicable
         - T-Beam
+        - T-Beam S3
         - T-Beam 0.7
         - T-Lora v1
         - T-Lora v1.3
@@ -42,6 +43,7 @@ body:
         - Heltec v1
         - Heltec v2
         - Heltec v2.1
+        - Heltec V3
         - Relay v1
         - Relay v2
         - DIY
