@@ -68,4 +68,5 @@ template <class T> class SX128xInterface : public RadioLibInterface
     virtual void setStandby() override;
 
   private:
+    uint32_t activeReceiveStart = 0;
 };
