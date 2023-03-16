@@ -454,13 +454,13 @@ void RadioInterface::applyModemConfig()
 
     // If user has manually specified a channel num, then use that, otherwise generate one by hashing the name
     const char *channelName = channels.getName(channels.getPrimaryIndex());
-    int channel_num = (loraConfig.channel_num ? loraConfig.channel_num - 1 : hash(channelName)) % numChannels;
+    int channel_num = (loraConfig.channel_num ? loraConfig.channel_num : hash(channelName)) % numChannels;
 
     // Old frequency selection formula
     // float freq = myRegion->freqStart + ((((myRegion->freqEnd - myRegion->freqStart) / numChannels) / 2) * channel_num);
 
     // New frequency selection formula
-    float freq = myRegion->freqStart + (bw / 2000) + (channel_num * (bw / 1000));
+    float freq = myRegion->freqStart + (bw / 2000) + ((channel_num - 1) * (bw / 1000));
 
     // override if we have a verbatim frequency
     if (loraConfig.override_frequency) {
