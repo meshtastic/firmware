@@ -454,13 +454,14 @@ void RadioInterface::applyModemConfig()
 
     // If user has manually specified a channel num, then use that, otherwise generate one by hashing the name
     const char *channelName = channels.getName(channels.getPrimaryIndex());
-    int channel_num = (loraConfig.channel_num ? loraConfig.channel_num : hash(channelName)) % numChannels;
+    // channel_num is actually (channel_num - 1), since modulus (%) returns values from 0 to (numChannels - 1)
+    int channel_num = (loraConfig.channel_num ? loraConfig.channel_num - 1 : hash(channelName)) % numChannels;
 
     // Old frequency selection formula
     // float freq = myRegion->freqStart + ((((myRegion->freqEnd - myRegion->freqStart) / numChannels) / 2) * channel_num);
 
     // New frequency selection formula
-    float freq = myRegion->freqStart + (bw / 2000) + ((channel_num - 1) * (bw / 1000));
+    float freq = myRegion->freqStart + (bw / 2000) + (channel_num * (bw / 1000));
 
     // override if we have a verbatim frequency
     if (loraConfig.override_frequency) {
@@ -480,7 +481,7 @@ void RadioInterface::applyModemConfig()
     LOG_INFO("Radio myRegion->freqStart -> myRegion->freqEnd: %f -> %f (%f mhz)\n", myRegion->freqStart, myRegion->freqEnd,
              myRegion->freqEnd - myRegion->freqStart);
     LOG_INFO("Radio myRegion->numChannels: %d x %.3fkHz\n", numChannels, bw);
-    LOG_INFO("Radio channel_num: %d\n", channel_num);
+    LOG_INFO("Radio channel_num: %d\n", channel_num + 1);
     LOG_INFO("Radio frequency: %f\n", getFreq());
     LOG_INFO("Slot time: %u msec\n", slotTimeMsec);
 }
