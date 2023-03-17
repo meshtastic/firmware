@@ -164,13 +164,13 @@ bool ReliableRouter::stopRetransmission(GlobalPacketId key)
 {
     auto old = findPendingPacket(key);
     if (old) {
-        auto p = old->packet;
         auto numErased = pending.erase(key);
         assert(numErased == 1);
         // remove the 'original' (identified by originator and packet->id) from the txqueue and free it
-        cancelSending(getFrom(p), p->id);
-        // now free the pooled copy for retransmission too
-        packetPool.release(p);
+        cancelSending(getFrom(old->packet), old->packet->id);
+        // now free the pooled copy for retransmission too. tryfix for #2228
+        if (old->packet)
+            packetPool.release(old->packet);
         return true;
     } else
         return false;
