@@ -47,6 +47,8 @@ template <typename T> bool SX126xInterface<T>::init()
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage, useRegulatorLDO);
     // \todo Display actual typename of the adapter, not just `SX126x`
     LOG_INFO("SX126x init result %d\n", res);
+    if (res == RADIOLIB_ERR_CHIP_NOT_FOUND)
+        return false;
 
     LOG_INFO("Frequency set to %f\n", getFreq());
     LOG_INFO("Bandwidth set to %f\n", bw);
