@@ -68,6 +68,10 @@ NRF52Bluetooth *nrf52Bluetooth;
 #endif
 #include "PowerFSMThread.h"
 
+#if !defined(ARCH_PORTDUINO)
+#include "AccelerometerThread.h"
+#endif
+
 using namespace concurrency;
 
 // We always create a screen object, but we only init it if we find the hardware
@@ -94,6 +98,8 @@ uint8_t kb_model;
 
 // The I2C address of the RTC Module (if found)
 ScanI2C::DeviceAddress rtc_found = ScanI2C::ADDRESS_NONE;
+// The I2C address of the Accelerometer (if found)
+ScanI2C::DeviceAddress accelerometer_found = ScanI2C::ADDRESS_NONE;
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 ATECCX08A atecc;
@@ -163,6 +169,7 @@ static OSThread *powerFSMthread;
 static OSThread *buttonThread;
 uint32_t ButtonThread::longPressTime = 0;
 #endif
+static OSThread *accelerometerThread;
 
 RadioInterface *rIf = NULL;
 
@@ -392,6 +399,16 @@ void setup()
     buttonThread = new ButtonThread();
 #endif
 
+#if !defined(ARCH_PORTDUINO)
+    auto acc_info = i2cScanner->firstAccelerometer();
+    accelerometer_found = acc_info.type != ScanI2C::DeviceType::NONE ? acc_info.address : accelerometer_found;
+
+    if (acc_info.type != ScanI2C::DeviceType::NONE) {
+        accelerometerThread = new AccelerometerThread(acc_info.type);
+    }
+    config.display.screen_on_secs = 10;
+#endif
+
 #ifdef LED_PIN
     pinMode(LED_PIN, OUTPUT);
     digitalWrite(LED_PIN, 1 ^ LED_INVERTED); // turn on for now
@@ -459,14 +476,14 @@ void setup()
     // Now that the mesh service is created, create any modules
     setupModules();
 
-    // Do this after service.init (because that clears error_code)
+// Do this after service.init (because that clears error_code)
 #ifdef HAS_PMU
     if (!pmu_found)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_AXP192); // Record a hardware fault for missing hardware
 #endif
 
-        // Don't call screen setup until after nodedb is setup (because we need
-        // the current region name)
+// Don't call screen setup until after nodedb is setup (because we need
+// the current region name)
 #if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER)
     screen->setup();
 #else
