@@ -833,7 +833,7 @@ void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
             if (WiFi.encryptionType(i) != WIFI_AUTH_OPEN) {
                 JSONObject thisNetwork;
                 thisNetwork["ssid"] = new JSONValue(ssidArray);
-                thisNetwork["rssi"] = new JSONValue(WiFi.RSSI(i));
+                thisNetwork["rssi"] = new JSONValue(int(WiFi.RSSI(i)));
                 networkObjs.push_back(new JSONValue(thisNetwork));
             }
             // Yield some cpu cycles to IP stack.

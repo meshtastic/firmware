@@ -178,6 +178,7 @@ void cpuDeepSleep(uint64_t msecToWake)
 
     Note: we don't isolate pins that are used for the LORA, LED, i2c, spi or the wake button
     */
+#if SOC_RTCIO_HOLD_SUPPORTED
     static const uint8_t rtcGpios[] = {/* 0, */ 2,
     /* 4, */
 #ifndef USE_JTAG
@@ -191,6 +192,7 @@ void cpuDeepSleep(uint64_t msecToWake)
 
     for (int i = 0; i < sizeof(rtcGpios); i++)
         rtc_gpio_isolate((gpio_num_t)rtcGpios[i]);
+#endif
 
     // FIXME, disable internal rtc pullups/pulldowns on the non isolated pins. for inputs that we aren't using
     // to detect wake and in normal operation the external part drives them hard.
@@ -200,7 +202,9 @@ void cpuDeepSleep(uint64_t msecToWake)
 
 #ifdef BUTTON_PIN
     // Only GPIOs which are have RTC functionality can be used in this bit map: 0,2,4,12-15,25-27,32-39.
+#if SOC_RTCIO_HOLD_SUPPORTED
     uint64_t gpioMask = (1ULL << BUTTON_PIN);
+#endif
 
 #ifdef BUTTON_NEED_PULLUP
     gpio_pullup_en((gpio_num_t)BUTTON_PIN);
@@ -210,7 +214,9 @@ void cpuDeepSleep(uint64_t msecToWake)
     // FIXME change polarity in hw so we can wake on ANY_HIGH instead - that would allow us to use all three buttons (instead of
     // just the first) gpio_pullup_en((gpio_num_t)BUTTON_PIN);
 
+#if SOC_PM_SUPPORT_EXT_WAKEUP
     esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ALL_LOW);
+#endif
 #endif
 
     esp_sleep_enable_timer_wakeup(msecToWake * 1000ULL); // call expects usecs
