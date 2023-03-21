@@ -12,7 +12,6 @@ namespace concurrency
 class AccelerometerThread : public concurrency::OSThread
 {
   public:
-    // callback returns the period for the next callback invocation (or 0 if we should no longer be called)
     AccelerometerThread(ScanI2C::DeviceType type = ScanI2C::DeviceType::NONE) : OSThread("AccelerometerThread")
     {
         if (accelerometer_found.port == ScanI2C::I2CPort::NO_I2C || !config.display.wake_on_tap_or_motion) {
@@ -34,14 +33,12 @@ class AccelerometerThread : public concurrency::OSThread
             LOG_DEBUG("LIS3DH initializing\n");
             lis.setRange(LIS3DH_RANGE_2_G);
 
-            // 1 = single click only interrupt output
             // Adjust threshhold, higher numbers are less sensitive
             lis.setClick(1, 80);
         }
     }
 
   protected:
-    /// If the button is pressed we suppress CPU sleep until release
     int32_t runOnce() override
     {
         canSleep = true; // Assume we should not keep the board awake
