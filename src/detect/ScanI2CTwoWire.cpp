@@ -248,7 +248,17 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                 }
                 break;
 
-                SCAN_SIMPLE_CASE(MCP9808_ADDR, MCP9808, "MCP9808 sensor found\n")
+            case MCP9808_ADDR:
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x07), 2);
+                if (registerValue == 0x0400) {
+                    type = MCP9808;
+                    LOG_INFO("MCP9808 sensor found\n");
+                } else {
+                    type = LIS3DH;
+                    LOG_INFO("LIS3DH accelerometer found\n");
+                }
+
+                break;
 
                 SCAN_SIMPLE_CASE(SHT31_ADDR, SHT31, "SHT31 sensor found\n")
                 SCAN_SIMPLE_CASE(SHTC3_ADDR, SHTC3, "SHTC3 sensor found\n")
@@ -262,7 +272,6 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
 
                 SCAN_SIMPLE_CASE(PMSA0031_ADDR, PMSA0031, "PMSA0031 air quality sensor found\n")
                 SCAN_SIMPLE_CASE(MPU6050_ADDR, MPU6050, "MPU6050 accelerometer found\n");
-                SCAN_SIMPLE_CASE(LIS3DH_ADR, LIS3DH, "LIS3DH accelerometer found\n");
 
             default:
                 LOG_INFO("Device found at address 0x%x was not able to be enumerated\n", addr.address);
