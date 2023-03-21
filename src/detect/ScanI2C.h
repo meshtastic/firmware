@@ -32,6 +32,7 @@ class ScanI2C
         QMC5883L,
         PMSA0031,
         MPU6050,
+        LIS3DH,
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;

@@ -3,25 +3,26 @@
 #include "configuration.h"
 #include "main.h"
 #include "power.h"
+
+#include <Adafruit_LIS3DH.h>
 #include <Adafruit_MPU6050.h>
 
 namespace concurrency
 {
 class AccelerometerThread : public concurrency::OSThread
 {
-    Adafruit_MPU6050 mpu;
-
   public:
     // callback returns the period for the next callback invocation (or 0 if we should no longer be called)
     AccelerometerThread(ScanI2C::DeviceType type) : OSThread("AccelerometerThread")
     {
+        if (accelerometer_found.port == ScanI2C::I2CPort::NO_I2C) {
+            disable();
+            return;
+        }
+        accleremoter_type = type;
         LOG_DEBUG("AccelerometerThread initializing\n");
-        // if (accelerometer_found.port == ScanI2C::I2CPort::NO_I2C)
-        // {
-        //     disable();
-        // }
 
-        if (type == ScanI2C::DeviceType::MPU6050 && mpu.begin(accelerometer_found.address)) {
+        if (accleremoter_type == ScanI2C::DeviceType::MPU6050 && mpu.begin(accelerometer_found.address)) {
             LOG_DEBUG("MPU6050 initializing\n");
             // setup motion detection
             mpu.setHighPassFilter(MPU6050_HIGHPASS_0_63_HZ);
@@ -29,6 +30,14 @@ class AccelerometerThread : public concurrency::OSThread
             mpu.setMotionDetectionDuration(20);
             mpu.setInterruptPinLatch(true); // Keep it latched.  Will turn off when reinitialized.
             mpu.setInterruptPinPolarity(true);
+        } else if (accleremoter_type == ScanI2C::DeviceType::LIS3DH) {
+            LOG_DEBUG("LIS3DH initializing\n");
+            lis = Adafruit_LIS3DH(accelerometer_found.address);
+            lis.setRange(LIS3DH_RANGE_2_G);
+
+            // 1 = single click only interrupt output
+            // Adjust threshhold, higher numbers are less sensitive
+            lis.setClick(1, 80);
         }
     }
 
@@ -39,12 +48,23 @@ class AccelerometerThread : public concurrency::OSThread
         canSleep = true; // Assume we should not keep the board awake
         LOG_DEBUG("AccelerometerThread runOnce()\n");
 
-        if (mpu.getMotionInterruptStatus()) {
-            LOG_DEBUG("Motion detected, turning on screen\n");
-            screen->setOn(true);
+        if (accleremoter_type == ScanI2C::DeviceType::MPU6050 && mpu.getMotionInterruptStatus()) {
+            wakeScreen();
+        } else if (accleremoter_type == ScanI2C::DeviceType::LIS3DH && lis.getClick() > 0) {
+            wakeScreen();
         }
-        return 10;
+        return 100;
     }
+
+  private:
+    void wakeScreen()
+    {
+        LOG_DEBUG("Tap or motion detected. Turning on screen\n");
+        screen->setOn(true);
+    }
+    ScanI2C::DeviceType accleremoter_type;
+    Adafruit_MPU6050 mpu;
+    Adafruit_LIS3DH lis;
 };
 
 } // namespace concurrency
