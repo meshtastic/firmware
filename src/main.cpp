@@ -361,10 +361,10 @@ void setup()
     auto acc_info = i2cScanner->firstAccelerometer();
     accelerometer_found = acc_info.type != ScanI2C::DeviceType::NONE ? acc_info.address : accelerometer_found;
 
+    LOG_DEBUG("acc_info = %i\n", acc_info.type);
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
         accelerometerThread = new AccelerometerThread(acc_info.type);
     }
-    config.display.screen_on_secs = 10;
 #endif
 
 #define STRING(S) #S

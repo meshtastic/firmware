@@ -30,9 +30,8 @@ class AccelerometerThread : public concurrency::OSThread
             mpu.setMotionDetectionDuration(20);
             mpu.setInterruptPinLatch(true); // Keep it latched.  Will turn off when reinitialized.
             mpu.setInterruptPinPolarity(true);
-        } else if (accleremoter_type == ScanI2C::DeviceType::LIS3DH) {
+        } else if (accleremoter_type == ScanI2C::DeviceType::LIS3DH && lis.begin(accelerometer_found.address)) {
             LOG_DEBUG("LIS3DH initializing\n");
-            lis = Adafruit_LIS3DH(accelerometer_found.address);
             lis.setRange(LIS3DH_RANGE_2_G);
 
             // 1 = single click only interrupt output
@@ -46,7 +45,6 @@ class AccelerometerThread : public concurrency::OSThread
     int32_t runOnce() override
     {
         canSleep = true; // Assume we should not keep the board awake
-        LOG_DEBUG("AccelerometerThread runOnce()\n");
 
         if (accleremoter_type == ScanI2C::DeviceType::MPU6050 && mpu.getMotionInterruptStatus()) {
             wakeScreen();
@@ -60,7 +58,9 @@ class AccelerometerThread : public concurrency::OSThread
     void wakeScreen()
     {
         LOG_DEBUG("Tap or motion detected. Turning on screen\n");
-        screen->setOn(true);
+        if (powerFSM.getState() == &stateDARK) {
+            powerFSM.trigger(&stateON);
+        }
     }
     ScanI2C::DeviceType accleremoter_type;
     Adafruit_MPU6050 mpu;
