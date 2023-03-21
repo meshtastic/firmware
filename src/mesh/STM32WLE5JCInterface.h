@@ -26,10 +26,6 @@ static const float tcxoVoltage = 1.7;
 static const RADIOLIB_PIN_TYPE rfswitch_pins[3] = {PA4, PA5, RADIOLIB_NC};
 
 static const Module::RfSwitchMode_t rfswitch_table[4] = {
-    {STM32WLx::MODE_IDLE, {LOW, LOW}},
-    {STM32WLx::MODE_RX, {HIGH, LOW}},
-    {STM32WLx::MODE_TX_HP, {LOW, HIGH}},
-    STM32WLx::END_OF_MODE_TABLE,
-};
+    {STM32WLx::MODE_IDLE, {LOW, LOW}}, {STM32WLx::MODE_RX, {HIGH, LOW}}, {STM32WLx::MODE_TX_HP, {LOW, HIGH}}, END_OF_MODE_TABLE};
 
 #endif // ARCH_STM32WL
