@@ -15,7 +15,7 @@ class LittleFS
 {
   public:
     LittleFS(void);
-    LittleFS(struct lfs_config *cfg);
+    explicit LittleFS(struct lfs_config *cfg);
     virtual ~LittleFS();
 
     bool begin(struct lfs_config *cfg = NULL);

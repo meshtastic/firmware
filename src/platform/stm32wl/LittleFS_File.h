@@ -16,7 +16,7 @@ enum {
 class File : public Stream
 {
   public:
-    File(LittleFS &fs);
+    explicit File(LittleFS &fs);
     File(char const *filename, uint8_t mode, LittleFS &fs);
 
   public:
