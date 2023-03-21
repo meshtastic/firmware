@@ -15,7 +15,7 @@ class AccelerometerThread : public concurrency::OSThread
     // callback returns the period for the next callback invocation (or 0 if we should no longer be called)
     AccelerometerThread(ScanI2C::DeviceType type) : OSThread("AccelerometerThread")
     {
-        if (accelerometer_found.port == ScanI2C::I2CPort::NO_I2C) {
+        if (accelerometer_found.port == ScanI2C::I2CPort::NO_I2C || !config.display.wake_on_tap_or_motion) {
             disable();
             return;
         }
@@ -59,7 +59,7 @@ class AccelerometerThread : public concurrency::OSThread
     {
         LOG_DEBUG("Tap or motion detected. Turning on screen\n");
         if (powerFSM.getState() == &stateDARK) {
-            powerFSM.trigger(&stateON);
+            powerFSM.trigger(EVENT_INPUT);
         }
     }
     ScanI2C::DeviceType accleremoter_type;
