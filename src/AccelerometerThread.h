@@ -13,7 +13,7 @@ class AccelerometerThread : public concurrency::OSThread
 {
   public:
     // callback returns the period for the next callback invocation (or 0 if we should no longer be called)
-    AccelerometerThread(ScanI2C::DeviceType type) : OSThread("AccelerometerThread")
+    AccelerometerThread(ScanI2C::DeviceType type = ScanI2C::DeviceType::NONE) : OSThread("AccelerometerThread")
     {
         if (accelerometer_found.port == ScanI2C::I2CPort::NO_I2C || !config.display.wake_on_tap_or_motion) {
             disable();
