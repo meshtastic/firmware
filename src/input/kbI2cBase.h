@@ -16,4 +16,6 @@ class KbI2cBase : public Observable<const InputEvent *>, public concurrency::OST
     const char *_originName;
 
     TwoWire *i2cBus = 0;
+
+    char readKeystroke() const;
 };

@@ -39,6 +39,8 @@ void write_to_14004(const TwoWire * i2cBus, uint8_t reg, uint8_t data)
 }
 #endif
 
+#define MAX_KEYSTROKE_READ 5
+
 int32_t KbI2cBase::runOnce()
 {
     if (cardkb_found.address != CARDKB_ADDR) {
@@ -87,10 +89,16 @@ int32_t KbI2cBase::runOnce()
         }
     } else {
         // m5 cardkb
-        i2cBus->requestFrom(CARDKB_ADDR, 1);
+        int readsRemaing = MAX_KEYSTROKE_READ;
 
-        while (i2cBus->available()) {
-            char c = i2cBus->read();
+        while (char c = readKeystroke()) {
+            // Bail out eventually - can't get stuck here forever
+            if (!readsRemaing) {
+                break;
+            } else {
+                readsRemaing -= 1;
+            }
+
             InputEvent e;
             e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
             e.source = this->_originName;
@@ -134,4 +142,14 @@ int32_t KbI2cBase::runOnce()
         }
     }
     return 500;
+}
+
+char KbI2cBase::readKeystroke() const
+{
+    i2cBus->requestFrom(CARDKB_ADDR, 1);
+    if (i2cBus->available()) {
+        return i2cBus->read();
+    }
+
+    return 0;
 }
