@@ -71,7 +71,7 @@ NRF52Bluetooth *nrf52Bluetooth;
 #endif
 #include "PowerFSMThread.h"
 
-#if !defined(ARCH_PORTDUINO)
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 #include "AccelerometerThread.h"
 #endif
 
