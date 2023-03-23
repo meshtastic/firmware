@@ -82,7 +82,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // #define DISABLE_NTP
 
 // Disable the welcome screen and allow
-//#define DISABLE_WELCOME_UNSET
+// #define DISABLE_WELCOME_UNSET
 
 // -----------------------------------------------------------------------------
 // OLED & Input
@@ -93,7 +93,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // The SH1106 controller is almost, but not quite, the same as SSD1306
 // Define this if you know you have that controller or your "SSD1306" misbehaves.
-//#define USE_SH1106
+// #define USE_SH1106
 
 // Define if screen should be mirrored left to right
 // #define SCREEN_MIRROR
@@ -117,6 +117,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LPS22HB_ADDR_ALT 0x5D
 #define SHT31_ADDR 0x44
 #define PMSA0031_ADDR 0x12
+
+// -----------------------------------------------------------------------------
+// ACCELEROMETER
+// -----------------------------------------------------------------------------
+#define MPU6050_ADDR 0x68
+#define LIS3DH_ADR 0x18
 
 // -----------------------------------------------------------------------------
 // Security
