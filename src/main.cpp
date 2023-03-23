@@ -360,7 +360,7 @@ void setup()
      * nodeTelemetrySensorsMap singleton. This wraps that logic in a temporary scope to declare the temporary field
      * "found".
      */
-#if !defined(ARCH_PORTDUINO)
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
     auto acc_info = i2cScanner->firstAccelerometer();
     accelerometer_found = acc_info.type != ScanI2C::DeviceType::NONE ? acc_info.address : accelerometer_found;
 
