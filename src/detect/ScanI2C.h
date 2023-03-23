@@ -31,6 +31,8 @@ class ScanI2C
         QMI8658,
         QMC5883L,
         PMSA0031,
+        MPU6050,
+        LIS3DH,
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;
@@ -78,6 +80,8 @@ class ScanI2C
     FoundDevice firstRTC() const;
 
     FoundDevice firstKeyboard() const;
+
+    FoundDevice firstAccelerometer() const;
 
     virtual FoundDevice find(DeviceType) const;
 

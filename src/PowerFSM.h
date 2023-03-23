@@ -23,6 +23,6 @@
 #define EVENT_INPUT 17           // input broker wants something, we need to wake up and enable screen
 
 extern Fsm powerFSM;
-extern State statePOWER, stateSERIAL;
+extern State stateON, statePOWER, stateSERIAL, stateDARK;
 
 void PowerFSM_setup();
