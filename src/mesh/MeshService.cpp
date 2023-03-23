@@ -77,8 +77,8 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
 
     nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
     if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB.getNode(mp->from)->has_user && nodeInfoModule) {
-        LOG_INFO("Heard a node we don't know, sending NodeInfo and asking for a response.\n");
-        nodeInfoModule->sendOurNodeInfo(mp->from, true);
+        LOG_INFO("Heard a node on channel %d we don't know, sending NodeInfo and asking for a response.\n", mp->channel);
+        nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
     }
 
     printPacket("Forwarding to phone", mp);
