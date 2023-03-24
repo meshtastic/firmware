@@ -727,7 +727,7 @@ void NodeDB::updateUser(uint32_t nodeId, const meshtastic_User &p)
 void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 {
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.from) {
-        LOG_DEBUG("Update DB node 0x%x, rx_time=%u\n", mp.from, mp.rx_time);
+        LOG_DEBUG("Update DB node 0x%x, rx_time=%u, channel=%d\n", mp.from, mp.rx_time, mp.channel);
 
         meshtastic_NodeInfo *info = getOrCreateNode(getFrom(&mp));
         if (!info) {
@@ -739,6 +739,8 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 
         if (mp.rx_snr)
             info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
+
+        info->channel = mp.channel;
     }
 }
 
