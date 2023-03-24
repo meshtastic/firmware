@@ -242,13 +242,13 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
 
     if (node->has_position && (node->position.latitude_i != 0 || node->position.longitude_i != 0)) {
         if (positionModule) {
-            LOG_INFO("Sending position ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
-            positionModule->sendOurPosition(dest, wantReplies);
+            LOG_INFO("Sending position ping to 0x%x, wantReplies=%d, channel=%d\n", dest, wantReplies, node->channel);
+            positionModule->sendOurPosition(dest, wantReplies, node->channel);
         }
     } else {
         if (nodeInfoModule) {
-            LOG_INFO("Sending nodeinfo ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
-            nodeInfoModule->sendOurNodeInfo(dest, wantReplies);
+            LOG_INFO("Sending nodeinfo ping to 0x%x, wantReplies=%d, channel=%d\n", dest, wantReplies, node->channel);
+            nodeInfoModule->sendOurNodeInfo(dest, wantReplies, node->channel);
         }
     }
 }

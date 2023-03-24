@@ -744,6 +744,15 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
     }
 }
 
+uint8_t NodeDB::getNodeChannel(NodeNum n)
+{
+    meshtastic_NodeInfo *info = getNode(n);
+    if (!info) {
+        return 0; // defaults to PRIMARY
+    }
+    return info->channel;
+}
+
 /// Find a node in our DB, return null for missing
 /// NOTE: This function might be called from an ISR
 meshtastic_NodeInfo *NodeDB::getNode(NodeNum n)
