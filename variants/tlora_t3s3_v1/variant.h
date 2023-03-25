@@ -59,4 +59,5 @@
 #define SX128X_RESET LORA_RESET
 #define SX128X_RXEN 21
 #define SX128X_TXEN 10
+#define SX128X_MAX_POWER 3
 #endif
