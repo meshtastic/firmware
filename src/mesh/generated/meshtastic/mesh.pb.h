@@ -563,7 +563,7 @@ typedef struct _meshtastic_NodeInfo {
     /* The latest device metrics for the node. */
     bool has_device_metrics;
     meshtastic_DeviceMetrics device_metrics;
-    /* local channel we heared that node */
+    /* local channel index we heard that node on. Only populated if its not the default channel. */
     uint8_t channel;
 } meshtastic_NodeInfo;
 
