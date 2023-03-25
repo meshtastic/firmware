@@ -75,7 +75,6 @@ template <typename T> bool SX128xInterface<T>::init()
     LOG_INFO("Power output set to %d\n", power);
 
 #if defined(SX128X_TXEN) && (SX128X_TXEN != RADIOLIB_NC) && defined(SX128X_RXEN) && (SX128X_RXEN != RADIOLIB_NC)
-    // lora.begin sets Dio2 as RF switch control, which is not true if we are manually controlling RX and TX
     if (res == RADIOLIB_ERR_NONE) {
         lora.setRfSwitchPins(SX128X_RXEN, SX128X_TXEN);
     }
