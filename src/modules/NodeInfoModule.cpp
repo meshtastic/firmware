@@ -38,9 +38,10 @@ void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
         p->to = dest;
         p->decoded.want_response = wantReplies;
         p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
-        if (channel > 0)
+        if (channel > 0) {
             LOG_DEBUG("sending ourNodeInfo to channel %d\n", channel);
             p->channel = channel;
+        }
 
         prevPacketId = p->id;
 
