@@ -13,6 +13,7 @@ SX128xInterface<T>::SX128xInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq,
                                     SPIClass &spi)
     : RadioLibInterface(cs, irq, rst, busy, spi, &lora), lora(&module)
 {
+    LOG_WARN("SX128xInterface(cs=%d, irq=%d, rst=%d, busy=%d)\n", cs, irq, rst, busy);
 }
 
 /// Initialise the Driver transport hardware and software.
@@ -72,6 +73,12 @@ template <typename T> bool SX128xInterface<T>::init()
     LOG_INFO("Frequency set to %f\n", getFreq());
     LOG_INFO("Bandwidth set to %f\n", bw);
     LOG_INFO("Power output set to %d\n", power);
+
+#if defined(SX128X_TXEN) && (SX128X_TXEN != RADIOLIB_NC) && defined(SX128X_RXEN) && (SX128X_RXEN != RADIOLIB_NC)
+    if (res == RADIOLIB_ERR_NONE) {
+        lora.setRfSwitchPins(SX128X_RXEN, SX128X_TXEN);
+    }
+#endif
 
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setCRC(2);
