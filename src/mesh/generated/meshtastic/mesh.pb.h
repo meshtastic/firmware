@@ -563,6 +563,8 @@ typedef struct _meshtastic_NodeInfo {
     /* The latest device metrics for the node. */
     bool has_device_metrics;
     meshtastic_DeviceMetrics device_metrics;
+    /* local channel index we heard that node on. Only populated if its not the default channel. */
+    uint8_t channel;
 } meshtastic_NodeInfo;
 
 /* Unique local debugging info for this node
@@ -823,7 +825,7 @@ extern "C" {
 #define meshtastic_Data_init_default             {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Waypoint_init_default         {0, 0, 0, 0, 0, "", "", 0}
 #define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN}
-#define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default}
+#define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0}
 #define meshtastic_MyNodeInfo_init_default       {0, 0, 0, "", _meshtastic_CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
 #define meshtastic_LogRecord_init_default        {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_default      {0, 0, 0, 0}
@@ -838,7 +840,7 @@ extern "C" {
 #define meshtastic_Data_init_zero                {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Waypoint_init_zero            {0, 0, 0, 0, 0, "", "", 0}
 #define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN}
-#define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero}
+#define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0}
 #define meshtastic_MyNodeInfo_init_zero          {0, 0, 0, "", _meshtastic_CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
 #define meshtastic_LogRecord_init_zero           {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_zero         {0, 0, 0, 0}
@@ -915,6 +917,7 @@ extern "C" {
 #define meshtastic_NodeInfo_snr_tag              4
 #define meshtastic_NodeInfo_last_heard_tag       5
 #define meshtastic_NodeInfo_device_metrics_tag   6
+#define meshtastic_NodeInfo_channel_tag          7
 #define meshtastic_MyNodeInfo_my_node_num_tag    1
 #define meshtastic_MyNodeInfo_has_gps_tag        2
 #define meshtastic_MyNodeInfo_max_channels_tag   3
@@ -1067,7 +1070,8 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  user,              2) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  position,          3) \
 X(a, STATIC,   SINGULAR, FLOAT,    snr,               4) \
 X(a, STATIC,   SINGULAR, FIXED32,  last_heard,        5) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  device_metrics,    6)
+X(a, STATIC,   OPTIONAL, MESSAGE,  device_metrics,    6) \
+X(a, STATIC,   SINGULAR, UINT32,   channel,           7)
 #define meshtastic_NodeInfo_CALLBACK NULL
 #define meshtastic_NodeInfo_DEFAULT NULL
 #define meshtastic_NodeInfo_user_MSGTYPE meshtastic_User
@@ -1207,7 +1211,7 @@ extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
 #define meshtastic_LogRecord_size                81
 #define meshtastic_MeshPacket_size               321
 #define meshtastic_MyNodeInfo_size               179
-#define meshtastic_NodeInfo_size                 258
+#define meshtastic_NodeInfo_size                 261
 #define meshtastic_Position_size                 137
 #define meshtastic_QueueStatus_size              23
 #define meshtastic_RouteDiscovery_size           40
