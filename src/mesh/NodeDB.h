@@ -156,12 +156,6 @@ class NodeDB
     void installDefaultDeviceState(), installDefaultChannels(), installDefaultConfig(), installDefaultModuleConfig();
 };
 
-/**
- * The node number the user is currently looking at
- * 0 if none
- */
-extern NodeNum displayedNodeNum;
-
 extern NodeDB nodeDB;
 
 /*
