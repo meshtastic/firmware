@@ -263,9 +263,9 @@ typedef struct _meshtastic_Config_PositionConfig {
     /* (Re)define GPS_TX_PIN for your board. */
     uint32_t tx_gpio;
     /* The minimum distance in meters traveled (since the last send) before we can send a position to the mesh if position_broadcast_smart_enabled */
-    uint32_t broadcast_smart_minumum_distance;
+    uint32_t broadcast_smart_minimum_distance;
     /* The minumum number of seconds (since the last send) before we can send a position to the mesh if position_broadcast_smart_enabled */
-    uint32_t broadcast_smart_minumum_interval_secs;
+    uint32_t broadcast_smart_minimum_interval_secs;
 } meshtastic_Config_PositionConfig;
 
 /* Power Config\
@@ -562,8 +562,8 @@ extern "C" {
 #define meshtastic_Config_PositionConfig_position_flags_tag 7
 #define meshtastic_Config_PositionConfig_rx_gpio_tag 8
 #define meshtastic_Config_PositionConfig_tx_gpio_tag 9
-#define meshtastic_Config_PositionConfig_broadcast_smart_minumum_distance_tag 10
-#define meshtastic_Config_PositionConfig_broadcast_smart_minumum_interval_secs_tag 11
+#define meshtastic_Config_PositionConfig_broadcast_smart_minimum_distance_tag 10
+#define meshtastic_Config_PositionConfig_broadcast_smart_minimum_interval_secs_tag 11
 #define meshtastic_Config_PowerConfig_is_power_saving_tag 1
 #define meshtastic_Config_PowerConfig_on_battery_shutdown_after_secs_tag 2
 #define meshtastic_Config_PowerConfig_adc_multiplier_override_tag 3
@@ -660,8 +660,8 @@ X(a, STATIC,   SINGULAR, UINT32,   gps_attempt_time,   6) \
 X(a, STATIC,   SINGULAR, UINT32,   position_flags,    7) \
 X(a, STATIC,   SINGULAR, UINT32,   rx_gpio,           8) \
 X(a, STATIC,   SINGULAR, UINT32,   tx_gpio,           9) \
-X(a, STATIC,   SINGULAR, UINT32,   broadcast_smart_minumum_distance,  10) \
-X(a, STATIC,   SINGULAR, UINT32,   broadcast_smart_minumum_interval_secs,  11)
+X(a, STATIC,   SINGULAR, UINT32,   broadcast_smart_minimum_distance,  10) \
+X(a, STATIC,   SINGULAR, UINT32,   broadcast_smart_minimum_interval_secs,  11)
 #define meshtastic_Config_PositionConfig_CALLBACK NULL
 #define meshtastic_Config_PositionConfig_DEFAULT NULL
 

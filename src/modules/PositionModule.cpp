@@ -26,8 +26,7 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 
     // FIXME this can in fact happen with packets sent from EUD (src=RX_SRC_USER)
     // to set fixed location, EUD-GPS location or just the time (see also issue #900)
-    if (nodeDB.getNodeNum() == getFrom(&mp))
-    {
+    if (nodeDB.getNodeNum() == getFrom(&mp)) {
         LOG_DEBUG("Incoming update from MYSELF\n");
         // LOG_DEBUG("Ignored an incoming update from MYSELF\n");
         // return false;
@@ -40,8 +39,7 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
              p.sats_in_view ? "SIV " : "", p.fix_quality ? "FXQ " : "", p.fix_type ? "FXT " : "", p.timestamp ? "PTS " : "",
              p.time ? "TIME " : "");
 
-    if (p.time)
-    {
+    if (p.time) {
         struct timeval tv;
         uint32_t secs = p.time;
 
@@ -75,8 +73,7 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     p.longitude_i = node->position.longitude_i;
     p.time = node->position.time;
 
-    if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE)
-    {
+    if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE) {
         if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL)
             p.altitude = node->position.altitude;
         else
@@ -86,14 +83,11 @@ meshtastic_MeshPacket *PositionModule::allocReply()
             p.altitude_geoidal_separation = node->position.altitude_geoidal_separation;
     }
 
-    if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_DOP)
-    {
-        if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_HVDOP)
-        {
+    if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_DOP) {
+        if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_HVDOP) {
             p.HDOP = node->position.HDOP;
             p.VDOP = node->position.VDOP;
-        }
-        else
+        } else
             p.PDOP = node->position.PDOP;
     }
 
@@ -115,12 +109,10 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     // Strip out any time information before sending packets to other nodes - to keep the wire size small (and because other
     // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS to include the time, so that gpsless
     // devices can get time.
-    if (getRTCQuality() < RTCQualityDevice)
-    {
+    if (getRTCQuality() < RTCQualityDevice) {
         LOG_INFO("Stripping time %u from position send\n", p.time);
         p.time = 0;
-    }
-    else
+    } else
         LOG_INFO("Providing time to mesh %u\n", p.time);
 
     LOG_INFO("Position reply: time=%i, latI=%i, lonI=-%i\n", p.time, p.latitude_i, p.longitude_i);
@@ -155,13 +147,10 @@ int32_t PositionModule::runOnce()
     uint32_t intervalMs = getConfiguredOrDefaultMs(config.position.position_broadcast_secs, default_broadcast_interval_secs);
     uint32_t msSinceLastSend = now - lastGpsSend;
 
-    if (lastGpsSend == 0 || msSinceLastSend >= intervalMs)
-    {
+    if (lastGpsSend == 0 || msSinceLastSend >= intervalMs) {
         // Only send packets if the channel is less than 40% utilized.
-        if (airTime->isTxAllowedChannelUtil())
-        {
-            if (node->has_position && (node->position.latitude_i != 0 || node->position.longitude_i != 0))
-            {
+        if (airTime->isTxAllowedChannelUtil()) {
+            if (node->has_position && (node->position.latitude_i != 0 || node->position.longitude_i != 0)) {
                 lastGpsSend = now;
 
                 lastGpsLatitude = node->position.latitude_i;
@@ -175,36 +164,33 @@ int32_t PositionModule::runOnce()
                 sendOurPosition(NODENUM_BROADCAST, requestReplies);
             }
         }
-    }
-    else if (config.position.position_broadcast_smart_enabled)
-    {
+    } else if (config.position.position_broadcast_smart_enabled) {
         // Only send packets if the channel is less than 25% utilized or we're a tracker.
-        if (airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER))
-        {
+        if (airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER)) {
             meshtastic_NodeInfo *node2 = service.refreshMyNodeInfo(); // should guarantee there is now a position
 
-            if (node2->has_position && (node2->position.latitude_i != 0 || node2->position.longitude_i != 0))
-            {
+            if (node2->has_position && (node2->position.latitude_i != 0 || node2->position.longitude_i != 0)) {
                 // The minimum distance to travel before we are able to send a new position packet.
-                const uint32_t distanceTravelThreshold = config.position.broadcast_smart_minumum_distance > 0 ? config.position.broadcast_smart_minumum_interval_secs : 50;
+                const uint32_t distanceTravelThreshold = config.position.broadcast_smart_minimum_distance > 0
+                                                             ? config.position.broadcast_smart_minimum_interval_secs
+                                                             : 50;
 
                 // The minimum time (in seconds) that would pass before we are able to send a new position packet.
-                const uint32_t minimumTimeThreshold = getConfiguredOrDefaultMs(config.position.broadcast_smart_minumum_interval_secs, 30);
+                const uint32_t minimumTimeThreshold =
+                    getConfiguredOrDefaultMs(config.position.broadcast_smart_minimum_interval_secs, 30);
 
                 // Determine the distance in meters between two points on the globe
-                float distanceTraveledSinceLastSend = GeoCoord::latLongToMeter(lastGpsLatitude * 1e-7, lastGpsLongitude * 1e-7,
-                                                                               node->position.latitude_i * 1e-7, node->position.longitude_i * 1e-7);
+                float distanceTraveledSinceLastSend =
+                    GeoCoord::latLongToMeter(lastGpsLatitude * 1e-7, lastGpsLongitude * 1e-7, node->position.latitude_i * 1e-7,
+                                             node->position.longitude_i * 1e-7);
 
-                if ((abs(distanceTraveledSinceLastSend) >= distanceTravelThreshold) && msSinceLastSend >= minimumTimeThreshold)
-                {
+                if ((abs(distanceTraveledSinceLastSend) >= distanceTravelThreshold) && msSinceLastSend >= minimumTimeThreshold) {
                     bool requestReplies = currentGeneration != radioGeneration;
                     currentGeneration = radioGeneration;
 
-                    LOG_INFO("Sending smart pos@%x:6 to mesh (distanceTraveled=%d, distanceMin=%d, timeElapsed=%d, minTimeInterval=%d)\n",
-                             node2->position.timestamp,
-                             distanceTraveledSinceLastSend,
-                             distanceTravelThreshold,
-                             msSinceLastSend,
+                    LOG_INFO("Sending smart pos@%x:6 to mesh (distanceTraveled=%d, distanceMin=%d, timeElapsed=%d, "
+                             "minTimeInterval=%d)\n",
+                             node2->position.timestamp, distanceTraveledSinceLastSend, distanceTravelThreshold, msSinceLastSend,
                              minimumTimeThreshold);
                     sendOurPosition(NODENUM_BROADCAST, requestReplies);
 
