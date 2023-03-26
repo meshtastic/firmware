@@ -171,9 +171,8 @@ int32_t PositionModule::runOnce()
 
             if (node2->has_position && (node2->position.latitude_i != 0 || node2->position.longitude_i != 0)) {
                 // The minimum distance to travel before we are able to send a new position packet.
-                const uint32_t distanceTravelThreshold = config.position.broadcast_smart_minimum_distance > 0
-                                                             ? config.position.broadcast_smart_minimum_interval_secs
-                                                             : 50;
+                const uint32_t distanceTravelThreshold =
+                    config.position.broadcast_smart_minimum_distance > 0 ? config.position.broadcast_smart_minimum_distance : 50;
 
                 // The minimum time (in seconds) that would pass before we are able to send a new position packet.
                 const uint32_t minimumTimeThreshold =
