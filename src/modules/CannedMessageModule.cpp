@@ -446,8 +446,6 @@ int CannedMessageModule::getPrevIndex()
 
 void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    displayedNodeNum = 0; // Not currently showing a node pane
-
     char buffer[50];
 
     if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {
