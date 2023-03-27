@@ -8,7 +8,7 @@ echo "prebuilt binaries for your computer into nanopb-0.4.7"
 
 # the nanopb tool seems to require that the .options file be in the current directory!
 cd protobufs
-../nanopb-0.4.7/generator-bin/protoc --nanopb_out=-v:../src/mesh/generated/ -I=../protobufs meshtastic/*.proto
+../nanopb-0.4.7/generator-bin/protoc --nanopb_out=-v:../src/mesh/generated/ -I=../protobufs meshtastic/*.proto --experimental_allow_proto3_optional
 
 # cd ../src/mesh/generated/meshtastic
 # sed -i 's/#include "meshtastic/#include "./g' -- *
