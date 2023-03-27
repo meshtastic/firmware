@@ -58,12 +58,6 @@ meshtastic_User &owner = devicestate.owner;
 
 static uint8_t ourMacAddr[6];
 
-/**
- * The node number the user is currently looking at
- * 0 if none
- */
-NodeNum displayedNodeNum;
-
 NodeDB::NodeDB() : nodes(devicestate.node_db), numNodes(&devicestate.node_db_count) {}
 
 /**

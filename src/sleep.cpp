@@ -99,10 +99,15 @@ void setGPSPower(bool on)
     if (pmu_found && PMU) {
         uint8_t model = PMU->getChipModel();
         if (model == XPOWERS_AXP2101) {
+#if (HW_VENDOR == meshtastic_HardwareModel_TBEAM)
+            // t-beam v1.2 GNSS power channel
+            on ? PMU->enablePowerOutput(XPOWERS_ALDO3) : PMU->disablePowerOutput(XPOWERS_ALDO3);
+#elif (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE)
             // t-beam-s3-core GNSS  power channel
             on ? PMU->enablePowerOutput(XPOWERS_ALDO4) : PMU->disablePowerOutput(XPOWERS_ALDO4);
+#endif
         } else if (model == XPOWERS_AXP192) {
-            // t-beam GNSS  power channel
+            // t-beam v1.1 GNSS  power channel
             on ? PMU->enablePowerOutput(XPOWERS_LDO3) : PMU->disablePowerOutput(XPOWERS_LDO3);
         }
     }
@@ -237,8 +242,14 @@ void doDeepSleep(uint64_t msecToWake)
 
         uint8_t model = PMU->getChipModel();
         if (model == XPOWERS_AXP2101) {
+#if (HW_VENDOR == meshtastic_HardwareModel_TBEAM)
+            // t-beam v1.2 radio power channel
+            PMU->disablePowerOutput(XPOWERS_ALDO2); // lora radio power channel
+#elif (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE)
             PMU->disablePowerOutput(XPOWERS_ALDO3); // lora radio power channel
+#endif
         } else if (model == XPOWERS_AXP192) {
+            // t-beam v1.1 radio power channel
             PMU->disablePowerOutput(XPOWERS_LDO2); // lora radio power channel
         }
     }
