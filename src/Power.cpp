@@ -528,7 +528,7 @@ bool Power::axpChipInit()
     } else if (PMU->getChipModel() == XPOWERS_AXP2101) {
 
         /*The alternative version of T-Beam 1.1 differs from T-Beam V1.1 in that it uses an AXP2101 power chip*/
-#if defined(CONFIG_IDF_TARGET_ESP32)
+#if (HW_VENDOR == meshtastic_HardwareModel_TBEAM)
         // Unuse power channel
         PMU->disablePowerOutput(XPOWERS_DCDC2);
         PMU->disablePowerOutput(XPOWERS_DCDC3);
@@ -558,10 +558,8 @@ bool Power::axpChipInit()
         PMU->setPowerChannelVoltage(XPOWERS_ALDO3, 3300);
         PMU->enablePowerOutput(XPOWERS_ALDO3);
 
-#endif /*CONFIG_IDF_TARGET_ESP32*/
-
+#elif (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE)
         // t-beam s3 core
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
         /**
          * gnss module power channel
          * The default ALDO4 is off, you need to turn on the GNSS power first, otherwise it will be invalid during initialization
