@@ -189,8 +189,8 @@ int32_t PositionModule::runOnce()
 
                     LOG_INFO("Sending smart pos@%x:6 to mesh (distanceTraveled=%f, minDistanceThreshold=%i, timeElapsed=%i, "
                              "minTimeInterval=%i)\n",
-                             node2->position.timestamp, abs(distanceTraveledSinceLastSend), distanceTravelThreshold, msSinceLastSend,
-                             minimumTimeThreshold);
+                             node2->position.timestamp, abs(distanceTraveledSinceLastSend), distanceTravelThreshold,
+                             msSinceLastSend, minimumTimeThreshold);
                     sendOurPosition(NODENUM_BROADCAST, requestReplies);
 
                     // Set the current coords as our last ones, after we've compared distance with current and decided to send
