@@ -527,8 +527,39 @@ bool Power::axpChipInit()
 
     } else if (PMU->getChipModel() == XPOWERS_AXP2101) {
 
-        // t-beam s3 core
+        /*The alternative version of T-Beam 1.1 differs from T-Beam V1.1 in that it uses an AXP2101 power chip*/
+#if (HW_VENDOR == meshtastic_HardwareModel_TBEAM)
+        // Unuse power channel
+        PMU->disablePowerOutput(XPOWERS_DCDC2);
+        PMU->disablePowerOutput(XPOWERS_DCDC3);
+        PMU->disablePowerOutput(XPOWERS_DCDC4);
+        PMU->disablePowerOutput(XPOWERS_DCDC5);
+        PMU->disablePowerOutput(XPOWERS_ALDO1);
+        PMU->disablePowerOutput(XPOWERS_ALDO4);
+        PMU->disablePowerOutput(XPOWERS_BLDO1);
+        PMU->disablePowerOutput(XPOWERS_BLDO2);
+        PMU->disablePowerOutput(XPOWERS_DLDO1);
+        PMU->disablePowerOutput(XPOWERS_DLDO2);
 
+        // GNSS RTC PowerVDD 3300mV
+        PMU->setPowerChannelVoltage(XPOWERS_VBACKUP, 3300);
+        PMU->enablePowerOutput(XPOWERS_VBACKUP);
+
+        // ESP32 VDD 3300mV
+        //  ! No need to set, automatically open , Don't close it
+        //  PMU->setPowerChannelVoltage(XPOWERS_DCDC1, 3300);
+        //  PMU->setProtectedChannel(XPOWERS_DCDC1);
+
+        // LoRa VDD 3300mV
+        PMU->setPowerChannelVoltage(XPOWERS_ALDO2, 3300);
+        PMU->enablePowerOutput(XPOWERS_ALDO2);
+
+        // GNSS VDD 3300mV
+        PMU->setPowerChannelVoltage(XPOWERS_ALDO3, 3300);
+        PMU->enablePowerOutput(XPOWERS_ALDO3);
+
+#elif (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE)
+        // t-beam s3 core
         /**
          * gnss module power channel
          * The default ALDO4 is off, you need to turn on the GNSS power first, otherwise it will be invalid during initialization
@@ -570,6 +601,8 @@ bool Power::axpChipInit()
         PMU->disablePowerOutput(XPOWERS_DLDO1); // Invalid power channel, it does not exist
         PMU->disablePowerOutput(XPOWERS_DLDO2); // Invalid power channel, it does not exist
         PMU->disablePowerOutput(XPOWERS_VBACKUP);
+
+#endif
 
         // disable all axp chip interrupt
         PMU->disableIRQ(XPOWERS_AXP2101_ALL_IRQ);
