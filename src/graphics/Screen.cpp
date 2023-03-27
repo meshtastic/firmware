@@ -348,8 +348,6 @@ static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, i
 /// Draw the last text message we received
 static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    displayedNodeNum = 0; // Not currently showing a node pane
-
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_MEDIUM);
 
@@ -370,8 +368,6 @@ static bool shouldDrawMessage(const meshtastic_MeshPacket *packet)
 /// Draw the last text message we received
 static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    displayedNodeNum = 0; // Not currently showing a node pane
-
     // the max length of this buffer is much longer than we can possibly print
     static char tempBuf[237];
 
@@ -773,7 +769,6 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             nodeIndex = (nodeIndex + 1) % nodeDB.getNumNodes();
             n = nodeDB.getNodeByIndex(nodeIndex);
         }
-        displayedNodeNum = n->num;
     }
 
     meshtastic_NodeInfo *node = nodeDB.getNodeByIndex(nodeIndex);
@@ -1393,8 +1388,6 @@ void Screen::setFastFramerate()
 
 void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    displayedNodeNum = 0; // Not currently showing a node pane
-
     display->setFont(FONT_SMALL);
 
     // The coordinates define the left starting point of the text
@@ -1501,8 +1494,6 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
 {
 #if HAS_WIFI
     const char *wifiName = config.network.wifi_ssid;
-
-    displayedNodeNum = 0; // Not currently showing a node pane
 
     display->setFont(FONT_SMALL);
 
@@ -1634,8 +1625,6 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
 void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    displayedNodeNum = 0; // Not currently showing a node pane
-
     display->setFont(FONT_SMALL);
 
     // The coordinates define the left starting point of the text
