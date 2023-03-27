@@ -165,6 +165,8 @@ void NodeDB::installDefaultConfig()
     config.lora.hop_limit = HOP_RELIABLE;
     config.position.gps_enabled = true;
     config.position.position_broadcast_smart_enabled = true;
+    config.position.broadcast_smart_minimum_distance = 100;
+    config.position.broadcast_smart_minimum_interval_secs = 30;
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER)
         config.device.node_info_broadcast_secs = 3 * 60 * 60;
     config.device.serial_enabled = true;
@@ -231,9 +233,7 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
     } else if (role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
         config.display.screen_on_secs = 1;
     } else if (role == meshtastic_Config_DeviceConfig_Role_TRACKER) {
-        config.position.position_broadcast_smart_enabled = false;
-        config.position.position_broadcast_secs = 120;
-        config.position.gps_update_interval = 60;
+        config.position.gps_update_interval = 30;
     } else if (role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
         moduleConfig.telemetry.environment_measurement_enabled = true;
         moduleConfig.telemetry.environment_update_interval = 300;
