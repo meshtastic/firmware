@@ -187,9 +187,9 @@ int32_t PositionModule::runOnce()
                     bool requestReplies = currentGeneration != radioGeneration;
                     currentGeneration = radioGeneration;
 
-                    LOG_INFO("Sending smart pos@%x:6 to mesh (distanceTraveled=%d, distanceMin=%d, timeElapsed=%d, "
-                             "minTimeInterval=%d)\n",
-                             node2->position.timestamp, distanceTraveledSinceLastSend, distanceTravelThreshold, msSinceLastSend,
+                    LOG_INFO("Sending smart pos@%x:6 to mesh (distanceTraveled=%f, minDistanceThreshold=%i, timeElapsed=%i, "
+                             "minTimeInterval=%i)\n",
+                             node2->position.timestamp, abs(distanceTraveledSinceLastSend), distanceTravelThreshold, msSinceLastSend,
                              minimumTimeThreshold);
                     sendOurPosition(NODENUM_BROADCAST, requestReplies);
 
