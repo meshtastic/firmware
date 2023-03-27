@@ -100,7 +100,7 @@ void setGPSPower(bool on)
         uint8_t model = PMU->getChipModel();
         if (model == XPOWERS_AXP2101) {
 #if defined(CONFIG_IDF_TARGET_ESP32)
-            //t-beam v1.2 GNSS power channel
+            // t-beam v1.2 GNSS power channel
             on ? PMU->enablePowerOutput(XPOWERS_ALDO3) : PMU->disablePowerOutput(XPOWERS_ALDO3);
 #else
             // t-beam-s3-core GNSS  power channel
@@ -243,13 +243,13 @@ void doDeepSleep(uint64_t msecToWake)
         uint8_t model = PMU->getChipModel();
         if (model == XPOWERS_AXP2101) {
 #if defined(CONFIG_IDF_TARGET_ESP32)
-            //t-beam v1.2 radio power channel
+            // t-beam v1.2 radio power channel
             PMU->disablePowerOutput(XPOWERS_ALDO2); // lora radio power channel
 #else
             PMU->disablePowerOutput(XPOWERS_ALDO3); // lora radio power channel
 #endif
         } else if (model == XPOWERS_AXP192) {
-            //t-beam v1.1 radio power channel
+            // t-beam v1.1 radio power channel
             PMU->disablePowerOutput(XPOWERS_LDO2); // lora radio power channel
         }
     }

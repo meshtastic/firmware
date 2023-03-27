@@ -527,9 +527,9 @@ bool Power::axpChipInit()
 
     } else if (PMU->getChipModel() == XPOWERS_AXP2101) {
 
-       /*The alternative version of T-Beam 1.1 differs from T-Beam V1.1 in that it uses an AXP2101 power chip*/
+        /*The alternative version of T-Beam 1.1 differs from T-Beam V1.1 in that it uses an AXP2101 power chip*/
 #if defined(CONFIG_IDF_TARGET_ESP32)
-        //Unuse power channel
+        // Unuse power channel
         PMU->disablePowerOutput(XPOWERS_DCDC2);
         PMU->disablePowerOutput(XPOWERS_DCDC3);
         PMU->disablePowerOutput(XPOWERS_DCDC4);
@@ -545,21 +545,20 @@ bool Power::axpChipInit()
         PMU->setPowerChannelVoltage(XPOWERS_VBACKUP, 3300);
         PMU->enablePowerOutput(XPOWERS_VBACKUP);
 
-        //ESP32 VDD 3300mV
-        // ! No need to set, automatically open , Don't close it
-        // PMU->setPowerChannelVoltage(XPOWERS_DCDC1, 3300);
-        // PMU->setProtectedChannel(XPOWERS_DCDC1);
+        // ESP32 VDD 3300mV
+        //  ! No need to set, automatically open , Don't close it
+        //  PMU->setPowerChannelVoltage(XPOWERS_DCDC1, 3300);
+        //  PMU->setProtectedChannel(XPOWERS_DCDC1);
 
         // LoRa VDD 3300mV
         PMU->setPowerChannelVoltage(XPOWERS_ALDO2, 3300);
         PMU->enablePowerOutput(XPOWERS_ALDO2);
 
-        //GNSS VDD 3300mV
+        // GNSS VDD 3300mV
         PMU->setPowerChannelVoltage(XPOWERS_ALDO3, 3300);
         PMU->enablePowerOutput(XPOWERS_ALDO3);
 
 #endif /*CONFIG_IDF_TARGET_ESP32*/
-
 
         // t-beam s3 core
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
@@ -606,7 +605,6 @@ bool Power::axpChipInit()
         PMU->disablePowerOutput(XPOWERS_VBACKUP);
 
 #endif
-
 
         // disable all axp chip interrupt
         PMU->disableIRQ(XPOWERS_AXP2101_ALL_IRQ);
