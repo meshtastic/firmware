@@ -16,7 +16,8 @@ class AccelerometerThread : public concurrency::OSThread
   public:
     AccelerometerThread(ScanI2C::DeviceType type = ScanI2C::DeviceType::NONE) : OSThread("AccelerometerThread")
     {
-        if (accelerometer_found.port == ScanI2C::I2CPort::NO_I2C || (!config.display.wake_on_tap_or_motion && !config.device.double_tap_as_button_press)) {
+        if (accelerometer_found.port == ScanI2C::I2CPort::NO_I2C) {
+            LOG_DEBUG("AccelerometerThread disabling due to no sensors found\n");
             disable();
             return;
         }
@@ -46,16 +47,22 @@ class AccelerometerThread : public concurrency::OSThread
     {
         canSleep = true; // Assume we should not keep the board awake
 
+        if (!config.display.wake_on_tap_or_motion && !config.device.double_tap_as_button_press) {
+            LOG_DEBUG("AccelerometerThread disabling due to no interested configuration\n");
+            disable();
+            return ACCELEROMETER_CHECK_INTERVAL_MS;
+        }
+
         if (accleremoter_type == ScanI2C::DeviceType::MPU6050 && mpu.getMotionInterruptStatus()) {
             wakeScreen();
-        } else if (accleremoter_type == ScanI2C::DeviceType::LIS3DH && lis.getClick() != 0) {
+        } else if (accleremoter_type == ScanI2C::DeviceType::LIS3DH && lis.getClick() > 0) {
             uint8_t click = lis.getClick();
-            LOG_DEBUG("click=%x\n", click);
-            if (!(click & 0x30)) {
+
+            if (config.device.double_tap_as_button_press && (click & 0x30)) {
                 return ACCELEROMETER_CHECK_INTERVAL_MS;
             }
 
-            if (!config.device.double_tap_as_button_press && (click & 0x10)) {
+            if (!config.device.double_tap_as_button_press) {
                 wakeScreen();
             }
             else if (config.device.double_tap_as_button_press && (click & 0x20)) {
