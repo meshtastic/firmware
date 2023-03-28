@@ -734,7 +734,9 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         if (mp.rx_snr)
             info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
 
-        info->channel = mp.channel;
+        if (mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP) {
+            info->channel = mp.channel;
+        }
     }
 }
 
