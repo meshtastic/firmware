@@ -50,8 +50,7 @@ class AccelerometerThread : public concurrency::OSThread
 
         if (!config.display.wake_on_tap_or_motion && !config.device.double_tap_as_button_press) {
             LOG_DEBUG("AccelerometerThread disabling due to no interested configurations\n");
-            disable();
-            return;
+            return disable();
         }
 
         if (accleremoter_type == ScanI2C::DeviceType::MPU6050 && mpu.getMotionInterruptStatus()) {
