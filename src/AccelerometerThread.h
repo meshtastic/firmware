@@ -21,9 +21,15 @@ class AccelerometerThread : public concurrency::OSThread
             disable();
             return;
         }
+        if (!config.display.wake_on_tap_or_motion && !config.device.double_tap_as_button_press) {
+            LOG_DEBUG("AccelerometerThread disabling due to no interested configurations\n");
+            disable();
+            return;
+        }
+
         accleremoter_type = type;
         LOG_DEBUG("AccelerometerThread initializing\n");
-        
+
         if (accleremoter_type == ScanI2C::DeviceType::MPU6050 && mpu.begin(accelerometer_found.address)) {
             LOG_DEBUG("MPU6050 initializing\n");
             // setup motion detection
@@ -47,25 +53,15 @@ class AccelerometerThread : public concurrency::OSThread
     {
         canSleep = true; // Assume we should not keep the board awake
 
-        if (!config.display.wake_on_tap_or_motion && !config.device.double_tap_as_button_press) {
-            LOG_DEBUG("AccelerometerThread disabling due to no interested configuration\n");
-            disable();
-            return ACCELEROMETER_CHECK_INTERVAL_MS;
-        }
-
         if (accleremoter_type == ScanI2C::DeviceType::MPU6050 && mpu.getMotionInterruptStatus()) {
             wakeScreen();
         } else if (accleremoter_type == ScanI2C::DeviceType::LIS3DH && lis.getClick() > 0) {
             uint8_t click = lis.getClick();
-
-            if (config.device.double_tap_as_button_press && (click & 0x30)) {
-                return ACCELEROMETER_CHECK_INTERVAL_MS;
-            }
-
             if (!config.device.double_tap_as_button_press) {
                 wakeScreen();
-            }
-            else if (config.device.double_tap_as_button_press && (click & 0x20)) {
+            } else if (config.device.double_tap_as_button_press && (click & 0x30)) {
+                LOG_DEBUG("Detected triple click. Skipping...\n");
+            } else if (config.device.double_tap_as_button_press && (click & 0x20)) {
                 buttonPress();
             }
         }
@@ -75,8 +71,8 @@ class AccelerometerThread : public concurrency::OSThread
   private:
     void wakeScreen()
     {
-        LOG_DEBUG("Tap or motion detected. Turning on screen\n");
         if (powerFSM.getState() == &stateDARK) {
+            LOG_INFO("Tap or motion detected. Turning on screen\n");
             powerFSM.trigger(EVENT_INPUT);
         }
     }
