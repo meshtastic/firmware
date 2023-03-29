@@ -29,7 +29,7 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     /**
      * Send our position into the mesh
      */
-    void sendOurPosition(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
+    void sendOurPosition(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false, uint8_t channel = 0);
 
   protected:
     /** Called to handle a particular incoming message

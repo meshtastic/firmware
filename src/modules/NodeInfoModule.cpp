@@ -27,7 +27,7 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     return false; // Let others look at this message also if they want
 }
 
-void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies)
+void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t channel)
 {
     // cancel any not yet sent (now stale) position packets
     if (prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
@@ -38,6 +38,11 @@ void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies)
         p->to = dest;
         p->decoded.want_response = wantReplies;
         p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+        if (channel > 0) {
+            LOG_DEBUG("sending ourNodeInfo to channel %d\n", channel);
+            p->channel = channel;
+        }
+
         prevPacketId = p->id;
 
         service.sendToMesh(p);
