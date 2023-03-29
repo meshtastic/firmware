@@ -113,6 +113,9 @@ class NodeDB
     /// pick a provisional nodenum we hope no one is using
     void pickNewNodeNum();
 
+    // get channel channel index we heard a nodeNum on, defaults to 0 if not found
+    uint8_t getNodeChannel(NodeNum n);
+
     /// Find a node in our DB, return null for missing
     meshtastic_NodeInfo *getNode(NodeNum n);
 

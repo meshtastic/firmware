@@ -120,7 +120,7 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     return allocDataProtobuf(p);
 }
 
-void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies)
+void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t channel)
 {
     // cancel any not yet sent (now stale) position packets
     if (prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
@@ -134,6 +134,9 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies)
     else
         p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
     prevPacketId = p->id;
+
+    if (channel > 0)
+        p->channel = channel;
 
     service.sendToMesh(p, RX_SRC_LOCAL, true);
 }
