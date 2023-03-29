@@ -23,6 +23,12 @@ class AccelerometerThread : public concurrency::OSThread
             return;
         }
 
+        if (!config.display.wake_on_tap_or_motion && !config.device.double_tap_as_button_press) {
+            LOG_DEBUG("AccelerometerThread disabling due to no interested configurations\n");
+            disable();
+            return;
+        }
+
         accleremoter_type = type;
         LOG_DEBUG("AccelerometerThread initializing\n");
 
@@ -38,7 +44,7 @@ class AccelerometerThread : public concurrency::OSThread
             LOG_DEBUG("LIS3DH initializing\n");
             lis.setRange(LIS3DH_RANGE_2_G);
             // Adjust threshhold, higher numbers are less sensitive
-            lis.setClick(1, ACCELEROMETER_CLICK_THRESHOLD);
+            lis.setClick(config.device.double_tap_as_button_press ? 2 : 1, ACCELEROMETER_CLICK_THRESHOLD);
         }
     }
 
@@ -47,19 +53,12 @@ class AccelerometerThread : public concurrency::OSThread
     {
         canSleep = true; // Assume we should not keep the board awake
 
-        if (!config.display.wake_on_tap_or_motion && !config.device.double_tap_as_button_press) {
-            LOG_DEBUG("AccelerometerThread disabling due to no interested configurations\n");
-            return disable();
-        }
-
         if (accleremoter_type == ScanI2C::DeviceType::MPU6050 && mpu.getMotionInterruptStatus()) {
             wakeScreen();
         } else if (accleremoter_type == ScanI2C::DeviceType::LIS3DH && lis.getClick() > 0) {
             uint8_t click = lis.getClick();
             if (!config.device.double_tap_as_button_press) {
                 wakeScreen();
-            } else {
-                lis.setClick(2, ACCELEROMETER_CLICK_THRESHOLD);
             }
 
             if (config.device.double_tap_as_button_press && (click & 0x30)) {
