@@ -357,14 +357,11 @@ void setup()
      * nodeTelemetrySensorsMap singleton. This wraps that logic in a temporary scope to declare the temporary field
      * "found".
      */
+
 #if !defined(ARCH_PORTDUINO)
     auto acc_info = i2cScanner->firstAccelerometer();
     accelerometer_found = acc_info.type != ScanI2C::DeviceType::NONE ? acc_info.address : accelerometer_found;
-
     LOG_DEBUG("acc_info = %i\n", acc_info.type);
-    if (acc_info.type != ScanI2C::DeviceType::NONE) {
-        accelerometerThread = new AccelerometerThread(acc_info.type);
-    }
 #endif
 
 #define STRING(S) #S
@@ -444,6 +441,12 @@ void setup()
 
 #if defined(USE_SH1107_128_64)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
+#endif
+
+#if !defined(ARCH_PORTDUINO)
+    if (acc_info.type != ScanI2C::DeviceType::NONE) {
+        accelerometerThread = new AccelerometerThread(acc_info.type);
+    }
 #endif
 
     // Init our SPI controller (must be before screen and lora)
