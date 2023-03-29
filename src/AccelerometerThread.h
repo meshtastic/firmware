@@ -8,6 +8,7 @@
 #include <Adafruit_MPU6050.h>
 
 #define ACCELEROMETER_CHECK_INTERVAL_MS 100
+#define ACCELEROMETER_CLICK_THRESHOLD 40
 
 namespace concurrency
 {
@@ -36,10 +37,8 @@ class AccelerometerThread : public concurrency::OSThread
         } else if (accleremoter_type == ScanI2C::DeviceType::LIS3DH && lis.begin(accelerometer_found.address)) {
             LOG_DEBUG("LIS3DH initializing\n");
             lis.setRange(LIS3DH_RANGE_2_G);
-
-            const uint8_t numberOfTaps = config.device.double_tap_as_button_press ? 2 : 1;
             // Adjust threshhold, higher numbers are less sensitive
-            lis.setClick(numberOfTaps, 40);
+            lis.setClick(1, ACCELEROMETER_CLICK_THRESHOLD);
         }
     }
 
@@ -59,7 +58,11 @@ class AccelerometerThread : public concurrency::OSThread
             uint8_t click = lis.getClick();
             if (!config.device.double_tap_as_button_press) {
                 wakeScreen();
-            } else if (config.device.double_tap_as_button_press && (click & 0x30)) {
+            } else {
+                lis.setClick(2, ACCELEROMETER_CLICK_THRESHOLD);
+            }
+
+            if (config.device.double_tap_as_button_press && (click & 0x30)) {
                 LOG_DEBUG("Detected triple click. Skipping...\n");
             } else if (config.device.double_tap_as_button_press && (click & 0x20)) {
                 buttonPress();
