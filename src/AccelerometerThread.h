@@ -21,11 +21,6 @@ class AccelerometerThread : public concurrency::OSThread
             disable();
             return;
         }
-        if (!config.display.wake_on_tap_or_motion && !config.device.double_tap_as_button_press) {
-            LOG_DEBUG("AccelerometerThread disabling due to no interested configurations\n");
-            disable();
-            return;
-        }
 
         accleremoter_type = type;
         LOG_DEBUG("AccelerometerThread initializing\n");
@@ -52,6 +47,12 @@ class AccelerometerThread : public concurrency::OSThread
     int32_t runOnce() override
     {
         canSleep = true; // Assume we should not keep the board awake
+
+        if (!config.display.wake_on_tap_or_motion && !config.device.double_tap_as_button_press) {
+            LOG_DEBUG("AccelerometerThread disabling due to no interested configurations\n");
+            disable();
+            return;
+        }
 
         if (accleremoter_type == ScanI2C::DeviceType::MPU6050 && mpu.getMotionInterruptStatus()) {
             wakeScreen();
