@@ -8,23 +8,22 @@
 
 #define USE_SSD1306
 
-#define I2C_SDA 18 //1 // I2C pins for this board
-#define I2C_SCL 17 //2
+#define I2C_SDA 18 // 1 // I2C pins for this board
+#define I2C_SCL 17 // 2
 
 //#define LED_PIN 38     // This is a RGB LED not a standard LED
 
-#define BUTTON_PIN 0    // This is the BOOT button
+#define BUTTON_PIN 0 // This is the BOOT button
 #define BUTTON_NEED_PULLUP
-
 
 //#define USE_RF95 // RFM95/SX127x
 //#define USE_SX1262
 #define USE_SX1280
 
-#define RF95_MISO  3
-#define RF95_SCK   5
-#define RF95_MOSI  6
-#define RF95_NSS   7
+#define RF95_MISO 3
+#define RF95_SCK 5
+#define RF95_MOSI 6
+#define RF95_NSS 7
 
 #define LORA_RESET 8
 #define LORA_DIO1 16
@@ -46,12 +45,12 @@
 #endif
 
 //#define USE_EINK
-  /*
+/*
  * eink display pins
  */
 //#define PIN_EINK_CS     13
 //#define PIN_EINK_BUSY   2
 //#define PIN_EINK_DC     1
 //#define PIN_EINK_RES    (-1)
-//#define PIN_EINK_SCLK   5 
+//#define PIN_EINK_SCLK   5
 //#define PIN_EINK_MOSI   6
