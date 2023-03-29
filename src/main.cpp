@@ -358,6 +358,12 @@ void setup()
      * "found".
      */
 
+#if !defined(ARCH_PORTDUINO)
+    auto acc_info = i2cScanner->firstAccelerometer();
+    accelerometer_found = acc_info.type != ScanI2C::DeviceType::NONE ? acc_info.address : accelerometer_found;
+    LOG_DEBUG("acc_info = %i\n", acc_info.type);
+#endif
+
 #define STRING(S) #S
 
 #define SCANNER_TO_SENSORS_MAP(SCANNER_T, PB_T)                                                                                  \
@@ -438,10 +444,6 @@ void setup()
 #endif
 
 #if !defined(ARCH_PORTDUINO)
-    auto acc_info = i2cScanner->firstAccelerometer();
-    accelerometer_found = acc_info.type != ScanI2C::DeviceType::NONE ? acc_info.address : accelerometer_found;
-
-    LOG_DEBUG("acc_info = %i\n", acc_info.type);
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
         accelerometerThread = new AccelerometerThread(acc_info.type);
     }

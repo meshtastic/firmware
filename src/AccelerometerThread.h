@@ -61,10 +61,9 @@ class AccelerometerThread : public concurrency::OSThread
                 wakeScreen();
             }
 
-            if (config.device.double_tap_as_button_press && (click & 0x30)) {
-                LOG_DEBUG("Detected triple click. Skipping...\n");
-            } else if (config.device.double_tap_as_button_press && (click & 0x20)) {
+            if (config.device.double_tap_as_button_press && (click & 0x20)) {
                 buttonPress();
+                return 500;
             }
         }
         return ACCELEROMETER_CHECK_INTERVAL_MS;
