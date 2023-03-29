@@ -12,7 +12,7 @@
 
 #if defined(TTGO_T_ECHO)
 #define TECHO_DISPLAY_MODEL GxEPD2_154_D67
-#elif defined(RAK4630) || defined(MAKERPYTHON)
+#elif defined(RAK4630)
 
 // GxEPD2_213_BN - RAK14000 2.13 inch b/w 250x122 - changed from GxEPD2_213_B74 - which was not going to give partial update
 // support
@@ -26,6 +26,10 @@
 
 // 1.54 inch 200x200 - GxEPD2_154_M09
 //#define TECHO_DISPLAY_MODEL GxEPD2_154_M09
+
+#elif defined(MAKERPYTHON)
+// 2.9 inch 296x128 - GxEPD2_290_T5D
+#define TECHO_DISPLAY_MODEL GxEPD2_290_T5D
 
 #elif defined(PCA10059)
 
@@ -45,20 +49,23 @@ EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY
 {
 #if defined(TTGO_T_ECHO)
     setGeometry(GEOMETRY_RAWMODE, TECHO_DISPLAY_MODEL::WIDTH, TECHO_DISPLAY_MODEL::HEIGHT);
-#elif defined(RAK4630) || defined(MAKERPYTHON)
+#elif defined(RAK4630) 
 
     // GxEPD2_213_BN - RAK14000 2.13 inch b/w 250x122
-    // setGeometry(GEOMETRY_RAWMODE, 250, 122);
+    setGeometry(GEOMETRY_RAWMODE, 250, 122);
 
     // GxEPD2_420_M01
     // setGeometry(GEOMETRY_RAWMODE, 300, 400);
 
     // GxEPD2_290_T5D
-    setGeometry(GEOMETRY_RAWMODE, 296, 128);
+    //setGeometry(GEOMETRY_RAWMODE, 296, 128);
 
     // GxEPD2_154_M09
     // setGeometry(GEOMETRY_RAWMODE, 200, 200);
-
+#elif defined(MAKERPYTHON)
+    // GxEPD2_290_T5D
+    setGeometry(GEOMETRY_RAWMODE, 296, 128);
+    
 #elif defined(PCA10059)
 
     // GxEPD2_420_M01
