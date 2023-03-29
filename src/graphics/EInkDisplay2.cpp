@@ -49,7 +49,7 @@ EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY
 {
 #if defined(TTGO_T_ECHO)
     setGeometry(GEOMETRY_RAWMODE, TECHO_DISPLAY_MODEL::WIDTH, TECHO_DISPLAY_MODEL::HEIGHT);
-#elif defined(RAK4630) 
+#elif defined(RAK4630)
 
     // GxEPD2_213_BN - RAK14000 2.13 inch b/w 250x122
     setGeometry(GEOMETRY_RAWMODE, 250, 122);
@@ -58,14 +58,14 @@ EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY
     // setGeometry(GEOMETRY_RAWMODE, 300, 400);
 
     // GxEPD2_290_T5D
-    //setGeometry(GEOMETRY_RAWMODE, 296, 128);
+    // setGeometry(GEOMETRY_RAWMODE, 296, 128);
 
     // GxEPD2_154_M09
     // setGeometry(GEOMETRY_RAWMODE, 200, 200);
 #elif defined(MAKERPYTHON)
     // GxEPD2_290_T5D
     setGeometry(GEOMETRY_RAWMODE, 296, 128);
-    
+
 #elif defined(PCA10059)
 
     // GxEPD2_420_M01
