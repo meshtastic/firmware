@@ -218,6 +218,10 @@ Power::Power() : OSThread("Power")
 
 bool Power::analogInit()
 {
+#ifdef EXT_PWR_DETECT
+    pinMode(EXT_PWR_DETECT, INPUT);
+#endif
+
 #ifdef BATTERY_PIN
     LOG_DEBUG("Using analog input %d for battery level\n", BATTERY_PIN);
 
