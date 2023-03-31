@@ -281,8 +281,8 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
     if (p->priority != 0)
         out += DEBUG_PORT.mt_sprintf(" priority=%d", p->priority);
 
-    out += ")\n";
-    LOG_DEBUG("%s", out.c_str());
+    out += ")";
+    LOG_DEBUG("%s\n", out.c_str());
 }
 
 RadioInterface::RadioInterface()
