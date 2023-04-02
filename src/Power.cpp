@@ -165,11 +165,11 @@ class AnalogBatteryLevel : public HasBatteryLevel
     virtual bool isVbusIn() override
     {
 #ifdef EXT_PWR_DETECT
-    // if external powered that pin will be pulled up
-    if (digitalRead(EXT_PWR_DETECT) == HIGH) {
-        return true;
-    }
-    // if it's not HIGH - check the battery
+        // if external powered that pin will be pulled up
+        if (digitalRead(EXT_PWR_DETECT) == HIGH) {
+            return true;
+        }
+        // if it's not HIGH - check the battery
 #endif
 
         return getBattVoltage() > chargingVolt;
