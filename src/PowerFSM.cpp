@@ -26,6 +26,9 @@ static bool isPowered()
         1) If we're powered up and there's no battery, we must be getting power externally. (because we'd be dead otherwise)
 
         2) If we detect USB power from the power management chip, we must be getting power externally.
+
+        3) On some boards we don't have the power management chip (like AXPxxxx) so we use EXT_PWR_DETECT GPIO pin to detect
+       external power source (see `isVbusIn()` in `Power.cpp`)
     */
     return !isPowerSavingMode && powerStatus && (!powerStatus->getHasBattery() || powerStatus->getHasUSB());
 }
