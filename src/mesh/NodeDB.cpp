@@ -165,6 +165,8 @@ void NodeDB::installDefaultConfig()
     config.lora.hop_limit = HOP_RELIABLE;
     config.position.gps_enabled = true;
     config.position.position_broadcast_smart_enabled = true;
+    config.position.broadcast_smart_minimum_distance = 100;
+    config.position.broadcast_smart_minimum_interval_secs = 30;
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER)
         config.device.node_info_broadcast_secs = 3 * 60 * 60;
     config.device.serial_enabled = true;
@@ -231,9 +233,7 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
     } else if (role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
         config.display.screen_on_secs = 1;
     } else if (role == meshtastic_Config_DeviceConfig_Role_TRACKER) {
-        config.position.position_broadcast_smart_enabled = false;
-        config.position.position_broadcast_secs = 120;
-        config.position.gps_update_interval = 60;
+        config.position.gps_update_interval = 30;
     } else if (role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
         moduleConfig.telemetry.environment_measurement_enabled = true;
         moduleConfig.telemetry.environment_update_interval = 300;
@@ -721,7 +721,7 @@ void NodeDB::updateUser(uint32_t nodeId, const meshtastic_User &p)
 void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 {
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.from) {
-        LOG_DEBUG("Update DB node 0x%x, rx_time=%u\n", mp.from, mp.rx_time);
+        LOG_DEBUG("Update DB node 0x%x, rx_time=%u, channel=%d\n", mp.from, mp.rx_time, mp.channel);
 
         meshtastic_NodeInfo *info = getOrCreateNode(getFrom(&mp));
         if (!info) {
@@ -733,7 +733,20 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 
         if (mp.rx_snr)
             info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
+
+        if (mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP) {
+            info->channel = mp.channel;
+        }
     }
+}
+
+uint8_t NodeDB::getNodeChannel(NodeNum n)
+{
+    meshtastic_NodeInfo *info = getNode(n);
+    if (!info) {
+        return 0; // defaults to PRIMARY
+    }
+    return info->channel;
 }
 
 /// Find a node in our DB, return null for missing
