@@ -231,6 +231,8 @@ typedef struct _meshtastic_Config_DeviceConfig {
     /* Send our nodeinfo this often
  Defaults to 900 Seconds (15 minutes) */
     uint32_t node_info_broadcast_secs;
+    /* Treat double tap interrupt on supported accelerometers as a button press if set to true */
+    bool double_tap_as_button_press;
 } meshtastic_Config_DeviceConfig;
 
 /* Position Config */
@@ -262,6 +264,10 @@ typedef struct _meshtastic_Config_PositionConfig {
     uint32_t rx_gpio;
     /* (Re)define GPS_TX_PIN for your board. */
     uint32_t tx_gpio;
+    /* The minimum distance in meters traveled (since the last send) before we can send a position to the mesh if position_broadcast_smart_enabled */
+    uint32_t broadcast_smart_minimum_distance;
+    /* The minumum number of seconds (since the last send) before we can send a position to the mesh if position_broadcast_smart_enabled */
+    uint32_t broadcast_smart_minimum_interval_secs;
 } meshtastic_Config_PositionConfig;
 
 /* Power Config\
@@ -523,8 +529,8 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_Config_init_default           {0, {meshtastic_Config_DeviceConfig_init_default}}
-#define meshtastic_Config_DeviceConfig_init_default {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0}
-#define meshtastic_Config_PositionConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_Config_DeviceConfig_init_default {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0}
+#define meshtastic_Config_PositionConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_PowerConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_default {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_default, ""}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_default {0, 0, 0, 0}
@@ -532,8 +538,8 @@ extern "C" {
 #define meshtastic_Config_LoRaConfig_init_default {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}}
 #define meshtastic_Config_BluetoothConfig_init_default {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0}
 #define meshtastic_Config_init_zero              {0, {meshtastic_Config_DeviceConfig_init_zero}}
-#define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0}
-#define meshtastic_Config_PositionConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0}
+#define meshtastic_Config_PositionConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_PowerConfig_init_zero  {0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_zero {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_zero, ""}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_zero {0, 0, 0, 0}
@@ -549,6 +555,7 @@ extern "C" {
 #define meshtastic_Config_DeviceConfig_buzzer_gpio_tag 5
 #define meshtastic_Config_DeviceConfig_rebroadcast_mode_tag 6
 #define meshtastic_Config_DeviceConfig_node_info_broadcast_secs_tag 7
+#define meshtastic_Config_DeviceConfig_double_tap_as_button_press_tag 8
 #define meshtastic_Config_PositionConfig_position_broadcast_secs_tag 1
 #define meshtastic_Config_PositionConfig_position_broadcast_smart_enabled_tag 2
 #define meshtastic_Config_PositionConfig_fixed_position_tag 3
@@ -558,6 +565,8 @@ extern "C" {
 #define meshtastic_Config_PositionConfig_position_flags_tag 7
 #define meshtastic_Config_PositionConfig_rx_gpio_tag 8
 #define meshtastic_Config_PositionConfig_tx_gpio_tag 9
+#define meshtastic_Config_PositionConfig_broadcast_smart_minimum_distance_tag 10
+#define meshtastic_Config_PositionConfig_broadcast_smart_minimum_interval_secs_tag 11
 #define meshtastic_Config_PowerConfig_is_power_saving_tag 1
 #define meshtastic_Config_PowerConfig_on_battery_shutdown_after_secs_tag 2
 #define meshtastic_Config_PowerConfig_adc_multiplier_override_tag 3
@@ -640,7 +649,8 @@ X(a, STATIC,   SINGULAR, BOOL,     debug_log_enabled,   3) \
 X(a, STATIC,   SINGULAR, UINT32,   button_gpio,       4) \
 X(a, STATIC,   SINGULAR, UINT32,   buzzer_gpio,       5) \
 X(a, STATIC,   SINGULAR, UENUM,    rebroadcast_mode,   6) \
-X(a, STATIC,   SINGULAR, UINT32,   node_info_broadcast_secs,   7)
+X(a, STATIC,   SINGULAR, UINT32,   node_info_broadcast_secs,   7) \
+X(a, STATIC,   SINGULAR, BOOL,     double_tap_as_button_press,   8)
 #define meshtastic_Config_DeviceConfig_CALLBACK NULL
 #define meshtastic_Config_DeviceConfig_DEFAULT NULL
 
@@ -653,7 +663,9 @@ X(a, STATIC,   SINGULAR, UINT32,   gps_update_interval,   5) \
 X(a, STATIC,   SINGULAR, UINT32,   gps_attempt_time,   6) \
 X(a, STATIC,   SINGULAR, UINT32,   position_flags,    7) \
 X(a, STATIC,   SINGULAR, UINT32,   rx_gpio,           8) \
-X(a, STATIC,   SINGULAR, UINT32,   tx_gpio,           9)
+X(a, STATIC,   SINGULAR, UINT32,   tx_gpio,           9) \
+X(a, STATIC,   SINGULAR, UINT32,   broadcast_smart_minimum_distance,  10) \
+X(a, STATIC,   SINGULAR, UINT32,   broadcast_smart_minimum_interval_secs,  11)
 #define meshtastic_Config_PositionConfig_CALLBACK NULL
 #define meshtastic_Config_PositionConfig_DEFAULT NULL
 
@@ -753,12 +765,12 @@ extern const pb_msgdesc_t meshtastic_Config_BluetoothConfig_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define meshtastic_Config_BluetoothConfig_size   10
-#define meshtastic_Config_DeviceConfig_size      26
+#define meshtastic_Config_DeviceConfig_size      28
 #define meshtastic_Config_DisplayConfig_size     28
 #define meshtastic_Config_LoRaConfig_size        77
 #define meshtastic_Config_NetworkConfig_IpV4Config_size 20
 #define meshtastic_Config_NetworkConfig_size     195
-#define meshtastic_Config_PositionConfig_size    42
+#define meshtastic_Config_PositionConfig_size    54
 #define meshtastic_Config_PowerConfig_size       43
 #define meshtastic_Config_size                   198
 

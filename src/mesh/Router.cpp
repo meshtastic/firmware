@@ -173,6 +173,11 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
             handleReceived(p, src);
         }
 
+        if (!p->channel) { // don't override if a channel was requested
+            p->channel = nodeDB.getNodeChannel(p->to);
+            LOG_DEBUG("localSend to channel %d\n", p->channel);
+        }
+
         return send(p);
     }
 }

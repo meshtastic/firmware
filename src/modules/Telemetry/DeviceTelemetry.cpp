@@ -10,7 +10,7 @@
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
-#define MAGIC_USB_BATTERY_LEVEL 111
+#define MAGIC_USB_BATTERY_LEVEL 101
 
 int32_t DeviceTelemetryModule::runOnce()
 {
