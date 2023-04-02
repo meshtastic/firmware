@@ -30,10 +30,10 @@
 #undef RF95_MOSI
 #undef RF95_NSS
 
-#define RF95_SCK 10
-#define RF95_MOSI 11
-#define RF95_MISO 12
-#define RF95_NSS 13
+#define RF95_SCK PIN_SPI0_SCK
+#define RF95_MOSI PIN_SPI0_MOSI
+#define RF95_MISO PIN_SPI0_MISO
+#define RF95_NSS PIN_SPI0_SS
 
 #define LORA_DIO0 RADIOLIB_NC
 #define LORA_RESET 14
