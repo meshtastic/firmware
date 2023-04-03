@@ -193,11 +193,7 @@ void MQTT::reconnect()
         }
 
 #if HAS_WIFI
-        // placeholder till mqtt.tls_enabled works its way through.
-        bool tls_enabled = true;
-
-        // if (moduleConfig.mqtt.tls_enabled) {
-        if (tls_enabled) {
+        if (moduleConfig.mqtt.tls_enabled) {
             // change default for encrypted to 8883
             try {
                 serverPort = 8883;
