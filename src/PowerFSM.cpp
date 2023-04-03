@@ -69,11 +69,11 @@ static void lsIdle()
 
     // Do we have more sleeping to do?
     if (secsSlept < config.power.ls_secs) {
-        // Briefly come out of sleep long enough to blink the led once every few seconds
-        uint32_t sleepTime = 30;
-
         // If some other service would stall sleep, don't let sleep happen yet
         if (doPreflightSleep()) {
+            // Briefly come out of sleep long enough to blink the led once every few seconds
+            uint32_t sleepTime = 30;
+
             setLed(false); // Never leave led on while in light sleep
             esp_sleep_source_t wakeCause2 = doLightSleep(sleepTime * 1000LL);
 
