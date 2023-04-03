@@ -173,10 +173,8 @@ static void powerEnter()
         screen->setOn(true);
         setBluetoothEnable(true);
         // within enter() the function getState() returns the state we came from
-        if (strcmp(powerFSM.getState()->name, "BOOT") != 0 &&
-            strcmp(powerFSM.getState()->name, "POWER") != 0 &&
-            strcmp(powerFSM.getState()->name, "DARK") != 0)
-        {
+        if (strcmp(powerFSM.getState()->name, "BOOT") != 0 && strcmp(powerFSM.getState()->name, "POWER") != 0 &&
+            strcmp(powerFSM.getState()->name, "DARK") != 0) {
             screen->print("Powered...\n");
         }
     }
