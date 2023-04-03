@@ -193,16 +193,15 @@ void MQTT::reconnect()
         }
 
 #if HAS_WIFI
-        bool tls_encrypted = true;
-        bool tls_insecure = true;
+        // placeholder till mqtt.tls_enabled works its way through.
+        bool tls_enabled = true;
 
-        if (tls_encrypted) {
+        // if (moduleConfig.mqtt.tls_enabled) {
+        if (tls_enabled) {
             // change default for encrypted to 8883
             try {
                 serverPort = 8883;
-                if (tls_insecure) {
-                    wifiSecureClient.setInsecure();
-                }
+                wifiSecureClient.setInsecure();
 
                 pubSub.setClient(wifiSecureClient);
                 LOG_INFO("Using TLS-encrypted session\n");
