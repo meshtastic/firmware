@@ -192,6 +192,26 @@ void MQTT::reconnect()
             mqttPassword = moduleConfig.mqtt.password;
         }
 
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+        if (moduleConfig.mqtt.tls_enabled) {
+            // change default for encrypted to 8883
+            try {
+                serverPort = 8883;
+                wifiSecureClient.setInsecure();
+
+                pubSub.setClient(wifiSecureClient);
+                LOG_INFO("Using TLS-encrypted session\n");
+            } catch (const std::exception &e) {
+                LOG_ERROR("MQTT ERROR: %s\n", e.what());
+            }
+        } else {
+            LOG_INFO("Using non-TLS-encrypted session\n");
+            pubSub.setClient(mqttClient);
+        }
+#else
+        pubSub.setClient(mqttClient);
+#endif
+
         String server = String(serverAddr);
         int delimIndex = server.indexOf(':');
         if (delimIndex > 0) {
