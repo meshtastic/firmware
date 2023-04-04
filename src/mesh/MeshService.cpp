@@ -125,7 +125,6 @@ void MeshService::reloadOwner(bool shouldSave)
     // update everyone else and save to disk
     if (nodeInfoModule && shouldSave) {
         nodeInfoModule->sendOurNodeInfo();
-        nodeDB.saveToDisk(SEGMENT_DEVICESTATE);
     }
 }
 
