@@ -1206,7 +1206,7 @@ void Screen::setFrames()
     LOG_DEBUG("Total frame count: %d\n", totalFrameCount);
 
     // We don't show the node info our our node (if we have it yet - we should)
-    size_t numnodes = nodeStatus->getNumTotal();
+    size_t numnodes = nodeDB.getNumNodes();
     if (numnodes > 0)
         numnodes--;
 
