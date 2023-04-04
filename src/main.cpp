@@ -445,7 +445,7 @@ void setup()
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
 #endif
 
-#if !defined(ARCH_PORTDUINO)
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
         accelerometerThread = new AccelerometerThread(acc_info.type);
     }
