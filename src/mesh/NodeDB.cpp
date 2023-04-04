@@ -710,9 +710,8 @@ void NodeDB::updateUser(uint32_t nodeId, const meshtastic_User &p)
         powerFSM.trigger(EVENT_NODEDB_UPDATED);
         notifyObservers(true); // Force an update whether or not our node counts have changed
 
-        // Not really needed - we will save anyways when we go to sleep
         // We just changed something important about the user, store our DB
-        // saveToDisk();
+        saveToDisk(SEGMENT_DEVICESTATE);
     }
 }
 
