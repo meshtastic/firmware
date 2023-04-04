@@ -8,7 +8,9 @@
 #include <PubSubClient.h>
 #if HAS_WIFI
 #include <WiFiClient.h>
+#if !defined(ARCH_PORTDUINO)
 #include <WiFiClientSecure.h>
+#endif
 #endif
 #if HAS_ETHERNET
 #include <EthernetClient.h>

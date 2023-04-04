@@ -192,7 +192,7 @@ void MQTT::reconnect()
             mqttPassword = moduleConfig.mqtt.password;
         }
 
-#if HAS_WIFI
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
         if (moduleConfig.mqtt.tls_enabled) {
             // change default for encrypted to 8883
             try {
