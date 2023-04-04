@@ -77,8 +77,8 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
 
     nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
     if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB.getNode(mp->from)->has_user && nodeInfoModule) {
-        LOG_INFO("Heard a node we don't know, sending NodeInfo and asking for a response.\n");
-        nodeInfoModule->sendOurNodeInfo(mp->from, true);
+        LOG_INFO("Heard a node on channel %d we don't know, sending NodeInfo and asking for a response.\n", mp->channel);
+        nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
     }
 
     printPacket("Forwarding to phone", mp);
@@ -125,7 +125,6 @@ void MeshService::reloadOwner(bool shouldSave)
     // update everyone else and save to disk
     if (nodeInfoModule && shouldSave) {
         nodeInfoModule->sendOurNodeInfo();
-        nodeDB.saveToDisk(SEGMENT_DEVICESTATE);
     }
 }
 
@@ -242,13 +241,13 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
 
     if (node->has_position && (node->position.latitude_i != 0 || node->position.longitude_i != 0)) {
         if (positionModule) {
-            LOG_INFO("Sending position ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
-            positionModule->sendOurPosition(dest, wantReplies);
+            LOG_INFO("Sending position ping to 0x%x, wantReplies=%d, channel=%d\n", dest, wantReplies, node->channel);
+            positionModule->sendOurPosition(dest, wantReplies, node->channel);
         }
     } else {
         if (nodeInfoModule) {
-            LOG_INFO("Sending nodeinfo ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
-            nodeInfoModule->sendOurNodeInfo(dest, wantReplies);
+            LOG_INFO("Sending nodeinfo ping to 0x%x, wantReplies=%d, channel=%d\n", dest, wantReplies, node->channel);
+            nodeInfoModule->sendOurNodeInfo(dest, wantReplies, node->channel);
         }
     }
 }
