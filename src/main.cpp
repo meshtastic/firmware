@@ -452,7 +452,11 @@ void setup()
     // Init our SPI controller (must be before screen and lora)
     initSPI();
 #ifdef ARCH_RP2040
-    SPI.begin(true);
+    SPI.setCS(RF95_NSS);
+    SPI.setSCK(RF95_SCK);
+    SPI.setRX(RF95_MOSI);
+    SPI.setTX(RF95_MISO);
+    SPI.begin(false);
 #elif !defined(ARCH_ESP32)
     SPI.begin();
 #else
