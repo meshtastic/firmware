@@ -1,7 +1,6 @@
 #include "RTC.h"
 #include "configuration.h"
 #include <stm32wle5xx.h>
-#include <SubGhz.h> // ugly hack to draw this in for linker. Radiolib depends on it.
 #include <stm32wlxx_hal.h>
 
 void setBluetoothEnable(bool on) {}
