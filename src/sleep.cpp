@@ -16,11 +16,11 @@
 #include <driver/rtc_io.h>
 #include <driver/uart.h>
 
-#ifndef INCLUDE_vTaskSuspend
-#define INCLUDE_vTaskSuspend 0
+esp_sleep_source_t wakeCause; // the reason we booted this time
 #endif
 
-esp_sleep_source_t wakeCause; // the reason we booted this time
+#ifndef INCLUDE_vTaskSuspend
+#define INCLUDE_vTaskSuspend 0
 #endif
 
 #ifdef HAS_PMU
