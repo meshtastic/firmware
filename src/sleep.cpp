@@ -203,7 +203,11 @@ void doGPSpowersave(bool on)
 
 void doDeepSleep(uint64_t msecToWake)
 {
-    LOG_INFO("Entering deep sleep for %lu seconds\n", msecToWake / 1000);
+    if (INCLUDE_vTaskSuspend && (msecToWake == portMAX_DELAY)) {
+        LOG_INFO("Entering deep sleep forever\n");
+    } else {
+        LOG_INFO("Entering deep sleep for %u seconds\n", msecToWake / 1000);
+    }
 
     // not using wifi yet, but once we are this is needed to shutoff the radio hw
     // esp_wifi_stop();
