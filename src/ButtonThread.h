@@ -123,9 +123,7 @@ class ButtonThread : public concurrency::OSThread
     static void userButtonPressedLong()
     {
         // LOG_DEBUG("Long press!\n");
-        if (screen_found == true) {
-            screen->adjustBrightness();
-        }
+        screen->adjustBrightness();
         // If user button is held down for 10 seconds, shutdown the device.
         if ((millis() - longPressTime > 10000) && (longPressTime > 0)) {
 #if defined(ARCH_NRF52) || defined(ARCH_ESP32)

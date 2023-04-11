@@ -201,7 +201,7 @@ void doGPSpowersave(bool on)
 #endif
 }
 
-void doDeepSleep(uint64_t msecToWake)
+void doDeepSleep(uint32_t msecToWake)
 {
     if (INCLUDE_vTaskSuspend && (msecToWake == portMAX_DELAY)) {
         LOG_INFO("Entering deep sleep forever\n");
