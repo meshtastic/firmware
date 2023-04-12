@@ -55,6 +55,10 @@ Router::Router() : concurrency::OSThread("Router"), fromRadioQueue(MAX_RX_FROMRA
     LOG_DEBUG("Size of MeshPacket %d\n", sizeof(MeshPacket)); */
 
     fromRadioQueue.setReader(this);
+
+    // init Lockguard for crypt operations
+    assert(!cryptLock);
+    cryptLock = new concurrency::Lock();
 }
 
 /**
@@ -305,6 +309,8 @@ void Router::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Rout
 
 bool perhapsDecode(meshtastic_MeshPacket *p)
 {
+    concurrency::LockGuard g(cryptLock);
+
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER &&
         config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING)
         return false;
@@ -371,6 +377,8 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
  */
 meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 {
+    concurrency::LockGuard g(cryptLock);
+
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded);
