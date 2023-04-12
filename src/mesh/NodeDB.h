@@ -86,7 +86,7 @@ class NodeDB
 
     /** Update user info for this node based on received user data
      */
-    void updateUser(uint32_t nodeId, const meshtastic_User &p);
+    bool updateUser(uint32_t nodeId, const meshtastic_User &p);
 
     /// @return our node number
     NodeNum getNodeNum() { return myNodeInfo.my_node_num; }

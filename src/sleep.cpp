@@ -19,6 +19,10 @@
 esp_sleep_source_t wakeCause; // the reason we booted this time
 #endif
 
+#ifndef INCLUDE_vTaskSuspend
+#define INCLUDE_vTaskSuspend 0
+#endif
+
 #ifdef HAS_PMU
 #include "XPowersLibInterface.hpp"
 extern XPowersLibInterface *PMU;
@@ -201,9 +205,13 @@ void doGPSpowersave(bool on)
 #endif
 }
 
-void doDeepSleep(uint64_t msecToWake)
+void doDeepSleep(uint32_t msecToWake)
 {
-    LOG_INFO("Entering deep sleep for %lu seconds\n", msecToWake / 1000);
+    if (INCLUDE_vTaskSuspend && (msecToWake == portMAX_DELAY)) {
+        LOG_INFO("Entering deep sleep forever\n");
+    } else {
+        LOG_INFO("Entering deep sleep for %u seconds\n", msecToWake / 1000);
+    }
 
     // not using wifi yet, but once we are this is needed to shutoff the radio hw
     // esp_wifi_stop();

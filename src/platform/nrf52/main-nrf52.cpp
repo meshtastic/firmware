@@ -155,7 +155,7 @@ void nrf52Setup()
     nRFCrypto.end();
 }
 
-void cpuDeepSleep(uint64_t msecToWake)
+void cpuDeepSleep(uint32_t msecToWake)
 {
     // FIXME, configure RTC or button press to wake us
     // FIXME, power down SPI, I2C, RAMs

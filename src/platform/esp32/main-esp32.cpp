@@ -162,7 +162,7 @@ void esp32Loop()
     // radio.radioIf.canSleep();
 }
 
-void cpuDeepSleep(uint64_t msecToWake)
+void cpuDeepSleep(uint32_t msecToWake)
 {
     /*
     Some ESP32 IOs have internal pullups or pulldowns, which are enabled by default.
