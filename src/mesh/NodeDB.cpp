@@ -767,7 +767,7 @@ meshtastic_NodeInfo *NodeDB::getOrCreateNode(NodeNum n)
     meshtastic_NodeInfo *info = getNode(n);
 
     if (!info) {
-        if (*numNodes >= MAX_NUM_NODES) {
+        if ((*numNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < meshtastic_NodeInfo_size * 3)) {
             screen->print("warning: node_db full! erasing oldest entry\n");
             // look for oldest node and erase it
             uint32_t oldest = UINT32_MAX;
