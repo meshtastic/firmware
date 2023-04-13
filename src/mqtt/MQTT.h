@@ -69,6 +69,9 @@ class MQTT : private concurrency::OSThread
     virtual int32_t runOnce() override;
 
   private:
+    std::string statusTopic = "/2/stat/";
+    std::string cryptTopic = "/2/c/";   // msh/2/c/CHANNELID/NODEID
+    std::string jsonTopic = "/2/json/"; // msh/2/json/CHANNELID/NODEID
     /** return true if we have a channel that wants uplink/downlink
      */
     bool wantsLink() const;
