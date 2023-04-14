@@ -142,12 +142,14 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
     case meshtastic_XModem_Control_EOT:
         // End of transmission
         sendControl(meshtastic_XModem_Control_ACK);
+        file.flush();
         file.close();
         isReceiving = false;
         break;
     case meshtastic_XModem_Control_CAN:
         // Cancel transmission and remove file
         sendControl(meshtastic_XModem_Control_ACK);
+        file.flush();
         file.close();
         FSCom.remove(filename);
         isReceiving = false;
