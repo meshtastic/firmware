@@ -15,12 +15,18 @@ static SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 void LockingModule::SPIbeginTransaction()
 {
     spiLock->lock();
+#if defined(ARCH_RP2040)
+    digitalWrite(RF95_NSS, LOW);
+#endif
 
     Module::SPIbeginTransaction();
 }
 
 void LockingModule::SPIendTransaction()
 {
+#if defined(ARCH_RP2040)
+    digitalWrite(RF95_NSS, HIGH);
+#endif
     spiLock->unlock();
 
     Module::SPIendTransaction();

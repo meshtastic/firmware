@@ -452,11 +452,12 @@ void setup()
     // Init our SPI controller (must be before screen and lora)
     initSPI();
 #ifdef ARCH_RP2040
-    SPI.setCS(RF95_NSS);
-    SPI.setSCK(RF95_SCK);
-    SPI.setRX(RF95_MOSI);
-    SPI.setTX(RF95_MISO);
-    SPI.begin(false);
+    SPI1.setSCK(RF95_SCK);
+    SPI1.setTX(RF95_MOSI);
+    SPI1.setRX(RF95_MISO);
+    pinMode(RF95_NSS, OUTPUT);
+    digitalWrite(RF95_NSS, HIGH);
+    SPI1.begin(false);
 #elif !defined(ARCH_ESP32)
     SPI.begin();
 #else
@@ -548,7 +549,7 @@ void setup()
 
 #if defined(USE_SX1262)
     if (!rIf) {
-        rIf = new SX1262Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
+        rIf = new SX1262Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI1);
         if (!rIf->init()) {
             LOG_WARN("Failed to find SX1262 radio\n");
             delete rIf;
