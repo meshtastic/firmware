@@ -490,6 +490,7 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
         } else {
             okay = true;
         }
+        f.flush();
         f.close();
 
         // brief window of risk here ;-)
