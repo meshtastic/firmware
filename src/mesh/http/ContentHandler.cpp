@@ -234,15 +234,18 @@ void htmlDeleteDir(const char *dirname)
     while (file) {
         if (file.isDirectory() && !String(file.name()).endsWith(".")) {
             htmlDeleteDir(file.name());
+            file.flush();
             file.close();
         } else {
             String fileName = String(file.name());
+            file.flush();
             file.close();
             LOG_DEBUG("    %s\n", fileName.c_str());
             FSCom.remove(fileName);
         }
         file = root.openNextFile();
     }
+    root.flush();
     root.close();
 }
 
@@ -521,7 +524,7 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
         std::string pathname = "/static/" + filename;
 
         // Create a new file to stream the data into
-        File file = FSCom.open(pathname.c_str(), "w");
+        File file = FSCom.open(pathname.c_str(), FILE_O_WRITE);
         size_t fileLength = 0;
         didwrite = true;
 
@@ -536,6 +539,7 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
 
             // Abort the transfer if there is less than 50k space left on the filesystem.
             if (FSCom.totalBytes() - FSCom.usedBytes() < 51200) {
+                file.flush();
                 file.close();
                 res->println("<p>Write aborted! Reserving 50k on filesystem.</p>");
 
@@ -553,6 +557,7 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
         }
         // enableLoopWDT();
 
+        file.flush();
         file.close();
         res->printf("<p>Saved %d bytes to %s</p>", (int)fileLength, pathname.c_str());
     }
