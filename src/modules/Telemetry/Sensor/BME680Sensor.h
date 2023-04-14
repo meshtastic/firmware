@@ -2,7 +2,7 @@
 #include "TelemetrySensor.h"
 #include <bsec.h>
 
-#define STATE_SAVE_PERIOD UINT32_C(360 * 60 * 1000)
+#define STATE_SAVE_PERIOD UINT32_C(360 * 60 * 1000) // That's 6 hours worth of millis()
 
 const uint8_t bsec_config_iaq[] = {
 #include <config/generic_33v_3s_4d/bsec_iaq.txt>
