@@ -202,7 +202,6 @@ void RadioLibInterface::onNotify(uint32_t notification)
         startTransmitTimer();
         break;
     case ISR_RX:
-        LOG_DEBUG("Rx interrupt\n");
         handleReceiveInterrupt();
         startReceive();
         // LOG_DEBUG("rx complete - starting timer\n");
