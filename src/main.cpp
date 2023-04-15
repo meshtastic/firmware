@@ -452,13 +452,22 @@ void setup()
     // Init our SPI controller (must be before screen and lora)
     initSPI();
 #ifdef ARCH_RP2040
+#ifdef HW_SPI1_DEVICE
     SPI1.setSCK(RF95_SCK);
     SPI1.setTX(RF95_MOSI);
     SPI1.setRX(RF95_MISO);
     pinMode(RF95_NSS, OUTPUT);
     digitalWrite(RF95_NSS, HIGH);
     SPI1.begin(false);
-#elif !defined(ARCH_ESP32)
+#else                      // HW_SPI1_DEVICE
+    SPI.setSCK(RF95_SCK);
+    SPI.setTX(RF95_MOSI);
+    SPI.setRX(RF95_MISO);
+    pinMode(RF95_NSS, OUTPUT);
+    digitalWrite(RF95_NSS, HIGH);
+    SPI.begin(false);
+#endif                     // HW_SPI1_DEVICE
+#elif !defined(ARCH_ESP32) // ARCH_RP2040
     SPI.begin();
 #else
     // ESP32
@@ -549,7 +558,11 @@ void setup()
 
 #if defined(USE_SX1262)
     if (!rIf) {
+#ifdef HW_SPI1_DEVICE
         rIf = new SX1262Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI1);
+#else
+        rIf = new SX1262Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
+#endif
         if (!rIf->init()) {
             LOG_WARN("Failed to find SX1262 radio\n");
             delete rIf;
