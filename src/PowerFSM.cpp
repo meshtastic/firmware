@@ -69,11 +69,11 @@ static void lsIdle()
 
     // Do we have more sleeping to do?
     if (secsSlept < config.power.ls_secs) {
-        // Briefly come out of sleep long enough to blink the led once every few seconds
-        uint32_t sleepTime = 30;
-
         // If some other service would stall sleep, don't let sleep happen yet
         if (doPreflightSleep()) {
+            // Briefly come out of sleep long enough to blink the led once every few seconds
+            uint32_t sleepTime = 30;
+
             setLed(false); // Never leave led on while in light sleep
             esp_sleep_source_t wakeCause2 = doLightSleep(sleepTime * 1000LL);
 
@@ -103,8 +103,7 @@ static void lsIdle()
 #else
                 bool pressed = false;
 #endif
-                if (pressed) // If we woke because of press, instead generate a PRESS event.
-                {
+                if (pressed) { // If we woke because of press, instead generate a PRESS event.
                     powerFSM.trigger(EVENT_PRESS);
                 } else {
                     // Otherwise let the NB state handle the IRQ (and that state will handle stuff like IRQs etc)
@@ -172,7 +171,11 @@ static void powerEnter()
     } else {
         screen->setOn(true);
         setBluetoothEnable(true);
-        screen->print("Powered...\n");
+        // within enter() the function getState() returns the state we came from
+        if (strcmp(powerFSM.getState()->name, "BOOT") != 0 && strcmp(powerFSM.getState()->name, "POWER") != 0 &&
+            strcmp(powerFSM.getState()->name, "DARK") != 0) {
+            screen->print("Powered...\n");
+        }
     }
 }
 
@@ -189,7 +192,8 @@ static void powerExit()
 {
     screen->setOn(true);
     setBluetoothEnable(true);
-    screen->print("Unpowered...\n");
+    if (!isPowered())
+        screen->print("Unpowered...\n");
 }
 
 static void onEnter()
@@ -249,7 +253,7 @@ void PowerFSM_setup()
     // Handle press events - note: we ignore button presses when in API mode
     powerFSM.add_transition(&stateLS, &stateON, EVENT_PRESS, NULL, "Press");
     powerFSM.add_transition(&stateNB, &stateON, EVENT_PRESS, NULL, "Press");
-    powerFSM.add_transition(&stateDARK, &stateON, EVENT_PRESS, NULL, "Press");
+    powerFSM.add_transition(&stateDARK, isPowered() ? &statePOWER : &stateON, EVENT_PRESS, NULL, "Press");
     powerFSM.add_transition(&statePOWER, &statePOWER, EVENT_PRESS, screenPress, "Press");
     powerFSM.add_transition(&stateON, &stateON, EVENT_PRESS, screenPress, "Press"); // reenter On to restart our timers
     powerFSM.add_transition(&stateSERIAL, &stateSERIAL, EVENT_PRESS, screenPress,
@@ -320,6 +324,12 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateDARK, &stateDARK, EVENT_CONTACT_FROM_PHONE, NULL, "Contact from phone");
 
     powerFSM.add_timed_transition(&stateON, &stateDARK,
+                                  getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL,
+                                  "Screen-on timeout");
+    powerFSM.add_timed_transition(&statePOWER, &stateDARK,
+                                  getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL,
+                                  "Screen-on timeout");
+    powerFSM.add_timed_transition(&stateDARK, &stateDARK,
                                   getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL,
                                   "Screen-on timeout");
 

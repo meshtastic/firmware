@@ -124,13 +124,8 @@ class ButtonThread : public concurrency::OSThread
     {
         // LOG_DEBUG("Long press!\n");
         // If user button is held down for 5 seconds, shutdown the device.
-        if ((millis() - longPressTime > 5 * 1000) && (longPressTime > 0)) {
-#ifdef HAS_PMU
-            if (pmu_found == true) {
-                setLed(false);
-                power->shutdown();
-            }
-#elif defined(ARCH_NRF52) || defined(ARCH_ESP32)
+        if ((millis() - longPressTime > 5000) && (longPressTime > 0)) {
+#if defined(ARCH_NRF52) || defined(ARCH_ESP32)
             // Do actual shutdown when button released, otherwise the button release
             // may wake the board immediatedly.
             if ((!shutdown_on_long_stop) && (millis() > 30 * 1000)) {

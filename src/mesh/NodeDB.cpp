@@ -490,6 +490,7 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
         } else {
             okay = true;
         }
+        f.flush();
         f.close();
 
         // brief window of risk here ;-)
@@ -689,11 +690,11 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
 
 /** Update user info for this node based on received user data
  */
-void NodeDB::updateUser(uint32_t nodeId, const meshtastic_User &p)
+bool NodeDB::updateUser(uint32_t nodeId, const meshtastic_User &p)
 {
     meshtastic_NodeInfo *info = getOrCreateNode(nodeId);
     if (!info) {
-        return;
+        return false;
     }
 
     LOG_DEBUG("old user %s/%s/%s\n", info->user.id, info->user.long_name, info->user.short_name);
@@ -710,10 +711,11 @@ void NodeDB::updateUser(uint32_t nodeId, const meshtastic_User &p)
         powerFSM.trigger(EVENT_NODEDB_UPDATED);
         notifyObservers(true); // Force an update whether or not our node counts have changed
 
-        // Not really needed - we will save anyways when we go to sleep
         // We just changed something important about the user, store our DB
-        // saveToDisk();
+        saveToDisk(SEGMENT_DEVICESTATE);
     }
+
+    return changed;
 }
 
 /// given a subpacket sniffed from the network, update our DB state
