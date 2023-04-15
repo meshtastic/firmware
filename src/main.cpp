@@ -463,8 +463,6 @@ void setup()
     SPI.setSCK(RF95_SCK);
     SPI.setTX(RF95_MOSI);
     SPI.setRX(RF95_MISO);
-    pinMode(RF95_NSS, OUTPUT);
-    digitalWrite(RF95_NSS, HIGH);
     SPI.begin(false);
 #endif                     // HW_SPI1_DEVICE
 #elif !defined(ARCH_ESP32) // ARCH_RP2040
