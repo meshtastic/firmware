@@ -85,6 +85,8 @@ typedef enum _meshtastic_PortNum {
     /* Provides a traceroute functionality to show the route a packet towards
  a certain destination would take on the mesh. */
     meshtastic_PortNum_TRACEROUTE_APP = 70,
+    /* Aggregates edge info for the network by sending out a list of each node's neighbors */
+    meshtastic_PortNum_NEIGHBORINFO_APP = 71,
     /* Private applications should use portnums >= 256.
  To simplify initial development and testing you can use "PRIVATE_APP"
  in your code without needing to rebuild protobuf files (via [regen-protos.sh](https://github.com/meshtastic/firmware/blob/master/bin/regen-protos.sh)) */
