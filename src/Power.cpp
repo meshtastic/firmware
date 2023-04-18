@@ -351,11 +351,13 @@ void Power::readPowerStatus()
             sprintf(mac, "!%02x%02x%02x%02x", dmac[2], dmac[3], dmac[4], dmac[5]);
 
             auto newHeap = memGet.getFreeHeap();
-            std::string heapTopic = (*moduleConfig.mqtt.root ? moduleConfig.mqtt.root : "msh") + std::string("/2/heap/") + std::string(mac);
+            std::string heapTopic =
+                (*moduleConfig.mqtt.root ? moduleConfig.mqtt.root : "msh") + std::string("/2/heap/") + std::string(mac);
             std::string heapString = std::to_string(newHeap);
             mqtt->pubSub.publish(heapTopic.c_str(), heapString.c_str(), false);
             auto wifiRSSI = WiFi.RSSI();
-            std::string wifiTopic = (*moduleConfig.mqtt.root ? moduleConfig.mqtt.root : "msh") + std::string("/2/wifi/") + std::string(mac);
+            std::string wifiTopic =
+                (*moduleConfig.mqtt.root ? moduleConfig.mqtt.root : "msh") + std::string("/2/wifi/") + std::string(mac);
             std::string wifiString = std::to_string(wifiRSSI);
             mqtt->pubSub.publish(wifiTopic.c_str(), wifiString.c_str(), false);
         }
