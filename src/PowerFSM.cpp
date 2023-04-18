@@ -99,7 +99,7 @@ static void lsIdle()
                 LOG_INFO("wakeCause2 %d\n", wakeCause2);
 
 #ifdef BUTTON_PIN
-                bool pressed = !digitalRead(BUTTON_PIN);
+                bool pressed = !digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
 #else
                 bool pressed = false;
 #endif
