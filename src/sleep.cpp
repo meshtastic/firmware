@@ -19,6 +19,10 @@
 esp_sleep_source_t wakeCause; // the reason we booted this time
 #endif
 
+#ifndef INCLUDE_vTaskSuspend
+#define INCLUDE_vTaskSuspend 0
+#endif
+
 #ifdef HAS_PMU
 #include "XPowersLibInterface.hpp"
 extern XPowersLibInterface *PMU;
@@ -201,9 +205,13 @@ void doGPSpowersave(bool on)
 #endif
 }
 
-void doDeepSleep(uint64_t msecToWake)
+void doDeepSleep(uint32_t msecToWake)
 {
-    LOG_INFO("Entering deep sleep for %lu seconds\n", msecToWake / 1000);
+    if (INCLUDE_vTaskSuspend && (msecToWake == portMAX_DELAY)) {
+        LOG_INFO("Entering deep sleep forever\n");
+    } else {
+        LOG_INFO("Entering deep sleep for %u seconds\n", msecToWake / 1000);
+    }
 
     // not using wifi yet, but once we are this is needed to shutoff the radio hw
     // esp_wifi_stop();
@@ -301,7 +309,8 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // assert(esp_sleep_enable_uart_wakeup(0) == ESP_OK);
 #endif
 #ifdef BUTTON_PIN
-    esp_sleep_enable_ext0_wakeup((gpio_num_t)BUTTON_PIN, LOW); // when user presses, this button goes low
+    esp_sleep_enable_ext0_wakeup((gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN),
+                                 LOW); // when user presses, this button goes low
 #endif
 #if defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
     gpio_wakeup_enable((gpio_num_t)LORA_DIO1, GPIO_INTR_HIGH_LEVEL); // SX126x/SX128x interrupt, active high
@@ -330,7 +339,8 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
 #ifdef BUTTON_PIN
     if (cause == ESP_SLEEP_WAKEUP_GPIO)
-        LOG_INFO("Exit light sleep gpio: btn=%d\n", !digitalRead(BUTTON_PIN));
+        LOG_INFO("Exit light sleep gpio: btn=%d\n",
+                 !digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
 #endif
 
     return cause;

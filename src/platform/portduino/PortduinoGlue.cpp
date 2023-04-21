@@ -16,7 +16,7 @@ void setBluetoothEnable(bool on)
     // not needed
 }
 
-void cpuDeepSleep(uint64_t msecs)
+void cpuDeepSleep(uint32_t msecs)
 {
     notImplemented("cpuDeepSleep");
 }

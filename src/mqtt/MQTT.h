@@ -8,6 +8,9 @@
 #include <PubSubClient.h>
 #if HAS_WIFI
 #include <WiFiClient.h>
+#if !defined(ARCH_PORTDUINO)
+#include <WiFiClientSecure.h>
+#endif
 #endif
 #if HAS_ETHERNET
 #include <EthernetClient.h>
@@ -23,9 +26,11 @@ class MQTT : private concurrency::OSThread
 {
     // supposedly the current version is busted:
     // http://www.iotsharing.com/2017/08/how-to-use-esp32-mqtts-with-mqtts-mosquitto-broker-tls-ssl.html
-    // WiFiClientSecure wifiClient;
 #if HAS_WIFI
     WiFiClient mqttClient;
+#if !defined(ARCH_PORTDUINO)
+    WiFiClientSecure wifiSecureClient;
+#endif
 #endif
 #if HAS_ETHERNET
     EthernetClient mqttClient;
@@ -64,6 +69,9 @@ class MQTT : private concurrency::OSThread
     virtual int32_t runOnce() override;
 
   private:
+    std::string statusTopic = "/2/stat/";
+    std::string cryptTopic = "/2/c/";   // msh/2/c/CHANNELID/NODEID
+    std::string jsonTopic = "/2/json/"; // msh/2/json/CHANNELID/NODEID
     /** return true if we have a channel that wants uplink/downlink
      */
     bool wantsLink() const;
