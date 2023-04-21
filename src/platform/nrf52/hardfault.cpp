@@ -90,7 +90,7 @@ extern "C" void HardFault_Handler(void)
     asm volatile(" mrs r0,msp\n"
                  " b HardFault_Impl \n");
 }
-#else
+#elif !defined(ARCH_NRF52)
 
 /* The prototype shows it is a naked function - in effect this is just an
 assembly function. */

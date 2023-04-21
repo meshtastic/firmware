@@ -490,6 +490,7 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
         } else {
             okay = true;
         }
+        f.flush();
         f.close();
 
         // brief window of risk here ;-)
@@ -689,11 +690,11 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
 
 /** Update user info for this node based on received user data
  */
-void NodeDB::updateUser(uint32_t nodeId, const meshtastic_User &p)
+bool NodeDB::updateUser(uint32_t nodeId, const meshtastic_User &p)
 {
     meshtastic_NodeInfo *info = getOrCreateNode(nodeId);
     if (!info) {
-        return;
+        return false;
     }
 
     LOG_DEBUG("old user %s/%s/%s\n", info->user.id, info->user.long_name, info->user.short_name);
@@ -713,6 +714,8 @@ void NodeDB::updateUser(uint32_t nodeId, const meshtastic_User &p)
         // We just changed something important about the user, store our DB
         saveToDisk(SEGMENT_DEVICESTATE);
     }
+
+    return changed;
 }
 
 /// given a subpacket sniffed from the network, update our DB state
@@ -765,7 +768,7 @@ meshtastic_NodeInfo *NodeDB::getOrCreateNode(NodeNum n)
     meshtastic_NodeInfo *info = getNode(n);
 
     if (!info) {
-        if (*numNodes >= MAX_NUM_NODES) {
+        if ((*numNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < meshtastic_NodeInfo_size * 3)) {
             screen->print("warning: node_db full! erasing oldest entry\n");
             // look for oldest node and erase it
             uint32_t oldest = UINT32_MAX;

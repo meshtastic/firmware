@@ -212,7 +212,7 @@ Power::Power() : OSThread("Power")
     statusHandler = {};
     low_voltage_counter = 0;
 #ifdef DEBUG_HEAP
-    lastheap = ESP.getFreeHeap();
+    lastheap = memGet.getFreeHeap();
 #endif
 }
 
@@ -277,12 +277,11 @@ void Power::shutdown()
     LOG_INFO("Shutting down\n");
 
 #ifdef HAS_PMU
-    if (PMU) {
+    if (pmu_found == true) {
         PMU->setChargingLedMode(XPOWERS_CHG_LED_OFF);
+        PMU->shutdown();
     }
-#endif
-
-#if defined(ARCH_NRF52) || defined(ARCH_ESP32)
+#elif defined(ARCH_NRF52) || defined(ARCH_ESP32)
 #ifdef PIN_LED1
     ledOff(PIN_LED1);
 #endif
@@ -328,7 +327,7 @@ void Power::readPowerStatus()
                   powerStatus2.getIsCharging(), powerStatus2.getBatteryVoltageMv(), powerStatus2.getBatteryChargePercent());
         newStatus.notifyObservers(&powerStatus2);
 #ifdef DEBUG_HEAP
-        if (lastheap != ESP.getFreeHeap()) {
+        if (lastheap != memGet.getFreeHeap()) {
             LOG_DEBUG("Threads running:");
             int running = 0;
             for (int i = 0; i < MAX_THREADS; i++) {
@@ -339,9 +338,9 @@ void Power::readPowerStatus()
                 }
             }
             LOG_DEBUG("\n");
-            LOG_DEBUG("Heap status: %d/%d bytes free (%d), running %d/%d threads\n", ESP.getFreeHeap(), ESP.getHeapSize(),
-                      ESP.getFreeHeap() - lastheap, running, concurrency::mainController.size(false));
-            lastheap = ESP.getFreeHeap();
+            LOG_DEBUG("Heap status: %d/%d bytes free (%d), running %d/%d threads\n", memGet.getFreeHeap(), memGet.getHeapSize(),
+                      memGet.getFreeHeap() - lastheap, running, concurrency::mainController.size(false));
+            lastheap = memGet.getFreeHeap();
         }
 #ifdef DEBUG_HEAP_MQTT
         if (mqtt) {
@@ -350,15 +349,17 @@ void Power::readPowerStatus()
             getMacAddr(dmac); // Get our hardware ID
             char mac[18];
             sprintf(mac, "!%02x%02x%02x%02x", dmac[2], dmac[3], dmac[4], dmac[5]);
-            auto newHeap = ESP.getFreeHeap();
-            std::string heapTopic = "msh/2/heap/" + std::string(mac);
+
+            auto newHeap = memGet.getFreeHeap();
+            std::string heapTopic =
+                (*moduleConfig.mqtt.root ? moduleConfig.mqtt.root : "msh") + std::string("/2/heap/") + std::string(mac);
             std::string heapString = std::to_string(newHeap);
             mqtt->pubSub.publish(heapTopic.c_str(), heapString.c_str(), false);
-            // auto fragHeap = ESP.getHeapFragmentation();
             auto wifiRSSI = WiFi.RSSI();
-            heapTopic = "msh/2/wifi/" + std::string(mac);
+            std::string wifiTopic =
+                (*moduleConfig.mqtt.root ? moduleConfig.mqtt.root : "msh") + std::string("/2/wifi/") + std::string(mac);
             std::string wifiString = std::to_string(wifiRSSI);
-            mqtt->pubSub.publish(heapTopic.c_str(), wifiString.c_str(), false);
+            mqtt->pubSub.publish(wifiTopic.c_str(), wifiString.c_str(), false);
         }
 #endif
 
