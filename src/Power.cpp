@@ -365,7 +365,8 @@ void Power::readPowerStatus()
 
 #endif
 
-        // If we have a battery at all and it is less than 10% full, force deep sleep if we have more than 10 low readings in a row
+        // If we have a battery at all and it is less than 10% full, force deep sleep if we have more than 10 low readings in a
+        // row
         if (powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
             if (batteryLevel->getBattVoltage() < MIN_BAT_MILLIVOLTS) {
                 low_voltage_counter++;
