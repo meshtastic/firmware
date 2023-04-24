@@ -19,10 +19,6 @@ const int reconnectMax = 5;
 
 MQTT *mqtt;
 
-std::string statusTopic = "msh/2/stat/";
-std::string cryptTopic = "msh/2/c/";   // msh/2/c/CHANNELID/NODEID
-std::string jsonTopic = "msh/2/json/"; // msh/2/json/CHANNELID/NODEID
-
 static MemoryDynamic<meshtastic_ServiceEnvelope> staticMqttPool;
 
 Allocator<meshtastic_ServiceEnvelope> &mqttPool = staticMqttPool;
@@ -163,6 +159,16 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), pubSub(mqttClient), mqttQueue(MAX_
 
         assert(!mqtt);
         mqtt = this;
+
+        if (*moduleConfig.mqtt.root) {
+            statusTopic = moduleConfig.mqtt.root + statusTopic;
+            cryptTopic = moduleConfig.mqtt.root + cryptTopic;
+            jsonTopic = moduleConfig.mqtt.root + jsonTopic;
+        } else {
+            statusTopic = "msh" + statusTopic;
+            cryptTopic = "msh" + cryptTopic;
+            jsonTopic = "msh" + jsonTopic;
+        }
 
         pubSub.setCallback(mqttCallback);
 

@@ -226,7 +226,7 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
         } else {
             LOG_ERROR("File write failed\n");
         }
-
+        fileToWrite.flush();
         fileToWrite.close();
     }
 
@@ -275,6 +275,7 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
 
     // TODO: If quotes are found in the payload, it has to be escaped.
     fileToAppend.printf("\"%s\"\n", p.payload.bytes);
+    fileToAppend.flush();
     fileToAppend.close();
 
     return 1;

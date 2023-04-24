@@ -145,17 +145,6 @@ static int32_t ledBlinker()
 
     setLed(ledOn);
 
-#ifdef ARCH_ESP32
-    auto newHeap = ESP.getFreeHeap();
-    if (newHeap < 11000) {
-        LOG_DEBUG("\n\n====== heap too low [11000] -> reboot in 1s ======\n\n");
-#ifdef HAS_SCREEN
-        screen->startRebootScreen();
-#endif
-        rebootAtMsec = millis() + 900;
-    }
-#endif
-
     // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
     return powerStatus->getIsCharging() ? 1000 : (ledOn ? 1 : 1000);
 }
@@ -232,10 +221,10 @@ void setup()
 
     // If the button is connected to GPIO 12, don't enable the ability to use
     // meshtasticAdmin on the device.
-    pinMode(BUTTON_PIN, INPUT);
+    pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT);
 
 #ifdef BUTTON_NEED_PULLUP
-    gpio_pullup_en((gpio_num_t)BUTTON_PIN);
+    gpio_pullup_en((gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
     delay(10);
 #endif
 
@@ -402,10 +391,7 @@ void setup()
     // scanEInkDevice();
 #endif
 
-#if HAS_BUTTON
-    // Buttons & LED
-    buttonThread = new ButtonThread();
-#endif
+    // LED init
 
 #ifdef LED_PIN
     pinMode(LED_PIN, OUTPUT);
@@ -429,6 +415,11 @@ void setup()
     // If we're taking on the repeater role, use flood router
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER)
         router = new FloodingRouter();
+
+#if HAS_BUTTON
+    // Buttons. Moved here cause we need NodeDB to be initialized
+    buttonThread = new ButtonThread();
+#endif
 
     playStartMelody();
 

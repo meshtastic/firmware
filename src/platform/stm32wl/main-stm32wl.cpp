@@ -25,7 +25,7 @@ void getMacAddr(uint8_t *dmac)
     dmac[0] = (uint8_t)(uid2 >> 8);
 }
 
-void cpuDeepSleep(uint64_t msecToWake) {}
+void cpuDeepSleep(uint32_t msecToWake) {}
 
 /* pacify libc_nano */
 extern "C" {

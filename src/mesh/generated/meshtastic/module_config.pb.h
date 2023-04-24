@@ -98,6 +98,9 @@ typedef struct _meshtastic_ModuleConfig_MQTTConfig {
     bool json_enabled;
     /* If true, we attempt to establish a secure connection using TLS */
     bool tls_enabled;
+    /* The root topic to use for MQTT messages. Default is "msh".
+ This is useful if you want to use a single MQTT server for multiple meshtastic networks and separate them via ACLs */
+    char root[16];
 } meshtastic_ModuleConfig_MQTTConfig;
 
 /* RemoteHardwareModule Config */
@@ -325,7 +328,7 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_ModuleConfig_init_default     {0, {meshtastic_ModuleConfig_MQTTConfig_init_default}}
-#define meshtastic_ModuleConfig_MQTTConfig_init_default {0, "", "", "", 0, 0, 0}
+#define meshtastic_ModuleConfig_MQTTConfig_init_default {0, "", "", "", 0, 0, 0, ""}
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_init_default {0}
 #define meshtastic_ModuleConfig_AudioConfig_init_default {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN}
@@ -335,7 +338,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_TelemetryConfig_init_default {0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define meshtastic_ModuleConfig_init_zero        {0, {meshtastic_ModuleConfig_MQTTConfig_init_zero}}
-#define meshtastic_ModuleConfig_MQTTConfig_init_zero {0, "", "", "", 0, 0, 0}
+#define meshtastic_ModuleConfig_MQTTConfig_init_zero {0, "", "", "", 0, 0, 0, ""}
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_init_zero {0}
 #define meshtastic_ModuleConfig_AudioConfig_init_zero {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN}
@@ -353,6 +356,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_MQTTConfig_encryption_enabled_tag 5
 #define meshtastic_ModuleConfig_MQTTConfig_json_enabled_tag 6
 #define meshtastic_ModuleConfig_MQTTConfig_tls_enabled_tag 7
+#define meshtastic_ModuleConfig_MQTTConfig_root_tag 8
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_AudioConfig_codec2_enabled_tag 1
 #define meshtastic_ModuleConfig_AudioConfig_ptt_pin_tag 2
@@ -448,7 +452,8 @@ X(a, STATIC,   SINGULAR, STRING,   username,          3) \
 X(a, STATIC,   SINGULAR, STRING,   password,          4) \
 X(a, STATIC,   SINGULAR, BOOL,     encryption_enabled,   5) \
 X(a, STATIC,   SINGULAR, BOOL,     json_enabled,      6) \
-X(a, STATIC,   SINGULAR, BOOL,     tls_enabled,       7)
+X(a, STATIC,   SINGULAR, BOOL,     tls_enabled,       7) \
+X(a, STATIC,   SINGULAR, STRING,   root,              8)
 #define meshtastic_ModuleConfig_MQTTConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_MQTTConfig_DEFAULT NULL
 
@@ -566,13 +571,13 @@ extern const pb_msgdesc_t meshtastic_ModuleConfig_CannedMessageConfig_msg;
 #define meshtastic_ModuleConfig_AudioConfig_size 19
 #define meshtastic_ModuleConfig_CannedMessageConfig_size 49
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_size 40
-#define meshtastic_ModuleConfig_MQTTConfig_size  203
+#define meshtastic_ModuleConfig_MQTTConfig_size  220
 #define meshtastic_ModuleConfig_RangeTestConfig_size 10
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_size 2
 #define meshtastic_ModuleConfig_SerialConfig_size 26
 #define meshtastic_ModuleConfig_StoreForwardConfig_size 22
 #define meshtastic_ModuleConfig_TelemetryConfig_size 26
-#define meshtastic_ModuleConfig_size             206
+#define meshtastic_ModuleConfig_size             223
 
 #ifdef __cplusplus
 } /* extern "C" */
