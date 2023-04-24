@@ -351,40 +351,39 @@ void Power::readPowerStatus()
             sprintf(mac, "!%02x%02x%02x%02x", dmac[2], dmac[3], dmac[4], dmac[5]);
 
             auto newHeap = memGet.getFreeHeap();
-            std::string heapTopic = (*moduleConfig.mqtt.root ? moduleConfig.mqtt.root : "msh") + "/2/heap/" + std::string(mac);
+            std::string heapTopic =
+                (*moduleConfig.mqtt.root ? moduleConfig.mqtt.root : "msh") + std::string("/2/heap/") + std::string(mac);
             std::string heapString = std::to_string(newHeap);
             mqtt->pubSub.publish(heapTopic.c_str(), heapString.c_str(), false);
-            // auto fragHeap = memGet.getHeapFragmentation();
             auto wifiRSSI = WiFi.RSSI();
-            heapTopic = (*moduleConfig.mqtt.root ? moduleConfig.mqtt.root : "msh") + "/2/wifi/" + std::string(mac);
+            std::string wifiTopic =
+                (*moduleConfig.mqtt.root ? moduleConfig.mqtt.root : "msh") + std::string("/2/wifi/") + std::string(mac);
             std::string wifiString = std::to_string(wifiRSSI);
-            mqtt->pubSub.publish(heapTopic.c_str(), wifiString.c_str(), false);
+            mqtt->pubSub.publish(wifiTopic.c_str(), wifiString.c_str(), false);
         }
 #endif
 
 #endif
 
-// If we have a battery at all and it is less than 10% full, force deep sleep if we have more than 3 low readings in a row
-// Supect fluctuating voltage on the RAK4631 to force it to deep sleep even if battery is at 85% after only a few days
-#ifdef ARCH_NRF52
+        // If we have a battery at all and it is less than 10% full, force deep sleep if we have more than 10 low readings in a
+        // row
         if (powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
             if (batteryLevel->getBattVoltage() < MIN_BAT_MILLIVOLTS) {
                 low_voltage_counter++;
-                LOG_DEBUG("Warning RAK4631 Low voltage counter: %d/10\n", low_voltage_counter);
+                LOG_DEBUG("Low voltage counter: %d/10\n", low_voltage_counter);
                 if (low_voltage_counter > 10) {
+#ifdef ARCH_NRF52
                     // We can't trigger deep sleep on NRF52, it's freezing the board
-                    // powerFSM.trigger(EVENT_LOW_BATTERY);
                     LOG_DEBUG("Low voltage detected, but not triggering deep sleep\n");
+#else
+                    LOG_INFO("Low voltage detected, triggering deep sleep\n");
+                    powerFSM.trigger(EVENT_LOW_BATTERY);
+#endif
                 }
             } else {
                 low_voltage_counter = 0;
             }
         }
-#else
-        // If we have a battery at all and it is less than 10% full, force deep sleep
-        if (powerStatus2.getHasBattery() && !powerStatus2.getHasUSB() && batteryLevel->getBattVoltage() < MIN_BAT_MILLIVOLTS)
-            powerFSM.trigger(EVENT_LOW_BATTERY);
-#endif
     } else {
         // No power sensing on this board - tell everyone else we have no idea what is happening
         const PowerStatus powerStatus3 = PowerStatus(OptUnknown, OptUnknown, OptUnknown, -1, -1);
@@ -538,7 +537,6 @@ bool Power::axpChipInit()
 
         // Set up the charging voltage
         PMU->setChargeTargetVoltage(XPOWERS_AXP192_CHG_VOL_4V2);
-
     } else if (PMU->getChipModel() == XPOWERS_AXP2101) {
 
         /*The alternative version of T-Beam 1.1 differs from T-Beam V1.1 in that it uses an AXP2101 power chip*/

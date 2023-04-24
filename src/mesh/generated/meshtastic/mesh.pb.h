@@ -680,6 +680,25 @@ typedef struct _meshtastic_Compressed {
     meshtastic_Compressed_data_t data;
 } meshtastic_Compressed;
 
+/* A single edge in the mesh */
+typedef struct _meshtastic_Neighbor {
+    /* Node ID of neighbor */
+    uint32_t node_id;
+    /* SNR of last heard message */
+    float snr;
+} meshtastic_Neighbor;
+
+/* Full info on edges for a single node */
+typedef struct _meshtastic_NeighborInfo {
+    /* The node ID of the node sending info on its neighbors */
+    uint32_t node_id;
+    /* Field to pass neighbor info for the next sending cycle */
+    uint32_t last_sent_by_id;
+    /* The list of out edges from this node */
+    pb_size_t neighbors_count;
+    meshtastic_Neighbor neighbors[10];
+} meshtastic_NeighborInfo;
+
 /* Device metadata response */
 typedef struct _meshtastic_DeviceMetadata {
     /* Device firmware version string */
@@ -813,6 +832,8 @@ extern "C" {
 
 #define meshtastic_Compressed_portnum_ENUMTYPE meshtastic_PortNum
 
+
+
 #define meshtastic_DeviceMetadata_role_ENUMTYPE meshtastic_Config_DeviceConfig_Role
 #define meshtastic_DeviceMetadata_hw_model_ENUMTYPE meshtastic_HardwareModel
 
@@ -832,6 +853,8 @@ extern "C" {
 #define meshtastic_FromRadio_init_default        {0, 0, {meshtastic_MeshPacket_init_default}}
 #define meshtastic_ToRadio_init_default          {0, {meshtastic_MeshPacket_init_default}}
 #define meshtastic_Compressed_init_default       {_meshtastic_PortNum_MIN, {0, {0}}}
+#define meshtastic_NeighborInfo_init_default     {0, 0, 0, {meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default}}
+#define meshtastic_Neighbor_init_default         {0, 0}
 #define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN}
 #define meshtastic_Position_init_zero            {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_User_init_zero                {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0}
@@ -847,6 +870,8 @@ extern "C" {
 #define meshtastic_FromRadio_init_zero           {0, 0, {meshtastic_MeshPacket_init_zero}}
 #define meshtastic_ToRadio_init_zero             {0, {meshtastic_MeshPacket_init_zero}}
 #define meshtastic_Compressed_init_zero          {_meshtastic_PortNum_MIN, {0, {0}}}
+#define meshtastic_NeighborInfo_init_zero        {0, 0, 0, {meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero}}
+#define meshtastic_Neighbor_init_zero            {0, 0}
 #define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN}
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -948,6 +973,11 @@ extern "C" {
 #define meshtastic_ToRadio_xmodemPacket_tag      5
 #define meshtastic_Compressed_portnum_tag        1
 #define meshtastic_Compressed_data_tag           2
+#define meshtastic_Neighbor_node_id_tag          1
+#define meshtastic_Neighbor_snr_tag              2
+#define meshtastic_NeighborInfo_node_id_tag      1
+#define meshtastic_NeighborInfo_last_sent_by_id_tag 2
+#define meshtastic_NeighborInfo_neighbors_tag    3
 #define meshtastic_DeviceMetadata_firmware_version_tag 1
 #define meshtastic_DeviceMetadata_device_state_version_tag 2
 #define meshtastic_DeviceMetadata_canShutdown_tag 3
@@ -1157,6 +1187,20 @@ X(a, STATIC,   SINGULAR, BYTES,    data,              2)
 #define meshtastic_Compressed_CALLBACK NULL
 #define meshtastic_Compressed_DEFAULT NULL
 
+#define meshtastic_NeighborInfo_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   node_id,           1) \
+X(a, STATIC,   SINGULAR, UINT32,   last_sent_by_id,   2) \
+X(a, STATIC,   REPEATED, MESSAGE,  neighbors,         3)
+#define meshtastic_NeighborInfo_CALLBACK NULL
+#define meshtastic_NeighborInfo_DEFAULT NULL
+#define meshtastic_NeighborInfo_neighbors_MSGTYPE meshtastic_Neighbor
+
+#define meshtastic_Neighbor_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   node_id,           1) \
+X(a, STATIC,   SINGULAR, FLOAT,    snr,               2)
+#define meshtastic_Neighbor_CALLBACK NULL
+#define meshtastic_Neighbor_DEFAULT NULL
+
 #define meshtastic_DeviceMetadata_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   firmware_version,   1) \
 X(a, STATIC,   SINGULAR, UINT32,   device_state_version,   2) \
@@ -1184,6 +1228,8 @@ extern const pb_msgdesc_t meshtastic_QueueStatus_msg;
 extern const pb_msgdesc_t meshtastic_FromRadio_msg;
 extern const pb_msgdesc_t meshtastic_ToRadio_msg;
 extern const pb_msgdesc_t meshtastic_Compressed_msg;
+extern const pb_msgdesc_t meshtastic_NeighborInfo_msg;
+extern const pb_msgdesc_t meshtastic_Neighbor_msg;
 extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
@@ -1201,6 +1247,8 @@ extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
 #define meshtastic_FromRadio_fields &meshtastic_FromRadio_msg
 #define meshtastic_ToRadio_fields &meshtastic_ToRadio_msg
 #define meshtastic_Compressed_fields &meshtastic_Compressed_msg
+#define meshtastic_NeighborInfo_fields &meshtastic_NeighborInfo_msg
+#define meshtastic_Neighbor_fields &meshtastic_Neighbor_msg
 #define meshtastic_DeviceMetadata_fields &meshtastic_DeviceMetadata_msg
 
 /* Maximum encoded size of messages (where known) */
@@ -1211,6 +1259,8 @@ extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
 #define meshtastic_LogRecord_size                81
 #define meshtastic_MeshPacket_size               321
 #define meshtastic_MyNodeInfo_size               179
+#define meshtastic_NeighborInfo_size             142
+#define meshtastic_Neighbor_size                 11
 #define meshtastic_NodeInfo_size                 261
 #define meshtastic_Position_size                 137
 #define meshtastic_QueueStatus_size              23
