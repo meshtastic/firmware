@@ -218,10 +218,10 @@ void setup()
 
     // If the button is connected to GPIO 12, don't enable the ability to use
     // meshtasticAdmin on the device.
-    pinMode(BUTTON_PIN, INPUT);
+    pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT);
 
 #ifdef BUTTON_NEED_PULLUP
-    gpio_pullup_en((gpio_num_t)BUTTON_PIN);
+    gpio_pullup_en((gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
     delay(10);
 #endif
 
@@ -389,10 +389,7 @@ void setup()
     // scanEInkDevice();
 #endif
 
-#if HAS_BUTTON
-    // Buttons & LED
-    buttonThread = new ButtonThread();
-#endif
+    // LED init
 
 #ifdef LED_PIN
     pinMode(LED_PIN, OUTPUT);
@@ -416,6 +413,11 @@ void setup()
     // If we're taking on the repeater role, use flood router
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER)
         router = new FloodingRouter();
+
+#if HAS_BUTTON
+    // Buttons. Moved here cause we need NodeDB to be initialized
+    buttonThread = new ButtonThread();
+#endif
 
     playStartMelody();
 

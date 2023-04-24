@@ -202,7 +202,7 @@ void cpuDeepSleep(uint32_t msecToWake)
 #ifdef BUTTON_PIN
     // Only GPIOs which are have RTC functionality can be used in this bit map: 0,2,4,12-15,25-27,32-39.
 #if SOC_RTCIO_HOLD_SUPPORTED
-    uint64_t gpioMask = (1ULL << BUTTON_PIN);
+    uint64_t gpioMask = (1ULL << config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
 #endif
 
 #ifdef BUTTON_NEED_PULLUP

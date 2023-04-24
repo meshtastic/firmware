@@ -45,10 +45,10 @@ class ButtonThread : public concurrency::OSThread
     ButtonThread() : OSThread("Button")
     {
 #ifdef BUTTON_PIN
-        userButton = OneButton(BUTTON_PIN, true, true);
+        userButton = OneButton(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, true, true);
 #ifdef INPUT_PULLUP_SENSE
         // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
-        pinMode(BUTTON_PIN, INPUT_PULLUP_SENSE);
+        pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT_PULLUP_SENSE);
 #endif
         userButton.attachClick(userButtonPressed);
         userButton.setClickTicks(300);
@@ -57,7 +57,7 @@ class ButtonThread : public concurrency::OSThread
         userButton.attachMultiClick(userButtonMultiPressed);
         userButton.attachLongPressStart(userButtonPressedLongStart);
         userButton.attachLongPressStop(userButtonPressedLongStop);
-        wakeOnIrq(BUTTON_PIN, FALLING);
+        wakeOnIrq(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, FALLING);
 #endif
 #ifdef BUTTON_PIN_ALT
         userButtonAlt = OneButton(BUTTON_PIN_ALT, true, true);
@@ -115,7 +115,9 @@ class ButtonThread : public concurrency::OSThread
     {
         // LOG_DEBUG("press!\n");
 #ifdef BUTTON_PIN
-        if ((BUTTON_PIN != moduleConfig.canned_message.inputbroker_pin_press) || !moduleConfig.canned_message.enabled) {
+        if (((config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN) !=
+             moduleConfig.canned_message.inputbroker_pin_press) ||
+            !moduleConfig.canned_message.enabled) {
             powerFSM.trigger(EVENT_PRESS);
         }
 #endif
