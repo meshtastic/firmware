@@ -404,6 +404,43 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), tempBuf);
 }
 
+/// Draw the last waypoint we received
+static void drawWaypointFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    static char tempBuf[237];
+
+    meshtastic_MeshPacket &mp = devicestate.rx_waypoint;
+    meshtastic_NodeInfo *node = nodeDB.getNode(getFrom(&mp));
+
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
+        display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+        display->setColor(BLACK);
+    }
+
+    uint32_t seconds = sinceReceived(&mp);
+    uint32_t minutes = seconds / 60;
+    uint32_t hours = minutes / 60;
+    uint32_t days = hours / 24;
+
+    if (config.display.heading_bold) {
+        display->drawStringf(1 + x, 0 + y, tempBuf, "%s ago from %s",
+                             screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
+                             (node && node->has_user) ? node->user.short_name : "???");
+    }
+    display->drawStringf(0 + x, 0 + y, tempBuf, "%s ago from %s", screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
+                         (node && node->has_user) ? node->user.short_name : "???");
+
+    display->setColor(WHITE);
+    meshtastic_Waypoint scratch;
+    memset(&scratch, 0, sizeof(scratch));
+    if (pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_Waypoint_msg, &scratch)) {
+        snprintf(tempBuf, sizeof(tempBuf), "Received waypoint: %s", scratch.name);
+        display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), tempBuf);
+    }
+}
+
 /// Draw a series of fields in a column, wrapping to multiple colums if needed
 static void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields)
 {
@@ -1231,6 +1268,10 @@ void Screen::setFrames()
     // If we have a text message - show it next, unless it's a phone message and we aren't using any special modules
     if (devicestate.has_rx_text_message && shouldDrawMessage(&devicestate.rx_text_message)) {
         normalFrames[numframes++] = drawTextMessageFrame;
+    }
+    // If we have a waypoint - show it next, unless it's a phone message and we aren't using any special modules
+    if (devicestate.has_rx_waypoint && shouldDrawMessage(&devicestate.rx_waypoint)) {
+        normalFrames[numframes++] = drawWaypointFrame;
     }
 
     // then all the nodes
