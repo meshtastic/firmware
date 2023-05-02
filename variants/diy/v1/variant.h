@@ -41,7 +41,6 @@
 //#define SX126X_RXEN 14
 //#define SX126X_TXEN 13
 #define SX126X_POWER_EN (13)
-#define SX126X_E22 
 
 // RX/TX for RFM95/SX127x
 #define RF95_RXEN 14
