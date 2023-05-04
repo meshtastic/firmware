@@ -60,11 +60,16 @@ int32_t ExternalNotificationModule::runOnce()
             }
             LOG_INFO("\n");
             isNagging = false;
-            red = 0;
-            green = 0;
-            blue = 0;
-            rgb.setColor(red, green, blue);
             return INT32_MAX; // save cycles till we're needed again
+        }
+    
+        if (rgb_found.type == ScanI2C::NCP5623) {
+            if (green == 255) {
+                green = 0;
+            }
+            else {
+                green++;
+            }
         }
 
         // If the output is turned on, turn it back off after the given period of time.
@@ -102,8 +107,8 @@ int32_t ExternalNotificationModule::runOnce()
             else {
                 green++;
             }
-            rgb.setColor(red, green, blue);
         }
+
         return 25;
     }
 }
@@ -126,6 +131,9 @@ void ExternalNotificationModule::setExternalOn(uint8_t index)
         digitalWrite(output, (moduleConfig.external_notification.active ? true : false));
         break;
     }
+    if (rgb_found.type == ScanI2C::NCP5623) {
+        rgb.setColor(red, green, blue);
+    }
 }
 
 void ExternalNotificationModule::setExternalOff(uint8_t index)
@@ -145,6 +153,13 @@ void ExternalNotificationModule::setExternalOff(uint8_t index)
     default:
         digitalWrite(output, (moduleConfig.external_notification.active ? false : true));
         break;
+    }
+
+    if (rgb_found.type == ScanI2C::NCP5623) {
+        red = 0;
+        green = 0;
+        blue = 0;
+        rgb.setColor(red, green, blue);
     }
 }
 
@@ -222,6 +237,7 @@ ExternalNotificationModule::ExternalNotificationModule()
         }
         if (rgb_found.type == ScanI2C::NCP5623) {
             rgb.begin();
+            rgb.setCurrent(10);
         }
     } else {
         LOG_INFO("External Notification Module Disabled\n");
@@ -323,11 +339,6 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                     nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
                 }
             }
-
-            if (rgb_found.type == ScanI2C::NCP5623) {
-                rgb.setColor(red, green, blue);
-            }
-
             setIntervalFromNow(0); // run once so we know if we should do something
         }
 
