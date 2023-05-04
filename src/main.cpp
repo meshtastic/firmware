@@ -234,8 +234,6 @@ void setup()
 
     fsInit();
 
-    router = new ReliableRouter();
-
 #ifdef I2C_SDA1
     Wire1.begin(I2C_SDA1, I2C_SCL1);
 #endif
@@ -413,6 +411,8 @@ void setup()
     // If we're taking on the repeater role, use flood router
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER)
         router = new FloodingRouter();
+    else
+        router = new ReliableRouter();
 
 #if HAS_BUTTON
     // Buttons. Moved here cause we need NodeDB to be initialized
