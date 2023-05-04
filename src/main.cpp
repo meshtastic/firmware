@@ -100,6 +100,8 @@ uint8_t kb_model;
 ScanI2C::DeviceAddress rtc_found = ScanI2C::ADDRESS_NONE;
 // The I2C address of the Accelerometer (if found)
 ScanI2C::DeviceAddress accelerometer_found = ScanI2C::ADDRESS_NONE;
+// The I2C address of the RGB LED (if found)
+ScanI2C::FoundDevice rgb_found = ScanI2C::FoundDevice(ScanI2C::DeviceType::NONE, ScanI2C::ADDRESS_NONE);
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 ATECCX08A atecc;
@@ -346,6 +348,8 @@ void setup()
      * nodeTelemetrySensorsMap singleton. This wraps that logic in a temporary scope to declare the temporary field
      * "found".
      */
+    // Only one supported RGB LED currently
+    rgb_found = i2cScanner->find(ScanI2C::DeviceType::NCP5623);
 
 #if !defined(ARCH_PORTDUINO)
     auto acc_info = i2cScanner->firstAccelerometer();

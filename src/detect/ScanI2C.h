@@ -33,6 +33,7 @@ class ScanI2C
         PMSA0031,
         MPU6050,
         LIS3DH,
+        NCP5623,
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;

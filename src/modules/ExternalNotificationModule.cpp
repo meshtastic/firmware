@@ -7,6 +7,13 @@
 #include "configuration.h"
 #include "mesh/generated/meshtastic/rtttl.pb.h"
 #include <Arduino.h>
+#include <NCP5623.h>
+#include "main.h"
+
+NCP5623 rgb;
+uint8_t red = 0;
+uint8_t green = 0;
+uint8_t blue = 0;
 
 #ifndef PIN_BUZZER
 #define PIN_BUZZER false
@@ -53,6 +60,10 @@ int32_t ExternalNotificationModule::runOnce()
             }
             LOG_INFO("\n");
             isNagging = false;
+            red = 0;
+            green = 0;
+            blue = 0;
+            rgb.setColor(red, green, blue);
             return INT32_MAX; // save cycles till we're needed again
         }
 
@@ -83,6 +94,15 @@ int32_t ExternalNotificationModule::runOnce()
                 // start the song again if we have time left
                 rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
             }
+        }
+        if (rgb_found.type == ScanI2C::NCP5623) {
+            if (green == 255) {
+                green = 0;
+            }
+            else {
+                green++;
+            }
+            rgb.setColor(red, green, blue);
         }
         return 25;
     }
@@ -200,6 +220,9 @@ ExternalNotificationModule::ExternalNotificationModule()
                 LOG_INFO("Using Pin %i in PWM mode\n", config.device.buzzer_gpio);
             }
         }
+        if (rgb_found.type == ScanI2C::NCP5623) {
+            rgb.begin();
+        }
     } else {
         LOG_INFO("External Notification Module Disabled\n");
         disable();
@@ -299,6 +322,10 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 } else {
                     nagCycleCutoff = millis() + moduleConfig.external_notification.output_ms;
                 }
+            }
+
+            if (rgb_found.type == ScanI2C::NCP5623) {
+                rgb.setColor(red, green, blue);
             }
 
             setIntervalFromNow(0); // run once so we know if we should do something
