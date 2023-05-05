@@ -19,11 +19,11 @@ const uint8_t Default_H2S_NonH2S_config[] = {
 class BME680Sensor : virtual public TelemetrySensor
 {
   private:
-  #ifdef USE_BSEC2
+#ifdef USE_BSEC2
     Bsec2 bme680;
-  #else
+#else
     Bsec bme680;
-  #endif // USE_BSEC2
+#endif // USE_BSEC2
 
   protected:
     virtual void setup() override;
