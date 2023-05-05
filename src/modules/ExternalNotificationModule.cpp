@@ -63,14 +63,6 @@ int32_t ExternalNotificationModule::runOnce()
             return INT32_MAX; // save cycles till we're needed again
         }
     
-        if (rgb_found.type == ScanI2C::NCP5623) {
-            if (green == 255) {
-                green = 0;
-            }
-            else {
-                green++;
-            }
-        }
 
         // If the output is turned on, turn it back off after the given period of time.
         if (isNagging) {
@@ -89,6 +81,10 @@ int32_t ExternalNotificationModule::runOnce()
                 millis()) {
                 getExternal(2) ? setExternalOff(2) : setExternalOn(2);
             }
+            if (rgb_found.type == ScanI2C::NCP5623) {
+                green = (green + 1) % 255;
+                rgb.setColor(red, green, blue);
+            }
         }
 
         // now let the PWM buzzer play
@@ -98,14 +94,6 @@ int32_t ExternalNotificationModule::runOnce()
             } else if (isNagging && (nagCycleCutoff >= millis())) {
                 // start the song again if we have time left
                 rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
-            }
-        }
-        if (rgb_found.type == ScanI2C::NCP5623) {
-            if (green == 255) {
-                green = 0;
-            }
-            else {
-                green++;
             }
         }
 
