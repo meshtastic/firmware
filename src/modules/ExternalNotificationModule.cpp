@@ -82,7 +82,10 @@ int32_t ExternalNotificationModule::runOnce()
                 getExternal(2) ? setExternalOff(2) : setExternalOn(2);
             }
             if (rgb_found.type == ScanI2C::NCP5623) {
-                green = (green + 1) % 255;
+                green = (green + 125) % 255;
+                red = abs(red - green) % 255;
+                blue = abs(blue - red) % 255;
+
                 rgb.setColor(red, green, blue);
             }
         }
