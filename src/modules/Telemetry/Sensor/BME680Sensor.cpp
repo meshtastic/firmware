@@ -26,7 +26,6 @@ int32_t BME680Sensor::runOnce()
         status = 0;
     }
 
-
     return initI2CSensor();
 }
 
@@ -37,7 +36,8 @@ bool BME680Sensor::getMetrics(meshtastic_Telemetry *measurement)
     bme680.run();
 #ifdef USE_BSEC2
     measurement->variant.environment_metrics.temperature = bme680.getData(BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE).signal;
-    measurement->variant.environment_metrics.relative_humidity = bme680.getData(BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY).signal;
+    measurement->variant.environment_metrics.relative_humidity =
+        bme680.getData(BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY).signal;
     measurement->variant.environment_metrics.barometric_pressure = bme680.getData(BSEC_OUTPUT_RAW_PRESSURE).signal / 100.0F;
     measurement->variant.environment_metrics.gas_resistance = bme680.getData(BSEC_OUTPUT_RAW_GAS).signal / 1000.0;
 #else
