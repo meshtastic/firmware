@@ -1,6 +1,7 @@
 #include "NMEAWPL.h"
 #include "GeoCoord.h"
 #include <time.h>
+#include "RTC.h"
 
 /* -------------------------------------------
  *        1       2 3        4 5    6
@@ -58,6 +59,9 @@ uint32_t printGGA(char *buf, size_t bufsz, const meshtastic_Position &pos)
 {
     GeoCoord geoCoord(pos.latitude_i, pos.longitude_i, pos.altitude);
     tm *t = localtime((time_t *)&pos.timestamp);
+    if (getRTCQuality() > 0) // use the device clock if we got time from somewhere. If not, use the GPS timestamp.
+        t = localtime((time_t *)getValidTime(RTCQuality::RTCQualityDevice));
+    
 
     uint32_t len = snprintf(
         buf, bufsz, "$GNGGA,%02d%02d%02d.%02d,%02d%07.4f,%c,%03d%07.4f,%c,%u,%02u,%04u,%04d,%c,%04d,%c,%d,%04d", t->tm_hour,
