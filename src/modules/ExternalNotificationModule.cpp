@@ -11,8 +11,8 @@
 #include "main.h"
 
 #ifdef RAK4630
-NCP5623 rgb;
 #include <NCP5623.h>
+NCP5623 rgb;
 
 uint8_t red = 0;
 uint8_t green = 0;
@@ -156,7 +156,9 @@ void ExternalNotificationModule::setExternalOff(uint8_t index)
 
     #ifdef RAK4630
     if (rgb_found.type == ScanI2C::NCP5623) {
-        red, green, blue = 0;
+        red = 0;
+        green = 0;
+        blue = 0;
         rgb.setColor(red, green, blue);
     }
     #endif
