@@ -66,7 +66,6 @@ int32_t ExternalNotificationModule::runOnce()
             isNagging = false;
             return INT32_MAX; // save cycles till we're needed again
         }
-    
 
         // If the output is turned on, turn it back off after the given period of time.
         if (isNagging) {
@@ -85,15 +84,15 @@ int32_t ExternalNotificationModule::runOnce()
                 millis()) {
                 getExternal(2) ? setExternalOff(2) : setExternalOn(2);
             }
-            #ifdef RAK4630
+#ifdef RAK4630
             if (rgb_found.type == ScanI2C::NCP5623) {
-                green = (green + 125) % 255;
+                green = (green + 50) % 255;
                 red = abs(red - green) % 255;
-                blue = abs(blue - red) % 255;
+                blue = abs(blue / red) % 255;
 
                 rgb.setColor(red, green, blue);
             }
-            #endif
+#endif
         }
 
         // now let the PWM buzzer play
@@ -128,11 +127,11 @@ void ExternalNotificationModule::setExternalOn(uint8_t index)
         digitalWrite(output, (moduleConfig.external_notification.active ? true : false));
         break;
     }
-    #ifdef RAK4630
+#ifdef RAK4630
     if (rgb_found.type == ScanI2C::NCP5623) {
         rgb.setColor(red, green, blue);
     }
-    #endif
+#endif
 }
 
 void ExternalNotificationModule::setExternalOff(uint8_t index)
@@ -154,14 +153,14 @@ void ExternalNotificationModule::setExternalOff(uint8_t index)
         break;
     }
 
-    #ifdef RAK4630
+#ifdef RAK4630
     if (rgb_found.type == ScanI2C::NCP5623) {
         red = 0;
         green = 0;
         blue = 0;
         rgb.setColor(red, green, blue);
     }
-    #endif
+#endif
 }
 
 bool ExternalNotificationModule::getExternal(uint8_t index)
@@ -236,12 +235,12 @@ ExternalNotificationModule::ExternalNotificationModule()
                 LOG_INFO("Using Pin %i in PWM mode\n", config.device.buzzer_gpio);
             }
         }
-        #ifdef RAK4630
+#ifdef RAK4630
         if (rgb_found.type == ScanI2C::NCP5623) {
             rgb.begin();
             rgb.setCurrent(10);
         }
-        #endif
+#endif
     } else {
         LOG_INFO("External Notification Module Disabled\n");
         disable();
