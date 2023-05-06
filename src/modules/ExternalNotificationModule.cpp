@@ -7,13 +7,17 @@
 #include "configuration.h"
 #include "mesh/generated/meshtastic/rtttl.pb.h"
 #include <Arduino.h>
-#include <NCP5623.h>
+
 #include "main.h"
 
+#ifdef RAK4630
 NCP5623 rgb;
+#include <NCP5623.h>
+
 uint8_t red = 0;
 uint8_t green = 0;
 uint8_t blue = 0;
+#endif
 
 #ifndef PIN_BUZZER
 #define PIN_BUZZER false
@@ -81,6 +85,7 @@ int32_t ExternalNotificationModule::runOnce()
                 millis()) {
                 getExternal(2) ? setExternalOff(2) : setExternalOn(2);
             }
+            #ifdef RAK4630
             if (rgb_found.type == ScanI2C::NCP5623) {
                 green = (green + 125) % 255;
                 red = abs(red - green) % 255;
@@ -88,6 +93,7 @@ int32_t ExternalNotificationModule::runOnce()
 
                 rgb.setColor(red, green, blue);
             }
+            #endif
         }
 
         // now let the PWM buzzer play
@@ -122,9 +128,11 @@ void ExternalNotificationModule::setExternalOn(uint8_t index)
         digitalWrite(output, (moduleConfig.external_notification.active ? true : false));
         break;
     }
+    #ifdef RAK4630
     if (rgb_found.type == ScanI2C::NCP5623) {
         rgb.setColor(red, green, blue);
     }
+    #endif
 }
 
 void ExternalNotificationModule::setExternalOff(uint8_t index)
@@ -146,12 +154,12 @@ void ExternalNotificationModule::setExternalOff(uint8_t index)
         break;
     }
 
+    #ifdef RAK4630
     if (rgb_found.type == ScanI2C::NCP5623) {
-        red = 0;
-        green = 0;
-        blue = 0;
+        red, green, blue = 0;
         rgb.setColor(red, green, blue);
     }
+    #endif
 }
 
 bool ExternalNotificationModule::getExternal(uint8_t index)
@@ -226,10 +234,12 @@ ExternalNotificationModule::ExternalNotificationModule()
                 LOG_INFO("Using Pin %i in PWM mode\n", config.device.buzzer_gpio);
             }
         }
+        #ifdef RAK4630
         if (rgb_found.type == ScanI2C::NCP5623) {
             rgb.begin();
             rgb.setCurrent(10);
         }
+        #endif
     } else {
         LOG_INFO("External Notification Module Disabled\n");
         disable();
