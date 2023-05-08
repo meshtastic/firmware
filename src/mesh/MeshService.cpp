@@ -75,10 +75,14 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
 {
     powerFSM.trigger(EVENT_PACKET_FOR_PHONE); // Possibly keep the node from sleeping
 
-    printPacket("Forwarding to phone", mp);
     nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
+    if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB.getNode(mp->from)->has_user && nodeInfoModule) {
+        LOG_INFO("Heard a node on channel %d we don't know, sending NodeInfo and asking for a response.\n", mp->channel);
+        nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
+    }
 
-    sendToPhone((meshtastic_MeshPacket *)mp);
+    printPacket("Forwarding to phone", mp);
+    sendToPhone(packetPool.allocCopy(*mp));
 
     return 0;
 }
@@ -121,7 +125,6 @@ void MeshService::reloadOwner(bool shouldSave)
     // update everyone else and save to disk
     if (nodeInfoModule && shouldSave) {
         nodeInfoModule->sendOurNodeInfo();
-        nodeDB.saveToDisk(SEGMENT_DEVICESTATE);
     }
 }
 
@@ -132,7 +135,7 @@ void MeshService::reloadOwner(bool shouldSave)
  */
 void MeshService::handleToRadio(meshtastic_MeshPacket &p)
 {
-#ifdef ARCH_PORTDUINO
+#if defined(ARCH_PORTDUINO) && !HAS_RADIO
     // Simulates device is receiving a packet via the LoRa chip
     if (p.decoded.portnum == meshtastic_PortNum_SIMULATOR_APP) {
         // Simulator packet (=Compressed packet) is encapsulated in a MeshPacket, so need to unwrap first
@@ -227,7 +230,7 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
     }
 
     if (ccToPhone) {
-        sendToPhone(p);
+        sendToPhone(packetPool.allocCopy(*p));
     }
 }
 
@@ -238,13 +241,13 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
 
     if (node->has_position && (node->position.latitude_i != 0 || node->position.longitude_i != 0)) {
         if (positionModule) {
-            LOG_INFO("Sending position ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
-            positionModule->sendOurPosition(dest, wantReplies);
+            LOG_INFO("Sending position ping to 0x%x, wantReplies=%d, channel=%d\n", dest, wantReplies, node->channel);
+            positionModule->sendOurPosition(dest, wantReplies, node->channel);
         }
     } else {
         if (nodeInfoModule) {
-            LOG_INFO("Sending nodeinfo ping to 0x%x, wantReplies=%d\n", dest, wantReplies);
-            nodeInfoModule->sendOurNodeInfo(dest, wantReplies);
+            LOG_INFO("Sending nodeinfo ping to 0x%x, wantReplies=%d, channel=%d\n", dest, wantReplies, node->channel);
+            nodeInfoModule->sendOurNodeInfo(dest, wantReplies, node->channel);
         }
     }
 }
@@ -258,9 +261,8 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
             releaseToPool(d);
     }
 
-    meshtastic_MeshPacket *copied = packetPool.allocCopy(*p);
-    perhapsDecode(copied);
-    assert(toPhoneQueue.enqueue(copied, 0));
+    perhapsDecode(p);
+    assert(toPhoneQueue.enqueue(p, 0));
     fromNum++;
 }
 

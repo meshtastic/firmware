@@ -10,6 +10,8 @@
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
+#define MAGIC_USB_BATTERY_LEVEL 101
+
 int32_t DeviceTelemetryModule::runOnce()
 {
     uint32_t now = millis();
@@ -48,7 +50,12 @@ bool DeviceTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     t.which_variant = meshtastic_Telemetry_device_metrics_tag;
 
     t.variant.device_metrics.air_util_tx = myNodeInfo.air_util_tx;
-    t.variant.device_metrics.battery_level = powerStatus->getBatteryChargePercent();
+    if (powerStatus->getIsCharging()) {
+        t.variant.device_metrics.battery_level = MAGIC_USB_BATTERY_LEVEL;
+    } else {
+        t.variant.device_metrics.battery_level = powerStatus->getBatteryChargePercent();
+    }
+
     t.variant.device_metrics.channel_utilization = myNodeInfo.channel_utilization;
     t.variant.device_metrics.voltage = powerStatus->getBatteryVoltageMv() / 1000.0;
 

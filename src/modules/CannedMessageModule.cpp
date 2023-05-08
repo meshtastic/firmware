@@ -5,10 +5,17 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h" // neede for button bypass
+#include "detect/ScanI2C.h"
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
+
+#include "main.h" // for cardkb_found
 
 #ifdef OLED_RU
 #include "graphics/fonts/OLEDDisplayFontsRU.h"
+#endif
+
+#ifdef OLED_UA
+#include "graphics/fonts/OLEDDisplayFontsUA.h"
 #endif
 
 #if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)
@@ -20,7 +27,11 @@
 #ifdef OLED_RU
 #define FONT_SMALL ArialMT_Plain_10_RU
 #else
+#ifdef OLED_UA
+#define FONT_SMALL ArialMT_Plain_10_UA
+#else
 #define FONT_SMALL ArialMT_Plain_10
+#endif
 #endif
 #define FONT_MEDIUM ArialMT_Plain_16
 #define FONT_LARGE ArialMT_Plain_24
@@ -35,7 +46,7 @@
 // Remove Canned message screen if no action is taken for some milliseconds
 #define INACTIVATE_AFTER_MS 20000
 
-extern uint8_t cardkb_found;
+extern ScanI2C::DeviceAddress cardkb_found;
 
 static const char *cannedMessagesConfigFile = "/prefs/cannedConf.proto";
 
@@ -48,7 +59,7 @@ CannedMessageModule::CannedMessageModule()
 {
     if (moduleConfig.canned_message.enabled) {
         this->loadProtoForModule();
-        if ((this->splitConfiguredMessages() <= 0) && (cardkb_found != CARDKB_ADDR)) {
+        if ((this->splitConfiguredMessages() <= 0) && (cardkb_found.address != CARDKB_ADDR)) {
             LOG_INFO("CannedMessageModule: No messages are configured. Module is disabled\n");
             this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
             disable();
@@ -435,8 +446,6 @@ int CannedMessageModule::getPrevIndex()
 
 void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    displayedNodeNum = 0; // Not currently showing a node pane
-
     char buffer[50];
 
     if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {

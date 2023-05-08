@@ -12,6 +12,7 @@
 #define BUTTON_PIN 39       // The middle button GPIO on the T-Beam
 #define BATTERY_PIN 35      // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define ADC_MULTIPLIER 1.85 // (R1 = 470k, R2 = 680k)
+#define EXT_PWR_DETECT 4    // Pin to detect connected external power source for LILYGO® TTGO T-Energy T18 and other DIY boards
 #define EXT_NOTIFY_OUT 12   // Overridden default pin to use for Ext Notify Module (#975).
 #define LED_PIN 2           // add status LED (compatible with core-pcb and DIY targets)
 
@@ -37,8 +38,9 @@
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET
-#define SX126X_RXEN 14
-#define SX126X_TXEN 13
+//#define SX126X_RXEN 14
+//#define SX126X_TXEN 13
+#define SX126X_POWER_EN (13)
 
 // RX/TX for RFM95/SX127x
 #define RF95_RXEN 14

@@ -52,7 +52,6 @@ SHT31Sensor sht31Sensor;
 
 int32_t EnvironmentTelemetryModule::runOnce()
 {
-#ifndef ARCH_PORTDUINO
     int32_t result = INT32_MAX;
     /*
         Uncomment the preferences below if you want to use the module
@@ -115,7 +114,16 @@ int32_t EnvironmentTelemetryModule::runOnce()
         }
     }
     return sendToPhoneIntervalMs;
-#endif
+}
+
+bool EnvironmentTelemetryModule::wantUIFrame()
+{
+    return moduleConfig.telemetry.environment_screen_enabled;
+}
+
+float EnvironmentTelemetryModule::CelsiusToFahrenheit(float c)
+{
+    return (c * 9) / 5 + 32;
 }
 
 uint32_t GetTimeSinceMeshPacket(const meshtastic_MeshPacket *mp)
@@ -128,16 +136,6 @@ uint32_t GetTimeSinceMeshPacket(const meshtastic_MeshPacket *mp)
         delta = 0;
 
     return delta;
-}
-
-bool EnvironmentTelemetryModule::wantUIFrame()
-{
-    return moduleConfig.telemetry.environment_screen_enabled;
-}
-
-float EnvironmentTelemetryModule::CelsiusToFahrenheit(float c)
-{
-    return (c * 9) / 5 + 32;
 }
 
 void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -246,8 +244,10 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     meshtastic_MeshPacket *p = allocDataProtobuf(m);
     p->to = dest;
     p->decoded.want_response = false;
-    p->priority = meshtastic_MeshPacket_Priority_MIN;
-
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
+        p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+    else
+        p->priority = meshtastic_MeshPacket_Priority_MIN;
     // release previous packet before occupying a new spot
     if (lastMeasurementPacket != nullptr)
         packetPool.release(lastMeasurementPacket);

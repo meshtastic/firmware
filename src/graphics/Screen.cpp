@@ -19,6 +19,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
+#include "Screen.h"
 #include "configuration.h"
 #if HAS_SCREEN
 #include <OLEDDisplay.h>
@@ -26,7 +27,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "Screen.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
 #include "graphics/images.h"
@@ -50,6 +50,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "fonts/OLEDDisplayFontsRU.h"
 #endif
 
+#ifdef OLED_UA
+#include "fonts/OLEDDisplayFontsUA.h"
+#endif
+
 using namespace meshtastic; /** @todo remove */
 
 namespace graphics
@@ -69,6 +73,8 @@ static uint32_t targetFramerate = IDLE_FRAMERATE;
 static char btPIN[16] = "888888";
 
 uint32_t logo_timeout = 5000; // 4 seconds for EACH logo
+
+uint32_t hours_in_month = 730;
 
 // This image definition is here instead of images.h because it's modified dynamically by the drawBattery function
 uint8_t imgBattery[16] = {0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0xE7, 0x3C};
@@ -104,7 +110,11 @@ static uint16_t displayWidth, displayHeight;
 #ifdef OLED_RU
 #define FONT_SMALL ArialMT_Plain_10_RU
 #else
+#ifdef OLED_UA
+#define FONT_SMALL ArialMT_Plain_10_UA
+#else
 #define FONT_SMALL ArialMT_Plain_10 // Height: 13
+#endif
 #endif
 #define FONT_MEDIUM ArialMT_Plain_16 // Height: 19
 #define FONT_LARGE ArialMT_Plain_24  // Height: 28
@@ -338,8 +348,6 @@ static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, i
 /// Draw the last text message we received
 static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    displayedNodeNum = 0; // Not currently showing a node pane
-
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_MEDIUM);
 
@@ -360,8 +368,6 @@ static bool shouldDrawMessage(const meshtastic_MeshPacket *packet)
 /// Draw the last text message we received
 static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    displayedNodeNum = 0; // Not currently showing a node pane
-
     // the max length of this buffer is much longer than we can possibly print
     static char tempBuf[237];
 
@@ -386,15 +392,53 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     uint32_t days = hours / 24;
 
     if (config.display.heading_bold) {
-        display->drawStringf(1 + x, 0 + y, tempBuf, "%s ago from %s", screen->drawTimeDelta(days, hours, minutes, seconds),
+        display->drawStringf(1 + x, 0 + y, tempBuf, "%s ago from %s",
+                             screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
                              (node && node->has_user) ? node->user.short_name : "???");
     }
-    display->drawStringf(0 + x, 0 + y, tempBuf, "%s ago from %s", screen->drawTimeDelta(days, hours, minutes, seconds),
+    display->drawStringf(0 + x, 0 + y, tempBuf, "%s ago from %s", screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
                          (node && node->has_user) ? node->user.short_name : "???");
 
     display->setColor(WHITE);
     snprintf(tempBuf, sizeof(tempBuf), "%s", mp.decoded.payload.bytes);
     display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), tempBuf);
+}
+
+/// Draw the last waypoint we received
+static void drawWaypointFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    static char tempBuf[237];
+
+    meshtastic_MeshPacket &mp = devicestate.rx_waypoint;
+    meshtastic_NodeInfo *node = nodeDB.getNode(getFrom(&mp));
+
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
+        display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+        display->setColor(BLACK);
+    }
+
+    uint32_t seconds = sinceReceived(&mp);
+    uint32_t minutes = seconds / 60;
+    uint32_t hours = minutes / 60;
+    uint32_t days = hours / 24;
+
+    if (config.display.heading_bold) {
+        display->drawStringf(1 + x, 0 + y, tempBuf, "%s ago from %s",
+                             screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
+                             (node && node->has_user) ? node->user.short_name : "???");
+    }
+    display->drawStringf(0 + x, 0 + y, tempBuf, "%s ago from %s", screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
+                         (node && node->has_user) ? node->user.short_name : "???");
+
+    display->setColor(WHITE);
+    meshtastic_Waypoint scratch;
+    memset(&scratch, 0, sizeof(scratch));
+    if (pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_Waypoint_msg, &scratch)) {
+        snprintf(tempBuf, sizeof(tempBuf), "Received waypoint: %s", scratch.name);
+        display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), tempBuf);
+    }
 }
 
 /// Draw a series of fields in a column, wrapping to multiple colums if needed
@@ -507,18 +551,12 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
 // Draw status when gps is disabled by PMU
 static void drawGPSpowerstat(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
-#ifdef HAS_PMU
     String displayLine = "GPS disabled";
     int16_t xPos = display->getStringWidth(displayLine);
 
     if (!config.position.gps_enabled) {
         display->drawString(x + xPos, y, displayLine);
-#ifdef GPS_POWER_TOGGLE
-        display->drawString(x + xPos, y - 2 + FONT_HEIGHT_SMALL, " by button");
-#endif
-        // display->drawString(x + xPos, y + 2, displayLine);
     }
-#endif
 }
 
 static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
@@ -768,7 +806,6 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             nodeIndex = (nodeIndex + 1) % nodeDB.getNumNodes();
             n = nodeDB.getNodeByIndex(nodeIndex);
         }
-        displayedNodeNum = n->num;
     }
 
     meshtastic_NodeInfo *node = nodeDB.getNodeByIndex(nodeIndex);
@@ -794,9 +831,6 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     else if (agoSecs < 120 * 60) // last 2 hrs
         snprintf(lastStr, sizeof(lastStr), "%u minutes ago", agoSecs / 60);
     else {
-
-        uint32_t hours_in_month = 730;
-
         // Only show hours ago if it's been less than 6 months. Otherwise, we may have bad
         //   data.
         if ((agoSecs / 60 / 60) < (hours_in_month * 6)) {
@@ -884,13 +918,11 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 //     }
 // }
 // #else
-Screen::Screen(uint8_t address, int sda, int scl)
-    : OSThread("Screen"), cmdQueue(32),
-      dispdev(address, sda, scl,
-              screen_model == meshtastic_Config_DisplayConfig_OledType_OLED_SH1107 ? GEOMETRY_128_128 : GEOMETRY_128_64),
+Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_OledType screenType, OLEDDISPLAY_GEOMETRY geometry)
+    : concurrency::OSThread("Screen"), address_found(address), model(screenType), geometry(geometry), cmdQueue(32),
+      dispdev(address.address, -1, -1, geometry, (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE),
       ui(&dispdev)
 {
-    address_found = address;
     cmdQueue.setReader(this);
 }
 // #endif
@@ -938,9 +970,11 @@ void Screen::setup()
     useDisplay = true;
 
 #ifdef AutoOLEDWire_h
-    if (screen_model == meshtastic_Config_DisplayConfig_OledType_OLED_SH1107)
-        screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1106;
-    dispdev.setDetected(screen_model);
+    dispdev.setDetected(model);
+#endif
+
+#ifdef USE_SH1107_128_64
+    dispdev.setSubtype(7);
 #endif
 
     // Initialising the UI will init the display too.
@@ -1175,7 +1209,7 @@ void Screen::drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiStat
  * it is expected that this will be used during the boot phase */
 void Screen::setSSLFrames()
 {
-    if (address_found) {
+    if (address_found.address) {
         // LOG_DEBUG("showing SSL frames\n");
         static FrameCallback sslFrames[] = {drawSSLScreen};
         ui.setFrames(sslFrames, 1);
@@ -1187,7 +1221,7 @@ void Screen::setSSLFrames()
  * it is expected that this will be used during the boot phase */
 void Screen::setWelcomeFrames()
 {
-    if (address_found) {
+    if (address_found.address) {
         // LOG_DEBUG("showing Welcome frames\n");
         ui.disableAllIndicators();
 
@@ -1209,7 +1243,7 @@ void Screen::setFrames()
     LOG_DEBUG("Total frame count: %d\n", totalFrameCount);
 
     // We don't show the node info our our node (if we have it yet - we should)
-    size_t numnodes = nodeStatus->getNumTotal();
+    size_t numnodes = nodeDB.getNumNodes();
     if (numnodes > 0)
         numnodes--;
 
@@ -1234,6 +1268,10 @@ void Screen::setFrames()
     // If we have a text message - show it next, unless it's a phone message and we aren't using any special modules
     if (devicestate.has_rx_text_message && shouldDrawMessage(&devicestate.rx_text_message)) {
         normalFrames[numframes++] = drawTextMessageFrame;
+    }
+    // If we have a waypoint - show it next, unless it's a phone message and we aren't using any special modules
+    if (devicestate.has_rx_waypoint && shouldDrawMessage(&devicestate.rx_waypoint)) {
+        normalFrames[numframes++] = drawWaypointFrame;
     }
 
     // then all the nodes
@@ -1336,17 +1374,20 @@ void Screen::blink()
     dispdev.setBrightness(brightness);
 }
 
-String Screen::drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint32_t seconds)
+std::string Screen::drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint32_t seconds)
 {
-    String uptime;
-    if (days >= 2)
-        uptime = String(days) + "d";
+    std::string uptime;
+
+    if (days > (hours_in_month * 6))
+        uptime = "?";
+    else if (days >= 2)
+        uptime = std::to_string(days) + "d";
     else if (hours >= 2)
-        uptime = String(hours) + "h";
+        uptime = std::to_string(hours) + "h";
     else if (minutes >= 1)
-        uptime = String(minutes) + "m";
+        uptime = std::to_string(minutes) + "m";
     else
-        uptime = String(seconds) + "s";
+        uptime = std::to_string(seconds) + "s";
     return uptime;
 }
 
@@ -1388,8 +1429,6 @@ void Screen::setFastFramerate()
 
 void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    displayedNodeNum = 0; // Not currently showing a node pane
-
     display->setFont(FONT_SMALL);
 
     // The coordinates define the left starting point of the text
@@ -1429,11 +1468,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     }
     // Display GPS status
     if (!config.position.gps_enabled) {
-        int16_t yPos = y + 2;
-#ifdef GPS_POWER_TOGGLE
-        yPos = (y + 10 + FONT_HEIGHT_SMALL);
-#endif
-        drawGPSpowerstat(display, x, yPos, gpsStatus);
+        drawGPSpowerstat(display, x, y + 2, gpsStatus);
     } else {
         if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
             drawGPS(display, x + (SCREEN_WIDTH * 0.63), y + 2, gpsStatus);
@@ -1500,8 +1535,6 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
 {
 #if HAS_WIFI
     const char *wifiName = config.network.wifi_ssid;
-
-    displayedNodeNum = 0; // Not currently showing a node pane
 
     display->setFont(FONT_SMALL);
 
@@ -1633,8 +1666,6 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
 void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    displayedNodeNum = 0; // Not currently showing a node pane
-
     display->setFont(FONT_SMALL);
 
     // The coordinates define the left starting point of the text
@@ -1714,7 +1745,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     display->setColor(WHITE);
 
     // Show uptime as days, hours, minutes OR seconds
-    String uptime = screen->drawTimeDelta(days, hours, minutes, seconds);
+    std::string uptime = screen->drawTimeDelta(days, hours, minutes, seconds);
 
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice);
     if (rtc_sec > 0) {
@@ -1729,12 +1760,12 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
         int min = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
         int sec = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
 
-        char timebuf[9];
+        char timebuf[10];
         snprintf(timebuf, sizeof(timebuf), " %02d:%02d:%02d", hour, min, sec);
         uptime += timebuf;
     }
 
-    display->drawString(x, y + FONT_HEIGHT_SMALL * 1, uptime);
+    display->drawString(x, y + FONT_HEIGHT_SMALL * 1, uptime.c_str());
 
     // Display Channel Utilization
     char chUtil[13];
@@ -1750,6 +1781,9 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
         drawGPScoordinates(display, x, y + FONT_HEIGHT_SMALL * 3, gpsStatus);
     } else {
         drawGPSpowerstat(display, x - (SCREEN_WIDTH / 4), y + FONT_HEIGHT_SMALL * 2, gpsStatus);
+#ifdef GPS_POWER_TOGGLE
+        display->drawString(x + 30, (y + FONT_HEIGHT_SMALL * 3), " by button");
+#endif
     }
     /* Display a heartbeat pixel that blinks every time the frame is redrawn */
 #ifdef SHOW_REDRAWS
@@ -1817,5 +1851,6 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 }
 
 } // namespace graphics
-
+#else
+graphics::Screen::Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY) {}
 #endif // HAS_SCREEN

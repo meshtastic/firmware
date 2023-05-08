@@ -126,7 +126,6 @@ static const uint8_t SCK = PIN_SPI_SCK;
  * eink display pins
  */
 
-#define PIN_EINK_EN (32 + 2) // (0 + 2) Note: this is really just backlight power
 #define PIN_EINK_CS (0 + 26)
 #define PIN_EINK_BUSY (0 + 4)
 #define PIN_EINK_DC (0 + 17)

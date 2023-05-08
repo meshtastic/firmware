@@ -31,11 +31,9 @@ typedef enum _meshtastic_Channel_Role {
 
 /* Struct definitions */
 typedef PB_BYTES_ARRAY_T(32) meshtastic_ChannelSettings_psk_t;
-/* Full settings (center freq, spread factor, pre-shared secret key etc...)
- needed to configure a radio for speaking on a particular channel This
- information can be encoded as a QRcode/url so that other users can configure
+/* This information can be encoded as a QRcode/url so that other users can configure
  their radio to join the same channel.
- A note about how channel names are shown to users: channelname-Xy
+ A note about how channel names are shown to users: channelname-X
  poundsymbol is a prefix used to indicate this is a channel name (idea from @professr).
  Where X is a letter from A-Z (base 26) representing a hash of the PSK for this
  channel - so that if the user changes anything about the channel (which does
@@ -45,8 +43,6 @@ typedef PB_BYTES_ARRAY_T(32) meshtastic_ChannelSettings_psk_t;
  The PSK is hashed into this letter by "0x41 + [xor all bytes of the psk ] modulo 26"
  This also allows the option of someday if people have the PSK off (zero), the
  users COULD type in a channel name and be able to talk.
- Y is a lower case letter from a-z that represents the channel 'speed' settings
- (for some future definition of speed)
  FIXME: Add description of multi-channel support and how primary vs secondary channels are used.
  FIXME: explain how apps use channels for security.
  explain how remote settings and remote gpio are managed as an example */
@@ -60,7 +56,7 @@ typedef struct _meshtastic_ChannelSettings {
  because they are listed in this source code.
  Those bytes are mapped using the following scheme:
  `0` = No crypto
- `1` = The special "default" channel key: {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59, 0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0xbf}
+ `1` = The special "default" channel key: {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59, 0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0x01}
  `2` through 10 = The default channel key, except with 1 through 9 added to the last byte.
  Shown to user as simple1 through 10 */
     meshtastic_ChannelSettings_psk_t psk;

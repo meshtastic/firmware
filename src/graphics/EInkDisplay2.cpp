@@ -27,6 +27,10 @@
 // 1.54 inch 200x200 - GxEPD2_154_M09
 //#define TECHO_DISPLAY_MODEL GxEPD2_154_M09
 
+#elif defined(MAKERPYTHON)
+// 2.9 inch 296x128 - GxEPD2_290_T5D
+#define TECHO_DISPLAY_MODEL GxEPD2_290_T5D
+
 #elif defined(PCA10059)
 
 // 4.2 inch 300x400 - GxEPD2_420_M01
@@ -41,7 +45,7 @@
 
 GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT> *adafruitDisplay;
 
-EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl, uint8_t screen_model)
+EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY geometry, HW_I2C i2cBus)
 {
 #if defined(TTGO_T_ECHO)
     setGeometry(GEOMETRY_RAWMODE, TECHO_DISPLAY_MODEL::WIDTH, TECHO_DISPLAY_MODEL::HEIGHT);
@@ -58,6 +62,9 @@ EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl, uint8_t screen_model
 
     // GxEPD2_154_M09
     // setGeometry(GEOMETRY_RAWMODE, 200, 200);
+#elif defined(MAKERPYTHON)
+    // GxEPD2_290_T5D
+    setGeometry(GEOMETRY_RAWMODE, 296, 128);
 
 #elif defined(PCA10059)
 
@@ -69,6 +76,11 @@ EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl, uint8_t screen_model
     // M5Stack_CoreInk 200x200
     // 1.54 inch 200x200 - GxEPD2_154_M09
     setGeometry(GEOMETRY_RAWMODE, EPD_HEIGHT, EPD_WIDTH);
+#elif defined(my)
+
+    // GxEPD2_290_T5D
+    setGeometry(GEOMETRY_RAWMODE, 296, 128);
+    LOG_DEBUG("GEOMETRY_RAWMODE, 296, 128\n");
 
 #endif
     // setGeometry(GEOMETRY_RAWMODE, 128, 64); // old resolution
@@ -109,7 +121,7 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
 #if defined(TTGO_T_ECHO)
         // ePaper.Reset(); // wake the screen from sleep
         adafruitDisplay->display(false); // FIXME, use partial update mode
-#elif defined(RAK4630)
+#elif defined(RAK4630) || defined(MAKERPYTHON)
 
         // RAK14000 2.13 inch b/w 250x122 actually now does support partial updates
 
@@ -125,6 +137,10 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
 
 #elif defined(PCA10059) || defined(M5_COREINK)
         adafruitDisplay->nextPage();
+
+#elif defined(PRIVATE_HW) || defined(my)
+        adafruitDisplay->nextPage();
+
 #endif
 
         // Put screen to sleep to save power (possibly not necessary because we already did poweroff inside of display)
@@ -184,7 +200,7 @@ bool EInkDisplay::connect()
         adafruitDisplay->init();
         adafruitDisplay->setRotation(3);
     }
-#elif defined(RAK4630)
+#elif defined(RAK4630) || defined(MAKERPYTHON)
     {
         if (eink_found) {
             auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
@@ -216,6 +232,14 @@ bool EInkDisplay::connect()
     adafruitDisplay->init(115200, true, 40, false, SPI, SPISettings(4000000, MSBFIRST, SPI_MODE0));
     adafruitDisplay->setRotation(0);
     adafruitDisplay->setPartialWindow(0, 0, EPD_WIDTH, EPD_HEIGHT);
+#elif defined(my)
+    {
+        auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
+        adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+        adafruitDisplay->init(115200, true, 40, false, SPI, SPISettings(4000000, MSBFIRST, SPI_MODE0));
+        adafruitDisplay->setRotation(1);
+        adafruitDisplay->setPartialWindow(0, 0, EPD_WIDTH, EPD_HEIGHT);
+    }
 #endif
 
     // adafruitDisplay->setFullWindow();

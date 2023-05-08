@@ -20,7 +20,7 @@ class NodeInfoModule : public ProtobufModule<meshtastic_User>, private concurren
     /**
      * Send our NodeInfo into the mesh
      */
-    void sendOurNodeInfo(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
+    void sendOurNodeInfo(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false, uint8_t channel = 0);
 
   protected:
     /** Called to handle a particular incoming message
@@ -35,6 +35,9 @@ class NodeInfoModule : public ProtobufModule<meshtastic_User>, private concurren
 
     /** Does our periodic broadcast */
     virtual int32_t runOnce() override;
+
+  private:
+    uint32_t lastSentToMesh = 0; // Last time we sent our NodeInfo to the mesh
 };
 
 extern NodeInfoModule *nodeInfoModule;

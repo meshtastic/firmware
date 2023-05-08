@@ -20,7 +20,7 @@
 #include "mqtt/MQTT.h"
 #endif
 
-#define DEFAULT_REBOOT_SECONDS 5
+#define DEFAULT_REBOOT_SECONDS 7
 
 AdminModule *adminModule;
 bool hasOpenEditTransaction;
@@ -39,9 +39,9 @@ static void writeSecret(char *buf, size_t bufsz, const char *currentVal)
 }
 
 /**
- * @brief Handle recieved protobuf message
+ * @brief Handle received protobuf message
  *
- * @param mp Recieved MeshPacket
+ * @param mp Received MeshPacket
  * @param r Decoded AdminMessage
  * @return bool
  */
@@ -105,6 +105,10 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
         else
             handleSetChannel(r->set_channel);
+        break;
+    case meshtastic_AdminMessage_set_ham_mode_tag:
+        LOG_INFO("Client is setting ham mode\n");
+        handleSetHamMode(r->set_ham_mode);
         break;
 
     /**
@@ -208,7 +212,6 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 void AdminModule::handleSetOwner(const meshtastic_User &o)
 {
     int changed = 0;
-    bool licensed_changed = false;
 
     if (*o.long_name) {
         changed |= strcmp(owner.long_name, o.long_name);
@@ -224,14 +227,12 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
     }
     if (owner.is_licensed != o.is_licensed) {
         changed = 1;
-        licensed_changed = true;
         owner.is_licensed = o.is_licensed;
-        config.lora.override_duty_cycle = owner.is_licensed; // override duty cycle for licensed operators
     }
 
     if (changed) { // If nothing really changed, don't broadcast on the network or write to flash
         service.reloadOwner(!hasOpenEditTransaction);
-        licensed_changed ? saveChanges(SEGMENT_CONFIG | SEGMENT_DEVICESTATE) : saveChanges(SEGMENT_DEVICESTATE);
+        saveChanges(SEGMENT_DEVICESTATE);
     }
 }
 
@@ -489,19 +490,7 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
 void AdminModule::handleGetDeviceMetadata(const meshtastic_MeshPacket &req)
 {
     meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
-
-    meshtastic_DeviceMetadata deviceMetadata;
-    strncpy(deviceMetadata.firmware_version, myNodeInfo.firmware_version, 18);
-    deviceMetadata.device_state_version = DEVICESTATE_CUR_VER;
-    deviceMetadata.canShutdown = pmu_found || HAS_CPU_SHUTDOWN;
-    deviceMetadata.hasBluetooth = HAS_BLUETOOTH;
-    deviceMetadata.hasWifi = HAS_WIFI;
-    deviceMetadata.hasEthernet = HAS_ETHERNET;
-    deviceMetadata.role = config.device.role;
-    deviceMetadata.position_flags = config.position.position_flags;
-    deviceMetadata.hw_model = HW_VENDOR;
-
-    r.get_device_metadata_response = deviceMetadata;
+    r.get_device_metadata_response = getDeviceMetadata();
     r.which_payload_variant = meshtastic_AdminMessage_get_device_metadata_response_tag;
     myReply = allocDataProtobuf(r);
 }
@@ -596,6 +585,32 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
     if (shouldReboot) {
         reboot(DEFAULT_REBOOT_SECONDS);
     }
+}
+
+void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
+{
+    // Set call sign and override lora limitations for licensed use
+    strncpy(owner.long_name, p.call_sign, sizeof(owner.long_name));
+    strncpy(owner.short_name, p.short_name, sizeof(owner.short_name));
+    owner.is_licensed = true;
+    config.lora.override_duty_cycle = true;
+    config.lora.tx_power = p.tx_power;
+    config.lora.override_frequency = p.frequency;
+    // Set node info broadcast interval to 10 minutes
+    // For FCC minimum call-sign announcement
+    config.device.node_info_broadcast_secs = 600;
+
+    config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY;
+    // Remove PSK of primary channel for plaintext amateur usage
+    auto primaryChannel = channels.getByIndex(channels.getPrimaryIndex());
+    auto &channelSettings = primaryChannel.settings;
+    channelSettings.psk.bytes[0] = 0;
+    channelSettings.psk.size = 0;
+    channels.setChannel(primaryChannel);
+    channels.onConfigChanged();
+
+    service.reloadOwner(false);
+    service.reloadConfig(SEGMENT_CONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
 }
 
 AdminModule::AdminModule() : ProtobufModule("Admin", meshtastic_PortNum_ADMIN_APP, &meshtastic_AdminMessage_msg)

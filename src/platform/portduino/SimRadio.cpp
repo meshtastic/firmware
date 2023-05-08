@@ -2,7 +2,7 @@
 #include "MeshService.h"
 #include "Router.h"
 
-SimRadio::SimRadio()
+SimRadio::SimRadio() : NotifiedWorkerThread("SimRadio")
 {
     instance = this;
 }
@@ -53,10 +53,7 @@ void SimRadio::startTransmitTimer(bool withDelay)
     if (!txQueue.empty()) {
         uint32_t delayMsec = !withDelay ? 1 : getTxDelayMsec();
         // LOG_DEBUG("xmit timer %d\n", delay);
-        delay(delayMsec);
-        onNotify(TRANSMIT_DELAY_COMPLETED);
-    } else {
-        LOG_DEBUG("TX QUEUE EMPTY!\n");
+        notifyLater(delayMsec, TRANSMIT_DELAY_COMPLETED, false);
     }
 }
 
@@ -66,8 +63,7 @@ void SimRadio::startTransmitTimerSNR(float snr)
     if (!txQueue.empty()) {
         uint32_t delayMsec = getTxDelayMsecWeighted(snr);
         // LOG_DEBUG("xmit timer %d\n", delay);
-        delay(delayMsec);
-        onNotify(TRANSMIT_DELAY_COMPLETED);
+        notifyLater(delayMsec, TRANSMIT_DELAY_COMPLETED, false);
     }
 }
 
@@ -142,11 +138,12 @@ void SimRadio::onNotify(uint32_t notification)
     switch (notification) {
     case ISR_TX:
         handleTransmitInterrupt();
-        LOG_DEBUG("tx complete - starting timer\n");
+        //  LOG_DEBUG("tx complete - starting timer\n");
         startTransmitTimer();
         break;
     case ISR_RX:
-        LOG_DEBUG("rx complete - starting timer\n");
+        //  LOG_DEBUG("rx complete - starting timer\n");
+        startTransmitTimer();
         break;
     case TRANSMIT_DELAY_COMPLETED:
         LOG_DEBUG("delay done\n");
@@ -170,8 +167,7 @@ void SimRadio::onNotify(uint32_t notification)
                     uint32_t xmitMsec = getPacketTime(txp);
                     airTime->logAirtime(TX_LOG, xmitMsec);
 
-                    delay(xmitMsec); // Model the time it is busy sending
-                    completeSending();
+                    notifyLater(xmitMsec, ISR_TX, false); // Model the time it is busy sending
                 }
             }
         } else {
@@ -242,8 +238,7 @@ void SimRadio::handleReceiveInterrupt(meshtastic_MeshPacket *p)
     xmitMsec = getPacketTime(length);
     // LOG_DEBUG("Payload size %d vs length (includes header) %d\n", p->decoded.payload.size, length);
 
-    meshtastic_MeshPacket *mp = packetPool.allocCopy(*p);          // keep a copy in packtPool
-    mp->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // Mark that the payload is already decoded
+    meshtastic_MeshPacket *mp = packetPool.allocCopy(*p); // keep a copy in packetPool
 
     printPacket("Lora RX", mp);
 

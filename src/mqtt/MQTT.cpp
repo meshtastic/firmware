@@ -15,11 +15,9 @@
 #include "mqtt/JSON.h"
 #include <assert.h>
 
-MQTT *mqtt;
+const int reconnectMax = 5;
 
-String statusTopic = "msh/2/stat/";
-String cryptTopic = "msh/2/c/";   // msh/2/c/CHANNELID/NODEID
-String jsonTopic = "msh/2/json/"; // msh/2/json/CHANNELID/NODEID
+MQTT *mqtt;
 
 static MemoryDynamic<meshtastic_ServiceEnvelope> staticMqttPool;
 
@@ -162,6 +160,16 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), pubSub(mqttClient), mqttQueue(MAX_
         assert(!mqtt);
         mqtt = this;
 
+        if (*moduleConfig.mqtt.root) {
+            statusTopic = moduleConfig.mqtt.root + statusTopic;
+            cryptTopic = moduleConfig.mqtt.root + cryptTopic;
+            jsonTopic = moduleConfig.mqtt.root + jsonTopic;
+        } else {
+            statusTopic = "msh" + statusTopic;
+            cryptTopic = "msh" + cryptTopic;
+            jsonTopic = "msh" + jsonTopic;
+        }
+
         pubSub.setCallback(mqttCallback);
 
         // preflightSleepObserver.observe(&preflightSleep);
@@ -189,6 +197,26 @@ void MQTT::reconnect()
             mqttUsername = moduleConfig.mqtt.username;
             mqttPassword = moduleConfig.mqtt.password;
         }
+
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+        if (moduleConfig.mqtt.tls_enabled) {
+            // change default for encrypted to 8883
+            try {
+                serverPort = 8883;
+                wifiSecureClient.setInsecure();
+
+                pubSub.setClient(wifiSecureClient);
+                LOG_INFO("Using TLS-encrypted session\n");
+            } catch (const std::exception &e) {
+                LOG_ERROR("MQTT ERROR: %s\n", e.what());
+            }
+        } else {
+            LOG_INFO("Using non-TLS-encrypted session\n");
+            pubSub.setClient(mqttClient);
+        }
+#else
+        pubSub.setClient(mqttClient);
+#endif
 
         String server = String(serverAddr);
         int delimIndex = server.indexOf(':');
@@ -218,15 +246,13 @@ void MQTT::reconnect()
             sendSubscriptions();
         } else {
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
-            LOG_ERROR("Failed to contact MQTT server (%d/5)...\n", reconnectCount + 1);
-            if (reconnectCount >= 4) {
+            reconnectCount++;
+            LOG_ERROR("Failed to contact MQTT server (%d/%d)...\n", reconnectCount, reconnectMax);
+            if (reconnectCount >= reconnectMax) {
                 needReconnect = true;
                 wifiReconnect->setIntervalFromNow(0);
                 reconnectCount = 0;
-            } else {
-                reconnectCount++;
             }
-
 #endif
         }
     }
@@ -238,11 +264,11 @@ void MQTT::sendSubscriptions()
     for (size_t i = 0; i < numChan; i++) {
         auto &ch = channels.getByIndex(i);
         if (ch.settings.downlink_enabled) {
-            String topic = cryptTopic + channels.getGlobalId(i) + "/#";
+            std::string topic = cryptTopic + channels.getGlobalId(i) + "/#";
             LOG_INFO("Subscribing to %s\n", topic.c_str());
             pubSub.subscribe(topic.c_str(), 1); // FIXME, is QOS 1 right?
             if (moduleConfig.mqtt.json_enabled == true) {
-                String topicDecoded = jsonTopic + channels.getGlobalId(i) + "/#";
+                std::string topicDecoded = jsonTopic + channels.getGlobalId(i) + "/#";
                 LOG_INFO("Subscribing to %s\n", topicDecoded.c_str());
                 pubSub.subscribe(topicDecoded.c_str(), 1); // FIXME, is QOS 1 right?
             }
@@ -296,7 +322,7 @@ int32_t MQTT::runOnce()
                     static uint8_t bytes[meshtastic_MeshPacket_size + 64];
                     size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, env);
 
-                    String topic = cryptTopic + env->channel_id + "/" + owner.id;
+                    std::string topic = cryptTopic + env->channel_id + "/" + owner.id;
                     LOG_INFO("publish %s, %u bytes from queue\n", topic.c_str(), numBytes);
 
                     pubSub.publish(topic.c_str(), bytes, numBytes, false);
@@ -305,7 +331,7 @@ int32_t MQTT::runOnce()
                         // handle json topic
                         auto jsonString = this->downstreamPacketToJson(env->packet);
                         if (jsonString.length() != 0) {
-                            String topicJson = jsonTopic + env->channel_id + "/" + owner.id;
+                            std::string topicJson = jsonTopic + env->channel_id + "/" + owner.id;
                             LOG_INFO("JSON publish message to %s, %u bytes: %s\n", topicJson.c_str(), jsonString.length(),
                                      jsonString.c_str());
                             pubSub.publish(topicJson.c_str(), jsonString.c_str(), false);
@@ -350,7 +376,7 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, ChannelIndex chIndex)
             static uint8_t bytes[meshtastic_MeshPacket_size + 64];
             size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, env);
 
-            String topic = cryptTopic + channelId + "/" + owner.id;
+            std::string topic = cryptTopic + channelId + "/" + owner.id;
             LOG_DEBUG("publish %s, %u bytes\n", topic.c_str(), numBytes);
 
             pubSub.publish(topic.c_str(), bytes, numBytes, false);
@@ -359,7 +385,7 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, ChannelIndex chIndex)
                 // handle json topic
                 auto jsonString = this->downstreamPacketToJson((meshtastic_MeshPacket *)&mp);
                 if (jsonString.length() != 0) {
-                    String topicJson = jsonTopic + channelId + "/" + owner.id;
+                    std::string topicJson = jsonTopic + channelId + "/" + owner.id;
                     LOG_INFO("JSON publish message to %s, %u bytes: %s\n", topicJson.c_str(), jsonString.length(),
                              jsonString.c_str());
                     pubSub.publish(topicJson.c_str(), jsonString.c_str(), false);
@@ -386,7 +412,7 @@ std::string MQTT::downstreamPacketToJson(meshtastic_MeshPacket *mp)
 {
     // the created jsonObj is immutable after creation, so
     // we need to do the heavy lifting before assembling it.
-    String msgType;
+    std::string msgType;
     JSONObject msgPayload;
     JSONObject jsonObj;
 

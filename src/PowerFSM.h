@@ -8,7 +8,7 @@
 #define EVENT_WAKE_TIMER 2
 // #define EVENT_RECEIVED_PACKET 3
 #define EVENT_PACKET_FOR_PHONE 4
-#define EVENT_RECEIVED_TEXT_MSG 5
+#define EVENT_RECEIVED_MSG 5
 // #define EVENT_BOOT 6 // now done with a timed transition
 #define EVENT_BLUETOOTH_PAIR 7
 #define EVENT_NODEDB_UPDATED 8     // NodeDB has a big enough change that we think you should turn on the screen
@@ -23,6 +23,6 @@
 #define EVENT_INPUT 17           // input broker wants something, we need to wake up and enable screen
 
 extern Fsm powerFSM;
-extern State statePOWER, stateSERIAL;
+extern State stateON, statePOWER, stateSERIAL, stateDARK;
 
 void PowerFSM_setup();

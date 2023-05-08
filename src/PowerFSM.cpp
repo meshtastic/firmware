@@ -26,6 +26,9 @@ static bool isPowered()
         1) If we're powered up and there's no battery, we must be getting power externally. (because we'd be dead otherwise)
 
         2) If we detect USB power from the power management chip, we must be getting power externally.
+
+        3) On some boards we don't have the power management chip (like AXPxxxx) so we use EXT_PWR_DETECT GPIO pin to detect
+       external power source (see `isVbusIn()` in `Power.cpp`)
     */
     return !isPowerSavingMode && powerStatus && (!powerStatus->getHasBattery() || powerStatus->getHasUSB());
 }
@@ -66,11 +69,11 @@ static void lsIdle()
 
     // Do we have more sleeping to do?
     if (secsSlept < config.power.ls_secs) {
-        // Briefly come out of sleep long enough to blink the led once every few seconds
-        uint32_t sleepTime = 30;
-
         // If some other service would stall sleep, don't let sleep happen yet
         if (doPreflightSleep()) {
+            // Briefly come out of sleep long enough to blink the led once every few seconds
+            uint32_t sleepTime = 30;
+
             setLed(false); // Never leave led on while in light sleep
             esp_sleep_source_t wakeCause2 = doLightSleep(sleepTime * 1000LL);
 
@@ -78,8 +81,8 @@ static void lsIdle()
             case ESP_SLEEP_WAKEUP_TIMER:
                 // Normal case: timer expired, we should just go back to sleep ASAP
 
-                setLed(true);                 // briefly turn on led
-                wakeCause2 = doLightSleep(1); // leave led on for 1ms
+                setLed(true);                   // briefly turn on led
+                wakeCause2 = doLightSleep(100); // leave led on for 1ms
 
                 secsSlept += sleepTime;
                 // LOG_INFO("sleeping, flash led!\n");
@@ -96,12 +99,11 @@ static void lsIdle()
                 LOG_INFO("wakeCause2 %d\n", wakeCause2);
 
 #ifdef BUTTON_PIN
-                bool pressed = !digitalRead(BUTTON_PIN);
+                bool pressed = !digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
 #else
                 bool pressed = false;
 #endif
-                if (pressed) // If we woke because of press, instead generate a PRESS event.
-                {
+                if (pressed) { // If we woke because of press, instead generate a PRESS event.
                     powerFSM.trigger(EVENT_PRESS);
                 } else {
                     // Otherwise let the NB state handle the IRQ (and that state will handle stuff like IRQs etc)
@@ -169,7 +171,11 @@ static void powerEnter()
     } else {
         screen->setOn(true);
         setBluetoothEnable(true);
-        screen->print("Powered...\n");
+        // within enter() the function getState() returns the state we came from
+        if (strcmp(powerFSM.getState()->name, "BOOT") != 0 && strcmp(powerFSM.getState()->name, "POWER") != 0 &&
+            strcmp(powerFSM.getState()->name, "DARK") != 0) {
+            screen->print("Powered...\n");
+        }
     }
 }
 
@@ -186,7 +192,8 @@ static void powerExit()
 {
     screen->setOn(true);
     setBluetoothEnable(true);
-    screen->print("Unpowered...\n");
+    if (!isPowered())
+        screen->print("Unpowered...\n");
 }
 
 static void onEnter()
@@ -194,17 +201,6 @@ static void onEnter()
     LOG_INFO("Enter state: ON\n");
     screen->setOn(true);
     setBluetoothEnable(true);
-
-    static uint32_t lastPingMs;
-
-    uint32_t now = millis();
-
-    if ((now - lastPingMs) >
-        30 * 1000) { // if more than a minute since our last press, ask node we are looking at to update their state
-        if (displayedNodeNum)
-            service.sendNetworkPing(displayedNodeNum, true); // Refresh the currently displayed node
-        lastPingMs = now;
-    }
 }
 
 static void onIdle()
@@ -257,7 +253,7 @@ void PowerFSM_setup()
     // Handle press events - note: we ignore button presses when in API mode
     powerFSM.add_transition(&stateLS, &stateON, EVENT_PRESS, NULL, "Press");
     powerFSM.add_transition(&stateNB, &stateON, EVENT_PRESS, NULL, "Press");
-    powerFSM.add_transition(&stateDARK, &stateON, EVENT_PRESS, NULL, "Press");
+    powerFSM.add_transition(&stateDARK, isPowered() ? &statePOWER : &stateON, EVENT_PRESS, NULL, "Press");
     powerFSM.add_transition(&statePOWER, &statePOWER, EVENT_PRESS, screenPress, "Press");
     powerFSM.add_transition(&stateON, &stateON, EVENT_PRESS, screenPress, "Press"); // reenter On to restart our timers
     powerFSM.add_transition(&stateSERIAL, &stateSERIAL, EVENT_PRESS, screenPress,
@@ -299,10 +295,10 @@ void PowerFSM_setup()
         powerFSM.add_transition(&stateON, &stateON, EVENT_NODEDB_UPDATED, NULL, "NodeDB update");
 
         // Show the received text message
-        powerFSM.add_transition(&stateLS, &stateON, EVENT_RECEIVED_TEXT_MSG, NULL, "Received text");
-        powerFSM.add_transition(&stateNB, &stateON, EVENT_RECEIVED_TEXT_MSG, NULL, "Received text");
-        powerFSM.add_transition(&stateDARK, &stateON, EVENT_RECEIVED_TEXT_MSG, NULL, "Received text");
-        powerFSM.add_transition(&stateON, &stateON, EVENT_RECEIVED_TEXT_MSG, NULL, "Received text"); // restarts the sleep timer
+        powerFSM.add_transition(&stateLS, &stateON, EVENT_RECEIVED_MSG, NULL, "Received text");
+        powerFSM.add_transition(&stateNB, &stateON, EVENT_RECEIVED_MSG, NULL, "Received text");
+        powerFSM.add_transition(&stateDARK, &stateON, EVENT_RECEIVED_MSG, NULL, "Received text");
+        powerFSM.add_transition(&stateON, &stateON, EVENT_RECEIVED_MSG, NULL, "Received text"); // restarts the sleep timer
     }
 
     // If we are not in statePOWER but get a serial connection, suppress sleep (and keep the screen on) while connected
@@ -328,6 +324,12 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateDARK, &stateDARK, EVENT_CONTACT_FROM_PHONE, NULL, "Contact from phone");
 
     powerFSM.add_timed_transition(&stateON, &stateDARK,
+                                  getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL,
+                                  "Screen-on timeout");
+    powerFSM.add_timed_transition(&statePOWER, &stateDARK,
+                                  getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL,
+                                  "Screen-on timeout");
+    powerFSM.add_timed_transition(&stateDARK, &stateDARK,
                                   getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL,
                                   "Screen-on timeout");
 

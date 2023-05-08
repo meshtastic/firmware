@@ -56,7 +56,7 @@ int32_t RangeTestModule::runOnce()
                 return (5000); // Sending first message 5 seconds after initilization.
             } else {
                 LOG_INFO("Initializing Range Test Module -- Receiver\n");
-                return (INT32_MAX);
+                return disable();
                 // This thread does not need to run as a receiver
             }
 
@@ -91,17 +91,9 @@ int32_t RangeTestModule::runOnce()
     return disable();
 }
 
-meshtastic_MeshPacket *RangeTestModuleRadio::allocReply()
-{
-
-    auto reply = allocDataPacket(); // Allocate a packet for sending
-
-    return reply;
-}
-
 void RangeTestModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 {
-    meshtastic_MeshPacket *p = allocReply();
+    meshtastic_MeshPacket *p = allocDataPacket();
     p->to = dest;
     p->decoded.want_response = wantReplies;
 
@@ -234,7 +226,7 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
         } else {
             LOG_ERROR("File write failed\n");
         }
-
+        fileToWrite.flush();
         fileToWrite.close();
     }
 
@@ -283,6 +275,7 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
 
     // TODO: If quotes are found in the payload, it has to be escaped.
     fileToAppend.printf("\"%s\"\n", p.payload.bytes);
+    fileToAppend.flush();
     fileToAppend.close();
 
     return 1;

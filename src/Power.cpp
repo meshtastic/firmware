@@ -7,6 +7,16 @@
 #include "sleep.h"
 #include "utils.h"
 
+#ifdef DEBUG_HEAP_MQTT
+#include "mqtt/MQTT.h"
+#include "target_specific.h"
+#include <WiFi.h>
+#endif
+
+#ifndef DELAY_FOREVER
+#define DELAY_FOREVER portMAX_DELAY
+#endif
+
 #ifdef HAS_PMU
 #include "XPowersAXP192.tpp"
 #include "XPowersAXP2101.tpp"
@@ -150,8 +160,18 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
     /// in power
+    /// On some boards we don't have the power management chip (like AXPxxxx)
+    /// so we use EXT_PWR_DETECT GPIO pin to detect external power source
     virtual bool isVbusIn() override
     {
+#ifdef EXT_PWR_DETECT
+        // if external powered that pin will be pulled up
+        if (digitalRead(EXT_PWR_DETECT) == HIGH) {
+            return true;
+        }
+        // if it's not HIGH - check the battery
+#endif
+
         return getBattVoltage() > chargingVolt;
     }
 
@@ -192,12 +212,16 @@ Power::Power() : OSThread("Power")
     statusHandler = {};
     low_voltage_counter = 0;
 #ifdef DEBUG_HEAP
-    lastheap = ESP.getFreeHeap();
+    lastheap = memGet.getFreeHeap();
 #endif
 }
 
 bool Power::analogInit()
 {
+#ifdef EXT_PWR_DETECT
+    pinMode(EXT_PWR_DETECT, INPUT);
+#endif
+
 #ifdef BATTERY_PIN
     LOG_DEBUG("Using analog input %d for battery level\n", BATTERY_PIN);
 
@@ -250,16 +274,23 @@ void Power::shutdown()
     digitalWrite(PIN_EINK_EN, LOW); // power off backlight first
 #endif
 
-#ifdef HAS_PMU
     LOG_INFO("Shutting down\n");
-    if (PMU) {
+
+#ifdef HAS_PMU
+    if (pmu_found == true) {
         PMU->setChargingLedMode(XPOWERS_CHG_LED_OFF);
         PMU->shutdown();
     }
-#elif defined(ARCH_NRF52)
-    playBeep();
+#elif defined(ARCH_NRF52) || defined(ARCH_ESP32)
+#ifdef PIN_LED1
     ledOff(PIN_LED1);
+#endif
+#ifdef PIN_LED2
     ledOff(PIN_LED2);
+#endif
+#ifdef PIN_LED3
+    ledOff(PIN_LED2);
+#endif
     doDeepSleep(DELAY_FOREVER);
 #endif
 }
@@ -296,7 +327,7 @@ void Power::readPowerStatus()
                   powerStatus2.getIsCharging(), powerStatus2.getBatteryVoltageMv(), powerStatus2.getBatteryChargePercent());
         newStatus.notifyObservers(&powerStatus2);
 #ifdef DEBUG_HEAP
-        if (lastheap != ESP.getFreeHeap()) {
+        if (lastheap != memGet.getFreeHeap()) {
             LOG_DEBUG("Threads running:");
             int running = 0;
             for (int i = 0; i < MAX_THREADS; i++) {
@@ -307,33 +338,52 @@ void Power::readPowerStatus()
                 }
             }
             LOG_DEBUG("\n");
-            LOG_DEBUG("Heap status: %d/%d bytes free (%d), running %d/%d threads\n", ESP.getFreeHeap(), ESP.getHeapSize(),
-                      ESP.getFreeHeap() - lastheap, running, concurrency::mainController.size(false));
-            lastheap = ESP.getFreeHeap();
+            LOG_DEBUG("Heap status: %d/%d bytes free (%d), running %d/%d threads\n", memGet.getFreeHeap(), memGet.getHeapSize(),
+                      memGet.getFreeHeap() - lastheap, running, concurrency::mainController.size(false));
+            lastheap = memGet.getFreeHeap();
+        }
+#ifdef DEBUG_HEAP_MQTT
+        if (mqtt) {
+            // send MQTT-Packet with Heap-Size
+            uint8_t dmac[6];
+            getMacAddr(dmac); // Get our hardware ID
+            char mac[18];
+            sprintf(mac, "!%02x%02x%02x%02x", dmac[2], dmac[3], dmac[4], dmac[5]);
+
+            auto newHeap = memGet.getFreeHeap();
+            std::string heapTopic =
+                (*moduleConfig.mqtt.root ? moduleConfig.mqtt.root : "msh") + std::string("/2/heap/") + std::string(mac);
+            std::string heapString = std::to_string(newHeap);
+            mqtt->pubSub.publish(heapTopic.c_str(), heapString.c_str(), false);
+            auto wifiRSSI = WiFi.RSSI();
+            std::string wifiTopic =
+                (*moduleConfig.mqtt.root ? moduleConfig.mqtt.root : "msh") + std::string("/2/wifi/") + std::string(mac);
+            std::string wifiString = std::to_string(wifiRSSI);
+            mqtt->pubSub.publish(wifiTopic.c_str(), wifiString.c_str(), false);
         }
 #endif
 
-// If we have a battery at all and it is less than 10% full, force deep sleep if we have more than 3 low readings in a row
-// Supect fluctuating voltage on the RAK4631 to force it to deep sleep even if battery is at 85% after only a few days
-#ifdef ARCH_NRF52
+#endif
+
+        // If we have a battery at all and it is less than 10% full, force deep sleep if we have more than 10 low readings in a
+        // row
         if (powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
             if (batteryLevel->getBattVoltage() < MIN_BAT_MILLIVOLTS) {
                 low_voltage_counter++;
-                LOG_DEBUG("Warning RAK4631 Low voltage counter: %d/10\n", low_voltage_counter);
+                LOG_DEBUG("Low voltage counter: %d/10\n", low_voltage_counter);
                 if (low_voltage_counter > 10) {
+#ifdef ARCH_NRF52
                     // We can't trigger deep sleep on NRF52, it's freezing the board
-                    // powerFSM.trigger(EVENT_LOW_BATTERY);
                     LOG_DEBUG("Low voltage detected, but not triggering deep sleep\n");
+#else
+                    LOG_INFO("Low voltage detected, triggering deep sleep\n");
+                    powerFSM.trigger(EVENT_LOW_BATTERY);
+#endif
                 }
             } else {
                 low_voltage_counter = 0;
             }
         }
-#else
-        // If we have a battery at all and it is less than 10% full, force deep sleep
-        if (powerStatus2.getHasBattery() && !powerStatus2.getHasUSB() && batteryLevel->getBattVoltage() < MIN_BAT_MILLIVOLTS)
-            powerFSM.trigger(EVENT_LOW_BATTERY);
-#endif
     } else {
         // No power sensing on this board - tell everyone else we have no idea what is happening
         const PowerStatus powerStatus3 = PowerStatus(OptUnknown, OptUnknown, OptUnknown, -1, -1);
@@ -487,11 +537,41 @@ bool Power::axpChipInit()
 
         // Set up the charging voltage
         PMU->setChargeTargetVoltage(XPOWERS_AXP192_CHG_VOL_4V2);
-
     } else if (PMU->getChipModel() == XPOWERS_AXP2101) {
 
-        // t-beam s3 core
+        /*The alternative version of T-Beam 1.1 differs from T-Beam V1.1 in that it uses an AXP2101 power chip*/
+#if (HW_VENDOR == meshtastic_HardwareModel_TBEAM)
+        // Unuse power channel
+        PMU->disablePowerOutput(XPOWERS_DCDC2);
+        PMU->disablePowerOutput(XPOWERS_DCDC3);
+        PMU->disablePowerOutput(XPOWERS_DCDC4);
+        PMU->disablePowerOutput(XPOWERS_DCDC5);
+        PMU->disablePowerOutput(XPOWERS_ALDO1);
+        PMU->disablePowerOutput(XPOWERS_ALDO4);
+        PMU->disablePowerOutput(XPOWERS_BLDO1);
+        PMU->disablePowerOutput(XPOWERS_BLDO2);
+        PMU->disablePowerOutput(XPOWERS_DLDO1);
+        PMU->disablePowerOutput(XPOWERS_DLDO2);
 
+        // GNSS RTC PowerVDD 3300mV
+        PMU->setPowerChannelVoltage(XPOWERS_VBACKUP, 3300);
+        PMU->enablePowerOutput(XPOWERS_VBACKUP);
+
+        // ESP32 VDD 3300mV
+        //  ! No need to set, automatically open , Don't close it
+        //  PMU->setPowerChannelVoltage(XPOWERS_DCDC1, 3300);
+        //  PMU->setProtectedChannel(XPOWERS_DCDC1);
+
+        // LoRa VDD 3300mV
+        PMU->setPowerChannelVoltage(XPOWERS_ALDO2, 3300);
+        PMU->enablePowerOutput(XPOWERS_ALDO2);
+
+        // GNSS VDD 3300mV
+        PMU->setPowerChannelVoltage(XPOWERS_ALDO3, 3300);
+        PMU->enablePowerOutput(XPOWERS_ALDO3);
+
+#elif (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE)
+        // t-beam s3 core
         /**
          * gnss module power channel
          * The default ALDO4 is off, you need to turn on the GNSS power first, otherwise it will be invalid during initialization
@@ -533,6 +613,8 @@ bool Power::axpChipInit()
         PMU->disablePowerOutput(XPOWERS_DLDO1); // Invalid power channel, it does not exist
         PMU->disablePowerOutput(XPOWERS_DLDO2); // Invalid power channel, it does not exist
         PMU->disablePowerOutput(XPOWERS_VBACKUP);
+
+#endif
 
         // disable all axp chip interrupt
         PMU->disableIRQ(XPOWERS_AXP2101_ALL_IRQ);

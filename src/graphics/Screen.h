@@ -2,6 +2,10 @@
 
 #include "configuration.h"
 
+#include "detect/ScanI2C.h"
+#include "mesh/generated/meshtastic/config.pb.h"
+#include <OLEDDisplay.h>
+
 #if !HAS_SCREEN
 #include "power.h"
 namespace graphics
@@ -10,7 +14,7 @@ namespace graphics
 class Screen
 {
   public:
-    explicit Screen(char) {}
+    explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
     void onPress() {}
     void setup() {}
     void setOn(bool) {}
@@ -21,10 +25,10 @@ class Screen
     void startBluetoothPinScreen(uint32_t pin) {}
     void stopBluetoothPinScreen() {}
     void startRebootScreen() {}
+    void startShutdownScreen() {}
     void startFirmwareUpdateScreen() {}
 };
 } // namespace graphics
-
 #else
 #include <cstring>
 
@@ -34,7 +38,7 @@ class Screen
 
 #ifdef USE_ST7567
 #include <ST7567Wire.h>
-#elif defined(USE_SH1106) || defined(USE_SH1107)
+#elif defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SH1107_128_64)
 #include <SH1106Wire.h>
 #elif defined(USE_SSD1306)
 #include <SSD1306Wire.h>
@@ -116,12 +120,14 @@ class Screen : public concurrency::OSThread
         CallbackObserver<Screen, const UIFrameEvent *>(this, &Screen::handleUIFrameEvent);
 
   public:
-    explicit Screen(uint8_t address, int sda = -1, int scl = -1);
+    explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
 
     Screen(const Screen &) = delete;
     Screen &operator=(const Screen &) = delete;
 
-    uint8_t address_found;
+    ScanI2C::DeviceAddress address_found;
+    meshtastic_Config_DisplayConfig_OledType model;
+    OLEDDISPLAY_GEOMETRY geometry;
 
     /// Initializes the UI, turns on the display, starts showing boot screen.
     //
@@ -207,7 +213,7 @@ class Screen : public concurrency::OSThread
     }
 
     /// generates a very brief time delta display
-    String drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint32_t seconds);
+    std::string drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint32_t seconds);
 
     /// Overrides the default utf8 character conversion, to replace empty space with question marks
     static char customFontTableLookup(const uint8_t ch)
@@ -240,6 +246,12 @@ class Screen : public concurrency::OSThread
         // library have empty chars for non-latin ASCII symbols
         case 0xD0: {
             SKIPREST = false;
+            if (ch == 132)
+                return (uint8_t)(170); // Є
+            if (ch == 134)
+                return (uint8_t)(178); // І
+            if (ch == 135)
+                return (uint8_t)(175); // Ї
             if (ch == 129)
                 return (uint8_t)(168); // Ё
             if (ch > 143 && ch < 192)
@@ -248,10 +260,24 @@ class Screen : public concurrency::OSThread
         }
         case 0xD1: {
             SKIPREST = false;
+            if (ch == 148)
+                return (uint8_t)(186); // є
+            if (ch == 150)
+                return (uint8_t)(179); // і
+            if (ch == 151)
+                return (uint8_t)(191); // ї
             if (ch == 145)
                 return (uint8_t)(184); // ё
             if (ch > 127 && ch < 144)
                 return (uint8_t)(ch + 112);
+            break;
+        }
+        case 0xD2: {
+            SKIPREST = false;
+            if (ch == 144)
+                return (uint8_t)(165); // Ґ
+            if (ch == 145)
+                return (uint8_t)(180); // ґ
             break;
         }
         }
@@ -350,7 +376,7 @@ class Screen : public concurrency::OSThread
 
     /// Display device
 
-#if defined(USE_SH1106) || defined(USE_SH1107)
+#if defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SH1107_128_64)
     SH1106Wire dispdev;
 #elif defined(USE_SSD1306)
     SSD1306Wire dispdev;

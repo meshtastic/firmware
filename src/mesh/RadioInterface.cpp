@@ -175,7 +175,7 @@ uint32_t RadioInterface::getPacketTime(uint32_t pl)
     return msecs;
 }
 
-uint32_t RadioInterface::getPacketTime(meshtastic_MeshPacket *p)
+uint32_t RadioInterface::getPacketTime(const meshtastic_MeshPacket *p)
 {
     uint32_t pl = 0;
     if (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag) {
@@ -241,47 +241,48 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(float snr)
 
 void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
 {
-    LOG_DEBUG("%s (id=0x%08x fr=0x%02x to=0x%02x, WantAck=%d, HopLim=%d Ch=0x%x", prefix, p->id, p->from & 0xff, p->to & 0xff,
-              p->want_ack, p->hop_limit, p->channel);
+    std::string out = DEBUG_PORT.mt_sprintf("%s (id=0x%08x fr=0x%02x to=0x%02x, WantAck=%d, HopLim=%d Ch=0x%x", prefix, p->id,
+                                            p->from & 0xff, p->to & 0xff, p->want_ack, p->hop_limit, p->channel);
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         auto &s = p->decoded;
 
-        LOG_DEBUG(" Portnum=%d", s.portnum);
+        out += DEBUG_PORT.mt_sprintf(" Portnum=%d", s.portnum);
 
         if (s.want_response)
-            LOG_DEBUG(" WANTRESP");
+            out += DEBUG_PORT.mt_sprintf(" WANTRESP");
 
         if (s.source != 0)
-            LOG_DEBUG(" source=%08x", s.source);
+            out += DEBUG_PORT.mt_sprintf(" source=%08x", s.source);
 
         if (s.dest != 0)
-            LOG_DEBUG(" dest=%08x", s.dest);
+            out += DEBUG_PORT.mt_sprintf(" dest=%08x", s.dest);
 
         if (s.request_id)
-            LOG_DEBUG(" requestId=%0x", s.request_id);
+            out += DEBUG_PORT.mt_sprintf(" requestId=%0x", s.request_id);
 
         /* now inside Data and therefore kinda opaque
         if (s.which_ackVariant == SubPacket_success_id_tag)
-            LOG_DEBUG(" successId=%08x", s.ackVariant.success_id);
+            out += DEBUG_PORT.mt_sprintf(" successId=%08x", s.ackVariant.success_id);
         else if (s.which_ackVariant == SubPacket_fail_id_tag)
-            LOG_DEBUG(" failId=%08x", s.ackVariant.fail_id); */
+            out += DEBUG_PORT.mt_sprintf(" failId=%08x", s.ackVariant.fail_id); */
     } else {
-        LOG_DEBUG(" encrypted");
+        out += " encrypted";
     }
 
     if (p->rx_time != 0) {
-        LOG_DEBUG(" rxtime=%u", p->rx_time);
+        out += DEBUG_PORT.mt_sprintf(" rxtime=%u", p->rx_time);
     }
     if (p->rx_snr != 0.0) {
-        LOG_DEBUG(" rxSNR=%g", p->rx_snr);
+        out += DEBUG_PORT.mt_sprintf(" rxSNR=%g", p->rx_snr);
     }
     if (p->rx_rssi != 0) {
-        LOG_DEBUG(" rxRSSI=%i", p->rx_rssi);
+        out += DEBUG_PORT.mt_sprintf(" rxRSSI=%i", p->rx_rssi);
     }
     if (p->priority != 0)
-        LOG_DEBUG(" priority=%d", p->priority);
+        out += DEBUG_PORT.mt_sprintf(" priority=%d", p->priority);
 
-    LOG_DEBUG(")\n");
+    out += ")";
+    LOG_DEBUG("%s\n", out.c_str());
 }
 
 RadioInterface::RadioInterface()
@@ -453,6 +454,7 @@ void RadioInterface::applyModemConfig()
 
     // If user has manually specified a channel num, then use that, otherwise generate one by hashing the name
     const char *channelName = channels.getName(channels.getPrimaryIndex());
+    // channel_num is actually (channel_num - 1), since modulus (%) returns values from 0 to (numChannels - 1)
     int channel_num = (loraConfig.channel_num ? loraConfig.channel_num - 1 : hash(channelName)) % numChannels;
 
     // Old frequency selection formula
@@ -470,13 +472,16 @@ void RadioInterface::applyModemConfig()
     saveChannelNum(channel_num);
     saveFreq(freq + loraConfig.frequency_offset);
 
+    preambleTimeMsec = getPacketTime((uint32_t)0);
+    maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
+
     LOG_INFO("Radio freq=%.3f, config.lora.frequency_offset=%.3f\n", freq, loraConfig.frequency_offset);
     LOG_INFO("Set radio: region=%s, name=%s, config=%u, ch=%d, power=%d\n", myRegion->name, channelName, loraConfig.modem_preset,
              channel_num, power);
     LOG_INFO("Radio myRegion->freqStart -> myRegion->freqEnd: %f -> %f (%f mhz)\n", myRegion->freqStart, myRegion->freqEnd,
              myRegion->freqEnd - myRegion->freqStart);
     LOG_INFO("Radio myRegion->numChannels: %d x %.3fkHz\n", numChannels, bw);
-    LOG_INFO("Radio channel_num: %d\n", channel_num);
+    LOG_INFO("Radio channel_num: %d\n", channel_num + 1);
     LOG_INFO("Radio frequency: %f\n", getFreq());
     LOG_INFO("Slot time: %u msec\n", slotTimeMsec);
 }

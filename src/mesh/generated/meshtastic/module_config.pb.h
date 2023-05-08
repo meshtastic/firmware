@@ -96,6 +96,11 @@ typedef struct _meshtastic_ModuleConfig_MQTTConfig {
     bool encryption_enabled;
     /* Whether to send / consume json packets on MQTT */
     bool json_enabled;
+    /* If true, we attempt to establish a secure connection using TLS */
+    bool tls_enabled;
+    /* The root topic to use for MQTT messages. Default is "msh".
+ This is useful if you want to use a single MQTT server for multiple meshtastic networks and separate them via ACLs */
+    char root[16];
 } meshtastic_ModuleConfig_MQTTConfig;
 
 /* RemoteHardwareModule Config */
@@ -222,6 +227,11 @@ typedef struct _meshtastic_ModuleConfig_TelemetryConfig {
     /* We'll always read the sensor in Celsius, but sometimes we might want to
  display the results in Fahrenheit as a "user preference". */
     bool environment_display_fahrenheit;
+    /* Enable/Disable the air quality metrics */
+    bool air_quality_enabled;
+    /* Interval in seconds of how often we should try to send our
+ air quality metrics to the mesh */
+    uint32_t air_quality_interval;
 } meshtastic_ModuleConfig_TelemetryConfig;
 
 /* TODO: REPLACE */
@@ -318,24 +328,24 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_ModuleConfig_init_default     {0, {meshtastic_ModuleConfig_MQTTConfig_init_default}}
-#define meshtastic_ModuleConfig_MQTTConfig_init_default {0, "", "", "", 0, 0}
+#define meshtastic_ModuleConfig_MQTTConfig_init_default {0, "", "", "", 0, 0, 0, ""}
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_init_default {0}
 #define meshtastic_ModuleConfig_AudioConfig_init_default {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_default {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_RangeTestConfig_init_default {0, 0, 0}
-#define meshtastic_ModuleConfig_TelemetryConfig_init_default {0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_TelemetryConfig_init_default {0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define meshtastic_ModuleConfig_init_zero        {0, {meshtastic_ModuleConfig_MQTTConfig_init_zero}}
-#define meshtastic_ModuleConfig_MQTTConfig_init_zero {0, "", "", "", 0, 0}
+#define meshtastic_ModuleConfig_MQTTConfig_init_zero {0, "", "", "", 0, 0, 0, ""}
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_init_zero {0}
 #define meshtastic_ModuleConfig_AudioConfig_init_zero {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_zero {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_RangeTestConfig_init_zero {0, 0, 0}
-#define meshtastic_ModuleConfig_TelemetryConfig_init_zero {0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_TelemetryConfig_init_zero {0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -345,6 +355,8 @@ extern "C" {
 #define meshtastic_ModuleConfig_MQTTConfig_password_tag 4
 #define meshtastic_ModuleConfig_MQTTConfig_encryption_enabled_tag 5
 #define meshtastic_ModuleConfig_MQTTConfig_json_enabled_tag 6
+#define meshtastic_ModuleConfig_MQTTConfig_tls_enabled_tag 7
+#define meshtastic_ModuleConfig_MQTTConfig_root_tag 8
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_AudioConfig_codec2_enabled_tag 1
 #define meshtastic_ModuleConfig_AudioConfig_ptt_pin_tag 2
@@ -387,6 +399,8 @@ extern "C" {
 #define meshtastic_ModuleConfig_TelemetryConfig_environment_measurement_enabled_tag 3
 #define meshtastic_ModuleConfig_TelemetryConfig_environment_screen_enabled_tag 4
 #define meshtastic_ModuleConfig_TelemetryConfig_environment_display_fahrenheit_tag 5
+#define meshtastic_ModuleConfig_TelemetryConfig_air_quality_enabled_tag 6
+#define meshtastic_ModuleConfig_TelemetryConfig_air_quality_interval_tag 7
 #define meshtastic_ModuleConfig_CannedMessageConfig_rotary1_enabled_tag 1
 #define meshtastic_ModuleConfig_CannedMessageConfig_inputbroker_pin_a_tag 2
 #define meshtastic_ModuleConfig_CannedMessageConfig_inputbroker_pin_b_tag 3
@@ -437,7 +451,9 @@ X(a, STATIC,   SINGULAR, STRING,   address,           2) \
 X(a, STATIC,   SINGULAR, STRING,   username,          3) \
 X(a, STATIC,   SINGULAR, STRING,   password,          4) \
 X(a, STATIC,   SINGULAR, BOOL,     encryption_enabled,   5) \
-X(a, STATIC,   SINGULAR, BOOL,     json_enabled,      6)
+X(a, STATIC,   SINGULAR, BOOL,     json_enabled,      6) \
+X(a, STATIC,   SINGULAR, BOOL,     tls_enabled,       7) \
+X(a, STATIC,   SINGULAR, STRING,   root,              8)
 #define meshtastic_ModuleConfig_MQTTConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_MQTTConfig_DEFAULT NULL
 
@@ -507,7 +523,9 @@ X(a, STATIC,   SINGULAR, UINT32,   device_update_interval,   1) \
 X(a, STATIC,   SINGULAR, UINT32,   environment_update_interval,   2) \
 X(a, STATIC,   SINGULAR, BOOL,     environment_measurement_enabled,   3) \
 X(a, STATIC,   SINGULAR, BOOL,     environment_screen_enabled,   4) \
-X(a, STATIC,   SINGULAR, BOOL,     environment_display_fahrenheit,   5)
+X(a, STATIC,   SINGULAR, BOOL,     environment_display_fahrenheit,   5) \
+X(a, STATIC,   SINGULAR, BOOL,     air_quality_enabled,   6) \
+X(a, STATIC,   SINGULAR, UINT32,   air_quality_interval,   7)
 #define meshtastic_ModuleConfig_TelemetryConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_TelemetryConfig_DEFAULT NULL
 
@@ -553,13 +571,13 @@ extern const pb_msgdesc_t meshtastic_ModuleConfig_CannedMessageConfig_msg;
 #define meshtastic_ModuleConfig_AudioConfig_size 19
 #define meshtastic_ModuleConfig_CannedMessageConfig_size 49
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_size 40
-#define meshtastic_ModuleConfig_MQTTConfig_size  201
+#define meshtastic_ModuleConfig_MQTTConfig_size  220
 #define meshtastic_ModuleConfig_RangeTestConfig_size 10
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_size 2
 #define meshtastic_ModuleConfig_SerialConfig_size 26
 #define meshtastic_ModuleConfig_StoreForwardConfig_size 22
-#define meshtastic_ModuleConfig_TelemetryConfig_size 18
-#define meshtastic_ModuleConfig_size             204
+#define meshtastic_ModuleConfig_TelemetryConfig_size 26
+#define meshtastic_ModuleConfig_size             223
 
 #ifdef __cplusplus
 } /* extern "C" */

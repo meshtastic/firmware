@@ -14,10 +14,12 @@
 #define RF95_PA_PWM_RES_BIT 8 // DAC and PWM resolution (in bits) to uniformly set analog level
 #define RF95_PA_PWM_FREQ 1000 // ESP32 PWM-specific frequency
 
-RF95Interface::RF95Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, SPIClass &spi)
-    : RadioLibInterface(cs, irq, rst, RADIOLIB_NC, spi)
+RF95Interface::RF95Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy,
+                             SPIClass &spi)
+    : RadioLibInterface(cs, irq, rst, busy, spi)
+
 {
-    // FIXME - we assume devices never get destroyed
+    LOG_WARN("RF95Interface(cs=%d, irq=%d, rst=%d, busy=%d)\n", cs, irq, rst, busy);
 }
 
 /** Some boards require GPIO control of tx vs rx paths */
@@ -93,18 +95,11 @@ bool RF95Interface::init()
 #endif
     setTransmitEnable(false);
 
-    int res = lora->begin(getFreq(), bw, sf, cr, syncWord, power, currentLimit, preambleLength);
+    int res = lora->begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength);
     LOG_INFO("RF95 init result %d\n", res);
-
     LOG_INFO("Frequency set to %f\n", getFreq());
     LOG_INFO("Bandwidth set to %f\n", bw);
     LOG_INFO("Power output set to %d\n", power);
-
-    // current limit was removed from module' ctor
-    // override default value (60 mA)
-    res = lora->setCurrentLimit(currentLimit);
-    LOG_DEBUG("Current limit set to %f\n", currentLimit);
-    LOG_DEBUG("Current limit set result %d\n", res);
 
     if (res == RADIOLIB_ERR_NONE)
         res = lora->setCRC(RADIOLIB_SX126X_LORA_CRC_ON);
