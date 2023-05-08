@@ -79,5 +79,5 @@ bool RadioLibRF95::isReceiving()
 
 uint8_t RadioLibRF95::readReg(uint8_t addr)
 {
-    return _mod->SPIreadRegister(addr);
+    return mod->SPIreadRegister(addr);
 }
