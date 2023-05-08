@@ -161,6 +161,7 @@ static OSThread *buttonThread;
 uint32_t ButtonThread::longPressTime = 0;
 #endif
 static OSThread *accelerometerThread;
+SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 
 RadioInterface *rIf = NULL;
 
@@ -453,8 +454,6 @@ void setup()
     SPI.begin(RF95_SCK, RF95_MISO, RF95_MOSI, RF95_NSS);
     SPI.setFrequency(4000000);
 #endif
-
-    static SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 
     // Initialize the screen first so we can show the logo while we start up everything else.
     screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
