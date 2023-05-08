@@ -12,7 +12,8 @@ class RF95Interface : public RadioLibInterface
     RadioLibRF95 *lora = NULL; // Either a RFM95 or RFM96 depending on what was stuffed on this board
 
   public:
-    RF95Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy, SPIClass &spi);
+    RF95Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
+                  RADIOLIB_PIN_TYPE busy);
 
     // TODO: Verify that this irq flag works with RFM95 / SX1276 radios the way it used to
     bool isIRQPending() override { return lora->getIRQFlags() & RADIOLIB_SX127X_MASK_IRQ_FLAG_VALID_HEADER; }
@@ -39,7 +40,7 @@ class RF95Interface : public RadioLibInterface
     /**
      * Enable a particular ISR callback glue function
      */
-    virtual void enableInterrupt(void (*callback)()) { lora->setDio0Action(callback); }
+    virtual void enableInterrupt(void (*callback)()) { lora->setDio0Action(callback, RISING); }
 
     /** can we detect a LoRa preamble on the current channel? */
     virtual bool isChannelActive() override;
