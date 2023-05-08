@@ -1,0 +1,38 @@
+{
+  "build": {
+    "arduino": {
+      "ldscript": "esp32s3_out.ld"
+    },
+    "core": "esp32",
+    "extra_flags": [
+      "-DARDUINO_USB_CDC_ON_BOOT=1",
+      "-DARDUINO_USB_MODE=0",
+      "-DARDUINO_RUNNING_CORE=1",
+      "-DARDUINO_EVENT_RUNNING_CORE=1",
+      "-DBOARD_HAS_PSRAM"
+    ],
+    "f_cpu": "240000000L",
+    "f_flash": "80000000L",
+    "flash_mode": "dio",
+    "hwids": [["0x303A", "0x1001"]],
+    "mcu": "esp32s3",
+    "variant": "bpi_picow_esp32_s3"
+  },
+  "connectivity": ["wifi"],
+  "debug": {
+    "openocd_target": "esp32s3.cfg"
+  },
+  "frameworks": ["arduino", "espidf"],
+  "name": "BPI-PicoW-S3 (8 MB FLASH, 2 MB PSRAM)",
+  "upload": {
+    "flash_size": "8MB",
+    "maximum_ram_size": 327680,
+    "maximum_size": 8388608,
+    "use_1200bps_touch": true,
+    "wait_for_upload_port": true,
+    "require_upload_port": true,
+    "speed": 921600
+  },
+  "url": "https://wiki.banana-pi.org/BPI-PicoW-S3",
+  "vendor": "BPI"
+}
