@@ -39,9 +39,9 @@ static void writeSecret(char *buf, size_t bufsz, const char *currentVal)
 }
 
 /**
- * @brief Handle recieved protobuf message
+ * @brief Handle received protobuf message
  *
- * @param mp Recieved MeshPacket
+ * @param mp Received MeshPacket
  * @param r Decoded AdminMessage
  * @return bool
  */

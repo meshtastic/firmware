@@ -18,7 +18,7 @@
 static void pinModes(uint64_t mask, uint8_t mode)
 {
     for (uint64_t i = 0; i < NUM_GPIOS; i++) {
-        if (mask & (1 << i)) {
+        if (mask & (1ULL << i)) {
             pinMode(i, mode);
         }
     }
@@ -29,13 +29,10 @@ static uint64_t digitalReads(uint64_t mask)
 {
     uint64_t res = 0;
 
-    // The Arduino docs show to run pinMode(). But, when testing, found it is best not to.
-    // If the line below is uncommented, read will flip the pin to the default of the second
-    // argument in pinModes(), which will make the read turn the PIN "on".
-    // pinModes(mask, INPUT_PULLUP);
+    pinModes(mask, INPUT_PULLUP);
 
     for (uint64_t i = 0; i < NUM_GPIOS; i++) {
-        uint64_t m = 1 << i;
+        uint64_t m = 1ULL << i;
         if (mask & m) {
             if (digitalRead(i)) {
                 res |= m;
@@ -64,7 +61,7 @@ bool RemoteHardwareModule::handleReceivedProtobuf(const meshtastic_MeshPacket &r
             screen->print("Write GPIOs\n");
 
             for (uint8_t i = 0; i < NUM_GPIOS; i++) {
-                uint64_t mask = 1 << i;
+                uint64_t mask = 1ULL << i;
                 if (p.gpio_mask & mask) {
                     digitalWrite(i, (p.gpio_value & mask) ? 1 : 0);
                 }
