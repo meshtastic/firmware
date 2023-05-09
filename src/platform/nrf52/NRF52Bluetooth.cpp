@@ -64,11 +64,12 @@ void onConnect(uint16_t conn_handle)
  * @param conn_handle connection where this event happens
  * @param reason is a BLE_HCI_STATUS_CODE which can be found in ble_hci.h
  */
-void NRF52Bluetooth::onDisconnect(uint16_t conn_handle, uint8_t reason)
+static void onDisconnect(uint16_t conn_handle, uint8_t reason)
 {
     LOG_INFO("BLE Disconnected, reason = 0x%x\n", reason);
     //Re-init bluetooth advertising
-    setup();
+    Bluefruit.Advertising.stop();
+    Bluefruit.Advertising.start(0);
 }
 
 void onCccd(uint16_t conn_hdl, BLECharacteristic *chr, uint16_t cccd_value)
