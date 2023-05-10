@@ -1,3 +1,6 @@
+#define I2C_SCL 47
+#define I2C_SDA 48
+
 #define LED_PIN LED
 
 #define HAS_SCREEN 0
