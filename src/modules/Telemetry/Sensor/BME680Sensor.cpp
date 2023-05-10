@@ -13,11 +13,7 @@ int32_t BME680Sensor::runOnce()
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
     bme680.begin(nodeTelemetrySensorsMap[sensorType], Wire);
-#ifdef USE_BSEC2
     if (bme680.status == BSEC_OK) {
-#else
-    if (bme680.bsecStatus == BSEC_OK) {
-#endif
         bme680.setConfig(Default_H2S_NonH2S_config);
         loadState();
         bme680.updateSubscription(sensorList, 13, BSEC_SAMPLE_RATE_LP);
@@ -34,18 +30,12 @@ void BME680Sensor::setup() {}
 bool BME680Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     bme680.run();
-#ifdef USE_BSEC2
+
     measurement->variant.environment_metrics.temperature = bme680.getData(BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE).signal;
     measurement->variant.environment_metrics.relative_humidity =
         bme680.getData(BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY).signal;
     measurement->variant.environment_metrics.barometric_pressure = bme680.getData(BSEC_OUTPUT_RAW_PRESSURE).signal / 100.0F;
     measurement->variant.environment_metrics.gas_resistance = bme680.getData(BSEC_OUTPUT_RAW_GAS).signal / 1000.0;
-#else
-    measurement->variant.environment_metrics.temperature = bme680.temperature;
-    measurement->variant.environment_metrics.relative_humidity = bme680.humidity;
-    measurement->variant.environment_metrics.barometric_pressure = bme680.pressure / 100.0F;
-    measurement->variant.environment_metrics.gas_resistance = bme680.gasResistance / 1000.0;
-#endif
     // Check if we need to save state to filesystem (every STATE_SAVE_PERIOD ms)
     updateState();
     return true;
@@ -74,11 +64,7 @@ void BME680Sensor::updateState()
     bool update = false;
     if (stateUpdateCounter == 0) {
         /* First state update when IAQ accuracy is >= 3 */
-#ifdef USE_BSEC2
         accuracy = bme680.getData(BSEC_OUTPUT_IAQ).accuracy;
-#else
-        accuracy = bme680.iaqAccuracy;
-#endif
         if (accuracy >= 3) {
             LOG_DEBUG("%s state update IAQ accuracy %u >= 3\n", sensorName, accuracy);
             update = true;
