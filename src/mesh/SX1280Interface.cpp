@@ -2,8 +2,8 @@
 #include "configuration.h"
 #include "error.h"
 
-SX1280Interface::SX1280Interface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy,
-                                 SPIClass &spi)
-    : SX128xInterface(cs, irq, rst, busy, spi)
+SX1280Interface::SX1280Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
+                                 RADIOLIB_PIN_TYPE busy)
+    : SX128xInterface(hal, cs, irq, rst, busy)
 {
 }
