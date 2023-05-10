@@ -9,9 +9,9 @@
 #endif
 
 template <typename T>
-SX126xInterface<T>::SX126xInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy,
-                                    SPIClass &spi)
-    : RadioLibInterface(cs, irq, rst, busy, spi, &lora), lora(&module)
+SX126xInterface<T>::SX126xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
+                                    RADIOLIB_PIN_TYPE busy)
+    : RadioLibInterface(hal, cs, irq, rst, busy, &lora), lora(&module)
 {
     LOG_WARN("SX126xInterface(cs=%d, irq=%d, rst=%d, busy=%d)\n", cs, irq, rst, busy);
 }

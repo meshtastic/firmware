@@ -23,9 +23,9 @@ jobs:
       matrix:
         include:
           - board: rak11200
-          - board: tlora-v2-1-1.6
+          - board: tlora-v2-1-1_6
           - board: tbeam
-          - board: heltec-v2.1
+          - board: heltec-v2_1
           - board: meshtastic-diy-v1
           - board: rak4631
           - board: t-echo
@@ -57,13 +57,13 @@ jobs:
           - board: tlora-v2
           - board: tlora-v1
           - board: tlora_v1_3
-          - board: tlora-v2-1-1.6
-          - board: tlora-v2-1-1.8
+          - board: tlora-v2-1-1_6
+          - board: tlora-v2-1-1_8
           - board: tbeam
           - board: heltec-v1
-          - board: heltec-v2.0
-          - board: heltec-v2.1
-          - board: tbeam0.7
+          - board: heltec-v2_0
+          - board: heltec-v2_1
+          - board: tbeam0_7
           - board: meshtastic-diy-v1
           - board: meshtastic-dr-dev
           - board: nano-g1

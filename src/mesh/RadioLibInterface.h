@@ -13,35 +13,18 @@
 #define INTERRUPT_ATTR
 #endif
 
+#define RADIOLIB_PIN_TYPE uint32_t
+
 /**
- * A wrapper for the RadioLib Module class, that adds mutex for SPI bus access
+ * We need to override the RadioLib ArduinoHal class to add mutex protection for SPI bus access
  */
-class LockingModule : public Module
+class LockingArduinoHal : public ArduinoHal
 {
   public:
-    /*!
-      \brief Extended SPI-based module constructor.
+    LockingArduinoHal(SPIClass &spi, SPISettings spiSettings) : ArduinoHal(spi, spiSettings){};
 
-      \param cs Arduino pin to be used as chip select.
-
-      \param irq Arduino pin to be used as interrupt/GPIO.
-
-      \param rst Arduino pin to be used as hardware reset for the module.
-
-      \param gpio Arduino pin to be used as additional interrupt/GPIO.
-
-      \param spi SPI interface to be used, can also use software SPI implementations.
-
-      \param spiSettings SPI interface settings.
-    */
-    LockingModule(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE gpio, SPIClass &spi,
-                  SPISettings spiSettings)
-        : Module(cs, irq, rst, gpio, spi, spiSettings)
-    {
-    }
-
-    void SPIbeginTransaction() override;
-    void SPIendTransaction() override;
+    void spiBeginTransaction() override;
+    void spiEndTransaction() override;
 };
 
 class RadioLibInterface : public RadioInterface, protected concurrency::NotifiedWorkerThread
@@ -73,7 +56,7 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     float currentLimit = 100; // 100mA OCP - Should be acceptable for RFM95/SX127x chipset.
 
-    LockingModule module; // The HW interface to the radio
+    Module module; // The HW interface to the radio
 
     /**
      * provides lowest common denominator RadioLib API
@@ -99,8 +82,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     virtual void enableInterrupt(void (*)()) = 0;
 
   public:
-    RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy, SPIClass &spi,
-                      PhysicalLayer *iface = NULL);
+    RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
+                      RADIOLIB_PIN_TYPE busy, PhysicalLayer *iface = NULL);
 
     virtual ErrorCode send(meshtastic_MeshPacket *p) override;
 
