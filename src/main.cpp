@@ -100,6 +100,8 @@ uint8_t kb_model;
 ScanI2C::DeviceAddress rtc_found = ScanI2C::ADDRESS_NONE;
 // The I2C address of the Accelerometer (if found)
 ScanI2C::DeviceAddress accelerometer_found = ScanI2C::ADDRESS_NONE;
+// The I2C address of the RGB LED (if found)
+ScanI2C::FoundDevice rgb_found = ScanI2C::FoundDevice(ScanI2C::DeviceType::NONE, ScanI2C::ADDRESS_NONE);
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 ATECCX08A atecc;
@@ -159,6 +161,7 @@ static OSThread *buttonThread;
 uint32_t ButtonThread::longPressTime = 0;
 #endif
 static OSThread *accelerometerThread;
+SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 
 RadioInterface *rIf = NULL;
 
@@ -233,8 +236,6 @@ void setup()
     ledPeriodic = new Periodic("Blink", ledBlinker);
 
     fsInit();
-
-    router = new ReliableRouter();
 
 #ifdef I2C_SDA1
     Wire1.begin(I2C_SDA1, I2C_SCL1);
@@ -346,6 +347,8 @@ void setup()
      * nodeTelemetrySensorsMap singleton. This wraps that logic in a temporary scope to declare the temporary field
      * "found".
      */
+    // Only one supported RGB LED currently
+    rgb_found = i2cScanner->find(ScanI2C::DeviceType::NCP5623);
 
 #if !defined(ARCH_PORTDUINO)
     auto acc_info = i2cScanner->firstAccelerometer();
@@ -413,6 +416,8 @@ void setup()
     // If we're taking on the repeater role, use flood router
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER)
         router = new FloodingRouter();
+    else
+        router = new ReliableRouter();
 
 #if HAS_BUTTON
     // Buttons. Moved here cause we need NodeDB to be initialized
@@ -517,6 +522,10 @@ void setup()
     digitalWrite(SX126X_ANT_SW, 1);
 #endif
 
+    // Init LockingHAL first, to use it for radio init
+
+    LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+
     // radio init MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
 
 #if !HAS_RADIO && defined(ARCH_PORTDUINO)
@@ -534,7 +543,7 @@ void setup()
 
 #if defined(RF95_IRQ)
     if (!rIf) {
-        rIf = new RF95Interface(RF95_NSS, RF95_IRQ, RF95_RESET, RF95_DIO1, SPI);
+        rIf = new RF95Interface(RadioLibHAL, RF95_NSS, RF95_IRQ, RF95_RESET, RF95_DIO1);
         if (!rIf->init()) {
             LOG_WARN("Failed to find RF95 radio\n");
             delete rIf;
@@ -547,11 +556,7 @@ void setup()
 
 #if defined(USE_SX1262)
     if (!rIf) {
-#ifdef HW_SPI1_DEVICE
-        rIf = new SX1262Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI1);
-#else
-        rIf = new SX1262Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
-#endif
+        rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
             LOG_WARN("Failed to find SX1262 radio\n");
             delete rIf;
@@ -564,7 +569,7 @@ void setup()
 
 #if defined(USE_SX1268)
     if (!rIf) {
-        rIf = new SX1268Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
+        rIf = new SX1268Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
             LOG_WARN("Failed to find SX1268 radio\n");
             delete rIf;
@@ -577,7 +582,7 @@ void setup()
 
 #if defined(USE_LLCC68)
     if (!rIf) {
-        rIf = new LLCC68Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
+        rIf = new LLCC68Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
             LOG_WARN("Failed to find LLCC68 radio\n");
             delete rIf;
@@ -590,7 +595,7 @@ void setup()
 
 #if defined(USE_SX1280)
     if (!rIf) {
-        rIf = new SX1280Interface(SX128X_CS, SX128X_DIO1, SX128X_RESET, SX128X_BUSY, SPI);
+        rIf = new SX1280Interface(RadioLibHAL, SX128X_CS, SX128X_DIO1, SX128X_RESET, SX128X_BUSY);
         if (!rIf->init()) {
             LOG_WARN("Failed to find SX1280 radio\n");
             delete rIf;

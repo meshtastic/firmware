@@ -1,26 +1,30 @@
-// #define BUTTON_NEED_PULLUP // if set we need to turn on the internal CPU pullup during sleep
+#define SDA 0
+#define SCL 1
+#define I2C_SDA SDA
+#define I2C_SCL SCL
 
-#define I2C_SDA 8
-#define I2C_SCL 9
-
-#define BUTTON_PIN 0
+#define BUTTON_PIN 9 // BOOT button
+#define LED_PIN 30   // RGB LED
 
 #define USE_RF95
-#undef RF95_SCK
 #define RF95_SCK 4
-#undef RF95_MISO
 #define RF95_MISO 5
-#undef RF95_MOSI
 #define RF95_MOSI 6
-#undef RF95_NSS
 #define RF95_NSS 7
 
-#define LORA_DIO0 10 // a No connect on the SX1262 module
-#define LORA_DIO1 3  // a No connect on the SX1262 module
+#define LORA_DIO0 10
+#define LORA_DIO1 3
 #define LORA_RESET 2
 
+// WaveShare Core1262-868M
+// https://www.waveshare.com/wiki/Core1262-868M
+#define USE_SX1262
+#define SX126X_CS RF95_NSS
+#define SX126X_DIO1 LORA_DIO1
+#define SX126X_BUSY 10
+#define SX126X_RESET LORA_RESET
+#define SX126X_E22 // use DIO2 as RF switch
+
+#define HAS_GPS 0
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
-
-#define HAS_SCREEN 0
-#define HAS_GPS 0

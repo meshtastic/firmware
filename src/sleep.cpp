@@ -309,8 +309,13 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // assert(esp_sleep_enable_uart_wakeup(0) == ESP_OK);
 #endif
 #ifdef BUTTON_PIN
+#if SOC_PM_SUPPORT_EXT_WAKEUP
     esp_sleep_enable_ext0_wakeup((gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN),
                                  LOW); // when user presses, this button goes low
+#else
+    esp_sleep_enable_gpio_wakeup();
+    gpio_wakeup_enable((gpio_num_t)BUTTON_PIN, GPIO_INTR_LOW_LEVEL);
+#endif
 #endif
 #if defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
     gpio_wakeup_enable((gpio_num_t)LORA_DIO1, GPIO_INTR_HIGH_LEVEL); // SX126x/SX128x interrupt, active high
