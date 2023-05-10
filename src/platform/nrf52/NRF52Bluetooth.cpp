@@ -67,7 +67,7 @@ void onConnect(uint16_t conn_handle)
 static void onDisconnect(uint16_t conn_handle, uint8_t reason)
 {
     LOG_INFO("BLE Disconnected, reason = 0x%x\n", reason);
-    //Re-init bluetooth advertising
+    // Re-init bluetooth advertising
     Bluefruit.Advertising.stop();
     Bluefruit.Advertising.start(0);
 }
