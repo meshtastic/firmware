@@ -455,11 +455,13 @@ void setup()
     pinMode(RF95_NSS, OUTPUT);
     digitalWrite(RF95_NSS, HIGH);
     SPI1.begin(false);
+    LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI1, spiSettings);
 #else                      // HW_SPI1_DEVICE
     SPI.setSCK(RF95_SCK);
     SPI.setTX(RF95_MOSI);
     SPI.setRX(RF95_MISO);
     SPI.begin(false);
+    LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
 #endif                     // HW_SPI1_DEVICE
 #elif !defined(ARCH_ESP32) // ARCH_RP2040
     SPI.begin();
@@ -521,10 +523,6 @@ void setup()
     pinMode(SX126X_ANT_SW, OUTPUT);
     digitalWrite(SX126X_ANT_SW, 1);
 #endif
-
-    // Init LockingHAL first, to use it for radio init
-
-    LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
 
     // radio init MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
 
