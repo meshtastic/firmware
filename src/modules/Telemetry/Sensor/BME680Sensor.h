@@ -1,22 +1,21 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
-#include <bsec.h>
+#include <bsec2.h>
 
 #define STATE_SAVE_PERIOD UINT32_C(360 * 60 * 1000) // That's 6 hours worth of millis()
 
-const uint8_t bsec_config_iaq[] = {
-#include <config/generic_33v_3s_4d/bsec_iaq.txt>
-};
+#include "config/Default_H2S_NonH2S/Default_H2S_NonH2S.h"
 
 class BME680Sensor : virtual public TelemetrySensor
 {
   private:
-    Bsec bme680;
+    Bsec2 bme680;
 
   protected:
     virtual void setup() override;
     const char *bsecConfigFileName = "/prefs/bsec.dat";
     uint8_t bsecState[BSEC_MAX_STATE_BLOB_SIZE] = {0};
+    uint8_t accuracy = 0;
     uint16_t stateUpdateCounter = 0;
     bsec_virtual_sensor_t sensorList[13] = {BSEC_OUTPUT_IAQ,
                                             BSEC_OUTPUT_STATIC_IAQ,
