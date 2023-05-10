@@ -9,26 +9,23 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 
-// FIXME, we default to 4MHz SPI, SPI mode 0, check if the datasheet says it can really do that
-static SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
-
-void LockingModule::SPIbeginTransaction()
+void LockingArduinoHal::spiBeginTransaction()
 {
     spiLock->lock();
 
-    Module::SPIbeginTransaction();
+    ArduinoHal::spiBeginTransaction();
 }
 
-void LockingModule::SPIendTransaction()
+void LockingArduinoHal::spiEndTransaction()
 {
     spiLock->unlock();
 
-    Module::SPIendTransaction();
+    ArduinoHal::spiEndTransaction();
 }
 
-RadioLibInterface::RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy,
-                                     SPIClass &spi, PhysicalLayer *_iface)
-    : NotifiedWorkerThread("RadioIf"), module(cs, irq, rst, busy, spi, spiSettings), iface(_iface)
+RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
+                                     RADIOLIB_PIN_TYPE busy, PhysicalLayer *_iface)
+    : NotifiedWorkerThread("RadioIf"), module(hal, cs, irq, rst, busy), iface(_iface)
 {
     instance = this;
 #if defined(ARCH_STM32WL) && defined(USE_SX1262)
