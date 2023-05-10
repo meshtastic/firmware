@@ -164,6 +164,7 @@ static OSThread *buttonThread;
 uint32_t ButtonThread::longPressTime = 0;
 #endif
 static OSThread *accelerometerThread;
+SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 
 RadioInterface *rIf = NULL;
 
@@ -511,6 +512,10 @@ void setup()
     digitalWrite(SX126X_ANT_SW, 1);
 #endif
 
+    // Init LockingHAL first, to use it for radio init
+
+    LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+
     // radio init MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
 #if defined(USE_STM32WLx)
     if (!rIf) {
@@ -540,7 +545,7 @@ void setup()
 
 #if defined(RF95_IRQ)
     if (!rIf) {
-        rIf = new RF95Interface(RF95_NSS, RF95_IRQ, RF95_RESET, RF95_DIO1, SPI);
+        rIf = new RF95Interface(RadioLibHAL, RF95_NSS, RF95_IRQ, RF95_RESET, RF95_DIO1);
         if (!rIf->init()) {
             LOG_WARN("Failed to find RF95 radio\n");
             delete rIf;
@@ -553,7 +558,7 @@ void setup()
 
 #if defined(USE_SX1262)
     if (!rIf) {
-        rIf = new SX1262Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
+        rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
             LOG_WARN("Failed to find SX1262 radio\n");
             delete rIf;
@@ -566,7 +571,7 @@ void setup()
 
 #if defined(USE_SX1268)
     if (!rIf) {
-        rIf = new SX1268Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
+        rIf = new SX1268Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
             LOG_WARN("Failed to find SX1268 radio\n");
             delete rIf;
@@ -579,7 +584,7 @@ void setup()
 
 #if defined(USE_LLCC68)
     if (!rIf) {
-        rIf = new LLCC68Interface(SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY, SPI);
+        rIf = new LLCC68Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
             LOG_WARN("Failed to find LLCC68 radio\n");
             delete rIf;
@@ -592,7 +597,7 @@ void setup()
 
 #if defined(USE_SX1280)
     if (!rIf) {
-        rIf = new SX1280Interface(SX128X_CS, SX128X_DIO1, SX128X_RESET, SX128X_BUSY, SPI);
+        rIf = new SX1280Interface(RadioLibHAL, SX128X_CS, SX128X_DIO1, SX128X_RESET, SX128X_BUSY);
         if (!rIf->init()) {
             LOG_WARN("Failed to find SX1280 radio\n");
             delete rIf;
