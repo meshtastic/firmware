@@ -1,6 +1,3 @@
-#define HAS_TELEMETRY 0 // as long as BSEC2 is not supported
-#define HAS_SENSOR 0    // as long as BSEC2 is not supported
-
 #define SDA 0
 #define SCL 1
 #define I2C_SDA SDA
