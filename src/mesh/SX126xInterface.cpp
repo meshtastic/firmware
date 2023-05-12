@@ -60,16 +60,19 @@ template <typename T> bool SX126xInterface<T>::init()
     LOG_DEBUG("Current limit set to %f\n", currentLimit);
     LOG_DEBUG("Current limit set result %d\n", res);
 
-#ifdef SX126X_E22
+#if defined(SX126X_E22)
     // E22 Emulation explicitly requires DIO2 as RF switch, so set it to TRUE again for good measure. In case somebody defines
     // SX126X_TX for an E22 Module
-    if (res == RADIOLIB_ERR_NONE)
+    if (res == RADIOLIB_ERR_NONE) {
+        LOG_DEBUG("SX126X_E22 mode enabled. Setting DIO2 as RF Switch\n");
         res = lora.setDio2AsRfSwitch(true);
+    }
 #endif
 
 #if defined(SX126X_TXEN) && (SX126X_TXEN != RADIOLIB_NC)
     // lora.begin sets Dio2 as RF switch control, which is not true if we are manually controlling RX and TX
     if (res == RADIOLIB_ERR_NONE) {
+        LOG_DEBUG("SX126X_TX/RX EN pins defined. Setting RF Switch: RXEN=%i, TXEN=%i\n", SX126X_RXEN, SX126X_TXEN);
         res = lora.setDio2AsRfSwitch(false);
         lora.setRfSwitchPins(SX126X_RXEN, SX126X_TXEN);
     }
