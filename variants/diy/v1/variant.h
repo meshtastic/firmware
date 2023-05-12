@@ -38,9 +38,8 @@
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET
-//#define SX126X_RXEN 14
-//#define SX126X_TXEN 13
-#define SX126X_POWER_EN (13)
+#define SX126X_RXEN RADIOLIB_NC // Defining the RXEN ruins RFSwitching for the E22 900M30S in RadioLib
+#define SX126X_TXEN 13
 
 // RX/TX for RFM95/SX127x
 #define RF95_RXEN 14
