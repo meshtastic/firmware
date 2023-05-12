@@ -423,8 +423,9 @@ int PhoneAPI::onNotify(uint32_t newValue)
     if (state == STATE_SEND_PACKETS) {
         LOG_INFO("Telling client we have new packets %u\n", newValue);
         onNowHasData(newValue);
-    } else
+    } else {
         LOG_DEBUG("(Client not yet interested in packets)\n");
+    }
 
     return 0;
 }

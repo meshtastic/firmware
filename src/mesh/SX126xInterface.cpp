@@ -79,11 +79,15 @@ template <typename T> bool SX126xInterface<T>::init()
 #endif
 
     if (config.lora.sx126x_rx_boosted_gain) {
+#ifdef DEBUG_PORT
         uint16_t result = lora.setRxBoostedGainMode(true);
         LOG_INFO("Set Rx Boosted Gain mode; result: %d\n", result);
+#endif
     } else {
+#ifdef DEBUG_PORT
         uint16_t result = lora.setRxBoostedGainMode(false);
         LOG_INFO("Set Rx Power Saving Gain mode; result: %d\n", result);
+#endif
     }
 
 #if 0
@@ -179,8 +183,9 @@ template <typename T> void SX126xInterface<T>::setStandby()
 
     int err = lora.standby();
 
-    if (err != RADIOLIB_ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE) {
         LOG_DEBUG("SX126x standby failed with error %d\n", err);
+    }
 
     assert(err == RADIOLIB_ERR_NONE);
 
