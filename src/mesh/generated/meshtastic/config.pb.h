@@ -233,6 +233,9 @@ typedef struct _meshtastic_Config_DeviceConfig {
     uint32_t node_info_broadcast_secs;
     /* Treat double tap interrupt on supported accelerometers as a button press if set to true */
     bool double_tap_as_button_press;
+    /* If true, device is considered to be "managed" by a mesh administrator
+ Clients should then limit available configuration and administrative options inside the user interface */
+    bool is_managed;
 } meshtastic_Config_DeviceConfig;
 
 /* Position Config */
@@ -529,7 +532,7 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_Config_init_default           {0, {meshtastic_Config_DeviceConfig_init_default}}
-#define meshtastic_Config_DeviceConfig_init_default {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0}
+#define meshtastic_Config_DeviceConfig_init_default {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0}
 #define meshtastic_Config_PositionConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_PowerConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_default {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_default, ""}
@@ -538,7 +541,7 @@ extern "C" {
 #define meshtastic_Config_LoRaConfig_init_default {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}}
 #define meshtastic_Config_BluetoothConfig_init_default {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0}
 #define meshtastic_Config_init_zero              {0, {meshtastic_Config_DeviceConfig_init_zero}}
-#define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0}
+#define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0}
 #define meshtastic_Config_PositionConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_PowerConfig_init_zero  {0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_zero {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_zero, ""}
@@ -556,6 +559,7 @@ extern "C" {
 #define meshtastic_Config_DeviceConfig_rebroadcast_mode_tag 6
 #define meshtastic_Config_DeviceConfig_node_info_broadcast_secs_tag 7
 #define meshtastic_Config_DeviceConfig_double_tap_as_button_press_tag 8
+#define meshtastic_Config_DeviceConfig_is_managed_tag 9
 #define meshtastic_Config_PositionConfig_position_broadcast_secs_tag 1
 #define meshtastic_Config_PositionConfig_position_broadcast_smart_enabled_tag 2
 #define meshtastic_Config_PositionConfig_fixed_position_tag 3
@@ -650,7 +654,8 @@ X(a, STATIC,   SINGULAR, UINT32,   button_gpio,       4) \
 X(a, STATIC,   SINGULAR, UINT32,   buzzer_gpio,       5) \
 X(a, STATIC,   SINGULAR, UENUM,    rebroadcast_mode,   6) \
 X(a, STATIC,   SINGULAR, UINT32,   node_info_broadcast_secs,   7) \
-X(a, STATIC,   SINGULAR, BOOL,     double_tap_as_button_press,   8)
+X(a, STATIC,   SINGULAR, BOOL,     double_tap_as_button_press,   8) \
+X(a, STATIC,   SINGULAR, BOOL,     is_managed,        9)
 #define meshtastic_Config_DeviceConfig_CALLBACK NULL
 #define meshtastic_Config_DeviceConfig_DEFAULT NULL
 
@@ -765,7 +770,7 @@ extern const pb_msgdesc_t meshtastic_Config_BluetoothConfig_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define meshtastic_Config_BluetoothConfig_size   10
-#define meshtastic_Config_DeviceConfig_size      28
+#define meshtastic_Config_DeviceConfig_size      30
 #define meshtastic_Config_DisplayConfig_size     28
 #define meshtastic_Config_LoRaConfig_size        77
 #define meshtastic_Config_NetworkConfig_IpV4Config_size 20
