@@ -106,11 +106,12 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
         if (p->want_ack) {
             if (MeshModule::currentReply) {
                 LOG_DEBUG("Some other module has replied to this message, no need for a 2nd ack\n");
-            } else if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag)
+            } else if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
                 sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel);
-            else
+            } else {
                 // Send a 'NO_CHANNEL' error on the primary channel if want_ack packet destined for us cannot be decoded
                 sendAckNak(meshtastic_Routing_Error_NO_CHANNEL, getFrom(p), p->id, channels.getPrimaryIndex());
+            }
         }
 
         // We consider an ack to be either a !routing packet with a request ID or a routing packet with !error
