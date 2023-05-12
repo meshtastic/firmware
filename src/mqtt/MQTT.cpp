@@ -461,8 +461,9 @@ std::string MQTT::downstreamPacketToJson(meshtastic_MeshPacket *mp)
                     msgPayload["current"] = new JSONValue(decoded->variant.environment_metrics.current);
                 }
                 jsonObj["payload"] = new JSONValue(msgPayload);
-            } else
+            } else {
                 LOG_ERROR("Error decoding protobuf for telemetry message!\n");
+            }
         };
         break;
     }
@@ -479,8 +480,9 @@ std::string MQTT::downstreamPacketToJson(meshtastic_MeshPacket *mp)
                 msgPayload["shortname"] = new JSONValue(decoded->short_name);
                 msgPayload["hardware"] = new JSONValue(decoded->hw_model);
                 jsonObj["payload"] = new JSONValue(msgPayload);
-            } else
+            } else {
                 LOG_ERROR("Error decoding protobuf for nodeinfo message!\n");
+            }
         };
         break;
     }
