@@ -92,10 +92,12 @@ void BME680Sensor::updateState()
             file.flush();
             file.close();
             // brief window of risk here ;-)
-            if (FSCom.exists(bsecConfigFileName) && !FSCom.remove(bsecConfigFileName))
+            if (FSCom.exists(bsecConfigFileName) && !FSCom.remove(bsecConfigFileName)) {
                 LOG_WARN("Can't remove old state file\n");
-            if (!renameFile(filenameTmp.c_str(), bsecConfigFileName))
+            }
+            if (!renameFile(filenameTmp.c_str(), bsecConfigFileName)) {
                 LOG_ERROR("Error: can't rename new state file\n");
+            }
 
         } else {
             LOG_INFO("Can't write %s state (File: %s).\n", sensorName, bsecConfigFileName);

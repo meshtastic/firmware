@@ -112,8 +112,9 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     if (getRTCQuality() < RTCQualityDevice) {
         LOG_INFO("Stripping time %u from position send\n", p.time);
         p.time = 0;
-    } else
+    } else {
         LOG_INFO("Providing time to mesh %u\n", p.time);
+    }
 
     LOG_INFO("Position reply: time=%i, latI=%i, lonI=-%i\n", p.time, p.latitude_i, p.longitude_i);
 

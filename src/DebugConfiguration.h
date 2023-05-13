@@ -28,6 +28,7 @@
 #define DEBUG_PORT (*console) // Serial debug port
 
 #ifdef USE_SEGGER
+#define DEBUG_PORT
 #define LOG_DEBUG(...) SEGGER_RTT_printf(0, __VA_ARGS__)
 #define LOG_INFO(...) SEGGER_RTT_printf(0, __VA_ARGS__)
 #define LOG_WARN(...) SEGGER_RTT_printf(0, __VA_ARGS__)

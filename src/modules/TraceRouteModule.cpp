@@ -47,6 +47,7 @@ void TraceRouteModule::appendMyID(meshtastic_RouteDiscovery *updated)
 
 void TraceRouteModule::printRoute(meshtastic_RouteDiscovery *r, uint32_t origin, uint32_t dest)
 {
+#ifdef DEBUG_PORT
     LOG_INFO("Route traced:\n");
     LOG_INFO("0x%x --> ", origin);
     for (uint8_t i = 0; i < r->route_count; i++) {
@@ -56,6 +57,7 @@ void TraceRouteModule::printRoute(meshtastic_RouteDiscovery *r, uint32_t origin,
         LOG_INFO("0x%x\n", dest);
     else
         LOG_INFO("...\n");
+#endif
 }
 
 meshtastic_MeshPacket *TraceRouteModule::allocReply()
