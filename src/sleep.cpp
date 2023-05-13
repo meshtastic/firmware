@@ -132,6 +132,7 @@ void initDeepSleep()
       support busted boards, assume button one was pressed wakeButtons = ((uint64_t)1) << buttons.gpios[0];
       */
 
+#ifdef DEBUG_PORT
     // If we booted because our timer ran out or the user pressed reset, send those as fake events
     const char *reason = "reset"; // our best guess
     RESET_REASON hwReason = rtc_get_reset_reason(0);
@@ -149,6 +150,7 @@ void initDeepSleep()
         reason = "timeout";
 
     LOG_INFO("Booted, wake cause %d (boot count %d), reset_reason=%s\n", wakeCause, bootCount, reason);
+#endif
 #endif
 }
 
@@ -329,23 +331,27 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
         gpio_wakeup_enable((gpio_num_t)PMU_IRQ, GPIO_INTR_LOW_LEVEL); // pmu irq
 #endif
     auto res = esp_sleep_enable_gpio_wakeup();
-    if (res != ESP_OK)
+    if (res != ESP_OK) {
         LOG_DEBUG("esp_sleep_enable_gpio_wakeup result %d\n", res);
+    }
     assert(res == ESP_OK);
     res = esp_sleep_enable_timer_wakeup(sleepUsec);
-    if (res != ESP_OK)
+    if (res != ESP_OK) {
         LOG_DEBUG("esp_sleep_enable_timer_wakeup result %d\n", res);
+    }
     assert(res == ESP_OK);
     res = esp_light_sleep_start();
-    if (res != ESP_OK)
+    if (res != ESP_OK) {
         LOG_DEBUG("esp_light_sleep_start result %d\n", res);
+    }
     assert(res == ESP_OK);
 
     esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
 #ifdef BUTTON_PIN
-    if (cause == ESP_SLEEP_WAKEUP_GPIO)
+    if (cause == ESP_SLEEP_WAKEUP_GPIO) {
         LOG_INFO("Exit light sleep gpio: btn=%d\n",
                  !digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
+    }
 #endif
 
     return cause;

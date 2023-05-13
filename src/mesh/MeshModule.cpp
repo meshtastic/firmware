@@ -179,9 +179,10 @@ void MeshModule::callPlugins(const meshtastic_MeshPacket &mp, RxSource src)
         }
     }
 
-    if (!moduleFound)
+    if (!moduleFound) {
         LOG_DEBUG("No modules interested in portnum=%d, src=%s\n", mp.decoded.portnum,
                   (src == RX_SRC_LOCAL) ? "LOCAL" : "REMOTE");
+    }
 }
 
 meshtastic_MeshPacket *MeshModule::allocReply()
