@@ -462,10 +462,11 @@ void setup()
 
     gps = createGps();
 
-    if (gps)
+    if (gps) {
         gpsStatus->observe(&gps->newStatus);
-    else
+    } else {
         LOG_WARN("No GPS found - running without GPS\n");
+    }
 
     nodeStatus->observe(&nodeDB.newStatus);
 
