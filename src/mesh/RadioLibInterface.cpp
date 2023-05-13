@@ -78,8 +78,9 @@ bool RadioLibInterface::canSendImmediately()
     bool busyRx = isReceiving && isActivelyReceiving();
 
     if (busyTx || busyRx) {
-        if (busyTx)
+        if (busyTx) {
             LOG_WARN("Can not send yet, busyTx\n");
+        }
         // If we've been trying to send the same packet more than one minute and we haven't gotten a
         // TX IRQ from the radio, the radio is probably broken.
         if (busyTx && (millis() - lastTxStart > 60000)) {
@@ -88,8 +89,9 @@ bool RadioLibInterface::canSendImmediately()
             // reboot in 5 seconds when this condition occurs.
             rebootAtMsec = lastTxStart + 65000;
         }
-        if (busyRx)
+        if (busyRx) {
             LOG_WARN("Can not send yet, busyRx\n");
+        }
         return false;
     } else
         return true;
@@ -164,9 +166,9 @@ meshtastic_QueueStatus RadioLibInterface::getQueueStatus()
 bool RadioLibInterface::canSleep()
 {
     bool res = txQueue.empty();
-    if (!res) // only print debug messages if we are vetoing sleep
+    if (!res) { // only print debug messages if we are vetoing sleep
         LOG_DEBUG("radio wait to sleep, txEmpty=%d\n", res);
-
+    }
     return res;
 }
 

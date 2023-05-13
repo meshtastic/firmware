@@ -195,8 +195,9 @@ int32_t AudioModule::runOnce()
                                        .tx_desc_auto_clear = true,
                                        .fixed_mclk = 0};
             res = i2s_driver_install(I2S_PORT, &i2s_config, 0, NULL);
-            if (res != ESP_OK)
+            if (res != ESP_OK) {
                 LOG_ERROR("Failed to install I2S driver: %d\n", res);
+            }
 
             const i2s_pin_config_t pin_config = {
                 .bck_io_num = moduleConfig.audio.i2s_sck,
@@ -204,12 +205,14 @@ int32_t AudioModule::runOnce()
                 .data_out_num = moduleConfig.audio.i2s_din ? moduleConfig.audio.i2s_din : I2S_PIN_NO_CHANGE,
                 .data_in_num = moduleConfig.audio.i2s_sd ? moduleConfig.audio.i2s_sd : I2S_PIN_NO_CHANGE};
             res = i2s_set_pin(I2S_PORT, &pin_config);
-            if (res != ESP_OK)
+            if (res != ESP_OK) {
                 LOG_ERROR("Failed to set I2S pin config: %d\n", res);
+            }
 
             res = i2s_start(I2S_PORT);
-            if (res != ESP_OK)
+            if (res != ESP_OK) {
                 LOG_ERROR("Failed to start I2S: %d\n", res);
+            }
 
             radio_state = RadioState::rx;
 

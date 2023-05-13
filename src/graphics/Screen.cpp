@@ -1239,8 +1239,10 @@ void Screen::setFrames()
 
     moduleFrames = MeshModule::GetMeshModulesWithUIFrames();
     LOG_DEBUG("Showing %d module frames\n", moduleFrames.size());
+#ifdef DEBUG_PORT
     int totalFrameCount = MAX_NUM_NODES + NUM_EXTRA_FRAMES + moduleFrames.size();
     LOG_DEBUG("Total frame count: %d\n", totalFrameCount);
+#endif
 
     // We don't show the node info our our node (if we have it yet - we should)
     size_t numnodes = nodeDB.getNumNodes();
