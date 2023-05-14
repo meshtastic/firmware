@@ -151,8 +151,9 @@ template <typename T> void SX128xInterface<T>::setStandby()
 
     int err = lora.standby();
 
-    if (err != RADIOLIB_ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE) {
         LOG_ERROR("SX128x standby failed with error %d\n", err);
+    }
 
     assert(err == RADIOLIB_ERR_NONE);
 
