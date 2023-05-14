@@ -6,6 +6,7 @@
 #include "main.h"
 #include "sleep.h"
 #include "utils.h"
+static const char *TAG = "ADCmod";
 
 #ifdef DEBUG_HEAP_MQTT
 #include "mqtt/MQTT.h"
@@ -16,6 +17,22 @@
 #ifndef DELAY_FOREVER
 #define DELAY_FOREVER portMAX_DELAY
 #endif
+
+#ifdef BATTERY_PIN
+
+#ifndef BAT_MEASURE_ADC_UNIT // ADC1
+static const adc1_channel_t adc_channel = ADC_CHANNEL;
+#else                     // make adc1 default
+static const adc2_channel_t adc_channel = ADC_CHANNEL;
+RTC_NOINIT_ATTR uint64_t RTC_reg_b;
+#include "soc/sens_reg.h" // needed for adc pin reset
+#endif
+
+esp_adc_cal_characteristics_t *adc_characs = (esp_adc_cal_characteristics_t *)calloc(1, sizeof(esp_adc_cal_characteristics_t));
+
+static const adc_atten_t atten = ADC_ATTEN_DB_11;
+static const adc_unit_t unit = adc_unit_name;
+#endif // BATTERY_PIN
 
 #ifdef HAS_PMU
 #include "XPowersAXP192.tpp"
@@ -36,7 +53,7 @@ class HasBatteryLevel
     /**
      * The raw voltage of the battery or NAN if unknown
      */
-    virtual uint16_t getBattVoltage() { return 0; }
+    virtual uint32_t getBattVoltage() { return 0; }
 
     /**
      * return true if there is a battery installed in this unit
@@ -105,7 +122,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /**
      * The raw voltage of the batteryin millivolts or NAN if unknown
      */
-    virtual uint16_t getBattVoltage() override
+    virtual uint32_t getBattVoltage() override
     {
 
 #ifndef ADC_MULTIPLIER
@@ -128,18 +145,27 @@ class AnalogBatteryLevel : public HasBatteryLevel
             // Set the number of samples, it has an effect of increasing sensitivity, especially in complex electromagnetic
             // environment.
             uint32_t raw = 0;
-            for (uint32_t i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
-                raw += analogRead(BATTERY_PIN);
+#ifndef BAT_MEASURE_ADC_UNIT // ADC1
+            for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
+                raw += adc1_get_raw(adc_channel);
             }
+#else  // ADC2
+            uint32_t adc_buf = 0;
+            for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
+                // ADC2 wifi bug workaround, see
+                // https://github.com/espressif/arduino-esp32/issues/102
+                WRITE_PERI_REG(SENS_SAR_READ_CTRL2_REG, RTC_reg_b);
+                SET_PERI_REG_MASK(SENS_SAR_READ_CTRL2_REG, SENS_SAR2_DATA_INV);
+                adc2_get_raw(adc_channel, ADC_WIDTH_BIT_12, &adc_buf);
+                raw += adc_buf;
+            }
+#endif // BAT_MEASURE_ADC_UNIT
             raw = raw / BATTERY_SENSE_SAMPLES;
-
             float scaled;
-#ifndef VBAT_RAW_TO_SCALED
-            scaled = 1000.0 * operativeAdcMultiplier * (AREF_VOLTAGE / 1024.0) * raw;
-#else
-            scaled = VBAT_RAW_TO_SCALED(raw); // defined in variant.h
-#endif
+            scaled = esp_adc_cal_raw_to_voltage(raw, adc_characs);
+            scaled *= operativeAdcMultiplier;
             // LOG_DEBUG("battery gpio %d raw val=%u scaled=%u\n", BATTERY_PIN, raw, (uint32_t)(scaled));
+
             last_read_value = scaled;
             return scaled;
         } else {
@@ -147,7 +173,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
         }
 #else
         return 0;
-#endif
+#endif // BATTERY_PIN
     }
 
     /**
@@ -222,36 +248,62 @@ bool Power::analogInit()
     pinMode(EXT_PWR_DETECT, INPUT);
 #endif
 
+#ifndef HAS_PMU
+
 #ifdef BATTERY_PIN
     LOG_DEBUG("Using analog input %d for battery level\n", BATTERY_PIN);
 
     // disable any internal pullups
-    pinMode(BATTERY_PIN, INPUT);
+    pinMode(35, INPUT);
+#endif // BATTERY PIN
+
+#ifndef BATTERY_SENSE_RESOLUTION_BITS
+#define BATTERY_SENSE_RESOLUTION_BITS 12
+#endif
 
 #ifdef ARCH_ESP32
-    // ESP32 needs special analog stuff
-    adcAttachPin(BATTERY_PIN);
+// ESP32 needs special analog stuff
+// configure ADC
+#ifndef BAT_MEASURE_ADC_UNIT // ADC1
+    adc1_config_width(width);
+    adc1_config_channel_atten(adc_channel, atten);
+#else // ADC2
+    adc2_config_channel_atten(adc_channel, atten);
+    // ADC2 wifi bug workaround, see
+    // https://github.com/espressif/arduino-esp32/issues/102
+    RTC_reg_b = READ_PERI_REG(SENS_SAR_READ_CTRL2_REG);
 #endif
+
+    LOG_DEBUG("ADC using channel %s\n", adc_channel_name);
+    // calibrate ADC
+    esp_adc_cal_value_t val_type = esp_adc_cal_characterize(unit, atten, width, DEFAULT_VREF, adc_characs);
+    // show ADC characterization base
+    if (val_type == ESP_ADC_CAL_VAL_EFUSE_TP) {
+        ESP_LOGI(TAG, "ADC characterization based on Two Point values stored in eFuse");
+    } else if (val_type == ESP_ADC_CAL_VAL_EFUSE_VREF) {
+        ESP_LOGI(TAG, "ADC characterization based on reference voltage stored in eFuse");
+    } else {
+        ESP_LOGI(TAG, "ADC characterization based on default reference voltage");
+    }
+#endif // ARCH_ESP32
+
 #ifdef ARCH_NRF52
 #ifdef VBAT_AR_INTERNAL
     analogReference(VBAT_AR_INTERNAL);
 #else
     analogReference(AR_INTERNAL); // 3.6V
 #endif
-#endif
-
-#ifndef BATTERY_SENSE_RESOLUTION_BITS
-#define BATTERY_SENSE_RESOLUTION_BITS 10
-#endif
-
-    // adcStart(BATTERY_PIN);
+    adcStart(BATTERY_PIN);
     analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS); // Default of 12 is not very linear. Recommended to use 10 or 11
                                                          // depending on needed resolution.
+
+#endif // ARCH_NRF52
+
     batteryLevel = &analogLevel;
     return true;
 #else
     return false;
-#endif
+#endif // !HAS_PMU
 }
 
 bool Power::setup()
@@ -302,7 +354,7 @@ void Power::readPowerStatus()
 {
     if (batteryLevel) {
         bool hasBattery = batteryLevel->isBatteryConnect();
-        int batteryVoltageMv = 0;
+        uint32_t batteryVoltageMv = 0;
         int8_t batteryChargePercent = 0;
         if (hasBattery) {
             batteryVoltageMv = batteryLevel->getBattVoltage();
