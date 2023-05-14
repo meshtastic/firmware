@@ -20,18 +20,19 @@ static const char *TAG = "ADCmod";
 
 #ifdef BATTERY_PIN
 
-#ifndef BAT_MEASURE_ADC_UNIT // ADC1
+#ifndef BAT_MEASURE_ADC_UNIT // ADC1 is default
 static const adc1_channel_t adc_channel = ADC_CHANNEL;
-#else                     // make adc1 default
+static const adc_unit_t unit = ADC_UNIT_1;
+#else // ADC2
 static const adc2_channel_t adc_channel = ADC_CHANNEL;
+static const adc_unit_t unit = ADC_UNIT_2;
 RTC_NOINIT_ATTR uint64_t RTC_reg_b;
-#include "soc/sens_reg.h" // needed for adc pin reset
+
 #endif
 
 esp_adc_cal_characteristics_t *adc_characs = (esp_adc_cal_characteristics_t *)calloc(1, sizeof(esp_adc_cal_characteristics_t));
 
 static const adc_atten_t atten = ADC_ATTEN_DB_11;
-static const adc_unit_t unit = adc_unit_name;
 #endif // BATTERY_PIN
 
 #ifdef HAS_PMU
@@ -269,12 +270,9 @@ bool Power::analogInit()
     adc1_config_channel_atten(adc_channel, atten);
 #else // ADC2
     adc2_config_channel_atten(adc_channel, atten);
-    // ADC2 wifi bug workaround, see
-    // https://github.com/espressif/arduino-esp32/issues/102
+    // ADC2 wifi bug workaround
     RTC_reg_b = READ_PERI_REG(SENS_SAR_READ_CTRL2_REG);
 #endif
-
-    LOG_DEBUG("ADC using channel %s\n", adc_channel_name);
     // calibrate ADC
     esp_adc_cal_value_t val_type = esp_adc_cal_characterize(unit, atten, width, DEFAULT_VREF, adc_characs);
     // show ADC characterization base
