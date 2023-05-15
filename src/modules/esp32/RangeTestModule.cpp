@@ -53,8 +53,8 @@ int32_t RangeTestModule::runOnce()
 
             if (moduleConfig.range_test.sender) {
                 LOG_INFO("Initializing Range Test Module -- Sender\n");
-                return (5000);      // Sending first message 5 seconds after initilization.
                 started = millis(); // make a note of when we started
+                return (5000);      // Sending first message 5 seconds after initilization.
             } else {
                 LOG_INFO("Initializing Range Test Module -- Receiver\n");
                 return disable();
