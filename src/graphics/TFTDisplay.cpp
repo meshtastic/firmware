@@ -1,6 +1,6 @@
 #include "configuration.h"
 
-#if defined(ST7735_CS) || defined(ILI9341_DRIVER)
+#if defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(USE_ST7789)
 #include "SPILock.h"
 #include "TFTDisplay.h"
 #include <SPI.h>
