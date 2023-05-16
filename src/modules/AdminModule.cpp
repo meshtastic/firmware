@@ -179,7 +179,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     case meshtastic_AdminMessage_get_module_config_response_tag: {
         LOG_INFO("Client is receiving a get_module_config response.\n");
         if (fromOthers && r->get_module_config_response.which_payload_variant == meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG) {
-            handleGetModuleConfigResponse(mp, r->get_module_config_response);
+            handleGetModuleConfigResponse(mp, r);
         }
         break;
     }
