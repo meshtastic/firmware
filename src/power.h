@@ -1,8 +1,10 @@
 #pragma once
 #include "PowerStatus.h"
 #include "concurrency/OSThread.h"
+#ifdef ARCH_ESP32
 #include <esp_adc_cal.h>
 #include <soc/adc_channel.h>
+#endif
 /**
  * Per @spattinson
  * MIN_BAT_MILLIVOLTS seems high. Typical 18650 are different chemistry to LiPo, even for LiPos that chart seems a bit off, other

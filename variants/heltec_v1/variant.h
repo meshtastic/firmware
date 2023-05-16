@@ -27,3 +27,5 @@
 #define ADC_MULTIPLIER 3.2
 
 #define BATTERY_PIN 13 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+#define ADC_CHANNEL ADC2_GPIO13_CHANNEL
+#define BAT_MEASURE_ADC_UNIT 2
