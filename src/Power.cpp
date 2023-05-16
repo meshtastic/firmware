@@ -54,7 +54,7 @@ class HasBatteryLevel
     /**
      * The raw voltage of the battery or NAN if unknown
      */
-    virtual uint32_t getBattVoltage() { return 0; }
+    virtual uint16_t getBattVoltage() { return 0; }
 
     /**
      * return true if there is a battery installed in this unit
@@ -123,7 +123,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /**
      * The raw voltage of the batteryin millivolts or NAN if unknown
      */
-    virtual uint32_t getBattVoltage() override
+    virtual uint16_t getBattVoltage() override
     {
 
 #ifndef ADC_MULTIPLIER
