@@ -350,7 +350,7 @@ void NodeDB::init()
         saveWhat |= SEGMENT_CHANNELS;
 
     if (!devicestate.node_remote_hardware_pins) {
-        memset(devicestate.node_remote_hardware_pins, 0, sizeof(devicestate.node_remote_hardware_pins));
+        devicestate.node_remote_hardware_pins[12] = {0};
     }
 
     saveToDisk(saveWhat);
