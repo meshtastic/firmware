@@ -50,6 +50,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     // if handled == false, then let others look at this message also if they want
     bool handled = false;
     assert(r);
+    bool fromOthers = mp.from != 0 && mp.from != nodeDB.getNodeNum();
 
     switch (r->which_payload_variant) {
 
@@ -175,6 +176,13 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         handleGetDeviceConnectionStatus(mp);
         break;
     }
+    case meshtastic_AdminMessage_get_module_config_response_tag: {
+        LOG_INFO("Client is receiving a get_module_config response.\n");
+        if (fromOthers && r->get_module_config_response.which_payload_variant == meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG) {
+            handleGetModuleConfigResponse(mp, r->get_module_config_response);
+        }
+        break;
+    }
 #ifdef ARCH_PORTDUINO
     case meshtastic_AdminMessage_exit_simulator_tag:
         LOG_INFO("Exiting simulator\n");
@@ -203,6 +211,31 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
 
     return handled;
+}
+
+void AdminModule::handleGetModuleConfigResponse(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *r) 
+{
+    // Skip if it's disabled or no pins are exposed
+    if (!r->get_module_config_response.payload_variant.remote_hardware.enabled ||
+        !r->get_module_config_response.payload_variant.remote_hardware.available_pins)
+    {
+        LOG_DEBUG("Remote hardware module disabled or no vailable_pins. Skipping...\n");
+        return;
+    }
+    for (uint8_t i = 0; i < devicestate.node_remote_hardware_pins_count; i++) {
+        if (devicestate.node_remote_hardware_pins[i].node_num == 0 || !devicestate.node_remote_hardware_pins[i].has_pin) {
+            continue;
+        }
+        for (uint8_t j = 0; j < sizeof(r->get_module_config_response.payload_variant.remote_hardware.available_pins); j++) {
+          auto availablePin = r->get_module_config_response.payload_variant.remote_hardware.available_pins[j];
+          if (i < devicestate.node_remote_hardware_pins_count) {
+            devicestate.node_remote_hardware_pins[i].node_num = mp.from;
+            devicestate.node_remote_hardware_pins[i].pin = availablePin;
+          }
+          i++;
+        }
+    }
+    
 }
 
 /**

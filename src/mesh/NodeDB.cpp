@@ -349,6 +349,10 @@ void NodeDB::init()
     if (channelFileCRC != crc32Buffer(&channelFile, sizeof(channelFile)))
         saveWhat |= SEGMENT_CHANNELS;
 
+    if (!devicestate.node_remote_hardware_pins) {
+        memset(devicestate.node_remote_hardware_pins, 0, sizeof(devicestate.node_remote_hardware_pins));
+    }
+
     saveToDisk(saveWhat);
 }
 

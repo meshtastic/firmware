@@ -227,9 +227,7 @@ extern const pb_msgdesc_t meshtastic_NodeRemoteHardwarePin_msg;
 #define meshtastic_ChannelFile_size              638
 #define meshtastic_DeviceState_size              22736
 #define meshtastic_NodeRemoteHardwarePin_size    29
-#if defined(meshtastic_LocalModuleConfig_size)
-#define meshtastic_OEMStore_size                 (2607 + meshtastic_LocalModuleConfig_size)
-#endif
+#define meshtastic_OEMStore_size                 3137
 
 #ifdef __cplusplus
 } /* extern "C" */

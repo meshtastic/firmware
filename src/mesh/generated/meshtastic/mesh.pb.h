@@ -1256,12 +1256,10 @@ extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
 #define meshtastic_DeviceMetadata_fields &meshtastic_DeviceMetadata_msg
 
 /* Maximum encoded size of messages (where known) */
-#if defined(meshtastic_ModuleConfig_size)
-union meshtastic_FromRadio_payload_variant_size_union {char f9[(6 + meshtastic_ModuleConfig_size)]; char f0[324];};
-#endif
 #define meshtastic_Compressed_size               243
 #define meshtastic_Data_size                     270
 #define meshtastic_DeviceMetadata_size           46
+#define meshtastic_FromRadio_size                330
 #define meshtastic_LogRecord_size                81
 #define meshtastic_MeshPacket_size               321
 #define meshtastic_MyNodeInfo_size               179
@@ -1275,9 +1273,6 @@ union meshtastic_FromRadio_payload_variant_size_union {char f9[(6 + meshtastic_M
 #define meshtastic_ToRadio_size                  324
 #define meshtastic_User_size                     77
 #define meshtastic_Waypoint_size                 165
-#if defined(meshtastic_ModuleConfig_size)
-#define meshtastic_FromRadio_size                (6 + sizeof(union meshtastic_FromRadio_payload_variant_size_union))
-#endif
 
 #ifdef __cplusplus
 } /* extern "C" */

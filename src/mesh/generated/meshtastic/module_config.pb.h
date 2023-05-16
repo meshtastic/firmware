@@ -112,16 +112,6 @@ typedef struct _meshtastic_ModuleConfig_MQTTConfig {
     char root[16];
 } meshtastic_ModuleConfig_MQTTConfig;
 
-/* RemoteHardwareModule Config */
-typedef struct _meshtastic_ModuleConfig_RemoteHardwareConfig {
-    /* Whether the Module is enabled */
-    bool enabled;
-    /* Whether the Module allows consumers to read / write to pins not defined in available_pins */
-    bool allow_undefined_pin_access;
-    /* Exposes the available pins to the mesh for reading and writing */
-    pb_callback_t available_pins;
-} meshtastic_ModuleConfig_RemoteHardwareConfig;
-
 /* Audio Config for codec2 voice */
 typedef struct _meshtastic_ModuleConfig_AudioConfig {
     /* Whether Audio is enabled */
@@ -275,6 +265,27 @@ typedef struct _meshtastic_ModuleConfig_CannedMessageConfig {
     bool send_bell;
 } meshtastic_ModuleConfig_CannedMessageConfig;
 
+/* A GPIO pin definition for remote hardware module */
+typedef struct _meshtastic_RemoteHardwarePin {
+    /* GPIO Pin number (must match Arduino) */
+    uint8_t gpio_pin;
+    /* Name for the GPIO pin (i.e. Front gate, mailbox, etc) */
+    char name[15];
+    /* Type of GPIO access available to consumers on the mesh */
+    meshtastic_RemoteHardwarePinType type;
+} meshtastic_RemoteHardwarePin;
+
+/* RemoteHardwareModule Config */
+typedef struct _meshtastic_ModuleConfig_RemoteHardwareConfig {
+    /* Whether the Module is enabled */
+    bool enabled;
+    /* Whether the Module allows consumers to read / write to pins not defined in available_pins */
+    bool allow_undefined_pin_access;
+    /* Exposes the available pins to the mesh for reading and writing */
+    pb_size_t available_pins_count;
+    meshtastic_RemoteHardwarePin available_pins[4];
+} meshtastic_ModuleConfig_RemoteHardwareConfig;
+
 /* Module Config */
 typedef struct _meshtastic_ModuleConfig {
     pb_size_t which_payload_variant;
@@ -299,16 +310,6 @@ typedef struct _meshtastic_ModuleConfig {
         meshtastic_ModuleConfig_RemoteHardwareConfig remote_hardware;
     } payload_variant;
 } meshtastic_ModuleConfig;
-
-/* A GPIO pin definition for remote hardware module */
-typedef struct _meshtastic_RemoteHardwarePin {
-    /* GPIO Pin number (must match Arduino) */
-    uint8_t gpio_pin;
-    /* Name for the GPIO pin (i.e. Front gate, mailbox, etc) */
-    char name[15];
-    /* Type of GPIO access available to consumers on the mesh */
-    meshtastic_RemoteHardwarePinType type;
-} meshtastic_RemoteHardwarePin;
 
 
 #ifdef __cplusplus
@@ -358,7 +359,7 @@ extern "C" {
 /* Initializer values for message structs */
 #define meshtastic_ModuleConfig_init_default     {0, {meshtastic_ModuleConfig_MQTTConfig_init_default}}
 #define meshtastic_ModuleConfig_MQTTConfig_init_default {0, "", "", "", 0, 0, 0, ""}
-#define meshtastic_ModuleConfig_RemoteHardwareConfig_init_default {0, 0, {{NULL}, NULL}}
+#define meshtastic_ModuleConfig_RemoteHardwareConfig_init_default {0, 0, 0, {meshtastic_RemoteHardwarePin_init_default, meshtastic_RemoteHardwarePin_init_default, meshtastic_RemoteHardwarePin_init_default, meshtastic_RemoteHardwarePin_init_default}}
 #define meshtastic_ModuleConfig_AudioConfig_init_default {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -369,7 +370,7 @@ extern "C" {
 #define meshtastic_RemoteHardwarePin_init_default {0, "", _meshtastic_RemoteHardwarePinType_MIN}
 #define meshtastic_ModuleConfig_init_zero        {0, {meshtastic_ModuleConfig_MQTTConfig_init_zero}}
 #define meshtastic_ModuleConfig_MQTTConfig_init_zero {0, "", "", "", 0, 0, 0, ""}
-#define meshtastic_ModuleConfig_RemoteHardwareConfig_init_zero {0, 0, {{NULL}, NULL}}
+#define meshtastic_ModuleConfig_RemoteHardwareConfig_init_zero {0, 0, 0, {meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero}}
 #define meshtastic_ModuleConfig_AudioConfig_init_zero {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -388,9 +389,6 @@ extern "C" {
 #define meshtastic_ModuleConfig_MQTTConfig_json_enabled_tag 6
 #define meshtastic_ModuleConfig_MQTTConfig_tls_enabled_tag 7
 #define meshtastic_ModuleConfig_MQTTConfig_root_tag 8
-#define meshtastic_ModuleConfig_RemoteHardwareConfig_enabled_tag 1
-#define meshtastic_ModuleConfig_RemoteHardwareConfig_allow_undefined_pin_access_tag 2
-#define meshtastic_ModuleConfig_RemoteHardwareConfig_available_pins_tag 3
 #define meshtastic_ModuleConfig_AudioConfig_codec2_enabled_tag 1
 #define meshtastic_ModuleConfig_AudioConfig_ptt_pin_tag 2
 #define meshtastic_ModuleConfig_AudioConfig_bitrate_tag 3
@@ -445,6 +443,12 @@ extern "C" {
 #define meshtastic_ModuleConfig_CannedMessageConfig_enabled_tag 9
 #define meshtastic_ModuleConfig_CannedMessageConfig_allow_input_source_tag 10
 #define meshtastic_ModuleConfig_CannedMessageConfig_send_bell_tag 11
+#define meshtastic_RemoteHardwarePin_gpio_pin_tag 1
+#define meshtastic_RemoteHardwarePin_name_tag    2
+#define meshtastic_RemoteHardwarePin_type_tag    3
+#define meshtastic_ModuleConfig_RemoteHardwareConfig_enabled_tag 1
+#define meshtastic_ModuleConfig_RemoteHardwareConfig_allow_undefined_pin_access_tag 2
+#define meshtastic_ModuleConfig_RemoteHardwareConfig_available_pins_tag 3
 #define meshtastic_ModuleConfig_mqtt_tag         1
 #define meshtastic_ModuleConfig_serial_tag       2
 #define meshtastic_ModuleConfig_external_notification_tag 3
@@ -454,9 +458,6 @@ extern "C" {
 #define meshtastic_ModuleConfig_canned_message_tag 7
 #define meshtastic_ModuleConfig_audio_tag        8
 #define meshtastic_ModuleConfig_remote_hardware_tag 9
-#define meshtastic_RemoteHardwarePin_gpio_pin_tag 1
-#define meshtastic_RemoteHardwarePin_name_tag    2
-#define meshtastic_RemoteHardwarePin_type_tag    3
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_ModuleConfig_FIELDLIST(X, a) \
@@ -496,8 +497,8 @@ X(a, STATIC,   SINGULAR, STRING,   root,              8)
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
 X(a, STATIC,   SINGULAR, BOOL,     allow_undefined_pin_access,   2) \
-X(a, CALLBACK, REPEATED, MESSAGE,  available_pins,    3)
-#define meshtastic_ModuleConfig_RemoteHardwareConfig_CALLBACK pb_default_field_callback
+X(a, STATIC,   REPEATED, MESSAGE,  available_pins,    3)
+#define meshtastic_ModuleConfig_RemoteHardwareConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_DEFAULT NULL
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_available_pins_MSGTYPE meshtastic_RemoteHardwarePin
 
@@ -616,16 +617,16 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_RemoteHardwarePin_fields &meshtastic_RemoteHardwarePin_msg
 
 /* Maximum encoded size of messages (where known) */
-/* meshtastic_ModuleConfig_size depends on runtime parameters */
-/* meshtastic_ModuleConfig_RemoteHardwareConfig_size depends on runtime parameters */
 #define meshtastic_ModuleConfig_AudioConfig_size 19
 #define meshtastic_ModuleConfig_CannedMessageConfig_size 49
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_size 40
 #define meshtastic_ModuleConfig_MQTTConfig_size  220
 #define meshtastic_ModuleConfig_RangeTestConfig_size 10
+#define meshtastic_ModuleConfig_RemoteHardwareConfig_size 96
 #define meshtastic_ModuleConfig_SerialConfig_size 26
 #define meshtastic_ModuleConfig_StoreForwardConfig_size 22
 #define meshtastic_ModuleConfig_TelemetryConfig_size 26
+#define meshtastic_ModuleConfig_size             223
 #define meshtastic_RemoteHardwarePin_size        21
 
 #ifdef __cplusplus
