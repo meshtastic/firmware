@@ -263,8 +263,6 @@ bool Power::analogInit()
     pinMode(EXT_PWR_DETECT, INPUT);
 #endif
 
-#ifndef HAS_PMU
-
 #ifdef BATTERY_PIN
     LOG_DEBUG("Using analog input %d for battery level\n", BATTERY_PIN);
 
@@ -315,10 +313,9 @@ bool Power::analogInit()
 
     batteryLevel = &analogLevel;
     return true;
-#endif // BATTERY_PIN
 #else
     return false;
-#endif // !HAS_PMU
+#endif
 }
 
 bool Power::setup()
