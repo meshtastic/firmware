@@ -53,7 +53,8 @@ int32_t RangeTestModule::runOnce()
 
             if (moduleConfig.range_test.sender) {
                 LOG_INFO("Initializing Range Test Module -- Sender\n");
-                return (5000); // Sending first message 5 seconds after initilization.
+                started = millis(); // make a note of when we started
+                return (5000);      // Sending first message 5 seconds after initilization.
             } else {
                 LOG_INFO("Initializing Range Test Module -- Receiver\n");
                 return disable();
@@ -77,7 +78,13 @@ int32_t RangeTestModule::runOnce()
                     rangeTestModuleRadio->sendPayload();
                 }
 
-                return (senderHeartbeat);
+                // If we have been running for more than 8 hours, turn module back off
+                if (millis() - started > 28800000) {
+                    LOG_INFO("Range Test Module - Disabling after 8 hours\n");
+                    return disable();
+                } else {
+                    return (senderHeartbeat);
+                }
             } else {
                 return disable();
                 // This thread does not need to run as a receiver
