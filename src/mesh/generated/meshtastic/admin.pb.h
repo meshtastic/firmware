@@ -274,7 +274,12 @@ extern const pb_msgdesc_t meshtastic_HamParameters_msg;
 #define meshtastic_HamParameters_fields &meshtastic_HamParameters_msg
 
 /* Maximum encoded size of messages (where known) */
-#define meshtastic_AdminMessage_size             234
+#if defined(meshtastic_ModuleConfig_size) && defined(meshtastic_ModuleConfig_size)
+union meshtastic_AdminMessage_payload_variant_size_union {char f8[(6 + meshtastic_ModuleConfig_size)]; char f35[(7 + meshtastic_ModuleConfig_size)]; char f0[234];};
+#endif
+#if defined(meshtastic_ModuleConfig_size) && defined(meshtastic_ModuleConfig_size)
+#define meshtastic_AdminMessage_size             (0 + sizeof(union meshtastic_AdminMessage_payload_variant_size_union))
+#endif
 #define meshtastic_HamParameters_size            32
 
 #ifdef __cplusplus

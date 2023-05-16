@@ -719,6 +719,8 @@ typedef struct _meshtastic_DeviceMetadata {
     uint32_t position_flags;
     /* Device hardware model */
     meshtastic_HardwareModel hw_model;
+    /* Has Remote Hardware enabled */
+    bool hasRemoteHardware;
 } meshtastic_DeviceMetadata;
 
 /* Packets from the radio to the phone will appear on the fromRadio characteristic.
@@ -855,7 +857,7 @@ extern "C" {
 #define meshtastic_Compressed_init_default       {_meshtastic_PortNum_MIN, {0, {0}}}
 #define meshtastic_NeighborInfo_init_default     {0, 0, 0, {meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default}}
 #define meshtastic_Neighbor_init_default         {0, 0}
-#define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN}
+#define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0}
 #define meshtastic_Position_init_zero            {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_User_init_zero                {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0}
 #define meshtastic_RouteDiscovery_init_zero      {0, {0, 0, 0, 0, 0, 0, 0, 0}}
@@ -872,7 +874,7 @@ extern "C" {
 #define meshtastic_Compressed_init_zero          {_meshtastic_PortNum_MIN, {0, {0}}}
 #define meshtastic_NeighborInfo_init_zero        {0, 0, 0, {meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero}}
 #define meshtastic_Neighbor_init_zero            {0, 0}
-#define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN}
+#define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_Position_latitude_i_tag       1
@@ -987,6 +989,7 @@ extern "C" {
 #define meshtastic_DeviceMetadata_role_tag       7
 #define meshtastic_DeviceMetadata_position_flags_tag 8
 #define meshtastic_DeviceMetadata_hw_model_tag   9
+#define meshtastic_DeviceMetadata_hasRemoteHardware_tag 10
 #define meshtastic_FromRadio_id_tag              1
 #define meshtastic_FromRadio_packet_tag          2
 #define meshtastic_FromRadio_my_info_tag         3
@@ -1210,7 +1213,8 @@ X(a, STATIC,   SINGULAR, BOOL,     hasBluetooth,      5) \
 X(a, STATIC,   SINGULAR, BOOL,     hasEthernet,       6) \
 X(a, STATIC,   SINGULAR, UENUM,    role,              7) \
 X(a, STATIC,   SINGULAR, UINT32,   position_flags,    8) \
-X(a, STATIC,   SINGULAR, UENUM,    hw_model,          9)
+X(a, STATIC,   SINGULAR, UENUM,    hw_model,          9) \
+X(a, STATIC,   SINGULAR, BOOL,     hasRemoteHardware,  10)
 #define meshtastic_DeviceMetadata_CALLBACK NULL
 #define meshtastic_DeviceMetadata_DEFAULT NULL
 
@@ -1252,10 +1256,12 @@ extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
 #define meshtastic_DeviceMetadata_fields &meshtastic_DeviceMetadata_msg
 
 /* Maximum encoded size of messages (where known) */
+#if defined(meshtastic_ModuleConfig_size)
+union meshtastic_FromRadio_payload_variant_size_union {char f9[(6 + meshtastic_ModuleConfig_size)]; char f0[324];};
+#endif
 #define meshtastic_Compressed_size               243
 #define meshtastic_Data_size                     270
-#define meshtastic_DeviceMetadata_size           44
-#define meshtastic_FromRadio_size                330
+#define meshtastic_DeviceMetadata_size           46
 #define meshtastic_LogRecord_size                81
 #define meshtastic_MeshPacket_size               321
 #define meshtastic_MyNodeInfo_size               179
@@ -1269,6 +1275,9 @@ extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
 #define meshtastic_ToRadio_size                  324
 #define meshtastic_User_size                     77
 #define meshtastic_Waypoint_size                 165
+#if defined(meshtastic_ModuleConfig_size)
+#define meshtastic_FromRadio_size                (6 + sizeof(union meshtastic_FromRadio_payload_variant_size_union))
+#endif
 
 #ifdef __cplusplus
 } /* extern "C" */
