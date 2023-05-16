@@ -315,9 +315,9 @@ bool Power::analogInit()
 
     batteryLevel = &analogLevel;
     return true;
+#endif // BATTERY_PIN
 #else
     return false;
-#endif // BATTERY_PIN
 #endif // !HAS_PMU
 }
 
