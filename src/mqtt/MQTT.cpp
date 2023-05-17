@@ -505,6 +505,15 @@ std::string MQTT::downstreamPacketToJson(meshtastic_MeshPacket *mp)
                 if ((int)decoded->altitude) {
                     msgPayload["altitude"] = new JSONValue((int)decoded->altitude);
                 }
+                if ((int)decoded->ground_speed) {
+                    msgPayload["ground_speed"] = new JSONValue((int)decoded->ground_speed);
+                }
+                if (int(decoded->ground_track)) {
+                    msgPayload["ground_track"] = new JSONValue((int)decoded->ground_track);
+                }
+                if (int(decoded->sats_in_view)) {
+                    msgPayload["sats_in_view"] = new JSONValue((int)decoded->sats_in_view);
+                }
                 jsonObj["payload"] = new JSONValue(msgPayload);
             } else {
                 LOG_ERROR("Error decoding protobuf for position message!\n");
