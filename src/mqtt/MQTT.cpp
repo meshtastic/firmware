@@ -461,8 +461,9 @@ std::string MQTT::downstreamPacketToJson(meshtastic_MeshPacket *mp)
                     msgPayload["current"] = new JSONValue(decoded->variant.environment_metrics.current);
                 }
                 jsonObj["payload"] = new JSONValue(msgPayload);
-            } else
+            } else {
                 LOG_ERROR("Error decoding protobuf for telemetry message!\n");
+            }
         };
         break;
     }
@@ -479,8 +480,9 @@ std::string MQTT::downstreamPacketToJson(meshtastic_MeshPacket *mp)
                 msgPayload["shortname"] = new JSONValue(decoded->short_name);
                 msgPayload["hardware"] = new JSONValue(decoded->hw_model);
                 jsonObj["payload"] = new JSONValue(msgPayload);
-            } else
+            } else {
                 LOG_ERROR("Error decoding protobuf for nodeinfo message!\n");
+            }
         };
         break;
     }
@@ -502,6 +504,15 @@ std::string MQTT::downstreamPacketToJson(meshtastic_MeshPacket *mp)
                 msgPayload["longitude_i"] = new JSONValue((int)decoded->longitude_i);
                 if ((int)decoded->altitude) {
                     msgPayload["altitude"] = new JSONValue((int)decoded->altitude);
+                }
+                if ((int)decoded->ground_speed) {
+                    msgPayload["ground_speed"] = new JSONValue((int)decoded->ground_speed);
+                }
+                if (int(decoded->ground_track)) {
+                    msgPayload["ground_track"] = new JSONValue((int)decoded->ground_track);
+                }
+                if (int(decoded->sats_in_view)) {
+                    msgPayload["sats_in_view"] = new JSONValue((int)decoded->sats_in_view);
                 }
                 jsonObj["payload"] = new JSONValue(msgPayload);
             } else {

@@ -39,6 +39,9 @@
 #ifndef HAS_CPU_SHUTDOWN
 #define HAS_CPU_SHUTDOWN 1
 #endif
+#ifndef DEFAULT_VREF
+#define DEFAULT_VREF 1100
+#endif
 
 #if defined(HAS_AXP192) || defined(HAS_AXP2101)
 #define HAS_PMU

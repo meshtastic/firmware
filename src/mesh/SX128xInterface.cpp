@@ -9,9 +9,9 @@
 #endif
 
 template <typename T>
-SX128xInterface<T>::SX128xInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy,
-                                    SPIClass &spi)
-    : RadioLibInterface(cs, irq, rst, busy, spi, &lora), lora(&module)
+SX128xInterface<T>::SX128xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
+                                    RADIOLIB_PIN_TYPE busy)
+    : RadioLibInterface(hal, cs, irq, rst, busy, &lora), lora(&module)
 {
     LOG_WARN("SX128xInterface(cs=%d, irq=%d, rst=%d, busy=%d)\n", cs, irq, rst, busy);
 }
@@ -151,8 +151,9 @@ template <typename T> void SX128xInterface<T>::setStandby()
 
     int err = lora.standby();
 
-    if (err != RADIOLIB_ERR_NONE)
+    if (err != RADIOLIB_ERR_NONE) {
         LOG_ERROR("SX128x standby failed with error %d\n", err);
+    }
 
     assert(err == RADIOLIB_ERR_NONE);
 

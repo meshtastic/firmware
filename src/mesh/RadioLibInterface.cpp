@@ -9,26 +9,23 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 
-// FIXME, we default to 4MHz SPI, SPI mode 0, check if the datasheet says it can really do that
-static SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
-
-void LockingModule::SPIbeginTransaction()
+void LockingArduinoHal::spiBeginTransaction()
 {
     spiLock->lock();
 
-    Module::SPIbeginTransaction();
+    ArduinoHal::spiBeginTransaction();
 }
 
-void LockingModule::SPIendTransaction()
+void LockingArduinoHal::spiEndTransaction()
 {
     spiLock->unlock();
 
-    Module::SPIendTransaction();
+    ArduinoHal::spiEndTransaction();
 }
 
-RadioLibInterface::RadioLibInterface(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE busy,
-                                     SPIClass &spi, PhysicalLayer *_iface)
-    : NotifiedWorkerThread("RadioIf"), module(cs, irq, rst, busy, spi, spiSettings), iface(_iface)
+RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
+                                     RADIOLIB_PIN_TYPE busy, PhysicalLayer *_iface)
+    : NotifiedWorkerThread("RadioIf"), module(hal, cs, irq, rst, busy), iface(_iface)
 {
     instance = this;
 #if defined(ARCH_STM32WL) && defined(USE_SX1262)
@@ -81,8 +78,9 @@ bool RadioLibInterface::canSendImmediately()
     bool busyRx = isReceiving && isActivelyReceiving();
 
     if (busyTx || busyRx) {
-        if (busyTx)
+        if (busyTx) {
             LOG_WARN("Can not send yet, busyTx\n");
+        }
         // If we've been trying to send the same packet more than one minute and we haven't gotten a
         // TX IRQ from the radio, the radio is probably broken.
         if (busyTx && (millis() - lastTxStart > 60000)) {
@@ -91,8 +89,9 @@ bool RadioLibInterface::canSendImmediately()
             // reboot in 5 seconds when this condition occurs.
             rebootAtMsec = lastTxStart + 65000;
         }
-        if (busyRx)
+        if (busyRx) {
             LOG_WARN("Can not send yet, busyRx\n");
+        }
         return false;
     } else
         return true;
@@ -167,9 +166,9 @@ meshtastic_QueueStatus RadioLibInterface::getQueueStatus()
 bool RadioLibInterface::canSleep()
 {
     bool res = txQueue.empty();
-    if (!res) // only print debug messages if we are vetoing sleep
+    if (!res) { // only print debug messages if we are vetoing sleep
         LOG_DEBUG("radio wait to sleep, txEmpty=%d\n", res);
-
+    }
     return res;
 }
 
