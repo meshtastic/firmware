@@ -178,7 +178,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_get_module_config_response_tag: {
         LOG_INFO("Client is receiving a get_module_config response.\n");
-        if (fromOthers && r->get_module_config_response.which_payload_variant == meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG) {
+        if (fromOthers && r->get_module_config_response.which_payload_variant ==
+                              meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG) {
             handleGetModuleConfigResponse(mp, r);
         }
         break;
@@ -213,12 +214,11 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     return handled;
 }
 
-void AdminModule::handleGetModuleConfigResponse(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *r) 
+void AdminModule::handleGetModuleConfigResponse(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *r)
 {
     // Skip if it's disabled or no pins are exposed
     if (!r->get_module_config_response.payload_variant.remote_hardware.enabled ||
-        !r->get_module_config_response.payload_variant.remote_hardware.available_pins)
-    {
+        !r->get_module_config_response.payload_variant.remote_hardware.available_pins) {
         LOG_DEBUG("Remote hardware module disabled or no vailable_pins. Skipping...\n");
         return;
     }
@@ -227,15 +227,14 @@ void AdminModule::handleGetModuleConfigResponse(const meshtastic_MeshPacket &mp,
             continue;
         }
         for (uint8_t j = 0; j < sizeof(r->get_module_config_response.payload_variant.remote_hardware.available_pins); j++) {
-          auto availablePin = r->get_module_config_response.payload_variant.remote_hardware.available_pins[j];
-          if (i < devicestate.node_remote_hardware_pins_count) {
-            devicestate.node_remote_hardware_pins[i].node_num = mp.from;
-            devicestate.node_remote_hardware_pins[i].pin = availablePin;
-          }
-          i++;
+            auto availablePin = r->get_module_config_response.payload_variant.remote_hardware.available_pins[j];
+            if (i < devicestate.node_remote_hardware_pins_count) {
+                devicestate.node_remote_hardware_pins[i].node_num = mp.from;
+                devicestate.node_remote_hardware_pins[i].pin = availablePin;
+            }
+            i++;
         }
     }
-    
 }
 
 /**
@@ -524,7 +523,8 @@ void AdminModule::handleGetNodeRemoteHardwarePins(const meshtastic_MeshPacket &r
 {
     // We create the reply here
     meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
-    memcpy(r.get_node_remote_hardware_pins_response.node_remote_hardware_pins, devicestate.node_remote_hardware_pins, sizeof(devicestate.node_remote_hardware_pins));
+    memcpy(r.get_node_remote_hardware_pins_response.node_remote_hardware_pins, devicestate.node_remote_hardware_pins,
+           sizeof(devicestate.node_remote_hardware_pins));
     r.which_payload_variant = meshtastic_AdminMessage_get_node_remote_hardware_pins_response_tag;
     myReply = allocDataProtobuf(r);
 }
