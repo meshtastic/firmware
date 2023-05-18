@@ -350,7 +350,8 @@ void NodeDB::init()
         saveWhat |= SEGMENT_CHANNELS;
 
     if (!devicestate.node_remote_hardware_pins) {
-        devicestate.node_remote_hardware_pins[12] = {0};
+        meshtastic_NodeRemoteHardwarePin empty[12] = {meshtastic_RemoteHardwarePin_init_default};
+        memcpy(devicestate.node_remote_hardware_pins, empty, sizeof(empty));
     }
 
     saveToDisk(saveWhat);
