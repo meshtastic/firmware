@@ -37,6 +37,7 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>
     void handleGetChannel(const meshtastic_MeshPacket &req, uint32_t channelIndex);
     void handleGetDeviceMetadata(const meshtastic_MeshPacket &req);
     void handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &req);
+    void handleGetNodeRemoteHardwarePins(const meshtastic_MeshPacket &req);
     /**
      * Setters
      */

@@ -520,6 +520,15 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
     }
 }
 
+void AdminModule::handleGetNodeRemoteHardwarePins(const meshtastic_MeshPacket &req)
+{
+    // We create the reply here
+    meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
+    memcpy(r.get_node_remote_hardware_pins_response.node_remote_hardware_pins, devicestate.node_remote_hardware_pins, sizeof(devicestate.node_remote_hardware_pins));
+    r.which_payload_variant = meshtastic_AdminMessage_get_node_remote_hardware_pins_response_tag;
+    myReply = allocDataProtobuf(r);
+}
+
 void AdminModule::handleGetDeviceMetadata(const meshtastic_MeshPacket &req)
 {
     meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
