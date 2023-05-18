@@ -322,7 +322,11 @@ static void drawFrameShutdown(OLEDDisplay *display, OLEDDisplayUiState *state, i
     display->setTextAlignment(TEXT_ALIGN_CENTER);
 
     display->setFont(FONT_MEDIUM);
+    #if defined(USE_EINK)
+    display->drawString(84 + x, 26 + y, "Shutting down...");
+    #elif
     display->drawString(64 + x, 26 + y, "Shutting down...");
+    #endif
 }
 
 static void drawFrameReboot(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
