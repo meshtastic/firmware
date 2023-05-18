@@ -29,7 +29,8 @@
 // code)
 #endif
 
-#define BATTERY_PIN 35           // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+#define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+#define ADC_CHANNEL ADC1_GPIO35_CHANNEL
 #define BATTERY_SENSE_SAMPLES 15 // Set the number of samples, It has an effect of increasing sensitivity.
 #define ADC_MULTIPLIER 2
 
