@@ -3,6 +3,9 @@
 #define I2C_SDA 21
 #define I2C_SCL 22
 
+#define I2C_SDA1 13
+#define I2C_SCL1 14
+
 #define BUTTON_PIN 38 // The middle button GPIO on the T-Beam
 //#define BUTTON_PIN_ALT 13 // Alternate GPIO for an external button if needed. Does anyone use this? It is not documented
 // anywhere.

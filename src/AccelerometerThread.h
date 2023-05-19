@@ -29,18 +29,20 @@ class AccelerometerThread : public concurrency::OSThread
             return;
         }
 
-        accleremoter_type = type;
+        accelerometer_type = type;
         LOG_DEBUG("AccelerometerThread initializing\n");
 
-        if (accleremoter_type == ScanI2C::DeviceType::MPU6050 && mpu.begin(accelerometer_found.address)) {
+        if (accelerometer_type == ScanI2C::DeviceType::MPU6050 &&
+            mpu.begin(accelerometer_found.address, &Wire1)) {
             LOG_DEBUG("MPU6050 initializing\n");
             // setup motion detection
             mpu.setHighPassFilter(MPU6050_HIGHPASS_0_63_HZ);
             mpu.setMotionDetectionThreshold(1);
             mpu.setMotionDetectionDuration(20);
-            mpu.setInterruptPinLatch(true); // Keep it latched.  Will turn off when reinitialized.
+            mpu.setInterruptPinLatch(
+                true); // Keep it latched.  Will turn off when reinitialized.
             mpu.setInterruptPinPolarity(true);
-        } else if (accleremoter_type == ScanI2C::DeviceType::LIS3DH && lis.begin(accelerometer_found.address)) {
+        } else if (accelerometer_type == ScanI2C::DeviceType::LIS3DH && lis.begin(accelerometer_found.address)) {
             LOG_DEBUG("LIS3DH initializing\n");
             lis.setRange(LIS3DH_RANGE_2_G);
             // Adjust threshhold, higher numbers are less sensitive
@@ -53,9 +55,13 @@ class AccelerometerThread : public concurrency::OSThread
     {
         canSleep = true; // Assume we should not keep the board awake
 
-        if (accleremoter_type == ScanI2C::DeviceType::MPU6050 && mpu.getMotionInterruptStatus()) {
-            wakeScreen();
-        } else if (accleremoter_type == ScanI2C::DeviceType::LIS3DH && lis.getClick() > 0) {
+        if (accelerometer_type == ScanI2C::DeviceType::MPU6050) {
+            if (mpu.getMotionInterruptStatus()) {
+              wakeScreen();
+            }
+            reportMpu6050();
+        } else if (accelerometer_type == ScanI2C::DeviceType::LIS3DH &&
+                   lis.getClick() > 0) {
             uint8_t click = lis.getClick();
             if (!config.device.double_tap_as_button_press) {
                 wakeScreen();
@@ -84,7 +90,24 @@ class AccelerometerThread : public concurrency::OSThread
         powerFSM.trigger(EVENT_PRESS);
     }
 
-    ScanI2C::DeviceType accleremoter_type;
+    void reportMpu6050() {
+        sensors_event_t accel;
+        sensors_event_t gyro;
+        sensors_event_t temp;
+        const bool ok = mpu.getEvent(&accel, &gyro, &temp);
+        if (not ok) {
+            LOG_WARN("Can't get MPU6050 accelerometer event\n");
+            return;
+        }
+        LOG_INFO("Acceleration: x %.4f y %.4f z %.4f, Rotation: yaw %.4f pitch "
+                 "%.4f roll %.4f, Temperature: %.2f\n",
+                 accel.acceleration.x, accel.acceleration.y,
+                 accel.acceleration.z, gyro.acceleration.heading,
+                 gyro.acceleration.pitch, gyro.acceleration.roll,
+                 temp.temperature);
+    }
+
+    ScanI2C::DeviceType accelerometer_type;
     Adafruit_MPU6050 mpu;
     Adafruit_LIS3DH lis;
 };
