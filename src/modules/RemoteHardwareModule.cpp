@@ -53,7 +53,7 @@ bool RemoteHardwareModule::handleReceivedProtobuf(const meshtastic_MeshPacket &r
 {
     if (moduleConfig.remote_hardware.enabled) {
         auto p = *pptr;
-        LOG_INFO("Received RemoteHardware typ=%d\n", p.type);
+        LOG_INFO("Received RemoteHardware type=%d\n", p.type);
 
         switch (p.type) {
         case meshtastic_HardwareMessage_Type_WRITE_GPIOS:
