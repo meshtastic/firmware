@@ -26,15 +26,18 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>
     bool hasOpenEditTransaction = false;
 
     void saveChanges(int saveWhat, bool shouldReboot = true);
+
     /**
      * Getters
      */
+    void handleGetModuleConfigResponse(const meshtastic_MeshPacket &req, meshtastic_AdminMessage *p);
     void handleGetOwner(const meshtastic_MeshPacket &req);
     void handleGetConfig(const meshtastic_MeshPacket &req, uint32_t configType);
     void handleGetModuleConfig(const meshtastic_MeshPacket &req, uint32_t configType);
     void handleGetChannel(const meshtastic_MeshPacket &req, uint32_t channelIndex);
     void handleGetDeviceMetadata(const meshtastic_MeshPacket &req);
     void handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &req);
+    void handleGetNodeRemoteHardwarePins(const meshtastic_MeshPacket &req);
     /**
      * Setters
      */
