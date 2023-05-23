@@ -211,7 +211,7 @@ typedef struct _meshtastic_ModuleConfig_RangeTestConfig {
     bool enabled;
     /* Send out range test messages from this node */
     uint32_t sender;
-    /* Bool value indicating that this node should save a RangeTest.csv file. 
+    /* Bool value indicating that this node should save a RangeTest.csv file.
  ESP32 Only */
     bool save;
 } meshtastic_ModuleConfig_RangeTestConfig;
