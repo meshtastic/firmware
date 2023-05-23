@@ -521,11 +521,23 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
 
 void AdminModule::handleGetNodeRemoteHardwarePins(const meshtastic_MeshPacket &req)
 {
-    // We create the reply here
     meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
-    memcpy(r.get_node_remote_hardware_pins_response.node_remote_hardware_pins, devicestate.node_remote_hardware_pins,
-           sizeof(devicestate.node_remote_hardware_pins));
     r.which_payload_variant = meshtastic_AdminMessage_get_node_remote_hardware_pins_response_tag;
+    for (uint8_t i = 0; i < devicestate.node_remote_hardware_pins_count; i++) {
+        if (devicestate.node_remote_hardware_pins[i].node_num == 0 || !devicestate.node_remote_hardware_pins[i].has_pin) {
+            continue;
+        }
+        r.get_node_remote_hardware_pins_response.node_remote_hardware_pins[i] = devicestate.node_remote_hardware_pins[i];
+    }
+    for (uint8_t i = 0; i < moduleConfig.remote_hardware.available_pins_count; i++) {
+        if (!moduleConfig.remote_hardware.available_pins[i].gpio_pin) {
+            continue;
+        }
+        meshtastic_NodeRemoteHardwarePin nodePin = meshtastic_NodeRemoteHardwarePin_init_default;
+        nodePin.node_num = nodeDB.getNodeNum();
+        nodePin.pin = moduleConfig.remote_hardware.available_pins[i];
+        r.get_node_remote_hardware_pins_response.node_remote_hardware_pins[i + 12] = nodePin;
+    }
     myReply = allocDataProtobuf(r);
 }
 
