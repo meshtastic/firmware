@@ -18,7 +18,7 @@ typedef enum _meshtastic_Config_DeviceConfig_Role {
    Same as a client except packets will not hop over this node, does not contribute to routing packets for mesh. */
     meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE = 1,
     /* Router device role.
-   Mesh packets will prefer to be routed over this node. This node will not be used by client apps. 
+   Mesh packets will prefer to be routed over this node. This node will not be used by client apps.
    The wifi/ble radios and the oled screen will be put to sleep.
    This mode may still potentially have higher power usage due to it's preference in message rebroadcasting on the mesh. */
     meshtastic_Config_DeviceConfig_Role_ROUTER = 2,
@@ -293,7 +293,7 @@ typedef struct _meshtastic_Config_PowerConfig {
  0 for default of 1 minute */
     uint32_t wait_bluetooth_secs;
     /* Mesh Super Deep Sleep Timeout Seconds
- While in Light Sleep if this value is exceeded we will lower into super deep sleep 
+ While in Light Sleep if this value is exceeded we will lower into super deep sleep
  for sds_secs (default 1 year) or a button press
  0 for default of two hours, MAXUINT for disabled */
     uint32_t mesh_sds_timeout_secs;
@@ -356,7 +356,7 @@ typedef struct _meshtastic_Config_DisplayConfig {
     /* Automatically toggles to the next page on the screen like a carousel, based the specified interval in seconds.
  Potentially useful for devices without user buttons. */
     uint32_t auto_screen_carousel_secs;
-    /* If this is set, the displayed compass will always point north. if unset, the old behaviour 
+    /* If this is set, the displayed compass will always point north. if unset, the old behaviour
  (top of display is heading direction) is used. */
     bool compass_north_top;
     /* Flip screen vertically, for cases that mount the screen upside down */
@@ -419,7 +419,7 @@ typedef struct _meshtastic_Config_LoRaConfig {
  If using the hash algorithm the channel number will be: hash(channel_name) %
  NUM_CHANNELS (Where num channels depends on the regulatory region). */
     uint16_t channel_num;
-    /* If true, duty cycle limits will be exceeded and thus you're possibly not following 
+    /* If true, duty cycle limits will be exceeded and thus you're possibly not following
  the local regulations if you're not a HAM.
  Has no effect if the duty cycle of the used region is 100%. */
     bool override_duty_cycle;

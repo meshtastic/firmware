@@ -6,6 +6,7 @@
 #include "main.h"
 #include "sleep.h"
 #include "utils.h"
+static const char *TAG = "ADCmod";
 
 #ifdef DEBUG_HEAP_MQTT
 #include "mqtt/MQTT.h"
@@ -16,6 +17,23 @@
 #ifndef DELAY_FOREVER
 #define DELAY_FOREVER portMAX_DELAY
 #endif
+
+#if defined(BATTERY_PIN) && defined(ARCH_ESP32)
+
+#ifndef BAT_MEASURE_ADC_UNIT // ADC1 is default
+static const adc1_channel_t adc_channel = ADC_CHANNEL;
+static const adc_unit_t unit = ADC_UNIT_1;
+#else // ADC2
+static const adc2_channel_t adc_channel = ADC_CHANNEL;
+static const adc_unit_t unit = ADC_UNIT_2;
+RTC_NOINIT_ATTR uint64_t RTC_reg_b;
+
+#endif // BAT_MEASURE_ADC_UNIT
+
+esp_adc_cal_characteristics_t *adc_characs = (esp_adc_cal_characteristics_t *)calloc(1, sizeof(esp_adc_cal_characteristics_t));
+
+static const adc_atten_t atten = ADC_ATTEN_DB_11;
+#endif // BATTERY_PIN && ARCH_ESP32
 
 #ifdef HAS_PMU
 #include "XPowersAXP192.tpp"
@@ -128,18 +146,41 @@ class AnalogBatteryLevel : public HasBatteryLevel
             // Set the number of samples, it has an effect of increasing sensitivity, especially in complex electromagnetic
             // environment.
             uint32_t raw = 0;
+#ifdef ARCH_ESP32
+#ifndef BAT_MEASURE_ADC_UNIT // ADC1
+            for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
+                raw += adc1_get_raw(adc_channel);
+            }
+#else  // ADC2
+            int32_t adc_buf = 0;
+            for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
+                // ADC2 wifi bug workaround, see
+                // https://github.com/espressif/arduino-esp32/issues/102
+                WRITE_PERI_REG(SENS_SAR_READ_CTRL2_REG, RTC_reg_b);
+                SET_PERI_REG_MASK(SENS_SAR_READ_CTRL2_REG, SENS_SAR2_DATA_INV);
+                adc2_get_raw(adc_channel, ADC_WIDTH_BIT_12, &adc_buf);
+                raw += adc_buf;
+            }
+#endif // BAT_MEASURE_ADC_UNIT
+#else  // !ARCH_ESP32
             for (uint32_t i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
                 raw += analogRead(BATTERY_PIN);
             }
+#endif
             raw = raw / BATTERY_SENSE_SAMPLES;
-
             float scaled;
+#ifdef ARCH_ESP32
+            scaled = esp_adc_cal_raw_to_voltage(raw, adc_characs);
+            scaled *= operativeAdcMultiplier;
+#else
 #ifndef VBAT_RAW_TO_SCALED
             scaled = 1000.0 * operativeAdcMultiplier * (AREF_VOLTAGE / 1024.0) * raw;
 #else
             scaled = VBAT_RAW_TO_SCALED(raw); // defined in variant.h
-#endif
-            // LOG_DEBUG("battery gpio %d raw val=%u scaled=%u\n", BATTERY_PIN, raw, (uint32_t)(scaled));
+#endif // VBAT RAW TO SCALED
+#endif // ARCH_ESP32
+       // LOG_DEBUG("battery gpio %d raw val=%u scaled=%u\n", BATTERY_PIN, raw, (uint32_t)(scaled));
+
             last_read_value = scaled;
             return scaled;
         } else {
@@ -147,7 +188,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
         }
 #else
         return 0;
-#endif
+#endif // BATTERY_PIN
     }
 
     /**
@@ -228,25 +269,48 @@ bool Power::analogInit()
     // disable any internal pullups
     pinMode(BATTERY_PIN, INPUT);
 
-#ifdef ARCH_ESP32
-    // ESP32 needs special analog stuff
-    adcAttachPin(BATTERY_PIN);
+#ifndef BATTERY_SENSE_RESOLUTION_BITS
+#define BATTERY_SENSE_RESOLUTION_BITS 10
 #endif
+
+#ifdef ARCH_ESP32 // ESP32 needs special analog stuff
+
+#ifndef ADC_WIDTH // max resolution by default
+    static const adc_bits_width_t width = ADC_WIDTH_BIT_12;
+#else
+    static const adc_bits_width_t width = ADC_WIDTH;
+#endif
+#ifndef BAT_MEASURE_ADC_UNIT // ADC1
+    adc1_config_width(width);
+    adc1_config_channel_atten(adc_channel, atten);
+#else // ADC2
+    adc2_config_channel_atten(adc_channel, atten);
+    // ADC2 wifi bug workaround
+    RTC_reg_b = READ_PERI_REG(SENS_SAR_READ_CTRL2_REG);
+#endif
+    // calibrate ADC
+    esp_adc_cal_value_t val_type = esp_adc_cal_characterize(unit, atten, width, DEFAULT_VREF, adc_characs);
+    // show ADC characterization base
+    if (val_type == ESP_ADC_CAL_VAL_EFUSE_TP) {
+        ESP_LOGI(TAG, "ADC characterization based on Two Point values stored in eFuse");
+    } else if (val_type == ESP_ADC_CAL_VAL_EFUSE_VREF) {
+        ESP_LOGI(TAG, "ADC characterization based on reference voltage stored in eFuse");
+    } else {
+        ESP_LOGI(TAG, "ADC characterization based on default reference voltage");
+    }
+#endif // ARCH_ESP32
+
 #ifdef ARCH_NRF52
 #ifdef VBAT_AR_INTERNAL
     analogReference(VBAT_AR_INTERNAL);
 #else
     analogReference(AR_INTERNAL); // 3.6V
 #endif
-#endif
-
-#ifndef BATTERY_SENSE_RESOLUTION_BITS
-#define BATTERY_SENSE_RESOLUTION_BITS 10
-#endif
-
-    // adcStart(BATTERY_PIN);
     analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS); // Default of 12 is not very linear. Recommended to use 10 or 11
                                                          // depending on needed resolution.
+
+#endif // ARCH_NRF52
+
     batteryLevel = &analogLevel;
     return true;
 #else
@@ -302,7 +366,7 @@ void Power::readPowerStatus()
 {
     if (batteryLevel) {
         bool hasBattery = batteryLevel->isBatteryConnect();
-        int batteryVoltageMv = 0;
+        uint32_t batteryVoltageMv = 0;
         int8_t batteryChargePercent = 0;
         if (hasBattery) {
             batteryVoltageMv = batteryLevel->getBattVoltage();
@@ -365,8 +429,8 @@ void Power::readPowerStatus()
 
 #endif
 
-        // If we have a battery at all and it is less than 10% full, force deep sleep if we have more than 10 low readings in a
-        // row
+        // If we have a battery at all and it is less than 10% full, force deep sleep if we have more than 10 low readings in
+        // a row
         if (powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
             if (batteryLevel->getBattVoltage() < MIN_BAT_MILLIVOLTS) {
                 low_voltage_counter++;
@@ -444,10 +508,10 @@ int32_t Power::runOnce()
  * Init the power manager chip
  *
  * axp192 power
-    DCDC1 0.7-3.5V @ 1200mA max -> OLED // If you turn this off you'll lose comms to the axp192 because the OLED and the axp192
- share the same i2c bus, instead use ssd1306 sleep mode DCDC2 -> unused DCDC3 0.7-3.5V @ 700mA max -> ESP32 (keep this on!) LDO1
- 30mA -> charges GPS backup battery // charges the tiny J13 battery by the GPS to power the GPS ram (for a couple of days), can
- not be turned off LDO2 200mA -> LORA LDO3 200mA -> GPS
+    DCDC1 0.7-3.5V @ 1200mA max -> OLED // If you turn this off you'll lose comms to the axp192 because the OLED and the
+ axp192 share the same i2c bus, instead use ssd1306 sleep mode DCDC2 -> unused DCDC3 0.7-3.5V @ 700mA max -> ESP32 (keep this
+ on!) LDO1 30mA -> charges GPS backup battery // charges the tiny J13 battery by the GPS to power the GPS ram (for a couple of
+ days), can not be turned off LDO2 200mA -> LORA LDO3 200mA -> GPS
  *
  */
 bool Power::axpChipInit()
@@ -574,7 +638,8 @@ bool Power::axpChipInit()
         // t-beam s3 core
         /**
          * gnss module power channel
-         * The default ALDO4 is off, you need to turn on the GNSS power first, otherwise it will be invalid during initialization
+         * The default ALDO4 is off, you need to turn on the GNSS power first, otherwise it will be invalid during
+         * initialization
          */
         PMU->setPowerChannelVoltage(XPOWERS_ALDO4, 3300);
         PMU->enablePowerOutput(XPOWERS_ALDO4);
