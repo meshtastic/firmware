@@ -670,6 +670,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     deviceMetadata.role = config.device.role;
     deviceMetadata.position_flags = config.position.position_flags;
     deviceMetadata.hw_model = HW_VENDOR;
+    deviceMetadata.hasRemoteHardware = moduleConfig.remote_hardware.enabled;
     return deviceMetadata;
 }
 
