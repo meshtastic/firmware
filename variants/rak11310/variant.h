@@ -30,6 +30,8 @@
 #undef RF95_MOSI
 #undef RF95_NSS
 
+// RAK BSP somehow uses SPI1 instead of SPI0
+#define HW_SPI1_DEVICE
 #define RF95_SCK PIN_SPI0_SCK
 #define RF95_MOSI PIN_SPI0_MOSI
 #define RF95_MISO PIN_SPI0_MISO
