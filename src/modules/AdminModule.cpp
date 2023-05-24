@@ -553,9 +553,8 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
 {
     meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
 
-    meshtastic_DeviceConnectionStatus conn;
+    meshtastic_DeviceConnectionStatus conn = meshtastic_DeviceConnectionStatus_init_zero;
 
-    conn.wifi = {0};
 #if HAS_WIFI
     conn.has_wifi = true;
     conn.wifi.has_status = true;
@@ -571,11 +570,8 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
         conn.wifi.status.is_mqtt_connected = mqtt && mqtt->connected();
         conn.wifi.status.is_syslog_connected = false; // FIXME wire this up
     }
-#else
-    conn.has_wifi = false;
 #endif
 
-    conn.ethernet = {0};
 #if HAS_ETHERNET
     conn.has_ethernet = true;
     conn.ethernet.has_status = true;
@@ -587,8 +583,6 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     } else {
         conn.ethernet.status.is_connected = false;
     }
-#else
-    conn.has_ethernet = false;
 #endif
 
 #if HAS_BLUETOOTH
