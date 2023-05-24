@@ -6,7 +6,6 @@
 #include "main.h"
 #include "sleep.h"
 #include "utils.h"
-static const char *TAG = "ADCmod";
 
 #ifdef DEBUG_HEAP_MQTT
 #include "mqtt/MQTT.h"
@@ -295,11 +294,11 @@ bool Power::analogInit()
     esp_adc_cal_value_t val_type = esp_adc_cal_characterize(unit, atten, width, DEFAULT_VREF, adc_characs);
     // show ADC characterization base
     if (val_type == ESP_ADC_CAL_VAL_EFUSE_TP) {
-        ESP_LOGI(TAG, "ADC characterization based on Two Point values stored in eFuse");
+        LOG_INFO("ADCmod: ADC characterization based on Two Point values stored in eFuse\n");
     } else if (val_type == ESP_ADC_CAL_VAL_EFUSE_VREF) {
-        ESP_LOGI(TAG, "ADC characterization based on reference voltage stored in eFuse");
+        LOG_INFO("ADCmod: ADC characterization based on reference voltage stored in eFuse\n");
     } else {
-        ESP_LOGI(TAG, "ADC characterization based on default reference voltage");
+        LOG_INFO("ADCmod: ADC characterization based on default reference voltage\n");
     }
 #endif // ARCH_ESP32
 
