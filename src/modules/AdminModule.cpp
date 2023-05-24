@@ -553,7 +553,7 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
 {
     meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
 
-    meshtastic_DeviceConnectionStatus conn = meshtastic_DeviceConnectionStatus_init_zero; 
+    meshtastic_DeviceConnectionStatus conn = meshtastic_DeviceConnectionStatus_init_zero;
 
 #if HAS_WIFI
     conn.has_wifi = true;
