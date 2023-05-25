@@ -21,10 +21,10 @@ void getMacAddr(uint8_t *dmac)
 {
     pico_unique_board_id_t src;
     pico_get_unique_board_id(&src);
-    dmac[5] = src.id[0];
-    dmac[4] = src.id[1];
-    dmac[3] = src.id[2];
-    dmac[2] = src.id[3];
-    dmac[1] = src.id[4];
-    dmac[0] = src.id[5];
+    dmac[5] = src.id[7];
+    dmac[4] = src.id[6];
+    dmac[3] = src.id[5];
+    dmac[2] = src.id[4];
+    dmac[1] = src.id[3];
+    dmac[0] = src.id[2];
 }
