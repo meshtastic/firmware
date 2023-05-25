@@ -33,7 +33,7 @@ jobs:
           - board: m5stack-coreink
           - board: tbeam-s3-core
           - board: tlora-t3s3-v1
-          - board: rak11310
+          #- board: rak11310
 
     runs-on: ubuntu-latest
     steps:
