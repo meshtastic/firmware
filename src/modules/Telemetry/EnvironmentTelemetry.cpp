@@ -52,7 +52,7 @@ SHT31Sensor sht31Sensor;
 
 int32_t EnvironmentTelemetryModule::runOnce()
 {
-    int32_t result = INT32_MAX;
+    uint32_t result = UINT32_MAX;
     /*
         Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
@@ -98,8 +98,12 @@ int32_t EnvironmentTelemetryModule::runOnce()
         return result;
     } else {
         // if we somehow got to a second run of this module with measurement disabled, then just wait forever
-        if (!moduleConfig.telemetry.environment_measurement_enabled)
-            return result;
+        if (!moduleConfig.telemetry.environment_measurement_enabled) {
+            return disable();
+        } else {
+            if (bme680Sensor.hasSensor())
+                result = bme680Sensor.runTrigger();
+        }
 
         uint32_t now = millis();
         if (((lastSentToMesh == 0) ||
@@ -107,13 +111,14 @@ int32_t EnvironmentTelemetryModule::runOnce()
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
             lastSentToMesh = now;
-        } else if (service.isToPhoneQueueEmpty()) {
+        } else if (((lastSentToPhone == 0) || ((now - lastSentToPhone) >= sendToPhoneIntervalMs)) &&
+                   (service.isToPhoneQueueEmpty())) {
             // Just send to phone when it's not our time to send to mesh yet
             // Only send while queue is empty (phone assumed connected)
             sendTelemetry(NODENUM_BROADCAST, true);
         }
     }
-    return sendToPhoneIntervalMs;
+    return min(sendToPhoneIntervalMs, result);
 }
 
 bool EnvironmentTelemetryModule::wantUIFrame()
@@ -205,6 +210,7 @@ bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPac
 bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 {
     meshtastic_Telemetry m;
+    bool valid = false;
     m.time = getTime();
     m.which_variant = meshtastic_Telemetry_environment_metrics_tag;
 
@@ -216,50 +222,52 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.variant.environment_metrics.voltage = 0;
 
     if (sht31Sensor.hasSensor())
-        sht31Sensor.getMetrics(&m);
+        valid = sht31Sensor.getMetrics(&m);
     if (lps22hbSensor.hasSensor())
-        lps22hbSensor.getMetrics(&m);
+        valid = lps22hbSensor.getMetrics(&m);
     if (shtc3Sensor.hasSensor())
-        shtc3Sensor.getMetrics(&m);
+        valid = shtc3Sensor.getMetrics(&m);
     if (bmp280Sensor.hasSensor())
-        bmp280Sensor.getMetrics(&m);
+        valid = bmp280Sensor.getMetrics(&m);
     if (bme280Sensor.hasSensor())
-        bme280Sensor.getMetrics(&m);
+        valid = bme280Sensor.getMetrics(&m);
     if (bme680Sensor.hasSensor())
-        bme680Sensor.getMetrics(&m);
+        valid = bme680Sensor.getMetrics(&m);
     if (mcp9808Sensor.hasSensor())
-        mcp9808Sensor.getMetrics(&m);
+        valid = mcp9808Sensor.getMetrics(&m);
     if (ina219Sensor.hasSensor())
-        ina219Sensor.getMetrics(&m);
+        valid = ina219Sensor.getMetrics(&m);
     if (ina260Sensor.hasSensor())
-        ina260Sensor.getMetrics(&m);
+        valid = ina260Sensor.getMetrics(&m);
 
-    LOG_INFO(
-        "(Sending): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f, voltage=%f\n",
-        m.variant.environment_metrics.barometric_pressure, m.variant.environment_metrics.current,
-        m.variant.environment_metrics.gas_resistance, m.variant.environment_metrics.relative_humidity,
-        m.variant.environment_metrics.temperature, m.variant.environment_metrics.voltage);
+    if (valid) {
+        LOG_INFO("(Sending): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f, "
+                 "voltage=%f\n",
+                 m.variant.environment_metrics.barometric_pressure, m.variant.environment_metrics.current,
+                 m.variant.environment_metrics.gas_resistance, m.variant.environment_metrics.relative_humidity,
+                 m.variant.environment_metrics.temperature, m.variant.environment_metrics.voltage);
 
-    sensor_read_error_count = 0;
+        sensor_read_error_count = 0;
 
-    meshtastic_MeshPacket *p = allocDataProtobuf(m);
-    p->to = dest;
-    p->decoded.want_response = false;
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
-        p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
-    else
-        p->priority = meshtastic_MeshPacket_Priority_MIN;
-    // release previous packet before occupying a new spot
-    if (lastMeasurementPacket != nullptr)
-        packetPool.release(lastMeasurementPacket);
+        meshtastic_MeshPacket *p = allocDataProtobuf(m);
+        p->to = dest;
+        p->decoded.want_response = false;
+        if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
+            p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+        else
+            p->priority = meshtastic_MeshPacket_Priority_MIN;
+        // release previous packet before occupying a new spot
+        if (lastMeasurementPacket != nullptr)
+            packetPool.release(lastMeasurementPacket);
 
-    lastMeasurementPacket = packetPool.allocCopy(*p);
-    if (phoneOnly) {
-        LOG_INFO("Sending packet to phone\n");
-        service.sendToPhone(p);
-    } else {
-        LOG_INFO("Sending packet to mesh\n");
-        service.sendToMesh(p, RX_SRC_LOCAL, true);
+        lastMeasurementPacket = packetPool.allocCopy(*p);
+        if (phoneOnly) {
+            LOG_INFO("Sending packet to phone\n");
+            service.sendToPhone(p);
+        } else {
+            LOG_INFO("Sending packet to mesh\n");
+            service.sendToMesh(p, RX_SRC_LOCAL, true);
+        }
     }
-    return true;
+    return valid;
 }
