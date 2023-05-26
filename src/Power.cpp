@@ -30,8 +30,11 @@ RTC_NOINIT_ATTR uint64_t RTC_reg_b;
 #endif // BAT_MEASURE_ADC_UNIT
 
 esp_adc_cal_characteristics_t *adc_characs = (esp_adc_cal_characteristics_t *)calloc(1, sizeof(esp_adc_cal_characteristics_t));
-
+#ifndef ADC_ATTENUATION
 static const adc_atten_t atten = ADC_ATTEN_DB_11;
+#else
+static const adc_atten_t atten = ADC_ATTENUATION;
+#endif
 #endif // BATTERY_PIN && ARCH_ESP32
 
 #ifdef HAS_PMU
