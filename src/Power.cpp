@@ -606,7 +606,7 @@ bool Power::axpChipInit()
     } else if (PMU->getChipModel() == XPOWERS_AXP2101) {
 
         /*The alternative version of T-Beam 1.1 differs from T-Beam V1.1 in that it uses an AXP2101 power chip*/
-        if (HW_VENDOR == meshtastic_HardwareModel_TBEAM){
+        if (HW_VENDOR == meshtastic_HardwareModel_TBEAM) {
             // Unuse power channel
             PMU->disablePowerOutput(XPOWERS_DCDC2);
             PMU->disablePowerOutput(XPOWERS_DCDC3);
@@ -636,7 +636,7 @@ bool Power::axpChipInit()
             PMU->setPowerChannelVoltage(XPOWERS_ALDO3, 3300);
             PMU->enablePowerOutput(XPOWERS_ALDO3);
 
-        }else if(HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE){
+        } else if (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE) {
             // t-beam s3 core
             /**
              * gnss module power channel
