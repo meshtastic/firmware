@@ -174,6 +174,11 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #ifdef ARCH_ESP32
             scaled = esp_adc_cal_raw_to_voltage(raw, adc_characs);
             scaled *= operativeAdcMultiplier;
+#ifdef SCALED_ADJUST
+            if (scaled <= 3940) {
+                scaled = SCALED_ADJUST(scaled); // defined in variant.h
+            }
+#endif
 #else
 #ifndef VBAT_RAW_TO_SCALED
             scaled = 1000.0 * operativeAdcMultiplier * (AREF_VOLTAGE / 1024.0) * raw;

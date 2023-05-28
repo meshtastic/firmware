@@ -13,7 +13,7 @@
  * looking at the red line - discharge at 0.2A - he gets a capacity of 2900mah, 90% of 2900 = 2610, that point in the graph looks
  * to be a shade above 3.2V
  */
-#define MIN_BAT_MILLIVOLTS 3250 // millivolts. 10% per https://blog.ampow.com/lipo-voltage-chart/
+#define MIN_BAT_MILLIVOLTS 2200 // millivolts. 10% per https://blog.ampow.com/lipo-voltage-chart/
 
 #define BAT_MILLIVOLTS_FULL 4100
 #define BAT_MILLIVOLTS_EMPTY 3500
