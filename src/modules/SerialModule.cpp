@@ -238,17 +238,16 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                 // Decode the Payload some more
                 meshtastic_Position scratch;
                 meshtastic_Position *decoded = NULL;
-                if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.decoded.portnum == ourPortNum))
-                    {
-                        memset(&scratch, 0, sizeof(scratch));
-                        if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Position_msg, &scratch)) {
-                            decoded = &scratch;
-                        }
-                        // send position packet as WPL to the serial port
-                        printWPL(outbuf, sizeof(outbuf), *decoded, nodeDB.getNode(getFrom(&mp))->user.long_name,
-                                 moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO);
-                        Serial2.printf("%s", outbuf);
+                if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.decoded.portnum == ourPortNum) {
+                    memset(&scratch, 0, sizeof(scratch));
+                    if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Position_msg, &scratch)) {
+                        decoded = &scratch;
                     }
+                    // send position packet as WPL to the serial port
+                    printWPL(outbuf, sizeof(outbuf), *decoded, nodeDB.getNode(getFrom(&mp))->user.long_name,
+                             moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO);
+                    Serial2.printf("%s", outbuf);
+                }
             }
         }
     }
