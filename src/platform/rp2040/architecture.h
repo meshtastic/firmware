@@ -12,6 +12,8 @@
 #define HAS_RADIO 1
 #endif
 
-#if defined(PRIVATE_HW)
-#define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
+#if defined(RPI_PICO)
+#define HW_VENDOR meshtastic_HardwareModel_RPI_PICO
+#elif defined(RAK11310)
+#define HW_VENDOR meshtastic_HardwareModel_RAK11310
 #endif
