@@ -71,6 +71,7 @@ SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
         ourPortNum = meshtastic_PortNum_TEXT_MESSAGE_APP;
         break;
     case meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA:
+    case meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO:
         ourPortNum = meshtastic_PortNum_POSITION_APP;
         break;
     default:
@@ -237,17 +238,17 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                 // Decode the Payload some more
                 meshtastic_Position scratch;
                 meshtastic_Position *decoded = NULL;
-                if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
-                    (mp.decoded.portnum == ourPortNum || mp.decoded.portnum == meshtastic_PortNum_POSITION_APP)) {
-                    memset(&scratch, 0, sizeof(scratch));
-                    if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Position_msg, &scratch)) {
-                        decoded = &scratch;
+                if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.decoded.portnum == ourPortNum))
+                    {
+                        memset(&scratch, 0, sizeof(scratch));
+                        if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Position_msg, &scratch)) {
+                            decoded = &scratch;
+                        }
+                        // send position packet as WPL to the serial port
+                        printWPL(outbuf, sizeof(outbuf), *decoded, nodeDB.getNode(getFrom(&mp))->user.long_name,
+                                 moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO);
+                        Serial2.printf("%s", outbuf);
                     }
-                    // send position packet as WPL to the serial port
-                    printWPL(outbuf, sizeof(outbuf), *decoded, nodeDB.getNode(getFrom(&mp))->user.long_name,
-                             moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO);
-                    Serial2.printf("%s", outbuf);
-                }
             }
         }
     }
