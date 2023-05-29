@@ -212,6 +212,13 @@ inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t d
     return defaultInterval * 1000;
 }
 
+/// Sometimes we will have Position objects that only have a time, so check for
+/// valid lat/lon
+static bool hasValidPosition(meshtastic_NodeInfo *n)
+{
+    return n->has_position && (n->position.latitude_i != 0 || n->position.longitude_i != 0);
+}
+
 /** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings
  * might have changed is incremented.  Allows others to detect they might now be on a new channel.
  */

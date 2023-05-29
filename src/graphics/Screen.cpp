@@ -711,13 +711,6 @@ static float estimatedHeading(double lat, double lon)
     return b;
 }
 
-/// Sometimes we will have Position objects that only have a time, so check for
-/// valid lat/lon
-static bool hasPosition(meshtastic_NodeInfo *n)
-{
-    return n->has_position && (n->position.latitude_i != 0 || n->position.longitude_i != 0);
-}
-
 static uint16_t getCompassDiam(OLEDDisplay *display)
 {
     uint16_t diam = 0;
