@@ -231,8 +231,14 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                     type = BME_280;
                     break;
                 default:
+                // The identification ID of t-beam-s3-core is BMP280, but it is actually BME280
+#ifdef LILYGO_TBEAM_S3_CORE
+                    LOG_INFO("BME-280 sensor found at address 0x%x\n", (uint8_t)addr.address);
+                    type = BME_280;
+#else
                     LOG_INFO("BMP-280 sensor found at address 0x%x\n", (uint8_t)addr.address);
                     type = BMP_280;
+#endif
                 }
                 break;
 
