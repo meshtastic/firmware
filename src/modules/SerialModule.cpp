@@ -62,13 +62,8 @@ SerialModule::SerialModule() : StreamAPI(&Serial2), concurrency::OSThread("Seria
 
 char serialBytes[meshtastic_Constants_DATA_PAYLOAD_LEN];
 size_t serialPayloadSize;
-#if CONFIG_IDF_TARGET_ESP32S3
-static USBCDC *serialModulePort = &Serial2;
-#elif defined(ARCH_NRF52)
-static Adafruit_USBD_CDC *serialModulePort = &Serial2;
-#else
-static HardwareSerial *serialModulePort = &Serial2;
-#endif
+static Print *serialPrint = &Serial2;
+
 SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
 {
     switch (moduleConfig.serial.mode) {
@@ -117,36 +112,35 @@ int32_t SerialModule::runOnce()
             // Interface with the serial peripheral from in here.
             LOG_INFO("Initializing serial peripheral interface\n");
 
-            if (moduleConfig.serial.override_console_serial_port) {
-                serialModulePort = &Serial;
-                serialModulePort->flush();
-                // Give it a chance to flush out 💩
-                delay(10);
-            }
             uint32_t baud = getBaudRate();
 
+            if (moduleConfig.serial.override_console_serial_port) {
+                Serial.flush();
+                serialPrint = &Serial;
+                // Give it a chance to flush out 💩
+                delay(10);
+            } else {
+                serialPrint = &Serial2;
+            }
 #ifdef ARCH_ESP32
-            serialModulePort->setRxBufferSize(RX_BUFFER);
 
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
-                serialModulePort->begin(baud, SERIAL_8N1, moduleConfig.serial.rxd, moduleConfig.serial.txd);
+                Serial2.setRxBufferSize(RX_BUFFER);
+                Serial2.begin(baud, SERIAL_8N1, moduleConfig.serial.rxd, moduleConfig.serial.txd);
             } else {
-                serialModulePort->begin(baud);
+                Serial.begin(baud);
+                Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             }
 #else
-            if (moduleConfig.serial.rxd && moduleConfig.serial.txd)
-                serialModulePort->setPins(moduleConfig.serial.rxd, moduleConfig.serial.txd);
-
-            serialModulePort->begin(baud, SERIAL_8N1);
-
-#endif
-            if (moduleConfig.serial.timeout) {
-                serialModulePort->setTimeout(
-                    moduleConfig.serial.timeout); // Number of MS to wait to set the timeout for the string.
+            if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
+                Serial2.setPins(moduleConfig.serial.rxd, moduleConfig.serial.txd);
+                Serial2.begin(baud, SERIAL_8N1);
+                Serial2.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             } else {
-                serialModulePort->setTimeout(TIMEOUT); // Number of MS to wait to set the timeout for the string.
+                Serial.begin(baud, SERIAL_8N1);
+                Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             }
-
+#endif
             serialModuleRadio = new SerialModuleRadio();
 
             firstTime = 0;
@@ -170,11 +164,11 @@ int32_t SerialModule::runOnce()
                     } else {
                         printGGA(outbuf, sizeof(outbuf), nodeDB.getNode(myNodeInfo.my_node_num)->position);
                     }
-                    serialModulePort->printf("%s", outbuf);
+                    serialPrint->printf("%s", outbuf);
                 }
             } else {
-                while (serialModulePort->available()) {
-                    serialPayloadSize = serialModulePort->readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
+                while (Serial2.available()) {
+                    serialPayloadSize = Serial2.readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
                     serialModuleRadio->sendPayload();
                 }
             }
@@ -235,21 +229,21 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                 if (lastRxID != mp.id) {
                     lastRxID = mp.id;
                     // LOG_DEBUG("* * Message came this device\n");
-                    // serialModulePort->println("* * Message came this device");
-                    serialModulePort->printf("%s", p.payload.bytes);
+                    // serialPrint->println("* * Message came this device");
+                    serialPrint->printf("%s", p.payload.bytes);
                 }
             }
         } else {
 
             if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_DEFAULT ||
                 moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_SIMPLE) {
-                serialModulePort->printf("%s", p.payload.bytes);
+                serialPrint->printf("%s", p.payload.bytes);
             } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG) {
                 meshtastic_NodeInfo *node = nodeDB.getNode(getFrom(&mp));
                 String sender = (node && node->has_user) ? node->user.short_name : "???";
-                serialModulePort->println();
-                serialModulePort->printf("%s: %s", sender, p.payload.bytes);
-                serialModulePort->println();
+                serialPrint->println();
+                serialPrint->printf("%s: %s", sender, p.payload.bytes);
+                serialPrint->println();
             } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA) {
                 // Decode the Payload some more
                 meshtastic_Position scratch;
@@ -262,7 +256,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                     // send position packet as WPL to the serial port
                     printWPL(outbuf, sizeof(outbuf), *decoded, nodeDB.getNode(getFrom(&mp))->user.long_name,
                              moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO);
-                    serialModulePort->printf("%s", outbuf);
+                    serialPrint->printf("%s", outbuf);
                 }
             }
         }
