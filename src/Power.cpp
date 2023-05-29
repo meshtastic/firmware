@@ -300,6 +300,10 @@ bool Power::analogInit()
     } else {
         LOG_INFO("ADCmod: ADC characterization based on default reference voltage\n");
     }
+#if defined(HELTEC_V3) || defined(HELTEC_WSL_V3)
+    pinMode(37, OUTPUT); // needed for P channel mosfet to work
+    digitalWrite(37, LOW);
+#endif
 #endif // ARCH_ESP32
 
 #ifdef ARCH_NRF52
