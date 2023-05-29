@@ -46,10 +46,8 @@ class NodeDB
     meshtastic_NodeInfo *nodes;
     pb_size_t *numNodes;
 
-    uint32_t readPointer = 0;
-
-  public:
-    bool updateGUI = false; // we think the gui should definitely be redrawn, screen will clear this once handled
+public:
+    bool updateGUI = false;                       // we think the gui should definitely be redrawn, screen will clear this once handled
     meshtastic_NodeInfo *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
     Observable<const meshtastic::NodeStatus *> newStatus;
 
@@ -104,11 +102,8 @@ class NodeDB
     their denial?)
     */
 
-    /// Called from bluetooth when the user wants to start reading the node DB from scratch.
-    void resetReadPointer() { readPointer = 0; }
-
     /// Allow the bluetooth layer to read our next nodeinfo record, or NULL if done reading
-    const meshtastic_NodeInfo *readNextInfo();
+    const meshtastic_NodeInfo *readNextInfo(uint32_t &readIndex);
 
     /// pick a provisional nodenum we hope no one is using
     void pickNewNodeNum();
@@ -137,7 +132,7 @@ class NodeDB
 
     void installRoleDefaults(meshtastic_Config_DeviceConfig_Role role);
 
-  private:
+private:
     /// Find a node in our DB, create an empty NodeInfo if missing
     meshtastic_NodeInfo *getOrCreateNode(NodeNum n);
 
@@ -184,7 +179,7 @@ extern NodeDB nodeDB;
 // Our delay functions check for this for times that should never expire
 #define NODE_DELAY_FOREVER 0xffffffff
 
-#define IF_ROUTER(routerVal, normalVal)                                                                                          \
+#define IF_ROUTER(routerVal, normalVal) \
     ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER) ? (routerVal) : (normalVal))
 
 #define ONE_DAY 24 * 60 * 60
@@ -222,7 +217,7 @@ inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t d
  */
 extern uint32_t radioGeneration;
 
-#define Module_Config_size                                                                                                       \
-    (ModuleConfig_CannedMessageConfig_size + ModuleConfig_ExternalNotificationConfig_size + ModuleConfig_MQTTConfig_size +       \
-     ModuleConfig_RangeTestConfig_size + ModuleConfig_SerialConfig_size + ModuleConfig_StoreForwardConfig_size +                 \
+#define Module_Config_size                                                                                                 \
+    (ModuleConfig_CannedMessageConfig_size + ModuleConfig_ExternalNotificationConfig_size + ModuleConfig_MQTTConfig_size + \
+     ModuleConfig_RangeTestConfig_size + ModuleConfig_SerialConfig_size + ModuleConfig_StoreForwardConfig_size +           \
      ModuleConfig_TelemetryConfig_size + ModuleConfig_size)
