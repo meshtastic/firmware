@@ -62,8 +62,13 @@ SerialModule::SerialModule() : StreamAPI(&Serial2), concurrency::OSThread("Seria
 
 char serialBytes[meshtastic_Constants_DATA_PAYLOAD_LEN];
 size_t serialPayloadSize;
+#if CONFIG_IDF_TARGET_ESP32S3
+static USBCDC *serialModulePort = &Serial2;
+#elif defined(ARCH_NRF52)
+static Adafruit_USBD_CDC *serialModulePort = &Serial2;
+#else
 static HardwareSerial *serialModulePort = &Serial2;
-
+#endif
 SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
 {
 
