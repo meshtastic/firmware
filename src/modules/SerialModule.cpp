@@ -244,7 +244,8 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                 serialPrint->println();
                 serialPrint->printf("%s: %s", sender, p.payload.bytes);
                 serialPrint->println();
-            } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA) {
+            } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA ||
+                       moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO) {
                 // Decode the Payload some more
                 meshtastic_Position scratch;
                 meshtastic_Position *decoded = NULL;
