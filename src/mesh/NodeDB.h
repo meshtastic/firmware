@@ -214,7 +214,7 @@ inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t d
 
 /// Sometimes we will have Position objects that only have a time, so check for
 /// valid lat/lon
-static bool hasValidPosition(meshtastic_NodeInfo *n)
+static inline bool hasValidPosition(const meshtastic_NodeInfo *n)
 {
     return n->has_position && (n->position.latitude_i != 0 || n->position.longitude_i != 0);
 }
