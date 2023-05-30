@@ -50,5 +50,3 @@
 #define SX126X_RESET LORA_RESET
 #define SX126X_E22
 #endif
-
-#include <Adafruit_TinyUSB.h>

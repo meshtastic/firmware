@@ -71,6 +71,7 @@ SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
         ourPortNum = meshtastic_PortNum_TEXT_MESSAGE_APP;
         break;
     case meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA:
+    case meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO:
         ourPortNum = meshtastic_PortNum_POSITION_APP;
         break;
     default:
@@ -108,56 +109,7 @@ int32_t SerialModule::runOnce()
             // Interface with the serial peripheral from in here.
             LOG_INFO("Initializing serial peripheral interface\n");
 
-            uint32_t baud = 0;
-
-            if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_DEFAULT) {
-                baud = 38400;
-
-            } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_110) {
-                baud = 110;
-
-            } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_300) {
-                baud = 300;
-
-            } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_600) {
-                baud = 600;
-
-            } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_1200) {
-                baud = 1200;
-
-            } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_2400) {
-                baud = 2400;
-
-            } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_4800) {
-                baud = 4800;
-
-            } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_9600) {
-                baud = 9600;
-
-            } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_19200) {
-                baud = 19200;
-
-            } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_38400) {
-                baud = 38400;
-
-            } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_57600) {
-                baud = 57600;
-
-            } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_115200) {
-                baud = 115200;
-
-            } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_230400) {
-                baud = 230400;
-
-            } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_460800) {
-                baud = 460800;
-
-            } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_576000) {
-                baud = 576000;
-
-            } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_921600) {
-                baud = 921600;
-            }
+            uint32_t baud = getBaudRate();
 
 #ifdef ARCH_ESP32
             Serial2.setRxBufferSize(RX_BUFFER);
@@ -186,16 +138,21 @@ int32_t SerialModule::runOnce()
             if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_PROTO) {
                 emitRebooted();
             }
-
         } else {
 
             if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_PROTO) {
                 return runOncePart();
-            } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA) {
+            } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA ||
+                       moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO) {
                 // in NMEA mode send out GGA every 2 seconds, Don't read from Port
                 if (millis() - lastNmeaTime > 2000) {
                     lastNmeaTime = millis();
-                    printGGA(outbuf, sizeof(outbuf), nodeDB.getNode(myNodeInfo.my_node_num)->position);
+                    if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO) {
+                        printWPL(outbuf, sizeof(outbuf), nodeDB.getNode(myNodeInfo.my_node_num)->position,
+                                 nodeDB.getNode(myNodeInfo.my_node_num)->user.long_name, true);
+                    } else {
+                        printGGA(outbuf, sizeof(outbuf), nodeDB.getNode(myNodeInfo.my_node_num)->position);
+                    }
                     Serial2.printf("%s", outbuf);
                 }
             } else {
@@ -266,7 +223,6 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                     Serial2.printf("%s", p.payload.bytes);
                 }
             }
-
         } else {
 
             if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_DEFAULT ||
@@ -288,12 +244,51 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                         decoded = &scratch;
                     }
                     // send position packet as WPL to the serial port
-                    printWPL(outbuf, sizeof(outbuf), *decoded, nodeDB.getNode(getFrom(&mp))->user.long_name);
+                    printWPL(outbuf, sizeof(outbuf), *decoded, nodeDB.getNode(getFrom(&mp))->user.long_name,
+                             moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO);
                     Serial2.printf("%s", outbuf);
                 }
             }
         }
     }
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
+}
+
+uint32_t SerialModule::getBaudRate()
+{
+    if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_DEFAULT) {
+        return 38400;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_110) {
+        return 110;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_300) {
+        return 300;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_600) {
+        return 600;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_1200) {
+        return 1200;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_2400) {
+        return 2400;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_4800) {
+        return 4800;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_9600) {
+        return 9600;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_19200) {
+        return 19200;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_38400) {
+        return 38400;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_57600) {
+        return 57600;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_115200) {
+        return 115200;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_230400) {
+        return 230400;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_460800) {
+        return 460800;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_576000) {
+        return 576000;
+    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_921600) {
+        return 921600;
+    }
+    return 38400;
 }
 #endif
