@@ -46,8 +46,6 @@ class NodeDB
     meshtastic_NodeInfo *nodes;
     pb_size_t *numNodes;
 
-    uint32_t readPointer = 0;
-
   public:
     bool updateGUI = false; // we think the gui should definitely be redrawn, screen will clear this once handled
     meshtastic_NodeInfo *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
@@ -104,11 +102,8 @@ class NodeDB
     their denial?)
     */
 
-    /// Called from bluetooth when the user wants to start reading the node DB from scratch.
-    void resetReadPointer() { readPointer = 0; }
-
     /// Allow the bluetooth layer to read our next nodeinfo record, or NULL if done reading
-    const meshtastic_NodeInfo *readNextInfo();
+    const meshtastic_NodeInfo *readNextInfo(uint32_t &readIndex);
 
     /// pick a provisional nodenum we hope no one is using
     void pickNewNodeNum();
@@ -215,6 +210,13 @@ inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t d
     if (configuredInterval > 0)
         return configuredInterval * 1000;
     return defaultInterval * 1000;
+}
+
+/// Sometimes we will have Position objects that only have a time, so check for
+/// valid lat/lon
+static inline bool hasValidPosition(const meshtastic_NodeInfo *n)
+{
+    return n->has_position && (n->position.latitude_i != 0 || n->position.longitude_i != 0);
 }
 
 /** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings

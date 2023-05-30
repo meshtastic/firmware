@@ -59,6 +59,7 @@ int32_t AirQualityTelemetryModule::runOnce()
 bool AirQualityTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
 {
     if (t->which_variant == meshtastic_Telemetry_air_quality_metrics_tag) {
+#ifdef DEBUG_PORT
         const char *sender = getSenderShortName(mp);
 
         LOG_INFO("(Received from %s): pm10_standard=%i, pm25_standard=%i, pm100_standard=%i\n", sender,
@@ -68,7 +69,7 @@ bool AirQualityTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPack
         LOG_INFO("                  | PM1.0(Environmental)=%i, PM2.5(Environmental)=%i, PM10.0(Environmental)=%i\n",
                  t->variant.air_quality_metrics.pm10_environmental, t->variant.air_quality_metrics.pm25_environmental,
                  t->variant.air_quality_metrics.pm100_environmental);
-
+#endif
         // release previous packet before occupying a new spot
         if (lastMeasurementPacket != nullptr)
             packetPool.release(lastMeasurementPacket);

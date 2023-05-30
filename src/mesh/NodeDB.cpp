@@ -349,6 +349,11 @@ void NodeDB::init()
     if (channelFileCRC != crc32Buffer(&channelFile, sizeof(channelFile)))
         saveWhat |= SEGMENT_CHANNELS;
 
+    if (!devicestate.node_remote_hardware_pins) {
+        meshtastic_NodeRemoteHardwarePin empty[12] = {meshtastic_RemoteHardwarePin_init_default};
+        memcpy(devicestate.node_remote_hardware_pins, empty, sizeof(empty));
+    }
+
     saveToDisk(saveWhat);
 }
 
@@ -468,8 +473,9 @@ void NodeDB::loadFromDisk()
         }
     }
 
-    if (loadProto(oemConfigFile, meshtastic_OEMStore_size, sizeof(meshtastic_OEMStore), &meshtastic_OEMStore_msg, &oemStore))
+    if (loadProto(oemConfigFile, meshtastic_OEMStore_size, sizeof(meshtastic_OEMStore), &meshtastic_OEMStore_msg, &oemStore)) {
         LOG_INFO("Loaded OEMStore\n");
+    }
 }
 
 /** Save a protobuf from a file, return true for success */
@@ -494,10 +500,12 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
         f.close();
 
         // brief window of risk here ;-)
-        if (FSCom.exists(filename) && !FSCom.remove(filename))
+        if (FSCom.exists(filename) && !FSCom.remove(filename)) {
             LOG_WARN("Can't remove old pref file\n");
-        if (!renameFile(filenameTmp.c_str(), filename))
+        }
+        if (!renameFile(filenameTmp.c_str(), filename)) {
             LOG_ERROR("Error: can't rename new pref file\n");
+        }
     } else {
         LOG_ERROR("Can't write prefs\n");
 #ifdef ARCH_NRF52
@@ -576,10 +584,10 @@ void NodeDB::saveToDisk(int saveWhat)
     }
 }
 
-const meshtastic_NodeInfo *NodeDB::readNextInfo()
+const meshtastic_NodeInfo *NodeDB::readNextInfo(uint32_t &readIndex)
 {
-    if (readPointer < *numNodes)
-        return &nodes[readPointer++];
+    if (readIndex < *numNodes)
+        return &nodes[readIndex++];
     else
         return NULL;
 }
@@ -802,10 +810,11 @@ void recordCriticalError(meshtastic_CriticalErrorCode code, uint32_t address, co
     // Print error to screen and serial port
     String lcd = String("Critical error ") + code + "!\n";
     screen->print(lcd.c_str());
-    if (filename)
+    if (filename) {
         LOG_ERROR("NOTE! Recording critical error %d at %s:%lu\n", code, filename, address);
-    else
+    } else {
         LOG_ERROR("NOTE! Recording critical error %d, address=0x%lx\n", code, address);
+    }
 
     // Record error to DB
     myNodeInfo.error_code = code;

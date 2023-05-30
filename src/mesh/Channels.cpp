@@ -108,8 +108,9 @@ CryptoKey Channels::getKey(ChannelIndex chIndex)
             if (ch.role == meshtastic_Channel_Role_SECONDARY) {
                 LOG_DEBUG("Unset PSK for secondary channel %s. using primary key\n", ch.settings.name);
                 k = getKey(primaryIndex);
-            } else
+            } else {
                 LOG_WARN("User disabled encryption\n");
+            }
         } else if (k.length == 1) {
             // Convert the short single byte variants of psk into variant that can be used more generally
 

@@ -451,7 +451,21 @@ void setup()
 
     // Init our SPI controller (must be before screen and lora)
     initSPI();
-#ifndef ARCH_ESP32
+#ifdef ARCH_RP2040
+#ifdef HW_SPI1_DEVICE
+    SPI1.setSCK(RF95_SCK);
+    SPI1.setTX(RF95_MOSI);
+    SPI1.setRX(RF95_MISO);
+    pinMode(RF95_NSS, OUTPUT);
+    digitalWrite(RF95_NSS, HIGH);
+    SPI1.begin(false);
+#else                      // HW_SPI1_DEVICE
+    SPI.setSCK(RF95_SCK);
+    SPI.setTX(RF95_MOSI);
+    SPI.setRX(RF95_MISO);
+    SPI.begin(false);
+#endif                     // HW_SPI1_DEVICE
+#elif !defined(ARCH_ESP32) // ARCH_RP2040
     SPI.begin();
 #else
     // ESP32
@@ -466,10 +480,11 @@ void setup()
 
     gps = createGps();
 
-    if (gps)
+    if (gps) {
         gpsStatus->observe(&gps->newStatus);
-    else
+    } else {
         LOG_WARN("No GPS found - running without GPS\n");
+    }
 
     nodeStatus->observe(&nodeDB.newStatus);
 
@@ -512,9 +527,11 @@ void setup()
     digitalWrite(SX126X_ANT_SW, 1);
 #endif
 
-    // Init LockingHAL first, to use it for radio init
-
+#ifdef HW_SPI1_DEVICE
+    LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI1, spiSettings);
+#else // HW_SPI1_DEVICE
     LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+#endif
 
     // radio init MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
 #if defined(USE_STM32WLx)
@@ -685,6 +702,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     deviceMetadata.role = config.device.role;
     deviceMetadata.position_flags = config.position.position_flags;
     deviceMetadata.hw_model = HW_VENDOR;
+    deviceMetadata.hasRemoteHardware = moduleConfig.remote_hardware.enabled;
     return deviceMetadata;
 }
 

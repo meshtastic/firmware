@@ -40,9 +40,8 @@ void PhoneAPI::handleStartConfig()
     state = STATE_SEND_MY_INFO;
 
     LOG_INFO("Starting API client config\n");
-    nodeInfoForPhone = NULL;   // Don't keep returning old nodeinfos
-    nodeDB.resetReadPointer(); // FIXME, this read pointer should be moved out of nodeDB and into this class - because
-                               // this will break once we have multiple instances of PhoneAPI running independently
+    nodeInfoForPhone = NULL; // Don't keep returning old nodeinfos
+    resetReadIndex();
 }
 
 void PhoneAPI::close()
@@ -373,7 +372,7 @@ bool PhoneAPI::available()
 
     case STATE_SEND_NODEINFO:
         if (!nodeInfoForPhone)
-            nodeInfoForPhone = nodeDB.readNextInfo();
+            nodeInfoForPhone = nodeDB.readNextInfo(readIndex);
         return true; // Always say we have something, because we might need to advance our state machine
 
     case STATE_SEND_PACKETS: {
@@ -423,8 +422,9 @@ int PhoneAPI::onNotify(uint32_t newValue)
     if (state == STATE_SEND_PACKETS) {
         LOG_INFO("Telling client we have new packets %u\n", newValue);
         onNowHasData(newValue);
-    } else
+    } else {
         LOG_DEBUG("(Client not yet interested in packets)\n");
+    }
 
     return 0;
 }

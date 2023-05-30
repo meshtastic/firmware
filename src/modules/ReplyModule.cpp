@@ -8,10 +8,12 @@
 meshtastic_MeshPacket *ReplyModule::allocReply()
 {
     assert(currentRequest); // should always be !NULL
+#ifdef DEBUG_PORT
     auto req = *currentRequest;
     auto &p = req.decoded;
     // The incoming message is in p.payload
     LOG_INFO("Received message from=0x%0x, id=%d, msg=%.*s\n", req.from, req.id, p.payload.size, p.payload.bytes);
+#endif
 
     screen->print("Sending reply\n");
 
