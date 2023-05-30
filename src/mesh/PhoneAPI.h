@@ -58,6 +58,9 @@ class PhoneAPI
 
     /// Use to ensure that clients don't get confused about old messages from the radio
     uint32_t config_nonce = 0;
+    uint32_t readIndex = 0;
+
+    void resetReadIndex() { readIndex = 0; }
 
   public:
     PhoneAPI();

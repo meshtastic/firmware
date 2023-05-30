@@ -584,10 +584,10 @@ void NodeDB::saveToDisk(int saveWhat)
     }
 }
 
-const meshtastic_NodeInfo *NodeDB::readNextInfo()
+const meshtastic_NodeInfo *NodeDB::readNextInfo(uint32_t &readIndex)
 {
-    if (readPointer < *numNodes)
-        return &nodes[readPointer++];
+    if (readIndex < *numNodes)
+        return &nodes[readIndex++];
     else
         return NULL;
 }

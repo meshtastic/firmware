@@ -62,6 +62,9 @@ size_t RedirectablePrint::vprintf(const char *format, va_list arg)
 
 size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
 {
+    if (moduleConfig.serial.override_console_serial_port && strcmp(logLevel, "DEBUG") == 0) {
+        return 0;
+    }
     size_t r = 0;
 
     if (!inDebugPrint) {
