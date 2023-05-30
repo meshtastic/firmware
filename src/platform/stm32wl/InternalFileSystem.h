@@ -27,6 +27,19 @@
 
 #include "LittleFS.h"
 
+// The EEPROM Library assumes our usable flash area starts at logical 0
+#define LFS_FLASH_ADDR 0
+
+// use the built in EEPROM emulation. Total Size is 2Kbyte
+#define LFS_BLOCK_SIZE 128 // min. block size is 128 to fit CTZ pointers
+#define LFS_CACHE_SIZE 16
+
+#define LFS_FLASH_TOTAL_SIZE FLASH_PAGE_SIZE
+
+static uint8_t lfs_read_buffer[LFS_CACHE_SIZE] = {0};
+static uint8_t lfs_prog_buffer[LFS_CACHE_SIZE] = {0};
+static uint8_t lfs_lookahead_buffer[LFS_CACHE_SIZE] = {0};
+
 class InternalFileSystem : public LittleFS
 {
   public:

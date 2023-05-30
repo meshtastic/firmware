@@ -15,7 +15,6 @@
 
 #define RADIOLIB_PIN_TYPE uint32_t
 
-#if !defined(USE_STM32WLx)
 /**
  * We need to override the RadioLib ArduinoHal class to add mutex protection for SPI bus access
  */
@@ -27,22 +26,17 @@ class LockingArduinoHal : public ArduinoHal
     void spiBeginTransaction() override;
     void spiEndTransaction() override;
 };
-#else
+
+#if defined(USE_STM32WLx)
 /**
  * A wrapper for the RadioLib STM32WLx_Module class, that doesn't connect any pins as they are virtual
  */
-class LockingModule : public STM32WLx_Module
+class STM32WLx_ModuleWrapper : public STM32WLx_Module
 {
   public:
-    // STM32WLx uses virtual pins and has a separate SUBGHZ SPI
-    LockingModule(RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst, RADIOLIB_PIN_TYPE gpio, SPIClass &spi,
-                  SPISettings spiSettings)
-        : STM32WLx_Module()
-    {
-    }
-
-    void SPIbeginTransaction() override;
-    void SPIendTransaction() override;
+    STM32WLx_ModuleWrapper(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
+                           RADIOLIB_PIN_TYPE busy)
+        : STM32WLx_Module(){};
 };
 #endif
 
@@ -75,7 +69,11 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
 
     float currentLimit = 100; // 100mA OCP - Should be acceptable for RFM95/SX127x chipset.
 
+#if !defined(USE_STM32WLx)
     Module module; // The HW interface to the radio
+#else
+    STM32WLx_ModuleWrapper module;
+#endif
 
     /**
      * provides lowest common denominator RadioLib API

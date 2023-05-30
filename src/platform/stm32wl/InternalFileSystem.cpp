@@ -25,13 +25,6 @@
 #include "InternalFileSystem.h"
 #include <EEPROM.h>
 
-// The EEPROM Library assumes our usable flash area starts at logical 0
-#define LFS_FLASH_ADDR 0
-
-// use the built in EEPROM emulation. Total Size is 2Kbyte and we use a page size of 16 bytes.
-#define LFS_BLOCK_SIZE 16
-
-#define LFS_FLASH_TOTAL_SIZE FLASH_PAGE_SIZE
 //--------------------------------------------------------------------+
 // LFS Disk IO
 //--------------------------------------------------------------------+
@@ -105,16 +98,18 @@ static struct lfs_config _InternalFSConfig = {.context = NULL,
                                               .erase = _internal_flash_erase,
                                               .sync = _internal_flash_sync,
 
-                                              .read_size = LFS_BLOCK_SIZE,
-                                              .prog_size = LFS_BLOCK_SIZE,
+                                              .read_size = LFS_CACHE_SIZE,
+                                              .prog_size = LFS_CACHE_SIZE,
                                               .block_size = LFS_BLOCK_SIZE,
                                               .block_count = LFS_FLASH_TOTAL_SIZE / LFS_BLOCK_SIZE,
-                                              .cache_size = LFS_BLOCK_SIZE,
-                                              .lookahead_size = LFS_BLOCK_SIZE,
+                                              .block_cycles =
+                                                  500, // protection against wear leveling (suggested values between 100-1000)
+                                              .cache_size = LFS_CACHE_SIZE,
+                                              .lookahead_size = LFS_CACHE_SIZE,
 
-                                              .read_buffer = NULL,
-                                              .prog_buffer = NULL,
-                                              .lookahead_buffer = NULL};
+                                              .read_buffer = lfs_read_buffer,
+                                              .prog_buffer = lfs_prog_buffer,
+                                              .lookahead_buffer = lfs_lookahead_buffer};
 
 InternalFileSystem InternalFS;
 
