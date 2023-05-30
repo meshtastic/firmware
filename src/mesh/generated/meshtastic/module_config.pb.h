@@ -58,7 +58,9 @@ typedef enum _meshtastic_ModuleConfig_SerialConfig_Serial_Mode {
     meshtastic_ModuleConfig_SerialConfig_Serial_Mode_SIMPLE = 1,
     meshtastic_ModuleConfig_SerialConfig_Serial_Mode_PROTO = 2,
     meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG = 3,
-    meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA = 4
+    meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA = 4,
+    /* NMEA messages specifically tailored for CalTopo */
+    meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO = 5
 } meshtastic_ModuleConfig_SerialConfig_Serial_Mode;
 
 /* TODO: REPLACE */
@@ -132,21 +134,24 @@ typedef struct _meshtastic_ModuleConfig_AudioConfig {
 
 /* Serial Config */
 typedef struct _meshtastic_ModuleConfig_SerialConfig {
-    /* Preferences for the SerialModule
- FIXME - Move this out of UserPreferences and into a section for module configuration. */
+    /* Preferences for the SerialModule */
     bool enabled;
     /* TODO: REPLACE */
     bool echo;
-    /* TODO: REPLACE */
+    /* RX pin (should match Arduino gpio pin number) */
     uint32_t rxd;
-    /* TODO: REPLACE */
+    /* TX pin (should match Arduino gpio pin number) */
     uint32_t txd;
-    /* TODO: REPLACE */
+    /* Serial baud rate */
     meshtastic_ModuleConfig_SerialConfig_Serial_Baud baud;
     /* TODO: REPLACE */
     uint32_t timeout;
-    /* TODO: REPLACE */
+    /* Mode for serial module operation */
     meshtastic_ModuleConfig_SerialConfig_Serial_Mode mode;
+    /* Overrides the platform's defacto Serial port instance to use with Serial module config settings
+ This is currently only usable in output modes like NMEA / CalTopo and may behave strangely or not work at all in other modes
+ Existing logging over the Serial Console will still be present */
+    bool override_console_serial_port;
 } meshtastic_ModuleConfig_SerialConfig;
 
 /* External Notifications Config */
@@ -330,8 +335,8 @@ extern "C" {
 #define _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_ARRAYSIZE ((meshtastic_ModuleConfig_SerialConfig_Serial_Baud)(meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_921600+1))
 
 #define _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN meshtastic_ModuleConfig_SerialConfig_Serial_Mode_DEFAULT
-#define _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MAX meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA
-#define _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_ARRAYSIZE ((meshtastic_ModuleConfig_SerialConfig_Serial_Mode)(meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA+1))
+#define _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MAX meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO
+#define _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_ARRAYSIZE ((meshtastic_ModuleConfig_SerialConfig_Serial_Mode)(meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO+1))
 
 #define _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE
 #define _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MAX meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK
@@ -361,7 +366,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_MQTTConfig_init_default {0, "", "", "", 0, 0, 0, ""}
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_init_default {0, 0, 0, {meshtastic_RemoteHardwarePin_init_default, meshtastic_RemoteHardwarePin_init_default, meshtastic_RemoteHardwarePin_init_default, meshtastic_RemoteHardwarePin_init_default}}
 #define meshtastic_ModuleConfig_AudioConfig_init_default {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
-#define meshtastic_ModuleConfig_SerialConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN}
+#define meshtastic_ModuleConfig_SerialConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_default {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_RangeTestConfig_init_default {0, 0, 0}
@@ -372,7 +377,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_MQTTConfig_init_zero {0, "", "", "", 0, 0, 0, ""}
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_init_zero {0, 0, 0, {meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero}}
 #define meshtastic_ModuleConfig_AudioConfig_init_zero {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
-#define meshtastic_ModuleConfig_SerialConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN}
+#define meshtastic_ModuleConfig_SerialConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_zero {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_RangeTestConfig_init_zero {0, 0, 0}
@@ -403,6 +408,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_SerialConfig_baud_tag 5
 #define meshtastic_ModuleConfig_SerialConfig_timeout_tag 6
 #define meshtastic_ModuleConfig_SerialConfig_mode_tag 7
+#define meshtastic_ModuleConfig_SerialConfig_override_console_serial_port_tag 8
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_output_ms_tag 2
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_output_tag 3
@@ -520,7 +526,8 @@ X(a, STATIC,   SINGULAR, UINT32,   rxd,               3) \
 X(a, STATIC,   SINGULAR, UINT32,   txd,               4) \
 X(a, STATIC,   SINGULAR, UENUM,    baud,              5) \
 X(a, STATIC,   SINGULAR, UINT32,   timeout,           6) \
-X(a, STATIC,   SINGULAR, UENUM,    mode,              7)
+X(a, STATIC,   SINGULAR, UENUM,    mode,              7) \
+X(a, STATIC,   SINGULAR, BOOL,     override_console_serial_port,   8)
 #define meshtastic_ModuleConfig_SerialConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_SerialConfig_DEFAULT NULL
 
@@ -623,7 +630,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_MQTTConfig_size  220
 #define meshtastic_ModuleConfig_RangeTestConfig_size 10
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_size 96
-#define meshtastic_ModuleConfig_SerialConfig_size 26
+#define meshtastic_ModuleConfig_SerialConfig_size 28
 #define meshtastic_ModuleConfig_StoreForwardConfig_size 22
 #define meshtastic_ModuleConfig_TelemetryConfig_size 26
 #define meshtastic_ModuleConfig_size             223
