@@ -25,6 +25,9 @@ class SerialModule : public StreamAPI, private concurrency::OSThread
 
     /// Check the current underlying physical link to see if the client is currently connected
     virtual bool checkIsConnected() override;
+
+  private:
+    uint32_t getBaudRate();
 };
 
 extern SerialModule *serialModule;
