@@ -154,7 +154,7 @@ int32_t PositionModule::runOnce()
     if (lastGpsSend == 0 || msSinceLastSend >= intervalMs) {
         // Only send packets if the channel is less than 40% utilized.
         if (airTime->isTxAllowedChannelUtil()) {
-            if (node->has_position && (node->position.latitude_i != 0 || node->position.longitude_i != 0)) {
+            if (hasValidPosition(node)) {
                 lastGpsSend = now;
 
                 lastGpsLatitude = node->position.latitude_i;
@@ -173,7 +173,7 @@ int32_t PositionModule::runOnce()
         if (airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER)) {
             meshtastic_NodeInfo *node2 = service.refreshMyNodeInfo(); // should guarantee there is now a position
 
-            if (node2->has_position && (node2->position.latitude_i != 0 || node2->position.longitude_i != 0)) {
+            if (hasValidPosition(node2)) {
                 // The minimum distance to travel before we are able to send a new position packet.
                 const uint32_t distanceTravelThreshold =
                     config.position.broadcast_smart_minimum_distance > 0 ? config.position.broadcast_smart_minimum_distance : 100;
