@@ -62,10 +62,10 @@ SerialModule::SerialModule() : StreamAPI(&Serial2), concurrency::OSThread("Seria
 
 char serialBytes[meshtastic_Constants_DATA_PAYLOAD_LEN];
 size_t serialPayloadSize;
+static Print *serialPrint = &Serial2;
 
 SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
 {
-
     switch (moduleConfig.serial.mode) {
     case meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG:
         ourPortNum = meshtastic_PortNum_TEXT_MESSAGE_APP;
@@ -96,40 +96,51 @@ int32_t SerialModule::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
 
-    // moduleConfig.serial.enabled = 1;
+    // moduleConfig.serial.enabled = true;
     // moduleConfig.serial.rxd = 35;
     // moduleConfig.serial.txd = 15;
+    // moduleConfig.serial.override_console_serial_port = true;
+    // moduleConfig.serial.mode = meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO;
     // moduleConfig.serial.timeout = 1000;
     // moduleConfig.serial.echo = 1;
 
-    if (moduleConfig.serial.enabled && moduleConfig.serial.rxd && moduleConfig.serial.txd) {
+    if (!moduleConfig.serial.enabled)
+        return disable();
 
+    if (moduleConfig.serial.override_console_serial_port || (moduleConfig.serial.rxd && moduleConfig.serial.txd)) {
         if (firstTime) {
-
             // Interface with the serial peripheral from in here.
             LOG_INFO("Initializing serial peripheral interface\n");
 
             uint32_t baud = getBaudRate();
 
+            if (moduleConfig.serial.override_console_serial_port) {
+                Serial.flush();
+                serialPrint = &Serial;
+                // Give it a chance to flush out 💩
+                delay(10);
+            } else {
+                serialPrint = &Serial2;
+            }
 #ifdef ARCH_ESP32
-            Serial2.setRxBufferSize(RX_BUFFER);
 
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
+                Serial2.setRxBufferSize(RX_BUFFER);
                 Serial2.begin(baud, SERIAL_8N1, moduleConfig.serial.rxd, moduleConfig.serial.txd);
+            } else {
+                Serial.begin(baud);
+                Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             }
 #else
-            if (moduleConfig.serial.rxd && moduleConfig.serial.txd)
+            if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
                 Serial2.setPins(moduleConfig.serial.rxd, moduleConfig.serial.txd);
-
-            Serial2.begin(baud, SERIAL_8N1);
-
-#endif
-            if (moduleConfig.serial.timeout) {
-                Serial2.setTimeout(moduleConfig.serial.timeout); // Number of MS to wait to set the timeout for the string.
+                Serial2.begin(baud, SERIAL_8N1);
+                Serial2.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             } else {
-                Serial2.setTimeout(TIMEOUT); // Number of MS to wait to set the timeout for the string.
+                Serial.begin(baud, SERIAL_8N1);
+                Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             }
-
+#endif
             serialModuleRadio = new SerialModuleRadio();
 
             firstTime = 0;
@@ -139,21 +150,25 @@ int32_t SerialModule::runOnce()
                 emitRebooted();
             }
         } else {
-
             if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_PROTO) {
                 return runOncePart();
-            } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA ||
-                       moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO) {
+            } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA) {
                 // in NMEA mode send out GGA every 2 seconds, Don't read from Port
                 if (millis() - lastNmeaTime > 2000) {
                     lastNmeaTime = millis();
-                    if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO) {
-                        printWPL(outbuf, sizeof(outbuf), nodeDB.getNode(myNodeInfo.my_node_num)->position,
-                                 nodeDB.getNode(myNodeInfo.my_node_num)->user.long_name, true);
-                    } else {
-                        printGGA(outbuf, sizeof(outbuf), nodeDB.getNode(myNodeInfo.my_node_num)->position);
+                    printGGA(outbuf, sizeof(outbuf), nodeDB.getNode(myNodeInfo.my_node_num)->position);
+                    serialPrint->printf("%s", outbuf);
+                }
+            } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO) {
+                if (millis() - lastNmeaTime > 10000) {
+                    lastNmeaTime = millis();
+                    uint32_t readIndex = 0;
+                    const meshtastic_NodeInfo *tempNodeInfo = nodeDB.readNextInfo(readIndex);
+                    while (tempNodeInfo != NULL && tempNodeInfo->has_user && hasValidPosition(tempNodeInfo)) {
+                        printWPL(outbuf, sizeof(outbuf), tempNodeInfo->position, tempNodeInfo->user.long_name, true);
+                        serialPrint->printf("%s", outbuf);
+                        tempNodeInfo = nodeDB.readNextInfo(readIndex);
                     }
-                    Serial2.printf("%s", outbuf);
                 }
             } else {
                 while (Serial2.available()) {
@@ -162,7 +177,6 @@ int32_t SerialModule::runOnce()
                 }
             }
         }
-
         return (10);
     } else {
         return disable();
@@ -219,22 +233,23 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                 if (lastRxID != mp.id) {
                     lastRxID = mp.id;
                     // LOG_DEBUG("* * Message came this device\n");
-                    // Serial2.println("* * Message came this device");
-                    Serial2.printf("%s", p.payload.bytes);
+                    // serialPrint->println("* * Message came this device");
+                    serialPrint->printf("%s", p.payload.bytes);
                 }
             }
         } else {
 
             if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_DEFAULT ||
                 moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_SIMPLE) {
-                Serial2.printf("%s", p.payload.bytes);
+                serialPrint->printf("%s", p.payload.bytes);
             } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG) {
                 meshtastic_NodeInfo *node = nodeDB.getNode(getFrom(&mp));
                 String sender = (node && node->has_user) ? node->user.short_name : "???";
-                Serial2.println();
-                Serial2.printf("%s: %s", sender, p.payload.bytes);
-                Serial2.println();
-            } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA) {
+                serialPrint->println();
+                serialPrint->printf("%s: %s", sender, p.payload.bytes);
+                serialPrint->println();
+            } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA ||
+                       moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO) {
                 // Decode the Payload some more
                 meshtastic_Position scratch;
                 meshtastic_Position *decoded = NULL;
@@ -246,7 +261,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                     // send position packet as WPL to the serial port
                     printWPL(outbuf, sizeof(outbuf), *decoded, nodeDB.getNode(getFrom(&mp))->user.long_name,
                              moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO);
-                    Serial2.printf("%s", outbuf);
+                    serialPrint->printf("%s", outbuf);
                 }
             }
         }
@@ -256,9 +271,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
 
 uint32_t SerialModule::getBaudRate()
 {
-    if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_DEFAULT) {
-        return 38400;
-    } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_110) {
+    if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_110) {
         return 110;
     } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_300) {
         return 300;
@@ -289,6 +302,6 @@ uint32_t SerialModule::getBaudRate()
     } else if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_921600) {
         return 921600;
     }
-    return 38400;
+    return BAUD;
 }
 #endif
