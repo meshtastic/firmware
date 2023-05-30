@@ -239,7 +239,7 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
     meshtastic_NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
     assert(node);
 
-    if (node->has_position && (node->position.latitude_i != 0 || node->position.longitude_i != 0)) {
+    if (hasValidPosition(node)) {
         if (positionModule) {
             LOG_INFO("Sending position ping to 0x%x, wantReplies=%d, channel=%d\n", dest, wantReplies, node->channel);
             positionModule->sendOurPosition(dest, wantReplies, node->channel);
