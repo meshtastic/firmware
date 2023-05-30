@@ -150,21 +150,25 @@ int32_t SerialModule::runOnce()
                 emitRebooted();
             }
         } else {
-
             if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_PROTO) {
                 return runOncePart();
-            } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA ||
-                       moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO) {
+            } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA) {
                 // in NMEA mode send out GGA every 2 seconds, Don't read from Port
                 if (millis() - lastNmeaTime > 2000) {
                     lastNmeaTime = millis();
-                    if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO) {
-                        printWPL(outbuf, sizeof(outbuf), nodeDB.getNode(myNodeInfo.my_node_num)->position,
-                                 nodeDB.getNode(myNodeInfo.my_node_num)->user.long_name, true);
-                    } else {
-                        printGGA(outbuf, sizeof(outbuf), nodeDB.getNode(myNodeInfo.my_node_num)->position);
-                    }
+                    printGGA(outbuf, sizeof(outbuf), nodeDB.getNode(myNodeInfo.my_node_num)->position);
                     serialPrint->printf("%s", outbuf);
+                }
+            } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO) {
+                if (millis() - lastNmeaTime > 10000) {
+                    lastNmeaTime = millis();
+                    uint32_t readIndex = 0;
+                    const meshtastic_NodeInfo *tempNodeInfo = nodeDB.readNextInfo(readIndex);
+                    while (tempNodeInfo != NULL && tempNodeInfo->has_user && hasValidPosition(tempNodeInfo)) {
+                        printWPL(outbuf, sizeof(outbuf), tempNodeInfo->position, tempNodeInfo->user.long_name, true);
+                        serialPrint->printf("%s", outbuf);
+                        tempNodeInfo = nodeDB.readNextInfo(readIndex);
+                    }
                 }
             } else {
                 while (Serial2.available()) {
