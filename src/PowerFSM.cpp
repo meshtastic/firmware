@@ -35,7 +35,7 @@ static bool isPowered()
 
 static void sdsEnter()
 {
-    LOG_INFO("Enter state: SDS\n");
+    LOG_DEBUG("Enter state: SDS\n");
     // FIXME - make sure GPS and LORA radio are off first - because we want close to zero current draw
     doDeepSleep(getConfiguredOrDefaultMs(config.power.sds_secs));
 }
@@ -44,7 +44,7 @@ extern Power *power;
 
 static void shutdownEnter()
 {
-    LOG_INFO("Enter state: SHUTDOWN\n");
+    LOG_DEBUG("Enter state: SHUTDOWN\n");
     power->shutdown();
 }
 
@@ -135,7 +135,7 @@ static void lsExit()
 
 static void nbEnter()
 {
-    LOG_INFO("Enter state: NB\n");
+    LOG_DEBUG("Enter state: NB\n");
     screen->setOn(false);
     setBluetoothEnable(false);
 
@@ -150,7 +150,7 @@ static void darkEnter()
 
 static void serialEnter()
 {
-    LOG_INFO("Enter state: SERIAL\n");
+    LOG_DEBUG("Enter state: SERIAL\n");
     setBluetoothEnable(false);
     screen->setOn(true);
     screen->print("Serial connected\n");
@@ -163,7 +163,7 @@ static void serialExit()
 
 static void powerEnter()
 {
-    LOG_INFO("Enter state: POWER\n");
+    LOG_DEBUG("Enter state: POWER\n");
     if (!isPowered()) {
         // If we got here, we are in the wrong state - we should be in powered, let that state ahndle things
         LOG_INFO("Loss of power in Powered\n");
@@ -198,7 +198,7 @@ static void powerExit()
 
 static void onEnter()
 {
-    LOG_INFO("Enter state: ON\n");
+    LOG_DEBUG("Enter state: ON\n");
     screen->setOn(true);
     setBluetoothEnable(true);
 }
@@ -218,7 +218,7 @@ static void screenPress()
 
 static void bootEnter()
 {
-    LOG_INFO("Enter state: BOOT\n");
+    LOG_DEBUG("Enter state: BOOT\n");
 }
 
 State stateSHUTDOWN(shutdownEnter, NULL, NULL, "SHUTDOWN");
