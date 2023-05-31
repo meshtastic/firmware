@@ -37,17 +37,17 @@ static const adc_atten_t atten = ADC_ATTENUATION;
 #endif
 #endif // BATTERY_PIN && ARCH_ESP32
 
+#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
+INA260Sensor ina260Sensor;
+INA219Sensor ina219Sensor;
+#endif
+
 #ifdef HAS_PMU
 #include "XPowersAXP192.tpp"
 #include "XPowersAXP2101.tpp"
 #include "XPowersLibInterface.hpp"
 XPowersLibInterface *PMU = NULL;
 #else
-
-#if HAS_TELEMETRY
-INA260Sensor ina260Sensor;
-INA219Sensor ina219Sensor;
-#endif
 
 // Copy of the base class defined in axp20x.h.
 // I'd rather not inlude axp20x.h as it brings Wire dependency.
@@ -259,7 +259,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
     uint16_t getINAVoltage()
     {
-#ifdef HAS_TELEMETRY
+#if defined(HAS_TELEMETRY) && !defined(ARCH_PORTDUINO) && !defined(HAS_PMU)
         if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219] == config.power.device_battery_ina_address) {
             return ina219Sensor.getBusVoltageMv();
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260] == config.power.device_battery_ina_address) {
@@ -271,7 +271,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
     bool hasINA()
     {
-#ifdef HAS_TELEMETRY
+#ifdef HAS_TELEMETRY && !defined(ARCH_PORTDUINO) && !defined(HAS_PMU)
         if (!config.power.device_battery_ina_address) {
             return false;
         }
