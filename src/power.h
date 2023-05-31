@@ -23,8 +23,8 @@ extern RTC_NOINIT_ATTR uint64_t RTC_reg_b;
 #endif
 
 #if HAS_TELEMETRY
-#include "Modules/Telemetry/Sensor/INA219Sensor.h"
-#include "Modules/Telemetry/Sensor/INA260Sensor.h"
+#include "modules/Telemetry/Sensor/INA219Sensor.h"
+#include "modules/Telemetry/Sensor/INA260Sensor.h"
 extern INA260Sensor ina260Sensor;
 extern INA219Sensor ina219Sensor;
 #endif
