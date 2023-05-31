@@ -133,9 +133,8 @@ class AnalogBatteryLevel : public HasBatteryLevel
      */
     virtual uint16_t getBattVoltage() override
     {
-
         if (hasINA()) {
-            return 0;
+            return getINAVoltage();
         }
 
 #ifndef ADC_MULTIPLIER
@@ -256,6 +255,18 @@ class AnalogBatteryLevel : public HasBatteryLevel
     const float fullVolt = BAT_FULLVOLT, emptyVolt = BAT_EMPTYVOLT, chargingVolt = BAT_CHARGINGVOLT, noBatVolt = BAT_NOBATVOLT;
     float last_read_value = 0.0;
     uint32_t last_read_time_ms = 0;
+
+    uint16_t getINAVoltage()
+    {
+#ifdef HAS_TELEMETRY
+        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219] == config.power.device_battery_ina_address) {
+            return ina219Sensor.getBusVoltageMv();
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260] == config.power.device_battery_ina_address) {
+            return ina260Sensor.getBusVoltageMv();
+        }
+#endif
+        return 0;
+    }
 
     bool hasINA()
     {
