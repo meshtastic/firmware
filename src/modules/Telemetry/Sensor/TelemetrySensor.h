@@ -18,6 +18,7 @@ class TelemetrySensor
     const char *sensorName;
     meshtastic_TelemetrySensorType sensorType;
     unsigned status;
+    bool isInitialized = false;
 
     int32_t initI2CSensor()
     {
@@ -28,6 +29,7 @@ class TelemetrySensor
             LOG_INFO("Opened %s sensor on default i2c bus\n", sensorName);
             setup();
         }
+        isInitialized = true;
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
     virtual void setup();
@@ -36,5 +38,8 @@ class TelemetrySensor
     bool hasSensor() { return sensorType < sizeof(nodeTelemetrySensorsMap) && nodeTelemetrySensorsMap[sensorType] > 0; }
 
     virtual int32_t runOnce() = 0;
+    bool isInitialzed() { return isInitialized; }
+    bool isRunning() { return status > 0; }
+
     virtual bool getMetrics(meshtastic_Telemetry *measurement) = 0;
 };

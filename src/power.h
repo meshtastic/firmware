@@ -22,6 +22,13 @@ extern RTC_NOINIT_ATTR uint64_t RTC_reg_b;
 #include "soc/sens_reg.h" // needed for adc pin reset
 #endif
 
+#if HAS_TELEMTRY
+#include "Sensor/INA219Sensor.h"
+#include "Sensor/INA260Sensor.h"
+extern INA260Sensor ina260Sensor;
+extern INA219Sensor ina219Sensor;
+#endif
+
 class Power : private concurrency::OSThread
 {
 
@@ -41,7 +48,8 @@ class Power : private concurrency::OSThread
 
     /// Setup a xpowers chip axp192/axp2101, return true if found
     bool axpChipInit();
-
+    /// Setup INA260/219 chip, return true if found
+    bool hasINA();
     /// Setup a simple ADC input based battery sensor
     bool analogInit();
 

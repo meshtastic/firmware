@@ -12,8 +12,12 @@ int32_t INA219Sensor::runOnce()
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    ina219 = Adafruit_INA219(nodeTelemetrySensorsMap[sensorType]);
-    status = ina219.begin();
+    if (!ina219 || !ina219.success()) {
+        ina219 = Adafruit_INA219(nodeTelemetrySensorsMap[sensorType]);
+        status = ina219.begin();
+    } else {
+        status = ina219.success();
+    }
     return initI2CSensor();
 }
 

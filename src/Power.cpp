@@ -29,6 +29,11 @@ RTC_NOINIT_ATTR uint64_t RTC_reg_b;
 
 #endif // BAT_MEASURE_ADC_UNIT
 
+#if HAS_TELEMTRY
+INA260Sensor ina260Sensor = new INA260Sensor();
+INA219Sensor ina219Sensor = = new INA219Sensor();
+#endif
+
 esp_adc_cal_characteristics_t *adc_characs = (esp_adc_cal_characteristics_t *)calloc(1, sizeof(esp_adc_cal_characteristics_t));
 #ifndef ADC_ATTENUATION
 static const adc_atten_t atten = ADC_ATTEN_DB_11;
@@ -639,7 +644,6 @@ bool Power::axpChipInit()
             // GNSS VDD 3300mV
             PMU->setPowerChannelVoltage(XPOWERS_ALDO3, 3300);
             PMU->enablePowerOutput(XPOWERS_ALDO3);
-
         } else if (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE) {
             // t-beam s3 core
             /**
@@ -798,4 +802,22 @@ bool Power::axpChipInit()
 #else
     return false;
 #endif
+}
+bool Power::hasINA()
+{
+#ifdef HAS_TELEMETRY
+    if (!config.power.device_battery_ina_address) {
+        return false;
+    }
+    if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219] == config.power.device_battery_ina_address) {
+        if (!ina219Sensor.isInitialized())
+            return ina219Sensor.runOnce() > 0;
+        return ina219Sensor.isRunning();
+    } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260] == config.power.device_battery_ina_address) {
+        if (!ina260Sensor.isInitialized())
+            return ina260Sensor.runOnce() > 0;
+        return ina260Sensor.isRunning();
+    }
+#endif
+    return false;
 }
