@@ -271,7 +271,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
     bool hasINA()
     {
-#ifdef HAS_TELEMETRY && !defined(ARCH_PORTDUINO) && !defined(HAS_PMU)
+#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO) && !defined(HAS_PMU)
         if (!config.power.device_battery_ina_address) {
             return false;
         }
