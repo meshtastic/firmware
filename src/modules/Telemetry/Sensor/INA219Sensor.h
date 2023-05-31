@@ -14,4 +14,5 @@ class INA219Sensor : virtual public TelemetrySensor
     INA219Sensor();
     virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+    uint16_t getBusVoltageMv();
 };

@@ -28,3 +28,8 @@ bool INA260Sensor::getMetrics(meshtastic_Telemetry *measurement)
     measurement->variant.environment_metrics.current = ina260.readCurrent();
     return true;
 }
+
+uint16_t INA260Sensor::getBusVoltageMv()
+{
+    return lround(ina260.readBusVoltage());
+}

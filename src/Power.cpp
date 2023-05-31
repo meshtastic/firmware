@@ -29,11 +29,6 @@ RTC_NOINIT_ATTR uint64_t RTC_reg_b;
 
 #endif // BAT_MEASURE_ADC_UNIT
 
-#if HAS_TELEMTRY
-INA260Sensor ina260Sensor = new INA260Sensor();
-INA219Sensor ina219Sensor = = new INA219Sensor();
-#endif
-
 esp_adc_cal_characteristics_t *adc_characs = (esp_adc_cal_characteristics_t *)calloc(1, sizeof(esp_adc_cal_characteristics_t));
 #ifndef ADC_ATTENUATION
 static const adc_atten_t atten = ADC_ATTEN_DB_11;
@@ -48,6 +43,12 @@ static const adc_atten_t atten = ADC_ATTENUATION;
 #include "XPowersLibInterface.hpp"
 XPowersLibInterface *PMU = NULL;
 #else
+
+#if HAS_TELEMETRY
+INA260Sensor ina260Sensor;
+INA219Sensor ina219Sensor;
+#endif
+
 // Copy of the base class defined in axp20x.h.
 // I'd rather not inlude axp20x.h as it brings Wire dependency.
 class HasBatteryLevel

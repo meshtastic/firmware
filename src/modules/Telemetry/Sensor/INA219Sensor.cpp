@@ -12,7 +12,7 @@ int32_t INA219Sensor::runOnce()
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    if (!ina219 || !ina219.success()) {
+    if (!ina219.success()) {
         ina219 = Adafruit_INA219(nodeTelemetrySensorsMap[sensorType]);
         status = ina219.begin();
     } else {
@@ -28,4 +28,9 @@ bool INA219Sensor::getMetrics(meshtastic_Telemetry *measurement)
     measurement->variant.environment_metrics.voltage = ina219.getBusVoltage_V();
     measurement->variant.environment_metrics.current = ina219.getCurrent_mA();
     return true;
+}
+
+uint16_t INA219Sensor::getBusVoltageMv()
+{
+    return lround(ina219.getBusVoltage_V() * 1000);
 }

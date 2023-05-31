@@ -22,9 +22,9 @@ extern RTC_NOINIT_ATTR uint64_t RTC_reg_b;
 #include "soc/sens_reg.h" // needed for adc pin reset
 #endif
 
-#if HAS_TELEMTRY
-#include "Sensor/INA219Sensor.h"
-#include "Sensor/INA260Sensor.h"
+#if HAS_TELEMETRY
+#include "Modules/Telemetry/Sensor/INA219Sensor.h"
+#include "Modules/Telemetry/Sensor/INA260Sensor.h"
 extern INA260Sensor ina260Sensor;
 extern INA219Sensor ina219Sensor;
 #endif
