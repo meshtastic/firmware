@@ -58,9 +58,11 @@ SerialModule *serialModule;
 SerialModuleRadio *serialModuleRadio;
 
 #ifdef TTGO_T_ECHO
-SerialModule::SerialModule() : StreamAPI(&Serial), concurrency::OSThread("SerialModule") static Print *serialPrint = &Serial;
+SerialModule::SerialModule() : StreamAPI(&Serial), concurrency::OSThread("SerialModule") {}
+static Print *serialPrint = &Serial;
 #else
-SerialModule::SerialModule() : StreamAPI(&Serial2), concurrency::OSThread("SerialModule") static Print *serialPrint = &Serial2;
+SerialModule::SerialModule() : StreamAPI(&Serial2), concurrency::OSThread("SerialModule") {}
+static Print *serialPrint = &Serial2;
 #endif
 
 char serialBytes[meshtastic_Constants_DATA_PAYLOAD_LEN];
