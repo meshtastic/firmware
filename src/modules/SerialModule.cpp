@@ -39,13 +39,12 @@
     KNOWN PROBLEMS
         * Until the module is initilized by the startup sequence, the TX pin is in a floating
           state. Device connected to that pin may see this as "noise".
-        * Will not work on T-Echo and the Linux device targets.
+        * Will not work on Linux device targets.
 
 
 */
 
-#if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(TTGO_T_ECHO) && !defined(CONFIG_IDF_TARGET_ESP32S2) &&              \
-    !defined(CONFIG_IDF_TARGET_ESP32C3)
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
 
 #define RX_BUFFER 128
 #define TIMEOUT 250
@@ -58,11 +57,16 @@
 SerialModule *serialModule;
 SerialModuleRadio *serialModuleRadio;
 
+#ifdef TTGO_T_ECHO
+SerialModule::SerialModule() : StreamAPI(&Serial), concurrency::OSThread("SerialModule") {}
+static Print *serialPrint = &Serial;
+#else
 SerialModule::SerialModule() : StreamAPI(&Serial2), concurrency::OSThread("SerialModule") {}
+static Print *serialPrint = &Serial2;
+#endif
 
 char serialBytes[meshtastic_Constants_DATA_PAYLOAD_LEN];
 size_t serialPayloadSize;
-static Print *serialPrint = &Serial2;
 
 SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
 {
@@ -119,8 +123,6 @@ int32_t SerialModule::runOnce()
                 serialPrint = &Serial;
                 // Give it a chance to flush out 💩
                 delay(10);
-            } else {
-                serialPrint = &Serial2;
             }
 #ifdef ARCH_ESP32
 
@@ -131,7 +133,7 @@ int32_t SerialModule::runOnce()
                 Serial.begin(baud);
                 Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             }
-#else
+#elif !defined(TTGO_T_ECHO)
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
                 Serial2.setPins(moduleConfig.serial.rxd, moduleConfig.serial.txd);
                 Serial2.begin(baud, SERIAL_8N1);
@@ -140,6 +142,9 @@ int32_t SerialModule::runOnce()
                 Serial.begin(baud, SERIAL_8N1);
                 Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             }
+#else
+            Serial.begin(baud, SERIAL_8N1);
+            Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
 #endif
             serialModuleRadio = new SerialModuleRadio();
 
@@ -170,12 +175,15 @@ int32_t SerialModule::runOnce()
                         tempNodeInfo = nodeDB.readNextInfo(readIndex);
                     }
                 }
-            } else {
+            }
+#ifndef TTGO_T_ECHO
+            else {
                 while (Serial2.available()) {
                     serialPayloadSize = Serial2.readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
                     serialModuleRadio->sendPayload();
                 }
             }
+#endif
         }
         return (10);
     } else {
