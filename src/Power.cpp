@@ -134,6 +134,10 @@ class AnalogBatteryLevel : public HasBatteryLevel
     virtual uint16_t getBattVoltage() override
     {
 
+        if (hasINA()) {
+            return 0;
+        }
+
 #ifndef ADC_MULTIPLIER
 #define ADC_MULTIPLIER 2.0
 #endif
@@ -252,6 +256,25 @@ class AnalogBatteryLevel : public HasBatteryLevel
     const float fullVolt = BAT_FULLVOLT, emptyVolt = BAT_EMPTYVOLT, chargingVolt = BAT_CHARGINGVOLT, noBatVolt = BAT_NOBATVOLT;
     float last_read_value = 0.0;
     uint32_t last_read_time_ms = 0;
+
+    bool hasINA()
+    {
+#ifdef HAS_TELEMETRY
+        if (!config.power.device_battery_ina_address) {
+            return false;
+        }
+        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219] == config.power.device_battery_ina_address) {
+            if (!ina219Sensor.isInitialized())
+                return ina219Sensor.runOnce() > 0;
+            return ina219Sensor.isRunning();
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260] == config.power.device_battery_ina_address) {
+            if (!ina260Sensor.isInitialized())
+                return ina260Sensor.runOnce() > 0;
+            return ina260Sensor.isRunning();
+        }
+#endif
+        return false;
+    }
 };
 
 AnalogBatteryLevel analogLevel;
@@ -803,22 +826,4 @@ bool Power::axpChipInit()
 #else
     return false;
 #endif
-}
-bool Power::hasINA()
-{
-#ifdef HAS_TELEMETRY
-    if (!config.power.device_battery_ina_address) {
-        return false;
-    }
-    if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219] == config.power.device_battery_ina_address) {
-        if (!ina219Sensor.isInitialized())
-            return ina219Sensor.runOnce() > 0;
-        return ina219Sensor.isRunning();
-    } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260] == config.power.device_battery_ina_address) {
-        if (!ina260Sensor.isInitialized())
-            return ina260Sensor.runOnce() > 0;
-        return ina260Sensor.isRunning();
-    }
-#endif
-    return false;
 }

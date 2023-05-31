@@ -48,8 +48,6 @@ class Power : private concurrency::OSThread
 
     /// Setup a xpowers chip axp192/axp2101, return true if found
     bool axpChipInit();
-    /// Setup INA260/219 chip, return true if found
-    bool hasINA();
     /// Setup a simple ADC input based battery sensor
     bool analogInit();
 
