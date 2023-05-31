@@ -133,7 +133,6 @@ class AnalogBatteryLevel : public HasBatteryLevel
      */
     virtual uint16_t getBattVoltage() override
     {
-
         if (hasINA()) {
             return 0;
         }
