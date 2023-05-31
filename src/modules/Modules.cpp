@@ -5,6 +5,7 @@
 #include "input/cardKbI2cImpl.h"
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
+#include "modules/NeighborInfoModule.h"
 #include "modules/NodeInfoModule.h"
 #include "modules/PositionModule.h"
 #include "modules/RemoteHardwareModule.h"
@@ -89,6 +90,7 @@ void setupModules()
     } else {
         adminModule = new AdminModule();
         traceRouteModule = new TraceRouteModule();
+        neighborInfoModule = new NeighborInfoModule();
     }
     // NOTE! This module must be added LAST because it likes to check for replies from other modules and avoid sending extra
     // acks

@@ -1,6 +1,6 @@
 version: 0.1
 cli:
-  version: 1.9.1
+  version: 1.10.0
 plugins:
   sources:
     - id: trunk
@@ -10,7 +10,7 @@ lint:
   enabled:
     - taplo@0.7.0
     - ruff@0.0.265
-    - yamllint@1.31.0
+    - yamllint@1.32.0
     - isort@5.12.0
     - markdownlint@0.34.0
     - oxipng@8.0.0
