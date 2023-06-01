@@ -22,11 +22,11 @@
 #endif
 #ifdef ARCH_ESP32
 #include "modules/esp32/AudioModule.h"
-#include "modules/esp32/RangeTestModule.h"
 #include "modules/esp32/StoreForwardModule.h"
 #endif
 #if defined(ARCH_ESP32) || defined(ARCH_NRF52)
 #include "modules/ExternalNotificationModule.h"
+#include "modules/RangeTestModule.h"
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(CONFIG_IDF_TARGET_ESP32S2)
 #include "modules/SerialModule.h"
 #endif
@@ -78,13 +78,12 @@ void setupModules()
 #ifdef ARCH_ESP32
         // Only run on an esp32 based device.
         audioModule = new AudioModule();
-        externalNotificationModule = new ExternalNotificationModule();
 
         storeForwardModule = new StoreForwardModule();
-
-        new RangeTestModule();
-#elif defined(ARCH_NRF52)
+#endif
+#if defined(ARCH_ESP32) || defined(ARCH_NRF52)
         externalNotificationModule = new ExternalNotificationModule();
+        new RangeTestModule();
 #endif
     } else {
         adminModule = new AdminModule();
