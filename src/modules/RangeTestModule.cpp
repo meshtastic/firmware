@@ -1,4 +1,5 @@
 #include "RangeTestModule.h"
+#include "FSCommon.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
@@ -8,7 +9,6 @@
 #include "configuration.h"
 #include "gps/GeoCoord.h"
 #include <Arduino.h>
-#include <FSCommon.h>
 
 /*
     As a sender, I can send packets every n seconds. These packets include an incremented PacketID.
@@ -28,7 +28,7 @@ uint32_t packetSequence = 0;
 
 int32_t RangeTestModule::runOnce()
 {
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) || defined(ARCH_NRF52)
 
     /*
         Uncomment the preferences below if you want to use the module
@@ -60,7 +60,6 @@ int32_t RangeTestModule::runOnce()
                 return disable();
                 // This thread does not need to run as a receiver
             }
-
         } else {
 
             if (moduleConfig.range_test.sender) {
@@ -122,7 +121,7 @@ void RangeTestModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 
 ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket &mp)
 {
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) || defined(ARCH_NRF52)
 
     if (moduleConfig.range_test.enabled) {
 
@@ -165,7 +164,6 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket 
             LOG_DEBUG("-----------------------------------------\n");
             */
         }
-
     } else {
         LOG_INFO("Range Test Module Disabled\n");
     }
@@ -177,6 +175,7 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket 
 
 bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
 {
+#ifdef ARCH_ESP32
     auto &p = mp.decoded;
 
     meshtastic_NodeInfo *n = nodeDB.getNode(getFrom(&mp));
@@ -284,6 +283,7 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
     fileToAppend.printf("\"%s\"\n", p.payload.bytes);
     fileToAppend.flush();
     fileToAppend.close();
+#endif
 
     return 1;
 }
