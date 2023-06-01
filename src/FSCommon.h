@@ -13,6 +13,13 @@
 #define FILE_O_READ "r"
 #endif
 
+#if defined(ARCH_STM32WL)
+#include "platform/stm32wl/InternalFileSystem.h" // STM32WL version
+#define FSCom InternalFS
+#define FSBegin() FSCom.begin()
+using namespace LittleFS_Namespace;
+#endif
+
 #if defined(ARCH_RP2040)
 // RP2040
 #include "LittleFS.h"
@@ -42,6 +49,6 @@ using namespace Adafruit_LittleFS_Namespace;
 void fsInit();
 bool copyFile(const char *from, const char *to);
 bool renameFile(const char *pathFrom, const char *pathTo);
-void listDir(const char *dirname, uint8_t levels, boolean del);
+void listDir(const char *dirname, uint8_t levels, bool del);
 void rmDir(const char *dirname);
 void setupSDCard();
