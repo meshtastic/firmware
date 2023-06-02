@@ -1,8 +1,9 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
+#include "VoltageSensor.h"
 #include <Adafruit_INA219.h>
 
-class INA219Sensor : virtual public TelemetrySensor
+class INA219Sensor : virtual public TelemetrySensor, VoltageSensor
 {
   private:
     Adafruit_INA219 ina219;
@@ -14,4 +15,5 @@ class INA219Sensor : virtual public TelemetrySensor
     INA219Sensor();
     virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+    virtual uint16_t getBusVoltageMv() override;
 };
