@@ -12,7 +12,7 @@
 #include <freertos/task.h>
 #endif
 
-#if defined(ARDUINO_NRF52_ADAFRUIT)
+#if defined(ARDUINO_NRF52_ADAFRUIT) || defined(ARDUINO_ARCH_STM32)
 #define HAS_FREE_RTOS
 
 #include <FreeRTOS.h>

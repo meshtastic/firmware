@@ -38,8 +38,6 @@ extern bool isUSBPowered;
 extern ATECCX08A atecc;
 #endif
 
-extern uint8_t nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1];
-
 extern int TCPPort; // set by Portduino
 
 // Global Screen singleton.
