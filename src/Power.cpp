@@ -133,10 +133,13 @@ class AnalogBatteryLevel : public HasBatteryLevel
      */
     virtual uint16_t getBattVoltage() override
     {
+
+#if defined(HAS_TELEMETRY) && !defined(ARCH_PORTDUINO) && !defined(HAS_PMU)
         if (hasINA()) {
             LOG_DEBUG("Using INA on I2C addr 0x%x for device battery voltage\n", config.power.device_battery_ina_address);
             return getINAVoltage();
         }
+#endif
 
 #ifndef ADC_MULTIPLIER
 #define ADC_MULTIPLIER 2.0
@@ -257,21 +260,19 @@ class AnalogBatteryLevel : public HasBatteryLevel
     float last_read_value = 0.0;
     uint32_t last_read_time_ms = 0;
 
+#if defined(HAS_TELEMETRY) && !defined(ARCH_PORTDUINO)
     uint16_t getINAVoltage()
     {
-#if defined(HAS_TELEMETRY) && !defined(ARCH_PORTDUINO) && !defined(HAS_PMU)
         if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219] == config.power.device_battery_ina_address) {
             return ina219Sensor.getBusVoltageMv();
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260] == config.power.device_battery_ina_address) {
             return ina260Sensor.getBusVoltageMv();
         }
-#endif
         return 0;
     }
 
     bool hasINA()
     {
-#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO) && !defined(HAS_PMU)
         if (!config.power.device_battery_ina_address) {
             return false;
         }
@@ -284,9 +285,9 @@ class AnalogBatteryLevel : public HasBatteryLevel
                 return ina260Sensor.runOnce() > 0;
             return ina260Sensor.isRunning();
         }
-#endif
         return false;
     }
+#endif
 };
 
 AnalogBatteryLevel analogLevel;
