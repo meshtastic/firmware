@@ -57,7 +57,7 @@ bool renameFile(const char *pathFrom, const char *pathTo)
 #endif
 }
 
-void listDir(const char *dirname, uint8_t levels, boolean del = false)
+void listDir(const char *dirname, uint8_t levels, bool del = false)
 {
 #ifdef FSCom
 #if (defined(ARCH_ESP32) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))

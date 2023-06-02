@@ -59,6 +59,9 @@ NRF52Bluetooth *nrf52Bluetooth;
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
 #include "SX1280Interface.h"
+#ifdef ARCH_STM32WL
+#include "STM32WLE5JCInterface.h"
+#endif
 #if !HAS_RADIO && defined(ARCH_PORTDUINO)
 #include "platform/portduino/SimRadio.h"
 #endif
@@ -68,7 +71,7 @@ NRF52Bluetooth *nrf52Bluetooth;
 #endif
 #include "PowerFSMThread.h"
 
-#if !defined(ARCH_PORTDUINO)
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 #include "AccelerometerThread.h"
 #endif
 
@@ -347,10 +350,11 @@ void setup()
      * nodeTelemetrySensorsMap singleton. This wraps that logic in a temporary scope to declare the temporary field
      * "found".
      */
+
     // Only one supported RGB LED currently
     rgb_found = i2cScanner->find(ScanI2C::DeviceType::NCP5623);
 
-#if !defined(ARCH_PORTDUINO)
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
     auto acc_info = i2cScanner->firstAccelerometer();
     accelerometer_found = acc_info.type != ScanI2C::DeviceType::NONE ? acc_info.address : accelerometer_found;
     LOG_DEBUG("acc_info = %i\n", acc_info.type);
@@ -439,7 +443,7 @@ void setup()
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
 #endif
 
-#if !defined(ARCH_PORTDUINO)
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
         accelerometerThread = new AccelerometerThread(acc_info.type);
     }
@@ -530,6 +534,18 @@ void setup()
 #endif
 
     // radio init MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
+#if defined(USE_STM32WLx)
+    if (!rIf) {
+        rIf = new STM32WLE5JCInterface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
+        if (!rIf->init()) {
+            LOG_WARN("Failed to find STM32WL radio\n");
+            delete rIf;
+            rIf = NULL;
+        } else {
+            LOG_INFO("STM32WL Radio init succeeded, using STM32WL radio\n");
+        }
+    }
+#endif
 
 #if !HAS_RADIO && defined(ARCH_PORTDUINO)
     if (!rIf) {
