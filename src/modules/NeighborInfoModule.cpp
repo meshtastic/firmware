@@ -37,7 +37,7 @@ void NeighborInfoModule::printNodeDBNodes(const char *header)
     LOG_DEBUG("DB contains %d nodes\n", num_nodes);
     for (int i = 0; i < num_nodes; i++) {
         meshtastic_NodeInfo *dbEntry = nodeDB.getNodeByIndex(i);
-        LOG_DEBUG("     Node %d: node_id=%d, snr=%d\n", i, dbEntry->num, dbEntry->snr);
+        LOG_DEBUG("     Node %d: node_id=%d, snr=%.2f\n", i, dbEntry->num, dbEntry->snr);
     }
     LOG_DEBUG("----------------\n");
 }
@@ -54,7 +54,7 @@ void NeighborInfoModule::printNodeDBNeighbors(const char *header)
     LOG_DEBUG("DB contains %d neighbors\n", num_neighbors);
     for (int i = 0; i < num_neighbors; i++) {
         meshtastic_Neighbor *dbEntry = getNeighborByIndex(i);
-        LOG_DEBUG("     Node %d: node_id=%d, snr=%d\n", i, dbEntry->node_id, dbEntry->snr);
+        LOG_DEBUG("     Node %d: node_id=%d, snr=%.2f\n", i, dbEntry->node_id, dbEntry->snr);
     }
     LOG_DEBUG("----------------\n");
 }
@@ -79,9 +79,9 @@ void NeighborInfoModule::printNodeDBSelection(const char *header, const meshtast
             }
         }
         if (!chosen) {
-            LOG_DEBUG("     Node %d: neighbor=%d, snr=%d\n", i, dbEntry->node_id, dbEntry->snr);
+            LOG_DEBUG("     Node %d: neighbor=%d, snr=%.2f\n", i, dbEntry->node_id, dbEntry->snr);
         } else {
-            LOG_DEBUG("---> Node %d: neighbor=%d, snr=%d\n", i, dbEntry->node_id, dbEntry->snr);
+            LOG_DEBUG("---> Node %d: neighbor=%d, snr=%.2f\n", i, dbEntry->node_id, dbEntry->snr);
         }
     }
     LOG_DEBUG("----------------\n");
