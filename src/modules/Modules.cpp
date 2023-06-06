@@ -47,6 +47,7 @@ void setupModules()
         waypointModule = new WaypointModule();
         textMessageModule = new TextMessageModule();
         traceRouteModule = new TraceRouteModule();
+        neighborInfoModule = new NeighborInfoModule();
 
         // Note: if the rest of meshtastic doesn't need to explicitly use your module, you do not need to assign the instance
         // to a global variable.
@@ -89,7 +90,6 @@ void setupModules()
     } else {
         adminModule = new AdminModule();
         traceRouteModule = new TraceRouteModule();
-        neighborInfoModule = new NeighborInfoModule();
     }
     // NOTE! This module must be added LAST because it likes to check for replies from other modules and avoid sending extra
     // acks
