@@ -7,7 +7,8 @@
   is appreciated." This will allow other devs to potentially save you time by not accidentially duplicating work etc...
 - Please do not check in files that don't have real changes
 - Please do not reformat lines that you didn't have to change the code on
-- We recommend using the [Visual Studio Code](https://platformio.org/install/ide?install=vscode) editor and the 'clang-format' extension,
-  because automatically follows our indentation rules and it's auto reformatting will not cause spurious changes to lines.
+- We recommend using the [Visual Studio Code](https://platformio.org/install/ide?install=vscode) editor along with the ['Trunk Check' extension](https://marketplace.visualstudio.com/items?itemName=trunk.io) (WSL2 is required on windows),
+  because it automatically follows our indentation rules and its auto reformatting will not cause spurious changes to lines.
 - If your PR fixes a bug, mention "fixes #bugnum" somewhere in your pull request description.
 - If your other co-developers have comments on your PR please tweak as needed.
+- Please also enable "Allow edits by maintainers".
