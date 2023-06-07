@@ -277,7 +277,6 @@ void NodeDB::installDefaultDeviceState()
 
     // default to no GPS, until one has been found by probing
     myNodeInfo.has_gps = false;
-    myNodeInfo.message_timeout_msec = FLOOD_EXPIRE_TIME;
     generatePacketId(); // FIXME - ugly way to init current_packet_id;
 
     // Init our blank owner info to reasonable defaults
@@ -301,8 +300,6 @@ void NodeDB::init()
     uint32_t channelFileCRC = crc32Buffer(&channelFile, sizeof(channelFile));
 
     int saveWhat = 0;
-
-    myNodeInfo.max_channels = MAX_NUM_CHANNELS; // tell others the max # of channels we can understand
 
     myNodeInfo.error_code =
         meshtastic_CriticalErrorCode_NONE; // For the error code, only show values from this boot (discard value from flash)
@@ -331,11 +328,6 @@ void NodeDB::init()
     myNodeInfo.reboot_count = preferences.getUInt("rebootCounter", 0);
     preferences.end();
     LOG_DEBUG("Number of Device Reboots: %d\n", myNodeInfo.reboot_count);
-
-    /* The ESP32 has a wifi radio. This will need to be modified at some point so
-     *    the test isn't so simplistic.
-     */
-    myNodeInfo.has_wifi = true;
 #endif
 
     resetRadioConfig(); // If bogus settings got saved, then fix them

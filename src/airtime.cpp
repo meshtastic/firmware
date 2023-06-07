@@ -6,20 +6,24 @@ AirTime *airTime = NULL;
 
 // Don't read out of this directly. Use the helper functions.
 
+#define MAX_PERIODS 8
+uint32_t air_period_tx[MAX_PERIODS];
+uint32_t air_period_rx[MAX_PERIODS];
+
 void AirTime::logAirtime(reportTypes reportType, uint32_t airtime_ms)
 {
 
     if (reportType == TX_LOG) {
         LOG_DEBUG("AirTime - Packet transmitted : %ums\n", airtime_ms);
         this->airtimes.periodTX[0] = this->airtimes.periodTX[0] + airtime_ms;
-        myNodeInfo.air_period_tx[0] = myNodeInfo.air_period_tx[0] + airtime_ms;
+        air_period_tx[0] = air_period_tx[0] + airtime_ms;
 
         this->utilizationTX[this->getPeriodUtilHour()] = this->utilizationTX[this->getPeriodUtilHour()] + airtime_ms;
 
     } else if (reportType == RX_LOG) {
         LOG_DEBUG("AirTime - Packet received : %ums\n", airtime_ms);
         this->airtimes.periodRX[0] = this->airtimes.periodRX[0] + airtime_ms;
-        myNodeInfo.air_period_rx[0] = myNodeInfo.air_period_rx[0] + airtime_ms;
+        air_period_rx[0] = air_period_rx[0] + airtime_ms;
     } else if (reportType == RX_ALL_LOG) {
         LOG_DEBUG("AirTime - Packet received (noise?) : %ums\n", airtime_ms);
         this->airtimes.periodRX_ALL[0] = this->airtimes.periodRX_ALL[0] + airtime_ms;
@@ -55,16 +59,16 @@ void AirTime::airtimeRotatePeriod()
             this->airtimes.periodRX[i + 1] = this->airtimes.periodRX[i];
             this->airtimes.periodRX_ALL[i + 1] = this->airtimes.periodRX_ALL[i];
 
-            myNodeInfo.air_period_tx[i + 1] = this->airtimes.periodTX[i];
-            myNodeInfo.air_period_rx[i + 1] = this->airtimes.periodRX[i];
+            air_period_tx[i + 1] = this->airtimes.periodTX[i];
+            air_period_rx[i + 1] = this->airtimes.periodRX[i];
         }
 
         this->airtimes.periodTX[0] = 0;
         this->airtimes.periodRX[0] = 0;
         this->airtimes.periodRX_ALL[0] = 0;
 
-        myNodeInfo.air_period_tx[0] = 0;
-        myNodeInfo.air_period_rx[0] = 0;
+        air_period_tx[0] = 0;
+        air_period_rx[0] = 0;
 
         this->airtimes.lastPeriodIndex = this->currentPeriodIndex();
     }
@@ -179,13 +183,13 @@ int32_t AirTime::runOnce()
         }
 
         // Init airtime windows to all 0
-        for (int i = 0; i < myNodeInfo.air_period_rx_count; i++) {
+        for (int i = 0; i < MAX_PERIODS; i++) {
             this->airtimes.periodTX[i] = 0;
             this->airtimes.periodRX[i] = 0;
             this->airtimes.periodRX_ALL[i] = 0;
 
-            // myNodeInfo.air_period_tx[i] = 0;
-            // myNodeInfo.air_period_rx[i] = 0;
+            // air_period_tx[i] = 0;
+            // air_period_rx[i] = 0;
         }
 
         firstTime = false;
@@ -206,12 +210,6 @@ int32_t AirTime::runOnce()
 
             this->utilizationTX[utilPeriodTX] = 0;
         }
-
-        // Update channel_utilization every second.
-        myNodeInfo.channel_utilization = airTime->channelUtilizationPercent();
-
-        // Update channel_utilization every second.
-        myNodeInfo.air_util_tx = airTime->utilizationTXPercent();
     }
     /*
         LOG_DEBUG("utilPeriodTX %d TX Airtime %3.2f%\n", utilPeriodTX, airTime->utilizationTXPercent());
