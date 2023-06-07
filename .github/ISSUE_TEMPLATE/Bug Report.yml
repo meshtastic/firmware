@@ -40,10 +40,12 @@ body:
         - T-Echo
         - Rak4631
         - Rak11200
+        - Rak11310
         - Heltec v1
         - Heltec v2
         - Heltec v2.1
         - Heltec V3
+        - Raspberry Pi Pico (W)
         - Relay v1
         - Relay v2
         - DIY
