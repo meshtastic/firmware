@@ -289,7 +289,6 @@ void NodeDB::installDefaultDeviceState()
     snprintf(owner.short_name, sizeof(owner.short_name), "%02x%02x", ourMacAddr[4], ourMacAddr[5]);
 
     snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum()); // Default node ID now based on nodenum
-    memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
 }
 
 void NodeDB::init()
@@ -375,7 +374,7 @@ void NodeDB::pickNewNodeNum()
         r = NUM_RESERVED; // don't pick a reserved node number
 
     meshtastic_NodeInfo *found;
-    while ((found = getNode(r)) && memcmp(found->user.macaddr, owner.macaddr, sizeof(owner.macaddr))) {
+    while ((found = getNode(r))) {
         NodeNum n = random(NUM_RESERVED, NODENUM_BROADCAST); // try a new random choice
         LOG_DEBUG("NOTE! Our desired nodenum 0x%x is in use, so trying for 0x%x\n", r, n);
         r = n;

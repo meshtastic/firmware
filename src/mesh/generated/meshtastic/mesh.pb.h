@@ -372,7 +372,8 @@ typedef struct _meshtastic_User {
     /* A VERY short name, ideally two characters.
  Suitable for a tiny OLED screen */
     char short_name[5];
-    /* This is the addr of the radio.
+    /* Deprecated in Meshtastic 2.1.x
+ This is the addr of the radio.
  Not populated by the phone, but added by the esp32 when broadcasting */
     pb_byte_t macaddr[6];
     /* TBEAM, HELTEC, etc...
