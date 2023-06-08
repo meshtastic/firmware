@@ -5,6 +5,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
+#include "TypeConversions.h"
 #include "configuration.h"
 #include "main.h"
 #include "xmodem.h"
@@ -147,7 +148,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         fromRadioScratch.my_info = myNodeInfo;
         state = STATE_SEND_NODEINFO;
 
-        service.refreshLocalNodeInfo(); // Update my NodeInfo because the client will be asking for it soon.
+        service.refreshLocalMeshNode(); // Update my NodeInfo because the client will be asking for it soon.
         break;
 
     case STATE_SEND_NODEINFO: {
@@ -371,7 +372,7 @@ bool PhoneAPI::available()
 
     case STATE_SEND_NODEINFO:
         if (!nodeInfoForPhone)
-            nodeInfoForPhone = nodeDB.readNextInfo(readIndex);
+            nodeInfoForPhone = ConvertToNodeInfo(nodeDB.readNextMeshNode(readIndex));
         return true; // Always say we have something, because we might need to advance our state machine
 
     case STATE_SEND_PACKETS: {

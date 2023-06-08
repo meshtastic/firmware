@@ -29,9 +29,10 @@ extern meshtastic_LocalConfig config;
 extern meshtastic_LocalModuleConfig moduleConfig;
 extern meshtastic_OEMStore oemStore;
 extern meshtastic_User &owner;
+extern meshtastic_Position &localPosition;
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
-uint32_t sinceLastSeen(const meshtastic_NodeInfo *n);
+uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
 
 /// Given a packet, return how many seconds in the past (vs now) it was received
 uint32_t sinceReceived(const meshtastic_MeshPacket *p);
@@ -52,7 +53,7 @@ class NodeDB
 
   public:
     bool updateGUI = false; // we think the gui should definitely be redrawn, screen will clear this once handled
-    meshtastic_NodeInfo *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
+    meshtastic_NodeInfoLite *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
     Observable<const meshtastic::NodeStatus *> newStatus;
 
     /// don't do mesh based algoritm for node id assignment (initially)
@@ -108,7 +109,7 @@ class NodeDB
     void pickNewNodeNum();
 
     // get channel channel index we heard a nodeNum on, defaults to 0 if not found
-    uint8_t getNodeChannel(NodeNum n);
+    uint8_t getMeshNodeChannel(NodeNum n);
 
     /// Return the number of nodes we've heard from recently (within the last 2 hrs?)
     size_t getNumOnlineMeshNodes();
@@ -129,6 +130,9 @@ class NodeDB
         assert(x < *numMeshNodes);
         return &meshNodes[x];
     }
+
+    meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
+    size_t getNumMeshNodes() { return *numMeshNodes; }
 
   private:
     /// Find a node in our DB, create an empty NodeInfo if missing
@@ -225,6 +229,10 @@ inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t d
 /// Sometimes we will have Position objects that only have a time, so check for
 /// valid lat/lon
 static inline bool hasValidPosition(const meshtastic_NodeInfo *n)
+{
+    return n->has_position && (n->position.latitude_i != 0 || n->position.longitude_i != 0);
+}
+static inline bool hasValidPosition(const meshtastic_NodeInfoLite *n)
 {
     return n->has_position && (n->position.latitude_i != 0 || n->position.longitude_i != 0);
 }
