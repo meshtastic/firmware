@@ -373,7 +373,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     static char tempBuf[237];
 
     meshtastic_MeshPacket &mp = devicestate.rx_text_message;
-    meshtastic_NodeInfo *node = nodeDB.getNode(getFrom(&mp));
+    meshtastic_NodeInfo *node = nodeDB.getNodeInfo(getFrom(&mp));
     // LOG_DEBUG("drawing text message from 0x%x: %s\n", mp.from,
     // mp.decoded.variant.data.decoded.bytes);
 
@@ -411,7 +411,7 @@ static void drawWaypointFrame(OLEDDisplay *display, OLEDDisplayUiState *state, i
     static char tempBuf[237];
 
     meshtastic_MeshPacket &mp = devicestate.rx_waypoint;
-    meshtastic_NodeInfo *node = nodeDB.getNode(getFrom(&mp));
+    meshtastic_NodeInfo *node = nodeDB.getNodeInfo(getFrom(&mp));
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
@@ -836,7 +836,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 
     static char distStr[20];
     strncpy(distStr, "? km", sizeof(distStr)); // might not have location data
-    meshtastic_NodeInfo *ourNode = nodeDB.getNode(nodeDB.getNodeNum());
+    meshtastic_NodeInfo *ourNode = nodeDB.getNodeInfo(nodeDB.getNodeNum());
     const char *fields[] = {username, distStr, signalStr, lastStr, NULL};
     int16_t compassX = 0, compassY = 0;
 

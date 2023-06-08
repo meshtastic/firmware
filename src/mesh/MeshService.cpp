@@ -76,7 +76,7 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
     powerFSM.trigger(EVENT_PACKET_FOR_PHONE); // Possibly keep the node from sleeping
 
     nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
-    if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB.getNode(mp->from)->has_user && nodeInfoModule) {
+    if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB.getNodeInfo(mp->from)->has_user && nodeInfoModule) {
         LOG_INFO("Heard a node on channel %d we don't know, sending NodeInfo and asking for a response.\n", mp->channel);
         nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
     }
@@ -236,7 +236,7 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
 
 void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
 {
-    meshtastic_NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
+    meshtastic_NodeInfo *node = nodeDB.getNodeInfo(nodeDB.getNodeNum());
     assert(node);
 
     if (hasValidPosition(node)) {
@@ -268,7 +268,7 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 
 meshtastic_NodeInfo *MeshService::refreshLocalNodeInfo()
 {
-    meshtastic_NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
+    meshtastic_NodeInfo *node = nodeDB.getNodeInfo(nodeDB.getNodeNum());
     assert(node);
 
     // We might not have a position yet for our local node, in that case, at least try to send the time

@@ -409,7 +409,7 @@ const char *CannedMessageModule::getNodeName(NodeNum node)
     if (node == NODENUM_BROADCAST) {
         return "Broadcast";
     } else {
-        meshtastic_NodeInfo *info = nodeDB.getNode(node);
+        meshtastic_NodeInfo *info = nodeDB.getNodeInfo(node);
         if (info != NULL) {
             return info->user.long_name;
         } else {

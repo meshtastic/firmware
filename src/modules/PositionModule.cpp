@@ -144,7 +144,7 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
 
 int32_t PositionModule::runOnce()
 {
-    meshtastic_NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
+    meshtastic_NodeInfo *node = nodeDB.getNodeInfo(nodeDB.getNodeNum());
 
     // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();

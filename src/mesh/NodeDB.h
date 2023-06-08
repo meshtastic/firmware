@@ -47,8 +47,11 @@ class NodeDB
     meshtastic_NodeInfo *nodes;
     pb_size_t *numNodes;
 
-  public:
-    bool updateGUI = false; // we think the gui should definitely be redrawn, screen will clear this once handled
+    meshtastic_NodeInfoLite *meshNodes;
+    pb_size_t *numMeshNodes;
+
+public:
+    bool updateGUI = false;                       // we think the gui should definitely be redrawn, screen will clear this once handled
     meshtastic_NodeInfo *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
     Observable<const meshtastic::NodeStatus *> newStatus;
 
@@ -90,8 +93,6 @@ class NodeDB
     /// @return our node number
     NodeNum getNodeNum() { return myNodeInfo.my_node_num; }
 
-    size_t getNumNodes() { return *numNodes; }
-
     /// if returns false, that means our node should send a DenyNodeNum response.  If true, we think the number is okay for use
     // bool handleWantNodeNum(NodeNum n);
 
@@ -103,26 +104,14 @@ class NodeDB
     their denial?)
     */
 
-    /// Allow the bluetooth layer to read our next nodeinfo record, or NULL if done reading
-    const meshtastic_NodeInfo *readNextInfo(uint32_t &readIndex);
-
     /// pick a provisional nodenum we hope no one is using
     void pickNewNodeNum();
 
     // get channel channel index we heard a nodeNum on, defaults to 0 if not found
     uint8_t getNodeChannel(NodeNum n);
 
-    /// Find a node in our DB, return null for missing
-    meshtastic_NodeInfo *getNode(NodeNum n);
-
-    meshtastic_NodeInfo *getNodeByIndex(size_t x)
-    {
-        assert(x < *numNodes);
-        return &nodes[x];
-    }
-
     /// Return the number of nodes we've heard from recently (within the last 2 hrs?)
-    size_t getNumOnlineNodes();
+    size_t getNumOnlineMeshNodes();
 
     void initConfigIntervals(), initModuleConfigIntervals(), resetNodes();
 
@@ -133,15 +122,35 @@ class NodeDB
 
     void installRoleDefaults(meshtastic_Config_DeviceConfig_Role role);
 
-  private:
+    const meshtastic_NodeInfoLite *readNextMeshNode(uint32_t &readIndex);
+
+    meshtastic_NodeInfoLite *getMeshNodeByIndex(size_t x)
+    {
+        assert(x < *numMeshNodes);
+        return &meshNodes[x];
+    }
+
+private:
     /// Find a node in our DB, create an empty NodeInfo if missing
     meshtastic_NodeInfo *getOrCreateNode(NodeNum n);
+    meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
+    /// Find a node in our DB, return null for missing
+    meshtastic_NodeInfo *getNodeInfo(NodeNum n);
+    /// Allow the bluetooth layer to read our next nodeinfo record, or NULL if done reading
+    const meshtastic_NodeInfo *readNextInfo(uint32_t &readIndex);
+    size_t getNumNodes() { return *numNodes; }
+
+    meshtastic_NodeInfo *getNodeByIndex(size_t x)
+    {
+        assert(x < *numNodes);
+        return &nodes[x];
+    }
 
     /// Notify observers of changes to the DB
     void notifyObservers(bool forceUpdate = false)
     {
         // Notify observers of the current node state
-        const meshtastic::NodeStatus status = meshtastic::NodeStatus(getNumOnlineNodes(), getNumNodes(), forceUpdate);
+        const meshtastic::NodeStatus status = meshtastic::NodeStatus(getNumOnlineMeshNodes(), getNumMeshNodes(), forceUpdate);
         newStatus.notifyObservers(&status);
     }
 
@@ -180,7 +189,7 @@ extern NodeDB nodeDB;
 // Our delay functions check for this for times that should never expire
 #define NODE_DELAY_FOREVER 0xffffffff
 
-#define IF_ROUTER(routerVal, normalVal)                                                                                          \
+#define IF_ROUTER(routerVal, normalVal) \
     ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER) ? (routerVal) : (normalVal))
 
 #define ONE_DAY 24 * 60 * 60
@@ -232,7 +241,7 @@ extern meshtastic_CriticalErrorCode error_code;
  */
 extern uint32_t error_address;
 
-#define Module_Config_size                                                                                                       \
-    (ModuleConfig_CannedMessageConfig_size + ModuleConfig_ExternalNotificationConfig_size + ModuleConfig_MQTTConfig_size +       \
-     ModuleConfig_RangeTestConfig_size + ModuleConfig_SerialConfig_size + ModuleConfig_StoreForwardConfig_size +                 \
+#define Module_Config_size                                                                                                 \
+    (ModuleConfig_CannedMessageConfig_size + ModuleConfig_ExternalNotificationConfig_size + ModuleConfig_MQTTConfig_size + \
+     ModuleConfig_RangeTestConfig_size + ModuleConfig_SerialConfig_size + ModuleConfig_StoreForwardConfig_size +           \
      ModuleConfig_TelemetryConfig_size + ModuleConfig_size)

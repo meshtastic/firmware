@@ -138,7 +138,7 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket 
             }
 
             /*
-            NodeInfo *n = nodeDB.getNode(getFrom(&mp));
+            NodeInfo *n = nodeDB.getNodeInfo(getFrom(&mp));
 
             LOG_DEBUG("-----------------------------------------\n");
             LOG_DEBUG("p.payload.bytes  \"%s\"\n", p.payload.bytes);
@@ -177,7 +177,7 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
 #ifdef ARCH_ESP32
     auto &p = mp.decoded;
 
-    meshtastic_NodeInfo *n = nodeDB.getNode(getFrom(&mp));
+    meshtastic_NodeInfo *n = nodeDB.getNodeInfo(getFrom(&mp));
     /*
         LOG_DEBUG("-----------------------------------------\n");
         LOG_DEBUG("p.payload.bytes  \"%s\"\n", p.payload.bytes);
