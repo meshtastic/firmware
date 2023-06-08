@@ -56,7 +56,7 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 
 meshtastic_MeshPacket *PositionModule::allocReply()
 {
-    meshtastic_NodeInfo *node = service.refreshMyNodeInfo(); // should guarantee there is now a position
+    meshtastic_NodeInfo *node = service.refreshLocalNodeInfo(); // should guarantee there is now a position
     assert(node->has_position);
 
     node->position.seq_number++;
@@ -171,7 +171,7 @@ int32_t PositionModule::runOnce()
     } else if (config.position.position_broadcast_smart_enabled) {
         // Only send packets if the channel is less than 25% utilized or we're a tracker.
         if (airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER)) {
-            meshtastic_NodeInfo *node2 = service.refreshMyNodeInfo(); // should guarantee there is now a position
+            meshtastic_NodeInfo *node2 = service.refreshLocalNodeInfo(); // should guarantee there is now a position
 
             if (hasValidPosition(node2)) {
                 // The minimum distance to travel before we are able to send a new position packet.

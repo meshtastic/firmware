@@ -56,6 +56,10 @@ extern void getMacAddr(uint8_t *dmac);
  */
 meshtastic_User &owner = devicestate.owner;
 
+meshtastic_CriticalErrorCode error_code =
+    meshtastic_CriticalErrorCode_NONE; // For the error code, only show values from this boot (discard value from flash)
+uint32_t error_address = 0;
+
 static uint8_t ourMacAddr[6];
 
 NodeDB::NodeDB() : nodes(devicestate.node_db), numNodes(&devicestate.node_db_count) {}
@@ -275,8 +279,6 @@ void NodeDB::installDefaultDeviceState()
     devicestate.version = DEVICESTATE_CUR_VER;
     devicestate.receive_queue_count = 0; // Not yet implemented FIXME
 
-    // default to no GPS, until one has been found by probing
-    myNodeInfo.has_gps = false;
     generatePacketId(); // FIXME - ugly way to init current_packet_id;
 
     // Init our blank owner info to reasonable defaults
@@ -301,10 +303,6 @@ void NodeDB::init()
 
     int saveWhat = 0;
 
-    myNodeInfo.error_code =
-        meshtastic_CriticalErrorCode_NONE; // For the error code, only show values from this boot (discard value from flash)
-    myNodeInfo.error_address = 0;
-
     // likewise - we always want the app requirements to come from the running appload
     myNodeInfo.min_app_version = 20300; // format is Mmmss (where M is 1+the numeric major number. i.e. 20120 means 1.1.20
 
@@ -319,8 +317,6 @@ void NodeDB::init()
     meshtastic_NodeInfo *info = getOrCreateNode(getNodeNum());
     info->user = owner;
     info->has_user = true;
-
-    strncpy(myNodeInfo.firmware_version, optstr(APP_VERSION), sizeof(myNodeInfo.firmware_version));
 
 #ifdef ARCH_ESP32
     Preferences preferences;
@@ -808,9 +804,8 @@ void recordCriticalError(meshtastic_CriticalErrorCode code, uint32_t address, co
     }
 
     // Record error to DB
-    myNodeInfo.error_code = code;
-    myNodeInfo.error_address = address;
-    myNodeInfo.error_count++;
+    error_code = code;
+    error_address = address;
 
     // Currently portuino is mostly used for simulation.  Make sue the user notices something really bad happend
 #ifdef ARCH_PORTDUINO
