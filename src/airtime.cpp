@@ -181,7 +181,7 @@ int32_t AirTime::runOnce()
         }
 
         // Init airtime windows to all 0
-        for (int i = 0; i < MAX_PERIODS; i++) {
+        for (int i = 0; i < PERIODS_TO_LOG; i++) {
             this->airtimes.periodTX[i] = 0;
             this->airtimes.periodRX[i] = 0;
             this->airtimes.periodRX_ALL[i] = 0;
