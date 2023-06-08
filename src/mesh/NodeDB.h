@@ -7,6 +7,7 @@
 #include "MeshTypes.h"
 #include "NodeStatus.h"
 #include "mesh-pb-constants.h"
+#include "mesh/generated/meshtastic/mesh.pb.h" // For CriticalErrorCode
 
 /*
 DeviceState versions used to be defined in the .proto file but really only this function cares.  So changed to a
@@ -223,6 +224,13 @@ static inline bool hasValidPosition(const meshtastic_NodeInfo *n)
  * might have changed is incremented.  Allows others to detect they might now be on a new channel.
  */
 extern uint32_t radioGeneration;
+
+extern meshtastic_CriticalErrorCode error_code;
+
+/*
+ * A numeric error address (nonzero if available)
+ */
+extern uint32_t error_address;
 
 #define Module_Config_size                                                                                                       \
     (ModuleConfig_CannedMessageConfig_size + ModuleConfig_ExternalNotificationConfig_size + ModuleConfig_MQTTConfig_size +       \
