@@ -1,32 +1,6 @@
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "mesh/generated/meshtastic/mesh.pb.h"
 
-inline static const meshtastic_NodeInfoLite *ConvertToNodeInfoLite(const meshtastic_NodeInfo *node)
-{
-    meshtastic_NodeInfoLite *lite = NULL;
-    memset(lite, 0, sizeof(*lite));
-
-    lite->num = node->num;
-    lite->snr = node->snr;
-    lite->last_heard = node->last_heard;
-    lite->channel = node->channel;
-
-    if (node->has_position) {
-        lite->position.latitude_i = node->position.latitude_i;
-        lite->position.longitude_i = node->position.longitude_i;
-        lite->position.altitude = node->position.altitude;
-        lite->position.location_source = node->position.location_source;
-        lite->position.time = node->position.time;
-    }
-    if (node->has_user) {
-        lite->user = node->user;
-    }
-    if (node->has_device_metrics) {
-        lite->device_metrics = node->device_metrics;
-    }
-    return lite;
-}
-
 inline static const meshtastic_NodeInfo *ConvertToNodeInfo(const meshtastic_NodeInfoLite *lite)
 {
     meshtastic_NodeInfo *info = NULL;

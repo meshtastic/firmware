@@ -135,13 +135,13 @@ class NodeDB
     size_t getNumMeshNodes() { return *numMeshNodes; }
 
   private:
-    /// Find a node in our DB, create an empty NodeInfo if missing
-    meshtastic_NodeInfo *getOrCreateNode(NodeNum n);
+    /// Find a node in our DB, create an empty NodeInfoLite if missing
     meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
+    meshtastic_NodeInfoLite *getOrCreateMeshNode(const meshtastic_NodeInfo *node);
     /// Find a node in our DB, return null for missing
     meshtastic_NodeInfo *getNodeInfo(NodeNum n);
     /// Allow the bluetooth layer to read our next nodeinfo record, or NULL if done reading
-    const meshtastic_NodeInfo *readNextInfo(uint32_t &readIndex);
+    const meshtastic_NodeInfo *readNextNodeInfo(uint32_t &readIndex);
     size_t getNumNodes() { return *numNodes; }
 
     meshtastic_NodeInfo *getNodeByIndex(size_t x)

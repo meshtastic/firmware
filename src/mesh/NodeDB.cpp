@@ -328,6 +328,19 @@ void NodeDB::init()
     info->user = owner;
     info->has_user = true;
 
+    if (numNodes > 0) {
+        LOG_DEBUG("Legacy NodeDB detected... Converting to NodeDBLite\n");
+        uint32_t readIndex = 0;
+        const meshtastic_NodeInfo *oldNodeInfo = nodeDB.readNextNodeInfo(readIndex);
+        while (oldNodeInfo != NULL) {
+            getOrCreateMeshNode(oldNodeInfo);
+            oldNodeInfo = nodeDB.readNextNodeInfo(readIndex);
+        }
+        LOG_DEBUG("Conversion done! Clearing out legacy NodeDB\n");
+        devicestate.node_db_count = 0;
+        memset(devicestate.node_db, 0, sizeof(devicestate.node_db));
+    }
+
 #ifdef ARCH_ESP32
     Preferences preferences;
     preferences.begin("meshtastic", false);
@@ -581,7 +594,7 @@ void NodeDB::saveToDisk(int saveWhat)
     }
 }
 
-const meshtastic_NodeInfo *NodeDB::readNextInfo(uint32_t &readIndex)
+const meshtastic_NodeInfo *NodeDB::readNextNodeInfo(uint32_t &readIndex)
 {
     if (readIndex < *numNodes)
         return &nodes[readIndex++];
@@ -789,45 +802,11 @@ meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
 }
 
 /// Find a node in our DB, create an empty NodeInfo if missing
-meshtastic_NodeInfo *NodeDB::getOrCreateNode(NodeNum n)
-{
-    meshtastic_NodeInfo *info = getNodeInfo(n);
-
-    if (!info) {
-        if ((*numNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < meshtastic_NodeInfo_size * 3)) {
-            screen->print("warning: node_db full! erasing oldest entry\n");
-            // look for oldest node and erase it
-            uint32_t oldest = UINT32_MAX;
-            int oldestIndex = -1;
-            for (int i = 0; i < *numNodes; i++) {
-                if (nodes[i].last_heard < oldest) {
-                    oldest = nodes[i].last_heard;
-                    oldestIndex = i;
-                }
-            }
-            // Shove the remaining nodes down the chain
-            for (int i = oldestIndex; i < *numNodes - 1; i++) {
-                nodes[i] = nodes[i + 1];
-            }
-            (*numNodes)--;
-        }
-        // add the node at the end
-        info = &nodes[(*numNodes)++];
-
-        // everything is missing except the nodenum
-        memset(info, 0, sizeof(*info));
-        info->num = n;
-    }
-
-    return info;
-}
-
-/// Find a node in our DB, create an empty NodeInfo if missing
 meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
 {
-    meshtastic_NodeInfoLite *info = getMeshNode(n);
+    meshtastic_NodeInfoLite *lite = getMeshNode(n);
 
-    if (!info) {
+    if (!lite) {
         if ((*numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < meshtastic_NodeInfoLite_size * 3)) {
             screen->print("warning: node_db_lite full! erasing oldest entry\n");
             // look for oldest node and erase it
@@ -846,14 +825,64 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             (*numMeshNodes)--;
         }
         // add the node at the end
-        info = &meshNodes[(*numMeshNodes)++];
+        lite = &meshNodes[(*numMeshNodes)++];
 
         // everything is missing except the nodenum
-        memset(info, 0, sizeof(*info));
-        info->num = n;
+        memset(lite, 0, sizeof(*lite));
+        lite->num = n;
     }
 
-    return info;
+    return lite;
+}
+
+meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(const meshtastic_NodeInfo *node)
+{
+    meshtastic_NodeInfoLite *lite = getMeshNode(node->num);
+
+    if (!lite) {
+        if ((*numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < meshtastic_NodeInfoLite_size * 3)) {
+            screen->print("warning: node_db_lite full! erasing oldest entry\n");
+            // look for oldest node and erase it
+            uint32_t oldest = UINT32_MAX;
+            int oldestIndex = -1;
+            for (int i = 0; i < *numMeshNodes; i++) {
+                if (meshNodes[i].last_heard < oldest) {
+                    oldest = meshNodes[i].last_heard;
+                    oldestIndex = i;
+                }
+            }
+            // Shove the remaining nodes down the chain
+            for (int i = oldestIndex; i < *numMeshNodes - 1; i++) {
+                meshNodes[i] = meshNodes[i + 1];
+            }
+            (*numMeshNodes)--;
+        }
+        // add the node at the end
+        lite = &meshNodes[(*numMeshNodes)++];
+
+        // everything is missing except the nodenum
+        memset(lite, 0, sizeof(*lite));
+        lite->num = node->num;
+        lite->snr = node->snr;
+        lite->last_heard = node->last_heard;
+        lite->channel = node->channel;
+
+        if (node->has_position) {
+            lite->position.latitude_i = node->position.latitude_i;
+            lite->position.longitude_i = node->position.longitude_i;
+            lite->position.altitude = node->position.altitude;
+            lite->position.location_source = node->position.location_source;
+            lite->position.time = node->position.time;
+        }
+        if (node->has_user) {
+            lite->user = node->user;
+        }
+        if (node->has_device_metrics) {
+            lite->device_metrics = node->device_metrics;
+        }
+    }
+
+    return lite;
 }
 
 /// Record an error that should be reported via analytics
