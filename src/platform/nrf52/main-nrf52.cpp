@@ -172,6 +172,8 @@ void cpuDeepSleep(uint32_t msecToWake)
     setBluetoothEnable(false);
 #ifdef RAK4630
     digitalWrite(PIN_3V3_EN, LOW);
+    // RAK-12039 set pin for Air quality sensor
+    digitalWrite(AQ_SET_PIN, LOW);
 #endif
     // FIXME, use system off mode with ram retention for key state?
     // FIXME, use non-init RAM per

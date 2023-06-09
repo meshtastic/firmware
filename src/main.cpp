@@ -263,6 +263,10 @@ void setup()
     // We need to enable 3.3V periphery in order to scan it
     pinMode(PIN_3V3_EN, OUTPUT);
     digitalWrite(PIN_3V3_EN, HIGH);
+
+    // RAK-12039 set pin for Air quality sensor
+    pinMode(AQ_SET_PIN, OUTPUT);
+    digitalWrite(AQ_SET_PIN, HIGH);
 #endif
 
     // Currently only the tbeam has a PMU

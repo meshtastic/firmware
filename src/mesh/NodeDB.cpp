@@ -362,7 +362,7 @@ void NodeDB::pickNewNodeNum()
         r = NUM_RESERVED; // don't pick a reserved node number
 
     meshtastic_NodeInfo *found;
-    while ((found = getNode(r))) {
+    while ((found = getNode(r)) && memcmp(found->user.macaddr, owner.macaddr, sizeof(owner.macaddr))) {
         NodeNum n = random(NUM_RESERVED, NODENUM_BROADCAST); // try a new random choice
         LOG_DEBUG("NOTE! Our desired nodenum 0x%x is in use, so trying for 0x%x\n", r, n);
         r = n;
