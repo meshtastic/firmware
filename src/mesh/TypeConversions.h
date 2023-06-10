@@ -3,8 +3,7 @@
 
 inline static const meshtastic_NodeInfo *ConvertToNodeInfo(const meshtastic_NodeInfoLite *lite)
 {
-    meshtastic_NodeInfo *info;
-    memset(info, 0, sizeof(*info));
+    meshtastic_NodeInfo *info = {0};
 
     info->num = lite->num;
     info->snr = lite->snr;
