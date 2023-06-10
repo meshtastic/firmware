@@ -328,7 +328,7 @@ void NodeDB::init()
     info->user = owner;
     info->has_user = true;
 
-    if (numNodes > 0) {
+    if (*numNodes > 0) {
         LOG_DEBUG("Legacy NodeDB detected... Converting to NodeDBLite\n");
         uint32_t readIndex = 0;
         const meshtastic_NodeInfo *oldNodeInfo = nodeDB.readNextNodeInfo(readIndex);

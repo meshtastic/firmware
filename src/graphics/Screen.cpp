@@ -1240,9 +1240,9 @@ void Screen::setFrames()
 #endif
 
     // We don't show the node info our our node (if we have it yet - we should)
-    size_t numnodes = nodeDB.getNumMeshNodes();
-    if (numnodes > 0)
-        numnodes--;
+    size_t numMeshNodes = nodeDB.getNumMeshNodes();
+    if (numMeshNodes > 0)
+        numMeshNodes--;
 
     size_t numframes = 0;
 
@@ -1273,7 +1273,7 @@ void Screen::setFrames()
 
     // then all the nodes
     // We only show a few nodes in our scrolling list - because meshes with many nodes would have too many screens
-    size_t numToShow = min(numnodes, 4U);
+    size_t numToShow = min(numMeshNodes, 4U);
     for (size_t i = 0; i < numToShow; i++)
         normalFrames[numframes++] = drawNodeInfo;
 

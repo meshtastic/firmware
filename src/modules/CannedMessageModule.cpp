@@ -305,14 +305,14 @@ int32_t CannedMessageModule::runOnce()
         switch (this->payload) {
         case 0xb4: // left
             if (this->destSelect) {
-                size_t numNodes = nodeDB.getNumMeshNodes();
+                size_t numMeshNodes = nodeDB.getNumMeshNodes();
                 if (this->dest == NODENUM_BROADCAST) {
                     this->dest = nodeDB.getNodeNum();
                 }
-                for (unsigned int i = 0; i < numNodes; i++) {
+                for (unsigned int i = 0; i < numMeshNodes; i++) {
                     if (nodeDB.getMeshNodeByIndex(i)->num == this->dest) {
                         this->dest =
-                            (i > 0) ? nodeDB.getMeshNodeByIndex(i - 1)->num : nodeDB.getMeshNodeByIndex(numNodes - 1)->num;
+                            (i > 0) ? nodeDB.getMeshNodeByIndex(i - 1)->num : nodeDB.getMeshNodeByIndex(numMeshNodes - 1)->num;
                         break;
                     }
                 }
@@ -327,14 +327,14 @@ int32_t CannedMessageModule::runOnce()
             break;
         case 0xb7: // right
             if (this->destSelect) {
-                size_t numNodes = nodeDB.getNumMeshNodes();
+                size_t numMeshNodes = nodeDB.getNumMeshNodes();
                 if (this->dest == NODENUM_BROADCAST) {
                     this->dest = nodeDB.getNodeNum();
                 }
-                for (unsigned int i = 0; i < numNodes; i++) {
+                for (unsigned int i = 0; i < numMeshNodes; i++) {
                     if (nodeDB.getMeshNodeByIndex(i)->num == this->dest) {
                         this->dest =
-                            (i < numNodes - 1) ? nodeDB.getMeshNodeByIndex(i + 1)->num : nodeDB.getMeshNodeByIndex(0)->num;
+                            (i < numMeshNodes - 1) ? nodeDB.getMeshNodeByIndex(i + 1)->num : nodeDB.getMeshNodeByIndex(0)->num;
                         break;
                     }
                 }
