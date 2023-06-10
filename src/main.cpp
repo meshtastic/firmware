@@ -263,6 +263,12 @@ void setup()
     // We need to enable 3.3V periphery in order to scan it
     pinMode(PIN_3V3_EN, OUTPUT);
     digitalWrite(PIN_3V3_EN, HIGH);
+
+#ifndef USE_EINK
+    // RAK-12039 set pin for Air quality sensor
+    pinMode(AQ_SET_PIN, OUTPUT);
+    digitalWrite(AQ_SET_PIN, HIGH);
+#endif
 #endif
 
     // Currently only the tbeam has a PMU
@@ -667,12 +673,10 @@ void setup()
     else {
         router->addInterface(rIf);
 
-        // Calculate and save the bit rate to myNodeInfo
-        // TODO: This needs to be added what ever method changes the channel from the phone.
-        myNodeInfo.bitrate =
-            (float(meshtastic_Constants_DATA_PAYLOAD_LEN) / (float(rIf->getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN)))) *
-            1000;
-        LOG_DEBUG("myNodeInfo.bitrate = %f bytes / sec\n", myNodeInfo.bitrate);
+        // Log bit rate to debug output
+        LOG_DEBUG("LoRA bitrate = %f bytes / sec\n", (float(meshtastic_Constants_DATA_PAYLOAD_LEN) /
+                                                      (float(rIf->getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN)))) *
+                                                         1000);
     }
 
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
@@ -693,7 +697,7 @@ bool runASAP;
 extern meshtastic_DeviceMetadata getDeviceMetadata()
 {
     meshtastic_DeviceMetadata deviceMetadata;
-    strncpy(deviceMetadata.firmware_version, myNodeInfo.firmware_version, 18);
+    strncpy(deviceMetadata.firmware_version, optstr(APP_VERSION), sizeof(deviceMetadata.firmware_version));
     deviceMetadata.device_state_version = DEVICESTATE_CUR_VER;
     deviceMetadata.canShutdown = pmu_found || HAS_CPU_SHUTDOWN;
     deviceMetadata.hasBluetooth = HAS_BLUETOOTH;
