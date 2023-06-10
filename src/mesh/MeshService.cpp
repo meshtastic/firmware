@@ -266,7 +266,7 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
     fromNum++;
 }
 
-meshtastic_NodeInfo *MeshService::refreshMyNodeInfo()
+meshtastic_NodeInfo *MeshService::refreshLocalNodeInfo()
 {
     meshtastic_NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
     assert(node);
@@ -293,7 +293,7 @@ meshtastic_NodeInfo *MeshService::refreshMyNodeInfo()
 int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
 {
     // Update our local node info with our position (even if we don't decide to update anyone else)
-    meshtastic_NodeInfo *node = refreshMyNodeInfo();
+    meshtastic_NodeInfo *node = refreshLocalNodeInfo();
     meshtastic_Position pos = meshtastic_Position_init_default;
 
     if (newStatus->getHasLock()) {
@@ -312,7 +312,7 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
     }
 
     // Finally add a fresh timestamp and battery level reading
-    // I KNOW this is redundant with refreshMyNodeInfo() above, but these are
+    // I KNOW this is redundant with refreshLocalNodeInfo() above, but these are
     //   inexpensive nonblocking calls and can be refactored in due course
     pos.time = getValidTime(RTCQualityGPS);
 
