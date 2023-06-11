@@ -56,7 +56,7 @@ extern void getMacAddr(uint8_t *dmac);
  * we use !macaddr (no colons).
  */
 meshtastic_User &owner = devicestate.owner;
-meshtastic_Position &localPosition;
+meshtastic_Position localPosition = meshtastic_Position_init_default;
 meshtastic_CriticalErrorCode error_code =
     meshtastic_CriticalErrorCode_NONE; // For the error code, only show values from this boot (discard value from flash)
 uint32_t error_address = 0;

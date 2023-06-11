@@ -29,7 +29,7 @@ extern meshtastic_LocalConfig config;
 extern meshtastic_LocalModuleConfig moduleConfig;
 extern meshtastic_OEMStore oemStore;
 extern meshtastic_User &owner;
-extern meshtastic_Position &localPosition;
+extern meshtastic_Position localPosition;
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
 uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
