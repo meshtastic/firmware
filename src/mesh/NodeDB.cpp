@@ -56,6 +56,10 @@ extern void getMacAddr(uint8_t *dmac);
  */
 meshtastic_User &owner = devicestate.owner;
 
+meshtastic_CriticalErrorCode error_code =
+    meshtastic_CriticalErrorCode_NONE; // For the error code, only show values from this boot (discard value from flash)
+uint32_t error_address = 0;
+
 static uint8_t ourMacAddr[6];
 
 NodeDB::NodeDB() : nodes(devicestate.node_db), numNodes(&devicestate.node_db_count) {}
@@ -275,9 +279,6 @@ void NodeDB::installDefaultDeviceState()
     devicestate.version = DEVICESTATE_CUR_VER;
     devicestate.receive_queue_count = 0; // Not yet implemented FIXME
 
-    // default to no GPS, until one has been found by probing
-    myNodeInfo.has_gps = false;
-    myNodeInfo.message_timeout_msec = FLOOD_EXPIRE_TIME;
     generatePacketId(); // FIXME - ugly way to init current_packet_id;
 
     // Init our blank owner info to reasonable defaults
@@ -289,7 +290,6 @@ void NodeDB::installDefaultDeviceState()
     snprintf(owner.short_name, sizeof(owner.short_name), "%02x%02x", ourMacAddr[4], ourMacAddr[5]);
 
     snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum()); // Default node ID now based on nodenum
-    memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
 }
 
 void NodeDB::init()
@@ -303,17 +303,12 @@ void NodeDB::init()
 
     int saveWhat = 0;
 
-    myNodeInfo.max_channels = MAX_NUM_CHANNELS; // tell others the max # of channels we can understand
-
-    myNodeInfo.error_code =
-        meshtastic_CriticalErrorCode_NONE; // For the error code, only show values from this boot (discard value from flash)
-    myNodeInfo.error_address = 0;
-
     // likewise - we always want the app requirements to come from the running appload
-    myNodeInfo.min_app_version = 20300; // format is Mmmss (where M is 1+the numeric major number. i.e. 20120 means 1.1.20
-
+    myNodeInfo.min_app_version = 20300;         // format is Mmmss (where M is 1+the numeric major number. i.e. 20120 means 1.1.20
+    myNodeInfo.max_channels = MAX_NUM_CHANNELS; // tell others the max # of channels we can understand
     // Note! We do this after loading saved settings, so that if somehow an invalid nodenum was stored in preferences we won't
     // keep using that nodenum forever. Crummy guess at our nodenum (but we will check against the nodedb to avoid conflicts)
+    strncpy(myNodeInfo.firmware_version, optstr(APP_VERSION), sizeof(myNodeInfo.firmware_version));
     pickNewNodeNum();
 
     // Set our board type so we can share it with others
@@ -324,19 +319,12 @@ void NodeDB::init()
     info->user = owner;
     info->has_user = true;
 
-    strncpy(myNodeInfo.firmware_version, optstr(APP_VERSION), sizeof(myNodeInfo.firmware_version));
-
 #ifdef ARCH_ESP32
     Preferences preferences;
     preferences.begin("meshtastic", false);
     myNodeInfo.reboot_count = preferences.getUInt("rebootCounter", 0);
     preferences.end();
     LOG_DEBUG("Number of Device Reboots: %d\n", myNodeInfo.reboot_count);
-
-    /* The ESP32 has a wifi radio. This will need to be modified at some point so
-     *    the test isn't so simplistic.
-     */
-    myNodeInfo.has_wifi = true;
 #endif
 
     resetRadioConfig(); // If bogus settings got saved, then fix them
@@ -817,9 +805,8 @@ void recordCriticalError(meshtastic_CriticalErrorCode code, uint32_t address, co
     }
 
     // Record error to DB
-    myNodeInfo.error_code = code;
-    myNodeInfo.error_address = address;
-    myNodeInfo.error_count++;
+    error_code = code;
+    error_address = address;
 
     // Currently portuino is mostly used for simulation.  Make sue the user notices something really bad happend
 #ifdef ARCH_PORTDUINO

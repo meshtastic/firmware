@@ -27,6 +27,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "error.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
 #include "graphics/images.h"
@@ -352,7 +353,7 @@ static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
     display->setFont(FONT_MEDIUM);
 
     char tempBuf[24];
-    snprintf(tempBuf, sizeof(tempBuf), "Critical fault #%d", myNodeInfo.error_code);
+    snprintf(tempBuf, sizeof(tempBuf), "Critical fault #%d", error_code);
     display->drawString(0 + x, 0 + y, tempBuf);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
@@ -1258,7 +1259,7 @@ void Screen::setFrames()
     LOG_DEBUG("Added modules.  numframes: %d\n", numframes);
 
     // If we have a critical fault, show it first
-    if (myNodeInfo.error_code)
+    if (error_code)
         normalFrames[numframes++] = drawCriticalFaultFrame;
 
     // If we have a text message - show it next, unless it's a phone message and we aren't using any special modules
