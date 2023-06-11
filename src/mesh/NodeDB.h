@@ -137,7 +137,7 @@ class NodeDB
   private:
     /// Find a node in our DB, create an empty NodeInfoLite if missing
     meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
-    meshtastic_NodeInfoLite *getOrCreateMeshNode(const meshtastic_NodeInfo *node);
+    void migrateToNodeInfoLite(const meshtastic_NodeInfo *node);
     /// Find a node in our DB, return null for missing
     meshtastic_NodeInfo *getNodeInfo(NodeNum n);
     /// Allow the bluetooth layer to read our next nodeinfo record, or NULL if done reading

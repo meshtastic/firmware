@@ -329,14 +329,14 @@ void NodeDB::init()
     info->has_user = true;
 
     if (*numNodes > 0) {
-        LOG_DEBUG("Legacy NodeDB detected... Converting to NodeDBLite\n");
+        LOG_DEBUG("Legacy NodeDB detected... Migrating to NodeDBLite\n");
         uint32_t readIndex = 0;
         const meshtastic_NodeInfo *oldNodeInfo = nodeDB.readNextNodeInfo(readIndex);
         while (oldNodeInfo != NULL) {
-            getOrCreateMeshNode(oldNodeInfo);
+            migrateToNodeInfoLite(oldNodeInfo);
             oldNodeInfo = nodeDB.readNextNodeInfo(readIndex);
         }
-        LOG_DEBUG("Conversion done! Clearing out legacy NodeDB\n");
+        LOG_DEBUG("Migration complete! Clearing out legacy NodeDB...\n");
         devicestate.node_db_count = 0;
         memset(devicestate.node_db, 0, sizeof(devicestate.node_db));
     }
@@ -835,7 +835,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
     return lite;
 }
 
-meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(const meshtastic_NodeInfo *node)
+void NodeDB::migrateToNodeInfoLite(const meshtastic_NodeInfo *node)
 {
     meshtastic_NodeInfoLite *lite = getMeshNode(node->num);
 
@@ -868,6 +868,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(const meshtastic_NodeInfo *
         lite->channel = node->channel;
 
         if (node->has_position) {
+            lite->has_position = true;
             lite->position.latitude_i = node->position.latitude_i;
             lite->position.longitude_i = node->position.longitude_i;
             lite->position.altitude = node->position.altitude;
@@ -875,14 +876,14 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(const meshtastic_NodeInfo *
             lite->position.time = node->position.time;
         }
         if (node->has_user) {
+            lite->has_user = true;
             lite->user = node->user;
         }
         if (node->has_device_metrics) {
+            lite->has_device_metrics = true;
             lite->device_metrics = node->device_metrics;
         }
     }
-
-    return lite;
 }
 
 /// Record an error that should be reported via analytics
