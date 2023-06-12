@@ -61,6 +61,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_NANO_G1_EXPLORER = 17,
     /* B&Q Consulting Station Edition G1: https://uniteng.com/wiki/doku.php?id=meshtastic:station */
     meshtastic_HardwareModel_STATION_G1 = 25,
+    /* RAK11310 (RP2040 + SX1262) */
+    meshtastic_HardwareModel_RAK11310 = 26,
     /* ---------------------------------------------------------------------------
  Less common/prototype boards listed here (needs one more byte over the air)
  --------------------------------------------------------------------------- */
@@ -93,6 +95,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_BETAFPV_2400_TX = 45,
     /* BetaFPV ExpressLRS "Nano" TX Module 900MHz with ESP32 CPU */
     meshtastic_HardwareModel_BETAFPV_900_NANO_TX = 46,
+    /* Raspberry Pi Pico (W) with Waveshare SX1262 LoRa Node Module */
+    meshtastic_HardwareModel_RPI_PICO = 47,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -368,7 +372,8 @@ typedef struct _meshtastic_User {
     /* A VERY short name, ideally two characters.
  Suitable for a tiny OLED screen */
     char short_name[5];
-    /* This is the addr of the radio.
+    /* Deprecated in Meshtastic 2.1.x
+ This is the addr of the radio.
  Not populated by the phone, but added by the esp32 when broadcasting */
     pb_byte_t macaddr[6];
     /* TBEAM, HELTEC, etc...
@@ -574,12 +579,15 @@ typedef struct _meshtastic_MyNodeInfo {
     /* Tells the phone what our node number is, default starting value is
  lowbyte of macaddr, but it will be fixed if that is already in use */
     uint32_t my_node_num;
-    /* Note: This flag merely means we detected a hardware GPS in our node.
+    /* Deprecated in 2.1.x (Source from device_metadata)
+ Note: This flag merely means we detected a hardware GPS in our node.
  Not the same as UserPreferences.location_sharing */
     bool has_gps;
-    /* The maximum number of 'software' channels that can be set on this node. */
+    /* Deprecated in 2.1.x
+ The maximum number of 'software' channels that can be set on this node. */
     uint32_t max_channels;
-    /* 0.0.5 etc... */
+    /* Deprecated in 2.1.x (Source from device_metadata)
+ 0.0.5 etc... */
     char firmware_version[18];
     /* An error message we'd like to report back to the mothership through analytics.
  It indicates a serious bug occurred on the device, the device coped with it,
@@ -596,9 +604,11 @@ typedef struct _meshtastic_MyNodeInfo {
     /* The total number of reboots this node has ever encountered
  (well - since the last time we discarded preferences) */
     uint32_t reboot_count;
-    /* Calculated bitrate of the current channel (in Bytes Per Second) */
+    /* Deprecated in 2.1.x
+ Calculated bitrate of the current channel (in Bytes Per Second) */
     float bitrate;
-    /* How long before we consider a message abandoned and we can clear our
+    /* Deprecated in 2.1.x
+ How long before we consider a message abandoned and we can clear our
  caches of any messages in flight Normally quite large to handle the worst case
  message delivery time, 5 minutes.
  Formerly called FLOOD_EXPIRE_TIME in the device code */
@@ -606,17 +616,22 @@ typedef struct _meshtastic_MyNodeInfo {
     /* The minimum app version that can talk to this device.
  Phone/PC apps should compare this to their build number and if too low tell the user they must update their app */
     uint32_t min_app_version;
-    /* 24 time windows of 1hr each with the airtime transmitted out of the device per hour. */
+    /* Deprecated in 2.1.x (Only used on device to keep track of utilization)
+ 24 time windows of 1hr each with the airtime transmitted out of the device per hour. */
     pb_size_t air_period_tx_count;
     uint32_t air_period_tx[8];
-    /* 24 time windows of 1hr each with the airtime of valid packets for your mesh. */
+    /* Deprecated in 2.1.x (Only used on device to keep track of utilization)
+ 24 time windows of 1hr each with the airtime of valid packets for your mesh. */
     pb_size_t air_period_rx_count;
     uint32_t air_period_rx[8];
-    /* Is the device wifi capable? */
+    /* Deprecated in 2.1.x (Source from DeviceMetadata instead)
+ Is the device wifi capable? */
     bool has_wifi;
-    /* Utilization for the current channel, including well formed TX, RX and malformed RX (aka noise). */
+    /* Deprecated in 2.1.x (Source from DeviceMetrics telemetry payloads)
+ Utilization for the current channel, including well formed TX, RX and malformed RX (aka noise). */
     float channel_utilization;
-    /* Percent of airtime for transmission used within the last hour. */
+    /* Deprecated in 2.1.x (Source from DeviceMetrics telemetry payloads)
+ Percent of airtime for transmission used within the last hour. */
     float air_util_tx;
 } meshtastic_MyNodeInfo;
 
@@ -719,6 +734,8 @@ typedef struct _meshtastic_DeviceMetadata {
     uint32_t position_flags;
     /* Device hardware model */
     meshtastic_HardwareModel hw_model;
+    /* Has Remote Hardware enabled */
+    bool hasRemoteHardware;
 } meshtastic_DeviceMetadata;
 
 /* Packets from the radio to the phone will appear on the fromRadio characteristic.
@@ -855,7 +872,7 @@ extern "C" {
 #define meshtastic_Compressed_init_default       {_meshtastic_PortNum_MIN, {0, {0}}}
 #define meshtastic_NeighborInfo_init_default     {0, 0, 0, {meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default}}
 #define meshtastic_Neighbor_init_default         {0, 0}
-#define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN}
+#define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0}
 #define meshtastic_Position_init_zero            {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_User_init_zero                {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0}
 #define meshtastic_RouteDiscovery_init_zero      {0, {0, 0, 0, 0, 0, 0, 0, 0}}
@@ -872,7 +889,7 @@ extern "C" {
 #define meshtastic_Compressed_init_zero          {_meshtastic_PortNum_MIN, {0, {0}}}
 #define meshtastic_NeighborInfo_init_zero        {0, 0, 0, {meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero}}
 #define meshtastic_Neighbor_init_zero            {0, 0}
-#define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN}
+#define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_Position_latitude_i_tag       1
@@ -987,6 +1004,7 @@ extern "C" {
 #define meshtastic_DeviceMetadata_role_tag       7
 #define meshtastic_DeviceMetadata_position_flags_tag 8
 #define meshtastic_DeviceMetadata_hw_model_tag   9
+#define meshtastic_DeviceMetadata_hasRemoteHardware_tag 10
 #define meshtastic_FromRadio_id_tag              1
 #define meshtastic_FromRadio_packet_tag          2
 #define meshtastic_FromRadio_my_info_tag         3
@@ -1210,7 +1228,8 @@ X(a, STATIC,   SINGULAR, BOOL,     hasBluetooth,      5) \
 X(a, STATIC,   SINGULAR, BOOL,     hasEthernet,       6) \
 X(a, STATIC,   SINGULAR, UENUM,    role,              7) \
 X(a, STATIC,   SINGULAR, UINT32,   position_flags,    8) \
-X(a, STATIC,   SINGULAR, UENUM,    hw_model,          9)
+X(a, STATIC,   SINGULAR, UENUM,    hw_model,          9) \
+X(a, STATIC,   SINGULAR, BOOL,     hasRemoteHardware,  10)
 #define meshtastic_DeviceMetadata_CALLBACK NULL
 #define meshtastic_DeviceMetadata_DEFAULT NULL
 
@@ -1254,7 +1273,7 @@ extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
 /* Maximum encoded size of messages (where known) */
 #define meshtastic_Compressed_size               243
 #define meshtastic_Data_size                     270
-#define meshtastic_DeviceMetadata_size           44
+#define meshtastic_DeviceMetadata_size           46
 #define meshtastic_FromRadio_size                330
 #define meshtastic_LogRecord_size                81
 #define meshtastic_MeshPacket_size               321

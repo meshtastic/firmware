@@ -56,7 +56,7 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 
 meshtastic_MeshPacket *PositionModule::allocReply()
 {
-    meshtastic_NodeInfo *node = service.refreshMyNodeInfo(); // should guarantee there is now a position
+    meshtastic_NodeInfo *node = service.refreshLocalNodeInfo(); // should guarantee there is now a position
     assert(node->has_position);
 
     node->position.seq_number++;
@@ -112,8 +112,9 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     if (getRTCQuality() < RTCQualityDevice) {
         LOG_INFO("Stripping time %u from position send\n", p.time);
         p.time = 0;
-    } else
+    } else {
         LOG_INFO("Providing time to mesh %u\n", p.time);
+    }
 
     LOG_INFO("Position reply: time=%i, latI=%i, lonI=-%i\n", p.time, p.latitude_i, p.longitude_i);
 
@@ -153,7 +154,7 @@ int32_t PositionModule::runOnce()
     if (lastGpsSend == 0 || msSinceLastSend >= intervalMs) {
         // Only send packets if the channel is less than 40% utilized.
         if (airTime->isTxAllowedChannelUtil()) {
-            if (node->has_position && (node->position.latitude_i != 0 || node->position.longitude_i != 0)) {
+            if (hasValidPosition(node)) {
                 lastGpsSend = now;
 
                 lastGpsLatitude = node->position.latitude_i;
@@ -170,9 +171,9 @@ int32_t PositionModule::runOnce()
     } else if (config.position.position_broadcast_smart_enabled) {
         // Only send packets if the channel is less than 25% utilized or we're a tracker.
         if (airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER)) {
-            meshtastic_NodeInfo *node2 = service.refreshMyNodeInfo(); // should guarantee there is now a position
+            meshtastic_NodeInfo *node2 = service.refreshLocalNodeInfo(); // should guarantee there is now a position
 
-            if (node2->has_position && (node2->position.latitude_i != 0 || node2->position.longitude_i != 0)) {
+            if (hasValidPosition(node2)) {
                 // The minimum distance to travel before we are able to send a new position packet.
                 const uint32_t distanceTravelThreshold =
                     config.position.broadcast_smart_minimum_distance > 0 ? config.position.broadcast_smart_minimum_distance : 100;

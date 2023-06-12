@@ -26,8 +26,8 @@ void powerCommandsCheck()
 
     if (shutdownAtMsec && millis() > shutdownAtMsec) {
         LOG_INFO("Shutting down from admin command\n");
-        playShutdownMelody();
 #if defined(ARCH_NRF52) || defined(ARCH_ESP32)
+        playShutdownMelody();
         power->shutdown();
 #else
         LOG_WARN("FIXME implement shutdown for this platform");

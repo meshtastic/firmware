@@ -18,7 +18,7 @@ typedef enum _meshtastic_Config_DeviceConfig_Role {
    Same as a client except packets will not hop over this node, does not contribute to routing packets for mesh. */
     meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE = 1,
     /* Router device role.
-   Mesh packets will prefer to be routed over this node. This node will not be used by client apps. 
+   Mesh packets will prefer to be routed over this node. This node will not be used by client apps.
    The wifi/ble radios and the oled screen will be put to sleep.
    This mode may still potentially have higher power usage due to it's preference in message rebroadcasting on the mesh. */
     meshtastic_Config_DeviceConfig_Role_ROUTER = 2,
@@ -233,6 +233,9 @@ typedef struct _meshtastic_Config_DeviceConfig {
     uint32_t node_info_broadcast_secs;
     /* Treat double tap interrupt on supported accelerometers as a button press if set to true */
     bool double_tap_as_button_press;
+    /* If true, device is considered to be "managed" by a mesh administrator
+ Clients should then limit available configuration and administrative options inside the user interface */
+    bool is_managed;
 } meshtastic_Config_DeviceConfig;
 
 /* Position Config */
@@ -290,7 +293,7 @@ typedef struct _meshtastic_Config_PowerConfig {
  0 for default of 1 minute */
     uint32_t wait_bluetooth_secs;
     /* Mesh Super Deep Sleep Timeout Seconds
- While in Light Sleep if this value is exceeded we will lower into super deep sleep 
+ While in Light Sleep if this value is exceeded we will lower into super deep sleep
  for sds_secs (default 1 year) or a button press
  0 for default of two hours, MAXUINT for disabled */
     uint32_t mesh_sds_timeout_secs;
@@ -308,6 +311,8 @@ typedef struct _meshtastic_Config_PowerConfig {
  While in light sleep when we receive packets on the LoRa radio we will wake and handle them and stay awake in no BLE mode for this value
  0 for default of 10 seconds */
     uint32_t min_wake_secs;
+    /* I2C address of INA_2XX to use for reading device battery voltage */
+    uint8_t device_battery_ina_address;
 } meshtastic_Config_PowerConfig;
 
 typedef struct _meshtastic_Config_NetworkConfig_IpV4Config {
@@ -353,7 +358,7 @@ typedef struct _meshtastic_Config_DisplayConfig {
     /* Automatically toggles to the next page on the screen like a carousel, based the specified interval in seconds.
  Potentially useful for devices without user buttons. */
     uint32_t auto_screen_carousel_secs;
-    /* If this is set, the displayed compass will always point north. if unset, the old behaviour 
+    /* If this is set, the displayed compass will always point north. if unset, the old behaviour
  (top of display is heading direction) is used. */
     bool compass_north_top;
     /* Flip screen vertically, for cases that mount the screen upside down */
@@ -416,7 +421,7 @@ typedef struct _meshtastic_Config_LoRaConfig {
  If using the hash algorithm the channel number will be: hash(channel_name) %
  NUM_CHANNELS (Where num channels depends on the regulatory region). */
     uint16_t channel_num;
-    /* If true, duty cycle limits will be exceeded and thus you're possibly not following 
+    /* If true, duty cycle limits will be exceeded and thus you're possibly not following
  the local regulations if you're not a HAM.
  Has no effect if the duty cycle of the used region is 100%. */
     bool override_duty_cycle;
@@ -529,18 +534,18 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_Config_init_default           {0, {meshtastic_Config_DeviceConfig_init_default}}
-#define meshtastic_Config_DeviceConfig_init_default {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0}
+#define meshtastic_Config_DeviceConfig_init_default {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0}
 #define meshtastic_Config_PositionConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define meshtastic_Config_PowerConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_Config_PowerConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_default {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_default, ""}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_default {0, 0, 0, 0}
 #define meshtastic_Config_DisplayConfig_init_default {0, _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0}
 #define meshtastic_Config_LoRaConfig_init_default {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}}
 #define meshtastic_Config_BluetoothConfig_init_default {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0}
 #define meshtastic_Config_init_zero              {0, {meshtastic_Config_DeviceConfig_init_zero}}
-#define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0}
+#define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0}
 #define meshtastic_Config_PositionConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define meshtastic_Config_PowerConfig_init_zero  {0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_Config_PowerConfig_init_zero  {0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_zero {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_zero, ""}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_zero {0, 0, 0, 0}
 #define meshtastic_Config_DisplayConfig_init_zero {0, _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0}
@@ -556,6 +561,7 @@ extern "C" {
 #define meshtastic_Config_DeviceConfig_rebroadcast_mode_tag 6
 #define meshtastic_Config_DeviceConfig_node_info_broadcast_secs_tag 7
 #define meshtastic_Config_DeviceConfig_double_tap_as_button_press_tag 8
+#define meshtastic_Config_DeviceConfig_is_managed_tag 9
 #define meshtastic_Config_PositionConfig_position_broadcast_secs_tag 1
 #define meshtastic_Config_PositionConfig_position_broadcast_smart_enabled_tag 2
 #define meshtastic_Config_PositionConfig_fixed_position_tag 3
@@ -575,6 +581,7 @@ extern "C" {
 #define meshtastic_Config_PowerConfig_sds_secs_tag 6
 #define meshtastic_Config_PowerConfig_ls_secs_tag 7
 #define meshtastic_Config_PowerConfig_min_wake_secs_tag 8
+#define meshtastic_Config_PowerConfig_device_battery_ina_address_tag 9
 #define meshtastic_Config_NetworkConfig_IpV4Config_ip_tag 1
 #define meshtastic_Config_NetworkConfig_IpV4Config_gateway_tag 2
 #define meshtastic_Config_NetworkConfig_IpV4Config_subnet_tag 3
@@ -650,7 +657,8 @@ X(a, STATIC,   SINGULAR, UINT32,   button_gpio,       4) \
 X(a, STATIC,   SINGULAR, UINT32,   buzzer_gpio,       5) \
 X(a, STATIC,   SINGULAR, UENUM,    rebroadcast_mode,   6) \
 X(a, STATIC,   SINGULAR, UINT32,   node_info_broadcast_secs,   7) \
-X(a, STATIC,   SINGULAR, BOOL,     double_tap_as_button_press,   8)
+X(a, STATIC,   SINGULAR, BOOL,     double_tap_as_button_press,   8) \
+X(a, STATIC,   SINGULAR, BOOL,     is_managed,        9)
 #define meshtastic_Config_DeviceConfig_CALLBACK NULL
 #define meshtastic_Config_DeviceConfig_DEFAULT NULL
 
@@ -677,7 +685,8 @@ X(a, STATIC,   SINGULAR, UINT32,   wait_bluetooth_secs,   4) \
 X(a, STATIC,   SINGULAR, UINT32,   mesh_sds_timeout_secs,   5) \
 X(a, STATIC,   SINGULAR, UINT32,   sds_secs,          6) \
 X(a, STATIC,   SINGULAR, UINT32,   ls_secs,           7) \
-X(a, STATIC,   SINGULAR, UINT32,   min_wake_secs,     8)
+X(a, STATIC,   SINGULAR, UINT32,   min_wake_secs,     8) \
+X(a, STATIC,   SINGULAR, UINT32,   device_battery_ina_address,   9)
 #define meshtastic_Config_PowerConfig_CALLBACK NULL
 #define meshtastic_Config_PowerConfig_DEFAULT NULL
 
@@ -765,13 +774,13 @@ extern const pb_msgdesc_t meshtastic_Config_BluetoothConfig_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define meshtastic_Config_BluetoothConfig_size   10
-#define meshtastic_Config_DeviceConfig_size      28
+#define meshtastic_Config_DeviceConfig_size      30
 #define meshtastic_Config_DisplayConfig_size     28
 #define meshtastic_Config_LoRaConfig_size        77
 #define meshtastic_Config_NetworkConfig_IpV4Config_size 20
 #define meshtastic_Config_NetworkConfig_size     195
 #define meshtastic_Config_PositionConfig_size    54
-#define meshtastic_Config_PowerConfig_size       43
+#define meshtastic_Config_PowerConfig_size       46
 #define meshtastic_Config_size                   198
 
 #ifdef __cplusplus

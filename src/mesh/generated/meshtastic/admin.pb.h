@@ -6,9 +6,10 @@
 #include <pb.h>
 #include "meshtastic/channel.pb.h"
 #include "meshtastic/config.pb.h"
+#include "meshtastic/connection_status.pb.h"
+#include "meshtastic/deviceonly.pb.h"
 #include "meshtastic/mesh.pb.h"
 #include "meshtastic/module_config.pb.h"
-#include "meshtastic/connection_status.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.
@@ -70,6 +71,13 @@ typedef struct _meshtastic_HamParameters {
     char short_name[6];
 } meshtastic_HamParameters;
 
+/* Response envelope for node_remote_hardware_pins */
+typedef struct _meshtastic_NodeRemoteHardwarePinsResponse {
+    /* Nodes and their respective remote hardware GPIO pins */
+    pb_size_t node_remote_hardware_pins_count;
+    meshtastic_NodeRemoteHardwarePin node_remote_hardware_pins[16];
+} meshtastic_NodeRemoteHardwarePinsResponse;
+
 /* This message is handled by the Admin module and is responsible for all settings/channel read/write operations.
  This message is used to do settings operations to both remote AND local nodes.
  (Prior to 1.2 these operations were done via special ToRadio operations) */
@@ -111,6 +119,10 @@ typedef struct _meshtastic_AdminMessage {
         meshtastic_DeviceConnectionStatus get_device_connection_status_response;
         /* Setup a node for licensed amateur (ham) radio operation */
         meshtastic_HamParameters set_ham_mode;
+        /* Get the mesh's nodes with their available gpio pins for RemoteHardware module use */
+        bool get_node_remote_hardware_pins_request;
+        /* Respond with the mesh's nodes with their available gpio pins for RemoteHardware module use */
+        meshtastic_NodeRemoteHardwarePinsResponse get_node_remote_hardware_pins_response;
         /* Set the owner for this node */
         meshtastic_User set_owner;
         /* Set channels (using the new API).
@@ -168,17 +180,21 @@ extern "C" {
 
 
 
+
 /* Initializer values for message structs */
 #define meshtastic_AdminMessage_init_default     {0, {0}}
 #define meshtastic_HamParameters_init_default    {"", 0, 0, ""}
+#define meshtastic_NodeRemoteHardwarePinsResponse_init_default {0, {meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default}}
 #define meshtastic_AdminMessage_init_zero        {0, {0}}
 #define meshtastic_HamParameters_init_zero       {"", 0, 0, ""}
+#define meshtastic_NodeRemoteHardwarePinsResponse_init_zero {0, {meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero}}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_HamParameters_call_sign_tag   1
 #define meshtastic_HamParameters_tx_power_tag    2
 #define meshtastic_HamParameters_frequency_tag   3
 #define meshtastic_HamParameters_short_name_tag  4
+#define meshtastic_NodeRemoteHardwarePinsResponse_node_remote_hardware_pins_tag 1
 #define meshtastic_AdminMessage_get_channel_request_tag 1
 #define meshtastic_AdminMessage_get_channel_response_tag 2
 #define meshtastic_AdminMessage_get_owner_request_tag 3
@@ -196,6 +212,8 @@ extern "C" {
 #define meshtastic_AdminMessage_get_device_connection_status_request_tag 16
 #define meshtastic_AdminMessage_get_device_connection_status_response_tag 17
 #define meshtastic_AdminMessage_set_ham_mode_tag 18
+#define meshtastic_AdminMessage_get_node_remote_hardware_pins_request_tag 19
+#define meshtastic_AdminMessage_get_node_remote_hardware_pins_response_tag 20
 #define meshtastic_AdminMessage_set_owner_tag    32
 #define meshtastic_AdminMessage_set_channel_tag  33
 #define meshtastic_AdminMessage_set_config_tag   34
@@ -230,6 +248,8 @@ X(a, STATIC,   ONEOF,    STRING,   (payload_variant,get_ringtone_response,get_ri
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,get_device_connection_status_request,get_device_connection_status_request),  16) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,get_device_connection_status_response,get_device_connection_status_response),  17) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_ham_mode,set_ham_mode),  18) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,get_node_remote_hardware_pins_request,get_node_remote_hardware_pins_request),  19) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,get_node_remote_hardware_pins_response,get_node_remote_hardware_pins_response),  20) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_owner,set_owner),  32) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_channel,set_channel),  33) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_config,set_config),  34) \
@@ -253,6 +273,7 @@ X(a, STATIC,   ONEOF,    INT32,    (payload_variant,nodedb_reset,nodedb_reset), 
 #define meshtastic_AdminMessage_payload_variant_get_device_metadata_response_MSGTYPE meshtastic_DeviceMetadata
 #define meshtastic_AdminMessage_payload_variant_get_device_connection_status_response_MSGTYPE meshtastic_DeviceConnectionStatus
 #define meshtastic_AdminMessage_payload_variant_set_ham_mode_MSGTYPE meshtastic_HamParameters
+#define meshtastic_AdminMessage_payload_variant_get_node_remote_hardware_pins_response_MSGTYPE meshtastic_NodeRemoteHardwarePinsResponse
 #define meshtastic_AdminMessage_payload_variant_set_owner_MSGTYPE meshtastic_User
 #define meshtastic_AdminMessage_payload_variant_set_channel_MSGTYPE meshtastic_Channel
 #define meshtastic_AdminMessage_payload_variant_set_config_MSGTYPE meshtastic_Config
@@ -266,16 +287,25 @@ X(a, STATIC,   SINGULAR, STRING,   short_name,        4)
 #define meshtastic_HamParameters_CALLBACK NULL
 #define meshtastic_HamParameters_DEFAULT NULL
 
+#define meshtastic_NodeRemoteHardwarePinsResponse_FIELDLIST(X, a) \
+X(a, STATIC,   REPEATED, MESSAGE,  node_remote_hardware_pins,   1)
+#define meshtastic_NodeRemoteHardwarePinsResponse_CALLBACK NULL
+#define meshtastic_NodeRemoteHardwarePinsResponse_DEFAULT NULL
+#define meshtastic_NodeRemoteHardwarePinsResponse_node_remote_hardware_pins_MSGTYPE meshtastic_NodeRemoteHardwarePin
+
 extern const pb_msgdesc_t meshtastic_AdminMessage_msg;
 extern const pb_msgdesc_t meshtastic_HamParameters_msg;
+extern const pb_msgdesc_t meshtastic_NodeRemoteHardwarePinsResponse_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_AdminMessage_fields &meshtastic_AdminMessage_msg
 #define meshtastic_HamParameters_fields &meshtastic_HamParameters_msg
+#define meshtastic_NodeRemoteHardwarePinsResponse_fields &meshtastic_NodeRemoteHardwarePinsResponse_msg
 
 /* Maximum encoded size of messages (where known) */
-#define meshtastic_AdminMessage_size             234
+#define meshtastic_AdminMessage_size             500
 #define meshtastic_HamParameters_size            32
+#define meshtastic_NodeRemoteHardwarePinsResponse_size 496
 
 #ifdef __cplusplus
 } /* extern "C" */

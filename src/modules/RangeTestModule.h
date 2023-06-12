@@ -9,6 +9,7 @@
 class RangeTestModule : private concurrency::OSThread
 {
     bool firstTime = 1;
+    unsigned long started = 0;
 
   public:
     RangeTestModule();

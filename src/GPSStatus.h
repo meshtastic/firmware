@@ -138,8 +138,9 @@ class GPSStatus : public Status
                 LOG_DEBUG("New GPS pos@%x:3 lat=%f, lon=%f, alt=%d, pdop=%.2f, track=%.2f, speed=%.2f, sats=%d\n", p.timestamp,
                           p.latitude_i * 1e-7, p.longitude_i * 1e-7, p.altitude, p.PDOP * 1e-2, p.ground_track * 1e-5,
                           p.ground_speed * 1e-2, p.sats_in_view);
-            } else
+            } else {
                 LOG_DEBUG("No GPS lock\n");
+            }
             onNewStatus.notifyObservers(this);
         }
         return 0;

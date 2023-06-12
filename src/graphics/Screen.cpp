@@ -27,6 +27,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "error.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
 #include "graphics/images.h"
@@ -352,7 +353,7 @@ static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
     display->setFont(FONT_MEDIUM);
 
     char tempBuf[24];
-    snprintf(tempBuf, sizeof(tempBuf), "Critical fault #%d", myNodeInfo.error_code);
+    snprintf(tempBuf, sizeof(tempBuf), "Critical fault #%d", error_code);
     display->drawString(0 + x, 0 + y, tempBuf);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
@@ -711,13 +712,6 @@ static float estimatedHeading(double lat, double lon)
     return b;
 }
 
-/// Sometimes we will have Position objects that only have a time, so check for
-/// valid lat/lon
-static bool hasPosition(meshtastic_NodeInfo *n)
-{
-    return n->has_position && (n->position.latitude_i != 0 || n->position.longitude_i != 0);
-}
-
 static uint16_t getCompassDiam(OLEDDisplay *display)
 {
     uint16_t diam = 0;
@@ -856,12 +850,12 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     }
     bool hasNodeHeading = false;
 
-    if (ourNode && hasPosition(ourNode)) {
+    if (ourNode && hasValidPosition(ourNode)) {
         meshtastic_Position &op = ourNode->position;
         float myHeading = estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
         drawCompassNorth(display, compassX, compassY, myHeading);
 
-        if (hasPosition(node)) {
+        if (hasValidPosition(node)) {
             // display direction toward node
             hasNodeHeading = true;
             meshtastic_Position &p = node->position;
@@ -892,7 +886,8 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     if (!hasNodeHeading) {
         // direction to node is unknown so display question mark
         // Debug info for gps lock errors
-        // LOG_DEBUG("ourNode %d, ourPos %d, theirPos %d\n", !!ourNode, ourNode && hasPosition(ourNode), hasPosition(node));
+        // LOG_DEBUG("ourNode %d, ourPos %d, theirPos %d\n", !!ourNode, ourNode && hasValidPosition(ourNode),
+        // hasValidPosition(node));
         display->drawString(compassX - FONT_HEIGHT_SMALL / 4, compassY - FONT_HEIGHT_SMALL / 2, "?");
     }
     display->drawCircle(compassX, compassY, getCompassDiam(display) / 2);
@@ -1239,8 +1234,10 @@ void Screen::setFrames()
 
     moduleFrames = MeshModule::GetMeshModulesWithUIFrames();
     LOG_DEBUG("Showing %d module frames\n", moduleFrames.size());
+#ifdef DEBUG_PORT
     int totalFrameCount = MAX_NUM_NODES + NUM_EXTRA_FRAMES + moduleFrames.size();
     LOG_DEBUG("Total frame count: %d\n", totalFrameCount);
+#endif
 
     // We don't show the node info our our node (if we have it yet - we should)
     size_t numnodes = nodeDB.getNumNodes();
@@ -1262,7 +1259,7 @@ void Screen::setFrames()
     LOG_DEBUG("Added modules.  numframes: %d\n", numframes);
 
     // If we have a critical fault, show it first
-    if (myNodeInfo.error_code)
+    if (error_code)
         normalFrames[numframes++] = drawCriticalFaultFrame;
 
     // If we have a text message - show it next, unless it's a phone message and we aren't using any special modules

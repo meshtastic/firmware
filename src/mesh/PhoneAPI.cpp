@@ -40,9 +40,8 @@ void PhoneAPI::handleStartConfig()
     state = STATE_SEND_MY_INFO;
 
     LOG_INFO("Starting API client config\n");
-    nodeInfoForPhone = NULL;   // Don't keep returning old nodeinfos
-    nodeDB.resetReadPointer(); // FIXME, this read pointer should be moved out of nodeDB and into this class - because
-                               // this will break once we have multiple instances of PhoneAPI running independently
+    nodeInfoForPhone = NULL; // Don't keep returning old nodeinfos
+    resetReadIndex();
 }
 
 void PhoneAPI::close()
@@ -144,12 +143,11 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         LOG_INFO("getFromRadio=STATE_SEND_MY_INFO\n");
         // If the user has specified they don't want our node to share its location, make sure to tell the phone
         // app not to send locations on our behalf.
-        myNodeInfo.has_gps = gps && gps->isConnected(); // Update with latest GPS connect info
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_my_info_tag;
         fromRadioScratch.my_info = myNodeInfo;
         state = STATE_SEND_NODEINFO;
 
-        service.refreshMyNodeInfo(); // Update my NodeInfo because the client will be asking for it soon.
+        service.refreshLocalNodeInfo(); // Update my NodeInfo because the client will be asking for it soon.
         break;
 
     case STATE_SEND_NODEINFO: {
@@ -373,7 +371,7 @@ bool PhoneAPI::available()
 
     case STATE_SEND_NODEINFO:
         if (!nodeInfoForPhone)
-            nodeInfoForPhone = nodeDB.readNextInfo();
+            nodeInfoForPhone = nodeDB.readNextInfo(readIndex);
         return true; // Always say we have something, because we might need to advance our state machine
 
     case STATE_SEND_PACKETS: {
@@ -423,8 +421,9 @@ int PhoneAPI::onNotify(uint32_t newValue)
     if (state == STATE_SEND_PACKETS) {
         LOG_INFO("Telling client we have new packets %u\n", newValue);
         onNowHasData(newValue);
-    } else
+    } else {
         LOG_DEBUG("(Client not yet interested in packets)\n");
+    }
 
     return 0;
 }

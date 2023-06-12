@@ -8,8 +8,7 @@
 #include <Arduino.h>
 #include <functional>
 
-#if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(TTGO_T_ECHO) && !defined(CONFIG_IDF_TARGET_ESP32S2) &&              \
-    !defined(CONFIG_IDF_TARGET_ESP32C3)
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
 
 class SerialModule : public StreamAPI, private concurrency::OSThread
 {
@@ -25,6 +24,9 @@ class SerialModule : public StreamAPI, private concurrency::OSThread
 
     /// Check the current underlying physical link to see if the client is currently connected
     virtual bool checkIsConnected() override;
+
+  private:
+    uint32_t getBaudRate();
 };
 
 extern SerialModule *serialModule;

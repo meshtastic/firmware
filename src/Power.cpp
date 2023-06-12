@@ -17,12 +17,38 @@
 #define DELAY_FOREVER portMAX_DELAY
 #endif
 
+#if defined(BATTERY_PIN) && defined(ARCH_ESP32)
+
+#ifndef BAT_MEASURE_ADC_UNIT // ADC1 is default
+static const adc1_channel_t adc_channel = ADC_CHANNEL;
+static const adc_unit_t unit = ADC_UNIT_1;
+#else // ADC2
+static const adc2_channel_t adc_channel = ADC_CHANNEL;
+static const adc_unit_t unit = ADC_UNIT_2;
+RTC_NOINIT_ATTR uint64_t RTC_reg_b;
+
+#endif // BAT_MEASURE_ADC_UNIT
+
+esp_adc_cal_characteristics_t *adc_characs = (esp_adc_cal_characteristics_t *)calloc(1, sizeof(esp_adc_cal_characteristics_t));
+#ifndef ADC_ATTENUATION
+static const adc_atten_t atten = ADC_ATTEN_DB_11;
+#else
+static const adc_atten_t atten = ADC_ATTENUATION;
+#endif
+#endif // BATTERY_PIN && ARCH_ESP32
+
+#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
+INA260Sensor ina260Sensor;
+INA219Sensor ina219Sensor;
+#endif
+
 #ifdef HAS_PMU
 #include "XPowersAXP192.tpp"
 #include "XPowersAXP2101.tpp"
 #include "XPowersLibInterface.hpp"
 XPowersLibInterface *PMU = NULL;
 #else
+
 // Copy of the base class defined in axp20x.h.
 // I'd rather not inlude axp20x.h as it brings Wire dependency.
 class HasBatteryLevel
@@ -108,6 +134,13 @@ class AnalogBatteryLevel : public HasBatteryLevel
     virtual uint16_t getBattVoltage() override
     {
 
+#if defined(HAS_TELEMETRY) && !defined(ARCH_PORTDUINO) && !defined(HAS_PMU)
+        if (hasINA()) {
+            LOG_DEBUG("Using INA on I2C addr 0x%x for device battery voltage\n", config.power.device_battery_ina_address);
+            return getINAVoltage();
+        }
+#endif
+
 #ifndef ADC_MULTIPLIER
 #define ADC_MULTIPLIER 2.0
 #endif
@@ -128,18 +161,41 @@ class AnalogBatteryLevel : public HasBatteryLevel
             // Set the number of samples, it has an effect of increasing sensitivity, especially in complex electromagnetic
             // environment.
             uint32_t raw = 0;
+#ifdef ARCH_ESP32
+#ifndef BAT_MEASURE_ADC_UNIT // ADC1
+            for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
+                raw += adc1_get_raw(adc_channel);
+            }
+#else  // ADC2
+            int32_t adc_buf = 0;
+            for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
+                // ADC2 wifi bug workaround, see
+                // https://github.com/espressif/arduino-esp32/issues/102
+                WRITE_PERI_REG(SENS_SAR_READ_CTRL2_REG, RTC_reg_b);
+                SET_PERI_REG_MASK(SENS_SAR_READ_CTRL2_REG, SENS_SAR2_DATA_INV);
+                adc2_get_raw(adc_channel, ADC_WIDTH_BIT_12, &adc_buf);
+                raw += adc_buf;
+            }
+#endif // BAT_MEASURE_ADC_UNIT
+#else  // !ARCH_ESP32
             for (uint32_t i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
                 raw += analogRead(BATTERY_PIN);
             }
+#endif
             raw = raw / BATTERY_SENSE_SAMPLES;
-
             float scaled;
+#ifdef ARCH_ESP32
+            scaled = esp_adc_cal_raw_to_voltage(raw, adc_characs);
+            scaled *= operativeAdcMultiplier;
+#else
 #ifndef VBAT_RAW_TO_SCALED
             scaled = 1000.0 * operativeAdcMultiplier * (AREF_VOLTAGE / 1024.0) * raw;
 #else
             scaled = VBAT_RAW_TO_SCALED(raw); // defined in variant.h
-#endif
-            // LOG_DEBUG("battery gpio %d raw val=%u scaled=%u\n", BATTERY_PIN, raw, (uint32_t)(scaled));
+#endif // VBAT RAW TO SCALED
+#endif // ARCH_ESP32
+       // LOG_DEBUG("battery gpio %d raw val=%u scaled=%u\n", BATTERY_PIN, raw, (uint32_t)(scaled));
+
             last_read_value = scaled;
             return scaled;
         } else {
@@ -147,7 +203,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
         }
 #else
         return 0;
-#endif
+#endif // BATTERY_PIN
     }
 
     /**
@@ -203,6 +259,35 @@ class AnalogBatteryLevel : public HasBatteryLevel
     const float fullVolt = BAT_FULLVOLT, emptyVolt = BAT_EMPTYVOLT, chargingVolt = BAT_CHARGINGVOLT, noBatVolt = BAT_NOBATVOLT;
     float last_read_value = 0.0;
     uint32_t last_read_time_ms = 0;
+
+#if defined(HAS_TELEMETRY) && !defined(ARCH_PORTDUINO)
+    uint16_t getINAVoltage()
+    {
+        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219] == config.power.device_battery_ina_address) {
+            return ina219Sensor.getBusVoltageMv();
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260] == config.power.device_battery_ina_address) {
+            return ina260Sensor.getBusVoltageMv();
+        }
+        return 0;
+    }
+
+    bool hasINA()
+    {
+        if (!config.power.device_battery_ina_address) {
+            return false;
+        }
+        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219] == config.power.device_battery_ina_address) {
+            if (!ina219Sensor.isInitialized())
+                return ina219Sensor.runOnce() > 0;
+            return ina219Sensor.isRunning();
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260] == config.power.device_battery_ina_address) {
+            if (!ina260Sensor.isInitialized())
+                return ina260Sensor.runOnce() > 0;
+            return ina260Sensor.isRunning();
+        }
+        return false;
+    }
+#endif
 };
 
 AnalogBatteryLevel analogLevel;
@@ -228,25 +313,52 @@ bool Power::analogInit()
     // disable any internal pullups
     pinMode(BATTERY_PIN, INPUT);
 
-#ifdef ARCH_ESP32
-    // ESP32 needs special analog stuff
-    adcAttachPin(BATTERY_PIN);
+#ifndef BATTERY_SENSE_RESOLUTION_BITS
+#define BATTERY_SENSE_RESOLUTION_BITS 10
 #endif
+
+#ifdef ARCH_ESP32 // ESP32 needs special analog stuff
+
+#ifndef ADC_WIDTH // max resolution by default
+    static const adc_bits_width_t width = ADC_WIDTH_BIT_12;
+#else
+    static const adc_bits_width_t width = ADC_WIDTH;
+#endif
+#ifndef BAT_MEASURE_ADC_UNIT // ADC1
+    adc1_config_width(width);
+    adc1_config_channel_atten(adc_channel, atten);
+#else // ADC2
+    adc2_config_channel_atten(adc_channel, atten);
+    // ADC2 wifi bug workaround
+    RTC_reg_b = READ_PERI_REG(SENS_SAR_READ_CTRL2_REG);
+#endif
+    // calibrate ADC
+    esp_adc_cal_value_t val_type = esp_adc_cal_characterize(unit, atten, width, DEFAULT_VREF, adc_characs);
+    // show ADC characterization base
+    if (val_type == ESP_ADC_CAL_VAL_EFUSE_TP) {
+        LOG_INFO("ADCmod: ADC characterization based on Two Point values stored in eFuse\n");
+    } else if (val_type == ESP_ADC_CAL_VAL_EFUSE_VREF) {
+        LOG_INFO("ADCmod: ADC characterization based on reference voltage stored in eFuse\n");
+    } else {
+        LOG_INFO("ADCmod: ADC characterization based on default reference voltage\n");
+    }
+#if defined(HELTEC_V3) || defined(HELTEC_WSL_V3)
+    pinMode(37, OUTPUT); // needed for P channel mosfet to work
+    digitalWrite(37, LOW);
+#endif
+#endif // ARCH_ESP32
+
 #ifdef ARCH_NRF52
 #ifdef VBAT_AR_INTERNAL
     analogReference(VBAT_AR_INTERNAL);
 #else
     analogReference(AR_INTERNAL); // 3.6V
 #endif
-#endif
-
-#ifndef BATTERY_SENSE_RESOLUTION_BITS
-#define BATTERY_SENSE_RESOLUTION_BITS 10
-#endif
-
-    // adcStart(BATTERY_PIN);
     analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS); // Default of 12 is not very linear. Recommended to use 10 or 11
                                                          // depending on needed resolution.
+
+#endif // ARCH_NRF52
+
     batteryLevel = &analogLevel;
     return true;
 #else
@@ -302,7 +414,7 @@ void Power::readPowerStatus()
 {
     if (batteryLevel) {
         bool hasBattery = batteryLevel->isBatteryConnect();
-        int batteryVoltageMv = 0;
+        uint32_t batteryVoltageMv = 0;
         int8_t batteryChargePercent = 0;
         if (hasBattery) {
             batteryVoltageMv = batteryLevel->getBattVoltage();
@@ -365,8 +477,8 @@ void Power::readPowerStatus()
 
 #endif
 
-        // If we have a battery at all and it is less than 10% full, force deep sleep if we have more than 10 low readings in a
-        // row
+        // If we have a battery at all and it is less than 10% full, force deep sleep if we have more than 10 low readings in
+        // a row
         if (powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
             if (batteryLevel->getBattVoltage() < MIN_BAT_MILLIVOLTS) {
                 low_voltage_counter++;
@@ -444,10 +556,10 @@ int32_t Power::runOnce()
  * Init the power manager chip
  *
  * axp192 power
-    DCDC1 0.7-3.5V @ 1200mA max -> OLED // If you turn this off you'll lose comms to the axp192 because the OLED and the axp192
- share the same i2c bus, instead use ssd1306 sleep mode DCDC2 -> unused DCDC3 0.7-3.5V @ 700mA max -> ESP32 (keep this on!) LDO1
- 30mA -> charges GPS backup battery // charges the tiny J13 battery by the GPS to power the GPS ram (for a couple of days), can
- not be turned off LDO2 200mA -> LORA LDO3 200mA -> GPS
+    DCDC1 0.7-3.5V @ 1200mA max -> OLED // If you turn this off you'll lose comms to the axp192 because the OLED and the
+ axp192 share the same i2c bus, instead use ssd1306 sleep mode DCDC2 -> unused DCDC3 0.7-3.5V @ 700mA max -> ESP32 (keep this
+ on!) LDO1 30mA -> charges GPS backup battery // charges the tiny J13 battery by the GPS to power the GPS ram (for a couple of
+ days), can not be turned off LDO2 200mA -> LORA LDO3 200mA -> GPS
  *
  */
 bool Power::axpChipInit()
@@ -540,81 +652,80 @@ bool Power::axpChipInit()
     } else if (PMU->getChipModel() == XPOWERS_AXP2101) {
 
         /*The alternative version of T-Beam 1.1 differs from T-Beam V1.1 in that it uses an AXP2101 power chip*/
-#if (HW_VENDOR == meshtastic_HardwareModel_TBEAM)
-        // Unuse power channel
-        PMU->disablePowerOutput(XPOWERS_DCDC2);
-        PMU->disablePowerOutput(XPOWERS_DCDC3);
-        PMU->disablePowerOutput(XPOWERS_DCDC4);
-        PMU->disablePowerOutput(XPOWERS_DCDC5);
-        PMU->disablePowerOutput(XPOWERS_ALDO1);
-        PMU->disablePowerOutput(XPOWERS_ALDO4);
-        PMU->disablePowerOutput(XPOWERS_BLDO1);
-        PMU->disablePowerOutput(XPOWERS_BLDO2);
-        PMU->disablePowerOutput(XPOWERS_DLDO1);
-        PMU->disablePowerOutput(XPOWERS_DLDO2);
+        if (HW_VENDOR == meshtastic_HardwareModel_TBEAM) {
+            // Unuse power channel
+            PMU->disablePowerOutput(XPOWERS_DCDC2);
+            PMU->disablePowerOutput(XPOWERS_DCDC3);
+            PMU->disablePowerOutput(XPOWERS_DCDC4);
+            PMU->disablePowerOutput(XPOWERS_DCDC5);
+            PMU->disablePowerOutput(XPOWERS_ALDO1);
+            PMU->disablePowerOutput(XPOWERS_ALDO4);
+            PMU->disablePowerOutput(XPOWERS_BLDO1);
+            PMU->disablePowerOutput(XPOWERS_BLDO2);
+            PMU->disablePowerOutput(XPOWERS_DLDO1);
+            PMU->disablePowerOutput(XPOWERS_DLDO2);
 
-        // GNSS RTC PowerVDD 3300mV
-        PMU->setPowerChannelVoltage(XPOWERS_VBACKUP, 3300);
-        PMU->enablePowerOutput(XPOWERS_VBACKUP);
+            // GNSS RTC PowerVDD 3300mV
+            PMU->setPowerChannelVoltage(XPOWERS_VBACKUP, 3300);
+            PMU->enablePowerOutput(XPOWERS_VBACKUP);
 
-        // ESP32 VDD 3300mV
-        //  ! No need to set, automatically open , Don't close it
-        //  PMU->setPowerChannelVoltage(XPOWERS_DCDC1, 3300);
-        //  PMU->setProtectedChannel(XPOWERS_DCDC1);
+            // ESP32 VDD 3300mV
+            //  ! No need to set, automatically open , Don't close it
+            //  PMU->setPowerChannelVoltage(XPOWERS_DCDC1, 3300);
+            //  PMU->setProtectedChannel(XPOWERS_DCDC1);
 
-        // LoRa VDD 3300mV
-        PMU->setPowerChannelVoltage(XPOWERS_ALDO2, 3300);
-        PMU->enablePowerOutput(XPOWERS_ALDO2);
+            // LoRa VDD 3300mV
+            PMU->setPowerChannelVoltage(XPOWERS_ALDO2, 3300);
+            PMU->enablePowerOutput(XPOWERS_ALDO2);
 
-        // GNSS VDD 3300mV
-        PMU->setPowerChannelVoltage(XPOWERS_ALDO3, 3300);
-        PMU->enablePowerOutput(XPOWERS_ALDO3);
+            // GNSS VDD 3300mV
+            PMU->setPowerChannelVoltage(XPOWERS_ALDO3, 3300);
+            PMU->enablePowerOutput(XPOWERS_ALDO3);
+        } else if (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE) {
+            // t-beam s3 core
+            /**
+             * gnss module power channel
+             * The default ALDO4 is off, you need to turn on the GNSS power first, otherwise it will be invalid during
+             * initialization
+             */
+            PMU->setPowerChannelVoltage(XPOWERS_ALDO4, 3300);
+            PMU->enablePowerOutput(XPOWERS_ALDO4);
 
-#elif (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE)
-        // t-beam s3 core
-        /**
-         * gnss module power channel
-         * The default ALDO4 is off, you need to turn on the GNSS power first, otherwise it will be invalid during initialization
-         */
-        PMU->setPowerChannelVoltage(XPOWERS_ALDO4, 3300);
-        PMU->enablePowerOutput(XPOWERS_ALDO4);
+            // lora radio power channel
+            PMU->setPowerChannelVoltage(XPOWERS_ALDO3, 3300);
+            PMU->enablePowerOutput(XPOWERS_ALDO3);
 
-        // lora radio power channel
-        PMU->setPowerChannelVoltage(XPOWERS_ALDO3, 3300);
-        PMU->enablePowerOutput(XPOWERS_ALDO3);
+            // m.2 interface
+            PMU->setPowerChannelVoltage(XPOWERS_DCDC3, 3300);
+            PMU->enablePowerOutput(XPOWERS_DCDC3);
 
-        // m.2 interface
-        PMU->setPowerChannelVoltage(XPOWERS_DCDC3, 3300);
-        PMU->enablePowerOutput(XPOWERS_DCDC3);
+            /**
+             * ALDO2 cannot be turned off.
+             * It is a necessary condition for sensor communication.
+             * It must be turned on to properly access the sensor and screen
+             * It is also responsible for the power supply of PCF8563
+             */
+            PMU->setPowerChannelVoltage(XPOWERS_ALDO2, 3300);
+            PMU->enablePowerOutput(XPOWERS_ALDO2);
 
-        /**
-         * ALDO2 cannot be turned off.
-         * It is a necessary condition for sensor communication.
-         * It must be turned on to properly access the sensor and screen
-         * It is also responsible for the power supply of PCF8563
-         */
-        PMU->setPowerChannelVoltage(XPOWERS_ALDO2, 3300);
-        PMU->enablePowerOutput(XPOWERS_ALDO2);
+            // 6-axis , magnetometer ,bme280 , oled screen power channel
+            PMU->setPowerChannelVoltage(XPOWERS_ALDO1, 3300);
+            PMU->enablePowerOutput(XPOWERS_ALDO1);
 
-        // 6-axis , magnetometer ,bme280 , oled screen power channel
-        PMU->setPowerChannelVoltage(XPOWERS_ALDO1, 3300);
-        PMU->enablePowerOutput(XPOWERS_ALDO1);
+            // sdcard power channle
+            PMU->setPowerChannelVoltage(XPOWERS_BLDO1, 3300);
+            PMU->enablePowerOutput(XPOWERS_BLDO1);
 
-        // sdcard power channle
-        PMU->setPowerChannelVoltage(XPOWERS_BLDO1, 3300);
-        PMU->enablePowerOutput(XPOWERS_BLDO1);
+            // PMU->setPowerChannelVoltage(XPOWERS_DCDC4, 3300);
+            // PMU->enablePowerOutput(XPOWERS_DCDC4);
 
-        // PMU->setPowerChannelVoltage(XPOWERS_DCDC4, 3300);
-        // PMU->enablePowerOutput(XPOWERS_DCDC4);
-
-        // not use channel
-        PMU->disablePowerOutput(XPOWERS_DCDC2); // not elicited
-        PMU->disablePowerOutput(XPOWERS_DCDC5); // not elicited
-        PMU->disablePowerOutput(XPOWERS_DLDO1); // Invalid power channel, it does not exist
-        PMU->disablePowerOutput(XPOWERS_DLDO2); // Invalid power channel, it does not exist
-        PMU->disablePowerOutput(XPOWERS_VBACKUP);
-
-#endif
+            // not use channel
+            PMU->disablePowerOutput(XPOWERS_DCDC2); // not elicited
+            PMU->disablePowerOutput(XPOWERS_DCDC5); // not elicited
+            PMU->disablePowerOutput(XPOWERS_DLDO1); // Invalid power channel, it does not exist
+            PMU->disablePowerOutput(XPOWERS_DLDO2); // Invalid power channel, it does not exist
+            PMU->disablePowerOutput(XPOWERS_VBACKUP);
+        }
 
         // disable all axp chip interrupt
         PMU->disableIRQ(XPOWERS_AXP2101_ALL_IRQ);

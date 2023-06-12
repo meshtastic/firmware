@@ -1,7 +1,10 @@
 #pragma once
 #include "PowerStatus.h"
 #include "concurrency/OSThread.h"
-
+#ifdef ARCH_ESP32
+#include <esp_adc_cal.h>
+#include <soc/adc_channel.h>
+#endif
 /**
  * Per @spattinson
  * MIN_BAT_MILLIVOLTS seems high. Typical 18650 are different chemistry to LiPo, even for LiPos that chart seems a bit off, other
@@ -14,6 +17,17 @@
 
 #define BAT_MILLIVOLTS_FULL 4100
 #define BAT_MILLIVOLTS_EMPTY 3500
+#ifdef BAT_MEASURE_ADC_UNIT
+extern RTC_NOINIT_ATTR uint64_t RTC_reg_b;
+#include "soc/sens_reg.h" // needed for adc pin reset
+#endif
+
+#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
+#include "modules/Telemetry/Sensor/INA219Sensor.h"
+#include "modules/Telemetry/Sensor/INA260Sensor.h"
+extern INA260Sensor ina260Sensor;
+extern INA219Sensor ina219Sensor;
+#endif
 
 class Power : private concurrency::OSThread
 {
@@ -34,7 +48,6 @@ class Power : private concurrency::OSThread
 
     /// Setup a xpowers chip axp192/axp2101, return true if found
     bool axpChipInit();
-
     /// Setup a simple ADC input based battery sensor
     bool analogInit();
 

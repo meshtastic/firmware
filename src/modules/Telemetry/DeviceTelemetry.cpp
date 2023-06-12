@@ -31,12 +31,13 @@ int32_t DeviceTelemetryModule::runOnce()
 bool DeviceTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
 {
     if (t->which_variant == meshtastic_Telemetry_device_metrics_tag) {
+#ifdef DEBUG_PORT
         const char *sender = getSenderShortName(mp);
 
         LOG_INFO("(Received from %s): air_util_tx=%f, channel_utilization=%f, battery_level=%i, voltage=%f\n", sender,
                  t->variant.device_metrics.air_util_tx, t->variant.device_metrics.channel_utilization,
                  t->variant.device_metrics.battery_level, t->variant.device_metrics.voltage);
-
+#endif
         nodeDB.updateTelemetry(getFrom(&mp), *t, RX_SRC_RADIO);
     }
     return false; // Let others look at this message also if they want
@@ -49,14 +50,14 @@ bool DeviceTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     t.time = getTime();
     t.which_variant = meshtastic_Telemetry_device_metrics_tag;
 
-    t.variant.device_metrics.air_util_tx = myNodeInfo.air_util_tx;
+    t.variant.device_metrics.air_util_tx = airTime->utilizationTXPercent();
     if (powerStatus->getIsCharging()) {
         t.variant.device_metrics.battery_level = MAGIC_USB_BATTERY_LEVEL;
     } else {
         t.variant.device_metrics.battery_level = powerStatus->getBatteryChargePercent();
     }
 
-    t.variant.device_metrics.channel_utilization = myNodeInfo.channel_utilization;
+    t.variant.device_metrics.channel_utilization = airTime->channelUtilizationPercent();
     t.variant.device_metrics.voltage = powerStatus->getBatteryVoltageMv() / 1000.0;
 
     LOG_INFO("(Sending): air_util_tx=%f, channel_utilization=%f, battery_level=%i, voltage=%f\n",

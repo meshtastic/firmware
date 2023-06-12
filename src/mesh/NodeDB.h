@@ -7,6 +7,7 @@
 #include "MeshTypes.h"
 #include "NodeStatus.h"
 #include "mesh-pb-constants.h"
+#include "mesh/generated/meshtastic/mesh.pb.h" // For CriticalErrorCode
 
 /*
 DeviceState versions used to be defined in the .proto file but really only this function cares.  So changed to a
@@ -45,8 +46,6 @@ class NodeDB
     // Note: these two references just point into our static array we serialize to/from disk
     meshtastic_NodeInfo *nodes;
     pb_size_t *numNodes;
-
-    uint32_t readPointer = 0;
 
   public:
     bool updateGUI = false; // we think the gui should definitely be redrawn, screen will clear this once handled
@@ -104,11 +103,8 @@ class NodeDB
     their denial?)
     */
 
-    /// Called from bluetooth when the user wants to start reading the node DB from scratch.
-    void resetReadPointer() { readPointer = 0; }
-
     /// Allow the bluetooth layer to read our next nodeinfo record, or NULL if done reading
-    const meshtastic_NodeInfo *readNextInfo();
+    const meshtastic_NodeInfo *readNextInfo(uint32_t &readIndex);
 
     /// pick a provisional nodenum we hope no one is using
     void pickNewNodeNum();
@@ -217,10 +213,24 @@ inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t d
     return defaultInterval * 1000;
 }
 
+/// Sometimes we will have Position objects that only have a time, so check for
+/// valid lat/lon
+static inline bool hasValidPosition(const meshtastic_NodeInfo *n)
+{
+    return n->has_position && (n->position.latitude_i != 0 || n->position.longitude_i != 0);
+}
+
 /** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings
  * might have changed is incremented.  Allows others to detect they might now be on a new channel.
  */
 extern uint32_t radioGeneration;
+
+extern meshtastic_CriticalErrorCode error_code;
+
+/*
+ * A numeric error address (nonzero if available)
+ */
+extern uint32_t error_address;
 
 #define Module_Config_size                                                                                                       \
     (ModuleConfig_CannedMessageConfig_size + ModuleConfig_ExternalNotificationConfig_size + ModuleConfig_MQTTConfig_size +       \

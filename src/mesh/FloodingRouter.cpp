@@ -21,6 +21,7 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 {
     if (wasSeenRecently(p)) { // Note: this will also add a recent packet record
         printPacket("Ignoring incoming msg, because we've already seen it", p);
+        Router::cancelSending(p->from, p->id); // cancel rebroadcast of this message *if* there was already one
         return true;
     }
 

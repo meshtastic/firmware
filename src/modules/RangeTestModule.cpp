@@ -1,4 +1,5 @@
 #include "RangeTestModule.h"
+#include "FSCommon.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
@@ -8,7 +9,6 @@
 #include "configuration.h"
 #include "gps/GeoCoord.h"
 #include <Arduino.h>
-#include <FSCommon.h>
 
 /*
     As a sender, I can send packets every n seconds. These packets include an incremented PacketID.
@@ -28,7 +28,7 @@ uint32_t packetSequence = 0;
 
 int32_t RangeTestModule::runOnce()
 {
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) || defined(ARCH_NRF52)
 
     /*
         Uncomment the preferences below if you want to use the module
@@ -53,13 +53,13 @@ int32_t RangeTestModule::runOnce()
 
             if (moduleConfig.range_test.sender) {
                 LOG_INFO("Initializing Range Test Module -- Sender\n");
-                return (5000); // Sending first message 5 seconds after initilization.
+                started = millis(); // make a note of when we started
+                return (5000);      // Sending first message 5 seconds after initilization.
             } else {
                 LOG_INFO("Initializing Range Test Module -- Receiver\n");
                 return disable();
                 // This thread does not need to run as a receiver
             }
-
         } else {
 
             if (moduleConfig.range_test.sender) {
@@ -77,7 +77,13 @@ int32_t RangeTestModule::runOnce()
                     rangeTestModuleRadio->sendPayload();
                 }
 
-                return (senderHeartbeat);
+                // If we have been running for more than 8 hours, turn module back off
+                if (millis() - started > 28800000) {
+                    LOG_INFO("Range Test Module - Disabling after 8 hours\n");
+                    return disable();
+                } else {
+                    return (senderHeartbeat);
+                }
             } else {
                 return disable();
                 // This thread does not need to run as a receiver
@@ -115,7 +121,7 @@ void RangeTestModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 
 ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket &mp)
 {
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) || defined(ARCH_NRF52)
 
     if (moduleConfig.range_test.enabled) {
 
@@ -146,7 +152,6 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket 
             LOG_DEBUG("---- Node Information of Received Packet (mp.from):\n");
             LOG_DEBUG("n->user.long_name         %s\n", n->user.long_name);
             LOG_DEBUG("n->user.short_name        %s\n", n->user.short_name);
-            LOG_DEBUG("n->user.macaddr           %X\n", n->user.macaddr);
             LOG_DEBUG("n->has_position           %d\n", n->has_position);
             LOG_DEBUG("n->position.latitude_i    %d\n", n->position.latitude_i);
             LOG_DEBUG("n->position.longitude_i   %d\n", n->position.longitude_i);
@@ -158,7 +163,6 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket 
             LOG_DEBUG("-----------------------------------------\n");
             */
         }
-
     } else {
         LOG_INFO("Range Test Module Disabled\n");
     }
@@ -170,6 +174,7 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket 
 
 bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
 {
+#ifdef ARCH_ESP32
     auto &p = mp.decoded;
 
     meshtastic_NodeInfo *n = nodeDB.getNode(getFrom(&mp));
@@ -186,7 +191,6 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
         LOG_DEBUG("---- Node Information of Received Packet (mp.from):\n");
         LOG_DEBUG("n->user.long_name         %s\n", n->user.long_name);
         LOG_DEBUG("n->user.short_name        %s\n", n->user.short_name);
-        LOG_DEBUG("n->user.macaddr           %X\n", n->user.macaddr);
         LOG_DEBUG("n->has_position           %d\n", n->has_position);
         LOG_DEBUG("n->position.latitude_i    %d\n", n->position.latitude_i);
         LOG_DEBUG("n->position.longitude_i   %d\n", n->position.longitude_i);
@@ -277,6 +281,7 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
     fileToAppend.printf("\"%s\"\n", p.payload.bytes);
     fileToAppend.flush();
     fileToAppend.close();
+#endif
 
     return 1;
 }
