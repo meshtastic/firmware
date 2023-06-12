@@ -59,6 +59,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_TLORA_T3_S3 = 16,
     /* B&Q Consulting Nano G1 Explorer: https://wiki.uniteng.com/en/meshtastic/nano-g1-explorer */
     meshtastic_HardwareModel_NANO_G1_EXPLORER = 17,
+    /* CanaryRadio.io LLC Handheld https://canaryradio.io */
+    meshtastic_HardwareModel_CANARY_V1_0 = 18,
     /* B&Q Consulting Station Edition G1: https://uniteng.com/wiki/doku.php?id=meshtastic:station */
     meshtastic_HardwareModel_STATION_G1 = 25,
     /* RAK11310 (RP2040 + SX1262) */

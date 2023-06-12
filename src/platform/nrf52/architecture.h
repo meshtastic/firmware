@@ -46,6 +46,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_RAK4631
 #elif defined(TTGO_T_ECHO)
 #define HW_VENDOR meshtastic_HardwareModel_T_ECHO
+#elif defined(CANARY_V1_0)
+#define HW_VENDOR meshtastic_HardwareModel_CANARY_V1_0
 #elif defined(NORDIC_PCA10059)
 #define HW_VENDOR meshtastic_HardwareModel_NRF52840_PCA10059
 #elif defined(PRIVATE_HW) || defined(FEATHER_DIY)

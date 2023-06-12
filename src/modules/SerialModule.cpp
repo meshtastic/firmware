@@ -57,7 +57,7 @@
 SerialModule *serialModule;
 SerialModuleRadio *serialModuleRadio;
 
-#ifdef TTGO_T_ECHO
+#if defined(TTGO_T_ECHO) || defined(CANARY_V1_0)
 SerialModule::SerialModule() : StreamAPI(&Serial), concurrency::OSThread("SerialModule") {}
 static Print *serialPrint = &Serial;
 #else
@@ -133,7 +133,7 @@ int32_t SerialModule::runOnce()
                 Serial.begin(baud);
                 Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             }
-#elif !defined(TTGO_T_ECHO)
+#elif !defined(TTGO_T_ECHO) && !defined(CANARY_V1_0)
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
                 Serial2.setPins(moduleConfig.serial.rxd, moduleConfig.serial.txd);
                 Serial2.begin(baud, SERIAL_8N1);
@@ -176,7 +176,7 @@ int32_t SerialModule::runOnce()
                     }
                 }
             }
-#ifndef TTGO_T_ECHO
+#if !defined(TTGO_T_ECHO) && !defined(CANARY_V1_0)
             else {
                 while (Serial2.available()) {
                     serialPayloadSize = Serial2.readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
