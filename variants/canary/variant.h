@@ -36,6 +36,9 @@ extern "C" {
 
 #define CANARY_V1_0
 
+#define GPIO_PORT0 0
+#define GPIO_PORT1 32
+
 // Number of pins defined in PinDescription array
 #define PINS_COUNT (48)
 #define NUM_DIGITAL_PINS (48)
@@ -43,16 +46,14 @@ extern "C" {
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LEDs
-#define PIN_LED1 (0 + 14) // 13 red (confirmed on 1.0 board)
-#define PIN_LED2 (0 + 15) // 14 blue
-#define PIN_LED3 (0 + 13) // 15 green
+#define PIN_LED1 (GPIO_PORT1 + 11) // blue P1.01
+#define PIN_LED2 (GPIO_PORT0 + 14) // yellow P0.14
+#define PIN_LED3 (GPIO_PORT1 + 3) // green P1.03
 
 #define LED_BLUE PIN_LED1
-#define LED_GREEN PIN_LED2
-#define LED_RED PIN_LED3
 
-#define LED_BUILTIN LED_BLUE
-#define LED_CONN PIN_GREEN
+#define LED_BUILTIN PIN_LED1
+#define LED_CONN PIN_LED3
 
 #define LED_STATE_ON 0 // State when LED is lit
 #define LED_INVERTED 1
@@ -60,23 +61,19 @@ extern "C" {
 /*
  * Buttons
  */
-#define PIN_BUTTON1 (32 + 10)
-#define PIN_BUTTON2 (0 + 18)
+#define PIN_BUTTON1 (GPIO_PORT0 + 15) // BTN0 on schematic
+#define PIN_BUTTON2 (GPIO_PORT0 + 16) // BTN1 on schematic
 
 /*
  * Analog pins
  */
-#define PIN_A0 (4) // Battery ADC
+#define PIN_A0 (4) // Battery ADC P0.04
 
 #define BATTERY_PIN PIN_A0
 
 static const uint8_t A0 = PIN_A0;
 
 #define ADC_RESOLUTION 14
-
-#define PIN_NFC1 (9)
-#define PIN_NFC2 (10)
-
 
 
 /**
@@ -87,23 +84,17 @@ static const uint8_t A0 = PIN_A0;
 #define PIN_WIRE_SDA (26)
 #define PIN_WIRE_SCL (27)
 
-/* touch sensor, active high */
-
-#define TP_SER_IO (0 + 11)
-
-#define PIN_RTC_INT (0 + 16) // Interrupt from the PCF8563 RTC
-
 /*
  * External serial flash WP25R1635FZUIL0
  */
 
 // QSPI Pins
-#define PIN_QSPI_SCK (32 + 14)
-#define PIN_QSPI_CS (32 + 15)
-#define PIN_QSPI_IO0 (32 + 12) // MOSI if using two bit interface
-#define PIN_QSPI_IO1 (32 + 13) // MISO if using two bit interface
-#define PIN_QSPI_IO2 (0 + 7)   // WP if using two bit interface (i.e. not used)
-#define PIN_QSPI_IO3 (0 + 5)   // HOLD if using two bit interface (i.e. not used)
+#define PIN_QSPI_SCK (GPIO_PORT1 + 14)
+#define PIN_QSPI_CS (GPIO_PORT1 + 15)
+#define PIN_QSPI_IO0 (GPIO_PORT1 + 12) // MOSI if using two bit interface
+#define PIN_QSPI_IO1 (GPIO_PORT1 + 13) // MISO if using two bit interface
+#define PIN_QSPI_IO2 (GPIO_PORT0 + 7)   // WP if using two bit interface (i.e. not used)
+#define PIN_QSPI_IO3 (GPIO_PORT0 + 5)   // HOLD if using two bit interface (i.e. not used)
 
 // On-board QSPI Flash
 #define EXTERNAL_FLASH_DEVICES MX25R1635F
@@ -115,15 +106,16 @@ static const uint8_t A0 = PIN_A0;
 
 #define USE_SX1262
 #define USE_SX1268
-#define SX126X_CS (0 + 24) // FIXME - we really should define LORA_CS instead
-#define SX126X_DIO1 (0 + 20)
+#define SX126X_CS (GPIO_PORT0 + 24) // FIXME - we really should define LORA_CS instead
+#define SX126X_DIO1 (GPIO_PORT0 + 20) // FIXME - This is currently wired to an RF switch and not an IRQ.
+// This is likely not to work for our device without modifying the SX1262 drivers.
 // Note DIO2 is attached internally to the module to an analog switch for TX/RX switching
 #define SX1262_DIO3                                                                                                              \
-    (0 + 21) // This is used as an *output* from the sx1262 and connected internally to power the tcxo, do not drive from the main
+    (GPIO_PORT0 + 21) // This is used as an *output* from the sx1262 and connected internally to power the tcxo, do not drive from the main
              // CPU?
-#define SX126X_BUSY (0 + 17)
-#define SX126X_RESET (0 + 25)
-#define SX126X_E22 // Not really an E22 but TTGO seems to be trying to clone that
+#define SX126X_BUSY (GPIO_PORT0 + 17)
+#define SX126X_RESET (GPIO_PORT0 + 25)
+#define SX126X_E22 // Not really an E22 but Canary seems to be trying to clone that
 // Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the sx1262interface
 // code)
 
@@ -131,24 +123,17 @@ static const uint8_t A0 = PIN_A0;
 
 // #undef SX126X_CS
 
-
-#define PIN_SPI1_MISO                                                                                                            \
-    (32 + 7) // FIXME not really needed, but for now the SPI code requires something to be defined, pick an used GPIO
-#define PIN_SPI1_MOSI (32 + 7)
-#define PIN_SPI1_SCK (32 + 7)
-
 /*
  * GPS pins
  */
+#define HAS_GPS 1
+#define GPS_UBLOX
 
-#define GPS_L76K
-#define PIN_GPS_REINIT (32 + 5) // An output to reset L76K GPS. As per datasheet, low for > 100ms will reset the L76K
-
-#define PIN_GPS_WAKE (32 + 2) // An output to wake GPS, low means allow sleep, high means force wake
+#define PIN_GPS_WAKE (GPIO_PORT1 + 2) // An output to wake GPS, low means allow sleep, high means force wake
 // Seems to be missing on this new board
-// #define PIN_GPS_PPS (32 + 4)  // Pulse per second input from the GPS
-#define PIN_GPS_TX (32 + 9) // This is for bits going TOWARDS the CPU
-#define PIN_GPS_RX (32 + 8) // This is for bits going TOWARDS the GPS
+#define PIN_GPS_PPS (GPIO_PORT1 + 4)  // Pulse per second input from the GPS
+#define PIN_GPS_TX (GPIO_PORT1 + 9) // This is for bits going TOWARDS the CPU
+#define PIN_GPS_RX (GPIO_PORT1 + 8) // This is for bits going TOWARDS the GPS
 
 #define GPS_THREAD_INTERVAL 50
 
@@ -156,19 +141,23 @@ static const uint8_t A0 = PIN_A0;
 #define PIN_SERIAL1_TX PIN_GPS_RX
 
 // PCF8563 RTC Module
-#define PCF8563_RTC 0x51
+// #define PCF8563_RTC 0x51
 
 /*
  * SPI Interfaces
  */
-#define SPI_INTERFACES_COUNT 2
+#define SPI_INTERFACES_COUNT 1
 
 // For LORA, spi 0
-#define PIN_SPI_MISO (0 + 23)
-#define PIN_SPI_MOSI (0 + 22)
-#define PIN_SPI_SCK (0 + 19)
+#define PIN_SPI_MISO (GPIO_PORT0 + 23)
+#define PIN_SPI_MOSI (GPIO_PORT0 + 22)
+#define PIN_SPI_SCK (GPIO_PORT0 + 19)
 
-#define PIN_PWR_EN (0 + 6)
+//#define PIN_SPI1_MISO (GPIO_PORT1 + 6) // FIXME not really needed, but for now the SPI code requires something to be defined, pick an used GPIO
+//#define PIN_SPI1_MOSI (GPIO_PORT1 + 8)
+//#define PIN_SPI1_SCK (GPIO_PORT1 + 9)
+
+#define PIN_PWR_EN (GPIO_PORT0 + 12)
 
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
 // #define USE_SEGGER
@@ -193,7 +182,7 @@ static const uint8_t A0 = PIN_A0;
 #define ADC_MULTIPLIER VBAT_DIVIDER_COMP
 #define VBAT_RAW_TO_SCALED(x) (REAL_VBAT_MV_PER_LSB * x)
 
-#define HAS_RTC 1
+// #define HAS_RTC 1
 
 #ifdef __cplusplus
 }
