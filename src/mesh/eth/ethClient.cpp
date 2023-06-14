@@ -128,7 +128,24 @@ bool initEthernet()
 
         if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_DHCP) {
             LOG_INFO("starting Ethernet DHCP\n");
-            status = Ethernet.begin(mac);
+
+            for (int i = 0; i < 2; i++) { // try DHCP 2 times
+                status = Ethernet.begin(mac);
+                if (status != 0)
+                    break;   // break the loop if DHCP is successful
+                delay(3000); // delay before next attempt
+            }
+
+            // DHCP failed twice, switch to static IP
+            if (status == 0) {
+                LOG_INFO("DHCP failed twice, switching to factory IP (192.168.192.168)\n");
+                IPAddress ip(192, 168, 192, 168);    // Static IP
+                IPAddress dns(1, 1, 1, 1);           // DNS
+                IPAddress gateway(192, 168, 192, 1); // Gateway
+                IPAddress subnet(255, 255, 255, 0);  // Subnet mask
+                Ethernet.begin(mac, ip, dns, gateway, subnet);
+                status = 1;
+            }
         } else if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_STATIC) {
             LOG_INFO("starting Ethernet Static\n");
 
