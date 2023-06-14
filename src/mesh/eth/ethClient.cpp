@@ -127,36 +127,34 @@ bool initEthernet()
         mac[0] &= 0xfe;  // Make sure this is not a multicast MAC
 
         if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_DHCP) {
-            LOG_INFO("starting Ethernet DHCP\n");
-
-            for (int i = 0; i < 2; i++) { // try DHCP 2 times
-                status = Ethernet.begin(mac);
-                if (status != 0)
-                    break;   // break the loop if DHCP is successful
-                delay(3000); // delay before next attempt
-            }
-
-            // DHCP failed twice, switch to static IP
+            LOG_INFO("Starting Ethernet DHCP\n");
+            status = Ethernet.begin(mac);
+            // DHCP failed, switch to static IP
             if (status == 0) {
-                LOG_INFO("DHCP failed twice, switching to factory IP (192.168.192.168)\n");
+                LOG_INFO("DHCP failed, switching to factory IP (192.168.192.168)\n");
                 IPAddress ip(192, 168, 192, 168);    // Static IP
                 IPAddress dns(1, 1, 1, 1);           // DNS
                 IPAddress gateway(192, 168, 192, 1); // Gateway
                 IPAddress subnet(255, 255, 255, 0);  // Subnet mask
-                Ethernet.begin(mac, ip, dns, gateway, subnet);
-                status = 1;
+                if (Ethernet.begin(mac, ip, dns, gateway, subnet) == 1) {
+                    status = 1;
+                } else {
+                    LOG_ERROR("Failed to assign factory IP address\n");
+                }
             }
         } else if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_STATIC) {
-            LOG_INFO("starting Ethernet Static\n");
+            LOG_INFO("Starting Ethernet IP\n");
 
             IPAddress ip = IPAddress(bigToLittleEndian(config.network.ipv4_config.ip));
             IPAddress dns = IPAddress(bigToLittleEndian(config.network.ipv4_config.dns));
             IPAddress gateway = IPAddress(bigToLittleEndian(config.network.ipv4_config.gateway));
             IPAddress subnet = IPAddress(bigToLittleEndian(config.network.ipv4_config.subnet));
 
-            Ethernet.begin(mac, ip, dns, gateway, subnet);
-
-            status = 1;
+            if (Ethernet.begin(mac, ip, dns, gateway, subnet) == 1) {
+                status = 1;
+            } else {
+                LOG_ERROR("Failed to assign static IP address\n");
+            }
         } else {
             LOG_INFO("Ethernet Disabled\n");
             return false;
