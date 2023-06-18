@@ -37,7 +37,7 @@
       "maximum_ram_size": 248832,
       "maximum_size": 815104,
       "speed": 115200,
-      "protocol": "jlink",
+      "protocol": "nrfutil",
       "protocols": ["jlink", "nrfjprog", "nrfutil", "stlink"],
       "use_1200bps_touch": true,
       "require_upload_port": true,

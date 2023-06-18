@@ -81,8 +81,12 @@ static const uint8_t A0 = PIN_A0;
  */
 #define WIRE_INTERFACES_COUNT 1
 
-#define PIN_WIRE_SDA (26)
-#define PIN_WIRE_SCL (27)
+#define PIN_WIRE_SDA (GPIO_PORT0 + 26)
+// #define I2C_SDA  (GPIO_PORT0 + 26)
+#define PIN_WIRE_SCL (GPIO_PORT0 + 27)
+// #define I2C_SCL (GPIO_PORT0 + 27)
+
+#define PIN_LCD_RESET (GPIO_PORT0 + 2)
 
 /*
  * External serial flash WP25R1635FZUIL0
@@ -103,21 +107,14 @@ static const uint8_t A0 = PIN_A0;
 /*
  * Lora radio
  */
-
+#define RADIOLIB_DEBUG 1
 #define USE_SX1262
-#define USE_SX1268
-#define SX126X_CS (GPIO_PORT0 + 24) // FIXME - we really should define LORA_CS instead
-#define SX126X_DIO1 (GPIO_PORT0 + 20) // FIXME - This is currently wired to an RF switch and not an IRQ.
-// This is likely not to work for our device without modifying the SX1262 drivers.
-// Note DIO2 is attached internally to the module to an analog switch for TX/RX switching
-#define SX1262_DIO3                                                                                                              \
-    (GPIO_PORT0 + 21) // This is used as an *output* from the sx1262 and connected internally to power the tcxo, do not drive from the main
-             // CPU?
+#define SX126X_CS (GPIO_PORT0 + 24)
+//#define SX126X_DIO1 () // LORA_SW_PW_ON
+#define SX126X_DIO3 (GPIO_PORT0 + 21) // LORA_IRQ
+//#define SX126X_DIO2 () // LORA_BUSY // LoRa RX/TX
 #define SX126X_BUSY (GPIO_PORT0 + 17)
 #define SX126X_RESET (GPIO_PORT0 + 25)
-#define SX126X_E22 // Not really an E22 but Canary seems to be trying to clone that
-// Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the sx1262interface
-// code)
 
 // #define LORA_DISABLE_SENDING // Define this to disable transmission for testing (power testing etc...)
 
@@ -160,7 +157,7 @@ static const uint8_t A0 = PIN_A0;
 #define PIN_PWR_EN (GPIO_PORT0 + 12)
 
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
-// #define USE_SEGGER
+#define USE_SEGGER 1
 
 // Battery
 // The battery sense is hooked to pin A0 (4)

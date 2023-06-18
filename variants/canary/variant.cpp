@@ -41,4 +41,6 @@ void initVariant()
 
     pinMode(PIN_LED3, OUTPUT);
     ledOff(PIN_LED3);
+
+    pinMode(PIN_PWR_EN, OUTPUT);
 }
