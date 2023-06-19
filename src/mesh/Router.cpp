@@ -178,7 +178,7 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
         }
 
         if (!p->channel) { // don't override if a channel was requested
-            p->channel = nodeDB.getNodeChannel(p->to);
+            p->channel = nodeDB.getMeshNodeChannel(p->to);
             LOG_DEBUG("localSend to channel %d\n", p->channel);
         }
 

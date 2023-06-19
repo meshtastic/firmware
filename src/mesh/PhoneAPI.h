@@ -51,7 +51,7 @@ class PhoneAPI
     meshtastic_QueueStatus *queueStatusPacketForPhone = NULL;
 
     /// We temporarily keep the nodeInfo here between the call to available and getFromRadio
-    const meshtastic_NodeInfo *nodeInfoForPhone = NULL;
+    meshtastic_NodeInfo nodeInfoForPhone = meshtastic_NodeInfo_init_default;
 
     meshtastic_ToRadio toRadioScratch = {
         0}; // this is a static scratch object, any data must be copied elsewhere before returning
