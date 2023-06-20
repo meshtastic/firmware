@@ -299,6 +299,7 @@ void NodeDB::installDefaultDeviceState()
     snprintf(owner.short_name, sizeof(owner.short_name), "%02x%02x", ourMacAddr[4], ourMacAddr[5]);
 
     snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum()); // Default node ID now based on nodenum
+    memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
 }
 
 void NodeDB::init()
