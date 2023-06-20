@@ -299,6 +299,7 @@ void NodeDB::installDefaultDeviceState()
     snprintf(owner.short_name, sizeof(owner.short_name), "%02x%02x", ourMacAddr[4], ourMacAddr[5]);
 
     snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum()); // Default node ID now based on nodenum
+    memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
 }
 
 void NodeDB::init()
@@ -377,17 +378,17 @@ void NodeDB::pickNewNodeNum()
 {
     NodeNum r = myNodeInfo.my_node_num;
 
-    // If we don't have a nodenum at app - pick an initial nodenum based on the macaddr
-    if (r == 0)
-        r = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
+    // Pick an initial nodenum based on the macaddr
+    r = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
 
     if (r == NODENUM_BROADCAST || r < NUM_RESERVED)
         r = NUM_RESERVED; // don't pick a reserved node number
 
     meshtastic_NodeInfoLite *found;
     while ((found = getMeshNode(r)) && memcmp(found->user.macaddr, owner.macaddr, sizeof(owner.macaddr))) {
+        // FIXME: input for random() is int, so NODENUM_BROADCAST becomes -1
         NodeNum n = random(NUM_RESERVED, NODENUM_BROADCAST); // try a new random choice
-        LOG_DEBUG("NOTE! Our desired nodenum 0x%x is in use, so trying for 0x%x\n", r, n);
+        LOG_WARN("NOTE! Our desired nodenum 0x%x is in use, so trying for 0x%x\n", r, n);
         r = n;
     }
 
