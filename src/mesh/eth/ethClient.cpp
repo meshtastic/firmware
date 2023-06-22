@@ -127,8 +127,11 @@ bool initEthernet()
         mac[0] &= 0xfe;  // Make sure this is not a multicast MAC
 
         if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_DHCP) {
-            LOG_INFO("Starting Ethernet DHCP\n");
+            LOG_INFO("Starting DHCP client\n");
+            LOG_INFO("MAC: %02x:%02x:%02x:%02x:%02x:%02x\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
             Ethernet.begin(mac);
+            LOG_INFO("Started\n");
             // DHCP failed, switch to static IP
             if (Ethernet.localIP() == IPAddress(0, 0, 0, 0)) {
                 LOG_INFO("DHCP failed, switching to factory IP (192.168.192.168)\n");
@@ -178,6 +181,12 @@ bool initEthernet()
                      Ethernet.gatewayIP()[3]);
             LOG_INFO("DNS Server IP %u.%u.%u.%u\n", Ethernet.dnsServerIP()[0], Ethernet.dnsServerIP()[1],
                      Ethernet.dnsServerIP()[2], Ethernet.dnsServerIP()[3]);
+            LOG_INFO("Link Status: %s\n", Ethernet.linkStatus() == LinkON ? "LinkON" : "LinkOFF");
+            LOG_INFO("LAN Hardware: %s\n", Ethernet.hardwareStatus() == EthernetNoHardware ? "EthernetNoHardware"
+                                           : Ethernet.hardwareStatus() == EthernetW5100    ? "EthernetW5100"
+                                           : Ethernet.hardwareStatus() == EthernetW5200    ? "EthernetW5200"
+                                           : Ethernet.hardwareStatus() == EthernetW5500    ? "EthernetW5500"
+                                                                                           : "Unknown");
         }
 
         ethEvent = new Periodic("ethConnect", reconnectETH);
