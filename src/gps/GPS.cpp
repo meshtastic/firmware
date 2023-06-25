@@ -225,13 +225,9 @@ bool GPS::setupGPS()
 
             // Calculate the checksum, starting from the CLASS field (which is _message_GNSS[2])
             for (size_t i = 2; i < sizeof(_message_GNSS) - 2; i++) {
-                CK_A = CK_A + _message_GNSS[i];
-                CK_B = CK_B + CK_A;
+                CK_A = (CK_A + _message_GNSS[i]) & 0xFF;
+                CK_B = (CK_B + CK_A) & 0xFF;
             }
-
-            // Make sure CK_A and CK_B are 8-bit unsigned integers
-            CK_A = CK_A & 0xFF;
-            CK_B = CK_B & 0xFF;
 
             // Place the calculated checksum values in the message
             _message_GNSS[sizeof(_message_GNSS) - 2] = CK_A;
@@ -272,13 +268,9 @@ bool GPS::setupGPS()
 
             // Calculate the checksum, starting from the CLASS field (which is _message_JAM[2])
             for (size_t i = 2; i < sizeof(_message_JAM) - 2; i++) {
-                CK_A = CK_A + _message_JAM[i];
-                CK_B = CK_B + CK_A;
+                CK_A = (CK_A + _message_JAM[i]) & 0xFF;
+                CK_B = (CK_B + CK_A) & 0xFF;
             }
-
-            // Ensure CK_A and CK_B are 8-bit unsigned integers
-            CK_A = CK_A & 0xFF;
-            CK_B = CK_B & 0xFF;
 
             // And finally, place the calculated checksum values in the message
             _message_JAM[sizeof(_message_JAM) - 2] = CK_A;
@@ -335,10 +327,6 @@ bool GPS::setupGPS()
                 CK_A = (CK_A + _message_NAVX5[i]) & 0xFF;
                 CK_B = (CK_B + CK_A) & 0xFF;
             }
-
-            // Ensure CK_A and CK_B are 8-bit unsigned integers
-            CK_A = CK_A & 0xFF;
-            CK_B = CK_B & 0xFF;
 
             // Place the calculated checksum values in the message
             _message_NAVX5[sizeof(_message_NAVX5) - 2] = CK_A;
@@ -441,10 +429,6 @@ bool GPS::setupGPS()
                 CK_A = (CK_A + _message_SAVE[i]) & 0xFF;
                 CK_B = (CK_B + CK_A) & 0xFF;
             }
-
-            // Ensure CK_A and CK_B are 8-bit unsigned integers
-            CK_A = CK_A & 0xFF;
-            CK_B = CK_B & 0xFF;
 
             // Place the calculated checksum values in the message
             _message_SAVE[sizeof(_message_SAVE) - 2] = CK_A;
