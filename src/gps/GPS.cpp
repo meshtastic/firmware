@@ -192,6 +192,120 @@ bool GPS::setupGPS()
             delay(250);
         } else if (gnssModel == GNSS_MODEL_UBLOX) {
 
+            uint8_t CK_A = 0, CK_B = 0; // checksum bytes
+
+            // Configure GNSS system to GPS+SBAS+GLONASS (Module may restart after this command)
+            // We need set it because by default it is GPS only, and we want to use GLONASS too
+            // Also we need SBAS for better accuracy and extra features
+            // ToDo: Dynamic configure GNSS systems depending of LoRa region
+            byte _message_GNSS[] = {
+                0xb5, 0x62, // Sync message for UBX protocol
+                0x06, 0x3e, // Message class and ID (UBX-CFG-GNSS)
+                0x1c, 0x00, // Length of payload
+                0x00,       // msgVer (0 for this version)
+                0x20,       // numTrkChHw (max number of hardware channels)
+                0x20,       // numTrkChUse (max number of channels to use)
+                0x03,       // numConfigBlocks (number of GNSS systems), most modules support maximum 3 GNSS systems
+                // GNSS config format: gnssId, resTrkCh, maxTrkCh, reserved1, flags
+                // gnssId: System identifier (1 byte)
+                // resTrkCh: Number of reserved (minimum) tracking channels (1 byte)
+                // maxTrkCh: Maximum number of tracking channels (1 byte)
+                // reserved1: Reserved (1 byte)
+                // flags: Tracking channel option flags (4 bytes), for more info see u-blox documentation
+                // https://content.u-blox.com/sites/default/files/products/documents/u-blox8-M8_ReceiverDescrProtSpec_UBX-13003221.pdf
+                0x00, 0x08, 0x10, 0x00, 0x01, 0x00, 0x01, 0x01, // GPS
+                0x01, 0x01, 0x03, 0x00, 0x01, 0x00, 0x01, 0x01, // SBAS
+                0x06, 0x08, 0x0e, 0x00, 0x01, 0x00, 0x01, 0x01  // GLONASS
+            };
+            _serial_gps->write(_message_GNSS, sizeof(_message_GNSS));
+            if (!getACK(0x06, 0x3e)) {
+                LOG_WARN("Unable to reconfigure GNSS.\n");
+            }
+
+            // Enable interference resistance, because we are using LoRa, WiFi and Bluetoot on same board,
+            // and we need to reduce interference from them
+            byte _message_JAM[] = {
+                0xB5, 0x62, // UBX protocol sync characters
+                0x06, 0x39, // Message class and ID (UBX-CFG-ITFM)
+                0x08, 0x00, // Length of payload
+                // bbThreshold (Broadband jamming detection threshold) is set to 0x3F (63 in decimal)
+                // cwThreshold (CW jamming detection threshold) is set to 0x10 (16 in decimal)
+                // algorithmBits (Reserved algorithm settings) is set to 0x16B156 as recommended
+                // enable (Enable interference detection) is set to 1 (enabled)
+                0x3F, 0x10, 0xB1, 0x56, // config: Interference config word
+                // generalBits (General settings) is set to 0x31E as recommended
+                // antSetting (Antenna setting, 0=unknown, 1=passive, 2=active) is set to 0 (unknown)
+                // ToDo: Set to 1 (passive) or 2 (active) if known, for example from UBX-MON-HW, or from board info
+                // enable2 (Set to 1 to scan auxiliary bands, u-blox 8 / u-blox M8 only, otherwise ignored) is set to 1 (enabled)
+                0x1E, 0x03, 0x00, 0x01, // config2: Extra settings for jamming/interference monitor
+                0x00, 0x00              // Checksum (calculated below)
+            };
+
+            // Now, calculate the checksum for the new message
+            for (size_t i = 2; i < sizeof(_message_JAM) - 2; i++) {
+                CK_A = CK_A + _message_JAM[i];
+                CK_B = CK_B + CK_A;
+            }
+
+            // And finally, place the calculated checksum values in the message
+            _message_JAM[sizeof(_message_JAM) - 2] = CK_A;
+            _message_JAM[sizeof(_message_JAM) - 1] = CK_B;
+
+            // Send the message to the module
+            _serial_gps->write(_message_JAM, sizeof(_message_JAM));
+            if (!getACK(0x06, 0x39)) {
+                LOG_WARN("Unable to enable interference resistance.\n");
+            }
+
+            // Configure navigation engine expert settings:
+            byte _message_NAVX5[] = {
+                0xb5, 0x62, // UBX protocol sync characters
+                0x06, 0x23, // Message class and ID (UBX-CFG-NAVX5)
+                0x28, 0x00, // Length of payload (40 bytes)
+                0x00, 0x00, // msgVer (0 for this version)
+                // minMax flag = 1: apply min/max SVs settings
+                // minCno flag = 1: apply minimum C/N0 setting
+                // initial3dfix flag = 0: apply initial 3D fix settings
+                // aop flag = 1: apply aopCfg (useAOP flag) settings (AssistNow Autonomous)
+                0x1B, 0x00, // mask1 (First parameters bitmask)
+                // adr flag = 1: apply ADR sensor fusion on/off setting (useAdr flag)
+                0x01, 0x00, 0x00, 0x00, // mask2 (Second parameters bitmask)
+                0x00, 0x00,             // Reserved
+                0x03,                   // minSVs (Minimum number of satellites for navigation) = 3
+                0x20,                   // maxSVs (Maximum number of satellites for navigation) = 32
+                0x06,                   // minCNO (Minimum satellite signal level for navigation) = 6 dBHz
+                0x00,                   // Reserved
+                0x00,                   // iniFix3D (Initial fix must be 3D) = 0 (disabled)
+                0x00, 0x00,             // Reserved
+                0x00,                   // ackAiding (Issue acknowledgements for assistance message input) = 0 (disabled)
+                0x00, 0x00,             // Reserved
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Reserved
+                0x00,                               // Reserved
+                0x01,                               // aopCfg (AssistNow Autonomous configuration) = 1 (enabled)
+                0x00, 0x00,                         // Reserved
+                0x00, 0x00,                         // Reserved
+                0x00, 0x00, 0x00, 0x00,             // Reserved
+                0x00, 0x00, 0x00,                   // Reserved
+                0x01,                               // useAdr (Enable/disable ADR sensor fusion) = 1 (enabled)
+                0x00, 0x00                          // Checksum (calculated below)
+            };
+
+            // Now, calculate the checksum for the new message
+            for (size_t i = 2; i < sizeof(_message_NAVX5) - 2; i++) {
+                CK_A = CK_A + _message_NAVX5[i];
+                CK_B = CK_B + CK_A;
+            }
+
+            // And finally, place the calculated checksum values in the message
+            _message_NAVX5[sizeof(_message_NAVX5) - 2] = CK_A;
+            _message_NAVX5[sizeof(_message_NAVX5) - 1] = CK_B;
+
+            // Send the message to the module
+            _serial_gps->write(_message_NAVX5, sizeof(_message_NAVX5));
+            if (!getACK(0x06, 0x23)) {
+                LOG_WARN("Unable to enable interference resistance.\n");
+            }
+
             /*
                 tips: NMEA Only should not be set here, otherwise initializing Ublox gnss module again after
                 setting will not output command messages in UART1, resulting in unrecognized module information
@@ -259,6 +373,35 @@ bool GPS::setupGPS()
             _serial_gps->write(_message_GGA, sizeof(_message_GGA));
             if (!getACK(0x06, 0x01)) {
                 LOG_WARN("Unable to enable NMEA GGA.\n");
+            }
+
+            // We need save configuration to flash to make our config changes persistent
+            byte _message_SAVE[] = {
+                0xB5, 0x62,             // UBX protocol header
+                0x06, 0x09,             // UBX class ID (Configuration Input Messages), message ID (UBX-CFG-CFG)
+                0x0D, 0x00,             // Length of payload (little endian)
+                0x00, 0x00, 0x00, 0x00, // clearMask: no sections cleared
+                0xFF, 0xFF, 0x00, 0x00, // saveMask: save all sections
+                0x00, 0x00, 0x00, 0x00, // loadMask: no sections loaded
+                0x0F,                   // deviceMask: BBR, Flash, EEPROM, and SPI Flash
+                0x00, 0x00              // Checksum (calculated below)
+            };
+
+            // Now, calculate the checksum for the new message
+            for (size_t i = 2; i < sizeof(_message_SAVE) - 2; i++) {
+                CK_A = CK_A + _message_SAVE[i];
+                CK_B = CK_B + CK_A;
+            }
+
+            // And finally, place the calculated checksum values in the message
+            _message_SAVE[sizeof(_message_SAVE) - 2] = CK_A;
+            _message_SAVE[sizeof(_message_SAVE) - 1] = CK_B;
+
+            // Send the message to the module
+            _serial_gps->write(_message_SAVE, sizeof(_message_SAVE));
+
+            if (!getACK(0x06, 0x09)) {
+                LOG_WARN("Unable to save GNSS module configuration.\n");
             }
         }
     }
