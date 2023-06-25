@@ -31,12 +31,12 @@ NOTE: for debugging only
 */
 void NeighborInfoModule::printNodeDBNodes(const char *header)
 {
-    int num_nodes = nodeDB.getNumNodes();
+    int num_nodes = nodeDB.getNumMeshNodes();
     LOG_DEBUG("%s NODEDB SELECTION from Node %d:\n", header, nodeDB.getNodeNum());
     LOG_DEBUG("----------------\n");
     LOG_DEBUG("DB contains %d nodes\n", num_nodes);
     for (int i = 0; i < num_nodes; i++) {
-        meshtastic_NodeInfo *dbEntry = nodeDB.getNodeByIndex(i);
+        meshtastic_NodeInfoLite *dbEntry = nodeDB.getMeshNodeByIndex(i);
         LOG_DEBUG("     Node %d: node_id=%d, snr=%.2f\n", i, dbEntry->num, dbEntry->snr);
     }
     LOG_DEBUG("----------------\n");
@@ -122,7 +122,6 @@ Assumes that the neighborInfo packet has been allocated
 uint32_t NeighborInfoModule::collectNeighborInfo(meshtastic_NeighborInfo *neighborInfo)
 {
     int num_neighbors = getNumNeighbors();
-    int current_time = getTime();
     int my_node_id = nodeDB.getNodeNum();
     neighborInfo->node_id = my_node_id;
     neighborInfo->last_sent_by_id = my_node_id;
