@@ -21,11 +21,10 @@ GPS *gps;
 /// only init that port once.
 static bool didSerialInit;
 
-bool GPS::getACK(uint8_t c, uint8_t i)
-{
+bool GPS::getACK(uint8_t class_id, uint8_t msg_id) {
     uint8_t b;
     uint8_t ack = 0;
-    const uint8_t ackP[2] = {c, i};
+    const uint8_t ackP[2] = {class_id, msg_id};
     uint8_t buf[10] = {0xB5, 0x62, 0x05, 0x01, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00};
     unsigned long startTime = millis();
 
@@ -42,17 +41,23 @@ bool GPS::getACK(uint8_t c, uint8_t i)
 
     while (1) {
         if (ack > 9) {
-            return true;
+            LOG_INFO("Got ACK for class %02X message %02X\n", class_id, msg_id);
+            return true;  // ACK received
         }
         if (millis() - startTime > 1000) {
-            return false;
+            LOG_WARN("No response for class %02X message %02X\n", class_id, msg_id);
+            return false;  // No response received within 1 second
         }
         if (_serial_gps->available()) {
             b = _serial_gps->read();
             if (b == buf[ack]) {
                 ack++;
             } else {
-                ack = 0;
+                ack = 0;  // Reset the acknowledgement counter
+                if (buf[3] == 0x00) {  // UBX-ACK-NAK message
+                    LOG_WARN("Got NAK for class %02X message %02X\n", class_id, msg_id);
+                    return false;  // NAK received
+                }
             }
         }
     }
