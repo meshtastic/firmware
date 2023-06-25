@@ -376,18 +376,17 @@ void NodeDB::init()
  */
 void NodeDB::pickNewNodeNum()
 {
-    NodeNum r = myNodeInfo.my_node_num;
-
     // Pick an initial nodenum based on the macaddr
-    r = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
+    NodeNum r = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
 
-    if (r == NODENUM_BROADCAST || r < NUM_RESERVED)
-        r = NUM_RESERVED; // don't pick a reserved node number
+    if (r == NODENUM_BROADCAST || r < NUM_RESERVED) {
+        r += NUM_RESERVED; // don't pick a reserved node number
+    }
 
     meshtastic_NodeInfoLite *found;
     while ((found = getMeshNode(r)) && memcmp(found->user.macaddr, owner.macaddr, sizeof(owner.macaddr))) {
-        // FIXME: input for random() is int, so NODENUM_BROADCAST becomes -1
-        NodeNum n = random(NUM_RESERVED, NODENUM_BROADCAST); // try a new random choice
+        // NOTE: input for random() is int, so NODENUM_BROADCAST becomes -1, use INT32_MAX as it is the same width
+        NodeNum n = random(NUM_RESERVED, INT32_MAX); // try a new random choice
         LOG_WARN("NOTE! Our desired nodenum 0x%x is in use, so trying for 0x%x\n", r, n);
         r = n;
     }
