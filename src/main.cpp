@@ -19,8 +19,8 @@
 #include "detect/ScanI2CTwoWire.h"
 #include "detect/axpDebug.h"
 #include "detect/einkScan.h"
-#include "graphics/Screen.h"
 #include "graphics/RAKled.h"
+#include "graphics/Screen.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/config.pb.h"
 #include "modules/Modules.h"
@@ -360,15 +360,15 @@ void setup()
 
     // Only one supported RGB LED currently
     rgb_found = i2cScanner->find(ScanI2C::DeviceType::NCP5623);
-    
-    // Start the RGB LED at 50%
-    #ifdef RAK4630
+
+// Start the RGB LED at 50%
+#ifdef RAK4630
     if (rgb_found.type == ScanI2C::NCP5623) {
         rgb.begin();
         rgb.setCurrent(10);
         rgb.setColor(128, 128, 128);
     }
-    #endif
+#endif
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
     auto acc_info = i2cScanner->firstAccelerometer();
