@@ -305,13 +305,14 @@ int32_t CannedMessageModule::runOnce()
         switch (this->payload) {
         case 0xb4: // left
             if (this->destSelect) {
-                size_t numNodes = nodeDB.getNumNodes();
+                size_t numMeshNodes = nodeDB.getNumMeshNodes();
                 if (this->dest == NODENUM_BROADCAST) {
                     this->dest = nodeDB.getNodeNum();
                 }
-                for (unsigned int i = 0; i < numNodes; i++) {
-                    if (nodeDB.getNodeByIndex(i)->num == this->dest) {
-                        this->dest = (i > 0) ? nodeDB.getNodeByIndex(i - 1)->num : nodeDB.getNodeByIndex(numNodes - 1)->num;
+                for (unsigned int i = 0; i < numMeshNodes; i++) {
+                    if (nodeDB.getMeshNodeByIndex(i)->num == this->dest) {
+                        this->dest =
+                            (i > 0) ? nodeDB.getMeshNodeByIndex(i - 1)->num : nodeDB.getMeshNodeByIndex(numMeshNodes - 1)->num;
                         break;
                     }
                 }
@@ -326,13 +327,14 @@ int32_t CannedMessageModule::runOnce()
             break;
         case 0xb7: // right
             if (this->destSelect) {
-                size_t numNodes = nodeDB.getNumNodes();
+                size_t numMeshNodes = nodeDB.getNumMeshNodes();
                 if (this->dest == NODENUM_BROADCAST) {
                     this->dest = nodeDB.getNodeNum();
                 }
-                for (unsigned int i = 0; i < numNodes; i++) {
-                    if (nodeDB.getNodeByIndex(i)->num == this->dest) {
-                        this->dest = (i < numNodes - 1) ? nodeDB.getNodeByIndex(i + 1)->num : nodeDB.getNodeByIndex(0)->num;
+                for (unsigned int i = 0; i < numMeshNodes; i++) {
+                    if (nodeDB.getMeshNodeByIndex(i)->num == this->dest) {
+                        this->dest =
+                            (i < numMeshNodes - 1) ? nodeDB.getMeshNodeByIndex(i + 1)->num : nodeDB.getMeshNodeByIndex(0)->num;
                         break;
                     }
                 }
@@ -409,7 +411,7 @@ const char *CannedMessageModule::getNodeName(NodeNum node)
     if (node == NODENUM_BROADCAST) {
         return "Broadcast";
     } else {
-        meshtastic_NodeInfo *info = nodeDB.getNode(node);
+        meshtastic_NodeInfoLite *info = nodeDB.getMeshNode(node);
         if (info != NULL) {
             return info->user.long_name;
         } else {
