@@ -290,9 +290,6 @@ void NodeDB::installDefaultDeviceState()
 
     generatePacketId(); // FIXME - ugly way to init current_packet_id;
 
-    // Init our blank owner info to reasonable defaults
-    getMacAddr(ourMacAddr);
-
     // Set default owner name
     pickNewNodeNum(); // based on macaddr now
     snprintf(owner.long_name, sizeof(owner.long_name), "Meshtastic %02x%02x", ourMacAddr[4], ourMacAddr[5]);
@@ -377,6 +374,8 @@ void NodeDB::init()
 void NodeDB::pickNewNodeNum()
 {
     NodeNum r = myNodeInfo.my_node_num;
+
+    getMacAddr(ourMacAddr); // Make sure ourMacAddr is set
 
     // Pick an initial nodenum based on the macaddr
     r = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
