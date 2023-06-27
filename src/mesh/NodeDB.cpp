@@ -229,6 +229,9 @@ void NodeDB::installDefaultModuleConfig()
     // Default to RAK led pin 2 (blue)
     moduleConfig.external_notification.enabled = true;
     moduleConfig.external_notification.output = PIN_LED2;
+    moduleConfig.external_notification.active = true;
+    moduleConfig.external_notification.alert_message = true;
+
 #endif
     moduleConfig.has_canned_message = true;
 
