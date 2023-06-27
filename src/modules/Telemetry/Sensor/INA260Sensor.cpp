@@ -12,7 +12,10 @@ int32_t INA260Sensor::runOnce()
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    status = ina260.begin(nodeTelemetrySensorsMap[sensorType]);
+
+    if (!status) {
+        status = ina260.begin(nodeTelemetrySensorsMap[sensorType]);
+    }
     return initI2CSensor();
 }
 
@@ -24,4 +27,9 @@ bool INA260Sensor::getMetrics(meshtastic_Telemetry *measurement)
     measurement->variant.environment_metrics.voltage = ina260.readBusVoltage() / 1000;
     measurement->variant.environment_metrics.current = ina260.readCurrent();
     return true;
+}
+
+uint16_t INA260Sensor::getBusVoltageMv()
+{
+    return lround(ina260.readBusVoltage());
 }

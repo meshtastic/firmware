@@ -51,7 +51,7 @@ class ButtonThread : public concurrency::OSThread
         pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT_PULLUP_SENSE);
 #endif
         userButton.attachClick(userButtonPressed);
-        userButton.setClickTicks(300);
+        userButton.setClickMs(300);
         userButton.attachDuringLongPress(userButtonPressedLong);
         userButton.attachDoubleClick(userButtonDoublePressed);
         userButton.attachMultiClick(userButtonMultiPressed);
@@ -157,7 +157,7 @@ class ButtonThread : public concurrency::OSThread
         digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
 #endif
         screen->print("Sent ad-hoc ping\n");
-        service.refreshMyNodeInfo();
+        service.refreshLocalMeshNode();
         service.sendNetworkPing(NODENUM_BROADCAST, true);
     }
 
