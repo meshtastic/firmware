@@ -4,8 +4,11 @@
 
 #define ARDUINO_ARCH_AVR
 
+#undef CBC
 #define CBC 0
+#undef CTR
 #define CTR 1
+#undef ECB
 #define ECB 0
 
 #define NO_GPS 1
@@ -18,11 +21,12 @@
 #define BUTTON_PIN 17
 #define EXT_NOTIFY_OUT 4
 
+#define LED_PIN PIN_LED
+
 #define BATTERY_PIN 26
 // ratio of voltage divider = 3.0 (R17=200k, R18=100k)
 #define ADC_MULTIPLIER 3.1 // 3.0 + a bit for being optimistic
 
-#define USE_RF95
 #define USE_SX1262
 
 #undef RF95_SCK
@@ -48,5 +52,3 @@
 #define SX126X_RESET LORA_RESET
 #define SX126X_E22
 #endif
-
-#include <Adafruit_TinyUSB.h>

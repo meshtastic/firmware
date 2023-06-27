@@ -232,7 +232,8 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(float snr)
         delay = random(0, 2 * CWsize) * slotTimeMsec;
         LOG_DEBUG("rx_snr found in packet. As a router, setting tx delay:%d\n", delay);
     } else {
-        delay = random(0, pow(2, CWsize)) * slotTimeMsec;
+        // offset the maximum delay for routers: (2 * CWmax * slotTimeMsec)
+        delay = (2 * CWmax * slotTimeMsec) + random(0, pow(2, CWsize)) * slotTimeMsec;
         LOG_DEBUG("rx_snr found in packet. Setting tx delay:%d\n", delay);
     }
 
