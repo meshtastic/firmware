@@ -231,7 +231,8 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output = PIN_LED2;
     moduleConfig.external_notification.active = true;
     moduleConfig.external_notification.alert_message = true;
-
+    moduleConfig.external_notification.output_ms = 1000;
+    moduleConfig.external_notification.nag_timeout = 60;
 #endif
     moduleConfig.has_canned_message = true;
 
