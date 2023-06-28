@@ -98,7 +98,7 @@ class MeshService
     bool cancelSending(PacketId id);
 
     /// Pull the latest power and time info into my nodeinfo
-    meshtastic_NodeInfo *refreshMyNodeInfo();
+    meshtastic_NodeInfoLite *refreshLocalMeshNode();
 
     /// Send a packet to the phone
     void sendToPhone(meshtastic_MeshPacket *p);

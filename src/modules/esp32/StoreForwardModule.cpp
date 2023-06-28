@@ -36,8 +36,6 @@ int32_t StoreForwardModule::runOnce()
                     this->packetHistoryTXQueue_index++;
                 }
             }
-            LOG_DEBUG("*** SF bitrate = %f bytes / sec\n", myNodeInfo.bitrate);
-
         } else if ((millis() - lastHeartbeat > (heartbeatInterval * 1000)) && airTime->isTxAllowedChannelUtil(true)) {
             lastHeartbeat = millis();
             LOG_INFO("*** Sending heartbeat\n");
@@ -266,7 +264,6 @@ ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &m
                     storeForwardModule->historyAdd(mp);
                     LOG_INFO("*** S&F stored. Message history contains %u records now.\n", this->packetHistoryCurrent);
                 }
-
             } else if (mp.decoded.portnum == meshtastic_PortNum_STORE_FORWARD_APP) {
                 auto &p = mp.decoded;
                 meshtastic_StoreAndForward scratch;
