@@ -372,7 +372,8 @@ typedef struct _meshtastic_User {
     /* A VERY short name, ideally two characters.
  Suitable for a tiny OLED screen */
     char short_name[5];
-    /* This is the addr of the radio.
+    /* Deprecated in Meshtastic 2.1.x
+ This is the addr of the radio.
  Not populated by the phone, but added by the esp32 when broadcasting */
     pb_byte_t macaddr[6];
     /* TBEAM, HELTEC, etc...
@@ -578,12 +579,15 @@ typedef struct _meshtastic_MyNodeInfo {
     /* Tells the phone what our node number is, default starting value is
  lowbyte of macaddr, but it will be fixed if that is already in use */
     uint32_t my_node_num;
-    /* Note: This flag merely means we detected a hardware GPS in our node.
+    /* Deprecated in 2.1.x (Source from device_metadata)
+ Note: This flag merely means we detected a hardware GPS in our node.
  Not the same as UserPreferences.location_sharing */
     bool has_gps;
-    /* The maximum number of 'software' channels that can be set on this node. */
+    /* Deprecated in 2.1.x
+ The maximum number of 'software' channels that can be set on this node. */
     uint32_t max_channels;
-    /* 0.0.5 etc... */
+    /* Deprecated in 2.1.x (Source from device_metadata)
+ 0.0.5 etc... */
     char firmware_version[18];
     /* An error message we'd like to report back to the mothership through analytics.
  It indicates a serious bug occurred on the device, the device coped with it,
@@ -600,9 +604,11 @@ typedef struct _meshtastic_MyNodeInfo {
     /* The total number of reboots this node has ever encountered
  (well - since the last time we discarded preferences) */
     uint32_t reboot_count;
-    /* Calculated bitrate of the current channel (in Bytes Per Second) */
+    /* Deprecated in 2.1.x
+ Calculated bitrate of the current channel (in Bytes Per Second) */
     float bitrate;
-    /* How long before we consider a message abandoned and we can clear our
+    /* Deprecated in 2.1.x
+ How long before we consider a message abandoned and we can clear our
  caches of any messages in flight Normally quite large to handle the worst case
  message delivery time, 5 minutes.
  Formerly called FLOOD_EXPIRE_TIME in the device code */
@@ -610,17 +616,22 @@ typedef struct _meshtastic_MyNodeInfo {
     /* The minimum app version that can talk to this device.
  Phone/PC apps should compare this to their build number and if too low tell the user they must update their app */
     uint32_t min_app_version;
-    /* 24 time windows of 1hr each with the airtime transmitted out of the device per hour. */
+    /* Deprecated in 2.1.x (Only used on device to keep track of utilization)
+ 24 time windows of 1hr each with the airtime transmitted out of the device per hour. */
     pb_size_t air_period_tx_count;
     uint32_t air_period_tx[8];
-    /* 24 time windows of 1hr each with the airtime of valid packets for your mesh. */
+    /* Deprecated in 2.1.x (Only used on device to keep track of utilization)
+ 24 time windows of 1hr each with the airtime of valid packets for your mesh. */
     pb_size_t air_period_rx_count;
     uint32_t air_period_rx[8];
-    /* Is the device wifi capable? */
+    /* Deprecated in 2.1.x (Source from DeviceMetadata instead)
+ Is the device wifi capable? */
     bool has_wifi;
-    /* Utilization for the current channel, including well formed TX, RX and malformed RX (aka noise). */
+    /* Deprecated in 2.1.x (Source from DeviceMetrics telemetry payloads)
+ Utilization for the current channel, including well formed TX, RX and malformed RX (aka noise). */
     float channel_utilization;
-    /* Percent of airtime for transmission used within the last hour. */
+    /* Deprecated in 2.1.x (Source from DeviceMetrics telemetry payloads)
+ Percent of airtime for transmission used within the last hour. */
     float air_util_tx;
 } meshtastic_MyNodeInfo;
 

@@ -37,12 +37,18 @@ static const adc_atten_t atten = ADC_ATTENUATION;
 #endif
 #endif // BATTERY_PIN && ARCH_ESP32
 
+#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
+INA260Sensor ina260Sensor;
+INA219Sensor ina219Sensor;
+#endif
+
 #ifdef HAS_PMU
 #include "XPowersAXP192.tpp"
 #include "XPowersAXP2101.tpp"
 #include "XPowersLibInterface.hpp"
 XPowersLibInterface *PMU = NULL;
 #else
+
 // Copy of the base class defined in axp20x.h.
 // I'd rather not inlude axp20x.h as it brings Wire dependency.
 class HasBatteryLevel
@@ -127,6 +133,13 @@ class AnalogBatteryLevel : public HasBatteryLevel
      */
     virtual uint16_t getBattVoltage() override
     {
+
+#if defined(HAS_TELEMETRY) && !defined(ARCH_PORTDUINO) && !defined(HAS_PMU)
+        if (hasINA()) {
+            LOG_DEBUG("Using INA on I2C addr 0x%x for device battery voltage\n", config.power.device_battery_ina_address);
+            return getINAVoltage();
+        }
+#endif
 
 #ifndef ADC_MULTIPLIER
 #define ADC_MULTIPLIER 2.0
@@ -246,6 +259,35 @@ class AnalogBatteryLevel : public HasBatteryLevel
     const float fullVolt = BAT_FULLVOLT, emptyVolt = BAT_EMPTYVOLT, chargingVolt = BAT_CHARGINGVOLT, noBatVolt = BAT_NOBATVOLT;
     float last_read_value = 0.0;
     uint32_t last_read_time_ms = 0;
+
+#if defined(HAS_TELEMETRY) && !defined(ARCH_PORTDUINO)
+    uint16_t getINAVoltage()
+    {
+        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219] == config.power.device_battery_ina_address) {
+            return ina219Sensor.getBusVoltageMv();
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260] == config.power.device_battery_ina_address) {
+            return ina260Sensor.getBusVoltageMv();
+        }
+        return 0;
+    }
+
+    bool hasINA()
+    {
+        if (!config.power.device_battery_ina_address) {
+            return false;
+        }
+        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219] == config.power.device_battery_ina_address) {
+            if (!ina219Sensor.isInitialized())
+                return ina219Sensor.runOnce() > 0;
+            return ina219Sensor.isRunning();
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260] == config.power.device_battery_ina_address) {
+            if (!ina260Sensor.isInitialized())
+                return ina260Sensor.runOnce() > 0;
+            return ina260Sensor.isRunning();
+        }
+        return false;
+    }
+#endif
 };
 
 AnalogBatteryLevel analogLevel;
@@ -639,7 +681,6 @@ bool Power::axpChipInit()
             // GNSS VDD 3300mV
             PMU->setPowerChannelVoltage(XPOWERS_ALDO3, 3300);
             PMU->enablePowerOutput(XPOWERS_ALDO3);
-
         } else if (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE) {
             // t-beam s3 core
             /**

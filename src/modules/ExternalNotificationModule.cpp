@@ -11,7 +11,7 @@
 #include "main.h"
 
 #ifdef RAK4630
-#include <NCP5623.h>
+#include <graphics/RAKled.h>
 NCP5623 rgb;
 
 uint8_t red = 0;

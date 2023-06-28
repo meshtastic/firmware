@@ -19,6 +19,7 @@
 #include "detect/ScanI2CTwoWire.h"
 #include "detect/axpDebug.h"
 #include "detect/einkScan.h"
+#include "graphics/RAKled.h"
 #include "graphics/Screen.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/config.pb.h"
@@ -59,6 +60,9 @@ NRF52Bluetooth *nrf52Bluetooth;
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
 #include "SX1280Interface.h"
+#ifdef ARCH_STM32WL
+#include "STM32WLE5JCInterface.h"
+#endif
 #if !HAS_RADIO && defined(ARCH_PORTDUINO)
 #include "platform/portduino/SimRadio.h"
 #endif
@@ -68,7 +72,7 @@ NRF52Bluetooth *nrf52Bluetooth;
 #endif
 #include "PowerFSMThread.h"
 
-#if !defined(ARCH_PORTDUINO)
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 #include "AccelerometerThread.h"
 #endif
 
@@ -260,6 +264,12 @@ void setup()
     // We need to enable 3.3V periphery in order to scan it
     pinMode(PIN_3V3_EN, OUTPUT);
     digitalWrite(PIN_3V3_EN, HIGH);
+
+#ifndef USE_EINK
+    // RAK-12039 set pin for Air quality sensor
+    pinMode(AQ_SET_PIN, OUTPUT);
+    digitalWrite(AQ_SET_PIN, HIGH);
+#endif
 #endif
 
     // Currently only the tbeam has a PMU
@@ -347,10 +357,20 @@ void setup()
      * nodeTelemetrySensorsMap singleton. This wraps that logic in a temporary scope to declare the temporary field
      * "found".
      */
+
     // Only one supported RGB LED currently
     rgb_found = i2cScanner->find(ScanI2C::DeviceType::NCP5623);
 
-#if !defined(ARCH_PORTDUINO)
+// Start the RGB LED at 50%
+#ifdef RAK4630
+    if (rgb_found.type == ScanI2C::NCP5623) {
+        rgb.begin();
+        rgb.setCurrent(10);
+        rgb.setColor(128, 128, 128);
+    }
+#endif
+
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
     auto acc_info = i2cScanner->firstAccelerometer();
     accelerometer_found = acc_info.type != ScanI2C::DeviceType::NONE ? acc_info.address : accelerometer_found;
     LOG_DEBUG("acc_info = %i\n", acc_info.type);
@@ -439,7 +459,7 @@ void setup()
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
 #endif
 
-#if !defined(ARCH_PORTDUINO)
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
         accelerometerThread = new AccelerometerThread(acc_info.type);
     }
@@ -530,6 +550,18 @@ void setup()
 #endif
 
     // radio init MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
+#if defined(USE_STM32WLx)
+    if (!rIf) {
+        rIf = new STM32WLE5JCInterface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
+        if (!rIf->init()) {
+            LOG_WARN("Failed to find STM32WL radio\n");
+            delete rIf;
+            rIf = NULL;
+        } else {
+            LOG_INFO("STM32WL Radio init succeeded, using STM32WL radio\n");
+        }
+    }
+#endif
 
 #if !HAS_RADIO && defined(ARCH_PORTDUINO)
     if (!rIf) {
@@ -651,12 +683,10 @@ void setup()
     else {
         router->addInterface(rIf);
 
-        // Calculate and save the bit rate to myNodeInfo
-        // TODO: This needs to be added what ever method changes the channel from the phone.
-        myNodeInfo.bitrate =
-            (float(meshtastic_Constants_DATA_PAYLOAD_LEN) / (float(rIf->getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN)))) *
-            1000;
-        LOG_DEBUG("myNodeInfo.bitrate = %f bytes / sec\n", myNodeInfo.bitrate);
+        // Log bit rate to debug output
+        LOG_DEBUG("LoRA bitrate = %f bytes / sec\n", (float(meshtastic_Constants_DATA_PAYLOAD_LEN) /
+                                                      (float(rIf->getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN)))) *
+                                                         1000);
     }
 
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
@@ -677,7 +707,7 @@ bool runASAP;
 extern meshtastic_DeviceMetadata getDeviceMetadata()
 {
     meshtastic_DeviceMetadata deviceMetadata;
-    strncpy(deviceMetadata.firmware_version, myNodeInfo.firmware_version, 18);
+    strncpy(deviceMetadata.firmware_version, optstr(APP_VERSION), sizeof(deviceMetadata.firmware_version));
     deviceMetadata.device_state_version = DEVICESTATE_CUR_VER;
     deviceMetadata.canShutdown = pmu_found || HAS_CPU_SHUTDOWN;
     deviceMetadata.hasBluetooth = HAS_BLUETOOTH;

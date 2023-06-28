@@ -27,6 +27,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "error.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
 #include "graphics/images.h"
@@ -352,7 +353,7 @@ static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
     display->setFont(FONT_MEDIUM);
 
     char tempBuf[24];
-    snprintf(tempBuf, sizeof(tempBuf), "Critical fault #%d", myNodeInfo.error_code);
+    snprintf(tempBuf, sizeof(tempBuf), "Critical fault #%d", error_code);
     display->drawString(0 + x, 0 + y, tempBuf);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
@@ -372,7 +373,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     static char tempBuf[237];
 
     meshtastic_MeshPacket &mp = devicestate.rx_text_message;
-    meshtastic_NodeInfo *node = nodeDB.getNode(getFrom(&mp));
+    meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(getFrom(&mp));
     // LOG_DEBUG("drawing text message from 0x%x: %s\n", mp.from,
     // mp.decoded.variant.data.decoded.bytes);
 
@@ -410,7 +411,7 @@ static void drawWaypointFrame(OLEDDisplay *display, OLEDDisplayUiState *state, i
     static char tempBuf[237];
 
     meshtastic_MeshPacket &mp = devicestate.rx_waypoint;
-    meshtastic_NodeInfo *node = nodeDB.getNode(getFrom(&mp));
+    meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(getFrom(&mp));
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
@@ -792,16 +793,16 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     if (state->currentFrame != prevFrame) {
         prevFrame = state->currentFrame;
 
-        nodeIndex = (nodeIndex + 1) % nodeDB.getNumNodes();
-        meshtastic_NodeInfo *n = nodeDB.getNodeByIndex(nodeIndex);
+        nodeIndex = (nodeIndex + 1) % nodeDB.getNumMeshNodes();
+        meshtastic_NodeInfoLite *n = nodeDB.getMeshNodeByIndex(nodeIndex);
         if (n->num == nodeDB.getNodeNum()) {
             // Don't show our node, just skip to next
-            nodeIndex = (nodeIndex + 1) % nodeDB.getNumNodes();
-            n = nodeDB.getNodeByIndex(nodeIndex);
+            nodeIndex = (nodeIndex + 1) % nodeDB.getNumMeshNodes();
+            n = nodeDB.getMeshNodeByIndex(nodeIndex);
         }
     }
 
-    meshtastic_NodeInfo *node = nodeDB.getNodeByIndex(nodeIndex);
+    meshtastic_NodeInfoLite *node = nodeDB.getMeshNodeByIndex(nodeIndex);
 
     display->setFont(FONT_SMALL);
 
@@ -835,7 +836,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 
     static char distStr[20];
     strncpy(distStr, "? km", sizeof(distStr)); // might not have location data
-    meshtastic_NodeInfo *ourNode = nodeDB.getNode(nodeDB.getNodeNum());
+    meshtastic_NodeInfoLite *ourNode = nodeDB.getMeshNode(nodeDB.getNodeNum());
     const char *fields[] = {username, distStr, signalStr, lastStr, NULL};
     int16_t compassX = 0, compassY = 0;
 
@@ -850,14 +851,14 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     bool hasNodeHeading = false;
 
     if (ourNode && hasValidPosition(ourNode)) {
-        meshtastic_Position &op = ourNode->position;
+        meshtastic_PositionLite &op = ourNode->position;
         float myHeading = estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
         drawCompassNorth(display, compassX, compassY, myHeading);
 
         if (hasValidPosition(node)) {
             // display direction toward node
             hasNodeHeading = true;
-            meshtastic_Position &p = node->position;
+            meshtastic_PositionLite &p = node->position;
             float d =
                 GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
 
@@ -1239,9 +1240,9 @@ void Screen::setFrames()
 #endif
 
     // We don't show the node info our our node (if we have it yet - we should)
-    size_t numnodes = nodeDB.getNumNodes();
-    if (numnodes > 0)
-        numnodes--;
+    size_t numMeshNodes = nodeDB.getNumMeshNodes();
+    if (numMeshNodes > 0)
+        numMeshNodes--;
 
     size_t numframes = 0;
 
@@ -1258,7 +1259,7 @@ void Screen::setFrames()
     LOG_DEBUG("Added modules.  numframes: %d\n", numframes);
 
     // If we have a critical fault, show it first
-    if (myNodeInfo.error_code)
+    if (error_code)
         normalFrames[numframes++] = drawCriticalFaultFrame;
 
     // If we have a text message - show it next, unless it's a phone message and we aren't using any special modules
@@ -1272,7 +1273,7 @@ void Screen::setFrames()
 
     // then all the nodes
     // We only show a few nodes in our scrolling list - because meshes with many nodes would have too many screens
-    size_t numToShow = min(numnodes, 4U);
+    size_t numToShow = min(numMeshNodes, 4U);
     for (size_t i = 0; i < numToShow; i++)
         normalFrames[numframes++] = drawNodeInfo;
 

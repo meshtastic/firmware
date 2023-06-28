@@ -10,6 +10,9 @@ template class SX126xInterface<SX1262>;
 template class SX126xInterface<SX1268>;
 template class SX126xInterface<LLCC68>;
 template class SX128xInterface<SX1280>;
+#ifdef ARCH_STM32WL
+template class SX126xInterface<STM32WLx>;
+#endif
 
 #if HAS_ETHERNET
 #include "api/ethServerAPI.h"

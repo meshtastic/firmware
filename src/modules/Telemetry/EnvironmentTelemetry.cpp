@@ -7,6 +7,7 @@
 #include "Router.h"
 #include "configuration.h"
 #include "main.h"
+#include "power.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
 
@@ -14,8 +15,6 @@
 #include "Sensor/BME280Sensor.h"
 #include "Sensor/BME680Sensor.h"
 #include "Sensor/BMP280Sensor.h"
-#include "Sensor/INA219Sensor.h"
-#include "Sensor/INA260Sensor.h"
 #include "Sensor/LPS22HBSensor.h"
 #include "Sensor/MCP9808Sensor.h"
 #include "Sensor/SHT31Sensor.h"
@@ -25,8 +24,6 @@ BMP280Sensor bmp280Sensor;
 BME280Sensor bme280Sensor;
 BME680Sensor bme680Sensor;
 MCP9808Sensor mcp9808Sensor;
-INA260Sensor ina260Sensor;
-INA219Sensor ina219Sensor;
 SHTC3Sensor shtc3Sensor;
 LPS22HBSensor lps22hbSensor;
 SHT31Sensor sht31Sensor;
@@ -83,15 +80,10 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = bme680Sensor.runOnce();
             if (mcp9808Sensor.hasSensor())
                 result = mcp9808Sensor.runOnce();
-            if (ina260Sensor.hasSensor())
-                result = ina260Sensor.runOnce();
-            if (ina219Sensor.hasSensor())
-                result = ina219Sensor.runOnce();
             if (shtc3Sensor.hasSensor())
                 result = shtc3Sensor.runOnce();
-            if (lps22hbSensor.hasSensor()) {
+            if (lps22hbSensor.hasSensor())
                 result = lps22hbSensor.runOnce();
-            }
             if (sht31Sensor.hasSensor())
                 result = sht31Sensor.runOnce();
         }

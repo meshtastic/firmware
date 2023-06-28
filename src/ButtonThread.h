@@ -157,7 +157,7 @@ class ButtonThread : public concurrency::OSThread
         digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
 #endif
         screen->print("Sent ad-hoc ping\n");
-        service.refreshMyNodeInfo();
+        service.refreshLocalMeshNode();
         service.sendNetworkPing(NODENUM_BROADCAST, true);
     }
 
