@@ -54,6 +54,7 @@ void PhoneAPI::close()
         unobserve(&xModem.packetReady);
         releasePhonePacket(); // Don't leak phone packets on shutdown
         releaseQueueStatusPhonePacket();
+        releaseMqttClientProxyMessagePhonePacket();
 
         onConnectionChanged(false);
     }
@@ -295,12 +296,16 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         break;
 
     case STATE_SEND_PACKETS:
-        // Do we have a message from the mesh?
+        // Do we have a message from the mesh or packet from the local device?
         LOG_INFO("getFromRadio=STATE_SEND_PACKETS\n");
         if (queueStatusPacketForPhone) {
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_queueStatus_tag;
             fromRadioScratch.queueStatus = *queueStatusPacketForPhone;
             releaseQueueStatusPhonePacket();
+        } else if (mqttPacketForPhone) {
+            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_mqttClientProxyMessage_tag;
+            fromRadioScratch.mqttClientProxyMessage = *mqttPacketForPhone;
+            releaseMqttPhonePacket();
         } else if (xmodemPacketForPhone.control != meshtastic_XModem_Control_NUL) {
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_xmodemPacket_tag;
             fromRadioScratch.xmodemPacket = xmodemPacketForPhone;
@@ -350,6 +355,14 @@ void PhoneAPI::releaseQueueStatusPhonePacket()
     if (queueStatusPacketForPhone) {
         service.releaseQueueStatusToPool(queueStatusPacketForPhone);
         queueStatusPacketForPhone = NULL;
+    }
+}
+
+void PhoneAPI::releaseMqttPhonePacket()
+{
+    if (mqttPacketForPhone) {
+        service.releaseMqttToPool(mqttPacketForPhone);
+        mqttPacketForPhone = NULL;
     }
 }
 

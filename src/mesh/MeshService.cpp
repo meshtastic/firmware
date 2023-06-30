@@ -54,11 +54,16 @@ MeshService service;
 
 static MemoryDynamic<meshtastic_QueueStatus> staticQueueStatusPool;
 
+Allocator<meshtastic_> &queueStatusPool = staticQueueStatusPool;
+
+static MemoryDynamic<meshtastic_QueueStatus> staticQueueStatusPool;
+
 Allocator<meshtastic_QueueStatus> &queueStatusPool = staticQueueStatusPool;
 
 #include "Router.h"
 
-MeshService::MeshService() : toPhoneQueue(MAX_RX_TOPHONE), toPhoneQueueStatusQueue(MAX_RX_TOPHONE)
+MeshService::MeshService()
+    : toPhoneQueue(MAX_RX_TOPHONE), toPhoneQueueStatusQueue(MAX_RX_TOPHONE), toPhoneMqttProxyQueue(MAX_RX_TOPHONE)
 {
     lastQueueStatus = {0, 0, 16, 0};
 }
@@ -266,6 +271,19 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 
     perhapsDecode(p);
     assert(toPhoneQueue.enqueue(p, 0));
+    fromNum++;
+}
+
+void MeshService::sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage *m)
+{
+    if (mqttClientProxyMessagePool.numFree() == 0) {
+        LOG_WARN("MqttClientProxyMessagePool queue is full, discarding oldest\n");
+        meshtastic_MqttClientProxyMessage *d = mqttClientProxyMessagePool.dequeuePtr(0);
+        if (d)
+            releaseMqttClientProxyMessageToPool(d);
+    }
+
+    assert(mqttClientProxyMessagePool.enqueue(m, 0));
     fromNum++;
 }
 

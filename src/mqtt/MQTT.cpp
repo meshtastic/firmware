@@ -183,7 +183,12 @@ bool MQTT::connected()
     return pubSub.connected();
 }
 
-void MQTT::reconnect()
+bool MQTT::clientProxyConnected()
+{
+    return bluetoothPhoneApi->isConnected();
+}
+
+void MQTT::rec∫onnect()
 {
     if (wantsLink()) {
         // Defaults
@@ -298,6 +303,10 @@ bool MQTT::wantsLink() const
 #if HAS_ETHERNET
     return hasChannel && (Ethernet.linkStatus() == LinkON);
 #endif
+    // Client proxy over bluetooth
+    if (bluetoothPhoneAPI->isConnected()) {
+        return true;
+    }
     return false;
 }
 

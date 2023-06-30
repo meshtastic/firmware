@@ -61,6 +61,8 @@ class MQTT : private concurrency::OSThread
 
     bool connected();
 
+    bool clientProxyConnected();
+
   protected:
     PointerQueue<meshtastic_ServiceEnvelope> mqttQueue;
 
