@@ -52,11 +52,11 @@ FIXME in the initial proof of concept we just skip the entire want/deny flow and
 
 MeshService service;
 
-static MemoryDynamic<meshtastic_QueueStatus> staticQueueStatusPool;
-
-Allocator<meshtastic_> &queueStatusPool = staticQueueStatusPool;
+static MemoryDynamic<meshtastic_MqttClientProxyMessage> staticMqttClientProxyMessagePool;
 
 static MemoryDynamic<meshtastic_QueueStatus> staticQueueStatusPool;
+
+Allocator<meshtastic_MqttClientProxyMessage> &mqttClientProxyMessagePool = staticMqttClientProxyMessagePool;
 
 Allocator<meshtastic_QueueStatus> &queueStatusPool = staticQueueStatusPool;
 
