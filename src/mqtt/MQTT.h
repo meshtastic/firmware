@@ -59,7 +59,7 @@ class MQTT : private concurrency::OSThread
      */
     void reconnect();
 
-    bool connected();
+    bool isConnectedDirectly();
 
     bool publish(const char *topic, const char *payload, bool retained);
 
@@ -92,6 +92,9 @@ class MQTT : private concurrency::OSThread
 
     /// Called when a new publish arrives from the MQTT server
     std::string downstreamPacketToJson(meshtastic_MeshPacket *mp);
+
+    void publishStatus();
+    void publishQueuedMessages();
 
     /// Return 0 if sleep is okay, veto sleep if we are connected to pubsub server
     // int preflightSleepCb(void *unused = NULL) { return pubSub.connected() ? 1 : 0; }
