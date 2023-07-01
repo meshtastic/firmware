@@ -21,6 +21,21 @@ GPS *gps;
 /// only init that port once.
 static bool didSerialInit;
 
+void GPS::UBXChecksum(byte *message, size_t length)
+{
+    uint8_t CK_A = 0, CK_B = 0;
+
+    // Calculate the checksum, starting from the CLASS field (which is message[2])
+    for (size_t i = 2; i < length - 2; i++) {
+        CK_A = (CK_A + message[i]) & 0xFF;
+        CK_B = (CK_B + CK_A) & 0xFF;
+    }
+
+    // Place the calculated checksum values in the message
+    message[length - 2] = CK_A;
+    message[length - 1] = CK_B;
+}
+
 bool GPS::getACK(uint8_t class_id, uint8_t msg_id)
 {
     uint8_t b;
@@ -219,25 +234,14 @@ bool GPS::setupGPS()
                 0x00, 0x00                                      // Checksum (to be calculated below)
             };
 
-            // Reset the checksum values
-            CK_A = 0;
-            CK_B = 0;
-
-            // Calculate the checksum, starting from the CLASS field (which is _message_GNSS[2])
-            for (size_t i = 2; i < sizeof(_message_GNSS) - 2; i++) {
-                CK_A = (CK_A + _message_GNSS[i]) & 0xFF;
-                CK_B = (CK_B + CK_A) & 0xFF;
-            }
-
-            // Place the calculated checksum values in the message
-            _message_GNSS[sizeof(_message_GNSS) - 2] = CK_A;
-            _message_GNSS[sizeof(_message_GNSS) - 1] = CK_B;
+            // Calculate the checksum and update the message.
+            UBXChecksum(_message_GNSS, sizeof(_message_GNSS));
 
             // Send the message to the module
             _serial_gps->write(_message_GNSS, sizeof(_message_GNSS));
 
             if (!getACK(0x06, 0x3e)) {
-                LOG_WARN("Unable to reconfigure GNSS.\n");
+                LOG_WARN("Unable to reconfigure GNSS, keep factory defaults\n");
             } else {
                 LOG_INFO("GNSS set to GPS+SBAS+GLONASS, waiting before sending next command (0.75s)\n");
                 delay(750);
@@ -262,19 +266,8 @@ bool GPS::setupGPS()
                 0x00, 0x00              // Checksum (calculated below)
             };
 
-            // Reset the checksum values
-            CK_A = 0;
-            CK_B = 0;
-
-            // Calculate the checksum, starting from the CLASS field (which is _message_JAM[2])
-            for (size_t i = 2; i < sizeof(_message_JAM) - 2; i++) {
-                CK_A = (CK_A + _message_JAM[i]) & 0xFF;
-                CK_B = (CK_B + CK_A) & 0xFF;
-            }
-
-            // And finally, place the calculated checksum values in the message
-            _message_JAM[sizeof(_message_JAM) - 2] = CK_A;
-            _message_JAM[sizeof(_message_JAM) - 1] = CK_B;
+            // Calculate the checksum and update the message.
+            UBXChecksum(_message_JAM, sizeof(_message_JAM));
 
             // Send the message to the module
             _serial_gps->write(_message_JAM, sizeof(_message_JAM));
@@ -300,7 +293,7 @@ bool GPS::setupGPS()
                 0x00, 0x00, 0x00, 0x00, // mask2 (Second parameters bitmask)
                 0x00, 0x00,             // Reserved
                 0x03,                   // minSVs (Minimum number of satellites for navigation) = 3
-                0x20,                   // maxSVs (Maximum number of satellites for navigation) = 32
+                0x10,                   // maxSVs (Maximum number of satellites for navigation) = 16
                 0x06,                   // minCNO (Minimum satellite signal level for navigation) = 6 dBHz
                 0x00,                   // Reserved
                 0x00,                   // iniFix3D (Initial fix must be 3D) = 0 (disabled)
@@ -318,19 +311,8 @@ bool GPS::setupGPS()
                 0x00, 0x00                          // Checksum (calculated below)
             };
 
-            // Reset the checksum values
-            CK_A = 0;
-            CK_B = 0;
-
-            // Calculate the checksum for the new message
-            for (size_t i = 2; i < sizeof(_message_NAVX5) - 2; i++) {
-                CK_A = (CK_A + _message_NAVX5[i]) & 0xFF;
-                CK_B = (CK_B + CK_A) & 0xFF;
-            }
-
-            // Place the calculated checksum values in the message
-            _message_NAVX5[sizeof(_message_NAVX5) - 2] = CK_A;
-            _message_NAVX5[sizeof(_message_NAVX5) - 1] = CK_B;
+            // Calculate the checksum and update the message.
+            UBXChecksum(_message_NAVX5, sizeof(_message_NAVX5));
 
             // Send the message to the module
             _serial_gps->write(_message_NAVX5, sizeof(_message_NAVX5));
