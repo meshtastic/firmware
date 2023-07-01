@@ -394,7 +394,9 @@ bool PhoneAPI::available()
     case STATE_SEND_PACKETS: {
         if (!queueStatusPacketForPhone)
             queueStatusPacketForPhone = service.getQueueStatusForPhone();
-        bool hasPacket = !!queueStatusPacketForPhone;
+        if (!mqttClientProxyMessageForPhone)
+            mqttClientProxyMessageForPhone = service.getMqttClientProxyMessageForPhone();
+        bool hasPacket = !!queueStatusPacketForPhone || !!mqttClientProxyMessageForPhone;
         if (hasPacket)
             return true;
 
