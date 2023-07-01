@@ -402,19 +402,8 @@ bool GPS::setupGPS()
                 0x00, 0x00              // Checksum (calculated below)
             };
 
-            // Reset the checksum values
-            CK_A = 0;
-            CK_B = 0;
-
-            // Calculate the checksum for the new message
-            for (size_t i = 2; i < sizeof(_message_SAVE) - 2; i++) {
-                CK_A = (CK_A + _message_SAVE[i]) & 0xFF;
-                CK_B = (CK_B + CK_A) & 0xFF;
-            }
-
-            // Place the calculated checksum values in the message
-            _message_SAVE[sizeof(_message_SAVE) - 2] = CK_A;
-            _message_SAVE[sizeof(_message_SAVE) - 1] = CK_B;
+            // Calculate the checksum and update the message.
+            UBXChecksum(_message_SAVE, sizeof(_message_SAVE));
 
             // Send the message to the module
             _serial_gps->write(_message_SAVE, sizeof(_message_SAVE));
