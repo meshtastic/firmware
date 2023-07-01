@@ -54,7 +54,7 @@ void PhoneAPI::close()
         unobserve(&xModem.packetReady);
         releasePhonePacket(); // Don't leak phone packets on shutdown
         releaseQueueStatusPhonePacket();
-        releaseMqttClientProxyMessagePhonePacket();
+        releaseMqttClientProxyPhonePacket();
 
         onConnectionChanged(false);
     }
@@ -302,10 +302,10 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_queueStatus_tag;
             fromRadioScratch.queueStatus = *queueStatusPacketForPhone;
             releaseQueueStatusPhonePacket();
-        } else if (mqttPacketForPhone) {
+        } else if (mqttClientProxyMessageForPhone) {
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_mqttClientProxyMessage_tag;
-            fromRadioScratch.mqttClientProxyMessage = *mqttPacketForPhone;
-            releaseMqttPhonePacket();
+            fromRadioScratch.mqttClientProxyMessage = *mqttClientProxyMessageForPhone;
+            releaseMqttClientProxyPhonePacket();
         } else if (xmodemPacketForPhone.control != meshtastic_XModem_Control_NUL) {
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_xmodemPacket_tag;
             fromRadioScratch.xmodemPacket = xmodemPacketForPhone;
@@ -358,11 +358,11 @@ void PhoneAPI::releaseQueueStatusPhonePacket()
     }
 }
 
-void PhoneAPI::releaseMqttPhonePacket()
+void PhoneAPI::releaseMqttClientProxyPhonePacket()
 {
-    if (mqttPacketForPhone) {
-        service.releaseMqttToPool(mqttPacketForPhone);
-        mqttPacketForPhone = NULL;
+    if (mqttClientProxyMessageForPhone) {
+        service.releaseMqttClientProxyMessageToPool(mqttClientProxyMessageForPhone);
+        mqttClientProxyMessageForPhone = NULL;
     }
 }
 

@@ -653,10 +653,11 @@ void setup()
             rebootAtMsec = millis() + 5000;
         }
     }
+    moduleConfig.mqtt.proxy_to_client_enabled = true;
+    moduleConfig.mqtt.enabled = true;
+    strcpy(moduleConfig.mqtt.address, "devmqtt.meshtastic.org");
 
-#if HAS_WIFI || HAS_ETHERNET
     mqttInit();
-#endif
 
 #ifndef ARCH_PORTDUINO
     // Initialize Wifi

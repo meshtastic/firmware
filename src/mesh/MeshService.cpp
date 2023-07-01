@@ -276,14 +276,15 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 
 void MeshService::sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage *m)
 {
-    if (mqttClientProxyMessagePool.numFree() == 0) {
+    LOG_DEBUG("Sending mqtt message on topic '%s' to client for proxying to server\n", m->topic);
+    if (toPhoneMqttProxyQueue.numFree() == 0) {
         LOG_WARN("MqttClientProxyMessagePool queue is full, discarding oldest\n");
-        meshtastic_MqttClientProxyMessage *d = mqttClientProxyMessagePool.dequeuePtr(0);
+        meshtastic_MqttClientProxyMessage *d = toPhoneMqttProxyQueue.dequeuePtr(0);
         if (d)
             releaseMqttClientProxyMessageToPool(d);
     }
 
-    assert(mqttClientProxyMessagePool.enqueue(m, 0));
+    assert(toPhoneMqttProxyQueue.enqueue(m, 0));
     fromNum++;
 }
 

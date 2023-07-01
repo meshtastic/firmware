@@ -129,7 +129,7 @@ class PhoneAPI
 
     void releaseQueueStatusPhonePacket();
 
-    void releaseMqttPhonePacket();
+    void releaseMqttClientProxyPhonePacket();
 
     /// begin a new connection
     void handleStartConfig();

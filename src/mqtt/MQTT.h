@@ -61,7 +61,9 @@ class MQTT : private concurrency::OSThread
 
     bool connected();
 
-    bool clientProxyConnected();
+    bool publish(const char *topic, const char *payload, bool retained);
+
+    bool publish(const char *topic, const uint8_t *payload, unsigned int length, const bool retained);
 
   protected:
     PointerQueue<meshtastic_ServiceEnvelope> mqttQueue;

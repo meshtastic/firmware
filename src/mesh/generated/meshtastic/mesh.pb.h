@@ -462,13 +462,20 @@ typedef struct _meshtastic_Waypoint {
     uint32_t icon;
 } meshtastic_Waypoint;
 
-typedef PB_BYTES_ARRAY_T(500) meshtastic_MqttClientProxyMessage_data_t;
+typedef PB_BYTES_ARRAY_T(435) meshtastic_MqttClientProxyMessage_data_t;
 /* This message will be proxied over the PhoneAPI for client to deliver to the MQTT server */
 typedef struct _meshtastic_MqttClientProxyMessage {
     /* The MQTT topic this message will be sent /received on */
-    char *topic;
-    /* The actual service envelope payload for mqtt delivery */
-    meshtastic_MqttClientProxyMessage_data_t data;
+    char topic[60];
+    pb_size_t which_payload_variant;
+    union {
+        /* Bytes */
+        meshtastic_MqttClientProxyMessage_data_t data;
+        /* Text */
+        char text[435];
+    } payload_variant;
+    /* Whether the message should be retained (or not) */
+    bool retained;
 } meshtastic_MqttClientProxyMessage;
 
 typedef PB_BYTES_ARRAY_T(256) meshtastic_MeshPacket_encrypted_t;
@@ -874,7 +881,7 @@ extern "C" {
 #define meshtastic_Routing_init_default          {0, {meshtastic_RouteDiscovery_init_default}}
 #define meshtastic_Data_init_default             {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Waypoint_init_default         {0, 0, 0, 0, 0, "", "", 0}
-#define meshtastic_MqttClientProxyMessage_init_default {NULL, {0, {0}}}
+#define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN}
 #define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0}
 #define meshtastic_MyNodeInfo_init_default       {0, 0, 0, "", _meshtastic_CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
@@ -892,7 +899,7 @@ extern "C" {
 #define meshtastic_Routing_init_zero             {0, {meshtastic_RouteDiscovery_init_zero}}
 #define meshtastic_Data_init_zero                {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Waypoint_init_zero            {0, 0, 0, 0, 0, "", "", 0}
-#define meshtastic_MqttClientProxyMessage_init_zero {NULL, {0, {0}}}
+#define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN}
 #define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0}
 #define meshtastic_MyNodeInfo_init_zero          {0, 0, 0, "", _meshtastic_CriticalErrorCode_MIN, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, 0, 0}
@@ -956,6 +963,8 @@ extern "C" {
 #define meshtastic_Waypoint_icon_tag             8
 #define meshtastic_MqttClientProxyMessage_topic_tag 1
 #define meshtastic_MqttClientProxyMessage_data_tag 2
+#define meshtastic_MqttClientProxyMessage_text_tag 3
+#define meshtastic_MqttClientProxyMessage_retained_tag 4
 #define meshtastic_MeshPacket_from_tag           1
 #define meshtastic_MeshPacket_to_tag             2
 #define meshtastic_MeshPacket_channel_tag        3
@@ -1112,8 +1121,10 @@ X(a, STATIC,   SINGULAR, FIXED32,  icon,              8)
 #define meshtastic_Waypoint_DEFAULT NULL
 
 #define meshtastic_MqttClientProxyMessage_FIELDLIST(X, a) \
-X(a, POINTER,  SINGULAR, STRING,   topic,             1) \
-X(a, STATIC,   SINGULAR, BYTES,    data,              2)
+X(a, STATIC,   SINGULAR, STRING,   topic,             1) \
+X(a, STATIC,   ONEOF,    BYTES,    (payload_variant,data,payload_variant.data),   2) \
+X(a, STATIC,   ONEOF,    STRING,   (payload_variant,text,payload_variant.text),   3) \
+X(a, STATIC,   SINGULAR, BOOL,     retained,          4)
 #define meshtastic_MqttClientProxyMessage_CALLBACK NULL
 #define meshtastic_MqttClientProxyMessage_DEFAULT NULL
 
@@ -1298,13 +1309,13 @@ extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
 #define meshtastic_DeviceMetadata_fields &meshtastic_DeviceMetadata_msg
 
 /* Maximum encoded size of messages (where known) */
-/* meshtastic_MqttClientProxyMessage_size depends on runtime parameters */
-/* meshtastic_FromRadio_size depends on runtime parameters */
 #define meshtastic_Compressed_size               243
 #define meshtastic_Data_size                     270
 #define meshtastic_DeviceMetadata_size           46
+#define meshtastic_FromRadio_size                510
 #define meshtastic_LogRecord_size                81
 #define meshtastic_MeshPacket_size               321
+#define meshtastic_MqttClientProxyMessage_size   501
 #define meshtastic_MyNodeInfo_size               179
 #define meshtastic_NeighborInfo_size             142
 #define meshtastic_Neighbor_size                 11

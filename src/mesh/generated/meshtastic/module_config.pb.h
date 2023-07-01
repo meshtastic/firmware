@@ -112,6 +112,8 @@ typedef struct _meshtastic_ModuleConfig_MQTTConfig {
     /* The root topic to use for MQTT messages. Default is "msh".
  This is useful if you want to use a single MQTT server for multiple meshtastic networks and separate them via ACLs */
     char root[16];
+    /* If true, we can use the connected phone / client to proxy messages to MQTT instead of a direct connection */
+    bool proxy_to_client_enabled;
 } meshtastic_ModuleConfig_MQTTConfig;
 
 /* NeighborInfoModule Config */
@@ -375,7 +377,7 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_ModuleConfig_init_default     {0, {meshtastic_ModuleConfig_MQTTConfig_init_default}}
-#define meshtastic_ModuleConfig_MQTTConfig_init_default {0, "", "", "", 0, 0, 0, ""}
+#define meshtastic_ModuleConfig_MQTTConfig_init_default {0, "", "", "", 0, 0, 0, "", 0}
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_init_default {0, 0, 0, {meshtastic_RemoteHardwarePin_init_default, meshtastic_RemoteHardwarePin_init_default, meshtastic_RemoteHardwarePin_init_default, meshtastic_RemoteHardwarePin_init_default}}
 #define meshtastic_ModuleConfig_NeighborInfoConfig_init_default {0, 0}
 #define meshtastic_ModuleConfig_AudioConfig_init_default {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
@@ -387,7 +389,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define meshtastic_RemoteHardwarePin_init_default {0, "", _meshtastic_RemoteHardwarePinType_MIN}
 #define meshtastic_ModuleConfig_init_zero        {0, {meshtastic_ModuleConfig_MQTTConfig_init_zero}}
-#define meshtastic_ModuleConfig_MQTTConfig_init_zero {0, "", "", "", 0, 0, 0, ""}
+#define meshtastic_ModuleConfig_MQTTConfig_init_zero {0, "", "", "", 0, 0, 0, "", 0}
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_init_zero {0, 0, 0, {meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero}}
 #define meshtastic_ModuleConfig_NeighborInfoConfig_init_zero {0, 0}
 #define meshtastic_ModuleConfig_AudioConfig_init_zero {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
@@ -408,6 +410,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_MQTTConfig_json_enabled_tag 6
 #define meshtastic_ModuleConfig_MQTTConfig_tls_enabled_tag 7
 #define meshtastic_ModuleConfig_MQTTConfig_root_tag 8
+#define meshtastic_ModuleConfig_MQTTConfig_proxy_to_client_enabled_tag 9
 #define meshtastic_ModuleConfig_NeighborInfoConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_NeighborInfoConfig_update_interval_tag 2
 #define meshtastic_ModuleConfig_AudioConfig_codec2_enabled_tag 1
@@ -515,7 +518,8 @@ X(a, STATIC,   SINGULAR, STRING,   password,          4) \
 X(a, STATIC,   SINGULAR, BOOL,     encryption_enabled,   5) \
 X(a, STATIC,   SINGULAR, BOOL,     json_enabled,      6) \
 X(a, STATIC,   SINGULAR, BOOL,     tls_enabled,       7) \
-X(a, STATIC,   SINGULAR, STRING,   root,              8)
+X(a, STATIC,   SINGULAR, STRING,   root,              8) \
+X(a, STATIC,   SINGULAR, BOOL,     proxy_to_client_enabled,   9)
 #define meshtastic_ModuleConfig_MQTTConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_MQTTConfig_DEFAULT NULL
 
@@ -654,14 +658,14 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_AudioConfig_size 19
 #define meshtastic_ModuleConfig_CannedMessageConfig_size 49
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_size 40
-#define meshtastic_ModuleConfig_MQTTConfig_size  220
+#define meshtastic_ModuleConfig_MQTTConfig_size  222
 #define meshtastic_ModuleConfig_NeighborInfoConfig_size 8
 #define meshtastic_ModuleConfig_RangeTestConfig_size 10
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_size 96
 #define meshtastic_ModuleConfig_SerialConfig_size 28
 #define meshtastic_ModuleConfig_StoreForwardConfig_size 22
 #define meshtastic_ModuleConfig_TelemetryConfig_size 26
-#define meshtastic_ModuleConfig_size             223
+#define meshtastic_ModuleConfig_size             225
 #define meshtastic_RemoteHardwarePin_size        21
 
 #ifdef __cplusplus

@@ -156,7 +156,6 @@ void mqttInit()
 MQTT::MQTT() : concurrency::OSThread("mqtt"), pubSub(mqttClient), mqttQueue(MAX_MQTT_QUEUE)
 {
     if (moduleConfig.mqtt.enabled) {
-
         assert(!mqtt);
         mqtt = this;
 
@@ -183,12 +182,41 @@ bool MQTT::connected()
     return pubSub.connected();
 }
 
-bool MQTT::clientProxyConnected()
+bool MQTT::publish(const char *topic, const char *payload, bool retained)
 {
-    return bluetoothPhoneApi->isConnected();
+    if (connected()) {
+        return pubSub.publish(topic, payload, retained);
+    } else if (!moduleConfig.mqtt.proxy_to_client_enabled) {
+        return false;
+    } else // send it client proxy
+    {
+        meshtastic_MqttClientProxyMessage msg;
+        strcpy(msg.topic, topic);
+        strcpy(msg.payload_variant.text, payload);
+        msg.retained = retained;
+        service.sendMqttMessageToClientProxy(&msg);
+        return true;
+    }
 }
 
-void MQTT::rec∫onnect()
+bool MQTT::publish(const char *topic, const uint8_t *payload, unsigned int length, bool retained)
+{
+    if (connected()) {
+        return pubSub.publish(topic, payload, length, retained);
+    } else if (!moduleConfig.mqtt.proxy_to_client_enabled) {
+        return false;
+    } else // send it client proxy
+    {
+        meshtastic_MqttClientProxyMessage msg;
+        strcpy(msg.topic, topic);
+        memcpy(msg.payload_variant.data.bytes, payload, sizeof(meshtastic_MqttClientProxyMessage_data_t::bytes));
+        msg.retained = retained;
+        service.sendMqttMessageToClientProxy(&msg);
+        return true;
+    }
+}
+
+void MQTT::reconnect()
 {
     if (wantsLink()) {
         // Defaults
@@ -234,8 +262,8 @@ void MQTT::rec∫onnect()
         pubSub.setServer(serverAddr, serverPort);
         pubSub.setBufferSize(512);
 
-        LOG_INFO("Connecting to MQTT server %s, port: %d, username: %s, password: %s\n", serverAddr, serverPort, mqttUsername,
-                 mqttPassword);
+        LOG_INFO("Attempting to connnect directly to MQTT server %s, port: %d, username: %s, password: %s\n", serverAddr,
+                 serverPort, mqttUsername, mqttPassword);
         auto myStatus = (statusTopic + owner.id);
         bool connected = pubSub.connect(owner.id, mqttUsername, mqttPassword, myStatus.c_str(), 1, true, "offline");
         if (connected) {
@@ -245,14 +273,22 @@ void MQTT::rec∫onnect()
             reconnectCount = 0;
 
             /// FIXME, include more information in the status text
-            bool ok = pubSub.publish(myStatus.c_str(), "online", true);
+            bool ok = publish(myStatus.c_str(), "online", true);
             LOG_INFO("published %d\n", ok);
 
             sendSubscriptions();
+        } else if (moduleConfig.mqtt.proxy_to_client_enabled) {
+            LOG_INFO("MQTT connecting via client proxy instead...\n");
+            enabled = true;
+            runASAP = true;
+            reconnectCount = 0;
+
+            bool ok = publish(myStatus.c_str(), "online", true);
+            LOG_INFO("published %d\n", ok);
         } else {
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
             reconnectCount++;
-            LOG_ERROR("Failed to contact MQTT server (%d/%d)...\n", reconnectCount, reconnectMax);
+            LOG_ERROR("Failed to contact MQTT server directly (%d/%d)...\n", reconnectCount, reconnectMax);
             if (reconnectCount >= reconnectMax) {
                 needReconnect = true;
                 wifiReconnect->setIntervalFromNow(0);
@@ -298,16 +334,11 @@ bool MQTT::wantsLink() const
     }
 
 #if HAS_WIFI
-    return hasChannel && WiFi.isConnected();
+    return hasChannel && (WiFi.isConnected() || moduleConfig.mqtt.proxy_to_client_enabled);
 #endif
 #if HAS_ETHERNET
-    return hasChannel && (Ethernet.linkStatus() == LinkON);
+    return hasChannel && (Ethernet.linkStatus() == LinkON || moduleConfig.mqtt.proxy_to_client_enabled);
 #endif
-    // Client proxy over bluetooth
-    if (bluetoothPhoneAPI->isConnected()) {
-        return true;
-    }
-    return false;
 }
 
 int32_t MQTT::runOnce()
@@ -318,13 +349,15 @@ int32_t MQTT::runOnce()
     bool wantConnection = wantsLink();
 
     // If connected poll rapidly, otherwise only occasionally check for a wifi connection change and ability to contact server
-    if (!pubSub.loop()) {
-        if (wantConnection) {
+    if (!pubSub.loop() || moduleConfig.mqtt.proxy_to_client_enabled) {
+        if (!wantConnection) {
+            return 5000; // If we don't want connection now, check again in 5 secs
+        } else {
             reconnect();
 
             // If we succeeded, empty the queue one by one and start reading rapidly, else try again in 30 seconds (TCP
             // connections are EXPENSIVE so try rarely)
-            if (pubSub.connected()) {
+            if (pubSub.connected() || moduleConfig.mqtt.proxy_to_client_enabled) {
                 if (!mqttQueue.isEmpty()) {
                     // FIXME - this size calculation is super sloppy, but it will go away once we dynamically alloc meshpackets
                     meshtastic_ServiceEnvelope *env = mqttQueue.dequeuePtr(0);
@@ -334,7 +367,7 @@ int32_t MQTT::runOnce()
                     std::string topic = cryptTopic + env->channel_id + "/" + owner.id;
                     LOG_INFO("publish %s, %u bytes from queue\n", topic.c_str(), numBytes);
 
-                    pubSub.publish(topic.c_str(), bytes, numBytes, false);
+                    publish(topic.c_str(), bytes, numBytes, false);
 
                     if (moduleConfig.mqtt.json_enabled) {
                         // handle json topic
@@ -343,7 +376,7 @@ int32_t MQTT::runOnce()
                             std::string topicJson = jsonTopic + env->channel_id + "/" + owner.id;
                             LOG_INFO("JSON publish message to %s, %u bytes: %s\n", topicJson.c_str(), jsonString.length(),
                                      jsonString.c_str());
-                            pubSub.publish(topicJson.c_str(), jsonString.c_str(), false);
+                            publish(topicJson.c_str(), jsonString.c_str(), false);
                         }
                     }
                     mqttPool.release(env);
@@ -352,8 +385,7 @@ int32_t MQTT::runOnce()
             } else {
                 return 30000;
             }
-        } else
-            return 5000; // If we don't want connection now, check again in 5 secs
+        }
     } else {
         // we are connected to server, check often for new requests on the TCP port
         if (!wantConnection) {
@@ -379,39 +411,42 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, ChannelIndex chIndex)
         env->packet = (meshtastic_MeshPacket *)&mp;
 
         // don't bother sending if not connected...
-        if (pubSub.connected()) {
+        // if (pubSub.connected())
+        // {
+        // FIXME - this size calculation is super sloppy, but it will go away once we dynamically alloc meshpackets
+        static uint8_t bytes[meshtastic_MeshPacket_size + 64];
+        size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, env);
 
-            // FIXME - this size calculation is super sloppy, but it will go away once we dynamically alloc meshpackets
-            static uint8_t bytes[meshtastic_MeshPacket_size + 64];
-            size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, env);
+        std::string topic = cryptTopic + channelId + "/" + owner.id;
+        LOG_DEBUG("publish %s, %u bytes\n", topic.c_str(), numBytes);
 
-            std::string topic = cryptTopic + channelId + "/" + owner.id;
-            LOG_DEBUG("publish %s, %u bytes\n", topic.c_str(), numBytes);
+        publish(topic.c_str(), bytes, numBytes, false);
 
-            pubSub.publish(topic.c_str(), bytes, numBytes, false);
-
-            if (moduleConfig.mqtt.json_enabled) {
-                // handle json topic
-                auto jsonString = this->downstreamPacketToJson((meshtastic_MeshPacket *)&mp);
-                if (jsonString.length() != 0) {
-                    std::string topicJson = jsonTopic + channelId + "/" + owner.id;
-                    LOG_INFO("JSON publish message to %s, %u bytes: %s\n", topicJson.c_str(), jsonString.length(),
-                             jsonString.c_str());
-                    pubSub.publish(topicJson.c_str(), jsonString.c_str(), false);
-                }
+        if (moduleConfig.mqtt.json_enabled) {
+            // handle json topic
+            auto jsonString = this->downstreamPacketToJson((meshtastic_MeshPacket *)&mp);
+            if (jsonString.length() != 0) {
+                std::string topicJson = jsonTopic + channelId + "/" + owner.id;
+                LOG_INFO("JSON publish message to %s, %u bytes: %s\n", topicJson.c_str(), jsonString.length(),
+                         jsonString.c_str());
+                publish(topicJson.c_str(), jsonString.c_str(), false);
             }
-        } else {
-            LOG_INFO("MQTT not connected, queueing packet\n");
-            if (mqttQueue.numFree() == 0) {
-                LOG_WARN("NOTE: MQTT queue is full, discarding oldest\n");
-                meshtastic_ServiceEnvelope *d = mqttQueue.dequeuePtr(0);
-                if (d)
-                    mqttPool.release(d);
-            }
-            // make a copy of serviceEnvelope and queue it
-            meshtastic_ServiceEnvelope *copied = mqttPool.allocCopy(*env);
-            assert(mqttQueue.enqueue(copied, 0));
         }
+        // }
+        // else
+        // {
+        //     LOG_INFO("MQTT not connected, queueing packet\n");
+        //     if (mqttQueue.numFree() == 0)
+        //     {
+        //         LOG_WARN("NOTE: MQTT queue is full, discarding oldest\n");
+        //         meshtastic_ServiceEnvelope *d = mqttQueue.dequeuePtr(0);
+        //         if (d)
+        //             mqttPool.release(d);
+        //     }
+        //     // make a copy of serviceEnvelope and queue it
+        //     meshtastic_ServiceEnvelope *copied = mqttPool.allocCopy(*env);
+        //     assert(mqttQueue.enqueue(copied, 0));
+        // }
         mqttPool.release(env);
     }
 }
