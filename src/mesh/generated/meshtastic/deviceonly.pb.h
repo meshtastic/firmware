@@ -153,7 +153,7 @@ typedef struct _meshtastic_DeviceState {
     /* The mesh's nodes with their available gpio pins for RemoteHardware module */
     pb_size_t node_remote_hardware_pins_count;
     meshtastic_NodeRemoteHardwarePin node_remote_hardware_pins[12];
-    /* New lite version of NodeDB to decrease */
+    /* New lite version of NodeDB to decrease memory footprint */
     pb_size_t node_db_lite_count;
     meshtastic_NodeInfoLite node_db_lite[80];
 } meshtastic_DeviceState;
