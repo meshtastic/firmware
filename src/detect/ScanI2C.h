@@ -33,8 +33,8 @@ class ScanI2C
         PMSA0031,
         MPU6050,
         LIS3DH,
-#ifdef NCP5623
-        NCP5623
+#ifdef HAS_NCP5623
+        NCP5623,
 #endif
     } DeviceType;
 

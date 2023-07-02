@@ -358,7 +358,7 @@ void setup()
  */
 
 // Only one supported RGB LED currently
-#ifdef NCP5623
+#ifdef HAS_NCP5623
     rgb_found = i2cScanner->find(ScanI2C::DeviceType::NCP5623);
 
     // Start the RGB LED at 50%
