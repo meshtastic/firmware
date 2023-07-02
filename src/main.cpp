@@ -265,10 +265,13 @@ void setup()
     pinMode(PIN_3V3_EN, OUTPUT);
     digitalWrite(PIN_3V3_EN, HIGH);
 #endif
+
+#ifdef RAK4630
 #ifndef HAS_EINK_RAK
     // RAK-12039 set pin for Air quality sensor
     pinMode(AQ_SET_PIN, OUTPUT);
     digitalWrite(AQ_SET_PIN, HIGH);
+#endif
 #endif
 
     // Currently only the tbeam has a PMU
