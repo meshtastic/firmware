@@ -22,7 +22,9 @@
 #define RAK4630
 
 // MonteOps hardware design variant
+#ifndef MONTEOPS_HW1
 #define MONTEOPS_HW1
+#endif
 
 /** Master clock frequency */
 #define VARIANT_MCK (64000000ul)
