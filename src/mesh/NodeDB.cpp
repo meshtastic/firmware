@@ -225,6 +225,15 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.has_store_forward = true;
     moduleConfig.has_telemetry = true;
     moduleConfig.has_external_notification = true;
+#if defined(RAK4630) || defined(RAK11310)
+    // Default to RAK led pin 2 (blue)
+    moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.output = PIN_LED2;
+    moduleConfig.external_notification.active = true;
+    moduleConfig.external_notification.alert_message = true;
+    moduleConfig.external_notification.output_ms = 1000;
+    moduleConfig.external_notification.nag_timeout = 60;
+#endif
     moduleConfig.has_canned_message = true;
 
     strncpy(moduleConfig.mqtt.address, default_mqtt_address, sizeof(moduleConfig.mqtt.address));
@@ -289,9 +298,6 @@ void NodeDB::installDefaultDeviceState()
     devicestate.receive_queue_count = 0; // Not yet implemented FIXME
 
     generatePacketId(); // FIXME - ugly way to init current_packet_id;
-
-    // Init our blank owner info to reasonable defaults
-    getMacAddr(ourMacAddr);
 
     // Set default owner name
     pickNewNodeNum(); // based on macaddr now
@@ -377,6 +383,8 @@ void NodeDB::init()
 void NodeDB::pickNewNodeNum()
 {
     NodeNum r = myNodeInfo.my_node_num;
+
+    getMacAddr(ourMacAddr); // Make sure ourMacAddr is set
 
     // Pick an initial nodenum based on the macaddr
     r = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];

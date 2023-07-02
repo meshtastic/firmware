@@ -139,6 +139,9 @@ class GPS : private concurrency::OSThread
     /// always returns 0 to indicate okay to sleep
     int prepareDeepSleep(void *unused);
 
+    // Calculate checksum
+    void UBXChecksum(byte *message, size_t length);
+
     /**
      * Switch the GPS into a mode where we are actively looking for a lock, or alternatively switch GPS into a low power mode
      *
