@@ -362,7 +362,7 @@ void setup()
     rgb_found = i2cScanner->find(ScanI2C::DeviceType::NCP5623);
 
 // Start the RGB LED at 50%
-#ifdef RAK4630
+#ifdef NCP5623
     if (rgb_found.type == ScanI2C::NCP5623) {
         rgb.begin();
         rgb.setCurrent(10);
