@@ -16,13 +16,13 @@
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-#ifndef _VARIANT_RAK4630_
-#define _VARIANT_RAK4630_
+#ifndef _VARIANT_MOPS_HW1_
+#define _VARIANT_MOPS_HW1_
 
 #define RAK4630
 
 // MonteOps hardware design variant
-#define MOPS_HW1
+#define MONTEOPS_HW1
 
 /** Master clock frequency */
 #define VARIANT_MCK (64000000ul)
