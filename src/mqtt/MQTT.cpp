@@ -186,11 +186,12 @@ bool MQTT::isConnectedDirectly()
 bool MQTT::publish(const char *topic, const char *payload, bool retained)
 {
     if (moduleConfig.mqtt.proxy_to_client_enabled) {
-        meshtastic_MqttClientProxyMessage msg;
-        strcpy(msg.topic, topic);
-        strcpy(msg.payload_variant.text, payload);
-        msg.retained = retained;
-        service.sendMqttMessageToClientProxy(&msg);
+        meshtastic_MqttClientProxyMessage *msg = mqttClientProxyMessagePool.allocZeroed();
+        msg->which_payload_variant = meshtastic_MqttClientProxyMessage_text_tag;
+        strcpy(msg->topic, topic);
+        strcpy(msg->payload_variant.text, payload);
+        msg->retained = retained;
+        service.sendMqttMessageToClientProxy(msg);
         return true;
     } else if (isConnectedDirectly()) {
         return pubSub.publish(topic, payload, retained);
@@ -198,14 +199,15 @@ bool MQTT::publish(const char *topic, const char *payload, bool retained)
     return false;
 }
 
-bool MQTT::publish(const char *topic, const uint8_t *payload, unsigned int length, bool retained)
+bool MQTT::publish(const char *topic, const uint8_t *payload, size_t length, bool retained)
 {
     if (moduleConfig.mqtt.proxy_to_client_enabled) {
-        meshtastic_MqttClientProxyMessage msg;
-        strcpy(msg.topic, topic);
-        memcpy(msg.payload_variant.data.bytes, payload, length);
-        msg.retained = retained;
-        service.sendMqttMessageToClientProxy(&msg);
+        meshtastic_MqttClientProxyMessage *msg = mqttClientProxyMessagePool.allocZeroed();
+        msg->which_payload_variant = meshtastic_MqttClientProxyMessage_data_tag;
+        strcpy(msg->topic, topic);
+        memcpy(msg->payload_variant.data.bytes, payload, length);
+        msg->retained = retained;
+        service.sendMqttMessageToClientProxy(msg);
         return true;
     } else if (isConnectedDirectly()) {
         return pubSub.publish(topic, payload, length, retained);
