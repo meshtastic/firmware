@@ -352,17 +352,18 @@ void setup()
 
     pmu_found = i2cScanner->exists(ScanI2C::DeviceType::PMU_AXP192_AXP2101);
 
-    /*
-     * There are a bunch of sensors that have no further logic than to be found and stuffed into the
-     * nodeTelemetrySensorsMap singleton. This wraps that logic in a temporary scope to declare the temporary field
-     * "found".
-     */
+/*
+ * There are a bunch of sensors that have no further logic than to be found and stuffed into the
+ * nodeTelemetrySensorsMap singleton. This wraps that logic in a temporary scope to declare the temporary field
+ * "found".
+ */
 
-    // Only one supported RGB LED currently
+// Only one supported RGB LED currently
+#ifdef NCP5623
     rgb_found = i2cScanner->find(ScanI2C::DeviceType::NCP5623);
 
-// Start the RGB LED at 50%
-#ifdef NCP5623
+    // Start the RGB LED at 50%
+
     if (rgb_found.type == ScanI2C::NCP5623) {
         rgb.begin();
         rgb.setCurrent(10);
