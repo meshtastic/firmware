@@ -34,7 +34,7 @@ class ScanI2C
         MPU6050,
         LIS3DH,
 #ifdef NCP5623
-        NCP5623,
+        NCP5623
 #endif
     } DeviceType;
 
