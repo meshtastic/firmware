@@ -248,7 +248,6 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 
         bool shouldActuallyEncrypt = true;
 
-#if HAS_WIFI || HAS_ETHERNET
         if (moduleConfig.mqtt.enabled) {
             // check if we should send decrypted packets to mqtt
 
@@ -272,7 +271,6 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             if (mqtt && !shouldActuallyEncrypt)
                 mqtt->onSend(*p, chIndex);
         }
-#endif
 
         auto encodeResult = perhapsEncode(p);
         if (encodeResult != meshtastic_Routing_Error_NONE) {
@@ -280,14 +278,12 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             return encodeResult; // FIXME - this isn't a valid ErrorCode
         }
 
-#if HAS_WIFI || HAS_ETHERNET
         if (moduleConfig.mqtt.enabled) {
             // the packet is now encrypted.
             // check if we should send encrypted packets to mqtt
             if (mqtt && shouldActuallyEncrypt)
                 mqtt->onSend(*p, chIndex);
         }
-#endif
     }
 
     assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
