@@ -170,12 +170,15 @@ void cpuDeepSleep(uint32_t msecToWake)
     Serial1.end();
 #endif
     setBluetoothEnable(false);
+
+#ifdef RAK4630
 #ifdef PIN_3V3_EN
     digitalWrite(PIN_3V3_EN, LOW);
 #endif
-#ifndef USE_EINK_RAK
+#ifndef USE_EINK
     // RAK-12039 set pin for Air quality sensor
     digitalWrite(AQ_SET_PIN, LOW);
+#endif
 #endif
     // FIXME, use system off mode with ram retention for key state?
     // FIXME, use non-init RAM per

@@ -266,7 +266,7 @@ void setup()
     pinMode(PIN_3V3_EN, OUTPUT);
     digitalWrite(PIN_3V3_EN, HIGH);
 #endif
-#ifndef HAS_EINK_RAK
+#ifndef USE_EINK
     // RAK-12039 set pin for Air quality sensor
     pinMode(AQ_SET_PIN, OUTPUT);
     digitalWrite(AQ_SET_PIN, HIGH);
