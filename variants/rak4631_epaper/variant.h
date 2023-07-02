@@ -139,6 +139,9 @@ static const uint8_t SCK = PIN_SPI_SCK;
 
 #define USE_EINK
 
+// RAKRGB
+#define NCP5623
+
 /*
  * Wire Interfaces
  */
