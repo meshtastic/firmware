@@ -212,9 +212,10 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                 }
                 break;
 
-                SCAN_SIMPLE_CASE(ST7567_ADDRESS, SCREEN_ST7567, "st7567 display found\n")
+                SCAN_SIMPLE_CASE(ST7567_ADDRESS, SCREEN_ST7567, "st7567 display found\n");
+#ifdef HAS_NCP5623
                 SCAN_SIMPLE_CASE(NCP5623_ADDR, NCP5623, "NCP5623 RGB LED found\n");
-
+#endif
 #ifdef HAS_PMU
                 SCAN_SIMPLE_CASE(XPOWERS_AXP192_AXP2101_ADDRESS, PMU_AXP192_AXP2101, "axp192/axp2101 PMU found\n")
 #endif
