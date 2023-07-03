@@ -1,6 +1,6 @@
 #include "../configuration.h"
 
-#ifdef HAS_EINK_RAK
+#ifdef RAK_4631
 #include "../main.h"
 #include <SPI.h>
 
