@@ -699,6 +699,8 @@ typedef struct _meshtastic_ToRadio {
      (Sending this message is optional for clients) */
         bool disconnect;
         meshtastic_XModem xmodemPacket;
+        /* MQTT Client Proxy Message */
+        meshtastic_MqttClientProxyMessage mqttClientProxyMessage;
     };
 } meshtastic_ToRadio;
 
@@ -1013,6 +1015,7 @@ extern "C" {
 #define meshtastic_ToRadio_want_config_id_tag    3
 #define meshtastic_ToRadio_disconnect_tag        4
 #define meshtastic_ToRadio_xmodemPacket_tag      5
+#define meshtastic_ToRadio_mqttClientProxyMessage_tag 6
 #define meshtastic_Compressed_portnum_tag        1
 #define meshtastic_Compressed_data_tag           2
 #define meshtastic_Neighbor_node_id_tag          1
@@ -1229,11 +1232,13 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,mqttClientProxyMessage,mqttC
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,packet,packet),   1) \
 X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,want_config_id,want_config_id),   3) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,disconnect,disconnect),   4) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,xmodemPacket,xmodemPacket),   5)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,xmodemPacket,xmodemPacket),   5) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,mqttClientProxyMessage,mqttClientProxyMessage),   6)
 #define meshtastic_ToRadio_CALLBACK NULL
 #define meshtastic_ToRadio_DEFAULT NULL
 #define meshtastic_ToRadio_payload_variant_packet_MSGTYPE meshtastic_MeshPacket
 #define meshtastic_ToRadio_payload_variant_xmodemPacket_MSGTYPE meshtastic_XModem
+#define meshtastic_ToRadio_payload_variant_mqttClientProxyMessage_MSGTYPE meshtastic_MqttClientProxyMessage
 
 #define meshtastic_Compressed_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    portnum,           1) \
@@ -1324,7 +1329,7 @@ extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
 #define meshtastic_QueueStatus_size              23
 #define meshtastic_RouteDiscovery_size           40
 #define meshtastic_Routing_size                  42
-#define meshtastic_ToRadio_size                  324
+#define meshtastic_ToRadio_size                  504
 #define meshtastic_User_size                     77
 #define meshtastic_Waypoint_size                 165
 

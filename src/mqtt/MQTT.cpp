@@ -25,12 +25,16 @@ Allocator<meshtastic_ServiceEnvelope> &mqttPool = staticMqttPool;
 
 void MQTT::mqttCallback(char *topic, byte *payload, unsigned int length)
 {
-    mqtt->onPublish(topic, payload, length);
+    mqtt->onReceive(topic, payload, length);
 }
 
-void MQTT::onPublish(char *topic, byte *payload, unsigned int length)
+void MQTT::onClientProxyReceive(meshtastic_MqttClientProxyMessage msg)
 {
-    // parsing ServiceEnvelope
+    onReceive(msg.topic, msg.payload_variant.data.bytes, msg.payload_variant.data.size);
+}
+
+void MQTT::onReceive(char *topic, byte *payload, unsigned int length)
+{
     meshtastic_ServiceEnvelope e = meshtastic_ServiceEnvelope_init_default;
 
     if (moduleConfig.mqtt.json_enabled && (strncmp(topic, jsonTopic.c_str(), jsonTopic.length()) == 0)) {
@@ -205,6 +209,7 @@ bool MQTT::publish(const char *topic, const uint8_t *payload, size_t length, boo
         meshtastic_MqttClientProxyMessage *msg = mqttClientProxyMessagePool.allocZeroed();
         msg->which_payload_variant = meshtastic_MqttClientProxyMessage_data_tag;
         strcpy(msg->topic, topic);
+        msg->payload_variant.data.size = length;
         memcpy(msg->payload_variant.data.bytes, payload, length);
         msg->retained = retained;
         service.sendMqttMessageToClientProxy(msg);
@@ -387,6 +392,7 @@ void MQTT::publishStatus()
 void MQTT::publishQueuedMessages()
 {
     if (!mqttQueue.isEmpty()) {
+        LOG_DEBUG("Publishing enqueued MQTT message\n");
         // FIXME - this size calculation is super sloppy, but it will go away once we dynamically alloc meshpackets
         meshtastic_ServiceEnvelope *env = mqttQueue.dequeuePtr(0);
         static uint8_t bytes[meshtastic_MeshPacket_size + 64];
@@ -399,7 +405,7 @@ void MQTT::publishQueuedMessages()
 
         if (moduleConfig.mqtt.json_enabled) {
             // handle json topic
-            auto jsonString = this->downstreamPacketToJson(env->packet);
+            auto jsonString = this->meshPacketToJson(env->packet);
             if (jsonString.length() != 0) {
                 std::string topicJson = jsonTopic + env->channel_id + "/" + owner.id;
                 LOG_INFO("JSON publish message to %s, %u bytes: %s\n", topicJson.c_str(), jsonString.length(),
@@ -416,12 +422,14 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, ChannelIndex chIndex)
     auto &ch = channels.getByIndex(chIndex);
 
     if (ch.settings.uplink_enabled) {
+
         const char *channelId = channels.getGlobalId(chIndex); // FIXME, for now we just use the human name for the channel
 
         meshtastic_ServiceEnvelope *env = mqttPool.allocZeroed();
         env->channel_id = (char *)channelId;
         env->gateway_id = owner.id;
         env->packet = (meshtastic_MeshPacket *)&mp;
+        LOG_DEBUG("MQTT onSend - Publishing portnum %i message\n", env->packet->decoded.portnum);
 
         // don't bother sending if not connected...
         // if (pubSub.isConnectedDirectly())
@@ -431,13 +439,13 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, ChannelIndex chIndex)
         size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, env);
 
         std::string topic = cryptTopic + channelId + "/" + owner.id;
-        LOG_DEBUG("publish %s, %u bytes\n", topic.c_str(), numBytes);
+        LOG_DEBUG("MQTT Publish %s, %u bytes\n", topic.c_str(), numBytes);
 
         publish(topic.c_str(), bytes, numBytes, false);
 
         if (moduleConfig.mqtt.json_enabled) {
             // handle json topic
-            auto jsonString = this->downstreamPacketToJson((meshtastic_MeshPacket *)&mp);
+            auto jsonString = this->meshPacketToJson((meshtastic_MeshPacket *)&mp);
             if (jsonString.length() != 0) {
                 std::string topicJson = jsonTopic + channelId + "/" + owner.id;
                 LOG_INFO("JSON publish message to %s, %u bytes: %s\n", topicJson.c_str(), jsonString.length(),
@@ -465,7 +473,7 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, ChannelIndex chIndex)
 }
 
 // converts a downstream packet into a json message
-std::string MQTT::downstreamPacketToJson(meshtastic_MeshPacket *mp)
+std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
 {
     // the created jsonObj is immutable after creation, so
     // we need to do the heavy lifting before assembling it.

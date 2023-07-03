@@ -65,6 +65,8 @@ class MQTT : private concurrency::OSThread
 
     bool publish(const char *topic, const uint8_t *payload, unsigned int length, const bool retained);
 
+    void onClientProxyReceive(meshtastic_MqttClientProxyMessage msg);
+
   protected:
     PointerQueue<meshtastic_ServiceEnvelope> mqttQueue;
 
@@ -84,14 +86,14 @@ class MQTT : private concurrency::OSThread
      */
     void sendSubscriptions();
 
-    /// Just C glue to call onPublish
+    /// Callback for direct mqtt subscription messages
     static void mqttCallback(char *topic, byte *payload, unsigned int length);
 
     /// Called when a new publish arrives from the MQTT server
-    void onPublish(char *topic, byte *payload, unsigned int length);
+    void onReceive(char *topic, byte *payload, unsigned int length);
 
     /// Called when a new publish arrives from the MQTT server
-    std::string downstreamPacketToJson(meshtastic_MeshPacket *mp);
+    std::string meshPacketToJson(meshtastic_MeshPacket *mp);
 
     void publishStatus();
     void publishQueuedMessages();

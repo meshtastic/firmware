@@ -18,6 +18,8 @@
 #error ToRadio is too big
 #endif
 
+#include "mqtt/MQTT.h"
+
 PhoneAPI::PhoneAPI()
 {
     lastContactMsec = millis();
@@ -98,6 +100,12 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
         case meshtastic_ToRadio_xmodemPacket_tag:
             LOG_INFO("Got xmodem packet\n");
             xModem.handlePacket(toRadioScratch.xmodemPacket);
+            break;
+        case meshtastic_ToRadio_mqttClientProxyMessage_tag:
+            LOG_INFO("Got MqttClientProxy message\n");
+            if (mqtt && moduleConfig.mqtt.proxy_to_client_enabled) {
+                mqtt->onClientProxyReceive(toRadioScratch.mqttClientProxyMessage);
+            }
             break;
         default:
             // Ignore nop messages
