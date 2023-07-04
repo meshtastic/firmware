@@ -16,9 +16,7 @@
 #include "unistd.h"
 #endif
 
-#if HAS_WIFI || HAS_ETHERNET
 #include "mqtt/MQTT.h"
-#endif
 
 #define DEFAULT_REBOOT_SECONDS 7
 

@@ -40,14 +40,9 @@ class MQTT : private concurrency::OSThread
 #if HAS_ETHERNET
     EthernetClient mqttClient;
 #endif
-#if !defined(DEBUG_HEAP_MQTT)
 
   public:
-#else
-  public:
-    PubSubClient pubSub;
-#endif
-#ifdef HAS_NETWORKING
+#if HAS_NETWORKING
     PubSubClient pubSub;
 #endif
     MQTT();
