@@ -259,10 +259,11 @@ void setup()
 #endif
 
 #ifdef RAK4630
+#ifdef PIN_3V3_EN
     // We need to enable 3.3V periphery in order to scan it
     pinMode(PIN_3V3_EN, OUTPUT);
     digitalWrite(PIN_3V3_EN, HIGH);
-
+#endif
 #ifndef USE_EINK
     // RAK-12039 set pin for Air quality sensor
     pinMode(AQ_SET_PIN, OUTPUT);
@@ -350,17 +351,18 @@ void setup()
 
     pmu_found = i2cScanner->exists(ScanI2C::DeviceType::PMU_AXP192_AXP2101);
 
-    /*
-     * There are a bunch of sensors that have no further logic than to be found and stuffed into the
-     * nodeTelemetrySensorsMap singleton. This wraps that logic in a temporary scope to declare the temporary field
-     * "found".
-     */
+/*
+ * There are a bunch of sensors that have no further logic than to be found and stuffed into the
+ * nodeTelemetrySensorsMap singleton. This wraps that logic in a temporary scope to declare the temporary field
+ * "found".
+ */
 
-    // Only one supported RGB LED currently
+// Only one supported RGB LED currently
+#ifdef HAS_NCP5623
     rgb_found = i2cScanner->find(ScanI2C::DeviceType::NCP5623);
 
-// Start the RGB LED at 50%
-#ifdef RAK4630
+    // Start the RGB LED at 50%
+
     if (rgb_found.type == ScanI2C::NCP5623) {
         rgb.begin();
         rgb.setCurrent(10);

@@ -139,6 +139,9 @@ static const uint8_t SCK = PIN_SPI_SCK;
 
 #define USE_EINK
 
+// RAKRGB
+#define HAS_NCP5623
+
 /*
  * Wire Interfaces
  */
@@ -225,6 +228,8 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define VBAT_RAW_TO_SCALED(x) (REAL_VBAT_MV_PER_LSB * x)
 
 #define HAS_RTC 1
+
+#define RAK_4631 1
 
 #ifdef __cplusplus
 }
