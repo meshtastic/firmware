@@ -5,8 +5,8 @@
 #include "concurrency/OSThread.h"
 #include "mesh/Channels.h"
 #include "mesh/generated/meshtastic/mqtt.pb.h"
-#include <PubSubClient.h>
 #if HAS_WIFI
+#include <PubSubClient.h>
 #include <WiFiClient.h>
 #if !defined(ARCH_PORTDUINO)
 #include <WiFiClientSecure.h>
@@ -14,6 +14,7 @@
 #endif
 #if HAS_ETHERNET
 #include <EthernetClient.h>
+#include <PubSubClient.h>
 #endif
 
 #define MAX_MQTT_QUEUE 16
