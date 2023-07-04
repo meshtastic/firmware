@@ -303,8 +303,9 @@ void MQTT::reconnect()
 
             publishStatus();
             sendSubscriptions();
-        } else {
+        }
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
+        else {
             reconnectCount++;
             LOG_ERROR("Failed to contact MQTT server directly (%d/%d)...\n", reconnectCount, reconnectMax);
             if (reconnectCount >= reconnectMax) {
@@ -312,8 +313,8 @@ void MQTT::reconnect()
                 wifiReconnect->setIntervalFromNow(0);
                 reconnectCount = 0;
             }
-#endif
         }
+#endif
 #endif
     }
 }
@@ -401,8 +402,8 @@ int32_t MQTT::runOnce()
         powerFSM.trigger(EVENT_CONTACT_FROM_PHONE); // Suppress entering light sleep (because that would turn off bluetooth)
         return 20;
     }
-    return 30000;
 #endif
+    return 30000;
 }
 
 /// FIXME, include more information in the status text
