@@ -158,7 +158,7 @@ void mqttInit()
 }
 #ifdef HAS_NETWORKING
 MQTT::MQTT() : concurrency::OSThread("mqtt"), pubSub(mqttClient), mqttQueue(MAX_MQTT_QUEUE)
-#elif
+#else
 MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
 #endif
 {
