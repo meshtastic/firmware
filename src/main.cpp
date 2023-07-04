@@ -47,12 +47,10 @@ NRF52Bluetooth *nrf52Bluetooth;
 
 #if HAS_WIFI
 #include "mesh/api/WiFiServerAPI.h"
-#include "mqtt/MQTT.h"
 #endif
 
 #if HAS_ETHERNET
 #include "mesh/api/ethServerAPI.h"
-#include "mqtt/MQTT.h"
 #endif
 
 #include "LLCC68Interface.h"
@@ -653,9 +651,6 @@ void setup()
             rebootAtMsec = millis() + 5000;
         }
     }
-    moduleConfig.mqtt.proxy_to_client_enabled = true;
-    moduleConfig.mqtt.enabled = true;
-    strcpy(moduleConfig.mqtt.address, "devmqtt.meshtastic.org");
 
     mqttInit();
 
