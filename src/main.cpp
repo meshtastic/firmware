@@ -52,6 +52,7 @@ NRF52Bluetooth *nrf52Bluetooth;
 #if HAS_ETHERNET
 #include "mesh/api/ethServerAPI.h"
 #endif
+#include "mqtt/MQTT.h"
 
 #include "LLCC68Interface.h"
 #include "RF95Interface.h"

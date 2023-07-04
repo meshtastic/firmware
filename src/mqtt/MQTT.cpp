@@ -432,7 +432,7 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, ChannelIndex chIndex)
         env->packet = (meshtastic_MeshPacket *)&mp;
         LOG_DEBUG("MQTT onSend - Publishing portnum %i message\n", env->packet->decoded.portnum);
 
-        if (moduleConfig.mqtt.proxy_to_client_enabled || isDirectlyConnected()) {
+        if (moduleConfig.mqtt.proxy_to_client_enabled || this->isConnectedDirectly()) {
             // FIXME - this size calculation is super sloppy, but it will go away once we dynamically alloc meshpackets
             static uint8_t bytes[meshtastic_MeshPacket_size + 64];
             size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, env);
@@ -444,7 +444,7 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, ChannelIndex chIndex)
 
             if (moduleConfig.mqtt.json_enabled) {
                 // handle json topic
-                auto jsonString = this->downstreamPacketToJson((meshtastic_MeshPacket *)&mp);
+                auto jsonString = this->meshPacketToJson((meshtastic_MeshPacket *)&mp);
                 if (jsonString.length() != 0) {
                     std::string topicJson = jsonTopic + channelId + "/" + owner.id;
                     LOG_INFO("JSON publish message to %s, %u bytes: %s\n", topicJson.c_str(), jsonString.length(),
