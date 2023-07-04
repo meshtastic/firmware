@@ -336,12 +336,14 @@ bool MQTT::wantsLink() const
             }
         }
     }
+    if (hasChannel && moduleConfig.mqtt.proxy_to_client_enabled)
+        return true;
 
 #if HAS_WIFI
-    return hasChannel && (WiFi.isConnected() || moduleConfig.mqtt.proxy_to_client_enabled);
+    return hasChannel && WiFi.isConnected();
 #endif
 #if HAS_ETHERNET
-    return hasChannel && (Ethernet.linkStatus() == LinkON || moduleConfig.mqtt.proxy_to_client_enabled);
+    return hasChannel && Ethernet.linkStatus() == LinkON;
 #endif
 }
 
