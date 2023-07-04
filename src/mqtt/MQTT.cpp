@@ -422,7 +422,6 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, ChannelIndex chIndex)
     auto &ch = channels.getByIndex(chIndex);
 
     if (ch.settings.uplink_enabled) {
-
         const char *channelId = channels.getGlobalId(chIndex); // FIXME, for now we just use the human name for the channel
 
         meshtastic_ServiceEnvelope *env = mqttPool.allocZeroed();
@@ -431,43 +430,38 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, ChannelIndex chIndex)
         env->packet = (meshtastic_MeshPacket *)&mp;
         LOG_DEBUG("MQTT onSend - Publishing portnum %i message\n", env->packet->decoded.portnum);
 
-        // don't bother sending if not connected...
-        // if (pubSub.isConnectedDirectly())
-        // {
-        // FIXME - this size calculation is super sloppy, but it will go away once we dynamically alloc meshpackets
-        static uint8_t bytes[meshtastic_MeshPacket_size + 64];
-        size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, env);
+        if (moduleConfig.mqtt.proxy_to_client_enabled || isDirectlyConnected()) {
+            // FIXME - this size calculation is super sloppy, but it will go away once we dynamically alloc meshpackets
+            static uint8_t bytes[meshtastic_MeshPacket_size + 64];
+            size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, env);
 
-        std::string topic = cryptTopic + channelId + "/" + owner.id;
-        LOG_DEBUG("MQTT Publish %s, %u bytes\n", topic.c_str(), numBytes);
+            std::string topic = cryptTopic + channelId + "/" + owner.id;
+            LOG_DEBUG("MQTT Publish %s, %u bytes\n", topic.c_str(), numBytes);
 
-        publish(topic.c_str(), bytes, numBytes, false);
+            publish(topic.c_str(), bytes, numBytes, false);
 
-        if (moduleConfig.mqtt.json_enabled) {
-            // handle json topic
-            auto jsonString = this->meshPacketToJson((meshtastic_MeshPacket *)&mp);
-            if (jsonString.length() != 0) {
-                std::string topicJson = jsonTopic + channelId + "/" + owner.id;
-                LOG_INFO("JSON publish message to %s, %u bytes: %s\n", topicJson.c_str(), jsonString.length(),
-                         jsonString.c_str());
-                publish(topicJson.c_str(), jsonString.c_str(), false);
+            if (moduleConfig.mqtt.json_enabled) {
+                // handle json topic
+                auto jsonString = this->downstreamPacketToJson((meshtastic_MeshPacket *)&mp);
+                if (jsonString.length() != 0) {
+                    std::string topicJson = jsonTopic + channelId + "/" + owner.id;
+                    LOG_INFO("JSON publish message to %s, %u bytes: %s\n", topicJson.c_str(), jsonString.length(),
+                             jsonString.c_str());
+                    publish(topicJson.c_str(), jsonString.c_str(), false);
+                }
             }
+        } else {
+            LOG_INFO("MQTT not connected, queueing packet\n");
+            if (mqttQueue.numFree() == 0) {
+                LOG_WARN("NOTE: MQTT queue is full, discarding oldest\n");
+                meshtastic_ServiceEnvelope *d = mqttQueue.dequeuePtr(0);
+                if (d)
+                    mqttPool.release(d);
+            }
+            // make a copy of serviceEnvelope and queue it
+            meshtastic_ServiceEnvelope *copied = mqttPool.allocCopy(*env);
+            assert(mqttQueue.enqueue(copied, 0));
         }
-        // }
-        // else
-        // {
-        //     LOG_INFO("MQTT not connected, queueing packet\n");
-        //     if (mqttQueue.numFree() == 0)
-        //     {
-        //         LOG_WARN("NOTE: MQTT queue is full, discarding oldest\n");
-        //         meshtastic_ServiceEnvelope *d = mqttQueue.dequeuePtr(0);
-        //         if (d)
-        //             mqttPool.release(d);
-        //     }
-        //     // make a copy of serviceEnvelope and queue it
-        //     meshtastic_ServiceEnvelope *copied = mqttPool.allocCopy(*env);
-        //     assert(mqttQueue.enqueue(copied, 0));
-        // }
         mqttPool.release(env);
     }
 }
