@@ -6,14 +6,18 @@
 #include "mesh/Channels.h"
 #include "mesh/generated/meshtastic/mqtt.pb.h"
 #if HAS_WIFI
-#include <PubSubClient.h>
 #include <WiFiClient.h>
 #if !defined(ARCH_PORTDUINO)
 #include <WiFiClientSecure.h>
+#define HAS_NETWORKING 1
 #endif
 #endif
 #if HAS_ETHERNET
 #include <EthernetClient.h>
+#define HAS_NETWORKING 1
+#endif
+
+#ifdef HAS_NETWORKING
 #include <PubSubClient.h>
 #endif
 
@@ -37,11 +41,13 @@ class MQTT : private concurrency::OSThread
     EthernetClient mqttClient;
 #endif
 #if !defined(DEBUG_HEAP_MQTT)
-    PubSubClient pubSub;
 
   public:
 #else
   public:
+    PubSubClient pubSub;
+#endif
+#ifdef HAS_NETWORKING
     PubSubClient pubSub;
 #endif
     MQTT();

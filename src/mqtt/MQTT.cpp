@@ -156,8 +156,11 @@ void mqttInit()
 {
     new MQTT();
 }
-
+#ifdef HAS_NETWORKING
 MQTT::MQTT() : concurrency::OSThread("mqtt"), pubSub(mqttClient), mqttQueue(MAX_MQTT_QUEUE)
+#elif
+MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
+#endif
 {
     if (moduleConfig.mqtt.enabled) {
         assert(!mqtt);
@@ -173,9 +176,10 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), pubSub(mqttClient), mqttQueue(MAX_
             jsonTopic = "msh" + jsonTopic;
         }
 
+#ifdef HAS_NETWORKING
         if (!moduleConfig.mqtt.proxy_to_client_enabled)
             pubSub.setCallback(mqttCallback);
-
+#endif
         // preflightSleepObserver.observe(&preflightSleep);
     } else {
         disable();
@@ -184,7 +188,11 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), pubSub(mqttClient), mqttQueue(MAX_
 
 bool MQTT::isConnectedDirectly()
 {
+#ifdef HAS_NETWORKING
     return pubSub.connected();
+#else
+    return false;
+#endif
 }
 
 bool MQTT::publish(const char *topic, const char *payload, bool retained)
@@ -197,9 +205,12 @@ bool MQTT::publish(const char *topic, const char *payload, bool retained)
         msg->retained = retained;
         service.sendMqttMessageToClientProxy(msg);
         return true;
-    } else if (isConnectedDirectly()) {
+    }
+#ifdef HAS_NETWORKING
+    else if (isConnectedDirectly()) {
         return pubSub.publish(topic, payload, retained);
     }
+#endif
     return false;
 }
 
@@ -214,9 +225,12 @@ bool MQTT::publish(const char *topic, const uint8_t *payload, size_t length, boo
         msg->retained = retained;
         service.sendMqttMessageToClientProxy(msg);
         return true;
-    } else if (isConnectedDirectly()) {
+    }
+#ifdef HAS_NETWORKING
+    else if (isConnectedDirectly()) {
         return pubSub.publish(topic, payload, length, retained);
     }
+#endif
     return false;
 }
 
@@ -232,7 +246,7 @@ void MQTT::reconnect()
             publishStatus();
             return; // Don't try to connect directly to the server
         }
-
+#if HAS_NETWORKING
         // Defaults
         int serverPort = 1883;
         const char *serverAddr = default_mqtt_address;
@@ -244,7 +258,6 @@ void MQTT::reconnect()
             mqttUsername = moduleConfig.mqtt.username;
             mqttPassword = moduleConfig.mqtt.password;
         }
-
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
         if (moduleConfig.mqtt.tls_enabled) {
             // change default for encrypted to 8883
@@ -261,7 +274,7 @@ void MQTT::reconnect()
             LOG_INFO("Using non-TLS-encrypted session\n");
             pubSub.setClient(mqttClient);
         }
-#else
+#elif HAS_ETHERNET
         pubSub.setClient(mqttClient);
 #endif
 
@@ -300,11 +313,13 @@ void MQTT::reconnect()
             }
 #endif
         }
+#endif
     }
 }
 
 void MQTT::sendSubscriptions()
 {
+#if HAS_NETWORKING
     size_t numChan = channels.getNumChannels();
     for (size_t i = 0; i < numChan; i++) {
         auto &ch = channels.getByIndex(i);
@@ -319,6 +334,7 @@ void MQTT::sendSubscriptions()
             }
         }
     }
+#endif
 }
 
 bool MQTT::wantsLink() const
@@ -358,7 +374,9 @@ int32_t MQTT::runOnce()
     if (moduleConfig.mqtt.proxy_to_client_enabled) {
         publishQueuedMessages();
         return 5000; // 200
-    } else if (!pubSub.loop()) {
+    }
+#if HAS_NETWORKING
+    else if (!pubSub.loop()) {
         if (!wantConnection)
             return 5000; // If we don't want connection now, check again in 5 secs
         else {
@@ -381,6 +399,7 @@ int32_t MQTT::runOnce()
         powerFSM.trigger(EVENT_CONTACT_FROM_PHONE); // Suppress entering light sleep (because that would turn off bluetooth)
         return 20;
     }
+#endif
 }
 
 /// FIXME, include more information in the status text
