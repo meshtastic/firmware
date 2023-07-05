@@ -7,9 +7,9 @@
 #include "mesh/generated/meshtastic/mqtt.pb.h"
 #if HAS_WIFI
 #include <WiFiClient.h>
+#define HAS_NETWORKING 1
 #if !defined(ARCH_PORTDUINO)
 #include <WiFiClientSecure.h>
-#define HAS_NETWORKING 1
 #endif
 #endif
 #if HAS_ETHERNET
