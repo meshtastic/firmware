@@ -275,7 +275,7 @@ void MQTT::reconnect()
             LOG_INFO("Using non-TLS-encrypted session\n");
             pubSub.setClient(mqttClient);
         }
-#elif HAS_ETHERNET
+#elif HAS_NETWORKING
         pubSub.setClient(mqttClient);
 #endif
 
@@ -303,9 +303,8 @@ void MQTT::reconnect()
 
             publishStatus();
             sendSubscriptions();
-        }
+        } else {
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
-        else {
             reconnectCount++;
             LOG_ERROR("Failed to contact MQTT server directly (%d/%d)...\n", reconnectCount, reconnectMax);
             if (reconnectCount >= reconnectMax) {
@@ -313,8 +312,8 @@ void MQTT::reconnect()
                 wifiReconnect->setIntervalFromNow(0);
                 reconnectCount = 0;
             }
-        }
 #endif
+        }
 #endif
     }
 }
