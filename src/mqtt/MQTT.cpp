@@ -23,7 +23,7 @@ static MemoryDynamic<meshtastic_ServiceEnvelope> staticMqttPool;
 
 Allocator<meshtastic_ServiceEnvelope> &mqttPool = staticMqttPool;
 
-void MQTT::mqttCallback(char *topic, byte *payload, unsigned int length)
+void MQTT::mqttCallback(char *topic, byte *payload, size_t length)
 {
     mqtt->onReceive(topic, payload, length);
 }
@@ -33,7 +33,7 @@ void MQTT::onClientProxyReceive(meshtastic_MqttClientProxyMessage msg)
     onReceive(msg.topic, msg.payload_variant.data.bytes, msg.payload_variant.data.size);
 }
 
-void MQTT::onReceive(char *topic, byte *payload, unsigned int length)
+void MQTT::onReceive(char *topic, byte *payload, size_t length)
 {
     meshtastic_ServiceEnvelope e = meshtastic_ServiceEnvelope_init_default;
 
