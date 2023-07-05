@@ -89,7 +89,7 @@ class MQTT : private concurrency::OSThread
     void sendSubscriptions();
 
     /// Callback for direct mqtt subscription messages
-    static void mqttCallback(char *topic, byte *payload, size_t length);
+    static void mqttCallback(char *topic, byte *payload, unsigned int length);
 
     /// Called when a new publish arrives from the MQTT server
     void onReceive(char *topic, byte *payload, size_t length);
