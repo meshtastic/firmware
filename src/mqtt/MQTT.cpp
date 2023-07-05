@@ -247,7 +247,7 @@ void MQTT::reconnect()
             publishStatus();
             return; // Don't try to connect directly to the server
         }
-#if HAS_NETWORKING
+#ifdef HAS_NETWORKING
         // Defaults
         int serverPort = 1883;
         const char *serverAddr = default_mqtt_address;
@@ -320,7 +320,7 @@ void MQTT::reconnect()
 
 void MQTT::sendSubscriptions()
 {
-#if HAS_NETWORKING
+#ifdef HAS_NETWORKING
     size_t numChan = channels.getNumChannels();
     for (size_t i = 0; i < numChan; i++) {
         auto &ch = channels.getByIndex(i);
@@ -377,7 +377,7 @@ int32_t MQTT::runOnce()
         publishQueuedMessages();
         return 5000; // 200
     }
-#if HAS_NETWORKING
+#ifdef HAS_NETWORKING
     else if (!pubSub.loop()) {
         if (!wantConnection)
             return 5000; // If we don't want connection now, check again in 5 secs

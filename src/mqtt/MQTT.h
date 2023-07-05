@@ -42,7 +42,7 @@ class MQTT : private concurrency::OSThread
 #endif
 
   public:
-#if HAS_NETWORKING
+#ifdef HAS_NETWORKING
     PubSubClient pubSub;
 #endif
     MQTT();
