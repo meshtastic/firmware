@@ -375,7 +375,7 @@ int32_t MQTT::runOnce()
     // If connected poll rapidly, otherwise only occasionally check for a wifi connection change and ability to contact server
     if (moduleConfig.mqtt.proxy_to_client_enabled) {
         publishQueuedMessages();
-        return 5000; // 200
+        return 200;
     }
 #ifdef HAS_NETWORKING
     else if (!pubSub.loop()) {
