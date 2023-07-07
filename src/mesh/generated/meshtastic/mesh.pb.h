@@ -463,7 +463,7 @@ typedef struct _meshtastic_Waypoint {
 } meshtastic_Waypoint;
 
 typedef PB_BYTES_ARRAY_T(435) meshtastic_MqttClientProxyMessage_data_t;
-/* This message will be proxied over the PhoneAPI for client to deliver to the MQTT server */
+/* This message will be proxied over the PhoneAPI for the client to deliver to the MQTT server */
 typedef struct _meshtastic_MqttClientProxyMessage {
     /* The MQTT topic this message will be sent /received on */
     char topic[60];

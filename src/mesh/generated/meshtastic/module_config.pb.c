@@ -39,6 +39,9 @@ PB_BIND(meshtastic_ModuleConfig_TelemetryConfig, meshtastic_ModuleConfig_Telemet
 PB_BIND(meshtastic_ModuleConfig_CannedMessageConfig, meshtastic_ModuleConfig_CannedMessageConfig, AUTO)
 
 
+PB_BIND(meshtastic_ModuleConfig_AmbientLightingConfig, meshtastic_ModuleConfig_AmbientLightingConfig, AUTO)
+
+
 PB_BIND(meshtastic_RemoteHardwarePin, meshtastic_RemoteHardwarePin, AUTO)
 
 
