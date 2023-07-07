@@ -426,7 +426,6 @@ bool GPS::setup()
 #ifdef HAS_PMU || PIN_GPS_EN
     if (config.position.gps_enabled) {
 #ifdef PIN_GPS_EN
-        digitalWrite(PIN_GPS_EN, 1);
         pinMode(PIN_GPS_EN, OUTPUT);
 #endif
         setGPSPower(true);
