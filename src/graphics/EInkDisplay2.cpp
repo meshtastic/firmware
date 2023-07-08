@@ -7,6 +7,10 @@
 #include "main.h"
 #include <SPI.h>
 
+#ifdef HELTEC_WIRELESS_PAPER
+SPIClass *hspi = NULL;
+#endif
+
 #define COLORED GxEPD_BLACK
 #define UNCOLORED GxEPD_WHITE
 
@@ -19,13 +23,13 @@
 #define TECHO_DISPLAY_MODEL GxEPD2_213_BN
 
 // 4.2 inch 300x400 - GxEPD2_420_M01
-//#define TECHO_DISPLAY_MODEL GxEPD2_420_M01
+// #define TECHO_DISPLAY_MODEL GxEPD2_420_M01
 
 // 2.9 inch 296x128 - GxEPD2_290_T5D
-//#define TECHO_DISPLAY_MODEL GxEPD2_290_T5D
+// #define TECHO_DISPLAY_MODEL GxEPD2_290_T5D
 
 // 1.54 inch 200x200 - GxEPD2_154_M09
-//#define TECHO_DISPLAY_MODEL GxEPD2_154_M09
+// #define TECHO_DISPLAY_MODEL GxEPD2_154_M09
 
 #elif defined(MAKERPYTHON)
 // 2.9 inch 296x128 - GxEPD2_290_T5D
@@ -41,6 +45,8 @@
 // 1.54 inch 200x200 - GxEPD2_154_M09
 #define TECHO_DISPLAY_MODEL GxEPD2_154_M09
 
+#elif defined(HELTEC_WIRELESS_PAPER)
+#define TECHO_DISPLAY_MODEL GxEPD2_213_BN
 #endif
 
 GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT> *adafruitDisplay;
@@ -49,7 +55,7 @@ EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY
 {
 #if defined(TTGO_T_ECHO)
     setGeometry(GEOMETRY_RAWMODE, TECHO_DISPLAY_MODEL::WIDTH, TECHO_DISPLAY_MODEL::HEIGHT);
-#elif defined(RAK4630)
+#elif defined(RAK4630) || defined(HELTEC_WIRELESS_PAPER)
 
     // GxEPD2_213_BN - RAK14000 2.13 inch b/w 250x122
     setGeometry(GEOMETRY_RAWMODE, 250, 122);
@@ -217,6 +223,16 @@ bool EInkDisplay::connect()
         } else {
             (void)adafruitDisplay;
         }
+    }
+#elif defined(HELTEC_WIRELESS_PAPER)
+    {
+        auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
+        adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+        // hspi = new SPIClass(HSPI);
+        // hspi->begin(PIN_SPI1_SCK, PIN_SPI1_MISO, PIN_SPI1_MOSI, PIN_SPI1_CS); // SCLK, MISO, MOSI, SS
+        adafruitDisplay->init(115200, true, 10, false, SPI, SPISettings(4000000, MSBFIRST, SPI_MODE0));
+        adafruitDisplay->setRotation(3);
+        adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
     }
 #elif defined(PCA10059)
     {
