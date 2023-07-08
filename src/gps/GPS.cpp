@@ -212,9 +212,6 @@ bool GPS::setupGPS()
             _serial_gps->write("$PCAS11,3*1E\r\n");
             delay(250);
         } else if (gnssModel == GNSS_MODEL_UBLOX) {
-
-            uint8_t CK_A = 0, CK_B = 0; // checksum bytes
-
             // Configure GNSS system to GPS+SBAS+GLONASS (Module may restart after this command)
             // We need set it because by default it is GPS only, and we want to use GLONASS too
             // Also we need SBAS for better accuracy and extra features
