@@ -7,7 +7,7 @@
 #define VEXT_ENABLE Vext // active low, powers the oled display and the lora antenna boost
 #define BUTTON_PIN 0
 
-#define PIN_GPS_EN 36 // GPS power enable pin
+#define PIN_GPS_EN 46 // GPS power enable pin
 
 #define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define ADC_CHANNEL ADC1_GPIO1_CHANNEL
