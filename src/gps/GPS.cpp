@@ -749,7 +749,7 @@ GnssModel_t GPS::probe()
     // Check that the returned response class and message ID are correct
     if (!getAck(buffer, 256, 0x06, 0x08)) {
         LOG_WARN("Failed to find UBlox & MTK GNSS Module\n");
-        return GNSS_MODEL_UNKONW;
+        return GNSS_MODEL_UNKNOWN;
     }
 
     //  Get Ublox gnss module hardware and software info
