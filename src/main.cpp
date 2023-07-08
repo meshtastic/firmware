@@ -215,6 +215,11 @@ void setup()
     digitalWrite(VEXT_ENABLE, 0); // turn on the display power
 #endif
 
+#ifdef VGNSS_CTRL
+    pinMode(VGNSS_CTRL, OUTPUT);
+    digitalWrite(VGNSS_CTRL, LOW);
+#endif
+
 #ifdef RESET_OLED
     pinMode(RESET_OLED, OUTPUT);
     digitalWrite(RESET_OLED, 1);

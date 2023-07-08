@@ -9,6 +9,10 @@
 #define ST7735_SDA 42
 #define ST7735_SCK 41
 
+// #define RESET_OLED 21
+// #define I2C_SDA 17 // I2C pins for this board
+// #define I2C_SCL 18
+
 #define SCREEN_TRANSITION_FRAMERATE 1 // fps
 
 #define VEXT_ENABLE Vext // active low, powers the oled display and the lora antenna boost
@@ -21,11 +25,11 @@
 
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
-#define GPS_RX_PIN 34
-#define GPS_TX_PIN 33
+#define GPS_RX_PIN 33
+#define GPS_TX_PIN 34
 #define PIN_GPS_RESET 35
-#define PIN_GPS_EN 37
-// #define PIN_GPS_PPS 36
+#define PIN_GPS_PPS 36
+#define VGNSS_CTRL 37 // Heltec Tracker needs this pulled low for GPS
 
 #define USE_SX1262
 
