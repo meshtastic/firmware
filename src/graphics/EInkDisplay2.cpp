@@ -7,9 +7,9 @@
 #include "main.h"
 #include <SPI.h>
 
-#ifdef HELTEC_WIRELESS_PAPER
-SPIClass *hspi = NULL;
-#endif
+// #ifdef HELTEC_WIRELESS_PAPER
+// SPIClass *hspi = NULL;
+// #endif
 
 #define COLORED GxEPD_BLACK
 #define UNCOLORED GxEPD_WHITE
