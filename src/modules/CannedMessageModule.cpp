@@ -123,8 +123,8 @@ int CannedMessageModule::splitConfiguredMessages()
 int CannedMessageModule::handleInputEvent(const InputEvent *event)
 {
     if ((strlen(moduleConfig.canned_message.allow_input_source) > 0) &&
-        (strcmp(moduleConfig.canned_message.allow_input_source, event->source) != 0) &&
-        (strcmp(moduleConfig.canned_message.allow_input_source, "_any") != 0)) {
+        (strcasecmp(moduleConfig.canned_message.allow_input_source, event->source) != 0) &&
+        (strcasecmp(moduleConfig.canned_message.allow_input_source, "_any") != 0)) {
         // Event source is not accepted.
         // Event only accepted if source matches the configured one, or
         //   the configured one is "_any" (or if there is no configured
