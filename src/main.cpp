@@ -219,6 +219,11 @@ void setup()
     digitalWrite(VGNSS_CTRL, LOW);
 #endif
 
+#if defined(VTFT_CTRL)
+    pinMode(VTFT_CTRL, OUTPUT);
+    digitalWrite(VTFT_CTRL, LOW);
+#endif
+
 #ifdef RESET_OLED
     pinMode(RESET_OLED, OUTPUT);
     digitalWrite(RESET_OLED, 1);

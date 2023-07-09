@@ -31,6 +31,8 @@
 #define PIN_GPS_PPS 36
 #define VGNSS_CTRL 37 // Heltec Tracker needs this pulled low for GPS
 
+#define VTFT_CTRL 46 // Heltec Tracker needs this pulled low for TFT
+
 #define USE_SX1262
 
 #define LORA_DIO0 -1 // a No connect on the SX1262 module
