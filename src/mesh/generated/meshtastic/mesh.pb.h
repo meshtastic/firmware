@@ -97,6 +97,14 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_BETAFPV_900_NANO_TX = 46,
     /* Raspberry Pi Pico (W) with Waveshare SX1262 LoRa Node Module */
     meshtastic_HardwareModel_RPI_PICO = 47,
+    /* Heltec Wireless Tracker with ESP32-S3 CPU, built-in GPS, and TFT */
+    meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER = 48,
+    /* Heltec Wireless Paper with ESP32-S3 CPU and E-Ink display */
+    meshtastic_HardwareModel_HELTEC_WIRELESS_PAPER = 49,
+    /* LilyGo T-Deck with ESP32-S3 CPU, Keyboard, and IPS display */
+    meshtastic_HardwareModel_T_DECK = 50,
+    /* LilyGo T-Watch S3 with ESP32-S3 CPU and IPS display */
+    meshtastic_HardwareModel_T_WATCH_S3 = 51,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
