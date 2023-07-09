@@ -47,13 +47,12 @@ NRF52Bluetooth *nrf52Bluetooth;
 
 #if HAS_WIFI
 #include "mesh/api/WiFiServerAPI.h"
-#include "mqtt/MQTT.h"
 #endif
 
 #if HAS_ETHERNET
 #include "mesh/api/ethServerAPI.h"
-#include "mqtt/MQTT.h"
 #endif
+#include "mqtt/MQTT.h"
 
 #include "LLCC68Interface.h"
 #include "RF95Interface.h"
@@ -661,9 +660,7 @@ void setup()
         }
     }
 
-#if HAS_WIFI || HAS_ETHERNET
     mqttInit();
-#endif
 
 #ifndef ARCH_PORTDUINO
     // Initialize Wifi
