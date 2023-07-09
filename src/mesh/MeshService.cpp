@@ -52,13 +52,18 @@ FIXME in the initial proof of concept we just skip the entire want/deny flow and
 
 MeshService service;
 
+static MemoryDynamic<meshtastic_MqttClientProxyMessage> staticMqttClientProxyMessagePool;
+
 static MemoryDynamic<meshtastic_QueueStatus> staticQueueStatusPool;
+
+Allocator<meshtastic_MqttClientProxyMessage> &mqttClientProxyMessagePool = staticMqttClientProxyMessagePool;
 
 Allocator<meshtastic_QueueStatus> &queueStatusPool = staticQueueStatusPool;
 
 #include "Router.h"
 
-MeshService::MeshService() : toPhoneQueue(MAX_RX_TOPHONE), toPhoneQueueStatusQueue(MAX_RX_TOPHONE)
+MeshService::MeshService()
+    : toPhoneQueue(MAX_RX_TOPHONE), toPhoneQueueStatusQueue(MAX_RX_TOPHONE), toPhoneMqttProxyQueue(MAX_RX_TOPHONE)
 {
     lastQueueStatus = {0, 0, 16, 0};
 }
@@ -266,6 +271,20 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 
     perhapsDecode(p);
     assert(toPhoneQueue.enqueue(p, 0));
+    fromNum++;
+}
+
+void MeshService::sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage *m)
+{
+    LOG_DEBUG("Sending mqtt message on topic '%s' to client for proxying to server\n", m->topic);
+    if (toPhoneMqttProxyQueue.numFree() == 0) {
+        LOG_WARN("MqttClientProxyMessagePool queue is full, discarding oldest\n");
+        meshtastic_MqttClientProxyMessage *d = toPhoneMqttProxyQueue.dequeuePtr(0);
+        if (d)
+            releaseMqttClientProxyMessageToPool(d);
+    }
+
+    assert(toPhoneMqttProxyQueue.enqueue(m, 0));
     fromNum++;
 }
 
