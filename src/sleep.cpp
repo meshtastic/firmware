@@ -189,7 +189,7 @@ static void waitEnterSleep()
 
 void doGPSpowersave(bool on)
 {
-#ifdef HAS_PMU || PIN_GPS_EN
+#if defined(HAS_PMU) || defined(PIN_GPS_EN)
     if (on) {
         LOG_INFO("Turning GPS back on\n");
         gps->forceWake(1);

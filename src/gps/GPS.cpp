@@ -423,7 +423,7 @@ bool GPS::setup()
 {
     // Master power for the GPS
 
-#ifdef HAS_PMU || PIN_GPS_EN
+#if defined(HAS_PMU) || defined(PIN_GPS_EN)
     if (config.position.gps_enabled) {
 #ifdef PIN_GPS_EN
         pinMode(PIN_GPS_EN, OUTPUT);
