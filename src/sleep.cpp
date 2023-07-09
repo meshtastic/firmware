@@ -99,6 +99,10 @@ void setGPSPower(bool on)
 {
     LOG_INFO("Setting GPS power=%d\n", on);
 
+#ifdef PIN_GPS_EN
+    digitalWrite(PIN_GPS_EN, on ? 1 : 0);
+#endif
+
 #ifdef HAS_PMU
     if (pmu_found && PMU) {
         uint8_t model = PMU->getChipModel();
@@ -185,7 +189,7 @@ static void waitEnterSleep()
 
 void doGPSpowersave(bool on)
 {
-#ifdef HAS_PMU
+#if defined(HAS_PMU) || defined(PIN_GPS_EN)
     if (on) {
         LOG_INFO("Turning GPS back on\n");
         gps->forceWake(1);
