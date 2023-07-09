@@ -143,6 +143,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     // In case we send a FromRadio packet
     memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
 
+    myNodeInfo.has_gps = gps && gps->isConnected(); // Update with latest GPS connect info
     // Advance states as needed
     switch (state) {
     case STATE_SEND_NOTHING:
