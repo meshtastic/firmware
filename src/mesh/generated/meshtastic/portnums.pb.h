@@ -54,6 +54,8 @@ typedef enum _meshtastic_PortNum {
     /* Audio Payloads.
  Encapsulated codec2 packets. On 2.4 GHZ Bandwidths only for now */
     meshtastic_PortNum_AUDIO_APP = 9,
+    /* Payloads for clients with a network connection proxying MQTT pub/sub to the device */
+    meshtastic_PortNum_MQTT_CLIENT_PROXY_APP = 10,
     /* Provides a 'ping' service that replies to any packet it receives.
  Also serves as a small example module. */
     meshtastic_PortNum_REPLY_APP = 32,
