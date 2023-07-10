@@ -320,18 +320,18 @@ static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, 
 
 static void drawFrameShutdown(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    uint16_t x_offset = display->width() / 2;
     display->setTextAlignment(TEXT_ALIGN_CENTER);
-
     display->setFont(FONT_MEDIUM);
-    display->drawString(64 + x, 26 + y, "Shutting down...");
+    display->drawString(x_offset + x, 26 + y, "Shutting down...");
 }
 
 static void drawFrameReboot(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    uint16_t x_offset = display->width() / 2;
     display->setTextAlignment(TEXT_ALIGN_CENTER);
-
     display->setFont(FONT_MEDIUM);
-    display->drawString(64 + x, 26 + y, "Rebooting...");
+    display->drawString(x_offset + x, 26 + y, "Rebooting...");
 }
 
 static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
