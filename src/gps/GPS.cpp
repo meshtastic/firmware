@@ -60,9 +60,9 @@ bool GPS::getACK(uint8_t class_id, uint8_t msg_id)
             // LOG_INFO("Got ACK for class %02X message %02X\n", class_id, msg_id);
             return true; // ACK received
         }
-        if (millis() - startTime > 1500) {
+        if (millis() - startTime > 3000) {
             LOG_WARN("No response for class %02X message %02X\n", class_id, msg_id);
-            return false; // No response received within 1.5 second
+            return false; // No response received within 3 seconds
         }
         if (_serial_gps->available()) {
             b = _serial_gps->read();
@@ -212,6 +212,7 @@ bool GPS::setupGPS()
             _serial_gps->write("$PCAS11,3*1E\r\n");
             delay(250);
         } else if (gnssModel == GNSS_MODEL_UBLOX) {
+
             // Configure GNSS system to GPS+SBAS+GLONASS (Module may restart after this command)
             // We need set it because by default it is GPS only, and we want to use GLONASS too
             // Also we need SBAS for better accuracy and extra features
@@ -239,9 +240,11 @@ bool GPS::setupGPS()
 
             if (!getACK(0x06, 0x3e)) {
                 LOG_WARN("Unable to reconfigure GNSS, keep factory defaults\n");
+                return true;
             } else {
                 LOG_INFO("GNSS set to GPS+SBAS+GLONASS, waiting before sending next command (0.75s)\n");
                 delay(750);
+                return true;
             }
 
             // Enable interference resistance, because we are using LoRa, WiFi and Bluetoot on same board,
@@ -271,6 +274,7 @@ bool GPS::setupGPS()
 
             if (!getACK(0x06, 0x39)) {
                 LOG_WARN("Unable to enable interference resistance.\n");
+                return true;
             }
 
             // Configure navigation engine expert settings:
@@ -316,6 +320,7 @@ bool GPS::setupGPS()
 
             if (!getACK(0x06, 0x23)) {
                 LOG_WARN("Unable to configure extra settings.\n");
+                return true;
             }
 
             /*
@@ -334,57 +339,120 @@ bool GPS::setupGPS()
 
             // ublox-M10S can be compatible with UBLOX traditional protocol, so the following sentence settings are also valid
 
-            // disable GGL
-            byte _message_GGL[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x01,
-                                   0x01, 0x00, 0x01, 0x01, 0x01, 0x01, 0x05, 0x3A};
+            // Disable GGL. GGL - Geographic position (latitude and longitude), which provides the current geographical
+            // coordinates.
+            byte _message_GGL[] = {
+                0xB5, 0x62,             // UBX sync characters
+                0x06, 0x01,             // Message class and ID (UBX-CFG-MSG)
+                0x08, 0x00,             // Length of payload (8 bytes)
+                0xF0, 0x01,             // NMEA ID for GLL
+                0x01,                   // I/O Target 0=I/O, 1=UART1, 2=UART2, 3=USB, 4=SPI
+                0x00,                   // Disable
+                0x01, 0x01, 0x01, 0x01, // Reserved
+                0x00, 0x00              // CK_A and CK_B (Checksum)
+            };
+
+            // Calculate the checksum and update the message.
+            UBXChecksum(_message_GGL, sizeof(_message_GGL));
+
+            // Send the message to the module
             _serial_gps->write(_message_GGL, sizeof(_message_GGL));
+
             if (!getACK(0x06, 0x01)) {
                 LOG_WARN("Unable to disable NMEA GGL.\n");
                 return true;
             }
 
-            // disable GSA
-            byte _message_GSA[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x02,
-                                   0x01, 0x00, 0x01, 0x01, 0x01, 0x01, 0x06, 0x41};
+            // Enable GSA. GSA - GPS DOP and active satellites, used for detailing the satellites used in the positioning and the
+            // DOP (Dilution of Precision)
+            byte _message_GSA[] = {
+                0xB5, 0x62,             // UBX sync characters
+                0x06, 0x01,             // Message class and ID (UBX-CFG-MSG)
+                0x08, 0x00,             // Length of payload (8 bytes)
+                0xF0, 0x02,             // NMEA ID for GSA
+                0x01,                   // I/O Target 0=I/O, 1=UART1, 2=UART2, 3=USB, 4=SPI
+                0x01,                   // Enable
+                0x01, 0x01, 0x01, 0x01, // Reserved
+                0x00, 0x00              // CK_A and CK_B (Checksum)
+            };
+            UBXChecksum(_message_GSA, sizeof(_message_GSA));
             _serial_gps->write(_message_GSA, sizeof(_message_GSA));
             if (!getACK(0x06, 0x01)) {
-                LOG_WARN("Unable to disable NMEA GSA.\n");
+                LOG_WARN("Unable to Enable NMEA GSA.\n");
                 return true;
             }
 
-            // disable GSV
-            byte _message_GSV[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x03,
-                                   0x01, 0x00, 0x01, 0x01, 0x01, 0x01, 0x07, 0x48};
+            // Disable GSV. GSV - Satellites in view, details the number and location of satellites in view.
+            byte _message_GSV[] = {
+                0xB5, 0x62,             // UBX sync characters
+                0x06, 0x01,             // Message class and ID (UBX-CFG-MSG)
+                0x08, 0x00,             // Length of payload (8 bytes)
+                0xF0, 0x03,             // NMEA ID for GSV
+                0x01,                   // I/O Target 0=I/O, 1=UART1, 2=UART2, 3=USB, 4=SPI
+                0x00,                   // Disable
+                0x01, 0x01, 0x01, 0x01, // Reserved
+                0x00, 0x00              // CK_A and CK_B (Checksum)
+            };
+            UBXChecksum(_message_GSV, sizeof(_message_GSV));
             _serial_gps->write(_message_GSV, sizeof(_message_GSV));
             if (!getACK(0x06, 0x01)) {
                 LOG_WARN("Unable to disable NMEA GSV.\n");
                 return true;
             }
 
-            // disable VTG
-            byte _message_VTG[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x05,
-                                   0x01, 0x00, 0x01, 0x01, 0x01, 0x01, 0x09, 0x56};
+            // Disable VTG. VTG - Track made good and ground speed, which provides course and speed information relative to the
+            // ground.
+            byte _message_VTG[] = {
+                0xB5, 0x62,             // UBX sync characters
+                0x06, 0x01,             // Message class and ID (UBX-CFG-MSG)
+                0x08, 0x00,             // Length of payload (8 bytes)
+                0xF0, 0x05,             // NMEA ID for VTG
+                0x01,                   // I/O Target 0=I/O, 1=UART1, 2=UART2, 3=USB, 4=SPI
+                0x00,                   // Disable
+                0x01, 0x01, 0x01, 0x01, // Reserved
+                0x00, 0x00              // CK_A and CK_B (Checksum)
+            };
+            UBXChecksum(_message_VTG, sizeof(_message_VTG));
             _serial_gps->write(_message_VTG, sizeof(_message_VTG));
             if (!getACK(0x06, 0x01)) {
                 LOG_WARN("Unable to disable NMEA VTG.\n");
                 return true;
             }
 
-            // enable RMC
-            byte _message_RMC[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x04,
-                                   0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x09, 0x54};
+            // Enable RMC. RMC - Recommended Minimum data, the essential gps pvt (position, velocity, time) data.
+            byte _message_RMC[] = {
+                0xB5, 0x62,             // UBX sync characters
+                0x06, 0x01,             // Message class and ID (UBX-CFG-MSG)
+                0x08, 0x00,             // Length of payload (8 bytes)
+                0xF0, 0x04,             // NMEA ID for RMC
+                0x01,                   // I/O Target 0=I/O, 1=UART1, 2=UART2, 3=USB, 4=SPI
+                0x01,                   // Enable
+                0x01, 0x01, 0x01, 0x01, // Reserved
+                0x00, 0x00              // CK_A and CK_B (Checksum)
+            };
+            UBXChecksum(_message_RMC, sizeof(_message_RMC));
             _serial_gps->write(_message_RMC, sizeof(_message_RMC));
             if (!getACK(0x06, 0x01)) {
                 LOG_WARN("Unable to enable NMEA RMC.\n");
                 return true;
             }
 
-            // enable GGA
-            byte _message_GGA[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x00,
-                                   0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x05, 0x38};
+            // Enable GGA. GGA - Global Positioning System Fix Data, which provides 3D location and accuracy data.
+            byte _message_GGA[] = {
+                0xB5, 0x62,             // UBX sync characters
+                0x06, 0x01,             // Message class and ID (UBX-CFG-MSG)
+                0x08, 0x00,             // Length of payload (8 bytes)
+                0xF0, 0x00,             // NMEA ID for GGA
+                0x01,                   // I/O Target 0=I/O, 1=UART1, 2=UART2, 3=USB, 4=SPI
+                0x01,                   // Enable
+                0x01, 0x01, 0x01, 0x01, // Reserved
+                0x00, 0x00              // CK_A and CK_B (Checksum)
+            };
+            UBXChecksum(_message_GGA, sizeof(_message_GGA));
             _serial_gps->write(_message_GGA, sizeof(_message_GGA));
             if (!getACK(0x06, 0x01)) {
                 LOG_WARN("Unable to enable NMEA GGA.\n");
+                return true;
             }
 
             // We need save configuration to flash to make our config changes persistent
@@ -407,8 +475,10 @@ bool GPS::setupGPS()
 
             if (!getACK(0x06, 0x09)) {
                 LOG_WARN("Unable to save GNSS module configuration.\n");
+                return true;
             } else {
                 LOG_INFO("GNSS module configuration saved!\n");
+                return true;
             }
         }
     }
