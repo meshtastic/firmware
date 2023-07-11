@@ -46,7 +46,8 @@
 #define TECHO_DISPLAY_MODEL GxEPD2_154_M09
 
 #elif defined(HELTEC_WIRELESS_PAPER)
-#define TECHO_DISPLAY_MODEL GxEPD2_213_T5D
+//#define TECHO_DISPLAY_MODEL GxEPD2_213_T5D
+#define TECHO_DISPLAY_MODEL GxEPD2_213_BN
 #endif
 
 GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT> *adafruitDisplay;
@@ -70,7 +71,8 @@ EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY
     // setGeometry(GEOMETRY_RAWMODE, 200, 200);
 
 #elif defined(HELTEC_WIRELESS_PAPER)
-    setGeometry(GEOMETRY_RAWMODE, 212, 104);
+    //setGeometry(GEOMETRY_RAWMODE, 212, 104);
+    setGeometry(GEOMETRY_RAWMODE, 250, 122);
 #elif defined(MAKERPYTHON)
     // GxEPD2_290_T5D
     setGeometry(GEOMETRY_RAWMODE, 296, 128);
