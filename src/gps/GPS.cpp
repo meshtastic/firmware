@@ -239,10 +239,17 @@ bool GPS::setupGPS()
             _serial_gps->write(_message_GNSS, sizeof(_message_GNSS));
 
             if (!getACK(0x06, 0x3e)) {
-                LOG_WARN("Unable to reconfigure GNSS, keep factory defaults\n");
+                // It's not critical if the module doesn't acknowledge this configuration.
+                // The module should operate adequately with its factory or previously saved settings.
+                // It appears that there is a firmware bug in some GPS modules: When an attempt is made
+                // to overwrite a saved state with identical values, no ACK/NAK is received, contrary to
+                // what is specified in the Ublox documentation.
+                // There is also a possibility that the module may be GPS-only.
+                LOG_INFO("Unable to reconfigure GNSS - defaults maintained. Is this module GPS-only?\n");
                 return true;
             } else {
-                LOG_INFO("GNSS set to GPS+SBAS+GLONASS, waiting before sending next command (0.75s)\n");
+                LOG_INFO("GNSS configured for GPS+SBAS+GLONASS. Pause for 0.75s before sending next command.\n");
+                // Documentation say, we need wait atleast 0.5s after reconfiguration of GNSS module, before sending next commands
                 delay(750);
                 return true;
             }
@@ -261,7 +268,8 @@ bool GPS::setupGPS()
                 // generalBits (General settings) is set to 0x31E as recommended
                 // antSetting (Antenna setting, 0=unknown, 1=passive, 2=active) is set to 0 (unknown)
                 // ToDo: Set to 1 (passive) or 2 (active) if known, for example from UBX-MON-HW, or from board info
-                // enable2 (Set to 1 to scan auxiliary bands, u-blox 8 / u-blox M8 only, otherwise ignored) is set to 1 (enabled)
+                // enable2 (Set to 1 to scan auxiliary bands, u-blox 8 / u-blox M8 only, otherwise ignored) is set to 1
+                // (enabled)
                 0x1E, 0x03, 0x00, 0x01, // config2: Extra settings for jamming/interference monitor
                 0x00, 0x00              // Checksum (calculated below)
             };
@@ -339,6 +347,31 @@ bool GPS::setupGPS()
 
             // ublox-M10S can be compatible with UBLOX traditional protocol, so the following sentence settings are also valid
 
+            // Set GPS update rate to 1Hz
+            // Lowering the update rate helps to save power.
+            // Additionally, for some new modules like the M9/M10, an update rate lower than 5Hz
+            // is recommended to avoid a known issue with satellites disappearing.
+            byte _message_1Hz[] = {
+                0xB5, 0x62, // UBX protocol sync characters
+                0x06, 0x08, // Message class and ID (UBX-CFG-RATE)
+                0x06, 0x00, // Length of payload (6 bytes)
+                0xE8, 0x03, // Measurement Rate (1000ms for 1Hz)
+                0x01, 0x00, // Navigation rate, always 1 in GPS mode
+                0x01, 0x00, // Time reference
+                0x00, 0x00  // Placeholder for checksum, will be calculated next
+            };
+
+            // Calculate the checksum and update the message.
+            UBXChecksum(_message_1Hz, sizeof(_message_1Hz));
+
+            // Send the message to the module
+            _serial_gps->write(_message_1Hz, sizeof(_message_1Hz));
+
+            if (!getACK(0x06, 0x08)) {
+                LOG_WARN("Unable to set GPS update rate.\n");
+                return true;
+            }
+
             // Disable GGL. GGL - Geographic position (latitude and longitude), which provides the current geographical
             // coordinates.
             byte _message_GGL[] = {
@@ -363,8 +396,8 @@ bool GPS::setupGPS()
                 return true;
             }
 
-            // Enable GSA. GSA - GPS DOP and active satellites, used for detailing the satellites used in the positioning and the
-            // DOP (Dilution of Precision)
+            // Enable GSA. GSA - GPS DOP and active satellites, used for detailing the satellites used in the positioning and
+            // the DOP (Dilution of Precision)
             byte _message_GSA[] = {
                 0xB5, 0x62,             // UBX sync characters
                 0x06, 0x01,             // Message class and ID (UBX-CFG-MSG)
@@ -400,8 +433,8 @@ bool GPS::setupGPS()
                 return true;
             }
 
-            // Disable VTG. VTG - Track made good and ground speed, which provides course and speed information relative to the
-            // ground.
+            // Disable VTG. VTG - Track made good and ground speed, which provides course and speed information relative to
+            // the ground.
             byte _message_VTG[] = {
                 0xB5, 0x62,             // UBX sync characters
                 0x06, 0x01,             // Message class and ID (UBX-CFG-MSG)
@@ -452,6 +485,40 @@ bool GPS::setupGPS()
             _serial_gps->write(_message_GGA, sizeof(_message_GGA));
             if (!getACK(0x06, 0x01)) {
                 LOG_WARN("Unable to enable NMEA GGA.\n");
+                return true;
+            }
+
+            // The Power Management configuration allows the GPS module to operate in different power modes for optimized power
+            // consumption.
+            // The modes supported are:
+            // 0x00 = Full power: The module operates at full power with no power saving.
+            // 0x01 = Balanced: The module dynamically adjusts the tracking behavior to balance power consumption.
+            // 0x02 = Interval: The module operates in a periodic mode, cycling between tracking and power saving states.
+            // 0x03 = Aggressive with 1 Hz: The module operates in a power saving mode with a 1 Hz update rate.
+            // 0x04 = Aggressive with 2 Hz: The module operates in a power saving mode with a 2 Hz update rate.
+            // 0x05 = Aggressive with 4 Hz: The module operates in a power saving mode with a 4 Hz update rate.
+            // The 'period' field specifies the position update and search period. It is only valid when the powerSetupValue is
+            // set to Interval; otherwise, it must be set to '0'. The 'onTime' field specifies the duration of the ON phase and
+            // must be smaller than the period. It is only valid when the powerSetupValue is set to Interval; otherwise, it must
+            // be set to '0'.
+            byte UBX_CFG_PMS[14] = {
+                0xB5, 0x62, // UBX sync characters
+                0x06, 0x86, // Message class and ID (UBX-CFG-PMS)
+                0x06, 0x00, // Length of payload (6 bytes)
+                0x00,       // Version (0)
+                0x03,       // Power setup value
+                0x00, 0x00, // period: not applicable, set to 0
+                0x00, 0x00, // onTime: not applicable, set to 0
+                0x00, 0x00  // Placeholder for checksum, will be calculated next
+            };
+
+            // Calculate the checksum and update the message
+            UBXChecksum(UBX_CFG_PMS, sizeof(UBX_CFG_PMS));
+
+            // Send the message to the module
+            _serial_gps->write(UBX_CFG_PMS, sizeof(UBX_CFG_PMS));
+            if (!getACK(0x06, 0x86)) {
+                LOG_WARN("Unable to enable powersaving for GPS.\n");
                 return true;
             }
 
@@ -894,8 +961,8 @@ GPS *createGps()
         LOG_DEBUG("Using MSL altitude model\n");
 #endif
         if (GPS::_serial_gps) {
-            // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.  Just
-            // assume NMEA at 9600 baud.
+            // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.
+            // Just assume NMEA at 9600 baud.
             GPS *new_gps = new NMEAGPS();
             new_gps->setup();
             return new_gps;
