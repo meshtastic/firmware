@@ -29,28 +29,23 @@
 #define RF95_NSS 18
 
 // supported modules list
-#define USE_RF95 // RFM95/SX127x
+//#define USE_RF95 // RFM95/SX127x
 #define USE_SX1262
-#define USE_SX1268
-#define USE_LLCC68
+//#define USE_SX1268
+//#define USE_LLCC68
 
 // common pinouts for SX126X modules
 #define SX126X_CS 18 // NSS for SX126X
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET
-#define SX126X_RXEN RADIOLIB_NC // Defining the RXEN ruins RFSwitching for the E22 900M30S in RadioLib
-#define SX126X_TXEN 13
+//#define SX126X_RXEN RADIOLIB_NC // Defining the RXEN ruins RFSwitching for the E22 900M30S in RadioLib
+//#define SX126X_TXEN 13
 
 // RX/TX for RFM95/SX127x
-#define RF95_RXEN 14
-#define RF95_TXEN 13
+//#define RF95_RXEN 14
+//#define RF95_TXEN 13
 
 // Set lora.tx_power to 13 for Hydra or other E22 900M30S target due to PA
-#define SX126X_MAX_POWER 22
-
-#ifdef EBYTE_E22
-// Internally the TTGO module hooks the SX126x-DIO2 in to control the TX/RX switch
-// (which is the default for the sx1262interface code)
+#define SX126X_MAX_POWER 13
 #define SX126X_E22
-#endif
