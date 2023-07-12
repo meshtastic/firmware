@@ -43,7 +43,7 @@ class AccelerometerThread : public concurrency::OSThread
         } else if (accleremoter_type == ScanI2C::DeviceType::LIS3DH && lis.begin(accelerometer_found.address)) {
             LOG_DEBUG("LIS3DH initializing\n");
             lis.setRange(LIS3DH_RANGE_2_G);
-            // Adjust threshhold, higher numbers are less sensitive
+            // Adjust threshold, higher numbers are less sensitive
             lis.setClick(config.device.double_tap_as_button_press ? 2 : 1, ACCELEROMETER_CLICK_THRESHOLD);
         }
     }

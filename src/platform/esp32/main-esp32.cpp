@@ -99,7 +99,7 @@ void esp32Setup()
 
     LOG_DEBUG("Setup Preferences in Flash Storage\n");
 
-    // Create object to store our persistant data
+    // Create object to store our persistent data
     Preferences preferences;
     preferences.begin("meshtastic", false);
 

@@ -62,7 +62,7 @@ void StoreForwardModule::populatePSRAM()
         https://learn.upesy.com/en/programmation/psram.html#psram-tab
     */
 
-    LOG_DEBUG("*** Before PSRAM initilization: heap %d/%d PSRAM %d/%d\n", memGet.getFreeHeap(), memGet.getHeapSize(),
+    LOG_DEBUG("*** Before PSRAM initialization: heap %d/%d PSRAM %d/%d\n", memGet.getFreeHeap(), memGet.getHeapSize(),
               memGet.getFreePsram(), memGet.getPsramSize());
 
     this->packetHistoryTXQueue =
@@ -77,7 +77,7 @@ void StoreForwardModule::populatePSRAM()
 
     this->packetHistory = static_cast<PacketHistoryStruct *>(ps_calloc(numberOfPackets, sizeof(PacketHistoryStruct)));
 
-    LOG_DEBUG("*** After PSRAM initilization: heap %d/%d PSRAM %d/%d\n", memGet.getFreeHeap(), memGet.getHeapSize(),
+    LOG_DEBUG("*** After PSRAM initialization: heap %d/%d PSRAM %d/%d\n", memGet.getFreeHeap(), memGet.getHeapSize(),
               memGet.getFreePsram(), memGet.getPsramSize());
     LOG_DEBUG("*** numberOfPackets for packetHistory - %u\n", numberOfPackets);
 }

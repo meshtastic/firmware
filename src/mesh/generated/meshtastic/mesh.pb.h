@@ -147,7 +147,7 @@ typedef enum _meshtastic_CriticalErrorCode {
     /* Radio transmit hardware failure. We sent data to the radio chip, but it didn't
  reply with an interrupt. */
     meshtastic_CriticalErrorCode_TRANSMIT_FAILED = 8,
-    /* We detected that the main CPU voltage dropped below the minumum acceptable value */
+    /* We detected that the main CPU voltage dropped below the minimum acceptable value */
     meshtastic_CriticalErrorCode_BROWNOUT = 9,
     /* Selftest of SX1262 radio chip failed */
     meshtastic_CriticalErrorCode_SX1262_FAILURE = 10,
@@ -371,7 +371,7 @@ typedef struct _meshtastic_Position {
  0 through 3 - for future use */
 typedef struct _meshtastic_User {
     /* A globally unique ID string for this user.
- In the case of Signal that would mean +16504442323, for the default macaddr derived id it would be !<8 hexidecimal bytes>.
+ In the case of Signal that would mean +16504442323, for the default macaddr derived id it would be !<8 hexadecimal bytes>.
  Note: app developers are encouraged to also use the following standard
  node IDs "^all" (for broadcast), "^local" (for the locally connected node) */
     char id[16];
@@ -418,7 +418,7 @@ typedef struct _meshtastic_Routing {
 
 typedef PB_BYTES_ARRAY_T(237) meshtastic_Data_payload_t;
 /* (Formerly called SubPacket)
- The payload portion fo a packet, this is the actual bytes that are sent
+ The payload portion for a packet, this is the actual bytes that are sent
  inside a radio packet (because from/to are broken out by the comms library) */
 typedef struct _meshtastic_Data {
     /* Formerly named typ and of type Type */
@@ -552,7 +552,7 @@ typedef struct _meshtastic_MeshPacket {
     /* The priority of this message for sending.
  See MeshPacket.Priority description for more details. */
     meshtastic_MeshPacket_Priority priority;
-    /* rssi of received packet. Only sent to phone for dispay purposes. */
+    /* rssi of received packet. Only sent to phone for display purposes. */
     int32_t rx_rssi;
     /* Describe if this message is delayed */
     meshtastic_MeshPacket_Delayed delayed;

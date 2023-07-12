@@ -26,7 +26,7 @@ void TFTDisplay::display(void)
 
     for (y = 0; y < displayHeight; y++) {
         for (x = 0; x < displayWidth; x++) {
-            // get src pixel in the page based ordering the OLED lib uses FIXME, super inefficent
+            // get src pixel in the page based ordering the OLED lib uses FIXME, super inefficient
             auto isset = buffer[x + (y / 8) * displayWidth] & (1 << (y & 7));
             auto dblbuf_isset = buffer_back[x + (y / 8) * displayWidth] & (1 << (y & 7));
             if (isset != dblbuf_isset) {

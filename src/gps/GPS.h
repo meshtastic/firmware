@@ -149,7 +149,7 @@ class GPS : private concurrency::OSThread
      */
     void setAwake(bool on);
 
-    /** Get how long we should stay looking for each aquisition
+    /** Get how long we should stay looking for each acquisition
      */
     uint32_t getWakeTime() const;
 
