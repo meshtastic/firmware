@@ -181,10 +181,14 @@ bool GPS::setupGPS()
             config.position.tx_gpio = GPS_TX_PIN;
 #endif
 
+//#define BAUD_RATE 115200
 // ESP32 has a special set of parameters vs other arduino ports
 #if defined(ARCH_ESP32)
-        if (config.position.rx_gpio)
+        if (config.position.rx_gpio) {
+            LOG_DEBUG("Using GPIO%d for GPS RX\n", config.position.rx_gpio);
+            LOG_DEBUG("Using GPIO%d for GPS TX\n", config.position.tx_gpio);
             _serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, config.position.rx_gpio, config.position.tx_gpio);
+        }
 #else
         _serial_gps->begin(GPS_BAUDRATE);
 #endif
