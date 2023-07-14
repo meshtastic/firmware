@@ -71,7 +71,7 @@ EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY
     // setGeometry(GEOMETRY_RAWMODE, 200, 200);
 
 #elif defined(HELTEC_WIRELESS_PAPER)
-    //setGeometry(GEOMETRY_RAWMODE, 212, 104);
+    // setGeometry(GEOMETRY_RAWMODE, 212, 104);
     setGeometry(GEOMETRY_RAWMODE, 250, 122);
 #elif defined(MAKERPYTHON)
     // GxEPD2_290_T5D
