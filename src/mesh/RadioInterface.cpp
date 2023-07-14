@@ -308,7 +308,7 @@ bool RadioInterface::init()
     preflightSleepObserver.observe(&preflightSleep);
     notifyDeepSleepObserver.observe(&notifyDeepSleep);
 
-    // we now expect interfaces to operate in promiscous mode
+    // we now expect interfaces to operate in promiscuous mode
     // radioIf.setThisAddress(nodeDB.getNodeNum()); // Note: we must do this here, because the nodenum isn't inited at constructor
     // time.
 

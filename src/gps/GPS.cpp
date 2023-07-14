@@ -129,12 +129,12 @@ int GPS::getAck(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
                 }
                 break;
             case 4:
-                // Payload lenght lsb
+                // Payload length lsb
                 needRead = c;
                 ubxFrameCounter++;
                 break;
             case 5:
-                // Payload lenght msb
+                // Payload length msb
                 needRead |= (c << 8);
                 ubxFrameCounter++;
                 break;
@@ -147,7 +147,7 @@ int GPS::getAck(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
                 if (_serial_gps->readBytes(buffer, needRead) != needRead) {
                     ubxFrameCounter = 0;
                 } else {
-                    // return payload lenght
+                    // return payload length
                     return needRead;
                 }
                 break;
@@ -258,7 +258,7 @@ bool GPS::setupGPS()
                 return true;
             }
 
-            // Enable interference resistance, because we are using LoRa, WiFi and Bluetoot on same board,
+            // Enable interference resistance, because we are using LoRa, WiFi and Bluetooth on same board,
             // and we need to reduce interference from them
             byte _message_JAM[16] = {
                 0xB5, 0x62, // UBX protocol sync characters
@@ -674,7 +674,7 @@ void GPS::setAwake(bool on)
     }
 }
 
-/** Get how long we should stay looking for each aquisition in msecs
+/** Get how long we should stay looking for each acquisition in msecs
  */
 uint32_t GPS::getWakeTime() const
 {

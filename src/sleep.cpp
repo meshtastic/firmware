@@ -250,7 +250,7 @@ void doDeepSleep(uint32_t msecToWake)
         //
         // No need to turn this off if the power draw in sleep mode really is just 0.2uA and turning it off would
         // leave floating input for the IRQ line
-        // If we want to leave the radio receving in would be 11.5mA current draw, but most of the time it is just waiting
+        // If we want to leave the radio receiving in would be 11.5mA current draw, but most of the time it is just waiting
         // in its sequencer (true?) so the average power draw should be much lower even if we were listinging for packets
         // all the time.
 

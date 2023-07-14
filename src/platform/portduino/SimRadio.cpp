@@ -92,7 +92,7 @@ void SimRadio::completeSending()
     }
 }
 
-/** Could we send right now (i.e. either not actively receving or transmitting)? */
+/** Could we send right now (i.e. either not actively receiving or transmitting)? */
 bool SimRadio::canSendImmediately()
 {
     // We wait _if_ we are partially though receiving a packet (rather than just merely waiting for one).

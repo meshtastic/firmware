@@ -169,7 +169,7 @@ SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 RadioInterface *rIf = NULL;
 
 /**
- * Some platforms (nrf52) might provide an alterate version that supresses calling delay from sleep.
+ * Some platforms (nrf52) might provide an alterate version that suppresses calling delay from sleep.
  */
 __attribute__((weak, noinline)) bool loopCanSleep()
 {
@@ -710,7 +710,7 @@ uint32_t rebootAtMsec;   // If not zero we will reboot at this time (used to reb
 uint32_t shutdownAtMsec; // If not zero we will shutdown at this time (used to shutdown from python or mobile client)
 
 // If a thread does something that might need for it to be rescheduled ASAP it can set this flag
-// This will supress the current delay and instead try to run ASAP.
+// This will suppress the current delay and instead try to run ASAP.
 bool runASAP;
 
 extern meshtastic_DeviceMetadata getDeviceMetadata()
