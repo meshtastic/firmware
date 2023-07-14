@@ -65,6 +65,10 @@ bool TFTDisplay::connect()
     digitalWrite(TFT_BL, HIGH);
     pinMode(TFT_BL, OUTPUT);
 #endif
+#ifdef TFT_POWER_EN
+    digitalWrite(TFT_POWER_EN, HIGH);
+    pinMode(TFT_POWER_EN, OUTPUT);
+#endif
 
 #ifdef ST7735_BACKLIGHT_EN
     digitalWrite(ST7735_BACKLIGHT_EN, HIGH);
