@@ -120,7 +120,7 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
         for (uint32_t y = 0; y < displayHeight; y++) {
             for (uint32_t x = 0; x < displayWidth; x++) {
 
-                // get src pixel in the page based ordering the OLED lib uses FIXME, super inefficent
+                // get src pixel in the page based ordering the OLED lib uses FIXME, super inefficient
                 auto b = buffer[x + (y / 8) * displayWidth];
                 auto isset = b & (1 << (y & 7));
                 adafruitDisplay->drawPixel(x, y, isset ? COLORED : UNCOLORED);
