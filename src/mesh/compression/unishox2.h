@@ -198,8 +198,8 @@
         2, 2, 2, 2, 0                                                                                                            \
     }
 
-/// Default frequently occurring sequences. When composition of text is know beforehand, the other sequences in this section can be
-/// used to achieve more compression.
+/// Default frequently occurring sequences. When composition of text is know beforehand, the other sequences in this section can
+/// be used to achieve more compression.
 #define USX_FREQ_SEQ_DFLT                                                                                                        \
     (const char *[])                                                                                                             \
     {                                                                                                                            \
