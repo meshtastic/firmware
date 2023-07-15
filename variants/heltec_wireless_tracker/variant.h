@@ -1,18 +1,25 @@
 #define LED_PIN 18
 
-#define TFT_POWER_EN 46
-
-#define ST7735_RESET 39 // Output
+// ST7735S TFT LCD
+#define ST7735S 1 // there are different (sub-)versions of ST7735
 #define ST7735_CS 38
-#define ST7735_BACKLIGHT_EN 45
-#define ST7735_RS 40
-#define ST7735_SDA 42
+#define ST7735_RS 40  // DC
+#define ST7735_SDA 42 // MOSI
 #define ST7735_SCK 41
-
-// #define RESET_OLED 21
-// #define I2C_SDA 17 // I2C pins for this board
-// #define I2C_SCL 18
-
+#define ST7735_RESET 39
+#define ST7735_MISO -1
+#define ST7735_BUSY -1
+#define ST7735_BL 45
+#define ST7735_SPI_HOST SPI3_HOST
+#define ST7735_BACKLIGHT_EN 45
+#define SPI_FREQUENCY 40000000
+#define SPI_READ_FREQUENCY 16000000
+#define SCREEN_ROTATE
+#define TFT_HEIGHT 160
+#define TFT_WIDTH 80
+#define TFT_OFFSET_X 26
+#define TFT_OFFSET_Y 0
+#define VTFT_CTRL 46                  // Heltec Tracker needs this pulled low for TFT
 #define SCREEN_TRANSITION_FRAMERATE 1 // fps
 
 #define VEXT_ENABLE Vext // active low, powers the oled display and the lora antenna boost
@@ -30,8 +37,6 @@
 #define PIN_GPS_RESET 35
 #define PIN_GPS_PPS 36
 #define VGNSS_CTRL 37 // Heltec Tracker needs this pulled low for GPS
-
-#define VTFT_CTRL 46 // Heltec Tracker needs this pulled low for TFT
 
 #define USE_SX1262
 
