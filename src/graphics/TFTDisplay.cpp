@@ -33,10 +33,10 @@ class LGFX : public lgfx::LGFX_Device
             auto cfg = _bus_instance.config();
 
             // configure SPI
-            cfg.spi_host = ST7735_SPI_HOST;     // ESP32-S2,S3,C3 : SPI2_HOST or SPI3_HOST / ESP32 : VSPI_HOST or HSPI_HOST
+            cfg.spi_host = ST7735_SPI_HOST; // ESP32-S2,S3,C3 : SPI2_HOST or SPI3_HOST / ESP32 : VSPI_HOST or HSPI_HOST
             cfg.spi_mode = 0;
-            cfg.freq_write = SPI_FREQUENCY;     // SPI clock for transmission (up to 80MHz, rounded to the value obtained by dividing
-                                                // 80MHz by an integer)
+            cfg.freq_write = SPI_FREQUENCY; // SPI clock for transmission (up to 80MHz, rounded to the value obtained by dividing
+                                            // 80MHz by an integer)
             cfg.freq_read = SPI_READ_FREQUENCY; // SPI clock when receiving
             cfg.spi_3wire = false;              // Set to true if reception is done on the MOSI pin
             cfg.use_lock = true;                // Set to true to use transaction locking
@@ -54,9 +54,9 @@ class LGFX : public lgfx::LGFX_Device
         {                                        // Set the display panel control.
             auto cfg = _panel_instance.config(); // Gets a structure for display panel settings.
 
-            cfg.pin_cs = ST7735_CS;        // Pin number where CS is connected (-1 = disable)
-            cfg.pin_rst = ST7735_RESET;    // Pin number where RST is connected  (-1 = disable)
-            cfg.pin_busy = ST7735_BUSY;    // Pin number where BUSY is connected (-1 = disable)
+            cfg.pin_cs = ST7735_CS;     // Pin number where CS is connected (-1 = disable)
+            cfg.pin_rst = ST7735_RESET; // Pin number where RST is connected  (-1 = disable)
+            cfg.pin_busy = ST7735_BUSY; // Pin number where BUSY is connected (-1 = disable)
 
             // The following setting values ​​are general initial values ​​for each panel, so please comment out any
             // unknown items and try them.
@@ -71,8 +71,9 @@ class LGFX : public lgfx::LGFX_Device
             cfg.readable = true;           // Set to true if data can be read
             cfg.invert = true;             // Set to true if the light/darkness of the panel is reversed
             cfg.rgb_order = false;         // Set to true if the panel's red and blue are swapped
-            cfg.dlen_16bit = false;        // Set to true for panels that transmit data length in 16-bit units with 16-bit parallel or SPI
-            cfg.bus_shared = true;         // If the bus is shared with the SD card, set to true (bus control with drawJpgFile etc.)
+            cfg.dlen_16bit =
+                false;             // Set to true for panels that transmit data length in 16-bit units with 16-bit parallel or SPI
+            cfg.bus_shared = true; // If the bus is shared with the SD card, set to true (bus control with drawJpgFile etc.)
 
             // Set the following only when the display is shifted with a driver with a variable number of pixels, such as the
             // ST7735 or ILI9163.
@@ -146,28 +147,26 @@ void TFTDisplay::sendCommand(uint8_t com)
 {
     // handle display on/off directly
     switch (com) {
-        case DISPLAYON:
-        {
+    case DISPLAYON: {
 #ifdef TFT_BL
-            digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
+        digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
 #endif
 #ifdef VTFT_CTRL
-            digitalWrite(VTFT_CTRL, LOW);
+        digitalWrite(VTFT_CTRL, LOW);
 #endif
-            break;
-        }
-        case DISPLAYOFF:
-        {
+        break;
+    }
+    case DISPLAYOFF: {
 #ifdef TFT_BL
-            digitalWrite(TFT_BL, !TFT_BACKLIGHT_ON);
+        digitalWrite(TFT_BL, !TFT_BACKLIGHT_ON);
 #endif
 #ifdef VTFT_CTRL
-            digitalWrite(VTFT_CTRL, HIGH);
+        digitalWrite(VTFT_CTRL, HIGH);
 #endif
-            break;
-        }
-        default:
-            break;
+        break;
+    }
+    default:
+        break;
     }
 
     // Drop all other commands to device (we just update the buffer)
