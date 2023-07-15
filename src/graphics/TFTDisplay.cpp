@@ -4,21 +4,16 @@
 #define TFT_BACKLIGHT_ON HIGH
 #endif
 
-#if defined(ILI9341_DRIVER)
-#include <TFT_eSPI.h> // Graphics and font library for ILI9341 driver chip
+// convert 24-bit color to 16-bit (56K)
+#define COLOR565(r, g, b) (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | ((b & 0xF8) >> 3))
+#define TFT_MESH COLOR565(0x67, 0xEA, 0x94)
 
-static TFT_eSPI tft = TFT_eSPI(); // Invoke library, pins defined in User_Setup.h
-
-#elif defined(ST7735_CS)
+#if defined(ST7735S)
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
 
 #if defined(ST7735_BACKLIGHT_EN) && !defined(TFT_BL)
 #define TFT_BL ST7735_BACKLIGHT_EN
 #endif
-
-// convert 24-bit color to 16-bit (56K)
-#define COLOR565(r, g, b) (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | ((b & 0xF8) >> 3))
-#define TFT_MESH COLOR565(0x67, 0xEA, 0x94)
 
 class LGFX : public lgfx::LGFX_Device
 {
@@ -100,6 +95,12 @@ class LGFX : public lgfx::LGFX_Device
 };
 
 static LGFX tft;
+
+#elif defined(ST7735_CS) || defined(ILI9341_DRIVER)
+#include <TFT_eSPI.h> // Graphics and font library for ILI9341 driver chip
+
+static TFT_eSPI tft = TFT_eSPI(); // Invoke library, pins defined in User_Setup.h
+
 #endif
 
 #if defined(ST7735_CS) || defined(ILI9341_DRIVER)

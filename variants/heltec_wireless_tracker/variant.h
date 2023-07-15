@@ -1,6 +1,7 @@
 #define LED_PIN 18
 
-// ST7735 TFT LCD
+// ST7735S TFT LCD
+#define ST7735S 1  // there are different (sub-)versions of ST7735
 #define ST7735_CS 38
 #define ST7735_RS 40  // DC
 #define ST7735_SDA 42 // MOSI
