@@ -37,9 +37,10 @@
 #define PIN_GPS_RESET 35
 #define PIN_GPS_PPS 36
 #define VGNSS_CTRL 37 // Heltec Tracker needs this pulled low for GPS
+#define GPS_RESET_MODE LOW
+#define GPS_UC6580
 
 #define USE_SX1262
-
 #define LORA_DIO0 -1 // a No connect on the SX1262 module
 #define LORA_RESET 12
 #define LORA_DIO1 14 // SX1262 IRQ

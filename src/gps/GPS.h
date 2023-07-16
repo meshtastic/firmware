@@ -14,6 +14,7 @@ struct uBloxGnssModelInfo {
 typedef enum {
     GNSS_MODEL_MTK,
     GNSS_MODEL_UBLOX,
+    GNSS_MODEL_UC6850,
     GNSS_MODEL_UNKNOWN,
 } GnssModel_t;
 
@@ -149,7 +150,7 @@ class GPS : private concurrency::OSThread
      */
     void setAwake(bool on);
 
-    /** Get how long we should stay looking for each acquisition
+    /** Get how long we should stay looking for each aquisition
      */
     uint32_t getWakeTime() const;
 
@@ -167,6 +168,7 @@ class GPS : private concurrency::OSThread
     virtual int32_t runOnce() override;
 
     // Get GNSS model
+    String getNMEA();
     GnssModel_t probe();
 
     int getAck(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t requestedID);
