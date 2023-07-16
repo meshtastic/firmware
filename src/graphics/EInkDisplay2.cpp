@@ -234,8 +234,10 @@ bool EInkDisplay::connect()
         auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, -1, PIN_EINK_BUSY);
         adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);
         hspi = new SPIClass(HSPI);
+        // Bogus MISO because espressif complains
         hspi->begin(PIN_EINK_SCLK, 46, PIN_EINK_MOSI, PIN_EINK_CS); // SCLK, MISO, MOSI, SS
-        adafruitDisplay->init(115200, true, 10, false, SPI, SPISettings(4000000, MSBFIRST, SPI_MODE0));
+        delay(10);
+        adafruitDisplay->init(115200, true, 10, false, SPI, SPISettings(6000000, MSBFIRST, SPI_MODE0));
         adafruitDisplay->setRotation(3);
         adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
     }
