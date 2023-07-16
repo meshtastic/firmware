@@ -249,7 +249,7 @@ jobs:
 
       - name: Create request artifacts
         if: ${{ github.event_name == 'pull_request_target' || github.event_name == 'pull_request' }}
-        uses: gavv/pull-request-artifacts@v1.0.0
+        uses: gavv/pull-request-artifacts@v1.1.0
         with:
           commit: ${{ (github.event.pull_request_target || github.event.pull_request).head.sha }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
