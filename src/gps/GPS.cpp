@@ -4,6 +4,10 @@
 #include "configuration.h"
 #include "sleep.h"
 
+#ifndef GPS_RESET_MODE
+#define GPS_RESET_MODE HIGH
+#endif
+
 // If we have a serial GPS port it will not be null
 #ifdef GPS_SERIAL_NUM
 HardwareSerial _serial_gps_real(GPS_SERIAL_NUM);
@@ -214,6 +218,11 @@ bool GPS::setupGPS()
             delay(250);
             // Switch to Vehicle Mode, since SoftRF enables Aviation < 2g
             _serial_gps->write("$PCAS11,3*1E\r\n");
+            delay(250);
+        } else if (gnssModel == GNSS_MODEL_UC6850) {
+
+            // use GPS + GLONASS
+            _serial_gps->write("$CFGSYS,h15\r\n");
             delay(250);
         } else if (gnssModel == GNSS_MODEL_UBLOX) {
 
@@ -571,10 +580,10 @@ bool GPS::setup()
 #endif
 
 #ifdef PIN_GPS_RESET
-    digitalWrite(PIN_GPS_RESET, 1); // assert for 10ms
+    digitalWrite(PIN_GPS_RESET, GPS_RESET_MODE); // assert for 10ms
     pinMode(PIN_GPS_RESET, OUTPUT);
     delay(10);
-    digitalWrite(PIN_GPS_RESET, 0);
+    digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
 #endif
     setAwake(true); // Wake GPS power before doing any init
     bool ok = setupGPS();
@@ -850,6 +859,9 @@ GnssModel_t GPS::probe()
     return GNSS_MODEL_UBLOX;
 #elif defined(GPS_L76K)
     return GNSS_MODEL_MTK;
+#elif defined(GPS_UC6580)
+    _serial_gps->updateBaudRate(115200);
+    return GNSS_MODEL_UC6850;
 #else
     // we use autodetect, only T-BEAM S3 for now...
     uint8_t buffer[256];
