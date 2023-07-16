@@ -4,7 +4,7 @@
 #include "FSCommon.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "PowerFSM.h" // neede for button bypass
+#include "PowerFSM.h" // needed for button bypass
 #include "detect/ScanI2C.h"
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
 

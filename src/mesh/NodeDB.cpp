@@ -138,7 +138,7 @@ bool NodeDB::factoryReset()
     // third, write everything to disk
     saveToDisk();
 #ifdef ARCH_ESP32
-    // This will erase what's in NVS including ssl keys, persistant variables and ble pairing
+    // This will erase what's in NVS including ssl keys, persistent variables and ble pairing
     nvs_flash_erase();
 #endif
 #ifdef ARCH_NRF52
@@ -911,7 +911,7 @@ void recordCriticalError(meshtastic_CriticalErrorCode code, uint32_t address, co
     error_code = code;
     error_address = address;
 
-    // Currently portuino is mostly used for simulation.  Make sue the user notices something really bad happend
+    // Currently portuino is mostly used for simulation.  Make sure the user notices something really bad happened
 #ifdef ARCH_PORTDUINO
     LOG_ERROR("A critical failure occurred, portduino is exiting...");
     exit(2);

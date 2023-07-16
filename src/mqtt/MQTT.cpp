@@ -290,7 +290,7 @@ void MQTT::reconnect()
         pubSub.setServer(serverAddr, serverPort);
         pubSub.setBufferSize(512);
 
-        LOG_INFO("Attempting to connnect directly to MQTT server %s, port: %d, username: %s, password: %s\n", serverAddr,
+        LOG_INFO("Attempting to connect directly to MQTT server %s, port: %d, username: %s, password: %s\n", serverAddr,
                  serverPort, mqttUsername, mqttPassword);
 
         auto myStatus = (statusTopic + owner.id);

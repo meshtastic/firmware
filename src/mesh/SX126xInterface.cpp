@@ -249,7 +249,7 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
     return false;
 }
 
-/** Could we send right now (i.e. either not actively receving or transmitting)? */
+/** Could we send right now (i.e. either not actively receiving or transmitting)? */
 template <typename T> bool SX126xInterface<T>::isActivelyReceiving()
 {
     // The IRQ status will be cleared when we start our read operation.  Check if we've started a header, but haven't yet

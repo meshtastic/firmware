@@ -320,18 +320,18 @@ static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, 
 
 static void drawFrameShutdown(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    uint16_t x_offset = display->width() / 2;
     display->setTextAlignment(TEXT_ALIGN_CENTER);
-
     display->setFont(FONT_MEDIUM);
-    display->drawString(64 + x, 26 + y, "Shutting down...");
+    display->drawString(x_offset + x, 26 + y, "Shutting down...");
 }
 
 static void drawFrameReboot(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    uint16_t x_offset = display->width() / 2;
     display->setTextAlignment(TEXT_ALIGN_CENTER);
-
     display->setFont(FONT_MEDIUM);
-    display->drawString(64 + x, 26 + y, "Rebooting...");
+    display->drawString(x_offset + x, 26 + y, "Rebooting...");
 }
 
 static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -360,7 +360,7 @@ static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
     display->drawString(0 + x, FONT_HEIGHT_MEDIUM + y, "For help, please visit \nmeshtastic.org");
 }
 
-// Ignore messages orginating from phone (from the current node 0x0) unless range test or store and forward module are enabled
+// Ignore messages originating from phone (from the current node 0x0) unless range test or store and forward module are enabled
 static bool shouldDrawMessage(const meshtastic_MeshPacket *packet)
 {
     return packet->from != 0 && !moduleConfig.range_test.enabled && !moduleConfig.store_forward.enabled;
@@ -442,7 +442,7 @@ static void drawWaypointFrame(OLEDDisplay *display, OLEDDisplayUiState *state, i
     }
 }
 
-/// Draw a series of fields in a column, wrapping to multiple colums if needed
+/// Draw a series of fields in a column, wrapping to multiple columns if needed
 static void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields)
 {
     // The coordinates define the left starting point of the text
@@ -1789,7 +1789,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     heartbeat = !heartbeat;
 #endif
 }
-// adjust Brightness cycle trough 1 to 254 as long as attachDuringLongPress is true
+// adjust Brightness cycle through 1 to 254 as long as attachDuringLongPress is true
 void Screen::adjustBrightness()
 {
     if (!useDisplay)

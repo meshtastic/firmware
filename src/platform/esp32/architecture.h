@@ -97,6 +97,10 @@
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_V3
 #elif defined(HELTEC_WSL_V3)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_WSL_V3
+#elif defined(HELTEC_WIRELESS_TRACKER)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER
+#elif defined(HELTEC_WIRELESS_PAPER)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_PAPER
 #elif defined(TLORA_T3S3_V1)
 #define HW_VENDOR meshtastic_HardwareModel_TLORA_T3_S3
 #elif defined(BETAFPV_2400_TX)

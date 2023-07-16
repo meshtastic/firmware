@@ -68,7 +68,7 @@ void INTERRUPT_ATTR RadioLibInterface::isrTxLevel0()
  */
 RadioLibInterface *RadioLibInterface::instance;
 
-/** Could we send right now (i.e. either not actively receving or transmitting)? */
+/** Could we send right now (i.e. either not actively receiving or transmitting)? */
 bool RadioLibInterface::canSendImmediately()
 {
     // We wait _if_ we are partially though receiving a packet (rather than just merely waiting for one).

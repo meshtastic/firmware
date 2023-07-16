@@ -50,7 +50,7 @@ XPowersLibInterface *PMU = NULL;
 #else
 
 // Copy of the base class defined in axp20x.h.
-// I'd rather not inlude axp20x.h as it brings Wire dependency.
+// I'd rather not include axp20x.h as it brings Wire dependency.
 class HasBatteryLevel
 {
   public:
@@ -712,7 +712,7 @@ bool Power::axpChipInit()
             PMU->setPowerChannelVoltage(XPOWERS_ALDO1, 3300);
             PMU->enablePowerOutput(XPOWERS_ALDO1);
 
-            // sdcard power channle
+            // sdcard power channel
             PMU->setPowerChannelVoltage(XPOWERS_BLDO1, 3300);
             PMU->enablePowerOutput(XPOWERS_BLDO1);
 

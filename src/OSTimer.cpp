@@ -5,7 +5,8 @@
  * Schedule a callback to run.  The callback must _not_ block, though it is called from regular thread level (not ISR)
  *
  * NOTE! xTimerPend... seems to ignore the time passed in on ESP32 and on NRF52
- * The reason this didn't work is bcause xTimerPednFunctCall really isn't a timer function at all - it just means run the callback
+ * The reason this didn't work is because xTimerPednFunctCall really isn't a timer function at all - it just means run the
+callback
  * from the timer thread the next time you have spare cycles.
  *
  * @return true if successful, false if the timer fifo is too full.
