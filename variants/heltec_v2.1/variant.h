@@ -8,6 +8,8 @@
 #define GPS_RX_PIN 36
 #define GPS_TX_PIN 33
 
+#define PIN_GPS_EN 37 // GPS power enable pin
+
 #ifndef USE_JTAG  // gpio15 is TDO for JTAG, so no I2C on this board while doing jtag
 #define I2C_SDA 4 // I2C pins for this board
 #define I2C_SCL 15
