@@ -17,7 +17,7 @@
  PortNums should be assigned in the following range:
  0-63   Core Meshtastic use, do not use for third party apps
  64-127 Registered 3rd party apps, send in a pull request that adds a new entry to portnums.proto to  register your application
- 256-511 Use one of these portnums for your private applications that you don't want to register publically
+ 256-511 Use one of these portnums for your private applications that you don't want to register publicly
  All other values are reserved.
  Note: This was formerly a Type enum named 'typ' with the same id #
  We have change to this 'portnum' based scheme for specifying app handlers for particular payloads.
@@ -54,6 +54,8 @@ typedef enum _meshtastic_PortNum {
     /* Audio Payloads.
  Encapsulated codec2 packets. On 2.4 GHZ Bandwidths only for now */
     meshtastic_PortNum_AUDIO_APP = 9,
+    /* Payloads for clients with a network connection proxying MQTT pub/sub to the device */
+    meshtastic_PortNum_MQTT_CLIENT_PROXY_APP = 10,
     /* Provides a 'ping' service that replies to any packet it receives.
  Also serves as a small example module. */
     meshtastic_PortNum_REPLY_APP = 32,

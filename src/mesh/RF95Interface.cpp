@@ -192,7 +192,7 @@ bool RF95Interface::isChannelActive()
     return false;
 }
 
-/** Could we send right now (i.e. either not actively receving or transmitting)? */
+/** Could we send right now (i.e. either not actively receiving or transmitting)? */
 bool RF95Interface::isActivelyReceiving()
 {
     return lora->isReceiving();
@@ -201,7 +201,7 @@ bool RF95Interface::isActivelyReceiving()
 bool RF95Interface::sleep()
 {
     // put chipset into sleep mode
-    setStandby(); // First cancel any active receving/sending
+    setStandby(); // First cancel any active receiving/sending
     lora->sleep();
 
     return true;

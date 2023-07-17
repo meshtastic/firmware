@@ -19,7 +19,7 @@ static uint64_t zeroOffsetSecs; // GPS based time in secs since 1970 - only upda
 
 void readFromRTC()
 {
-    struct timeval tv; /* btw settimeofday() is helpfull here too*/
+    struct timeval tv; /* btw settimeofday() is helpful here too*/
 #ifdef RV3028_RTC
     if (rtc_found.address == RV3028_RTC) {
         uint32_t now = millis();

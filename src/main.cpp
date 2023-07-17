@@ -47,13 +47,12 @@ NRF52Bluetooth *nrf52Bluetooth;
 
 #if HAS_WIFI
 #include "mesh/api/WiFiServerAPI.h"
-#include "mqtt/MQTT.h"
 #endif
 
 #if HAS_ETHERNET
 #include "mesh/api/ethServerAPI.h"
-#include "mqtt/MQTT.h"
 #endif
+#include "mqtt/MQTT.h"
 
 #include "LLCC68Interface.h"
 #include "RF95Interface.h"
@@ -170,7 +169,7 @@ SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 RadioInterface *rIf = NULL;
 
 /**
- * Some platforms (nrf52) might provide an alterate version that supresses calling delay from sleep.
+ * Some platforms (nrf52) might provide an alterate version that suppresses calling delay from sleep.
  */
 __attribute__((weak, noinline)) bool loopCanSleep()
 {
@@ -213,6 +212,16 @@ void setup()
 #ifdef VEXT_ENABLE
     pinMode(VEXT_ENABLE, OUTPUT);
     digitalWrite(VEXT_ENABLE, 0); // turn on the display power
+#endif
+
+#ifdef VGNSS_CTRL
+    pinMode(VGNSS_CTRL, OUTPUT);
+    digitalWrite(VGNSS_CTRL, LOW);
+#endif
+
+#if defined(VTFT_CTRL)
+    pinMode(VTFT_CTRL, OUTPUT);
+    digitalWrite(VTFT_CTRL, LOW);
 #endif
 
 #ifdef RESET_OLED
@@ -261,10 +270,11 @@ void setup()
 #endif
 
 #ifdef RAK4630
+#ifdef PIN_3V3_EN
     // We need to enable 3.3V periphery in order to scan it
     pinMode(PIN_3V3_EN, OUTPUT);
     digitalWrite(PIN_3V3_EN, HIGH);
-
+#endif
 #ifndef USE_EINK
     // RAK-12039 set pin for Air quality sensor
     pinMode(AQ_SET_PIN, OUTPUT);
@@ -352,17 +362,18 @@ void setup()
 
     pmu_found = i2cScanner->exists(ScanI2C::DeviceType::PMU_AXP192_AXP2101);
 
-    /*
-     * There are a bunch of sensors that have no further logic than to be found and stuffed into the
-     * nodeTelemetrySensorsMap singleton. This wraps that logic in a temporary scope to declare the temporary field
-     * "found".
-     */
+/*
+ * There are a bunch of sensors that have no further logic than to be found and stuffed into the
+ * nodeTelemetrySensorsMap singleton. This wraps that logic in a temporary scope to declare the temporary field
+ * "found".
+ */
 
-    // Only one supported RGB LED currently
+// Only one supported RGB LED currently
+#ifdef HAS_NCP5623
     rgb_found = i2cScanner->find(ScanI2C::DeviceType::NCP5623);
 
-// Start the RGB LED at 50%
-#ifdef RAK4630
+    // Start the RGB LED at 50%
+
     if (rgb_found.type == ScanI2C::NCP5623) {
         rgb.begin();
         rgb.setCurrent(10);
@@ -654,9 +665,7 @@ void setup()
         }
     }
 
-#if HAS_WIFI || HAS_ETHERNET
     mqttInit();
-#endif
 
 #ifndef ARCH_PORTDUINO
     // Initialize Wifi
@@ -701,7 +710,7 @@ uint32_t rebootAtMsec;   // If not zero we will reboot at this time (used to reb
 uint32_t shutdownAtMsec; // If not zero we will shutdown at this time (used to shutdown from python or mobile client)
 
 // If a thread does something that might need for it to be rescheduled ASAP it can set this flag
-// This will supress the current delay and instead try to run ASAP.
+// This will suppress the current delay and instead try to run ASAP.
 bool runASAP;
 
 extern meshtastic_DeviceMetadata getDeviceMetadata()
