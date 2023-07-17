@@ -29,7 +29,8 @@
   "debug": {
     "jlink_device": "nRF52833_xxAA",
     "onboard_tools": ["jlink"],
-    "svd_path": "nrf52833.svd"
+    "svd_path": "nrf52833.svd",
+    "openocd_target": "nrf52840-mdk-rs"
   },
   "frameworks": ["arduino"],
   "name": "Meshtastic PPR1 (Adafruit BSP)",

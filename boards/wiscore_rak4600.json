@@ -32,7 +32,8 @@
   "connectivity": ["bluetooth"],
   "debug": {
     "jlink_device": "nRF52832_xxAA",
-    "svd_path": "nrf52.svd"
+    "svd_path": "nrf52.svd",
+    "openocd_target": "nrf52840-mdk-rs"
   },
   "frameworks": ["arduino", "zephyr"],
   "name": "Adafruit Bluefruit nRF52832 Feather",
