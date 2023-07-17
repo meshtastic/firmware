@@ -215,7 +215,7 @@ typedef enum _meshtastic_Config_BluetoothConfig_PairingMode {
 typedef struct _meshtastic_Config_DeviceConfig {
     /* Sets the role of node */
     meshtastic_Config_DeviceConfig_Role role;
-    /* Disabling this will disable the SerialConsole by not initilizing the StreamAPI */
+    /* Disabling this will disable the SerialConsole by not initializing the StreamAPI */
     bool serial_enabled;
     /* By default we turn off logging as soon as an API client connects (to keep shared serial link quiet).
  Set this to true to leave the debug log outputting even when API is active. */
@@ -269,7 +269,7 @@ typedef struct _meshtastic_Config_PositionConfig {
     uint32_t tx_gpio;
     /* The minimum distance in meters traveled (since the last send) before we can send a position to the mesh if position_broadcast_smart_enabled */
     uint32_t broadcast_smart_minimum_distance;
-    /* The minumum number of seconds (since the last send) before we can send a position to the mesh if position_broadcast_smart_enabled */
+    /* The minimum number of seconds (since the last send) before we can send a position to the mesh if position_broadcast_smart_enabled */
     uint32_t broadcast_smart_minimum_interval_secs;
 } meshtastic_Config_PositionConfig;
 
@@ -363,7 +363,7 @@ typedef struct _meshtastic_Config_DisplayConfig {
     bool compass_north_top;
     /* Flip screen vertically, for cases that mount the screen upside down */
     bool flip_screen;
-    /* Perferred display units */
+    /* Preferred display units */
     meshtastic_Config_DisplayConfig_DisplayUnits units;
     /* Override auto-detect in screen */
     meshtastic_Config_DisplayConfig_OledType oled;

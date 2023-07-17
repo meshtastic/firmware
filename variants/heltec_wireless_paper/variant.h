@@ -1,13 +1,18 @@
-#define LED_PIN LED
+#define LED_PIN 18
 
-#define RESET_OLED RST_OLED
-#define I2C_SDA SDA_OLED // I2C pins for this board
-#define I2C_SCL SCL_OLED
+#define USE_EINK
+/*
+ * eink display pins
+ */
+#define PIN_EINK_CS 4
+#define PIN_EINK_BUSY 7
+#define PIN_EINK_DC 5
+#define PIN_EINK_RES 6
+#define PIN_EINK_SCLK 3
+#define PIN_EINK_MOSI 2
 
 #define VEXT_ENABLE Vext // active low, powers the oled display and the lora antenna boost
 #define BUTTON_PIN 0
-
-#define PIN_GPS_EN 46 // GPS power enable pin
 
 #define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define ADC_CHANNEL ADC1_GPIO1_CHANNEL

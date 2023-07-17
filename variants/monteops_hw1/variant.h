@@ -16,10 +16,15 @@
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-#ifndef _VARIANT_RAK4630_
-#define _VARIANT_RAK4630_
+#ifndef _VARIANT_MOPS_HW1_
+#define _VARIANT_MOPS_HW1_
 
 #define RAK4630
+
+// MonteOps hardware design variant
+#ifndef MONTEOPS_HW1
+#define MONTEOPS_HW1
+#endif
 
 /** Master clock frequency */
 #define VARIANT_MCK (64000000ul)
@@ -45,7 +50,7 @@ extern "C" {
 
 // LEDs
 #define PIN_LED1 (35)
-#define PIN_LED2 (36)
+#define PIN_LED2 (36) // Connected to WWAN host LED (if present)
 
 #define LED_BUILTIN PIN_LED1
 #define LED_CONN PIN_LED2
@@ -59,7 +64,7 @@ extern "C" {
  * Buttons
  */
 
-#define PIN_BUTTON1 9 // Pin for button on E-ink button module or IO expansion
+//#define PIN_BUTTON1 9 // Pin for button on E-ink button module or IO expansion
 #define BUTTON_NEED_PULLUP
 #define PIN_BUTTON2 12
 #define PIN_BUTTON3 24
@@ -122,29 +127,6 @@ static const uint8_t MOSI = PIN_SPI_MOSI;
 static const uint8_t MISO = PIN_SPI_MISO;
 static const uint8_t SCK = PIN_SPI_SCK;
 
-/*
- * eink display pins
- */
-
-#define PIN_EINK_CS (0 + 26)
-#define PIN_EINK_BUSY (0 + 4)
-#define PIN_EINK_DC (0 + 17)
-#define PIN_EINK_RES (-1)
-#define PIN_EINK_SCLK (0 + 3)
-#define PIN_EINK_MOSI (0 + 30) // also called SDI
-
-// Controls power for the eink display - Board power is enabled either by VBUS from USB or the CPU asserting PWR_ON
-// FIXME - I think this is actually just the board power enable - it enables power to the CPU also
-// #define PIN_EINK_PWR_ON (-1)
-
-// #define USE_EINK
-
-// RAKRGB
-#define HAS_NCP5623
-
-/*
- * Wire Interfaces
- */
 #define WIRE_INTERFACES_COUNT 1
 
 #define PIN_WIRE_SDA (13)
@@ -172,8 +154,8 @@ static const uint8_t SCK = PIN_SPI_SCK;
    IO6       <->  P0.10 (Arduino GPIO number 10)
    IO7       <->  P0.28 (Arduino GPIO number 28)
    SW1       <->  P0.01 (Arduino GPIO number 1)
-   A0        <->  P0.04/AIN2 (Arduino Analog A2
-   A1        <->  P0.31/AIN7 (Arduino Analog A7
+   A0        <->  P0.04/AIN2 (Arduino Analog A2)
+   A1        <->  P0.31/AIN7 (Arduino Analog A7)
    SPI_CS    <->  P0.26 (Arduino GPIO number 26)
  */
 
@@ -211,28 +193,12 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define SX126X_POWER_EN (37)
 #define SX126X_E22 // DIO2 controlls an antenna switch and the TCXO voltage is controlled by DIO3
 
-// enables 3.3V periphery like GPS or IO Module
-#define PIN_3V3_EN (34)
-
-// RAK1910 GPS module
-// If using the wisblock GPS module and pluged into Port A on WisBlock base
-// IO1 is hooked to PPS (pin 12 on header) = gpio 17
-// IO2 is hooked to GPS RESET = gpio 34, but it can not be used to this because IO2 is ALSO used to control 3V3_S power (1 is on).
-// Therefore must be 1 to keep peripherals powered
-// Power is on the controllable 3V3_S rail
-// #define PIN_GPS_RESET (34)
-#define PIN_GPS_EN PIN_3V3_EN
-#define PIN_GPS_PPS (17) // Pulse per second input from the GPS
+#define PIN_GPS_RESET (34) // Must be P1.02
+// #define PIN_GPS_EN
+// #define PIN_GPS_PPS (17) // Pulse per second input from the GPS
 
 #define GPS_RX_PIN PIN_SERIAL1_RX
 #define GPS_TX_PIN PIN_SERIAL1_TX
-
-// RAK12002 RTC Module
-#define RV3028_RTC (uint8_t)0b1010010
-
-// RAK18001 Buzzer in Slot C
-// #define PIN_BUZZER 21 // IO3 is PWM2
-// NEW: set this via protobuf instead!
 
 // Battery
 // The battery sense is hooked to pin A0 (5)
@@ -254,14 +220,12 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define ADC_MULTIPLIER VBAT_DIVIDER_COMP // REAL_VBAT_MV_PER_LSB
 #define VBAT_RAW_TO_SCALED(x) (REAL_VBAT_MV_PER_LSB * x)
 
-#define HAS_RTC 1
+//#define HAS_RTC 1
 
 #define HAS_ETHERNET 1
 
-#define RAK_4631 1
-
 #define PIN_ETHERNET_RESET 21
-#define PIN_ETHERNET_SS PIN_EINK_CS
+#define PIN_ETHERNET_SS 26 // P0.26 QSPI_CS
 #define ETH_SPI_PORT SPI1
 #define AQ_SET_PIN 10
 

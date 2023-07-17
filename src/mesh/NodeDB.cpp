@@ -141,7 +141,7 @@ bool NodeDB::factoryReset()
     // write NeighbourInfo
     neighborInfoModule->saveProtoForModule();
 #ifdef ARCH_ESP32
-    // This will erase what's in NVS including ssl keys, persistant variables and ble pairing
+    // This will erase what's in NVS including ssl keys, persistent variables and ble pairing
     nvs_flash_erase();
 #endif
 #ifdef ARCH_NRF52
@@ -228,6 +228,15 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.has_store_forward = true;
     moduleConfig.has_telemetry = true;
     moduleConfig.has_external_notification = true;
+#if defined(RAK4630) || defined(RAK11310)
+    // Default to RAK led pin 2 (blue)
+    moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.output = PIN_LED2;
+    moduleConfig.external_notification.active = true;
+    moduleConfig.external_notification.alert_message = true;
+    moduleConfig.external_notification.output_ms = 1000;
+    moduleConfig.external_notification.nag_timeout = 60;
+#endif
     moduleConfig.has_canned_message = true;
 
     strncpy(moduleConfig.mqtt.address, default_mqtt_address, sizeof(moduleConfig.mqtt.address));
@@ -906,7 +915,7 @@ void recordCriticalError(meshtastic_CriticalErrorCode code, uint32_t address, co
     error_code = code;
     error_address = address;
 
-    // Currently portuino is mostly used for simulation.  Make sue the user notices something really bad happend
+    // Currently portuino is mostly used for simulation.  Make sure the user notices something really bad happened
 #ifdef ARCH_PORTDUINO
     LOG_ERROR("A critical failure occurred, portduino is exiting...");
     exit(2);
