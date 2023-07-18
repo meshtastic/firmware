@@ -296,7 +296,7 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
 static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     int x_offset = display->width() / 2;
-    int y_offset = display->height() == 64 ? 0 : 32;
+    int y_offset = display->height() <= 80 ? 0 : 32;
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(FONT_MEDIUM);
     display->drawString(x_offset + x, y_offset + y, "Bluetooth");
