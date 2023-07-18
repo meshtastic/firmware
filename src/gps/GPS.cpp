@@ -909,14 +909,15 @@ GnssModel_t GPS::probe()
         0xB5, 0x62, // Sync message for UBX protocol
         0x0A, 0x04, // Message class and ID (UBX-MON-VER)
         0x00, 0x00, // Length of payload (we're asking for an answer, so no payload)
-        0x0E, 0x34  // Checksum
+        0x00, 0x00  // Checksum
     };
     //  Get Ublox gnss module hardware and software info
+    UBXChecksum(_message_MONVER, sizeof(_message_MONVER));
     _serial_gps->write(_message_MONVER, sizeof(_message_MONVER));
 
     uint16_t len = getAck(buffer, 384, 0x0A, 0x04);
     if (len) {
-
+        // LOG_DEBUG("monver reply size = %d\n", len);
         int16_t position = 0;
         for (int i = 0; i < 30; i++) {
             info.swVersion[i] = buffer[position];
