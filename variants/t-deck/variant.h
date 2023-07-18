@@ -34,7 +34,6 @@
 #define SPI_CS (39)
 #define SDCARD_CS SPI_CS
 
-
 #define BATTERY_PIN 4 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 // ratio of voltage divider = 2.0 (RD2=100k, RD3=100k)
 #define ADC_MULTIPLIER 2.11 // 2.0 + 10% for correction of display undervoltage.
@@ -51,7 +50,6 @@
 #define KB_LEFT 1
 #define KB_RIGHT 15
 
-
 #define USE_SX1262
 #define USE_SX1268
 
@@ -64,7 +62,7 @@
 #define LORA_RESET 17
 #define LORA_DIO1 45 // SX1262 IRQ
 #define LORA_DIO2 13 // SX1262 BUSY
-#define LORA_DIO3   // Not connected on PCB, but internally on the TTGO SX1262, if DIO3 is high the TXCO is enabled
+#define LORA_DIO3    // Not connected on PCB, but internally on the TTGO SX1262, if DIO3 is high the TXCO is enabled
 
 #define SX126X_CS RF95_NSS // FIXME - we really should define LORA_CS instead
 #define SX126X_DIO1 LORA_DIO1

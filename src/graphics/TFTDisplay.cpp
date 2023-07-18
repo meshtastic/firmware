@@ -21,7 +21,7 @@ class LGFX : public lgfx::LGFX_Device
     lgfx::Bus_SPI _bus_instance;
     lgfx::Light_PWM _light_instance;
 
-public:
+  public:
     LGFX(void)
     {
         {
@@ -30,8 +30,8 @@ public:
             // configure SPI
             cfg.spi_host = ST7735_SPI_HOST; // ESP32-S2,S3,C3 : SPI2_HOST or SPI3_HOST / ESP32 : VSPI_HOST or HSPI_HOST
             cfg.spi_mode = 0;
-            cfg.freq_write = SPI_FREQUENCY;     // SPI clock for transmission (up to 80MHz, rounded to the value obtained by dividing
-                                                // 80MHz by an integer)
+            cfg.freq_write = SPI_FREQUENCY; // SPI clock for transmission (up to 80MHz, rounded to the value obtained by dividing
+                                            // 80MHz by an integer)
             cfg.freq_read = SPI_READ_FREQUENCY; // SPI clock when receiving
             cfg.spi_3wire = false;              // Set to true if reception is done on the MOSI pin
             cfg.use_lock = true;                // Set to true to use transaction locking
@@ -66,7 +66,8 @@ public:
             cfg.readable = true;           // Set to true if data can be read
             cfg.invert = true;             // Set to true if the light/darkness of the panel is reversed
             cfg.rgb_order = false;         // Set to true if the panel's red and blue are swapped
-            cfg.dlen_16bit = false;        // Set to true for panels that transmit data length in 16-bit units with 16-bit parallel or SPI
+            cfg.dlen_16bit =
+                false;             // Set to true for panels that transmit data length in 16-bit units with 16-bit parallel or SPI
             cfg.bus_shared = true; // If the bus is shared with the SD card, set to true (bus control with drawJpgFile etc.)
 
             // Set the following only when the display is shifted with a driver with a variable number of pixels, such as the
@@ -109,7 +110,7 @@ class LGFX : public lgfx::LGFX_Device
     lgfx::Light_PWM _light_instance;
     lgfx::Touch_GT911 _touch_instance;
 
-public:
+  public:
     LGFX(void)
     {
         {
@@ -118,7 +119,8 @@ public:
             // SPI
             cfg.spi_host = ST7789_SPI_HOST;
             cfg.spi_mode = 0;
-            cfg.freq_write = SPI_FREQUENCY;     // SPI clock for transmission (up to 80MHz, rounded to the value obtained by dividing 80MHz by an integer)
+            cfg.freq_write = SPI_FREQUENCY; // SPI clock for transmission (up to 80MHz, rounded to the value obtained by dividing
+                                            // 80MHz by an integer)
             cfg.freq_read = SPI_READ_FREQUENCY; // SPI clock when receiving
             cfg.spi_3wire = false;              // Set to true if reception is done on the MOSI pin
             cfg.use_lock = true;                // Set to true to use transaction locking
@@ -139,7 +141,8 @@ public:
             cfg.pin_rst = -1;       // Pin number where RST is connected  (-1 = disable)
             cfg.pin_busy = -1;      // Pin number where BUSY is connected (-1 = disable)
 
-            // The following setting values ​​are general initial values ​​for each panel, so please comment out any unknown items and try them.
+            // The following setting values ​​are general initial values ​​for each panel, so please comment out any
+            // unknown items and try them.
 
             cfg.panel_width = TFT_WIDTH;   // actual displayable width
             cfg.panel_height = TFT_HEIGHT; // actual displayable height
@@ -151,10 +154,12 @@ public:
             cfg.readable = true;           // Set to true if data can be read
             cfg.invert = true;             // Set to true if the light/darkness of the panel is reversed
             cfg.rgb_order = false;         // Set to true if the panel's red and blue are swapped
-            cfg.dlen_16bit = false;        // Set to true for panels that transmit data length in 16-bit units with 16-bit parallel or SPI
-            cfg.bus_shared = true;         // If the bus is shared with the SD card, set to true (bus control with drawJpgFile etc.)
+            cfg.dlen_16bit =
+                false;             // Set to true for panels that transmit data length in 16-bit units with 16-bit parallel or SPI
+            cfg.bus_shared = true; // If the bus is shared with the SD card, set to true (bus control with drawJpgFile etc.)
 
-            // Set the following only when the display is shifted with a driver with a variable number of pixels, such as the ST7735 or ILI9163.
+            // Set the following only when the display is shifted with a driver with a variable number of pixels, such as the
+            // ST7735 or ILI9163.
             cfg.memory_width = TFT_WIDTH;   // Maximum width supported by the driver IC
             cfg.memory_height = TFT_HEIGHT; // Maximum height supported by the driver IC
             _panel_instance.config(cfg);
@@ -203,7 +208,6 @@ public:
 
 static LGFX tft;
 
-
 #elif defined(ST7735_CS) || defined(ILI9341_DRIVER)
 #include <TFT_eSPI.h> // Graphics and font library for ILI9341 driver chip
 
@@ -232,24 +236,19 @@ void TFTDisplay::display(void)
 
     uint16_t x, y;
 
-    for (y = 0; y < displayHeight; y++)
-    {
-        for (x = 0; x < displayWidth; x++)
-        {
+    for (y = 0; y < displayHeight; y++) {
+        for (x = 0; x < displayWidth; x++) {
             // get src pixel in the page based ordering the OLED lib uses FIXME, super inefficent
             auto isset = buffer[x + (y / 8) * displayWidth] & (1 << (y & 7));
             auto dblbuf_isset = buffer_back[x + (y / 8) * displayWidth] & (1 << (y & 7));
-            if (isset != dblbuf_isset)
-            {
+            if (isset != dblbuf_isset) {
                 tft.drawPixel(x, y, isset ? TFT_MESH : TFT_BLACK);
             }
         }
     }
     // Copy the Buffer to the Back Buffer
-    for (y = 0; y < (displayHeight / 8); y++)
-    {
-        for (x = 0; x < displayWidth; x++)
-        {
+    for (y = 0; y < (displayHeight / 8); y++) {
+        for (x = 0; x < displayWidth; x++) {
             uint16_t pos = x + y * displayWidth;
             buffer_back[pos] = buffer[pos];
         }
@@ -260,10 +259,8 @@ void TFTDisplay::display(void)
 void TFTDisplay::sendCommand(uint8_t com)
 {
     // handle display on/off directly
-    switch (com)
-    {
-    case DISPLAYON:
-    {
+    switch (com) {
+    case DISPLAYON: {
 #ifdef TFT_BL
         digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
 #endif
@@ -272,8 +269,7 @@ void TFTDisplay::sendCommand(uint8_t com)
 #endif
         break;
     }
-    case DISPLAYOFF:
-    {
+    case DISPLAYOFF: {
 #ifdef TFT_BL
         digitalWrite(TFT_BL, !TFT_BACKLIGHT_ON);
 #endif
