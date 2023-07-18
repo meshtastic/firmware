@@ -34,7 +34,7 @@ arbitrating to select a node number and keeping the current nodedb.
 
 /* Broadcast when a newly powered mesh node wants to find a node num it can use
 
-The algoritm is as follows:
+The algorithm is as follows:
 * when a node starts up, it broadcasts their user and the normal flow is for all other nodes to reply with their User as well (so
 the new node can build its node db)
 * If a node ever receives a User (not just the first broadcast) message where the sender node number equals our node number, that
