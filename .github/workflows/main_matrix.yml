@@ -66,6 +66,7 @@ jobs:
           - board: heltec-v2_1
           - board: tbeam0_7
           - board: meshtastic-diy-v1
+          - board: hydra
           - board: meshtastic-dr-dev
           - board: nano-g1
           - board: station-g1

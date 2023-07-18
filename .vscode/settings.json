@@ -1,4 +1,9 @@
 {
-  "editor.formatOnSave": true,
-  "editor.defaultFormatter": "trunk.io"
+  "editor.formatOnSave": false,
+  "editor.defaultFormatter": "trunk.io",
+  "files.associations": {
+    "ios": "cpp",
+    "*.tpp": "cpp",
+    "*.ipp": "cpp"
+  }
 }
