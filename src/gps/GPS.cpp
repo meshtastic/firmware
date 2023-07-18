@@ -858,21 +858,16 @@ int GPS::prepareDeepSleep(void *unused)
 GnssModel_t GPS::probe()
 {
     memset(&info, 0, sizeof(struct uBloxGnssModelInfo));
-    // return immediately if the model is set by the variant.h file
-//#ifdef GPS_UBLOX
-//    return GNSS_MODEL_UBLOX;
+// return immediately if the model is set by the variant.h file
+//#ifdef GPS_UBLOX               (unless it's a ublox, because we might want to know the module info!
+//    return GNSS_MODEL_UBLOX;    think about removing this macro and return)
 #if defined(GPS_L76K)
     return GNSS_MODEL_MTK;
 #elif defined(GPS_UC6580)
     _serial_gps->updateBaudRate(115200);
     return GNSS_MODEL_UC6850;
 #else
-    // we use autodetect, only T-BEAM S3 for now...
     uint8_t buffer[384] = {0};
-    /*
-     * The GNSS module information variable is temporarily placed inside the function body,
-     * if it needs to be used elsewhere, it can be moved to the outside
-     * */
 
     // Close all NMEA sentences , Only valid for MTK platform
     _serial_gps->write("$PCAS03,0,0,0,0,0,0,0,0,0,0,,,0,0*02\r\n");
@@ -918,7 +913,7 @@ GnssModel_t GPS::probe()
     uint16_t len = getAck(buffer, 384, 0x0A, 0x04);
     if (len) {
         // LOG_DEBUG("monver reply size = %d\n", len);
-        int16_t position = 0;
+        uint16_t position = 0;
         for (int i = 0; i < 30; i++) {
             info.swVersion[i] = buffer[position];
             position++;
