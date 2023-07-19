@@ -160,8 +160,8 @@ class LGFX : public lgfx::LGFX_Device
 
             // Set the following only when the display is shifted with a driver with a variable number of pixels, such as the
             // ST7735 or ILI9163.
-            cfg.memory_width = TFT_WIDTH;   // Maximum width supported by the driver IC
-            cfg.memory_height = TFT_HEIGHT; // Maximum height supported by the driver IC
+            //cfg.memory_width = TFT_WIDTH;   // Maximum width supported by the driver IC
+            //cfg.memory_height = TFT_HEIGHT; // Maximum height supported by the driver IC
             _panel_instance.config(cfg);
         }
 
@@ -183,17 +183,17 @@ class LGFX : public lgfx::LGFX_Device
 
             cfg.pin_cs = -1;
             cfg.x_min = 0;
-            cfg.x_max = 319;
+            cfg.x_max = TFT_HEIGHT-1;
             cfg.y_min = 0;
-            cfg.y_max = 239;
-            cfg.pin_int = 16;
+            cfg.y_max = TFT_WIDTH-1;
+            cfg.pin_int = SCREEN_TOUCH_INT;
             cfg.bus_shared = true;
             cfg.offset_rotation = 0;
             // cfg.freq = 2500000;
 
             // I2C
             cfg.i2c_port = 1;
-            cfg.i2c_addr = GT911_SLAVE_ADDRESS;
+            cfg.i2c_addr = TOUCH_SLAVE_ADDRESS;
             cfg.pin_sda = I2C_SDA;
             cfg.pin_scl = I2C_SCL;
             cfg.freq = 400000;
