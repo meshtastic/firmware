@@ -302,8 +302,10 @@ bool TFTDisplay::connect()
 #endif
 
     tft.init();
-#if defined(M5STACK) || defined(T_DECK) || defined(T_WATCH_S3)
+#if defined(M5STACK) || defined(T_DECK)
     tft.setRotation(1); // M5Stack/T-Deck have the TFT in landscape
+#elif defined(T_WATCH_S3)
+    tft.setRotation(0); // T-Watch S3 has the TFT in portrait
 #else
     tft.setRotation(3); // Orient horizontal and wide underneath the silkscreen name label
 #endif
