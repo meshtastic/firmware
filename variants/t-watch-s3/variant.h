@@ -36,8 +36,6 @@
 #define HAS_RTC 1
 
 // Specify the PMU as Wire1. In the t-beam-s3 core, PCF8563 and PMU share the bus
-#define PMU_USE_WIRE1
-#define RTC_USE_WIRE1
 
 // #define TOUCH_SDA (23)
 // #define TOUCH_SCL (32)
