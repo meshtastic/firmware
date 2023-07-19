@@ -35,6 +35,6 @@
     "require_upload_port": true,
     "speed": 921600
   },
-  "url": "https://docs.espressif.com/projects/esp-idf/en/latest/esp32s3/hw-reference/esp32s3/user-guide-devkitc-1.html",
+  "url": "https://www.lilygo.cc/en-pl/products/t-deck",
   "vendor": "LilyGO"
 }
