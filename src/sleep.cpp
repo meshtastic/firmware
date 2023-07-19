@@ -259,7 +259,8 @@ void doDeepSleep(uint32_t msecToWake)
             if (HW_VENDOR == meshtastic_HardwareModel_TBEAM) {
                 // t-beam v1.2 radio power channel
                 PMU->disablePowerOutput(XPOWERS_ALDO2); // lora radio power channel
-            } else if (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE) {
+            } else if (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE ||
+                       HW_VENDOR == meshtastic_HardwareModel_T_WATCH_S3) {
                 PMU->disablePowerOutput(XPOWERS_ALDO3); // lora radio power channel
             }
         } else if (model == XPOWERS_AXP192) {

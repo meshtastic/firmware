@@ -681,7 +681,8 @@ bool Power::axpChipInit()
             // GNSS VDD 3300mV
             PMU->setPowerChannelVoltage(XPOWERS_ALDO3, 3300);
             PMU->enablePowerOutput(XPOWERS_ALDO3);
-        } else if (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE) {
+        } else if (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE ||
+                   HW_VENDOR == meshtastic_HardwareModel_T_WATCH_S3) {
             // t-beam s3 core
             /**
              * gnss module power channel
