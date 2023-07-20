@@ -165,6 +165,7 @@ void NodeDB::installDefaultConfig()
     config.has_network = true;
     config.has_bluetooth = true;
     config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
+
     config.lora.sx126x_rx_boosted_gain = false;
     config.lora.tx_enabled =
         true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
@@ -194,6 +195,10 @@ void NodeDB::installDefaultConfig()
     // for backward compat, default position flags are ALT+MSL
     config.position.position_flags =
         (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL);
+
+#ifdef T_WATCH_S3
+    config.display.wake_on_tap_or_motion = true;
+#endif
 
     initConfigIntervals();
 }

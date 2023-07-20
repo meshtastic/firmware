@@ -194,8 +194,13 @@ class LGFX : public lgfx::LGFX_Device
             // I2C
             cfg.i2c_port = 1;
             cfg.i2c_addr = TOUCH_SLAVE_ADDRESS;
+#ifdef SCREEN_TOUCH_USE_I2C1
+            cfg.pin_sda = I2C_SDA1;
+            cfg.pin_scl = I2C_SCL1;
+#else
             cfg.pin_sda = I2C_SDA;
             cfg.pin_scl = I2C_SCL;
+#endif
             cfg.freq = 400000;
 
             _touch_instance.config(cfg);
@@ -311,6 +316,12 @@ bool TFTDisplay::connect()
 #endif
     tft.fillScreen(TFT_BLACK);
     return true;
+}
+
+// Get touch coords from the display
+void TFTDisplay::getTouch(int *x, int *y)
+{
+    tft.getTouch(x, y);
 }
 
 #endif

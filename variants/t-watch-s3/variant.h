@@ -18,7 +18,11 @@
 #define SCREEN_ROTATE
 #define SCREEN_TRANSITION_FRAMERATE 1 // fps
 #define SCREEN_TOUCH_INT 16
+#define SCREEN_TOUCH_USE_I2C1 1
 #define TOUCH_SLAVE_ADDRESS 0x5D // GT911
+
+#define I2C_SDA1 39 // Used for capacitive touch
+#define I2C_SCL1 40 // Used for capacitive touch
 
 // #define TWATCH_TFT_MISO             (GPIO_NUM_MAX)
 // #define TWATCH_TFT_MOSI             (GPIO_NUM_19)
@@ -59,7 +63,11 @@
 #define I2C_SCL 11 // For QMC6310 sensors and screens
 
 #define BUTTON_PIN 0
+
+//#define PIN_BUTTON_TOUCH 16 // Actually capacitive touch interrupt
 // #define BUTTON_NEED_PULLUP
+
+#define BMA4XX_INT 14 // Interrupt for BMA_423 axis sensor
 
 #define HAS_GPS 0
 #undef GPS_RX_PIN
@@ -84,5 +92,5 @@
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET
 #define SX126X_E22 // Not really an E22 but TTGO seems to be trying to clone that
-                   // Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the sx1262interface
-                   // code)
+                   // Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for
+                   // the sx1262interface code)

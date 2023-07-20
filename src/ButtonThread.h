@@ -100,6 +100,15 @@ class ButtonThread : public concurrency::OSThread
 #endif
         // if (!canSleep) LOG_DEBUG("Suppressing sleep!\n");
         // else LOG_DEBUG("sleep ok\n");
+#if defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ST7789_CS)
+        int x, y = 0;
+        screen->getTouch(&x, &y);
+        if (x > 0 && y > 0) {
+            LOG_DEBUG("touch %d %d\n", x, y);
+            powerFSM.trigger(EVENT_PRESS);
+            return 100; // Check for next touch every in 100ms
+        }
+#endif
 
         return 5;
     }
