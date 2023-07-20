@@ -944,7 +944,7 @@ void Screen::handleSetOn(bool on)
     if (on != screenOn) {
         if (on) {
             LOG_INFO("Turning on screen\n");
-#ifdef TFT_BL
+#if defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
             digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
 #endif
             dispdev.displayOn();
@@ -955,7 +955,7 @@ void Screen::handleSetOn(bool on)
         } else {
             LOG_INFO("Turning off screen\n");
             dispdev.displayOff();
-#ifdef TFT_BL
+#if defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
             digitalWrite(TFT_BL, !TFT_BACKLIGHT_ON);
 #endif
             enabled = false;
