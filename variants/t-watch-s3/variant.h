@@ -7,8 +7,8 @@
 #define ST7789_MISO -1
 #define ST7789_BUSY -1
 #define ST7789_BL 45
-#define ST7789_SPI_HOST SPI2_HOST
-//#define ST7789_BACKLIGHT_EN 15
+#define ST7789_SPI_HOST SPI3_HOST
+#define ST7789_BACKLIGHT_EN 45
 #define SPI_FREQUENCY 40000000
 #define SPI_READ_FREQUENCY 16000000
 #define TFT_HEIGHT 240
@@ -84,5 +84,5 @@
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET
 #define SX126X_E22 // Not really an E22 but TTGO seems to be trying to clone that
-// Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the sx1262interface
-// code)
+                   // Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the sx1262interface
+                   // code)
