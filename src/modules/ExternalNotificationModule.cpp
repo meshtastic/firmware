@@ -19,6 +19,11 @@ uint8_t green = 0;
 uint8_t blue = 0;
 #endif
 
+#ifdef T_WATCH_S3
+#include <Adafruit_DRV2605.h>
+Adafruit_DRV2605 drv;
+#endif
+
 #ifndef PIN_BUZZER
 #define PIN_BUZZER false
 #endif
@@ -93,6 +98,10 @@ int32_t ExternalNotificationModule::runOnce()
                 rgb.setColor(red, green, blue);
             }
 #endif
+
+#ifdef T_WATCH_S3
+            drv.go();
+#endif
         }
 
         // now let the PWM buzzer play
@@ -124,13 +133,17 @@ void ExternalNotificationModule::setExternalOn(uint8_t index)
             digitalWrite(moduleConfig.external_notification.output_buzzer, true);
         break;
     default:
-        digitalWrite(output, (moduleConfig.external_notification.active ? true : false));
+        if (output > 0)
+            digitalWrite(output, (moduleConfig.external_notification.active ? true : false));
         break;
     }
 #ifdef HAS_NCP5623
     if (rgb_found.type == ScanI2C::NCP5623) {
         rgb.setColor(red, green, blue);
     }
+#endif
+#ifdef T_WATCH_S3
+    drv.go();
 #endif
 }
 
@@ -149,7 +162,8 @@ void ExternalNotificationModule::setExternalOff(uint8_t index)
             digitalWrite(moduleConfig.external_notification.output_buzzer, false);
         break;
     default:
-        digitalWrite(output, (moduleConfig.external_notification.active ? false : true));
+        if (output > 0)
+            digitalWrite(output, (moduleConfig.external_notification.active ? false : true));
         break;
     }
 
@@ -160,6 +174,9 @@ void ExternalNotificationModule::setExternalOff(uint8_t index)
         blue = 0;
         rgb.setColor(red, green, blue);
     }
+#endif
+#ifdef T_WATCH_S3
+    drv.stop();
 #endif
 }
 
@@ -174,6 +191,9 @@ void ExternalNotificationModule::stopNow()
     nagCycleCutoff = 1; // small value
     isNagging = false;
     setIntervalFromNow(0);
+#ifdef T_WATCH_S3
+    drv.stop();
+#endif
 }
 
 ExternalNotificationModule::ExternalNotificationModule()
@@ -185,7 +205,6 @@ ExternalNotificationModule::ExternalNotificationModule()
         without having to configure it from the PythonAPI or WebUI.
     */
 
-    // moduleConfig.external_notification.enabled = true;
     // moduleConfig.external_notification.alert_message = true;
     // moduleConfig.external_notification.alert_message_buzzer = true;
     // moduleConfig.external_notification.alert_message_vibra = true;
@@ -213,8 +232,10 @@ ExternalNotificationModule::ExternalNotificationModule()
                                                            : EXT_NOTIFICATION_MODULE_OUTPUT;
 
         // Set the direction of a pin
-        LOG_INFO("Using Pin %i in digital mode\n", output);
-        pinMode(output, OUTPUT);
+        if (output > 0) {
+            LOG_INFO("Using Pin %i in digital mode\n", output);
+            pinMode(output, OUTPUT);
+        }
         setExternalOff(0);
         externalTurnedOn[0] = 0;
         if (moduleConfig.external_notification.output_vibra) {
@@ -241,6 +262,16 @@ ExternalNotificationModule::ExternalNotificationModule()
             rgb.setCurrent(10);
         }
 #endif
+#ifdef T_WATCH_S3
+        drv.begin();
+        // I2C trigger by sending 'go' command
+        drv.setMode(DRV2605_MODE_INTTRIG); // default, internal trigger when sending GO command
+        drv.selectLibrary(1);
+        drv.setWaveform(0, 84); // ramp up medium 1, see datasheet part 11.2
+        drv.setWaveform(1, 1);  // strong click 100%, see datasheet part 11.2
+        drv.setWaveform(2, 0);  // end of waveforms
+#endif
+
     } else {
         LOG_INFO("External Notification Module Disabled\n");
         disable();
