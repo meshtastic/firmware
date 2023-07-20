@@ -321,7 +321,7 @@ bool TFTDisplay::connect()
 // Get touch coords from the display
 void TFTDisplay::getTouch(int *x, int *y)
 {
-#if defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ST7789_CS)
+#ifndef M5STACK
     tft.getTouch(x, y);
 #endif
 }

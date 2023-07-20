@@ -19,7 +19,7 @@
 #define SCREEN_TRANSITION_FRAMERATE 1 // fps
 #define SCREEN_TOUCH_INT 16
 #define SCREEN_TOUCH_USE_I2C1 1
-#define TOUCH_SLAVE_ADDRESS 0x5D // GT911
+#define TOUCH_SLAVE_ADDRESS 0x38 // GT911
 
 #define I2C_SDA1 39 // Used for capacitive touch
 #define I2C_SCL1 40 // Used for capacitive touch
