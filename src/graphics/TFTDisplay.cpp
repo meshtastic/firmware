@@ -266,7 +266,7 @@ void TFTDisplay::sendCommand(uint8_t com)
     // handle display on/off directly
     switch (com) {
     case DISPLAYON: {
-#ifdef TFT_BL
+#if defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
         digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
 #endif
 #ifdef VTFT_CTRL
@@ -275,7 +275,7 @@ void TFTDisplay::sendCommand(uint8_t com)
         break;
     }
     case DISPLAYOFF: {
-#ifdef TFT_BL
+#if defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
         digitalWrite(TFT_BL, !TFT_BACKLIGHT_ON);
 #endif
 #ifdef VTFT_CTRL

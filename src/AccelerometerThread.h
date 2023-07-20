@@ -82,14 +82,14 @@ class AccelerometerThread : public concurrency::OSThread
             bmaSensor.setAccelConfig(cfg);
             bmaSensor.enableAccel();
 
-            struct bma4_int_pin_config config;
-            config.edge_ctrl = BMA4_LEVEL_TRIGGER;
-            config.lvl = BMA4_ACTIVE_HIGH;
-            config.od = BMA4_PUSH_PULL;
-            config.output_en = BMA4_OUTPUT_ENABLE;
-            config.input_en = BMA4_INPUT_DISABLE;
+            struct bma4_int_pin_config pin_config;
+            pin_config.edge_ctrl = BMA4_LEVEL_TRIGGER;
+            pin_config.lvl = BMA4_ACTIVE_HIGH;
+            pin_config.od = BMA4_PUSH_PULL;
+            pin_config.output_en = BMA4_OUTPUT_ENABLE;
+            pin_config.input_en = BMA4_INPUT_DISABLE;
             // The correct trigger interrupt needs to be configured as needed
-            bmaSensor.setINTPinConfig(config, BMA4_INTR1_MAP);
+            bmaSensor.setINTPinConfig(pin_config, BMA4_INTR1_MAP);
 
 #ifdef BMA423_INT
             pinMode(BMA4XX_INT, INPUT);
