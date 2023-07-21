@@ -24,6 +24,8 @@
 #define I2C_SDA1 39 // Used for capacitive touch
 #define I2C_SCL1 40 // Used for capacitive touch
 
+#define TFT_BL T7789_BACKLIGHT_EN
+
 // #define TWATCH_TFT_MISO             (GPIO_NUM_MAX)
 // #define TWATCH_TFT_MOSI             (GPIO_NUM_19)
 // #define TWATCH_TFT_SCLK             (GPIO_NUM_18)

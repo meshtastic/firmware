@@ -197,6 +197,7 @@ void NodeDB::installDefaultConfig()
         (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL);
 
 #ifdef T_WATCH_S3
+    config.display.screen_on_secs = 30;
     config.display.wake_on_tap_or_motion = true;
 #endif
 
@@ -239,13 +240,10 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 1000;
     moduleConfig.external_notification.nag_timeout = 60;
 #endif
-    // #ifdef T_WATCH_S3
-    //     moduleConfig.external_notification.enabled = true;
-    //     moduleConfig.external_notification.active = true;
-    //     moduleConfig.external_notification.alert_message = true;
-    //     moduleConfig.external_notification.output_ms = 1000;
-    //     moduleConfig.external_notification.nag_timeout = 60;
-    // #endif
+#ifdef T_WATCH_S3
+    // Don't worry about the other settings, we'll use the DRV2056 behavior for notifications
+    moduleConfig.external_notification.enabled = true;
+#endif
     moduleConfig.has_canned_message = true;
 
     strncpy(moduleConfig.mqtt.address, default_mqtt_address, sizeof(moduleConfig.mqtt.address));

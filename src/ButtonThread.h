@@ -103,26 +103,16 @@ class ButtonThread : public concurrency::OSThread
         // else LOG_DEBUG("sleep ok\n");
 #if defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ST7789_CS)
         int x, y = 0;
-        if (isVibrating) {
-            isVibrating = false;
+        screen->getTouch(&x, &y);
+        if (x > 0 && y > 0) {
 #ifdef T_WATCH_S3
-            LOG_DEBUG("Stopping DRV vibration sequence\n");
-            // drv.stop();
+            drv.setWaveform(0, 75);
+            drv.setWaveform(1, 0); // end waveform
+            drv.go();
 #endif
-        } else {
-            screen->getTouch(&x, &y);
-            if (x > 0 && y > 0) {
-                isVibrating = true;
-#ifdef T_WATCH_S3
-                LOG_DEBUG("Starting DRV vibration sequence\n");
-                drv.setWaveform(0, 26);
-                drv.setWaveform(1, 0); // end waveform
-                drv.go();
-#endif
-                LOG_DEBUG("touch %d %d\n", x, y);
-                powerFSM.trigger(EVENT_PRESS);
-                return 1000; // Check for next touch every in 150
-            }
+            LOG_DEBUG("touch %d %d\n", x, y);
+            powerFSM.trigger(EVENT_PRESS);
+            return 150; // Check for next touch every in 150ms
         }
 
 #endif

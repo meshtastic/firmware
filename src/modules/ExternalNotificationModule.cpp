@@ -257,15 +257,6 @@ ExternalNotificationModule::ExternalNotificationModule()
             rgb.setCurrent(10);
         }
 #endif
-        // #ifdef T_WATCH_S3
-        //         drv.begin();
-        //         // I2C trigger by sending 'go' command
-        //         drv.setMode(DRV2605_MODE_INTTRIG); // default, internal trigger when sending GO command
-        //         drv.selectLibrary(1);
-        //         drv.setWaveform(0, 84); // ramp up medium 1, see datasheet part 11.2
-        //         drv.setWaveform(1, 1);  // strong click 100%, see datasheet part 11.2
-        //         drv.setWaveform(2, 0);  // end of waveforms
-        // #endif
     } else {
         LOG_INFO("External Notification Module Disabled\n");
         disable();
@@ -275,7 +266,12 @@ ExternalNotificationModule::ExternalNotificationModule()
 ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
     if (moduleConfig.external_notification.enabled) {
-
+#if T_WATCH_S3
+        drv.setWaveform(0, 75);
+        drv.setWaveform(1, 56);
+        drv.setWaveform(2, 0);
+        drv.go();
+#endif
         if (getFrom(&mp) != nodeDB.getNodeNum()) {
 
             // Check if the message contains a bell character. Don't do this loop for every pin, just once.

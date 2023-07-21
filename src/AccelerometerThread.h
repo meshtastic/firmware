@@ -141,13 +141,9 @@ class AccelerometerThread : public concurrency::OSThread
                 buttonPress();
                 return 500;
             }
-        } else if (acceleremoter_type == ScanI2C::DeviceType::BMA423 && BMA_IRQ) {
-            BMA_IRQ = false;
-            bmaSensor.getINT();
-
+        } else if (acceleremoter_type == ScanI2C::DeviceType::BMA423 && bmaSensor.getINT()) {
             if (bmaSensor.isTilt() || bmaSensor.isDoubleClick()) {
                 wakeScreen();
-                powerFSM.trigger(EVENT_PRESS);
                 return 500;
             }
         }
