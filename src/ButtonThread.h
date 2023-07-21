@@ -4,8 +4,8 @@
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include "graphics/Screen.h"
-#include "power.h"
 #include "main.h"
+#include "power.h"
 #include <OneButton.h>
 
 namespace concurrency
@@ -107,7 +107,7 @@ class ButtonThread : public concurrency::OSThread
             isVibrating = false;
 #ifdef T_WATCH_S3
             LOG_DEBUG("Stopping DRV vibration sequence\n");
-            //drv.stop();
+            // drv.stop();
 #endif
         } else {
             screen->getTouch(&x, &y);
@@ -116,7 +116,7 @@ class ButtonThread : public concurrency::OSThread
 #ifdef T_WATCH_S3
                 LOG_DEBUG("Starting DRV vibration sequence\n");
                 drv.setWaveform(0, 26);
-                drv.setWaveform(1, 0);// end waveform
+                drv.setWaveform(1, 0); // end waveform
                 drv.go();
 #endif
                 LOG_DEBUG("touch %d %d\n", x, y);
