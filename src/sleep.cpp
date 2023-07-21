@@ -23,11 +23,6 @@ esp_sleep_source_t wakeCause; // the reason we booted this time
 #define INCLUDE_vTaskSuspend 0
 #endif
 
-#ifdef HAS_PMU
-#include "XPowersLibInterface.hpp"
-extern XPowersLibInterface *PMU;
-#endif
-
 /// Called to ask any observers if they want to veto sleep. Return 1 to veto or 0 to allow sleep to happen
 Observable<void *> preflightSleep;
 

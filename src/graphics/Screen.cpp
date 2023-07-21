@@ -944,8 +944,8 @@ void Screen::handleSetOn(bool on)
     if (on != screenOn) {
         if (on) {
             LOG_INFO("Turning on screen\n");
-#if defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
-            digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
+#ifdef T_WATCH_S3
+            PMU->enablePowerOutput(XPOWERS_ALDO2);
 #endif
             dispdev.displayOn();
             dispdev.displayOn();
@@ -955,8 +955,8 @@ void Screen::handleSetOn(bool on)
         } else {
             LOG_INFO("Turning off screen\n");
             dispdev.displayOff();
-#if defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
-            digitalWrite(TFT_BL, !TFT_BACKLIGHT_ON);
+#ifdef T_WATCH_S3
+            PMU->disablePowerOutput(XPOWERS_ALDO2);
 #endif
             enabled = false;
         }
