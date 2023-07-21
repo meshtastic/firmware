@@ -719,6 +719,12 @@ bool Power::axpChipInit()
             PMU->setPowerChannelVoltage(XPOWERS_BLDO1, 3300);
             PMU->enablePowerOutput(XPOWERS_BLDO1);
 
+#ifdef T_WATCH_S3
+            // DRV2605 power channel
+            PMU->setPowerChannelVoltage(XPOWERS_BLDO2, 3300);
+            PMU->enablePowerOutput(XPOWERS_BLDO2);
+#endif
+
             // PMU->setPowerChannelVoltage(XPOWERS_DCDC4, 3300);
             // PMU->enablePowerOutput(XPOWERS_DCDC4);
 
