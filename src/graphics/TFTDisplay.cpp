@@ -108,7 +108,11 @@ class LGFX : public lgfx::LGFX_Device
     lgfx::Panel_ST7789 _panel_instance;
     lgfx::Bus_SPI _bus_instance;
     lgfx::Light_PWM _light_instance;
+#ifdef T_WATCH_S3
+    lgfx::Touch_FT5x06 _touch_instance;
+#else
     lgfx::Touch_GT911 _touch_instance;
+#endif
 
   public:
     LGFX(void)

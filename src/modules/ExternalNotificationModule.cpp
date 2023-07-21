@@ -19,11 +19,6 @@ uint8_t green = 0;
 uint8_t blue = 0;
 #endif
 
-#ifdef T_WATCH_S3
-#include <Adafruit_DRV2605.h>
-Adafruit_DRV2605 drv;
-#endif
-
 #ifndef PIN_BUZZER
 #define PIN_BUZZER false
 #endif
@@ -262,16 +257,15 @@ ExternalNotificationModule::ExternalNotificationModule()
             rgb.setCurrent(10);
         }
 #endif
-#ifdef T_WATCH_S3
-        drv.begin();
-        // I2C trigger by sending 'go' command
-        drv.setMode(DRV2605_MODE_INTTRIG); // default, internal trigger when sending GO command
-        drv.selectLibrary(1);
-        drv.setWaveform(0, 84); // ramp up medium 1, see datasheet part 11.2
-        drv.setWaveform(1, 1);  // strong click 100%, see datasheet part 11.2
-        drv.setWaveform(2, 0);  // end of waveforms
-#endif
-
+        // #ifdef T_WATCH_S3
+        //         drv.begin();
+        //         // I2C trigger by sending 'go' command
+        //         drv.setMode(DRV2605_MODE_INTTRIG); // default, internal trigger when sending GO command
+        //         drv.selectLibrary(1);
+        //         drv.setWaveform(0, 84); // ramp up medium 1, see datasheet part 11.2
+        //         drv.setWaveform(1, 1);  // strong click 100%, see datasheet part 11.2
+        //         drv.setWaveform(2, 0);  // end of waveforms
+        // #endif
     } else {
         LOG_INFO("External Notification Module Disabled\n");
         disable();
@@ -374,7 +368,6 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             }
             setIntervalFromNow(0); // run once so we know if we should do something
         }
-
     } else {
         LOG_INFO("External Notification Module Disabled\n");
     }

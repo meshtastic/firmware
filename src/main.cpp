@@ -110,6 +110,11 @@ ScanI2C::FoundDevice rgb_found = ScanI2C::FoundDevice(ScanI2C::DeviceType::NONE,
 ATECCX08A atecc;
 #endif
 
+#ifdef T_WATCH_S3
+Adafruit_DRV2605 drv;
+#endif
+bool isVibrating = false;
+
 bool eink_found = true;
 
 uint32_t serialSinceMsec;
@@ -474,6 +479,13 @@ void setup()
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
         accelerometerThread = new AccelerometerThread(acc_info.type);
     }
+#endif
+
+#ifdef T_WATCH_S3
+    drv.begin();
+    drv.selectLibrary(1);
+    // I2C trigger by sending 'go' command
+    drv.setMode(DRV2605_MODE_INTTRIG);
 #endif
 
     // Init our SPI controller (must be before screen and lora)
