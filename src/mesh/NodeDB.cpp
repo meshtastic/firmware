@@ -187,7 +187,7 @@ void NodeDB::installDefaultConfig()
     // FIXME: Default to bluetooth capability of platform as default
     config.bluetooth.enabled = true;
     config.bluetooth.fixed_pin = defaultBLEPin;
-#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER)
+#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS)
     bool hasScreen = true;
 #else
     bool hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
