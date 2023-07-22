@@ -944,6 +944,9 @@ void Screen::handleSetOn(bool on)
     if (on != screenOn) {
         if (on) {
             LOG_INFO("Turning on screen\n");
+#ifdef T_WATCH_S3
+            PMU->enablePowerOutput(XPOWERS_ALDO2);
+#endif
             dispdev.displayOn();
             dispdev.displayOn();
             enabled = true;
@@ -952,6 +955,9 @@ void Screen::handleSetOn(bool on)
         } else {
             LOG_INFO("Turning off screen\n");
             dispdev.displayOff();
+#ifdef T_WATCH_S3
+            PMU->disablePowerOutput(XPOWERS_ALDO2);
+#endif
             enabled = false;
         }
         screenOn = on;
