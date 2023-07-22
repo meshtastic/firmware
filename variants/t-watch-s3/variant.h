@@ -26,48 +26,14 @@
 
 #define TFT_BL ST7789_BACKLIGHT_EN
 
-// #define TWATCH_TFT_MISO             (GPIO_NUM_MAX)
-// #define TWATCH_TFT_MOSI             (GPIO_NUM_19)
-// #define TWATCH_TFT_SCLK             (GPIO_NUM_18)
-// #define TWATCH_TFT_CS               (GPIO_NUM_5)
-// #define TWATCH_TFT_DC               (GPIO_NUM_27)
-// #define TWATCH_TFT_RST              (GPIO_NUM_MAX)
-// #define TWATCH_TFT_BL               (GPIO_NUM_15)
-
-// Leave undefined to disable our PMU IRQ handler.  DO NOT ENABLE THIS because the pmuirq can cause sperious interrupts
-// and waking from light sleep
-// #define PMU_IRQ 40
 #define HAS_AXP2101
 
 #define HAS_RTC 1
-
-// Specify the PMU as Wire1. In the t-beam-s3 core, PCF8563 and PMU share the bus
-
-// #define TOUCH_SDA (23)
-// #define TOUCH_SCL (32)
-// #define TOUCH_INT (38)
-// #define TOUCH_RST (14)
-
-// #define SEN_SDA (21)
-// #define SEN_SCL (22)
-
-// #define RTC_INT_PIN (37)
-// #define AXP202_INT (35)
-// #define BMA423_INT1 (39)
-
-// #define TWATCH_DAC_IIS_BCK (26)
-// #define TWATCH_DAC_IIS_WS (25)
-// #define TWATCH_DAC_IIS_DOUT (33)
-
-// #define MOTOR_PIN (4)
 
 #define I2C_SDA 10 // For QMC6310 sensors and screens
 #define I2C_SCL 11 // For QMC6310 sensors and screens
 
 #define BUTTON_PIN 0
-
-//#define PIN_BUTTON_TOUCH 16 // Actually capacitive touch interrupt
-// #define BUTTON_NEED_PULLUP
 
 #define BMA4XX_INT 14 // Interrupt for BMA_423 axis sensor
 
