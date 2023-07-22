@@ -38,6 +38,12 @@ extern bool isUSBPowered;
 extern ATECCX08A atecc;
 #endif
 
+#ifdef T_WATCH_S3
+#include <Adafruit_DRV2605.h>
+extern Adafruit_DRV2605 drv;
+#endif
+extern bool isVibrating;
+
 extern int TCPPort; // set by Portduino
 
 // Global Screen singleton.
