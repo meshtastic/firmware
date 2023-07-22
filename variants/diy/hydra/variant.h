@@ -35,6 +35,9 @@
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET
+#define SX126X_RXEN 14
+#define SX126X_TXEN RADIOLIB_NC
+#define E22_TXEN_CONNECTED_TO_DIO2 1
 
 // Set lora.tx_power to 13 for Hydra or other E22 900M30S target due to PA
 #define SX126X_MAX_POWER 13
