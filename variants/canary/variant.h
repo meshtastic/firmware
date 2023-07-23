@@ -48,7 +48,7 @@ extern "C" {
 // LEDs
 #define PIN_LED1 (GPIO_PORT1 + 11) // blue P1.01
 #define PIN_LED2 (GPIO_PORT0 + 14) // yellow P0.14
-#define PIN_LED3 (GPIO_PORT1 + 3) // green P1.03
+#define PIN_LED3 (GPIO_PORT1 + 3)  // green P1.03
 
 #define LED_BLUE PIN_LED1
 
@@ -75,7 +75,6 @@ static const uint8_t A0 = PIN_A0;
 
 #define ADC_RESOLUTION 14
 
-
 /**
  * Wire Interfaces
  */
@@ -97,8 +96,8 @@ static const uint8_t A0 = PIN_A0;
 #define PIN_QSPI_CS (GPIO_PORT1 + 15)
 #define PIN_QSPI_IO0 (GPIO_PORT1 + 12) // MOSI if using two bit interface
 #define PIN_QSPI_IO1 (GPIO_PORT1 + 13) // MISO if using two bit interface
-#define PIN_QSPI_IO2 (GPIO_PORT0 + 7)   // WP if using two bit interface (i.e. not used)
-#define PIN_QSPI_IO3 (GPIO_PORT0 + 5)   // HOLD if using two bit interface (i.e. not used)
+#define PIN_QSPI_IO2 (GPIO_PORT0 + 7)  // WP if using two bit interface (i.e. not used)
+#define PIN_QSPI_IO3 (GPIO_PORT0 + 5)  // HOLD if using two bit interface (i.e. not used)
 
 // On-board QSPI Flash
 #define EXTERNAL_FLASH_DEVICES MX25R1635F
@@ -128,9 +127,9 @@ static const uint8_t A0 = PIN_A0;
 
 // #define PIN_GPS_WAKE (GPIO_PORT1 + 2) // An output to wake GPS, low means allow sleep, high means force wake
 // Seems to be missing on this new board
-#define PIN_GPS_PPS (GPIO_PORT1 + 4)  // Pulse per second input from the GPS
-#define GPS_TX_PIN (GPIO_PORT1 + 8) // This is for bits going TOWARDS the CPU
-#define GPS_RX_PIN (GPIO_PORT1 + 9) // This is for bits going TOWARDS the GPS
+#define PIN_GPS_PPS (GPIO_PORT1 + 4) // Pulse per second input from the GPS
+#define GPS_TX_PIN (GPIO_PORT1 + 8)  // This is for bits going TOWARDS the CPU
+#define GPS_RX_PIN (GPIO_PORT1 + 9)  // This is for bits going TOWARDS the GPS
 
 #define GPS_THREAD_INTERVAL 50
 
@@ -147,9 +146,8 @@ static const uint8_t A0 = PIN_A0;
 #define PIN_SPI_MOSI (GPIO_PORT0 + 22)
 #define PIN_SPI_SCK (GPIO_PORT0 + 19)
 
-//#define PIN_SPI1_MISO (GPIO_PORT1 + 6) // FIXME not really needed, but for now the SPI code requires something to be defined, pick an used GPIO
-//#define PIN_SPI1_MOSI (GPIO_PORT1 + 8)
-//#define PIN_SPI1_SCK (GPIO_PORT1 + 9)
+//#define PIN_SPI1_MISO (GPIO_PORT1 + 6) // FIXME not really needed, but for now the SPI code requires something to be defined,
+// pick an used GPIO #define PIN_SPI1_MOSI (GPIO_PORT1 + 8) #define PIN_SPI1_SCK (GPIO_PORT1 + 9)
 
 #define PIN_PWR_EN (GPIO_PORT0 + 12)
 
