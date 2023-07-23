@@ -11,6 +11,7 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
+#include "TypeConversions.h"
 #include "error.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
@@ -55,14 +56,18 @@ extern void getMacAddr(uint8_t *dmac);
  * we use !macaddr (no colons).
  */
 meshtastic_User &owner = devicestate.owner;
-
+meshtastic_Position localPosition = meshtastic_Position_init_default;
 meshtastic_CriticalErrorCode error_code =
     meshtastic_CriticalErrorCode_NONE; // For the error code, only show values from this boot (discard value from flash)
 uint32_t error_address = 0;
 
 static uint8_t ourMacAddr[6];
 
-NodeDB::NodeDB() : nodes(devicestate.node_db), numNodes(&devicestate.node_db_count) {}
+NodeDB::NodeDB()
+    : nodes(devicestate.node_db), numNodes(&devicestate.node_db_count), meshNodes(devicestate.node_db_lite),
+      numMeshNodes(&devicestate.node_db_lite_count)
+{
+}
 
 /**
  * Most (but not always) of the time we want to treat packets 'from' the local phone (where from == 0), as if they originated on
@@ -133,7 +138,7 @@ bool NodeDB::factoryReset()
     // third, write everything to disk
     saveToDisk();
 #ifdef ARCH_ESP32
-    // This will erase what's in NVS including ssl keys, persistant variables and ble pairing
+    // This will erase what's in NVS including ssl keys, persistent variables and ble pairing
     nvs_flash_erase();
 #endif
 #ifdef ARCH_NRF52
@@ -160,6 +165,7 @@ void NodeDB::installDefaultConfig()
     config.has_network = true;
     config.has_bluetooth = true;
     config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
+
     config.lora.sx126x_rx_boosted_gain = false;
     config.lora.tx_enabled =
         true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
@@ -179,7 +185,7 @@ void NodeDB::installDefaultConfig()
     // FIXME: Default to bluetooth capability of platform as default
     config.bluetooth.enabled = true;
     config.bluetooth.fixed_pin = defaultBLEPin;
-#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER)
+#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS)
     bool hasScreen = true;
 #else
     bool hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
@@ -189,6 +195,11 @@ void NodeDB::installDefaultConfig()
     // for backward compat, default position flags are ALT+MSL
     config.position.position_flags =
         (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL);
+
+#ifdef T_WATCH_S3
+    config.display.screen_on_secs = 30;
+    config.display.wake_on_tap_or_motion = true;
+#endif
 
     initConfigIntervals();
 }
@@ -220,6 +231,19 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.has_store_forward = true;
     moduleConfig.has_telemetry = true;
     moduleConfig.has_external_notification = true;
+#if defined(RAK4630) || defined(RAK11310)
+    // Default to RAK led pin 2 (blue)
+    moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.output = PIN_LED2;
+    moduleConfig.external_notification.active = true;
+    moduleConfig.external_notification.alert_message = true;
+    moduleConfig.external_notification.output_ms = 1000;
+    moduleConfig.external_notification.nag_timeout = 60;
+#endif
+#ifdef T_WATCH_S3
+    // Don't worry about the other settings, we'll use the DRV2056 behavior for notifications
+    moduleConfig.external_notification.enabled = true;
+#endif
     moduleConfig.has_canned_message = true;
 
     strncpy(moduleConfig.mqtt.address, default_mqtt_address, sizeof(moduleConfig.mqtt.address));
@@ -262,6 +286,9 @@ void NodeDB::resetNodes()
 {
     devicestate.node_db_count = 0;
     memset(devicestate.node_db, 0, sizeof(devicestate.node_db));
+
+    devicestate.node_db_lite_count = 0;
+    memset(devicestate.node_db_lite, 0, sizeof(devicestate.node_db_lite));
     saveDeviceStateToDisk();
 }
 
@@ -276,13 +303,11 @@ void NodeDB::installDefaultDeviceState()
     devicestate.has_my_node = true;
     devicestate.has_owner = true;
     devicestate.node_db_count = 0;
+    devicestate.node_db_lite_count = 0;
     devicestate.version = DEVICESTATE_CUR_VER;
     devicestate.receive_queue_count = 0; // Not yet implemented FIXME
 
     generatePacketId(); // FIXME - ugly way to init current_packet_id;
-
-    // Init our blank owner info to reasonable defaults
-    getMacAddr(ourMacAddr);
 
     // Set default owner name
     pickNewNodeNum(); // based on macaddr now
@@ -290,6 +315,7 @@ void NodeDB::installDefaultDeviceState()
     snprintf(owner.short_name, sizeof(owner.short_name), "%02x%02x", ourMacAddr[4], ourMacAddr[5]);
 
     snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum()); // Default node ID now based on nodenum
+    memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
 }
 
 void NodeDB::init()
@@ -315,9 +341,22 @@ void NodeDB::init()
     owner.hw_model = HW_VENDOR;
 
     // Include our owner in the node db under our nodenum
-    meshtastic_NodeInfo *info = getOrCreateNode(getNodeNum());
+    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
     info->user = owner;
     info->has_user = true;
+
+    if (*numNodes > 0) {
+        LOG_DEBUG("Legacy NodeDB detected... Migrating to NodeDBLite\n");
+        uint32_t readIndex = 0;
+        const meshtastic_NodeInfo *oldNodeInfo = nodeDB.readNextNodeInfo(readIndex);
+        while (oldNodeInfo != NULL) {
+            migrateToNodeInfoLite(oldNodeInfo);
+            oldNodeInfo = nodeDB.readNextNodeInfo(readIndex);
+        }
+        LOG_DEBUG("Migration complete! Clearing out legacy NodeDB...\n");
+        devicestate.node_db_count = 0;
+        memset(devicestate.node_db, 0, sizeof(devicestate.node_db));
+    }
 
 #ifdef ARCH_ESP32
     Preferences preferences;
@@ -355,17 +394,19 @@ void NodeDB::pickNewNodeNum()
 {
     NodeNum r = myNodeInfo.my_node_num;
 
-    // If we don't have a nodenum at app - pick an initial nodenum based on the macaddr
-    if (r == 0)
-        r = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
+    getMacAddr(ourMacAddr); // Make sure ourMacAddr is set
+
+    // Pick an initial nodenum based on the macaddr
+    r = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
 
     if (r == NODENUM_BROADCAST || r < NUM_RESERVED)
         r = NUM_RESERVED; // don't pick a reserved node number
 
-    meshtastic_NodeInfo *found;
-    while ((found = getNode(r)) && memcmp(found->user.macaddr, owner.macaddr, sizeof(owner.macaddr))) {
+    meshtastic_NodeInfoLite *found;
+    while ((found = getMeshNode(r)) && memcmp(found->user.macaddr, owner.macaddr, sizeof(owner.macaddr))) {
+        // FIXME: input for random() is int, so NODENUM_BROADCAST becomes -1
         NodeNum n = random(NUM_RESERVED, NODENUM_BROADCAST); // try a new random choice
-        LOG_DEBUG("NOTE! Our desired nodenum 0x%x is in use, so trying for 0x%x\n", r, n);
+        LOG_WARN("NOTE! Our desired nodenum 0x%x is in use, so trying for 0x%x\n", r, n);
         r = n;
     }
 
@@ -572,7 +613,7 @@ void NodeDB::saveToDisk(int saveWhat)
     }
 }
 
-const meshtastic_NodeInfo *NodeDB::readNextInfo(uint32_t &readIndex)
+const meshtastic_NodeInfo *NodeDB::readNextNodeInfo(uint32_t &readIndex)
 {
     if (readIndex < *numNodes)
         return &nodes[readIndex++];
@@ -580,8 +621,16 @@ const meshtastic_NodeInfo *NodeDB::readNextInfo(uint32_t &readIndex)
         return NULL;
 }
 
+const meshtastic_NodeInfoLite *NodeDB::readNextMeshNode(uint32_t &readIndex)
+{
+    if (readIndex < *numMeshNodes)
+        return &meshNodes[readIndex++];
+    else
+        return NULL;
+}
+
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
-uint32_t sinceLastSeen(const meshtastic_NodeInfo *n)
+uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n)
 {
     uint32_t now = getTime();
 
@@ -605,13 +654,13 @@ uint32_t sinceReceived(const meshtastic_MeshPacket *p)
 
 #define NUM_ONLINE_SECS (60 * 60 * 2) // 2 hrs to consider someone offline
 
-size_t NodeDB::getNumOnlineNodes()
+size_t NodeDB::getNumOnlineMeshNodes()
 {
     size_t numseen = 0;
 
     // FIXME this implementation is kinda expensive
-    for (int i = 0; i < *numNodes; i++)
-        if (sinceLastSeen(&nodes[i]) < NUM_ONLINE_SECS)
+    for (int i = 0; i < *numMeshNodes; i++)
+        if (sinceLastSeen(&meshNodes[i]) < NUM_ONLINE_SECS)
             numseen++;
 
     return numseen;
@@ -623,7 +672,7 @@ size_t NodeDB::getNumOnlineNodes()
  */
 void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSource src)
 {
-    meshtastic_NodeInfo *info = getOrCreateNode(nodeId);
+    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(nodeId);
     if (!info) {
         return;
     }
@@ -632,7 +681,9 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
         // Local packet, fully authoritative
         LOG_INFO("updatePosition LOCAL pos@%x, time=%u, latI=%d, lonI=%d, alt=%d\n", p.timestamp, p.time, p.latitude_i,
                  p.longitude_i, p.altitude);
-        info->position = p;
+
+        info->position = ConvertToPositionLite(p);
+        localPosition = p;
     } else if ((p.time > 0) && !p.latitude_i && !p.longitude_i && !p.timestamp && !p.location_source) {
         // FIXME SPECIAL TIME SETTING PACKET FROM EUD TO RADIO
         // (stop-gap fix for issue #900)
@@ -650,7 +701,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
         uint32_t tmp_time = info->position.time;
 
         // Next, update atomically
-        info->position = p;
+        info->position = ConvertToPositionLite(p);
 
         // Last, restore any fields that may have been overwritten
         if (!info->position.time)
@@ -666,7 +717,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
  */
 void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxSource src)
 {
-    meshtastic_NodeInfo *info = getOrCreateNode(nodeId);
+    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(nodeId);
     // Environment metrics should never go to NodeDb but we'll safegaurd anyway
     if (!info || t.which_variant != meshtastic_Telemetry_device_metrics_tag) {
         return;
@@ -688,7 +739,7 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
  */
 bool NodeDB::updateUser(uint32_t nodeId, const meshtastic_User &p)
 {
-    meshtastic_NodeInfo *info = getOrCreateNode(nodeId);
+    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(nodeId);
     if (!info) {
         return false;
     }
@@ -721,7 +772,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.from) {
         LOG_DEBUG("Update DB node 0x%x, rx_time=%u, channel=%d\n", mp.from, mp.rx_time, mp.channel);
 
-        meshtastic_NodeInfo *info = getOrCreateNode(getFrom(&mp));
+        meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getFrom(&mp));
         if (!info) {
             return;
         }
@@ -738,9 +789,9 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
     }
 }
 
-uint8_t NodeDB::getNodeChannel(NodeNum n)
+uint8_t NodeDB::getMeshNodeChannel(NodeNum n)
 {
-    meshtastic_NodeInfo *info = getNode(n);
+    meshtastic_NodeInfoLite *info = getMeshNode(n);
     if (!info) {
         return 0; // defaults to PRIMARY
     }
@@ -749,7 +800,7 @@ uint8_t NodeDB::getNodeChannel(NodeNum n)
 
 /// Find a node in our DB, return null for missing
 /// NOTE: This function might be called from an ISR
-meshtastic_NodeInfo *NodeDB::getNode(NodeNum n)
+meshtastic_NodeInfo *NodeDB::getNodeInfo(NodeNum n)
 {
     for (int i = 0; i < *numNodes; i++)
         if (nodes[i].num == n)
@@ -758,38 +809,100 @@ meshtastic_NodeInfo *NodeDB::getNode(NodeNum n)
     return NULL;
 }
 
-/// Find a node in our DB, create an empty NodeInfo if missing
-meshtastic_NodeInfo *NodeDB::getOrCreateNode(NodeNum n)
+/// Find a node in our DB, return null for missing
+/// NOTE: This function might be called from an ISR
+meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
 {
-    meshtastic_NodeInfo *info = getNode(n);
+    for (int i = 0; i < *numMeshNodes; i++)
+        if (meshNodes[i].num == n)
+            return &meshNodes[i];
 
-    if (!info) {
-        if ((*numNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < meshtastic_NodeInfo_size * 3)) {
-            screen->print("warning: node_db full! erasing oldest entry\n");
+    return NULL;
+}
+
+/// Find a node in our DB, create an empty NodeInfo if missing
+meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
+{
+    meshtastic_NodeInfoLite *lite = getMeshNode(n);
+
+    if (!lite) {
+        if ((*numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < meshtastic_NodeInfoLite_size * 3)) {
+            screen->print("warning: node_db_lite full! erasing oldest entry\n");
             // look for oldest node and erase it
             uint32_t oldest = UINT32_MAX;
             int oldestIndex = -1;
-            for (int i = 0; i < *numNodes; i++) {
-                if (nodes[i].last_heard < oldest) {
-                    oldest = nodes[i].last_heard;
+            for (int i = 0; i < *numMeshNodes; i++) {
+                if (meshNodes[i].last_heard < oldest) {
+                    oldest = meshNodes[i].last_heard;
                     oldestIndex = i;
                 }
             }
             // Shove the remaining nodes down the chain
-            for (int i = oldestIndex; i < *numNodes - 1; i++) {
-                nodes[i] = nodes[i + 1];
+            for (int i = oldestIndex; i < *numMeshNodes - 1; i++) {
+                meshNodes[i] = meshNodes[i + 1];
             }
-            (*numNodes)--;
+            (*numMeshNodes)--;
         }
         // add the node at the end
-        info = &nodes[(*numNodes)++];
+        lite = &meshNodes[(*numMeshNodes)++];
 
         // everything is missing except the nodenum
-        memset(info, 0, sizeof(*info));
-        info->num = n;
+        memset(lite, 0, sizeof(*lite));
+        lite->num = n;
     }
 
-    return info;
+    return lite;
+}
+
+void NodeDB::migrateToNodeInfoLite(const meshtastic_NodeInfo *node)
+{
+    meshtastic_NodeInfoLite *lite = getMeshNode(node->num);
+
+    if (!lite) {
+        if ((*numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < meshtastic_NodeInfoLite_size * 3)) {
+            screen->print("warning: node_db_lite full! erasing oldest entry\n");
+            // look for oldest node and erase it
+            uint32_t oldest = UINT32_MAX;
+            int oldestIndex = -1;
+            for (int i = 0; i < *numMeshNodes; i++) {
+                if (meshNodes[i].last_heard < oldest) {
+                    oldest = meshNodes[i].last_heard;
+                    oldestIndex = i;
+                }
+            }
+            // Shove the remaining nodes down the chain
+            for (int i = oldestIndex; i < *numMeshNodes - 1; i++) {
+                meshNodes[i] = meshNodes[i + 1];
+            }
+            (*numMeshNodes)--;
+        }
+        // add the node at the end
+        lite = &meshNodes[(*numMeshNodes)++];
+
+        // everything is missing except the nodenum
+        memset(lite, 0, sizeof(*lite));
+        lite->num = node->num;
+        lite->snr = node->snr;
+        lite->last_heard = node->last_heard;
+        lite->channel = node->channel;
+
+        if (node->has_position) {
+            lite->has_position = true;
+            lite->position.latitude_i = node->position.latitude_i;
+            lite->position.longitude_i = node->position.longitude_i;
+            lite->position.altitude = node->position.altitude;
+            lite->position.location_source = node->position.location_source;
+            lite->position.time = node->position.time;
+        }
+        if (node->has_user) {
+            lite->has_user = true;
+            lite->user = node->user;
+        }
+        if (node->has_device_metrics) {
+            lite->has_device_metrics = true;
+            lite->device_metrics = node->device_metrics;
+        }
+    }
 }
 
 /// Record an error that should be reported via analytics
@@ -808,7 +921,7 @@ void recordCriticalError(meshtastic_CriticalErrorCode code, uint32_t address, co
     error_code = code;
     error_address = address;
 
-    // Currently portuino is mostly used for simulation.  Make sue the user notices something really bad happend
+    // Currently portuino is mostly used for simulation.  Make sure the user notices something really bad happened
 #ifdef ARCH_PORTDUINO
     LOG_ERROR("A critical failure occurred, portduino is exiting...");
     exit(2);

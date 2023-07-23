@@ -54,7 +54,7 @@ int32_t RangeTestModule::runOnce()
             if (moduleConfig.range_test.sender) {
                 LOG_INFO("Initializing Range Test Module -- Sender\n");
                 started = millis(); // make a note of when we started
-                return (5000);      // Sending first message 5 seconds after initilization.
+                return (5000);      // Sending first message 5 seconds after initialization.
             } else {
                 LOG_INFO("Initializing Range Test Module -- Receiver\n");
                 return disable();
@@ -138,7 +138,7 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket 
             }
 
             /*
-            NodeInfo *n = nodeDB.getNode(getFrom(&mp));
+            NodeInfoLite *n = nodeDB.getMeshNode(getFrom(&mp));
 
             LOG_DEBUG("-----------------------------------------\n");
             LOG_DEBUG("p.payload.bytes  \"%s\"\n", p.payload.bytes);
@@ -147,8 +147,8 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket 
             LOG_DEBUG("mp.from          %d\n", mp.from);
             LOG_DEBUG("mp.rx_snr        %f\n", mp.rx_snr);
             LOG_DEBUG("mp.hop_limit     %d\n", mp.hop_limit);
-            // LOG_DEBUG("mp.decoded.position.latitude_i     %d\n", mp.decoded.position.latitude_i); // Depricated
-            // LOG_DEBUG("mp.decoded.position.longitude_i    %d\n", mp.decoded.position.longitude_i); // Depricated
+            // LOG_DEBUG("mp.decoded.position.latitude_i     %d\n", mp.decoded.position.latitude_i); // Deprecated
+            // LOG_DEBUG("mp.decoded.position.longitude_i    %d\n", mp.decoded.position.longitude_i); // Deprecated
             LOG_DEBUG("---- Node Information of Received Packet (mp.from):\n");
             LOG_DEBUG("n->user.long_name         %s\n", n->user.long_name);
             LOG_DEBUG("n->user.short_name        %s\n", n->user.short_name);
@@ -177,7 +177,7 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
 #ifdef ARCH_ESP32
     auto &p = mp.decoded;
 
-    meshtastic_NodeInfo *n = nodeDB.getNode(getFrom(&mp));
+    meshtastic_NodeInfoLite *n = nodeDB.getMeshNode(getFrom(&mp));
     /*
         LOG_DEBUG("-----------------------------------------\n");
         LOG_DEBUG("p.payload.bytes  \"%s\"\n", p.payload.bytes);
@@ -186,8 +186,8 @@ bool RangeTestModuleRadio::appendFile(const meshtastic_MeshPacket &mp)
         LOG_DEBUG("mp.from          %d\n", mp.from);
         LOG_DEBUG("mp.rx_snr        %f\n", mp.rx_snr);
         LOG_DEBUG("mp.hop_limit     %d\n", mp.hop_limit);
-        // LOG_DEBUG("mp.decoded.position.latitude_i     %d\n", mp.decoded.position.latitude_i);  // Depricated
-        // LOG_DEBUG("mp.decoded.position.longitude_i    %d\n", mp.decoded.position.longitude_i); // Depricated
+        // LOG_DEBUG("mp.decoded.position.latitude_i     %d\n", mp.decoded.position.latitude_i);  // Deprecated
+        // LOG_DEBUG("mp.decoded.position.longitude_i    %d\n", mp.decoded.position.longitude_i); // Deprecated
         LOG_DEBUG("---- Node Information of Received Packet (mp.from):\n");
         LOG_DEBUG("n->user.long_name         %s\n", n->user.long_name);
         LOG_DEBUG("n->user.short_name        %s\n", n->user.short_name);

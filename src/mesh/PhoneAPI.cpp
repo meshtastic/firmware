@@ -5,6 +5,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
+#include "TypeConversions.h"
 #include "configuration.h"
 #include "main.h"
 #include "xmodem.h"
@@ -16,6 +17,8 @@
 #if ToRadio_size > MAX_TO_FROM_RADIO_SIZE
 #error ToRadio is too big
 #endif
+
+#include "mqtt/MQTT.h"
 
 PhoneAPI::PhoneAPI()
 {
@@ -40,7 +43,7 @@ void PhoneAPI::handleStartConfig()
     state = STATE_SEND_MY_INFO;
 
     LOG_INFO("Starting API client config\n");
-    nodeInfoForPhone = NULL; // Don't keep returning old nodeinfos
+    nodeInfoForPhone.num = 0; // Don't keep returning old nodeinfos
     resetReadIndex();
 }
 
@@ -53,6 +56,7 @@ void PhoneAPI::close()
         unobserve(&xModem.packetReady);
         releasePhonePacket(); // Don't leak phone packets on shutdown
         releaseQueueStatusPhonePacket();
+        releaseMqttClientProxyPhonePacket();
 
         onConnectionChanged(false);
     }
@@ -96,6 +100,12 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
         case meshtastic_ToRadio_xmodemPacket_tag:
             LOG_INFO("Got xmodem packet\n");
             xModem.handlePacket(toRadioScratch.xmodemPacket);
+            break;
+        case meshtastic_ToRadio_mqttClientProxyMessage_tag:
+            LOG_INFO("Got MqttClientProxy message\n");
+            if (mqtt && moduleConfig.mqtt.proxy_to_client_enabled) {
+                mqtt->onClientProxyReceive(toRadioScratch.mqttClientProxyMessage);
+            }
             break;
         default:
             // Ignore nop messages
@@ -147,20 +157,19 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         fromRadioScratch.my_info = myNodeInfo;
         state = STATE_SEND_NODEINFO;
 
-        service.refreshLocalNodeInfo(); // Update my NodeInfo because the client will be asking for it soon.
+        service.refreshLocalMeshNode(); // Update my NodeInfo because the client will be asking for it soon.
         break;
 
     case STATE_SEND_NODEINFO: {
         LOG_INFO("getFromRadio=STATE_SEND_NODEINFO\n");
-        const meshtastic_NodeInfo *info = nodeInfoForPhone;
-        nodeInfoForPhone = NULL; // We just consumed a nodeinfo, will need a new one next time
 
-        if (info) {
-            LOG_INFO("Sending nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s\n", info->num, info->last_heard, info->user.id,
-                     info->user.long_name);
+        if (nodeInfoForPhone.num != 0) {
+            LOG_INFO("nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s\n", nodeInfoForPhone.num, nodeInfoForPhone.last_heard,
+                     nodeInfoForPhone.user.id, nodeInfoForPhone.user.long_name);
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_node_info_tag;
-            fromRadioScratch.node_info = *info;
+            fromRadioScratch.node_info = nodeInfoForPhone;
             // Stay in current state until done sending nodeinfos
+            nodeInfoForPhone.num = 0; // We just consumed a nodeinfo, will need a new one next time
         } else {
             LOG_INFO("Done sending nodeinfos\n");
             state = STATE_SEND_CHANNELS;
@@ -295,12 +304,16 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         break;
 
     case STATE_SEND_PACKETS:
-        // Do we have a message from the mesh?
+        // Do we have a message from the mesh or packet from the local device?
         LOG_INFO("getFromRadio=STATE_SEND_PACKETS\n");
         if (queueStatusPacketForPhone) {
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_queueStatus_tag;
             fromRadioScratch.queueStatus = *queueStatusPacketForPhone;
             releaseQueueStatusPhonePacket();
+        } else if (mqttClientProxyMessageForPhone) {
+            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_mqttClientProxyMessage_tag;
+            fromRadioScratch.mqttClientProxyMessage = *mqttClientProxyMessageForPhone;
+            releaseMqttClientProxyPhonePacket();
         } else if (xmodemPacketForPhone.control != meshtastic_XModem_Control_NUL) {
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_xmodemPacket_tag;
             fromRadioScratch.xmodemPacket = xmodemPacketForPhone;
@@ -353,6 +366,14 @@ void PhoneAPI::releaseQueueStatusPhonePacket()
     }
 }
 
+void PhoneAPI::releaseMqttClientProxyPhonePacket()
+{
+    if (mqttClientProxyMessageForPhone) {
+        service.releaseMqttClientProxyMessageToPool(mqttClientProxyMessageForPhone);
+        mqttClientProxyMessageForPhone = NULL;
+    }
+}
+
 /**
  * Return true if we have data available to send to the phone
  */
@@ -370,14 +391,20 @@ bool PhoneAPI::available()
         return true;
 
     case STATE_SEND_NODEINFO:
-        if (!nodeInfoForPhone)
-            nodeInfoForPhone = nodeDB.readNextInfo(readIndex);
+        if (nodeInfoForPhone.num == 0) {
+            auto nextNode = nodeDB.readNextMeshNode(readIndex);
+            if (nextNode) {
+                nodeInfoForPhone = ConvertToNodeInfo(nextNode);
+            }
+        }
         return true; // Always say we have something, because we might need to advance our state machine
 
     case STATE_SEND_PACKETS: {
         if (!queueStatusPacketForPhone)
             queueStatusPacketForPhone = service.getQueueStatusForPhone();
-        bool hasPacket = !!queueStatusPacketForPhone;
+        if (!mqttClientProxyMessageForPhone)
+            mqttClientProxyMessageForPhone = service.getMqttClientProxyMessageForPhone();
+        bool hasPacket = !!queueStatusPacketForPhone || !!mqttClientProxyMessageForPhone;
         if (hasPacket)
             return true;
 

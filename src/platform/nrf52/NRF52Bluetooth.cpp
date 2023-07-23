@@ -17,7 +17,7 @@ static BLEBas blebas; // BAS (Battery Service) helper class instance
 static BLEDfu bledfu; // DFU software update helper service
 
 // This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in
-// proccess at once
+// process at once
 // static uint8_t trBytes[_max(_max(_max(_max(ToRadio_size, RadioConfig_size), User_size), MyNodeInfo_size), FromRadio_size)];
 static uint8_t fromRadioBytes[meshtastic_FromRadio_size];
 static uint8_t toRadioBytes[meshtastic_ToRadio_size];

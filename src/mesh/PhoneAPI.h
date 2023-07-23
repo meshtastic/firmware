@@ -50,8 +50,11 @@ class PhoneAPI
     // Keep QueueStatus packet just as packetForPhone
     meshtastic_QueueStatus *queueStatusPacketForPhone = NULL;
 
+    // Keep MqttClientProxyMessage packet just as packetForPhone
+    meshtastic_MqttClientProxyMessage *mqttClientProxyMessageForPhone = NULL;
+
     /// We temporarily keep the nodeInfo here between the call to available and getFromRadio
-    const meshtastic_NodeInfo *nodeInfoForPhone = NULL;
+    meshtastic_NodeInfo nodeInfoForPhone = meshtastic_NodeInfo_init_default;
 
     meshtastic_ToRadio toRadioScratch = {
         0}; // this is a static scratch object, any data must be copied elsewhere before returning
@@ -125,6 +128,8 @@ class PhoneAPI
     void releasePhonePacket();
 
     void releaseQueueStatusPhonePacket();
+
+    void releaseMqttClientProxyPhonePacket();
 
     /// begin a new connection
     void handleStartConfig();

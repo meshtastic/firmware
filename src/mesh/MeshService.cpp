@@ -9,6 +9,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RTC.h"
+#include "TypeConversions.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "modules/NodeInfoModule.h"
@@ -33,7 +34,7 @@ arbitrating to select a node number and keeping the current nodedb.
 
 /* Broadcast when a newly powered mesh node wants to find a node num it can use
 
-The algoritm is as follows:
+The algorithm is as follows:
 * when a node starts up, it broadcasts their user and the normal flow is for all other nodes to reply with their User as well (so
 the new node can build its node db)
 * If a node ever receives a User (not just the first broadcast) message where the sender node number equals our node number, that
@@ -51,13 +52,18 @@ FIXME in the initial proof of concept we just skip the entire want/deny flow and
 
 MeshService service;
 
+static MemoryDynamic<meshtastic_MqttClientProxyMessage> staticMqttClientProxyMessagePool;
+
 static MemoryDynamic<meshtastic_QueueStatus> staticQueueStatusPool;
+
+Allocator<meshtastic_MqttClientProxyMessage> &mqttClientProxyMessagePool = staticMqttClientProxyMessagePool;
 
 Allocator<meshtastic_QueueStatus> &queueStatusPool = staticQueueStatusPool;
 
 #include "Router.h"
 
-MeshService::MeshService() : toPhoneQueue(MAX_RX_TOPHONE), toPhoneQueueStatusQueue(MAX_RX_TOPHONE)
+MeshService::MeshService()
+    : toPhoneQueue(MAX_RX_TOPHONE), toPhoneQueueStatusQueue(MAX_RX_TOPHONE), toPhoneMqttProxyQueue(MAX_RX_TOPHONE)
 {
     lastQueueStatus = {0, 0, 16, 0};
 }
@@ -76,7 +82,8 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
     powerFSM.trigger(EVENT_PACKET_FOR_PHONE); // Possibly keep the node from sleeping
 
     nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
-    if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB.getNode(mp->from)->has_user && nodeInfoModule) {
+    if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB.getMeshNode(mp->from)->has_user &&
+        nodeInfoModule) {
         LOG_INFO("Heard a node on channel %d we don't know, sending NodeInfo and asking for a response.\n", mp->channel);
         nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
     }
@@ -236,7 +243,8 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
 
 void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
 {
-    meshtastic_NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
+    meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
+
     assert(node);
 
     if (hasValidPosition(node)) {
@@ -266,9 +274,23 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
     fromNum++;
 }
 
-meshtastic_NodeInfo *MeshService::refreshLocalNodeInfo()
+void MeshService::sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage *m)
 {
-    meshtastic_NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
+    LOG_DEBUG("Sending mqtt message on topic '%s' to client for proxying to server\n", m->topic);
+    if (toPhoneMqttProxyQueue.numFree() == 0) {
+        LOG_WARN("MqttClientProxyMessagePool queue is full, discarding oldest\n");
+        meshtastic_MqttClientProxyMessage *d = toPhoneMqttProxyQueue.dequeuePtr(0);
+        if (d)
+            releaseMqttClientProxyMessageToPool(d);
+    }
+
+    assert(toPhoneMqttProxyQueue.enqueue(m, 0));
+    fromNum++;
+}
+
+meshtastic_NodeInfoLite *MeshService::refreshLocalMeshNode()
+{
+    meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
     assert(node);
 
     // We might not have a position yet for our local node, in that case, at least try to send the time
@@ -277,7 +299,7 @@ meshtastic_NodeInfo *MeshService::refreshLocalNodeInfo()
         node->has_position = true;
     }
 
-    meshtastic_Position &position = node->position;
+    meshtastic_PositionLite &position = node->position;
 
     // Update our local node info with our time (even if we don't decide to update anyone else)
     node->last_heard =
@@ -293,7 +315,7 @@ meshtastic_NodeInfo *MeshService::refreshLocalNodeInfo()
 int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
 {
     // Update our local node info with our position (even if we don't decide to update anyone else)
-    meshtastic_NodeInfo *node = refreshLocalNodeInfo();
+    meshtastic_NodeInfoLite *node = refreshLocalMeshNode();
     meshtastic_Position pos = meshtastic_Position_init_default;
 
     if (newStatus->getHasLock()) {
@@ -307,12 +329,12 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
 #endif
         if (config.position.fixed_position) {
             LOG_WARN("Using fixed position\n");
-            pos = node->position;
+            pos = ConvertToPosition(node->position);
         }
     }
 
     // Finally add a fresh timestamp and battery level reading
-    // I KNOW this is redundant with refreshLocalNodeInfo() above, but these are
+    // I KNOW this is redundant with refreshLocalMeshNode() above, but these are
     //   inexpensive nonblocking calls and can be refactored in due course
     pos.time = getValidTime(RTCQualityGPS);
 
