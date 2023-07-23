@@ -60,6 +60,10 @@ template <typename T> bool SX126xInterface<T>::init()
     LOG_DEBUG("Current limit set to %f\n", currentLimit);
     LOG_DEBUG("Current limit set result %d\n", res);
 
+#if defined(CANARY_V1_0)
+  res = lora.setDio2AsRfSwitch(true);
+#endif
+
 #if defined(SX126X_E22)
     // E22 Emulation explicitly requires DIO2 as RF switch, so set it to TRUE again for good measure. In case somebody defines
     // SX126X_TX for an E22 Module
