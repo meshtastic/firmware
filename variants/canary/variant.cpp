@@ -43,4 +43,5 @@ void initVariant()
     ledOff(PIN_LED3);
 
     pinMode(PIN_PWR_EN, OUTPUT);
+    digitalWrite(PIN_PWR_EN, HIGH);
 }

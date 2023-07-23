@@ -126,16 +126,16 @@ static const uint8_t A0 = PIN_A0;
 #define HAS_GPS 1
 #define GPS_UBLOX
 
-#define PIN_GPS_WAKE (GPIO_PORT1 + 2) // An output to wake GPS, low means allow sleep, high means force wake
+// #define PIN_GPS_WAKE (GPIO_PORT1 + 2) // An output to wake GPS, low means allow sleep, high means force wake
 // Seems to be missing on this new board
 #define PIN_GPS_PPS (GPIO_PORT1 + 4)  // Pulse per second input from the GPS
-#define PIN_GPS_TX (GPIO_PORT1 + 9) // This is for bits going TOWARDS the CPU
-#define PIN_GPS_RX (GPIO_PORT1 + 8) // This is for bits going TOWARDS the GPS
+#define GPS_TX_PIN (GPIO_PORT1 + 8) // This is for bits going TOWARDS the CPU
+#define GPS_RX_PIN (GPIO_PORT1 + 9) // This is for bits going TOWARDS the GPS
 
 #define GPS_THREAD_INTERVAL 50
 
-#define PIN_SERIAL1_RX PIN_GPS_TX
-#define PIN_SERIAL1_TX PIN_GPS_RX
+#define PIN_SERIAL1_RX GPS_TX_PIN
+#define PIN_SERIAL1_TX GPS_RX_PIN
 
 // PCF8563 RTC Module
 // #define PCF8563_RTC 0x51

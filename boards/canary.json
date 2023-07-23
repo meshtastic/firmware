@@ -29,7 +29,8 @@
     "debug": {
       "jlink_device": "nRF52840_xxAA",
       "onboard_tools": ["jlink"],
-      "svd_path": "nrf52840.svd"
+      "svd_path": "nrf52840.svd",
+      "openocd_target": "nrf52840-mdk-rs"
     },
     "frameworks": ["arduino"],
     "name": "Canary (Adafruit BSP)",
@@ -44,6 +45,6 @@
       "wait_for_upload_port": true
     },
     "url": "https://canaryradio.io/",
-    "vendor": "Canary IO, LLC"
+    "vendor": "Canary Radio Company"
   }
   
