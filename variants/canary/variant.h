@@ -137,9 +137,6 @@ static const uint8_t A0 = PIN_A0;
 #define PIN_SERIAL1_RX GPS_TX_PIN
 #define PIN_SERIAL1_TX GPS_RX_PIN
 
-// PCF8563 RTC Module
-// #define PCF8563_RTC 0x51
-
 /*
  * SPI Interfaces
  */
@@ -179,7 +176,6 @@ static const uint8_t A0 = PIN_A0;
 #define ADC_MULTIPLIER VBAT_DIVIDER_COMP
 #define VBAT_RAW_TO_SCALED(x) (REAL_VBAT_MV_PER_LSB * x)
 
-// #define HAS_RTC 1
 
 #ifdef __cplusplus
 }
