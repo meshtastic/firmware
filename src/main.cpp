@@ -112,7 +112,20 @@ ATECCX08A atecc;
 
 #ifdef T_WATCH_S3
 Adafruit_DRV2605 drv;
+
+#include "AudioFileSourcePROGMEM.h"
+#include "AudioGeneratorRTTTL.h"
+#include "AudioOutputI2S.h"
+
+AudioGeneratorRTTTL *i2sRtttl;
+AudioOutputI2S *audioOut;
+const char rudolph[] PROGMEM =
+"Rudolph the Red Nosed Raindeer:d=8,o=5,b=250:g,4a,g,4e,4c6,4a,2g.,g,a,g,a,4g,4c6,2b.,4p,f,4g,f,4d,4b,4a,2g.,g,a,g,a,4g,4a,2e.,4p,g,4a,a,4e,4c6,4a,2g.,g,a,g,a,4g,4c6,2b.,4p,f,4g,f,4d,4b,4a,2g.,g,a,g,a,4g,4d6,2c.6,4p,4a,4a,4c6,4a,4g,4e,2g,4d,4e,4g,4a,4b,4b,2b,4c6,4c6,4b,4a,4g,4f,2d,g,4a,g,4e,4c6,4a,2g.,g,a,g,a,4g,4c6,2b.,4p,f,4g,f,4d,4b,4a,2g.,4g,4a,4g,4a,2g,2d6,1c.6.";
+// Plenty more at: http://mines.lumpylumpy.com/Electronics/Computers/Software/Cpp/MFC/RingTones.RTTTL
+
+AudioFileSourcePROGMEM *rtttlFile;
 #endif
+
 bool isVibrating = false;
 
 bool eink_found = true;
@@ -731,6 +744,17 @@ void setup()
 
     // setBluetoothEnable(false); we now don't start bluetooth until we enter the proper state
     setCPUFast(false); // 80MHz is fine for our slow peripherals
+
+#if defined(T_WATCH_S3)
+    LOG_DEBUG("Playing startup\n");
+    audioLogger = &Serial;
+    rtttlFile = new AudioFileSourcePROGMEM(rudolph, strlen_P(rudolph));
+    audioOut = new AudioOutputI2S(1, AudioOutputI2S::EXTERNAL_I2S);
+    audioOut->SetPinout(DAC_I2S_BCK, DAC_I2S_WS, DAC_I2S_DOUT);
+    audioOut->SetGain(0.5);
+    i2sRtttl = new AudioGeneratorRTTTL();
+    i2sRtttl->begin(rtttlFile, audioOut);
+#endif
 }
 
 uint32_t rebootAtMsec;   // If not zero we will reboot at this time (used to reboot shortly after the update completes)
