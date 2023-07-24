@@ -2,8 +2,17 @@
 
 #define ARCH_RP2040
 
+#ifndef HAS_BUTTON
+#define HAS_BUTTON 1
+#endif
 #ifndef HAS_TELEMETRY
 #define HAS_TELEMETRY 1
+#endif
+#ifndef HAS_SCREEN
+#define HAS_SCREEN 1
+#endif
+#ifndef HAS_WIRE
+#define HAS_WIRE 1
 #endif
 #ifndef HAS_SENSOR
 #define HAS_SENSOR 1

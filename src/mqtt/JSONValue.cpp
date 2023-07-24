@@ -282,7 +282,7 @@ JSONValue *JSONValue::Parse(const char **data)
         return NULL;
     }
 
-    // Ran out of possibilites, it's bad!
+    // Ran out of possibilities, it's bad!
     else {
         return NULL;
     }
