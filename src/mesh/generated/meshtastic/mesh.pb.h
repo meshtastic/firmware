@@ -707,7 +707,7 @@ typedef struct _meshtastic_ToRadio {
      (Sending this message is optional for clients) */
         bool disconnect;
         meshtastic_XModem xmodemPacket;
-        /* MQTT Client Proxy Message */
+        /* MQTT Client Proxy Message (for client / phone subscribed to MQTT sending to device) */
         meshtastic_MqttClientProxyMessage mqttClientProxyMessage;
     };
 } meshtastic_ToRadio;
@@ -806,7 +806,7 @@ typedef struct _meshtastic_FromRadio {
         meshtastic_XModem xmodemPacket;
         /* Device metadata message */
         meshtastic_DeviceMetadata metadata;
-        /* MQTT Client Proxy Message */
+        /* MQTT Client Proxy Message (device sending to client / phone for publishing to MQTT) */
         meshtastic_MqttClientProxyMessage mqttClientProxyMessage;
     };
 } meshtastic_FromRadio;

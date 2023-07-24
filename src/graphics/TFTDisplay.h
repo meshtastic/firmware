@@ -28,6 +28,8 @@ class TFTDisplay : public OLEDDisplay
      */
     void setDetected(uint8_t detected);
 
+    void getTouch(int *x, int *y);
+
   protected:
     // the header size of the buffer used, e.g. for the SPI command header
     virtual int getBufferOffset(void) override { return 0; }
