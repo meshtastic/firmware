@@ -242,7 +242,7 @@ jobs:
       - name: Device scripts permissions
         run: |
           chmod +x ./output/device-install.sh
-          chmod +x ./output/device-update.sh
+          chmod +x ./output/device-update.shath
 
       - name: Zip firmware
         run: zip -j -9 -r ./firmware-${{ steps.version.outputs.version }}.zip ./output
@@ -255,6 +255,7 @@ jobs:
           retention-days: 30
 
       - name: Create request artifacts
+        continue-on-error: true # FIXME: Why are we getting 502, but things still work?
         if: ${{ github.event_name == 'pull_request_target' || github.event_name == 'pull_request' }}
         uses: gavv/pull-request-artifacts@v1.1.0
         with:
