@@ -242,7 +242,7 @@ jobs:
       - name: Device scripts permissions
         run: |
           chmod +x ./output/device-install.sh
-          chmod +x ./output/device-update.shath
+          chmod +x ./output/device-update.sh
 
       - name: Zip firmware
         run: zip -j -9 -r ./firmware-${{ steps.version.outputs.version }}.zip ./output
