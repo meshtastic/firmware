@@ -4,7 +4,7 @@
 #include "FSCommon.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "PowerFSM.h" // neede for button bypass
+#include "PowerFSM.h" // needed for button bypass
 #include "detect/ScanI2C.h"
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
 
@@ -18,7 +18,7 @@
 #include "graphics/fonts/OLEDDisplayFontsUA.h"
 #endif
 
-#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)
+#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)
 // The screen is bigger so use bigger fonts
 #define FONT_SMALL ArialMT_Plain_16
 #define FONT_MEDIUM ArialMT_Plain_24
@@ -123,8 +123,8 @@ int CannedMessageModule::splitConfiguredMessages()
 int CannedMessageModule::handleInputEvent(const InputEvent *event)
 {
     if ((strlen(moduleConfig.canned_message.allow_input_source) > 0) &&
-        (strcmp(moduleConfig.canned_message.allow_input_source, event->source) != 0) &&
-        (strcmp(moduleConfig.canned_message.allow_input_source, "_any") != 0)) {
+        (strcasecmp(moduleConfig.canned_message.allow_input_source, event->source) != 0) &&
+        (strcasecmp(moduleConfig.canned_message.allow_input_source, "_any") != 0)) {
         // Event source is not accepted.
         // Event only accepted if source matches the configured one, or
         //   the configured one is "_any" (or if there is no configured

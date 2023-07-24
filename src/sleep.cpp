@@ -23,11 +23,6 @@ esp_sleep_source_t wakeCause; // the reason we booted this time
 #define INCLUDE_vTaskSuspend 0
 #endif
 
-#ifdef HAS_PMU
-#include "XPowersLibInterface.hpp"
-extern XPowersLibInterface *PMU;
-#endif
-
 /// Called to ask any observers if they want to veto sleep. Return 1 to veto or 0 to allow sleep to happen
 Observable<void *> preflightSleep;
 
@@ -98,6 +93,10 @@ void setLed(bool ledOn)
 void setGPSPower(bool on)
 {
     LOG_INFO("Setting GPS power=%d\n", on);
+
+#ifdef PIN_GPS_EN
+    digitalWrite(PIN_GPS_EN, on ? 1 : 0);
+#endif
 
 #ifdef HAS_PMU
     if (pmu_found && PMU) {
@@ -185,7 +184,7 @@ static void waitEnterSleep()
 
 void doGPSpowersave(bool on)
 {
-#ifdef HAS_PMU
+#if defined(HAS_PMU) || defined(PIN_GPS_EN)
     if (on) {
         LOG_INFO("Turning GPS back on\n");
         gps->forceWake(1);
@@ -246,7 +245,7 @@ void doDeepSleep(uint32_t msecToWake)
         //
         // No need to turn this off if the power draw in sleep mode really is just 0.2uA and turning it off would
         // leave floating input for the IRQ line
-        // If we want to leave the radio receving in would be 11.5mA current draw, but most of the time it is just waiting
+        // If we want to leave the radio receiving in would be 11.5mA current draw, but most of the time it is just waiting
         // in its sequencer (true?) so the average power draw should be much lower even if we were listinging for packets
         // all the time.
 
@@ -255,7 +254,8 @@ void doDeepSleep(uint32_t msecToWake)
             if (HW_VENDOR == meshtastic_HardwareModel_TBEAM) {
                 // t-beam v1.2 radio power channel
                 PMU->disablePowerOutput(XPOWERS_ALDO2); // lora radio power channel
-            } else if (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE) {
+            } else if (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE ||
+                       HW_VENDOR == meshtastic_HardwareModel_T_WATCH_S3) {
                 PMU->disablePowerOutput(XPOWERS_ALDO3); // lora radio power channel
             }
         } else if (model == XPOWERS_AXP192) {

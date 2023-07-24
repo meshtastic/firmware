@@ -20,7 +20,7 @@ class Channels
     /// The index of the primary channel
     ChannelIndex primaryIndex = 0;
 
-    /** The channel index that was requested for sending/receving.  Note: if this channel is a secondary
+    /** The channel index that was requested for sending/receiving.  Note: if this channel is a secondary
     channel and does not have a PSK, we will use the PSK from the primary channel.  If this channel is disabled
     no sending or receiving will be allowed */
     ChannelIndex activeChannelIndex = 0;
