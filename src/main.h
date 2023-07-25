@@ -40,7 +40,9 @@ extern ATECCX08A atecc;
 
 #ifdef T_WATCH_S3
 #include <Adafruit_DRV2605.h>
+#include <AudioOutputI2S.h>
 extern Adafruit_DRV2605 drv;
+extern AudioOutputI2S *audioOut;
 #endif
 extern bool isVibrating;
 

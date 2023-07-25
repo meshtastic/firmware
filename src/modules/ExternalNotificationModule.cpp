@@ -7,8 +7,12 @@
 #include "configuration.h"
 #include "mesh/generated/meshtastic/rtttl.pb.h"
 #include <Arduino.h>
-
 #include "main.h"
+
+#if defined(T_WATCH_S3)
+#include <ESP8266SAM.h>
+#endif
+
 
 #ifdef HAS_NCP5623
 #include <graphics/RAKled.h>
@@ -266,14 +270,13 @@ ExternalNotificationModule::ExternalNotificationModule()
 ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
     if (moduleConfig.external_notification.enabled) {
-#if T_WATCH_S3
+#if defined(T_WATCH_S3)
         drv.setWaveform(0, 75);
         drv.setWaveform(1, 56);
         drv.setWaveform(2, 0);
         drv.go();
 #endif
         if (getFrom(&mp) != nodeDB.getNodeNum()) {
-
             // Check if the message contains a bell character. Don't do this loop for every pin, just once.
             auto &p = mp.decoded;
             bool containsBell = false;
@@ -282,6 +285,14 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                     containsBell = true;
                 }
             }
+#if defined(T_WATCH_S3)
+            ESP8266SAM *sam = new ESP8266SAM;
+            sam->Say(audioOut, "Text message received");
+            delay(1000);
+            static char textBuffer[237];
+            snprintf(textBuffer, sizeof(textBuffer), "%s", p.payload.bytes);
+            sam->Say(audioOut, textBuffer);
+#endif
 
             if (moduleConfig.external_notification.alert_bell) {
                 if (containsBell) {

@@ -112,7 +112,7 @@ class ButtonThread : public concurrency::OSThread
 #endif
             LOG_DEBUG("touch %d %d\n", x, y);
             powerFSM.trigger(EVENT_PRESS);
-            return 150; // Check for next touch every in 150ms
+            return 500; // Check for next touch every 500ms
         }
 
 #endif
