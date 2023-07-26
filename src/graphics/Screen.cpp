@@ -836,7 +836,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 
     static char distStr[20];
     if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
-        strncpy(distStr, "? mi", sizeof(distStr));
+        strncpy(distStr, "? mi", sizeof(distStr)); // might not have location data
     } else {
         strncpy(distStr, "? km", sizeof(distStr));
     }
