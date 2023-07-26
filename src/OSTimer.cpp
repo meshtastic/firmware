@@ -29,6 +29,16 @@ static void IRAM_ATTR onTimer()
     (*tCallback)(tParam1, tParam2);
 }
 
+/**
+ * Schedules a hardware callback function to be executed after a specified delay.
+ * 
+ * @param callback The function to be executed.
+ * @param param1 The first parameter to be passed to the function.
+ * @param param2 The second parameter to be passed to the function.
+ * @param delayMsec The delay time in milliseconds before the function is executed.
+ * 
+ * @return True if the function was successfully scheduled, false otherwise.
+ */
 bool scheduleHWCallback(PendableFunction callback, void *param1, uint32_t param2, uint32_t delayMsec)
 {
     if (!timer) {
