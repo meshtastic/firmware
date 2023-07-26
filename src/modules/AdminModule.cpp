@@ -368,6 +368,11 @@ void AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         moduleConfig.has_remote_hardware = true;
         moduleConfig.remote_hardware = c.payload_variant.remote_hardware;
         break;
+    case meshtastic_ModuleConfig_neighbor_info_tag:
+        LOG_INFO("Setting module config: Neighbor Info\n");
+        moduleConfig.has_neighbor_info = true;
+        moduleConfig.neighbor_info = c.payload_variant.neighbor_info;
+        break;
     }
 
     saveChanges(SEGMENT_MODULECONFIG);

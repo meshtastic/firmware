@@ -5,6 +5,7 @@
 #include "input/cardKbI2cImpl.h"
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
+#include "modules/NeighborInfoModule.h"
 #include "modules/NodeInfoModule.h"
 #include "modules/PositionModule.h"
 #include "modules/RemoteHardwareModule.h"
@@ -46,6 +47,7 @@ void setupModules()
         waypointModule = new WaypointModule();
         textMessageModule = new TextMessageModule();
         traceRouteModule = new TraceRouteModule();
+        neighborInfoModule = new NeighborInfoModule();
 
         // Note: if the rest of meshtastic doesn't need to explicitly use your module, you do not need to assign the instance
         // to a global variable.
