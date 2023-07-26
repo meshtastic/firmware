@@ -1,10 +1,10 @@
 /**
  * @file memGet.cpp
  * @brief Implementation of MemGet class that provides functions to get memory information.
- * 
- * This file contains the implementation of MemGet class that provides functions to get 
- * information about free heap, heap size, free psram and psram size. The functions are 
- * implemented for ESP32 and NRF52 architectures. If the platform does not have heap 
+ *
+ * This file contains the implementation of MemGet class that provides functions to get
+ * information about free heap, heap size, free psram and psram size. The functions are
+ * implemented for ESP32 and NRF52 architectures. If the platform does not have heap
  * management function implemented, the functions return UINT32_MAX or 0.
  */
 #include "memGet.h"
@@ -60,7 +60,7 @@ uint32_t MemGet::getFreePsram()
 
 /**
  * @brief Returns the size of the PSRAM memory.
- * 
+ *
  * @return uint32_t The size of the PSRAM memory.
  */
 uint32_t MemGet::getPsramSize()
