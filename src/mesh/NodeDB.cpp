@@ -15,6 +15,7 @@
 #include "error.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
+#include "modules/NeighborInfoModule.h"
 #include <ErriezCRC32.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -133,6 +134,8 @@ bool NodeDB::factoryReset()
     installDefaultChannels();
     // third, write everything to disk
     saveToDisk();
+    // write NeighbourInfo
+    neighborInfoModule->saveProtoForModule();
 #ifdef ARCH_ESP32
     // This will erase what's in NVS including ssl keys, persistent variables and ble pairing
     nvs_flash_erase();
@@ -283,6 +286,7 @@ void NodeDB::resetNodes()
     devicestate.node_db_lite_count = 0;
     memset(devicestate.node_db_lite, 0, sizeof(devicestate.node_db_lite));
     saveDeviceStateToDisk();
+    neighborInfoModule->resetNeighbors();
 }
 
 void NodeDB::installDefaultDeviceState()

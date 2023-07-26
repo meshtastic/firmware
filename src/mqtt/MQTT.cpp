@@ -637,6 +637,24 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
         };
         break;
     }
+    case meshtastic_PortNum_NEIGHBORINFO_APP: {
+        msgType = "neighborinfo";
+        meshtastic_NeighborInfo scratch;
+        meshtastic_NeighborInfo *decoded = NULL;
+        if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+            memset(&scratch, 0, sizeof(scratch));
+            if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &meshtastic_NeighborInfo_msg,
+                                     &scratch)) {
+                decoded = &scratch;
+                msgPayload["node_id"] = new JSONValue((int)decoded->node_id);
+                msgPayload["neighbors_count"] = new JSONValue((int)decoded->neighbors_count);
+                msgPayload["neighbors"] = new JSONValue(decoded->neighbors);
+            } else {
+                LOG_ERROR("Error decoding protobuf for neighborinfo message!\n");
+            }
+        };
+        break;
+    }
     // add more packet types here if needed
     default:
         break;
