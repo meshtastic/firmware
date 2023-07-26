@@ -64,7 +64,7 @@ uint32_t error_address = 0;
 static uint8_t ourMacAddr[6];
 
 NodeDB::NodeDB()
-    : nodes(devicestate.node_db), numNodes(&devicestate.node_db_count), meshNodes(devicestate.node_db_lite),
+    : meshNodes(devicestate.node_db_lite),
       numMeshNodes(&devicestate.node_db_lite_count)
 {
 }
@@ -284,9 +284,6 @@ void NodeDB::installDefaultChannels()
 
 void NodeDB::resetNodes()
 {
-    devicestate.node_db_count = 0;
-    memset(devicestate.node_db, 0, sizeof(devicestate.node_db));
-
     devicestate.node_db_lite_count = 0;
     memset(devicestate.node_db_lite, 0, sizeof(devicestate.node_db_lite));
     saveDeviceStateToDisk();
@@ -297,12 +294,11 @@ void NodeDB::installDefaultDeviceState()
     LOG_INFO("Installing default DeviceState\n");
     memset(&devicestate, 0, sizeof(meshtastic_DeviceState));
 
-    *numNodes = 0;
+    *numMeshNodes = 0;
 
     // init our devicestate with valid flags so protobuf writing/reading will work
     devicestate.has_my_node = true;
     devicestate.has_owner = true;
-    devicestate.node_db_count = 0;
     devicestate.node_db_lite_count = 0;
     devicestate.version = DEVICESTATE_CUR_VER;
     devicestate.receive_queue_count = 0; // Not yet implemented FIXME
@@ -331,10 +327,8 @@ void NodeDB::init()
 
     // likewise - we always want the app requirements to come from the running appload
     myNodeInfo.min_app_version = 20300;         // format is Mmmss (where M is 1+the numeric major number. i.e. 20120 means 1.1.20
-    myNodeInfo.max_channels = MAX_NUM_CHANNELS; // tell others the max # of channels we can understand
     // Note! We do this after loading saved settings, so that if somehow an invalid nodenum was stored in preferences we won't
     // keep using that nodenum forever. Crummy guess at our nodenum (but we will check against the nodedb to avoid conflicts)
-    strncpy(myNodeInfo.firmware_version, optstr(APP_VERSION), sizeof(myNodeInfo.firmware_version));
     pickNewNodeNum();
 
     // Set our board type so we can share it with others
@@ -345,19 +339,6 @@ void NodeDB::init()
     info->user = owner;
     info->has_user = true;
 
-    if (*numNodes > 0) {
-        LOG_DEBUG("Legacy NodeDB detected... Migrating to NodeDBLite\n");
-        uint32_t readIndex = 0;
-        const meshtastic_NodeInfo *oldNodeInfo = nodeDB.readNextNodeInfo(readIndex);
-        while (oldNodeInfo != NULL) {
-            migrateToNodeInfoLite(oldNodeInfo);
-            oldNodeInfo = nodeDB.readNextNodeInfo(readIndex);
-        }
-        LOG_DEBUG("Migration complete! Clearing out legacy NodeDB...\n");
-        devicestate.node_db_count = 0;
-        memset(devicestate.node_db, 0, sizeof(devicestate.node_db));
-    }
-
 #ifdef ARCH_ESP32
     Preferences preferences;
     preferences.begin("meshtastic", false);
@@ -367,7 +348,7 @@ void NodeDB::init()
 #endif
 
     resetRadioConfig(); // If bogus settings got saved, then fix them
-    LOG_DEBUG("region=%d, NODENUM=0x%x, dbsize=%d\n", config.lora.region, myNodeInfo.my_node_num, *numNodes);
+    LOG_DEBUG("region=%d, NODENUM=0x%x, dbsize=%d\n", config.lora.region, myNodeInfo.my_node_num, *numMeshNodes);
 
     if (devicestateCRC != crc32Buffer(&devicestate, sizeof(devicestate)))
         saveWhat |= SEGMENT_DEVICESTATE;
@@ -613,14 +594,6 @@ void NodeDB::saveToDisk(int saveWhat)
     }
 }
 
-const meshtastic_NodeInfo *NodeDB::readNextNodeInfo(uint32_t &readIndex)
-{
-    if (readIndex < *numNodes)
-        return &nodes[readIndex++];
-    else
-        return NULL;
-}
-
 const meshtastic_NodeInfoLite *NodeDB::readNextMeshNode(uint32_t &readIndex)
 {
     if (readIndex < *numMeshNodes)
@@ -800,17 +773,6 @@ uint8_t NodeDB::getMeshNodeChannel(NodeNum n)
 
 /// Find a node in our DB, return null for missing
 /// NOTE: This function might be called from an ISR
-meshtastic_NodeInfo *NodeDB::getNodeInfo(NodeNum n)
-{
-    for (int i = 0; i < *numNodes; i++)
-        if (nodes[i].num == n)
-            return &nodes[i];
-
-    return NULL;
-}
-
-/// Find a node in our DB, return null for missing
-/// NOTE: This function might be called from an ISR
 meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
 {
     for (int i = 0; i < *numMeshNodes; i++)
@@ -852,57 +814,6 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
     }
 
     return lite;
-}
-
-void NodeDB::migrateToNodeInfoLite(const meshtastic_NodeInfo *node)
-{
-    meshtastic_NodeInfoLite *lite = getMeshNode(node->num);
-
-    if (!lite) {
-        if ((*numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < meshtastic_NodeInfoLite_size * 3)) {
-            screen->print("warning: node_db_lite full! erasing oldest entry\n");
-            // look for oldest node and erase it
-            uint32_t oldest = UINT32_MAX;
-            int oldestIndex = -1;
-            for (int i = 0; i < *numMeshNodes; i++) {
-                if (meshNodes[i].last_heard < oldest) {
-                    oldest = meshNodes[i].last_heard;
-                    oldestIndex = i;
-                }
-            }
-            // Shove the remaining nodes down the chain
-            for (int i = oldestIndex; i < *numMeshNodes - 1; i++) {
-                meshNodes[i] = meshNodes[i + 1];
-            }
-            (*numMeshNodes)--;
-        }
-        // add the node at the end
-        lite = &meshNodes[(*numMeshNodes)++];
-
-        // everything is missing except the nodenum
-        memset(lite, 0, sizeof(*lite));
-        lite->num = node->num;
-        lite->snr = node->snr;
-        lite->last_heard = node->last_heard;
-        lite->channel = node->channel;
-
-        if (node->has_position) {
-            lite->has_position = true;
-            lite->position.latitude_i = node->position.latitude_i;
-            lite->position.longitude_i = node->position.longitude_i;
-            lite->position.altitude = node->position.altitude;
-            lite->position.location_source = node->position.location_source;
-            lite->position.time = node->position.time;
-        }
-        if (node->has_user) {
-            lite->has_user = true;
-            lite->user = node->user;
-        }
-        if (node->has_device_metrics) {
-            lite->has_device_metrics = true;
-            lite->device_metrics = node->device_metrics;
-        }
-    }
 }
 
 /// Record an error that should be reported via analytics
