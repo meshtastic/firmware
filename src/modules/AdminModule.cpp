@@ -508,6 +508,11 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_remote_hardware_tag;
             res.get_module_config_response.payload_variant.remote_hardware = moduleConfig.remote_hardware;
             break;
+        case meshtastic_AdminMessage_ModuleConfigType_NEIGHBORINFO_CONFIG:
+            LOG_INFO("Getting module config: Remote Hardware\n");
+            res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_neighbor_info_tag;
+            res.get_module_config_response.payload_variant.neighbor_info = moduleConfig.neighbor_info;
+            break;
         }
 
         // NOTE: The phone app needs to know the ls_secsvalue so it can properly expect sleep behavior.
