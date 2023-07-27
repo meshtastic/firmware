@@ -1,13 +1,14 @@
 /**
  * @file StoreForwardModule.cpp
  * @brief Implementation of the StoreForwardModule class.
- * 
- * This file contains the implementation of the StoreForwardModule class, which is responsible for managing the store and forward functionality of the Meshtastic device.
- * The class provides methods for sending and receiving messages, as well as managing the message history queue.
- * It also initializes and manages the data structures used for storing the message history.
- * 
- * The StoreForwardModule class is used by the MeshService class to provide store and forward functionality to the Meshtastic device.
- * 
+ *
+ * This file contains the implementation of the StoreForwardModule class, which is responsible for managing the store and forward
+ * functionality of the Meshtastic device. The class provides methods for sending and receiving messages, as well as managing the
+ * message history queue. It also initializes and manages the data structures used for storing the message history.
+ *
+ * The StoreForwardModule class is used by the MeshService class to provide store and forward functionality to the Meshtastic
+ * device.
+ *
  * @author Jm Casler
  * @date [Insert Date]
  */
@@ -97,7 +98,7 @@ void StoreForwardModule::populatePSRAM()
 
 /**
  * Sends messages from the message history to the specified recipient.
- * 
+ *
  * @param msAgo The number of milliseconds ago from which to start sending messages.
  * @param to The recipient ID to send the messages to.
  */
@@ -122,7 +123,7 @@ void StoreForwardModule::historySend(uint32_t msAgo, uint32_t to)
 
 /**
  * Creates a new history queue with messages that were received within the specified time frame.
- * 
+ *
  * @param msAgo The number of milliseconds ago to start the history queue.
  * @param to The maximum number of messages to include in the history queue.
  * @return The ID of the newly created history queue.
@@ -195,7 +196,7 @@ meshtastic_MeshPacket *StoreForwardModule::allocReply()
 
 /**
  * Sends a payload to a specified destination node using the store and forward mechanism.
- * 
+ *
  * @param dest The destination node number.
  * @param packetHistory_index The index of the packet in the packet history buffer.
  */
@@ -222,7 +223,7 @@ void StoreForwardModule::sendPayload(NodeNum dest, uint32_t packetHistory_index)
 
 /**
  * Sends a message to a specified destination node using the store and forward protocol.
- * 
+ *
  * @param dest The destination node number.
  * @param payload The message payload to be sent.
  */
@@ -248,7 +249,7 @@ void StoreForwardModule::sendMessage(NodeNum dest, meshtastic_StoreAndForward &p
 
 /**
  * Sends a store-and-forward message to the specified destination node.
- * 
+ *
  * @param dest The destination node number.
  * @param rr The store-and-forward request/response message to send.
  */
@@ -349,7 +350,7 @@ ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &m
 
 /**
  * Handles a received protobuf message for the Store and Forward module.
- * 
+ *
  * @param mp The received MeshPacket to handle.
  * @param p A pointer to the StoreAndForward object.
  * @return True if the message was successfully handled, false otherwise.
