@@ -11,7 +11,7 @@
 #include "main.h"
 
 #ifdef HAS_NCP5623
-#include <graphics/RAKled.h>
+#include "AmbientLightingModule.h"
 NCP5623 rgb;
 
 uint8_t red = 0;
