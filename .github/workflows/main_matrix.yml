@@ -49,7 +49,7 @@ jobs:
 
       - name: Trunk Check
         if: ${{ github.event_name != 'workflow_dispatch' }}
-        uses: trunk-io/trunk-action@v1
+        uses: trunk-io/trunk-action@782e83f803ca6e369f035d64c6ba2768174ba61b
 
       - name: Check ${{ matrix.board }}
         run: bin/check-all.sh ${{ matrix.board }}
