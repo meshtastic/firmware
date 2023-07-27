@@ -835,7 +835,11 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     }
 
     static char distStr[20];
-    strncpy(distStr, "? km", sizeof(distStr)); // might not have location data
+    if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+        strncpy(distStr, "? mi", sizeof(distStr)); // might not have location data
+    } else {
+        strncpy(distStr, "? km", sizeof(distStr));
+    }
     meshtastic_NodeInfoLite *ourNode = nodeDB.getMeshNode(nodeDB.getNodeNum());
     const char *fields[] = {username, distStr, signalStr, lastStr, NULL};
     int16_t compassX = 0, compassY = 0;
