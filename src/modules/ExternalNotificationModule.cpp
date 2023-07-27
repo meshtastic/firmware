@@ -1,14 +1,15 @@
 /**
  * @file ExternalNotificationModule.cpp
  * @brief Implementation of the ExternalNotificationModule class.
- * 
- * This file contains the implementation of the ExternalNotificationModule class, which is responsible for handling external notifications such as vibration, buzzer, and LED lights.
- * The class provides methods to turn on and off the external notification outputs and to play ringtones using PWM buzzer.
- * It also includes default configurations and a runOnce() method to handle the module's behavior.
- * 
+ *
+ * This file contains the implementation of the ExternalNotificationModule class, which is responsible for handling external
+ * notifications such as vibration, buzzer, and LED lights. The class provides methods to turn on and off the external
+ * notification outputs and to play ringtones using PWM buzzer. It also includes default configurations and a runOnce() method to
+ * handle the module's behavior.
+ *
  * Documentation:
  * https://meshtastic.org/docs/settings/moduleconfig/external-notification
- * 
+ *
  * @author Jm Casler & Meshtastic Team
  * @date [Insert Date]
  */

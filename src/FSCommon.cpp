@@ -1,10 +1,12 @@
 /**
  * @file FSCommon.cpp
- * @brief This file contains functions for common filesystem operations such as copying, renaming, listing and deleting files and directories.
- * 
- * The functions in this file are used to perform common filesystem operations such as copying, renaming, listing and deleting files and directories.
- * These functions are used in the Meshtastic-device project to manage files and directories on the device's filesystem.
- * 
+ * @brief This file contains functions for common filesystem operations such as copying, renaming, listing and deleting files and
+ * directories.
+ *
+ * The functions in this file are used to perform common filesystem operations such as copying, renaming, listing and deleting
+ * files and directories. These functions are used in the Meshtastic-device project to manage files and directories on the
+ * device's filesystem.
+ *
  */
 #include "FSCommon.h"
 #include "configuration.h"
@@ -24,7 +26,7 @@ SPIClass SPI1(HSPI);
 
 /**
  * @brief Copies a file from one location to another.
- * 
+ *
  * @param from The path of the source file.
  * @param to The path of the destination file.
  * @return true if the file was successfully copied, false otherwise.
@@ -60,10 +62,10 @@ bool copyFile(const char *from, const char *to)
 
 /**
  * Renames a file from pathFrom to pathTo.
- * 
+ *
  * @param pathFrom The original path of the file.
  * @param pathTo The new path of the file.
- * 
+ *
  * @return True if the file was successfully renamed, false otherwise.
  */
 bool renameFile(const char *pathFrom, const char *pathTo)
@@ -186,9 +188,9 @@ void listDir(const char *dirname, uint8_t levels, bool del = false)
 
 /**
  * @brief Removes a directory and all its contents.
- * 
+ *
  * This function recursively removes a directory and all its contents, including subdirectories and files.
- * 
+ *
  * @param dirname The name of the directory to remove.
  */
 void rmDir(const char *dirname)

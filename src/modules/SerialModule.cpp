@@ -88,9 +88,9 @@ SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
 
 /**
  * @brief Checks if the serial connection is established.
- * 
+ *
  * @return true if the serial connection is established, false otherwise.
- * 
+ *
  * For the serial2 port we can't really detect if any client is on the other side, so instead just look for recent messages
  */
 bool SerialModule::checkIsConnected()
@@ -199,7 +199,7 @@ int32_t SerialModule::runOnce()
 
 /**
  * Allocates a new mesh packet for use as a reply to a received packet.
- * 
+ *
  * @return A pointer to the newly allocated mesh packet.
  */
 meshtastic_MeshPacket *SerialModuleRadio::allocReply()
@@ -211,7 +211,7 @@ meshtastic_MeshPacket *SerialModuleRadio::allocReply()
 
 /**
  * Sends a payload to a specified destination node.
- * 
+ *
  * @param dest The destination node number.
  * @param wantReplies Whether or not to request replies from the destination node.
  */
@@ -302,7 +302,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
 
 /**
  * @brief Returns the baud rate of the serial module from the module configuration.
- * 
+ *
  * @return uint32_t The baud rate of the serial module.
  */
 uint32_t SerialModule::getBaudRate()
