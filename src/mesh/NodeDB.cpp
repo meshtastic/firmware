@@ -249,6 +249,9 @@ void NodeDB::installDefaultModuleConfig()
     strncpy(moduleConfig.mqtt.username, default_mqtt_username, sizeof(moduleConfig.mqtt.username));
     strncpy(moduleConfig.mqtt.password, default_mqtt_password, sizeof(moduleConfig.mqtt.password));
 
+    moduleConfig.has_neighbor_info = true;
+    moduleConfig.neighbor_info.enabled = false;
+
     initModuleConfigIntervals();
 }
 
@@ -272,6 +275,7 @@ void NodeDB::initModuleConfigIntervals()
     moduleConfig.telemetry.device_update_interval = default_broadcast_interval_secs;
     moduleConfig.telemetry.environment_update_interval = default_broadcast_interval_secs;
     moduleConfig.telemetry.air_quality_interval = default_broadcast_interval_secs;
+    moduleConfig.neighbor_info.update_interval = default_broadcast_interval_secs;
 }
 
 void NodeDB::installDefaultChannels()
