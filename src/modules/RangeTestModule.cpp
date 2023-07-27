@@ -1,10 +1,10 @@
 /**
  * @file RangeTestModule.cpp
  * @brief Implementation of the RangeTestModule class and RangeTestModuleRadio class.
- * 
+ *
  * As a sender, this module sends packets every n seconds with an incremented PacketID.
  * As a receiver, this module receives packets from multiple senders and saves them to the Filesystem.
- * 
+ *
  * The RangeTestModule class is an OSThread that runs the module.
  * The RangeTestModuleRadio class handles sending and receiving packets.
  */
@@ -104,7 +104,7 @@ int32_t RangeTestModule::runOnce()
 
 /**
  * Sends a payload to a specified destination node.
- * 
+ *
  * @param dest The destination node number.
  * @param wantReplies Whether or not to request replies from the destination node.
  */
