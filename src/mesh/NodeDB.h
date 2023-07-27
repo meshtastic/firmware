@@ -19,7 +19,7 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define SEGMENT_DEVICESTATE 4
 #define SEGMENT_CHANNELS 8
 
-#define DEVICESTATE_CUR_VER 21
+#define DEVICESTATE_CUR_VER 22
 #define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
 
 extern meshtastic_DeviceState devicestate;
