@@ -320,13 +320,6 @@ class Screen : public concurrency::OSThread
 
     void setWelcomeFrames();
 
-    void getTouch(int *x, int *y)
-    {
-#if defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ST7789_CS)
-        dispdev.getTouch(x, y);
-#endif
-    };
-
   protected:
     /// Updates the UI.
     //
