@@ -165,8 +165,20 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT))) {
         LOG_DEBUG("Canned message event (%x)\n", event->kbchar);
         if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
-            // pass the pressed key
-            this->payload = event->kbchar;
+            // tweak for left/right events generated via trackball/touch with empty kbchar
+            if (!event->kbchar) {
+                if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
+                    this->payload = 0xb4;
+                    this->destSelect = true;
+                } else if (event->inputEvent ==
+                           static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
+                    this->payload = 0xb7;
+                    this->destSelect = true;
+                }
+            } else {
+                // pass the pressed key
+                this->payload = event->kbchar;
+            }
             this->lastTouchMillis = millis();
             validEvent = true;
         }
@@ -225,7 +237,7 @@ int32_t CannedMessageModule::runOnce()
         (this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE)) {
         return INT32_MAX;
     }
-    LOG_DEBUG("Check status\n");
+    // LOG_DEBUG("Check status\n");
     UIFrameEvent e = {false, true};
     if (this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {
         // TODO: might have some feedback of sendig state

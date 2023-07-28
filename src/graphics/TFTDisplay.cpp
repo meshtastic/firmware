@@ -192,11 +192,11 @@ class LGFX : public lgfx::LGFX_Device
             // cfg.freq = 2500000;
 
             // I2C
-            cfg.i2c_port = 1;
+            cfg.i2c_port = TOUCH_I2C_PORT;
             cfg.i2c_addr = TOUCH_SLAVE_ADDRESS;
             cfg.pin_sda = I2C_SDA;
             cfg.pin_scl = I2C_SCL;
-            cfg.freq = 400000;
+            // cfg.freq = 400000;
 
             _touch_instance.config(cfg);
             _panel_instance.setTouch(&_touch_instance);
@@ -283,6 +283,16 @@ void TFTDisplay::sendCommand(uint8_t com)
     }
 
     // Drop all other commands to device (we just update the buffer)
+}
+
+bool TFTDisplay::hasTouch(void)
+{
+    return tft.touch() != nullptr;
+}
+
+bool TFTDisplay::getTouch(uint16_t *x, uint16_t *y)
+{
+    return tft.getTouch(x, y);
 }
 
 void TFTDisplay::setDetected(uint8_t detected)

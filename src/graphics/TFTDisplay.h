@@ -22,6 +22,10 @@ class TFTDisplay : public OLEDDisplay
     // Write the buffer to the display memory
     virtual void display(void) override;
 
+    // Touch screen (static handlers)
+    static bool hasTouch(void);
+    static bool getTouch(uint16_t *x, uint16_t *y);
+
     /**
      * shim to make the abstraction happy
      *

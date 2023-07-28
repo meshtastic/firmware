@@ -101,7 +101,7 @@ class ButtonThread : public concurrency::OSThread
         // if (!canSleep) LOG_DEBUG("Suppressing sleep!\n");
         // else LOG_DEBUG("sleep ok\n");
 
-        return 5;
+        return 50;
     }
 
   private:
