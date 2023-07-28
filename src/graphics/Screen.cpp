@@ -836,7 +836,11 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     }
 
     static char distStr[20];
-    strncpy(distStr, "? km", sizeof(distStr)); // might not have location data
+    if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+        strncpy(distStr, "? mi", sizeof(distStr)); // might not have location data
+    } else {
+        strncpy(distStr, "? km", sizeof(distStr));
+    }
     meshtastic_NodeInfoLite *ourNode = nodeDB.getMeshNode(nodeDB.getNodeNum());
     const char *fields[] = {username, distStr, signalStr, lastStr, NULL};
     int16_t compassX = 0, compassY = 0;
@@ -945,6 +949,9 @@ void Screen::handleSetOn(bool on)
     if (on != screenOn) {
         if (on) {
             LOG_INFO("Turning on screen\n");
+#ifdef T_WATCH_S3
+            PMU->enablePowerOutput(XPOWERS_ALDO2);
+#endif
             dispdev.displayOn();
             dispdev.displayOn();
             enabled = true;
@@ -953,6 +960,9 @@ void Screen::handleSetOn(bool on)
         } else {
             LOG_INFO("Turning off screen\n");
             dispdev.displayOff();
+#ifdef T_WATCH_S3
+            PMU->disablePowerOutput(XPOWERS_ALDO2);
+#endif
             enabled = false;
         }
         screenOn = on;

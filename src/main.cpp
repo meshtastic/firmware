@@ -110,6 +110,11 @@ ScanI2C::FoundDevice rgb_found = ScanI2C::FoundDevice(ScanI2C::DeviceType::NONE,
 ATECCX08A atecc;
 #endif
 
+#ifdef T_WATCH_S3
+Adafruit_DRV2605 drv;
+#endif
+bool isVibrating = false;
+
 bool eink_found = true;
 
 uint32_t serialSinceMsec;
@@ -249,6 +254,19 @@ void setup()
     ledPeriodic = new Periodic("Blink", ledBlinker);
 
     fsInit();
+
+#if defined(_SEEED_XIAO_NRF52840_SENSE_H_)
+
+    pinMode(CHARGE_LED, INPUT); // sets to detect if charge LED is on or off to see if USB is plugged in
+
+    pinMode(HICHG, OUTPUT);
+    digitalWrite(HICHG, LOW); // 100 mA charging current if set to LOW and 50mA (actually about 20mA) if set to HIGH
+
+    pinMode(BAT_READ, OUTPUT);
+    digitalWrite(BAT_READ, LOW); // This is pin P0_14 = 14 and by pullling low to GND it provices path to read on pin 32 (P0,31)
+                                 // PIN_VBAT the voltage from divider on XIAO board
+
+#endif
 
 #ifdef I2C_SDA1
     Wire1.begin(I2C_SDA1, I2C_SCL1);
@@ -488,8 +506,17 @@ void setup()
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
+        config.display.wake_on_tap_or_motion = true;
+        moduleConfig.external_notification.enabled = true;
         accelerometerThread = new AccelerometerThread(acc_info.type);
     }
+#endif
+
+#ifdef T_WATCH_S3
+    drv.begin();
+    drv.selectLibrary(1);
+    // I2C trigger by sending 'go' command
+    drv.setMode(DRV2605_MODE_INTTRIG);
 #endif
 
     // Init our SPI controller (must be before screen and lora)

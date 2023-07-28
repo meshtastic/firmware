@@ -108,7 +108,11 @@ class LGFX : public lgfx::LGFX_Device
     lgfx::Panel_ST7789 _panel_instance;
     lgfx::Bus_SPI _bus_instance;
     lgfx::Light_PWM _light_instance;
+#ifdef T_WATCH_S3
+    lgfx::Touch_FT5x06 _touch_instance;
+#else
     lgfx::Touch_GT911 _touch_instance;
+#endif
 
   public:
     LGFX(void)
@@ -194,8 +198,13 @@ class LGFX : public lgfx::LGFX_Device
             // I2C
             cfg.i2c_port = TOUCH_I2C_PORT;
             cfg.i2c_addr = TOUCH_SLAVE_ADDRESS;
+#ifdef SCREEN_TOUCH_USE_I2C1
+            cfg.pin_sda = I2C_SDA1;
+            cfg.pin_scl = I2C_SCL1;
+#else
             cfg.pin_sda = I2C_SDA;
             cfg.pin_scl = I2C_SCL;
+#endif
             // cfg.freq = 400000;
 
             _touch_instance.config(cfg);
@@ -261,7 +270,7 @@ void TFTDisplay::sendCommand(uint8_t com)
     // handle display on/off directly
     switch (com) {
     case DISPLAYON: {
-#ifdef TFT_BL
+#if defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
         digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
 #endif
 #ifdef VTFT_CTRL
@@ -270,7 +279,7 @@ void TFTDisplay::sendCommand(uint8_t com)
         break;
     }
     case DISPLAYOFF: {
-#ifdef TFT_BL
+#if defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
         digitalWrite(TFT_BL, !TFT_BACKLIGHT_ON);
 #endif
 #ifdef VTFT_CTRL
@@ -287,12 +296,20 @@ void TFTDisplay::sendCommand(uint8_t com)
 
 bool TFTDisplay::hasTouch(void)
 {
+#ifndef M5STACK
     return tft.touch() != nullptr;
+#else
+    return false;
+#endif
 }
 
 bool TFTDisplay::getTouch(uint16_t *x, uint16_t *y)
 {
+#ifndef M5STACK
     return tft.getTouch(x, y);
+#else
+    return false;
+#endif
 }
 
 void TFTDisplay::setDetected(uint8_t detected)
@@ -314,6 +331,8 @@ bool TFTDisplay::connect()
     tft.init();
 #if defined(M5STACK) || defined(T_DECK)
     tft.setRotation(1); // M5Stack/T-Deck have the TFT in landscape
+#elif defined(T_WATCH_S3)
+    tft.setRotation(0); // T-Watch S3 has the TFT in portrait
 #else
     tft.setRotation(3); // Orient horizontal and wide underneath the silkscreen name label
 #endif
