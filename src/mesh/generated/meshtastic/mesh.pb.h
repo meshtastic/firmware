@@ -679,8 +679,6 @@ typedef struct _meshtastic_Neighbor {
     uint32_t node_id;
     /* SNR of last heard message */
     float snr;
-    /* Broadcast interval of the represented node (in seconds) */
-    uint16_t node_broadcast_interval_secs;
 } meshtastic_Neighbor;
 
 /* Full info on edges for a single node */
@@ -689,6 +687,8 @@ typedef struct _meshtastic_NeighborInfo {
     uint32_t node_id;
     /* Field to pass neighbor info for the next sending cycle */
     uint32_t last_sent_by_id;
+    /* Broadcast interval of the represented node (in seconds) */
+    uint32_t node_broadcast_interval_secs;
     /* The list of out edges from this node */
     pb_size_t neighbors_count;
     meshtastic_Neighbor neighbors[10];
@@ -853,8 +853,8 @@ extern "C" {
 #define meshtastic_FromRadio_init_default        {0, 0, {meshtastic_MeshPacket_init_default}}
 #define meshtastic_ToRadio_init_default          {0, {meshtastic_MeshPacket_init_default}}
 #define meshtastic_Compressed_init_default       {_meshtastic_PortNum_MIN, {0, {0}}}
-#define meshtastic_NeighborInfo_init_default     {0, 0, 0, {meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default}}
-#define meshtastic_Neighbor_init_default         {0, 0, 0}
+#define meshtastic_NeighborInfo_init_default     {0, 0, 0, 0, {meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default}}
+#define meshtastic_Neighbor_init_default         {0, 0}
 #define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0}
 #define meshtastic_Position_init_zero            {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_User_init_zero                {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0}
@@ -871,8 +871,8 @@ extern "C" {
 #define meshtastic_FromRadio_init_zero           {0, 0, {meshtastic_MeshPacket_init_zero}}
 #define meshtastic_ToRadio_init_zero             {0, {meshtastic_MeshPacket_init_zero}}
 #define meshtastic_Compressed_init_zero          {_meshtastic_PortNum_MIN, {0, {0}}}
-#define meshtastic_NeighborInfo_init_zero        {0, 0, 0, {meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero}}
-#define meshtastic_Neighbor_init_zero            {0, 0, 0}
+#define meshtastic_NeighborInfo_init_zero        {0, 0, 0, 0, {meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero}}
+#define meshtastic_Neighbor_init_zero            {0, 0}
 #define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -968,10 +968,10 @@ extern "C" {
 #define meshtastic_Compressed_data_tag           2
 #define meshtastic_Neighbor_node_id_tag          1
 #define meshtastic_Neighbor_snr_tag              2
-#define meshtastic_Neighbor_node_broadcast_interval_secs_tag 3
 #define meshtastic_NeighborInfo_node_id_tag      1
 #define meshtastic_NeighborInfo_last_sent_by_id_tag 2
-#define meshtastic_NeighborInfo_neighbors_tag    3
+#define meshtastic_NeighborInfo_node_broadcast_interval_secs_tag 3
+#define meshtastic_NeighborInfo_neighbors_tag    4
 #define meshtastic_DeviceMetadata_firmware_version_tag 1
 #define meshtastic_DeviceMetadata_device_state_version_tag 2
 #define meshtastic_DeviceMetadata_canShutdown_tag 3
@@ -1185,15 +1185,15 @@ X(a, STATIC,   SINGULAR, BYTES,    data,              2)
 #define meshtastic_NeighborInfo_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   node_id,           1) \
 X(a, STATIC,   SINGULAR, UINT32,   last_sent_by_id,   2) \
-X(a, STATIC,   REPEATED, MESSAGE,  neighbors,         3)
+X(a, STATIC,   SINGULAR, UINT32,   node_broadcast_interval_secs,   3) \
+X(a, STATIC,   REPEATED, MESSAGE,  neighbors,         4)
 #define meshtastic_NeighborInfo_CALLBACK NULL
 #define meshtastic_NeighborInfo_DEFAULT NULL
 #define meshtastic_NeighborInfo_neighbors_MSGTYPE meshtastic_Neighbor
 
 #define meshtastic_Neighbor_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   node_id,           1) \
-X(a, STATIC,   SINGULAR, FLOAT,    snr,               2) \
-X(a, STATIC,   SINGULAR, UINT32,   node_broadcast_interval_secs,   3)
+X(a, STATIC,   SINGULAR, FLOAT,    snr,               2)
 #define meshtastic_Neighbor_CALLBACK NULL
 #define meshtastic_Neighbor_DEFAULT NULL
 
@@ -1259,8 +1259,8 @@ extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
 #define meshtastic_MeshPacket_size               321
 #define meshtastic_MqttClientProxyMessage_size   501
 #define meshtastic_MyNodeInfo_size               18
-#define meshtastic_NeighborInfo_size             182
-#define meshtastic_Neighbor_size                 15
+#define meshtastic_NeighborInfo_size             148
+#define meshtastic_Neighbor_size                 11
 #define meshtastic_NodeInfo_size                 261
 #define meshtastic_Position_size                 137
 #define meshtastic_QueueStatus_size              23
