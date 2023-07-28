@@ -1,7 +1,7 @@
 #include "TouchScreenBase.h"
 
 TouchScreenBase::TouchScreenBase(const char *name, uint16_t width, uint16_t height)
-    : concurrency::OSThread(name), _tapped(false), _originName(name)
+    : concurrency::OSThread(name), _first_x(0), _last_x(0), _first_y(0), _last_y(0), _start(0), _tapped(false), _originName(name)
 {
     // move a quarter over the screen to detect a "swipe"
     _touchThreshold_x = width / 4;
