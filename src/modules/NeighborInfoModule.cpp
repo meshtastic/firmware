@@ -21,8 +21,7 @@ void NeighborInfoModule::printNeighborInfo(const char *header, const meshtastic_
     LOG_DEBUG("----------------\n");
     LOG_DEBUG("Packet contains %d neighbors\n", np->neighbors_count);
     for (int i = 0; i < np->neighbors_count; i++) {
-        LOG_DEBUG("Neighbor %d: node_id=%d, snr=%d, broadcast_interval=%d\n", i, np->neighbors[i].node_id, np->neighbors[i].snr,
-                  np->neighbors[i].node_broadcast_interval_secs);
+        LOG_DEBUG("Neighbor %d: node_id=%d, snr=%d\n", i, np->neighbors[i].node_id, np->neighbors[i].snr);
     }
     LOG_DEBUG("----------------\n");
 }
@@ -38,8 +37,7 @@ void NeighborInfoModule::printNodeDBNodes(const char *header)
     LOG_DEBUG("DB contains %d nodes\n", num_nodes);
     for (int i = 0; i < num_nodes; i++) {
         meshtastic_NodeInfoLite *dbEntry = nodeDB.getMeshNodeByIndex(i);
-        LOG_DEBUG("     Node %d: node_id=%d, snr=%.2f, broadcast_interval=%d\n", i, dbEntry->num, dbEntry->snr,
-                  dbEntry->node_broadcast_interval_secs);
+        LOG_DEBUG("     Node %d: node_id=%d, snr=%.2f\n", i, dbEntry->num, dbEntry->snr);
     }
     LOG_DEBUG("----------------\n");
 }
@@ -56,8 +54,7 @@ void NeighborInfoModule::printNodeDBNeighbors(const char *header)
     LOG_DEBUG("DB contains %d neighbors\n", num_neighbors);
     for (int i = 0; i < num_neighbors; i++) {
         meshtastic_Neighbor *dbEntry = getNeighborByIndex(i);
-        LOG_DEBUG("     Node %d: node_id=%d, snr=%.2f, broadcast_interval=%d\n", i, dbEntry->node_id, dbEntry->snr,
-                  dbEntry->node_broadcast_interval_secs);
+        LOG_DEBUG("     Node %d: node_id=%d, snr=%.2f\n", i, dbEntry->node_id, dbEntry->snr);
     }
     LOG_DEBUG("----------------\n");
 }
@@ -82,11 +79,9 @@ void NeighborInfoModule::printNodeDBSelection(const char *header, const meshtast
             }
         }
         if (!chosen) {
-            LOG_DEBUG("     Node %d: neighbor=%d, snr=%.2f, broadcast_interval=%d\n", i, dbEntry->node_id, dbEntry->snr,
-                      dbEntry->node_broadcast_interval_secs);
+            LOG_DEBUG("     Node %d: neighbor=%d, snr=%.2f\n", i, dbEntry->node_id, dbEntry->snr);
         } else {
-            LOG_DEBUG("---> Node %d: neighbor=%d, snr=%.2f, broadcast_interval=%d\n", i, dbEntry->node_id, dbEntry->snr,
-                      dbEntry->node_broadcast_interval_secs);
+            LOG_DEBUG("---> Node %d: neighbor=%d, snr=%.2f\n", i, dbEntry->node_id, dbEntry->snr);
         }
     }
     LOG_DEBUG("----------------\n");
@@ -130,8 +125,10 @@ uint32_t NeighborInfoModule::collectNeighborInfo(meshtastic_NeighborInfo *neighb
     int my_node_id = nodeDB.getNodeNum();
     neighborInfo->node_id = my_node_id;
     neighborInfo->last_sent_by_id = my_node_id;
+    neighborInfo->node_broadcast_interval_secs = moduleConfig.neighbor_info.broadcast_interval_secs;
 
-    for (int i = 0; i < num_neighbors; i++) {
+        for (int i = 0; i < num_neighbors; i++)
+    {
         meshtastic_Neighbor *dbEntry = getNeighborByIndex(i);
         if ((neighborInfo->neighbors_count < MAX_NUM_NEIGHBORS) && (dbEntry->node_id != my_node_id)) {
             neighborInfo->neighbors[neighborInfo->neighbors_count].node_id = dbEntry->node_id;
