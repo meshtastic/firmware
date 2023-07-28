@@ -125,10 +125,9 @@ uint32_t NeighborInfoModule::collectNeighborInfo(meshtastic_NeighborInfo *neighb
     int my_node_id = nodeDB.getNodeNum();
     neighborInfo->node_id = my_node_id;
     neighborInfo->last_sent_by_id = my_node_id;
-    neighborInfo->node_broadcast_interval_secs = moduleConfig.neighbor_info.broadcast_interval_secs;
+    neighborInfo->node_broadcast_interval_secs = moduleConfig.neighbor_info.update_interval;
 
-        for (int i = 0; i < num_neighbors; i++)
-    {
+    for (int i = 0; i < num_neighbors; i++) {
         meshtastic_Neighbor *dbEntry = getNeighborByIndex(i);
         if ((neighborInfo->neighbors_count < MAX_NUM_NEIGHBORS) && (dbEntry->node_id != my_node_id)) {
             neighborInfo->neighbors[neighborInfo->neighbors_count].node_id = dbEntry->node_id;
