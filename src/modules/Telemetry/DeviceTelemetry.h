@@ -21,6 +21,7 @@ class DeviceTelemetryModule : private concurrency::OSThread, public ProtobufModu
     @return true if you've guaranteed you've handled this message and no other handlers should be considered for it
     */
     virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *p) override;
+    virtual meshtastic_MeshPacket *allocReply() override;
     virtual int32_t runOnce() override;
     /**
      * Send our Telemetry into the mesh
@@ -28,6 +29,7 @@ class DeviceTelemetryModule : private concurrency::OSThread, public ProtobufModu
     bool sendTelemetry(NodeNum dest = NODENUM_BROADCAST, bool phoneOnly = false);
 
   private:
+    meshtastic_Telemetry getDeviceTelemetry();
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute
     uint32_t lastSentToMesh = 0;
 };
