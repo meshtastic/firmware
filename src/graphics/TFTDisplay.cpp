@@ -303,7 +303,7 @@ bool TFTDisplay::hasTouch(void)
 #endif
 }
 
-bool TFTDisplay::getTouch(uint16_t *x, uint16_t *y)
+bool TFTDisplay::getTouch(int16_t *x, int16_t *y)
 {
 #ifndef M5STACK
     return tft.getTouch(x, y);

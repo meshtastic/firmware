@@ -33,7 +33,7 @@ class TouchScreenBase : public Observable<const InputEvent *>, public concurrenc
 
     virtual int32_t runOnce() override;
 
-    virtual bool getTouch(uint16_t &x, uint16_t &y) = 0;
+    virtual bool getTouch(int16_t &x, int16_t &y) = 0;
     virtual void onEvent(const TouchEvent &event) = 0;
 
     volatile TouchScreenBaseStateType _state = TOUCH_EVENT_CLEARED;
@@ -43,8 +43,8 @@ class TouchScreenBase : public Observable<const InputEvent *>, public concurrenc
     bool _touchedOld = false;   // previous touch state
     uint16_t _touchThreshold_x; // minimum swipe distance x
     uint16_t _touchThreshold_y; // minimum swipe distance y
-    uint16_t _first_x, _last_x; // horizontal swipe direction
-    uint16_t _first_y, _last_y; // vertical swipe direction
+    int16_t _first_x, _last_x;  // horizontal swipe direction
+    int16_t _first_y, _last_y;  // vertical swipe direction
     time_t _start;              // for LONG_PRESS
     bool _tapped;               // for DOUBLE_TAP
 

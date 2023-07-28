@@ -4,7 +4,7 @@
 
 TouchScreenImpl1 *touchScreenImpl1;
 
-TouchScreenImpl1::TouchScreenImpl1(uint16_t width, uint16_t height, bool (*getTouch)(uint16_t *, uint16_t *))
+TouchScreenImpl1::TouchScreenImpl1(uint16_t width, uint16_t height, bool (*getTouch)(int16_t *, int16_t *))
     : TouchScreenBase("touchscreen1", width, height), _getTouch(getTouch)
 {
 }
@@ -20,7 +20,7 @@ void TouchScreenImpl1::init()
 #endif
 }
 
-bool TouchScreenImpl1::getTouch(uint16_t &x, uint16_t &y)
+bool TouchScreenImpl1::getTouch(int16_t &x, int16_t &y)
 {
     return _getTouch(&x, &y);
 }

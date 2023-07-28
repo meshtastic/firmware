@@ -25,7 +25,7 @@ int32_t TouchScreenBase::runOnce()
     e.touchEvent = static_cast<char>(TOUCH_ACTION_NONE);
 
     // process touch events
-    uint16_t x, y;
+    int16_t x, y;
     bool touched = getTouch(x, y);
     if (touched) {
         this->setInterval(30);
