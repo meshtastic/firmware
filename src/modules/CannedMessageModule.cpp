@@ -4,7 +4,7 @@
 #include "FSCommon.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "PowerFSM.h" // neede for button bypass
+#include "PowerFSM.h" // needed for button bypass
 #include "detect/ScanI2C.h"
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
 
@@ -18,7 +18,7 @@
 #include "graphics/fonts/OLEDDisplayFontsUA.h"
 #endif
 
-#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)
+#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)
 // The screen is bigger so use bigger fonts
 #define FONT_SMALL ArialMT_Plain_16
 #define FONT_MEDIUM ArialMT_Plain_24

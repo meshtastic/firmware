@@ -399,7 +399,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             if (compressed_len >= p->decoded.payload.size) {
 
                 LOG_DEBUG("Not using compressing message.\n");
-                // Set the uncompressed payload varient anyway. Shouldn't hurt?
+                // Set the uncompressed payload variant anyway. Shouldn't hurt?
                 // p->decoded.which_payloadVariant = Data_payload_tag;
 
                 // Otherwise we use the compressor

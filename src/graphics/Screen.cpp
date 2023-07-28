@@ -102,7 +102,7 @@ static uint16_t displayWidth, displayHeight;
 #define SCREEN_WIDTH displayWidth
 #define SCREEN_HEIGHT displayHeight
 
-#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)
+#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)
 // The screen is bigger so use bigger fonts
 #define FONT_SMALL ArialMT_Plain_16  // Height: 19
 #define FONT_MEDIUM ArialMT_Plain_24 // Height: 28
@@ -296,7 +296,7 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
 static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     int x_offset = display->width() / 2;
-    int y_offset = display->height() == 64 ? 0 : 32;
+    int y_offset = display->height() <= 80 ? 0 : 32;
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(FONT_MEDIUM);
     display->drawString(x_offset + x, y_offset + y, "Bluetooth");
@@ -360,7 +360,7 @@ static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
     display->drawString(0 + x, FONT_HEIGHT_MEDIUM + y, "For help, please visit \nmeshtastic.org");
 }
 
-// Ignore messages orginating from phone (from the current node 0x0) unless range test or store and forward module are enabled
+// Ignore messages originating from phone (from the current node 0x0) unless range test or store and forward module are enabled
 static bool shouldDrawMessage(const meshtastic_MeshPacket *packet)
 {
     return packet->from != 0 && !moduleConfig.range_test.enabled && !moduleConfig.store_forward.enabled;
@@ -442,7 +442,7 @@ static void drawWaypointFrame(OLEDDisplay *display, OLEDDisplayUiState *state, i
     }
 }
 
-/// Draw a series of fields in a column, wrapping to multiple colums if needed
+/// Draw a series of fields in a column, wrapping to multiple columns if needed
 static void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields)
 {
     // The coordinates define the left starting point of the text
@@ -492,7 +492,7 @@ static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, NodeStatus *no
 {
     char usersString[20];
     snprintf(usersString, sizeof(usersString), "%d/%d", nodeStatus->getNumOnline(), nodeStatus->getNumTotal());
-#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)
+#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)
     display->drawFastImage(x, y + 3, 8, 8, imgUser);
 #else
     display->drawFastImage(x, y, 8, 8, imgUser);
@@ -835,7 +835,11 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     }
 
     static char distStr[20];
-    strncpy(distStr, "? km", sizeof(distStr)); // might not have location data
+    if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+        strncpy(distStr, "? mi", sizeof(distStr)); // might not have location data
+    } else {
+        strncpy(distStr, "? km", sizeof(distStr));
+    }
     meshtastic_NodeInfoLite *ourNode = nodeDB.getMeshNode(nodeDB.getNodeNum());
     const char *fields[] = {username, distStr, signalStr, lastStr, NULL};
     int16_t compassX = 0, compassY = 0;
@@ -944,6 +948,9 @@ void Screen::handleSetOn(bool on)
     if (on != screenOn) {
         if (on) {
             LOG_INFO("Turning on screen\n");
+#ifdef T_WATCH_S3
+            PMU->enablePowerOutput(XPOWERS_ALDO2);
+#endif
             dispdev.displayOn();
             dispdev.displayOn();
             enabled = true;
@@ -952,6 +959,9 @@ void Screen::handleSetOn(bool on)
         } else {
             LOG_INFO("Turning off screen\n");
             dispdev.displayOff();
+#ifdef T_WATCH_S3
+            PMU->disablePowerOutput(XPOWERS_ALDO2);
+#endif
             enabled = false;
         }
         screenOn = on;
@@ -1482,7 +1492,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 #ifdef ARCH_ESP32
         if (millis() - storeForwardModule->lastHeartbeat >
             (storeForwardModule->heartbeatInterval * 1200)) { // no heartbeat, overlap a bit
-#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)
+#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)
             display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8,
                                    imgQuestionL1);
             display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 11 + FONT_HEIGHT_SMALL, 12, 8,
@@ -1492,7 +1502,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                                    imgQuestion);
 #endif
         } else {
-#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)
+#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)
             display->drawFastImage(x + SCREEN_WIDTH - 18 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 16, 8,
                                    imgSFL1);
             display->drawFastImage(x + SCREEN_WIDTH - 18 - display->getStringWidth(ourId), y + 11 + FONT_HEIGHT_SMALL, 16, 8,
@@ -1504,7 +1514,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         }
 #endif
     } else {
-#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS)
+#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)
         display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8,
                                imgInfoL1);
         display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 11 + FONT_HEIGHT_SMALL, 12, 8,
@@ -1789,7 +1799,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     heartbeat = !heartbeat;
 #endif
 }
-// adjust Brightness cycle trough 1 to 254 as long as attachDuringLongPress is true
+// adjust Brightness cycle through 1 to 254 as long as attachDuringLongPress is true
 void Screen::adjustBrightness()
 {
     if (!useDisplay)

@@ -120,7 +120,7 @@ class MeshService
 
   private:
     /// Called when our gps position has changed - updates nodedb and sends Location message out into the mesh
-    /// returns 0 to allow futher processing
+    /// returns 0 to allow further processing
     int onGPSChanged(const meshtastic::GPSStatus *arg);
 
     /// Handle a packet that just arrived from the radio.  This method does _ReliableRouternot_ free the provided packet.  If it
