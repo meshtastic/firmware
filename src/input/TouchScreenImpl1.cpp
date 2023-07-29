@@ -34,6 +34,7 @@ bool TouchScreenImpl1::getTouch(int16_t &x, int16_t &y)
  */
 void TouchScreenImpl1::onEvent(const TouchEvent &event)
 {
+    hapticFeedback();
     InputEvent e;
     e.source = event.source;
     switch (event.touchEvent) {
@@ -65,4 +66,13 @@ void TouchScreenImpl1::onEvent(const TouchEvent &event)
         return;
     }
     this->notifyObservers(&e);
+}
+
+void TouchScreenImpl1::hapticFeedback()
+{
+#ifdef T_WATCH_S3
+    drv.setWaveform(0, 75);
+    drv.setWaveform(1, 0); // end waveform
+    drv.go();
+#endif
 }
