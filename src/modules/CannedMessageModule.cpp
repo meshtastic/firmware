@@ -418,7 +418,8 @@ const char *CannedMessageModule::getNextMessage()
 {
     return this->messages[this->getNextIndex()];
 }
-const char *CannedMessageModule::getMessageByIndex(int index) {
+const char *CannedMessageModule::getMessageByIndex(int index)
+{
     return (index >= 0 && index < this->messagesCount) ? this->messages[index] : "";
 }
 
@@ -507,19 +508,19 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                 display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * 2, cannedMessageModule->getCurrentMessage());
                 display->setColor(WHITE);
                 display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * 3, cannedMessageModule->getNextMessage());
-            }
-            else {
+            } else {
                 // use entire display height for larger displays
-                int topMsg = (messagesCount > lines && currentMessageIndex >= lines -1) ? currentMessageIndex - lines + 2 : 0;
-                for (int i=0; i<std::min(messagesCount, lines); i++ ) {
+                int topMsg = (messagesCount > lines && currentMessageIndex >= lines - 1) ? currentMessageIndex - lines + 2 : 0;
+                for (int i = 0; i < std::min(messagesCount, lines); i++) {
                     if (i == currentMessageIndex - topMsg) {
-                        display->fillRect(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i+1), x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+                        display->fillRect(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1), x + display->getWidth(),
+                                          y + FONT_HEIGHT_SMALL);
                         display->setColor(BLACK);
-                        display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i+1), cannedMessageModule->getCurrentMessage());
+                        display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1), cannedMessageModule->getCurrentMessage());
                         display->setColor(WHITE);
-                    }
-                    else {
-                        display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i+1), cannedMessageModule->getMessageByIndex(topMsg+i));
+                    } else {
+                        display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1),
+                                            cannedMessageModule->getMessageByIndex(topMsg + i));
                     }
                 }
             }
