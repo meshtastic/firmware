@@ -1,7 +1,4 @@
 {
   "editor.formatOnSave": true,
-  "editor.defaultFormatter": "trunk.io",
-  "[jsonc]": {
-    "editor.defaultFormatter": "vscode.json-language-features"
-  }
+  "editor.defaultFormatter": "trunk.io"
 }
