@@ -1,6 +1,7 @@
 #include "TouchScreenImpl1.h"
 #include "InputBroker.h"
 #include "configuration.h"
+#include "main.h"
 
 TouchScreenImpl1 *touchScreenImpl1;
 
