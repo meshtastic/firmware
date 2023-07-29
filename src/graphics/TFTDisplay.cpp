@@ -174,7 +174,7 @@ class LGFX : public lgfx::LGFX_Device
             auto cfg = _light_instance.config(); // Gets a structure for backlight settings.
 
             cfg.pin_bl = ST7789_BL; // Pin number to which the backlight is connected
-            cfg.invert = true;      // true to invert the brightness of the backlight
+            cfg.invert = false;     // true to invert the brightness of the backlight
             // cfg.pwm_channel = 0;
 
             _light_instance.config(cfg);
@@ -276,6 +276,9 @@ void TFTDisplay::sendCommand(uint8_t com)
 #ifdef VTFT_CTRL
         digitalWrite(VTFT_CTRL, LOW);
 #endif
+#ifndef M5STACK
+        tft.setBrightness(128);
+#endif
         break;
     }
     case DISPLAYOFF: {
@@ -284,6 +287,9 @@ void TFTDisplay::sendCommand(uint8_t com)
 #endif
 #ifdef VTFT_CTRL
         digitalWrite(VTFT_CTRL, HIGH);
+#endif
+#ifndef M5STACK
+        tft.setBrightness(0);
 #endif
         break;
     }
