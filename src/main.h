@@ -68,7 +68,7 @@ extern uint32_t serialSinceMsec;
 // This will suppress the current delay and instead try to run ASAP.
 extern bool runASAP;
 
-void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop(), clearBonds();
+void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop(), rp2040Setup(), clearBonds();
 
 meshtastic_DeviceMetadata getDeviceMetadata();
 
