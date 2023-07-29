@@ -33,7 +33,6 @@ int32_t TouchScreenBase::runOnce()
         _last_y = y;
     }
     if (touched != _touchedOld) {
-        _state = (TouchScreenBaseStateType)(1 - _state);
         if (touched) {
             _state = TOUCH_EVENT_OCCURRED;
             _start = millis();

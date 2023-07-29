@@ -418,6 +418,10 @@ const char *CannedMessageModule::getNextMessage()
 {
     return this->messages[this->getNextIndex()];
 }
+const char *CannedMessageModule::getMessageByIndex(int index) {
+    return (index >= 0 && index < this->messagesCount) ? this->messages[index] : "";
+}
+
 const char *CannedMessageModule::getNodeName(NodeNum node)
 {
     if (node == NODENUM_BROADCAST) {
@@ -494,12 +498,31 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             display->setTextAlignment(TEXT_ALIGN_LEFT);
             display->setFont(FONT_SMALL);
             display->drawStringf(0 + x, 0 + y, buffer, "To: %s", cannedMessageModule->getNodeName(this->dest));
-            display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL, cannedMessageModule->getPrevMessage());
-            display->fillRect(0 + x, 0 + y + FONT_HEIGHT_SMALL * 2, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-            display->setColor(BLACK);
-            display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * 2, cannedMessageModule->getCurrentMessage());
-            display->setColor(WHITE);
-            display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * 3, cannedMessageModule->getNextMessage());
+            int lines = (display->getHeight() / FONT_HEIGHT_SMALL) - 1;
+            if (lines == 3) {
+                // static (old) behavior for small displays
+                display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL, cannedMessageModule->getPrevMessage());
+                display->fillRect(0 + x, 0 + y + FONT_HEIGHT_SMALL * 2, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+                display->setColor(BLACK);
+                display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * 2, cannedMessageModule->getCurrentMessage());
+                display->setColor(WHITE);
+                display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * 3, cannedMessageModule->getNextMessage());
+            }
+            else {
+                // use entire display height for larger displays
+                int topMsg = (messagesCount > lines && currentMessageIndex >= lines -1) ? currentMessageIndex - lines + 2 : 0;
+                for (int i=0; i<std::min(messagesCount, lines); i++ ) {
+                    if (i == currentMessageIndex - topMsg) {
+                        display->fillRect(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i+1), x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+                        display->setColor(BLACK);
+                        display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i+1), cannedMessageModule->getCurrentMessage());
+                        display->setColor(WHITE);
+                    }
+                    else {
+                        display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i+1), cannedMessageModule->getMessageByIndex(topMsg+i));
+                    }
+                }
+            }
         }
     }
 }
