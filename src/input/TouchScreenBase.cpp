@@ -81,14 +81,12 @@ int32_t TouchScreenBase::runOnce()
                     if (_tapped) {
                         _tapped = false;
                         e.touchEvent = static_cast<char>(TOUCH_ACTION_DOUBLE_TAP);
-                        LOG_DEBUG("action DOUBLE TAP\n");
+                        LOG_DEBUG("action DOUBLE TAP(%d/%d)\n", x, y);
                     } else {
                         _tapped = true;
                     }
                 }
             }
-            e.x = x;
-            e.y = y;
         }
     }
     _touchedOld = touched;
@@ -96,11 +94,13 @@ int32_t TouchScreenBase::runOnce()
     if (_tapped && (millis() - _start) > 350) {
         _tapped = false;
         e.touchEvent = static_cast<char>(TOUCH_ACTION_TAP);
-        LOG_DEBUG("action TAP\n");
+        LOG_DEBUG("action TAP(%d/%d)\n", _last_x, _last_y);
     }
 
     if (e.touchEvent != TOUCH_ACTION_NONE) {
         e.source = this->_originName;
+        e.x = _last_x;
+        e.y = _last_y;
         onEvent(e);
     }
 
