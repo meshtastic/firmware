@@ -24,7 +24,7 @@
 #include "modules/esp32/AudioModule.h"
 #include "modules/esp32/StoreForwardModule.h"
 #endif
-#if defined(ARCH_ESP32) || defined(ARCH_NRF52)
+#if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)
 #include "modules/ExternalNotificationModule.h"
 #include "modules/RangeTestModule.h"
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(CONFIG_IDF_TARGET_ESP32S2)
@@ -81,7 +81,7 @@ void setupModules()
 
         storeForwardModule = new StoreForwardModule();
 #endif
-#if defined(ARCH_ESP32) || defined(ARCH_NRF52)
+#if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)
         externalNotificationModule = new ExternalNotificationModule();
         new RangeTestModule();
 #endif

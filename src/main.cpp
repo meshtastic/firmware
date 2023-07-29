@@ -458,6 +458,11 @@ void setup()
 #ifdef ARCH_NRF52
     nrf52Setup();
 #endif
+
+#ifdef ARCH_RP2040
+    rp2040Setup();
+#endif
+
     // We do this as early as possible because this loads preferences from flash
     // but we need to do this after main cpu iniot (esp32setup), because we need the random seed set
     nodeDB.init();
