@@ -32,5 +32,5 @@ const uint32_t g_ADigitalPinMap[] = {
 
 void initVariant()
 {
-  //Nothing need to be inited for now
+    // Nothing need to be inited for now
 }

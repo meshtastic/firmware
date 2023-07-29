@@ -42,9 +42,9 @@ extern "C" {
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LEDs
-#define PIN_LED1 (-1) 
-#define PIN_LED2 (-1) 
-#define PIN_LED3 (-1) 
+#define PIN_LED1 (-1)
+#define PIN_LED2 (-1)
+#define PIN_LED3 (-1)
 
 #define LED_RED PIN_LED3
 #define LED_BLUE PIN_LED1
@@ -61,7 +61,6 @@ extern "C" {
  */
 #define PIN_BUTTON1 (32 + 6)
 
-
 #define EXT_NOTIFY_OUT (0 + 4) // Default pin to use for Ext Notify Module.
 
 /*
@@ -74,7 +73,6 @@ extern "C" {
 static const uint8_t A4 = PIN_A4;
 
 #define ADC_RESOLUTION 14
-
 
 /*
  * Serial interfaces
@@ -90,7 +88,6 @@ static const uint8_t A4 = PIN_A4;
 #define PIN_WIRE_SDA (0 + 17)
 #define PIN_WIRE_SCL (0 + 15)
 
-
 #define PIN_RTC_INT (0 + 14) // Interrupt from the PCF8563 RTC
 
 /*
@@ -100,10 +97,10 @@ External serial flash W25Q16JV_IQ
 // QSPI Pins
 #define PIN_QSPI_SCK (0 + 8)
 #define PIN_QSPI_CS (32 + 7)
-#define PIN_QSPI_IO0 (0 + 6) // MOSI if using two bit interface
+#define PIN_QSPI_IO0 (0 + 6)  // MOSI if using two bit interface
 #define PIN_QSPI_IO1 (0 + 26) // MISO if using two bit interface
-#define PIN_QSPI_IO2 (32 + 4)   // WP if using two bit interface (i.e. not used)
-#define PIN_QSPI_IO3 (32 + 2)   // HOLD if using two bit interface (i.e. not used)
+#define PIN_QSPI_IO2 (32 + 4) // WP if using two bit interface (i.e. not used)
+#define PIN_QSPI_IO3 (32 + 2) // HOLD if using two bit interface (i.e. not used)
 
 // On-board QSPI Flash
 #define EXTERNAL_FLASH_DEVICES W25Q16JV_IQ
@@ -117,9 +114,9 @@ External serial flash W25Q16JV_IQ
 #define SX126X_CS (32 + 13) // FIXME - we really should define LORA_CS instead
 #define SX126X_DIO1 (32 + 10)
 // Note DIO2 is attached internally to the module to an analog switch for TX/RX switching
-//#define SX1262_DIO3                                                                                                              \
+//#define SX1262_DIO3 \
     (0 + 21) // This is used as an *output* from the sx1262 and connected internally to power the tcxo, do not drive from the main
-             // CPU?
+// CPU?
 #define SX126X_BUSY (32 + 11)
 #define SX126X_RESET (32 + 15)
 #define SX126X_E22 //  DIO2 controlls an antenna switch and the TCXO voltage is controlled by DIO3
@@ -135,8 +132,8 @@ External serial flash W25Q16JV_IQ
 #define GPS_L76K
 
 #define PIN_GPS_WAKE (0 + 13) // An output to wake GPS, low means allow sleep, high means force wake
-#define PIN_GPS_TX (0 + 9) // This is for bits going TOWARDS the CPU
-#define PIN_GPS_RX (0 + 10) // This is for bits going TOWARDS the GPS
+#define PIN_GPS_TX (0 + 9)    // This is for bits going TOWARDS the CPU
+#define PIN_GPS_RX (0 + 10)   // This is for bits going TOWARDS the GPS
 
 //#define GPS_THREAD_INTERVAL 50
 
