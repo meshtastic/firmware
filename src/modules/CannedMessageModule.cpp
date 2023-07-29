@@ -164,24 +164,21 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) ||
         (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT))) {
         LOG_DEBUG("Canned message event (%x)\n", event->kbchar);
-        if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
-            // tweak for left/right events generated via trackball/touch with empty kbchar
-            if (!event->kbchar) {
-                if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
-                    this->payload = 0xb4;
-                    this->destSelect = true;
-                } else if (event->inputEvent ==
-                           static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
-                    this->payload = 0xb7;
-                    this->destSelect = true;
-                }
-            } else {
-                // pass the pressed key
-                this->payload = event->kbchar;
+        // tweak for left/right events generated via trackball/touch with empty kbchar
+        if (!event->kbchar) {
+            if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
+                this->payload = 0xb4;
+                this->destSelect = true;
+            } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
+                this->payload = 0xb7;
+                this->destSelect = true;
             }
-            this->lastTouchMillis = millis();
-            validEvent = true;
+        } else {
+            // pass the pressed key
+            this->payload = event->kbchar;
         }
+        this->lastTouchMillis = millis();
+        validEvent = true;
     }
     if (event->inputEvent == static_cast<char>(ANYKEY)) {
         LOG_DEBUG("Canned message event any key pressed\n");
@@ -312,8 +309,7 @@ int32_t CannedMessageModule::runOnce()
             this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
             LOG_DEBUG("MOVE DOWN (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
         }
-    } else if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
-        e.frameChanged = true;
+    } else if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT || this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
         switch (this->payload) {
         case 0xb4: // left
             if (this->destSelect) {
@@ -359,6 +355,12 @@ int32_t CannedMessageModule::runOnce()
                 }
             }
             break;
+        default:
+            break;
+        }
+    } else if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
+        e.frameChanged = true;
+        switch (this->payload) {
         case 0x08: // backspace
             if (this->freetext.length() > 0) {
                 if (this->cursor == this->freetext.length()) {
