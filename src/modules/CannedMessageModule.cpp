@@ -358,40 +358,45 @@ int32_t CannedMessageModule::runOnce()
         default:
             break;
         }
-    } else if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
-        e.frameChanged = true;
-        switch (this->payload) {
-        case 0x08: // backspace
-            if (this->freetext.length() > 0) {
-                if (this->cursor == this->freetext.length()) {
-                    this->freetext = this->freetext.substring(0, this->freetext.length() - 1);
-                } else {
-                    this->freetext = this->freetext.substring(0, this->cursor - 1) +
-                                     this->freetext.substring(this->cursor, this->freetext.length());
+        if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
+            e.frameChanged = true;
+            switch (this->payload) {
+            case 0x08: // backspace
+                if (this->freetext.length() > 0) {
+                    if (this->cursor == this->freetext.length()) {
+                        this->freetext = this->freetext.substring(0, this->freetext.length() - 1);
+                    } else {
+                        this->freetext = this->freetext.substring(0, this->cursor - 1) +
+                                         this->freetext.substring(this->cursor, this->freetext.length());
+                    }
+                    this->cursor--;
                 }
-                this->cursor--;
+                break;
+            case 0x09: // tab
+                if (this->destSelect) {
+                    this->destSelect = false;
+                } else {
+                    this->destSelect = true;
+                }
+                break;
+            case 0xb4: // left
+            case 0xb7: // right
+                // already handled above
+                break;
+            default:
+                if (this->cursor == this->freetext.length()) {
+                    this->freetext += this->payload;
+                } else {
+                    this->freetext =
+                        this->freetext.substring(0, this->cursor) + this->payload + this->freetext.substring(this->cursor);
+                }
+                this->cursor += 1;
+                if (this->freetext.length() > meshtastic_Constants_DATA_PAYLOAD_LEN) {
+                    this->cursor = meshtastic_Constants_DATA_PAYLOAD_LEN;
+                    this->freetext = this->freetext.substring(0, meshtastic_Constants_DATA_PAYLOAD_LEN);
+                }
+                break;
             }
-            break;
-        case 0x09: // tab
-            if (this->destSelect) {
-                this->destSelect = false;
-            } else {
-                this->destSelect = true;
-            }
-            break;
-        default:
-            if (this->cursor == this->freetext.length()) {
-                this->freetext += this->payload;
-            } else {
-                this->freetext =
-                    this->freetext.substring(0, this->cursor) + this->payload + this->freetext.substring(this->cursor);
-            }
-            this->cursor += 1;
-            if (this->freetext.length() > meshtastic_Constants_DATA_PAYLOAD_LEN) {
-                this->cursor = meshtastic_Constants_DATA_PAYLOAD_LEN;
-                this->freetext = this->freetext.substring(0, meshtastic_Constants_DATA_PAYLOAD_LEN);
-            }
-            break;
         }
 
         this->lastTouchMillis = millis();
