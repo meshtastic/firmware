@@ -46,8 +46,6 @@ class TouchScreenBase : public Observable<const InputEvent *>, public concurrenc
 
   private:
     bool _touchedOld = false;   // previous touch state
-    uint16_t _touchThreshold_x; // minimum swipe distance x
-    uint16_t _touchThreshold_y; // minimum swipe distance y
     int16_t _first_x, _last_x;  // horizontal swipe direction
     int16_t _first_y, _last_y;  // vertical swipe direction
     time_t _start;              // for LONG_PRESS
