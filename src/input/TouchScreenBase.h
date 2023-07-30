@@ -45,11 +45,11 @@ class TouchScreenBase : public Observable<const InputEvent *>, public concurrenc
     uint16_t _display_height;
 
   private:
-    bool _touchedOld = false;   // previous touch state
-    int16_t _first_x, _last_x;  // horizontal swipe direction
-    int16_t _first_y, _last_y;  // vertical swipe direction
-    time_t _start;              // for LONG_PRESS
-    bool _tapped;               // for DOUBLE_TAP
+    bool _touchedOld = false;  // previous touch state
+    int16_t _first_x, _last_x; // horizontal swipe direction
+    int16_t _first_y, _last_y; // vertical swipe direction
+    time_t _start;             // for LONG_PRESS
+    bool _tapped;              // for DOUBLE_TAP
 
     const char *_originName;
 };
