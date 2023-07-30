@@ -2,6 +2,7 @@
 
 #include "InputBroker.h"
 #include "concurrency/OSThread.h"
+#include "main.h"
 #include "mesh/NodeDB.h"
 
 typedef struct _TouchEvent {
@@ -38,6 +39,7 @@ class TouchScreenBase : public Observable<const InputEvent *>, public concurrenc
 
     volatile TouchScreenBaseStateType _state = TOUCH_EVENT_CLEARED;
     volatile TouchScreenBaseEventType _action = TOUCH_ACTION_NONE;
+    void hapticFeedback();
 
   private:
     bool _touchedOld = false;   // previous touch state

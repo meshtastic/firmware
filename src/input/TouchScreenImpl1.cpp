@@ -1,7 +1,6 @@
 #include "TouchScreenImpl1.h"
 #include "InputBroker.h"
 #include "configuration.h"
-#include "main.h"
 
 TouchScreenImpl1 *touchScreenImpl1;
 
@@ -67,13 +66,4 @@ void TouchScreenImpl1::onEvent(const TouchEvent &event)
         return;
     }
     this->notifyObservers(&e);
-}
-
-void TouchScreenImpl1::hapticFeedback()
-{
-#ifdef T_WATCH_S3
-    drv.setWaveform(0, 75);
-    drv.setWaveform(1, 0); // end waveform
-    drv.go();
-#endif
 }

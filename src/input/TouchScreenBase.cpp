@@ -28,6 +28,7 @@ int32_t TouchScreenBase::runOnce()
     int16_t x, y;
     bool touched = getTouch(x, y);
     if (touched) {
+        hapticFeedback();
         this->setInterval(30);
         _last_x = x;
         _last_y = y;
@@ -104,4 +105,13 @@ int32_t TouchScreenBase::runOnce()
     }
 
     return interval;
+}
+
+void TouchScreenBase::hapticFeedback()
+{
+#ifdef T_WATCH_S3
+    drv.setWaveform(0, 75);
+    drv.setWaveform(1, 0); // end waveform
+    drv.go();
+#endif
 }

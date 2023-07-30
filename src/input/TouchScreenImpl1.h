@@ -12,7 +12,6 @@ class TouchScreenImpl1 : public TouchScreenBase
     virtual void onEvent(const TouchEvent &event);
 
     bool (*_getTouch)(int16_t *, int16_t *);
-    void hapticFeedback();
 };
 
 extern TouchScreenImpl1 *touchScreenImpl1;
