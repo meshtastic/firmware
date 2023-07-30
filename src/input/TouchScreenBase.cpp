@@ -1,17 +1,29 @@
 #include "TouchScreenBase.h"
+#include "main.h"
+
+#ifndef TIME_LONG_PRESS
+#define TIME_LONG_PRESS 400
+#endif
+
+// move a minimum distance over the screen to detect a "swipe"
+#ifndef TOUCH_THRESHOLD_X
+#define TOUCH_THRESHOLD_X 30
+#endif
+
+#ifndef TOUCH_THRESHOLD_Y
+#define TOUCH_THRESHOLD_Y 20
+#endif
 
 TouchScreenBase::TouchScreenBase(const char *name, uint16_t width, uint16_t height)
-    : concurrency::OSThread(name), _first_x(0), _last_x(0), _first_y(0), _last_y(0), _start(0), _tapped(false), _originName(name)
+    : concurrency::OSThread(name), _display_width(width), _display_height(height), _first_x(0), _last_x(0), _first_y(0),
+      _last_y(0), _start(0), _tapped(false), _originName(name)
 {
-    // move a quarter over the screen to detect a "swipe"
-    _touchThreshold_x = width / 4;
-    _touchThreshold_y = height / 4;
 }
 
 void TouchScreenBase::init(bool hasTouch)
 {
     if (hasTouch) {
-        LOG_INFO("TouchScreen initialized %d %d\n", _touchThreshold_x, _touchThreshold_y);
+        LOG_INFO("TouchScreen initialized %d %d\n", TOUCH_THRESHOLD_X, TOUCH_THRESHOLD_Y);
         this->setInterval(100);
     } else {
         disable();
@@ -29,7 +41,7 @@ int32_t TouchScreenBase::runOnce()
     bool touched = getTouch(x, y);
     if (touched) {
         hapticFeedback();
-        this->setInterval(30);
+        this->setInterval(20);
         _last_x = x;
         _last_y = y;
     }
@@ -44,7 +56,7 @@ int32_t TouchScreenBase::runOnce()
             time_t duration = millis() - _start;
             x = _last_x;
             y = _last_y;
-            this->setInterval(100);
+            this->setInterval(50);
 
             // compute distance
             int16_t dx = x - _first_x;
@@ -53,7 +65,7 @@ int32_t TouchScreenBase::runOnce()
             uint16_t ady = abs(dy);
 
             // swipe horizontal
-            if (adx > ady && adx > _touchThreshold_x) {
+            if (adx > ady && adx > TOUCH_THRESHOLD_X) {
                 if (0 > dx) { // swipe right to left
                     e.touchEvent = static_cast<char>(TOUCH_ACTION_LEFT);
                     LOG_DEBUG("action SWIPE: right to left\n");
@@ -63,7 +75,7 @@ int32_t TouchScreenBase::runOnce()
                 }
             }
             // swipe vertical
-            else if (ady > adx && ady > _touchThreshold_y) {
+            else if (ady > adx && ady > TOUCH_THRESHOLD_Y) {
                 if (0 > dy) { // swipe bottom to top
                     e.touchEvent = static_cast<char>(TOUCH_ACTION_UP);
                     LOG_DEBUG("action SWIPE: bottom to top\n");
@@ -74,10 +86,7 @@ int32_t TouchScreenBase::runOnce()
             }
             // tap
             else {
-                if (duration > 400) {
-                    e.touchEvent = static_cast<char>(TOUCH_ACTION_LONG_PRESS);
-                    LOG_DEBUG("action LONG PRESS\n");
-                } else {
+                if (duration > 0 && duration < TIME_LONG_PRESS) {
                     if (_tapped) {
                         _tapped = false;
                         e.touchEvent = static_cast<char>(TOUCH_ACTION_DOUBLE_TAP);
@@ -85,16 +94,27 @@ int32_t TouchScreenBase::runOnce()
                     } else {
                         _tapped = true;
                     }
+                } else {
+                    _tapped = false;
                 }
             }
         }
     }
     _touchedOld = touched;
 
-    if (_tapped && (millis() - _start) > 350) {
+    // fire TAP event when no 2nd tap occured within time
+    if (_tapped && (time_t(millis()) - _start) > TIME_LONG_PRESS - 50) {
         _tapped = false;
         e.touchEvent = static_cast<char>(TOUCH_ACTION_TAP);
         LOG_DEBUG("action TAP(%d/%d)\n", _last_x, _last_y);
+    }
+
+    // fire LONG_PRESS event without the need for release
+    if (touched && (time_t(millis()) - _start) > TIME_LONG_PRESS) {
+        // tricky: prevent reoccurring events and another touch event when releasing
+        _start = millis() + 30000;
+        e.touchEvent = static_cast<char>(TOUCH_ACTION_LONG_PRESS);
+        LOG_DEBUG("action LONG PRESS(%d/%d)\n", _last_x, _last_y);
     }
 
     if (e.touchEvent != TOUCH_ACTION_NONE) {
