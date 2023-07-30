@@ -16,8 +16,11 @@
 #define TFT_OFFSET_X 0
 #define TFT_OFFSET_Y 0
 #define SCREEN_ROTATE
-#define SCREEN_TRANSITION_FRAMERATE 1 // fps
+#define SCREEN_TRANSITION_FRAMERATE 5
+
+#define HAS_TOUCHSCREEN 1
 #define SCREEN_TOUCH_INT 16
+#define TOUCH_I2C_PORT 0
 #define TOUCH_SLAVE_ADDRESS 0x5D // GT911
 
 #define BUTTON_PIN 0
@@ -43,14 +46,25 @@
 // keyboard
 #define I2C_SDA 18 // I2C pins for this board
 #define I2C_SCL 8
-#define BOARD_POWERON 10 // must be set to HIGH
-#define KB_SLAVE_ADDRESS 0x55
-#define KB_BL_PIN 46 // INT, set to INPUT
-#define KB_UP 2
-#define KB_DOWN 3
-#define KB_LEFT 1
-#define KB_RIGHT 15
+#define KB_POWERON 10                  // must be set to HIGH
+#define KB_SLAVE_ADDRESS TDECK_KB_ADDR // 0x55
+#define KB_BL_PIN 46                   // not used for now
 
+// trackball
+#define HAS_TRACKBALL 1
+#define TB_UP 3
+#define TB_DOWN 15
+#define TB_LEFT 1
+#define TB_RIGHT 2
+#define TB_PRESS BUTTON_PIN
+
+// microphone
+#define ES7210_SCK 47
+#define ES7210_DIN 14
+#define ES7210_LRCK 21
+#define ES7210_MCLK 48
+
+// LoRa
 #define USE_SX1262
 #define USE_SX1268
 

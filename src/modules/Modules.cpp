@@ -1,6 +1,7 @@
 #include "configuration.h"
 #include "input/InputBroker.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
+#include "input/TrackballInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
 #include "input/cardKbI2cImpl.h"
 #include "modules/AdminModule.h"
@@ -59,6 +60,10 @@ void setupModules()
         upDownInterruptImpl1->init();
         cardKbI2cImpl = new CardKbI2cImpl();
         cardKbI2cImpl->init();
+#endif
+#if HAS_TRACKBALL
+        trackballInterruptImpl1 = new TrackballInterruptImpl1();
+        trackballInterruptImpl1->init();
 #endif
 #if HAS_SCREEN
         cannedMessageModule = new CannedMessageModule();

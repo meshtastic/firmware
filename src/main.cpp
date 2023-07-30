@@ -96,7 +96,7 @@ ScanI2C::DeviceAddress screen_found = ScanI2C::ADDRESS_NONE;
 
 // The I2C address of the cardkb or RAK14004 (if found)
 ScanI2C::DeviceAddress cardkb_found = ScanI2C::ADDRESS_NONE;
-// 0x02 for RAK14004 and 0x00 for cardkb
+// 0x02 for RAK14004, 0x00 for cardkb, 0x10 for T-Deck
 uint8_t kb_model;
 
 // The I2C address of the RTC Module (if found)
@@ -300,6 +300,15 @@ void setup()
 #endif
 #endif
 
+#ifdef T_DECK
+    // enable keyboard
+    pinMode(KB_POWERON, OUTPUT);
+    digitalWrite(KB_POWERON, HIGH);
+    // There needs to be a delay after power on, give LILYGO-KEYBOARD some startup time
+    // otherwise keyboard and touch screen will not work
+    delay(800);
+#endif
+
     // Currently only the tbeam has a PMU
     // PMU initialization needs to be placed before i2c scanning
     power = new Power();
@@ -372,8 +381,15 @@ void setup()
             kb_model = 0x02;
             break;
         case ScanI2C::DeviceType::CARDKB:
+            kb_model = 0x00;
+            break;
+        case ScanI2C::DeviceType::TDECKKB:
+            // assign an arbitrary value to distinguish from other models
+            kb_model = 0x10;
+            break;
         default:
             // use this as default since it's also just zero
+            LOG_WARN("kb_info.type is unknown(0x%02x), setting kb_model=0x00\n", kb_info.type);
             kb_model = 0x00;
         }
     }
