@@ -39,11 +39,17 @@ class NeighborInfoModule : public ProtobufModule<meshtastic_NeighborInfo>, priva
      */
     uint32_t collectNeighborInfo(meshtastic_NeighborInfo *neighborInfo);
 
+    /*
+    Remove neighbors from the database that we haven't heard from in a while
+    @returns new number of neighbors
+    */
+    size_t cleanUpNeighbors();
+
     /* Allocate a new NeighborInfo packet */
     meshtastic_NeighborInfo *allocateNeighborInfoPacket();
 
-    /// Find a neighbor in our DB, create an empty neighbor if missing
-    meshtastic_Neighbor *getOrCreateNeighbor(NodeNum n, int snr);
+    // Find a neighbor in our DB, create an empty neighbor if missing
+    meshtastic_Neighbor *getOrCreateNeighbor(NodeNum originalSender, NodeNum n, uint32_t node_broadcast_interval_secs, int snr);
 
     /*
      * Send info on our node's neighbors into the mesh
