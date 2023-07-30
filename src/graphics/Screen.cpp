@@ -31,6 +31,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
 #include "graphics/images.h"
+#include "input/TouchScreenImpl1.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "mesh/Channels.h"
@@ -835,7 +836,11 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     }
 
     static char distStr[20];
-    strncpy(distStr, "? km", sizeof(distStr)); // might not have location data
+    if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
+        strncpy(distStr, "? mi", sizeof(distStr)); // might not have location data
+    } else {
+        strncpy(distStr, "? km", sizeof(distStr));
+    }
     meshtastic_NodeInfoLite *ourNode = nodeDB.getMeshNode(nodeDB.getNodeNum());
     const char *fields[] = {username, distStr, signalStr, lastStr, NULL};
     int16_t compassX = 0, compassY = 0;
@@ -1040,12 +1045,18 @@ void Screen::setup()
 #endif
     serialSinceMsec = millis();
 
+#if HAS_TOUCHSCREEN
+    touchScreenImpl1 = new TouchScreenImpl1(dispdev.getWidth(), dispdev.getHeight(), dispdev.getTouch);
+    touchScreenImpl1->init();
+#endif
+
     // Subscribe to status updates
     powerStatusObserver.observe(&powerStatus->onNewStatus);
     gpsStatusObserver.observe(&gpsStatus->onNewStatus);
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
     if (textMessageModule)
         textMessageObserver.observe(textMessageModule);
+    inputObserver.observe(inputBroker);
 
     // Modules can notify screen about refresh
     MeshModule::observeUIEvents(&uiFrameEventObserver);
@@ -1122,6 +1133,12 @@ int32_t Screen::runOnce()
                 // Don't advance the screen if we just wanted to switch off the nag notification
                 handleOnPress();
             }
+            break;
+        case Cmd::SHOW_PREV_FRAME:
+            handleShowPrevFrame();
+            break;
+        case Cmd::SHOW_NEXT_FRAME:
+            handleShowNextFrame();
             break;
         case Cmd::START_BLUETOOTH_PIN_SCREEN:
             handleStartBluetoothPinScreen(cmd.bluetooth_pin);
@@ -1406,6 +1423,28 @@ void Screen::handlePrint(const char *text)
 }
 
 void Screen::handleOnPress()
+{
+    // If screen was off, just wake it, otherwise advance to next frame
+    // If we are in a transition, the press must have bounced, drop it.
+    if (ui.getUiState()->frameState == FIXED) {
+        ui.nextFrame();
+        lastScreenTransition = millis();
+        setFastFramerate();
+    }
+}
+
+void Screen::handleShowPrevFrame()
+{
+    // If screen was off, just wake it, otherwise go back to previous frame
+    // If we are in a transition, the press must have bounced, drop it.
+    if (ui.getUiState()->frameState == FIXED) {
+        ui.previousFrame();
+        lastScreenTransition = millis();
+        setFastFramerate();
+    }
+}
+
+void Screen::handleShowNextFrame()
 {
     // If screen was off, just wake it, otherwise advance to next frame
     // If we are in a transition, the press must have bounced, drop it.
@@ -1847,6 +1886,20 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
             // TODO: We might also want switch to corresponding frame,
             //       but we don't know the exact frame number.
             // ui.switchToFrame(0);
+        }
+    }
+
+    return 0;
+}
+
+int Screen::handleInputEvent(const InputEvent *event)
+{
+    if (showingNormalScreen && moduleFrames.size() == 0) {
+        LOG_DEBUG("Screen::handleInputEvent from %s\n", event->source);
+        if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
+            showPrevFrame();
+        } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
+            showNextFrame();
         }
     }
 

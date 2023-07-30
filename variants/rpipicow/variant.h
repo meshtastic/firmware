@@ -19,6 +19,7 @@
 // SDA = 4
 // SCL = 5
 
+#define EXT_NOTIFY_OUT 22
 #define BUTTON_PIN 17
 
 #define BATTERY_PIN 26

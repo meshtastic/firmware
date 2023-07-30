@@ -1,6 +1,7 @@
 #include "configuration.h"
 #include "input/InputBroker.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
+#include "input/TrackballInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
 #include "input/cardKbI2cImpl.h"
 #include "modules/AdminModule.h"
@@ -24,7 +25,7 @@
 #include "modules/esp32/AudioModule.h"
 #include "modules/esp32/StoreForwardModule.h"
 #endif
-#if defined(ARCH_ESP32) || defined(ARCH_NRF52)
+#if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)
 #include "modules/ExternalNotificationModule.h"
 #include "modules/RangeTestModule.h"
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(CONFIG_IDF_TARGET_ESP32S2)
@@ -60,6 +61,10 @@ void setupModules()
         cardKbI2cImpl = new CardKbI2cImpl();
         cardKbI2cImpl->init();
 #endif
+#if HAS_TRACKBALL
+        trackballInterruptImpl1 = new TrackballInterruptImpl1();
+        trackballInterruptImpl1->init();
+#endif
 #if HAS_SCREEN
         cannedMessageModule = new CannedMessageModule();
 #endif
@@ -81,7 +86,7 @@ void setupModules()
 
         storeForwardModule = new StoreForwardModule();
 #endif
-#if defined(ARCH_ESP32) || defined(ARCH_NRF52)
+#if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)
         externalNotificationModule = new ExternalNotificationModule();
         new RangeTestModule();
 #endif
