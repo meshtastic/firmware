@@ -54,7 +54,7 @@ void TouchScreenImpl1::onEvent(const TouchEvent &event)
         e.inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN);
         break;
     }
-    case TOUCH_ACTION_TAP: {
+    case TOUCH_ACTION_DOUBLE_TAP: {
         e.inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT);
         break;
     }
