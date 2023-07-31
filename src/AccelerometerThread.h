@@ -4,6 +4,8 @@
 #include "main.h"
 #include "power.h"
 
+#if defined(HAS_TELEMETRY) && (HAS_TELEMETRY == 1)
+
 #include <Adafruit_LIS3DH.h>
 #include <Adafruit_MPU6050.h>
 
@@ -90,3 +92,5 @@ class AccelerometerThread : public concurrency::OSThread
 };
 
 } // namespace concurrency
+
+#endif

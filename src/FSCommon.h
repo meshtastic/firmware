@@ -20,6 +20,13 @@
 using namespace LittleFS_Namespace;
 #endif
 
+#if defined(ARCH_APOLLO3)
+#include "platform/apollo3/InternalFileSystem.h" // Apollo3
+#define FSCom InternalFS
+#define FSBegin() FSCom.begin()
+using namespace LittleFS_Namespace;
+#endif
+
 #if defined(ARCH_RP2040)
 // RP2040
 #include "LittleFS.h"

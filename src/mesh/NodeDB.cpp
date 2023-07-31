@@ -9,7 +9,7 @@
 #include "NodeDB.h"
 #include "PacketHistory.h"
 #include "PowerFSM.h"
-#include "RTC.h"
+#include "gps/RTC.h"
 #include "Router.h"
 #include "TypeConversions.h"
 #include "error.h"

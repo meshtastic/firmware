@@ -37,8 +37,8 @@ bool copyFile(const char *from, const char *to)
     f2.flush();
     f2.close();
     f1.close();
-    return true;
 #endif
+    return true;
 }
 
 bool renameFile(const char *pathFrom, const char *pathTo)
@@ -55,6 +55,7 @@ bool renameFile(const char *pathFrom, const char *pathTo)
     }
 #endif
 #endif
+    return true;
 }
 
 void listDir(const char *dirname, uint8_t levels, bool del = false)

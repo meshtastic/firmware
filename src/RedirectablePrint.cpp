@@ -1,6 +1,6 @@
 #include "RedirectablePrint.h"
 #include "NodeDB.h"
-#include "RTC.h"
+#include "gps/RTC.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include <assert.h>

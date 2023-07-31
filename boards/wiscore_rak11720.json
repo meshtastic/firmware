@@ -13,7 +13,7 @@
           "extra_flags": "-DSFE_ARTEMIS"
         },
         "v2": {
-          "variant": "WisCore_RAK11720_Board",
+          "variant": "rak11720",
           "extra_flags": "-DARDUINO_RAK_11720_MODULE"
         }
       },

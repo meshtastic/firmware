@@ -130,20 +130,11 @@ extern const uint32_t g_ADigitalPinMap[];
 #define PIN_A0 P13
 #define PIN_A1 P33
 
-static const uint8_t A0 = PIN_A0;
-static const uint8_t A1 = PIN_A1;
-
 #define PIN_A3 P5  // channel1
 #define PIN_A4 P31 // channel2
 #define PIN_A5 P32 // channel4
 #define PIN_A6 P36
 #define PIN_A7 P7 // channel6
-
-static const uint8_t A3 = PIN_A3;
-static const uint8_t A4 = PIN_A4;
-static const uint8_t A5 = PIN_A5;
-static const uint8_t A6 = PIN_A6;
-static const uint8_t A7 = PIN_A7;
 
 #define ADC_RESOLUTION 14
 // Other pins
@@ -164,6 +155,7 @@ static const uint8_t AREF = PIN_AREF;
  * SPI Interfaces
  */
 #define SPI_INTERFACES_COUNT 1
+#define VARIANT_SPI_INTFCS SPI_INTERFACES_COUNT
 
 #define PIN_SPI_CS WB_SPI_CS
 #define PIN_SPI_MISO WB_SPI_MISO
@@ -179,6 +171,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
  * Wire Interfaces
  */
 #define WIRE_INTERFACES_COUNT 1
+#define VARIANT_WIRE_INTFCS WIRE_INTERFACES_COUNT
 
 #define PIN_WIRE_SDA WB_I2C1_SDA
 #define PIN_WIRE_SCL WB_I2C1_SCL

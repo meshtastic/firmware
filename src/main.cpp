@@ -11,7 +11,7 @@
 #include "power.h"
 // #include "debug.h"
 #include "FSCommon.h"
-#include "RTC.h"
+#include "gps/RTC.h"
 #include "SPILock.h"
 #include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
@@ -107,7 +107,7 @@ ScanI2C::DeviceAddress accelerometer_found = ScanI2C::ADDRESS_NONE;
 // The I2C address of the RGB LED (if found)
 ScanI2C::FoundDevice rgb_found = ScanI2C::FoundDevice(ScanI2C::DeviceType::NONE, ScanI2C::ADDRESS_NONE);
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(ARCH_APOLLO3)
 ATECCX08A atecc;
 #endif
 
@@ -459,7 +459,7 @@ void setup()
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
 #endif
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(ARCH_APOLLO3)
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
         accelerometerThread = new AccelerometerThread(acc_info.type);
     }
@@ -481,6 +481,9 @@ void setup()
     SPI.setRX(RF95_MISO);
     SPI.begin(false);
 #endif                     // HW_SPI1_DEVICE
+#elif defined(ARCH_APOLLO3)
+    // Apollo3
+    SPI.begin();
 #elif !defined(ARCH_ESP32) // ARCH_RP2040
     SPI.begin();
 #else

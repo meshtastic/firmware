@@ -8,7 +8,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
-#include "RTC.h"
+#include "gps/RTC.h"
 #include "TypeConversions.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
