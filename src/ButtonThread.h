@@ -4,6 +4,7 @@
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include "graphics/Screen.h"
+#include "main.h"
 #include "power.h"
 #include <OneButton.h>
 
@@ -98,10 +99,10 @@ class ButtonThread : public concurrency::OSThread
         userButtonTouch.tick();
         canSleep &= userButtonTouch.isIdle();
 #endif
-        // if (!canSleep) LOG_DEBUG("Supressing sleep!\n");
+        // if (!canSleep) LOG_DEBUG("Suppressing sleep!\n");
         // else LOG_DEBUG("sleep ok\n");
 
-        return 5;
+        return 50;
     }
 
   private:
