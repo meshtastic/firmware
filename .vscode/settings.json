@@ -1,4 +1,5 @@
 {
   "editor.formatOnSave": true,
-  "editor.defaultFormatter": "trunk.io"
+  "editor.defaultFormatter": "trunk.io",
+  "trunk.enableWindows": true
 }
