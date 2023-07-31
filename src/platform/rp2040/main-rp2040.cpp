@@ -28,3 +28,11 @@ void getMacAddr(uint8_t *dmac)
     dmac[1] = src.id[3];
     dmac[0] = src.id[2];
 }
+
+void rp2040Setup()
+{
+    /* Sets a random seed to make sure we get different random numbers on each boot.
+       Taken from CPU cycle counter and ROSC oscillator, so should be pretty random.
+    */
+    randomSeed(rp2040.hwrand32());
+}

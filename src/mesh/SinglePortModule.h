@@ -3,7 +3,7 @@
 #include "Router.h"
 
 /**
- * Most modules are only interested in sending/receving one particular portnum.  This baseclass simplifies that common
+ * Most modules are only interested in sending/receiving one particular portnum.  This baseclass simplifies that common
  * case.
  */
 class SinglePortModule : public MeshModule

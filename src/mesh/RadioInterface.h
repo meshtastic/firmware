@@ -15,7 +15,7 @@
 
 /**
  * This structure has to exactly match the wire layout when sent over the radio link.  Used to keep compatibility
- * wtih the old radiohead implementation.
+ * with the old radiohead implementation.
  */
 typedef struct {
     NodeNum to, from; // can be 1 byte or four bytes
@@ -75,7 +75,7 @@ class RadioInterface
     uint32_t lastTxStart = 0L;
 
     /**
-     * A temporary buffer used for sending/receving packets, sized to hold the biggest buffer we might need
+     * A temporary buffer used for sending/receiving packets, sized to hold the biggest buffer we might need
      * */
     uint8_t radiobuf[MAX_RHPACKETLEN];
 
@@ -198,7 +198,7 @@ class RadioInterface
     virtual void saveFreq(float savedFreq);
 
     /**
-     * Save the chanel we selected for later reuse.
+     * Save the channel we selected for later reuse.
      */
     virtual void saveChannelNum(uint32_t savedChannelNum);
 
@@ -206,7 +206,7 @@ class RadioInterface
     /**
      * Convert our modemConfig enum into wf, sf, etc...
      *
-     * These paramaters will be pull from the channelSettings global
+     * These parameters will be pull from the channelSettings global
      */
     void applyModemConfig();
 
