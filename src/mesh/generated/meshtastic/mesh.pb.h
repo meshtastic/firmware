@@ -59,6 +59,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_TLORA_T3_S3 = 16,
     /* B&Q Consulting Nano G1 Explorer: https://wiki.uniteng.com/en/meshtastic/nano-g1-explorer */
     meshtastic_HardwareModel_NANO_G1_EXPLORER = 17,
+    /* B&Q Consulting Nano G2 Ultra: https://wiki.uniteng.com/en/meshtastic/nano-g2-ultra */
+    meshtastic_HardwareModel_NANO_G2_ULTRA = 18,
     /* B&Q Consulting Station Edition G1: https://uniteng.com/wiki/doku.php?id=meshtastic:station */
     meshtastic_HardwareModel_STATION_G1 = 25,
     /* RAK11310 (RP2040 + SX1262) */
@@ -228,9 +230,9 @@ typedef enum _meshtastic_Routing_Error {
  to make sure that critical packets are sent ASAP.
  In the case of meshtastic that means we want to send protocol acks as soon as possible
  (to prevent unneeded retransmissions), we want routing messages to be sent next,
- then messages marked as reliable and finally ‘background’ packets like periodic position updates.
+ then messages marked as reliable and finally 'background' packets like periodic position updates.
  So I bit the bullet and implemented a new (internal - not sent over the air)
- field in MeshPacket called ‘priority’.
+ field in MeshPacket called 'priority'.
  And the transmission queue in the router object is now a priority queue. */
 typedef enum _meshtastic_MeshPacket_Priority {
     /* Treated as Priority.DEFAULT */
