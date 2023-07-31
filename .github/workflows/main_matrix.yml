@@ -111,6 +111,7 @@ jobs:
           - board: t-echo
           - board: pca10059_diy_eink
           - board: feather_diy
+          - board: nano-g2-ultra
     uses: ./.github/workflows/build_nrf52.yml
     with:
       board: ${{ matrix.board }}
