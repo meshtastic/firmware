@@ -352,5 +352,5 @@ void PowerFSM_setup()
                                       "mesh timeout");
 #endif
 
-    powerFSM.run_machine(); // run one interation of the state machine, so we run our on enter tasks for the initial DARK state
+    powerFSM.run_machine(); // run one iteration of the state machine, so we run our on enter tasks for the initial DARK state
 }

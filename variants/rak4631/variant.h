@@ -139,6 +139,9 @@ static const uint8_t SCK = PIN_SPI_SCK;
 
 // #define USE_EINK
 
+// RAKRGB
+#define HAS_NCP5623
+
 /*
  * Wire Interfaces
  */
@@ -254,6 +257,8 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define HAS_RTC 1
 
 #define HAS_ETHERNET 1
+
+#define RAK_4631 1
 
 #define PIN_ETHERNET_RESET 21
 #define PIN_ETHERNET_SS PIN_EINK_CS

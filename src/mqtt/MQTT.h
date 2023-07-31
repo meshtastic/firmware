@@ -5,15 +5,20 @@
 #include "concurrency/OSThread.h"
 #include "mesh/Channels.h"
 #include "mesh/generated/meshtastic/mqtt.pb.h"
-#include <PubSubClient.h>
 #if HAS_WIFI
 #include <WiFiClient.h>
+#define HAS_NETWORKING 1
 #if !defined(ARCH_PORTDUINO)
 #include <WiFiClientSecure.h>
 #endif
 #endif
 #if HAS_ETHERNET
 #include <EthernetClient.h>
+#define HAS_NETWORKING 1
+#endif
+
+#ifdef HAS_NETWORKING
+#include <PubSubClient.h>
 #endif
 
 #define MAX_MQTT_QUEUE 16
@@ -35,12 +40,9 @@ class MQTT : private concurrency::OSThread
 #if HAS_ETHERNET
     EthernetClient mqttClient;
 #endif
-#if !defined(DEBUG_HEAP_MQTT)
-    PubSubClient pubSub;
 
   public:
-#else
-  public:
+#ifdef HAS_NETWORKING
     PubSubClient pubSub;
 #endif
     MQTT();
@@ -51,7 +53,7 @@ class MQTT : private concurrency::OSThread
      * @param chIndex the index of the channel for this message
      *
      * Note: for messages we are forwarding on the mesh that we can't find the channel for (because we don't have the keys), we
-     * can not forward those messages to the cloud - becuase no way to find a global channel ID.
+     * can not forward those messages to the cloud - because no way to find a global channel ID.
      */
     void onSend(const meshtastic_MeshPacket &mp, ChannelIndex chIndex);
 
@@ -59,7 +61,13 @@ class MQTT : private concurrency::OSThread
      */
     void reconnect();
 
-    bool connected();
+    bool isConnectedDirectly();
+
+    bool publish(const char *topic, const char *payload, bool retained);
+
+    bool publish(const char *topic, const uint8_t *payload, size_t length, const bool retained);
+
+    void onClientProxyReceive(meshtastic_MqttClientProxyMessage msg);
 
   protected:
     PointerQueue<meshtastic_ServiceEnvelope> mqttQueue;
@@ -80,14 +88,17 @@ class MQTT : private concurrency::OSThread
      */
     void sendSubscriptions();
 
-    /// Just C glue to call onPublish
+    /// Callback for direct mqtt subscription messages
     static void mqttCallback(char *topic, byte *payload, unsigned int length);
 
     /// Called when a new publish arrives from the MQTT server
-    void onPublish(char *topic, byte *payload, unsigned int length);
+    void onReceive(char *topic, byte *payload, size_t length);
 
     /// Called when a new publish arrives from the MQTT server
-    std::string downstreamPacketToJson(meshtastic_MeshPacket *mp);
+    std::string meshPacketToJson(meshtastic_MeshPacket *mp);
+
+    void publishStatus();
+    void publishQueuedMessages();
 
     /// Return 0 if sleep is okay, veto sleep if we are connected to pubsub server
     // int preflightSleepCb(void *unused = NULL) { return pubSub.connected() ? 1 : 0; }

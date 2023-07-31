@@ -33,11 +33,11 @@
            to your device.
 
     TODO (in this order):
-        * Define a verbose RX mode to report on mesh and packet infomration.
+        * Define a verbose RX mode to report on mesh and packet information.
             - This won't happen any time soon.
 
     KNOWN PROBLEMS
-        * Until the module is initilized by the startup sequence, the TX pin is in a floating
+        * Until the module is initialized by the startup sequence, the TX pin is in a floating
           state. Device connected to that pin may see this as "noise".
         * Will not work on Linux device targets.
 
@@ -249,7 +249,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
 
             if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_DEFAULT ||
                 moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_SIMPLE) {
-                serialPrint->printf("%s", p.payload.bytes);
+                serialPrint->write(p.payload.bytes, p.payload.size);
             } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG) {
                 meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(getFrom(&mp));
                 String sender = (node && node->has_user) ? node->user.short_name : "???";
