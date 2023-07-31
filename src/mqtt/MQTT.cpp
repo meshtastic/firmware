@@ -607,6 +607,15 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
                 if (int(decoded->sats_in_view)) {
                     msgPayload["sats_in_view"] = new JSONValue((int)decoded->sats_in_view);
                 }
+                if ((int)decoded->PDOP) {
+                    msgPayload["PDOP"] = new JSONValue((int)decoded->PDOP);
+                }
+                if ((int)decoded->HDOP) {
+                    msgPayload["HDOP"] = new JSONValue((int)decoded->HDOP);
+                }
+                if ((int)decoded->VDOP) {
+                    msgPayload["VDOP"] = new JSONValue((int)decoded->VDOP);
+                }
                 jsonObj["payload"] = new JSONValue(msgPayload);
             } else {
                 LOG_ERROR("Error decoding protobuf for position message!\n");

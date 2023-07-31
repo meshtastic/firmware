@@ -30,6 +30,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     const char *getCurrentMessage();
     const char *getPrevMessage();
     const char *getNextMessage();
+    const char *getMessageByIndex(int index);
     const char *getNodeName(NodeNum node);
     bool shouldDraw();
     void eventUp();
