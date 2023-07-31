@@ -3,7 +3,7 @@
 #include "PowerFSM.h" // FIXME - someday I want to make this OTA thing a separate lb at at that point it can't touch this
 
 /**
- * A characterstic with a set of overridable callbacks
+ * A characteristic with a set of overridable callbacks
  */
 class CallbackCharacteristic : public BLECharacteristic, public BLECharacteristicCallbacks
 {

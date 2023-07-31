@@ -8,6 +8,8 @@
 #ifdef SDCARD_USE_SPI1
 SPIClass SPI1(HSPI);
 #define SDHandler SPI1
+#else
+#define SDHandler SPI
 #endif
 
 #endif // HAS_SDCARD

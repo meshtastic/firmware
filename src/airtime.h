@@ -17,9 +17,9 @@
 
   Example analytics:
 
-  TX_LOG + RX_LOG = Total air time for a perticular meshtastic channel.
+  TX_LOG + RX_LOG = Total air time for a particular meshtastic channel.
 
-  TX_LOG + RX_LOG = Total air time for a perticular meshtastic channel, including
+  TX_LOG + RX_LOG = Total air time for a particular meshtastic channel, including
                     other lora radios.
 
   RX_ALL_LOG - RX_LOG = Other lora radios on our frequency channel.

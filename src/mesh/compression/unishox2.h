@@ -198,45 +198,45 @@
         2, 2, 2, 2, 0                                                                                                            \
     }
 
-/// Default frequently occuring sequences. When composition of text is know beforehand, the other sequences in this section can be
-/// used to achieve more compression.
+/// Default frequently occurring sequences. When composition of text is know beforehand, the other sequences in this section can
+/// be used to achieve more compression.
 #define USX_FREQ_SEQ_DFLT                                                                                                        \
     (const char *[])                                                                                                             \
     {                                                                                                                            \
         "\": \"", "\": ", "</", "=\"", "\":\"", "://"                                                                            \
     }
-/// Frequently occuring sequences in text content
+/// Frequently occurring sequences in text content
 #define USX_FREQ_SEQ_TXT                                                                                                         \
     (const char *[])                                                                                                             \
     {                                                                                                                            \
         " the ", " and ", "tion", " with", "ing", "ment"                                                                         \
     }
-/// Frequently occuring sequences in URL content
+/// Frequently occurring sequences in URL content
 #define USX_FREQ_SEQ_URL                                                                                                         \
     (const char *[])                                                                                                             \
     {                                                                                                                            \
         "https://", "www.", ".com", "http://", ".org", ".net"                                                                    \
     }
-/// Frequently occuring sequences in JSON content
+/// Frequently occurring sequences in JSON content
 #define USX_FREQ_SEQ_JSON                                                                                                        \
     (const char *[])                                                                                                             \
     {                                                                                                                            \
         "\": \"", "\": ", "\",", "}}}", "\":\"", "}}"                                                                            \
     }
-/// Frequently occuring sequences in HTML content
+/// Frequently occurring sequences in HTML content
 #define USX_FREQ_SEQ_HTML                                                                                                        \
     (const char *[])                                                                                                             \
     {                                                                                                                            \
         "</", "=\"", "div", "href", "class", "<p>"                                                                               \
     }
-/// Frequently occuring sequences in XML content
+/// Frequently occurring sequences in XML content
 #define USX_FREQ_SEQ_XML                                                                                                         \
     (const char *[])                                                                                                             \
     {                                                                                                                            \
         "</", "=\"", "\">", "<?xml version=\"1.0\"", "xmlns:", "://"                                                             \
     }
 
-/// Commonly occuring templates (ISO Date/Time, ISO Date, US Phone number, ISO Time, Unused)
+/// Commonly occurring templates (ISO Date/Time, ISO Date, US Phone number, ISO Time, Unused)
 #define USX_TEMPLATES                                                                                                            \
     (const char *[])                                                                                                             \
     {                                                                                                                            \
@@ -333,8 +333,8 @@ extern int unishox2_decompress_simple(const char *in, int len, char *out);
  * @param[in] olen           length of 'out' buffer in bytes. Can be omitted if sufficient buffer is provided
  * @param[in] usx_hcodes     Horizontal codes (array of bytes). See macro section for samples.
  * @param[in] usx_hcode_lens Length of each element in usx_hcodes array
- * @param[in] usx_freq_seq   Frequently occuring sequences. See USX_FREQ_SEQ_* macros for samples
- * @param[in] usx_templates  Templates of frequently occuring patterns. See USX_TEMPLATES macro.
+ * @param[in] usx_freq_seq   Frequently occurring sequences. See USX_FREQ_SEQ_* macros for samples
+ * @param[in] usx_templates  Templates of frequently occurring patterns. See USX_TEMPLATES macro.
  */
 extern int unishox2_compress(const char *in, int len, UNISHOX_API_OUT_AND_LEN(char *out, int olen),
                              const unsigned char usx_hcodes[], const unsigned char usx_hcode_lens[], const char *usx_freq_seq[],
@@ -352,8 +352,8 @@ extern int unishox2_compress(const char *in, int len, UNISHOX_API_OUT_AND_LEN(ch
  * @param[in] olen           length of 'out' buffer in bytes. Can be omitted if sufficient buffer is provided
  * @param[in] usx_hcodes     Horizontal codes (array of bytes). See macro section for samples.
  * @param[in] usx_hcode_lens Length of each element in usx_hcodes array
- * @param[in] usx_freq_seq   Frequently occuring sequences. See USX_FREQ_SEQ_* macros for samples
- * @param[in] usx_templates  Templates of frequently occuring patterns. See USX_TEMPLATES macro.
+ * @param[in] usx_freq_seq   Frequently occurring sequences. See USX_FREQ_SEQ_* macros for samples
+ * @param[in] usx_templates  Templates of frequently occurring patterns. See USX_TEMPLATES macro.
  */
 extern int unishox2_decompress(const char *in, int len, UNISHOX_API_OUT_AND_LEN(char *out, int olen),
                                const unsigned char usx_hcodes[], const unsigned char usx_hcode_lens[], const char *usx_freq_seq[],
@@ -373,7 +373,7 @@ extern int unishox2_compress_lines(const char *in, int len, UNISHOX_API_OUT_AND_
                                    const char *usx_freq_seq[], const char *usx_templates[], struct us_lnk_lst *prev_lines);
 /**
  * More Comprehensive API for de-compressing array of strings \n
- * This function is not be used in conjuction with unishox2_compress_lines()
+ * This function is not be used in conjunction with unishox2_compress_lines()
  *
  * See unishox2_decompress() function for parameter definitions. \n
  * Typically an array is compressed using unishox2_compress_lines() and \n

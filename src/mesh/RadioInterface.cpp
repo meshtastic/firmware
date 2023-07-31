@@ -196,8 +196,9 @@ uint32_t RadioInterface::getRetransmissionMsec(const meshtastic_MeshPacket *p)
     // LOG_DEBUG("Waiting for flooding message with airtime %d and slotTime is %d\n", packetAirtime, slotTimeMsec);
     float channelUtil = airTime->channelUtilizationPercent();
     uint8_t CWsize = map(channelUtil, 0, 100, CWmin, CWmax);
-    // Assuming we pick max. of CWsize and there will be a receiver with SNR at half the range
-    return 2 * packetAirtime + (pow(2, CWsize) + pow(2, int((CWmax + CWmin) / 2))) * slotTimeMsec + PROCESSING_TIME_MSEC;
+    // Assuming we pick max. of CWsize and there will be a client with SNR at half the range
+    return 2 * packetAirtime + (pow(2, CWsize) + 2 * CWmax + pow(2, int((CWmax + CWmin) / 2))) * slotTimeMsec +
+           PROCESSING_TIME_MSEC;
 }
 
 /** The delay to use when we want to send something */
@@ -307,7 +308,7 @@ bool RadioInterface::init()
     preflightSleepObserver.observe(&preflightSleep);
     notifyDeepSleepObserver.observe(&notifyDeepSleep);
 
-    // we now expect interfaces to operate in promiscous mode
+    // we now expect interfaces to operate in promiscuous mode
     // radioIf.setThisAddress(nodeDB.getNodeNum()); // Note: we must do this here, because the nodenum isn't inited at constructor
     // time.
 

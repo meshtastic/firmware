@@ -47,13 +47,12 @@ NRF52Bluetooth *nrf52Bluetooth;
 
 #if HAS_WIFI
 #include "mesh/api/WiFiServerAPI.h"
-#include "mqtt/MQTT.h"
 #endif
 
 #if HAS_ETHERNET
 #include "mesh/api/ethServerAPI.h"
-#include "mqtt/MQTT.h"
 #endif
+#include "mqtt/MQTT.h"
 
 #include "LLCC68Interface.h"
 #include "RF95Interface.h"
@@ -97,7 +96,7 @@ ScanI2C::DeviceAddress screen_found = ScanI2C::ADDRESS_NONE;
 
 // The I2C address of the cardkb or RAK14004 (if found)
 ScanI2C::DeviceAddress cardkb_found = ScanI2C::ADDRESS_NONE;
-// 0x02 for RAK14004 and 0x00 for cardkb
+// 0x02 for RAK14004, 0x00 for cardkb, 0x10 for T-Deck
 uint8_t kb_model;
 
 // The I2C address of the RTC Module (if found)
@@ -110,6 +109,11 @@ ScanI2C::FoundDevice rgb_found = ScanI2C::FoundDevice(ScanI2C::DeviceType::NONE,
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(ARCH_APOLLO3)
 ATECCX08A atecc;
 #endif
+
+#ifdef T_WATCH_S3
+Adafruit_DRV2605 drv;
+#endif
+bool isVibrating = false;
 
 bool eink_found = true;
 
@@ -170,7 +174,7 @@ SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 RadioInterface *rIf = NULL;
 
 /**
- * Some platforms (nrf52) might provide an alterate version that supresses calling delay from sleep.
+ * Some platforms (nrf52) might provide an alterate version that suppresses calling delay from sleep.
  */
 __attribute__((weak, noinline)) bool loopCanSleep()
 {
@@ -215,6 +219,16 @@ void setup()
     digitalWrite(VEXT_ENABLE, 0); // turn on the display power
 #endif
 
+#ifdef VGNSS_CTRL
+    pinMode(VGNSS_CTRL, OUTPUT);
+    digitalWrite(VGNSS_CTRL, LOW);
+#endif
+
+#if defined(VTFT_CTRL)
+    pinMode(VTFT_CTRL, OUTPUT);
+    digitalWrite(VTFT_CTRL, LOW);
+#endif
+
 #ifdef RESET_OLED
     pinMode(RESET_OLED, OUTPUT);
     digitalWrite(RESET_OLED, 1);
@@ -241,6 +255,19 @@ void setup()
 
     fsInit();
 
+#if defined(_SEEED_XIAO_NRF52840_SENSE_H_)
+
+    pinMode(CHARGE_LED, INPUT); // sets to detect if charge LED is on or off to see if USB is plugged in
+
+    pinMode(HICHG, OUTPUT);
+    digitalWrite(HICHG, LOW); // 100 mA charging current if set to LOW and 50mA (actually about 20mA) if set to HIGH
+
+    pinMode(BAT_READ, OUTPUT);
+    digitalWrite(BAT_READ, LOW); // This is pin P0_14 = 14 and by pullling low to GND it provices path to read on pin 32 (P0,31)
+                                 // PIN_VBAT the voltage from divider on XIAO board
+
+#endif
+
 #ifdef I2C_SDA1
     Wire1.begin(I2C_SDA1, I2C_SCL1);
 #endif
@@ -261,15 +288,25 @@ void setup()
 #endif
 
 #ifdef RAK4630
+#ifdef PIN_3V3_EN
     // We need to enable 3.3V periphery in order to scan it
     pinMode(PIN_3V3_EN, OUTPUT);
     digitalWrite(PIN_3V3_EN, HIGH);
-
+#endif
 #ifndef USE_EINK
     // RAK-12039 set pin for Air quality sensor
     pinMode(AQ_SET_PIN, OUTPUT);
     digitalWrite(AQ_SET_PIN, HIGH);
 #endif
+#endif
+
+#ifdef T_DECK
+    // enable keyboard
+    pinMode(KB_POWERON, OUTPUT);
+    digitalWrite(KB_POWERON, HIGH);
+    // There needs to be a delay after power on, give LILYGO-KEYBOARD some startup time
+    // otherwise keyboard and touch screen will not work
+    delay(800);
 #endif
 
     // Currently only the tbeam has a PMU
@@ -344,25 +381,33 @@ void setup()
             kb_model = 0x02;
             break;
         case ScanI2C::DeviceType::CARDKB:
+            kb_model = 0x00;
+            break;
+        case ScanI2C::DeviceType::TDECKKB:
+            // assign an arbitrary value to distinguish from other models
+            kb_model = 0x10;
+            break;
         default:
             // use this as default since it's also just zero
+            LOG_WARN("kb_info.type is unknown(0x%02x), setting kb_model=0x00\n", kb_info.type);
             kb_model = 0x00;
         }
     }
 
     pmu_found = i2cScanner->exists(ScanI2C::DeviceType::PMU_AXP192_AXP2101);
 
-    /*
-     * There are a bunch of sensors that have no further logic than to be found and stuffed into the
-     * nodeTelemetrySensorsMap singleton. This wraps that logic in a temporary scope to declare the temporary field
-     * "found".
-     */
+/*
+ * There are a bunch of sensors that have no further logic than to be found and stuffed into the
+ * nodeTelemetrySensorsMap singleton. This wraps that logic in a temporary scope to declare the temporary field
+ * "found".
+ */
 
-    // Only one supported RGB LED currently
+// Only one supported RGB LED currently
+#ifdef HAS_NCP5623
     rgb_found = i2cScanner->find(ScanI2C::DeviceType::NCP5623);
 
-// Start the RGB LED at 50%
-#ifdef RAK4630
+    // Start the RGB LED at 50%
+
     if (rgb_found.type == ScanI2C::NCP5623) {
         rgb.begin();
         rgb.setCurrent(10);
@@ -429,6 +474,11 @@ void setup()
 #ifdef ARCH_NRF52
     nrf52Setup();
 #endif
+
+#ifdef ARCH_RP2040
+    rp2040Setup();
+#endif
+
     // We do this as early as possible because this loads preferences from flash
     // but we need to do this after main cpu iniot (esp32setup), because we need the random seed set
     nodeDB.init();
@@ -461,8 +511,17 @@ void setup()
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(ARCH_APOLLO3)
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
+        config.display.wake_on_tap_or_motion = true;
+        moduleConfig.external_notification.enabled = true;
         accelerometerThread = new AccelerometerThread(acc_info.type);
     }
+#endif
+
+#ifdef T_WATCH_S3
+    drv.begin();
+    drv.selectLibrary(1);
+    // I2C trigger by sending 'go' command
+    drv.setMode(DRV2605_MODE_INTTRIG);
 #endif
 
     // Init our SPI controller (must be before screen and lora)
@@ -520,7 +579,7 @@ void setup()
 
 // Don't call screen setup until after nodedb is setup (because we need
 // the current region name)
-#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER)
+#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS)
     screen->setup();
 #else
     if (screen_found.port != ScanI2C::I2CPort::NO_I2C)
@@ -657,9 +716,7 @@ void setup()
         }
     }
 
-#if HAS_WIFI || HAS_ETHERNET
     mqttInit();
-#endif
 
 #ifndef ARCH_PORTDUINO
     // Initialize Wifi
@@ -704,7 +761,7 @@ uint32_t rebootAtMsec;   // If not zero we will reboot at this time (used to reb
 uint32_t shutdownAtMsec; // If not zero we will shutdown at this time (used to shutdown from python or mobile client)
 
 // If a thread does something that might need for it to be rescheduled ASAP it can set this flag
-// This will supress the current delay and instead try to run ASAP.
+// This will suppress the current delay and instead try to run ASAP.
 bool runASAP;
 
 extern meshtastic_DeviceMetadata getDeviceMetadata()

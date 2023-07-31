@@ -138,7 +138,7 @@ bool NodeDB::factoryReset()
     // third, write everything to disk
     saveToDisk();
 #ifdef ARCH_ESP32
-    // This will erase what's in NVS including ssl keys, persistant variables and ble pairing
+    // This will erase what's in NVS including ssl keys, persistent variables and ble pairing
     nvs_flash_erase();
 #endif
 #ifdef ARCH_NRF52
@@ -165,7 +165,8 @@ void NodeDB::installDefaultConfig()
     config.has_network = true;
     config.has_bluetooth = true;
     config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
-    config.lora.sx126x_rx_boosted_gain = false;
+
+    config.lora.sx126x_rx_boosted_gain = true;
     config.lora.tx_enabled =
         true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
     config.lora.override_duty_cycle = false;
@@ -184,7 +185,7 @@ void NodeDB::installDefaultConfig()
     // FIXME: Default to bluetooth capability of platform as default
     config.bluetooth.enabled = true;
     config.bluetooth.fixed_pin = defaultBLEPin;
-#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER)
+#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS)
     bool hasScreen = true;
 #else
     bool hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
@@ -194,6 +195,11 @@ void NodeDB::installDefaultConfig()
     // for backward compat, default position flags are ALT+MSL
     config.position.position_flags =
         (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL);
+
+#ifdef T_WATCH_S3
+    config.display.screen_on_secs = 30;
+    config.display.wake_on_tap_or_motion = true;
+#endif
 
     initConfigIntervals();
 }
@@ -233,6 +239,10 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.alert_message = true;
     moduleConfig.external_notification.output_ms = 1000;
     moduleConfig.external_notification.nag_timeout = 60;
+#endif
+#ifdef T_WATCH_S3
+    // Don't worry about the other settings, we'll use the DRV2056 behavior for notifications
+    moduleConfig.external_notification.enabled = true;
 #endif
     moduleConfig.has_canned_message = true;
 
@@ -911,7 +921,7 @@ void recordCriticalError(meshtastic_CriticalErrorCode code, uint32_t address, co
     error_code = code;
     error_address = address;
 
-    // Currently portuino is mostly used for simulation.  Make sue the user notices something really bad happend
+    // Currently portuino is mostly used for simulation.  Make sure the user notices something really bad happened
 #ifdef ARCH_PORTDUINO
     LOG_ERROR("A critical failure occurred, portduino is exiting...");
     exit(2);
