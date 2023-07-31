@@ -18,7 +18,7 @@ meshtastic_MeshPacket *MeshModule::currentReply;
 
 MeshModule::MeshModule(const char *_name) : name(_name)
 {
-    // Can't trust static initalizer order, so we check each time
+    // Can't trust static initializer order, so we check each time
     if (!modules)
         modules = new std::vector<MeshModule *>();
 
@@ -39,7 +39,7 @@ meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, Nod
     c.error_reason = err;
     c.which_variant = meshtastic_Routing_error_reason_tag;
 
-    // Now that we have moded sendAckNak up one level into the class heirarchy we can no longer assume we are a RoutingPlugin
+    // Now that we have moded sendAckNak up one level into the class hierarchy we can no longer assume we are a RoutingPlugin
     // So we manually call pb_encode_to_bytes and specify routing port number
     // auto p = allocDataProtobuf(c);
     meshtastic_MeshPacket *p = router->allocForSending();
@@ -169,7 +169,7 @@ void MeshModule::callPlugins(const meshtastic_MeshPacket &mp, RxSource src)
             // Note: if the message started with the local node or a module asked to ignore the request, we don't want to send a
             // no response reply
 
-            // No one wanted to reply to this requst, tell the requster that happened
+            // No one wanted to reply to this request, tell the requster that happened
             LOG_DEBUG("No one responded, send a nak\n");
 
             // SECURITY NOTE! I considered sending back a different error code if we didn't find the psk (i.e. !isDecoded)
