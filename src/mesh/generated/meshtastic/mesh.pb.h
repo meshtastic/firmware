@@ -59,6 +59,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_TLORA_T3_S3 = 16,
     /* B&Q Consulting Nano G1 Explorer: https://wiki.uniteng.com/en/meshtastic/nano-g1-explorer */
     meshtastic_HardwareModel_NANO_G1_EXPLORER = 17,
+    /* B&Q Consulting Nano G2 Ultra: https://wiki.uniteng.com/en/meshtastic/nano-g2-ultra */
+    meshtastic_HardwareModel_NANO_G2_ULTRA = 18,
     /* B&Q Consulting Station Edition G1: https://uniteng.com/wiki/doku.php?id=meshtastic:station */
     meshtastic_HardwareModel_STATION_G1 = 25,
     /* RAK11310 (RP2040 + SX1262) */
@@ -228,9 +230,9 @@ typedef enum _meshtastic_Routing_Error {
  to make sure that critical packets are sent ASAP.
  In the case of meshtastic that means we want to send protocol acks as soon as possible
  (to prevent unneeded retransmissions), we want routing messages to be sent next,
- then messages marked as reliable and finally ‘background’ packets like periodic position updates.
+ then messages marked as reliable and finally 'background' packets like periodic position updates.
  So I bit the bullet and implemented a new (internal - not sent over the air)
- field in MeshPacket called ‘priority’.
+ field in MeshPacket called 'priority'.
  And the transmission queue in the router object is now a priority queue. */
 typedef enum _meshtastic_MeshPacket_Priority {
     /* Treated as Priority.DEFAULT */
@@ -679,7 +681,7 @@ typedef struct _meshtastic_Neighbor {
     uint32_t node_id;
     /* SNR of last heard message */
     float snr;
-    /* Reception time of last message that was sent by this ID.
+    /* Reception time (in secs since 1970) of last message that was last sent by this ID.
  Note: this is for local storage only and will not be sent out over the mesh. */
     uint32_t last_rx_time;
     /* Broadcast interval of this neighbor (in seconds).
@@ -1202,7 +1204,7 @@ X(a, STATIC,   REPEATED, MESSAGE,  neighbors,         4)
 #define meshtastic_Neighbor_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   node_id,           1) \
 X(a, STATIC,   SINGULAR, FLOAT,    snr,               2) \
-X(a, STATIC,   SINGULAR, UINT32,   last_rx_time,      3) \
+X(a, STATIC,   SINGULAR, FIXED32,  last_rx_time,      3) \
 X(a, STATIC,   SINGULAR, UINT32,   node_broadcast_interval_secs,   4)
 #define meshtastic_Neighbor_CALLBACK NULL
 #define meshtastic_Neighbor_DEFAULT NULL
@@ -1269,8 +1271,8 @@ extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
 #define meshtastic_MeshPacket_size               321
 #define meshtastic_MqttClientProxyMessage_size   501
 #define meshtastic_MyNodeInfo_size               18
-#define meshtastic_NeighborInfo_size             268
-#define meshtastic_Neighbor_size                 23
+#define meshtastic_NeighborInfo_size             258
+#define meshtastic_Neighbor_size                 22
 #define meshtastic_NodeInfo_size                 261
 #define meshtastic_Position_size                 137
 #define meshtastic_QueueStatus_size              23
