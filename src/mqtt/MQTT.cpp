@@ -164,6 +164,8 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
 #endif
 {
     if (moduleConfig.mqtt.enabled) {
+        LOG_DEBUG("Initializing MQTT\n");
+
         assert(!mqtt);
         mqtt = this;
 
@@ -181,6 +183,14 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
         if (!moduleConfig.mqtt.proxy_to_client_enabled)
             pubSub.setCallback(mqttCallback);
 #endif
+
+        if (moduleConfig.mqtt.proxy_to_client_enabled) {
+            LOG_INFO("MQTT configured to use client proxy...\n");
+            enabled = true;
+            runASAP = true;
+            reconnectCount = 0;
+            publishStatus();
+        }
         // preflightSleepObserver.observe(&preflightSleep);
     } else {
         disable();
@@ -596,6 +606,15 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
                 }
                 if (int(decoded->sats_in_view)) {
                     msgPayload["sats_in_view"] = new JSONValue((int)decoded->sats_in_view);
+                }
+                if ((int)decoded->PDOP) {
+                    msgPayload["PDOP"] = new JSONValue((int)decoded->PDOP);
+                }
+                if ((int)decoded->HDOP) {
+                    msgPayload["HDOP"] = new JSONValue((int)decoded->HDOP);
+                }
+                if ((int)decoded->VDOP) {
+                    msgPayload["VDOP"] = new JSONValue((int)decoded->VDOP);
                 }
                 jsonObj["payload"] = new JSONValue(msgPayload);
             } else {

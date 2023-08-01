@@ -52,11 +52,22 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 
     nodeDB.updatePosition(getFrom(&mp), p);
 
+    // Only respond to location requests on the channel where we broadcast location.
+    if (channels.getByIndex(mp.channel).role == meshtastic_Channel_Role_PRIMARY) {
+        ignoreRequest = false;
+    } else {
+        ignoreRequest = true;
+    }
+
     return false; // Let others look at this message also if they want
 }
 
 meshtastic_MeshPacket *PositionModule::allocReply()
 {
+    if (ignoreRequest) {
+        return NULL;
+    }
+
     meshtastic_NodeInfoLite *node = service.refreshLocalMeshNode(); // should guarantee there is now a position
     assert(node->has_position);
 
