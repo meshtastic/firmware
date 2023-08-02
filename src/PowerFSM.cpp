@@ -242,7 +242,11 @@ void PowerFSM_setup()
 
     // wake timer expired or a packet arrived
     // if we are a router node, we go to NB (no need for bluetooth) otherwise we go to DARK (so we can send message to phone)
+#ifdef ARCH_ESP32
     powerFSM.add_transition(&stateLS, isRouter ? &stateNB : &stateDARK, EVENT_WAKE_TIMER, NULL, "Wake timer");
+#else // Don't go into a no-bluetooth state on low power platforms
+    powerFSM.add_transition(&stateLS, &stateDARK, EVENT_WAKE_TIMER, NULL, "Wake timer");
+#endif
 
     // We need this transition, because we might not transition if we were waiting to enter light-sleep, because when we wake from
     // light sleep we _always_ transition to NB or dark and
