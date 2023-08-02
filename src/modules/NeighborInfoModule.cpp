@@ -173,6 +173,11 @@ size_t NeighborInfoModule::cleanUpNeighbors()
         (*numNeighbors)--;
     }
 
+    // Save the neighbor list if we removed any neighbors
+    if (indices_to_remove.size() > 0) {
+        saveProtoForModule();
+    }
+
     return *numNeighbors;
 }
 
@@ -207,7 +212,7 @@ Pass it to an upper client; do not persist this data on the mesh
 */
 bool NeighborInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_NeighborInfo *np)
 {
-    printNeighborInfo("RECIEVED", np);
+    printNeighborInfo("RECEIVED", np);
     updateNeighbors(mp, np);
     // Allow others to handle this packet
     return false;
@@ -234,6 +239,7 @@ void NeighborInfoModule::updateLastSentById(meshtastic_MeshPacket *p)
 
 void NeighborInfoModule::resetNeighbors()
 {
+    *numNeighbors = 0;
     neighborState.neighbors_count = 0;
     memset(neighborState.neighbors, 0, sizeof(neighborState.neighbors));
     saveProtoForModule();
@@ -265,6 +271,7 @@ meshtastic_Neighbor *NeighborInfoModule::getOrCreateNeighbor(NodeNum originalSen
             // Only if this is the original sender, the broadcast interval corresponds to it
             if (originalSender == n)
                 nbr->node_broadcast_interval_secs = node_broadcast_interval_secs;
+            saveProtoForModule(); // Save the updated neighbor
             return nbr;
         }
     }
@@ -280,6 +287,7 @@ meshtastic_Neighbor *NeighborInfoModule::getOrCreateNeighbor(NodeNum originalSen
     // Only if this is the original sender, the broadcast interval corresponds to it
     if (originalSender == n)
         new_nbr->node_broadcast_interval_secs = node_broadcast_interval_secs;
+    saveProtoForModule(); // Save the new neighbor
     return new_nbr;
 }
 
