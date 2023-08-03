@@ -1,3 +1,12 @@
+/**
+ * @file PowerFSM.cpp
+ * @brief Implements the finite state machine for power management.
+ *
+ * This file contains the implementation of the finite state machine (FSM) for power management.
+ * The FSM controls the power states of the device, including SDS (shallow deep sleep), LS (light sleep),
+ * NB (normal mode), and POWER (powered mode). The FSM also handles transitions between states and
+ * actions to be taken upon entering or exiting each state.
+ */
 #include "PowerFSM.h"
 #include "GPS.h"
 #include "MeshService.h"

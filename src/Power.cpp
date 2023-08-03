@@ -1,3 +1,15 @@
+/**
+ * @file Power.cpp
+ * @brief This file contains the implementation of the Power class, which is responsible for managing power-related functionality
+ * of the device. It includes battery level sensing, power management unit (PMU) control, and power state machine management. The
+ * Power class is used by the main device class to manage power-related functionality.
+ *
+ * The file also includes implementations of various battery level sensors, such as the AnalogBatteryLevel class, which assumes
+ * the battery voltage is attached via a voltage-divider to an analog input.
+ *
+ * This file is part of the Meshtastic project.
+ * For more information, see: https://meshtastic.org/
+ */
 #include "power.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
@@ -366,6 +378,11 @@ bool Power::analogInit()
 #endif
 }
 
+/**
+ * Initializes the Power class.
+ *
+ * @return true if the setup was successful, false otherwise.
+ */
 bool Power::setup()
 {
     bool found = axpChipInit();
