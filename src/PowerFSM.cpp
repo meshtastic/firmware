@@ -137,7 +137,10 @@ static void nbEnter()
 {
     LOG_DEBUG("Enter state: NB\n");
     screen->setOn(false);
+#ifdef ARCH_ESP32
+    // Only ESP32 should turn off bluetooth
     setBluetoothEnable(false);
+#endif
 
     // FIXME - check if we already have packets for phone and immediately trigger EVENT_PACKETS_FOR_PHONE
 }
@@ -158,6 +161,8 @@ static void serialEnter()
 
 static void serialExit()
 {
+    // Turn bluetooth back on when we leave serial stream API
+    setBluetoothEnable(true);
     screen->print("Serial disconnected\n");
 }
 
