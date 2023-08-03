@@ -89,11 +89,11 @@ void readFromRTC()
 
 /**
  * Sets the RTC (Real-Time Clock) if the provided time is of higher quality than the current RTC time.
- * 
+ *
  * @param q The quality of the provided time.
  * @param tv A pointer to a timeval struct containing the time to potentially set the RTC to.
  * @return True if the RTC was set, false otherwise.
- * 
+ *
  * If we haven't yet set our RTC this boot, set it from a GPS derived time
  */
 bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
@@ -165,7 +165,7 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
 
 /**
  * Sets the RTC time if the provided time is of higher quality than the current RTC time.
- * 
+ *
  * @param q The quality of the provided time.
  * @param t The time to potentially set the RTC to.
  * @return True if the RTC was set to the provided time, false otherwise.
