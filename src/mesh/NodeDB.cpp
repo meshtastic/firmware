@@ -109,7 +109,6 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_TW;
 
         // Enter super deep sleep soon and stay there not very long
-        // radioConfig.preferences.mesh_sds_timeout_secs = 10;
         // radioConfig.preferences.sds_secs = 60;
     }
 
@@ -211,7 +210,6 @@ void NodeDB::initConfigIntervals()
     config.position.position_broadcast_secs = default_broadcast_interval_secs;
 
     config.power.ls_secs = default_ls_secs;
-    config.power.mesh_sds_timeout_secs = default_mesh_sds_timeout_secs;
     config.power.min_wake_secs = default_min_wake_secs;
     config.power.sds_secs = default_sds_secs;
     config.power.wait_bluetooth_secs = default_wait_bluetooth_secs;
