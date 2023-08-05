@@ -14,6 +14,7 @@
 #undef GPS_SERIAL_NUM
 
 #define LED_CONN PIN_LED2
+#define LED_PIN LED_BUILTIN
 
 #define BUTTON_PIN 9
 #define BUTTON_NEED_PULLUP

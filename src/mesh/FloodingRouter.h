@@ -48,7 +48,7 @@ class FloodingRouter : public Router, protected PacketHistory
     /**
      * Should this incoming filter be dropped?
      *
-     * Called immedately on receiption, before any further processing.
+     * Called immediately on reception, before any further processing.
      * @return true to abandon the packet
      */
     virtual bool shouldFilterReceived(const meshtastic_MeshPacket *p) override;

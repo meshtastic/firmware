@@ -15,6 +15,7 @@
 #endif
 
 extern Allocator<meshtastic_QueueStatus> &queueStatusPool;
+extern Allocator<meshtastic_MqttClientProxyMessage> &mqttClientProxyMessagePool;
 
 /**
  * Top level app for this service.  keeps the mesh, the radio config and the queue of received packets.
@@ -33,6 +34,9 @@ class MeshService
 
     // keep list of QueueStatus packets to be send to the phone
     PointerQueue<meshtastic_QueueStatus> toPhoneQueueStatusQueue;
+
+    // keep list of MqttClientProxyMessages to be send to the client for delivery
+    PointerQueue<meshtastic_MqttClientProxyMessage> toPhoneMqttProxyQueue;
 
     // This holds the last QueueStatus send
     meshtastic_QueueStatus lastQueueStatus;
@@ -67,8 +71,14 @@ class MeshService
     /// Return the next QueueStatus packet destined to the phone.
     meshtastic_QueueStatus *getQueueStatusForPhone() { return toPhoneQueueStatusQueue.dequeuePtr(0); }
 
+    /// Return the next MqttClientProxyMessage packet destined to the phone.
+    meshtastic_MqttClientProxyMessage *getMqttClientProxyMessageForPhone() { return toPhoneMqttProxyQueue.dequeuePtr(0); }
+
     // Release QueueStatus packet to pool
     void releaseQueueStatusToPool(meshtastic_QueueStatus *p) { queueStatusPool.release(p); }
+
+    // Release MqttClientProxyMessage packet to pool
+    void releaseMqttClientProxyMessageToPool(meshtastic_MqttClientProxyMessage *p) { mqttClientProxyMessagePool.release(p); }
 
     /**
      *  Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)
@@ -98,16 +108,19 @@ class MeshService
     bool cancelSending(PacketId id);
 
     /// Pull the latest power and time info into my nodeinfo
-    meshtastic_NodeInfo *refreshLocalNodeInfo();
+    meshtastic_NodeInfoLite *refreshLocalMeshNode();
 
     /// Send a packet to the phone
     void sendToPhone(meshtastic_MeshPacket *p);
+
+    /// Send an MQTT message to the phone for client proxying
+    void sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage *m);
 
     bool isToPhoneQueueEmpty();
 
   private:
     /// Called when our gps position has changed - updates nodedb and sends Location message out into the mesh
-    /// returns 0 to allow futher processing
+    /// returns 0 to allow further processing
     int onGPSChanged(const meshtastic::GPSStatus *arg);
 
     /// Handle a packet that just arrived from the radio.  This method does _ReliableRouternot_ free the provided packet.  If it

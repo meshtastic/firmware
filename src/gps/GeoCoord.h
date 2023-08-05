@@ -65,7 +65,7 @@ struct MGRS {
     uint32_t northing;
 };
 
-// A struct to hold the data for a OSGR coordiante
+// A struct to hold the data for a OSGR coordinate
 struct OSGR {
     char e100k;
     char n100k;

@@ -15,11 +15,11 @@
 #define USE_SH1106 1
 #undef GPS_SERIAL_NUM
 
-// #define I2C_SDA 6
-// #define I2C_SCL 7
+// default I2C pins:
+// SDA = 4
+// SCL = 5
 
 #define BUTTON_PIN 17
-#define EXT_NOTIFY_OUT 4
 
 #define BATTERY_PIN 26
 // ratio of voltage divider = 3.0 (R17=200k, R18=100k)

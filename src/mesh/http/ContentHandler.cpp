@@ -165,7 +165,7 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
 
     if (params->getQueryParameter("all", valueAll)) {
 
-        // If all is ture, return all the buffers we have available
+        // If all is true, return all the buffers we have available
         //   to us at this point in time.
         if (valueAll == "true") {
             while (len) {
@@ -179,7 +179,7 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
             res->write(txBuf, len);
         }
 
-        // the param "all" was not spcified. Return just one protobuf
+        // the param "all" was not specified. Return just one protobuf
     } else {
         len = webAPI.getFromRadio(txBuf);
         res->write(txBuf, len);
@@ -460,7 +460,7 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
     HTTPBodyParser *parser;
     std::string contentType = req->getHeader("Content-Type");
 
-    // The content type may have additional properties after a semicolon, for exampel:
+    // The content type may have additional properties after a semicolon, for example:
     // Content-Type: text/html;charset=utf-8
     // Content-Type: multipart/form-data;boundary=------s0m3w31rdch4r4c73rs
     // As we're interested only in the actual mime _type_, we strip everything after the

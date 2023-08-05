@@ -63,7 +63,7 @@ typedef struct _meshtastic_EnvironmentMetrics {
     float relative_humidity;
     /* Barometric pressure in hPA measured */
     float barometric_pressure;
-    /* Gas resistance in mOhm measured */
+    /* Gas resistance in MOhm measured */
     float gas_resistance;
     /* Voltage measured */
     float voltage;

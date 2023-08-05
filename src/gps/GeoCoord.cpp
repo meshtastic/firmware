@@ -12,7 +12,7 @@ GeoCoord::GeoCoord(int32_t lat, int32_t lon, int32_t alt) : _latitude(lat), _lon
 
 GeoCoord::GeoCoord(float lat, float lon, int32_t alt) : _altitude(alt)
 {
-    // Change decimial reprsentation to int32_t. I.e., 12.345 becomes 123450000
+    // Change decimial representation to int32_t. I.e., 12.345 becomes 123450000
     _latitude = int32_t(lat * 1e+7);
     _longitude = int32_t(lon * 1e+7);
     GeoCoord::setCoords();
@@ -20,7 +20,7 @@ GeoCoord::GeoCoord(float lat, float lon, int32_t alt) : _altitude(alt)
 
 GeoCoord::GeoCoord(double lat, double lon, int32_t alt) : _altitude(alt)
 {
-    // Change decimial reprsentation to int32_t. I.e., 12.345 becomes 123450000
+    // Change decimial representation to int32_t. I.e., 12.345 becomes 123450000
     _latitude = int32_t(lat * 1e+7);
     _longitude = int32_t(lon * 1e+7);
     GeoCoord::setCoords();
@@ -41,7 +41,7 @@ void GeoCoord::setCoords()
 
 void GeoCoord::updateCoords(int32_t lat, int32_t lon, int32_t alt)
 {
-    // If marked dirty or new coordiantes
+    // If marked dirty or new coordinates
     if (_dirty || _latitude != lat || _longitude != lon || _altitude != alt) {
         _dirty = true;
         _latitude = lat;
@@ -55,7 +55,7 @@ void GeoCoord::updateCoords(const double lat, const double lon, const int32_t al
 {
     int32_t iLat = lat * 1e+7;
     int32_t iLon = lon * 1e+7;
-    // If marked dirty or new coordiantes
+    // If marked dirty or new coordinates
     if (_dirty || _latitude != iLat || _longitude != iLon || _altitude != alt) {
         _dirty = true;
         _latitude = iLat;
@@ -69,7 +69,7 @@ void GeoCoord::updateCoords(const float lat, const float lon, const int32_t alt)
 {
     int32_t iLat = lat * 1e+7;
     int32_t iLon = lon * 1e+7;
-    // If marked dirty or new coordiantes
+    // If marked dirty or new coordinates
     if (_dirty || _latitude != iLat || _longitude != iLon || _altitude != alt) {
         _dirty = true;
         _latitude = iLat;
@@ -217,7 +217,7 @@ void GeoCoord::latLongToOSGR(const double lat, const double lon, OSGR &osgr)
     double eta2 = v / rho - 1;
     double mA = (1 + n + (5 / 4) * n * n + (5 / 4) * n * n * n) * (phi - phi0);
     double mB = (3 * n + 3 * n * n + (21 / 8) * n * n * n) * sin(phi - phi0) * cos(phi + phi0);
-    // loss of precision in mC & mD due to floating point rounding can cause innaccuracy of northing by a few meters
+    // loss of precision in mC & mD due to floating point rounding can cause inaccuracy of northing by a few meters
     double mC = (15 / 8 * n * n + 15 / 8 * n * n * n) * sin(2 * (phi - phi0)) * cos(2 * (phi + phi0));
     double mD = (35 / 24) * n * n * n * sin(3 * (phi - phi0)) * cos(3 * (phi + phi0));
     double m = b * f0 * (mA - mB + mC - mD);

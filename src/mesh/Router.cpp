@@ -12,9 +12,7 @@ extern "C" {
 #include "mesh/compression/unishox2.h"
 }
 
-#if HAS_WIFI || HAS_ETHERNET
 #include "mqtt/MQTT.h"
-#endif
 
 /**
  * Router todo
@@ -178,7 +176,7 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
         }
 
         if (!p->channel) { // don't override if a channel was requested
-            p->channel = nodeDB.getNodeChannel(p->to);
+            p->channel = nodeDB.getMeshNodeChannel(p->to);
             LOG_DEBUG("localSend to channel %d\n", p->channel);
         }
 
@@ -248,7 +246,6 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 
         bool shouldActuallyEncrypt = true;
 
-#if HAS_WIFI || HAS_ETHERNET
         if (moduleConfig.mqtt.enabled) {
             // check if we should send decrypted packets to mqtt
 
@@ -272,7 +269,6 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             if (mqtt && !shouldActuallyEncrypt)
                 mqtt->onSend(*p, chIndex);
         }
-#endif
 
         auto encodeResult = perhapsEncode(p);
         if (encodeResult != meshtastic_Routing_Error_NONE) {
@@ -280,14 +276,12 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             return encodeResult; // FIXME - this isn't a valid ErrorCode
         }
 
-#if HAS_WIFI || HAS_ETHERNET
         if (moduleConfig.mqtt.enabled) {
             // the packet is now encrypted.
             // check if we should send encrypted packets to mqtt
             if (mqtt && shouldActuallyEncrypt)
                 mqtt->onSend(*p, chIndex);
         }
-#endif
     }
 
     assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
@@ -405,7 +399,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             if (compressed_len >= p->decoded.payload.size) {
 
                 LOG_DEBUG("Not using compressing message.\n");
-                // Set the uncompressed payload varient anyway. Shouldn't hurt?
+                // Set the uncompressed payload variant anyway. Shouldn't hurt?
                 // p->decoded.which_payloadVariant = Data_payload_tag;
 
                 // Otherwise we use the compressor

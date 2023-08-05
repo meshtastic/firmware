@@ -18,7 +18,7 @@ namespace concurrency
  *
  * Useful for they top level loop() delay call to keep the CPU powered down until our next scheduled event or some external event.
  *
- * This is implmented for FreeRTOS but should be easy to port to other operating systems.
+ * This is implemented for FreeRTOS but should be easy to port to other operating systems.
  */
 class InterruptableDelay
 {

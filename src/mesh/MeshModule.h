@@ -47,7 +47,7 @@ typedef struct _UIFrameEvent {
  * A key concept for this is that your module should use a particular "portnum" for each message type you want to receive
  * and handle.
  *
- * Interally we use modules to implement the core meshtastic text messaging and gps position sharing features.  You
+ * Internally we use modules to implement the core meshtastic text messaging and gps position sharing features.  You
  * can use these classes as examples for how to write your own custom module.  See here: (FIXME)
  */
 class MeshModule

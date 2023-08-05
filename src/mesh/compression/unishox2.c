@@ -57,7 +57,7 @@ uint8_t usx_code_94[94];
 uint8_t usx_vcodes[] = {0x00, 0x40, 0x60, 0x80, 0x90, 0xA0, 0xB0, 0xC0, 0xD0, 0xD8, 0xE0, 0xE4, 0xE8, 0xEC,
                         0xEE, 0xF0, 0xF2, 0xF4, 0xF6, 0xF7, 0xF8, 0xF9, 0xFA, 0xFB, 0xFC, 0xFD, 0xFE, 0xFF};
 
-/// Length of each veritical code
+/// Length of each vertical code
 uint8_t usx_vcode_lens[] = {2, 3, 3, 4, 4, 4, 4, 4, 5, 5, 6, 6, 6, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8};
 
 /// Vertical Codes and Set number for frequent sequences in sets USX_SYM and USX_NUM. First 3 bits indicate set (USX_SYM/USX_NUM)
@@ -188,7 +188,7 @@ int append_switch_code(char *out, int olen, int ol, uint8_t state)
     return ol;
 }
 
-/// Appends given horizontal and veritical code bits to out
+/// Appends given horizontal and vertical code bits to out
 int append_code(char *out, int olen, int ol, uint8_t code, uint8_t *state, const uint8_t usx_hcodes[],
                 const uint8_t usx_hcode_lens[])
 {
@@ -888,7 +888,7 @@ int read8bitCode(const char *in, int len, int bit_no)
     return code;
 }
 
-/// The list of veritical codes is split into 5 sections. Used by readVCodeIdx()
+/// The list of vertical codes is split into 5 sections. Used by readVCodeIdx()
 #define SECTION_COUNT 5
 /// Used by readVCodeIdx() for finding the section under which the code read using read8bitCode() falls
 uint8_t usx_vsections[] = {0x7F, 0xBF, 0xDF, 0xEF, 0xFF};
@@ -915,7 +915,7 @@ uint8_t usx_vcode_lookup[36] = {(1 << 5) + 0,  (1 << 5) + 0,  (2 << 5) + 1,  (2 
 /// compared to using a 256 uint8_t buffer to decode the next 8 bits read by read8bitCode() \n
 /// by splitting the list of vertical codes. \n
 /// Decoder is designed for using less memory, not speed. \n
-/// Returns the veritical code index or 99 if match could not be found. \n
+/// Returns the vertical code index or 99 if match could not be found. \n
 /// Also updates bit_no_p with how many ever bits used by the vertical code.
 int readVCodeIdx(const char *in, int len, int *bit_no_p)
 {

@@ -50,7 +50,7 @@ XPowersLibInterface *PMU = NULL;
 #else
 
 // Copy of the base class defined in axp20x.h.
-// I'd rather not inlude axp20x.h as it brings Wire dependency.
+// I'd rather not include axp20x.h as it brings Wire dependency.
 class HasBatteryLevel
 {
   public:
@@ -540,10 +540,12 @@ int32_t Power::runOnce()
             LOG_DEBUG("Battery removed\n");
         }
         */
+#ifndef T_WATCH_S3 // FIXME - why is this triggering on the T-Watch S3?
         if (PMU->isPekeyLongPressIrq()) {
             LOG_DEBUG("PEK long button press\n");
             screen->setOn(false);
         }
+#endif
 
         PMU->clearIrqStatus();
     }
@@ -681,7 +683,8 @@ bool Power::axpChipInit()
             // GNSS VDD 3300mV
             PMU->setPowerChannelVoltage(XPOWERS_ALDO3, 3300);
             PMU->enablePowerOutput(XPOWERS_ALDO3);
-        } else if (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE) {
+        } else if (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE ||
+                   HW_VENDOR == meshtastic_HardwareModel_T_WATCH_S3) {
             // t-beam s3 core
             /**
              * gnss module power channel
@@ -712,9 +715,15 @@ bool Power::axpChipInit()
             PMU->setPowerChannelVoltage(XPOWERS_ALDO1, 3300);
             PMU->enablePowerOutput(XPOWERS_ALDO1);
 
-            // sdcard power channle
+            // sdcard power channel
             PMU->setPowerChannelVoltage(XPOWERS_BLDO1, 3300);
             PMU->enablePowerOutput(XPOWERS_BLDO1);
+
+#ifdef T_WATCH_S3
+            // DRV2605 power channel
+            PMU->setPowerChannelVoltage(XPOWERS_BLDO2, 3300);
+            PMU->enablePowerOutput(XPOWERS_BLDO2);
+#endif
 
             // PMU->setPowerChannelVoltage(XPOWERS_DCDC4, 3300);
             // PMU->enablePowerOutput(XPOWERS_DCDC4);

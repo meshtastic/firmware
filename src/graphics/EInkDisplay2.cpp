@@ -7,6 +7,10 @@
 #include "main.h"
 #include <SPI.h>
 
+// #ifdef HELTEC_WIRELESS_PAPER
+// SPIClass *hspi = NULL;
+// #endif
+
 #define COLORED GxEPD_BLACK
 #define UNCOLORED GxEPD_WHITE
 
@@ -19,13 +23,13 @@
 #define TECHO_DISPLAY_MODEL GxEPD2_213_BN
 
 // 4.2 inch 300x400 - GxEPD2_420_M01
-//#define TECHO_DISPLAY_MODEL GxEPD2_420_M01
+// #define TECHO_DISPLAY_MODEL GxEPD2_420_M01
 
 // 2.9 inch 296x128 - GxEPD2_290_T5D
-//#define TECHO_DISPLAY_MODEL GxEPD2_290_T5D
+// #define TECHO_DISPLAY_MODEL GxEPD2_290_T5D
 
 // 1.54 inch 200x200 - GxEPD2_154_M09
-//#define TECHO_DISPLAY_MODEL GxEPD2_154_M09
+// #define TECHO_DISPLAY_MODEL GxEPD2_154_M09
 
 #elif defined(MAKERPYTHON)
 // 2.9 inch 296x128 - GxEPD2_290_T5D
@@ -41,6 +45,9 @@
 // 1.54 inch 200x200 - GxEPD2_154_M09
 #define TECHO_DISPLAY_MODEL GxEPD2_154_M09
 
+#elif defined(HELTEC_WIRELESS_PAPER)
+//#define TECHO_DISPLAY_MODEL GxEPD2_213_T5D
+#define TECHO_DISPLAY_MODEL GxEPD2_213_BN
 #endif
 
 GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT> *adafruitDisplay;
@@ -62,6 +69,10 @@ EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY
 
     // GxEPD2_154_M09
     // setGeometry(GEOMETRY_RAWMODE, 200, 200);
+
+#elif defined(HELTEC_WIRELESS_PAPER)
+    // setGeometry(GEOMETRY_RAWMODE, 212, 104);
+    setGeometry(GEOMETRY_RAWMODE, 250, 122);
 #elif defined(MAKERPYTHON)
     // GxEPD2_290_T5D
     setGeometry(GEOMETRY_RAWMODE, 296, 128);
@@ -109,7 +120,7 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
         for (uint32_t y = 0; y < displayHeight; y++) {
             for (uint32_t x = 0; x < displayWidth; x++) {
 
-                // get src pixel in the page based ordering the OLED lib uses FIXME, super inefficent
+                // get src pixel in the page based ordering the OLED lib uses FIXME, super inefficient
                 auto b = buffer[x + (y / 8) * displayWidth];
                 auto isset = b & (1 << (y & 7));
                 adafruitDisplay->drawPixel(x, y, isset ? COLORED : UNCOLORED);
@@ -217,6 +228,16 @@ bool EInkDisplay::connect()
         } else {
             (void)adafruitDisplay;
         }
+    }
+#elif defined(HELTEC_WIRELESS_PAPER)
+    {
+        auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
+        adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+        // hspi = new SPIClass(HSPI);
+        // hspi->begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS); // SCLK, MISO, MOSI, SS
+        adafruitDisplay->init(115200, true, 10, false, SPI, SPISettings(6000000, MSBFIRST, SPI_MODE0));
+        adafruitDisplay->setRotation(3);
+        adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
     }
 #elif defined(PCA10059)
     {

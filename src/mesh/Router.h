@@ -90,7 +90,7 @@ class Router : protected concurrency::OSThread
      *
      * FIXME, move this into the new RoutingModule and do the filtering there using the regular module logic
      *
-     * Called immedately on receiption, before any further processing.
+     * Called immediately on reception, before any further processing.
      * @return true to abandon the packet
      */
     virtual bool shouldFilterReceived(const meshtastic_MeshPacket *p) { return false; }

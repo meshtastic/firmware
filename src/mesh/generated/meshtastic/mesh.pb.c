@@ -24,6 +24,9 @@ PB_BIND(meshtastic_Data, meshtastic_Data, 2)
 PB_BIND(meshtastic_Waypoint, meshtastic_Waypoint, AUTO)
 
 
+PB_BIND(meshtastic_MqttClientProxyMessage, meshtastic_MqttClientProxyMessage, 2)
+
+
 PB_BIND(meshtastic_MeshPacket, meshtastic_MeshPacket, 2)
 
 

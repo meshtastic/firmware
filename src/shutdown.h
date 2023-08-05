@@ -12,6 +12,8 @@ void powerCommandsCheck()
         ESP.restart();
 #elif defined(ARCH_NRF52)
         NVIC_SystemReset();
+#elif defined(ARCH_RP2040)
+        rp2040.reboot();
 #else
         rebootAtMsec = -1;
         LOG_WARN("FIXME implement reboot for this platform. Skipping for now.\n");

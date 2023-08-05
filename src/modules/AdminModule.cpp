@@ -16,9 +16,7 @@
 #include "unistd.h"
 #endif
 
-#if HAS_WIFI || HAS_ETHERNET
 #include "mqtt/MQTT.h"
-#endif
 
 #define DEFAULT_REBOOT_SECONDS 7
 
@@ -567,7 +565,7 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     if (conn.wifi.status.is_connected) {
         conn.wifi.rssi = WiFi.RSSI();
         conn.wifi.status.ip_address = WiFi.localIP();
-        conn.wifi.status.is_mqtt_connected = mqtt && mqtt->connected();
+        conn.wifi.status.is_mqtt_connected = mqtt && mqtt->isConnectedDirectly();
         conn.wifi.status.is_syslog_connected = false; // FIXME wire this up
     }
 #endif
@@ -578,7 +576,7 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     if (Ethernet.linkStatus() == LinkON) {
         conn.ethernet.status.is_connected = true;
         conn.ethernet.status.ip_address = Ethernet.localIP();
-        conn.ethernet.status.is_mqtt_connected = mqtt && mqtt->connected();
+        conn.ethernet.status.is_mqtt_connected = mqtt && mqtt->isConnectedDirectly();
         conn.ethernet.status.is_syslog_connected = false; // FIXME wire this up
     } else {
         conn.ethernet.status.is_connected = false;

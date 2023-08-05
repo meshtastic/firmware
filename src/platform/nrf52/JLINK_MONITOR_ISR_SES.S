@@ -136,7 +136,7 @@ Purpose : Implementation of debug monitor for J-Link monitor mode
 *    This handler is also responsible for handling commands that are sent by the debugger.
 *
 *  Notes 
-*    This is actually the ISR for the debug inerrupt (exception no. 12)
+*    This is actually the ISR for the debug interrupt (exception no. 12)
 */ 
         .thumb_func
 

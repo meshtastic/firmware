@@ -242,7 +242,7 @@ template <typename T> bool SX128xInterface<T>::isChannelActive()
     return false;
 }
 
-/** Could we send right now (i.e. either not actively receving or transmitting)? */
+/** Could we send right now (i.e. either not actively receiving or transmitting)? */
 template <typename T> bool SX128xInterface<T>::isActivelyReceiving()
 {
     uint16_t irq = lora.getIrqStatus();

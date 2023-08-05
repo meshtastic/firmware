@@ -3,6 +3,7 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include "Router.h"
+#include "TypeConversions.h"
 #include "airtime.h"
 #include "configuration.h"
 #include "gps/GeoCoord.h"
@@ -56,10 +57,8 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 
 meshtastic_MeshPacket *PositionModule::allocReply()
 {
-    meshtastic_NodeInfo *node = service.refreshLocalNodeInfo(); // should guarantee there is now a position
+    meshtastic_NodeInfoLite *node = service.refreshLocalMeshNode(); // should guarantee there is now a position
     assert(node->has_position);
-
-    node->position.seq_number++;
 
     // configuration of POSITION packet
     //   consider making this a function argument?
@@ -67,44 +66,48 @@ meshtastic_MeshPacket *PositionModule::allocReply()
 
     // Populate a Position struct with ONLY the requested fields
     meshtastic_Position p = meshtastic_Position_init_default; //   Start with an empty structure
+    if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0) {
+        localPosition = ConvertToPosition(node->position);
+    }
+    localPosition.seq_number++;
 
     // lat/lon are unconditionally included - IF AVAILABLE!
-    p.latitude_i = node->position.latitude_i;
-    p.longitude_i = node->position.longitude_i;
-    p.time = node->position.time;
+    p.latitude_i = localPosition.latitude_i;
+    p.longitude_i = localPosition.longitude_i;
+    p.time = localPosition.time;
 
     if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE) {
         if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL)
-            p.altitude = node->position.altitude;
+            p.altitude = localPosition.altitude;
         else
-            p.altitude_hae = node->position.altitude_hae;
+            p.altitude_hae = localPosition.altitude_hae;
 
         if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_GEOIDAL_SEPARATION)
-            p.altitude_geoidal_separation = node->position.altitude_geoidal_separation;
+            p.altitude_geoidal_separation = localPosition.altitude_geoidal_separation;
     }
 
     if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_DOP) {
         if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_HVDOP) {
-            p.HDOP = node->position.HDOP;
-            p.VDOP = node->position.VDOP;
+            p.HDOP = localPosition.HDOP;
+            p.VDOP = localPosition.VDOP;
         } else
-            p.PDOP = node->position.PDOP;
+            p.PDOP = localPosition.PDOP;
     }
 
     if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_SATINVIEW)
-        p.sats_in_view = node->position.sats_in_view;
+        p.sats_in_view = localPosition.sats_in_view;
 
     if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_TIMESTAMP)
-        p.timestamp = node->position.timestamp;
+        p.timestamp = localPosition.timestamp;
 
     if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_SEQ_NO)
-        p.seq_number = node->position.seq_number;
+        p.seq_number = localPosition.seq_number;
 
     if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_HEADING)
-        p.ground_track = node->position.ground_track;
+        p.ground_track = localPosition.ground_track;
 
     if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_SPEED)
-        p.ground_speed = node->position.ground_speed;
+        p.ground_speed = localPosition.ground_speed;
 
     // Strip out any time information before sending packets to other nodes - to keep the wire size small (and because other
     // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS to include the time, so that gpsless
@@ -144,7 +147,7 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
 
 int32_t PositionModule::runOnce()
 {
-    meshtastic_NodeInfo *node = nodeDB.getNode(nodeDB.getNodeNum());
+    meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
 
     // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();
@@ -164,14 +167,14 @@ int32_t PositionModule::runOnce()
                 bool requestReplies = currentGeneration != radioGeneration;
                 currentGeneration = radioGeneration;
 
-                LOG_INFO("Sending pos@%x:6 to mesh (wantReplies=%d)\n", node->position.timestamp, requestReplies);
+                LOG_INFO("Sending pos@%x:6 to mesh (wantReplies=%d)\n", localPosition.timestamp, requestReplies);
                 sendOurPosition(NODENUM_BROADCAST, requestReplies);
             }
         }
     } else if (config.position.position_broadcast_smart_enabled) {
         // Only send packets if the channel is less than 25% utilized or we're a tracker.
         if (airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER)) {
-            meshtastic_NodeInfo *node2 = service.refreshLocalNodeInfo(); // should guarantee there is now a position
+            meshtastic_NodeInfoLite *node2 = service.refreshLocalMeshNode(); // should guarantee there is now a position
 
             if (hasValidPosition(node2)) {
                 // The minimum distance to travel before we are able to send a new position packet.
@@ -193,7 +196,7 @@ int32_t PositionModule::runOnce()
 
                     LOG_INFO("Sending smart pos@%x:6 to mesh (distanceTraveled=%fm, minDistanceThreshold=%im, timeElapsed=%ims, "
                              "minTimeInterval=%ims)\n",
-                             node2->position.timestamp, abs(distanceTraveledSinceLastSend), distanceTravelThreshold,
+                             localPosition.timestamp, abs(distanceTraveledSinceLastSend), distanceTravelThreshold,
                              msSinceLastSend, minimumTimeThreshold);
                     sendOurPosition(NODENUM_BROADCAST, requestReplies);
 

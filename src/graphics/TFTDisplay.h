@@ -7,7 +7,6 @@
  *
  * Remaining TODO:
  * optimize display() to only draw changed pixels (see other OLED subclasses for examples)
- * implement displayOn/displayOff to turn off the TFT device (and backlight)
  * Use the fast NRF52 SPI API rather than the slow standard arduino version
  *
  * turn radio back on - currently with both on spi bus is fucked? or are we leaving chip select asserted?
@@ -28,6 +27,8 @@ class TFTDisplay : public OLEDDisplay
      *
      */
     void setDetected(uint8_t detected);
+
+    void getTouch(int *x, int *y);
 
   protected:
     // the header size of the buffer used, e.g. for the SPI command header

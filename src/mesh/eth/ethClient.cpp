@@ -68,7 +68,7 @@ static int32_t reconnectETH()
         }
 
         // FIXME this is kinda yucky, instead we should just have an observable for 'wifireconnected'
-        if (mqtt && !mqtt->connected()) {
+        if (mqtt && !moduleConfig.mqtt.proxy_to_client_enabled && !mqtt->isConnectedDirectly()) {
             mqtt->reconnect();
         }
     }
@@ -87,7 +87,6 @@ static int32_t reconnectETH()
             perhapsSetRTC(RTCQualityNTP, &tv);
 
             ntp_renew = millis() + 43200 * 1000; // success, refresh every 12 hours
-
         } else {
             LOG_ERROR("NTP Update failed\n");
             ntp_renew = millis() + 300 * 1000; // failure, retry every 5 minutes
@@ -170,7 +169,6 @@ bool initEthernet()
         ethEvent = new Periodic("ethConnect", reconnectETH);
 
         return true;
-
     } else {
         LOG_INFO("Not using Ethernet\n");
         return false;

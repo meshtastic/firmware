@@ -33,11 +33,11 @@
            to your device.
 
     TODO (in this order):
-        * Define a verbose RX mode to report on mesh and packet infomration.
+        * Define a verbose RX mode to report on mesh and packet information.
             - This won't happen any time soon.
 
     KNOWN PROBLEMS
-        * Until the module is initilized by the startup sequence, the TX pin is in a floating
+        * Until the module is initialized by the startup sequence, the TX pin is in a floating
           state. Device connected to that pin may see this as "noise".
         * Will not work on Linux device targets.
 
@@ -161,18 +161,18 @@ int32_t SerialModule::runOnce()
                 // in NMEA mode send out GGA every 2 seconds, Don't read from Port
                 if (millis() - lastNmeaTime > 2000) {
                     lastNmeaTime = millis();
-                    printGGA(outbuf, sizeof(outbuf), nodeDB.getNode(myNodeInfo.my_node_num)->position);
+                    printGGA(outbuf, sizeof(outbuf), localPosition);
                     serialPrint->printf("%s", outbuf);
                 }
             } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO) {
                 if (millis() - lastNmeaTime > 10000) {
                     lastNmeaTime = millis();
                     uint32_t readIndex = 0;
-                    const meshtastic_NodeInfo *tempNodeInfo = nodeDB.readNextInfo(readIndex);
+                    const meshtastic_NodeInfoLite *tempNodeInfo = nodeDB.readNextMeshNode(readIndex);
                     while (tempNodeInfo != NULL && tempNodeInfo->has_user && hasValidPosition(tempNodeInfo)) {
                         printWPL(outbuf, sizeof(outbuf), tempNodeInfo->position, tempNodeInfo->user.long_name, true);
                         serialPrint->printf("%s", outbuf);
-                        tempNodeInfo = nodeDB.readNextInfo(readIndex);
+                        tempNodeInfo = nodeDB.readNextMeshNode(readIndex);
                     }
                 }
             }
@@ -251,7 +251,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                 moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_SIMPLE) {
                 serialPrint->printf("%s", p.payload.bytes);
             } else if (moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG) {
-                meshtastic_NodeInfo *node = nodeDB.getNode(getFrom(&mp));
+                meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(getFrom(&mp));
                 String sender = (node && node->has_user) ? node->user.short_name : "???";
                 serialPrint->println();
                 serialPrint->printf("%s: %s", sender, p.payload.bytes);
@@ -267,7 +267,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                         decoded = &scratch;
                     }
                     // send position packet as WPL to the serial port
-                    printWPL(outbuf, sizeof(outbuf), *decoded, nodeDB.getNode(getFrom(&mp))->user.long_name,
+                    printWPL(outbuf, sizeof(outbuf), *decoded, nodeDB.getMeshNode(getFrom(&mp))->user.long_name,
                              moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO);
                     serialPrint->printf("%s", outbuf);
                 }

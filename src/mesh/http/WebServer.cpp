@@ -15,7 +15,7 @@
 #include "esp_task_wdt.h"
 #endif
 
-// Persistant Data Storage
+// Persistent Data Storage
 #include <Preferences.h>
 Preferences prefs;
 

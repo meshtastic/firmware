@@ -1,7 +1,19 @@
+// Primary I2C Bus includes PCF8563 RTC Module
 #define I2C_SDA 21
 #define I2C_SCL 22
 
-// LED?
+// 7-07-2023 Or enable Secondary I2C Bus
+//#define I2C_SDA1 32
+//#define I2C_SCL1 33
+
+#define HAS_GPS 1
+#undef GPS_RX_PIN
+#undef GPS_TX_PIN
+// Use Secondary I2C Bus as GPS Serial
+#define GPS_RX_PIN 33
+#define GPS_TX_PIN 32
+
+// Green LED
 #define LED_INVERTED 0
 #define LED_PIN 10
 
@@ -36,10 +48,6 @@
 #define LORA_RESET 26
 #define LORA_DIO1 RADIOLIB_NC
 #define LORA_DIO2 RADIOLIB_NC
-
-// This board has no GPS for now
-#undef GPS_RX_PIN
-#undef GPS_TX_PIN
 
 #define USE_EINK
 // https://docs.m5stack.com/en/core/coreink
