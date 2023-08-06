@@ -247,10 +247,10 @@ class LGFX : public lgfx::LGFX_Device
             cfg.use_lock = true;                // Set to true to use transaction locking
             cfg.dma_channel = SPI_DMA_CH_AUTO;  // SPI_DMA_CH_AUTO; // Set DMA channel to use (0=not use DMA / 1=1ch / 2=ch /
                                                 // SPI_DMA_CH_AUTO=auto setting)
-            cfg.pin_sclk = TFT_SCLK;         // Set SPI SCLK pin number
-            cfg.pin_mosi = TFT_MOSI;         // Set SPI MOSI pin number
-            cfg.pin_miso = TFT_MISO;        // Set SPI MISO pin number (-1 = disable)
-            cfg.pin_dc = TFT_DC;            // Set SPI DC pin number (-1 = disable)
+            cfg.pin_sclk = TFT_SCLK;            // Set SPI SCLK pin number
+            cfg.pin_mosi = TFT_MOSI;            // Set SPI MOSI pin number
+            cfg.pin_miso = TFT_MISO;            // Set SPI MISO pin number (-1 = disable)
+            cfg.pin_dc = TFT_DC;                // Set SPI DC pin number (-1 = disable)
 
             _bus_instance.config(cfg);              // applies the set value to the bus.
             _panel_instance.setBus(&_bus_instance); // set the bus on the panel.
@@ -260,7 +260,7 @@ class LGFX : public lgfx::LGFX_Device
             auto cfg = _panel_instance.config(); // Gets a structure for display panel settings.
 
             cfg.pin_cs = TFT_CS;     // Pin number where CS is connected (-1 = disable)
-            cfg.pin_rst = TFT_RST; // Pin number where RST is connected  (-1 = disable)
+            cfg.pin_rst = TFT_RST;   // Pin number where RST is connected  (-1 = disable)
             cfg.pin_busy = TFT_BUSY; // Pin number where BUSY is connected (-1 = disable)
 
             // The following setting values ​​are general initial values ​​for each panel, so please comment out any
@@ -274,12 +274,12 @@ class LGFX : public lgfx::LGFX_Device
             cfg.dummy_read_pixel = 8;      // Number of bits for dummy read before pixel readout
             cfg.dummy_read_bits = 1;       // Number of bits for dummy read before non-pixel data read
             cfg.readable = true;           // Set to true if data can be read
-            cfg.invert = false;             // Set to true if the light/darkness of the panel is reversed
+            cfg.invert = false;            // Set to true if the light/darkness of the panel is reversed
             cfg.rgb_order = false;         // Set to true if the panel's red and blue are swapped
             cfg.dlen_16bit =
                 false;             // Set to true for panels that transmit data length in 16-bit units with 16-bit parallel or SPI
             cfg.bus_shared = true; // If the bus is shared with the SD card, set to true (bus control with drawJpgFile etc.)
-            
+
             // Set the following only when the display is shifted with a driver with a variable number of pixels, such as the
             // ST7735 or ILI9163.
             cfg.memory_width = TFT_WIDTH;   // Maximum width supported by the driver IC
@@ -292,7 +292,7 @@ class LGFX : public lgfx::LGFX_Device
             auto cfg = _light_instance.config(); // Gets a structure for backlight settings.
 
             cfg.pin_bl = TFT_BL; // Pin number to which the backlight is connected
-            cfg.invert = false;      // true to invert the brightness of the backlight
+            cfg.invert = false;  // true to invert the brightness of the backlight
             // cfg.freq = 44100;    // PWM frequency of backlight
             // cfg.pwm_channel = 1; // PWM channel number to use
 
