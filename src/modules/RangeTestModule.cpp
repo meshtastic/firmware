@@ -1,3 +1,13 @@
+/**
+ * @file RangeTestModule.cpp
+ * @brief Implementation of the RangeTestModule class and RangeTestModuleRadio class.
+ *
+ * As a sender, this module sends packets every n seconds with an incremented PacketID.
+ * As a receiver, this module receives packets from multiple senders and saves them to the Filesystem.
+ *
+ * The RangeTestModule class is an OSThread that runs the module.
+ * The RangeTestModuleRadio class handles sending and receiving packets.
+ */
 #include "RangeTestModule.h"
 #include "FSCommon.h"
 #include "MeshService.h"
@@ -9,11 +19,6 @@
 #include "configuration.h"
 #include "gps/GeoCoord.h"
 #include <Arduino.h>
-
-/*
-    As a sender, I can send packets every n seconds. These packets include an incremented PacketID.
-    As a receiver, I can receive packets from multiple senders. These packets can be saved to the Filesystem.
-*/
 
 RangeTestModule *rangeTestModule;
 RangeTestModuleRadio *rangeTestModuleRadio;
@@ -97,6 +102,12 @@ int32_t RangeTestModule::runOnce()
     return disable();
 }
 
+/**
+ * Sends a payload to a specified destination node.
+ *
+ * @param dest The destination node number.
+ * @param wantReplies Whether or not to request replies from the destination node.
+ */
 void RangeTestModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 {
     meshtastic_MeshPacket *p = allocDataPacket();
