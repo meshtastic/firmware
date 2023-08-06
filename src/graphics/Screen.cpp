@@ -31,6 +31,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
 #include "graphics/images.h"
+#include "input/TouchScreenImpl1.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "mesh/Channels.h"
@@ -102,7 +103,8 @@ static uint16_t displayWidth, displayHeight;
 #define SCREEN_WIDTH displayWidth
 #define SCREEN_HEIGHT displayHeight
 
-#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)
+#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)) &&                                \
+    !defined(DISPLAY_FORCE_SMALL_FONTS)
 // The screen is bigger so use bigger fonts
 #define FONT_SMALL ArialMT_Plain_16  // Height: 19
 #define FONT_MEDIUM ArialMT_Plain_24 // Height: 28
@@ -492,7 +494,8 @@ static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, NodeStatus *no
 {
     char usersString[20];
     snprintf(usersString, sizeof(usersString), "%d/%d", nodeStatus->getNumOnline(), nodeStatus->getNumTotal());
-#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)
+#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)) &&                                \
+    !defined(DISPLAY_FORCE_SMALL_FONTS)
     display->drawFastImage(x, y + 3, 8, 8, imgUser);
 #else
     display->drawFastImage(x, y, 8, 8, imgUser);
@@ -1044,12 +1047,18 @@ void Screen::setup()
 #endif
     serialSinceMsec = millis();
 
+#if HAS_TOUCHSCREEN
+    touchScreenImpl1 = new TouchScreenImpl1(dispdev.getWidth(), dispdev.getHeight(), dispdev.getTouch);
+    touchScreenImpl1->init();
+#endif
+
     // Subscribe to status updates
     powerStatusObserver.observe(&powerStatus->onNewStatus);
     gpsStatusObserver.observe(&gpsStatus->onNewStatus);
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
     if (textMessageModule)
         textMessageObserver.observe(textMessageModule);
+    inputObserver.observe(inputBroker);
 
     // Modules can notify screen about refresh
     MeshModule::observeUIEvents(&uiFrameEventObserver);
@@ -1126,6 +1135,12 @@ int32_t Screen::runOnce()
                 // Don't advance the screen if we just wanted to switch off the nag notification
                 handleOnPress();
             }
+            break;
+        case Cmd::SHOW_PREV_FRAME:
+            handleShowPrevFrame();
+            break;
+        case Cmd::SHOW_NEXT_FRAME:
+            handleShowNextFrame();
             break;
         case Cmd::START_BLUETOOTH_PIN_SCREEN:
             handleStartBluetoothPinScreen(cmd.bluetooth_pin);
@@ -1420,6 +1435,28 @@ void Screen::handleOnPress()
     }
 }
 
+void Screen::handleShowPrevFrame()
+{
+    // If screen was off, just wake it, otherwise go back to previous frame
+    // If we are in a transition, the press must have bounced, drop it.
+    if (ui.getUiState()->frameState == FIXED) {
+        ui.previousFrame();
+        lastScreenTransition = millis();
+        setFastFramerate();
+    }
+}
+
+void Screen::handleShowNextFrame()
+{
+    // If screen was off, just wake it, otherwise advance to next frame
+    // If we are in a transition, the press must have bounced, drop it.
+    if (ui.getUiState()->frameState == FIXED) {
+        ui.nextFrame();
+        lastScreenTransition = millis();
+        setFastFramerate();
+    }
+}
+
 #ifndef SCREEN_TRANSITION_FRAMERATE
 #define SCREEN_TRANSITION_FRAMERATE 30 // fps
 #endif
@@ -1492,7 +1529,8 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 #ifdef ARCH_ESP32
         if (millis() - storeForwardModule->lastHeartbeat >
             (storeForwardModule->heartbeatInterval * 1200)) { // no heartbeat, overlap a bit
-#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)
+#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)) &&                                \
+    !defined(DISPLAY_FORCE_SMALL_FONTS)
             display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8,
                                    imgQuestionL1);
             display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 11 + FONT_HEIGHT_SMALL, 12, 8,
@@ -1502,7 +1540,8 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                                    imgQuestion);
 #endif
         } else {
-#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)
+#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)) &&                                \
+    !defined(DISPLAY_FORCE_SMALL_FONTS)
             display->drawFastImage(x + SCREEN_WIDTH - 18 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 16, 8,
                                    imgSFL1);
             display->drawFastImage(x + SCREEN_WIDTH - 18 - display->getStringWidth(ourId), y + 11 + FONT_HEIGHT_SMALL, 16, 8,
@@ -1514,7 +1553,8 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         }
 #endif
     } else {
-#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)
+#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)) &&                                \
+    !defined(DISPLAY_FORCE_SMALL_FONTS)
         display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8,
                                imgInfoL1);
         display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 11 + FONT_HEIGHT_SMALL, 12, 8,
@@ -1851,6 +1891,20 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
             // TODO: We might also want switch to corresponding frame,
             //       but we don't know the exact frame number.
             // ui.switchToFrame(0);
+        }
+    }
+
+    return 0;
+}
+
+int Screen::handleInputEvent(const InputEvent *event)
+{
+    if (showingNormalScreen && moduleFrames.size() == 0) {
+        LOG_DEBUG("Screen::handleInputEvent from %s\n", event->source);
+        if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
+            showPrevFrame();
+        } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
+            showNextFrame();
         }
     }
 

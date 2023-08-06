@@ -7,7 +7,7 @@ CardKbI2cImpl::CardKbI2cImpl() : KbI2cBase("cardKB") {}
 
 void CardKbI2cImpl::init()
 {
-    if (cardkb_found.address != CARDKB_ADDR) {
+    if (cardkb_found.address != CARDKB_ADDR && cardkb_found.address != TDECK_KB_ADDR) {
         disable();
         return;
     }

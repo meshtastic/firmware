@@ -1,6 +1,7 @@
 #include "configuration.h"
 #include "input/InputBroker.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
+#include "input/TrackballInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
 #include "input/cardKbI2cImpl.h"
 #include "modules/AdminModule.h"
@@ -60,6 +61,10 @@ void setupModules()
         cardKbI2cImpl = new CardKbI2cImpl();
         cardKbI2cImpl->init();
 #endif
+#if HAS_TRACKBALL
+        trackballInterruptImpl1 = new TrackballInterruptImpl1();
+        trackballInterruptImpl1->init();
+#endif
 #if HAS_SCREEN
         cannedMessageModule = new CannedMessageModule();
 #endif
@@ -87,6 +92,9 @@ void setupModules()
 #endif
     } else {
         adminModule = new AdminModule();
+#if HAS_TELEMETRY
+        new DeviceTelemetryModule();
+#endif
         traceRouteModule = new TraceRouteModule();
     }
     // NOTE! This module must be added LAST because it likes to check for replies from other modules and avoid sending extra

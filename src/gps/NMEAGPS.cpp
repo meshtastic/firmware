@@ -107,6 +107,14 @@ bool NMEAGPS::lookForLocation()
     // At a minimum, use the fixQuality indicator in GPGGA (FIXME?)
     fixQual = reader.fixQuality();
 
+#ifndef TINYGPS_OPTION_NO_STATISTICS
+    if (reader.failedChecksum() > lastChecksumFailCount) {
+        LOG_WARN("Warning, %u new GPS checksum failures, for a total of %u.\n", reader.failedChecksum() - lastChecksumFailCount,
+                 reader.failedChecksum());
+        lastChecksumFailCount = reader.failedChecksum();
+    }
+#endif
+
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
     fixType = atoi(gsafixtype.value()); // will set to zero if no data
     // LOG_DEBUG("FIX QUAL=%d, TYPE=%d\n", fixQual, fixType);
@@ -174,8 +182,10 @@ bool NMEAGPS::lookForLocation()
 #endif
 
     // Discard incomplete or erroneous readings
-    if (reader.hdop.value() == 0)
+    if (reader.hdop.value() == 0) {
+        LOG_WARN("BOGUS hdop.value() REJECTED: %d\n", reader.hdop.value());
         return false;
+    }
 
     p.latitude_i = toDegInt(loc.lat);
     p.longitude_i = toDegInt(loc.lng);
@@ -243,7 +253,8 @@ bool NMEAGPS::hasFlow()
 bool NMEAGPS::whileIdle()
 {
     bool isValid = false;
-
+    // if (_serial_gps->available() > 0)
+    // LOG_DEBUG("GPS Bytes Waiting: %u\n", _serial_gps->available());
     // First consume any chars that have piled up at the receiver
     while (_serial_gps->available() > 0) {
         int c = _serial_gps->read();

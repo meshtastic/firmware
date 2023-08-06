@@ -30,8 +30,8 @@ ScanI2C::FoundDevice ScanI2C::firstRTC() const
 
 ScanI2C::FoundDevice ScanI2C::firstKeyboard() const
 {
-    ScanI2C::DeviceType types[] = {CARDKB, RAK14004};
-    return firstOfOrNONE(2, types);
+    ScanI2C::DeviceType types[] = {CARDKB, TDECKKB, RAK14004};
+    return firstOfOrNONE(3, types);
 }
 
 ScanI2C::FoundDevice ScanI2C::firstAccelerometer() const

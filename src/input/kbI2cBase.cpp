@@ -41,7 +41,7 @@ void write_to_14004(const TwoWire * i2cBus, uint8_t reg, uint8_t data)
 
 int32_t KbI2cBase::runOnce()
 {
-    if (cardkb_found.address != CARDKB_ADDR) {
+    if (cardkb_found.address != CARDKB_ADDR && cardkb_found.address != TDECK_KB_ADDR) {
         // Input device is not detected.
         return INT32_MAX;
     }
@@ -85,9 +85,9 @@ int32_t KbI2cBase::runOnce()
             e.kbchar = PrintDataBuf;
             this->notifyObservers(&e);
         }
-    } else {
-        // m5 cardkb
-        i2cBus->requestFrom(CARDKB_ADDR, 1);
+    } else if (kb_model == 0x00 || kb_model == 0x10) {
+        // m5 cardkb and T-Deck
+        i2cBus->requestFrom(kb_model == 0x00 ? CARDKB_ADDR : TDECK_KB_ADDR, 1);
 
         while (i2cBus->available()) {
             char c = i2cBus->read();
@@ -132,6 +132,8 @@ int32_t KbI2cBase::runOnce()
                 this->notifyObservers(&e);
             }
         }
+    } else {
+        LOG_WARN("Unknown kb_model 0x%02x\n", kb_model);
     }
-    return 500;
+    return 300;
 }

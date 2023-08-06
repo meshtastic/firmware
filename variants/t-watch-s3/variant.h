@@ -16,10 +16,13 @@
 #define TFT_OFFSET_X 0
 #define TFT_OFFSET_Y 0
 #define SCREEN_ROTATE
-#define SCREEN_TRANSITION_FRAMERATE 1 // fps
+#define SCREEN_TRANSITION_FRAMERATE 5 // fps
+
+#define HAS_TOUCHSCREEN 1
 #define SCREEN_TOUCH_INT 16
-#define SCREEN_TOUCH_USE_I2C1 1
-#define TOUCH_SLAVE_ADDRESS 0x38 // GT911
+#define SCREEN_TOUCH_USE_I2C1
+#define TOUCH_I2C_PORT 1
+#define TOUCH_SLAVE_ADDRESS 0x38
 
 #define I2C_SDA1 39 // Used for capacitive touch
 #define I2C_SCL1 40 // Used for capacitive touch

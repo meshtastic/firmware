@@ -174,7 +174,7 @@ class LGFX : public lgfx::LGFX_Device
             auto cfg = _light_instance.config(); // Gets a structure for backlight settings.
 
             cfg.pin_bl = ST7789_BL; // Pin number to which the backlight is connected
-            cfg.invert = true;      // true to invert the brightness of the backlight
+            cfg.invert = false;     // true to invert the brightness of the backlight
             // cfg.pwm_channel = 0;
 
             _light_instance.config(cfg);
@@ -196,7 +196,7 @@ class LGFX : public lgfx::LGFX_Device
             // cfg.freq = 2500000;
 
             // I2C
-            cfg.i2c_port = 1;
+            cfg.i2c_port = TOUCH_I2C_PORT;
             cfg.i2c_addr = TOUCH_SLAVE_ADDRESS;
 #ifdef SCREEN_TOUCH_USE_I2C1
             cfg.pin_sda = I2C_SDA1;
@@ -205,7 +205,7 @@ class LGFX : public lgfx::LGFX_Device
             cfg.pin_sda = I2C_SDA;
             cfg.pin_scl = I2C_SCL;
 #endif
-            cfg.freq = 400000;
+            // cfg.freq = 400000;
 
             _touch_instance.config(cfg);
             _panel_instance.setTouch(&_touch_instance);
@@ -276,6 +276,9 @@ void TFTDisplay::sendCommand(uint8_t com)
 #ifdef VTFT_CTRL
         digitalWrite(VTFT_CTRL, LOW);
 #endif
+#ifndef M5STACK
+        tft.setBrightness(128);
+#endif
         break;
     }
     case DISPLAYOFF: {
@@ -285,6 +288,9 @@ void TFTDisplay::sendCommand(uint8_t com)
 #ifdef VTFT_CTRL
         digitalWrite(VTFT_CTRL, HIGH);
 #endif
+#ifndef M5STACK
+        tft.setBrightness(0);
+#endif
         break;
     }
     default:
@@ -292,6 +298,24 @@ void TFTDisplay::sendCommand(uint8_t com)
     }
 
     // Drop all other commands to device (we just update the buffer)
+}
+
+bool TFTDisplay::hasTouch(void)
+{
+#ifndef M5STACK
+    return tft.touch() != nullptr;
+#else
+    return false;
+#endif
+}
+
+bool TFTDisplay::getTouch(int16_t *x, int16_t *y)
+{
+#ifndef M5STACK
+    return tft.getTouch(x, y);
+#else
+    return false;
+#endif
 }
 
 void TFTDisplay::setDetected(uint8_t detected)
@@ -320,14 +344,6 @@ bool TFTDisplay::connect()
 #endif
     tft.fillScreen(TFT_BLACK);
     return true;
-}
-
-// Get touch coords from the display
-void TFTDisplay::getTouch(int *x, int *y)
-{
-#ifndef M5STACK
-    tft.getTouch(x, y);
-#endif
 }
 
 #endif

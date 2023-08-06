@@ -13,6 +13,7 @@ class NMEAGPS : public GPS
 {
     TinyGPSPlus reader;
     uint8_t fixQual = 0; // fix quality from GPGGA
+    uint32_t lastChecksumFailCount = 0;
 
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
     // (20210908) TinyGps++ can only read the GPGSA "FIX TYPE" field
