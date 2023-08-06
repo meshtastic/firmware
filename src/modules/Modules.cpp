@@ -92,6 +92,9 @@ void setupModules()
 #endif
     } else {
         adminModule = new AdminModule();
+#if HAS_TELEMETRY
+        new DeviceTelemetryModule();
+#endif
         traceRouteModule = new TraceRouteModule();
     }
     // NOTE! This module must be added LAST because it likes to check for replies from other modules and avoid sending extra

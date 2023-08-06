@@ -114,9 +114,8 @@ External serial flash W25Q16JV_IQ
 #define SX126X_CS (32 + 13) // FIXME - we really should define LORA_CS instead
 #define SX126X_DIO1 (32 + 10)
 // Note DIO2 is attached internally to the module to an analog switch for TX/RX switching
-//#define SX1262_DIO3 \
-    (0 + 21) // This is used as an *output* from the sx1262 and connected internally to power the tcxo, do not drive from the main
-// CPU?
+//#define SX1262_DIO3 (0 + 21)
+// This is used as an *output* from the sx1262 and connected internally to power the tcxo, do not drive from the main CPU?
 #define SX126X_BUSY (32 + 11)
 #define SX126X_RESET (32 + 15)
 #define SX126X_E22 //  DIO2 controlls an antenna switch and the TCXO voltage is controlled by DIO3

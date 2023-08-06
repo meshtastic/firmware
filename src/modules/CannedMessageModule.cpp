@@ -18,7 +18,9 @@
 #include "graphics/fonts/OLEDDisplayFontsUA.h"
 #endif
 
-#if defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)
+#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)) &&                                \
+    !defined(DISPLAY_FORCE_SMALL_FONTS)
+
 // The screen is bigger so use bigger fonts
 #define FONT_SMALL ArialMT_Plain_16
 #define FONT_MEDIUM ArialMT_Plain_24
@@ -59,7 +61,8 @@ CannedMessageModule::CannedMessageModule()
 {
     if (moduleConfig.canned_message.enabled) {
         this->loadProtoForModule();
-        if ((this->splitConfiguredMessages() <= 0) && (cardkb_found.address != CARDKB_ADDR)) {
+        if ((this->splitConfiguredMessages() <= 0) && (cardkb_found.address != CARDKB_ADDR) &&
+            (cardkb_found.address != TDECK_KB_ADDR)) {
             LOG_INFO("CannedMessageModule: No messages are configured. Module is disabled\n");
             this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
             disable();
