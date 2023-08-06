@@ -174,7 +174,6 @@ extern NodeDB nodeDB;
 
         # prefs.position_broadcast_secs = FIXME possibly broadcast only once an hr
         prefs.wait_bluetooth_secs = 1  # Don't stay in bluetooth mode
-        prefs.mesh_sds_timeout_secs = never
         # try to stay in light sleep one full day, then briefly wake and sleep again
 
         prefs.ls_secs = oneday
@@ -202,7 +201,6 @@ extern NodeDB nodeDB;
 #define default_gps_update_interval IF_ROUTER(ONE_DAY, 2 * 60)
 #define default_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 15 * 60)
 #define default_wait_bluetooth_secs IF_ROUTER(1, 60)
-#define default_mesh_sds_timeout_secs IF_ROUTER(NODE_DELAY_FOREVER, 2 * 60 * 60)
 #define default_sds_secs IF_ROUTER(ONE_DAY, UINT32_MAX) // Default to forever super deep sleep
 #define default_ls_secs IF_ROUTER(ONE_DAY, 5 * 60)
 #define default_min_wake_secs 10
