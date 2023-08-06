@@ -157,7 +157,8 @@ meshtastic_QueueStatus Router::getQueueStatus()
         meshtastic_QueueStatus qs;
         qs.res = qs.mesh_packet_id = qs.free = qs.maxlen = 0;
         return qs;
-    } else return iface->getQueueStatus();
+    } else
+        return iface->getQueueStatus();
 }
 
 ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
