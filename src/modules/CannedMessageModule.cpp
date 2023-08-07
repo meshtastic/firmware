@@ -10,6 +10,10 @@
 
 #include "main.h" // for cardkb_found
 
+#ifndef INPUTBROKER_MATRIX_TYPE
+#define INPUTBROKER_MATRIX_TYPE 0
+#endif
+
 #ifdef OLED_RU
 #include "graphics/fonts/OLEDDisplayFontsRU.h"
 #endif

@@ -1,6 +1,8 @@
 #include "kbMatrixBase.h"
 #include "configuration.h"
 
+#ifdef INPUTBROKER_MATRIX_TYPE
+
 const byte keys_cols[] = KEYS_COLS;
 const byte keys_rows[] = KEYS_ROWS;
 
@@ -125,3 +127,5 @@ int32_t KbMatrixBase::runOnce()
     }
     return 50; // Keyscan every 50msec to avoid key bounce
 }
+
+#endif // INPUTBROKER_MATRIX_TYPE
