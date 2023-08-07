@@ -103,10 +103,12 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER = 48,
     /* Heltec Wireless Paper with ESP32-S3 CPU and E-Ink display */
     meshtastic_HardwareModel_HELTEC_WIRELESS_PAPER = 49,
-    /* LilyGo T-Deck with ESP32-S3 CPU, Keyboard, and IPS display */
+    /* LilyGo T-Deck with ESP32-S3 CPU, Keyboard and IPS display */
     meshtastic_HardwareModel_T_DECK = 50,
     /* LilyGo T-Watch S3 with ESP32-S3 CPU and IPS display */
     meshtastic_HardwareModel_T_WATCH_S3 = 51,
+    /* Bobricius Picomputer with ESP32-S3 CPU, Keyboard and IPS display */
+    meshtastic_HardwareModel_PICOMPUTER_S3 = 52,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
