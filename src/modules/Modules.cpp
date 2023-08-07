@@ -4,6 +4,7 @@
 #include "input/TrackballInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
 #include "input/cardKbI2cImpl.h"
+#include "input/kbMatrixImpl.h"
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/NodeInfoModule.h"
@@ -60,6 +61,8 @@ void setupModules()
         upDownInterruptImpl1->init();
         cardKbI2cImpl = new CardKbI2cImpl();
         cardKbI2cImpl->init();
+        kbMatrixImpl = new KbMatrixImpl();
+        kbMatrixImpl->init();
 #endif
 #if HAS_TRACKBALL
         trackballInterruptImpl1 = new TrackballInterruptImpl1();

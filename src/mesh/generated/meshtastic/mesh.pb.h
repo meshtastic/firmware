@@ -107,6 +107,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_T_DECK = 50,
     /* LilyGo T-Watch S3 with ESP32-S3 CPU and IPS display */
     meshtastic_HardwareModel_T_WATCH_S3 = 51,
+    /* LilyGo T-Watch S3 with ESP32-S3 CPU and IPS display */
+    meshtastic_HardwareModel_PICOMPUTER_S3 = 52,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
