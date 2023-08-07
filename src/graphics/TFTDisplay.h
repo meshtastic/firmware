@@ -3,7 +3,7 @@
 #include <OLEDDisplay.h>
 
 /**
- * An adapter class that allows using the TFT_eSPI library as if it was an OLEDDisplay implementation.
+ * An adapter class that allows using the LovyanGFX library as if it was an OLEDDisplay implementation.
  *
  * Remaining TODO:
  * optimize display() to only draw changed pixels (see other OLED subclasses for examples)
