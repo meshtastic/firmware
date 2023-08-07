@@ -18,20 +18,13 @@ static const uint8_t TX = 43;
 static const uint8_t RX = 44;
 
 // The default Wire will be mapped to PMU and RTC
-static const uint8_t SDA = 12;
-static const uint8_t SCL = 14;
+static const uint8_t SDA = 8;
+static const uint8_t SCL = 9;
 
-// Default SPI will be mapped to Radio
+// Default SPI
 static const uint8_t MISO = 39;
 static const uint8_t SCK = 21;
 static const uint8_t MOSI = 38;
-static const uint8_t SS = 17;
-
-//#define SPI_MOSI                    (11)
-//#define SPI_SCK                     (14)
-//#define SPI_MISO                    (2)
-//#define SPI_CS                      (13)
-
-//#define SDCARD_CS                   SPI_CS
+static const uint8_t SS = 40;
 
 #endif /* Pins_Arduino_h */

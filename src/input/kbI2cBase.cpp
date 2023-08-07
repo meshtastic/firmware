@@ -28,17 +28,6 @@ uint8_t read_from_14004(TwoWire *i2cBus, uint8_t reg, uint8_t *data, uint8_t len
     return readflag;
 }
 
-// Unused for now - flagging it off
-#if 0
-void write_to_14004(const TwoWire * i2cBus, uint8_t reg, uint8_t data)
-{
-    i2cBus->beginTransmission(CARDKB_ADDR);
-    i2cBus->write(reg);
-    i2cBus->write(data);
-    i2cBus->endTransmission(); // stop transmitting
-}
-#endif
-
 int32_t KbI2cBase::runOnce()
 {
     if (cardkb_found.address != CARDKB_ADDR && cardkb_found.address != TDECK_KB_ADDR) {
