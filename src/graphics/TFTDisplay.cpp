@@ -108,10 +108,12 @@ class LGFX : public lgfx::LGFX_Device
     lgfx::Panel_ST7789 _panel_instance;
     lgfx::Bus_SPI _bus_instance;
     lgfx::Light_PWM _light_instance;
+#if HAS_TOUCHSCREEN
 #ifdef T_WATCH_S3
     lgfx::Touch_FT5x06 _touch_instance;
 #else
     lgfx::Touch_GT911 _touch_instance;
+#endif
 #endif
 
   public:
@@ -126,13 +128,14 @@ class LGFX : public lgfx::LGFX_Device
             cfg.freq_write = SPI_FREQUENCY; // SPI clock for transmission (up to 80MHz, rounded to the value obtained by dividing
                                             // 80MHz by an integer)
             cfg.freq_read = SPI_READ_FREQUENCY; // SPI clock when receiving
-            cfg.spi_3wire = false;              // Set to true if reception is done on the MOSI pin
-            cfg.use_lock = true;                // Set to true to use transaction locking
-            cfg.dma_channel = SPI_DMA_CH_AUTO;  // SPI_DMA_CH_AUTO; // Set DMA channel to use (0=not use DMA / 1=1ch / 2=ch /
-            cfg.pin_sclk = ST7789_SCK;          // Set SPI SCLK pin number
-            cfg.pin_mosi = ST7789_SDA;          // Set SPI MOSI pin number
-            cfg.pin_miso = ST7789_MISO;         // Set SPI MISO pin number (-1 = disable)
-            cfg.pin_dc = ST7789_RS;             // Set SPI DC pin number (-1 = disable)
+            cfg.spi_3wire = false;
+            cfg.use_lock = true;               // Set to true to use transaction locking
+            cfg.dma_channel = SPI_DMA_CH_AUTO; // SPI_DMA_CH_AUTO; // Set DMA channel to use (0=not use DMA / 1=1ch / 2=ch /
+                                               // SPI_DMA_CH_AUTO=auto setting)
+            cfg.pin_sclk = ST7789_SCK;         // Set SPI SCLK pin number
+            cfg.pin_mosi = ST7789_SDA;         // Set SPI MOSI pin number
+            cfg.pin_miso = ST7789_MISO;        // Set SPI MISO pin number (-1 = disable)
+            cfg.pin_dc = ST7789_RS;            // Set SPI DC pin number (-1 = disable)
 
             _bus_instance.config(cfg);              // applies the set value to the bus.
             _panel_instance.setBus(&_bus_instance); // set the bus on the panel.
@@ -181,6 +184,7 @@ class LGFX : public lgfx::LGFX_Device
             _panel_instance.setLight(&_light_instance); // Set the backlight on the panel.
         }
 
+#if HAS_TOUCHSCREEN
         // Configure settings for touch screen control.
         {
             auto cfg = _touch_instance.config();
@@ -210,6 +214,7 @@ class LGFX : public lgfx::LGFX_Device
             _touch_instance.config(cfg);
             _panel_instance.setTouch(&_touch_instance);
         }
+#endif
 
         setPanel(&_panel_instance); // Sets the panel to use.
     }
@@ -424,7 +429,7 @@ bool TFTDisplay::connect()
 #endif
 
     tft.init();
-#if defined(T_DECK)
+#if defined(T_DECK) || defined(PICOMPUTER_S3)
     tft.setRotation(1); // M5Stack/T-Deck have the TFT in landscape
 #elif defined(M5STACK) || defined(T_WATCH_S3)
     tft.setRotation(0); // T-Watch S3 has the TFT in portrait
