@@ -19,7 +19,7 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define SEGMENT_DEVICESTATE 4
 #define SEGMENT_CHANNELS 8
 
-#define DEVICESTATE_CUR_VER 20
+#define DEVICESTATE_CUR_VER 22
 #define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
 
 extern meshtastic_DeviceState devicestate;
@@ -45,9 +45,6 @@ class NodeDB
     // Eventually use a smarter datastructure
     // HashMap<NodeNum, NodeInfo> nodes;
     // Note: these two references just point into our static array we serialize to/from disk
-    meshtastic_NodeInfo *nodes;
-    pb_size_t *numNodes;
-
     meshtastic_NodeInfoLite *meshNodes;
     pb_size_t *numMeshNodes;
 
@@ -137,18 +134,6 @@ class NodeDB
   private:
     /// Find a node in our DB, create an empty NodeInfoLite if missing
     meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
-    void migrateToNodeInfoLite(const meshtastic_NodeInfo *node);
-    /// Find a node in our DB, return null for missing
-    meshtastic_NodeInfo *getNodeInfo(NodeNum n);
-    /// Allow the bluetooth layer to read our next nodeinfo record, or NULL if done reading
-    const meshtastic_NodeInfo *readNextNodeInfo(uint32_t &readIndex);
-    size_t getNumNodes() { return *numNodes; }
-
-    meshtastic_NodeInfo *getNodeByIndex(size_t x)
-    {
-        assert(x < *numNodes);
-        return &nodes[x];
-    }
 
     /// Notify observers of changes to the DB
     void notifyObservers(bool forceUpdate = false)
@@ -226,10 +211,6 @@ inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t d
 
 /// Sometimes we will have Position objects that only have a time, so check for
 /// valid lat/lon
-static inline bool hasValidPosition(const meshtastic_NodeInfo *n)
-{
-    return n->has_position && (n->position.latitude_i != 0 || n->position.longitude_i != 0);
-}
 static inline bool hasValidPosition(const meshtastic_NodeInfoLite *n)
 {
     return n->has_position && (n->position.latitude_i != 0 || n->position.longitude_i != 0);
