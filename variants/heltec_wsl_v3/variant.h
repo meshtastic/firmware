@@ -1,5 +1,5 @@
-#define I2C_SCL 47
-#define I2C_SDA 48
+#define I2C_SCL SCL
+#define I2C_SDA SDA
 
 #define LED_PIN LED
 
