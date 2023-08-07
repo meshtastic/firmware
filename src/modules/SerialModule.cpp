@@ -86,7 +86,13 @@ SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
     }
 }
 
-// For the serial2 port we can't really detect if any client is on the other side, so instead just look for recent messages
+/**
+ * @brief Checks if the serial connection is established.
+ *
+ * @return true if the serial connection is established, false otherwise.
+ *
+ * For the serial2 port we can't really detect if any client is on the other side, so instead just look for recent messages
+ */
 bool SerialModule::checkIsConnected()
 {
     uint32_t now = millis();
@@ -191,6 +197,11 @@ int32_t SerialModule::runOnce()
     }
 }
 
+/**
+ * Allocates a new mesh packet for use as a reply to a received packet.
+ *
+ * @return A pointer to the newly allocated mesh packet.
+ */
 meshtastic_MeshPacket *SerialModuleRadio::allocReply()
 {
     auto reply = allocDataPacket(); // Allocate a packet for sending
@@ -198,6 +209,12 @@ meshtastic_MeshPacket *SerialModuleRadio::allocReply()
     return reply;
 }
 
+/**
+ * Sends a payload to a specified destination node.
+ *
+ * @param dest The destination node number.
+ * @param wantReplies Whether or not to request replies from the destination node.
+ */
 void SerialModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 {
     meshtastic_Channel *ch = (boundChannel != NULL) ? &channels.getByName(boundChannel) : NULL;
@@ -216,6 +233,12 @@ void SerialModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
     service.sendToMesh(p);
 }
 
+/**
+ * Handle a received mesh packet.
+ *
+ * @param mp The received mesh packet.
+ * @return The processed message.
+ */
 ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp)
 {
     if (moduleConfig.serial.enabled) {
@@ -277,6 +300,11 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }
 
+/**
+ * @brief Returns the baud rate of the serial module from the module configuration.
+ *
+ * @return uint32_t The baud rate of the serial module.
+ */
 uint32_t SerialModule::getBaudRate()
 {
     if (moduleConfig.serial.baud == meshtastic_ModuleConfig_SerialConfig_Serial_Baud_BAUD_110) {
