@@ -61,9 +61,11 @@ void setupModules()
         upDownInterruptImpl1->init();
         cardKbI2cImpl = new CardKbI2cImpl();
         cardKbI2cImpl->init();
+#ifdef INPUTBROKER_MATRIX_TYPE
         kbMatrixImpl = new KbMatrixImpl();
         kbMatrixImpl->init();
-#endif
+#endif // INPUTBROKER_MATRIX_TYPE
+#endif // HAS_BUTTON
 #if HAS_TRACKBALL
         trackballInterruptImpl1 = new TrackballInterruptImpl1();
         trackballInterruptImpl1->init();
