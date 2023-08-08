@@ -4,6 +4,10 @@
 #define I2C_SDA SDA_OLED // I2C pins for this board
 #define I2C_SCL SCL_OLED
 
+// Enable secondary bus for external periherals
+#define I2C_SDA1 SDA
+#define I2C_SCL1 SCL
+
 #define VEXT_ENABLE Vext // active low, powers the oled display and the lora antenna boost
 #define BUTTON_PIN 0
 

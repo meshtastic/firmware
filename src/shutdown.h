@@ -16,7 +16,7 @@ void powerCommandsCheck()
         rp2040.reboot();
 #else
         rebootAtMsec = -1;
-        LOG_WARN("FIXME implement reboot for this platform. Skipping for now.\n");
+        LOG_WARN("FIXME implement reboot for this platform. Note that some settings require a restart to be applied.\n");
 #endif
     }
 

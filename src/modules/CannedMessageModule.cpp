@@ -10,6 +10,10 @@
 
 #include "main.h" // for cardkb_found
 
+#ifndef INPUTBROKER_MATRIX_TYPE
+#define INPUTBROKER_MATRIX_TYPE 0
+#endif
+
 #ifdef OLED_RU
 #include "graphics/fonts/OLEDDisplayFontsRU.h"
 #endif
@@ -62,7 +66,7 @@ CannedMessageModule::CannedMessageModule()
     if (moduleConfig.canned_message.enabled) {
         this->loadProtoForModule();
         if ((this->splitConfiguredMessages() <= 0) && (cardkb_found.address != CARDKB_ADDR) &&
-            (cardkb_found.address != TDECK_KB_ADDR)) {
+            (cardkb_found.address != TDECK_KB_ADDR) && !INPUTBROKER_MATRIX_TYPE) {
             LOG_INFO("CannedMessageModule: No messages are configured. Module is disabled\n");
             this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
             disable();
