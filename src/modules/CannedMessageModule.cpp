@@ -500,7 +500,8 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         }
         display->drawStringf(0 + x, 0 + y, buffer, "To: %s", cannedMessageModule->getNodeName(this->dest));
         // used chars right aligned
-        uint16_t charsLeft = meshtastic_Constants_DATA_PAYLOAD_LEN - this->freetext.length() - (moduleConfig.canned_message.send_bell ? 1 : 0);
+        uint16_t charsLeft =
+            meshtastic_Constants_DATA_PAYLOAD_LEN - this->freetext.length() - (moduleConfig.canned_message.send_bell ? 1 : 0);
         snprintf(buffer, sizeof(buffer), "%d left", charsLeft);
         display->drawString(x + display->getWidth() - display->getStringWidth(buffer), y + 0, buffer);
         if (this->destSelect) {
