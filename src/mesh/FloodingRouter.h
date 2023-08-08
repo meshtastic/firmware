@@ -2,6 +2,7 @@
 
 #include "PacketHistory.h"
 #include "Router.h"
+#include "modules/NeighborInfoModule.h"
 #include "modules/TraceRouteModule.h"
 
 /**

@@ -292,7 +292,8 @@ typedef struct _meshtastic_Config_PowerConfig {
  The number of seconds for to wait before turning off BLE in No Bluetooth states
  0 for default of 1 minute */
     uint32_t wait_bluetooth_secs;
-    /* Mesh Super Deep Sleep Timeout Seconds
+    /* Deprecated in 2.1.X
+ Mesh Super Deep Sleep Timeout Seconds
  While in Light Sleep if this value is exceeded we will lower into super deep sleep
  for sds_secs (default 1 year) or a button press
  0 for default of two hours, MAXUINT for disabled */

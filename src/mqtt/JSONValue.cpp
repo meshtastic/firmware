@@ -364,6 +364,19 @@ JSONValue::JSONValue(int m_integer_value)
 }
 
 /**
+ * Basic constructor for creating a JSON Value of type Number
+ *
+ * @access public
+ *
+ * @param uint m_integer_value The number to use as the value
+ */
+JSONValue::JSONValue(uint m_integer_value)
+{
+    type = JSONType_Number;
+    number_value = (double)m_integer_value;
+}
+
+/**
  * Basic constructor for creating a JSON Value of type Array
  *
  * @access public

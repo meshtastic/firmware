@@ -480,7 +480,7 @@ void setup()
 #endif
 
     // We do this as early as possible because this loads preferences from flash
-    // but we need to do this after main cpu iniot (esp32setup), because we need the random seed set
+    // but we need to do this after main cpu init (esp32setup), because we need the random seed set
     nodeDB.init();
 
     // If we're taking on the repeater role, use flood router
@@ -548,6 +548,7 @@ void setup()
 #else
     // ESP32
     SPI.begin(RF95_SCK, RF95_MISO, RF95_MOSI, RF95_NSS);
+    LOG_WARN("SPI.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)\n", RF95_SCK, RF95_MISO, RF95_MOSI, RF95_NSS);
     SPI.setFrequency(4000000);
 #endif
 

@@ -4,8 +4,10 @@
 #include "input/TrackballInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
 #include "input/cardKbI2cImpl.h"
+#include "input/kbMatrixImpl.h"
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
+#include "modules/NeighborInfoModule.h"
 #include "modules/NodeInfoModule.h"
 #include "modules/PositionModule.h"
 #include "modules/RemoteHardwareModule.h"
@@ -47,6 +49,7 @@ void setupModules()
         waypointModule = new WaypointModule();
         textMessageModule = new TextMessageModule();
         traceRouteModule = new TraceRouteModule();
+        neighborInfoModule = new NeighborInfoModule();
 
         // Note: if the rest of meshtastic doesn't need to explicitly use your module, you do not need to assign the instance
         // to a global variable.
@@ -60,7 +63,11 @@ void setupModules()
         upDownInterruptImpl1->init();
         cardKbI2cImpl = new CardKbI2cImpl();
         cardKbI2cImpl->init();
-#endif
+#ifdef INPUTBROKER_MATRIX_TYPE
+        kbMatrixImpl = new KbMatrixImpl();
+        kbMatrixImpl->init();
+#endif // INPUTBROKER_MATRIX_TYPE
+#endif // HAS_BUTTON
 #if HAS_TRACKBALL
         trackballInterruptImpl1 = new TrackballInterruptImpl1();
         trackballInterruptImpl1->init();
@@ -92,6 +99,9 @@ void setupModules()
 #endif
     } else {
         adminModule = new AdminModule();
+#if HAS_TELEMETRY
+        new DeviceTelemetryModule();
+#endif
         traceRouteModule = new TraceRouteModule();
     }
     // NOTE! This module must be added LAST because it likes to check for replies from other modules and avoid sending extra
