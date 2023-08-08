@@ -40,13 +40,13 @@ int32_t TouchScreenBase::runOnce()
     int16_t x, y;
     bool touched = getTouch(x, y);
     if (touched) {
-        hapticFeedback();
         this->setInterval(20);
         _last_x = x;
         _last_y = y;
     }
     if (touched != _touchedOld) {
         if (touched) {
+            hapticFeedback();
             _state = TOUCH_EVENT_OCCURRED;
             _start = millis();
             _first_x = x;

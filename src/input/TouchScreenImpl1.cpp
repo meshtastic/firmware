@@ -1,5 +1,6 @@
 #include "TouchScreenImpl1.h"
 #include "InputBroker.h"
+#include "PowerFSM.h"
 #include "configuration.h"
 
 TouchScreenImpl1 *touchScreenImpl1;
@@ -59,6 +60,10 @@ void TouchScreenImpl1::onEvent(const TouchEvent &event)
     }
     case TOUCH_ACTION_LONG_PRESS: {
         e.inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL);
+        break;
+    }
+    case TOUCH_ACTION_TAP: {
+        powerFSM.trigger(EVENT_INPUT);
         break;
     }
     default:
