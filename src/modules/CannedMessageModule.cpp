@@ -224,7 +224,7 @@ void CannedMessageModule::sendText(NodeNum dest, const char *message, bool wantR
     p->want_ack = true;
     p->decoded.payload.size = strlen(message);
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
-    if (moduleConfig.canned_message.send_bell) {
+    if (moduleConfig.canned_message.send_bell && p->decoded.payload.size < meshtastic_Constants_DATA_PAYLOAD_LEN) {
         p->decoded.payload.bytes[p->decoded.payload.size] = 7;        // Bell character
         p->decoded.payload.bytes[p->decoded.payload.size + 1] = '\0'; // Bell character
         p->decoded.payload.size++;
