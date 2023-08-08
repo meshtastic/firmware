@@ -148,16 +148,16 @@ class LGFX : public lgfx::LGFX_Device
             // The following setting values ​​are general initial values ​​for each panel, so please comment out any
             // unknown items and try them.
 
-            cfg.panel_width = TFT_WIDTH;   // actual displayable width
-            cfg.panel_height = TFT_HEIGHT; // actual displayable height
-            cfg.offset_x = TFT_OFFSET_X;   // Panel offset amount in X direction
-            cfg.offset_y = TFT_OFFSET_Y;   // Panel offset amount in Y direction
-            cfg.offset_rotation = 0;       // Rotation direction value offset 0~7 (4~7 is mirrored)
-            cfg.dummy_read_pixel = 9;      // Number of bits for dummy read before pixel readout
-            cfg.dummy_read_bits = 1;       // Number of bits for dummy read before non-pixel data read
-            cfg.readable = true;           // Set to true if data can be read
-            cfg.invert = true;             // Set to true if the light/darkness of the panel is reversed
-            cfg.rgb_order = false;         // Set to true if the panel's red and blue are swapped
+            cfg.panel_width = TFT_WIDTH;               // actual displayable width
+            cfg.panel_height = TFT_HEIGHT;             // actual displayable height
+            cfg.offset_x = TFT_OFFSET_X;               // Panel offset amount in X direction
+            cfg.offset_y = TFT_OFFSET_Y;               // Panel offset amount in Y direction
+            cfg.offset_rotation = TFT_OFFSET_ROTATION; // Rotation direction value offset 0~7 (4~7 is mirrored)
+            cfg.dummy_read_pixel = 9;                  // Number of bits for dummy read before pixel readout
+            cfg.dummy_read_bits = 1;                   // Number of bits for dummy read before non-pixel data read
+            cfg.readable = true;                       // Set to true if data can be read
+            cfg.invert = true;                         // Set to true if the light/darkness of the panel is reversed
+            cfg.rgb_order = false;                     // Set to true if the panel's red and blue are swapped
             cfg.dlen_16bit =
                 false;             // Set to true for panels that transmit data length in 16-bit units with 16-bit parallel or SPI
             cfg.bus_shared = true; // If the bus is shared with the SD card, set to true (bus control with drawJpgFile etc.)
@@ -192,7 +192,7 @@ class LGFX : public lgfx::LGFX_Device
             cfg.y_max = TFT_WIDTH - 1;
             cfg.pin_int = SCREEN_TOUCH_INT;
             cfg.bus_shared = true;
-            cfg.offset_rotation = 0;
+            cfg.offset_rotation = TFT_OFFSET_ROTATION;
             // cfg.freq = 2500000;
 
             // I2C
@@ -389,6 +389,14 @@ void TFTDisplay::sendCommand(uint8_t com)
     // Drop all other commands to device (we just update the buffer)
 }
 
+void TFTDisplay::flipScreenVertically()
+{
+#if defined(T_WATCH_S3)
+    LOG_DEBUG("Flip TFT vertically\n"); // T-Watch S3 right-handed orientation
+    tft.setRotation(0);
+#endif
+}
+
 bool TFTDisplay::hasTouch(void)
 {
 #ifndef M5STACK
@@ -424,10 +432,12 @@ bool TFTDisplay::connect()
 #endif
 
     tft.init();
-#if defined(T_DECK)
-    tft.setRotation(1); // M5Stack/T-Deck have the TFT in landscape
-#elif defined(M5STACK) || defined(T_WATCH_S3)
-    tft.setRotation(0); // T-Watch S3 has the TFT in portrait
+#if defined(M5STACK)
+    tft.setRotation(0);
+#elif defined(T_DECK)
+    tft.setRotation(1); // T-Deck has the TFT in landscape
+#elif defined(T_WATCH_S3)
+    tft.setRotation(2); // T-Watch S3 left-handed orientation
 #else
     tft.setRotation(3); // Orient horizontal and wide underneath the silkscreen name label
 #endif

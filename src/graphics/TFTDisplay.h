@@ -22,6 +22,9 @@ class TFTDisplay : public OLEDDisplay
     // Write the buffer to the display memory
     virtual void display(void) override;
 
+    // Turn the display upside down
+    virtual void flipScreenVertically();
+
     // Touch screen (static handlers)
     static bool hasTouch(void);
     static bool getTouch(int16_t *x, int16_t *y);
