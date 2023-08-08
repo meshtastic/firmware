@@ -55,6 +55,8 @@ typedef enum _meshtastic_AdminMessage_ModuleConfigType {
     /* TODO: REPLACE */
     meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG = 8,
     /* TODO: REPLACE */
+    meshtastic_AdminMessage_ModuleConfigType_NEIGHBORINFO_CONFIG = 9,
+    /* TODO: REPLACE */
     meshtastic_AdminMessage_ModuleConfigType_AMBIENTLIGHTING_CONFIG = 10
 } meshtastic_AdminMessage_ModuleConfigType;
 
