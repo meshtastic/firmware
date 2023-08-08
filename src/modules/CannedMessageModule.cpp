@@ -398,9 +398,10 @@ int32_t CannedMessageModule::runOnce()
                         this->freetext.substring(0, this->cursor) + this->payload + this->freetext.substring(this->cursor);
                 }
                 this->cursor += 1;
-                if (this->freetext.length() > meshtastic_Constants_DATA_PAYLOAD_LEN) {
-                    this->cursor = meshtastic_Constants_DATA_PAYLOAD_LEN;
-                    this->freetext = this->freetext.substring(0, meshtastic_Constants_DATA_PAYLOAD_LEN);
+                uint16_t maxChars = meshtastic_Constants_DATA_PAYLOAD_LEN - (moduleConfig.canned_message.send_bell ? 1 : 0);
+                if (this->freetext.length() > maxChars) {
+                    this->cursor = maxChars;
+                    this->freetext = this->freetext.substring(0, maxChars);
                 }
                 break;
             }
@@ -499,7 +500,8 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         }
         display->drawStringf(0 + x, 0 + y, buffer, "To: %s", cannedMessageModule->getNodeName(this->dest));
         // used chars right aligned
-        snprintf(buffer, sizeof(buffer), "%d left", meshtastic_Constants_DATA_PAYLOAD_LEN - this->freetext.length());
+        uint16_t charsLeft = meshtastic_Constants_DATA_PAYLOAD_LEN - this->freetext.length() - (moduleConfig.canned_message.send_bell ? 1 : 0);
+        snprintf(buffer, sizeof(buffer), "%d left", charsLeft);
         display->drawString(x + display->getWidth() - display->getStringWidth(buffer), y + 0, buffer);
         if (this->destSelect) {
             display->drawString(x + display->getWidth() - display->getStringWidth(buffer) - 1, y + 0, buffer);
