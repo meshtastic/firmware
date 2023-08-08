@@ -39,16 +39,17 @@
 #define TFT_WIDTH 240
 #define TFT_OFFSET_X 0
 #define TFT_OFFSET_Y 0
+#define TFT_OFFSET_ROTATION 0
 #define SCREEN_ROTATE
 #define SCREEN_TRANSITION_FRAMERATE 5
 
 #define INPUTBROKER_MATRIX_TYPE 1
 
-#define KEYS_COLS                                                                                                                \
-    {                                                                                                                            \
-        44, 47, 17, 15, 13, 41                                                                                                   \
+#define KEYS_COLS              \
+    {                          \
+        44, 47, 17, 15, 13, 41 \
     }
-#define KEYS_ROWS                                                                                                                \
-    {                                                                                                                            \
-        12, 16, 42, 18, 14, 7                                                                                                    \
+#define KEYS_ROWS             \
+    {                         \
+        12, 16, 42, 18, 14, 7 \
     }
