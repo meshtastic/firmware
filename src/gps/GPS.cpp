@@ -213,8 +213,8 @@ bool GPS::setupGPS()
             // _serial_gps->begin(9600);    //The baud rate of 9600 has been initialized at the beginning of setupGPS, this line
             // is the redundant part delay(250);
 
-            // Initialize the L76K Chip, use GPS + GLONASS
-            _serial_gps->write("$PCAS04,5*1C\r\n");
+            // Initialize the L76K Chip, use GPS + GLONASS + BEIDOU
+            _serial_gps->write("$PCAS04,7*1E\r\n");
             delay(250);
             // only ask for RMC and GGA
             _serial_gps->write("$PCAS03,1,0,0,0,1,0,0,0,0,0,,,0,0*02\r\n");
