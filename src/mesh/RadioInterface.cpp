@@ -114,6 +114,20 @@ const RegionInfo regions[] = {
     RDEF(LORA_24, 2400.0f, 2483.5f, 100, 0, 10, true, false, true),
 
     /*
+        920-925 MHz
+        https://resources.lora-alliance.org/technical-specifications/rp002-1-0-4-regional-parameters
+        
+    */
+    RDEF(SG, 920.0f, 925.0f, 100, 0, 16, true, false, false),
+
+    /*
+        433.05-434.79 MHz
+        https://resources.lora-alliance.org/technical-specifications/rp002-1-0-4-regional-parameters
+        
+    */
+    RDEF(SG_433, 433.0f, 434.7f, 10, 0, 12, true, false, false),
+
+    /*
         This needs to be last. Same as US.
     */
     RDEF(UNSET, 902.0f, 928.0f, 100, 0, 30, true, false, false)
