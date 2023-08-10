@@ -7,7 +7,7 @@ extern uint8_t nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1];
 
 class TelemetrySensor
 {
-  protected:
+protected:
     TelemetrySensor(meshtastic_TelemetrySensorType sensorType, const char *sensorName)
     {
         this->sensorName = sensorName;
@@ -22,10 +22,14 @@ class TelemetrySensor
 
     int32_t initI2CSensor()
     {
-        if (!status) {
+        // LOG_INFO("initI2CSensor: \n");
+        if (!status)
+        {
             LOG_WARN("Could not connect to detected %s sensor.\n Removing from nodeTelemetrySensorsMap.\n", sensorName);
             nodeTelemetrySensorsMap[sensorType] = 0;
-        } else {
+        }
+        else
+        {
             LOG_INFO("Opened %s sensor on default i2c bus\n", sensorName);
             setup();
         }
@@ -34,7 +38,7 @@ class TelemetrySensor
     }
     virtual void setup();
 
-  public:
+public:
     bool hasSensor() { return sensorType < sizeof(nodeTelemetrySensorsMap) && nodeTelemetrySensorsMap[sensorType] > 0; }
 
     virtual int32_t runOnce() = 0;

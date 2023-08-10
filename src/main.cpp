@@ -132,9 +132,12 @@ const char *getDeviceName()
     static char name[20];
     snprintf(name, sizeof(name), "%02x%02x", dmac[4], dmac[5]);
     // if the shortname exists and is NOT the new default of ab3c, use it for BLE name.
-    if ((owner.short_name != NULL) && (strcmp(owner.short_name, name) != 0)) {
+    if ((owner.short_name != NULL) && (strcmp(owner.short_name, name) != 0))
+    {
         snprintf(name, sizeof(name), "%s_%02x%02x", owner.short_name, dmac[4], dmac[5]);
-    } else {
+    }
+    else
+    {
         snprintf(name, sizeof(name), "Meshtastic_%02x%02x", dmac[4], dmac[5]);
     }
     return name;
@@ -308,15 +311,19 @@ void setup()
 #endif
 
     auto i2cCount = i2cScanner->countDevices();
-    if (i2cCount == 0) {
+    if (i2cCount == 0)
+    {
         LOG_INFO("No I2C devices found\n");
-    } else {
+    }
+    else
+    {
         LOG_INFO("%i I2C devices found\n", i2cCount);
     }
 
 #ifdef ARCH_ESP32
     // Don't init display if we don't have one or we are waking headless due to a timer event
-    if (wakeCause == ESP_SLEEP_WAKEUP_TIMER) {
+    if (wakeCause == ESP_SLEEP_WAKEUP_TIMER)
+    {
         LOG_DEBUG("suppress screen wake because this is a headless timer wakeup");
         i2cScanner->setSuppressScreen();
     }
@@ -325,8 +332,10 @@ void setup()
     auto screenInfo = i2cScanner->firstScreen();
     screen_found = screenInfo.type != ScanI2C::DeviceType::NONE ? screenInfo.address : ScanI2C::ADDRESS_NONE;
 
-    if (screen_found.port != ScanI2C::I2CPort::NO_I2C) {
-        switch (screenInfo.type) {
+    if (screen_found.port != ScanI2C::I2CPort::NO_I2C)
+    {
+        switch (screenInfo.type)
+        {
         case ScanI2C::DeviceType::SCREEN_SH1106:
             screen_model = meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_SH1106;
             break;
@@ -347,9 +356,11 @@ void setup()
 
     auto kb_info = i2cScanner->firstKeyboard();
 
-    if (kb_info.type != ScanI2C::DeviceType::NONE) {
+    if (kb_info.type != ScanI2C::DeviceType::NONE)
+    {
         cardkb_found = kb_info.address;
-        switch (kb_info.type) {
+        switch (kb_info.type)
+        {
         case ScanI2C::DeviceType::RAK14004:
             kb_model = 0x02;
             break;
@@ -374,7 +385,8 @@ void setup()
 
     // Start the RGB LED at 50%
 
-    if (rgb_found.type == ScanI2C::NCP5623) {
+    if (rgb_found.type == ScanI2C::NCP5623)
+    {
         rgb.begin();
         rgb.setCurrent(10);
         rgb.setColor(128, 128, 128);
@@ -389,13 +401,15 @@ void setup()
 
 #define STRING(S) #S
 
-#define SCANNER_TO_SENSORS_MAP(SCANNER_T, PB_T)                                                                                  \
-    {                                                                                                                            \
-        auto found = i2cScanner->find(SCANNER_T);                                                                                \
-        if (found.type != ScanI2C::DeviceType::NONE) {                                                                           \
-            nodeTelemetrySensorsMap[PB_T] = found.address.address;                                                               \
-            LOG_DEBUG("found i2c sensor %s\n", STRING(PB_T));                                                                    \
-        }                                                                                                                        \
+#define SCANNER_TO_SENSORS_MAP(SCANNER_T, PB_T)                    \
+    {                                                              \
+        auto found = i2cScanner->find(SCANNER_T);                  \
+        if (found.type != ScanI2C::DeviceType::NONE)               \
+        {                                                          \
+            nodeTelemetrySensorsMap[PB_T] = found.address.address; \
+            LOG_DEBUG("found i2c sensor %s\n", STRING(PB_T));      \
+        // Serial.println(nodeTelemetrySensorsMap[PB_T], HEX);    \
+        }                                                          \
     }
 
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::BME_680, meshtastic_TelemetrySensorType_BME680)
@@ -412,6 +426,7 @@ void setup()
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::QMI8658, meshtastic_TelemetrySensorType_QMI8658)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::QMC5883L, meshtastic_TelemetrySensorType_QMC5883L)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::PMSA0031, meshtastic_TelemetrySensorType_PMSA003I)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::MFRC522, meshtastic_TelemetrySensorType_MFRC522)
 
     i2cScanner.reset();
 
@@ -421,6 +436,11 @@ void setup()
 
 #ifdef RAK4630
     // scanEInkDevice();
+#endif
+//     // MFRC522 init
+#ifdef MFRC522_DEV
+    pinMode(RST_PIN_MFRC522, OUTPUT);
+    digitalWrite(RST_PIN_MFRC522, LOW); // turn on for now
 #endif
 
     // LED init
@@ -471,7 +491,8 @@ void setup()
 #endif
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
-    if (acc_info.type != ScanI2C::DeviceType::NONE) {
+    if (acc_info.type != ScanI2C::DeviceType::NONE)
+    {
         accelerometerThread = new AccelerometerThread(acc_info.type);
     }
 #endif
@@ -507,9 +528,12 @@ void setup()
 
     gps = createGps();
 
-    if (gps) {
+    if (gps)
+    {
         gpsStatus->observe(&gps->newStatus);
-    } else {
+    }
+    else
+    {
         LOG_WARN("No GPS found - running without GPS\n");
     }
 
@@ -540,9 +564,11 @@ void setup()
     // We have now loaded our saved preferences from flash
 
     // ONCE we will factory reset the GPS for bug #327
-    if (gps && !devicestate.did_gps_reset) {
+    if (gps && !devicestate.did_gps_reset)
+    {
         LOG_WARN("GPS FactoryReset requested\n");
-        if (gps->factoryReset()) { // If we don't succeed try again next time
+        if (gps->factoryReset())
+        { // If we don't succeed try again next time
             devicestate.did_gps_reset = true;
             nodeDB.saveToDisk(SEGMENT_DEVICESTATE);
         }
@@ -562,91 +588,119 @@ void setup()
 
     // radio init MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
 #if defined(USE_STM32WLx)
-    if (!rIf) {
+    if (!rIf)
+    {
         rIf = new STM32WLE5JCInterface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
-        if (!rIf->init()) {
+        if (!rIf->init())
+        {
             LOG_WARN("Failed to find STM32WL radio\n");
             delete rIf;
             rIf = NULL;
-        } else {
+        }
+        else
+        {
             LOG_INFO("STM32WL Radio init succeeded, using STM32WL radio\n");
         }
     }
 #endif
 
 #if !HAS_RADIO && defined(ARCH_PORTDUINO)
-    if (!rIf) {
+    if (!rIf)
+    {
         rIf = new SimRadio;
-        if (!rIf->init()) {
+        if (!rIf->init())
+        {
             LOG_WARN("Failed to find simulated radio\n");
             delete rIf;
             rIf = NULL;
-        } else {
+        }
+        else
+        {
             LOG_INFO("Using SIMULATED radio!\n");
         }
     }
 #endif
 
 #if defined(RF95_IRQ)
-    if (!rIf) {
+    if (!rIf)
+    {
         rIf = new RF95Interface(RadioLibHAL, RF95_NSS, RF95_IRQ, RF95_RESET, RF95_DIO1);
-        if (!rIf->init()) {
+        if (!rIf->init())
+        {
             LOG_WARN("Failed to find RF95 radio\n");
             delete rIf;
             rIf = NULL;
-        } else {
+        }
+        else
+        {
             LOG_INFO("RF95 Radio init succeeded, using RF95 radio\n");
         }
     }
 #endif
 
 #if defined(USE_SX1262)
-    if (!rIf) {
+    if (!rIf)
+    {
         rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
-        if (!rIf->init()) {
+        if (!rIf->init())
+        {
             LOG_WARN("Failed to find SX1262 radio\n");
             delete rIf;
             rIf = NULL;
-        } else {
+        }
+        else
+        {
             LOG_INFO("SX1262 Radio init succeeded, using SX1262 radio\n");
         }
     }
 #endif
 
 #if defined(USE_SX1268)
-    if (!rIf) {
+    if (!rIf)
+    {
         rIf = new SX1268Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
-        if (!rIf->init()) {
+        if (!rIf->init())
+        {
             LOG_WARN("Failed to find SX1268 radio\n");
             delete rIf;
             rIf = NULL;
-        } else {
+        }
+        else
+        {
             LOG_INFO("SX1268 Radio init succeeded, using SX1268 radio\n");
         }
     }
 #endif
 
 #if defined(USE_LLCC68)
-    if (!rIf) {
+    if (!rIf)
+    {
         rIf = new LLCC68Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
-        if (!rIf->init()) {
+        if (!rIf->init())
+        {
             LOG_WARN("Failed to find LLCC68 radio\n");
             delete rIf;
             rIf = NULL;
-        } else {
+        }
+        else
+        {
             LOG_INFO("LLCC68 Radio init succeeded, using LLCC68 radio\n");
         }
     }
 #endif
 
 #if defined(USE_SX1280)
-    if (!rIf) {
+    if (!rIf)
+    {
         rIf = new SX1280Interface(RadioLibHAL, SX128X_CS, SX128X_DIO1, SX128X_RESET, SX128X_BUSY);
-        if (!rIf->init()) {
+        if (!rIf->init())
+        {
             LOG_WARN("Failed to find SX1280 radio\n");
             delete rIf;
             rIf = NULL;
-        } else {
+        }
+        else
+        {
             LOG_INFO("SX1280 Radio init succeeded, using SX1280 radio\n");
         }
     }
@@ -654,11 +708,13 @@ void setup()
 
     // check if the radio chip matches the selected region
 
-    if ((config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && (!rIf->wideLora())) {
+    if ((config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && (!rIf->wideLora()))
+    {
         LOG_WARN("Radio chip does not support 2.4GHz LoRa. Reverting to unset.\n");
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
         nodeDB.saveToDisk(SEGMENT_CONFIG);
-        if (!rIf->reconfigure()) {
+        if (!rIf->reconfigure())
+        {
             LOG_WARN("Reconfigure failed, rebooting\n");
             screen->startRebootScreen();
             rebootAtMsec = millis() + 5000;
@@ -689,7 +745,8 @@ void setup()
 
     if (!rIf)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_RADIO);
-    else {
+    else
+    {
         router->addInterface(rIf);
 
         // Log bit rate to debug output
@@ -750,7 +807,8 @@ void loop()
 
 #ifdef DEBUG_STACK
     static uint32_t lastPrint = 0;
-    if (millis() - lastPrint > 10 * 1000L) {
+    if (millis() - lastPrint > 10 * 1000L)
+    {
         lastPrint = millis();
         meshtastic::printThreadInfo("main");
     }
@@ -768,7 +826,8 @@ void loop()
                   mainController.nextThread->tillRun(millis())); */
 
     // We want to sleep as long as possible here - because it saves power
-    if (!runASAP && loopCanSleep()) {
+    if (!runASAP && loopCanSleep())
+    {
         // if(delayMsec > 100) LOG_DEBUG("sleeping %ld\n", delayMsec);
         mainDelay.delay(delayMsec);
     }

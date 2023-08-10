@@ -1,7 +1,12 @@
 // #define BUTTON_NEED_PULLUP // if set we need to turn on the internal CPU pullup during sleep
+#define RST_PIN_MFRC522 5 // попытка включить 5 пин
+#define MFRC522_DEV 1     // попытка включить 5 пин
 
 #define I2C_SDA 21
 #define I2C_SCL 22
+#define OLED_RU // руссификация экрана
+
+#define HAS_SENSOR 1
 
 #define BUTTON_PIN 39
 #define BATTERY_PIN 35    // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
