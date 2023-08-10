@@ -114,18 +114,11 @@ const RegionInfo regions[] = {
     RDEF(LORA_24, 2400.0f, 2483.5f, 100, 0, 10, true, false, true),
 
     /*
-        920-925 MHz
+        866 - 869 MHz, No Duty Cycle, 500mW EIRP (27dBm). [Table 1, Item 29, p. 15]
+        https://www.imda.gov.sg/-/media/imda/files/regulation-licensing-and-consultations/ict-standards/telecommunication-standards/imda-technical/imda-ts-srd.pdf
         https://resources.lora-alliance.org/technical-specifications/rp002-1-0-4-regional-parameters
-        
     */
-    RDEF(SG, 920.0f, 925.0f, 100, 0, 16, true, false, false),
-
-    /*
-        433.05-434.79 MHz
-        https://resources.lora-alliance.org/technical-specifications/rp002-1-0-4-regional-parameters
-        
-    */
-    RDEF(SG_433, 433.0f, 434.7f, 10, 0, 12, true, false, false),
+    RDEF(SG, 866.0f, 869.0f, 100, 0, 27, true, false, false),
 
     /*
         This needs to be last. Same as US.
