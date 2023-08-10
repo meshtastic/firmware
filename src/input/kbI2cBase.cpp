@@ -30,7 +30,7 @@ uint8_t read_from_14004(TwoWire *i2cBus, uint8_t reg, uint8_t *data, uint8_t len
 
 int32_t KbI2cBase::runOnce()
 {
-    if (cardkb_found.address != CARDKB_ADDR && cardkb_found.address != TDECK_KB_ADDR) {
+    if (cardkb_found.address == 0x00) {
         // Input device is not detected.
         return INT32_MAX;
     }
@@ -53,7 +53,8 @@ int32_t KbI2cBase::runOnce()
         }
     }
 
-    if (kb_model == 0x02) {
+    switch (kb_model) {
+    case 0x02: {
         // RAK14004
         uint8_t rDataBuf[8] = {0};
         uint8_t PrintDataBuf = 0;
@@ -74,9 +75,12 @@ int32_t KbI2cBase::runOnce()
             e.kbchar = PrintDataBuf;
             this->notifyObservers(&e);
         }
-    } else if (kb_model == 0x00 || kb_model == 0x10) {
-        // m5 cardkb and T-Deck
-        i2cBus->requestFrom(kb_model == 0x00 ? CARDKB_ADDR : TDECK_KB_ADDR, 1);
+        break;
+    }
+    case 0x00:   // CARDKB
+    case 0x10:   // T-DECK
+    case 0x11: { // BB Q10
+        i2cBus->requestFrom((int)cardkb_found.address, 1);
 
         while (i2cBus->available()) {
             char c = i2cBus->read();
@@ -92,18 +96,24 @@ int32_t KbI2cBase::runOnce()
                 e.kbchar = c;
                 break;
             case 0xb5: // Up
+            case 0x12: // sym shift+2
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP;
+                e.kbchar = 0xb5;
                 break;
             case 0xb6: // Down
+            case 0x18: // sym shift+8
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN;
+                e.kbchar = 0xb6;
                 break;
             case 0xb4: // Left
+            case 0x14: // sym shift+4
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT;
-                e.kbchar = c;
+                e.kbchar = 0x00; // tweak for destSelect
                 break;
             case 0xb7: // Right
+            case 0x16: // sym shift+6
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
-                e.kbchar = c;
+                e.kbchar = 0x00; // tweak for destSelect
                 break;
             case 0x0d: // Enter
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
@@ -112,6 +122,7 @@ int32_t KbI2cBase::runOnce()
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
                 break;
             default: // all other keys
+                LOG_WARN("ANYKEY 0x%02x\n", (int)c);
                 e.inputEvent = ANYKEY;
                 e.kbchar = c;
                 break;
@@ -121,7 +132,9 @@ int32_t KbI2cBase::runOnce()
                 this->notifyObservers(&e);
             }
         }
-    } else {
+        break;
+    }
+    default:
         LOG_WARN("Unknown kb_model 0x%02x\n", kb_model);
     }
     return 300;
