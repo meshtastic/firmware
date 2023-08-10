@@ -275,6 +275,10 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                 SCAN_SIMPLE_CASE(PMSA0031_ADDR, PMSA0031, "PMSA0031 air quality sensor found\n")
                 SCAN_SIMPLE_CASE(MPU6050_ADDR, MPU6050, "MPU6050 accelerometer found\n");
 
+            case MFRC522_ADDR:
+                    LOG_INFO("MFRC522 sensor found at address 0x%x\n", (uint8_t)addr.address);
+                    type = MFRC522;
+                    break;
             default:
                 LOG_INFO("Device found at address 0x%x was not able to be enumerated\n", addr.address);
             }

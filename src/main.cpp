@@ -408,7 +408,6 @@ void setup()
         {                                                          \
             nodeTelemetrySensorsMap[PB_T] = found.address.address; \
             LOG_DEBUG("found i2c sensor %s\n", STRING(PB_T));      \
-        // Serial.println(nodeTelemetrySensorsMap[PB_T], HEX);    \
         }                                                          \
     }
 

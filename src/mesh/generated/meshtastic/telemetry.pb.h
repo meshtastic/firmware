@@ -39,7 +39,9 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* High accuracy temperature and humidity */
     meshtastic_TelemetrySensorType_SHT31 = 12,
     /* PM2.5 air quality sensor */
-    meshtastic_TelemetrySensorType_PMSA003I = 13
+    meshtastic_TelemetrySensorType_PMSA003I = 13,
+    /* MFRC522 module */
+    meshtastic_TelemetrySensorType_MFRC522 = 14
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -125,8 +127,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_PMSA003I
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_PMSA003I+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_MFRC522
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_MFRC522+1))
 
 
 

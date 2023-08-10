@@ -1,4 +1,23 @@
 {
   "editor.formatOnSave": true,
-  "editor.defaultFormatter": "trunk.io"
+  "editor.defaultFormatter": "trunk.io",
+  "files.associations": {
+    "typeinfo": "cpp",
+    "array": "cpp",
+    "deque": "cpp",
+    "list": "cpp",
+    "string": "cpp",
+    "unordered_map": "cpp",
+    "unordered_set": "cpp",
+    "vector": "cpp",
+    "string_view": "cpp",
+    "initializer_list": "cpp",
+    "*.tpp": "cpp",
+    "*.tcc": "cpp",
+    "memory": "cpp",
+    "random": "cpp"
+  },
+  "[cpp]": {
+    "editor.defaultFormatter": "ms-vscode.cpptools"
+  }
 }
