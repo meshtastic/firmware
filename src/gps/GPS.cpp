@@ -884,7 +884,7 @@ GnssModel_t GPS::probe()
             int index = ver.indexOf("$");
             if (index != -1) {
                 ver = ver.substring(index);
-                if (ver.startsWith("$GPTXT,01,01,02")) {
+                if (ver.startsWith("$GPTXT,01,01,02,SW=")) {
                     LOG_INFO("L76K GNSS init succeeded, using L76K GNSS Module\n");
                     return GNSS_MODEL_MTK;
                 }
