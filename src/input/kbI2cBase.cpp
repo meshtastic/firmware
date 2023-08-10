@@ -122,7 +122,6 @@ int32_t KbI2cBase::runOnce()
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
                 break;
             default: // all other keys
-                LOG_WARN("ANYKEY 0x%02x\n", (int)c);
                 e.inputEvent = ANYKEY;
                 e.kbchar = c;
                 break;
