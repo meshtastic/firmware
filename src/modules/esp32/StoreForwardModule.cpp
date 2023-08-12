@@ -227,7 +227,7 @@ void StoreForwardModule::sendPayload(NodeNum dest, uint32_t packetHistory_index)
  * @param dest The destination node number.
  * @param payload The message payload to be sent.
  */
-void StoreForwardModule::sendMessage(NodeNum dest, meshtastic_StoreAndForward &payload)
+void StoreForwardModule::sendMessage(NodeNum dest, const meshtastic_StoreAndForward &payload)
 {
     meshtastic_MeshPacket *p = allocDataProtobuf(payload);
 
