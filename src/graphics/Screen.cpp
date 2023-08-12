@@ -1901,7 +1901,7 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 int Screen::handleInputEvent(const InputEvent *event)
 {
     if (showingNormalScreen && moduleFrames.size() == 0) {
-        LOG_DEBUG("Screen::handleInputEvent from %s\n", event->source);
+        //LOG_DEBUG("Screen::handleInputEvent from %s\n", event->source);
         if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
             showPrevFrame();
         } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
