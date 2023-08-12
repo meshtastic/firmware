@@ -217,7 +217,7 @@ meshtastic_MeshPacket *SerialModuleRadio::allocReply()
  */
 void SerialModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 {
-    meshtastic_Channel *ch = (boundChannel != NULL) ? &channels.getByName(boundChannel) : NULL;
+    const meshtastic_Channel *ch = (boundChannel != NULL) ? &channels.getByName(boundChannel) : NULL;
     meshtastic_MeshPacket *p = allocReply();
     p->to = dest;
     if (ch != NULL) {
