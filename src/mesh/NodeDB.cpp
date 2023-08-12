@@ -765,7 +765,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 
 uint8_t NodeDB::getMeshNodeChannel(NodeNum n)
 {
-    meshtastic_NodeInfoLite *info = getMeshNode(n);
+    const meshtastic_NodeInfoLite *info = getMeshNode(n);
     if (!info) {
         return 0; // defaults to PRIMARY
     }
@@ -790,7 +790,8 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
 
     if (!lite) {
         if ((*numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < meshtastic_NodeInfoLite_size * 3)) {
-            screen->print("warning: node_db_lite full! erasing oldest entry\n");
+            if (screen)
+                screen->print("warning: node_db_lite full! erasing oldest entry\n");
             // look for oldest node and erase it
             uint32_t oldest = UINT32_MAX;
             int oldestIndex = -1;
