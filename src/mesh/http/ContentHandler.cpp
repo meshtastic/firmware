@@ -402,7 +402,6 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
                              "href=/admin>admin</a>");
 
                 return;
-
             } else {
                 res->setHeader("Content-Encoding", "gzip");
             }
@@ -438,7 +437,6 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
         file.close();
 
         return;
-
     } else {
         LOG_ERROR("This should not have happened...\n");
         res->println("ERROR: This should not have happened...");
@@ -467,7 +465,7 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
     // first semicolon, if one exists:
     size_t semicolonPos = contentType.find(";");
     if (semicolonPos != std::string::npos) {
-        contentType = contentType.substr(0, semicolonPos);
+        contentType = contentType.substr(0, semicolonPos); // cpp-check-suppress
     }
 
     // Now, we can decide based on the content type:
@@ -581,7 +579,6 @@ void handleReport(HTTPRequest *req, HTTPResponse *res)
         res->setHeader("Content-Type", "application/json");
         res->setHeader("Access-Control-Allow-Origin", "*");
         res->setHeader("Access-Control-Allow-Methods", "GET");
-
     } else {
         res->setHeader("Content-Type", "text/html");
         res->println("<pre>");
