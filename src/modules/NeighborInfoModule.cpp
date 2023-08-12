@@ -164,7 +164,7 @@ size_t NeighborInfoModule::cleanUpNeighbors()
     }
 
     // Update the neighbor list
-    for (int i = 0; i < indices_to_remove.size(); i++) {
+    for (uint i = 0; i < indices_to_remove.size(); i++) {
         int index = indices_to_remove[i];
         LOG_DEBUG("Removing neighbor with node ID 0x%x\n", neighbors[index].node_id);
         for (int j = index; j < num_neighbors - 1; j++) {
