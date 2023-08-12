@@ -765,7 +765,7 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 
 uint8_t NodeDB::getMeshNodeChannel(NodeNum n)
 {
-    meshtastic_NodeInfoLite *info = getMeshNode(n);
+    const meshtastic_NodeInfoLite *info = getMeshNode(n);
     if (!info) {
         return 0; // defaults to PRIMARY
     }
