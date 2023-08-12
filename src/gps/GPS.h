@@ -91,6 +91,9 @@ class GPS : private concurrency::OSThread
     // Some GPS modules (ublock) require factory reset
     virtual bool factoryReset() { return true; }
 
+    // Empty the input buffer as quickly as possible
+    void clearBuffer();
+
   protected:
     /// Do gps chipset specific init, return true for success
     virtual bool setupGPS();

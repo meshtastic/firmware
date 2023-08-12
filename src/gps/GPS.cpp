@@ -174,7 +174,7 @@ bool GPS::setupGPS()
 
 #ifdef ARCH_ESP32
         // In esp32 framework, setRxBufferSize needs to be initialized before Serial
-        _serial_gps->setRxBufferSize(2048); // the default is 256
+        _serial_gps->setRxBufferSize(SERIAL_BUFFER_SIZE); // the default is 256
 #endif
 
         // if the overrides are not dialled in, set them from the board definitions, if they exist
@@ -832,6 +832,14 @@ void GPS::forceWake(bool on)
         // attempt even if we are in light sleep.  Once the attempt succeeds (or times out) we'll then shut it down.
         // setAwake(false);
     }
+}
+
+// clear the GPS rx buffer as quickly as possible
+void GPS::clearBuffer()
+{
+    int x = _serial_gps->available();
+    while (x--)
+        _serial_gps->read();
 }
 
 /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
