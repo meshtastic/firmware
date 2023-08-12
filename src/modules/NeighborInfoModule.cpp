@@ -35,7 +35,7 @@ void NeighborInfoModule::printNodeDBNodes(const char *header)
     LOG_DEBUG("----------------\n");
     LOG_DEBUG("DB contains %d nodes\n", num_nodes);
     for (int i = 0; i < num_nodes; i++) {
-        meshtastic_NodeInfoLite *dbEntry = nodeDB.getMeshNodeByIndex(i);
+        const meshtastic_NodeInfoLite *dbEntry = nodeDB.getMeshNodeByIndex(i);
         LOG_DEBUG("     Node %d: node_id=%d, snr=%.2f\n", i, dbEntry->num, dbEntry->snr);
     }
     LOG_DEBUG("----------------\n");
@@ -52,7 +52,7 @@ void NeighborInfoModule::printNodeDBNeighbors(const char *header)
     LOG_DEBUG("----------------\n");
     LOG_DEBUG("DB contains %d neighbors\n", num_neighbors);
     for (int i = 0; i < num_neighbors; i++) {
-        meshtastic_Neighbor *dbEntry = getNeighborByIndex(i);
+        const meshtastic_Neighbor *dbEntry = getNeighborByIndex(i);
         LOG_DEBUG("     Node %d: node_id=%d, snr=%.2f\n", i, dbEntry->node_id, dbEntry->snr);
     }
     LOG_DEBUG("----------------\n");
@@ -245,7 +245,7 @@ void NeighborInfoModule::resetNeighbors()
     saveProtoForModule();
 }
 
-void NeighborInfoModule::updateNeighbors(const meshtastic_MeshPacket &mp, meshtastic_NeighborInfo *np)
+void NeighborInfoModule::updateNeighbors(const meshtastic_MeshPacket &mp, const meshtastic_NeighborInfo *np)
 {
     // The last sent ID will be 0 if the packet is from the phone, which we don't count as
     // an edge. So we assume that if it's zero, then this packet is from our node.

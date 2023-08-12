@@ -333,7 +333,7 @@ void MQTT::sendSubscriptions()
 #ifdef HAS_NETWORKING
     size_t numChan = channels.getNumChannels();
     for (size_t i = 0; i < numChan; i++) {
-        auto &ch = channels.getByIndex(i);
+        const auto &ch = channels.getByIndex(i);
         if (ch.settings.downlink_enabled) {
             std::string topic = cryptTopic + channels.getGlobalId(i) + "/#";
             LOG_INFO("Subscribing to %s\n", topic.c_str());
@@ -356,7 +356,7 @@ bool MQTT::wantsLink() const
         // No need for link if no channel needed it
         size_t numChan = channels.getNumChannels();
         for (size_t i = 0; i < numChan; i++) {
-            auto &ch = channels.getByIndex(i);
+            const auto &ch = channels.getByIndex(i);
             if (ch.settings.uplink_enabled || ch.settings.downlink_enabled) {
                 hasChannel = true;
                 break;
