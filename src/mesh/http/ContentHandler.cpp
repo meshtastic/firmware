@@ -465,7 +465,7 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
     // first semicolon, if one exists:
     size_t semicolonPos = contentType.find(";");
     if (semicolonPos != std::string::npos) {
-        contentType = contentType.substr(0, semicolonPos); // cpp-check-suppress
+        contentType = contentType.resize(semicolonPos); // cpp-check-suppress
     }
 
     // Now, we can decide based on the content type:
