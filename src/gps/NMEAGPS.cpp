@@ -260,7 +260,7 @@ bool NMEAGPS::whileIdle()
     }
 #endif
     // if (_serial_gps->available() > 0)
-    LOG_DEBUG("GPS Bytes Waiting: %u\n", _serial_gps->available());
+    // LOG_DEBUG("GPS Bytes Waiting: %u\n", _serial_gps->available());
     // First consume any chars that have piled up at the receiver
     while (_serial_gps->available() > 0) {
         int c = _serial_gps->read();
