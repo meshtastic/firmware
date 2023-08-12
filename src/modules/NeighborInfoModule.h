@@ -65,7 +65,7 @@ class NeighborInfoModule : public ProtobufModule<meshtastic_NeighborInfo>, priva
     }
 
     /* update neighbors with subpacket sniffed from network */
-    void updateNeighbors(const meshtastic_MeshPacket &mp, meshtastic_NeighborInfo *np);
+    void updateNeighbors(const meshtastic_MeshPacket &mp, const meshtastic_NeighborInfo *np);
 
     /* update a NeighborInfo packet with our NodeNum as last_sent_by_id */
     void updateLastSentById(meshtastic_MeshPacket *p);
