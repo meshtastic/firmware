@@ -1058,7 +1058,8 @@ void Screen::setup()
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
     if (textMessageModule)
         textMessageObserver.observe(textMessageModule);
-    inputObserver.observe(inputBroker);
+    if (inputBroker)
+        inputObserver.observe(inputBroker);
 
     // Modules can notify screen about refresh
     MeshModule::observeUIEvents(&uiFrameEventObserver);
