@@ -805,15 +805,6 @@ int32_t GPS::runOnce()
 
     // If state has changed do a publish
     publishUpdate();
-
-    if (!(fixeddelayCtr >= 20) && config.position.fixed_position && hasValidLocation) {
-        fixeddelayCtr++;
-        // LOG_DEBUG("Our delay counter is %d\n", fixeddelayCtr);
-        if (fixeddelayCtr >= 20) {
-            doGPSpowersave(false);
-            forceWake(false);
-        }
-    }
     // 9600bps is approx 1 byte per msec, so considering our buffer size we never need to wake more often than 200ms
     // if not awake we can run super infrquently (once every 5 secs?) to see if we need to wake.
     return isAwake ? GPS_THREAD_INTERVAL : 5000;
