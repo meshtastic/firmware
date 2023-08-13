@@ -140,12 +140,12 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
     bool validEvent = false;
     if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP)) {
-        LOG_DEBUG("Canned message event UP\n");
+        // LOG_DEBUG("Canned message event UP\n");
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_UP;
         validEvent = true;
     }
     if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN)) {
-        LOG_DEBUG("Canned message event DOWN\n");
+        // LOG_DEBUG("Canned message event DOWN\n");
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_DOWN;
         validEvent = true;
     }
@@ -169,8 +169,8 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     if ((event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK)) ||
         (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) ||
         (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT))) {
-        LOG_DEBUG("Canned message event (%x)\n", event->kbchar);
-        // tweak for left/right events generated via trackball/touch with empty kbchar
+        // LOG_DEBUG("Canned message event (%x)\n", event->kbchar);
+        //  tweak for left/right events generated via trackball/touch with empty kbchar
         if (!event->kbchar) {
             if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
                 this->payload = 0xb4;
