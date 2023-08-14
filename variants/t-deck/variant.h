@@ -27,7 +27,6 @@
 #define BUTTON_PIN 0
 // #define BUTTON_NEED_PULLUP
 
-#define HAS_GPS 0
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 
