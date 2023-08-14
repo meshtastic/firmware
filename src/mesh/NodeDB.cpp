@@ -255,7 +255,7 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.has_detection_sensor = true;
     moduleConfig.detection_sensor.enabled = false;
     moduleConfig.detection_sensor.detection_triggered_high = true;
-    moduleConfig.detection_sensor.minimum_broadcast_secs = 30;
+    moduleConfig.detection_sensor.minimum_broadcast_secs = 45;
 
     initModuleConfigIntervals();
 }

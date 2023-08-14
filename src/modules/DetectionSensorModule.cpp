@@ -38,6 +38,11 @@ int32_t DetectionSensorModule::runOnce()
             LOG_WARN("Detection Sensor Module: Set to enabled but no monitor pin is set. Disabling module...\n");
             return disable();
         }
+        else
+        {
+            LOG_WARN("Detection Sensor Module: Set to enabled but no monitor pin is set. Disabling module...\n");
+            return disable();
+        }
         LOG_INFO("Detection Sensor Module: Initializing\n");
 
         return DELAYED_INTERVAL;
