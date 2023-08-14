@@ -106,12 +106,18 @@ int32_t KbI2cBase::runOnce()
                 e.kbchar = 0xb6;
                 break;
             case 0xb4: // Left
-            case 0x14: // sym shift+4
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT;
+                e.kbchar = 0xb4;
+                break;
+            case 0x14: // Left (sym shift+4)
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT;
                 e.kbchar = 0x00; // tweak for destSelect
                 break;
             case 0xb7: // Right
-            case 0x16: // sym shift+6
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
+                e.kbchar = 0xb7;
+                break;
+            case 0x16: // Right (sym shift+6)
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
                 e.kbchar = 0x00; // tweak for destSelect
                 break;
