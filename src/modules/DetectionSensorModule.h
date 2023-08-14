@@ -1,0 +1,20 @@
+#pragma once
+#include "SinglePortModule.h"
+
+class DetectionSensorModule : public SinglePortModule, private concurrency::OSThread
+{
+  public:
+    DetectionSensorModule() : SinglePortModule("detection", meshtastic_PortNum_TEXT_MESSAGE_APP), OSThread("DetectionSensor") {}
+
+  protected:
+    virtual int32_t runOnce() override;
+
+  private:
+    bool firstTime = true;
+    uint32_t lastSentToMesh = 0;
+    void sendDetectionMessage();
+    void sendCurrentStateMessage();
+    bool hasStateChanged();
+};
+
+extern DetectionSensorModule *detectionSensorModule;

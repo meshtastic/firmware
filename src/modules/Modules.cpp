@@ -31,6 +31,7 @@
 #include "modules/ExternalNotificationModule.h"
 #include "modules/RangeTestModule.h"
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(CONFIG_IDF_TARGET_ESP32S2)
+#include "modules/DetectionSensorModule.h"
 #include "modules/SerialModule.h"
 #endif
 #endif
@@ -50,6 +51,7 @@ void setupModules()
         textMessageModule = new TextMessageModule();
         traceRouteModule = new TraceRouteModule();
         neighborInfoModule = new NeighborInfoModule();
+        detectionSensorModule = new DetectionSensorModule();
 
         // Note: if the rest of meshtastic doesn't need to explicitly use your module, you do not need to assign the instance
         // to a global variable.
