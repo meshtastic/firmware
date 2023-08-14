@@ -3,21 +3,21 @@
 
 class DetectionSensorModule : public SinglePortModule, private concurrency::OSThread
 {
-  public:
-    DetectionSensorModule()
-        : SinglePortModule("detection", meshtastic_PortNum_TEXT_MESSAGE_APP), OSThread("DetectionSensorModule")
-    {
-    }
+public:
+  DetectionSensorModule()
+      : SinglePortModule("detection", meshtastic_PortNum_TEXT_MESSAGE_APP), OSThread("DetectionSensorModule")
+  {
+  }
 
-  protected:
-    virtual int32_t runOnce() override;
+protected:
+  virtual int32_t runOnce() override;
 
-  private:
-    bool firstTime = true;
-    uint32_t lastSentToMesh = 0;
-    void sendDetectionMessage();
-    void sendCurrentStateMessage();
-    bool hasDetectionEvent();
+private:
+  bool firstTime = true;
+  uint32_t lastSentToMesh = 0;
+  void sendDetectionMessage();
+  void sendCurrentStateMessage();
+  bool hasDetectionEvent();
 };
 
 extern DetectionSensorModule *detectionSensorModule;

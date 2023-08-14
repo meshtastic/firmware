@@ -8,7 +8,6 @@
 DetectionSensorModule *detectionSensorModule;
 
 #define GPIO_POLLING_INTERVAL 100
-#define DELAYED_INTERVAL 1000
 
 int32_t DetectionSensorModule::runOnce()
 {
@@ -26,12 +25,16 @@ int32_t DetectionSensorModule::runOnce()
     if (moduleConfig.detection_sensor.enabled == false)
         return disable();
 
-    if (firstTime) {
+    if (firstTime)
+    {
         // This is the first time the OSThread library has called this function, so do some setup
         firstTime = false;
-        if (moduleConfig.detection_sensor.monitor_pin > 0) {
+        if (moduleConfig.detection_sensor.monitor_pin > 0)
+        {
             pinMode(moduleConfig.detection_sensor.monitor_pin, moduleConfig.detection_sensor.use_pullup ? INPUT_PULLUP : INPUT);
-        } else {
+        }
+        else
+        {
             LOG_WARN("Detection Sensor Module: Set to enabled but no monitor pin is set. Disabling module...\n");
             return disable();
         }
@@ -41,7 +44,8 @@ int32_t DetectionSensorModule::runOnce()
     }
 
     if ((millis() - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs) &&
-        hasDetectionEvent()) {
+        hasDetectionEvent())
+    {
         sendDetectionMessage();
         return DELAYED_INTERVAL;
     }
@@ -49,7 +53,8 @@ int32_t DetectionSensorModule::runOnce()
     // of heartbeat. We only do this if the minimum broadcast interval is greater than zero, otherwise we'll only broadcast state
     // change detections.
     else if (moduleConfig.detection_sensor.state_broadcast_secs > 0 &&
-             (millis() - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs)) {
+             (millis() - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs))
+    {
         sendCurrentStateMessage();
         return DELAYED_INTERVAL;
     }
@@ -65,7 +70,8 @@ void DetectionSensorModule::sendDetectionMessage()
     p->want_ack = false;
     p->decoded.payload.size = strlen(message);
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
-    if (moduleConfig.detection_sensor.send_bell && p->decoded.payload.size < meshtastic_Constants_DATA_PAYLOAD_LEN) {
+    if (moduleConfig.detection_sensor.send_bell && p->decoded.payload.size < meshtastic_Constants_DATA_PAYLOAD_LEN)
+    {
         p->decoded.payload.bytes[p->decoded.payload.size] = 7;        // Bell character
         p->decoded.payload.bytes[p->decoded.payload.size + 1] = '\0'; // Bell character
         p->decoded.payload.size++;
