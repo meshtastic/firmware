@@ -7,7 +7,7 @@
 
 DetectionSensorModule *detectionSensorModule;
 
-#define GPIO_POLLING_INTERVAL 80
+#define GPIO_POLLING_INTERVAL 100
 #define DELAYED_INTERVAL 1000
 
 int32_t DetectionSensorModule::runOnce()
@@ -31,6 +31,9 @@ int32_t DetectionSensorModule::runOnce()
         firstTime = false;
         if (moduleConfig.detection_sensor.monitor_pin > 0) {
             pinMode(moduleConfig.detection_sensor.monitor_pin, moduleConfig.detection_sensor.use_pullup ? INPUT_PULLUP : INPUT);
+        } else {
+            LOG_WARN("Detection Sensor Module: Set to enabled but no monitor pin is set. Disabling module...\n");
+            return disable();
         }
         LOG_INFO("Detection Sensor Module: Initializing\n");
 
@@ -38,11 +41,11 @@ int32_t DetectionSensorModule::runOnce()
     }
 
     if ((millis() - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs) &&
-        hasStateChanged()) {
+        hasDetectionEvent()) {
         sendDetectionMessage();
         return DELAYED_INTERVAL;
     }
-    // Even if we haven't detected a change from state, broadcast our current state the mesh on the scheduled interval as a sort
+    // Even if we haven't detected an event, broadcast our current state to the mesh on the scheduled interval as a sort
     // of heartbeat. We only do this if the minimum broadcast interval is greater than zero, otherwise we'll only broadcast state
     // change detections.
     else if (moduleConfig.detection_sensor.state_broadcast_secs > 0 &&
@@ -55,7 +58,7 @@ int32_t DetectionSensorModule::runOnce()
 
 void DetectionSensorModule::sendDetectionMessage()
 {
-    LOG_DEBUG("Detected state change. Sending message\n");
+    LOG_DEBUG("Detected event observed. Sending message\n");
     char *message = new char[40];
     sprintf(message, "%s detected", moduleConfig.detection_sensor.name);
     meshtastic_MeshPacket *p = allocDataPacket();
@@ -76,7 +79,7 @@ void DetectionSensorModule::sendDetectionMessage()
 void DetectionSensorModule::sendCurrentStateMessage()
 {
     char *message = new char[40];
-    sprintf(message, "%s state: %i", moduleConfig.detection_sensor.name, hasStateChanged());
+    sprintf(message, "%s state: %i", moduleConfig.detection_sensor.name, hasDetectionEvent());
 
     meshtastic_MeshPacket *p = allocDataPacket();
     p->want_ack = false;
@@ -88,7 +91,7 @@ void DetectionSensorModule::sendCurrentStateMessage()
     delete[] message;
 }
 
-bool DetectionSensorModule::hasStateChanged()
+bool DetectionSensorModule::hasDetectionEvent()
 {
     bool currentState = digitalRead(moduleConfig.detection_sensor.monitor_pin);
     // LOG_DEBUG("Detection Sensor Module: Current state: %i\n", currentState);
