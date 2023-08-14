@@ -7,7 +7,7 @@
 
 DetectionSensorModule *detectionSensorModule;
 
-#define GPIO_POLLING_INTERVAL 50
+#define GPIO_POLLING_INTERVAL 80
 #define DELAYED_INTERVAL 1000
 
 int32_t DetectionSensorModule::runOnce()
@@ -16,11 +16,12 @@ int32_t DetectionSensorModule::runOnce()
         Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
     */
-    moduleConfig.detection_sensor.enabled = true;
-    moduleConfig.detection_sensor.monitor_pin = 10; // WisBlock PIR IO6
-    moduleConfig.detection_sensor.minimum_broadcast_secs = 60;
-    moduleConfig.detection_sensor.detection_triggered_high = false;
-    strcpy(moduleConfig.detection_sensor.name, "Motion");
+    // moduleConfig.detection_sensor.enabled = true;
+    // moduleConfig.detection_sensor.monitor_pin = 10; // WisBlock PIR IO6
+    // moduleConfig.detection_sensor.minimum_broadcast_secs = 60;
+    // moduleConfig.detection_sensor.state_broadcast_secs = 120;
+    // moduleConfig.detection_sensor.detection_triggered_high = false;
+    // strcpy(moduleConfig.detection_sensor.name, "Motion");
 
     if (moduleConfig.detection_sensor.enabled == false)
         return disable();
@@ -29,7 +30,7 @@ int32_t DetectionSensorModule::runOnce()
         // This is the first time the OSThread library has called this function, so do some setup
         firstTime = false;
         if (moduleConfig.detection_sensor.monitor_pin > 0) {
-            pinMode(moduleConfig.detection_sensor.monitor_pin, INPUT);
+            pinMode(moduleConfig.detection_sensor.monitor_pin, moduleConfig.detection_sensor.use_pullup ? INPUT_PULLUP : INPUT);
         }
         LOG_INFO("Detection Sensor Module: Initializing\n");
 
@@ -41,12 +42,14 @@ int32_t DetectionSensorModule::runOnce()
         sendDetectionMessage();
         return DELAYED_INTERVAL;
     }
-    // Even if we haven't detected a change, broadcast to the mesh on our scheduled interval as a sort of heartbeat
-    else if ((millis() - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs)) {
+    // Even if we haven't detected a change from state, broadcast our current state the mesh on the scheduled interval as a sort
+    // of heartbeat. We only do this if the minimum broadcast interval is greater than zero, otherwise we'll only broadcast state
+    // change detections.
+    else if (moduleConfig.detection_sensor.state_broadcast_secs > 0 &&
+             (millis() - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs)) {
+        sendCurrentStateMessage();
         return DELAYED_INTERVAL;
     }
-    // bool currentState = digitalRead(moduleConfig.detection_sensor.monitor_pin);
-    // LOG_DEBUG("Detection Sensor Module: Current state: %i\n", currentState);
     return GPIO_POLLING_INTERVAL;
 }
 
@@ -86,6 +89,6 @@ void DetectionSensorModule::sendCurrentStateMessage()
 bool DetectionSensorModule::hasStateChanged()
 {
     bool currentState = digitalRead(moduleConfig.detection_sensor.monitor_pin);
-    LOG_DEBUG("Detection Sensor Module: Current state: %i\n", currentState);
+    // LOG_DEBUG("Detection Sensor Module: Current state: %i\n", currentState);
     return moduleConfig.detection_sensor.detection_triggered_high ? currentState : !currentState;
 }
