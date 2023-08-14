@@ -7,6 +7,7 @@
 #include "input/kbMatrixImpl.h"
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
+#include "modules/DetectionSensorModule.h"
 #include "modules/NeighborInfoModule.h"
 #include "modules/NodeInfoModule.h"
 #include "modules/PositionModule.h"
@@ -31,7 +32,6 @@
 #include "modules/ExternalNotificationModule.h"
 #include "modules/RangeTestModule.h"
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(CONFIG_IDF_TARGET_ESP32S2)
-#include "modules/DetectionSensorModule.h"
 #include "modules/SerialModule.h"
 #endif
 #endif
