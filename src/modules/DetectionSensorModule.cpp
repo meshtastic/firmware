@@ -70,6 +70,7 @@ void DetectionSensorModule::sendDetectionMessage()
     LOG_INFO("Sending message id=%d, dest=%x, msg=%.*s\n", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
     lastSentToMesh = millis();
     service.sendToMesh(p);
+    delete[] message;
 }
 
 void DetectionSensorModule::sendCurrentStateMessage()
@@ -84,6 +85,7 @@ void DetectionSensorModule::sendCurrentStateMessage()
     LOG_INFO("Sending message id=%d, dest=%x, msg=%.*s\n", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
     lastSentToMesh = millis();
     service.sendToMesh(p);
+    delete[] message;
 }
 
 bool DetectionSensorModule::hasStateChanged()
