@@ -15,11 +15,12 @@ int32_t DetectionSensorModule::runOnce()
         Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
     */
-    // moduleConfig.detection_sensor.enabled = true;
+    moduleConfig.detection_sensor.enabled = true;
     // moduleConfig.detection_sensor.monitor_pin = 10; // WisBlock PIR IO6
-    // moduleConfig.detection_sensor.minimum_broadcast_secs = 60;
+    // moduleConfig.detection_sensor.monitor_pin = 21; // WisBlock RAK12013 Radar IO6
+    // moduleConfig.detection_sensor.minimum_broadcast_secs = 30;
     // moduleConfig.detection_sensor.state_broadcast_secs = 120;
-    // moduleConfig.detection_sensor.detection_triggered_high = false;
+    // moduleConfig.detection_sensor.detection_triggered_high = true;
     // strcpy(moduleConfig.detection_sensor.name, "Motion");
 
     if (moduleConfig.detection_sensor.enabled == false)
@@ -48,11 +49,13 @@ int32_t DetectionSensorModule::runOnce()
         return DELAYED_INTERVAL;
     }
 
+    // LOG_DEBUG("Detection Sensor Module: Current pin state: %i\n", digitalRead(moduleConfig.detection_sensor.monitor_pin));
+
     if ((millis() - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs) &&
         hasDetectionEvent())
     {
         sendDetectionMessage();
-        return DELAYED_INTERVAL;
+        return moduleConfig.detection_sensor.minimum_broadcast_secs;
     }
     // Even if we haven't detected an event, broadcast our current state to the mesh on the scheduled interval as a sort
     // of heartbeat. We only do this if the minimum broadcast interval is greater than zero, otherwise we'll only broadcast state
@@ -61,7 +64,7 @@ int32_t DetectionSensorModule::runOnce()
              (millis() - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs))
     {
         sendCurrentStateMessage();
-        return DELAYED_INTERVAL;
+        return moduleConfig.detection_sensor.minimum_broadcast_secs;
     }
     return GPIO_POLLING_INTERVAL;
 }
