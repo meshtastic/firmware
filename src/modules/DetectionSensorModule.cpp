@@ -8,6 +8,7 @@
 DetectionSensorModule *detectionSensorModule;
 
 #define GPIO_POLLING_INTERVAL 100
+#define DELAYED_INTERVAL 1000
 
 int32_t DetectionSensorModule::runOnce()
 {
