@@ -173,6 +173,9 @@ ProcessMessage RangeTestModuleRadio::handleReceived(const meshtastic_MeshPacket 
             LOG_DEBUG("gpsStatus->getDOP()          %d\n", gpsStatus->getDOP());
             LOG_DEBUG("-----------------------------------------\n");
             */
+
+            // Bad hack to modify the port number of the packet so that it is displayed as a text message in the UI.
+            const_cast<meshtastic_MeshPacket *>(&mp)->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
         }
     } else {
         LOG_INFO("Range Test Module Disabled\n");
