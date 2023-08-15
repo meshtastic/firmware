@@ -15,7 +15,7 @@ int32_t DetectionSensorModule::runOnce()
         Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
     */
-    moduleConfig.detection_sensor.enabled = true;
+    // moduleConfig.detection_sensor.enabled = true;
     // moduleConfig.detection_sensor.monitor_pin = 10; // WisBlock PIR IO6
     // moduleConfig.detection_sensor.monitor_pin = 21; // WisBlock RAK12013 Radar IO6
     // moduleConfig.detection_sensor.minimum_broadcast_secs = 30;
@@ -32,11 +32,6 @@ int32_t DetectionSensorModule::runOnce()
         if (moduleConfig.detection_sensor.monitor_pin > 0) {
             pinMode(moduleConfig.detection_sensor.monitor_pin, moduleConfig.detection_sensor.use_pullup ? INPUT_PULLUP : INPUT);
         } else {
-            LOG_WARN("Detection Sensor Module: Set to enabled but no monitor pin is set. Disabling module...\n");
-            return disable();
-        }
-        else
-        {
             LOG_WARN("Detection Sensor Module: Set to enabled but no monitor pin is set. Disabling module...\n");
             return disable();
         }
