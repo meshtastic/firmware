@@ -43,6 +43,11 @@
 #define SCREEN_ROTATE
 #define SCREEN_TRANSITION_FRAMERATE 5
 
+// Picomputer gets a white on black display
+#define TFT_MESH COLOR565(0xFF, 0xFF, 0xFF)
+
+#define CANNED_MESSAGE_MODULE_ENABLE 1
+
 #define INPUTBROKER_MATRIX_TYPE 1
 
 #define KEYS_COLS                                                                                                                \
