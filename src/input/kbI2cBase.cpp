@@ -66,47 +66,50 @@ int32_t KbI2cBase::runOnce()
         int keyCount = Q10keyboard.keyCount();
         while (keyCount--) {
             const BBQ10Keyboard::KeyEvent key = Q10keyboard.keyEvent();
-            InputEvent e;
-            e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
-            e.source = this->_originName;
-            switch (key.key) {
-            case 0x1b: // ESC
-                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL;
-                break;
-            case 0x08: // Back
-                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK;
-                e.kbchar = key.key;
-                break;
-            case 0x12: // sym shift+2
-                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP;
-                e.kbchar = 0xb5;
-                break;
-            case 0x18: // sym shift+8
-                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN;
-                e.kbchar = 0xb6;
-                break;
-            case 0x14: // Left (sym shift+4)
-                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT;
-                e.kbchar = 0x00; // tweak for destSelect
-                break;
-            case 0x16: // Right (sym shift+6)
-                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
-                e.kbchar = 0x00; // tweak for destSelect
-                break;
-            case 0x0d: // Enter
-                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
-                break;
-            case 0x00: // nopress
+            if ((key.key != 0x00) && (key.state == BBQ10Keyboard::StateRelease)) {
+                InputEvent e;
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
-                break;
-            default: // all other keys
-                e.inputEvent = ANYKEY;
-                e.kbchar = key.key;
-                break;
-            }
+                e.source = this->_originName;
+                switch (key.key) {
+                case 0x1b: // ESC
+                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL;
+                    break;
+                case 0x08: // Back
+                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK;
+                    e.kbchar = key.key;
+                    break;
+                case 0x12: // sym shift+2
+                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP;
+                    e.kbchar = 0xb5;
+                    break;
+                case 0x18: // sym shift+8
+                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN;
+                    e.kbchar = 0xb6;
+                    break;
+                case 0x14: // Left (sym shift+4)
+                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT;
+                    e.kbchar = 0x00; // tweak for destSelect
+                    break;
+                case 0x16: // Right (sym shift+6)
+                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
+                    e.kbchar = 0x00; // tweak for destSelect
+                    break;
+                case 0x0d: // Enter
+                case 0x0a: // apparently Enter on Q10 is a line feed instead of carriage return
+                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
+                    break;
+                case 0x00: // nopress
+                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+                    break;
+                default: // all other keys
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = key.key;
+                    break;
+                }
 
-            if (e.inputEvent != meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE) {
-                this->notifyObservers(&e);
+                if (e.inputEvent != meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE) {
+                    this->notifyObservers(&e);
+                }
             }
         }
         break;
