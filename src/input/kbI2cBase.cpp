@@ -41,11 +41,19 @@ int32_t KbI2cBase::runOnce()
 #ifdef I2C_SDA1
             LOG_DEBUG("Using I2C Bus 1 (the second one)\n");
             i2cBus = &Wire1;
+            if (cardkb_found.address == BBQ10_KB_ADDR) {
+                Q10keyboard.begin(BBQ10_KB_ADDR, &Wire1);
+                Q10keyboard.setBacklight(0);
+            }
             break;
 #endif
         case ScanI2C::WIRE:
             LOG_DEBUG("Using I2C Bus 0 (the first one)\n");
             i2cBus = &Wire;
+            if (cardkb_found.address == BBQ10_KB_ADDR) {
+                Q10keyboard.begin(BBQ10_KB_ADDR, &Wire);
+                Q10keyboard.setBacklight(0);
+            }
             break;
         case ScanI2C::NO_I2C:
         default:
@@ -54,6 +62,55 @@ int32_t KbI2cBase::runOnce()
     }
 
     switch (kb_model) {
+    case 0x11: { // BB Q10
+        int keyCount = Q10keyboard.keyCount();
+        while (keyCount--) {
+            const BBQ10Keyboard::KeyEvent key = Q10keyboard.keyEvent();
+            InputEvent e;
+            e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+            e.source = this->_originName;
+            switch (key.key) {
+            case 0x1b: // ESC
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL;
+                break;
+            case 0x08: // Back
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK;
+                e.kbchar = key.key;
+                break;
+            case 0x12: // sym shift+2
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP;
+                e.kbchar = 0xb5;
+                break;
+            case 0x18: // sym shift+8
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN;
+                e.kbchar = 0xb6;
+                break;
+            case 0x14: // Left (sym shift+4)
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT;
+                e.kbchar = 0x00; // tweak for destSelect
+                break;
+            case 0x16: // Right (sym shift+6)
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
+                e.kbchar = 0x00; // tweak for destSelect
+                break;
+            case 0x0d: // Enter
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
+                break;
+            case 0x00: // nopress
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+                break;
+            default: // all other keys
+                e.inputEvent = ANYKEY;
+                e.kbchar = key.key;
+                break;
+            }
+
+            if (e.inputEvent != meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE) {
+                this->notifyObservers(&e);
+            }
+        }
+        break;
+    }
     case 0x02: {
         // RAK14004
         uint8_t rDataBuf[8] = {0};
@@ -78,8 +135,8 @@ int32_t KbI2cBase::runOnce()
         break;
     }
     case 0x00:   // CARDKB
-    case 0x10:   // T-DECK
-    case 0x11: { // BB Q10
+    case 0x10: { // T-DECK
+
         i2cBus->requestFrom((int)cardkb_found.address, 1);
 
         while (i2cBus->available()) {
@@ -96,12 +153,10 @@ int32_t KbI2cBase::runOnce()
                 e.kbchar = c;
                 break;
             case 0xb5: // Up
-            case 0x12: // sym shift+2
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP;
                 e.kbchar = 0xb5;
                 break;
             case 0xb6: // Down
-            case 0x18: // sym shift+8
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN;
                 e.kbchar = 0xb6;
                 break;
@@ -109,17 +164,9 @@ int32_t KbI2cBase::runOnce()
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT;
                 e.kbchar = 0xb4;
                 break;
-            case 0x14: // Left (sym shift+4)
-                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT;
-                e.kbchar = 0x00; // tweak for destSelect
-                break;
             case 0xb7: // Right
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
                 e.kbchar = 0xb7;
-                break;
-            case 0x16: // Right (sym shift+6)
-                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
-                e.kbchar = 0x00; // tweak for destSelect
                 break;
             case 0x0d: // Enter
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
