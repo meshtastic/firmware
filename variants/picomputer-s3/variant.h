@@ -39,8 +39,14 @@
 #define TFT_WIDTH 240
 #define TFT_OFFSET_X 0
 #define TFT_OFFSET_Y 0
+#define TFT_OFFSET_ROTATION 0
 #define SCREEN_ROTATE
 #define SCREEN_TRANSITION_FRAMERATE 5
+
+// Picomputer gets a white on black display
+#define TFT_MESH COLOR565(0xFF, 0xFF, 0xFF)
+
+#define CANNED_MESSAGE_MODULE_ENABLE 1
 
 #define INPUTBROKER_MATRIX_TYPE 1
 

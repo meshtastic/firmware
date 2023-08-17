@@ -15,6 +15,7 @@
 #define TFT_WIDTH 240
 #define TFT_OFFSET_X 0
 #define TFT_OFFSET_Y 0
+#define TFT_OFFSET_ROTATION 2
 #define SCREEN_ROTATE
 #define SCREEN_TRANSITION_FRAMERATE 5 // fps
 

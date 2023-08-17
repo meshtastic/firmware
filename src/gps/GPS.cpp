@@ -174,7 +174,7 @@ bool GPS::setupGPS()
 
 #ifdef ARCH_ESP32
         // In esp32 framework, setRxBufferSize needs to be initialized before Serial
-        _serial_gps->setRxBufferSize(2048); // the default is 256
+        _serial_gps->setRxBufferSize(SERIAL_BUFFER_SIZE); // the default is 256
 #endif
 
         // if the overrides are not dialled in, set them from the board definitions, if they exist
@@ -805,15 +805,6 @@ int32_t GPS::runOnce()
 
     // If state has changed do a publish
     publishUpdate();
-
-    if (!(fixeddelayCtr >= 20) && config.position.fixed_position && hasValidLocation) {
-        fixeddelayCtr++;
-        // LOG_DEBUG("Our delay counter is %d\n", fixeddelayCtr);
-        if (fixeddelayCtr >= 20) {
-            doGPSpowersave(false);
-            forceWake(false);
-        }
-    }
     // 9600bps is approx 1 byte per msec, so considering our buffer size we never need to wake more often than 200ms
     // if not awake we can run super infrquently (once every 5 secs?) to see if we need to wake.
     return isAwake ? GPS_THREAD_INTERVAL : 5000;
@@ -832,6 +823,14 @@ void GPS::forceWake(bool on)
         // attempt even if we are in light sleep.  Once the attempt succeeds (or times out) we'll then shut it down.
         // setAwake(false);
     }
+}
+
+// clear the GPS rx buffer as quickly as possible
+void GPS::clearBuffer()
+{
+    int x = _serial_gps->available();
+    while (x--)
+        _serial_gps->read();
 }
 
 /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
@@ -884,7 +883,7 @@ GnssModel_t GPS::probe()
             int index = ver.indexOf("$");
             if (index != -1) {
                 ver = ver.substring(index);
-                if (ver.startsWith("$GPTXT,01,01,02")) {
+                if (ver.startsWith("$GPTXT,01,01,02,SW=")) {
                     LOG_INFO("L76K GNSS init succeeded, using L76K GNSS Module\n");
                     return GNSS_MODEL_MTK;
                 }

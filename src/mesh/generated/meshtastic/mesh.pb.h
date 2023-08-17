@@ -61,6 +61,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_NANO_G1_EXPLORER = 17,
     /* B&Q Consulting Nano G2 Ultra: https://wiki.uniteng.com/en/meshtastic/nano-g2-ultra */
     meshtastic_HardwareModel_NANO_G2_ULTRA = 18,
+    /* LoRAType device: https://loratype.org/ */
+    meshtastic_HardwareModel_LORA_TYPE = 19,
     /* B&Q Consulting Station Edition G1: https://uniteng.com/wiki/doku.php?id=meshtastic:station */
     meshtastic_HardwareModel_STATION_G1 = 25,
     /* RAK11310 (RP2040 + SX1262) */
@@ -151,7 +153,7 @@ typedef enum _meshtastic_CriticalErrorCode {
     /* Radio transmit hardware failure. We sent data to the radio chip, but it didn't
  reply with an interrupt. */
     meshtastic_CriticalErrorCode_TRANSMIT_FAILED = 8,
-    /* We detected that the main CPU voltage dropped below the minumum acceptable value */
+    /* We detected that the main CPU voltage dropped below the minimum acceptable value */
     meshtastic_CriticalErrorCode_BROWNOUT = 9,
     /* Selftest of SX1262 radio chip failed */
     meshtastic_CriticalErrorCode_SX1262_FAILURE = 10,

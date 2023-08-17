@@ -35,7 +35,7 @@ void NeighborInfoModule::printNodeDBNodes(const char *header)
     LOG_DEBUG("----------------\n");
     LOG_DEBUG("DB contains %d nodes\n", num_nodes);
     for (int i = 0; i < num_nodes; i++) {
-        meshtastic_NodeInfoLite *dbEntry = nodeDB.getMeshNodeByIndex(i);
+        const meshtastic_NodeInfoLite *dbEntry = nodeDB.getMeshNodeByIndex(i);
         LOG_DEBUG("     Node %d: node_id=%d, snr=%.2f\n", i, dbEntry->num, dbEntry->snr);
     }
     LOG_DEBUG("----------------\n");
@@ -52,7 +52,7 @@ void NeighborInfoModule::printNodeDBNeighbors(const char *header)
     LOG_DEBUG("----------------\n");
     LOG_DEBUG("DB contains %d neighbors\n", num_neighbors);
     for (int i = 0; i < num_neighbors; i++) {
-        meshtastic_Neighbor *dbEntry = getNeighborByIndex(i);
+        const meshtastic_Neighbor *dbEntry = getNeighborByIndex(i);
         LOG_DEBUG("     Node %d: node_id=%d, snr=%.2f\n", i, dbEntry->node_id, dbEntry->snr);
     }
     LOG_DEBUG("----------------\n");
@@ -88,9 +88,9 @@ void NeighborInfoModule::printNodeDBSelection(const char *header, const meshtast
 
 /* Send our initial owner announcement 35 seconds after we start (to give network time to setup) */
 NeighborInfoModule::NeighborInfoModule()
-    : neighbors(neighborState.neighbors), numNeighbors(&neighborState.neighbors_count),
-      ProtobufModule("neighborinfo", meshtastic_PortNum_NEIGHBORINFO_APP, &meshtastic_NeighborInfo_msg), concurrency::OSThread(
-                                                                                                             "NeighborInfoModule")
+    : ProtobufModule("neighborinfo", meshtastic_PortNum_NEIGHBORINFO_APP, &meshtastic_NeighborInfo_msg),
+      concurrency::OSThread("NeighborInfoModule"), neighbors(neighborState.neighbors),
+      numNeighbors(&neighborState.neighbors_count)
 {
     ourPortNum = meshtastic_PortNum_NEIGHBORINFO_APP;
 
@@ -164,7 +164,7 @@ size_t NeighborInfoModule::cleanUpNeighbors()
     }
 
     // Update the neighbor list
-    for (int i = 0; i < indices_to_remove.size(); i++) {
+    for (uint i = 0; i < indices_to_remove.size(); i++) {
         int index = indices_to_remove[i];
         LOG_DEBUG("Removing neighbor with node ID 0x%x\n", neighbors[index].node_id);
         for (int j = index; j < num_neighbors - 1; j++) {
@@ -245,7 +245,7 @@ void NeighborInfoModule::resetNeighbors()
     saveProtoForModule();
 }
 
-void NeighborInfoModule::updateNeighbors(const meshtastic_MeshPacket &mp, meshtastic_NeighborInfo *np)
+void NeighborInfoModule::updateNeighbors(const meshtastic_MeshPacket &mp, const meshtastic_NeighborInfo *np)
 {
     // The last sent ID will be 0 if the packet is from the phone, which we don't count as
     // an edge. So we assume that if it's zero, then this packet is from our node.

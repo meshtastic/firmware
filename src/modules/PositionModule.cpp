@@ -185,7 +185,7 @@ int32_t PositionModule::runOnce()
     } else if (config.position.position_broadcast_smart_enabled) {
         // Only send packets if the channel is less than 25% utilized or we're a tracker.
         if (airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER)) {
-            meshtastic_NodeInfoLite *node2 = service.refreshLocalMeshNode(); // should guarantee there is now a position
+            const meshtastic_NodeInfoLite *node2 = service.refreshLocalMeshNode(); // should guarantee there is now a position
 
             if (hasValidPosition(node2)) {
                 // The minimum distance to travel before we are able to send a new position packet.

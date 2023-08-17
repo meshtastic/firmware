@@ -7,6 +7,7 @@
 #include "input/kbMatrixImpl.h"
 #include "modules/AdminModule.h"
 #include "modules/CannedMessageModule.h"
+#include "modules/DetectionSensorModule.h"
 #include "modules/NeighborInfoModule.h"
 #include "modules/NodeInfoModule.h"
 #include "modules/PositionModule.h"
@@ -50,6 +51,7 @@ void setupModules()
         textMessageModule = new TextMessageModule();
         traceRouteModule = new TraceRouteModule();
         neighborInfoModule = new NeighborInfoModule();
+        detectionSensorModule = new DetectionSensorModule();
 
         // Note: if the rest of meshtastic doesn't need to explicitly use your module, you do not need to assign the instance
         // to a global variable.

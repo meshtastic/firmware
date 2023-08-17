@@ -320,7 +320,7 @@ meshtastic_NodeInfoLite *MeshService::refreshLocalMeshNode()
 int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
 {
     // Update our local node info with our position (even if we don't decide to update anyone else)
-    meshtastic_NodeInfoLite *node = refreshLocalMeshNode();
+    const meshtastic_NodeInfoLite *node = refreshLocalMeshNode();
     meshtastic_Position pos = meshtastic_Position_init_default;
 
     if (newStatus->getHasLock()) {

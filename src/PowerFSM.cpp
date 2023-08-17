@@ -177,7 +177,7 @@ static void serialExit()
 
 static void powerEnter()
 {
-    LOG_DEBUG("Enter state: POWER\n");
+    // LOG_DEBUG("Enter state: POWER\n");
     if (!isPowered()) {
         // If we got here, we are in the wrong state - we should be in powered, let that state ahndle things
         LOG_INFO("Loss of power in Powered\n");
@@ -297,7 +297,8 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateLS, &stateON, EVENT_INPUT, NULL, "Input Device");
     powerFSM.add_transition(&stateNB, &stateON, EVENT_INPUT, NULL, "Input Device");
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_INPUT, NULL, "Input Device");
-    powerFSM.add_transition(&stateON, &stateON, EVENT_INPUT, NULL, "Input Device"); // restarts the sleep timer
+    powerFSM.add_transition(&stateON, &stateON, EVENT_INPUT, NULL, "Input Device");       // restarts the sleep timer
+    powerFSM.add_transition(&statePOWER, &statePOWER, EVENT_INPUT, NULL, "Input Device"); // restarts the sleep timer
 
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_BLUETOOTH_PAIR, NULL, "Bluetooth pairing");
     powerFSM.add_transition(&stateON, &stateON, EVENT_BLUETOOTH_PAIR, NULL, "Bluetooth pairing");
