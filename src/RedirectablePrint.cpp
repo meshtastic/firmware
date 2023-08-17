@@ -1,8 +1,8 @@
 #include "RedirectablePrint.h"
 #include "NodeDB.h"
-#include "gps/RTC.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
+#include "gps/RTC.h"
 #include <assert.h>
 #include <cstring>
 #include <memory>

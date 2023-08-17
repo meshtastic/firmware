@@ -1,5 +1,5 @@
-#include "gps/RTC.h"
 #include "configuration.h"
+#include "gps/RTC.h"
 
 void setBluetoothEnable(bool on) {}
 

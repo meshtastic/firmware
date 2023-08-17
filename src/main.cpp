@@ -11,7 +11,6 @@
 #include "power.h"
 // #include "debug.h"
 #include "FSCommon.h"
-#include "gps/RTC.h"
 #include "SPILock.h"
 #include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
@@ -19,6 +18,7 @@
 #include "detect/ScanI2CTwoWire.h"
 #include "detect/axpDebug.h"
 #include "detect/einkScan.h"
+#include "gps/RTC.h"
 #include "graphics/RAKled.h"
 #include "graphics/Screen.h"
 #include "main.h"
@@ -534,12 +534,12 @@ void setup()
     pinMode(RF95_NSS, OUTPUT);
     digitalWrite(RF95_NSS, HIGH);
     SPI1.begin(false);
-#else                      // HW_SPI1_DEVICE
+#else  // HW_SPI1_DEVICE
     SPI.setSCK(RF95_SCK);
     SPI.setTX(RF95_MOSI);
     SPI.setRX(RF95_MISO);
     SPI.begin(false);
-#endif                     // HW_SPI1_DEVICE
+#endif // HW_SPI1_DEVICE
 #elif defined(ARCH_APOLLO3)
     // Apollo3
     SPI.begin();
