@@ -20,6 +20,10 @@ enum cannedMessageModuleRunState {
  */
 #define CANNED_MESSAGE_MODULE_MESSAGES_SIZE 800
 
+#ifndef CANNED_MESSAGE_MODULE_ENABLE
+#define CANNED_MESSAGE_MODULE_ENABLE 0
+#endif
+
 class CannedMessageModule : public SinglePortModule, public Observable<const UIFrameEvent *>, private concurrency::OSThread
 {
     CallbackObserver<CannedMessageModule, const InputEvent *> inputObserver =

@@ -269,7 +269,7 @@ typedef struct _meshtastic_Config_PositionConfig {
     uint32_t tx_gpio;
     /* The minimum distance in meters traveled (since the last send) before we can send a position to the mesh if position_broadcast_smart_enabled */
     uint32_t broadcast_smart_minimum_distance;
-    /* The minumum number of seconds (since the last send) before we can send a position to the mesh if position_broadcast_smart_enabled */
+    /* The minimum number of seconds (since the last send) before we can send a position to the mesh if position_broadcast_smart_enabled */
     uint32_t broadcast_smart_minimum_interval_secs;
 } meshtastic_Config_PositionConfig;
 

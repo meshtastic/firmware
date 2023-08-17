@@ -177,7 +177,7 @@ static void serialExit()
 
 static void powerEnter()
 {
-    LOG_DEBUG("Enter state: POWER\n");
+    // LOG_DEBUG("Enter state: POWER\n");
     if (!isPowered()) {
         // If we got here, we are in the wrong state - we should be in powered, let that state ahndle things
         LOG_INFO("Loss of power in Powered\n");
