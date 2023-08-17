@@ -148,6 +148,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define GPS_THREAD_INTERVAL 100
 #endif
 
+// convert 24-bit color to 16-bit (56K)
+#define COLOR565(r, g, b) (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | ((b & 0xF8) >> 3))
+
 /* Step #1: offer chance for variant-specific defines */
 #include "variant.h"
 

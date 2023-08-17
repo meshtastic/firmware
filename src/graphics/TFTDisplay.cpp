@@ -4,9 +4,9 @@
 #define TFT_BACKLIGHT_ON HIGH
 #endif
 
-// convert 24-bit color to 16-bit (56K)
-#define COLOR565(r, g, b) (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | ((b & 0xF8) >> 3))
+#ifndef TFT_MESH
 #define TFT_MESH COLOR565(0x67, 0xEA, 0x94)
+#endif
 
 #if defined(ST7735S)
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
