@@ -124,6 +124,7 @@ static const uint8_t A0 = PIN_A0;
  */
 #define HAS_GPS 1
 #define GPS_UBLOX
+#define GPS_BAUDRATE 38400 
 
 // #define PIN_GPS_WAKE (GPIO_PORT1 + 2) // An output to wake GPS, low means allow sleep, high means force wake
 // Seems to be missing on this new board
@@ -153,6 +154,8 @@ static const uint8_t A0 = PIN_A0;
 
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
 #define USE_SEGGER 1
+
+#define LORA_DISABLE_SENDING 1
 
 // Battery
 // The battery sense is hooked to pin A0 (4)

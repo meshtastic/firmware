@@ -858,9 +858,10 @@ int GPS::prepareDeepSleep(void *unused)
 GnssModel_t GPS::probe()
 {
     memset(&info, 0, sizeof(struct uBloxGnssModelInfo));
-// return immediately if the model is set by the variant.h file
-//#ifdef GPS_UBLOX               (unless it's a ublox, because we might want to know the module info!
-//    return GNSS_MODEL_UBLOX;    think about removing this macro and return)
+#ifdef CANARY_V1_0 // Following code fails for UBLOX M9N TODO: Fix insteads of skipping
+    LOG_DEBUG("Canary, skipping GPS probe\n");
+    return GNSS_MODEL_UBLOX;
+#endif
 #if defined(GPS_L76K)
     return GNSS_MODEL_MTK;
 #elif defined(GPS_UC6580)
