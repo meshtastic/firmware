@@ -1,4 +1,5 @@
 #include "TextMessageModule.h"
+#include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "configuration.h"
@@ -25,9 +26,5 @@ ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp
 
 bool TextMessageModule::wantPacket(const meshtastic_MeshPacket *p)
 {
-    if (moduleConfig.range_test.enabled && p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP) {
-        return true;
-    }
-    return p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
-           p->decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP;
+    return MeshService::isTextPayload(p);
 }

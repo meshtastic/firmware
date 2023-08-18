@@ -120,7 +120,7 @@ Assumes that the neighborInfo packet has been allocated
 */
 uint32_t NeighborInfoModule::collectNeighborInfo(meshtastic_NeighborInfo *neighborInfo)
 {
-    int my_node_id = nodeDB.getNodeNum();
+    uint my_node_id = nodeDB.getNodeNum();
     neighborInfo->node_id = my_node_id;
     neighborInfo->last_sent_by_id = my_node_id;
     neighborInfo->node_broadcast_interval_secs = moduleConfig.neighbor_info.update_interval;
