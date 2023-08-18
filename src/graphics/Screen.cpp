@@ -36,11 +36,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "mesh-pb-constants.h"
 #include "mesh/Channels.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
+#include "meshUtils.h"
 #include "modules/ExternalNotificationModule.h"
 #include "modules/TextMessageModule.h"
 #include "sleep.h"
 #include "target_specific.h"
-#include "utils.h"
 
 #ifdef ARCH_ESP32
 #include "esp_task_wdt.h"
