@@ -46,10 +46,7 @@ int32_t DetectionSensorModule::runOnce()
     if ((millis() - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs) &&
         hasDetectionEvent()) {
         sendDetectionMessage();
-        return getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs <
-                                                moduleConfig.detection_sensor.state_broadcast_secs
-                                            ? moduleConfig.detection_sensor.minimum_broadcast_secs
-                                            : moduleConfig.detection_sensor.state_broadcast_secs);
+        return DELAYED_INTERVAL;
     }
     // Even if we haven't detected an event, broadcast our current state to the mesh on the scheduled interval as a sort
     // of heartbeat. We only do this if the minimum broadcast interval is greater than zero, otherwise we'll only broadcast state
@@ -57,10 +54,7 @@ int32_t DetectionSensorModule::runOnce()
     else if (moduleConfig.detection_sensor.state_broadcast_secs > 0 &&
              (millis() - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs)) {
         sendCurrentStateMessage();
-        return getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs <
-                                                moduleConfig.detection_sensor.state_broadcast_secs
-                                            ? moduleConfig.detection_sensor.minimum_broadcast_secs
-                                            : moduleConfig.detection_sensor.state_broadcast_secs);
+        return DELAYED_INTERVAL;
     }
     return GPIO_POLLING_INTERVAL;
 }
