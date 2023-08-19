@@ -170,7 +170,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     if ((event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK)) ||
         (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) ||
         (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT))) {
-        LOG_DEBUG("Canned message event (%x)\n", event->kbchar);
+        // LOG_DEBUG("Canned message event (%x)\n", event->kbchar);
         //  tweak for left/right events generated via trackball/touch with empty kbchar
         if (!event->kbchar) {
             if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
@@ -195,6 +195,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             this->runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
         }
         // pass the pressed key
+        LOG_DEBUG("Canned message ANYKEY (%x)\n", event->kbchar);
         this->payload = event->kbchar;
         this->lastTouchMillis = millis();
         validEvent = true;
