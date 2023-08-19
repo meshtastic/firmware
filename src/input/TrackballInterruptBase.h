@@ -3,7 +3,7 @@
 #include "InputBroker.h"
 #include "mesh/NodeDB.h"
 
-class TrackballInterruptBase : public Observable<const InputEvent *>
+class TrackballInterruptBase : public Observable<const InputEvent *>, public concurrency::OSThread
 {
   public:
     explicit TrackballInterruptBase(const char *name);
@@ -15,6 +15,20 @@ class TrackballInterruptBase : public Observable<const InputEvent *>
     void intUpHandler();
     void intLeftHandler();
     void intRightHandler();
+
+    virtual int32_t runOnce() override;
+
+  protected:
+    enum TrackballInterruptBaseActionType {
+        TB_ACTION_NONE,
+        TB_ACTION_PRESSED,
+        TB_ACTION_UP,
+        TB_ACTION_DOWN,
+        TB_ACTION_LEFT,
+        TB_ACTION_RIGHT
+    };
+
+    volatile TrackballInterruptBaseActionType action = TB_ACTION_NONE;
 
   private:
     uint8_t _pinDown = 0;

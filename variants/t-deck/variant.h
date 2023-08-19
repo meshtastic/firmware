@@ -15,6 +15,7 @@
 #define TFT_WIDTH 240
 #define TFT_OFFSET_X 0
 #define TFT_OFFSET_Y 0
+#define TFT_OFFSET_ROTATION 0
 #define SCREEN_ROTATE
 #define SCREEN_TRANSITION_FRAMERATE 5
 
@@ -26,7 +27,6 @@
 #define BUTTON_PIN 0
 // #define BUTTON_NEED_PULLUP
 
-#define HAS_GPS 0
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 
@@ -49,6 +49,7 @@
 #define KB_POWERON 10                  // must be set to HIGH
 #define KB_SLAVE_ADDRESS TDECK_KB_ADDR // 0x55
 #define KB_BL_PIN 46                   // not used for now
+#define CANNED_MESSAGE_MODULE_ENABLE 1
 
 // trackball
 #define HAS_TRACKBALL 1

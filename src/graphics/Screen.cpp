@@ -36,11 +36,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "mesh-pb-constants.h"
 #include "mesh/Channels.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
+#include "meshUtils.h"
 #include "modules/ExternalNotificationModule.h"
 #include "modules/TextMessageModule.h"
 #include "sleep.h"
 #include "target_specific.h"
-#include "utils.h"
 
 #ifdef ARCH_ESP32
 #include "esp_task_wdt.h"
@@ -374,7 +374,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     // the max length of this buffer is much longer than we can possibly print
     static char tempBuf[237];
 
-    meshtastic_MeshPacket &mp = devicestate.rx_text_message;
+    const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
     meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(getFrom(&mp));
     // LOG_DEBUG("drawing text message from 0x%x: %s\n", mp.from,
     // mp.decoded.variant.data.decoded.bytes);
@@ -490,7 +490,7 @@ static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *img
 }
 
 // Draw nodes status
-static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, NodeStatus *nodeStatus)
+static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const NodeStatus *nodeStatus)
 {
     char usersString[20];
     snprintf(usersString, sizeof(usersString), "%d/%d", nodeStatus->getNumOnline(), nodeStatus->getNumTotal());
@@ -858,14 +858,14 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     bool hasNodeHeading = false;
 
     if (ourNode && hasValidPosition(ourNode)) {
-        meshtastic_PositionLite &op = ourNode->position;
+        const meshtastic_PositionLite &op = ourNode->position;
         float myHeading = estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
         drawCompassNorth(display, compassX, compassY, myHeading);
 
         if (hasValidPosition(node)) {
             // display direction toward node
             hasNodeHeading = true;
-            meshtastic_PositionLite &p = node->position;
+            const meshtastic_PositionLite &p = node->position;
             float d =
                 GeoCoord::latLongToMeter(DegD(p.latitude_i), DegD(p.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
 
@@ -1058,7 +1058,8 @@ void Screen::setup()
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
     if (textMessageModule)
         textMessageObserver.observe(textMessageModule);
-    inputObserver.observe(inputBroker);
+    if (inputBroker)
+        inputObserver.observe(inputBroker);
 
     // Modules can notify screen about refresh
     MeshModule::observeUIEvents(&uiFrameEventObserver);
@@ -1900,7 +1901,7 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 int Screen::handleInputEvent(const InputEvent *event)
 {
     if (showingNormalScreen && moduleFrames.size() == 0) {
-        LOG_DEBUG("Screen::handleInputEvent from %s\n", event->source);
+        // LOG_DEBUG("Screen::handleInputEvent from %s\n", event->source);
         if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
             showPrevFrame();
         } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {

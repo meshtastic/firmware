@@ -253,6 +253,12 @@ bool NMEAGPS::hasFlow()
 bool NMEAGPS::whileIdle()
 {
     bool isValid = false;
+#ifdef SERIAL_BUFFER_SIZE
+    if (_serial_gps->available() >= SERIAL_BUFFER_SIZE - 1) {
+        LOG_WARN("GPS Buffer full with %u bytes waiting. Flushing to avoid corruption.\n", _serial_gps->available());
+        clearBuffer();
+    }
+#endif
     // if (_serial_gps->available() > 0)
     // LOG_DEBUG("GPS Bytes Waiting: %u\n", _serial_gps->available());
     // First consume any chars that have piled up at the receiver

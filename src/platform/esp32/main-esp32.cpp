@@ -9,10 +9,10 @@
 #include "BleOta.h"
 #include "mesh/http/WiFiAPClient.h"
 
+#include "meshUtils.h"
 #include "sleep.h"
 #include "soc/rtc.h"
 #include "target_specific.h"
-#include "utils.h"
 #include <Preferences.h>
 #include <driver/rtc_io.h>
 #include <nvs.h>

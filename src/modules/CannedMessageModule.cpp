@@ -10,6 +10,10 @@
 
 #include "main.h" // for cardkb_found
 
+#ifndef INPUTBROKER_MATRIX_TYPE
+#define INPUTBROKER_MATRIX_TYPE 0
+#endif
+
 #ifdef OLED_RU
 #include "graphics/fonts/OLEDDisplayFontsRU.h"
 #endif
@@ -59,9 +63,10 @@ CannedMessageModule *cannedMessageModule;
 CannedMessageModule::CannedMessageModule()
     : SinglePortModule("canned", meshtastic_PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("CannedMessageModule")
 {
-    if (moduleConfig.canned_message.enabled) {
+    if (moduleConfig.canned_message.enabled || CANNED_MESSAGE_MODULE_ENABLE) {
         this->loadProtoForModule();
-        if ((this->splitConfiguredMessages() <= 0) && (cardkb_found.address != CARDKB_ADDR)) {
+        if ((this->splitConfiguredMessages() <= 0) && (cardkb_found.address != CARDKB_ADDR) &&
+            (cardkb_found.address != TDECK_KB_ADDR) && !INPUTBROKER_MATRIX_TYPE && !CANNED_MESSAGE_MODULE_ENABLE) {
             LOG_INFO("CannedMessageModule: No messages are configured. Module is disabled\n");
             this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
             disable();
@@ -136,12 +141,12 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
     bool validEvent = false;
     if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP)) {
-        LOG_DEBUG("Canned message event UP\n");
+        // LOG_DEBUG("Canned message event UP\n");
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_UP;
         validEvent = true;
     }
     if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN)) {
-        LOG_DEBUG("Canned message event DOWN\n");
+        // LOG_DEBUG("Canned message event DOWN\n");
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_DOWN;
         validEvent = true;
     }
@@ -165,8 +170,8 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     if ((event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK)) ||
         (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) ||
         (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT))) {
-        LOG_DEBUG("Canned message event (%x)\n", event->kbchar);
-        // tweak for left/right events generated via trackball/touch with empty kbchar
+        // LOG_DEBUG("Canned message event (%x)\n", event->kbchar);
+        //  tweak for left/right events generated via trackball/touch with empty kbchar
         if (!event->kbchar) {
             if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
                 this->payload = 0xb4;
@@ -219,9 +224,9 @@ void CannedMessageModule::sendText(NodeNum dest, const char *message, bool wantR
     p->want_ack = true;
     p->decoded.payload.size = strlen(message);
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
-    if (moduleConfig.canned_message.send_bell) {
-        p->decoded.payload.bytes[p->decoded.payload.size - 1] = 7; // Bell character
-        p->decoded.payload.bytes[p->decoded.payload.size] = '\0';  // Bell character
+    if (moduleConfig.canned_message.send_bell && p->decoded.payload.size < meshtastic_Constants_DATA_PAYLOAD_LEN) {
+        p->decoded.payload.bytes[p->decoded.payload.size] = 7;        // Bell character
+        p->decoded.payload.bytes[p->decoded.payload.size + 1] = '\0'; // Bell character
         p->decoded.payload.size++;
     }
 
@@ -232,8 +237,8 @@ void CannedMessageModule::sendText(NodeNum dest, const char *message, bool wantR
 
 int32_t CannedMessageModule::runOnce()
 {
-    if ((!moduleConfig.canned_message.enabled) || (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) ||
-        (this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE)) {
+    if (((!moduleConfig.canned_message.enabled) && !CANNED_MESSAGE_MODULE_ENABLE) ||
+        (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) || (this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE)) {
         return INT32_MAX;
     }
     // LOG_DEBUG("Check status\n");
@@ -393,9 +398,10 @@ int32_t CannedMessageModule::runOnce()
                         this->freetext.substring(0, this->cursor) + this->payload + this->freetext.substring(this->cursor);
                 }
                 this->cursor += 1;
-                if (this->freetext.length() > meshtastic_Constants_DATA_PAYLOAD_LEN) {
-                    this->cursor = meshtastic_Constants_DATA_PAYLOAD_LEN;
-                    this->freetext = this->freetext.substring(0, meshtastic_Constants_DATA_PAYLOAD_LEN);
+                uint16_t maxChars = meshtastic_Constants_DATA_PAYLOAD_LEN - (moduleConfig.canned_message.send_bell ? 1 : 0);
+                if (this->freetext.length() > maxChars) {
+                    this->cursor = maxChars;
+                    this->freetext = this->freetext.substring(0, maxChars);
                 }
                 break;
             }
@@ -448,7 +454,7 @@ const char *CannedMessageModule::getNodeName(NodeNum node)
 
 bool CannedMessageModule::shouldDraw()
 {
-    if (!moduleConfig.canned_message.enabled) {
+    if (!moduleConfig.canned_message.enabled && !CANNED_MESSAGE_MODULE_ENABLE) {
         return false;
     }
     return (currentMessageIndex != -1) || (this->runState != CANNED_MESSAGE_RUN_STATE_INACTIVE);
@@ -494,7 +500,9 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         }
         display->drawStringf(0 + x, 0 + y, buffer, "To: %s", cannedMessageModule->getNodeName(this->dest));
         // used chars right aligned
-        snprintf(buffer, sizeof(buffer), "%d left", meshtastic_Constants_DATA_PAYLOAD_LEN - this->freetext.length());
+        uint16_t charsLeft =
+            meshtastic_Constants_DATA_PAYLOAD_LEN - this->freetext.length() - (moduleConfig.canned_message.send_bell ? 1 : 0);
+        snprintf(buffer, sizeof(buffer), "%d left", charsLeft);
         display->drawString(x + display->getWidth() - display->getStringWidth(buffer), y + 0, buffer);
         if (this->destSelect) {
             display->drawString(x + display->getWidth() - display->getStringWidth(buffer) - 1, y + 0, buffer);

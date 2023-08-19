@@ -18,6 +18,9 @@ PB_BIND(meshtastic_ModuleConfig_RemoteHardwareConfig, meshtastic_ModuleConfig_Re
 PB_BIND(meshtastic_ModuleConfig_NeighborInfoConfig, meshtastic_ModuleConfig_NeighborInfoConfig, AUTO)
 
 
+PB_BIND(meshtastic_ModuleConfig_DetectionSensorConfig, meshtastic_ModuleConfig_DetectionSensorConfig, AUTO)
+
+
 PB_BIND(meshtastic_ModuleConfig_AudioConfig, meshtastic_ModuleConfig_AudioConfig, AUTO)
 
 
