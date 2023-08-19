@@ -195,6 +195,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             this->runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
         }
         // pass the pressed key
+        LOG_DEBUG("Canned message ANYKEY (%x)\n", event->kbchar);
         this->payload = event->kbchar;
         this->lastTouchMillis = millis();
         validEvent = true;
