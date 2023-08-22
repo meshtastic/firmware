@@ -119,7 +119,7 @@ int32_t KbI2cBase::runOnce()
                     }
                     break;
                 case KEY_MOD_SYM: // toggle SYM Key
-                case 0x13: // Code scanner says the SYM key ias 0x13
+                case 0x13:        // Code scanner says the SYM key ias 0x13
                     is_sym = !is_sym;
                     break;
                 case 0x0d: // Enter
