@@ -244,7 +244,8 @@ int32_t CannedMessageModule::runOnce()
     }
     // LOG_DEBUG("Check status\n");
     UIFrameEvent e = {false, true};
-    if (this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {
+    if ((this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) ||
+        (this->runState == CANNED_MESSAGE_RUN_STATE_ACK_RECEIVED)) {
         // TODO: might have some feedback of sendig state
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         e.frameChanged = true;
@@ -483,7 +484,12 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 {
     char buffer[50];
 
-    if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {
+    if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_ACK_RECEIVED) {
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->setFont(FONT_MEDIUM);
+        display->drawStringf(display->getWidth() / 2 + x, 0 + y + 12, buffer, "Delivered to %s",
+                             cannedMessageModule->getNodeName(this->incoming));
+    } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->setFont(FONT_MEDIUM);
         display->drawString(display->getWidth() / 2 + x, 0 + y + 12, "Sending...");
@@ -544,6 +550,24 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             }
         }
     }
+}
+
+ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &mp)
+{
+    if (mp.decoded.portnum == meshtastic_PortNum_ROUTING_APP) {
+        // look for a request_id
+        if (mp.decoded.request_id != 0) {
+            UIFrameEvent e = {false, true};
+            e.frameChanged = true;
+            this->runState = CANNED_MESSAGE_RUN_STATE_ACK_RECEIVED;
+            this->incoming = mp.decoded.request_id;
+            this->notifyObservers(&e);
+            // run the next time 2 seconds later
+            setIntervalFromNow(2000);
+        }
+    }
+
+    return ProcessMessage::CONTINUE;
 }
 
 void CannedMessageModule::loadProtoForModule()

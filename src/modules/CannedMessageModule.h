@@ -9,6 +9,7 @@ enum cannedMessageModuleRunState {
     CANNED_MESSAGE_RUN_STATE_ACTIVE,
     CANNED_MESSAGE_RUN_STATE_FREETEXT,
     CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE,
+    CANNED_MESSAGE_RUN_STATE_ACK_RECEIVED,
     CANNED_MESSAGE_RUN_STATE_ACTION_SELECT,
     CANNED_MESSAGE_RUN_STATE_ACTION_UP,
     CANNED_MESSAGE_RUN_STATE_ACTION_DOWN,
@@ -37,14 +38,28 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     const char *getMessageByIndex(int index);
     const char *getNodeName(NodeNum node);
     bool shouldDraw();
-    void eventUp();
-    void eventDown();
-    void eventSelect();
+    // void eventUp();
+    // void eventDown();
+    // void eventSelect();
 
     void handleGetCannedMessageModuleMessages(const meshtastic_MeshPacket &req, meshtastic_AdminMessage *response);
     void handleSetCannedMessageModuleMessages(const char *from_msg);
 
     String drawWithCursor(String text, int cursor);
+
+    /*
+      -Override the wantPacket method. We need the Routing Messages to look for ACKs.
+    */
+    virtual bool wantPacket(const meshtastic_MeshPacket *p) override
+    {
+        switch (p->decoded.portnum) {
+        case meshtastic_PortNum_TEXT_MESSAGE_APP:
+        case meshtastic_PortNum_ROUTING_APP:
+            return true;
+        default:
+            return false;
+        }
+    }
 
   protected:
     virtual int32_t runOnce() override;
@@ -63,6 +78,12 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
                                                                  meshtastic_AdminMessage *request,
                                                                  meshtastic_AdminMessage *response) override;
 
+    /** Called to handle a particular incoming message
+     * @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered
+     * for it
+     */
+    virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
+
     void loadProtoForModule();
     bool saveProtoForModule();
 
@@ -75,6 +96,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     String freetext = "";    // Text Buffer for Freetext Editor
     bool destSelect = false; // Freetext Editor Mode
     NodeNum dest = NODENUM_BROADCAST;
+    NodeNum incoming = NODENUM_BROADCAST;
 
     char messageStore[CANNED_MESSAGE_MODULE_MESSAGES_SIZE + 1];
     char *messages[CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT];
