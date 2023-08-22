@@ -97,6 +97,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     bool destSelect = false; // Freetext Editor Mode
     NodeNum dest = NODENUM_BROADCAST;
     NodeNum incoming = NODENUM_BROADCAST;
+    bool ack = false; // True means ACK, false means NAK (error_reason != NONE)
 
     char messageStore[CANNED_MESSAGE_MODULE_MESSAGES_SIZE + 1];
     char *messages[CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT];
