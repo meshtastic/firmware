@@ -487,7 +487,12 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
     if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_ACK_RECEIVED) {
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->setFont(FONT_MEDIUM);
-        display->drawStringf(display->getWidth() / 2 + x, 0 + y + 12, buffer, "Delivered to %s",
+        String displayString;
+        if (this->ack)
+            displayString = "Delivered to\n%s";
+        else
+            displayString = "Delivery failed\nto %s";
+        display->drawStringf(display->getWidth() / 2 + x, 0 + y + 12, buffer, displayString,
                              cannedMessageModule->getNodeName(this->incoming));
     } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {
         display->setTextAlignment(TEXT_ALIGN_CENTER);
@@ -561,6 +566,9 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
             e.frameChanged = true;
             this->runState = CANNED_MESSAGE_RUN_STATE_ACK_RECEIVED;
             this->incoming = mp.decoded.request_id;
+            meshtastic_Routing decoded = meshtastic_Routing_init_default;
+            pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, meshtastic_Routing_fields, &decoded);
+            this->ack = decoded.error_reason == meshtastic_Routing_Error_NONE;
             this->notifyObservers(&e);
             // run the next time 2 seconds later
             setIntervalFromNow(2000);
