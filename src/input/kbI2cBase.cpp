@@ -78,21 +78,48 @@ int32_t KbI2cBase::runOnce()
                     e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK;
                     e.kbchar = key.key;
                     break;
-                case 0x12: // sym shift+2
-                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP;
-                    e.kbchar = 0xb5;
+                case 'e': // sym e
+                case '2': // sym shift+2
+                    if (is_sym) {
+                        e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP;
+                        e.kbchar = 0xb5;
+                    } else {
+                        e.inputEvent = ANYKEY;
+                        e.kbchar = key.key;
+                    }
                     break;
-                case 0x18: // sym shift+8
-                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN;
-                    e.kbchar = 0xb6;
+                case 'x': // sym x
+                case '8': // sym shift+8
+                    if (is_sym) {
+                        e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN;
+                        e.kbchar = 0xb6;
+                    } else {
+                        e.inputEvent = ANYKEY;
+                        e.kbchar = key.key;
+                    }
                     break;
-                case 0x14: // Left (sym shift+4)
-                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT;
-                    e.kbchar = 0x00; // tweak for destSelect
+                case 's': // sym s
+                case '4': // Left (sym shift+4)
+                    if (is_sym) {
+                        e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT;
+                        e.kbchar = 0x00; // tweak for destSelect
+                    } else {
+                        e.inputEvent = ANYKEY;
+                        e.kbchar = key.key;
+                    }
                     break;
-                case 0x16: // Right (sym shift+6)
-                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
-                    e.kbchar = 0x00; // tweak for destSelect
+                case 'f': // sym f
+                case '6': // Right (sym shift+6)
+                    if (is_sym) {
+                        e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
+                        e.kbchar = 0x00; // tweak for destSelect
+                    } else {
+                        e.inputEvent = ANYKEY;
+                        e.kbchar = key.key;
+                    }
+                    break;
+                case KEY_MOD_SYM: // toggle SYM Key
+                    is_sym = !is_sym;
                     break;
                 case 0x0d: // Enter
                 case 0x0a: // apparently Enter on Q10 is a line feed instead of carriage return
