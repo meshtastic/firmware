@@ -49,7 +49,7 @@ class NeighborInfoModule : public ProtobufModule<meshtastic_NeighborInfo>, priva
     meshtastic_NeighborInfo *allocateNeighborInfoPacket();
 
     // Find a neighbor in our DB, create an empty neighbor if missing
-    meshtastic_Neighbor *getOrCreateNeighbor(NodeNum originalSender, NodeNum n, uint32_t node_broadcast_interval_secs, int snr);
+    meshtastic_Neighbor *getOrCreateNeighbor(NodeNum originalSender, NodeNum n, uint32_t node_broadcast_interval_secs, float snr);
 
     /*
      * Send info on our node's neighbors into the mesh
