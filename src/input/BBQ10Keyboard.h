@@ -3,6 +3,11 @@
 #include "configuration.h"
 #include <Wire.h>
 
+#define KEY_MOD_ALT (0x1A)
+#define KEY_MOD_SHL (0x1B)
+#define KEY_MOD_SHR (0x1C)
+#define KEY_MOD_SYM (0x1D)
+
 class BBQ10Keyboard
 {
   public:
