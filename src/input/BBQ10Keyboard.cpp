@@ -33,7 +33,7 @@
 #define KEY_NUMLOCK (1 << 6)
 #define KEY_COUNT_MASK (0x1F)
 
-BBQ10Keyboard::BBQ10Keyboard() : m_wire(nullptr), m_addr(NULL), writeCallback(nullptr), readCallback(nullptr) {}
+BBQ10Keyboard::BBQ10Keyboard() : m_wire(nullptr), m_addr(0), readCallback(nullptr), writeCallback(nullptr) {}
 
 void BBQ10Keyboard::begin(uint8_t addr, TwoWire *wire)
 {
