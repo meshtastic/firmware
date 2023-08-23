@@ -1,5 +1,5 @@
-//#define I2C_SDA 1
-//#define I2C_SCL 0
+#define I2C_SDA 1
+#define I2C_SCL 0
 
 #define BUTTON_PIN 9
 #define BUTTON_NEED_PULLUP
@@ -34,13 +34,3 @@
 #define SX126X_BUSY LORA_BUSY
 #define SX126X_RESET LORA_RESET
 #define SX126X_E22
-
-// Not yet tested
-//#define USE_EINK
-//#define PIN_EINK_EN   -1  // N/C
-//#define PIN_EINK_CS   9   // EPD_CS
-//#define PIN_EINK_BUSY 18  // EPD_BUSY
-//#define PIN_EINK_DC   19  // EPD_D/C
-//#define PIN_EINK_RES  -1  // Connected but not needed
-//#define PIN_EINK_SCLK 4   // EPD_SCLK
-//#define PIN_EINK_MOSI 6   // EPD_MOSI
