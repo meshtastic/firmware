@@ -166,7 +166,7 @@ static void darkEnter()
 static void serialEnter()
 {
     LOG_DEBUG("Enter state: SERIAL\n");
-    setBluetoothEnable(false);
+    // setBluetoothEnable(false);
     screen->setOn(true);
     screen->print("Serial connected\n");
 }
@@ -174,7 +174,7 @@ static void serialEnter()
 static void serialExit()
 {
     // Turn bluetooth back on when we leave serial stream API
-    setBluetoothEnable(true);
+    // setBluetoothEnable(true);
     screen->print("Serial disconnected\n");
 }
 
