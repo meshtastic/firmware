@@ -1,5 +1,6 @@
 #pragma once
 
+#include "BBQ10Keyboard.h"
 #include "InputBroker.h"
 #include "Wire.h"
 #include "concurrency/OSThread.h"
@@ -16,4 +17,6 @@ class KbI2cBase : public Observable<const InputEvent *>, public concurrency::OST
     const char *_originName;
 
     TwoWire *i2cBus = 0;
+
+    BBQ10Keyboard Q10keyboard;
 };
