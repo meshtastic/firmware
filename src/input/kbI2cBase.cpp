@@ -71,15 +71,30 @@ int32_t KbI2cBase::runOnce()
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
                 e.source = this->_originName;
                 switch (key.key) {
-                case 0x1b: // ESC
-                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL;
+                case 'p': // TAB
+                    if (is_sym) {
+                        e.kbchar = 0x09; // TAB Scancode
+                        is_sym = false;  // reset sym state after second keypress
+                    } else {
+                        e.inputEvent = ANYKEY;
+                        e.kbchar = key.key;
+                    }
+                    break;
+                case 'q': // ESC
+                    if (is_sym) {
+                        e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL;
+                        e.kbchar = 0x1b;
+                        is_sym = false; // reset sym state after second keypress
+                    } else {
+                        e.inputEvent = ANYKEY;
+                        e.kbchar = key.key;
+                    }
                     break;
                 case 0x08: // Back
                     e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK;
                     e.kbchar = key.key;
                     break;
                 case 'e': // sym e
-
                     if (is_sym) {
                         e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP;
                         e.kbchar = 0xb5;
@@ -90,7 +105,6 @@ int32_t KbI2cBase::runOnce()
                     }
                     break;
                 case 'x': // sym x
-
                     if (is_sym) {
                         e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN;
                         e.kbchar = 0xb6;
@@ -101,7 +115,6 @@ int32_t KbI2cBase::runOnce()
                     }
                     break;
                 case 's': // sym s
-
                     if (is_sym) {
                         e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT;
                         e.kbchar = 0x00; // tweak for destSelect
@@ -112,7 +125,6 @@ int32_t KbI2cBase::runOnce()
                     }
                     break;
                 case 'f': // sym f
-
                     if (is_sym) {
                         e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
                         e.kbchar = 0x00; // tweak for destSelect
@@ -122,7 +134,6 @@ int32_t KbI2cBase::runOnce()
                         e.kbchar = key.key;
                     }
                     break;
-
                 case 0x13: // Code scanner says the SYM key is 0x13
                     is_sym = !is_sym;
                     break;
