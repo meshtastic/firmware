@@ -327,15 +327,15 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
         // load data from GPS object, will add timestamp + battery further down
         pos = gps->p;
     } else {
-        // The GPS has lost lock, if we are fixed position we should just keep using
-        // the old position
+        // The GPS has lost lock
 #ifdef GPS_EXTRAVERBOSE
         LOG_DEBUG("onGPSchanged() - lost validLocation\n");
 #endif
-        if (config.position.fixed_position) {
-            LOG_WARN("Using fixed position\n");
-            pos = ConvertToPosition(node->position);
-        }
+    }
+    // Used fixed position if configured regalrdless of GPS lock
+    if (config.position.fixed_position) {
+        LOG_WARN("Using fixed position\n");
+        pos = ConvertToPosition(node->position);
     }
 
     // Finally add a fresh timestamp and battery level reading
