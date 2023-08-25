@@ -73,6 +73,7 @@ int32_t KbI2cBase::runOnce()
                 switch (key.key) {
                 case 'p': // TAB
                     if (is_sym) {
+                        e.inputEvent = ANYKEY;
                         e.kbchar = 0x09; // TAB Scancode
                         is_sym = false;  // reset sym state after second keypress
                     } else {
