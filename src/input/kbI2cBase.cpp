@@ -72,6 +72,7 @@ int32_t KbI2cBase::runOnce()
                 e.source = this->_originName;
                 switch (key.key) {
                 case 'p': // TAB
+                case 't': // TAB as well
                     if (is_sym) {
                         e.inputEvent = ANYKEY;
                         e.kbchar = 0x09; // TAB Scancode
