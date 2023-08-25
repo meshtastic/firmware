@@ -65,8 +65,8 @@ CannedMessageModule::CannedMessageModule()
 {
     if (moduleConfig.canned_message.enabled || CANNED_MESSAGE_MODULE_ENABLE) {
         this->loadProtoForModule();
-        if ((this->splitConfiguredMessages() <= 0) && (cardkb_found.address != CARDKB_ADDR) &&
-            (cardkb_found.address != TDECK_KB_ADDR) && !INPUTBROKER_MATRIX_TYPE && !CANNED_MESSAGE_MODULE_ENABLE) {
+        if ((this->splitConfiguredMessages() <= 0) && (cardkb_found.address == 0x00) && !INPUTBROKER_MATRIX_TYPE &&
+            !CANNED_MESSAGE_MODULE_ENABLE) {
             LOG_INFO("CannedMessageModule: No messages are configured. Module is disabled\n");
             this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
             disable();
@@ -195,6 +195,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             this->runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
         }
         // pass the pressed key
+        LOG_DEBUG("Canned message ANYKEY (%x)\n", event->kbchar);
         this->payload = event->kbchar;
         this->lastTouchMillis = millis();
         validEvent = true;
