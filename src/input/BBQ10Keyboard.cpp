@@ -22,6 +22,8 @@
 #define CFG_NUMLOCK_INT (1 << 3)
 #define CFG_KEY_INT (1 << 4)
 #define CFG_PANIC_INT (1 << 5)
+#define CFG_REPORT_MODS (1 << 6)
+#define CFG_USE_MODS (1 << 7)
 
 #define INT_OVERFLOW (1 << 0)
 #define INT_CAPSLOCK (1 << 1)
@@ -33,7 +35,7 @@
 #define KEY_NUMLOCK (1 << 6)
 #define KEY_COUNT_MASK (0x1F)
 
-BBQ10Keyboard::BBQ10Keyboard() : m_wire(nullptr), m_addr(NULL), writeCallback(nullptr), readCallback(nullptr) {}
+BBQ10Keyboard::BBQ10Keyboard() : m_wire(nullptr), m_addr(0), readCallback(nullptr), writeCallback(nullptr) {}
 
 void BBQ10Keyboard::begin(uint8_t addr, TwoWire *wire)
 {
@@ -65,6 +67,8 @@ void BBQ10Keyboard::reset()
         uint8_t data = 0;
         writeCallback(m_addr, _REG_RST, &data, 0);
     }
+    delay(100);
+    writeRegister(_REG_CFG, readRegister8(_REG_CFG) | CFG_REPORT_MODS);
     delay(100);
 }
 
