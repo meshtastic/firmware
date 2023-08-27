@@ -9,7 +9,8 @@
 #define ST7735_RESET 39
 #define ST7735_MISO -1
 #define ST7735_BUSY -1
-#define ST7735_BL 45
+#define ST7735_BL_V03 45
+#define ST7735_BL_V05 21 /* V1.1 PCB marking */
 #define ST7735_SPI_HOST SPI3_HOST
 #define ST7735_BACKLIGHT_EN 45
 #define SPI_FREQUENCY 40000000
