@@ -1,4 +1,5 @@
 #include "configuration.h"
+#include "main.h"
 
 #ifndef TFT_BACKLIGHT_ON
 #define TFT_BACKLIGHT_ON HIGH
@@ -13,21 +14,6 @@
 
 #if defined(ST7735_BACKLIGHT_EN) && !defined(TFT_BL)
 #define TFT_BL ST7735_BACKLIGHT_EN
-#endif
-
-#ifdef ST7735_BL_V03 // Heltec Wireless Tracker PCB Change Detect/Hack, thanks to Linar Yusupov, taken from softRF under GPL V3
-
-static uint32_t calibrate_one(rtc_cal_sel_t cal_clk, const char *name)
-{
-    const uint32_t cal_count = 1000;
-    uint32_t cali_val;
-    for (int i = 0; i < 5; ++i) {
-        cali_val = rtc_clk_cal(cal_clk, cal_count);
-    }
-    return cali_val;
-}
-
-#define CALIBRATE_ONE(cali_clk) calibrate_one(cali_clk, #cali_clk)
 #endif
 
 class LGFX : public lgfx::LGFX_Device
@@ -96,16 +82,12 @@ class LGFX : public lgfx::LGFX_Device
         {
             auto cfg = _light_instance.config(); // Gets a structure for backlight settings.
 
-#ifdef ST7735_BL_V03 // Heltec Wireless Tracker PCB Change Detect/Hack
-
-            CALIBRATE_ONE(RTC_CAL_RTC_MUX);
-            CALIBRATE_ONE(RTC_CAL_32K_XTAL);
-            if (rtc_clk_slow_freq_get() != RTC_SLOW_FREQ_32K_XTAL) {
+#ifdef ST7735_BL_V03
+            if (heltec_version == 3) {
                 cfg.pin_bl = ST7735_BL_V03;
             } else {
                 cfg.pin_bl = ST7735_BL_V05;
             }
-
 #else
             cfg.pin_bl = ST7735_BL; // Pin number to which the backlight is connected
 #endif

@@ -24,7 +24,8 @@
 #define SCREEN_TRANSITION_FRAMERATE 1 // fps
 #define DISPLAY_FORCE_SMALL_FONTS
 
-#define VEXT_ENABLE Vext // active low, powers the oled display and the lora antenna boost
+#define VEXT_ENABLE_V03 Vext // active low, powers the oled display and the lora antenna boost
+#define VEXT_ENABLE_V05 3    // active HIGH, powers the oled display
 #define BUTTON_PIN 0
 
 #define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
