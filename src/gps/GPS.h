@@ -172,7 +172,7 @@ class GPS : private concurrency::OSThread
 
     // Get GNSS model
     String getNMEA();
-    GnssModel_t probe();
+    GnssModel_t probe(int serialSpeed);
 
     int getAck(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t requestedID);
 
