@@ -29,7 +29,6 @@
 #include "target_specific.h"
 #include <Wire.h>
 #include <memory>
-#include <soc/rtc.h>
 // #include <driver/rtc_io.h>
 
 #include "mesh/eth/ethClient.h"
@@ -147,6 +146,8 @@ const char *getDeviceName()
 }
 
 #ifdef VEXT_ENABLE_V03
+
+#include <soc/rtc.h>
 
 static uint32_t calibrate_one(rtc_cal_sel_t cal_clk, const char *name)
 {
