@@ -29,6 +29,7 @@
 #include "target_specific.h"
 #include <Wire.h>
 #include <memory>
+#include <soc/rtc.h>
 // #include <driver/rtc_io.h>
 
 #include "mesh/eth/ethClient.h"
@@ -145,6 +146,23 @@ const char *getDeviceName()
     return name;
 }
 
+#ifdef VEXT_ENABLE_V03
+
+static uint32_t calibrate_one(rtc_cal_sel_t cal_clk, const char *name)
+{
+    const uint32_t cal_count = 1000;
+    uint32_t cali_val;
+    for (int i = 0; i < 5; ++i) {
+        cali_val = rtc_clk_cal(cal_clk, cal_count);
+    }
+    return cali_val;
+}
+
+int heltec_version = 3;
+
+#define CALIBRATE_ONE(cali_clk) calibrate_one(cali_clk, #cali_clk)
+#endif
+
 static int32_t ledBlinker()
 {
     static bool ledOn;
@@ -214,7 +232,26 @@ void setup()
     digitalWrite(PIN_EINK_PWR_ON, HIGH);
 #endif
 
-#ifdef VEXT_ENABLE
+#ifdef ST7735_BL_V03 // Heltec Wireless Tracker PCB Change Detect/Hack
+
+    CALIBRATE_ONE(RTC_CAL_RTC_MUX);
+    CALIBRATE_ONE(RTC_CAL_32K_XTAL);
+    if (rtc_clk_slow_freq_get() != RTC_SLOW_FREQ_32K_XTAL) {
+        heltec_version = 3;
+    } else {
+        heltec_version = 5;
+    }
+#endif
+
+#if defined(VEXT_ENABLE_V03)
+    if (heltec_version == 3) {
+        pinMode(VEXT_ENABLE_V03, OUTPUT);
+        digitalWrite(VEXT_ENABLE_V03, 0); // turn on the display power
+    } else {
+        pinMode(VEXT_ENABLE_V05, OUTPUT);
+        digitalWrite(VEXT_ENABLE_V05, 1); // turn on the display power
+    }
+#elif defined(VEXT_ENABLE)
     pinMode(VEXT_ENABLE, OUTPUT);
     digitalWrite(VEXT_ENABLE, 0); // turn on the display power
 #endif
