@@ -4,6 +4,10 @@
 #include "configuration.h"
 #include "sleep.h"
 
+#ifdef ARCH_PORTDUINO
+#include "meshUtils.h"
+#endif
+
 #ifndef GPS_RESET_MODE
 #define GPS_RESET_MODE HIGH
 #endif
@@ -203,7 +207,17 @@ bool GPS::setupGPS()
         /*
          * T-Beam-S3-Core will be preset to use gps Probe here, and other boards will not be changed first
          */
-        gnssModel = probe();
+#if defined(GPS_UC6580)
+        _serial_gps->updateBaudRate(115200);
+        gnssModel = GNSS_MODEL_UC6850;
+#else
+        for (int serialSpeed : {9600, 4800, 38400, 57600, 115200}) {
+            LOG_DEBUG("Probing for GPS at %d \n", serialSpeed);
+            gnssModel = probe(serialSpeed);
+            if (gnssModel != GNSS_MODEL_UNKNOWN)
+                break;
+        }
+#endif
 
         if (gnssModel == GNSS_MODEL_MTK) {
             /*
@@ -262,7 +276,6 @@ bool GPS::setupGPS()
                 // what is specified in the Ublox documentation.
                 // There is also a possibility that the module may be GPS-only.
                 LOG_INFO("Unable to reconfigure GNSS - defaults maintained. Is this module GPS-only?\n");
-                return true;
             } else {
                 LOG_INFO("GNSS configured for GPS+SBAS+GLONASS. Pause for 0.75s before sending next command.\n");
                 // Documentation say, we need wait atleast 0.5s after reconfiguration of GNSS module, before sending next commands
@@ -297,7 +310,6 @@ bool GPS::setupGPS()
 
             if (!getACK(0x06, 0x39)) {
                 LOG_WARN("Unable to enable interference resistance.\n");
-                return true;
             }
 
             // Configure navigation engine expert settings:
@@ -343,7 +355,6 @@ bool GPS::setupGPS()
 
             if (!getACK(0x06, 0x23)) {
                 LOG_WARN("Unable to configure extra settings.\n");
-                return true;
             }
 
             /*
@@ -384,7 +395,6 @@ bool GPS::setupGPS()
 
             if (!getACK(0x06, 0x08)) {
                 LOG_WARN("Unable to set GPS update rate.\n");
-                return true;
             }
 
             // Disable GGL. GGL - Geographic position (latitude and longitude), which provides the current geographical
@@ -408,7 +418,6 @@ bool GPS::setupGPS()
 
             if (!getACK(0x06, 0x01)) {
                 LOG_WARN("Unable to disable NMEA GGL.\n");
-                return true;
             }
 
             // Enable GSA. GSA - GPS DOP and active satellites, used for detailing the satellites used in the positioning and
@@ -427,7 +436,6 @@ bool GPS::setupGPS()
             _serial_gps->write(_message_GSA, sizeof(_message_GSA));
             if (!getACK(0x06, 0x01)) {
                 LOG_WARN("Unable to Enable NMEA GSA.\n");
-                return true;
             }
 
             // Disable GSV. GSV - Satellites in view, details the number and location of satellites in view.
@@ -445,7 +453,6 @@ bool GPS::setupGPS()
             _serial_gps->write(_message_GSV, sizeof(_message_GSV));
             if (!getACK(0x06, 0x01)) {
                 LOG_WARN("Unable to disable NMEA GSV.\n");
-                return true;
             }
 
             // Disable VTG. VTG - Track made good and ground speed, which provides course and speed information relative to
@@ -464,7 +471,6 @@ bool GPS::setupGPS()
             _serial_gps->write(_message_VTG, sizeof(_message_VTG));
             if (!getACK(0x06, 0x01)) {
                 LOG_WARN("Unable to disable NMEA VTG.\n");
-                return true;
             }
 
             // Enable RMC. RMC - Recommended Minimum data, the essential gps pvt (position, velocity, time) data.
@@ -482,7 +488,6 @@ bool GPS::setupGPS()
             _serial_gps->write(_message_RMC, sizeof(_message_RMC));
             if (!getACK(0x06, 0x01)) {
                 LOG_WARN("Unable to enable NMEA RMC.\n");
-                return true;
             }
 
             // Enable GGA. GGA - Global Positioning System Fix Data, which provides 3D location and accuracy data.
@@ -500,7 +505,6 @@ bool GPS::setupGPS()
             _serial_gps->write(_message_GGA, sizeof(_message_GGA));
             if (!getACK(0x06, 0x01)) {
                 LOG_WARN("Unable to enable NMEA GGA.\n");
-                return true;
             }
 
             // The Power Management configuration allows the GPS module to operate in different power modes for optimized power
@@ -534,8 +538,6 @@ bool GPS::setupGPS()
             _serial_gps->write(UBX_CFG_PMS, sizeof(UBX_CFG_PMS));
             if (!getACK(0x06, 0x86)) {
                 LOG_WARN("Unable to enable powersaving for GPS.\n");
-                // T-beam doesn't support this mode.
-                // Don't bail from function early.
             }
 
             // We need save configuration to flash to make our config changes persistent
@@ -558,10 +560,8 @@ bool GPS::setupGPS()
 
             if (!getACK(0x06, 0x09)) {
                 LOG_WARN("Unable to save GNSS module configuration.\n");
-                return true;
             } else {
                 LOG_INFO("GNSS module configuration saved!\n");
-                return true;
             }
         }
     }
@@ -855,18 +855,15 @@ int GPS::prepareDeepSleep(void *unused)
     return 0;
 }
 
-GnssModel_t GPS::probe()
+GnssModel_t GPS::probe(int serialSpeed)
 {
-    memset(&info, 0, sizeof(struct uBloxGnssModelInfo));
-// return immediately if the model is set by the variant.h file
-// #ifdef GPS_UBLOX               (unless it's a ublox, because we might want to know the module info!
-//    return GNSS_MODEL_UBLOX;    think about removing this macro and return)
-#if defined(GPS_L76K)
-    return GNSS_MODEL_MTK;
-#elif defined(GPS_UC6580)
-    _serial_gps->updateBaudRate(115200);
-    return GNSS_MODEL_UC6850;
+#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_RP2040)
+    _serial_gps->end();
+    _serial_gps->begin(serialSpeed);
 #else
+    _serial_gps->updateBaudRate(serialSpeed);
+#endif
+    memset(&info, 0, sizeof(struct uBloxGnssModelInfo));
     uint8_t buffer[384] = {0};
 
     // Close all NMEA sentences , Only valid for MTK platform
@@ -874,20 +871,17 @@ GnssModel_t GPS::probe()
     delay(20);
 
     // Get version information
+    clearBuffer();
     _serial_gps->write("$PCAS06,0*1B\r\n");
     uint32_t startTimeout = millis() + 500;
     while (millis() < startTimeout) {
         if (_serial_gps->available()) {
-            String ver = _serial_gps->readStringUntil('\r');
             // Get module info , If the correct header is returned,
             // it can be determined that it is the MTK chip
-            int index = ver.indexOf("$");
-            if (index != -1) {
-                ver = ver.substring(index);
-                if (ver.startsWith("$GPTXT,01,01,02,SW=")) {
-                    LOG_INFO("L76K GNSS init succeeded, using L76K GNSS Module\n");
-                    return GNSS_MODEL_MTK;
-                }
+            int bytesRead = _serial_gps->readBytesUntil('\r', buffer, sizeof(buffer));
+            if (strnstr((char *)buffer, "$GPTXT,01,01,02,SW=", bytesRead) != nullptr) {
+                LOG_INFO("L76K GNSS init succeeded, using L76K GNSS Module\n");
+                return GNSS_MODEL_MTK;
             }
         }
     }
@@ -897,9 +891,10 @@ GnssModel_t GPS::probe()
     _serial_gps->write(cfg_rate, sizeof(cfg_rate));
     // Check that the returned response class and message ID are correct
     if (!getAck(buffer, 384, 0x06, 0x08)) {
-        LOG_WARN("Failed to find UBlox & MTK GNSS Module\n");
+        LOG_WARN("Failed to find UBlox & MTK GNSS Module using baudrate %d\n", serialSpeed);
         return GNSS_MODEL_UNKNOWN;
     }
+    LOG_INFO("Found a UBlox Module using baudrate %d\n", serialSpeed);
     memset(buffer, 0, sizeof(buffer));
     byte _message_MONVER[8] = {
         0xB5, 0x62, // Sync message for UBX protocol
@@ -971,7 +966,6 @@ GnssModel_t GPS::probe()
     }
 
     return GNSS_MODEL_UBLOX;
-#endif
 }
 
 #if HAS_GPS
