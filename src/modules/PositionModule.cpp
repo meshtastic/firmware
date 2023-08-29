@@ -11,8 +11,8 @@
 PositionModule *positionModule;
 
 PositionModule::PositionModule()
-    : ProtobufModule("position", meshtastic_PortNum_POSITION_APP, &meshtastic_Position_msg), concurrency::OSThread(
-                                                                                                 "PositionModule")
+    : ProtobufModule("position", meshtastic_PortNum_POSITION_APP, &meshtastic_Position_msg),
+      concurrency::OSThread("PositionModule")
 {
     isPromiscuous = true;          // We always want to update our nodedb, even if we are sniffing on others
     setIntervalFromNow(60 * 1000); // Send our initial position 60 seconds after we start (to give GPS time to setup)
@@ -65,7 +65,7 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 meshtastic_MeshPacket *PositionModule::allocReply()
 {
     if (ignoreRequest) {
-        return NULL;
+        return nullptr;
     }
 
     meshtastic_NodeInfoLite *node = service.refreshLocalMeshNode(); // should guarantee there is now a position
@@ -142,6 +142,11 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
         service.cancelSending(prevPacketId);
 
     meshtastic_MeshPacket *p = allocReply();
+    if (p == nullptr) {
+        LOG_WARN("allocReply returned a nullptr");
+        return;
+    }
+
     p->to = dest;
     p->decoded.want_response = wantReplies;
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER)

@@ -188,8 +188,8 @@ bool GPS::setupGPS()
             config.position.tx_gpio = GPS_TX_PIN;
 #endif
 
-//#define BAUD_RATE 115200
-// ESP32 has a special set of parameters vs other arduino ports
+// #define BAUD_RATE 115200
+//  ESP32 has a special set of parameters vs other arduino ports
 #if defined(ARCH_ESP32)
         if (config.position.rx_gpio) {
             LOG_DEBUG("Using GPIO%d for GPS RX\n", config.position.rx_gpio);
@@ -267,7 +267,6 @@ bool GPS::setupGPS()
                 LOG_INFO("GNSS configured for GPS+SBAS+GLONASS. Pause for 0.75s before sending next command.\n");
                 // Documentation say, we need wait atleast 0.5s after reconfiguration of GNSS module, before sending next commands
                 delay(750);
-                return true;
             }
 
             // Enable interference resistance, because we are using LoRa, WiFi and Bluetooth on same board,
@@ -535,7 +534,8 @@ bool GPS::setupGPS()
             _serial_gps->write(UBX_CFG_PMS, sizeof(UBX_CFG_PMS));
             if (!getACK(0x06, 0x86)) {
                 LOG_WARN("Unable to enable powersaving for GPS.\n");
-                return true;
+                // T-beam doesn't support this mode.
+                // Don't bail from function early.
             }
 
             // We need save configuration to flash to make our config changes persistent
@@ -675,6 +675,7 @@ void GPS::setAwake(bool on)
     if (isAwake != on) {
         LOG_DEBUG("WANT GPS=%d\n", on);
         if (on) {
+            clearBuffer(); // drop any old data waiting in the buffer
             lastWakeStartMsec = millis();
             wake();
         } else {
@@ -858,7 +859,7 @@ GnssModel_t GPS::probe()
 {
     memset(&info, 0, sizeof(struct uBloxGnssModelInfo));
 // return immediately if the model is set by the variant.h file
-//#ifdef GPS_UBLOX               (unless it's a ublox, because we might want to know the module info!
+// #ifdef GPS_UBLOX               (unless it's a ublox, because we might want to know the module info!
 //    return GNSS_MODEL_UBLOX;    think about removing this macro and return)
 #if defined(GPS_L76K)
     return GNSS_MODEL_MTK;
@@ -891,7 +892,8 @@ GnssModel_t GPS::probe()
         }
     }
 
-    uint8_t cfg_rate[] = {0xB5, 0x62, 0x06, 0x08, 0x00, 0x00, 0x0E, 0x30};
+    uint8_t cfg_rate[] = {0xB5, 0x62, 0x06, 0x08, 0x00, 0x00, 0x00, 0x00};
+    UBXChecksum(cfg_rate, sizeof(cfg_rate));
     _serial_gps->write(cfg_rate, sizeof(cfg_rate));
     // Check that the returned response class and message ID are correct
     if (!getAck(buffer, 384, 0x06, 0x08)) {
