@@ -931,7 +931,6 @@ GnssModel_t GPS::probe(int serialSpeed)
 
         LOG_DEBUG("Module Info : \n");
         LOG_DEBUG("Soft version: %s\n", info.swVersion);
-        LOG_DEBUG("first char is %c\n", (char)info.swVersion[0]);
         LOG_DEBUG("Hard version: %s\n", info.hwVersion);
         LOG_DEBUG("Extensions:%d\n", info.extensionNo);
         for (int i = 0; i < info.extensionNo; i++) {
