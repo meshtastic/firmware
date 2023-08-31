@@ -16,8 +16,8 @@
 #include "buzz/buzz.h"
 #include "configuration.h"
 #include "main.h"
+#include "meshUtils.h"
 #include "sleep.h"
-#include "utils.h"
 
 #ifdef DEBUG_HEAP_MQTT
 #include "mqtt/MQTT.h"
@@ -221,10 +221,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /**
      * return true if there is a battery installed in this unit
      */
-    virtual bool isBatteryConnect() override
-    {
-        return getBatteryPercent() != -1;
-    }
+    virtual bool isBatteryConnect() override { return getBatteryPercent() != -1; }
 
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
     /// in power
@@ -245,10 +242,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
     /// Assume charging if we have a battery and external power is connected.
     /// we can't be smart enough to say 'full'?
-    virtual bool isCharging() override
-    {
-        return isBatteryConnect() && isVbusIn();
-    }
+    virtual bool isCharging() override { return isBatteryConnect() && isVbusIn(); }
 
   private:
     /// If we see a battery voltage higher than physics allows - assume charger is pumping

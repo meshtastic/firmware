@@ -17,6 +17,7 @@ class ScanI2C
         RTC_PCF8563,
         CARDKB,
         TDECKKB,
+        BBQ10KB,
         RAK14004,
         PMU_AXP192_AXP2101,
         BME_680,

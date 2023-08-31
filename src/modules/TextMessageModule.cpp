@@ -1,4 +1,5 @@
 #include "TextMessageModule.h"
+#include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "configuration.h"
@@ -21,4 +22,9 @@ ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp
     notifyObservers(&mp);
 
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
+}
+
+bool TextMessageModule::wantPacket(const meshtastic_MeshPacket *p)
+{
+    return MeshService::isTextPayload(p);
 }
