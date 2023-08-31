@@ -656,8 +656,16 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
                                      &scratch)) {
                 decoded = &scratch;
                 msgPayload["node_id"] = new JSONValue((uint)decoded->node_id);
+                msgPayload["node_broadcast_interval_secs"] = new JSONValue((uint)decoded->node_broadcast_interval_secs);
+                msgPayload["last_sent_by_id"] = new JSONValue((uint)decoded->last_sent_by_id);
                 msgPayload["neighbors_count"] = new JSONValue(decoded->neighbors_count);
-                msgPayload["neighbors"] = new JSONValue(decoded->neighbors);
+                const char baseString[] = "neighborID_";
+                char resultString[14];
+                for (uint8_t i = 0; i < decoded->neighbors_count; i++) {
+                    sprintf(resultString, "%s%d", baseString, i);
+                    msgPayload[resultString] = new JSONValue((uint)decoded->neighbors[i].node_id);
+                }
+                jsonObj["payload"] = new JSONValue(msgPayload);
             } else {
                 LOG_ERROR("Error decoding protobuf for neighborinfo message!\n");
             }
