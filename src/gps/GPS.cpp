@@ -47,7 +47,7 @@ void GPS::UBXChecksum(byte *message, size_t length)
     message[length - 1] = CK_B;
 }
 
-bool GPS::getACK(uint8_t class_id, uint8_t msg_id)
+bool GPS::getACK(uint8_t class_id, uint8_t msg_id, int waitMillis)
 {
     uint8_t b;
     uint8_t ack = 0;
@@ -66,14 +66,10 @@ bool GPS::getACK(uint8_t class_id, uint8_t msg_id)
         buf[9] += buf[8];
     }
 
-    while (1) {
+    while (millis() - startTime < waitMillis) {
         if (ack > 9) {
-            // LOG_INFO("Got ACK for class %02X message %02X\n", class_id, msg_id);
+            // LOG_INFO("Got ACK for class %02X message %02X in %d millis.\n", class_id, msg_id, millis() - startTime);
             return true; // ACK received
-        }
-        if (millis() - startTime > 3000) {
-            LOG_WARN("No response for class %02X message %02X\n", class_id, msg_id);
-            return false; // No response received within 3 seconds
         }
         if (_serial_gps->available()) {
             b = _serial_gps->read();
@@ -88,6 +84,8 @@ bool GPS::getACK(uint8_t class_id, uint8_t msg_id)
             }
         }
     }
+    // LOG_WARN("No response for class %02X message %02X\n", class_id, msg_id);
+    return false; // No response received within timeout
 }
 
 /**
@@ -99,14 +97,14 @@ bool GPS::getACK(uint8_t class_id, uint8_t msg_id)
  * @param  requestedID:     request message ID constant
  * @retval length of payload message
  */
-int GPS::getAck(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t requestedID)
+int GPS::getAck(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t requestedID, int waitMillis)
 {
     uint16_t ubxFrameCounter = 0;
     uint32_t startTime = millis();
     uint16_t needRead;
 
-    while (millis() - startTime < 1200) {
-        while (_serial_gps->available()) {
+    while (millis() - startTime < waitMillis) {
+        if (_serial_gps->available()) {
             int c = _serial_gps->read();
             switch (ubxFrameCounter) {
             case 0:
@@ -159,6 +157,8 @@ int GPS::getAck(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
                     ubxFrameCounter = 0;
                 } else {
                     // return payload length
+                    // LOG_INFO("Got ACK for class %02X message %02X in %d millis.\n", requestedClass, requestedID, millis() -
+                    // startTime);
                     return needRead;
                 }
                 break;
@@ -168,6 +168,7 @@ int GPS::getAck(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
             }
         }
     }
+    // LOG_WARN("No response for class %02X message %02X\n", requestedClass, requestedID);
     return 0;
 }
 
@@ -268,7 +269,7 @@ bool GPS::setupGPS()
             // Send the message to the module
             _serial_gps->write(_message_GNSS, sizeof(_message_GNSS));
 
-            if (!getACK(0x06, 0x3e)) {
+            if (!getACK(0x06, 0x3e, 300)) {
                 // It's not critical if the module doesn't acknowledge this configuration.
                 // The module should operate adequately with its factory or previously saved settings.
                 // It appears that there is a firmware bug in some GPS modules: When an attempt is made
@@ -308,7 +309,7 @@ bool GPS::setupGPS()
             // Send the message to the module
             _serial_gps->write(_message_JAM, sizeof(_message_JAM));
 
-            if (!getACK(0x06, 0x39)) {
+            if (!getACK(0x06, 0x39, 300)) {
                 LOG_WARN("Unable to enable interference resistance.\n");
             }
 
@@ -353,7 +354,7 @@ bool GPS::setupGPS()
             // Send the message to the module
             _serial_gps->write(_message_NAVX5, sizeof(_message_NAVX5));
 
-            if (!getACK(0x06, 0x23)) {
+            if (!getACK(0x06, 0x23, 300)) {
                 LOG_WARN("Unable to configure extra settings.\n");
             }
 
@@ -365,7 +366,7 @@ bool GPS::setupGPS()
                 byte _message_nmea[] = {0xB5, 0x62, 0x06, 0x00, 0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0xC0, 0x08, 0x00, 0x00,
                                         0x80, 0x25, 0x00, 0x00, 0x07, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x91, 0xAF};
                 _serial_gps->write(_message_nmea, sizeof(_message_nmea));
-                if (!getACK(0x06, 0x00)) {
+                if (!getACK(0x06, 0x00, 300)) {
                     LOG_WARN("Unable to enable NMEA Mode.\n");
                     return true;
                 }
@@ -393,7 +394,7 @@ bool GPS::setupGPS()
             // Send the message to the module
             _serial_gps->write(_message_1Hz, sizeof(_message_1Hz));
 
-            if (!getACK(0x06, 0x08)) {
+            if (!getACK(0x06, 0x08, 300)) {
                 LOG_WARN("Unable to set GPS update rate.\n");
             }
 
@@ -416,7 +417,7 @@ bool GPS::setupGPS()
             // Send the message to the module
             _serial_gps->write(_message_GGL, sizeof(_message_GGL));
 
-            if (!getACK(0x06, 0x01)) {
+            if (!getACK(0x06, 0x01, 300)) {
                 LOG_WARN("Unable to disable NMEA GGL.\n");
             }
 
@@ -434,7 +435,7 @@ bool GPS::setupGPS()
             };
             UBXChecksum(_message_GSA, sizeof(_message_GSA));
             _serial_gps->write(_message_GSA, sizeof(_message_GSA));
-            if (!getACK(0x06, 0x01)) {
+            if (!getACK(0x06, 0x01, 300)) {
                 LOG_WARN("Unable to Enable NMEA GSA.\n");
             }
 
@@ -451,7 +452,7 @@ bool GPS::setupGPS()
             };
             UBXChecksum(_message_GSV, sizeof(_message_GSV));
             _serial_gps->write(_message_GSV, sizeof(_message_GSV));
-            if (!getACK(0x06, 0x01)) {
+            if (!getACK(0x06, 0x01, 300)) {
                 LOG_WARN("Unable to disable NMEA GSV.\n");
             }
 
@@ -469,7 +470,7 @@ bool GPS::setupGPS()
             };
             UBXChecksum(_message_VTG, sizeof(_message_VTG));
             _serial_gps->write(_message_VTG, sizeof(_message_VTG));
-            if (!getACK(0x06, 0x01)) {
+            if (!getACK(0x06, 0x01, 300)) {
                 LOG_WARN("Unable to disable NMEA VTG.\n");
             }
 
@@ -486,7 +487,7 @@ bool GPS::setupGPS()
             };
             UBXChecksum(_message_RMC, sizeof(_message_RMC));
             _serial_gps->write(_message_RMC, sizeof(_message_RMC));
-            if (!getACK(0x06, 0x01)) {
+            if (!getACK(0x06, 0x01, 300)) {
                 LOG_WARN("Unable to enable NMEA RMC.\n");
             }
 
@@ -503,7 +504,7 @@ bool GPS::setupGPS()
             };
             UBXChecksum(_message_GGA, sizeof(_message_GGA));
             _serial_gps->write(_message_GGA, sizeof(_message_GGA));
-            if (!getACK(0x06, 0x01)) {
+            if (!getACK(0x06, 0x01, 300)) {
                 LOG_WARN("Unable to enable NMEA GGA.\n");
             }
 
@@ -536,7 +537,7 @@ bool GPS::setupGPS()
 
             // Send the message to the module
             _serial_gps->write(UBX_CFG_PMS, sizeof(UBX_CFG_PMS));
-            if (!getACK(0x06, 0x86)) {
+            if (!getACK(0x06, 0x86, 300)) {
                 LOG_WARN("Unable to enable powersaving for GPS.\n");
             }
 
@@ -558,7 +559,7 @@ bool GPS::setupGPS()
             // Send the message to the module
             _serial_gps->write(_message_SAVE, sizeof(_message_SAVE));
 
-            if (!getACK(0x06, 0x09)) {
+            if (!getACK(0x06, 0x09, 300)) {
                 LOG_WARN("Unable to save GNSS module configuration.\n");
             } else {
                 LOG_INFO("GNSS module configuration saved!\n");
@@ -864,7 +865,7 @@ GnssModel_t GPS::probe(int serialSpeed)
     _serial_gps->updateBaudRate(serialSpeed);
 #endif
     memset(&info, 0, sizeof(struct uBloxGnssModelInfo));
-    uint8_t buffer[384] = {0};
+    uint8_t buffer[768] = {0};
 
     // Close all NMEA sentences , Only valid for MTK platform
     _serial_gps->write("$PCAS03,0,0,0,0,0,0,0,0,0,0,,,0,0*02\r\n");
@@ -888,9 +889,10 @@ GnssModel_t GPS::probe(int serialSpeed)
 
     uint8_t cfg_rate[] = {0xB5, 0x62, 0x06, 0x08, 0x00, 0x00, 0x00, 0x00};
     UBXChecksum(cfg_rate, sizeof(cfg_rate));
+    clearBuffer();
     _serial_gps->write(cfg_rate, sizeof(cfg_rate));
     // Check that the returned response class and message ID are correct
-    if (!getAck(buffer, 384, 0x06, 0x08)) {
+    if (!getAck(buffer, sizeof(buffer), 0x06, 0x08, 750)) {
         LOG_WARN("Failed to find UBlox & MTK GNSS Module using baudrate %d\n", serialSpeed);
         return GNSS_MODEL_UNKNOWN;
     }
@@ -904,9 +906,10 @@ GnssModel_t GPS::probe(int serialSpeed)
     };
     //  Get Ublox gnss module hardware and software info
     UBXChecksum(_message_MONVER, sizeof(_message_MONVER));
+    clearBuffer();
     _serial_gps->write(_message_MONVER, sizeof(_message_MONVER));
 
-    uint16_t len = getAck(buffer, 384, 0x0A, 0x04);
+    uint16_t len = getAck(buffer, sizeof(buffer), 0x0A, 0x04, 1200);
     if (len) {
         // LOG_DEBUG("monver reply size = %d\n", len);
         uint16_t position = 0;
