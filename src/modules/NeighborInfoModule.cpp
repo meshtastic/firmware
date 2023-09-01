@@ -277,7 +277,7 @@ meshtastic_Neighbor *NeighborInfoModule::getOrCreateNeighbor(NodeNum originalSen
     }
     // otherwise, allocate one and assign data to it
     // TODO: max memory for the database should take neighbors into account, but currently doesn't
-    if (*numNeighbors < MAX_NUM_NODES) {
+    if (*numNeighbors < MAX_NUM_NEIGHBORS) {
         (*numNeighbors)++;
     }
     meshtastic_Neighbor *new_nbr = &neighbors[((*numNeighbors) - 1)];
