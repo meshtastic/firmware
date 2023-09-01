@@ -161,8 +161,6 @@ class GPS : private concurrency::OSThread
      */
     uint32_t getSleepTime() const;
 
-    bool getACK(uint8_t c, uint8_t i, int waitMillis);
-
     /**
      * Tell users we have new GPS readings
      */
@@ -175,7 +173,8 @@ class GPS : private concurrency::OSThread
     GnssModel_t probe(int serialSpeed);
 
     int getAck(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t requestedID, int waitMillis);
-
+    bool getACK(uint8_t c, uint8_t i, int waitMillis);
+    bool getACK(const char *message, int waitMillis);
     // delay counter to allow more sats before fixed position stops GPS thread
     uint8_t fixeddelayCtr = 0;
 
