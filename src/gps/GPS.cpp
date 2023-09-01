@@ -47,6 +47,30 @@ void GPS::UBXChecksum(byte *message, size_t length)
     message[length - 1] = CK_B;
 }
 
+bool GPS::getACK(const char *message, int waitMillis)
+{
+    uint8_t buffer[768] = {0};
+    uint8_t b;
+    int bytesRead;
+    uint32_t startTimeout = millis() + waitMillis;
+    while (millis() < startTimeout) {
+        bytesRead = 0;
+        while ((_serial_gps->available()) && (millis() < startTimeout)) {
+            b = _serial_gps->read();
+            buffer[bytesRead] = b;
+            bytesRead++;
+            if ((bytesRead == 768) || (b == '\r'))
+                break;
+            // Get module info , If the correct header is returned,
+            // it can be determined that it is the MTK chip
+        }
+        if (strnstr((char *)buffer, message, bytesRead) != nullptr) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool GPS::getACK(uint8_t class_id, uint8_t msg_id, int waitMillis)
 {
     uint8_t b;
@@ -68,7 +92,7 @@ bool GPS::getACK(uint8_t class_id, uint8_t msg_id, int waitMillis)
 
     while (millis() - startTime < waitMillis) {
         if (ack > 9) {
-            // LOG_INFO("Got ACK for class %02X message %02X in %d millis.\n", class_id, msg_id, millis() - startTime);
+            LOG_INFO("Got ACK for class %02X message %02X in %d millis.\n", class_id, msg_id, millis() - startTime);
             return true; // ACK received
         }
         if (_serial_gps->available()) {
@@ -84,7 +108,7 @@ bool GPS::getACK(uint8_t class_id, uint8_t msg_id, int waitMillis)
             }
         }
     }
-    // LOG_WARN("No response for class %02X message %02X\n", class_id, msg_id);
+    LOG_WARN("No response for class %02X message %02X\n", class_id, msg_id);
     return false; // No response received within timeout
 }
 
@@ -357,20 +381,6 @@ bool GPS::setupGPS()
             if (!getACK(0x06, 0x23, 300)) {
                 LOG_WARN("Unable to configure extra settings.\n");
             }
-
-            /*
-                tips: NMEA Only should not be set here, otherwise initializing Ublox gnss module again after
-                setting will not output command messages in UART1, resulting in unrecognized module information
-
-                // Set the UART port to output NMEA only
-                byte _message_nmea[] = {0xB5, 0x62, 0x06, 0x00, 0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0xC0, 0x08, 0x00, 0x00,
-                                        0x80, 0x25, 0x00, 0x00, 0x07, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x91, 0xAF};
-                _serial_gps->write(_message_nmea, sizeof(_message_nmea));
-                if (!getACK(0x06, 0x00, 300)) {
-                    LOG_WARN("Unable to enable NMEA Mode.\n");
-                    return true;
-                }
-            */
 
             // ublox-M10S can be compatible with UBLOX traditional protocol, so the following sentence settings are also valid
 
@@ -874,17 +884,9 @@ GnssModel_t GPS::probe(int serialSpeed)
     // Get version information
     clearBuffer();
     _serial_gps->write("$PCAS06,0*1B\r\n");
-    uint32_t startTimeout = millis() + 500;
-    while (millis() < startTimeout) {
-        if (_serial_gps->available()) {
-            // Get module info , If the correct header is returned,
-            // it can be determined that it is the MTK chip
-            int bytesRead = _serial_gps->readBytesUntil('\r', buffer, sizeof(buffer));
-            if (strnstr((char *)buffer, "$GPTXT,01,01,02,SW=", bytesRead) != nullptr) {
-                LOG_INFO("L76K GNSS init succeeded, using L76K GNSS Module\n");
-                return GNSS_MODEL_MTK;
-            }
-        }
+    if (getACK("$GPTXT,01,01,02,SW=", 500)) {
+        LOG_INFO("L76K GNSS init succeeded, using L76K GNSS Module\n");
+        return GNSS_MODEL_MTK;
     }
 
     uint8_t cfg_rate[] = {0xB5, 0x62, 0x06, 0x08, 0x00, 0x00, 0x00, 0x00};
@@ -892,11 +894,30 @@ GnssModel_t GPS::probe(int serialSpeed)
     clearBuffer();
     _serial_gps->write(cfg_rate, sizeof(cfg_rate));
     // Check that the returned response class and message ID are correct
-    if (!getAck(buffer, sizeof(buffer), 0x06, 0x08, 1000)) {
+    if (!getAck(buffer, sizeof(buffer), 0x06, 0x08, 1500)) {
         LOG_WARN("Failed to find UBlox & MTK GNSS Module using baudrate %d\n", serialSpeed);
         return GNSS_MODEL_UNKNOWN;
     }
     LOG_INFO("Found a UBlox Module using baudrate %d\n", serialSpeed);
+
+    // tips: NMEA Only should not be set here, otherwise initializing Ublox gnss module again after
+    // setting will not output command messages in UART1, resulting in unrecognized module information
+    if (serialSpeed != 9600) {
+        // Set the UART port to 9600
+        byte _message_prt[] = {0xB5, 0x62, 0x06, 0x00, 0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0xD0, 0x08, 0x00, 0x00,
+                               0x80, 0x25, 0x00, 0x00, 0x07, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+        UBXChecksum(_message_prt, sizeof(_message_prt));
+        _serial_gps->write(_message_prt, sizeof(_message_prt));
+        delay(500);
+        serialSpeed = 9600;
+#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_RP2040)
+        _serial_gps->end();
+        _serial_gps->begin(serialSpeed);
+#else
+        _serial_gps->updateBaudRate(serialSpeed);
+#endif
+    }
+
     memset(buffer, 0, sizeof(buffer));
     byte _message_MONVER[8] = {
         0xB5, 0x62, // Sync message for UBX protocol
