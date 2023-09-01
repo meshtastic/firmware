@@ -892,7 +892,7 @@ GnssModel_t GPS::probe(int serialSpeed)
     clearBuffer();
     _serial_gps->write(cfg_rate, sizeof(cfg_rate));
     // Check that the returned response class and message ID are correct
-    if (!getAck(buffer, sizeof(buffer), 0x06, 0x08, 750)) {
+    if (!getAck(buffer, sizeof(buffer), 0x06, 0x08, 1000)) {
         LOG_WARN("Failed to find UBlox & MTK GNSS Module using baudrate %d\n", serialSpeed);
         return GNSS_MODEL_UNKNOWN;
     }
