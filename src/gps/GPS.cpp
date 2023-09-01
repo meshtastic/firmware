@@ -51,21 +51,20 @@ bool GPS::getACK(const char *message, int waitMillis)
 {
     uint8_t buffer[768] = {0};
     uint8_t b;
-    int bytesRead;
+    int bytesRead = 0;
     uint32_t startTimeout = millis() + waitMillis;
     while (millis() < startTimeout) {
-        bytesRead = 0;
-        while ((_serial_gps->available()) && (millis() < startTimeout)) {
+        if (_serial_gps->available()) {
             b = _serial_gps->read();
             buffer[bytesRead] = b;
             bytesRead++;
-            if ((bytesRead == 768) || (b == '\r'))
-                break;
-            // Get module info , If the correct header is returned,
-            // it can be determined that it is the MTK chip
-        }
-        if (strnstr((char *)buffer, message, bytesRead) != nullptr) {
-            return true;
+            if ((bytesRead == 768) || (b == '\r')) {
+                if (strnstr((char *)buffer, message, bytesRead) != nullptr) {
+                    return true;
+                } else {
+                    bytesRead = 0;
+                }
+            }
         }
     }
     return false;
@@ -92,7 +91,7 @@ bool GPS::getACK(uint8_t class_id, uint8_t msg_id, int waitMillis)
 
     while (millis() - startTime < waitMillis) {
         if (ack > 9) {
-            LOG_INFO("Got ACK for class %02X message %02X in %d millis.\n", class_id, msg_id, millis() - startTime);
+            // LOG_INFO("Got ACK for class %02X message %02X in %d millis.\n", class_id, msg_id, millis() - startTime);
             return true; // ACK received
         }
         if (_serial_gps->available()) {
@@ -108,7 +107,7 @@ bool GPS::getACK(uint8_t class_id, uint8_t msg_id, int waitMillis)
             }
         }
     }
-    LOG_WARN("No response for class %02X message %02X\n", class_id, msg_id);
+    // LOG_WARN("No response for class %02X message %02X\n", class_id, msg_id);
     return false; // No response received within timeout
 }
 
@@ -121,7 +120,7 @@ bool GPS::getACK(uint8_t class_id, uint8_t msg_id, int waitMillis)
  * @param  requestedID:     request message ID constant
  * @retval length of payload message
  */
-int GPS::getAck(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t requestedID, int waitMillis)
+int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t requestedID, int waitMillis)
 {
     uint16_t ubxFrameCounter = 0;
     uint32_t startTime = millis();
@@ -894,7 +893,7 @@ GnssModel_t GPS::probe(int serialSpeed)
     clearBuffer();
     _serial_gps->write(cfg_rate, sizeof(cfg_rate));
     // Check that the returned response class and message ID are correct
-    if (!getAck(buffer, sizeof(buffer), 0x06, 0x08, 1500)) {
+    if (!getACK(0x06, 0x08, 500)) {
         LOG_WARN("Failed to find UBlox & MTK GNSS Module using baudrate %d\n", serialSpeed);
         return GNSS_MODEL_UNKNOWN;
     }
@@ -930,7 +929,7 @@ GnssModel_t GPS::probe(int serialSpeed)
     clearBuffer();
     _serial_gps->write(_message_MONVER, sizeof(_message_MONVER));
 
-    uint16_t len = getAck(buffer, sizeof(buffer), 0x0A, 0x04, 1200);
+    uint16_t len = getACK(buffer, sizeof(buffer), 0x0A, 0x04, 1200);
     if (len) {
         // LOG_DEBUG("monver reply size = %d\n", len);
         uint16_t position = 0;

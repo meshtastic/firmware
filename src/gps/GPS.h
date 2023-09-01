@@ -172,7 +172,7 @@ class GPS : private concurrency::OSThread
     String getNMEA();
     GnssModel_t probe(int serialSpeed);
 
-    int getAck(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t requestedID, int waitMillis);
+    int getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t requestedID, int waitMillis);
     bool getACK(uint8_t c, uint8_t i, int waitMillis);
     bool getACK(const char *message, int waitMillis);
     // delay counter to allow more sats before fixed position stops GPS thread
