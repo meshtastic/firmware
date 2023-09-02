@@ -18,6 +18,13 @@ typedef enum {
     GNSS_MODEL_UNKNOWN,
 } GnssModel_t;
 
+typedef enum {
+    GNSS_RESPONSE_NONE,
+    GNSS_RESPONSE_NAK,
+    GNSS_RESPONSE_FRAME_ERRORS,
+    GNSS_RESPONSE_OK,
+} GPS_RESPONSE;
+
 // Generate a string representation of DOP
 const char *getDOPString(uint32_t dop);
 
@@ -173,8 +180,8 @@ class GPS : private concurrency::OSThread
     GnssModel_t probe(int serialSpeed);
 
     int getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t requestedID, int waitMillis);
-    bool getACK(uint8_t c, uint8_t i, int waitMillis);
-    bool getACK(const char *message, int waitMillis);
+    GPS_RESPONSE getACK(uint8_t c, uint8_t i, int waitMillis);
+    GPS_RESPONSE getACK(const char *message, int waitMillis);
     // delay counter to allow more sats before fixed position stops GPS thread
     uint8_t fixeddelayCtr = 0;
 
