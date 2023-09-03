@@ -47,7 +47,7 @@ void GPS::UBXChecksum(byte *message, size_t length)
     message[length - 1] = CK_B;
 }
 
-GPS_RESPONSE GPS::getACK(const char *message, int waitMillis)
+GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
 {
     uint8_t buffer[768] = {0};
     uint8_t b;
@@ -62,27 +62,31 @@ GPS_RESPONSE GPS::getACK(const char *message, int waitMillis)
                 if (strnstr((char *)buffer, message, bytesRead) != nullptr) {
                     return GNSS_RESPONSE_OK;
                 } else {
+#ifdef GPS_DEBUG
                     buffer[bytesRead] = '\0';
                     bytesRead++;
-                    LOG_INFO("Bytes read:%s\n", (char*) buffer);
+                    LOG_INFO("Bytes read:%s\n", (char *)buffer);
+#endif
                     bytesRead = 0;
                 }
             }
         }
     }
+#ifdef GPS_DEBUG
     buffer[bytesRead] = '\0';
     bytesRead++;
-    LOG_INFO("Bytes read:%s\n", (char*) buffer);
+    LOG_INFO("Bytes read:%s\n", (char *)buffer);
+#endif
     return GNSS_RESPONSE_NONE;
 }
 
-GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, int waitMillis)
+GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
 {
     uint8_t b;
     uint8_t ack = 0;
     const uint8_t ackP[2] = {class_id, msg_id};
     uint8_t buf[10] = {0xB5, 0x62, 0x05, 0x01, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00};
-    unsigned long startTime = millis();
+    uint32_t startTime = millis();
     const char frame_errors[] = "More than 100 frame errors";
     int sCounter = 0;
 
@@ -99,7 +103,9 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, int waitMillis)
 
     while (millis() - startTime < waitMillis) {
         if (ack > 9) {
-            // LOG_INFO("Got ACK for class %02X message %02X in %d millis.\n", class_id, msg_id, millis() - startTime);
+#ifdef GPS_DEBUG
+            LOG_INFO("Got ACK for class %02X message %02X in %d millis.\n", class_id, msg_id, millis() - startTime);
+#endif
             return GNSS_RESPONSE_OK; // ACK received
         }
         if (_serial_gps->available()) {
@@ -138,7 +144,7 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, int waitMillis)
  * @param  requestedID:     request message ID constant
  * @retval length of payload message
  */
-int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t requestedID, int waitMillis)
+int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t requestedID, uint32_t waitMillis)
 {
     uint16_t ubxFrameCounter = 0;
     uint32_t startTime = millis();
@@ -198,8 +204,10 @@ int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
                     ubxFrameCounter = 0;
                 } else {
                     // return payload length
-                    // LOG_INFO("Got ACK for class %02X message %02X in %d millis.\n", requestedClass, requestedID, millis() -
-                    // startTime);
+#ifdef GPS_DEBUG
+                    LOG_INFO("Got ACK for class %02X message %02X in %d millis.\n", requestedClass, requestedID,
+                             millis() - startTime);
+#endif
                     return needRead;
                 }
                 break;
@@ -548,26 +556,27 @@ bool GPS::setupGPS()
             // set to Interval; otherwise, it must be set to '0'. The 'onTime' field specifies the duration of the ON phase and
             // must be smaller than the period. It is only valid when the powerSetupValue is set to Interval; otherwise, it must
             // be set to '0'.
-            byte UBX_CFG_PMS[14] = {
-                0xB5, 0x62, // UBX sync characters
-                0x06, 0x86, // Message class and ID (UBX-CFG-PMS)
-                0x06, 0x00, // Length of payload (6 bytes)
-                0x00,       // Version (0)
-                0x03,       // Power setup value
-                0x00, 0x00, // period: not applicable, set to 0
-                0x00, 0x00, // onTime: not applicable, set to 0
-                0x00, 0x00  // Placeholder for checksum, will be calculated next
-            };
+            if (uBloxProtocolVersion >= 18) {
+                byte UBX_CFG_PMS[14] = {
+                    0xB5, 0x62, // UBX sync characters
+                    0x06, 0x86, // Message class and ID (UBX-CFG-PMS)
+                    0x06, 0x00, // Length of payload (6 bytes)
+                    0x00,       // Version (0)
+                    0x03,       // Power setup value
+                    0x00, 0x00, // period: not applicable, set to 0
+                    0x00, 0x00, // onTime: not applicable, set to 0
+                    0x00, 0x00  // Placeholder for checksum, will be calculated next
+                };
 
-            // Calculate the checksum and update the message
-            UBXChecksum(UBX_CFG_PMS, sizeof(UBX_CFG_PMS));
+                // Calculate the checksum and update the message
+                UBXChecksum(UBX_CFG_PMS, sizeof(UBX_CFG_PMS));
 
-            // Send the message to the module
-            _serial_gps->write(UBX_CFG_PMS, sizeof(UBX_CFG_PMS));
-            if (getACK(0x06, 0x86, 300) != GNSS_RESPONSE_OK) {
-                LOG_WARN("Unable to enable powersaving for GPS.\n");
+                // Send the message to the module
+                _serial_gps->write(UBX_CFG_PMS, sizeof(UBX_CFG_PMS));
+                if (getACK(0x06, 0x86, 300) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("Unable to enable powersaving for GPS.\n");
+                }
             }
-
             // We need save configuration to flash to make our config changes persistent
             byte _message_SAVE[21] = {
                 0xB5, 0x62,             // UBX protocol header
@@ -938,6 +947,7 @@ GnssModel_t GPS::probe(int serialSpeed)
 #else
         _serial_gps->updateBaudRate(serialSpeed);
 #endif
+        delay(200);
     }
 
     memset(buffer, 0, sizeof(buffer));
@@ -995,7 +1005,7 @@ GnssModel_t GPS::probe(int serialSpeed)
                 } else {
                     LOG_INFO("UBlox GNSS init succeeded, using UBlox GNSS Module\n");
                 }
-            } else if (!strncmp(info.extension[i], "PROTVER=", 8)) {
+            } else if (!strncmp(info.extension[i], "PROTVER", 7)) {
                 char *ptr = nullptr;
                 memset(buffer, 0, sizeof(buffer));
                 strncpy((char *)buffer, &(info.extension[i][8]), sizeof(buffer));
