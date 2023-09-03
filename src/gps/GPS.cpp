@@ -58,15 +58,21 @@ GPS_RESPONSE GPS::getACK(const char *message, int waitMillis)
             b = _serial_gps->read();
             buffer[bytesRead] = b;
             bytesRead++;
-            if ((bytesRead == 768) || (b == '\r')) {
+            if ((bytesRead == 767) || (b == '\r')) {
                 if (strnstr((char *)buffer, message, bytesRead) != nullptr) {
                     return GNSS_RESPONSE_OK;
                 } else {
+                    buffer[bytesRead] = '\0';
+                    bytesRead++;
+                    LOG_INFO("Bytes read:%s\n", (char*) buffer);
                     bytesRead = 0;
                 }
             }
         }
     }
+    buffer[bytesRead] = '\0';
+    bytesRead++;
+    LOG_INFO("Bytes read:%s\n", (char*) buffer);
     return GNSS_RESPONSE_NONE;
 }
 
@@ -887,6 +893,7 @@ GnssModel_t GPS::probe(int serialSpeed)
 #endif
     memset(&info, 0, sizeof(struct uBloxGnssModelInfo));
     uint8_t buffer[768] = {0};
+    delay(100);
 
     // Close all NMEA sentences , Only valid for MTK platform
     _serial_gps->write("$PCAS03,0,0,0,0,0,0,0,0,0,0,,,0,0*02\r\n");
