@@ -68,6 +68,8 @@ class GPS : private concurrency::OSThread
 
     virtual ~GPS();
 
+    uint8_t _message_PMREQ[16];
+    friend void doGPSpowersave(bool on);
     /** We will notify this observable anytime GPS state has changed meaningfully */
     Observable<const meshtastic::GPSStatus *> newStatus;
 

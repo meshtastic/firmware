@@ -204,6 +204,19 @@ void doGPSpowersave(bool on)
         notifyGPSSleep.notifyObservers(NULL);
     }
 #endif
+    if (!on) {
+        notifyGPSSleep.notifyObservers(NULL);
+        gps->UBXChecksum(gps->_message_PMREQ, sizeof(gps->_message_PMREQ));
+        gps->_serial_gps->write(gps->_message_PMREQ, sizeof(gps->_message_PMREQ));
+        if (!gps->getACK(0x02, 0x41, 500)) {
+            LOG_WARN("No response for RXM-PMREQ\n");
+        } else {
+            LOG_WARN("PMREQ received successfully\n");
+        }
+    } else {
+        gps->forceWake(1);
+        gps->_serial_gps->write(0xFF);
+    }
 }
 
 void doDeepSleep(uint32_t msecToWake)

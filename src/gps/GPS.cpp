@@ -32,6 +32,17 @@ static bool didSerialInit;
 struct uBloxGnssModelInfo info;
 uint8_t uBloxProtocolVersion;
 
+byte _message_PMREQ[] = {
+    0xB5, 0x62, // UBX protocol sync characters
+    0x02, 0x41, // Message class and ID (UBX-RXM-PMREQ)
+    0x08, 0x00, // Length of payload (6 bytes)
+    0x00, 0x00, // 4 bytes duration of request task
+    0x00, 0x00, // (milliseconds)
+    0x02, 0x00, // Task flag bitfield
+    0x00, 0x00, // byte index 1 = sleep mode
+    0x00, 0x00  // Placeholder for checksum, will be calculated next
+};
+
 void GPS::UBXChecksum(byte *message, size_t length)
 {
     uint8_t CK_A = 0, CK_B = 0;
@@ -250,8 +261,8 @@ bool GPS::setupGPS()
             config.position.tx_gpio = GPS_TX_PIN;
 #endif
 
-// #define BAUD_RATE 115200
-//  ESP32 has a special set of parameters vs other arduino ports
+//  #define BAUD_RATE 115200
+//   ESP32 has a special set of parameters vs other arduino ports
 #if defined(ARCH_ESP32)
         if (config.position.rx_gpio) {
             LOG_DEBUG("Using GPIO%d for GPS RX\n", config.position.rx_gpio);
