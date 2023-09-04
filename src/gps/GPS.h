@@ -153,7 +153,9 @@ class GPS : private concurrency::OSThread
     int prepareDeepSleep(void *unused);
 
     // Calculate checksum
-    void UBXChecksum(byte *message, size_t length);
+    void UBXChecksum(uint8_t *message, size_t length);
+
+    uint8_t makeUBXCFG(uint8_t class_id, uint8_t msg_id, uint16_t msglen, const uint8_t *msg);
 
     /**
      * Switch the GPS into a mode where we are actively looking for a lock, or alternatively switch GPS into a low power mode
