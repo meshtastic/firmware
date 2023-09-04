@@ -201,8 +201,6 @@ int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
                 // Payload length msb
                 needRead |= (c << 8);
                 ubxFrameCounter++;
-                break;
-            case 6:
                 // Check for buffer overflow
                 if (needRead >= size) {
                     ubxFrameCounter = 0;
@@ -304,13 +302,31 @@ bool GPS::setupGPS()
             _serial_gps->write("$CFGSYS,h15\r\n");
             delay(250);
         } else if (gnssModel == GNSS_MODEL_UBLOX) {
+            /*
+            uint8_t buffer[768] = {0};
+            byte _message_GNSS[8] = {0xb5, 0x62, // Sync message for UBX protocol
+                                     0x06, 0x3e, // Message class and ID (UBX-CFG-GNSS)
+                                     0x00, 0x00, // Length of payload (28 bytes)
+                                     0x00, 0x00};
+            UBXChecksum(_message_GNSS, sizeof(_message_GNSS));
+            // Send the message to the module
+            _serial_gps->write(_message_GNSS, sizeof(_message_GNSS));
+            int ackLen = getACK(buffer, sizeof(buffer), 0x06, 0x3e, 2000);
+            LOG_DEBUG("monver reply size = %d\n", ackLen);
+            LOG_DEBUG("Ack: ");
+            for (int i = 0; i < ackLen; i++) {
+                LOG_DEBUG("%02X", buffer[i]);
+            }
+            LOG_DEBUG("\n"); */
 
             // Configure GNSS system to GPS+SBAS+GLONASS (Module may restart after this command)
             // We need set it because by default it is GPS only, and we want to use GLONASS too
             // Also we need SBAS for better accuracy and extra features
             // ToDo: Dynamic configure GNSS systems depending of LoRa region
 
-            if (strncmp(info.hwVersion, "00070000", 8) == 0) { // Max7 seems to only support GPS *or* GLONASS
+            if ((strncmp(info.hwVersion, "00070000", 8) == 0) || // Max7 seems to only support GPS *or* GLONASS
+                (strncmp(info.hwVersion, "00040007", 8) == 0)) {
+                LOG_DEBUG("Setting GPS+SBAS\n");
                 byte _message_GNSS[28] = {
                     0xb5, 0x62, // Sync message for UBX protocol
                     0x06, 0x3e, // Message class and ID (UBX-CFG-GNSS)
@@ -1007,13 +1023,13 @@ GnssModel_t GPS::probe(int serialSpeed)
             position++;
         }
         for (int i = 0; i < 10; i++) {
-            info.hwVersion[i] = buffer[position - 1];
+            info.hwVersion[i] = buffer[position];
             position++;
         }
 
         while (len >= position + 30) {
             for (int i = 0; i < 30; i++) {
-                info.extension[info.extensionNo][i] = buffer[position - 1];
+                info.extension[info.extensionNo][i] = buffer[position];
                 position++;
             }
             info.extensionNo++;
