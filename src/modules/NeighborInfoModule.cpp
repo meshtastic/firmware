@@ -99,6 +99,7 @@ NeighborInfoModule::NeighborInfoModule()
         setIntervalFromNow(35 * 1000);
     } else {
         LOG_DEBUG("NeighborInfoModule is disabled\n");
+        neighborState = meshtastic_NeighborInfo_init_zero;
         disable();
     }
 }
