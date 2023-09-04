@@ -190,7 +190,9 @@ void NodeDB::installDefaultConfig()
                                       : meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN;
     // for backward compat, default position flags are ALT+MSL
     config.position.position_flags =
-        (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL);
+        (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL |
+         meshtastic_Config_PositionConfig_PositionFlags_SPEED | meshtastic_Config_PositionConfig_PositionFlags_HEADING |
+         meshtastic_Config_PositionConfig_PositionFlags_DOP);
 
 #ifdef T_WATCH_S3
     config.display.screen_on_secs = 30;
