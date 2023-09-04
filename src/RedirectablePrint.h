@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../freertosinc.h"
 #include <Print.h>
 #include <stdarg.h>
 #include <string>
@@ -16,14 +17,19 @@ class RedirectablePrint : public Print
     /// Used to allow multiple logDebug messages to appear on a single log line
     bool isContinuationMessage = false;
 
+#ifdef HAS_FREE_RTOS
+    SemaphoreHandle_t inDebugPrint = nullptr;
+    StaticSemaphore_t _MutexStorageSpace;
+#else
     volatile bool inDebugPrint = false;
-
+#endif
   public:
     explicit RedirectablePrint(Print *_dest) : dest(_dest) {}
 
     /**
      * Set a new destination
      */
+    void rpInit();
     void setDestination(Print *dest);
 
     virtual size_t write(uint8_t c);
