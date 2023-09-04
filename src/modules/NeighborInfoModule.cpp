@@ -105,16 +105,6 @@ NeighborInfoModule::NeighborInfoModule()
 }
 
 /*
-Allocate a zeroed neighbor info packet
-*/
-meshtastic_NeighborInfo *NeighborInfoModule::allocateNeighborInfoPacket()
-{
-    meshtastic_NeighborInfo *neighborInfo = (meshtastic_NeighborInfo *)malloc(sizeof(meshtastic_NeighborInfo));
-    memset(neighborInfo, 0, sizeof(meshtastic_NeighborInfo));
-    return neighborInfo;
-}
-
-/*
 Collect neighbor info from the nodeDB's history, capping at a maximum number of entries and max time
 Assumes that the neighborInfo packet has been allocated
 @returns the number of entries collected
@@ -185,14 +175,14 @@ size_t NeighborInfoModule::cleanUpNeighbors()
 /* Send neighbor info to the mesh */
 void NeighborInfoModule::sendNeighborInfo(NodeNum dest, bool wantReplies)
 {
-    meshtastic_NeighborInfo *neighborInfo = allocateNeighborInfoPacket();
-    collectNeighborInfo(neighborInfo);
-    meshtastic_MeshPacket *p = allocDataProtobuf(*neighborInfo);
+    meshtastic_NeighborInfo neighborInfo = meshtastic_NeighborInfo_init_zero;
+    collectNeighborInfo(&neighborInfo);
+    meshtastic_MeshPacket *p = allocDataProtobuf(neighborInfo);
     // send regardless of whether or not we have neighbors in our DB,
     // because we want to get neighbors for the next cycle
     p->to = dest;
     p->decoded.want_response = wantReplies;
-    printNeighborInfo("SENDING", neighborInfo);
+    printNeighborInfo("SENDING", &neighborInfo);
     service.sendToMesh(p, RX_SRC_LOCAL, true);
 }
 
