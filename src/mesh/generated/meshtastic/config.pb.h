@@ -51,8 +51,9 @@ typedef enum _meshtastic_Config_DeviceConfig_RebroadcastMode {
 } meshtastic_Config_DeviceConfig_RebroadcastMode;
 
 /* Bit field of boolean configuration options, indicating which optional
-   fields to include when assembling POSITION messages
- Longitude and latitude are always included (also time if GPS-synced)
+ fields to include when assembling POSITION messages.
+ Longitude, latitude, altitude, speed, heading, and DOP
+ are always included (also time if GPS-synced)
  NOTE: the more fields are included, the larger the message will be -
    leading to longer airtime and a higher risk of packet loss */
 typedef enum _meshtastic_Config_PositionConfig_PositionFlags {
