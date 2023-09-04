@@ -46,6 +46,10 @@
 #if defined(HAS_AXP192) || defined(HAS_AXP2101)
 #define HAS_PMU
 #endif
+
+#ifdef PIN_BUTTON_TOUCH
+#define BUTTON_PIN_TOUCH PIN_BUTTON_TOUCH
+#endif
 //
 // set HW_VENDOR
 //
@@ -81,6 +85,10 @@
 #define HW_VENDOR meshtastic_HardwareModel_TLORA_V2_1_1P6
 #elif defined(TLORA_V2_1_18)
 #define HW_VENDOR meshtastic_HardwareModel_TLORA_V2_1_1P8
+#elif defined(T_DECK)
+#define HW_VENDOR meshtastic_HardwareModel_T_DECK
+#elif defined(T_WATCH_S3)
+#define HW_VENDOR meshtastic_HardwareModel_T_WATCH_S3
 #elif defined(GENIEBLOCKS)
 #define HW_VENDOR meshtastic_HardwareModel_GENIEBLOCKS
 #elif defined(PRIVATE_HW)
@@ -109,6 +117,10 @@
 #define HW_VENDOR meshtastic_HardwareModel_NANO_G1_EXPLORER
 #elif defined(BETAFPV_900_TX_NANO)
 #define HW_VENDOR meshtastic_HardwareModel_BETAFPV_900_NANO_TX
+#elif defined(PICOMPUTER_S3)
+#define HW_VENDOR meshtastic_HardwareModel_PICOMPUTER_S3
+#elif defined(HELTEC_HT62)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_HT62
 #endif
 
 //

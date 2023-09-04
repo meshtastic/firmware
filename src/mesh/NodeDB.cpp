@@ -15,6 +15,7 @@
 #include "error.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
+#include "modules/NeighborInfoModule.h"
 #include <ErriezCRC32.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -63,11 +64,7 @@ uint32_t error_address = 0;
 
 static uint8_t ourMacAddr[6];
 
-NodeDB::NodeDB()
-    : nodes(devicestate.node_db), numNodes(&devicestate.node_db_count), meshNodes(devicestate.node_db_lite),
-      numMeshNodes(&devicestate.node_db_lite_count)
-{
-}
+NodeDB::NodeDB() : meshNodes(devicestate.node_db_lite), numMeshNodes(&devicestate.node_db_lite_count) {}
 
 /**
  * Most (but not always) of the time we want to treat packets 'from' the local phone (where from == 0), as if they originated on
@@ -109,7 +106,6 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_TW;
 
         // Enter super deep sleep soon and stay there not very long
-        // radioConfig.preferences.mesh_sds_timeout_secs = 10;
         // radioConfig.preferences.sds_secs = 60;
     }
 
@@ -165,7 +161,8 @@ void NodeDB::installDefaultConfig()
     config.has_network = true;
     config.has_bluetooth = true;
     config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
-    config.lora.sx126x_rx_boosted_gain = false;
+
+    config.lora.sx126x_rx_boosted_gain = true;
     config.lora.tx_enabled =
         true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
     config.lora.override_duty_cycle = false;
@@ -184,7 +181,7 @@ void NodeDB::installDefaultConfig()
     // FIXME: Default to bluetooth capability of platform as default
     config.bluetooth.enabled = true;
     config.bluetooth.fixed_pin = defaultBLEPin;
-#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER)
+#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS)
     bool hasScreen = true;
 #else
     bool hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
@@ -194,6 +191,11 @@ void NodeDB::installDefaultConfig()
     // for backward compat, default position flags are ALT+MSL
     config.position.position_flags =
         (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL);
+
+#ifdef T_WATCH_S3
+    config.display.screen_on_secs = 30;
+    config.display.wake_on_tap_or_motion = true;
+#endif
 
     initConfigIntervals();
 }
@@ -205,7 +207,6 @@ void NodeDB::initConfigIntervals()
     config.position.position_broadcast_secs = default_broadcast_interval_secs;
 
     config.power.ls_secs = default_ls_secs;
-    config.power.mesh_sds_timeout_secs = default_mesh_sds_timeout_secs;
     config.power.min_wake_secs = default_min_wake_secs;
     config.power.sds_secs = default_sds_secs;
     config.power.wait_bluetooth_secs = default_wait_bluetooth_secs;
@@ -234,11 +235,23 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 1000;
     moduleConfig.external_notification.nag_timeout = 60;
 #endif
+#ifdef T_WATCH_S3
+    // Don't worry about the other settings, we'll use the DRV2056 behavior for notifications
+    moduleConfig.external_notification.enabled = true;
+#endif
     moduleConfig.has_canned_message = true;
 
     strncpy(moduleConfig.mqtt.address, default_mqtt_address, sizeof(moduleConfig.mqtt.address));
     strncpy(moduleConfig.mqtt.username, default_mqtt_username, sizeof(moduleConfig.mqtt.username));
     strncpy(moduleConfig.mqtt.password, default_mqtt_password, sizeof(moduleConfig.mqtt.password));
+
+    moduleConfig.has_neighbor_info = true;
+    moduleConfig.neighbor_info.enabled = false;
+
+    moduleConfig.has_detection_sensor = true;
+    moduleConfig.detection_sensor.enabled = false;
+    moduleConfig.detection_sensor.detection_triggered_high = true;
+    moduleConfig.detection_sensor.minimum_broadcast_secs = 45;
 
     initModuleConfigIntervals();
 }
@@ -263,6 +276,7 @@ void NodeDB::initModuleConfigIntervals()
     moduleConfig.telemetry.device_update_interval = default_broadcast_interval_secs;
     moduleConfig.telemetry.environment_update_interval = default_broadcast_interval_secs;
     moduleConfig.telemetry.air_quality_interval = default_broadcast_interval_secs;
+    moduleConfig.neighbor_info.update_interval = default_broadcast_interval_secs;
 }
 
 void NodeDB::installDefaultChannels()
@@ -274,12 +288,11 @@ void NodeDB::installDefaultChannels()
 
 void NodeDB::resetNodes()
 {
-    devicestate.node_db_count = 0;
-    memset(devicestate.node_db, 0, sizeof(devicestate.node_db));
-
     devicestate.node_db_lite_count = 0;
     memset(devicestate.node_db_lite, 0, sizeof(devicestate.node_db_lite));
     saveDeviceStateToDisk();
+    if (neighborInfoModule && moduleConfig.neighbor_info.enabled)
+        neighborInfoModule->resetNeighbors();
 }
 
 void NodeDB::installDefaultDeviceState()
@@ -287,12 +300,11 @@ void NodeDB::installDefaultDeviceState()
     LOG_INFO("Installing default DeviceState\n");
     memset(&devicestate, 0, sizeof(meshtastic_DeviceState));
 
-    *numNodes = 0;
+    *numMeshNodes = 0;
 
     // init our devicestate with valid flags so protobuf writing/reading will work
     devicestate.has_my_node = true;
     devicestate.has_owner = true;
-    devicestate.node_db_count = 0;
     devicestate.node_db_lite_count = 0;
     devicestate.version = DEVICESTATE_CUR_VER;
     devicestate.receive_queue_count = 0; // Not yet implemented FIXME
@@ -320,11 +332,9 @@ void NodeDB::init()
     int saveWhat = 0;
 
     // likewise - we always want the app requirements to come from the running appload
-    myNodeInfo.min_app_version = 20300;         // format is Mmmss (where M is 1+the numeric major number. i.e. 20120 means 1.1.20
-    myNodeInfo.max_channels = MAX_NUM_CHANNELS; // tell others the max # of channels we can understand
+    myNodeInfo.min_app_version = 30200; // format is Mmmss (where M is 1+the numeric major number. i.e. 30200 means 2.2.00
     // Note! We do this after loading saved settings, so that if somehow an invalid nodenum was stored in preferences we won't
     // keep using that nodenum forever. Crummy guess at our nodenum (but we will check against the nodedb to avoid conflicts)
-    strncpy(myNodeInfo.firmware_version, optstr(APP_VERSION), sizeof(myNodeInfo.firmware_version));
     pickNewNodeNum();
 
     // Set our board type so we can share it with others
@@ -335,19 +345,6 @@ void NodeDB::init()
     info->user = owner;
     info->has_user = true;
 
-    if (*numNodes > 0) {
-        LOG_DEBUG("Legacy NodeDB detected... Migrating to NodeDBLite\n");
-        uint32_t readIndex = 0;
-        const meshtastic_NodeInfo *oldNodeInfo = nodeDB.readNextNodeInfo(readIndex);
-        while (oldNodeInfo != NULL) {
-            migrateToNodeInfoLite(oldNodeInfo);
-            oldNodeInfo = nodeDB.readNextNodeInfo(readIndex);
-        }
-        LOG_DEBUG("Migration complete! Clearing out legacy NodeDB...\n");
-        devicestate.node_db_count = 0;
-        memset(devicestate.node_db, 0, sizeof(devicestate.node_db));
-    }
-
 #ifdef ARCH_ESP32
     Preferences preferences;
     preferences.begin("meshtastic", false);
@@ -357,7 +354,7 @@ void NodeDB::init()
 #endif
 
     resetRadioConfig(); // If bogus settings got saved, then fix them
-    LOG_DEBUG("region=%d, NODENUM=0x%x, dbsize=%d\n", config.lora.region, myNodeInfo.my_node_num, *numNodes);
+    LOG_DEBUG("region=%d, NODENUM=0x%x, dbsize=%d\n", config.lora.region, myNodeInfo.my_node_num, *numMeshNodes);
 
     if (devicestateCRC != crc32Buffer(&devicestate, sizeof(devicestate)))
         saveWhat |= SEGMENT_DEVICESTATE;
@@ -603,14 +600,6 @@ void NodeDB::saveToDisk(int saveWhat)
     }
 }
 
-const meshtastic_NodeInfo *NodeDB::readNextNodeInfo(uint32_t &readIndex)
-{
-    if (readIndex < *numNodes)
-        return &nodes[readIndex++];
-    else
-        return NULL;
-}
-
 const meshtastic_NodeInfoLite *NodeDB::readNextMeshNode(uint32_t &readIndex)
 {
     if (readIndex < *numMeshNodes)
@@ -781,22 +770,11 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 
 uint8_t NodeDB::getMeshNodeChannel(NodeNum n)
 {
-    meshtastic_NodeInfoLite *info = getMeshNode(n);
+    const meshtastic_NodeInfoLite *info = getMeshNode(n);
     if (!info) {
         return 0; // defaults to PRIMARY
     }
     return info->channel;
-}
-
-/// Find a node in our DB, return null for missing
-/// NOTE: This function might be called from an ISR
-meshtastic_NodeInfo *NodeDB::getNodeInfo(NodeNum n)
-{
-    for (int i = 0; i < *numNodes; i++)
-        if (nodes[i].num == n)
-            return &nodes[i];
-
-    return NULL;
 }
 
 /// Find a node in our DB, return null for missing
@@ -817,7 +795,8 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
 
     if (!lite) {
         if ((*numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < meshtastic_NodeInfoLite_size * 3)) {
-            screen->print("warning: node_db_lite full! erasing oldest entry\n");
+            if (screen)
+                screen->print("warning: node_db_lite full! erasing oldest entry\n");
             // look for oldest node and erase it
             uint32_t oldest = UINT32_MAX;
             int oldestIndex = -1;
@@ -842,57 +821,6 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
     }
 
     return lite;
-}
-
-void NodeDB::migrateToNodeInfoLite(const meshtastic_NodeInfo *node)
-{
-    meshtastic_NodeInfoLite *lite = getMeshNode(node->num);
-
-    if (!lite) {
-        if ((*numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < meshtastic_NodeInfoLite_size * 3)) {
-            screen->print("warning: node_db_lite full! erasing oldest entry\n");
-            // look for oldest node and erase it
-            uint32_t oldest = UINT32_MAX;
-            int oldestIndex = -1;
-            for (int i = 0; i < *numMeshNodes; i++) {
-                if (meshNodes[i].last_heard < oldest) {
-                    oldest = meshNodes[i].last_heard;
-                    oldestIndex = i;
-                }
-            }
-            // Shove the remaining nodes down the chain
-            for (int i = oldestIndex; i < *numMeshNodes - 1; i++) {
-                meshNodes[i] = meshNodes[i + 1];
-            }
-            (*numMeshNodes)--;
-        }
-        // add the node at the end
-        lite = &meshNodes[(*numMeshNodes)++];
-
-        // everything is missing except the nodenum
-        memset(lite, 0, sizeof(*lite));
-        lite->num = node->num;
-        lite->snr = node->snr;
-        lite->last_heard = node->last_heard;
-        lite->channel = node->channel;
-
-        if (node->has_position) {
-            lite->has_position = true;
-            lite->position.latitude_i = node->position.latitude_i;
-            lite->position.longitude_i = node->position.longitude_i;
-            lite->position.altitude = node->position.altitude;
-            lite->position.location_source = node->position.location_source;
-            lite->position.time = node->position.time;
-        }
-        if (node->has_user) {
-            lite->has_user = true;
-            lite->user = node->user;
-        }
-        if (node->has_device_metrics) {
-            lite->has_device_metrics = true;
-            lite->device_metrics = node->device_metrics;
-        }
-    }
 }
 
 /// Record an error that should be reported via analytics

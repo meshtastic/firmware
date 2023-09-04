@@ -215,7 +215,7 @@ typedef enum _meshtastic_Config_BluetoothConfig_PairingMode {
 typedef struct _meshtastic_Config_DeviceConfig {
     /* Sets the role of node */
     meshtastic_Config_DeviceConfig_Role role;
-    /* Disabling this will disable the SerialConsole by not initializing the StreamAPI */
+    /* Disabling this will disable the SerialConsole by not initilizing the StreamAPI */
     bool serial_enabled;
     /* By default we turn off logging as soon as an API client connects (to keep shared serial link quiet).
  Set this to true to leave the debug log outputting even when API is active. */
@@ -292,11 +292,6 @@ typedef struct _meshtastic_Config_PowerConfig {
  The number of seconds for to wait before turning off BLE in No Bluetooth states
  0 for default of 1 minute */
     uint32_t wait_bluetooth_secs;
-    /* Mesh Super Deep Sleep Timeout Seconds
- While in Light Sleep if this value is exceeded we will lower into super deep sleep
- for sds_secs (default 1 year) or a button press
- 0 for default of two hours, MAXUINT for disabled */
-    uint32_t mesh_sds_timeout_secs;
     /* Super Deep Sleep Seconds
  While in Light Sleep if mesh_sds_timeout_secs is exceeded we will lower into super deep sleep
  for this value (default 1 year) or a button press
@@ -363,7 +358,7 @@ typedef struct _meshtastic_Config_DisplayConfig {
     bool compass_north_top;
     /* Flip screen vertically, for cases that mount the screen upside down */
     bool flip_screen;
-    /* Preferred display units */
+    /* Perferred display units */
     meshtastic_Config_DisplayConfig_DisplayUnits units;
     /* Override auto-detect in screen */
     meshtastic_Config_DisplayConfig_OledType oled;
@@ -536,7 +531,7 @@ extern "C" {
 #define meshtastic_Config_init_default           {0, {meshtastic_Config_DeviceConfig_init_default}}
 #define meshtastic_Config_DeviceConfig_init_default {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0}
 #define meshtastic_Config_PositionConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define meshtastic_Config_PowerConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_Config_PowerConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_default {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_default, ""}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_default {0, 0, 0, 0}
 #define meshtastic_Config_DisplayConfig_init_default {0, _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0}
@@ -545,7 +540,7 @@ extern "C" {
 #define meshtastic_Config_init_zero              {0, {meshtastic_Config_DeviceConfig_init_zero}}
 #define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0}
 #define meshtastic_Config_PositionConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define meshtastic_Config_PowerConfig_init_zero  {0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_Config_PowerConfig_init_zero  {0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_zero {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_zero, ""}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_zero {0, 0, 0, 0}
 #define meshtastic_Config_DisplayConfig_init_zero {0, _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0}
@@ -577,7 +572,6 @@ extern "C" {
 #define meshtastic_Config_PowerConfig_on_battery_shutdown_after_secs_tag 2
 #define meshtastic_Config_PowerConfig_adc_multiplier_override_tag 3
 #define meshtastic_Config_PowerConfig_wait_bluetooth_secs_tag 4
-#define meshtastic_Config_PowerConfig_mesh_sds_timeout_secs_tag 5
 #define meshtastic_Config_PowerConfig_sds_secs_tag 6
 #define meshtastic_Config_PowerConfig_ls_secs_tag 7
 #define meshtastic_Config_PowerConfig_min_wake_secs_tag 8
@@ -682,7 +676,6 @@ X(a, STATIC,   SINGULAR, BOOL,     is_power_saving,   1) \
 X(a, STATIC,   SINGULAR, UINT32,   on_battery_shutdown_after_secs,   2) \
 X(a, STATIC,   SINGULAR, FLOAT,    adc_multiplier_override,   3) \
 X(a, STATIC,   SINGULAR, UINT32,   wait_bluetooth_secs,   4) \
-X(a, STATIC,   SINGULAR, UINT32,   mesh_sds_timeout_secs,   5) \
 X(a, STATIC,   SINGULAR, UINT32,   sds_secs,          6) \
 X(a, STATIC,   SINGULAR, UINT32,   ls_secs,           7) \
 X(a, STATIC,   SINGULAR, UINT32,   min_wake_secs,     8) \
@@ -780,7 +773,7 @@ extern const pb_msgdesc_t meshtastic_Config_BluetoothConfig_msg;
 #define meshtastic_Config_NetworkConfig_IpV4Config_size 20
 #define meshtastic_Config_NetworkConfig_size     195
 #define meshtastic_Config_PositionConfig_size    54
-#define meshtastic_Config_PowerConfig_size       46
+#define meshtastic_Config_PowerConfig_size       40
 #define meshtastic_Config_size                   198
 
 #ifdef __cplusplus

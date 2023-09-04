@@ -70,10 +70,23 @@ template <typename T> bool SX126xInterface<T>::init()
 #endif
 
 #if defined(SX126X_TXEN) && (SX126X_TXEN != RADIOLIB_NC)
-    // lora.begin sets Dio2 as RF switch control, which is not true if we are manually controlling RX and TX
+    // If SX126X_TXEN is connected to the MCU, we are manually controlling RX and TX.
+    // But lora.begin (called above) sets Dio2 as RF switch control, which is not true here, so set it back to false.
     if (res == RADIOLIB_ERR_NONE) {
-        LOG_DEBUG("SX126X_TX/RX EN pins defined. Setting RF Switch: RXEN=%i, TXEN=%i\n", SX126X_RXEN, SX126X_TXEN);
+        LOG_DEBUG("SX126X_TXEN pin defined. Setting RF Switch: RXEN=%i, TXEN=%i\n", SX126X_RXEN, SX126X_TXEN);
         res = lora.setDio2AsRfSwitch(false);
+        lora.setRfSwitchPins(SX126X_RXEN, SX126X_TXEN);
+    }
+#elif defined(SX126X_RXEN) && (SX126X_RXEN != RADIOLIB_NC && defined(E22_TXEN_CONNECTED_TO_DIO2))
+    // Otherwise, if SX126X_RXEN is connected to the MCU, and E22_TXEN_CONNECTED_TO_DIO2 is defined, we are letting the
+    // E22 control RX and TX via DIO2. In this configuration, the E22's TXEN and DIO2 pins are connected to each other,
+    // but not to the MCU.
+    // However, we must still connect the E22's RXEN pin to the MCU, define SX126X_RXEN accordingly, and then call
+    // setRfSwitchPins, otherwise RX sensitivity (observed via RSSI) is greatly diminished.
+    LOG_DEBUG("SX126X_RXEN and E22_TXEN_CONNECTED_TO_DIO2 are defined; value of res: %d", res);
+    if (res == RADIOLIB_ERR_NONE) {
+        LOG_DEBUG("SX126X_TXEN is RADIOLIB_NC, but SX126X_RXEN and E22_TXEN_CONNECTED_TO_DIO2 are both defined; calling "
+                  "lora.setRfSwitchPins.");
         lora.setRfSwitchPins(SX126X_RXEN, SX126X_TXEN);
     }
 #endif

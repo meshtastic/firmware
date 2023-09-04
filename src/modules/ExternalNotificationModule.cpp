@@ -1,3 +1,18 @@
+/**
+ * @file ExternalNotificationModule.cpp
+ * @brief Implementation of the ExternalNotificationModule class.
+ *
+ * This file contains the implementation of the ExternalNotificationModule class, which is responsible for handling external
+ * notifications such as vibration, buzzer, and LED lights. The class provides methods to turn on and off the external
+ * notification outputs and to play ringtones using PWM buzzer. It also includes default configurations and a runOnce() method to
+ * handle the module's behavior.
+ *
+ * Documentation:
+ * https://meshtastic.org/docs/settings/moduleconfig/external-notification
+ *
+ * @author Jm Casler & Meshtastic Team
+ * @date [Insert Date]
+ */
 #include "ExternalNotificationModule.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -93,6 +108,10 @@ int32_t ExternalNotificationModule::runOnce()
                 rgb.setColor(red, green, blue);
             }
 #endif
+
+#ifdef T_WATCH_S3
+            drv.go();
+#endif
         }
 
         // now let the PWM buzzer play
@@ -109,6 +128,16 @@ int32_t ExternalNotificationModule::runOnce()
     }
 }
 
+bool ExternalNotificationModule::wantPacket(const meshtastic_MeshPacket *p)
+{
+    return MeshService::isTextPayload(p);
+}
+
+/**
+ * Sets the external notification on for the specified index.
+ *
+ * @param index The index of the external notification to turn on.
+ */
 void ExternalNotificationModule::setExternalOn(uint8_t index)
 {
     externalCurrentState[index] = 1;
@@ -124,13 +153,17 @@ void ExternalNotificationModule::setExternalOn(uint8_t index)
             digitalWrite(moduleConfig.external_notification.output_buzzer, true);
         break;
     default:
-        digitalWrite(output, (moduleConfig.external_notification.active ? true : false));
+        if (output > 0)
+            digitalWrite(output, (moduleConfig.external_notification.active ? true : false));
         break;
     }
 #ifdef HAS_NCP5623
     if (rgb_found.type == ScanI2C::NCP5623) {
         rgb.setColor(red, green, blue);
     }
+#endif
+#ifdef T_WATCH_S3
+    drv.go();
 #endif
 }
 
@@ -149,7 +182,8 @@ void ExternalNotificationModule::setExternalOff(uint8_t index)
             digitalWrite(moduleConfig.external_notification.output_buzzer, false);
         break;
     default:
-        digitalWrite(output, (moduleConfig.external_notification.active ? false : true));
+        if (output > 0)
+            digitalWrite(output, (moduleConfig.external_notification.active ? false : true));
         break;
     }
 
@@ -160,6 +194,9 @@ void ExternalNotificationModule::setExternalOff(uint8_t index)
         blue = 0;
         rgb.setColor(red, green, blue);
     }
+#endif
+#ifdef T_WATCH_S3
+    drv.stop();
 #endif
 }
 
@@ -174,18 +211,20 @@ void ExternalNotificationModule::stopNow()
     nagCycleCutoff = 1; // small value
     isNagging = false;
     setIntervalFromNow(0);
+#ifdef T_WATCH_S3
+    drv.stop();
+#endif
 }
 
 ExternalNotificationModule::ExternalNotificationModule()
-    : SinglePortModule("ExternalNotificationModule", meshtastic_PortNum_TEXT_MESSAGE_APP), concurrency::OSThread(
-                                                                                               "ExternalNotificationModule")
+    : SinglePortModule("ExternalNotificationModule", meshtastic_PortNum_TEXT_MESSAGE_APP),
+      concurrency::OSThread("ExternalNotificationModule")
 {
     /*
         Uncomment the preferences below if you want to use the module
         without having to configure it from the PythonAPI or WebUI.
     */
 
-    // moduleConfig.external_notification.enabled = true;
     // moduleConfig.external_notification.alert_message = true;
     // moduleConfig.external_notification.alert_message_buzzer = true;
     // moduleConfig.external_notification.alert_message_vibra = true;
@@ -213,8 +252,10 @@ ExternalNotificationModule::ExternalNotificationModule()
                                                            : EXT_NOTIFICATION_MODULE_OUTPUT;
 
         // Set the direction of a pin
-        LOG_INFO("Using Pin %i in digital mode\n", output);
-        pinMode(output, OUTPUT);
+        if (output > 0) {
+            LOG_INFO("Using Pin %i in digital mode\n", output);
+            pinMode(output, OUTPUT);
+        }
         setExternalOff(0);
         externalTurnedOn[0] = 0;
         if (moduleConfig.external_notification.output_vibra) {
@@ -250,7 +291,12 @@ ExternalNotificationModule::ExternalNotificationModule()
 ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
     if (moduleConfig.external_notification.enabled) {
-
+#if T_WATCH_S3
+        drv.setWaveform(0, 75);
+        drv.setWaveform(1, 56);
+        drv.setWaveform(2, 0);
+        drv.go();
+#endif
         if (getFrom(&mp) != nodeDB.getNodeNum()) {
 
             // Check if the message contains a bell character. Don't do this loop for every pin, just once.
@@ -343,7 +389,6 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             }
             setIntervalFromNow(0); // run once so we know if we should do something
         }
-
     } else {
         LOG_INFO("External Notification Module Disabled\n");
     }

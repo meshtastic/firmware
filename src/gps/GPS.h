@@ -18,6 +18,13 @@ typedef enum {
     GNSS_MODEL_UNKNOWN,
 } GnssModel_t;
 
+typedef enum {
+    GNSS_RESPONSE_NONE,
+    GNSS_RESPONSE_NAK,
+    GNSS_RESPONSE_FRAME_ERRORS,
+    GNSS_RESPONSE_OK,
+} GPS_RESPONSE;
+
 // Generate a string representation of DOP
 const char *getDOPString(uint32_t dop);
 
@@ -91,6 +98,9 @@ class GPS : private concurrency::OSThread
     // Some GPS modules (ublock) require factory reset
     virtual bool factoryReset() { return true; }
 
+    // Empty the input buffer as quickly as possible
+    void clearBuffer();
+
   protected:
     /// Do gps chipset specific init, return true for success
     virtual bool setupGPS();
@@ -158,8 +168,6 @@ class GPS : private concurrency::OSThread
      */
     uint32_t getSleepTime() const;
 
-    bool getACK(uint8_t c, uint8_t i);
-
     /**
      * Tell users we have new GPS readings
      */
@@ -169,10 +177,11 @@ class GPS : private concurrency::OSThread
 
     // Get GNSS model
     String getNMEA();
-    GnssModel_t probe();
+    GnssModel_t probe(int serialSpeed);
 
-    int getAck(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t requestedID);
-
+    int getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t requestedID, uint32_t waitMillis);
+    GPS_RESPONSE getACK(uint8_t c, uint8_t i, uint32_t waitMillis);
+    GPS_RESPONSE getACK(const char *message, uint32_t waitMillis);
     // delay counter to allow more sats before fixed position stops GPS thread
     uint8_t fixeddelayCtr = 0;
 

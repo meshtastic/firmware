@@ -212,6 +212,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                 }
                 break;
 
+                SCAN_SIMPLE_CASE(TDECK_KB_ADDR, TDECKKB, "T-Deck keyboard found\n");
+                SCAN_SIMPLE_CASE(BBQ10_KB_ADDR, BBQ10KB, "BB Q10 keyboard found\n");
                 SCAN_SIMPLE_CASE(ST7567_ADDRESS, SCREEN_ST7567, "st7567 display found\n");
 #ifdef HAS_NCP5623
                 SCAN_SIMPLE_CASE(NCP5623_ADDR, NCP5623, "NCP5623 RGB LED found\n");
@@ -274,6 +276,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
 
                 SCAN_SIMPLE_CASE(PMSA0031_ADDR, PMSA0031, "PMSA0031 air quality sensor found\n")
                 SCAN_SIMPLE_CASE(MPU6050_ADDR, MPU6050, "MPU6050 accelerometer found\n");
+                SCAN_SIMPLE_CASE(BMA423_ADDR, BMA423, "BMA423 accelerometer found\n");
 
             default:
                 LOG_INFO("Device found at address 0x%x was not able to be enumerated\n", addr.address);

@@ -1,3 +1,12 @@
+/**
+ * @file PowerFSM.cpp
+ * @brief Implements the finite state machine for power management.
+ *
+ * This file contains the implementation of the finite state machine (FSM) for power management.
+ * The FSM controls the power states of the device, including SDS (shallow deep sleep), LS (light sleep),
+ * NB (normal mode), and POWER (powered mode). The FSM also handles transitions between states and
+ * actions to be taken upon entering or exiting each state.
+ */
 #include "PowerFSM.h"
 #include "GPS.h"
 #include "MeshService.h"
@@ -137,7 +146,10 @@ static void nbEnter()
 {
     LOG_DEBUG("Enter state: NB\n");
     screen->setOn(false);
+#ifdef ARCH_ESP32
+    // Only ESP32 should turn off bluetooth
     setBluetoothEnable(false);
+#endif
 
     // FIXME - check if we already have packets for phone and immediately trigger EVENT_PACKETS_FOR_PHONE
 }
@@ -158,12 +170,14 @@ static void serialEnter()
 
 static void serialExit()
 {
+    // Turn bluetooth back on when we leave serial stream API
+    setBluetoothEnable(true);
     screen->print("Serial disconnected\n");
 }
 
 static void powerEnter()
 {
-    LOG_DEBUG("Enter state: POWER\n");
+    // LOG_DEBUG("Enter state: POWER\n");
     if (!isPowered()) {
         // If we got here, we are in the wrong state - we should be in powered, let that state ahndle things
         LOG_INFO("Loss of power in Powered\n");
@@ -242,7 +256,11 @@ void PowerFSM_setup()
 
     // wake timer expired or a packet arrived
     // if we are a router node, we go to NB (no need for bluetooth) otherwise we go to DARK (so we can send message to phone)
+#ifdef ARCH_ESP32
     powerFSM.add_transition(&stateLS, isRouter ? &stateNB : &stateDARK, EVENT_WAKE_TIMER, NULL, "Wake timer");
+#else // Don't go into a no-bluetooth state on low power platforms
+    powerFSM.add_transition(&stateLS, &stateDARK, EVENT_WAKE_TIMER, NULL, "Wake timer");
+#endif
 
     // We need this transition, because we might not transition if we were waiting to enter light-sleep, because when we wake from
     // light sleep we _always_ transition to NB or dark and
@@ -279,7 +297,8 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateLS, &stateON, EVENT_INPUT, NULL, "Input Device");
     powerFSM.add_transition(&stateNB, &stateON, EVENT_INPUT, NULL, "Input Device");
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_INPUT, NULL, "Input Device");
-    powerFSM.add_transition(&stateON, &stateON, EVENT_INPUT, NULL, "Input Device"); // restarts the sleep timer
+    powerFSM.add_transition(&stateON, &stateON, EVENT_INPUT, NULL, "Input Device");       // restarts the sleep timer
+    powerFSM.add_transition(&statePOWER, &statePOWER, EVENT_INPUT, NULL, "Input Device"); // restarts the sleep timer
 
     powerFSM.add_transition(&stateDARK, &stateON, EVENT_BLUETOOTH_PAIR, NULL, "Bluetooth pairing");
     powerFSM.add_transition(&stateON, &stateON, EVENT_BLUETOOTH_PAIR, NULL, "Bluetooth pairing");

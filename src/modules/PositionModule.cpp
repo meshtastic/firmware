@@ -11,8 +11,8 @@
 PositionModule *positionModule;
 
 PositionModule::PositionModule()
-    : ProtobufModule("position", meshtastic_PortNum_POSITION_APP, &meshtastic_Position_msg), concurrency::OSThread(
-                                                                                                 "PositionModule")
+    : ProtobufModule("position", meshtastic_PortNum_POSITION_APP, &meshtastic_Position_msg),
+      concurrency::OSThread("PositionModule")
 {
     isPromiscuous = true;          // We always want to update our nodedb, even if we are sniffing on others
     setIntervalFromNow(60 * 1000); // Send our initial position 60 seconds after we start (to give GPS time to setup)
@@ -52,11 +52,22 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 
     nodeDB.updatePosition(getFrom(&mp), p);
 
+    // Only respond to location requests on the channel where we broadcast location.
+    if (channels.getByIndex(mp.channel).role == meshtastic_Channel_Role_PRIMARY) {
+        ignoreRequest = false;
+    } else {
+        ignoreRequest = true;
+    }
+
     return false; // Let others look at this message also if they want
 }
 
 meshtastic_MeshPacket *PositionModule::allocReply()
 {
+    if (ignoreRequest) {
+        return nullptr;
+    }
+
     meshtastic_NodeInfoLite *node = service.refreshLocalMeshNode(); // should guarantee there is now a position
     assert(node->has_position);
 
@@ -131,6 +142,11 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
         service.cancelSending(prevPacketId);
 
     meshtastic_MeshPacket *p = allocReply();
+    if (p == nullptr) {
+        LOG_WARN("allocReply returned a nullptr");
+        return;
+    }
+
     p->to = dest;
     p->decoded.want_response = wantReplies;
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER)
@@ -174,7 +190,7 @@ int32_t PositionModule::runOnce()
     } else if (config.position.position_broadcast_smart_enabled) {
         // Only send packets if the channel is less than 25% utilized or we're a tracker.
         if (airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER)) {
-            meshtastic_NodeInfoLite *node2 = service.refreshLocalMeshNode(); // should guarantee there is now a position
+            const meshtastic_NodeInfoLite *node2 = service.refreshLocalMeshNode(); // should guarantee there is now a position
 
             if (hasValidPosition(node2)) {
                 // The minimum distance to travel before we are able to send a new position packet.

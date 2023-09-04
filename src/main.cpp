@@ -96,7 +96,7 @@ ScanI2C::DeviceAddress screen_found = ScanI2C::ADDRESS_NONE;
 
 // The I2C address of the cardkb or RAK14004 (if found)
 ScanI2C::DeviceAddress cardkb_found = ScanI2C::ADDRESS_NONE;
-// 0x02 for RAK14004 and 0x00 for cardkb
+// 0x02 for RAK14004, 0x00 for cardkb, 0x10 for T-Deck
 uint8_t kb_model;
 
 // The I2C address of the RTC Module (if found)
@@ -109,6 +109,11 @@ ScanI2C::FoundDevice rgb_found = ScanI2C::FoundDevice(ScanI2C::DeviceType::NONE,
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 ATECCX08A atecc;
 #endif
+
+#ifdef T_WATCH_S3
+Adafruit_DRV2605 drv;
+#endif
+bool isVibrating = false;
 
 bool eink_found = true;
 
@@ -250,6 +255,19 @@ void setup()
 
     fsInit();
 
+#if defined(_SEEED_XIAO_NRF52840_SENSE_H_)
+
+    pinMode(CHARGE_LED, INPUT); // sets to detect if charge LED is on or off to see if USB is plugged in
+
+    pinMode(HICHG, OUTPUT);
+    digitalWrite(HICHG, LOW); // 100 mA charging current if set to LOW and 50mA (actually about 20mA) if set to HIGH
+
+    pinMode(BAT_READ, OUTPUT);
+    digitalWrite(BAT_READ, LOW); // This is pin P0_14 = 14 and by pullling low to GND it provices path to read on pin 32 (P0,31)
+                                 // PIN_VBAT the voltage from divider on XIAO board
+
+#endif
+
 #ifdef I2C_SDA1
     Wire1.begin(I2C_SDA1, I2C_SCL1);
 #endif
@@ -280,6 +298,15 @@ void setup()
     pinMode(AQ_SET_PIN, OUTPUT);
     digitalWrite(AQ_SET_PIN, HIGH);
 #endif
+#endif
+
+#ifdef T_DECK
+    // enable keyboard
+    pinMode(KB_POWERON, OUTPUT);
+    digitalWrite(KB_POWERON, HIGH);
+    // There needs to be a delay after power on, give LILYGO-KEYBOARD some startup time
+    // otherwise keyboard and touch screen will not work
+    delay(800);
 #endif
 
     // Currently only the tbeam has a PMU
@@ -354,8 +381,19 @@ void setup()
             kb_model = 0x02;
             break;
         case ScanI2C::DeviceType::CARDKB:
+            kb_model = 0x00;
+            break;
+        case ScanI2C::DeviceType::TDECKKB:
+            // assign an arbitrary value to distinguish from other models
+            kb_model = 0x10;
+            break;
+        case ScanI2C::DeviceType::BBQ10KB:
+            // assign an arbitrary value to distinguish from other models
+            kb_model = 0x11;
+            break;
         default:
             // use this as default since it's also just zero
+            LOG_WARN("kb_info.type is unknown(0x%02x), setting kb_model=0x00\n", kb_info.type);
             kb_model = 0x00;
         }
     }
@@ -440,8 +478,13 @@ void setup()
 #ifdef ARCH_NRF52
     nrf52Setup();
 #endif
+
+#ifdef ARCH_RP2040
+    rp2040Setup();
+#endif
+
     // We do this as early as possible because this loads preferences from flash
-    // but we need to do this after main cpu iniot (esp32setup), because we need the random seed set
+    // but we need to do this after main cpu init (esp32setup), because we need the random seed set
     nodeDB.init();
 
     // If we're taking on the repeater role, use flood router
@@ -472,8 +515,17 @@ void setup()
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
+        config.display.wake_on_tap_or_motion = true;
+        moduleConfig.external_notification.enabled = true;
         accelerometerThread = new AccelerometerThread(acc_info.type);
     }
+#endif
+
+#ifdef T_WATCH_S3
+    drv.begin();
+    drv.selectLibrary(1);
+    // I2C trigger by sending 'go' command
+    drv.setMode(DRV2605_MODE_INTTRIG);
 #endif
 
     // Init our SPI controller (must be before screen and lora)
@@ -497,6 +549,7 @@ void setup()
 #else
     // ESP32
     SPI.begin(RF95_SCK, RF95_MISO, RF95_MOSI, RF95_NSS);
+    LOG_WARN("SPI.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)\n", RF95_SCK, RF95_MISO, RF95_MOSI, RF95_NSS);
     SPI.setFrequency(4000000);
 #endif
 
@@ -528,7 +581,7 @@ void setup()
 
 // Don't call screen setup until after nodedb is setup (because we need
 // the current region name)
-#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER)
+#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS)
     screen->setup();
 #else
     if (screen_found.port != ScanI2C::I2CPort::NO_I2C)

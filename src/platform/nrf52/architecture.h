@@ -66,6 +66,14 @@
 
 #endif
 
+#ifdef _SEEED_XIAO_NRF52840_SENSE_H_
+
+// This board uses 0 to be mean LED on
+#undef LED_INVERTED
+#define LED_INVERTED 1
+
+#endif
+
 #ifndef TTGO_T_ECHO
 #define GPS_UBLOX
 #endif

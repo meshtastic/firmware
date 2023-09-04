@@ -279,6 +279,14 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_remote_hardware_tag;
             fromRadioScratch.moduleConfig.payload_variant.remote_hardware = moduleConfig.remote_hardware;
             break;
+        case meshtastic_ModuleConfig_neighbor_info_tag:
+            fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_neighbor_info_tag;
+            fromRadioScratch.moduleConfig.payload_variant.neighbor_info = moduleConfig.neighbor_info;
+            break;
+        case meshtastic_ModuleConfig_detection_sensor_tag:
+            fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_detection_sensor_tag;
+            fromRadioScratch.moduleConfig.payload_variant.detection_sensor = moduleConfig.detection_sensor;
+            break;
         default:
             LOG_ERROR("Unknown module config type %d\n", config_state);
         }

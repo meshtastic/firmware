@@ -38,6 +38,12 @@ extern bool isUSBPowered;
 extern ATECCX08A atecc;
 #endif
 
+#ifdef T_WATCH_S3
+#include <Adafruit_DRV2605.h>
+extern Adafruit_DRV2605 drv;
+#endif
+extern bool isVibrating;
+
 extern int TCPPort; // set by Portduino
 
 // Global Screen singleton.
@@ -62,7 +68,7 @@ extern uint32_t serialSinceMsec;
 // This will suppress the current delay and instead try to run ASAP.
 extern bool runASAP;
 
-void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop(), clearBonds();
+void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop(), rp2040Setup(), clearBonds();
 
 meshtastic_DeviceMetadata getDeviceMetadata();
 

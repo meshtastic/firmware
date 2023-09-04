@@ -53,6 +53,7 @@ class Screen
 #include "commands.h"
 #include "concurrency/LockGuard.h"
 #include "concurrency/OSThread.h"
+#include "input/InputBroker.h"
 #include "mesh/MeshModule.h"
 #include "power.h"
 #include <string>
@@ -118,6 +119,8 @@ class Screen : public concurrency::OSThread
         CallbackObserver<Screen, const meshtastic_MeshPacket *>(this, &Screen::handleTextMessage);
     CallbackObserver<Screen, const UIFrameEvent *> uiFrameEventObserver =
         CallbackObserver<Screen, const UIFrameEvent *>(this, &Screen::handleUIFrameEvent);
+    CallbackObserver<Screen, const InputEvent *> inputObserver =
+        CallbackObserver<Screen, const InputEvent *>(this, &Screen::handleInputEvent);
 
   public:
     explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
@@ -152,8 +155,10 @@ class Screen : public concurrency::OSThread
 
     void blink();
 
-    /// Handles a button press.
+    /// Handle button press, trackball or swipe action)
     void onPress() { enqueueCmd(ScreenCmd{.cmd = Cmd::ON_PRESS}); }
+    void showPrevFrame() { enqueueCmd(ScreenCmd{.cmd = Cmd::SHOW_PREV_FRAME}); }
+    void showNextFrame() { enqueueCmd(ScreenCmd{.cmd = Cmd::SHOW_NEXT_FRAME}); }
 
     // Implementation to Adjust Brightness
     void adjustBrightness();
@@ -301,9 +306,11 @@ class Screen : public concurrency::OSThread
     // Use this handle to set things like battery status, user count, GPS status, etc.
     DebugInfo *debug_info() { return &debugInfo; }
 
+    // Handle observer events
     int handleStatusUpdate(const meshtastic::Status *arg);
     int handleTextMessage(const meshtastic_MeshPacket *arg);
     int handleUIFrameEvent(const UIFrameEvent *arg);
+    int handleInputEvent(const InputEvent *arg);
 
     /// Used to force (super slow) eink displays to draw critical frames
     void forceDisplay();
@@ -343,6 +350,8 @@ class Screen : public concurrency::OSThread
     // Implementations of various commands, called from doTask().
     void handleSetOn(bool on);
     void handleOnPress();
+    void handleShowNextFrame();
+    void handleShowPrevFrame();
     void handleStartBluetoothPinScreen(uint32_t pin);
     void handlePrint(const char *text);
     void handleStartFirmwareUpdateScreen();
@@ -380,7 +389,7 @@ class Screen : public concurrency::OSThread
     SH1106Wire dispdev;
 #elif defined(USE_SSD1306)
     SSD1306Wire dispdev;
-#elif defined(ST7735_CS) || defined(ILI9341_DRIVER)
+#elif defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ST7789_CS)
     TFTDisplay dispdev;
 #elif defined(USE_EINK)
     EInkDisplay dispdev;
