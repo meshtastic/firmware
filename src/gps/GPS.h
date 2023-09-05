@@ -62,6 +62,8 @@ class GPS : private concurrency::OSThread
     /** If !NULL we will use this serial port to construct our GPS */
     static HardwareSerial *_serial_gps;
 
+    static const uint8_t _message_PMREQ[8];
+
     meshtastic_Position p = meshtastic_Position_init_default;
 
     GPS() : concurrency::OSThread("GPS") {}
@@ -100,6 +102,12 @@ class GPS : private concurrency::OSThread
 
     // Empty the input buffer as quickly as possible
     void clearBuffer();
+
+    // Create a ublox packet for editing in memory
+    uint8_t makeUBXPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_size, const uint8_t *msg);
+
+    // scratch space for creating ublox packets
+    uint8_t UBXscratch[250] = {0};
 
   protected:
     /// Do gps chipset specific init, return true for success
@@ -151,7 +159,7 @@ class GPS : private concurrency::OSThread
     int prepareDeepSleep(void *unused);
 
     // Calculate checksum
-    void UBXChecksum(byte *message, size_t length);
+    void UBXChecksum(uint8_t *message, size_t length);
 
     /**
      * Switch the GPS into a mode where we are actively looking for a lock, or alternatively switch GPS into a low power mode
