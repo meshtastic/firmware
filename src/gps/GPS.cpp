@@ -28,11 +28,19 @@ GPS *gps;
 /// Multiple GPS instances might use the same serial port (in sequence), but we can
 /// only init that port once.
 static bool didSerialInit;
+uint8_t UBXscratch[250] = {0};
 
 struct uBloxGnssModelInfo info;
 uint8_t uBloxProtocolVersion;
 
-void GPS::UBXChecksum(byte *message, size_t length)
+const uint8_t GPS::_message_PMREQ[] PROGMEM = {
+    0x00, 0x00, // 4 bytes duration of request task
+    0x00, 0x00, // (milliseconds)
+    0x02, 0x00, // Task flag bitfield
+    0x00, 0x00, // byte index 1 = sleep mode
+};
+
+void GPS::UBXChecksum(uint8_t *message, size_t length)
 {
     uint8_t CK_A = 0, CK_B = 0;
 
@@ -45,6 +53,27 @@ void GPS::UBXChecksum(byte *message, size_t length)
     // Place the calculated checksum values in the message
     message[length - 2] = CK_A;
     message[length - 1] = CK_B;
+}
+
+// Function to create a ublox packet for editing in memory
+uint8_t GPS::makeUBXPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_size, const uint8_t *msg)
+{
+    // Construct the UBX packet
+    UBXscratch[0] = 0xB5;         // header
+    UBXscratch[1] = 0x62;         // header
+    UBXscratch[2] = class_id;     // class
+    UBXscratch[3] = msg_id;       // id
+    UBXscratch[4] = payload_size; // length
+    UBXscratch[5] = 0x00;
+
+    UBXscratch[6 + payload_size] = 0x00; // CK_A
+    UBXscratch[7 + payload_size] = 0x00; // CK_B
+
+    for (int i = 0; i < payload_size; i++) {
+        UBXscratch[6 + i] = pgm_read_byte(&msg[i]);
+    }
+    UBXChecksum(UBXscratch, (payload_size + 8));
+    return (payload_size + 8);
 }
 
 GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
