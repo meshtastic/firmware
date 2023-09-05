@@ -203,8 +203,10 @@ Pass it to an upper client; do not persist this data on the mesh
 */
 bool NeighborInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_NeighborInfo *np)
 {
-    printNeighborInfo("RECEIVED", np);
-    updateNeighbors(mp, np);
+    if (enabled) {
+        printNeighborInfo("RECEIVED", np);
+        updateNeighbors(mp, np);
+    }
     // Allow others to handle this packet
     return false;
 }
