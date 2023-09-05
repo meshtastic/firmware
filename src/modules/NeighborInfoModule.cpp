@@ -99,7 +99,6 @@ NeighborInfoModule::NeighborInfoModule()
         setIntervalFromNow(35 * 1000);
     } else {
         LOG_DEBUG("NeighborInfoModule is disabled\n");
-        neighborState = meshtastic_NeighborInfo_init_zero;
         disable();
     }
 }
@@ -203,8 +202,10 @@ Pass it to an upper client; do not persist this data on the mesh
 */
 bool NeighborInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_NeighborInfo *np)
 {
-    printNeighborInfo("RECEIVED", np);
-    updateNeighbors(mp, np);
+    if (enabled) {
+        printNeighborInfo("RECEIVED", np);
+        updateNeighbors(mp, np);
+    }
     // Allow others to handle this packet
     return false;
 }
