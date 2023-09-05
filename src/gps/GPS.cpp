@@ -32,7 +32,14 @@ static bool didSerialInit;
 struct uBloxGnssModelInfo info;
 uint8_t uBloxProtocolVersion;
 
-void GPS::UBXChecksum(byte *message, size_t length)
+const uint8_t GPS::_message_PMREQ[] PROGMEM = {
+    0x00, 0x00, // 4 bytes duration of request task
+    0x00, 0x00, // (milliseconds)
+    0x02, 0x00, // Task flag bitfield
+    0x00, 0x00, // byte index 1 = sleep mode
+};
+
+void GPS::UBXChecksum(uint8_t *message, size_t length)
 {
     uint8_t CK_A = 0, CK_B = 0;
 
@@ -45,6 +52,27 @@ void GPS::UBXChecksum(byte *message, size_t length)
     // Place the calculated checksum values in the message
     message[length - 2] = CK_A;
     message[length - 1] = CK_B;
+}
+
+// Function to create a ublox packet for editing in memory
+uint8_t GPS::makeUBXPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_size, const uint8_t *msg)
+{
+    // Construct the UBX packet
+    UBXscratch[0] = 0xB5;         // header
+    UBXscratch[1] = 0x62;         // header
+    UBXscratch[2] = class_id;     // class
+    UBXscratch[3] = msg_id;       // id
+    UBXscratch[4] = payload_size; // length
+    UBXscratch[5] = 0x00;
+
+    UBXscratch[6 + payload_size] = 0x00; // CK_A
+    UBXscratch[7 + payload_size] = 0x00; // CK_B
+
+    for (int i = 0; i < payload_size; i++) {
+        UBXscratch[6 + i] = pgm_read_byte(&msg[i]);
+    }
+    UBXChecksum(UBXscratch, (payload_size + 8));
+    return (payload_size + 8);
 }
 
 GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
@@ -306,7 +334,7 @@ bool GPS::setupGPS()
         } else if (gnssModel == GNSS_MODEL_UBLOX) {
             /*
             uint8_t buffer[768] = {0};
-            byte _message_GNSS[8] = {0xb5, 0x62, // Sync message for UBX protocol
+            uint8_t _message_GNSS[8] = {0xb5, 0x62, // Sync message for UBX protocol
                                         0x06, 0x3e, // Message class and ID (UBX-CFG-GNSS)
                                         0x00, 0x00, // Length of payload (28 bytes)
                                         0x00, 0x00};
@@ -330,7 +358,7 @@ bool GPS::setupGPS()
                 0) { // The original ublox 6 is GPS only and doesn't support the UBX-CFG-GNSS message
                 if (strncmp(info.hwVersion, "00070000", 8) == 0) { // Max7 seems to only support GPS *or* GLONASS
                     LOG_DEBUG("Setting GPS+SBAS\n");
-                    byte _message_GNSS[28] = {
+                    uint8_t _message_GNSS[28] = {
                         0xb5, 0x62, // Sync message for UBX protocol
                         0x06, 0x3e, // Message class and ID (UBX-CFG-GNSS)
                         0x14, 0x00, // Length of payload (28 bytes)
@@ -348,7 +376,7 @@ bool GPS::setupGPS()
                     // Send the message to the module
                     _serial_gps->write(_message_GNSS, sizeof(_message_GNSS));
                 } else {
-                    byte _message_GNSS[36] = {
+                    uint8_t _message_GNSS[36] = {
                         0xb5, 0x62, // Sync message for UBX protocol
                         0x06, 0x3e, // Message class and ID (UBX-CFG-GNSS)
                         0x1c, 0x00, // Length of payload (28 bytes)
@@ -390,7 +418,7 @@ bool GPS::setupGPS()
 
             // Enable interference resistance, because we are using LoRa, WiFi and Bluetooth on same board,
             // and we need to reduce interference from them
-            byte _message_JAM[16] = {
+            uint8_t _message_JAM[16] = {
                 0xB5, 0x62, // UBX protocol sync characters
                 0x06, 0x39, // Message class and ID (UBX-CFG-ITFM)
                 0x08, 0x00, // Length of payload (8 bytes)
@@ -419,7 +447,7 @@ bool GPS::setupGPS()
             }
 
             // Configure navigation engine expert settings:
-            byte _message_NAVX5[48] = {
+            uint8_t _message_NAVX5[48] = {
                 0xb5, 0x62, // UBX protocol sync characters
                 0x06, 0x23, // Message class and ID (UBX-CFG-NAVX5)
                 0x28, 0x00, // Length of payload (40 bytes)
@@ -469,7 +497,7 @@ bool GPS::setupGPS()
             // Lowering the update rate helps to save power.
             // Additionally, for some new modules like the M9/M10, an update rate lower than 5Hz
             // is recommended to avoid a known issue with satellites disappearing.
-            byte _message_1Hz[] = {
+            uint8_t _message_1Hz[] = {
                 0xB5, 0x62, // UBX protocol sync characters
                 0x06, 0x08, // Message class and ID (UBX-CFG-RATE)
                 0x06, 0x00, // Length of payload (6 bytes)
@@ -491,7 +519,7 @@ bool GPS::setupGPS()
 
             // Disable GGL. GGL - Geographic position (latitude and longitude), which provides the current geographical
             // coordinates.
-            byte _message_GGL[] = {
+            uint8_t _message_GGL[] = {
                 0xB5, 0x62,             // UBX sync characters
                 0x06, 0x01,             // Message class and ID (UBX-CFG-MSG)
                 0x08, 0x00,             // Length of payload (8 bytes)
@@ -514,7 +542,7 @@ bool GPS::setupGPS()
 
             // Enable GSA. GSA - GPS DOP and active satellites, used for detailing the satellites used in the positioning and
             // the DOP (Dilution of Precision)
-            byte _message_GSA[] = {
+            uint8_t _message_GSA[] = {
                 0xB5, 0x62,             // UBX sync characters
                 0x06, 0x01,             // Message class and ID (UBX-CFG-MSG)
                 0x08, 0x00,             // Length of payload (8 bytes)
@@ -531,7 +559,7 @@ bool GPS::setupGPS()
             }
 
             // Disable GSV. GSV - Satellites in view, details the number and location of satellites in view.
-            byte _message_GSV[] = {
+            uint8_t _message_GSV[] = {
                 0xB5, 0x62,             // UBX sync characters
                 0x06, 0x01,             // Message class and ID (UBX-CFG-MSG)
                 0x08, 0x00,             // Length of payload (8 bytes)
@@ -549,7 +577,7 @@ bool GPS::setupGPS()
 
             // Disable VTG. VTG - Track made good and ground speed, which provides course and speed information relative to
             // the ground.
-            byte _message_VTG[] = {
+            uint8_t _message_VTG[] = {
                 0xB5, 0x62,             // UBX sync characters
                 0x06, 0x01,             // Message class and ID (UBX-CFG-MSG)
                 0x08, 0x00,             // Length of payload (8 bytes)
@@ -566,7 +594,7 @@ bool GPS::setupGPS()
             }
 
             // Enable RMC. RMC - Recommended Minimum data, the essential gps pvt (position, velocity, time) data.
-            byte _message_RMC[] = {
+            uint8_t _message_RMC[] = {
                 0xB5, 0x62,             // UBX sync characters
                 0x06, 0x01,             // Message class and ID (UBX-CFG-MSG)
                 0x08, 0x00,             // Length of payload (8 bytes)
@@ -583,7 +611,7 @@ bool GPS::setupGPS()
             }
 
             // Enable GGA. GGA - Global Positioning System Fix Data, which provides 3D location and accuracy data.
-            byte _message_GGA[] = {
+            uint8_t _message_GGA[] = {
                 0xB5, 0x62,             // UBX sync characters
                 0x06, 0x01,             // Message class and ID (UBX-CFG-MSG)
                 0x08, 0x00,             // Length of payload (8 bytes)
@@ -635,7 +663,7 @@ bool GPS::setupGPS()
                 }
             }
             // We need save configuration to flash to make our config changes persistent
-            byte _message_SAVE[21] = {
+            uint8_t _message_SAVE[21] = {
                 0xB5, 0x62,             // UBX protocol header
                 0x06, 0x09,             // UBX class ID (Configuration Input Messages), message ID (UBX-CFG-CFG)
                 0x0D, 0x00,             // Length of payload (13 bytes)
@@ -1000,8 +1028,8 @@ GnssModel_t GPS::probe(int serialSpeed)
     // setting will not output command messages in UART1, resulting in unrecognized module information
     if (serialSpeed != 9600) {
         // Set the UART port to 9600
-        byte _message_prt[] = {0xB5, 0x62, 0x06, 0x00, 0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0xD0, 0x08, 0x00, 0x00,
-                               0x80, 0x25, 0x00, 0x00, 0x07, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+        uint8_t _message_prt[] = {0xB5, 0x62, 0x06, 0x00, 0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0xD0, 0x08, 0x00, 0x00,
+                                  0x80, 0x25, 0x00, 0x00, 0x07, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
         UBXChecksum(_message_prt, sizeof(_message_prt));
         _serial_gps->write(_message_prt, sizeof(_message_prt));
         delay(500);
@@ -1016,7 +1044,7 @@ GnssModel_t GPS::probe(int serialSpeed)
     }
 
     memset(buffer, 0, sizeof(buffer));
-    byte _message_MONVER[8] = {
+    uint8_t _message_MONVER[8] = {
         0xB5, 0x62, // Sync message for UBX protocol
         0x0A, 0x04, // Message class and ID (UBX-MON-VER)
         0x00, 0x00, // Length of payload (we're asking for an answer, so no payload)
