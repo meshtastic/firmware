@@ -71,30 +71,74 @@ int32_t KbI2cBase::runOnce()
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
                 e.source = this->_originName;
                 switch (key.key) {
-                case 0x1b: // ESC
-                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL;
+                case 'p': // TAB
+                case 't': // TAB as well
+                    if (is_sym) {
+                        e.inputEvent = ANYKEY;
+                        e.kbchar = 0x09; // TAB Scancode
+                        is_sym = false;  // reset sym state after second keypress
+                    } else {
+                        e.inputEvent = ANYKEY;
+                        e.kbchar = key.key;
+                    }
+                    break;
+                case 'q': // ESC
+                    if (is_sym) {
+                        e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL;
+                        e.kbchar = 0x1b;
+                        is_sym = false; // reset sym state after second keypress
+                    } else {
+                        e.inputEvent = ANYKEY;
+                        e.kbchar = key.key;
+                    }
                     break;
                 case 0x08: // Back
                     e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK;
                     e.kbchar = key.key;
                     break;
-                case 0x12: // sym shift+2
-                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP;
-                    e.kbchar = 0xb5;
+                case 'e': // sym e
+                    if (is_sym) {
+                        e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP;
+                        e.kbchar = 0xb5;
+                        is_sym = false; // reset sym state after second keypress
+                    } else {
+                        e.inputEvent = ANYKEY;
+                        e.kbchar = key.key;
+                    }
                     break;
-                case 0x18: // sym shift+8
-                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN;
-                    e.kbchar = 0xb6;
+                case 'x': // sym x
+                    if (is_sym) {
+                        e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN;
+                        e.kbchar = 0xb6;
+                        is_sym = false; // reset sym state after second keypress
+                    } else {
+                        e.inputEvent = ANYKEY;
+                        e.kbchar = key.key;
+                    }
                     break;
-                case 0x14: // Left (sym shift+4)
-                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT;
-                    e.kbchar = 0x00; // tweak for destSelect
+                case 's': // sym s
+                    if (is_sym) {
+                        e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT;
+                        e.kbchar = 0x00; // tweak for destSelect
+                        is_sym = false;  // reset sym state after second keypress
+                    } else {
+                        e.inputEvent = ANYKEY;
+                        e.kbchar = key.key;
+                    }
                     break;
-                case 0x16: // Right (sym shift+6)
-                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
-                    e.kbchar = 0x00; // tweak for destSelect
+                case 'f': // sym f
+                    if (is_sym) {
+                        e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
+                        e.kbchar = 0x00; // tweak for destSelect
+                        is_sym = false;  // reset sym state after second keypress
+                    } else {
+                        e.inputEvent = ANYKEY;
+                        e.kbchar = key.key;
+                    }
                     break;
-                case 0x0d: // Enter
+                case 0x13: // Code scanner says the SYM key is 0x13
+                    is_sym = !is_sym;
+                    break;
                 case 0x0a: // apparently Enter on Q10 is a line feed instead of carriage return
                     e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
                     break;
@@ -104,6 +148,7 @@ int32_t KbI2cBase::runOnce()
                 default: // all other keys
                     e.inputEvent = ANYKEY;
                     e.kbchar = key.key;
+                    is_sym = false; // reset sym state after second keypress
                     break;
                 }
 

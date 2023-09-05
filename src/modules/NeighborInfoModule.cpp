@@ -99,18 +99,9 @@ NeighborInfoModule::NeighborInfoModule()
         setIntervalFromNow(35 * 1000);
     } else {
         LOG_DEBUG("NeighborInfoModule is disabled\n");
+        neighborState = meshtastic_NeighborInfo_init_zero;
         disable();
     }
-}
-
-/*
-Allocate a zeroed neighbor info packet
-*/
-meshtastic_NeighborInfo *NeighborInfoModule::allocateNeighborInfoPacket()
-{
-    meshtastic_NeighborInfo *neighborInfo = (meshtastic_NeighborInfo *)malloc(sizeof(meshtastic_NeighborInfo));
-    memset(neighborInfo, 0, sizeof(meshtastic_NeighborInfo));
-    return neighborInfo;
 }
 
 /*
@@ -184,14 +175,14 @@ size_t NeighborInfoModule::cleanUpNeighbors()
 /* Send neighbor info to the mesh */
 void NeighborInfoModule::sendNeighborInfo(NodeNum dest, bool wantReplies)
 {
-    meshtastic_NeighborInfo *neighborInfo = allocateNeighborInfoPacket();
-    collectNeighborInfo(neighborInfo);
-    meshtastic_MeshPacket *p = allocDataProtobuf(*neighborInfo);
+    meshtastic_NeighborInfo neighborInfo = meshtastic_NeighborInfo_init_zero;
+    collectNeighborInfo(&neighborInfo);
+    meshtastic_MeshPacket *p = allocDataProtobuf(neighborInfo);
     // send regardless of whether or not we have neighbors in our DB,
     // because we want to get neighbors for the next cycle
     p->to = dest;
     p->decoded.want_response = wantReplies;
-    printNeighborInfo("SENDING", neighborInfo);
+    printNeighborInfo("SENDING", &neighborInfo);
     service.sendToMesh(p, RX_SRC_LOCAL, true);
 }
 
@@ -277,7 +268,7 @@ meshtastic_Neighbor *NeighborInfoModule::getOrCreateNeighbor(NodeNum originalSen
     }
     // otherwise, allocate one and assign data to it
     // TODO: max memory for the database should take neighbors into account, but currently doesn't
-    if (*numNeighbors < MAX_NUM_NODES) {
+    if (*numNeighbors < MAX_NUM_NEIGHBORS) {
         (*numNeighbors)++;
     }
     meshtastic_Neighbor *new_nbr = &neighbors[((*numNeighbors) - 1)];
