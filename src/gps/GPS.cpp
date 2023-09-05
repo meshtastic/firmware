@@ -356,47 +356,48 @@ bool GPS::setupGPS()
             // Also we need SBAS for better accuracy and extra features
             // ToDo: Dynamic configure GNSS systems depending of LoRa region
 
-            if ((strncmp(info.hwVersion, "00070000", 8) == 0) || // Max7 seems to only support GPS *or* GLONASS
-                (strncmp(info.hwVersion, "00040007", 8) == 0)) {
-                LOG_DEBUG("Setting GPS+SBAS\n");
-                byte _message_GNSS[28] = {
-                    0xb5, 0x62, // Sync message for UBX protocol
-                    0x06, 0x3e, // Message class and ID (UBX-CFG-GNSS)
-                    0x14, 0x00, // Length of payload (28 uint8_ts)
-                    0x00,       // msgVer (0 for this version)
-                    0x00,       // numTrkChHw (max number of hardware channels, read only, so it's always 0)
-                    0xff,       // numTrkChUse (max number of channels to use, 0xff = max available)
-                    0x02,       // numConfigBlocks (number of GNSS systems), most modules support maximum 3 GNSS systems
-                    // GNSS config format: gnssId, resTrkCh, maxTrkCh, reserved1, flags
-                    0x00, 0x08, 0x10, 0x00, 0x01, 0x00, 0x00, 0x01, // GPS
-                    0x01, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x01, // SBAS
-                    0x00, 0x00                                      // Checksum (to be calculated below)
-                };
-                // Calculate the checksum and update the message.
-                UBXChecksum(_message_GNSS, sizeof(_message_GNSS));
-                // Send the message to the module
-                _serial_gps->write(_message_GNSS, sizeof(_message_GNSS));
-            } else {
-                uint8_t _message_GNSS[36] = {
-                    0xb5, 0x62, // Sync message for UBX protocol
-                    0x06, 0x3e, // Message class and ID (UBX-CFG-GNSS)
-                    0x1c, 0x00, // Length of payload (28 bytes)
-                    0x00,       // msgVer (0 for this version)
-                    0x00,       // numTrkChHw (max number of hardware channels, read only, so it's always 0)
-                    0xff,       // numTrkChUse (max number of channels to use, 0xff = max available)
-                    0x03,       // numConfigBlocks (number of GNSS systems), most modules support maximum 3 GNSS systems
-                    // GNSS config format: gnssId, resTrkCh, maxTrkCh, reserved1, flags
-                    0x00, 0x08, 0x10, 0x00, 0x01, 0x00, 0x01, 0x01, // GPS
-                    0x01, 0x01, 0x03, 0x00, 0x01, 0x00, 0x01, 0x01, // SBAS
-                    0x06, 0x08, 0x0e, 0x00, 0x01, 0x00, 0x01, 0x01, // GLONASS
-                    0x00, 0x00                                      // Checksum (to be calculated below)
-                };
-                // Calculate the checksum and update the message.
-                UBXChecksum(_message_GNSS, sizeof(_message_GNSS));
-                // Send the message to the module
-                _serial_gps->write(_message_GNSS, sizeof(_message_GNSS));
+            if (strncmp(info.hwVersion, "00040007", 8) !=
+                0) { // The original ublox 6 is GPS only and doesn't support the UBX-CFG-GNSS message
+                if (strncmp(info.hwVersion, "00070000", 8) == 0) { // Max7 seems to only support GPS *or* GLONASS
+                    LOG_DEBUG("Setting GPS+SBAS\n");
+                    byte _message_GNSS[28] = {
+                        0xb5, 0x62, // Sync message for UBX protocol
+                        0x06, 0x3e, // Message class and ID (UBX-CFG-GNSS)
+                        0x14, 0x00, // Length of payload (28 bytes)
+                        0x00,       // msgVer (0 for this version)
+                        0x00,       // numTrkChHw (max number of hardware channels, read only, so it's always 0)
+                        0xff,       // numTrkChUse (max number of channels to use, 0xff = max available)
+                        0x02,       // numConfigBlocks (number of GNSS systems), most modules support maximum 3 GNSS systems
+                        // GNSS config format: gnssId, resTrkCh, maxTrkCh, reserved1, flags
+                        0x00, 0x08, 0x10, 0x00, 0x01, 0x00, 0x00, 0x01, // GPS
+                        0x01, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x01, // SBAS
+                        0x00, 0x00                                      // Checksum (to be calculated below)
+                    };
+                    // Calculate the checksum and update the message.
+                    UBXChecksum(_message_GNSS, sizeof(_message_GNSS));
+                    // Send the message to the module
+                    _serial_gps->write(_message_GNSS, sizeof(_message_GNSS));
+                } else {
+                    byte _message_GNSS[36] = {
+                        0xb5, 0x62, // Sync message for UBX protocol
+                        0x06, 0x3e, // Message class and ID (UBX-CFG-GNSS)
+                        0x1c, 0x00, // Length of payload (28 bytes)
+                        0x00,       // msgVer (0 for this version)
+                        0x00,       // numTrkChHw (max number of hardware channels, read only, so it's always 0)
+                        0xff,       // numTrkChUse (max number of channels to use, 0xff = max available)
+                        0x03,       // numConfigBlocks (number of GNSS systems), most modules support maximum 3 GNSS systems
+                        // GNSS config format: gnssId, resTrkCh, maxTrkCh, reserved1, flags
+                        0x00, 0x08, 0x10, 0x00, 0x01, 0x00, 0x01, 0x01, // GPS
+                        0x01, 0x01, 0x03, 0x00, 0x01, 0x00, 0x01, 0x01, // SBAS
+                        0x06, 0x08, 0x0e, 0x00, 0x01, 0x00, 0x01, 0x01, // GLONASS
+                        0x00, 0x00                                      // Checksum (to be calculated below)
+                    };
+                    // Calculate the checksum and update the message.
+                    UBXChecksum(_message_GNSS, sizeof(_message_GNSS));
+                    // Send the message to the module
+                    _serial_gps->write(_message_GNSS, sizeof(_message_GNSS));
+                }
             }
-
             if (getACK(0x06, 0x3e, 800) == GNSS_RESPONSE_NAK) {
                 // It's not critical if the module doesn't acknowledge this configuration.
                 // The module should operate adequately with its factory or previously saved settings.
