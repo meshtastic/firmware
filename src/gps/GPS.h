@@ -61,14 +61,13 @@ class GPS : private concurrency::OSThread
   public:
     /** If !NULL we will use this serial port to construct our GPS */
     static HardwareSerial *_serial_gps;
-
+    static const uint8_t _message_PMREQ[8];
     meshtastic_Position p = meshtastic_Position_init_default;
 
     GPS() : concurrency::OSThread("GPS") {}
 
     virtual ~GPS();
 
-    uint8_t _message_PMREQ[16];
     friend void doGPSpowersave(bool on);
     /** We will notify this observable anytime GPS state has changed meaningfully */
     Observable<const meshtastic::GPSStatus *> newStatus;
@@ -102,6 +101,7 @@ class GPS : private concurrency::OSThread
 
     // Empty the input buffer as quickly as possible
     void clearBuffer();
+    uint8_t makeUBXPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_size, const uint8_t *msg);
 
   protected:
     /// Do gps chipset specific init, return true for success
@@ -143,6 +143,8 @@ class GPS : private concurrency::OSThread
 
     void setNumSatellites(uint8_t n);
 
+    uint8_t UBXscratch[250];
+
   private:
     /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
     /// always returns 0 to indicate okay to sleep
@@ -154,8 +156,6 @@ class GPS : private concurrency::OSThread
 
     // Calculate checksum
     void UBXChecksum(uint8_t *message, size_t length);
-
-    uint8_t makeUBXCFG(uint8_t class_id, uint8_t msg_id, uint16_t msglen, const uint8_t *msg);
 
     /**
      * Switch the GPS into a mode where we are actively looking for a lock, or alternatively switch GPS into a low power mode
