@@ -28,7 +28,6 @@ GPS *gps;
 /// Multiple GPS instances might use the same serial port (in sequence), but we can
 /// only init that port once.
 static bool didSerialInit;
-uint8_t UBXscratch[250] = {0};
 
 struct uBloxGnssModelInfo info;
 uint8_t uBloxProtocolVersion;

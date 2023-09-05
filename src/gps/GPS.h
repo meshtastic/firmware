@@ -106,6 +106,9 @@ class GPS : private concurrency::OSThread
     // Create a ublox packet for editing in memory
     uint8_t makeUBXPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_size, const uint8_t *msg);
 
+    // scratch space for creating ublox packets
+    uint8_t UBXscratch[250] = {0};
+
   protected:
     /// Do gps chipset specific init, return true for success
     virtual bool setupGPS();
@@ -145,9 +148,6 @@ class GPS : private concurrency::OSThread
     void setConnected();
 
     void setNumSatellites(uint8_t n);
-
-    // scratch space for creating ublox packets
-    uint8_t UBXscratch[250];
 
   private:
     /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
