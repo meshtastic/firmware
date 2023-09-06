@@ -3,6 +3,7 @@
 #include "RTC.h"
 #include "configuration.h"
 #include "sleep.h"
+#include "ubx.h"
 
 #ifdef ARCH_PORTDUINO
 #include "meshUtils.h"
@@ -31,13 +32,6 @@ static bool didSerialInit;
 
 struct uBloxGnssModelInfo info;
 uint8_t uBloxProtocolVersion;
-
-const uint8_t GPS::_message_PMREQ[] PROGMEM = {
-    0x00, 0x00, // 4 bytes duration of request task
-    0x00, 0x00, // (milliseconds)
-    0x02, 0x00, // Task flag bitfield
-    0x00, 0x00, // byte index 1 = sleep mode
-};
 
 void GPS::UBXChecksum(uint8_t *message, size_t length)
 {
@@ -662,7 +656,24 @@ bool GPS::setupGPS()
                     LOG_WARN("Unable to enable powersaving for GPS.\n");
                 }
             } else {
-                // use cfg-rxm
+                if (strncmp(info.hwVersion, "00040007", 8) == 0) { // This PSM mode has only been tested on this hardware
+                    int msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_PSM);
+                    _serial_gps->write(UBXscratch, msglen);
+                    if (getACK(0x06, 0x11, 300) != GNSS_RESPONSE_OK) {
+                        LOG_WARN("Unable to enable powersaving mode for GPS.\n");
+                    }
+                    msglen = makeUBXPacket(0x06, 0x3B, 44, _message_CFG_PM2);
+                    _serial_gps->write(UBXscratch, msglen);
+                    if (getACK(0x06, 0x3B, 300) != GNSS_RESPONSE_OK) {
+                        LOG_WARN("Unable to enable powersaving details for GPS.\n");
+                    }
+                } else {
+                    int msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_ECO);
+                    _serial_gps->write(UBXscratch, msglen);
+                    if (getACK(0x06, 0x11, 300) != GNSS_RESPONSE_OK) {
+                        LOG_WARN("Unable to enable powersaving ECO mode for GPS.\n");
+                    }
+                }
             }
             // We need save configuration to flash to make our config changes persistent
             uint8_t _message_SAVE[21] = {
