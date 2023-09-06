@@ -228,7 +228,6 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define GPS_TX_PIN PIN_SERIAL1_TX
 
 // Define pin to enable GPS toggle (set GPIO to LOW) via user button triple press
-#define PIN_GPS_EN 34 // GPS power enable pin
 
 // RAK12002 RTC Module
 #define RV3028_RTC (uint8_t)0b1010010
