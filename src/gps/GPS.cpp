@@ -661,6 +661,8 @@ bool GPS::setupGPS()
                 if (getACK(0x06, 0x86, 300) != GNSS_RESPONSE_OK) {
                     LOG_WARN("Unable to enable powersaving for GPS.\n");
                 }
+            } else {
+                // use cfg-rxm
             }
             // We need save configuration to flash to make our config changes persistent
             uint8_t _message_SAVE[21] = {
@@ -721,7 +723,6 @@ bool GPS::setup()
 
     if (config.position.gps_enabled == false && config.position.fixed_position == false) {
         setAwake(false);
-        doGPSpowersave(false);
     }
     return ok;
 }
