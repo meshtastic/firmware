@@ -562,6 +562,9 @@ void setup()
 
     if (gps) {
         gpsStatus->observe(&gps->newStatus);
+        if (config.position.gps_enabled == false && config.position.fixed_position == false) {
+            doGPSpowersave(false);
+        }
     } else {
         LOG_WARN("No GPS found - running without GPS\n");
     }
