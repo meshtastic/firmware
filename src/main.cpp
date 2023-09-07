@@ -73,6 +73,7 @@ NRF52Bluetooth *nrf52Bluetooth;
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 #include "AccelerometerThread.h"
+#include "AmbientLightingThread.h"
 #endif
 
 using namespace concurrency;
@@ -169,6 +170,7 @@ static OSThread *buttonThread;
 uint32_t ButtonThread::longPressTime = 0;
 #endif
 static OSThread *accelerometerThread;
+static OSThread *ambientLightingThread;
 SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 
 RadioInterface *rIf = NULL;
@@ -409,14 +411,6 @@ void setup()
 // Only one supported RGB LED currently
 #ifdef HAS_NCP5623
     rgb_found = i2cScanner->find(ScanI2C::DeviceType::NCP5623);
-
-    // Start the RGB LED at 50%
-
-    if (rgb_found.type == ScanI2C::NCP5623) {
-        rgb.begin();
-        rgb.setCurrent(10);
-        rgb.setColor(128, 128, 128);
-    }
 #endif
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
@@ -518,6 +512,12 @@ void setup()
         config.display.wake_on_tap_or_motion = true;
         moduleConfig.external_notification.enabled = true;
         accelerometerThread = new AccelerometerThread(acc_info.type);
+    }
+#endif
+
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+    if (rgb_found.type != ScanI2C::DeviceType::NONE) {
+        ambientLightingThread = new AmbientLightingThread(rgb_found.type);
     }
 #endif
 
