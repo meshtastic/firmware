@@ -558,17 +558,6 @@ void setup()
 
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 
-    gps = createGps();
-
-    if (gps) {
-        gpsStatus->observe(&gps->newStatus);
-        if (config.position.gps_enabled == false && config.position.fixed_position == false) {
-            doGPSpowersave(false);
-        }
-    } else {
-        LOG_WARN("No GPS found - running without GPS\n");
-    }
-
     nodeStatus->observe(&nodeDB.newStatus);
 
     service.init();
@@ -593,6 +582,16 @@ void setup()
 
     screen->print("Started...\n");
 
+    gps = createGps();
+
+    if (gps) {
+        gpsStatus->observe(&gps->newStatus);
+        if (config.position.gps_enabled == false && config.position.fixed_position == false) {
+            doGPSpowersave(false);
+        }
+    } else {
+        LOG_WARN("No GPS found - running without GPS\n");
+    }
     // We have now loaded our saved preferences from flash
 
     // ONCE we will factory reset the GPS for bug #327
