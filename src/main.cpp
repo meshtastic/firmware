@@ -558,17 +558,6 @@ void setup()
 
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 
-    gps = createGps();
-
-    if (gps) {
-        gpsStatus->observe(&gps->newStatus);
-        if (config.position.gps_enabled == false && config.position.fixed_position == false) {
-            doGPSpowersave(false);
-        }
-    } else {
-        LOG_WARN("No GPS found - running without GPS\n");
-    }
-
     nodeStatus->observe(&nodeDB.newStatus);
 
     service.init();
@@ -592,17 +581,6 @@ void setup()
 #endif
 
     screen->print("Started...\n");
-
-    // We have now loaded our saved preferences from flash
-
-    // ONCE we will factory reset the GPS for bug #327
-    if (gps && !devicestate.did_gps_reset) {
-        LOG_WARN("GPS FactoryReset requested\n");
-        if (gps->factoryReset()) { // If we don't succeed try again next time
-            devicestate.did_gps_reset = true;
-            nodeDB.saveToDisk(SEGMENT_DEVICESTATE);
-        }
-    }
 
 #ifdef SX126X_ANT_SW
     // make analog PA vs not PA switch on SX126x eval board work properly
@@ -758,6 +736,26 @@ void setup()
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
     powerFSMthread = new PowerFSMThread();
 
+    gps = createGps();
+
+    if (gps) {
+        gpsStatus->observe(&gps->newStatus);
+        if (config.position.gps_enabled == false && config.position.fixed_position == false) {
+            doGPSpowersave(false);
+        }
+    } else {
+        LOG_WARN("No GPS found - running without GPS\n");
+    }
+    // We have now loaded our saved preferences from flash
+
+    // ONCE we will factory reset the GPS for bug #327
+    if (gps && !devicestate.did_gps_reset) {
+        LOG_WARN("GPS FactoryReset requested\n");
+        if (gps->factoryReset()) { // If we don't succeed try again next time
+            devicestate.did_gps_reset = true;
+            nodeDB.saveToDisk(SEGMENT_DEVICESTATE);
+        }
+    }
     // setBluetoothEnable(false); we now don't start bluetooth until we enter the proper state
     setCPUFast(false); // 80MHz is fine for our slow peripherals
 }
