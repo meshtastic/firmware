@@ -63,7 +63,9 @@ class GPS : private concurrency::OSThread
     static HardwareSerial *_serial_gps;
 
     static const uint8_t _message_PMREQ[8];
-
+    static const uint8_t _message_CFG_RXM_PSM[2];
+    static const uint8_t _message_CFG_RXM_ECO[2];
+    static const uint8_t _message_CFG_PM2[44];
     meshtastic_Position p = meshtastic_Position_init_default;
 
     GPS() : concurrency::OSThread("GPS") {}
