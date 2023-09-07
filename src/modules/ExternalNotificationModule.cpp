@@ -27,7 +27,6 @@
 
 #ifdef HAS_NCP5623
 #include <graphics/RAKled.h>
-NCP5623 rgb;
 
 uint8_t red = 0;
 uint8_t green = 0;
