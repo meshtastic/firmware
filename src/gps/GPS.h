@@ -52,6 +52,8 @@ class GPS : private concurrency::OSThread
 
     bool hasGPS = false; // Do we have a GPS we are talking to
 
+    bool GPSInitFinished = false; // Init thread finished?
+
     uint8_t numSatellites = 0;
 
     CallbackObserver<GPS, void *> notifySleepObserver = CallbackObserver<GPS, void *>(this, &GPS::prepareSleep);

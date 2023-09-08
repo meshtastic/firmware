@@ -865,6 +865,29 @@ void GPS::publishUpdate()
 
 int32_t GPS::runOnce()
 {
+    if (!GPSInitFinished) {
+        LOG_DEBUG("In GPS RunONce\n");
+        this->setup();
+        if (gps) {
+            gpsStatus->observe(&gps->newStatus);
+            if (config.position.gps_enabled == false && config.position.fixed_position == false) {
+                doGPSpowersave(false);
+            }
+        } else {
+            LOG_WARN("No GPS found - running without GPS\n");
+        }
+        // We have now loaded our saved preferences from flash
+
+        // ONCE we will factory reset the GPS for bug #327
+        if (gps && !devicestate.did_gps_reset) {
+            LOG_WARN("GPS FactoryReset requested\n");
+            if (gps->factoryReset()) { // If we don't succeed try again next time
+                devicestate.did_gps_reset = true;
+                nodeDB.saveToDisk(SEGMENT_DEVICESTATE);
+            }
+        }
+        GPSInitFinished = true;
+    }
     // Repeaters have no need for GPS
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER)
         disable();
@@ -1138,24 +1161,24 @@ GPS *createGps()
 #if !HAS_GPS
     return nullptr;
 #else
-    if (config.position.gps_enabled) {
-#ifdef GPS_ALTITUDE_HAE
-        LOG_DEBUG("Using HAE altitude model\n");
-#else
-        LOG_DEBUG("Using MSL altitude model\n");
-#endif
-        if (GPS::_serial_gps) {
-            // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.
-            // Just assume NMEA at 9600 baud.
-            GPS *new_gps = new NMEAGPS();
-            new_gps->setup();
-            return new_gps;
-        }
-    } else {
-        GPS *new_gps = new NMEAGPS();
-        new_gps->setup();
-        return new_gps;
-    }
-    return nullptr;
+    /*    if (config.position.gps_enabled) {
+    #ifdef GPS_ALTITUDE_HAE
+            LOG_DEBUG("Using HAE altitude model\n");
+    #else
+            LOG_DEBUG("Using MSL altitude model\n");
+    #endif
+            if (GPS::_serial_gps) {
+                // Some boards might have only the TX line from the GPS connected, in that case, we can't configure it at all.
+                // Just assume NMEA at 9600 baud.
+                GPS *new_gps = new NMEAGPS();
+                //new_gps->setup();
+                return new_gps;
+            }
+        } else { */
+    GPS *new_gps = new NMEAGPS();
+    // new_gps->setup();
+    return new_gps;
+    // }
+    // return nullptr;
 #endif
 }
