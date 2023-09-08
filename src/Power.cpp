@@ -497,7 +497,7 @@ void Power::readPowerStatus()
                 if (low_voltage_counter > 10) {
                     LOG_INFO("Low voltage detected, triggering deep sleep\n");
 #ifdef ARCH_NRF52
-                    doDeepSleep(3600)
+                    doDeepSleep(3600);
 #else
                     powerFSM.trigger(EVENT_LOW_BATTERY);
 #endif
