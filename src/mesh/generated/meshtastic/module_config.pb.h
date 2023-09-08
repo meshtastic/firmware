@@ -313,13 +313,14 @@ Initially created for the RAK14001 RGB LED module. */
 typedef struct _meshtastic_ModuleConfig_AmbientLightingConfig {
     /* Sets LED to on or off. */
     bool led_state;
-    /* Sets the overall current for the LED, firmware side range for the RAK14001 is 1-31, but users should be given a range of 0-100% */
+    /* Sets the current for the LED output. Default is 10. */
     uint8_t current;
-    uint8_t red; /* Red level */
-    /* Sets the green level of the LED, firmware side values are 0-255, but users should be given a range of 0-100% */
-    uint8_t green; /* Green level */
-    /* Sets the blue level of the LED, firmware side values are 0-255, but users should be given a range of 0-100% */
-    uint8_t blue; /* Blue level */
+    /* Sets the red LED level. Values are 0-255. */
+    uint8_t red;
+    /* Sets the green LED level. Values are 0-255. */
+    uint8_t green;
+    /* Sets the blue LED level. Values are 0-255. */
+    uint8_t blue;
 } meshtastic_ModuleConfig_AmbientLightingConfig;
 
 /* A GPIO pin definition for remote hardware module */
