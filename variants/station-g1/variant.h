@@ -7,8 +7,8 @@
 #define I2C_SCL1 15 // Second i2c channel on external IO connector
 
 #define BUTTON_PIN 36 // The middle button GPIO on the Nano G1
-//#define BUTTON_PIN_ALT 13 // Alternate GPIO for an external button if needed. Does anyone use this? It is not documented
-// anywhere.
+// #define BUTTON_PIN_ALT 13 // Alternate GPIO for an external button if needed. Does anyone use this? It is not documented
+//  anywhere.
 #define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Module.
 
 // common pinout for their SX1262 vs RF95 modules - both can be enabled and we will probe at runtime for RF95 and if
@@ -27,9 +27,9 @@
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET
-//#define SX126X_E22 // Not really an E22
-// Internally the module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the sx1262interface
-// code)
+// #define SX126X_E22 // Not really an E22
+//  Internally the module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the sx1262interface
+//  code)
 #define SX126X_MAX_POWER                                                                                                         \
     16 // Ensure the PA does not exceed the saturation output power. More
        // Info:https://uniteng.com/wiki/doku.php?id=meshtastic:station#rf_design_-_lora_station_edition_g1
