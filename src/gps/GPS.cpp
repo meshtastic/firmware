@@ -344,8 +344,6 @@ bool GPS::setup()
              * t-beam-s3-core uses the same L76K GNSS module as t-echo.
              * Unlike t-echo, L76K uses 9600 baud rate for communication by default.
              * */
-            // _serial_gps->begin(9600);    //The baud rate of 9600 has been initialized at the beginning of setupGPS, this
-            // line is the redundant part delay(250);
 
             // Initialize the L76K Chip, use GPS + GLONASS + BEIDOU
             _serial_gps->write("$PCAS04,7*1E\r\n");
@@ -380,11 +378,6 @@ bool GPS::setup()
 
                 if (getACK(0x06, 0x3e, 800) == GNSS_RESPONSE_NAK) {
                     // It's not critical if the module doesn't acknowledge this configuration.
-                    // The module should operate adequately with its factory or previously saved settings.
-                    // It appears that there is a firmware bug in some GPS modules: When an attempt is made
-                    // to overwrite a saved state with identical values, no ACK/NAK is received, contrary to
-                    // what is specified in the Ublox documentation.
-                    // There is also a possibility that the module may be GPS-only.
                     LOG_INFO("Unable to reconfigure GNSS - defaults maintained. Is this module GPS-only?\n");
                 } else {
                     if (strncmp(info.hwVersion, "00070000", 8) == 0) {
@@ -398,15 +391,12 @@ bool GPS::setup()
                 }
             }
 
-            // Enable interference resistance, because we are using LoRa, WiFi and Bluetooth on same board,
-            // and we need to reduce interference from them
             msglen = makeUBXPacket(0x06, 0x39, sizeof(_message_JAM), _message_JAM);
             _serial_gps->write(UBXscratch, msglen);
             if (getACK(0x06, 0x39, 300) != GNSS_RESPONSE_OK) {
                 LOG_WARN("Unable to enable interference resistance.\n");
             }
 
-            // Configure navigation engine expert settings:
             msglen = makeUBXPacket(0x06, 0x23, sizeof(_message_NAVX5), _message_NAVX5);
             _serial_gps->write(UBXscratch, msglen);
             if (getACK(0x06, 0x23, 300) != GNSS_RESPONSE_OK) {
@@ -415,155 +405,51 @@ bool GPS::setup()
 
             // ublox-M10S can be compatible with UBLOX traditional protocol, so the following sentence settings are also valid
 
-            // Set GPS update rate to 1Hz
-            // Lowering the update rate helps to save power.
-            // Additionally, for some new modules like the M9/M10, an update rate lower than 5Hz
-            // is recommended to avoid a known issue with satellites disappearing.
             msglen = makeUBXPacket(0x06, 0x08, sizeof(_message_1HZ), _message_1HZ);
             _serial_gps->write(UBXscratch, msglen);
             if (getACK(0x06, 0x08, 300) != GNSS_RESPONSE_OK) {
                 LOG_WARN("Unable to set GPS update rate.\n");
             }
 
-            // Disable GGL. GGL - Geographic position (latitude and longitude), which provides the current geographical
-            // coordinates.
-            uint8_t _message_GGL[] = {
-                0xB5, 0x62,             // UBX sync characters
-                0x06, 0x01,             // Message class and ID (UBX-CFG-MSG)
-                0x08, 0x00,             // Length of payload (8 bytes)
-                0xF0, 0x01,             // NMEA ID for GLL
-                0x01,                   // I/O Target 0=I/O, 1=UART1, 2=UART2, 3=USB, 4=SPI
-                0x00,                   // Disable
-                0x01, 0x01, 0x01, 0x01, // Reserved
-                0x00, 0x00              // CK_A and CK_B (Checksum)
-            };
-
-            // Calculate the checksum and update the message.
-            UBXChecksum(_message_GGL, sizeof(_message_GGL));
-
-            // Send the message to the module
-            _serial_gps->write(_message_GGL, sizeof(_message_GGL));
-
+            msglen = makeUBXPacket(0x06, 0x01, sizeof(_message_GGL), _message_GGL);
+            _serial_gps->write(UBXscratch, msglen);
             if (getACK(0x06, 0x01, 300) != GNSS_RESPONSE_OK) {
                 LOG_WARN("Unable to disable NMEA GGL.\n");
             }
 
-            // Enable GSA. GSA - GPS DOP and active satellites, used for detailing the satellites used in the positioning and
-            // the DOP (Dilution of Precision)
-            uint8_t _message_GSA[] = {
-                0xB5, 0x62,             // UBX sync characters
-                0x06, 0x01,             // Message class and ID (UBX-CFG-MSG)
-                0x08, 0x00,             // Length of payload (8 bytes)
-                0xF0, 0x02,             // NMEA ID for GSA
-                0x01,                   // I/O Target 0=I/O, 1=UART1, 2=UART2, 3=USB, 4=SPI
-                0x01,                   // Enable
-                0x01, 0x01, 0x01, 0x01, // Reserved
-                0x00, 0x00              // CK_A and CK_B (Checksum)
-            };
-            UBXChecksum(_message_GSA, sizeof(_message_GSA));
-            _serial_gps->write(_message_GSA, sizeof(_message_GSA));
+            msglen = makeUBXPacket(0x06, 0x01, sizeof(_message_GSA), _message_GSA);
+            _serial_gps->write(UBXscratch, msglen);
             if (getACK(0x06, 0x01, 300) != GNSS_RESPONSE_OK) {
                 LOG_WARN("Unable to Enable NMEA GSA.\n");
             }
 
-            // Disable GSV. GSV - Satellites in view, details the number and location of satellites in view.
-            uint8_t _message_GSV[] = {
-                0xB5, 0x62,             // UBX sync characters
-                0x06, 0x01,             // Message class and ID (UBX-CFG-MSG)
-                0x08, 0x00,             // Length of payload (8 bytes)
-                0xF0, 0x03,             // NMEA ID for GSV
-                0x01,                   // I/O Target 0=I/O, 1=UART1, 2=UART2, 3=USB, 4=SPI
-                0x00,                   // Disable
-                0x01, 0x01, 0x01, 0x01, // Reserved
-                0x00, 0x00              // CK_A and CK_B (Checksum)
-            };
-            UBXChecksum(_message_GSV, sizeof(_message_GSV));
-            _serial_gps->write(_message_GSV, sizeof(_message_GSV));
+            msglen = makeUBXPacket(0x06, 0x01, sizeof(_message_GSV), _message_GSV);
+            _serial_gps->write(UBXscratch, msglen);
             if (getACK(0x06, 0x01, 300) != GNSS_RESPONSE_OK) {
                 LOG_WARN("Unable to disable NMEA GSV.\n");
             }
 
-            // Disable VTG. VTG - Track made good and ground speed, which provides course and speed information relative to
-            // the ground.
-            uint8_t _message_VTG[] = {
-                0xB5, 0x62,             // UBX sync characters
-                0x06, 0x01,             // Message class and ID (UBX-CFG-MSG)
-                0x08, 0x00,             // Length of payload (8 bytes)
-                0xF0, 0x05,             // NMEA ID for VTG
-                0x01,                   // I/O Target 0=I/O, 1=UART1, 2=UART2, 3=USB, 4=SPI
-                0x00,                   // Disable
-                0x01, 0x01, 0x01, 0x01, // Reserved
-                0x00, 0x00              // CK_A and CK_B (Checksum)
-            };
-            UBXChecksum(_message_VTG, sizeof(_message_VTG));
-            _serial_gps->write(_message_VTG, sizeof(_message_VTG));
+            msglen = makeUBXPacket(0x06, 0x01, sizeof(_message_VTG), _message_VTG);
+            _serial_gps->write(UBXscratch, msglen);
             if (getACK(0x06, 0x01, 300) != GNSS_RESPONSE_OK) {
                 LOG_WARN("Unable to disable NMEA VTG.\n");
             }
 
-            // Enable RMC. RMC - Recommended Minimum data, the essential gps pvt (position, velocity, time) data.
-            uint8_t _message_RMC[] = {
-                0xB5, 0x62,             // UBX sync characters
-                0x06, 0x01,             // Message class and ID (UBX-CFG-MSG)
-                0x08, 0x00,             // Length of payload (8 bytes)
-                0xF0, 0x04,             // NMEA ID for RMC
-                0x01,                   // I/O Target 0=I/O, 1=UART1, 2=UART2, 3=USB, 4=SPI
-                0x01,                   // Enable
-                0x01, 0x01, 0x01, 0x01, // Reserved
-                0x00, 0x00              // CK_A and CK_B (Checksum)
-            };
-            UBXChecksum(_message_RMC, sizeof(_message_RMC));
-            _serial_gps->write(_message_RMC, sizeof(_message_RMC));
+            msglen = makeUBXPacket(0x06, 0x01, sizeof(_message_RMC), _message_RMC);
+            _serial_gps->write(UBXscratch, msglen);
             if (getACK(0x06, 0x01, 300) != GNSS_RESPONSE_OK) {
                 LOG_WARN("Unable to enable NMEA RMC.\n");
             }
 
-            // Enable GGA. GGA - Global Positioning System Fix Data, which provides 3D location and accuracy data.
-            uint8_t _message_GGA[] = {
-                0xB5, 0x62,             // UBX sync characters
-                0x06, 0x01,             // Message class and ID (UBX-CFG-MSG)
-                0x08, 0x00,             // Length of payload (8 bytes)
-                0xF0, 0x00,             // NMEA ID for GGA
-                0x01,                   // I/O Target 0=I/O, 1=UART1, 2=UART2, 3=USB, 4=SPI
-                0x01,                   // Enable
-                0x01, 0x01, 0x01, 0x01, // Reserved
-                0x00, 0x00              // CK_A and CK_B (Checksum)
-            };
-            UBXChecksum(_message_GGA, sizeof(_message_GGA));
-            _serial_gps->write(_message_GGA, sizeof(_message_GGA));
+            msglen = makeUBXPacket(0x06, 0x01, sizeof(_message_GGA), _message_GGA);
+            _serial_gps->write(UBXscratch, msglen);
             if (getACK(0x06, 0x01, 300) != GNSS_RESPONSE_OK) {
                 LOG_WARN("Unable to enable NMEA GGA.\n");
             }
 
-            // The Power Management configuration allows the GPS module to operate in different power modes for optimized
-            // power consumption. The modes supported are: 0x00 = Full power: The module operates at full power with no power
-            // saving. 0x01 = Balanced: The module dynamically adjusts the tracking behavior to balance power consumption.
-            // 0x02 = Interval: The module operates in a periodic mode, cycling between tracking and power saving states.
-            // 0x03 = Aggressive with 1 Hz: The module operates in a power saving mode with a 1 Hz update rate.
-            // 0x04 = Aggressive with 2 Hz: The module operates in a power saving mode with a 2 Hz update rate.
-            // 0x05 = Aggressive with 4 Hz: The module operates in a power saving mode with a 4 Hz update rate.
-            // The 'period' field specifies the position update and search period. It is only valid when the powerSetupValue
-            // is set to Interval; otherwise, it must be set to '0'. The 'onTime' field specifies the duration of the ON phase
-            // and must be smaller than the period. It is only valid when the powerSetupValue is set to Interval; otherwise,
-            // it must be set to '0'.
             if (uBloxProtocolVersion >= 18) {
-                byte UBX_CFG_PMS[16] = {
-                    0xB5, 0x62, // UBX sync characters
-                    0x06, 0x86, // Message class and ID (UBX-CFG-PMS)
-                    0x08, 0x00, // Length of payload (6 bytes)
-                    0x00,       // Version (0)
-                    0x03,       // Power setup value
-                    0x00, 0x00, // period: not applicable, set to 0
-                    0x00, 0x00, // onTime: not applicable, set to 0
-                    0x97, 0x6F, // reserved, generated by u-center
-                    0x00, 0x00  // Placeholder for checksum, will be calculated next
-                };
-
-                // Calculate the checksum and update the message
-                UBXChecksum(UBX_CFG_PMS, sizeof(UBX_CFG_PMS));
-
-                // Send the message to the module
-                _serial_gps->write(UBX_CFG_PMS, sizeof(UBX_CFG_PMS));
+                msglen = makeUBXPacket(0x06, 0x86, sizeof(_message_PMS), _message_PMS);
+                _serial_gps->write(UBXscratch, msglen);
                 if (getACK(0x06, 0x86, 300) != GNSS_RESPONSE_OK) {
                     LOG_WARN("Unable to enable powersaving for GPS.\n");
                 }
@@ -587,24 +473,9 @@ bool GPS::setup()
                     }
                 }
             }
-            // We need save configuration to flash to make our config changes persistent
-            uint8_t _message_SAVE[21] = {
-                0xB5, 0x62,             // UBX protocol header
-                0x06, 0x09,             // UBX class ID (Configuration Input Messages), message ID (UBX-CFG-CFG)
-                0x0D, 0x00,             // Length of payload (13 bytes)
-                0x00, 0x00, 0x00, 0x00, // clearMask: no sections cleared
-                0xFF, 0xFF, 0x00, 0x00, // saveMask: save all sections
-                0x00, 0x00, 0x00, 0x00, // loadMask: no sections loaded
-                0x0F,                   // deviceMask: BBR, Flash, EEPROM, and SPI Flash
-                0x00, 0x00              // Checksum (calculated below)
-            };
 
-            // Calculate the checksum and update the message.
-            UBXChecksum(_message_SAVE, sizeof(_message_SAVE));
-
-            // Send the message to the module
-            _serial_gps->write(_message_SAVE, sizeof(_message_SAVE));
-
+            msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
+            _serial_gps->write(UBXscratch, msglen);
             if (getACK(0x06, 0x09, 300) != GNSS_RESPONSE_OK) {
                 LOG_WARN("Unable to save GNSS module configuration.\n");
             } else {
