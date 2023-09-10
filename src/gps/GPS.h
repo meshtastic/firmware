@@ -37,6 +37,10 @@ class GPS : private concurrency::OSThread
 {
   private:
     uint32_t lastWakeStartMsec = 0, lastSleepStartMsec = 0, lastWhileActiveMsec = 0;
+    const int serialSpeeds[6] = {9600, 4800, 38400, 57600, 115200, 9600};
+
+    int speedSelect = 0;
+    int probeTries = 2;
 
     /**
      * hasValidLocation - indicates that the position variables contain a complete
@@ -53,6 +57,7 @@ class GPS : private concurrency::OSThread
     bool hasGPS = false; // Do we have a GPS we are talking to
 
     bool GPSInitFinished = false; // Init thread finished?
+    bool GPSInitStarted = false;  // Init thread finished?
 
     uint8_t numSatellites = 0;
 
@@ -64,10 +69,16 @@ class GPS : private concurrency::OSThread
     /** If !NULL we will use this serial port to construct our GPS */
     static HardwareSerial *_serial_gps;
 
-    static const uint8_t _message_PMREQ[8];
-    static const uint8_t _message_CFG_RXM_PSM[2];
-    static const uint8_t _message_CFG_RXM_ECO[2];
-    static const uint8_t _message_CFG_PM2[44];
+    static const uint8_t _message_PMREQ[];
+    static const uint8_t _message_CFG_RXM_PSM[];
+    static const uint8_t _message_CFG_RXM_ECO[];
+    static const uint8_t _message_CFG_PM2[];
+    static const uint8_t _message_GNSS_7[];
+    static const uint8_t _message_GNSS[];
+    static const uint8_t _message_JAM[];
+    static const uint8_t _message_NAVX5[];
+    static const uint8_t _message_1HZ[];
+
     meshtastic_Position p = meshtastic_Position_init_default;
 
     GPS() : concurrency::OSThread("GPS") {}
@@ -113,10 +124,11 @@ class GPS : private concurrency::OSThread
     // scratch space for creating ublox packets
     uint8_t UBXscratch[250] = {0};
 
-  protected:
-    /// Do gps chipset specific init, return true for success
-    virtual bool setupGPS();
+    int getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t requestedID, uint32_t waitMillis);
+    GPS_RESPONSE getACK(uint8_t c, uint8_t i, uint32_t waitMillis);
+    GPS_RESPONSE getACK(const char *message, uint32_t waitMillis);
 
+  protected:
     /// If possible force the GPS into sleep/low power mode
     virtual void sleep();
 
@@ -191,9 +203,6 @@ class GPS : private concurrency::OSThread
     String getNMEA();
     GnssModel_t probe(int serialSpeed);
 
-    int getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t requestedID, uint32_t waitMillis);
-    GPS_RESPONSE getACK(uint8_t c, uint8_t i, uint32_t waitMillis);
-    GPS_RESPONSE getACK(const char *message, uint32_t waitMillis);
     // delay counter to allow more sats before fixed position stops GPS thread
     uint8_t fixeddelayCtr = 0;
 

@@ -24,8 +24,6 @@ class NMEAGPS : public GPS
 #endif
 
   public:
-    virtual bool setupGPS() override;
-
     virtual bool factoryReset() override;
 
   protected:
