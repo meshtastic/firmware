@@ -36,30 +36,6 @@ bool NMEAGPS::factoryReset()
     return true;
 }
 
-bool NMEAGPS::setupGPS()
-{
-    GPS::setupGPS();
-
-#ifdef PIN_GPS_PPS
-    // pulse per second
-    // FIXME - move into shared GPS code
-    pinMode(PIN_GPS_PPS, INPUT);
-#endif
-
-// Currently disabled per issue #525 (TinyGPS++ crash bug)
-// when fixed upstream, can be un-disabled to enable 3D FixType and PDOP
-#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-    // see NMEAGPS.h
-    gsafixtype.begin(reader, NMEA_MSG_GXGSA, 2);
-    gsapdop.begin(reader, NMEA_MSG_GXGSA, 15);
-    LOG_DEBUG("Using " NMEA_MSG_GXGSA " for 3DFIX and PDOP\n");
-#else
-    LOG_DEBUG("GxGSA NOT available\n");
-#endif
-
-    return true;
-}
-
 /**
  * Perform any processing that should be done only while the GPS is awake and looking for a fix.
  * Override this method to check for new locations
