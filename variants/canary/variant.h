@@ -46,7 +46,7 @@ extern "C" {
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LEDs
-#define PIN_LED1 (GPIO_PORT1 + 11) // blue P1.01
+#define PIN_LED1 (GPIO_PORT1 + 1) // blue P1.01
 #define PIN_LED2 (GPIO_PORT0 + 14) // yellow P0.14
 #define PIN_LED3 (GPIO_PORT1 + 3)  // green P1.03
 
@@ -129,8 +129,8 @@ static const uint8_t A0 = PIN_A0;
 // #define PIN_GPS_WAKE (GPIO_PORT1 + 2) // An output to wake GPS, low means allow sleep, high means force wake
 // Seems to be missing on this new board
 #define PIN_GPS_PPS (GPIO_PORT1 + 4) // Pulse per second input from the GPS
-#define GPS_TX_PIN (GPIO_PORT1 + 8)  // This is for bits going TOWARDS the CPU
-#define GPS_RX_PIN (GPIO_PORT1 + 9)  // This is for bits going TOWARDS the GPS
+#define GPS_TX_PIN (GPIO_PORT1 + 9)  // This is for bits going TOWARDS the CPU
+#define GPS_RX_PIN (GPIO_PORT1 + 8)  // This is for bits going TOWARDS the GPS
 
 #define GPS_THREAD_INTERVAL 50
 
