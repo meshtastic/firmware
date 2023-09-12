@@ -557,9 +557,10 @@ void setup()
     screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
 
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
-
-    nodeStatus->observe(&nodeDB.newStatus);
     gps = createGps();
+    if (gps)
+        gpsStatus->observe(&gps->newStatus);
+    nodeStatus->observe(&nodeDB.newStatus);
 
     service.init();
 
