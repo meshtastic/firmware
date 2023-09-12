@@ -254,77 +254,9 @@ int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
 bool GPS::setup()
 {
     int msglen = 0;
-    // Master power for the GPS
-#ifdef PIN_GPS_PPS
-    // pulse per second
-    pinMode(PIN_GPS_PPS, INPUT);
-#endif
-
-// Currently disabled per issue #525 (TinyGPS++ crash bug)
-// when fixed upstream, can be un-disabled to enable 3D FixType and PDOP
-#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
-    // see NMEAGPS.h
-    gsafixtype.begin(reader, NMEA_MSG_GXGSA, 2);
-    gsapdop.begin(reader, NMEA_MSG_GXGSA, 15);
-    LOG_DEBUG("Using " NMEA_MSG_GXGSA " for 3DFIX and PDOP\n");
-#endif
-
-#if defined(HAS_PMU) || defined(PIN_GPS_EN)
-    if (config.position.gps_enabled) {
-#ifdef PIN_GPS_EN
-        pinMode(PIN_GPS_EN, OUTPUT);
-#endif
-        setGPSPower(true);
-    }
-#endif
-
-#ifdef PIN_GPS_RESET
-    digitalWrite(PIN_GPS_RESET, GPS_RESET_MODE); // assert for 10ms
-    pinMode(PIN_GPS_RESET, OUTPUT);
-    delay(10);
-    digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
-#endif
-    setAwake(true); // Wake GPS power before doing any init
 
     if (_serial_gps && !didSerialInit) {
-        if (!GPSInitStarted) {
-            GPSInitStarted = true;
-#ifdef ARCH_ESP32
-            // In esp32 framework, setRxBufferSize needs to be initialized before Serial
-            _serial_gps->setRxBufferSize(SERIAL_BUFFER_SIZE); // the default is 256
-#endif
-
-            // if the overrides are not dialled in, set them from the board definitions, if they exist
-
-#if defined(GPS_RX_PIN)
-            if (!config.position.rx_gpio)
-                config.position.rx_gpio = GPS_RX_PIN;
-#endif
-#if defined(GPS_TX_PIN)
-            if (!config.position.tx_gpio)
-                config.position.tx_gpio = GPS_TX_PIN;
-#endif
-
-// #define BAUD_RATE 115200
-//  ESP32 has a special set of parameters vs other arduino ports
-#if defined(ARCH_ESP32)
-            if (config.position.rx_gpio) {
-                LOG_DEBUG("Using GPIO%d for GPS RX\n", config.position.rx_gpio);
-                LOG_DEBUG("Using GPIO%d for GPS TX\n", config.position.tx_gpio);
-                _serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, config.position.rx_gpio, config.position.tx_gpio);
-            }
-#else
-            _serial_gps->begin(GPS_BAUDRATE);
-#endif
-
-            /*
-             * T-Beam-S3-Core will be preset to use gps Probe here, and other boards will not be changed first
-             */
-#if defined(GPS_UC6580)
-            _serial_gps->updateBaudRate(115200);
-            gnssModel = GNSS_MODEL_UC6850;
-#else
-        }
+#if !defined(GPS_UC6580)
         LOG_DEBUG("Probing for GPS at %d \n", serialSpeeds[speedSelect]);
         gnssModel = probe(serialSpeeds[speedSelect]);
         if (gnssModel == GNSS_MODEL_UNKNOWN) {
@@ -336,8 +268,10 @@ bool GPS::setup()
                 }
             }
             return false;
-#endif
         }
+#else
+        gnssModel = GNSS_MODEL_UC6850;
+#endif
 
         if (gnssModel == GNSS_MODEL_MTK) {
             /*
@@ -625,7 +559,6 @@ int32_t GPS::runOnce()
     if (!GPSInitFinished) {
         if (!setup())
             return 2000; // Setup failed, re-run in two seconds
-        gpsStatus->observe(&gps->newStatus);
 
         // We have now loaded our saved preferences from flash
 
@@ -917,6 +850,75 @@ GPS *createGps()
 #if !HAS_GPS
     return nullptr;
 #else
-    return new NMEAGPS();
+    GPS *new_gps = new NMEAGPS();
+    // Master power for the GPS
+#ifdef PIN_GPS_PPS
+    // pulse per second
+    pinMode(PIN_GPS_PPS, INPUT);
+#endif
+
+// Currently disabled per issue #525 (TinyGPS++ crash bug)
+// when fixed upstream, can be un-disabled to enable 3D FixType and PDOP
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+    // see NMEAGPS.h
+    gsafixtype.begin(reader, NMEA_MSG_GXGSA, 2);
+    gsapdop.begin(reader, NMEA_MSG_GXGSA, 15);
+    LOG_DEBUG("Using " NMEA_MSG_GXGSA " for 3DFIX and PDOP\n");
+#endif
+
+#if defined(HAS_PMU) || defined(PIN_GPS_EN)
+    if (config.position.gps_enabled) {
+#ifdef PIN_GPS_EN
+        pinMode(PIN_GPS_EN, OUTPUT);
+#endif
+        setGPSPower(true);
+    }
+#endif
+
+#ifdef PIN_GPS_RESET
+    digitalWrite(PIN_GPS_RESET, GPS_RESET_MODE); // assert for 10ms
+    pinMode(PIN_GPS_RESET, OUTPUT);
+    delay(10);
+    digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
+#endif
+    new_gps->setAwake(true); // Wake GPS power before doing any init
+
+    if (new_gps->_serial_gps) {
+#ifdef ARCH_ESP32
+        // In esp32 framework, setRxBufferSize needs to be initialized before Serial
+        new_gps->_serial_gps->setRxBufferSize(SERIAL_BUFFER_SIZE); // the default is 256
+#endif
+
+        // if the overrides are not dialled in, set them from the board definitions, if they exist
+
+#if defined(GPS_RX_PIN)
+        if (!config.position.rx_gpio)
+            config.position.rx_gpio = GPS_RX_PIN;
+#endif
+#if defined(GPS_TX_PIN)
+        if (!config.position.tx_gpio)
+            config.position.tx_gpio = GPS_TX_PIN;
+#endif
+
+// #define BAUD_RATE 115200
+//  ESP32 has a special set of parameters vs other arduino ports
+#if defined(ARCH_ESP32)
+        if (config.position.rx_gpio) {
+            LOG_DEBUG("Using GPIO%d for GPS RX\n", config.position.rx_gpio);
+            LOG_DEBUG("Using GPIO%d for GPS TX\n", config.position.tx_gpio);
+            new_gps->_serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, config.position.rx_gpio, config.position.tx_gpio);
+        }
+#else
+        new_gps->_serial_gps->begin(GPS_BAUDRATE);
+#endif
+
+        /*
+         * T-Beam-S3-Core will be preset to use gps Probe here, and other boards will not be changed first
+         */
+#if defined(GPS_UC6580)
+        new_gps->_serial_gps->updateBaudRate(115200);
+#endif
+    }
+    return new_gps;
 #endif
 }
