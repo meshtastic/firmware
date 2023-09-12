@@ -136,6 +136,13 @@ class GPS : private concurrency::OSThread
     GPS_RESPONSE getACK(uint8_t c, uint8_t i, uint32_t waitMillis);
     GPS_RESPONSE getACK(const char *message, uint32_t waitMillis);
 
+    /**
+     * Switch the GPS into a mode where we are actively looking for a lock, or alternatively switch GPS into a low power mode
+     *
+     * calls sleep/wake
+     */
+    void setAwake(bool on);
+
   protected:
     /// If possible force the GPS into sleep/low power mode
     virtual void sleep();
@@ -184,13 +191,6 @@ class GPS : private concurrency::OSThread
 
     // Calculate checksum
     void UBXChecksum(uint8_t *message, size_t length);
-
-    /**
-     * Switch the GPS into a mode where we are actively looking for a lock, or alternatively switch GPS into a low power mode
-     *
-     * calls sleep/wake
-     */
-    void setAwake(bool on);
 
     /** Get how long we should stay looking for each aquisition
      */
