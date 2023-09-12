@@ -558,8 +558,11 @@ void setup()
 
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
     gps = createGps();
-    if (gps)
+    if (gps) {
         gpsStatus->observe(&gps->newStatus);
+    } else {
+        LOG_DEBUG("Running without GPS.\n");
+    }
     nodeStatus->observe(&nodeDB.newStatus);
 
     service.init();

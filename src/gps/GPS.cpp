@@ -850,6 +850,16 @@ GPS *createGps()
 #if !HAS_GPS
     return nullptr;
 #else
+#if defined(GPS_RX_PIN)
+        if (!config.position.rx_gpio)
+            config.position.rx_gpio = GPS_RX_PIN;
+#endif
+#if defined(GPS_TX_PIN)
+        if (!config.position.tx_gpio)
+            config.position.tx_gpio = GPS_TX_PIN;
+#endif
+    if (config.position.rx_gpio == UINT32_MAX)
+        return nullptr;
     GPS *new_gps = new NMEAGPS();
     // Master power for the GPS
 #ifdef PIN_GPS_PPS
@@ -891,14 +901,7 @@ GPS *createGps()
 
         // if the overrides are not dialled in, set them from the board definitions, if they exist
 
-#if defined(GPS_RX_PIN)
-        if (!config.position.rx_gpio)
-            config.position.rx_gpio = GPS_RX_PIN;
-#endif
-#if defined(GPS_TX_PIN)
-        if (!config.position.tx_gpio)
-            config.position.tx_gpio = GPS_TX_PIN;
-#endif
+
 
 // #define BAUD_RATE 115200
 //  ESP32 has a special set of parameters vs other arduino ports
@@ -906,7 +909,8 @@ GPS *createGps()
         if (config.position.rx_gpio) {
             LOG_DEBUG("Using GPIO%d for GPS RX\n", config.position.rx_gpio);
             LOG_DEBUG("Using GPIO%d for GPS TX\n", config.position.tx_gpio);
-            new_gps->_serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, config.position.rx_gpio, config.position.tx_gpio);
+            new_gps->_serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, config.position.rx_gpio,
+                config.position.tx_gpio != UINT32_MAX ? config.position.tx_gpio : -1);
         }
 #else
         new_gps->_serial_gps->begin(GPS_BAUDRATE);
