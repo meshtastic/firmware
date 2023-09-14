@@ -209,9 +209,7 @@ void doGPSpowersave(bool on)
         uint8_t msglen;
         notifyGPSSleep.notifyObservers(NULL);
         msglen = gps->makeUBXPacket(0x02, 0x41, 0x08, gps->_message_PMREQ);
-        for (int i = 0; i < msglen; i++) {
-            gps->_serial_gps->write(gps->UBXscratch, msglen);
-        }
+        gps->_serial_gps->write(gps->UBXscratch, msglen);
     } else {
         gps->forceWake(1);
         gps->_serial_gps->write(0xFF);

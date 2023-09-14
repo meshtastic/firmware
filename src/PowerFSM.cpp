@@ -158,6 +158,9 @@ static void darkEnter()
 {
     setBluetoothEnable(true);
     screen->setOn(false);
+#ifdef KB_POWERON
+    digitalWrite(KB_POWERON, LOW);
+#endif
 }
 
 static void serialEnter()
@@ -185,6 +188,9 @@ static void powerEnter()
     } else {
         screen->setOn(true);
         setBluetoothEnable(true);
+#ifdef KB_POWERON
+        digitalWrite(KB_POWERON, HIGH);
+#endif
         // within enter() the function getState() returns the state we came from
         if (strcmp(powerFSM.getState()->name, "BOOT") != 0 && strcmp(powerFSM.getState()->name, "POWER") != 0 &&
             strcmp(powerFSM.getState()->name, "DARK") != 0) {
@@ -215,6 +221,9 @@ static void onEnter()
     LOG_DEBUG("Enter state: ON\n");
     screen->setOn(true);
     setBluetoothEnable(true);
+#ifdef KB_POWERON
+    digitalWrite(KB_POWERON, HIGH);
+#endif
 }
 
 static void onIdle()
