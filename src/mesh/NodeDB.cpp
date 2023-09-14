@@ -388,25 +388,25 @@ void NodeDB::init()
  */
 void NodeDB::pickNewNodeNum()
 {
-    NodeNum r = myNodeInfo.my_node_num;
+    NodeNum existingNum = myNodeInfo.my_node_num;
 
     getMacAddr(ourMacAddr); // Make sure ourMacAddr is set
 
     // Pick an initial nodenum based on the macaddr
-    r = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
+    existingNum = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
 
-    if (r == NODENUM_BROADCAST || r < NUM_RESERVED)
-        r = NUM_RESERVED; // don't pick a reserved node number
+    if (existingNum == NODENUM_BROADCAST || existingNum < NUM_RESERVED)
+        existingNum = NUM_RESERVED; // don't pick a reserved node number
 
     meshtastic_NodeInfoLite *found;
-    while ((found = getMeshNode(r)) && memcmp(found->user.macaddr, owner.macaddr, sizeof(owner.macaddr))) {
+    while ((found = getMeshNode(existingNum)) && memcmp(found->user.macaddr, owner.macaddr, sizeof(owner.macaddr))) {
         // FIXME: input for random() is int, so NODENUM_BROADCAST becomes -1
-        NodeNum n = random(NUM_RESERVED, NODENUM_BROADCAST); // try a new random choice
-        LOG_WARN("NOTE! Our desired nodenum 0x%x is in use, so trying for 0x%x\n", r, n);
-        r = n;
+        NodeNum newNum = random(NUM_RESERVED, NODENUM_BROADCAST); // try a new random choice
+        LOG_WARN("NOTE! Our desired nodenum 0x%x is in use, so trying for 0x%x\n", existingNum, n);
+        existingNum = newNum;
     }
 
-    myNodeInfo.my_node_num = r;
+    myNodeInfo.my_node_num = existingNum;
 }
 
 static const char *prefFileName = "/prefs/db.proto";
