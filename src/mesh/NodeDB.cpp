@@ -389,11 +389,13 @@ void NodeDB::init()
 void NodeDB::pickNewNodeNum()
 {
     NodeNum existingNum = myNodeInfo.my_node_num;
+    LOG_DEBUG("NodeDB::pickNewNodeNum() existingNum=%d (0x%x)\n", existingNum, existingNum);
 
     getMacAddr(ourMacAddr); // Make sure ourMacAddr is set
 
     // Pick an initial nodenum based on the macaddr
     existingNum = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
+    LOG_DEBUG("NodeDB::pickNewNodeNum() Setting via ourMacAddr - existingNum=%d (0x%x)\n", existingNum, existingNum);
 
     if (existingNum == NODENUM_BROADCAST || existingNum < NUM_RESERVED)
         existingNum = NUM_RESERVED; // don't pick a reserved node number
@@ -402,9 +404,11 @@ void NodeDB::pickNewNodeNum()
     while ((found = getMeshNode(existingNum)) && memcmp(found->user.macaddr, owner.macaddr, sizeof(owner.macaddr))) {
         // FIXME: input for random() is int, so NODENUM_BROADCAST becomes -1
         NodeNum newNum = random(NUM_RESERVED, NODENUM_BROADCAST); // try a new random choice
-        LOG_WARN("NOTE! Our desired nodenum 0x%x is in use, so trying for 0x%x\n", existingNum, n);
+        LOG_WARN("NOTE! Our desired nodenum %d is in use, so trying for %d\n", existingNum, newNum);
         existingNum = newNum;
     }
+
+    LOG_DEBUG("NodeDB::pickNewNodeNum() Exiting w/ setting myNodeInfo.my_node_num=%d (0x%x)\n", existingNum, existingNum);
 
     myNodeInfo.my_node_num = existingNum;
 }
