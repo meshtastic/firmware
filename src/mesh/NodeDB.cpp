@@ -800,17 +800,17 @@ meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n, bool printMe)
     }
     for (int i = 0; i < *numMeshNodes; i++) {
         if (printMe) {
+            LOG_DEBUG("---------------------------------\n");
             LOG_DEBUG("Node[%d]: %d (0x%x)\n", i, meshNodes[i].num, meshNodes[i].num);
             if (meshNodes[i].has_user) {
-                LOG_DEBUG("User: %s\n", meshNodes[i].user.id);
-                LOG_DEBUG("Macaddr: %s\n", meshNodes[i].user.macaddr);
+                LOG_DEBUG("User: !%08x\n", meshNodes[i].user.id);
                 LOG_DEBUG("Short name: %s\n", meshNodes[i].user.short_name);
                 LOG_DEBUG("Long name: %s\n", meshNodes[i].user.long_name);
             }
         }
         if (meshNodes[i].num == n) {
             if (printMe)
-                LOG_DEBUG("Matched node %d\n", meshNodes[i].num);
+                LOG_DEBUG("MATCHED NODE %d\n", meshNodes[i].num);
             return &meshNodes[i];
         }
     }
