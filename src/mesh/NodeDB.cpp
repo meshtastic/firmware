@@ -401,7 +401,7 @@ void NodeDB::pickNewNodeNum()
         existingNum = NUM_RESERVED; // don't pick a reserved node number
 
     meshtastic_NodeInfoLite *found;
-    while ((found = getMeshNode(existingNum)) && memcmp(found->user.macaddr, owner.macaddr, sizeof(owner.macaddr))) {
+    while ((found = getMeshNode(existingNum, true)) && memcmp(found->user.macaddr, owner.macaddr, sizeof(owner.macaddr))) {
         // FIXME: input for random() is int, so NODENUM_BROADCAST becomes -1
         NodeNum newNum = random(NUM_RESERVED, NODENUM_BROADCAST); // try a new random choice
         LOG_WARN("NOTE! Our desired nodenum %d is in use, so trying for %d\n", existingNum, newNum);
@@ -792,12 +792,28 @@ uint8_t NodeDB::getMeshNodeChannel(NodeNum n)
 
 /// Find a node in our DB, return null for missing
 /// NOTE: This function might be called from an ISR
-meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
+meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n, bool printMe)
 {
-    for (int i = 0; i < *numMeshNodes; i++)
-        if (meshNodes[i].num == n)
+    if (printMe) {
+        LOG_DEBUG("---------------------------------\n");
+        LOG_DEBUG("getMeshNode(): Looking for num %d in NodeDB (%d) total\n", n, *numMeshNodes);
+    }
+    for (int i = 0; i < *numMeshNodes; i++) {
+        if (printMe) {
+            LOG_DEBUG("Node[%d]: %d (0x%x)\n", i, meshNodes[i].num, meshNodes[i].num);
+            if (meshNodes[i].has_user) {
+                LOG_DEBUG("User: %s\n", i, meshNodes[i].user.id);
+                LOG_DEBUG("Macaddr: %s\n", i, meshNodes[i].user.macaddr);
+                LOG_DEBUG("Short name: %s\n", i, meshNodes[i].user.short_name);
+                LOG_DEBUG("Long name: %s\n", i, meshNodes[i].user.long_name);
+            }
+        }
+        if (meshNodes[i].num == n) {
+            if (printMe)
+                LOG_DEBUG("Matched node %d\n", meshNodes[i].num);
             return &meshNodes[i];
-
+        }
+    }
     return NULL;
 }
 

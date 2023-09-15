@@ -128,7 +128,7 @@ class NodeDB
         return &meshNodes[x];
     }
 
-    meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
+    meshtastic_NodeInfoLite *getMeshNode(NodeNum n, bool printMe = false);
     size_t getNumMeshNodes() { return *numMeshNodes; }
 
   private:
