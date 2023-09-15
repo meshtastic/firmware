@@ -802,10 +802,10 @@ meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n, bool printMe)
         if (printMe) {
             LOG_DEBUG("Node[%d]: %d (0x%x)\n", i, meshNodes[i].num, meshNodes[i].num);
             if (meshNodes[i].has_user) {
-                LOG_DEBUG("User: %s\n", i, meshNodes[i].user.id);
-                LOG_DEBUG("Macaddr: %s\n", i, meshNodes[i].user.macaddr);
-                LOG_DEBUG("Short name: %s\n", i, meshNodes[i].user.short_name);
-                LOG_DEBUG("Long name: %s\n", i, meshNodes[i].user.long_name);
+                LOG_DEBUG("User: %s\n", meshNodes[i].user.id);
+                LOG_DEBUG("Macaddr: %s\n", meshNodes[i].user.macaddr);
+                LOG_DEBUG("Short name: %s\n", meshNodes[i].user.short_name);
+                LOG_DEBUG("Long name: %s\n", meshNodes[i].user.long_name);
             }
         }
         if (meshNodes[i].num == n) {
