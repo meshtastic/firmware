@@ -13,12 +13,7 @@
 #define GPS_RESET_MODE HIGH
 #endif
 
-// If we have a serial GPS port it will not be null
-#ifdef ARCH_ESP32
-HardwareSerial _serial_gps_real(1);
-HardwareSerial *GPS::_serial_gps = &_serial_gps_real;
-#elif defined(NRF52840_XXAA) || defined(NRF52833_XXAA)
-// Assume NRF52840
+#if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32)
 HardwareSerial *GPS::_serial_gps = &Serial1;
 #else
 HardwareSerial *GPS::_serial_gps = NULL;
