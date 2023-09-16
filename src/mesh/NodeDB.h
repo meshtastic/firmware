@@ -146,6 +146,9 @@ class NodeDB
     /// read our db from flash
     void loadFromDisk();
 
+    /// purge db entries without user info
+    void cleanupMeshDB();
+
     /// Reinit device state from scratch (not loading from disk)
     void installDefaultDeviceState(), installDefaultChannels(), installDefaultConfig(), installDefaultModuleConfig();
 };
