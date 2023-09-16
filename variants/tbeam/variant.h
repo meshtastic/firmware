@@ -4,8 +4,8 @@
 #define I2C_SCL 22
 
 #define BUTTON_PIN 38 // The middle button GPIO on the T-Beam
-//#define BUTTON_PIN_ALT 13 // Alternate GPIO for an external button if needed. Does anyone use this? It is not documented
-// anywhere.
+// #define BUTTON_PIN_ALT 13 // Alternate GPIO for an external button if needed. Does anyone use this? It is not documented
+//  anywhere.
 #define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Module.
 
 #define LED_INVERTED 1
@@ -38,3 +38,5 @@
 // #define PMU_IRQ 35
 #define HAS_AXP192
 #define GPS_UBLOX
+#define GPS_RX_PIN 34
+#define GPS_TX_PIN 12

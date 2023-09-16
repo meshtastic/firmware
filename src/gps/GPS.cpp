@@ -14,8 +14,8 @@
 #endif
 
 // If we have a serial GPS port it will not be null
-#ifdef GPS_SERIAL_NUM
-HardwareSerial _serial_gps_real(GPS_SERIAL_NUM);
+#ifdef ARCH_ESP32
+HardwareSerial _serial_gps_real(1);
 HardwareSerial *GPS::_serial_gps = &_serial_gps_real;
 #elif defined(NRF52840_XXAA) || defined(NRF52833_XXAA)
 // Assume NRF52840
@@ -32,6 +32,8 @@ static bool didSerialInit;
 
 struct uBloxGnssModelInfo info;
 uint8_t uBloxProtocolVersion;
+#define GPS_SOL_EXPIRY_MS 5000 // in millis. give 1 second time to combine different sentences. NMEA Frequency isn't higher anyway
+#define NMEA_MSG_GXGSA "GNGSA" // GSA message (GPGSA, GNGSA etc)
 
 void GPS::UBXChecksum(uint8_t *message, size_t length)
 {
@@ -257,17 +259,21 @@ bool GPS::setup()
 
     if (_serial_gps && !didSerialInit) {
 #if !defined(GPS_UC6580)
-        LOG_DEBUG("Probing for GPS at %d \n", serialSpeeds[speedSelect]);
-        gnssModel = probe(serialSpeeds[speedSelect]);
-        if (gnssModel == GNSS_MODEL_UNKNOWN) {
-            if (++speedSelect == sizeof(serialSpeeds) / sizeof(int)) {
-                speedSelect = 0;
-                if (--probeTries == 0) {
-                    LOG_WARN("Giving up on GPS probe and setting to 9600.\n");
-                    return true;
+        if (tx_gpio) {
+            LOG_DEBUG("Probing for GPS at %d \n", serialSpeeds[speedSelect]);
+            gnssModel = probe(serialSpeeds[speedSelect]);
+            if (gnssModel == GNSS_MODEL_UNKNOWN) {
+                if (++speedSelect == sizeof(serialSpeeds) / sizeof(int)) {
+                    speedSelect = 0;
+                    if (--probeTries == 0) {
+                        LOG_WARN("Giving up on GPS probe and setting to 9600.\n");
+                        return true;
+                    }
                 }
+                return false;
             }
-            return false;
+        } else {
+            gnssModel = GNSS_MODEL_UNKNOWN;
         }
 #else
         gnssModel = GNSS_MODEL_UC6850;
@@ -437,16 +443,6 @@ GPS::~GPS()
     notifyGPSSleepObserver.observe(&notifyGPSSleep);
 }
 
-bool GPS::hasLock()
-{
-    return hasValidLocation;
-}
-
-bool GPS::hasFlow()
-{
-    return hasGPS;
-}
-
 // Allow defining the polarity of the WAKE output.  default is active high
 #ifndef GPS_WAKE_ACTIVE
 #define GPS_WAKE_ACTIVE 1
@@ -563,7 +559,7 @@ int32_t GPS::runOnce()
         // We have now loaded our saved preferences from flash
 
         // ONCE we will factory reset the GPS for bug #327
-        if (gps && !devicestate.did_gps_reset) {
+        if (!devicestate.did_gps_reset) {
             LOG_WARN("GPS FactoryReset requested\n");
             if (gps->factoryReset()) { // If we don't succeed try again next time
                 devicestate.did_gps_reset = true;
@@ -840,28 +836,11 @@ GnssModel_t GPS::probe(int serialSpeed)
     return GNSS_MODEL_UBLOX;
 }
 
-#if HAS_GPS
-#include "NMEAGPS.h"
-#endif
-
-GPS *createGps()
+GPS::GPS(uint32_t _rx_gpio, uint32_t _tx_gpio) : concurrency::OSThread("GPS")
 {
+    rx_gpio = _rx_gpio;
+    tx_gpio = _tx_gpio;
 
-#if !HAS_GPS
-    return nullptr;
-#else
-#if defined(GPS_RX_PIN)
-        if (!config.position.rx_gpio)
-            config.position.rx_gpio = GPS_RX_PIN;
-#endif
-#if defined(GPS_TX_PIN)
-        if (!config.position.tx_gpio)
-            config.position.tx_gpio = GPS_TX_PIN;
-#endif
-    if (config.position.rx_gpio == UINT32_MAX)
-        return nullptr;
-    GPS *new_gps = new NMEAGPS();
-    // Master power for the GPS
 #ifdef PIN_GPS_PPS
     // pulse per second
     pinMode(PIN_GPS_PPS, INPUT);
@@ -891,17 +870,15 @@ GPS *createGps()
     delay(10);
     digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
 #endif
-    new_gps->setAwake(true); // Wake GPS power before doing any init
+    setAwake(true); // Wake GPS power before doing any init
 
-    if (new_gps->_serial_gps) {
+    if (_serial_gps) {
 #ifdef ARCH_ESP32
         // In esp32 framework, setRxBufferSize needs to be initialized before Serial
-        new_gps->_serial_gps->setRxBufferSize(SERIAL_BUFFER_SIZE); // the default is 256
+        _serial_gps->setRxBufferSize(SERIAL_BUFFER_SIZE); // the default is 256
 #endif
 
         // if the overrides are not dialled in, set them from the board definitions, if they exist
-
-
 
 // #define BAUD_RATE 115200
 //  ESP32 has a special set of parameters vs other arduino ports
@@ -909,20 +886,258 @@ GPS *createGps()
         if (config.position.rx_gpio) {
             LOG_DEBUG("Using GPIO%d for GPS RX\n", config.position.rx_gpio);
             LOG_DEBUG("Using GPIO%d for GPS TX\n", config.position.tx_gpio);
-            new_gps->_serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, config.position.rx_gpio,
-                config.position.tx_gpio != UINT32_MAX ? config.position.tx_gpio : -1);
+            _serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, config.position.rx_gpio,
+                               config.position.tx_gpio != UINT32_MAX ? config.position.tx_gpio : -1);
         }
 #else
-        new_gps->_serial_gps->begin(GPS_BAUDRATE);
+        _serial_gps->begin(GPS_BAUDRATE);
 #endif
 
         /*
          * T-Beam-S3-Core will be preset to use gps Probe here, and other boards will not be changed first
          */
 #if defined(GPS_UC6580)
-        new_gps->_serial_gps->updateBaudRate(115200);
+        _serial_gps->updateBaudRate(115200);
 #endif
     }
-    return new_gps;
+    return; // new_gps;
+}
+
+static int32_t toDegInt(RawDegrees d)
+{
+    int32_t degMult = 10000000; // 1e7
+    int32_t r = d.deg * degMult + d.billionths / 100;
+    if (d.negative)
+        r *= -1;
+    return r;
+}
+
+bool GPS::factoryReset()
+{
+#ifdef PIN_GPS_REINIT
+    // The L76K GNSS on the T-Echo requires the RESET pin to be pulled LOW
+    digitalWrite(PIN_GPS_REINIT, 0);
+    pinMode(PIN_GPS_REINIT, OUTPUT);
+    delay(150); // The L76K datasheet calls for at least 100MS delay
+    digitalWrite(PIN_GPS_REINIT, 1);
 #endif
+
+    // send the UBLOX Factory Reset Command regardless of detect state, something is very wrong, just assume it's UBLOX.
+    // Factory Reset
+    byte _message_reset[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF, 0xFB, 0x00, 0x00, 0x00,
+                             0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x17, 0x2B, 0x7E};
+    _serial_gps->write(_message_reset, sizeof(_message_reset));
+    delay(1000);
+    return true;
+}
+
+/**
+ * Perform any processing that should be done only while the GPS is awake and looking for a fix.
+ * Override this method to check for new locations
+ *
+ * @return true if we've acquired a new location
+ */
+bool GPS::lookForTime()
+{
+    auto ti = reader.time;
+    auto d = reader.date;
+    if (ti.isValid() && d.isValid()) { // Note: we don't check for updated, because we'll only be called if needed
+        /* Convert to unix time
+The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1, 1970
+(midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
+*/
+        struct tm t;
+        t.tm_sec = ti.second();
+        t.tm_min = ti.minute();
+        t.tm_hour = ti.hour();
+        t.tm_mday = d.day();
+        t.tm_mon = d.month() - 1;
+        t.tm_year = d.year() - 1900;
+        t.tm_isdst = false;
+        if (t.tm_mon > -1) {
+            LOG_DEBUG("NMEA GPS time %02d-%02d-%02d %02d:%02d:%02d\n", d.year(), d.month(), t.tm_mday, t.tm_hour, t.tm_min,
+                      t.tm_sec);
+            perhapsSetRTC(RTCQualityGPS, t);
+            return true;
+        } else
+            return false;
+    } else
+        return false;
+}
+
+/**
+ * Perform any processing that should be done only while the GPS is awake and looking for a fix.
+ * Override this method to check for new locations
+ *
+ * @return true if we've acquired a new location
+ */
+bool GPS::lookForLocation()
+{
+    // By default, TinyGPS++ does not parse GPGSA lines, which give us
+    //   the 2D/3D fixType (see NMEAGPS.h)
+    // At a minimum, use the fixQuality indicator in GPGGA (FIXME?)
+    fixQual = reader.fixQuality();
+
+#ifndef TINYGPS_OPTION_NO_STATISTICS
+    if (reader.failedChecksum() > lastChecksumFailCount) {
+        LOG_WARN("Warning, %u new GPS checksum failures, for a total of %u.\n", reader.failedChecksum() - lastChecksumFailCount,
+                 reader.failedChecksum());
+        lastChecksumFailCount = reader.failedChecksum();
+    }
+#endif
+
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+    fixType = atoi(gsafixtype.value()); // will set to zero if no data
+    // LOG_DEBUG("FIX QUAL=%d, TYPE=%d\n", fixQual, fixType);
+#endif
+
+    // check if GPS has an acceptable lock
+    if (!hasLock())
+        return false;
+
+#ifdef GPS_EXTRAVERBOSE
+    LOG_DEBUG("AGE: LOC=%d FIX=%d DATE=%d TIME=%d\n", reader.location.age(),
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+              gsafixtype.age(),
+#else
+              0,
+#endif
+              reader.date.age(), reader.time.age());
+#endif // GPS_EXTRAVERBOSE
+
+    // check if a complete GPS solution set is available for reading
+    //   tinyGPSDatum::age() also includes isValid() test
+    // FIXME
+    if (!((reader.location.age() < GPS_SOL_EXPIRY_MS) &&
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+          (gsafixtype.age() < GPS_SOL_EXPIRY_MS) &&
+#endif
+          (reader.time.age() < GPS_SOL_EXPIRY_MS) && (reader.date.age() < GPS_SOL_EXPIRY_MS))) {
+        LOG_WARN("SOME data is TOO OLD: LOC %u, TIME %u, DATE %u\n", reader.location.age(), reader.time.age(), reader.date.age());
+        return false;
+    }
+
+    // Is this a new point or are we re-reading the previous one?
+    if (!reader.location.isUpdated())
+        return false;
+
+    // We know the solution is fresh and valid, so just read the data
+    auto loc = reader.location.value();
+
+    // Bail out EARLY to avoid overwriting previous good data (like #857)
+    if (toDegInt(loc.lat) > 900000000) {
+#ifdef GPS_EXTRAVERBOSE
+        LOG_DEBUG("Bail out EARLY on LAT %i\n", toDegInt(loc.lat));
+#endif
+        return false;
+    }
+    if (toDegInt(loc.lng) > 1800000000) {
+#ifdef GPS_EXTRAVERBOSE
+        LOG_DEBUG("Bail out EARLY on LNG %i\n", toDegInt(loc.lng));
+#endif
+        return false;
+    }
+
+    p.location_source = meshtastic_Position_LocSource_LOC_INTERNAL;
+
+    // Dilution of precision (an accuracy metric) is reported in 10^2 units, so we need to scale down when we use it
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+    p.HDOP = reader.hdop.value();
+    p.PDOP = TinyGPSPlus::parseDecimal(gsapdop.value());
+    // LOG_DEBUG("PDOP=%d, HDOP=%d\n", p.PDOP, p.HDOP);
+#else
+    // FIXME! naive PDOP emulation (assumes VDOP==HDOP)
+    // correct formula is PDOP = SQRT(HDOP^2 + VDOP^2)
+    p.HDOP = reader.hdop.value();
+    p.PDOP = 1.41 * reader.hdop.value();
+#endif
+
+    // Discard incomplete or erroneous readings
+    if (reader.hdop.value() == 0) {
+        LOG_WARN("BOGUS hdop.value() REJECTED: %d\n", reader.hdop.value());
+        return false;
+    }
+
+    p.latitude_i = toDegInt(loc.lat);
+    p.longitude_i = toDegInt(loc.lng);
+
+    p.altitude_geoidal_separation = reader.geoidHeight.meters();
+    p.altitude_hae = reader.altitude.meters() + p.altitude_geoidal_separation;
+    p.altitude = reader.altitude.meters();
+
+    p.fix_quality = fixQual;
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+    p.fix_type = fixType;
+#endif
+
+    // positional timestamp
+    struct tm t;
+    t.tm_sec = reader.time.second();
+    t.tm_min = reader.time.minute();
+    t.tm_hour = reader.time.hour();
+    t.tm_mday = reader.date.day();
+    t.tm_mon = reader.date.month() - 1;
+    t.tm_year = reader.date.year() - 1900;
+    t.tm_isdst = false;
+    p.timestamp = mktime(&t);
+
+    // Nice to have, if available
+    if (reader.satellites.isUpdated()) {
+        p.sats_in_view = reader.satellites.value();
+    }
+
+    if (reader.course.isUpdated() && reader.course.isValid()) {
+        if (reader.course.value() < 36000) { // sanity check
+            p.ground_track =
+                reader.course.value() * 1e3; // Scale the heading (in degrees * 10^-2) to match the expected degrees * 10^-5
+        } else {
+            LOG_WARN("BOGUS course.value() REJECTED: %d\n", reader.course.value());
+        }
+    }
+
+    if (reader.speed.isUpdated() && reader.speed.isValid()) {
+        p.ground_speed = reader.speed.kmph();
+    }
+
+    return true;
+}
+
+bool GPS::hasLock()
+{
+    // Using GPGGA fix quality indicator
+    if (fixQual >= 1 && fixQual <= 5) {
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+        // Use GPGSA fix type 2D/3D (better) if available
+        if (fixType == 3 || fixType == 0) // zero means "no data received"
+#endif
+            return true;
+    }
+
+    return false;
+}
+
+bool GPS::hasFlow()
+{
+    return reader.passedChecksum() > 0;
+}
+
+bool GPS::whileIdle()
+{
+    bool isValid = false;
+#ifdef SERIAL_BUFFER_SIZE
+    if (_serial_gps->available() >= SERIAL_BUFFER_SIZE - 1) {
+        LOG_WARN("GPS Buffer full with %u bytes waiting. Flushing to avoid corruption.\n", _serial_gps->available());
+        clearBuffer();
+    }
+#endif
+    // if (_serial_gps->available() > 0)
+    // LOG_DEBUG("GPS Bytes Waiting: %u\n", _serial_gps->available());
+    // First consume any chars that have piled up at the receiver
+    while (_serial_gps->available() > 0) {
+        int c = _serial_gps->read();
+        // LOG_DEBUG("%c", c);
+        isValid |= reader.encode(c);
+    }
+
+    return isValid;
 }

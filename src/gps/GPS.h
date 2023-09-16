@@ -2,6 +2,7 @@
 
 #include "GPSStatus.h"
 #include "Observer.h"
+#include "TinyGPS++.h"
 #include "concurrency/OSThread.h"
 
 struct uBloxGnssModelInfo {
@@ -35,9 +36,23 @@ const char *getDOPString(uint32_t dop);
  */
 class GPS : private concurrency::OSThread
 {
+    TinyGPSPlus reader;
+    uint8_t fixQual = 0; // fix quality from GPGGA
+    uint32_t lastChecksumFailCount = 0;
+
+#ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
+    // (20210908) TinyGps++ can only read the GPGSA "FIX TYPE" field
+    // via optional feature "custom fields", currently disabled (bug #525)
+    TinyGPSCustom gsafixtype; // custom extract fix type from GPGSA
+    TinyGPSCustom gsapdop;    // custom extract PDOP from GPGSA
+    uint8_t fixType = 0;      // fix type from GPGSA
+#endif
   private:
     uint32_t lastWakeStartMsec = 0, lastSleepStartMsec = 0, lastWhileActiveMsec = 0;
     const int serialSpeeds[6] = {9600, 4800, 38400, 57600, 115200, 9600};
+
+    uint32_t rx_gpio;
+    uint32_t tx_gpio;
 
     int speedSelect = 0;
     int probeTries = 2;
@@ -89,7 +104,9 @@ class GPS : private concurrency::OSThread
 
     meshtastic_Position p = meshtastic_Position_init_default;
 
-    GPS() : concurrency::OSThread("GPS") {}
+    // GPS() : concurrency::OSThread("GPS") {}
+
+    GPS(uint32_t _rx_gpio, uint32_t _tx_gpio);
 
     virtual ~GPS();
 
@@ -120,9 +137,6 @@ class GPS : private concurrency::OSThread
      * */
     void forceWake(bool on);
 
-    // Some GPS modules (ublock) require factory reset
-    virtual bool factoryReset() { return true; }
-
     // Empty the input buffer as quickly as possible
     void clearBuffer();
 
@@ -142,6 +156,7 @@ class GPS : private concurrency::OSThread
      * calls sleep/wake
      */
     void setAwake(bool on);
+    virtual bool factoryReset();
 
   protected:
     /// If possible force the GPS into sleep/low power mode
@@ -154,7 +169,6 @@ class GPS : private concurrency::OSThread
      *
      * Return true if we received a valid message from the GPS
      */
-    virtual bool whileIdle() = 0;
 
     /** Idle processing while GPS is looking for lock, called once per secondish */
     virtual void whileActive() {}
@@ -165,7 +179,6 @@ class GPS : private concurrency::OSThread
      *
      * @return true if we've acquired a time
      */
-    virtual bool lookForTime() = 0;
 
     /**
      * Perform any processing that should be done only while the GPS is awake and looking for a fix.
@@ -173,12 +186,33 @@ class GPS : private concurrency::OSThread
      *
      * @return true if we've acquired a new location
      */
-    virtual bool lookForLocation() = 0;
 
     /// Record that we have a GPS
     void setConnected();
 
     void setNumSatellites(uint8_t n);
+
+    /** Subclasses should look for serial rx characters here and feed it to their GPS parser
+     *
+     * Return true if we received a valid message from the GPS
+     */
+    virtual bool whileIdle();
+
+    /**
+     * Perform any processing that should be done only while the GPS is awake and looking for a fix.
+     * Override this method to check for new locations
+     *
+     * @return true if we've acquired a time
+     */
+    virtual bool lookForTime();
+
+    /**
+     * Perform any processing that should be done only while the GPS is awake and looking for a fix.
+     * Override this method to check for new locations
+     *
+     * @return true if we've acquired a new location
+     */
+    virtual bool lookForLocation();
 
   private:
     /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
@@ -220,6 +254,6 @@ class GPS : private concurrency::OSThread
 
 // Creates an instance of the GPS class.
 // Returns the new instance or null if the GPS is not present.
-GPS *createGps();
+// GPS *createGps();
 
 extern GPS *gps;
