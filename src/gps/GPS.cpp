@@ -564,6 +564,7 @@ int32_t GPS::runOnce()
         GPSInitFinished = true;
         if (config.position.gps_enabled == false) {
             doGPSpowersave(false);
+            disable();
             return 0;
         }
     }
