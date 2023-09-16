@@ -557,23 +557,8 @@ void setup()
     screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
 
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
-    int8_t rx_gpio = config.position.rx_gpio;
-    int8_t tx_gpio = config.position.tx_gpio;
 
-#if defined(HAS_GPS) && !defined(ARCH_ESP32)
-    rx_gpio = 1; // We only specify GPS serial ports on ESP32. Otherwise, these are just flags.
-    tx_gpio = 1;
-#endif
-#if defined(GPS_RX_PIN)
-    if (!rx_gpio)
-        rx_gpio = GPS_RX_PIN;
-#endif
-#if defined(GPS_TX_PIN)
-    if (!tx_gpio)
-        tx_gpio = GPS_TX_PIN;
-#endif
-    if (rx_gpio)
-        gps = new GPS(rx_gpio, tx_gpio);
+    gps = GPS::createGps();
     if (gps) {
         gpsStatus->observe(&gps->newStatus);
     } else {

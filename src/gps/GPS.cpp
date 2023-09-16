@@ -831,10 +831,29 @@ GnssModel_t GPS::probe(int serialSpeed)
     return GNSS_MODEL_UBLOX;
 }
 
-GPS::GPS(uint32_t _rx_gpio, uint32_t _tx_gpio) : concurrency::OSThread("GPS")
+// GPS::GPS(uint32_t _rx_gpio, uint32_t _tx_gpio) : concurrency::OSThread("GPS")
+GPS *GPS::createGps()
 {
-    rx_gpio = _rx_gpio;
-    tx_gpio = _tx_gpio;
+    int8_t _rx_gpio = config.position.rx_gpio;
+    int8_t _tx_gpio = config.position.tx_gpio;
+#if defined(HAS_GPS) && !defined(ARCH_ESP32)
+    _rx_gpio = 1; // We only specify GPS serial ports on ESP32. Otherwise, these are just flags.
+    _tx_gpio = 1;
+#endif
+#if defined(GPS_RX_PIN)
+    if (!_rx_gpio)
+        _rx_gpio = GPS_RX_PIN;
+#endif
+#if defined(GPS_TX_PIN)
+    if (!_tx_gpio)
+        _tx_gpio = GPS_TX_PIN;
+#endif
+    if (!_rx_gpio) // Configured to have no GPS at all
+        return nullptr;
+
+    GPS *new_gps = new GPS;
+    new_gps->rx_gpio = _rx_gpio;
+    new_gps->tx_gpio = _tx_gpio;
 
 #ifdef PIN_GPS_PPS
     // pulse per second
@@ -865,7 +884,7 @@ GPS::GPS(uint32_t _rx_gpio, uint32_t _tx_gpio) : concurrency::OSThread("GPS")
     delay(10);
     digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
 #endif
-    setAwake(true); // Wake GPS power before doing any init
+    new_gps->setAwake(true); // Wake GPS power before doing any init
 
     if (_serial_gps) {
 #ifdef ARCH_ESP32
@@ -873,17 +892,12 @@ GPS::GPS(uint32_t _rx_gpio, uint32_t _tx_gpio) : concurrency::OSThread("GPS")
         _serial_gps->setRxBufferSize(SERIAL_BUFFER_SIZE); // the default is 256
 #endif
 
-        // if the overrides are not dialled in, set them from the board definitions, if they exist
-
-// #define BAUD_RATE 115200
 //  ESP32 has a special set of parameters vs other arduino ports
 #if defined(ARCH_ESP32)
-        if (config.position.rx_gpio) {
-            LOG_DEBUG("Using GPIO%d for GPS RX\n", config.position.rx_gpio);
-            LOG_DEBUG("Using GPIO%d for GPS TX\n", config.position.tx_gpio);
-            _serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, config.position.rx_gpio,
-                               config.position.tx_gpio != UINT32_MAX ? config.position.tx_gpio : -1);
-        }
+        LOG_DEBUG("Using GPIO%d for GPS RX\n", new_gps->rx_gpio);
+        LOG_DEBUG("Using GPIO%d for GPS TX\n", new_gps->tx_gpio);
+        _serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, new_gps->rx_gpio, new_gps->tx_gpio);
+
 #else
         _serial_gps->begin(GPS_BAUDRATE);
 #endif
@@ -895,7 +909,7 @@ GPS::GPS(uint32_t _rx_gpio, uint32_t _tx_gpio) : concurrency::OSThread("GPS")
         _serial_gps->updateBaudRate(115200);
 #endif
     }
-    return; // new_gps;
+    return new_gps;
 }
 
 static int32_t toDegInt(RawDegrees d)

@@ -51,8 +51,8 @@ class GPS : private concurrency::OSThread
     uint32_t lastWakeStartMsec = 0, lastSleepStartMsec = 0, lastWhileActiveMsec = 0;
     const int serialSpeeds[6] = {9600, 4800, 38400, 57600, 115200, 9600};
 
-    uint32_t rx_gpio;
-    uint32_t tx_gpio;
+    uint32_t rx_gpio = 0;
+    uint32_t tx_gpio = 0;
 
     int speedSelect = 0;
     int probeTries = 2;
@@ -104,9 +104,7 @@ class GPS : private concurrency::OSThread
 
     meshtastic_Position p = meshtastic_Position_init_default;
 
-    // GPS() : concurrency::OSThread("GPS") {}
-
-    GPS(uint32_t _rx_gpio, uint32_t _tx_gpio);
+    GPS() : concurrency::OSThread("GPS") {}
 
     virtual ~GPS();
 
@@ -157,6 +155,10 @@ class GPS : private concurrency::OSThread
      */
     void setAwake(bool on);
     virtual bool factoryReset();
+
+    // Creates an instance of the GPS class.
+    // Returns the new instance or null if the GPS is not present.
+    static GPS *createGps();
 
   protected:
     /// If possible force the GPS into sleep/low power mode
@@ -251,9 +253,5 @@ class GPS : private concurrency::OSThread
   protected:
     GnssModel_t gnssModel = GNSS_MODEL_UNKNOWN;
 };
-
-// Creates an instance of the GPS class.
-// Returns the new instance or null if the GPS is not present.
-// GPS *createGps();
 
 extern GPS *gps;
