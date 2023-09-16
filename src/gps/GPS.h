@@ -154,6 +154,7 @@ class GPS : private concurrency::OSThread
      * calls sleep/wake
      */
     void setAwake(bool on);
+    void doGPSpowersave(bool on);
     virtual bool factoryReset();
 
     // Creates an instance of the GPS class.
