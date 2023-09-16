@@ -564,10 +564,11 @@ int32_t GPS::runOnce()
         GPSInitFinished = true;
         if (config.position.gps_enabled == false) {
             doGPSpowersave(false);
-            disable();
             return 0;
         }
     }
+    if (config.position.gps_enabled == false)
+        return 0;
 
     // Repeaters have no need for GPS
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER)
