@@ -1160,6 +1160,7 @@ void GPS::doGPSpowersave(bool on)
         LOG_INFO("Turning GPS back on\n");
         gps->forceWake(1);
         setGPSPower(1);
+        setAwake(1);
     } else {
         LOG_INFO("Turning off GPS chip\n");
         notifyGPSSleep.notifyObservers(NULL);
@@ -1170,6 +1171,7 @@ void GPS::doGPSpowersave(bool on)
     if (on) {
         LOG_INFO("Waking GPS");
         gps->forceWake(1);
+        setAwake(1);
     } else {
         LOG_INFO("GPS entering sleep");
         notifyGPSSleep.notifyObservers(NULL);
@@ -1183,6 +1185,7 @@ void GPS::doGPSpowersave(bool on)
             msglen = gps->makeUBXPacket(0x02, 0x41, 0x08, gps->_message_PMREQ);
             gps->_serial_gps->write(gps->UBXscratch, msglen);
         }
+        setAwake(1);
     } else {
         gps->forceWake(1);
         if (gnssModel == GNSS_MODEL_UBLOX)
