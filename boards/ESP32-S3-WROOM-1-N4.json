@@ -6,7 +6,6 @@
       },
       "core": "esp32",
       "extra_flags": [
-        "-DARDUINO_ESP32S3_DEV",
         "-DARDUINO_USB_CDC_ON_BOOT=0",
         "-DARDUINO_USB_MODE=0",
         "-DARDUINO_RUNNING_CORE=1",
