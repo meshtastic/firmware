@@ -1,11 +1,11 @@
-// E22-900M30S with ESP32-S3-WROOM-X-N4
-// NOTE: ESP32-S3-WROOM-X-N4.json in boards folder (via platformio.ini board field) assumes 4 MB (Quad SPI) Flash, NO PSRAM
+// E22-900M30S with ESP32-S3-WROOM-1-N4
+// NOTE: ESP32-S3-WROOM-1-N4.json in boards folder (via platformio.ini board field) assumes 4 MB (Quad SPI) Flash, NO PSRAM
 
 // For each pin in this section, provide the IO pin number of the ESP32-S3-WROOM module you connected it to
 // This configuration uses the E22's DIO2 pin of the SX1262 (thereby the E22-900M30S) to control the RF switching, so we connect it to E22's TXEN
 // Alternatively you may assign a pin number to E22_TXEN and it will be used for RF switching and DIO2 will not be, the DIO2 mode will be automatically set in this file!
 
-// FIXME: We have many free pins on the ESP32-S3-WROOM-X-Y module, perhaps it is best to use one of it's pins to control TXEN, and use DIO2 as an extra interrupt?
+// FIXME: We have many free pins on the ESP32-S3-WROOM-X-Y module, perhaps it is best to use one of its pins to control TXEN, and use DIO2 as an extra interrupt?
 // However, Meshtastic does not currently seem to reap any benefits from having another interrupt pin available
 // Adding two 0-ohm links on your PCB design so that you can choose between the two connections would enable future software to make the most of an extra interrupt pin
 
