@@ -11,8 +11,6 @@
 #undef ECB
 #define ECB 0
 
-#undef GPS_SERIAL_NUM
-
 #define LED_CONN PIN_LED2
 #define LED_PIN LED_BUILTIN
 
