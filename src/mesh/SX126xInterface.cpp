@@ -34,7 +34,7 @@ template <typename T> bool SX126xInterface<T>::init()
     float tcxoVoltage = 1.8;
 #else
     // (DIO3 is free to be used as an IRQ)
-    LOG_DEBUG("DIO3_AS_TCXO_AT_1V8 mode false. Not using DIO3 to power TCXO\n")
+    LOG_DEBUG("DIO3_AS_TCXO_AT_1V8 mode false. Not using DIO3 to power TCXO\n");
     float tcxoVoltage = 0; // None - we use an XTAL
 #endif
     bool useRegulatorLDO = false; // Seems to depend on the connection to pin 9/DCC_SW - if an inductor DCDC?
