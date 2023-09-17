@@ -3,7 +3,7 @@
 #include "error.h"
 #include "mesh/NodeDB.h"
 
-// Particular boards might define a different max power based on what their hardware can do, deafult to max power output if not specified (dangerous?)
+// Particular boards might define a different max power based on what their hardware can do, default to max power output if not specified (may be dangerous if using external PA and SX126x power config forgotten)
 #ifndef SX126X_MAX_POWER
 #define SX126X_MAX_POWER 22
 #endif
