@@ -86,12 +86,12 @@ template <typename T> bool SX126xInterface<T>::init()
         res = lora.setDio2AsRfSwitch(false);
     }
 #endif
-
+	
 #ifndef SX126X_RXEN
-    #define SX126X_RXEN RADIOLIB_NC;
+    #define SX126X_RXEN RADIOLIB_NC
 #endif
 #ifndef SX126X_TXEN
-    #define SX126X_TXEN RADIOLIB_NC;
+    #define SX126X_TXEN RADIOLIB_NC
 #endif
     // If the pins for RX or for TX isn't defined, then it won't control that function as it is set to NC
     if (res == RADIOLIB_ERR_NONE) {
