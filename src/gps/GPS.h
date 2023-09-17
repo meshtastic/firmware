@@ -5,6 +5,11 @@
 #include "TinyGPS++.h"
 #include "concurrency/OSThread.h"
 
+// Allow defining the polarity of the ENABLE output.  default is active high
+#ifndef GPS_EN_ACTIVE
+#define GPS_EN_ACTIVE 1
+#endif
+
 struct uBloxGnssModelInfo {
     char swVersion[30];
     char hwVersion[10];
@@ -115,7 +120,10 @@ class GPS : private concurrency::OSThread
      */
     virtual bool setup();
 
+    // re-enable the thread
     void enable();
+
+    // Disable the thread
     int32_t disable() override;
 
     void setGPSPower(bool on);

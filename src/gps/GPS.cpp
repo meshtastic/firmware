@@ -437,17 +437,18 @@ GPS::~GPS()
     notifyGPSSleepObserver.observe(&notifyGPSSleep);
 }
 
-// Allow defining the polarity of the WAKE output.  default is active high
-#ifndef GPS_WAKE_ACTIVE
-#define GPS_WAKE_ACTIVE 1
-#endif
+
 
 void GPS::setGPSPower(bool on)
 {
     LOG_INFO("Setting GPS power=%d\n", on);
 
 #ifdef PIN_GPS_EN
+#if GPS_EN_ACTIVE == 1
     digitalWrite(PIN_GPS_EN, on ? 1 : 0);
+#else
+    digitalWrite(PIN_GPS_EN, on ? 0 : 1);
+#endif
 #endif
 
 #ifdef HAS_PMU
@@ -467,7 +468,7 @@ void GPS::setGPSPower(bool on)
         }
     }
 #endif
-#ifdef PIN_GPS_WAKE
+#ifdef PIN_GPS_STANDBY
     if (on) {
         LOG_INFO("Waking GPS");
         setAwake(true);
@@ -477,7 +478,7 @@ void GPS::setGPSPower(bool on)
         setAwake(false);
     }
 #endif
-#if !(defined(HAS_PMU) || defined(PIN_GPS_EN) || defined(PIN_GPS_WAKE))
+#if !(defined(HAS_PMU) || defined(PIN_GPS_EN) || defined(PIN_GPS_STANDBY))
     if (!on) {
         notifyGPSSleep.notifyObservers(NULL);
         if (gnssModel == GNSS_MODEL_UBLOX) {
@@ -493,19 +494,19 @@ void GPS::setGPSPower(bool on)
 #endif
 }
 
-void GPS::wake()
+void GPS::wake() // currently only L76K
 {
-#ifdef PIN_GPS_WAKE
-    digitalWrite(PIN_GPS_WAKE, GPS_WAKE_ACTIVE);
-    pinMode(PIN_GPS_WAKE, OUTPUT);
+#ifdef PIN_GPS_STANDBY
+    digitalWrite(PIN_GPS_STANDBY, 1);
+    pinMode(PIN_GPS_STANDBY, OUTPUT);
 #endif
 }
 
 void GPS::sleep()
 {
-#ifdef PIN_GPS_WAKE
-    digitalWrite(PIN_GPS_WAKE, GPS_WAKE_ACTIVE ? 0 : 1);
-    pinMode(PIN_GPS_WAKE, OUTPUT);
+#ifdef PIN_GPS_STANDBY
+    digitalWrite(PIN_GPS_STANDBY, 0);
+    pinMode(PIN_GPS_STANDBY, OUTPUT);
 #endif
 }
 
