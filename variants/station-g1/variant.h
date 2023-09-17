@@ -46,3 +46,7 @@
 
 // different screen
 #define USE_SH1106
+
+// Station may not have GPS installed, but it has a labeled GPS pinout
+#define GPS_RX_PIN 34
+#define GPS_TX_PIN 12
