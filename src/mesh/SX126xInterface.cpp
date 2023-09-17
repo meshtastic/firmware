@@ -26,7 +26,9 @@ template <typename T> bool SX126xInterface<T>::init()
     pinMode(SX126X_POWER_EN, OUTPUT);
 #endif
     // Always power on the TCXO on SX126X devices, since all of them have a TCXO onboard
-    // which needs to be activated by setting DIO3 to high. Reference: https://github.com/Xinyuan-LilyGO/LilyGo-LoRa-Series/blob/master/schematic/T-SX1262.pdf
+    // which needs to be activated by setting DIO3 to high. Reference:
+    // https://github.com/Xinyuan-LilyGO/LilyGo-LoRa-Series/blob/master/schematic/T-SX1262.pdf
+
     // Use DIO3 to power tcxo per https://github.com/jgromes/RadioLib/issues/12#issuecomment-520695575
     float tcxoVoltage = 1.8;
 
