@@ -2,6 +2,7 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include "configuration.h"
+#include "main.h" // pmu_found
 #include "sleep.h"
 #include "ubx.h"
 
@@ -420,7 +421,6 @@ bool GPS::setup()
         didSerialInit = true;
     }
 
-    notifySleepObserver.observe(&notifySleep);
     notifyDeepSleepObserver.observe(&notifyDeepSleep);
     notifyGPSSleepObserver.observe(&notifyGPSSleep);
 
@@ -433,7 +433,6 @@ bool GPS::setup()
 GPS::~GPS()
 {
     // we really should unregister our sleep observer
-    notifySleepObserver.unobserve(&notifySleep);
     notifyDeepSleepObserver.unobserve(&notifyDeepSleep);
     notifyGPSSleepObserver.observe(&notifyGPSSleep);
 }
@@ -442,6 +441,57 @@ GPS::~GPS()
 #ifndef GPS_WAKE_ACTIVE
 #define GPS_WAKE_ACTIVE 1
 #endif
+
+void GPS::setGPSPower(bool on)
+{
+    LOG_INFO("Setting GPS power=%d\n", on);
+
+#ifdef PIN_GPS_EN
+    digitalWrite(PIN_GPS_EN, on ? 1 : 0);
+#endif
+
+#ifdef HAS_PMU
+    if (pmu_found && PMU) {
+        uint8_t model = PMU->getChipModel();
+        if (model == XPOWERS_AXP2101) {
+            if (HW_VENDOR == meshtastic_HardwareModel_TBEAM) {
+                // t-beam v1.2 GNSS power channel
+                on ? PMU->enablePowerOutput(XPOWERS_ALDO3) : PMU->disablePowerOutput(XPOWERS_ALDO3);
+            } else if (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE) {
+                // t-beam-s3-core GNSS  power channel
+                on ? PMU->enablePowerOutput(XPOWERS_ALDO4) : PMU->disablePowerOutput(XPOWERS_ALDO4);
+            }
+        } else if (model == XPOWERS_AXP192) {
+            // t-beam v1.1 GNSS  power channel
+            on ? PMU->enablePowerOutput(XPOWERS_LDO3) : PMU->disablePowerOutput(XPOWERS_LDO3);
+        }
+    }
+#endif
+#ifdef PIN_GPS_WAKE
+    if (on) {
+        LOG_INFO("Waking GPS");
+        setAwake(true);
+    } else {
+        LOG_INFO("GPS entering sleep");
+        notifyGPSSleep.notifyObservers(NULL);
+        setAwake(false);
+    }
+#endif
+#if !(defined(HAS_PMU) || defined(PIN_GPS_EN) || defined(PIN_GPS_WAKE))
+    if (!on) {
+        notifyGPSSleep.notifyObservers(NULL);
+        if (gnssModel == GNSS_MODEL_UBLOX) {
+            uint8_t msglen;
+            msglen = gps->makeUBXPacket(0x02, 0x41, 0x08, gps->_message_PMREQ);
+            gps->_serial_gps->write(gps->UBXscratch, msglen);
+        }
+        setAwake(true);
+    } else {
+        if (gnssModel == GNSS_MODEL_UBLOX)
+            gps->_serial_gps->write(0xFF);
+    }
+#endif
+}
 
 void GPS::wake()
 {
@@ -483,11 +533,6 @@ void GPS::setNumSatellites(uint8_t n)
  */
 void GPS::setAwake(bool on)
 {
-    if (!wakeAllowed && on) {
-        LOG_WARN("Inhibiting because !wakeAllowed\n");
-        on = false;
-    }
-
     if (isAwake != on) {
         LOG_DEBUG("WANT GPS=%d\n", on);
         if (on) {
@@ -519,10 +564,9 @@ uint32_t GPS::getWakeTime() const
 uint32_t GPS::getSleepTime() const
 {
     uint32_t t = config.position.gps_update_interval;
-    bool gps_enabled = config.position.gps_enabled;
 
     // We'll not need the GPS thread to wake up again after first acq. with fixed position.
-    if (!gps_enabled || config.position.fixed_position)
+    if (!config.position.gps_enabled || config.position.fixed_position)
         t = UINT32_MAX; // Sleep forever now
 
     if (t == UINT32_MAX)
@@ -563,16 +607,18 @@ int32_t GPS::runOnce()
         }
         GPSInitFinished = true;
         if (config.position.gps_enabled == false) {
-            doGPSpowersave(false);
-            return 0;
+            setGPSPower(false);
+            return disable();
         }
     }
     if (config.position.gps_enabled == false)
-        return 0;
+        return disable();
 
     // Repeaters have no need for GPS
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER)
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
+        setGPSPower(false);
         disable();
+    }
 
     if (whileIdle()) {
         // if we have received valid NMEA claim we are connected
@@ -650,36 +696,12 @@ int32_t GPS::runOnce()
     return isAwake ? GPS_THREAD_INTERVAL : 5000;
 }
 
-void GPS::forceWake(bool on)
-{
-    if (on) {
-        LOG_DEBUG("Allowing GPS lock\n");
-        // lastSleepStartMsec = 0; // Force an update ASAP
-        wakeAllowed = true;
-    } else {
-        wakeAllowed = false;
-
-        // Note: if the gps was already awake, we DO NOT shut it down, because we want to allow it to complete its lock
-        // attempt even if we are in light sleep.  Once the attempt succeeds (or times out) we'll then shut it down.
-        // setAwake(false);
-    }
-}
-
 // clear the GPS rx buffer as quickly as possible
 void GPS::clearBuffer()
 {
     int x = _serial_gps->available();
     while (x--)
         _serial_gps->read();
-}
-
-/// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
-int GPS::prepareSleep(void *unused)
-{
-    LOG_INFO("GPS prepare sleep!\n");
-    forceWake(false);
-
-    return 0;
 }
 
 /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
@@ -876,7 +898,7 @@ GPS *GPS::createGps()
 #ifdef PIN_GPS_EN
         pinMode(PIN_GPS_EN, OUTPUT);
 #endif
-        setGPSPower(true);
+        new_gps->setGPSPower(true);
     }
 #endif
 
@@ -1152,44 +1174,16 @@ bool GPS::whileIdle()
 
     return isValid;
 }
-
-void GPS::doGPSpowersave(bool on)
+void GPS::enable()
 {
-#if defined(HAS_PMU) || defined(PIN_GPS_EN)
-    if (on) {
-        LOG_INFO("Turning GPS back on\n");
-        gps->forceWake(1);
-        setGPSPower(1);
-        setAwake(1);
-    } else {
-        LOG_INFO("Turning off GPS chip\n");
-        notifyGPSSleep.notifyObservers(NULL);
-        setGPSPower(0);
-    }
-#endif
-#ifdef PIN_GPS_WAKE
-    if (on) {
-        LOG_INFO("Waking GPS");
-        gps->forceWake(1);
-        setAwake(1);
-    } else {
-        LOG_INFO("GPS entering sleep");
-        notifyGPSSleep.notifyObservers(NULL);
-    }
-#endif
-#if !(defined(HAS_PMU) || defined(PIN_GPS_EN) || defined(PIN_GPS_WAKE))
-    if (!on) {
-        notifyGPSSleep.notifyObservers(NULL);
-        if (gnssModel == GNSS_MODEL_UBLOX) {
-            uint8_t msglen;
-            msglen = gps->makeUBXPacket(0x02, 0x41, 0x08, gps->_message_PMREQ);
-            gps->_serial_gps->write(gps->UBXscratch, msglen);
-        }
-        setAwake(1);
-    } else {
-        gps->forceWake(1);
-        if (gnssModel == GNSS_MODEL_UBLOX)
-            gps->_serial_gps->write(0xFF);
-    }
-#endif
+    enabled = true;
+    setInterval(GPS_THREAD_INTERVAL);
+}
+
+int32_t GPS::disable()
+{
+    enabled = false;
+    setInterval(INT32_MAX);
+
+    return INT32_MAX;
 }

@@ -166,13 +166,15 @@ class ButtonThread : public concurrency::OSThread
     {
 #if defined(GPS_POWER_TOGGLE)
         if (gps != nullptr) {
+            config.position.gps_enabled = !(config.position.gps_enabled);
+            gps->setGPSPower(config.position.gps_enabled);
             if (config.position.gps_enabled) {
                 LOG_DEBUG("Flag set to false for gps power\n");
+                gps->disable();
             } else {
                 LOG_DEBUG("Flag set to true to restore power\n");
+                gps->enable();
             }
-            config.position.gps_enabled = !(config.position.gps_enabled);
-            gps->doGPSpowersave(config.position.gps_enabled);
         }
 #endif
     }

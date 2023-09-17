@@ -90,33 +90,6 @@ void setLed(bool ledOn)
 #endif
 }
 
-void setGPSPower(bool on)
-{
-    LOG_INFO("Setting GPS power=%d\n", on);
-
-#ifdef PIN_GPS_EN
-    digitalWrite(PIN_GPS_EN, on ? 1 : 0);
-#endif
-
-#ifdef HAS_PMU
-    if (pmu_found && PMU) {
-        uint8_t model = PMU->getChipModel();
-        if (model == XPOWERS_AXP2101) {
-            if (HW_VENDOR == meshtastic_HardwareModel_TBEAM) {
-                // t-beam v1.2 GNSS power channel
-                on ? PMU->enablePowerOutput(XPOWERS_ALDO3) : PMU->disablePowerOutput(XPOWERS_ALDO3);
-            } else if (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE) {
-                // t-beam-s3-core GNSS  power channel
-                on ? PMU->enablePowerOutput(XPOWERS_ALDO4) : PMU->disablePowerOutput(XPOWERS_ALDO4);
-            }
-        } else if (model == XPOWERS_AXP192) {
-            // t-beam v1.1 GNSS  power channel
-            on ? PMU->enablePowerOutput(XPOWERS_LDO3) : PMU->disablePowerOutput(XPOWERS_LDO3);
-        }
-    }
-#endif
-}
-
 // Perform power on init that we do on each wake from deep sleep
 void initDeepSleep()
 {
@@ -200,7 +173,7 @@ void doDeepSleep(uint32_t msecToWake)
     nodeDB.saveToDisk();
 
     // Kill GPS power completely (even if previously we just had it in sleep mode)
-    setGPSPower(false);
+    gps->setGPSPower(false);
 
     setLed(false);
 
