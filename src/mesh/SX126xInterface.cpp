@@ -3,7 +3,7 @@
 #include "error.h"
 #include "mesh/NodeDB.h"
 
-// Particular boards might define a different max power based on what their hardware can do
+// Particular boards might define a different max power based on what their hardware can do, deafult to max power output if not specified (dangerous?)
 #ifndef SX126X_MAX_POWER
 #define SX126X_MAX_POWER 22
 #endif
@@ -26,20 +26,25 @@ template <typename T> bool SX126xInterface<T>::init()
     pinMode(SX126X_POWER_EN, OUTPUT);
 #endif
 
-#ifndef SX126X_E22
-    float tcxoVoltage = 0; // None - we use an XTAL
-#else
-    // Use DIO3 to power tcxo per https://github.com/jgromes/RadioLib/issues/12#issuecomment-520695575
+// If we need more TCXO voltage ranges in the future we can split this into DIO3_AS_TCXO and DIO3_TCXO_VOLTAGE
+#ifdef DIO3_AS_TCXO_AT_1V8
+    // Used in E22 modules as TCXO voltage is 1.8V per https://www.ebyte.com/en/pdf-down.aspx?id=781 (and https://github.com/jgromes/RadioLib/issues/12#issuecomment-520695575)
+    // (DIO3 is not free to be used as an IRQ)
+    LOG_DEBUG("DIO3_AS_TCXO_AT_1V8 mode true. Using DIO3 to power TCXO with 1.8V\n");
     float tcxoVoltage = 1.8;
+#else
+    // (DIO3 is free to be used as an IRQ)
+    LOG_DEBUG("DIO3_AS_TCXO_AT_1V8 mode false. Not using DIO3 to power TCXO\n")
+    float tcxoVoltage = 0; // None - we use an XTAL
 #endif
     bool useRegulatorLDO = false; // Seems to depend on the connection to pin 9/DCC_SW - if an inductor DCDC?
 
     RadioLibInterface::init();
 
-    if (power == 0)
-        power = SX126X_MAX_POWER;
+    // Do not correct 0dBm to 22dBm as may be using external amplifier! (removed code that did this)
 
-    if (power > SX126X_MAX_POWER) // This chip has lower power limits than some
+    // Clamp power output to valid range (incorrect value may be entered as this chip has lower power limits than some)
+    if (power > SX126X_MAX_POWER)
         power = SX126X_MAX_POWER;
 
     limitPower();
@@ -55,41 +60,44 @@ template <typename T> bool SX126xInterface<T>::init()
     LOG_INFO("Power output set to %d\n", power);
 
     // current limit was removed from module' ctor
-    // override default value (60 mA)
+    // override default value (60 mA) using value in SX126xInterface.h - might not be true that default value FOR ALL SX126x is 60mA:
+    // From Table 12-1: List of Registers in SX1262 datasheet
+    // Set the Over Current Protection level. The value is changed internally depending on the device selected.
+    // Default values are: SX1262: 0x38 (140 mA), SX1261: 0x18 (60 mA)
     res = lora.setCurrentLimit(currentLimit);
     LOG_DEBUG("Current limit set to %f\n", currentLimit);
     LOG_DEBUG("Current limit set result %d\n", res);
+    // Requried current for SX126x shouldn't be affected by PA
+    // Note: setting current limit for all SX126x as 140mA may be dangerous if support for SX1261 is added and this file is used!
 
-#if defined(SX126X_E22)
-    // E22 Emulation explicitly requires DIO2 as RF switch, so set it to TRUE again for good measure. In case somebody defines
-    // SX126X_TX for an E22 Module
+// Reference 13.3.5 SetDIO2AsRfSwitchCtrl in SX1262 datasheet
+#if defined(DIO2_AS_RF_SWITCH)
+    // DIO2 is selected to be used to control an RF switch. In this case:
+    // DIO2 = 0 in SLEEP, STDBY_RX, STDBY_XOSC, FS and RX modes, DIO2 = 1 in TX mode
+    // (DIO2 is not free to be used as an IRQ)
     if (res == RADIOLIB_ERR_NONE) {
-        LOG_DEBUG("SX126X_E22 mode enabled. Setting DIO2 as RF Switch\n");
+        LOG_DEBUG("DIO2_AS_RF_SWITCH mode true. Setting DIO2 as RF switch\n");
         res = lora.setDio2AsRfSwitch(true);
     }
+#else
+   // (DIO2 is free to be used as an IRQ)
+   if (res == RADIOLIB_ERR_NONE) {
+        LOG_DEBUG("DIO2_AS_RF_SWITCH mode false. Setting DIO2 as not RF switch\n");
+        res = lora.setDio2AsRfSwitch(false);
+    }
 #endif
 
-#if defined(SX126X_TXEN) && (SX126X_TXEN != RADIOLIB_NC)
-    // If SX126X_TXEN is connected to the MCU, we are manually controlling RX and TX.
-    // But lora.begin (called above) sets Dio2 as RF switch control, which is not true here, so set it back to false.
-    if (res == RADIOLIB_ERR_NONE) {
-        LOG_DEBUG("SX126X_TXEN pin defined. Setting RF Switch: RXEN=%i, TXEN=%i\n", SX126X_RXEN, SX126X_TXEN);
-        res = lora.setDio2AsRfSwitch(false);
-        lora.setRfSwitchPins(SX126X_RXEN, SX126X_TXEN);
-    }
-#elif defined(SX126X_RXEN) && (SX126X_RXEN != RADIOLIB_NC && defined(E22_TXEN_CONNECTED_TO_DIO2))
-    // Otherwise, if SX126X_RXEN is connected to the MCU, and E22_TXEN_CONNECTED_TO_DIO2 is defined, we are letting the
-    // E22 control RX and TX via DIO2. In this configuration, the E22's TXEN and DIO2 pins are connected to each other,
-    // but not to the MCU.
-    // However, we must still connect the E22's RXEN pin to the MCU, define SX126X_RXEN accordingly, and then call
-    // setRfSwitchPins, otherwise RX sensitivity (observed via RSSI) is greatly diminished.
-    LOG_DEBUG("SX126X_RXEN and E22_TXEN_CONNECTED_TO_DIO2 are defined; value of res: %d", res);
-    if (res == RADIOLIB_ERR_NONE) {
-        LOG_DEBUG("SX126X_TXEN is RADIOLIB_NC, but SX126X_RXEN and E22_TXEN_CONNECTED_TO_DIO2 are both defined; calling "
-                  "lora.setRfSwitchPins.");
-        lora.setRfSwitchPins(SX126X_RXEN, SX126X_TXEN);
-    }
+#ifndef SX126X_RXEN
+    SX126X_RXEN = RADIOLIB_NC;
 #endif
+#ifndef SX126X_TXEN
+    SX126X_TXEN = RADIOLIB_NC;
+#endif
+    // If the pins for RX or for TX isn't defined, then it won't control that function as it is set to NC
+    if (res == RADIOLIB_ERR_NONE) {
+        LOG_DEBUG("Setting RF Switch: RXEN=%i, TXEN=%i\n", SX126X_RXEN, SX126X_TXEN);
+        lora.setRfSwitchPins(SX126X_RXEN, SX126X_TXEN);
+    }
 
     if (config.lora.sx126x_rx_boosted_gain) {
         uint16_t result = lora.setRxBoostedGainMode(true);
@@ -266,7 +274,7 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
 template <typename T> bool SX126xInterface<T>::isActivelyReceiving()
 {
     // The IRQ status will be cleared when we start our read operation.  Check if we've started a header, but haven't yet
-    // received and handled the interrupt for reading the packet/handling errors.
+		// received and handled the interrupt for reading the packet/handling errors.
 
     uint16_t irq = lora.getIrqStatus();
     bool detected = (irq & (RADIOLIB_SX126X_IRQ_HEADER_VALID | RADIOLIB_SX126X_IRQ_RADIOLIB_PREAMBLE_DETECTED));
@@ -296,7 +304,7 @@ template <typename T> bool SX126xInterface<T>::sleep()
 {
     // Not keeping config is busted - next time nrf52 board boots lora sending fails  tcxo related? - see datasheet
     // \todo Display actual typename of the adapter, not just `SX126x`
-    LOG_DEBUG("sx126x entering sleep mode (FIXME, don't keep config)\n");
+    LOG_DEBUG("SX126x entering sleep mode (FIXME, don't keep config)\n");
     setStandby(); // Stop any pending operations
 
     // turn off TCXO if it was powered
