@@ -1,0 +1,42 @@
+{
+    "build": {
+      "arduino":{
+        "ldscript": "esp32s3_out.ld"
+ 
+      },
+      "core": "esp32",
+      "extra_flags": [
+        "-DARDUINO_ESP32S3_DEV",
+        "-DARDUINO_USB_CDC_ON_BOOT=0",
+        "-DARDUINO_USB_MODE=0",
+        "-DARDUINO_RUNNING_CORE=1",
+        "-DARDUINO_EVENT_RUNNING_CORE=1"
+      ],
+      "f_cpu": "240000000L",
+      "f_flash": "80000000L",
+      "flash_mode": "qio",
+      "hwids": [["0x303A", "0x1001"]],
+      "mcu": "esp32s3",
+      "variant": "esp32s3"
+    },
+    "connectivity": [
+      "wifi"
+    ],
+    "debug": {
+      "default_tool": "esp-builtin",
+      "onboard_tools": ["esp-builtin"],
+      "openocd_target": "esp32s3.cfg"
+    },
+    "frameworks": ["arduino","espidf"],
+    "name": "(4 MB Flash, No PSRAM)",
+    "upload": {
+      "flash_size": "4MB",
+      "maximum_ram_size": 524288,
+      "maximum_size": 4194304,
+      "require_upload_port": true,
+      "speed": 2000000
+    },
+    "url": "https://docs.espressif.com/projects/esp-idf/en/latest/esp32s3/hw-reference/esp32s3/user-guide-devkitc-1.html",
+    "vendor": "Espressif"
+  }
+  
