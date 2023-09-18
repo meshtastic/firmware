@@ -7,7 +7,8 @@
 
 #define HAS_WIRE 0
 
-#define BATTERY_PIN 2 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+#define BATTERY_PIN ADC1_CHANNEL_1_GPIO_NUM // 2
+// A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 // ratio of voltage divider = 3.0 (R11=200k, R7=100k)
 #define ADC_MULTIPLIER 3.1 // 3.0 with correction of display undervoltage.
 #define ADC_CHANNEL ADC1_GPIO2_CHANNEL
