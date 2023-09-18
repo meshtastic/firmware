@@ -34,11 +34,11 @@ template <typename T> bool SX126xInterface<T>::init()
     float tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE
     // (DIO3 is not free to be used as an IRQ)
 #endif
-    // FIXME: Is this related to the TCXO? When do we use the LDO? When we aren't using the TCXO? In this case it should be moved with the `tcxoVoltage = 0` statement
+    // FIXME: Is this related to the TCXO? When do we use the LDO? When we aren't using the TCXO? - if so it should be moved with the `tcxoVoltage = 0` statement
     bool useRegulatorLDO = false; // Seems to depend on the connection to pin 9/DCC_SW - if an inductor DCDC?
 
     RadioLibInterface::init();
-    // FIXME (verify): Incorrect power may be configured as this chip has lower power limits than some
+    // FIXME (verify comment validity): Incorrect power may be configured as this chip has lower power limits than some
     if (power > SX126X_MAX_POWER) // Clamp power
         power = SX126X_MAX_POWER;
 
@@ -54,7 +54,7 @@ template <typename T> bool SX126xInterface<T>::init()
     LOG_INFO("Bandwidth set to %f\n", bw);
     LOG_INFO("Power output set to %d\n", power);
 
-    // FIXME (verify comments):
+    // FIXME (verify comment validity):
     // current limit was removed from module' ctor
     // override default value (60 mA) using value in SX126xInterface.h - might not be true that default value FOR ALL SX126x is 60mA:
     // From Table 12-1: List of Registers in SX1262 datasheet
