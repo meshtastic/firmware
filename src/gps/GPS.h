@@ -165,7 +165,6 @@ class GPS : private concurrency::OSThread
     static GPS *createGps();
 
   protected:
-
     /** Subclasses should look for serial rx characters here and feed it to their GPS parser
      *
      * Return true if we received a valid message from the GPS

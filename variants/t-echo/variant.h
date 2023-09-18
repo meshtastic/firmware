@@ -85,9 +85,9 @@ static const uint8_t A0 = PIN_A0;
 /*
 No longer populated on PCB
 */
-//#define PIN_SERIAL2_RX (0 + 6)
-//#define PIN_SERIAL2_TX (0 + 8)
-// #define PIN_SERIAL2_EN (0 + 17)
+// #define PIN_SERIAL2_RX (0 + 6)
+// #define PIN_SERIAL2_TX (0 + 8)
+//  #define PIN_SERIAL2_EN (0 + 17)
 
 /**
     Wire Interfaces

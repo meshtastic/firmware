@@ -23,7 +23,7 @@
 #define VARIANT_MCK (64000000ul)
 
 #define USE_LFXO // Board uses 32khz crystal for LF
-//#define USE_LFRC  // Board uses 32khz RC for LF
+// #define USE_LFRC  // Board uses 32khz RC for LF
 
 /*----------------------------------------------------------------------------
  *        Headers
@@ -54,7 +54,7 @@ extern "C" {
 #define LED_CONN PIN_GREEN
 
 #define LED_STATE_ON 0 // State when LED is lit
-//#define LED_INVERTED 1
+// #define LED_INVERTED 1
 
 /*
  * Buttons
@@ -114,7 +114,7 @@ External serial flash W25Q16JV_IQ
 #define SX126X_CS (32 + 13) // FIXME - we really should define LORA_CS instead
 #define SX126X_DIO1 (32 + 10)
 // Note DIO2 is attached internally to the module to an analog switch for TX/RX switching
-//#define SX1262_DIO3 (0 + 21)
+// #define SX1262_DIO3 (0 + 21)
 // This is used as an *output* from the sx1262 and connected internally to power the tcxo, do not drive from the main CPU?
 #define SX126X_BUSY (32 + 11)
 #define SX126X_RESET (32 + 15)
@@ -131,10 +131,10 @@ External serial flash W25Q16JV_IQ
 #define GPS_L76K
 
 #define PIN_GPS_STANDBY (0 + 13) // An output to wake GPS, low means allow sleep, high means force wake STANDBY
-#define PIN_GPS_TX (0 + 9)    // This is for bits going TOWARDS the CPU
-#define PIN_GPS_RX (0 + 10)   // This is for bits going TOWARDS the GPS
+#define PIN_GPS_TX (0 + 9)       // This is for bits going TOWARDS the CPU
+#define PIN_GPS_RX (0 + 10)      // This is for bits going TOWARDS the GPS
 
-//#define GPS_THREAD_INTERVAL 50
+// #define GPS_THREAD_INTERVAL 50
 
 #define PIN_SERIAL1_RX PIN_GPS_TX
 #define PIN_SERIAL1_TX PIN_GPS_RX
@@ -152,7 +152,7 @@ External serial flash W25Q16JV_IQ
 #define PIN_SPI_MOSI (0 + 11)
 #define PIN_SPI_SCK (0 + 12)
 
-//#define PIN_PWR_EN (0 + 6)
+// #define PIN_PWR_EN (0 + 6)
 
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
 // #define USE_SEGGER
