@@ -501,14 +501,6 @@ void GPS::setConnected()
     }
 }
 
-void GPS::setNumSatellites(uint8_t n)
-{
-    if (n != numSatellites) {
-        numSatellites = n;
-        shouldPublish = true;
-    }
-}
-
 /**
  * Switch the GPS into a mode where we are actively looking for a lock, or alternatively switch GPS into a low power mode
  *
@@ -597,7 +589,7 @@ int32_t GPS::runOnce()
 
     // Repeaters have no need for GPS
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
-        disable();
+        return disable();
     }
 
     if (whileIdle()) {
@@ -611,7 +603,7 @@ int32_t GPS::runOnce()
                 LOG_DEBUG("GPS is not communicating, trying factory reset on next bootup.\n");
                 devicestate.did_gps_reset = false;
                 nodeDB.saveDeviceStateToDisk();
-                disable(); // Stop the GPS thread as it can do nothing useful until next reboot.
+                return disable(); // Stop the GPS thread as it can do nothing useful until next reboot.
             }
         }
     }

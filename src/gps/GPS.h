@@ -163,8 +163,6 @@ class GPS : private concurrency::OSThread
     static GPS *createGps();
 
   protected:
-    /** Subclasses should look for serial rx characters here and feed it to their GPS parser
-
     /**
      * Perform any processing that should be done only while the GPS is awake and looking for a fix.
      * Override this method to check for new locations
@@ -181,8 +179,6 @@ class GPS : private concurrency::OSThread
 
     /// Record that we have a GPS
     void setConnected();
-
-    void setNumSatellites(uint8_t n);
 
     /** Subclasses should look for serial rx characters here and feed it to their GPS parser
      *
