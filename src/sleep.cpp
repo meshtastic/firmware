@@ -182,30 +182,6 @@ static void waitEnterSleep()
     notifySleep.notifyObservers(NULL);
 }
 
-void doGPSpowersave(bool on)
-{
-#if defined(HAS_PMU) || defined(PIN_GPS_EN)
-    if (on) {
-        LOG_INFO("Turning GPS back on\n");
-        gps->forceWake(1);
-        setGPSPower(1);
-    } else {
-        LOG_INFO("Turning off GPS chip\n");
-        notifyGPSSleep.notifyObservers(NULL);
-        setGPSPower(0);
-    }
-#endif
-#ifdef PIN_GPS_WAKE
-    if (on) {
-        LOG_INFO("Waking GPS");
-        gps->forceWake(1);
-    } else {
-        LOG_INFO("GPS entering sleep");
-        notifyGPSSleep.notifyObservers(NULL);
-    }
-#endif
-}
-
 void doDeepSleep(uint32_t msecToWake)
 {
     if (INCLUDE_vTaskSuspend && (msecToWake == portMAX_DELAY)) {

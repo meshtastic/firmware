@@ -11,9 +11,7 @@
 #undef ECB
 #define ECB 0
 
-#define NO_GPS 1
 #define USE_SH1106 1
-#undef GPS_SERIAL_NUM
 
 // default I2C pins:
 // SDA = 4

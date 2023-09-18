@@ -190,7 +190,9 @@ void NodeDB::installDefaultConfig()
                                       : meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN;
     // for backward compat, default position flags are ALT+MSL
     config.position.position_flags =
-        (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL);
+        (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL |
+         meshtastic_Config_PositionConfig_PositionFlags_SPEED | meshtastic_Config_PositionConfig_PositionFlags_HEADING |
+         meshtastic_Config_PositionConfig_PositionFlags_DOP);
 
 #ifdef T_WATCH_S3
     config.display.screen_on_secs = 30;
@@ -252,6 +254,13 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.detection_sensor.enabled = false;
     moduleConfig.detection_sensor.detection_triggered_high = true;
     moduleConfig.detection_sensor.minimum_broadcast_secs = 45;
+
+    moduleConfig.has_ambient_lighting = true;
+    moduleConfig.ambient_lighting.current = 10;
+    // Default to a color based on our node number
+    moduleConfig.ambient_lighting.red = (myNodeInfo.my_node_num & 0xFF0000) >> 16;
+    moduleConfig.ambient_lighting.green = (myNodeInfo.my_node_num & 0x00FF00) >> 8;
+    moduleConfig.ambient_lighting.blue = myNodeInfo.my_node_num & 0x0000FF;
 
     initModuleConfigIntervals();
 }
