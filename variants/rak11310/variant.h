@@ -48,5 +48,7 @@
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET
 #define SX126X_POWER_EN 25
-#define SX126X_E22 // DIO2 controlls an antenna switch and the TCXO voltage is controlled by DIO3
+// DIO2 controlls an antenna switch and the TCXO voltage is controlled by DIO3
+#define SX126X_DIO2_AS_RF_SWITCH
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
 #endif
