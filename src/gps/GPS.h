@@ -165,11 +165,6 @@ class GPS : private concurrency::OSThread
     static GPS *createGps();
 
   protected:
-    /// If possible force the GPS into sleep/low power mode
-    virtual void sleep();
-
-    /// wake the GPS into normal operation mode
-    virtual void wake();
 
     /** Subclasses should look for serial rx characters here and feed it to their GPS parser
      *
