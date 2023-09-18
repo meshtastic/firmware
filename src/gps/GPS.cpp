@@ -628,11 +628,6 @@ int32_t GPS::runOnce()
     // While we are awake
     if (isAwake) {
         // LOG_DEBUG("looking for location\n");
-        if ((now - lastWhileActiveMsec) > 5000) {
-            lastWhileActiveMsec = now;
-            whileActive(); // does nothing. Huh?
-        }
-
         // If we've already set time from the GPS, no need to ask the GPS
         bool gotTime = (getRTCQuality() >= RTCQualityGPS);
         if (!gotTime && lookForTime()) { // Note: we count on this && short-circuiting and not resetting the RTC time
@@ -665,7 +660,7 @@ int32_t GPS::runOnce()
                 hasValidLocation = false;
             }
 
-            setAwake(false);      // TODO only sleep for times longer than 59 seconds
+            setAwake(false);
             shouldPublish = true; // publish our update for this just finished acquisition window
         }
     }

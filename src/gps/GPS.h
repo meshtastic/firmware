@@ -53,7 +53,7 @@ class GPS : private concurrency::OSThread
     uint8_t fixType = 0;      // fix type from GPGSA
 #endif
   private:
-    uint32_t lastWakeStartMsec = 0, lastSleepStartMsec = 0, lastWhileActiveMsec = 0;
+    uint32_t lastWakeStartMsec = 0, lastSleepStartMsec = 0;
     const int serialSpeeds[6] = {9600, 4800, 38400, 57600, 115200, 9600};
 
     uint32_t rx_gpio = 0;
@@ -69,8 +69,6 @@ class GPS : private concurrency::OSThread
     bool hasValidLocation = false; // default to false, until we complete our first read
 
     bool isAwake = false; // true if we want a location right now
-
-    bool wakeAllowed = true; // false if gps must be forced to sleep regardless of what time it is
 
     bool shouldPublish = false; // If we've changed GPS state, this will force a publish the next loop()
 
@@ -166,12 +164,6 @@ class GPS : private concurrency::OSThread
 
   protected:
     /** Subclasses should look for serial rx characters here and feed it to their GPS parser
-     *
-     * Return true if we received a valid message from the GPS
-     */
-
-    /** Idle processing while GPS is looking for lock, called once per secondish */
-    virtual void whileActive() {}
 
     /**
      * Perform any processing that should be done only while the GPS is awake and looking for a fix.
