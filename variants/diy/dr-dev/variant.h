@@ -69,4 +69,4 @@
 #define USE_SX1262
 //#define USE_SX1268
 //#define USE_LLCC68
-#define SX126X_E22
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
