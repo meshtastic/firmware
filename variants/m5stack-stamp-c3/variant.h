@@ -42,7 +42,8 @@
 //#define SX126X_DIO1 LORA_DIO1
 //#define SX126X_BUSY LORA_BUSY
 //#define SX126X_RESET LORA_RESET
-//#define SX126X_E22
+//#define SX126X_DIO2_AS_RF_SWITCH
+//#define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
 // SX128X 2.4 Ghz LoRa module Not OK - RadioLib issue ? still to confirm
 //#define USE_SX1280
