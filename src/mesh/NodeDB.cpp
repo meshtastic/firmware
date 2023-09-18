@@ -304,6 +304,19 @@ void NodeDB::resetNodes()
         neighborInfoModule->resetNeighbors();
 }
 
+void NodeDB::cleanupMeshDB()
+{
+    int newPos = 0, removed = 0;
+    for (int i = 0; i < *numMeshNodes; i++) {
+        if (meshNodes[i].has_user)
+            meshNodes[newPos++] = meshNodes[i];
+        else
+            removed++;
+    }
+    *numMeshNodes -= removed;
+    LOG_DEBUG("cleanupMeshDB purged %d entries\n", removed);
+}
+
 void NodeDB::installDefaultDeviceState()
 {
     LOG_INFO("Installing default DeviceState\n");
@@ -333,6 +346,7 @@ void NodeDB::init()
 {
     LOG_INFO("Initializing NodeDB\n");
     loadFromDisk();
+    cleanupMeshDB();
 
     uint32_t devicestateCRC = crc32Buffer(&devicestate, sizeof(devicestate));
     uint32_t configCRC = crc32Buffer(&config, sizeof(config));
@@ -388,25 +402,20 @@ void NodeDB::init()
  */
 void NodeDB::pickNewNodeNum()
 {
-    NodeNum r = myNodeInfo.my_node_num;
-
     getMacAddr(ourMacAddr); // Make sure ourMacAddr is set
 
     // Pick an initial nodenum based on the macaddr
-    r = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
-
-    if (r == NODENUM_BROADCAST || r < NUM_RESERVED)
-        r = NUM_RESERVED; // don't pick a reserved node number
+    NodeNum nodeNum = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
 
     meshtastic_NodeInfoLite *found;
-    while ((found = getMeshNode(r)) && memcmp(found->user.macaddr, owner.macaddr, sizeof(owner.macaddr))) {
-        // FIXME: input for random() is int, so NODENUM_BROADCAST becomes -1
-        NodeNum n = random(NUM_RESERVED, NODENUM_BROADCAST); // try a new random choice
-        LOG_WARN("NOTE! Our desired nodenum 0x%x is in use, so trying for 0x%x\n", r, n);
-        r = n;
+    while ((nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED) ||
+           ((found = getMeshNode(nodeNum)) && memcmp(found->user.macaddr, owner.macaddr, sizeof(owner.macaddr)) != 0)) {
+        NodeNum candidate = random(NUM_RESERVED, LONG_MAX); // try a new random choice
+        LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, so trying for 0x%x\n", nodeNum, candidate);
+        nodeNum = candidate;
     }
 
-    myNodeInfo.my_node_num = r;
+    myNodeInfo.my_node_num = nodeNum;
 }
 
 static const char *prefFileName = "/prefs/db.proto";
