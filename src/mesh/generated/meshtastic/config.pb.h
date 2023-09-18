@@ -399,7 +399,8 @@ typedef struct _meshtastic_Config_LoRaConfig {
     /* The region code for the radio (US, CN, EU433, etc...) */
     meshtastic_Config_LoRaConfig_RegionCode region;
     /* Maximum number of hops. This can't be greater than 7.
- Default of 3 */
+ Default of 3
+ Attempting to set a value > 7 results in the default */
     uint32_t hop_limit;
     /* Disable TX from the LoRa radio. Useful for hot-swapping antennas and other tests.
  Defaults to false */
