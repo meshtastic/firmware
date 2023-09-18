@@ -33,7 +33,7 @@
       "maximum_ram_size": 524288,
       "maximum_size": 4194304,
       "require_upload_port": true,
-      "speed": 2000000
+      "speed": 921600
     },
     "url": "https://docs.espressif.com/projects/esp-idf/en/latest/esp32s3/hw-reference/esp32s3/user-guide-devkitc-1.html",
     "vendor": "Espressif"
