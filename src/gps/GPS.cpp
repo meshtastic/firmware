@@ -555,7 +555,8 @@ void GPS::publishUpdate()
         shouldPublish = false;
 
         // In debug logs, identify position by @timestamp:stage (stage 2 = publish)
-        LOG_DEBUG("publishing pos@%x:2, hasVal=%d, GPSlock=%d\n", p.timestamp, hasValidLocation, hasLock());
+        LOG_DEBUG("publishing pos@%x:2, hasVal=%d, Sats=%d, GPSlock=%d\n", p.timestamp, hasValidLocation, p.sats_in_view,
+                  hasLock());
 
         // Notify any status instances that are observing us
         const meshtastic::GPSStatus status = meshtastic::GPSStatus(hasValidLocation, isConnected(), isPowerSaving(), p);
@@ -598,8 +599,7 @@ int32_t GPS::runOnce()
     } else {
         if ((config.position.gps_enabled == 1) && (gnssModel == GNSS_MODEL_UBLOX)) {
             // reset the GPS on next bootup
-            if (devicestate.did_gps_reset && (millis() - lastWakeStartMsec > 60000) &&
-                !hasFlow()) { // This logic fails when booting disabled
+            if (devicestate.did_gps_reset && (millis() - lastWakeStartMsec > 60000) && !hasFlow()) {
                 LOG_DEBUG("GPS is not communicating, trying factory reset on next bootup.\n");
                 devicestate.did_gps_reset = false;
                 nodeDB.saveDeviceStateToDisk();
