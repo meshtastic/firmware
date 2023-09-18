@@ -405,6 +405,7 @@ void TFTDisplay::sendCommand(uint8_t com)
         } else {
             digitalWrite(ST7735_BACKLIGHT_EN_V05, !TFT_BACKLIGHT_ON);
         }
+#endif
 #if defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
         digitalWrite(TFT_BL, !TFT_BACKLIGHT_ON);
 #endif

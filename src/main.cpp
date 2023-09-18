@@ -241,7 +241,6 @@ void setup()
     CALIBRATE_ONE(RTC_CAL_32K_XTAL);
     if (rtc_clk_slow_freq_get() != RTC_SLOW_FREQ_32K_XTAL) {
         heltec_version = 3;
-
     } else {
         heltec_version = 5;
     }
