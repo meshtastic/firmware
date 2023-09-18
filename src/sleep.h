@@ -18,8 +18,6 @@ extern esp_sleep_source_t wakeCause;
 extern XPowersLibInterface *PMU;
 #endif
 
-
-
 // Perform power on init that we do on each wake from deep sleep
 void initDeepSleep();
 
