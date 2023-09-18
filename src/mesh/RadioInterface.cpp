@@ -534,8 +534,8 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
     h->id = p->id;
     h->channel = p->channel;
     if (p->hop_limit > HOP_MAX) {
-        LOG_WARN("hop limit %d is too high, setting to %d\n", p->hop_limit, HOP_MAX);
-        p->hop_limit = HOP_MAX;
+        LOG_WARN("hop limit %d is too high, setting to %d\n", p->hop_limit, 3);
+        p->hop_limit = 3;
     }
     h->flags = p->hop_limit | (p->want_ack ? PACKET_FLAGS_WANT_ACK_MASK : 0);
 
