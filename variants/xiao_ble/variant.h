@@ -125,7 +125,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 
 #define SX126X_TXEN RADIOLIB_NC
 #define SX126X_RXEN D7
-#define E22_TXEN_CONNECTED_TO_DIO2
+#define SX126X_DIO2_AS_RF_SWITCH
 
 // ------------------------------ OR ------------------------------
 
@@ -141,7 +141,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #ifdef EBYTE_E22
 // Internally the TTGO module hooks the SX126x-DIO2 in to control the TX/RX switch
 // (which is the default for the sx1262interface code)
-#define SX126X_E22
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
 #endif
 
 /*
