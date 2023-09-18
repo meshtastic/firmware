@@ -373,8 +373,22 @@ void TFTDisplay::sendCommand(uint8_t com)
     // handle display on/off directly
     switch (com) {
     case DISPLAYON: {
+#if defined(ST7735_BACKLIGHT_EN_V03) && defined(TFT_BACKLIGHT_ON)
+        if (heltec_version == 3) {
+            digitalWrite(ST7735_BACKLIGHT_EN_V03, TFT_BACKLIGHT_ON);
+        } else {
+            digitalWrite(ST7735_BACKLIGHT_EN_V05, TFT_BACKLIGHT_ON);
+        }
+#endif
 #if defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
         digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
+#endif
+#ifdef VTFT_CTRL_V03
+        if (heltec_version == 3) {
+            digitalWrite(VTFT_CTRL_V03, LOW);
+        } else {
+            digitalWrite(VTFT_CTRL_V05, LOW);
+        }
 #endif
 #ifdef VTFT_CTRL
         digitalWrite(VTFT_CTRL, LOW);
@@ -385,8 +399,21 @@ void TFTDisplay::sendCommand(uint8_t com)
         break;
     }
     case DISPLAYOFF: {
+#if defined(ST7735_BACKLIGHT_EN_V03) && defined(TFT_BACKLIGHT_ON)
+        if (heltec_version == 3) {
+            digitalWrite(ST7735_BACKLIGHT_EN_V03, !TFT_BACKLIGHT_ON);
+        } else {
+            digitalWrite(ST7735_BACKLIGHT_EN_V05, !TFT_BACKLIGHT_ON);
+        }
 #if defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
         digitalWrite(TFT_BL, !TFT_BACKLIGHT_ON);
+#endif
+#ifdef VTFT_CTRL_V03
+        if (heltec_version == 3) {
+            digitalWrite(VTFT_CTRL_V03, HIGH);
+        } else {
+            digitalWrite(VTFT_CTRL_V05, HIGH);
+        }
 #endif
 #ifdef VTFT_CTRL
         digitalWrite(VTFT_CTRL, HIGH);
@@ -443,6 +470,16 @@ bool TFTDisplay::connect()
 #ifdef TFT_BL
     digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
     pinMode(TFT_BL, OUTPUT);
+#endif
+
+#ifdef ST7735_BACKLIGHT_EN_V03
+    if (heltec_version == 3) {
+        digitalWrite(ST7735_BACKLIGHT_EN_V03, TFT_BACKLIGHT_ON);
+        pinMode(ST7735_BACKLIGHT_EN_V03, OUTPUT);
+    } else {
+        digitalWrite(ST7735_BACKLIGHT_EN_V05, TFT_BACKLIGHT_ON);
+        pinMode(ST7735_BACKLIGHT_EN_V05, OUTPUT);
+    }
 #endif
 
     tft.init();

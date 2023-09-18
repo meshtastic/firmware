@@ -241,6 +241,7 @@ void setup()
     CALIBRATE_ONE(RTC_CAL_32K_XTAL);
     if (rtc_clk_slow_freq_get() != RTC_SLOW_FREQ_32K_XTAL) {
         heltec_version = 3;
+
     } else {
         heltec_version = 5;
     }
@@ -250,16 +251,38 @@ void setup()
     if (heltec_version == 3) {
         pinMode(VEXT_ENABLE_V03, OUTPUT);
         digitalWrite(VEXT_ENABLE_V03, 0); // turn on the display power
+        LOG_DEBUG("HELTEC Detect Tracker V1.0\n");
     } else {
         pinMode(VEXT_ENABLE_V05, OUTPUT);
         digitalWrite(VEXT_ENABLE_V05, 1); // turn on the display power
+        LOG_DEBUG("HELTEC Detect Tracker V1.1\n");
     }
 #elif defined(VEXT_ENABLE)
     pinMode(VEXT_ENABLE, OUTPUT);
     digitalWrite(VEXT_ENABLE, 0); // turn on the display power
 #endif
 
-#ifdef VGNSS_CTRL
+#if defined(VGNSS_CTRL_V03)
+    if (heltec_version == 3) {
+        pinMode(VGNSS_CTRL_V03, OUTPUT);
+        digitalWrite(VGNSS_CTRL_V03, LOW);
+    } else {
+        pinMode(VGNSS_CTRL_V05, OUTPUT);
+        digitalWrite(VGNSS_CTRL_V05, LOW);
+    }
+#endif
+
+#if defined(VTFT_CTRL_V03)
+    if (heltec_version == 3) {
+        pinMode(VTFT_CTRL_V03, OUTPUT);
+        digitalWrite(VTFT_CTRL_V03, LOW);
+    } else {
+        pinMode(VTFT_CTRL_V05, OUTPUT);
+        digitalWrite(VTFT_CTRL_V05, LOW);
+    }
+#endif
+
+#if defined(VGNSS_CTRL)
     pinMode(VGNSS_CTRL, OUTPUT);
     digitalWrite(VGNSS_CTRL, LOW);
 #endif
