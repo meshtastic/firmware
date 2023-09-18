@@ -437,13 +437,13 @@ GPS::~GPS()
     notifyGPSSleepObserver.observe(&notifyGPSSleep);
 }
 
-
-
 void GPS::setGPSPower(bool on)
 {
     LOG_INFO("Setting GPS power=%d\n", on);
+    if (on)
+        clearBuffer(); // drop any old data waiting in the buffer before re-enabling
 
-#ifdef PIN_GPS_EN  // enable pin // powers down GPS?
+#ifdef PIN_GPS_EN // enable pin // powers down GPS?
     digitalWrite(PIN_GPS_EN, on ? GPS_EN_ACTIVE : !GPS_EN_ACTIVE);
 #endif
 #ifdef HAS_PMU
@@ -466,8 +466,8 @@ void GPS::setGPSPower(bool on)
 #ifdef PIN_GPS_STANDBY // standby pin // puts GPU in standby
     if (on) {
         LOG_INFO("Waking GPS");
-            digitalWrite(PIN_GPS_STANDBY, 1);
-            pinMode(PIN_GPS_STANDBY, OUTPUT);
+        digitalWrite(PIN_GPS_STANDBY, 1);
+        pinMode(PIN_GPS_STANDBY, OUTPUT);
     } else {
         LOG_INFO("GPS entering sleep");
         // notifyGPSSleep.notifyObservers(NULL);
@@ -488,6 +488,8 @@ void GPS::setGPSPower(bool on)
             gps->_serial_gps->write(0xFF);
     }
 #endif
+    if (!on)
+        clearBuffer(); // drop any old data waiting in the buffer
 }
 
 /// Record that we have a GPS
@@ -516,13 +518,14 @@ void GPS::setAwake(bool on)
 {
     if (isAwake != on) {
         LOG_DEBUG("WANT GPS=%d\n", on);
+
         if (on) {
-            clearBuffer(); // drop any old data waiting in the buffer
             lastWakeStartMsec = millis();
         } else {
             lastSleepStartMsec = millis();
         }
-        setGPSPower(on);
+        if (getSleepTime() > 59000) // We're only powering down for a minute or more between fixes
+            setGPSPower(on);
         isAwake = on;
     }
 }
@@ -603,7 +606,8 @@ int32_t GPS::runOnce()
     } else {
         if ((config.position.gps_enabled == 1) && (gnssModel == GNSS_MODEL_UBLOX)) {
             // reset the GPS on next bootup
-            if (devicestate.did_gps_reset && (millis() - lastWakeStartMsec > 60000) && !hasFlow()) { // This logic fails when booting disabled
+            if (devicestate.did_gps_reset && (millis() - lastWakeStartMsec > 60000) &&
+                !hasFlow()) { // This logic fails when booting disabled
                 LOG_DEBUG("GPS is not communicating, trying factory reset on next bootup.\n");
                 devicestate.did_gps_reset = false;
                 nodeDB.saveDeviceStateToDisk();
@@ -661,7 +665,7 @@ int32_t GPS::runOnce()
                 hasValidLocation = false;
             }
 
-            setAwake(false); // TODO only sleep for times longer than 59 seconds
+            setAwake(false);      // TODO only sleep for times longer than 59 seconds
             shouldPublish = true; // publish our update for this just finished acquisition window
         }
     }
@@ -1134,8 +1138,8 @@ bool GPS::whileIdle()
         clearBuffer();
     }
 #endif
-     // if (_serial_gps->available() > 0)
-     // LOG_DEBUG("GPS Bytes Waiting: %u\n", _serial_gps->available());
+    // if (_serial_gps->available() > 0)
+    // LOG_DEBUG("GPS Bytes Waiting: %u\n", _serial_gps->available());
     // First consume any chars that have piled up at the receiver
     while (_serial_gps->available() > 0) {
         int c = _serial_gps->read();
