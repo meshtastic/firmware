@@ -1,8 +1,3 @@
-#undef GPS_RX_PIN
-#undef GPS_TX_PIN
-
-#define PIN_GPS_EN 42 // GPS power enable pin
-
 #define HAS_SDCARD
 #define SDCARD_USE_SPI1
 
