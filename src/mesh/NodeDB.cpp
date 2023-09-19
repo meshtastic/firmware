@@ -170,10 +170,10 @@ void NodeDB::installDefaultConfig()
     config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
     config.lora.hop_limit = HOP_RELIABLE;
 #ifdef PIN_GPS_EN
-    config.position.gps_en_gpio = PIN_GPS_EN
+    config.position.gps_en_gpio = PIN_GPS_EN;
 #endif
 #ifdef GPS_POWER_TOGGLE
-                                      config.device.disable_triple_click = false;
+    config.device.disable_triple_click = false;
 #else
     config.device.disable_triple_click = true;
 #endif
