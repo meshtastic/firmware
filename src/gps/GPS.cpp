@@ -443,9 +443,9 @@ void GPS::setGPSPower(bool on)
     if (on)
         clearBuffer(); // drop any old data waiting in the buffer before re-enabling
 
-#ifdef PIN_GPS_EN // enable pin // powers down GPS?
-    digitalWrite(PIN_GPS_EN, on ? GPS_EN_ACTIVE : !GPS_EN_ACTIVE);
-#endif
+    if (en_gpio != 0)
+        digitalWrite(en_gpio, on ? GPS_EN_ACTIVE : !GPS_EN_ACTIVE);
+
 #ifdef HAS_PMU
     if (pmu_found && PMU) { // Powers down GPU
         uint8_t model = PMU->getChipModel();
@@ -475,17 +475,19 @@ void GPS::setGPSPower(bool on)
         pinMode(PIN_GPS_STANDBY, OUTPUT);
     }
 #endif
-#if !(defined(HAS_PMU) || defined(PIN_GPS_EN) || defined(PIN_GPS_STANDBY))
-    if (!on) {
-        // notifyGPSSleep.notifyObservers(NULL); // How deep is this sleep? // recursive loop!
-        if (gnssModel == GNSS_MODEL_UBLOX) {
-            uint8_t msglen;
-            msglen = gps->makeUBXPacket(0x02, 0x41, 0x08, gps->_message_PMREQ);
-            gps->_serial_gps->write(gps->UBXscratch, msglen);
+#if !(defined(HAS_PMU) || defined(PIN_GPS_STANDBY))
+    if (en_gpio == 0) {
+        if (!on) {
+            // notifyGPSSleep.notifyObservers(NULL); // How deep is this sleep? // recursive loop!
+            if (gnssModel == GNSS_MODEL_UBLOX) {
+                uint8_t msglen;
+                msglen = gps->makeUBXPacket(0x02, 0x41, 0x08, gps->_message_PMREQ);
+                gps->_serial_gps->write(gps->UBXscratch, msglen);
+            }
+        } else {
+            if (gnssModel == GNSS_MODEL_UBLOX)
+                gps->_serial_gps->write(0xFF);
         }
-    } else {
-        if (gnssModel == GNSS_MODEL_UBLOX)
-            gps->_serial_gps->write(0xFF);
     }
 #endif
     if (!on)
@@ -827,6 +829,7 @@ GPS *GPS::createGps()
 {
     int8_t _rx_gpio = config.position.rx_gpio;
     int8_t _tx_gpio = config.position.tx_gpio;
+    int8_t _en_gpio = config.position.gps_en_gpio;
 #if defined(HAS_GPS) && !defined(ARCH_ESP32)
     _rx_gpio = 1; // We only specify GPS serial ports on ESP32. Otherwise, these are just flags.
     _tx_gpio = 1;
@@ -839,12 +842,17 @@ GPS *GPS::createGps()
     if (!_tx_gpio)
         _tx_gpio = GPS_TX_PIN;
 #endif
+#if defined(PIN_GPS_EN)
+    if (!_en_gpio)
+        _en_gpio = PIN_GPS_EN;
+#endif
     if (!_rx_gpio) // Configured to have no GPS at all
         return nullptr;
 
     GPS *new_gps = new GPS;
     new_gps->rx_gpio = _rx_gpio;
     new_gps->tx_gpio = _tx_gpio;
+    new_gps->en_gpio = _en_gpio;
 
 #ifdef PIN_GPS_PPS
     // pulse per second

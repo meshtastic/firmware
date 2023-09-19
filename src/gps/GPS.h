@@ -58,6 +58,7 @@ class GPS : private concurrency::OSThread
 
     uint32_t rx_gpio = 0;
     uint32_t tx_gpio = 0;
+    uint32_t en_gpio = 0;
 
     int speedSelect = 0;
     int probeTries = 2;

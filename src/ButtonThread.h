@@ -164,8 +164,7 @@ class ButtonThread : public concurrency::OSThread
 
     static void userButtonMultiPressed()
     {
-#if defined(GPS_POWER_TOGGLE) // todo make runtime config
-        if (gps != nullptr) {
+        if (!config.device.disable_triple_click && (gps != nullptr)) {
             config.position.gps_enabled = !(config.position.gps_enabled);
             if (config.position.gps_enabled) {
                 LOG_DEBUG("Flag set to true to restore power\n");
@@ -176,7 +175,6 @@ class ButtonThread : public concurrency::OSThread
                 gps->disable();
             }
         }
-#endif
     }
 
     static void userButtonPressedLongStart()
