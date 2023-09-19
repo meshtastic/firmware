@@ -1,10 +1,3 @@
-#undef GPS_RX_PIN
-#undef GPS_TX_PIN
-#define GPS_RX_PIN 15 // per @der_bear on the forum, 36 is incorrect for this board type and 15 is a better pick
-#define GPS_TX_PIN 13
-
-#define PIN_GPS_EN 19 // GPS power enable pin
-
 #define BATTERY_PIN 35
 #define ADC_CHANNEL ADC1_GPIO35_CHANNEL
 #define BATTERY_SENSE_SAMPLES 30
