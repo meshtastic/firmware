@@ -141,7 +141,6 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define SX126X_TXEN (32 + 13)  // TXEN        P1.13 NiceRF 868 dont use
 #define SX126X_RXEN (32 + 10)  // RXEN        P1.10 NiceRF 868 dont use
 
-#define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
 #define PIN_GPS_EN (-1)
