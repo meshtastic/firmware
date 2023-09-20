@@ -526,8 +526,11 @@ void GPS::setAwake(bool on)
             }
             LOG_DEBUG("GPS Lock took %d, average %d\n", (lastSleepStartMsec - lastWakeStartMsec) / 1000, averageLockTime / 1000);
         }
-        if ((int32_t)getSleepTime() - averageLockTime > 20000) // We're only powering down if
+        if ((int32_t)getSleepTime() - averageLockTime > 20000) { // We're only powering down if
             setGPSPower(on);
+        } else if (averageLockTime > 20000) {
+            averageLockTime -= 1000; // eventually want to sleep again.
+        }
         isAwake = on;
     }
 }
@@ -571,6 +574,8 @@ void GPS::publishUpdate()
         // Notify any status instances that are observing us
         const meshtastic::GPSStatus status = meshtastic::GPSStatus(hasValidLocation, isConnected(), isPowerSaving(), p);
         newStatus.notifyObservers(&status);
+        if (config.position.gps_enabled)
+            positionModule->handleNewPosition();
     }
 }
 
@@ -624,8 +629,7 @@ int32_t GPS::runOnce()
 
     auto sleepTime = getSleepTime();
     if (!isAwake && (sleepTime != UINT32_MAX) &&
-        ((timeAsleep > sleepTime) ||
-         (isInPowersave && timeAsleep > (sleepTime - averageLockTime)))) {
+        ((timeAsleep > sleepTime) || (isInPowersave && timeAsleep > (sleepTime - averageLockTime)))) {
         // We now want to be awake - so wake up the GPS
         setAwake(true);
     }

@@ -4,6 +4,7 @@
 #include "Observer.h"
 #include "TinyGPS++.h"
 #include "concurrency/OSThread.h"
+#include "modules/PositionModule.h"
 
 // Allow defining the polarity of the ENABLE output.  default is active high
 #ifndef GPS_EN_ACTIVE
