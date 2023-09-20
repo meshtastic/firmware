@@ -444,8 +444,10 @@ void GPS::setGPSPower(bool on)
         clearBuffer(); // drop any old data waiting in the buffer before re-enabling
     isInPowersave = !on;
 
-    if (en_gpio != 0)
+    if (en_gpio != 0 && !(HW_VENDOR == meshtastic_HardwareModel_RAK4631 && rotaryEncoderInterruptImpl1 != nullptr)) {
         digitalWrite(en_gpio, on ? GPS_EN_ACTIVE : !GPS_EN_ACTIVE);
+        return;
+    }
 
 #ifdef HAS_PMU
     if (pmu_found && PMU) { // Powers down GPU
@@ -462,6 +464,7 @@ void GPS::setGPSPower(bool on)
             // t-beam v1.1 GNSS  power channel
             on ? PMU->enablePowerOutput(XPOWERS_LDO3) : PMU->disablePowerOutput(XPOWERS_LDO3);
         }
+        return;
     }
 #endif
 #ifdef PIN_GPS_STANDBY // standby pin // puts GPU in standby
@@ -469,30 +472,28 @@ void GPS::setGPSPower(bool on)
         LOG_INFO("Waking GPS");
         digitalWrite(PIN_GPS_STANDBY, 1);
         pinMode(PIN_GPS_STANDBY, OUTPUT);
+        return;
     } else {
         LOG_INFO("GPS entering sleep");
         // notifyGPSSleep.notifyObservers(NULL);
         digitalWrite(PIN_GPS_STANDBY, 0);
         pinMode(PIN_GPS_STANDBY, OUTPUT);
+        return;
     }
 #endif
-#if !(defined(HAS_PMU) || defined(PIN_GPS_STANDBY))
-    if (en_gpio == 0) {
-        if (!on) {
-            // notifyGPSSleep.notifyObservers(NULL); // How deep is this sleep? // recursive loop!
-            if (gnssModel == GNSS_MODEL_UBLOX) {
-                uint8_t msglen;
-                msglen = gps->makeUBXPacket(0x02, 0x41, 0x08, gps->_message_PMREQ);
-                gps->_serial_gps->write(gps->UBXscratch, msglen);
-            }
-        } else {
-            if (gnssModel == GNSS_MODEL_UBLOX)
-                gps->_serial_gps->write(0xFF);
+    if (!on) {
+        // notifyGPSSleep.notifyObservers(NULL); // How deep is this sleep? // recursive loop!
+        if (gnssModel == GNSS_MODEL_UBLOX) {
+            uint8_t msglen;
+            msglen = gps->makeUBXPacket(0x02, 0x41, 0x08, gps->_message_PMREQ);
+            gps->_serial_gps->write(gps->UBXscratch, msglen);
+        }
+    } else {
+        if (gnssModel == GNSS_MODEL_UBLOX) {
+            gps->_serial_gps->write(0xFF);
+            clearBuffer(); // This often returns old data, so drop it
         }
     }
-#endif
-    if (!on)
-        clearBuffer(); // drop any old data waiting in the buffer
 }
 
 /// Record that we have a GPS
@@ -865,6 +866,11 @@ GPS *GPS::createGps()
     new_gps->rx_gpio = _rx_gpio;
     new_gps->tx_gpio = _tx_gpio;
     new_gps->en_gpio = _en_gpio;
+
+    if (_en_gpio != 0) {
+        LOG_DEBUG("Setting %d to output.\n", _en_gpio);
+        pinMode(_en_gpio, OUTPUT);
+    }
 
 #ifdef PIN_GPS_PPS
     // pulse per second

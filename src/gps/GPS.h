@@ -5,6 +5,7 @@
 #include "TinyGPS++.h"
 #include "concurrency/OSThread.h"
 #include "modules/PositionModule.h"
+#include "input/RotaryEncoderInterruptImpl1.h"
 
 // Allow defining the polarity of the ENABLE output.  default is active high
 #ifndef GPS_EN_ACTIVE
