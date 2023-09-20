@@ -252,7 +252,7 @@ bool GPS::setup()
 {
     int msglen = 0;
 
-    if (_serial_gps && !didSerialInit) {
+    if (!didSerialInit) {
 #if !defined(GPS_UC6580)
         if (tx_gpio) {
             LOG_DEBUG("Probing for GPS at %d \n", serialSpeeds[speedSelect]);
@@ -548,6 +548,8 @@ void GPS::publishUpdate()
 int32_t GPS::runOnce()
 {
     if (!GPSInitFinished) {
+        if (!_serial_gps)
+            return disable();
         if (!setup())
             return 2000; // Setup failed, re-run in two seconds
 
