@@ -59,6 +59,8 @@ class GPS : private concurrency::OSThread
     uint32_t rx_gpio = 0;
     uint32_t tx_gpio = 0;
     uint32_t en_gpio = 0;
+    int32_t averageLockTime = 0;
+    uint32_t GPSCycles = 0;
 
     int speedSelect = 0;
     int probeTries = 2;
@@ -70,6 +72,8 @@ class GPS : private concurrency::OSThread
     bool hasValidLocation = false; // default to false, until we complete our first read
 
     bool isAwake = false; // true if we want a location right now
+
+    bool isInPowersave = false;
 
     bool shouldPublish = false; // If we've changed GPS state, this will force a publish the next loop()
 

@@ -442,6 +442,7 @@ void GPS::setGPSPower(bool on)
     LOG_INFO("Setting GPS power=%d\n", on);
     if (on)
         clearBuffer(); // drop any old data waiting in the buffer before re-enabling
+    isInPowersave = !on;
 
     if (en_gpio != 0)
         digitalWrite(en_gpio, on ? GPS_EN_ACTIVE : !GPS_EN_ACTIVE);
@@ -517,8 +518,15 @@ void GPS::setAwake(bool on)
             lastWakeStartMsec = millis();
         } else {
             lastSleepStartMsec = millis();
+            GPSCycles++;
+            if (GPSCycles == 1) {
+                averageLockTime = lastSleepStartMsec - lastWakeStartMsec;
+            } else {
+                averageLockTime += ((int32_t)(lastSleepStartMsec - lastWakeStartMsec) - averageLockTime) / (int32_t)GPSCycles;
+            }
+            LOG_DEBUG("GPS Lock took %d, average %d\n", (lastSleepStartMsec - lastWakeStartMsec) / 1000, averageLockTime / 1000);
         }
-        if (getSleepTime() > 59000) // We're only powering down for a minute or more between fixes
+        if ((int32_t)getSleepTime() - averageLockTime > 20000) // We're only powering down if
             setGPSPower(on);
         isAwake = on;
     }
@@ -612,9 +620,12 @@ int32_t GPS::runOnce()
 
     // If we are overdue for an update, turn on the GPS and at least publish the current status
     uint32_t now = millis();
+    uint32_t timeAsleep = now - lastSleepStartMsec;
 
     auto sleepTime = getSleepTime();
-    if (!isAwake && sleepTime != UINT32_MAX && (now - lastSleepStartMsec) > sleepTime) {
+    if (!isAwake && (sleepTime != UINT32_MAX) &&
+        ((timeAsleep > sleepTime) ||
+         (isInPowersave && timeAsleep > (sleepTime - averageLockTime)))) {
         // We now want to be awake - so wake up the GPS
         setAwake(true);
     }
@@ -636,7 +647,6 @@ int32_t GPS::runOnce()
             shouldPublish = true;
         }
 
-        // We've been awake too long - force sleep
         now = millis();
         auto wakeTime = getWakeTime();
         bool tooLong = wakeTime != UINT32_MAX && (now - lastWakeStartMsec) > wakeTime;
@@ -679,8 +689,6 @@ int GPS::prepareDeepSleep(void *unused)
 {
     LOG_INFO("GPS deep sleep!\n");
 
-    // For deep sleep we also want abandon any lock attempts (because we want minimum power)
-    getSleepTime();
     setAwake(false);
 
     return 0;
