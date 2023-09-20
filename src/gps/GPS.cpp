@@ -852,7 +852,7 @@ GPS *GPS::createGps()
     if (!_tx_gpio)
         _tx_gpio = GPS_TX_PIN;
 #endif
-    if (!_rx_gpio) // Configured to have no GPS at all
+    if (!_rx_gpio || !_serial_gps) // Configured to have no GPS at all
         return nullptr;
 
     GPS *new_gps = new GPS;
