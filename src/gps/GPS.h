@@ -131,7 +131,7 @@ class GPS : private concurrency::OSThread
     // Disable the thread
     int32_t disable() override;
 
-    void setGPSPower(bool on);
+    void setGPSPower(bool on, bool standbyOnly);
 
     /// Returns true if we have acquired GPS lock.
     virtual bool hasLock();

@@ -437,18 +437,21 @@ GPS::~GPS()
     notifyGPSSleepObserver.observe(&notifyGPSSleep);
 }
 
-void GPS::setGPSPower(bool on)
+void GPS::setGPSPower(bool on, bool standbyOnly)
 {
     LOG_INFO("Setting GPS power=%d\n", on);
-    if (on)
+    if (on) {
         clearBuffer(); // drop any old data waiting in the buffer before re-enabling
+        if (en_gpio)
+            digitalWrite(en_gpio, on ? GPS_EN_ACTIVE : !GPS_EN_ACTIVE); // turn this on if defined, every time
+    }
     isInPowersave = !on;
 
-    if (en_gpio != 0 && !(HW_VENDOR == meshtastic_HardwareModel_RAK4631 && rotaryEncoderInterruptImpl1 != nullptr)) {
+    if (!standbyOnly && en_gpio != 0 &&
+        !(HW_VENDOR == meshtastic_HardwareModel_RAK4631 && rotaryEncoderInterruptImpl1 != nullptr)) {
         digitalWrite(en_gpio, on ? GPS_EN_ACTIVE : !GPS_EN_ACTIVE);
         return;
     }
-
 #ifdef HAS_PMU
     if (pmu_found && PMU) { // Powers down GPU
         uint8_t model = PMU->getChipModel();
@@ -482,7 +485,6 @@ void GPS::setGPSPower(bool on)
     }
 #endif
     if (!on) {
-        // notifyGPSSleep.notifyObservers(NULL); // How deep is this sleep? // recursive loop!
         if (gnssModel == GNSS_MODEL_UBLOX) {
             uint8_t msglen;
             msglen = gps->makeUBXPacket(0x02, 0x41, 0x08, gps->_message_PMREQ);
@@ -519,16 +521,19 @@ void GPS::setAwake(bool on)
             lastWakeStartMsec = millis();
         } else {
             lastSleepStartMsec = millis();
-            GPSCycles++;
-            if (GPSCycles == 1) {
+            if (GPSCycles == 1) { // Skipping initial lock time, as it will likely be much longer than average
                 averageLockTime = lastSleepStartMsec - lastWakeStartMsec;
-            } else {
+            } else if (GPSCycles > 1) {
                 averageLockTime += ((int32_t)(lastSleepStartMsec - lastWakeStartMsec) - averageLockTime) / (int32_t)GPSCycles;
             }
+            GPSCycles++;
             LOG_DEBUG("GPS Lock took %d, average %d\n", (lastSleepStartMsec - lastWakeStartMsec) / 1000, averageLockTime / 1000);
         }
-        if ((int32_t)getSleepTime() - averageLockTime > 20000) { // We're only powering down if
-            setGPSPower(on);
+        if ((int32_t)getSleepTime() - averageLockTime >
+            15 * 60 * 1000) { // 15 minutes is probably long enough to make a complete poweroff worth it.
+            setGPSPower(on, false);
+        } else if ((int32_t)getSleepTime() - averageLockTime > 10000) { // 10 seconds is enough for standby
+            setGPSPower(on, true);
         } else if (averageLockTime > 20000) {
             averageLockTime -= 1000; // eventually want to sleep again.
         }
@@ -889,7 +894,7 @@ GPS *GPS::createGps()
 #endif
 
     if (config.position.gps_enabled) {
-        new_gps->setGPSPower(true);
+        new_gps->setGPSPower(true, false);
     }
 
 #ifdef PIN_GPS_RESET

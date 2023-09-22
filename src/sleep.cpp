@@ -173,7 +173,7 @@ void doDeepSleep(uint32_t msecToWake)
     nodeDB.saveToDisk();
 
     // Kill GPS power completely (even if previously we just had it in sleep mode)
-    gps->setGPSPower(false);
+    gps->setGPSPower(false, false);
 
     setLed(false);
 
