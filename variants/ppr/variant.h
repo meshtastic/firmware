@@ -89,8 +89,8 @@ static const uint8_t A7 = PIN_A7;
 
 // Other pins
 #define PIN_AREF (0xff)
-//#define PIN_NFC1 (9)
-//#define PIN_NFC2 (10)
+// #define PIN_NFC1 (9)
+// #define PIN_NFC2 (10)
 
 static const uint8_t AREF = PIN_AREF;
 
@@ -103,8 +103,8 @@ static const uint8_t AREF = PIN_AREF;
 #define PIN_SERIAL1_TX (9)
 
 // Connected to Jlink CDC
-//#define PIN_SERIAL2_RX (8)
-//#define PIN_SERIAL2_TX (6)
+// #define PIN_SERIAL2_RX (8)
+// #define PIN_SERIAL2_TX (6)
 
 /*
  * SPI Interfaces
