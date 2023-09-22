@@ -446,9 +446,9 @@ void GPS::setGPSPower(bool on, bool standbyOnly)
             digitalWrite(en_gpio, on ? GPS_EN_ACTIVE : !GPS_EN_ACTIVE); // turn this on if defined, every time
     }
     isInPowersave = !on;
-
     if (!standbyOnly && en_gpio != 0 &&
-        !(HW_VENDOR == meshtastic_HardwareModel_RAK4631 && rotaryEncoderInterruptImpl1 != nullptr)) {
+        !(HW_VENDOR == meshtastic_HardwareModel_RAK4631 && (rotaryEncoderInterruptImpl1 || upDownInterruptImpl1))) {
+        LOG_DEBUG("GPS powerdown using GPS_EN_ACTIVE\n");
         digitalWrite(en_gpio, on ? GPS_EN_ACTIVE : !GPS_EN_ACTIVE);
         return;
     }

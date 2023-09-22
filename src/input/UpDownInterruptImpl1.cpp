@@ -5,12 +5,12 @@ UpDownInterruptImpl1 *upDownInterruptImpl1;
 
 UpDownInterruptImpl1::UpDownInterruptImpl1() : UpDownInterruptBase("upDown1") {}
 
-void UpDownInterruptImpl1::init()
+bool UpDownInterruptImpl1::init()
 {
 
     if (!moduleConfig.canned_message.updown1_enabled) {
         // Input device is disabled.
-        return;
+        return false;
     }
 
     uint8_t pinUp = moduleConfig.canned_message.inputbroker_pin_a;
@@ -24,6 +24,7 @@ void UpDownInterruptImpl1::init()
     UpDownInterruptBase::init(pinDown, pinUp, pinPress, eventDown, eventUp, eventPressed, UpDownInterruptImpl1::handleIntDown,
                               UpDownInterruptImpl1::handleIntUp, UpDownInterruptImpl1::handleIntPressed);
     inputBroker->registerSource(this);
+    return true;
 }
 
 void UpDownInterruptImpl1::handleIntDown()
