@@ -66,5 +66,5 @@
 // Not really an E22 but TTGO seems to be trying to clone that
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
-                   // Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for
-                   // the sx1262interface code)
+// Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for
+// the sx1262interface code)
