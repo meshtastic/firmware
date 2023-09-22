@@ -47,12 +47,12 @@ extern "C" {
 #define PIN_LED2 (0 + 6)  // Built in Green  P0.06
 
 // Green Built in LED1
-//#define PIN_LED1 (0 + 6)          // LED1            P1.15
+// #define PIN_LED1 (0 + 6)          // LED1            P1.15
 
 // RGB NeoPixel LED2
-//#define PIN_LED1 (0 + 8) Red
-//#define PIN_LED1 (32 + 9) Green
-//#define PIN_LED1 (0 + 12) Blue
+// #define PIN_LED1 (0 + 8) Red
+// #define PIN_LED1 (32 + 9) Green
+// #define PIN_LED1 (0 + 12) Blue
 
 #define LED_BUILTIN PIN_LED1
 #define LED_CONN PIN_LED2
@@ -113,7 +113,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
  * eink display pins
  */
 
-//#define PIN_EINK_EN  (-1)
+// #define PIN_EINK_EN  (-1)
 #define PIN_EINK_EN (0 + 6) // Turn on the Green built in LED
 #define PIN_EINK_CS (32)    // EPD_CS
 #define PIN_EINK_BUSY (20)  // EPD_BUSY
