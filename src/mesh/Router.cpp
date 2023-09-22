@@ -359,6 +359,7 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
                     // LOG_DEBUG("\n\n**\n\nDecompressed length - %d \n", decompressed_len);
 
                     memcpy(p->decoded.payload.bytes, decompressed_out, decompressed_len);
+                    p->decoded.payload.size = decompressed_len;
 
                     // Switch the port from PortNum_TEXT_MESSAGE_COMPRESSED_APP to PortNum_TEXT_MESSAGE_APP
                     p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
