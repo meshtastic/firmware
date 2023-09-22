@@ -64,7 +64,7 @@ extern "C" {
  * Buttons
  */
 
-//#define PIN_BUTTON1 9 // Pin for button on E-ink button module or IO expansion
+// #define PIN_BUTTON1 9 // Pin for button on E-ink button module or IO expansion
 #define BUTTON_NEED_PULLUP
 #define PIN_BUTTON2 12
 #define PIN_BUTTON3 24
@@ -222,7 +222,7 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define ADC_MULTIPLIER VBAT_DIVIDER_COMP // REAL_VBAT_MV_PER_LSB
 #define VBAT_RAW_TO_SCALED(x) (REAL_VBAT_MV_PER_LSB * x)
 
-//#define HAS_RTC 1
+// #define HAS_RTC 1
 
 #define HAS_ETHERNET 1
 
