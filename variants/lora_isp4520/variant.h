@@ -28,7 +28,7 @@
 
 #define USE_LFXO
 
-//#define USE_SEGGER
+// #define USE_SEGGER
 
 // Number of pins defined in PinDescription array
 #define PINS_COUNT (16)
