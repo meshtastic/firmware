@@ -3,7 +3,8 @@
 #include "error.h"
 #include "mesh/NodeDB.h"
 
-// Particular boards might define a different max power based on what their hardware can do, default to max power output if not specified (may be dangerous if using external PA and SX126x power config forgotten)
+// Particular boards might define a different max power based on what their hardware can do, default to max power output if not
+// specified (may be dangerous if using external PA and SX126x power config forgotten)
 #ifndef SX126X_MAX_POWER
 #define SX126X_MAX_POWER 22
 #endif
@@ -28,7 +29,9 @@ template <typename T> bool SX126xInterface<T>::init()
 
 // FIXME: correct logic to default to not using TCXO if no voltage is specified for SX126X_DIO3_TCXO_VOLTAGE
 #if !defined(SX126X_DIO3_TCXO_VOLTAGE)
-    float tcxoVoltage = 0; // "TCXO reference voltage to be set on DIO3. Defaults to 1.6 V, set to 0 to skip." per https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/SX126x/SX126x.h#L471C26-L471C104
+    float tcxoVoltage =
+        0; // "TCXO reference voltage to be set on DIO3. Defaults to 1.6 V, set to 0 to skip." per
+           // https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/SX126x/SX126x.h#L471C26-L471C104
     // (DIO3 is free to be used as an IRQ)
     LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE not defined, not using DIO3 as TCXO reference voltage\n");
 #else
@@ -55,36 +58,40 @@ template <typename T> bool SX126xInterface<T>::init()
     LOG_INFO("Bandwidth set to %f\n", bw);
     LOG_INFO("Power output set to %d\n", power);
 
-    // Overriding current limit (https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/SX126x/SX126x.cpp#L85) using value in SX126xInterface.h (currently 140 mA)
-    // It may or may not be neccessary, depending on how RadioLib functions, from SX1261/2 datasheet: OCP after setting DeviceSel with SetPaConfig(): SX1261 - 60 mA, SX1262 - 140 mA
-    // For the SX1268 the IC defaults to 140mA no matter the set power level, but RadioLib set it lower, this would need further checking
-    // Default values are: SX1262, SX1268: 0x38 (140 mA), SX1261: 0x18 (60 mA)
-    // FIXME: Not ideal to increase SX1261 current limit above 60mA as it can only transmit max 15dBm, should probably only do it if using SX1262 or SX1268
+    // Overriding current limit
+    // (https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/SX126x/SX126x.cpp#L85) using
+    // value in SX126xInterface.h (currently 140 mA) It may or may not be neccessary, depending on how RadioLib functions, from
+    // SX1261/2 datasheet: OCP after setting DeviceSel with SetPaConfig(): SX1261 - 60 mA, SX1262 - 140 mA For the SX1268 the IC
+    // defaults to 140mA no matter the set power level, but RadioLib set it lower, this would need further checking Default values
+    // are: SX1262, SX1268: 0x38 (140 mA), SX1261: 0x18 (60 mA)
+    // FIXME: Not ideal to increase SX1261 current limit above 60mA as it can only transmit max 15dBm, should probably only do it
+    // if using SX1262 or SX1268
     res = lora.setCurrentLimit(currentLimit);
     LOG_DEBUG("Current limit set to %f\n", currentLimit);
     LOG_DEBUG("Current limit set result %d\n", res);
 
 #ifdef SX126X_DIO2_AS_RF_SWITCH
-	LOG_DEBUG("Setting DIO2 as RF switch\n");
-	bool dio2AsRfSwitch = true;
+    LOG_DEBUG("Setting DIO2 as RF switch\n");
+    bool dio2AsRfSwitch = true;
 #else
-	LOG_DEBUG("Setting DIO2 as not RF switch\n");
-	bool dio2AsRfSwitch = false;
+    LOG_DEBUG("Setting DIO2 as not RF switch\n");
+    bool dio2AsRfSwitch = false;
 #endif
-	if (res == RADIOLIB_ERR_NONE) {
-		res = lora.setDio2AsRfSwitch(dio2AsRfSwitch);
-	}
+    if (res == RADIOLIB_ERR_NONE) {
+        res = lora.setDio2AsRfSwitch(dio2AsRfSwitch);
+    }
 
-    // If a pin isn't defined, we set it to RADIOLIB_NC, it is safe to always do external RF switching with RADIOLIB_NC as it has no effect
+    // If a pin isn't defined, we set it to RADIOLIB_NC, it is safe to always do external RF switching with RADIOLIB_NC as it has
+    // no effect
 #ifndef SX126X_RXEN
-	#define SX126X_RXEN RADIOLIB_NC
+#define SX126X_RXEN RADIOLIB_NC
     LOG_DEBUG("SX126X_RXEN not defined, defaulting to RADIOLIB_NC\n");
 #endif
 #ifndef SX126X_TXEN
-	#define SX126X_TXEN RADIOLIB_NC
+#define SX126X_TXEN RADIOLIB_NC
     LOG_DEBUG("SX126X_TXEN not defined, defaulting to RADIOLIB_NC\n");
 #endif
-	if (res == RADIOLIB_ERR_NONE) {
+    if (res == RADIOLIB_ERR_NONE) {
         LOG_DEBUG("Using MCU pin %i as RXEN and pin %i as TXEN to control RF switching\n", SX126X_RXEN, SX126X_TXEN);
         lora.setRfSwitchPins(SX126X_RXEN, SX126X_TXEN);
     }
