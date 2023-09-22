@@ -382,9 +382,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
-        size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded);
-
-        // Only allow encryption on the text message app.
+        // Only allow compression on the text message app.
         //  TODO: Allow modules to opt into compression.
         if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) {
 
@@ -396,17 +394,12 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             int compressed_len;
             compressed_len = unishox2_compress_simple(original_payload, p->decoded.payload.size, compressed_out);
 
-            LOG_DEBUG("Original length - %d \n", p->decoded.payload.size);
-            LOG_DEBUG("Compressed length - %d \n", compressed_len);
+            LOG_DEBUG("Length - %d, compressed length - %d \n", p->decoded.payload.size, compressed_len);
             LOG_DEBUG("Original message - %s \n", p->decoded.payload.bytes);
 
             // If the compressed length is greater than or equal to the original size, don't use the compressed form
             if (compressed_len >= p->decoded.payload.size) {
-
                 LOG_DEBUG("Not using compressing message.\n");
-                // Set the uncompressed payload variant anyway. Shouldn't hurt?
-                // p->decoded.which_payloadVariant = Data_payload_tag;
-
                 // Otherwise we use the compressor
             } else {
                 LOG_DEBUG("Using compressed message.\n");
@@ -418,6 +411,8 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                 p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP;
             }
         }
+
+        size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded);
 
         if (numbytes > MAX_RHPACKETLEN)
             return meshtastic_Routing_Error_TOO_LARGE;
