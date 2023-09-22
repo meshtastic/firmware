@@ -65,8 +65,8 @@
 #define SX126X_TXEN LORA_TXEN
 
 // supported modules list
-//#define USE_RF95 // RFM95/SX127x
+// #define USE_RF95 // RFM95/SX127x
 #define USE_SX1262
-//#define USE_SX1268
-//#define USE_LLCC68
+// #define USE_SX1268
+// #define USE_LLCC68
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
