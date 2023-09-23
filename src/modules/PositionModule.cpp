@@ -238,7 +238,6 @@ void PositionModule::handleNewPosition()
     const meshtastic_NodeInfoLite *node2 = service.refreshLocalMeshNode(); // should guarantee there is now a position
     // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();
-    uint32_t intervalMs = getConfiguredOrDefaultMs(config.position.position_broadcast_secs, default_broadcast_interval_secs);
     uint32_t msSinceLastSend = now - lastGpsSend;
 
     if (hasValidPosition(node2)) {

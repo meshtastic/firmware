@@ -452,8 +452,8 @@ void GPS::setGPSPower(bool on, bool standbyOnly)
         digitalWrite(en_gpio, on ? GPS_EN_ACTIVE : !GPS_EN_ACTIVE);
         return;
     }
-#ifdef HAS_PMU
-    if (pmu_found && PMU) { // Powers down GPU
+#ifdef HAS_PMU // We only have PMUs on the T-Beam, and that board has a tiny battery to save GPS ephemera, so treat as a standby.
+    if (pmu_found && PMU) {
         uint8_t model = PMU->getChipModel();
         if (model == XPOWERS_AXP2101) {
             if (HW_VENDOR == meshtastic_HardwareModel_TBEAM) {
@@ -470,7 +470,7 @@ void GPS::setGPSPower(bool on, bool standbyOnly)
         return;
     }
 #endif
-#ifdef PIN_GPS_STANDBY // standby pin // puts GPU in standby
+#ifdef PIN_GPS_STANDBY // Specifically the standby pin for L76K and clones
     if (on) {
         LOG_INFO("Waking GPS");
         digitalWrite(PIN_GPS_STANDBY, 1);
