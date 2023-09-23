@@ -1154,10 +1154,13 @@ bool GPS::hasFlow()
 bool GPS::whileIdle()
 {
     bool isValid = false;
+    if (!isAwake) {
+        clearBuffer();
+        return isAwake;
+    }
 #ifdef SERIAL_BUFFER_SIZE
     if (_serial_gps->available() >= SERIAL_BUFFER_SIZE - 1) {
-        if (isAwake)
-            LOG_WARN("GPS Buffer full with %u bytes waiting. Flushing to avoid corruption.\n", _serial_gps->available());
+        LOG_WARN("GPS Buffer full with %u bytes waiting. Flushing to avoid corruption.\n", _serial_gps->available());
         clearBuffer();
     }
 #endif
