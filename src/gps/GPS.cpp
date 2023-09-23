@@ -880,6 +880,7 @@ GPS *GPS::createGps()
 
     if (_en_gpio != 0) {
         LOG_DEBUG("Setting %d to output.\n", _en_gpio);
+        digitalWrite(_en_gpio, !GPS_EN_ACTIVE);
         pinMode(_en_gpio, OUTPUT);
     }
 
