@@ -425,7 +425,7 @@ bool GPS::setup()
     notifyGPSSleepObserver.observe(&notifyGPSSleep);
 
     if (config.position.gps_enabled == false && config.position.fixed_position == false) {
-        setAwake(false);
+        disable();
     }
     return true;
 }
