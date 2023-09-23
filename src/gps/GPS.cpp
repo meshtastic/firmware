@@ -516,6 +516,11 @@ void GPS::setAwake(bool on)
 {
     if (isAwake != on) {
         LOG_DEBUG("WANT GPS=%d\n", on);
+        isAwake = on;
+        if (!enabled) { // short circuit if the user has disabled GPS
+            setGPSPower(on, false);
+            return;
+        }
 
         if (on) {
             lastWakeStartMsec = millis();
@@ -537,7 +542,6 @@ void GPS::setAwake(bool on)
         } else if (averageLockTime > 20000) {
             averageLockTime -= 1000; // eventually want to sleep again.
         }
-        isAwake = on;
     }
 }
 
