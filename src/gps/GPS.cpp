@@ -423,10 +423,6 @@ bool GPS::setup()
 
     notifyDeepSleepObserver.observe(&notifyDeepSleep);
     notifyGPSSleepObserver.observe(&notifyGPSSleep);
-
-    if (config.position.gps_enabled == false && config.position.fixed_position == false) {
-        disable();
-    }
     return true;
 }
 
@@ -518,7 +514,7 @@ void GPS::setAwake(bool on)
         LOG_DEBUG("WANT GPS=%d\n", on);
         isAwake = on;
         if (!enabled) { // short circuit if the user has disabled GPS
-            setGPSPower(on, false);
+            setGPSPower(false, false);
             return;
         }
 
@@ -598,7 +594,9 @@ int32_t GPS::runOnce()
             return 2000; // Setup failed, re-run in two seconds
 
         // We have now loaded our saved preferences from flash
-
+        if (config.position.gps_enabled == false && config.position.fixed_position == false) {
+            return disable();
+        }
         // ONCE we will factory reset the GPS for bug #327
         if (!devicestate.did_gps_reset) {
             LOG_WARN("GPS FactoryReset requested\n");
@@ -608,12 +606,7 @@ int32_t GPS::runOnce()
             }
         }
         GPSInitFinished = true;
-        if (config.position.gps_enabled == false) {
-            return disable();
-        }
     }
-    if (config.position.gps_enabled == false)
-        return disable();
 
     // Repeaters have no need for GPS
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
@@ -687,6 +680,10 @@ int32_t GPS::runOnce()
 
     // If state has changed do a publish
     publishUpdate();
+
+    if (config.position.gps_enabled == false) // This should trigger if GPS is disabled but fixed_position is true
+        return disable();
+
     // 9600bps is approx 1 byte per msec, so considering our buffer size we never need to wake more often than 200ms
     // if not awake we can run super infrquently (once every 5 secs?) to see if we need to wake.
     return isAwake ? GPS_THREAD_INTERVAL : 5000;
@@ -1159,7 +1156,8 @@ bool GPS::whileIdle()
     bool isValid = false;
 #ifdef SERIAL_BUFFER_SIZE
     if (_serial_gps->available() >= SERIAL_BUFFER_SIZE - 1) {
-        LOG_WARN("GPS Buffer full with %u bytes waiting. Flushing to avoid corruption.\n", _serial_gps->available());
+        if (isAwake)
+            LOG_WARN("GPS Buffer full with %u bytes waiting. Flushing to avoid corruption.\n", _serial_gps->available());
         clearBuffer();
     }
 #endif
