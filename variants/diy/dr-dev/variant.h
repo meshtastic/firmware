@@ -56,7 +56,7 @@
 */
 
 // RX/TX for RFM95/SX127x
-//#define RF95_RXEN LORA_RXEN
+// #define RF95_RXEN LORA_RXEN
 #define RF95_TXEN LORA_TXEN
 // #define RF95_TCXO <GPIO#>
 
@@ -64,7 +64,7 @@
 
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_RESET LORA_RESET
-#define SX126X_RXEN LORA_RXEN
+// #define SX126X_RXEN LORA_RXEN
 #define SX126X_TXEN LORA_TXEN
 
 // supported modules list
