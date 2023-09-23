@@ -31,12 +31,12 @@
 
 // PINS FOR THE 900M22S
 
-#define LORA_DIO1 26        // IRQ for SX1262/SX1268
-#define LORA_DIO2 22        // BUSY for SX1262/SX1268
+#define LORA_DIO1 26 // IRQ for SX1262/SX1268
+#define LORA_DIO2 22 // BUSY for SX1262/SX1268
 // NOT_A_PIN is treated as RADIOLIB_NC due to how they are defined, best to use RADIOLIB_NC directly
 #define LORA_TXEN RADIOLIB_NC // Input - RF switch TX control, connecting external MCU IO or DIO2, valid in high level
 // E22_TXEN_CONNECTED_TO_DIO2 wasn't defined, so RXEN wasn't controlled. Commented it out to maintain behavior, but shouldn't be.
-// #define LORA_RXEN 17        // Input - RF switch RX control, connecting external MCU IO, valid in high level
+// #define LORA_RXEN 17 // Input - RF switch RX control, connecting external MCU IO, valid in high level
 #undef RF95_NSS
 #define RF95_NSS 16
 #define SX126X_BUSY 22
