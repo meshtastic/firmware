@@ -8,7 +8,6 @@
  * actions to be taken upon entering or exiting each state.
  */
 #include "PowerFSM.h"
-#include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "configuration.h"
@@ -137,9 +136,6 @@ static void lsIdle()
 static void lsExit()
 {
     LOG_INFO("Exit state: LS\n");
-    // setGPSPower(true); // restore GPS power
-    if (gps)
-        gps->forceWake(true);
 }
 
 static void nbEnter()

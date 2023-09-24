@@ -2,6 +2,7 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include "configuration.h"
+#include "main.h" // pmu_found
 #include "sleep.h"
 #include "ubx.h"
 
@@ -420,43 +421,77 @@ bool GPS::setup()
         didSerialInit = true;
     }
 
-    notifySleepObserver.observe(&notifySleep);
     notifyDeepSleepObserver.observe(&notifyDeepSleep);
     notifyGPSSleepObserver.observe(&notifyGPSSleep);
-
-    if (config.position.gps_enabled == false && config.position.fixed_position == false) {
-        setAwake(false);
-    }
     return true;
 }
 
 GPS::~GPS()
 {
     // we really should unregister our sleep observer
-    notifySleepObserver.unobserve(&notifySleep);
     notifyDeepSleepObserver.unobserve(&notifyDeepSleep);
     notifyGPSSleepObserver.observe(&notifyGPSSleep);
 }
 
-// Allow defining the polarity of the WAKE output.  default is active high
-#ifndef GPS_WAKE_ACTIVE
-#define GPS_WAKE_ACTIVE 1
-#endif
-
-void GPS::wake()
+void GPS::setGPSPower(bool on, bool standbyOnly)
 {
-#ifdef PIN_GPS_WAKE
-    digitalWrite(PIN_GPS_WAKE, GPS_WAKE_ACTIVE);
-    pinMode(PIN_GPS_WAKE, OUTPUT);
+    LOG_INFO("Setting GPS power=%d\n", on);
+    if (on) {
+        clearBuffer(); // drop any old data waiting in the buffer before re-enabling
+        if (en_gpio)
+            digitalWrite(en_gpio, on ? GPS_EN_ACTIVE : !GPS_EN_ACTIVE); // turn this on if defined, every time
+    }
+    isInPowersave = !on;
+    if (!standbyOnly && en_gpio != 0 &&
+        !(HW_VENDOR == meshtastic_HardwareModel_RAK4631 && (rotaryEncoderInterruptImpl1 || upDownInterruptImpl1))) {
+        LOG_DEBUG("GPS powerdown using GPS_EN_ACTIVE\n");
+        digitalWrite(en_gpio, on ? GPS_EN_ACTIVE : !GPS_EN_ACTIVE);
+        return;
+    }
+#ifdef HAS_PMU // We only have PMUs on the T-Beam, and that board has a tiny battery to save GPS ephemera, so treat as a standby.
+    if (pmu_found && PMU) {
+        uint8_t model = PMU->getChipModel();
+        if (model == XPOWERS_AXP2101) {
+            if (HW_VENDOR == meshtastic_HardwareModel_TBEAM) {
+                // t-beam v1.2 GNSS power channel
+                on ? PMU->enablePowerOutput(XPOWERS_ALDO3) : PMU->disablePowerOutput(XPOWERS_ALDO3);
+            } else if (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE) {
+                // t-beam-s3-core GNSS  power channel
+                on ? PMU->enablePowerOutput(XPOWERS_ALDO4) : PMU->disablePowerOutput(XPOWERS_ALDO4);
+            }
+        } else if (model == XPOWERS_AXP192) {
+            // t-beam v1.1 GNSS  power channel
+            on ? PMU->enablePowerOutput(XPOWERS_LDO3) : PMU->disablePowerOutput(XPOWERS_LDO3);
+        }
+        return;
+    }
 #endif
-}
-
-void GPS::sleep()
-{
-#ifdef PIN_GPS_WAKE
-    digitalWrite(PIN_GPS_WAKE, GPS_WAKE_ACTIVE ? 0 : 1);
-    pinMode(PIN_GPS_WAKE, OUTPUT);
+#ifdef PIN_GPS_STANDBY // Specifically the standby pin for L76K and clones
+    if (on) {
+        LOG_INFO("Waking GPS");
+        digitalWrite(PIN_GPS_STANDBY, 1);
+        pinMode(PIN_GPS_STANDBY, OUTPUT);
+        return;
+    } else {
+        LOG_INFO("GPS entering sleep");
+        // notifyGPSSleep.notifyObservers(NULL);
+        digitalWrite(PIN_GPS_STANDBY, 0);
+        pinMode(PIN_GPS_STANDBY, OUTPUT);
+        return;
+    }
 #endif
+    if (!on) {
+        if (gnssModel == GNSS_MODEL_UBLOX) {
+            uint8_t msglen;
+            msglen = gps->makeUBXPacket(0x02, 0x41, 0x08, gps->_message_PMREQ);
+            gps->_serial_gps->write(gps->UBXscratch, msglen);
+        }
+    } else {
+        if (gnssModel == GNSS_MODEL_UBLOX) {
+            gps->_serial_gps->write(0xFF);
+            clearBuffer(); // This often returns old data, so drop it
+        }
+    }
 }
 
 /// Record that we have a GPS
@@ -468,14 +503,6 @@ void GPS::setConnected()
     }
 }
 
-void GPS::setNumSatellites(uint8_t n)
-{
-    if (n != numSatellites) {
-        numSatellites = n;
-        shouldPublish = true;
-    }
-}
-
 /**
  * Switch the GPS into a mode where we are actively looking for a lock, or alternatively switch GPS into a low power mode
  *
@@ -483,23 +510,38 @@ void GPS::setNumSatellites(uint8_t n)
  */
 void GPS::setAwake(bool on)
 {
-    if (!wakeAllowed && on) {
-        LOG_WARN("Inhibiting because !wakeAllowed\n");
-        on = false;
-    }
-
     if (isAwake != on) {
         LOG_DEBUG("WANT GPS=%d\n", on);
-        if (on) {
-            clearBuffer(); // drop any old data waiting in the buffer
-            lastWakeStartMsec = millis();
-            wake();
-        } else {
-            lastSleepStartMsec = millis();
-            sleep();
+        isAwake = on;
+        if (!enabled) { // short circuit if the user has disabled GPS
+            setGPSPower(false, false);
+            return;
         }
 
-        isAwake = on;
+        if (on) {
+            lastWakeStartMsec = millis();
+        } else {
+            lastSleepStartMsec = millis();
+            if (GPSCycles == 1) { // Skipping initial lock time, as it will likely be much longer than average
+                averageLockTime = lastSleepStartMsec - lastWakeStartMsec;
+            } else if (GPSCycles > 1) {
+                averageLockTime += ((int32_t)(lastSleepStartMsec - lastWakeStartMsec) - averageLockTime) / (int32_t)GPSCycles;
+            }
+            GPSCycles++;
+            LOG_DEBUG("GPS Lock took %d, average %d\n", (lastSleepStartMsec - lastWakeStartMsec) / 1000, averageLockTime / 1000);
+        }
+        if ((int32_t)getSleepTime() - averageLockTime >
+            15 * 60 * 1000) { // 15 minutes is probably long enough to make a complete poweroff worth it.
+            setGPSPower(on, false);
+        } else if ((int32_t)getSleepTime() - averageLockTime > 10000) { // 10 seconds is enough for standby
+#ifdef GPS_UC6580
+            setGPSPower(on, false);
+#else
+            setGPSPower(on, true);
+#endif
+        } else if (averageLockTime > 20000) {
+            averageLockTime -= 1000; // eventually want to sleep again.
+        }
     }
 }
 
@@ -519,10 +561,9 @@ uint32_t GPS::getWakeTime() const
 uint32_t GPS::getSleepTime() const
 {
     uint32_t t = config.position.gps_update_interval;
-    bool gps_enabled = config.position.gps_enabled;
 
     // We'll not need the GPS thread to wake up again after first acq. with fixed position.
-    if (!gps_enabled || config.position.fixed_position)
+    if (!config.position.gps_enabled || config.position.fixed_position)
         t = UINT32_MAX; // Sleep forever now
 
     if (t == UINT32_MAX)
@@ -537,11 +578,14 @@ void GPS::publishUpdate()
         shouldPublish = false;
 
         // In debug logs, identify position by @timestamp:stage (stage 2 = publish)
-        LOG_DEBUG("publishing pos@%x:2, hasVal=%d, GPSlock=%d\n", p.timestamp, hasValidLocation, hasLock());
+        LOG_DEBUG("publishing pos@%x:2, hasVal=%d, Sats=%d, GPSlock=%d\n", p.timestamp, hasValidLocation, p.sats_in_view,
+                  hasLock());
 
         // Notify any status instances that are observing us
         const meshtastic::GPSStatus status = meshtastic::GPSStatus(hasValidLocation, isConnected(), isPowerSaving(), p);
         newStatus.notifyObservers(&status);
+        if (config.position.gps_enabled)
+            positionModule->handleNewPosition();
     }
 }
 
@@ -554,7 +598,9 @@ int32_t GPS::runOnce()
             return 2000; // Setup failed, re-run in two seconds
 
         // We have now loaded our saved preferences from flash
-
+        if (config.position.gps_enabled == false && config.position.fixed_position == false) {
+            return disable();
+        }
         // ONCE we will factory reset the GPS for bug #327
         if (!devicestate.did_gps_reset) {
             LOG_WARN("GPS FactoryReset requested\n");
@@ -564,17 +610,12 @@ int32_t GPS::runOnce()
             }
         }
         GPSInitFinished = true;
-        if (config.position.gps_enabled == false) {
-            doGPSpowersave(false);
-            return 0;
-        }
     }
-    if (config.position.gps_enabled == false)
-        return 0;
 
     // Repeaters have no need for GPS
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER)
-        disable();
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
+        return disable();
+    }
 
     if (whileIdle()) {
         // if we have received valid NMEA claim we are connected
@@ -582,20 +623,22 @@ int32_t GPS::runOnce()
     } else {
         if ((config.position.gps_enabled == 1) && (gnssModel == GNSS_MODEL_UBLOX)) {
             // reset the GPS on next bootup
-            if (devicestate.did_gps_reset && (millis() > 60000) && !hasFlow()) {
+            if (devicestate.did_gps_reset && (millis() - lastWakeStartMsec > 60000) && !hasFlow()) {
                 LOG_DEBUG("GPS is not communicating, trying factory reset on next bootup.\n");
                 devicestate.did_gps_reset = false;
                 nodeDB.saveDeviceStateToDisk();
-                disable(); // Stop the GPS thread as it can do nothing useful until next reboot.
+                return disable(); // Stop the GPS thread as it can do nothing useful until next reboot.
             }
         }
     }
 
     // If we are overdue for an update, turn on the GPS and at least publish the current status
     uint32_t now = millis();
+    uint32_t timeAsleep = now - lastSleepStartMsec;
 
     auto sleepTime = getSleepTime();
-    if (!isAwake && sleepTime != UINT32_MAX && (now - lastSleepStartMsec) > sleepTime) {
+    if (!isAwake && (sleepTime != UINT32_MAX) &&
+        ((timeAsleep > sleepTime) || (isInPowersave && timeAsleep > (sleepTime - averageLockTime)))) {
         // We now want to be awake - so wake up the GPS
         setAwake(true);
     }
@@ -603,11 +646,6 @@ int32_t GPS::runOnce()
     // While we are awake
     if (isAwake) {
         // LOG_DEBUG("looking for location\n");
-        if ((now - lastWhileActiveMsec) > 5000) {
-            lastWhileActiveMsec = now;
-            whileActive();
-        }
-
         // If we've already set time from the GPS, no need to ask the GPS
         bool gotTime = (getRTCQuality() >= RTCQualityGPS);
         if (!gotTime && lookForTime()) { // Note: we count on this && short-circuiting and not resetting the RTC time
@@ -622,7 +660,6 @@ int32_t GPS::runOnce()
             shouldPublish = true;
         }
 
-        // We've been awake too long - force sleep
         now = millis();
         auto wakeTime = getWakeTime();
         bool tooLong = wakeTime != UINT32_MAX && (now - lastWakeStartMsec) > wakeTime;
@@ -647,24 +684,13 @@ int32_t GPS::runOnce()
 
     // If state has changed do a publish
     publishUpdate();
+
+    if (config.position.gps_enabled == false) // This should trigger if GPS is disabled but fixed_position is true
+        return disable();
+
     // 9600bps is approx 1 byte per msec, so considering our buffer size we never need to wake more often than 200ms
     // if not awake we can run super infrquently (once every 5 secs?) to see if we need to wake.
     return isAwake ? GPS_THREAD_INTERVAL : 5000;
-}
-
-void GPS::forceWake(bool on)
-{
-    if (on) {
-        LOG_DEBUG("Allowing GPS lock\n");
-        // lastSleepStartMsec = 0; // Force an update ASAP
-        wakeAllowed = true;
-    } else {
-        wakeAllowed = false;
-
-        // Note: if the gps was already awake, we DO NOT shut it down, because we want to allow it to complete its lock
-        // attempt even if we are in light sleep.  Once the attempt succeeds (or times out) we'll then shut it down.
-        // setAwake(false);
-    }
 }
 
 // clear the GPS rx buffer as quickly as possible
@@ -676,21 +702,10 @@ void GPS::clearBuffer()
 }
 
 /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
-int GPS::prepareSleep(void *unused)
-{
-    LOG_INFO("GPS prepare sleep!\n");
-    forceWake(false);
-
-    return 0;
-}
-
-/// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
 int GPS::prepareDeepSleep(void *unused)
 {
     LOG_INFO("GPS deep sleep!\n");
 
-    // For deep sleep we also want abandon any lock attempts (because we want minimum power)
-    getSleepTime();
     setAwake(false);
 
     return 0;
@@ -835,11 +850,11 @@ GnssModel_t GPS::probe(int serialSpeed)
     return GNSS_MODEL_UBLOX;
 }
 
-// GPS::GPS(uint32_t _rx_gpio, uint32_t _tx_gpio) : concurrency::OSThread("GPS")
 GPS *GPS::createGps()
 {
     int8_t _rx_gpio = config.position.rx_gpio;
     int8_t _tx_gpio = config.position.tx_gpio;
+    int8_t _en_gpio = config.position.gps_en_gpio;
 #if defined(HAS_GPS) && !defined(ARCH_ESP32)
     _rx_gpio = 1; // We only specify GPS serial ports on ESP32. Otherwise, these are just flags.
     _tx_gpio = 1;
@@ -852,12 +867,23 @@ GPS *GPS::createGps()
     if (!_tx_gpio)
         _tx_gpio = GPS_TX_PIN;
 #endif
+#if defined(PIN_GPS_EN)
+    if (!_en_gpio)
+        _en_gpio = PIN_GPS_EN;
+#endif
     if (!_rx_gpio || !_serial_gps) // Configured to have no GPS at all
         return nullptr;
 
     GPS *new_gps = new GPS;
     new_gps->rx_gpio = _rx_gpio;
     new_gps->tx_gpio = _tx_gpio;
+    new_gps->en_gpio = _en_gpio;
+
+    if (_en_gpio != 0) {
+        LOG_DEBUG("Setting %d to output.\n", _en_gpio);
+        digitalWrite(_en_gpio, !GPS_EN_ACTIVE);
+        pinMode(_en_gpio, OUTPUT);
+    }
 
 #ifdef PIN_GPS_PPS
     // pulse per second
@@ -873,14 +899,9 @@ GPS *GPS::createGps()
     LOG_DEBUG("Using " NMEA_MSG_GXGSA " for 3DFIX and PDOP\n");
 #endif
 
-#if defined(HAS_PMU) || defined(PIN_GPS_EN)
     if (config.position.gps_enabled) {
-#ifdef PIN_GPS_EN
-        pinMode(PIN_GPS_EN, OUTPUT);
-#endif
-        setGPSPower(true);
+        new_gps->setGPSPower(true, false);
     }
-#endif
 
 #ifdef PIN_GPS_RESET
     digitalWrite(PIN_GPS_RESET, GPS_RESET_MODE); // assert for 10ms
@@ -1137,6 +1158,10 @@ bool GPS::hasFlow()
 bool GPS::whileIdle()
 {
     bool isValid = false;
+    if (!isAwake) {
+        clearBuffer();
+        return isAwake;
+    }
 #ifdef SERIAL_BUFFER_SIZE
     if (_serial_gps->available() >= SERIAL_BUFFER_SIZE - 1) {
         LOG_WARN("GPS Buffer full with %u bytes waiting. Flushing to avoid corruption.\n", _serial_gps->available());
@@ -1154,44 +1179,18 @@ bool GPS::whileIdle()
 
     return isValid;
 }
-
-void GPS::doGPSpowersave(bool on)
+void GPS::enable()
 {
-#if defined(HAS_PMU) || defined(PIN_GPS_EN)
-    if (on) {
-        LOG_INFO("Turning GPS back on\n");
-        gps->forceWake(1);
-        setGPSPower(1);
-        setAwake(1);
-    } else {
-        LOG_INFO("Turning off GPS chip\n");
-        notifyGPSSleep.notifyObservers(NULL);
-        setGPSPower(0);
-    }
-#endif
-#ifdef PIN_GPS_WAKE
-    if (on) {
-        LOG_INFO("Waking GPS");
-        gps->forceWake(1);
-        setAwake(1);
-    } else {
-        LOG_INFO("GPS entering sleep");
-        notifyGPSSleep.notifyObservers(NULL);
-    }
-#endif
-#if !(defined(HAS_PMU) || defined(PIN_GPS_EN) || defined(PIN_GPS_WAKE))
-    if (!on) {
-        notifyGPSSleep.notifyObservers(NULL);
-        if (gnssModel == GNSS_MODEL_UBLOX) {
-            uint8_t msglen;
-            msglen = gps->makeUBXPacket(0x02, 0x41, 0x08, gps->_message_PMREQ);
-            gps->_serial_gps->write(gps->UBXscratch, msglen);
-        }
-        setAwake(1);
-    } else {
-        gps->forceWake(1);
-        if (gnssModel == GNSS_MODEL_UBLOX)
-            gps->_serial_gps->write(0xFF);
-    }
-#endif
+    enabled = true;
+    setInterval(GPS_THREAD_INTERVAL);
+    setAwake(true);
+}
+
+int32_t GPS::disable()
+{
+    enabled = false;
+    setInterval(INT32_MAX);
+    setAwake(false);
+
+    return INT32_MAX;
 }

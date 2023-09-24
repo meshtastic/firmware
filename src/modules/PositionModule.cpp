@@ -231,3 +231,40 @@ int32_t PositionModule::runOnce()
 
     return 5000; // to save power only wake for our callback occasionally
 }
+
+void PositionModule::handleNewPosition()
+{
+    meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
+    const meshtastic_NodeInfoLite *node2 = service.refreshLocalMeshNode(); // should guarantee there is now a position
+    // We limit our GPS broadcasts to a max rate
+    uint32_t now = millis();
+    uint32_t msSinceLastSend = now - lastGpsSend;
+
+    if (hasValidPosition(node2)) {
+        // The minimum distance to travel before we are able to send a new position packet.
+        const uint32_t distanceTravelThreshold =
+            config.position.broadcast_smart_minimum_distance > 0 ? config.position.broadcast_smart_minimum_distance : 100;
+
+        // Determine the distance in meters between two points on the globe
+        float distanceTraveledSinceLastSend = GeoCoord::latLongToMeter(
+            lastGpsLatitude * 1e-7, lastGpsLongitude * 1e-7, node->position.latitude_i * 1e-7, node->position.longitude_i * 1e-7);
+
+        if ((abs(distanceTraveledSinceLastSend) >= distanceTravelThreshold)) {
+            bool requestReplies = currentGeneration != radioGeneration;
+            currentGeneration = radioGeneration;
+
+            LOG_INFO("Sending smart pos@%x:6 to mesh (distanceTraveled=%fm, minDistanceThreshold=%im, timeElapsed=%ims)\n",
+                     localPosition.timestamp, abs(distanceTraveledSinceLastSend), distanceTravelThreshold, msSinceLastSend);
+            sendOurPosition(NODENUM_BROADCAST, requestReplies);
+
+            // Set the current coords as our last ones, after we've compared distance with current and decided to send
+            lastGpsLatitude = node->position.latitude_i;
+            lastGpsLongitude = node->position.longitude_i;
+
+            /* Update lastGpsSend to now. This means if the device is stationary, then
+                getPref_position_broadcast_secs will still apply.
+            */
+            lastGpsSend = now;
+        }
+    }
+}
