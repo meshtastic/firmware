@@ -169,6 +169,14 @@ void NodeDB::installDefaultConfig()
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
     config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
     config.lora.hop_limit = HOP_RELIABLE;
+#ifdef PIN_GPS_EN
+    config.position.gps_en_gpio = PIN_GPS_EN;
+#endif
+#ifdef GPS_POWER_TOGGLE
+    config.device.disable_triple_click = false;
+#else
+    config.device.disable_triple_click = true;
+#endif
     config.position.gps_enabled = true;
     config.position.position_broadcast_smart_enabled = true;
     config.position.broadcast_smart_minimum_distance = 100;
