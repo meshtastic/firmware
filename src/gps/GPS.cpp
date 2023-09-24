@@ -534,7 +534,11 @@ void GPS::setAwake(bool on)
             15 * 60 * 1000) { // 15 minutes is probably long enough to make a complete poweroff worth it.
             setGPSPower(on, false);
         } else if ((int32_t)getSleepTime() - averageLockTime > 10000) { // 10 seconds is enough for standby
+#ifdef GPS_UC6580
+            setGPSPower(on, false);
+#else
             setGPSPower(on, true);
+#endif
         } else if (averageLockTime > 20000) {
             averageLockTime -= 1000; // eventually want to sleep again.
         }
