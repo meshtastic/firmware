@@ -4,6 +4,14 @@
 #include "Observer.h"
 #include "TinyGPS++.h"
 #include "concurrency/OSThread.h"
+#include "input/RotaryEncoderInterruptImpl1.h"
+#include "input/UpDownInterruptImpl1.h"
+#include "modules/PositionModule.h"
+
+// Allow defining the polarity of the ENABLE output.  default is active high
+#ifndef GPS_EN_ACTIVE
+#define GPS_EN_ACTIVE 1
+#endif
 
 struct uBloxGnssModelInfo {
     char swVersion[30];
@@ -48,11 +56,14 @@ class GPS : private concurrency::OSThread
     uint8_t fixType = 0;      // fix type from GPGSA
 #endif
   private:
-    uint32_t lastWakeStartMsec = 0, lastSleepStartMsec = 0, lastWhileActiveMsec = 0;
+    uint32_t lastWakeStartMsec = 0, lastSleepStartMsec = 0;
     const int serialSpeeds[6] = {9600, 4800, 38400, 57600, 115200, 9600};
 
     uint32_t rx_gpio = 0;
     uint32_t tx_gpio = 0;
+    uint32_t en_gpio = 0;
+    int32_t averageLockTime = 0;
+    uint32_t GPSCycles = 0;
 
     int speedSelect = 0;
     int probeTries = 2;
@@ -65,7 +76,7 @@ class GPS : private concurrency::OSThread
 
     bool isAwake = false; // true if we want a location right now
 
-    bool wakeAllowed = true; // false if gps must be forced to sleep regardless of what time it is
+    bool isInPowersave = false;
 
     bool shouldPublish = false; // If we've changed GPS state, this will force a publish the next loop()
 
@@ -76,7 +87,6 @@ class GPS : private concurrency::OSThread
 
     uint8_t numSatellites = 0;
 
-    CallbackObserver<GPS, void *> notifySleepObserver = CallbackObserver<GPS, void *>(this, &GPS::prepareSleep);
     CallbackObserver<GPS, void *> notifyDeepSleepObserver = CallbackObserver<GPS, void *>(this, &GPS::prepareDeepSleep);
     CallbackObserver<GPS, void *> notifyGPSSleepObserver = CallbackObserver<GPS, void *>(this, &GPS::prepareDeepSleep);
 
@@ -116,6 +126,14 @@ class GPS : private concurrency::OSThread
      */
     virtual bool setup();
 
+    // re-enable the thread
+    void enable();
+
+    // Disable the thread
+    int32_t disable() override;
+
+    void setGPSPower(bool on, bool standbyOnly);
+
     /// Returns true if we have acquired GPS lock.
     virtual bool hasLock();
 
@@ -126,14 +144,6 @@ class GPS : private concurrency::OSThread
     bool isConnected() const { return hasGPS; }
 
     bool isPowerSaving() const { return !config.position.gps_enabled; }
-
-    /**
-     * Restart our lock attempt - try to get and broadcast a GPS reading ASAP
-     * called after the CPU wakes from light-sleep state
-     *
-     * Or set to false, to disallow any sort of waking
-     * */
-    void forceWake(bool on);
 
     // Empty the input buffer as quickly as possible
     void clearBuffer();
@@ -154,7 +164,6 @@ class GPS : private concurrency::OSThread
      * calls sleep/wake
      */
     void setAwake(bool on);
-    void doGPSpowersave(bool on);
     virtual bool factoryReset();
 
     // Creates an instance of the GPS class.
@@ -162,20 +171,6 @@ class GPS : private concurrency::OSThread
     static GPS *createGps();
 
   protected:
-    /// If possible force the GPS into sleep/low power mode
-    virtual void sleep();
-
-    /// wake the GPS into normal operation mode
-    virtual void wake();
-
-    /** Subclasses should look for serial rx characters here and feed it to their GPS parser
-     *
-     * Return true if we received a valid message from the GPS
-     */
-
-    /** Idle processing while GPS is looking for lock, called once per secondish */
-    virtual void whileActive() {}
-
     /**
      * Perform any processing that should be done only while the GPS is awake and looking for a fix.
      * Override this method to check for new locations
@@ -192,8 +187,6 @@ class GPS : private concurrency::OSThread
 
     /// Record that we have a GPS
     void setConnected();
-
-    void setNumSatellites(uint8_t n);
 
     /** Subclasses should look for serial rx characters here and feed it to their GPS parser
      *
@@ -218,10 +211,6 @@ class GPS : private concurrency::OSThread
     virtual bool lookForLocation();
 
   private:
-    /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
-    /// always returns 0 to indicate okay to sleep
-    int prepareSleep(void *unused);
-
     /// Prepare the GPS for the cpu entering deep sleep, expect to be gone for at least 100s of msecs
     /// always returns 0 to indicate okay to sleep
     int prepareDeepSleep(void *unused);
