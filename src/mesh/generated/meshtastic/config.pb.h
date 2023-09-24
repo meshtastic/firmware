@@ -237,8 +237,8 @@ typedef struct _meshtastic_Config_DeviceConfig {
     /* If true, device is considered to be "managed" by a mesh administrator
  Clients should then limit available configuration and administrative options inside the user interface */
     bool is_managed;
-    /* Enables the triple-press of user button to enable or disable GPS */
-    bool enable_triple_click;
+    /* Disables the triple-press of user button to enable or disable GPS */
+    bool disable_triple_click;
 } meshtastic_Config_DeviceConfig;
 
 /* Position Config */
@@ -563,7 +563,7 @@ extern "C" {
 #define meshtastic_Config_DeviceConfig_node_info_broadcast_secs_tag 7
 #define meshtastic_Config_DeviceConfig_double_tap_as_button_press_tag 8
 #define meshtastic_Config_DeviceConfig_is_managed_tag 9
-#define meshtastic_Config_DeviceConfig_enable_triple_click_tag 10
+#define meshtastic_Config_DeviceConfig_disable_triple_click_tag 10
 #define meshtastic_Config_PositionConfig_position_broadcast_secs_tag 1
 #define meshtastic_Config_PositionConfig_position_broadcast_smart_enabled_tag 2
 #define meshtastic_Config_PositionConfig_fixed_position_tag 3
@@ -661,7 +661,7 @@ X(a, STATIC,   SINGULAR, UENUM,    rebroadcast_mode,   6) \
 X(a, STATIC,   SINGULAR, UINT32,   node_info_broadcast_secs,   7) \
 X(a, STATIC,   SINGULAR, BOOL,     double_tap_as_button_press,   8) \
 X(a, STATIC,   SINGULAR, BOOL,     is_managed,        9) \
-X(a, STATIC,   SINGULAR, BOOL,     enable_triple_click,  10)
+X(a, STATIC,   SINGULAR, BOOL,     disable_triple_click,  10)
 #define meshtastic_Config_DeviceConfig_CALLBACK NULL
 #define meshtastic_Config_DeviceConfig_DEFAULT NULL
 

@@ -165,8 +165,8 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define ST7735_SDA (39) // actually spi MOSI
 #define ST7735_SCK (37) // actually spi clk
 
-#define PIN_GPS_WAKE 36   // Just kill GPS power when we want it to sleep?  FIXME
-#define GPS_WAKE_ACTIVE 0 // GPS Power output is active low
+#define PIN_GPS_EN 36   // Just kill GPS power when we want it to sleep?  FIXME
+#define GPS_EN_ACTIVE 0 // GPS Power output is active low
 
 // #define LORA_DISABLE_SENDING // The board can brownout during lora TX if you don't have a battery connected.  Disable sending
 // to allow USB power only based debugging

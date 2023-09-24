@@ -31,6 +31,8 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
      */
     void sendOurPosition(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false, uint8_t channel = 0);
 
+    void handleNewPosition();
+
   protected:
     /** Called to handle a particular incoming message
 
