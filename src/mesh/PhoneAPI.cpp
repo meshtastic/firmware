@@ -155,9 +155,16 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         // app not to send locations on our behalf.
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_my_info_tag;
         fromRadioScratch.my_info = myNodeInfo;
-        state = STATE_SEND_NODEINFO;
+        state = STATE_SEND_METADATA;
 
         service.refreshLocalMeshNode(); // Update my NodeInfo because the client will be asking for it soon.
+        break;
+
+    case STATE_SEND_METADATA:
+        LOG_INFO("getFromRadio=STATE_SEND_METADATA\n");
+        fromRadioScratch.which_payload_variant = meshtastic_FromRadio_metadata_tag;
+        fromRadioScratch.metadata = getDeviceMetadata();
+        state = STATE_SEND_NODEINFO;
         break;
 
     case STATE_SEND_NODEINFO: {
@@ -294,15 +301,11 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         config_state++;
         // Advance when we have sent all of our ModuleConfig objects
         if (config_state > (_meshtastic_AdminMessage_ModuleConfigType_MAX + 1)) {
-            state = STATE_SEND_METADATA;
+            state = STATE_SEND_COMPLETE_ID;
             config_state = 0;
         }
         break;
-    case STATE_SEND_METADATA:
-        fromRadioScratch.which_payload_variant = meshtastic_FromRadio_metadata_tag;
-        fromRadioScratch.metadata = getDeviceMetadata();
-        state = STATE_SEND_COMPLETE_ID;
-        break;
+
     case STATE_SEND_COMPLETE_ID:
         LOG_INFO("getFromRadio=STATE_SEND_COMPLETE_ID\n");
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_config_complete_id_tag;
