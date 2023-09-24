@@ -38,6 +38,8 @@
 #define PIN_GPS_RESET 35
 #define PIN_GPS_PPS 36
 #define VGNSS_CTRL 37 // Heltec Tracker needs this pulled low for GPS
+#define PIN_GPS_EN VGNSS_CTRL
+#define GPS_EN_ACTIVE LOW
 #define GPS_RESET_MODE LOW
 #define GPS_UC6580
 

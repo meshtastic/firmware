@@ -60,9 +60,15 @@ void setupModules()
         new ReplyModule();
 #if HAS_BUTTON
         rotaryEncoderInterruptImpl1 = new RotaryEncoderInterruptImpl1();
-        rotaryEncoderInterruptImpl1->init();
+        if (!rotaryEncoderInterruptImpl1->init()) {
+            delete rotaryEncoderInterruptImpl1;
+            rotaryEncoderInterruptImpl1 = nullptr;
+        }
         upDownInterruptImpl1 = new UpDownInterruptImpl1();
-        upDownInterruptImpl1->init();
+        if (!upDownInterruptImpl1->init()) {
+            delete upDownInterruptImpl1;
+            upDownInterruptImpl1 = nullptr;
+        }
         cardKbI2cImpl = new CardKbI2cImpl();
         cardKbI2cImpl->init();
 #ifdef INPUTBROKER_MATRIX_TYPE

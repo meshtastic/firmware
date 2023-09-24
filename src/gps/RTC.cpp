@@ -103,9 +103,8 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
 
     bool shouldSet;
     if (q > currentQuality) {
-        currentQuality = q;
         shouldSet = true;
-        LOG_DEBUG("Upgrading time to RTC %ld secs (quality %d)\n", tv->tv_sec, q);
+        LOG_DEBUG("Upgrading time to quality %d\n", q);
     } else if (q == RTCQualityGPS && (now - lastSetMsec) > (12 * 60 * 60 * 1000UL)) {
         // Every 12 hrs we will slam in a new GPS time, to correct for local RTC clock drift
         shouldSet = true;
@@ -114,12 +113,12 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
         shouldSet = false;
 
     if (shouldSet) {
+        currentQuality = q;
         lastSetMsec = now;
 
         // This delta value works on all platforms
         timeStartMsec = now;
         zeroOffsetSecs = tv->tv_sec;
-
         // If this platform has a setable RTC, set it
 #ifdef RV3028_RTC
         if (rtc_found.address == RV3028_RTC) {
