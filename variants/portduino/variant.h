@@ -20,5 +20,6 @@
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET
+#define SX126X_DIO2_AS_RF_SWITCH
 // HOPE RFM90 does not have a TCXO therefore not SX126X_E22
 #endif
