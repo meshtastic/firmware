@@ -44,7 +44,8 @@
 
 */
 
-#if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)) && !defined(CONFIG_IDF_TARGET_ESP32S2) &&               \
+    !defined(CONFIG_IDF_TARGET_ESP32C3)
 
 #define RX_BUFFER 128
 #define TIMEOUT 250
@@ -141,7 +142,12 @@ int32_t SerialModule::runOnce()
             }
 #elif !defined(TTGO_T_ECHO)
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
+#ifdef ARCH_RP2040
+                Serial2.setFIFOSize(RX_BUFFER);
+                Serial2.setPinout(moduleConfig.serial.txd, moduleConfig.serial.rxd);
+#else
                 Serial2.setPins(moduleConfig.serial.rxd, moduleConfig.serial.txd);
+#endif
                 Serial2.begin(baud, SERIAL_8N1);
                 Serial2.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             } else {
@@ -182,7 +188,7 @@ int32_t SerialModule::runOnce()
                     }
                 }
             }
-#ifndef TTGO_T_ECHO
+#if !defined(TTGO_T_ECHO) && !defined(ARCH_RP2040)
             else {
                 while (Serial2.available()) {
                     serialPayloadSize = Serial2.readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
