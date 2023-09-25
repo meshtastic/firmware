@@ -47,7 +47,7 @@
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)) && !defined(CONFIG_IDF_TARGET_ESP32S2) &&               \
     !defined(CONFIG_IDF_TARGET_ESP32C3)
 
-#define RX_BUFFER 128
+#define RX_BUFFER 256
 #define TIMEOUT 250
 #define BAUD 38400
 #define ACK 1
