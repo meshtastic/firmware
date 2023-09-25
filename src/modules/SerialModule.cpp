@@ -188,7 +188,7 @@ int32_t SerialModule::runOnce()
                     }
                 }
             }
-#if !defined(TTGO_T_ECHO) && !defined(ARCH_RP2040)
+#if !defined(TTGO_T_ECHO)
             else {
                 while (Serial2.available()) {
                     serialPayloadSize = Serial2.readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
