@@ -455,6 +455,13 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, ChannelIndex chIndex)
 {
     auto &ch = channels.getByIndex(chIndex);
 
+    if (&mp.decoded && strcmp(moduleConfig.mqtt.address, default_mqtt_address) &&
+        (mp.decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
+         mp.decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP)) {
+        LOG_DEBUG("MQTT onSend - Ignoring range test or detection sensor message on public mqtt\n");
+        return;
+    }
+
     if (ch.settings.uplink_enabled) {
         const char *channelId = channels.getGlobalId(chIndex); // FIXME, for now we just use the human name for the channel
 
