@@ -17,6 +17,10 @@
 // SDA = 4
 // SCL = 5
 
+// Recommended pins for SerialModule:
+// txd = 8
+// rxd = 9
+
 #define EXT_NOTIFY_OUT 22
 #define BUTTON_PIN 17
 
