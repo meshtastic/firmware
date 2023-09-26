@@ -260,6 +260,10 @@ void PositionModule::handleNewPosition()
                 getPref_position_broadcast_secs will still apply.
             */
             lastGpsSend = now;
+        } else {
+            LOG_DEBUG("Skipping smart position broadcast. Distance traveled since last send (%fm) is less than the minimum "
+                      "threshold (%im).\n",
+                      abs(distanceTraveledSinceLastSend), distanceTravelThreshold);
         }
     }
 }
