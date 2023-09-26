@@ -13,6 +13,9 @@
 #define USE_RF95
 #define USE_SX1262
 
+#define GPS_RX_PIN 34
+#define GPS_TX_PIN 12
+
 #define LORA_DIO0 26 // a No connect on the SX1262 module
 #define LORA_RESET 23
 #define LORA_DIO1 33 // SX1262 IRQ
