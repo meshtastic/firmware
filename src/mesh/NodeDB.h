@@ -212,6 +212,14 @@ inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t d
     return defaultInterval * 1000;
 }
 
+inline uint32_t getConfiguredOrDefault(uint32_t configured, uint32_t defaultValue)
+{
+    if (configured > 0)
+        return configured;
+
+    return defaultValue;
+}
+
 /// Sometimes we will have Position objects that only have a time, so check for
 /// valid lat/lon
 static inline bool hasValidPosition(const meshtastic_NodeInfoLite *n)

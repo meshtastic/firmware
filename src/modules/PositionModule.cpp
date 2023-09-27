@@ -193,26 +193,19 @@ int32_t PositionModule::runOnce()
             const meshtastic_NodeInfoLite *node2 = service.refreshLocalMeshNode(); // should guarantee there is now a position
 
             if (hasValidPosition(node2)) {
-                // The minimum distance to travel before we are able to send a new position packet.
-                const uint32_t distanceTravelThreshold =
-                    config.position.broadcast_smart_minimum_distance > 0 ? config.position.broadcast_smart_minimum_distance : 100;
-
                 // The minimum time (in seconds) that would pass before we are able to send a new position packet.
                 const uint32_t minimumTimeThreshold =
                     getConfiguredOrDefaultMs(config.position.broadcast_smart_minimum_interval_secs, 30);
 
-                // Determine the distance in meters between two points on the globe
-                float distanceTraveledSinceLastSend =
-                    GeoCoord::latLongToMeter(lastGpsLatitude * 1e-7, lastGpsLongitude * 1e-7, node->position.latitude_i * 1e-7,
-                                             node->position.longitude_i * 1e-7);
+                auto smartPosition = getDistanceTraveledSinceLastSend(node->position);
 
-                if ((abs(distanceTraveledSinceLastSend) >= distanceTravelThreshold) && msSinceLastSend >= minimumTimeThreshold) {
+                if (smartPosition.hasTraveledOverThreshold && msSinceLastSend >= minimumTimeThreshold) {
                     bool requestReplies = currentGeneration != radioGeneration;
                     currentGeneration = radioGeneration;
 
                     LOG_INFO("Sending smart pos@%x:6 to mesh (distanceTraveled=%fm, minDistanceThreshold=%im, timeElapsed=%ims, "
                              "minTimeInterval=%ims)\n",
-                             localPosition.timestamp, abs(distanceTraveledSinceLastSend), distanceTravelThreshold,
+                             localPosition.timestamp, smartPosition.distanceTraveled, smartPosition.distanceThreshold,
                              msSinceLastSend, minimumTimeThreshold);
                     sendOurPosition(NODENUM_BROADCAST, requestReplies);
 
@@ -232,6 +225,20 @@ int32_t PositionModule::runOnce()
     return 5000; // to save power only wake for our callback occasionally
 }
 
+struct SmartPosition PositionModule::getDistanceTraveledSinceLastSend(meshtastic_PositionLite currentPosition)
+{
+    // The minimum distance to travel before we are able to send a new position packet.
+    const uint32_t distanceTravelThreshold = getConfiguredOrDefault(config.position.broadcast_smart_minimum_distance, 100);
+
+    // Determine the distance in meters between two points on the globe
+    float distanceTraveledSinceLastSend = GeoCoord::latLongToMeter(
+        lastGpsLatitude * 1e-7, lastGpsLongitude * 1e-7, currentPosition.latitude_i * 1e-7, currentPosition.longitude_i * 1e-7);
+
+    return SmartPosition{.distanceTraveled = abs(distanceTraveledSinceLastSend),
+                         .distanceThreshold = distanceTravelThreshold,
+                         .hasTraveledOverThreshold = abs(distanceTraveledSinceLastSend) >= distanceTravelThreshold};
+}
+
 void PositionModule::handleNewPosition()
 {
     meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
@@ -241,20 +248,13 @@ void PositionModule::handleNewPosition()
     uint32_t msSinceLastSend = now - lastGpsSend;
 
     if (hasValidPosition(node2)) {
-        // The minimum distance to travel before we are able to send a new position packet.
-        const uint32_t distanceTravelThreshold =
-            config.position.broadcast_smart_minimum_distance > 0 ? config.position.broadcast_smart_minimum_distance : 100;
-
-        // Determine the distance in meters between two points on the globe
-        float distanceTraveledSinceLastSend = GeoCoord::latLongToMeter(
-            lastGpsLatitude * 1e-7, lastGpsLongitude * 1e-7, node->position.latitude_i * 1e-7, node->position.longitude_i * 1e-7);
-
-        if ((abs(distanceTraveledSinceLastSend) >= distanceTravelThreshold)) {
+        auto smartPosition = getDistanceTraveledSinceLastSend(node->position);
+        if (smartPosition.hasTraveledOverThreshold) {
             bool requestReplies = currentGeneration != radioGeneration;
             currentGeneration = radioGeneration;
 
             LOG_INFO("Sending smart pos@%x:6 to mesh (distanceTraveled=%fm, minDistanceThreshold=%im, timeElapsed=%ims)\n",
-                     localPosition.timestamp, abs(distanceTraveledSinceLastSend), distanceTravelThreshold, msSinceLastSend);
+                     localPosition.timestamp, smartPosition.distanceTraveled, smartPosition.distanceThreshold, msSinceLastSend);
             sendOurPosition(NODENUM_BROADCAST, requestReplies);
 
             // Set the current coords as our last ones, after we've compared distance with current and decided to send
