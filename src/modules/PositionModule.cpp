@@ -34,11 +34,12 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     }
 
     // Log packet size and data fields
-    LOG_INFO("POSITION node=%08x l=%d latI=%d lonI=%d msl=%d hae=%d geo=%d pdop=%d hdop=%d vdop=%d siv=%d fxq=%d fxt=%d pts=%d time=%d\n", getFrom(&mp), mp.decoded.payload.size,
-             p.latitude_i, p.longitude_i, p.altitude, p.altitude_hae,
-             p.altitude_geoidal_separation, p.PDOP, p.HDOP, p.VDOP,
-             p.sats_in_view, p.fix_quality, p.fix_type, p.timestamp,p.time);
-             
+    LOG_INFO("POSITION node=%08x l=%d latI=%d lonI=%d msl=%d hae=%d geo=%d pdop=%d hdop=%d vdop=%d siv=%d fxq=%d fxt=%d pts=%d "
+             "time=%d\n",
+             getFrom(&mp), mp.decoded.payload.size, p.latitude_i, p.longitude_i, p.altitude, p.altitude_hae,
+             p.altitude_geoidal_separation, p.PDOP, p.HDOP, p.VDOP, p.sats_in_view, p.fix_quality, p.fix_type, p.timestamp,
+             p.time);
+
     if (p.time) {
         struct timeval tv;
         uint32_t secs = p.time;
