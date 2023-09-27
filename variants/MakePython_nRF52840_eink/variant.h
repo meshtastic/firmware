@@ -73,7 +73,7 @@ static const uint8_t AREF = PIN_AREF;
  */
 #define SPI_INTERFACES_COUNT 2
 // here
-//#define SPI_INTERFACES_COUNT 1
+// #define SPI_INTERFACES_COUNT 1
 
 #define PIN_SPI_MISO (0 + 31) // MISO      P0.31
 #define PIN_SPI_MOSI (0 + 30) // MOSI      P0.30
@@ -94,7 +94,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
  * eink display pins
  */
 
-//#define PIN_EINK_EN    (-1)
+// #define PIN_EINK_EN    (-1)
 #define PIN_EINK_CS (0 + 3)     // EPD_CS
 #define PIN_EINK_BUSY (32 + 11) // EPD_BUSY
 #define PIN_EINK_DC (32 + 13)   // EPD_D/C
@@ -118,8 +118,8 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define SX128X_CS (0 + 23)
 #define SX128X_DIO1 (0 + 4)
 #define SX128X_BUSY (0 + 7)
-//#define SX128X_TXEN  (32 + 9)
-//#define SX128X_RXEN  (0 + 12)
+// #define SX128X_TXEN  (32 + 9)
+// #define SX128X_RXEN  (0 + 12)
 #define SX128X_RESET LORA_RESET
 
 #define PIN_GPS_EN (-1)
