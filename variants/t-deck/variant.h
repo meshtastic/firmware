@@ -27,8 +27,8 @@
 #define BUTTON_PIN 0
 // #define BUTTON_NEED_PULLUP
 
-#undef GPS_RX_PIN
-#undef GPS_TX_PIN
+#define GPS_RX_PIN 44
+#define GPS_TX_PIN 43
 
 // Have SPI interface SD card slot
 #define HAS_SDCARD 1
@@ -41,7 +41,7 @@
 #define BATTERY_PIN 4 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 // ratio of voltage divider = 2.0 (RD2=100k, RD3=100k)
 #define ADC_MULTIPLIER 2.11 // 2.0 + 10% for correction of display undervoltage.
-#define ADC_CHANNEL ADC1_GPIO1_CHANNEL
+#define ADC_CHANNEL ADC1_GPIO4_CHANNEL
 
 // keyboard
 #define I2C_SDA 18 // I2C pins for this board
@@ -84,6 +84,8 @@
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET
-#define SX126X_E22 // Not really an E22 but TTGO seems to be trying to clone that
+// Not really an E22 but TTGO seems to be trying to clone that
+#define SX126X_DIO2_AS_RF_SWITCH
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
 // Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the sx1262interface
 // code)

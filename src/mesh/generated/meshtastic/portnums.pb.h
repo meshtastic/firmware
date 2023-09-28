@@ -69,6 +69,9 @@ typedef enum _meshtastic_PortNum {
  NOTE: audio frames contain a 3 byte header (0xc0 0xde 0xc2) and a one byte marker for the decompressed bitrate.
  This marker comes from the 'moduleConfig.audio.bitrate' enum minus one. */
     meshtastic_PortNum_AUDIO_APP = 9,
+    /* Same as Text Message but originating from Detection Sensor Module.
+ NOTE: This portnum traffic is not sent to the public MQTT starting at firmware version 2.2.9 */
+    meshtastic_PortNum_DETECTION_SENSOR_APP = 10,
     /* Provides a 'ping' service that replies to any packet it receives.
  Also serves as a small example module.
  ENCODING: ASCII Plaintext */
@@ -88,7 +91,8 @@ typedef enum _meshtastic_PortNum {
  ENCODING: Protobuf */
     meshtastic_PortNum_STORE_FORWARD_APP = 65,
     /* Optional port for messages for the range test module.
- ENCODING: ASCII Plaintext */
+ ENCODING: ASCII Plaintext
+ NOTE: This portnum traffic is not sent to the public MQTT starting at firmware version 2.2.9 */
     meshtastic_PortNum_RANGE_TEST_APP = 66,
     /* Provides a format to send and receive telemetry data from the Meshtastic network.
  Maintained by Charles Crossan (crossan007) : crossan007@gmail.com

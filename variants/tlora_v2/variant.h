@@ -1,8 +1,3 @@
-#undef GPS_RX_PIN
-#undef GPS_TX_PIN
-#define GPS_RX_PIN 36
-#define GPS_TX_PIN 13 // per @eugene
-
 #define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define ADC_CHANNEL ADC1_GPIO35_CHANNEL
 

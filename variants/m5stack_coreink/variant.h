@@ -3,8 +3,8 @@
 #define I2C_SCL 22
 
 // 7-07-2023 Or enable Secondary I2C Bus
-//#define I2C_SDA1 32
-//#define I2C_SCL1 33
+// #define I2C_SDA1 32
+// #define I2C_SCL1 33
 
 #define HAS_GPS 1
 #undef GPS_RX_PIN
@@ -39,7 +39,7 @@
 #undef RF95_MOSI
 #undef RF95_NSS
 #define USE_RF95
-//#define USE_SX1280
+// #define USE_SX1280
 
 #ifdef USE_RF95
 #define RF95_SCK 18

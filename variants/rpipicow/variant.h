@@ -11,13 +11,15 @@
 #undef ECB
 #define ECB 0
 
-#define NO_GPS 1
 #define USE_SH1106 1
-#undef GPS_SERIAL_NUM
 
 // default I2C pins:
 // SDA = 4
 // SCL = 5
+
+// Recommended pins for SerialModule:
+// txd = 8
+// rxd = 9
 
 #define EXT_NOTIFY_OUT 22
 #define BUTTON_PIN 17
@@ -49,5 +51,6 @@
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET
-#define SX126X_E22
+#define SX126X_DIO2_AS_RF_SWITCH
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
 #endif

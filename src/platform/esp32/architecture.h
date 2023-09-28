@@ -119,22 +119,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_BETAFPV_900_NANO_TX
 #elif defined(PICOMPUTER_S3)
 #define HW_VENDOR meshtastic_HardwareModel_PICOMPUTER_S3
-#endif
-
-//
-// Standard definitions for ESP32 targets
-//
-
-#define GPS_SERIAL_NUM 1
-#ifndef GPS_RX_PIN
-#define GPS_RX_PIN 34
-#endif
-#ifndef GPS_TX_PIN
-#ifdef USE_JTAG
-#define GPS_TX_PIN -1
-#else
-#define GPS_TX_PIN 12
-#endif
+#elif defined(HELTEC_HT62)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_HT62
 #endif
 
 // -----------------------------------------------------------------------------

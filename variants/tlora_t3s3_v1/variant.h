@@ -1,8 +1,3 @@
-#undef GPS_RX_PIN
-#undef GPS_TX_PIN
-
-#define PIN_GPS_EN 42 // GPS power enable pin
-
 #define HAS_SDCARD
 #define SDCARD_USE_SPI1
 
@@ -49,7 +44,8 @@
 #define SX126X_DIO1 33
 #define SX126X_BUSY 34
 #define SX126X_RESET LORA_RESET
-#define SX126X_E22
+#define SX126X_DIO2_AS_RF_SWITCH
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
 #endif
 
 // per SX128x_Receive_Interrupt/utilities.h

@@ -5,7 +5,7 @@ class DetectionSensorModule : public SinglePortModule, private concurrency::OSTh
 {
   public:
     DetectionSensorModule()
-        : SinglePortModule("detection", meshtastic_PortNum_TEXT_MESSAGE_APP), OSThread("DetectionSensorModule")
+        : SinglePortModule("detection", meshtastic_PortNum_DETECTION_SENSOR_APP), OSThread("DetectionSensorModule")
     {
     }
 
