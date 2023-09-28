@@ -5,12 +5,12 @@ RotaryEncoderInterruptImpl1 *rotaryEncoderInterruptImpl1;
 
 RotaryEncoderInterruptImpl1::RotaryEncoderInterruptImpl1() : RotaryEncoderInterruptBase("rotEnc1") {}
 
-void RotaryEncoderInterruptImpl1::init()
+bool RotaryEncoderInterruptImpl1::init()
 {
     if (!moduleConfig.canned_message.rotary1_enabled) {
         // Input device is disabled.
         disable();
-        return;
+        return false;
     }
 
     uint8_t pinA = moduleConfig.canned_message.inputbroker_pin_a;
@@ -25,6 +25,7 @@ void RotaryEncoderInterruptImpl1::init()
                                      RotaryEncoderInterruptImpl1::handleIntA, RotaryEncoderInterruptImpl1::handleIntB,
                                      RotaryEncoderInterruptImpl1::handleIntPressed);
     inputBroker->registerSource(this);
+    return true;
 }
 
 void RotaryEncoderInterruptImpl1::handleIntA()

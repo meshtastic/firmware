@@ -52,5 +52,5 @@
 #ifdef EBYTE_E22
 // Internally the TTGO module hooks the SX126x-DIO2 in to control the TX/RX switch
 // (which is the default for the sx1262interface code)
-#define SX126X_E22
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
 #endif

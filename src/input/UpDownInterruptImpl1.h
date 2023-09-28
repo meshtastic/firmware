@@ -5,7 +5,7 @@ class UpDownInterruptImpl1 : public UpDownInterruptBase
 {
   public:
     UpDownInterruptImpl1();
-    void init();
+    bool init();
     static void handleIntDown();
     static void handleIntUp();
     static void handleIntPressed();

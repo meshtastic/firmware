@@ -85,9 +85,9 @@ static const uint8_t A0 = PIN_A0;
 /*
 No longer populated on PCB
 */
-//#define PIN_SERIAL2_RX (0 + 6)
-//#define PIN_SERIAL2_TX (0 + 8)
-// #define PIN_SERIAL2_EN (0 + 17)
+// #define PIN_SERIAL2_RX (0 + 6)
+// #define PIN_SERIAL2_TX (0 + 8)
+//  #define PIN_SERIAL2_EN (0 + 17)
 
 /**
     Wire Interfaces
@@ -133,7 +133,9 @@ External serial flash WP25R1635FZUIL0
              // CPU?
 #define SX126X_BUSY (0 + 17)
 #define SX126X_RESET (0 + 25)
-#define SX126X_E22 // Not really an E22 but TTGO seems to be trying to clone that
+// Not really an E22 but TTGO seems to be trying to clone that
+#define SX126X_DIO2_AS_RF_SWITCH
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
 // Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the sx1262interface
 // code)
 
@@ -171,7 +173,7 @@ External serial flash WP25R1635FZUIL0
 #define GPS_L76K
 #define PIN_GPS_REINIT (32 + 5) // An output to reset L76K GPS. As per datasheet, low for > 100ms will reset the L76K
 
-#define PIN_GPS_WAKE (32 + 2) // An output to wake GPS, low means allow sleep, high means force wake
+#define PIN_GPS_STANDBY (32 + 2) // An output to wake GPS, low means allow sleep, high means force wake
 // Seems to be missing on this new board
 // #define PIN_GPS_PPS (32 + 4)  // Pulse per second input from the GPS
 #define PIN_GPS_TX (32 + 9) // This is for bits going TOWARDS the CPU

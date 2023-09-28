@@ -53,7 +53,7 @@ class OSThread : public Thread
 
     static void setup();
 
-    int32_t disable();
+    virtual int32_t disable();
 
     /**
      * Wait a specified number msecs starting from the current time (rather than the last time we were run)

@@ -28,7 +28,7 @@
 
 #define USE_LFXO
 
-//#define USE_SEGGER
+// #define USE_SEGGER
 
 // Number of pins defined in PinDescription array
 #define PINS_COUNT (16)
@@ -88,6 +88,7 @@
 #define BATTERY_PIN 3
 #define ADC_MULTIPLIER 1.436
 
-#define SX126X_E22 // Not really an E22 but this board clones using DIO3 for tcxo control
+#define SX126X_DIO2_AS_RF_SWITCH
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8 // Not really an E22 but this board clones using DIO3 for tcxo control
 
 #endif

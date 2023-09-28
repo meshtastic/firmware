@@ -4,7 +4,7 @@
 #define I2C_SCL 22
 
 // #define BUTTON_PIN 39 // 38, 37
-//#define BUTTON_PIN 0
+// #define BUTTON_PIN 0
 #define BUTTON_NEED_PULLUP
 // #define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Plugin.
 
