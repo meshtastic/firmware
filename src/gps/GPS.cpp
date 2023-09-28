@@ -76,28 +76,25 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
     while (millis() < startTimeout) {
         if (_serial_gps->available()) {
             b = _serial_gps->read();
+#ifdef GPS_DEBUG
+            LOG_DEBUG("%02X", (char *)buffer);
+#endif
             buffer[bytesRead] = b;
             bytesRead++;
             if ((bytesRead == 767) || (b == '\r')) {
                 if (strnstr((char *)buffer, message, bytesRead) != nullptr) {
 #ifdef GPS_DEBUG
-                    buffer[bytesRead] = '\0';
-                    LOG_DEBUG("%s\r", (char *)buffer);
+                    LOG_DEBUG("\r");
 #endif
                     return GNSS_RESPONSE_OK;
                 } else {
-#ifdef GPS_DEBUG
-                    buffer[bytesRead] = '\0';
-                    LOG_INFO("Bytes read:%s\n", (char *)buffer);
-#endif
                     bytesRead = 0;
                 }
             }
         }
     }
 #ifdef GPS_DEBUG
-    buffer[bytesRead] = '\0';
-    LOG_INFO("Bytes read:%s\n", (char *)buffer);
+    LOG_DEBUG("\n");
 #endif
     return GNSS_RESPONSE_NONE;
 }
@@ -975,9 +972,9 @@ bool GPS::factoryReset()
 
 /**
  * Perform any processing that should be done only while the GPS is awake and looking for a fix.
- * Override this method to check for new locations
+ * Override this method to check for new times
  *
- * @return true if we've acquired a new location
+ * @return true if we've acquired a new time
  */
 bool GPS::lookForTime()
 {
@@ -1181,7 +1178,9 @@ bool GPS::whileIdle()
     // First consume any chars that have piled up at the receiver
     while (_serial_gps->available() > 0) {
         int c = _serial_gps->read();
-        // LOG_DEBUG("%c", c);
+#ifdef GPS_DEBUG
+        LOG_DEBUG("%c", c);
+#endif
         isValid |= reader.encode(c);
     }
 
