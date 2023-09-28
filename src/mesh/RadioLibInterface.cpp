@@ -166,7 +166,7 @@ meshtastic_QueueStatus RadioLibInterface::getQueueStatus()
 bool RadioLibInterface::canSleep()
 {
     bool res = txQueue.empty();
-    if (!res) { // only print debug messages if we are vetoing sleep
+    if (res != true) { // only print debug messages if we are vetoing sleep
         LOG_DEBUG("radio wait to sleep, txEmpty=%d\n", res);
     }
     return res;

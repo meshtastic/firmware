@@ -45,7 +45,7 @@ static void sdsEnter()
 {
     LOG_DEBUG("Enter state: SDS\n");
     // FIXME - make sure GPS and LORA radio are off first - because we want close to zero current draw
-    doDeepSleep(getConfiguredOrDefaultMs(config.power.sds_secs));
+    doDeepSleep(getConfiguredOrDefaultMs(config.power.sds_secs), false);
 }
 
 extern Power *power;

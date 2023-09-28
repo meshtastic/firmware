@@ -165,8 +165,9 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
 #ifdef ARCH_ESP32
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER && config.power.is_power_saving) {
         uint32_t nightyNightMs = getConfiguredOrDefaultMs(config.position.position_broadcast_secs);
-        doDeepSleep(nightyNightMs);
         LOG_DEBUG("Sleeping for %ims, then awaking to send position again.\n", nightyNightMs);
+
+        doDeepSleep(nightyNightMs, true);
     }
 #endif
 }
