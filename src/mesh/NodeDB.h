@@ -146,6 +146,9 @@ class NodeDB
     /// read our db from flash
     void loadFromDisk();
 
+    /// purge db entries without user info
+    void cleanupMeshDB();
+
     /// Reinit device state from scratch (not loading from disk)
     void installDefaultDeviceState(), installDefaultChannels(), installDefaultConfig(), installDefaultModuleConfig();
 };
@@ -207,6 +210,14 @@ inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t d
     if (configuredInterval > 0)
         return configuredInterval * 1000;
     return defaultInterval * 1000;
+}
+
+inline uint32_t getConfiguredOrDefault(uint32_t configured, uint32_t defaultValue)
+{
+    if (configured > 0)
+        return configured;
+
+    return defaultValue;
 }
 
 /// Sometimes we will have Position objects that only have a time, so check for

@@ -169,6 +169,14 @@ void NodeDB::installDefaultConfig()
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
     config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
     config.lora.hop_limit = HOP_RELIABLE;
+#ifdef PIN_GPS_EN
+    config.position.gps_en_gpio = PIN_GPS_EN;
+#endif
+#ifdef GPS_POWER_TOGGLE
+    config.device.disable_triple_click = false;
+#else
+    config.device.disable_triple_click = true;
+#endif
     config.position.gps_enabled = true;
     config.position.position_broadcast_smart_enabled = true;
     config.position.broadcast_smart_minimum_distance = 100;
@@ -190,7 +198,9 @@ void NodeDB::installDefaultConfig()
                                       : meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN;
     // for backward compat, default position flags are ALT+MSL
     config.position.position_flags =
-        (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL);
+        (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL |
+         meshtastic_Config_PositionConfig_PositionFlags_SPEED | meshtastic_Config_PositionConfig_PositionFlags_HEADING |
+         meshtastic_Config_PositionConfig_PositionFlags_DOP);
 
 #ifdef T_WATCH_S3
     config.display.screen_on_secs = 30;
@@ -253,6 +263,13 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.detection_sensor.detection_triggered_high = true;
     moduleConfig.detection_sensor.minimum_broadcast_secs = 45;
 
+    moduleConfig.has_ambient_lighting = true;
+    moduleConfig.ambient_lighting.current = 10;
+    // Default to a color based on our node number
+    moduleConfig.ambient_lighting.red = (myNodeInfo.my_node_num & 0xFF0000) >> 16;
+    moduleConfig.ambient_lighting.green = (myNodeInfo.my_node_num & 0x00FF00) >> 8;
+    moduleConfig.ambient_lighting.blue = myNodeInfo.my_node_num & 0x0000FF;
+
     initModuleConfigIntervals();
 }
 
@@ -295,6 +312,19 @@ void NodeDB::resetNodes()
         neighborInfoModule->resetNeighbors();
 }
 
+void NodeDB::cleanupMeshDB()
+{
+    int newPos = 0, removed = 0;
+    for (int i = 0; i < *numMeshNodes; i++) {
+        if (meshNodes[i].has_user)
+            meshNodes[newPos++] = meshNodes[i];
+        else
+            removed++;
+    }
+    *numMeshNodes -= removed;
+    LOG_DEBUG("cleanupMeshDB purged %d entries\n", removed);
+}
+
 void NodeDB::installDefaultDeviceState()
 {
     LOG_INFO("Installing default DeviceState\n");
@@ -324,6 +354,7 @@ void NodeDB::init()
 {
     LOG_INFO("Initializing NodeDB\n");
     loadFromDisk();
+    cleanupMeshDB();
 
     uint32_t devicestateCRC = crc32Buffer(&devicestate, sizeof(devicestate));
     uint32_t configCRC = crc32Buffer(&config, sizeof(config));
@@ -379,25 +410,20 @@ void NodeDB::init()
  */
 void NodeDB::pickNewNodeNum()
 {
-    NodeNum r = myNodeInfo.my_node_num;
-
     getMacAddr(ourMacAddr); // Make sure ourMacAddr is set
 
     // Pick an initial nodenum based on the macaddr
-    r = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
-
-    if (r == NODENUM_BROADCAST || r < NUM_RESERVED)
-        r = NUM_RESERVED; // don't pick a reserved node number
+    NodeNum nodeNum = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
 
     meshtastic_NodeInfoLite *found;
-    while ((found = getMeshNode(r)) && memcmp(found->user.macaddr, owner.macaddr, sizeof(owner.macaddr))) {
-        // FIXME: input for random() is int, so NODENUM_BROADCAST becomes -1
-        NodeNum n = random(NUM_RESERVED, NODENUM_BROADCAST); // try a new random choice
-        LOG_WARN("NOTE! Our desired nodenum 0x%x is in use, so trying for 0x%x\n", r, n);
-        r = n;
+    while ((nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED) ||
+           ((found = getMeshNode(nodeNum)) && memcmp(found->user.macaddr, owner.macaddr, sizeof(owner.macaddr)) != 0)) {
+        NodeNum candidate = random(NUM_RESERVED, LONG_MAX); // try a new random choice
+        LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, so trying for 0x%x\n", nodeNum, candidate);
+        nodeNum = candidate;
     }
 
-    myNodeInfo.my_node_num = r;
+    myNodeInfo.my_node_num = nodeNum;
 }
 
 static const char *prefFileName = "/prefs/db.proto";

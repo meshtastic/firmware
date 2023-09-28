@@ -18,6 +18,12 @@ NoopPrint noopPrint;
 #if HAS_WIFI || HAS_ETHERNET
 extern Syslog syslog;
 #endif
+void RedirectablePrint::rpInit()
+{
+#ifdef HAS_FREE_RTOS
+    inDebugPrint = xSemaphoreCreateMutexStatic(&this->_MutexStorageSpace);
+#endif
+}
 
 void RedirectablePrint::setDestination(Print *_dest)
 {
@@ -66,9 +72,12 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
         return 0;
     }
     size_t r = 0;
-
+#ifdef HAS_FREE_RTOS
+    if (inDebugPrint != nullptr && xSemaphoreTake(inDebugPrint, portMAX_DELAY) == pdTRUE) {
+#else
     if (!inDebugPrint) {
         inDebugPrint = true;
+#endif
 
         va_list arg;
         va_start(arg, format);
@@ -141,7 +150,11 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
         va_end(arg);
 
         isContinuationMessage = !hasNewline;
+#ifdef HAS_FREE_RTOS
+        xSemaphoreGive(inDebugPrint);
+#else
         inDebugPrint = false;
+#endif
     }
 
     return r;

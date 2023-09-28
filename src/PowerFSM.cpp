@@ -8,7 +8,6 @@
  * actions to be taken upon entering or exiting each state.
  */
 #include "PowerFSM.h"
-#include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "configuration.h"
@@ -137,9 +136,6 @@ static void lsIdle()
 static void lsExit()
 {
     LOG_INFO("Exit state: LS\n");
-    // setGPSPower(true); // restore GPS power
-    if (gps)
-        gps->forceWake(true);
 }
 
 static void nbEnter()
@@ -158,6 +154,9 @@ static void darkEnter()
 {
     setBluetoothEnable(true);
     screen->setOn(false);
+#ifdef KB_POWERON
+    digitalWrite(KB_POWERON, LOW);
+#endif
 }
 
 static void serialEnter()
@@ -185,6 +184,9 @@ static void powerEnter()
     } else {
         screen->setOn(true);
         setBluetoothEnable(true);
+#ifdef KB_POWERON
+        digitalWrite(KB_POWERON, HIGH);
+#endif
         // within enter() the function getState() returns the state we came from
         if (strcmp(powerFSM.getState()->name, "BOOT") != 0 && strcmp(powerFSM.getState()->name, "POWER") != 0 &&
             strcmp(powerFSM.getState()->name, "DARK") != 0) {
@@ -215,6 +217,9 @@ static void onEnter()
     LOG_DEBUG("Enter state: ON\n");
     screen->setOn(true);
     setBluetoothEnable(true);
+#ifdef KB_POWERON
+    digitalWrite(KB_POWERON, HIGH);
+#endif
 }
 
 static void onIdle()
@@ -365,10 +370,6 @@ void PowerFSM_setup()
                                       getConfiguredOrDefaultMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs),
                                       NULL, "Bluetooth timeout");
     }
-
-    if (config.power.sds_secs != UINT32_MAX)
-        powerFSM.add_timed_transition(lowPowerState, &stateSDS, getConfiguredOrDefaultMs(config.power.sds_secs), NULL,
-                                      "mesh timeout");
 #endif
 
     powerFSM.run_machine(); // run one iteration of the state machine, so we run our on enter tasks for the initial DARK state

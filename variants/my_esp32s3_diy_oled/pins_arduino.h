@@ -24,11 +24,11 @@ static const uint8_t SCK = 5;
 static const uint8_t MOSI = 6;
 static const uint8_t SS = 7;
 
-//#define SPI_MOSI                    (11)
-//#define SPI_SCK                     (14)
-//#define SPI_MISO                    (2)
-//#define SPI_CS                      (13)
+// #define SPI_MOSI                    (11)
+// #define SPI_SCK                     (14)
+// #define SPI_MISO                    (2)
+// #define SPI_CS                      (13)
 
-//#define SDCARD_CS                   SPI_CS
+// #define SDCARD_CS                   SPI_CS
 
 #endif /* Pins_Arduino_h */

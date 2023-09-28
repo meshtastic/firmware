@@ -73,6 +73,7 @@ NRF52Bluetooth *nrf52Bluetooth;
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 #include "AccelerometerThread.h"
+#include "AmbientLightingThread.h"
 #endif
 
 using namespace concurrency;
@@ -169,6 +170,7 @@ static OSThread *buttonThread;
 uint32_t ButtonThread::longPressTime = 0;
 #endif
 static OSThread *accelerometerThread;
+static OSThread *ambientLightingThread;
 SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 
 RadioInterface *rIf = NULL;
@@ -217,11 +219,6 @@ void setup()
 #ifdef VEXT_ENABLE
     pinMode(VEXT_ENABLE, OUTPUT);
     digitalWrite(VEXT_ENABLE, 0); // turn on the display power
-#endif
-
-#ifdef VGNSS_CTRL
-    pinMode(VGNSS_CTRL, OUTPUT);
-    digitalWrite(VGNSS_CTRL, LOW);
 #endif
 
 #if defined(VTFT_CTRL)
@@ -409,14 +406,6 @@ void setup()
 // Only one supported RGB LED currently
 #ifdef HAS_NCP5623
     rgb_found = i2cScanner->find(ScanI2C::DeviceType::NCP5623);
-
-    // Start the RGB LED at 50%
-
-    if (rgb_found.type == ScanI2C::NCP5623) {
-        rgb.begin();
-        rgb.setCurrent(10);
-        rgb.setColor(128, 128, 128);
-    }
 #endif
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
@@ -521,6 +510,12 @@ void setup()
     }
 #endif
 
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+    if (rgb_found.type != ScanI2C::DeviceType::NONE) {
+        ambientLightingThread = new AmbientLightingThread(rgb_found.type);
+    }
+#endif
+
 #ifdef T_WATCH_S3
     drv.begin();
     drv.selectLibrary(1);
@@ -561,14 +556,12 @@ void setup()
 
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 
-    gps = createGps();
-
+    gps = GPS::createGps();
     if (gps) {
         gpsStatus->observe(&gps->newStatus);
     } else {
-        LOG_WARN("No GPS found - running without GPS\n");
+        LOG_DEBUG("Running without GPS.\n");
     }
-
     nodeStatus->observe(&nodeDB.newStatus);
 
     service.init();
@@ -592,17 +585,6 @@ void setup()
 #endif
 
     screen->print("Started...\n");
-
-    // We have now loaded our saved preferences from flash
-
-    // ONCE we will factory reset the GPS for bug #327
-    if (gps && !devicestate.did_gps_reset) {
-        LOG_WARN("GPS FactoryReset requested\n");
-        if (gps->factoryReset()) { // If we don't succeed try again next time
-            devicestate.did_gps_reset = true;
-            nodeDB.saveToDisk(SEGMENT_DEVICESTATE);
-        }
-    }
 
 #ifdef SX126X_ANT_SW
     // make analog PA vs not PA switch on SX126x eval board work properly
@@ -758,7 +740,6 @@ void setup()
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
     powerFSMthread = new PowerFSMThread();
 
-    // setBluetoothEnable(false); we now don't start bluetooth until we enter the proper state
     setCPUFast(false); // 80MHz is fine for our slow peripherals
 }
 

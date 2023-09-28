@@ -38,6 +38,8 @@
 #define PIN_GPS_RESET 35
 #define PIN_GPS_PPS 36
 #define VGNSS_CTRL 37 // Heltec Tracker needs this pulled low for GPS
+#define PIN_GPS_EN VGNSS_CTRL
+#define GPS_EN_ACTIVE LOW
 #define GPS_RESET_MODE LOW
 #define GPS_UC6580
 
@@ -57,4 +59,6 @@
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET
-#define SX126X_E22
+
+#define SX126X_DIO2_AS_RF_SWITCH
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
