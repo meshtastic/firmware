@@ -666,6 +666,11 @@ bool Power::axpChipInit()
 
         /*The alternative version of T-Beam 1.1 differs from T-Beam V1.1 in that it uses an AXP2101 power chip*/
         if (HW_VENDOR == meshtastic_HardwareModel_TBEAM) {
+
+            // GNSS VDD 3300mV -- Done first to trigger a cold boot
+            PMU->setPowerChannelVoltage(XPOWERS_ALDO3, 3300);
+            PMU->enablePowerOutput(XPOWERS_ALDO3);
+
             // Unuse power channel
             PMU->disablePowerOutput(XPOWERS_DCDC2);
             PMU->disablePowerOutput(XPOWERS_DCDC3);
@@ -678,10 +683,6 @@ bool Power::axpChipInit()
             PMU->disablePowerOutput(XPOWERS_DLDO1);
             PMU->disablePowerOutput(XPOWERS_DLDO2);
 
-            // GNSS RTC PowerVDD 3300mV
-            PMU->setPowerChannelVoltage(XPOWERS_VBACKUP, 3300);
-            PMU->enablePowerOutput(XPOWERS_VBACKUP);
-
             // ESP32 VDD 3300mV
             //  ! No need to set, automatically open , Don't close it
             //  PMU->setPowerChannelVoltage(XPOWERS_DCDC1, 3300);
@@ -691,9 +692,10 @@ bool Power::axpChipInit()
             PMU->setPowerChannelVoltage(XPOWERS_ALDO2, 3300);
             PMU->enablePowerOutput(XPOWERS_ALDO2);
 
-            // GNSS VDD 3300mV
-            PMU->setPowerChannelVoltage(XPOWERS_ALDO3, 3300);
-            PMU->enablePowerOutput(XPOWERS_ALDO3);
+            // GNSS RTC PowerVDD 3300mV
+            PMU->setPowerChannelVoltage(XPOWERS_VBACKUP, 3300);
+            PMU->enablePowerOutput(XPOWERS_VBACKUP);
+
         } else if (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE ||
                    HW_VENDOR == meshtastic_HardwareModel_T_WATCH_S3) {
             // t-beam s3 core
