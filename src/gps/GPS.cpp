@@ -296,6 +296,16 @@ bool GPS::setup()
             _serial_gps->write("$CFGSYS,h15\r\n");
             delay(250);
         } else if (gnssModel == GNSS_MODEL_UBLOX) {
+
+            // ONCE we will factory reset the GPS for bug #327
+            if (!devicestate.did_gps_reset) {
+                LOG_WARN("GPS FactoryReset requested\n");
+                if (gps->factoryReset()) { // If we don't succeed try again next time
+                    devicestate.did_gps_reset = true;
+                    nodeDB.saveToDisk(SEGMENT_DEVICESTATE);
+                }
+            }
+
             // Configure GNSS system to GPS+SBAS+GLONASS (Module may restart after this command)
             // We need set it because by default it is GPS only, and we want to use GLONASS too
             // Also we need SBAS for better accuracy and extra features
@@ -600,14 +610,6 @@ int32_t GPS::runOnce()
         // We have now loaded our saved preferences from flash
         if (config.position.gps_enabled == false && config.position.fixed_position == false) {
             return disable();
-        }
-        // ONCE we will factory reset the GPS for bug #327
-        if (!devicestate.did_gps_reset) {
-            LOG_WARN("GPS FactoryReset requested\n");
-            if (gps->factoryReset()) { // If we don't succeed try again next time
-                devicestate.did_gps_reset = true;
-                nodeDB.saveToDisk(SEGMENT_DEVICESTATE);
-            }
         }
         GPSInitFinished = true;
     }
@@ -962,6 +964,12 @@ bool GPS::factoryReset()
                              0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x17, 0x2B, 0x7E};
     _serial_gps->write(_message_reset, sizeof(_message_reset));
     delay(1000);
+
+    // Reset device ram to COLDSTART state
+    byte _message_CFG_RST_COLDSTART[] = {0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0xFF, 0xB9, 0x00, 0x00, 0xC6, 0x8B};
+    _serial_gps->write(_message_CFG_RST_COLDSTART, sizeof(_message_CFG_RST_COLDSTART));
+    getACK("$GPTXT,01,01,02,SW=", 1000); // Using this to capture the bootup messages and wait for 1 second
+    // delay(1000);
     return true;
 }
 
