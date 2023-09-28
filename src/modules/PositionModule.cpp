@@ -7,6 +7,7 @@
 #include "airtime.h"
 #include "configuration.h"
 #include "gps/GeoCoord.h"
+#include "sleep.h"
 
 PositionModule *positionModule;
 
@@ -15,7 +16,8 @@ PositionModule::PositionModule()
       concurrency::OSThread("PositionModule")
 {
     isPromiscuous = true;          // We always want to update our nodedb, even if we are sniffing on others
-    setIntervalFromNow(60 * 1000); // Send our initial position 60 seconds after we start (to give GPS time to setup)
+    if (config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER)
+        setIntervalFromNow(60 * 1000);
 }
 
 bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Position *pptr)
@@ -159,6 +161,14 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
         p->channel = channel;
 
     service.sendToMesh(p, RX_SRC_LOCAL, true);
+
+#ifdef ARCH_ESP32
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER && config.power.is_power_saving) {
+        uint32_t nightyNightMs = getConfiguredOrDefaultMs(config.position.position_broadcast_secs);
+        doDeepSleep(nightyNightMs);
+        LOG_DEBUG("Sleeping for %ims, then awaking to send position again.\n", nightyNightMs);
+    }
+#endif
 }
 
 int32_t PositionModule::runOnce()
