@@ -18,8 +18,6 @@ extern esp_sleep_source_t wakeCause;
 extern XPowersLibInterface *PMU;
 #endif
 
-void setGPSPower(bool on);
-void doGPSpowersave(bool on);
 // Perform power on init that we do on each wake from deep sleep
 void initDeepSleep();
 

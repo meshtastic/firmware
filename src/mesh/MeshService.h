@@ -48,6 +48,14 @@ class MeshService
     uint32_t oldFromNum = 0;
 
   public:
+    static bool isTextPayload(const meshtastic_MeshPacket *p)
+    {
+        if (moduleConfig.range_test.enabled && p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP) {
+            return true;
+        }
+        return p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
+               p->decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP;
+    }
     /// Called when some new packets have arrived from one of the radios
     Observable<uint32_t> fromNumChanged;
 

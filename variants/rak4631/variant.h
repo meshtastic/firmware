@@ -209,7 +209,9 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // #define SX126X_TXEN (39)
 // #define SX126X_RXEN (37)
 #define SX126X_POWER_EN (37)
-#define SX126X_E22 // DIO2 controlls an antenna switch and the TCXO voltage is controlled by DIO3
+// DIO2 controlls an antenna switch and the TCXO voltage is controlled by DIO3
+#define SX126X_DIO2_AS_RF_SWITCH
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
 // enables 3.3V periphery like GPS or IO Module
 #define PIN_3V3_EN (34)
@@ -226,6 +228,8 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 
 #define GPS_RX_PIN PIN_SERIAL1_RX
 #define GPS_TX_PIN PIN_SERIAL1_TX
+
+// Define pin to enable GPS toggle (set GPIO to LOW) via user button triple press
 
 // RAK12002 RTC Module
 #define RV3028_RTC (uint8_t)0b1010010
