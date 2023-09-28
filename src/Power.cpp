@@ -786,6 +786,10 @@ bool Power::axpChipInit()
         LOG_DEBUG("DC4  : %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_DCDC4) ? "+" : "-",
                   PMU->getPowerChannelVoltage(XPOWERS_DCDC4));
     }
+    if (PMU->isChannelAvailable(XPOWERS_DCDC5)) {
+        LOG_DEBUG("DC5  : %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_DCDC5) ? "+" : "-",
+                  PMU->getPowerChannelVoltage(XPOWERS_DCDC5));
+    }
     if (PMU->isChannelAvailable(XPOWERS_LDO2)) {
         LOG_DEBUG("LDO2 : %s   Voltage:%u mV \n", PMU->isPowerChannelEnable(XPOWERS_LDO2) ? "+" : "-",
                   PMU->getPowerChannelVoltage(XPOWERS_LDO2));

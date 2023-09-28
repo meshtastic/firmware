@@ -398,7 +398,7 @@ bool GPS::setup()
                 }
             } else {
                 if (strncmp(info.hwVersion, "00040007", 8) == 0) { // This PSM mode has only been tested on this hardware
-                    msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_PSM);
+                    /*msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_PSM);
                     _serial_gps->write(UBXscratch, msglen);
                     if (getACK(0x06, 0x11, 300) != GNSS_RESPONSE_OK) {
                         LOG_WARN("Unable to enable powersaving mode for GPS.\n");
@@ -407,7 +407,7 @@ bool GPS::setup()
                     _serial_gps->write(UBXscratch, msglen);
                     if (getACK(0x06, 0x3B, 300) != GNSS_RESPONSE_OK) {
                         LOG_WARN("Unable to enable powersaving details for GPS.\n");
-                    }
+                    }*/
                 } else {
                     msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_ECO);
                     _serial_gps->write(UBXscratch, msglen);
@@ -954,19 +954,32 @@ bool GPS::factoryReset()
     delay(150); // The L76K datasheet calls for at least 100MS delay
     digitalWrite(PIN_GPS_REINIT, 1);
 #endif
-
-    // send the UBLOX Factory Reset Command regardless of detect state, something is very wrong, just assume it's UBLOX.
-    // Factory Reset
-    byte _message_reset[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF, 0xFB, 0x00, 0x00, 0x00,
-                             0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x17, 0x2B, 0x7E};
-    _serial_gps->write(_message_reset, sizeof(_message_reset));
+    if (HW_VENDOR == meshtastic_HardwareModel_TBEAM) {
+        byte _message_reset1[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00,
+                                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x1C, 0xA2};
+        _serial_gps->write(_message_reset1, sizeof(_message_reset1));
+        delay(1000);
+        byte _message_reset2[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00,
+                                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x1B, 0xA1};
+        _serial_gps->write(_message_reset2, sizeof(_message_reset2));
+        delay(1000);
+        byte _message_reset3[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                  0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x03, 0x2B, 0x7E};
+        _serial_gps->write(_message_reset3, sizeof(_message_reset3));
+    } else {
+        // send the UBLOX Factory Reset Command regardless of detect state, something is very wrong, just assume it's UBLOX.
+        // Factory Reset
+        byte _message_reset[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF, 0xFB, 0x00, 0x00, 0x00,
+                                 0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x17, 0x2B, 0x7E};
+        _serial_gps->write(_message_reset, sizeof(_message_reset));
+    }
     delay(1000);
 
     // Reset device ram to COLDSTART state
     byte _message_CFG_RST_COLDSTART[] = {0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0xFF, 0xB9, 0x00, 0x00, 0xC6, 0x8B};
     _serial_gps->write(_message_CFG_RST_COLDSTART, sizeof(_message_CFG_RST_COLDSTART));
-    getACK("$GPTXT,01,01,02,SW=", 1000); // Using this to capture the bootup messages and wait for 1 second
-    // delay(1000);
+    // getACK("$GPTXT,01,01,02,SW=", 1000); // Using this to capture the bootup messages and wait for 1 second
+    delay(1000);
     return true;
 }
 
