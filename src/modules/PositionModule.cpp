@@ -3,7 +3,6 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
-#include "RadioLibInterface.h"
 #include "Router.h"
 #include "TypeConversions.h"
 #include "airtime.h"
