@@ -1,4 +1,5 @@
 #include "PositionModule.h"
+#include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
@@ -8,6 +9,7 @@
 #include "configuration.h"
 #include "gps/GeoCoord.h"
 #include "sleep.h"
+#include "target_specific.h"
 
 PositionModule *positionModule;
 
@@ -21,11 +23,16 @@ PositionModule::PositionModule()
 
     // Power saving trackers should clear their position on startup to avoid waking up and sending a stale position
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER && config.power.is_power_saving) {
-        LOG_DEBUG("Clearing position on startup for sleepy tracker (ー。ー) zzz\n");
-        meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
-        node->position.latitude_i = 0;
-        node->position.longitude_i = 0;
+        clearPosition();
     }
+}
+
+void PositionModule::clearPosition()
+{
+    LOG_DEBUG("Clearing position on startup for sleepy tracker (ー。ー) zzz\n");
+    meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
+    node->position.latitude_i = 0;
+    node->position.longitude_i = 0;
 }
 
 bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Position *pptr)
@@ -170,14 +177,30 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
 
     service.sendToMesh(p, RX_SRC_LOCAL, true);
 
-#ifdef ARCH_ESP32
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER && config.power.is_power_saving) {
         uint32_t nightyNightMs = getConfiguredOrDefaultMs(config.position.position_broadcast_secs);
         LOG_DEBUG("Sleeping for %ims, then awaking to send position again.\n", nightyNightMs);
-
+#ifdef ARCH_ESP32
         doDeepSleep(nightyNightMs, true);
-    }
+#elif defined(ARCH_NRF52)
+        setBluetoothEnable(false);
+        gps->disable();
+#ifdef PIN_3V3_EN
+        digitalWrite(PIN_3V3_EN, LOW);
 #endif
+        clearPosition();
+        sd_power_mode_set(NRF_POWER_MODE_LOWPWR);
+        delay(nightyNightMs);
+#ifdef PIN_3V3_EN
+        digitalWrite(PIN_3V3_EN, HIGH);
+#endif
+        gps->enable();
+        if (config.bluetooth.enabled)
+            setBluetoothEnable(true);
+        // Default power mode
+        sd_power_mode_set(NRF_POWER_MODE_CONSTLAT);
+#endif
+    }
 }
 
 int32_t PositionModule::runOnce()
