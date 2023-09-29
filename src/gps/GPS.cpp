@@ -301,7 +301,7 @@ bool GPS::setup()
                     devicestate.did_gps_reset = true;
                     nodeDB.saveToDisk(SEGMENT_DEVICESTATE);
                 }
-            }
+            } /*
 
             // Configure GNSS system to GPS+SBAS+GLONASS (Module may restart after this command)
             // We need set it because by default it is GPS only, and we want to use GLONASS too
@@ -407,7 +407,7 @@ bool GPS::setup()
                     _serial_gps->write(UBXscratch, msglen);
                     if (getACK(0x06, 0x3B, 300) != GNSS_RESPONSE_OK) {
                         LOG_WARN("Unable to enable powersaving details for GPS.\n");
-                    }*/
+                    }
                 } else {
                     msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_ECO);
                     _serial_gps->write(UBXscratch, msglen);
@@ -424,6 +424,7 @@ bool GPS::setup()
             } else {
                 LOG_INFO("GNSS module configuration saved!\n");
             }
+            */
         }
         didSerialInit = true;
     }
