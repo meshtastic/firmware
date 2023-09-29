@@ -198,7 +198,7 @@ int32_t PositionModule::runOnce()
 
     if (lastGpsSend == 0 || msSinceLastSend >= intervalMs) {
         // Only send packets if the channel is less than 40% utilized.
-        if (airTime->isTxAllowedChannelUtil()) {
+        if (airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER)) {
             if (hasValidPosition(node)) {
                 lastGpsSend = now;
 
