@@ -15,9 +15,17 @@ PositionModule::PositionModule()
     : ProtobufModule("position", meshtastic_PortNum_POSITION_APP, &meshtastic_Position_msg),
       concurrency::OSThread("PositionModule")
 {
-    isPromiscuous = true;          // We always want to update our nodedb, even if we are sniffing on others
+    isPromiscuous = true; // We always want to update our nodedb, even if we are sniffing on others
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER)
         setIntervalFromNow(60 * 1000);
+
+    // Power saving trackers should clear their position on startup to avoid waking up and sending a stale position
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER && config.power.is_power_saving) {
+        LOG_DEBUG("Clearing position on startup for sleepy tracker (ー。ー) zzz\n");
+        meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
+        node->position.latitude_i = 0;
+        node->position.longitude_i = 0;
+    }
 }
 
 bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Position *pptr)
