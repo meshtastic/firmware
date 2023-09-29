@@ -3,6 +3,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
+#include "RadioLibInterface.h"
 #include "Router.h"
 #include "TypeConversions.h"
 #include "airtime.h"
@@ -180,25 +181,8 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER && config.power.is_power_saving) {
         uint32_t nightyNightMs = getConfiguredOrDefaultMs(config.position.position_broadcast_secs);
         LOG_DEBUG("Sleeping for %ims, then awaking to send position again.\n", nightyNightMs);
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) || defined(ARCH_NRF52)
         doDeepSleep(nightyNightMs, true);
-#elif defined(ARCH_NRF52)
-        setBluetoothEnable(false);
-        gps->disable();
-#ifdef PIN_3V3_EN
-        digitalWrite(PIN_3V3_EN, LOW);
-#endif
-        clearPosition();
-        sd_power_mode_set(NRF_POWER_MODE_LOWPWR);
-        delay(nightyNightMs);
-#ifdef PIN_3V3_EN
-        digitalWrite(PIN_3V3_EN, HIGH);
-#endif
-        gps->enable();
-        if (config.bluetooth.enabled)
-            setBluetoothEnable(true);
-        // Default power mode
-        sd_power_mode_set(NRF_POWER_MODE_CONSTLAT);
 #endif
     }
 }
