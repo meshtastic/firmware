@@ -200,22 +200,15 @@ void cpuDeepSleep(uint32_t msecToWake)
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
 
 #ifdef BUTTON_PIN
-    // Only GPIOs which are have RTC functionality can be used in this bit map: 0,2,4,12-15,25-27,32-39.
-#if SOC_RTCIO_HOLD_SUPPORTED
-    uint64_t gpioMask = (1ULL << config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
+
+#if SOC_PM_SUPPORT_EXT_WAKEUP
+    esp_sleep_enable_ext0_wakeup((gpio_num_t)(1ULL << (config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN)), LOW);
 #endif
 
 #ifdef BUTTON_NEED_PULLUP
     gpio_pullup_en((gpio_num_t)BUTTON_PIN);
 #endif
 
-    // Not needed because both of the current boards have external pullups
-    // FIXME change polarity in hw so we can wake on ANY_HIGH instead - that would allow us to use all three buttons (instead of
-    // just the first) gpio_pullup_en((gpio_num_t)BUTTON_PIN);
-
-#if SOC_PM_SUPPORT_EXT_WAKEUP
-    esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ALL_LOW);
-#endif
 #endif
 
     esp_sleep_enable_timer_wakeup(msecToWake * 1000ULL); // call expects usecs
