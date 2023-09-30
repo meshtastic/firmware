@@ -178,16 +178,26 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
     service.sendToMesh(p, RX_SRC_LOCAL, true);
 
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER && config.power.is_power_saving) {
-        uint32_t nightyNightMs = getConfiguredOrDefaultMs(config.position.position_broadcast_secs);
-        LOG_DEBUG("Sleeping for %ims, then awaking to send position again.\n", nightyNightMs);
-#if defined(ARCH_ESP32) || defined(ARCH_NRF52)
-        doDeepSleep(nightyNightMs, true);
-#endif
+        LOG_DEBUG("Starting next execution in 3 seconds and then going to sleep.\n");
+        sleepOnNextExecution = true;
+        setIntervalFromNow(3000);
     }
 }
 
 int32_t PositionModule::runOnce()
 {
+    if (sleepOnNextExecution == true) {
+        sleepOnNextExecution = false;
+        uint32_t nightyNightMs = getConfiguredOrDefaultMs(config.position.position_broadcast_secs);
+        LOG_DEBUG("Sleeping for %ims, then awaking to send position again.\n", nightyNightMs);
+        // if (HW_VENDOR == meshtastic_HardwareModel_TBEAM) {
+        //     doLightSleep(nightyNightMs);
+        // }
+        // else {
+        doDeepSleep(nightyNightMs, false);
+        // }
+    }
+
     meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
 
     // We limit our GPS broadcasts to a max rate
