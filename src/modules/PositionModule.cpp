@@ -165,7 +165,7 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
     }
 
     p->to = dest;
-    p->decoded.want_response = wantReplies;
+    p->decoded.want_response = config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ? false : wantReplies;
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER)
         p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
     else
