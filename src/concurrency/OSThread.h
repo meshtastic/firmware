@@ -67,6 +67,7 @@ class OSThread : public Thread
      * Returns desired period for next invocation (or RUN_SAME for no change)
      */
     virtual int32_t runOnce() = 0;
+    bool sleepOnNextExecution = false;
 
     // Do not override this
     virtual void run();

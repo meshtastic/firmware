@@ -45,7 +45,7 @@ static void sdsEnter()
 {
     LOG_DEBUG("Enter state: SDS\n");
     // FIXME - make sure GPS and LORA radio are off first - because we want close to zero current draw
-    doDeepSleep(getConfiguredOrDefaultMs(config.power.sds_secs));
+    doDeepSleep(getConfiguredOrDefaultMs(config.power.sds_secs), false);
 }
 
 extern Power *power;
@@ -154,9 +154,6 @@ static void darkEnter()
 {
     setBluetoothEnable(true);
     screen->setOn(false);
-#ifdef KB_POWERON
-    digitalWrite(KB_POWERON, LOW);
-#endif
 }
 
 static void serialEnter()
@@ -184,9 +181,6 @@ static void powerEnter()
     } else {
         screen->setOn(true);
         setBluetoothEnable(true);
-#ifdef KB_POWERON
-        digitalWrite(KB_POWERON, HIGH);
-#endif
         // within enter() the function getState() returns the state we came from
         if (strcmp(powerFSM.getState()->name, "BOOT") != 0 && strcmp(powerFSM.getState()->name, "POWER") != 0 &&
             strcmp(powerFSM.getState()->name, "DARK") != 0) {
@@ -217,9 +211,6 @@ static void onEnter()
     LOG_DEBUG("Enter state: ON\n");
     screen->setOn(true);
     setBluetoothEnable(true);
-#ifdef KB_POWERON
-    digitalWrite(KB_POWERON, HIGH);
-#endif
 }
 
 static void onIdle()
