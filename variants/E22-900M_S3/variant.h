@@ -1,6 +1,8 @@
 // Developed for E22-900M30S with ESP32-S3-WROOM-1-N4
 // NOTE: Uses ESP32-S3-WROOM-1-N4.json in boards folder (via platformio.ini board field), assumes 4 MB (quad SPI) flash, no PSRAM
 
+// Example schematic: https://github.com/S5NC/E22-900M_S3/blob/main/schematic.pdf
+
 // For each E22 pin in this section, provide the pin number of the ESP32-S3 you connected it to
 // The ESP32-S3 is great because YOU CAN USE PRACTICALLY ANY PINS for the connections, but avoid some pins (such as on the WROOM
 // modules the following): strapping pins (except 0 as a user button input as it already has a pulldown resistor in typical
