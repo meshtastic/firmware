@@ -433,7 +433,7 @@ GPS::~GPS()
     notifyGPSSleepObserver.observe(&notifyGPSSleep);
 }
 
-void GPS::setGPSPower(bool on, bool standbyOnly)
+void GPS::setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime)
 {
     LOG_INFO("Setting GPS power=%d\n", on);
     if (on) {
@@ -483,6 +483,10 @@ void GPS::setGPSPower(bool on, bool standbyOnly)
     if (!on) {
         if (gnssModel == GNSS_MODEL_UBLOX) {
             uint8_t msglen;
+            LOG_DEBUG("Sleep Time: %i\n", sleepTime);
+            for (int i = 0; i < 4; i++) {
+                gps->_message_PMREQ[0 + i] = sleepTime >> (i * 8); // Encode the sleep time in millis into the packet
+            }
             msglen = gps->makeUBXPacket(0x02, 0x41, 0x08, gps->_message_PMREQ);
             gps->_serial_gps->write(gps->UBXscratch, msglen);
         }
@@ -514,7 +518,7 @@ void GPS::setAwake(bool on)
         LOG_DEBUG("WANT GPS=%d\n", on);
         isAwake = on;
         if (!enabled) { // short circuit if the user has disabled GPS
-            setGPSPower(false, false);
+            setGPSPower(false, false, 0);
             return;
         }
 
@@ -532,12 +536,12 @@ void GPS::setAwake(bool on)
         }
         if ((int32_t)getSleepTime() - averageLockTime >
             15 * 60 * 1000) { // 15 minutes is probably long enough to make a complete poweroff worth it.
-            setGPSPower(on, false);
+            setGPSPower(on, false, getSleepTime() - averageLockTime);
         } else if ((int32_t)getSleepTime() - averageLockTime > 10000) { // 10 seconds is enough for standby
 #ifdef GPS_UC6580
-            setGPSPower(on, false);
+            setGPSPower(on, false, getSleepTime() - averageLockTime);
 #else
-            setGPSPower(on, true);
+            setGPSPower(on, true, getSleepTime() - averageLockTime);
 #endif
         } else if (averageLockTime > 20000) {
             averageLockTime -= 1000; // eventually want to sleep again.
@@ -900,7 +904,7 @@ GPS *GPS::createGps()
 #endif
 
     if (config.position.gps_enabled) {
-        new_gps->setGPSPower(true, false);
+        new_gps->setGPSPower(true, false, 0);
     }
 
 #ifdef PIN_GPS_RESET
