@@ -1,4 +1,5 @@
 #include "PositionModule.h"
+#include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
@@ -7,6 +8,8 @@
 #include "airtime.h"
 #include "configuration.h"
 #include "gps/GeoCoord.h"
+#include "sleep.h"
+#include "target_specific.h"
 
 PositionModule *positionModule;
 
@@ -14,8 +17,22 @@ PositionModule::PositionModule()
     : ProtobufModule("position", meshtastic_PortNum_POSITION_APP, &meshtastic_Position_msg),
       concurrency::OSThread("PositionModule")
 {
-    isPromiscuous = true;          // We always want to update our nodedb, even if we are sniffing on others
-    setIntervalFromNow(60 * 1000); // Send our initial position 60 seconds after we start (to give GPS time to setup)
+    isPromiscuous = true; // We always want to update our nodedb, even if we are sniffing on others
+    if (config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER)
+        setIntervalFromNow(60 * 1000);
+
+    // Power saving trackers should clear their position on startup to avoid waking up and sending a stale position
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER && config.power.is_power_saving) {
+        clearPosition();
+    }
+}
+
+void PositionModule::clearPosition()
+{
+    LOG_DEBUG("Clearing position on startup for sleepy tracker (ー。ー) zzz\n");
+    meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
+    node->position.latitude_i = 0;
+    node->position.longitude_i = 0;
 }
 
 bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Position *pptr)
@@ -148,7 +165,7 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
     }
 
     p->to = dest;
-    p->decoded.want_response = wantReplies;
+    p->decoded.want_response = config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ? false : wantReplies;
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER)
         p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
     else
@@ -159,10 +176,23 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
         p->channel = channel;
 
     service.sendToMesh(p, RX_SRC_LOCAL, true);
+
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER && config.power.is_power_saving) {
+        LOG_DEBUG("Starting next execution in 3 seconds and then going to sleep.\n");
+        sleepOnNextExecution = true;
+        setIntervalFromNow(3000);
+    }
 }
 
 int32_t PositionModule::runOnce()
 {
+    if (sleepOnNextExecution == true) {
+        sleepOnNextExecution = false;
+        uint32_t nightyNightMs = getConfiguredOrDefaultMs(config.position.position_broadcast_secs);
+        LOG_DEBUG("Sleeping for %ims, then awaking to send position again.\n", nightyNightMs);
+        doDeepSleep(nightyNightMs, false);
+    }
+
     meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
 
     // We limit our GPS broadcasts to a max rate
@@ -172,7 +202,7 @@ int32_t PositionModule::runOnce()
 
     if (lastGpsSend == 0 || msSinceLastSend >= intervalMs) {
         // Only send packets if the channel is less than 40% utilized.
-        if (airTime->isTxAllowedChannelUtil()) {
+        if (airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER)) {
             if (hasValidPosition(node)) {
                 lastGpsSend = now;
 
