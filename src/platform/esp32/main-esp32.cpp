@@ -201,8 +201,8 @@ void cpuDeepSleep(uint32_t msecToWake)
 
 #ifdef BUTTON_PIN
 
-#if SOC_PM_SUPPORT_EXT_WAKEUP && !defined(HELTEC_WIRELESS_TRACKER)
-    esp_sleep_enable_ext0_wakeup((gpio_num_t)(1ULL << (config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN)), LOW);
+#if SOC_PM_SUPPORT_EXT_WAKEUP
+    esp_sleep_enable_ext0_wakeup((gpio_num_t)(1U << (config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN)), LOW);
 #endif
 
 #ifdef BUTTON_NEED_PULLUP
