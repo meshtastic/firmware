@@ -135,16 +135,18 @@ bool doPreflightSleep()
 }
 
 /// Tell devices we are going to sleep and wait for them to handle things
-static void waitEnterSleep()
+static void waitEnterSleep(bool skipPreflight = false)
 {
-    uint32_t now = millis();
-    while (!doPreflightSleep()) {
-        delay(100); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
+    if (!skipPreflight) {
+        uint32_t now = millis();
+        while (!doPreflightSleep()) {
+            delay(100); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
 
-        if (millis() - now > 30 * 1000) { // If we wait too long just report an error and go to sleep
-            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_SLEEP_ENTER_WAIT);
-            assert(0); // FIXME - for now we just restart, need to fix bug #167
-            break;
+            if (millis() - now > 30 * 1000) { // If we wait too long just report an error and go to sleep
+                RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_SLEEP_ENTER_WAIT);
+                assert(0); // FIXME - for now we just restart, need to fix bug #167
+                break;
+            }
         }
     }
 
@@ -155,7 +157,7 @@ static void waitEnterSleep()
     notifySleep.notifyObservers(NULL);
 }
 
-void doDeepSleep(uint32_t msecToWake)
+void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
 {
     if (INCLUDE_vTaskSuspend && (msecToWake == portMAX_DELAY)) {
         LOG_INFO("Entering deep sleep forever\n");
@@ -165,7 +167,7 @@ void doDeepSleep(uint32_t msecToWake)
 
     // not using wifi yet, but once we are this is needed to shutoff the radio hw
     // esp_wifi_stop();
-    waitEnterSleep();
+    waitEnterSleep(skipPreflight);
     notifyDeepSleep.notifyObservers(NULL);
 
     screen->doDeepSleep(); // datasheet says this will draw only 10ua
@@ -227,7 +229,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 {
     // LOG_DEBUG("Enter light sleep\n");
 
-    waitEnterSleep();
+    waitEnterSleep(false);
 
     uint64_t sleepUsec = sleepMsec * 1000LL;
 

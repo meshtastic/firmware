@@ -903,9 +903,7 @@ GPS *GPS::createGps()
     LOG_DEBUG("Using " NMEA_MSG_GXGSA " for 3DFIX and PDOP\n");
 #endif
 
-    if (config.position.gps_enabled) {
-        new_gps->setGPSPower(true, false, 0);
-    }
+    new_gps->setGPSPower(true, false);
 
 #ifdef PIN_GPS_RESET
     digitalWrite(PIN_GPS_RESET, GPS_RESET_MODE); // assert for 10ms
