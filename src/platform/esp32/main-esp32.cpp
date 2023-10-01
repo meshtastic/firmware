@@ -202,7 +202,7 @@ void cpuDeepSleep(uint32_t msecToWake)
 #ifdef BUTTON_PIN
 
 #if SOC_PM_SUPPORT_EXT_WAKEUP
-    esp_sleep_enable_ext0_wakeup((gpio_num_t)(1U << (config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN)), LOW);
+    esp_sleep_enable_ext0_wakeup((gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN), LOW);
 #endif
 
 #ifdef BUTTON_NEED_PULLUP
