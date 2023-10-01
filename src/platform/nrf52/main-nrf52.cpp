@@ -184,10 +184,16 @@ void cpuDeepSleep(uint32_t msecToWake)
     // FIXME, use non-init RAM per
     // https://devzone.nordicsemi.com/f/nordic-q-a/48919/ram-retention-settings-with-softdevice-enabled
 
-    auto ok = sd_power_system_off();
-    if (ok != NRF_SUCCESS) {
-        LOG_ERROR("FIXME: Ignoring soft device (EasyDMA pending?) and forcing system-off!\n");
-        NRF_POWER->SYSTEMOFF = 1;
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER && config.power.is_power_saving == true) {
+        sd_power_mode_set(NRF_POWER_MODE_LOWPWR);
+        delay(msecToWake);
+        NVIC_SystemReset();
+    } else {
+        auto ok = sd_power_system_off();
+        if (ok != NRF_SUCCESS) {
+            LOG_ERROR("FIXME: Ignoring soft device (EasyDMA pending?) and forcing system-off!\n");
+            NRF_POWER->SYSTEMOFF = 1;
+        }
     }
 
     // The following code should not be run, because we are off
