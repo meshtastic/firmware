@@ -101,12 +101,15 @@
 // Respect local regulations! If your E22-900M30S outputs the advertised 30 dBm and you use a 6 dBi antenna, you are at the
 // equivalent of 36 EIRP (Effective Isotropic Radiated Power), which in this case is the limit for non-HAM users in the US (4W
 // EIRP, at SPECIFIC frequencies).
-// To respect the 500 mW (27 dBm) EIRP (at SPECIFIC frequencies, others are lower) EU limit with a 2.5 dBi gain antenna, assuming
-// the E22-900M30S outputs with a gain of 7.5 dBm (calculated measured value), you must output 17 dBm from the E22-900M30S's
+// In the EU (and UK), as of now, you are allowed 27 dBm ERP which is 29.15 EIRP.
+// https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32022D0180
+// https://www.legislation.gov.uk/uksi/1999/930/schedule/6/made
+// To respect the 29.15 dBm EIRP (at SPECIFIC frequencies, others are lower) EU limit with a 2.5 dBi gain antenna, assuming
+// the E22-900M30S outputs with a gain of 7.5 dBm (calculated measured value), output <= 19.15 (so 19) dBm from the E22-900M30S's
 // SX1262. It is worth noting that if you are in this situation and don't have a HAM license, you may be better off with a lower
 // gain antenna, and output the difference as a higher total power input into the antenna, as your EIRP would be the same, but you
-// would get a wider angle of coverage. Please check regulations yourself and check airtime, usage (for example whether you are
-// airborne), frequency, and power laws
+// would get a wider angle of coverage. Also take VSWR into account (https://www.everythingrf.com/tech-resources/vswr).
+// Please check regulations yourself and check airtime, usage (for example whether you are airborne), frequency, and power laws.
 #define SX126X_MAX_POWER 22 // SX126xInterface.cpp defaults to 22 if not defined, but here we define it for good practice
 
 // FIXME: change behavior in src to default to not having screen if is undefined
