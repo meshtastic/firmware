@@ -76,28 +76,25 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
     while (millis() < startTimeout) {
         if (_serial_gps->available()) {
             b = _serial_gps->read();
+#ifdef GPS_DEBUG
+            LOG_DEBUG("%02X", (char *)buffer);
+#endif
             buffer[bytesRead] = b;
             bytesRead++;
             if ((bytesRead == 767) || (b == '\r')) {
                 if (strnstr((char *)buffer, message, bytesRead) != nullptr) {
 #ifdef GPS_DEBUG
-                    buffer[bytesRead] = '\0';
-                    LOG_DEBUG("%s\r", (char *)buffer);
+                    LOG_DEBUG("\r");
 #endif
                     return GNSS_RESPONSE_OK;
                 } else {
-#ifdef GPS_DEBUG
-                    buffer[bytesRead] = '\0';
-                    LOG_INFO("Bytes read:%s\n", (char *)buffer);
-#endif
                     bytesRead = 0;
                 }
             }
         }
     }
 #ifdef GPS_DEBUG
-    buffer[bytesRead] = '\0';
-    LOG_INFO("Bytes read:%s\n", (char *)buffer);
+    LOG_DEBUG("\n");
 #endif
     return GNSS_RESPONSE_NONE;
 }
@@ -255,7 +252,10 @@ bool GPS::setup()
 
     if (!didSerialInit) {
 #if !defined(GPS_UC6580)
-        if (tx_gpio) {
+        // The T-Beam 1.2 has issues with the GPS
+        if (HW_VENDOR == meshtastic_HardwareModel_TBEAM && PMU->getChipModel() == XPOWERS_AXP2101) {
+            gnssModel = GNSS_MODEL_UBLOX;
+        } else if (tx_gpio) {
             LOG_DEBUG("Probing for GPS at %d \n", serialSpeeds[speedSelect]);
             gnssModel = probe(serialSpeeds[speedSelect]);
             if (gnssModel == GNSS_MODEL_UNKNOWN) {
@@ -409,14 +409,16 @@ bool GPS::setup()
                     }
                 }
             }
-
-            msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
-            _serial_gps->write(UBXscratch, msglen);
-            if (getACK(0x06, 0x09, 300) != GNSS_RESPONSE_OK) {
-                LOG_WARN("Unable to save GNSS module configuration.\n");
-            } else {
-                LOG_INFO("GNSS module configuration saved!\n");
-            }
+            // The T-beam 1.2 has issues.
+            //if (!(HW_VENDOR == meshtastic_HardwareModel_TBEAM && PMU->getChipModel() == XPOWERS_AXP2101)) {
+                msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
+                _serial_gps->write(UBXscratch, msglen);
+                if (getACK(0x06, 0x09, 300) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("Unable to save GNSS module configuration.\n");
+                } else {
+                    LOG_INFO("GNSS module configuration saved!\n");
+                }
+            //}
         }
         didSerialInit = true;
     }
@@ -1175,10 +1177,11 @@ bool GPS::whileIdle()
     // First consume any chars that have piled up at the receiver
     while (_serial_gps->available() > 0) {
         int c = _serial_gps->read();
-        // LOG_DEBUG("%c", c);
+#ifdef GPS_DEBUG
+        LOG_DEBUG("%c", c);
+#endif
         isValid |= reader.encode(c);
     }
-
     return isValid;
 }
 void GPS::enable()
