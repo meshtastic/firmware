@@ -129,6 +129,7 @@ class NodeDB
     }
 
     meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
+    NodeNum findMatchingNodeNum(uint8_t last_byte);
     size_t getNumMeshNodes() { return *numMeshNodes; }
 
   private:

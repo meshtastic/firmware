@@ -814,6 +814,16 @@ meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
     return NULL;
 }
 
+// Find a node in the database that matches the last byte, return 0 if not found
+NodeNum NodeDB::findMatchingNodeNum(uint8_t last_byte)
+{
+    for (int i = 0; i < *numMeshNodes; i++)
+        if ((uint8_t)(meshNodes[i].num & 0xFF) == last_byte)
+            return meshNodes[i].num;
+
+    return 0;
+}
+
 /// Find a node in our DB, create an empty NodeInfo if missing
 meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
 {

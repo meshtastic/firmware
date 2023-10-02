@@ -31,6 +31,12 @@ typedef struct {
 
     /** The channel hash - used as a hint for the decoder to limit which channels we consider */
     uint8_t channel;
+
+    // Last byte of the NodeNum of the next-hop for this packet
+    uint8_t next_hop;
+
+    // Last byte of the NodeNum of the current relayer of this packet
+    uint8_t current_relayer;
 } PacketHeader;
 
 /**

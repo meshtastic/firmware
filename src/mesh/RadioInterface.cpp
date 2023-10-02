@@ -538,6 +538,8 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
         p->hop_limit = HOP_RELIABLE;
     }
     h->flags = p->hop_limit | (p->want_ack ? PACKET_FLAGS_WANT_ACK_MASK : 0);
+    h->next_hop = (p->next_hop & 0xFF);               // set last byte of next_hop
+    h->current_relayer = (p->current_relayer & 0xFF); // set last byte of current_relayer
 
     // if the sender nodenum is zero, that means uninitialized
     assert(h->from);

@@ -240,6 +240,8 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     // the lora we need to make sure we have replaced it with our local address
     p->from = getFrom(p);
 
+    p->current_relayer = getNodeNum(); // set the current relayer to us
+
     // If the packet hasn't yet been encrypted, do so now (it might already be encrypted if we are just forwarding it)
 
     assert(p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag ||

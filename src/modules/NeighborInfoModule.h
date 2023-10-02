@@ -20,8 +20,9 @@ class NeighborInfoModule : public ProtobufModule<meshtastic_NeighborInfo>, priva
 
     bool saveProtoForModule();
 
-    // Let FloodingRouter call updateLastSentById upon rebroadcasting a NeighborInfo packet
+    // Let FloodingRouter/NexthopRouter call updateLastSentById upon rebroadcasting a NeighborInfo packet
     friend class FloodingRouter;
+    friend class NextHopRouter;
 
   protected:
     // Note: this holds our local info.
@@ -69,6 +70,12 @@ class NeighborInfoModule : public ProtobufModule<meshtastic_NeighborInfo>, priva
 
     /* update a NeighborInfo packet with our NodeNum as last_sent_by_id */
     void updateLastSentById(meshtastic_MeshPacket *p);
+
+    /* update the next hop for nodes in the database */
+    void updateNextHops(meshtastic_NeighborInfo *np);
+
+    /* check if the given node number is a neighbor of us */
+    bool isANeighbor(NodeNum node_id);
 
     void loadProtoForModule();
 

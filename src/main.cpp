@@ -561,6 +561,9 @@ void setup()
     }
     nodeStatus->observe(&nodeDB.newStatus);
 
+    config.lora.next_hop_routing = true; // FIXME - remove this before merging
+    LOG_INFO("USING NEXT-HOP ROUTING\n");
+
     service.init();
 
     // Now that the mesh service is created, create any modules
