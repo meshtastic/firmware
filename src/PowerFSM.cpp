@@ -348,10 +348,8 @@ void PowerFSM_setup()
                                   getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL,
                                   "Screen-on timeout");
 
+// We never enter light-sleep or NB states on NRF52 (because the CPU uses so little power normally)
 #ifdef ARCH_ESP32
-    State *lowPowerState = &stateLS;
-    // We never enter light-sleep or NB states on NRF52 (because the CPU uses so little power normally)
-
     // See: https://github.com/meshtastic/firmware/issues/1071
     if (isRouter || config.power.is_power_saving) {
         powerFSM.add_timed_transition(&stateNB, &stateLS,
