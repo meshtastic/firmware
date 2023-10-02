@@ -42,4 +42,4 @@
 #define GPS_UBLOX
 #define GPS_RX_PIN 34
 #define GPS_TX_PIN 12
-#define GPS_DEBUG
+// #define GPS_DEBUG
