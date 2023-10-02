@@ -178,8 +178,7 @@ static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int1
         // Draw region in upper left
         const char *region = myRegion ? myRegion->name : NULL;
         drawIconScreen(region, display, state, x, y);
-    }
-    else {
+    } else {
         drawFrameResume(display, state, x, y);
     }
 }
