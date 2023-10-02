@@ -562,7 +562,7 @@ int32_t Power::runOnce()
     }
 #endif
     // Only read once every 20 seconds once the power status for the app has been initialized
-    return (statusHandler && statusHandler->isInitialized()) ? (1000 * 60) : RUN_SAME;
+    return (statusHandler && statusHandler->isInitialized()) ? (1000 * 20) : RUN_SAME;
 }
 
 /**
@@ -667,34 +667,37 @@ bool Power::axpChipInit()
         /*The alternative version of T-Beam 1.1 differs from T-Beam V1.1 in that it uses an AXP2101 power chip*/
         if (HW_VENDOR == meshtastic_HardwareModel_TBEAM) {
 
-            // GNSS VDD 3300mV -- Done first to trigger a cold boot
-            PMU->setPowerChannelVoltage(XPOWERS_ALDO3, 3300);
-            PMU->enablePowerOutput(XPOWERS_ALDO3);
+         //Unuse power channel
+        PMU->disablePowerOutput(XPOWERS_DCDC2);
+        PMU->disablePowerOutput(XPOWERS_DCDC3);
+        PMU->disablePowerOutput(XPOWERS_DCDC4);
+        PMU->disablePowerOutput(XPOWERS_DCDC5);
+        PMU->disablePowerOutput(XPOWERS_ALDO1);
+        PMU->disablePowerOutput(XPOWERS_ALDO4);
+        PMU->disablePowerOutput(XPOWERS_BLDO1);
+        PMU->disablePowerOutput(XPOWERS_BLDO2);
+        PMU->disablePowerOutput(XPOWERS_DLDO1);
+        PMU->disablePowerOutput(XPOWERS_DLDO2);
 
-            // Unuse power channel
-            PMU->disablePowerOutput(XPOWERS_DCDC2);
-            PMU->disablePowerOutput(XPOWERS_DCDC3);
-            PMU->disablePowerOutput(XPOWERS_DCDC4);
-            PMU->disablePowerOutput(XPOWERS_DCDC5);
-            PMU->disablePowerOutput(XPOWERS_ALDO1);
-            PMU->disablePowerOutput(XPOWERS_ALDO4);
-            PMU->disablePowerOutput(XPOWERS_BLDO1);
-            PMU->disablePowerOutput(XPOWERS_BLDO2);
-            PMU->disablePowerOutput(XPOWERS_DLDO1);
-            PMU->disablePowerOutput(XPOWERS_DLDO2);
+        // GNSS RTC PowerVDD 3300mV
+        PMU->setPowerChannelVoltage(XPOWERS_VBACKUP, 3300);
+        PMU->enablePowerOutput(XPOWERS_VBACKUP);
 
-            // ESP32 VDD 3300mV
-            //  ! No need to set, automatically open , Don't close it
-            //  PMU->setPowerChannelVoltage(XPOWERS_DCDC1, 3300);
-            //  PMU->setProtectedChannel(XPOWERS_DCDC1);
+        //ESP32 VDD 3300mV
+        // ! No need to set, automatically open , Don't close it
+        // PMU->setPowerChannelVoltage(XPOWERS_DCDC1, 3300);
+        // PMU->setProtectedChannel(XPOWERS_DCDC1);
+        PMU->setProtectedChannel(XPOWERS_DCDC1);
 
-            // LoRa VDD 3300mV
-            PMU->setPowerChannelVoltage(XPOWERS_ALDO2, 3300);
-            PMU->enablePowerOutput(XPOWERS_ALDO2);
+        // LoRa VDD 3300mV
+        PMU->setPowerChannelVoltage(XPOWERS_ALDO2, 3300);
+        PMU->enablePowerOutput(XPOWERS_ALDO2);
 
-            // GNSS RTC PowerVDD 3300mV
-            PMU->setPowerChannelVoltage(XPOWERS_VBACKUP, 3300);
-            PMU->enablePowerOutput(XPOWERS_VBACKUP);
+        //GNSS VDD 3300mV
+        PMU->setPowerChannelVoltage(XPOWERS_ALDO3, 3300);
+        PMU->enablePowerOutput(XPOWERS_ALDO3);
+        
+        PMU->enableSystemVoltageMeasure();
 
         } else if (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE ||
                    HW_VENDOR == meshtastic_HardwareModel_T_WATCH_S3) {
@@ -747,16 +750,16 @@ bool Power::axpChipInit()
             PMU->disablePowerOutput(XPOWERS_DLDO1); // Invalid power channel, it does not exist
             PMU->disablePowerOutput(XPOWERS_DLDO2); // Invalid power channel, it does not exist
             PMU->disablePowerOutput(XPOWERS_VBACKUP);
+
+            // disable all axp chip interrupt
+            PMU->disableIRQ(XPOWERS_AXP2101_ALL_IRQ);
+
+            // Set the constant current charging current of AXP2101, temporarily use 500mA by default
+            PMU->setChargerConstantCurr(XPOWERS_AXP2101_CHG_CUR_500MA);
+
+            // Set up the charging voltage
+            PMU->setChargeTargetVoltage(XPOWERS_AXP2101_CHG_VOL_4V2);
         }
-
-        // disable all axp chip interrupt
-        PMU->disableIRQ(XPOWERS_AXP2101_ALL_IRQ);
-
-        // Set the constant current charging current of AXP2101, temporarily use 500mA by default
-        PMU->setChargerConstantCurr(XPOWERS_AXP2101_CHG_CUR_500MA);
-
-        // Set up the charging voltage
-        PMU->setChargeTargetVoltage(XPOWERS_AXP2101_CHG_VOL_4V2);
     }
 
     PMU->clearIrqStatus();

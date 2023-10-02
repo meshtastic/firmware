@@ -252,7 +252,10 @@ bool GPS::setup()
 
     if (!didSerialInit) {
 #if !defined(GPS_UC6580)
-        if (tx_gpio) {
+        // The T-Beam 1.2 has issues with the GPS
+        if (HW_VENDOR == meshtastic_HardwareModel_TBEAM && PMU->getChipModel() == XPOWERS_AXP2101) {
+            gnssModel = GNSS_MODEL_UBLOX;
+        } else if (tx_gpio) {
             LOG_DEBUG("Probing for GPS at %d \n", serialSpeeds[speedSelect]);
             gnssModel = probe(serialSpeeds[speedSelect]);
             if (gnssModel == GNSS_MODEL_UNKNOWN) {
@@ -301,8 +304,7 @@ bool GPS::setup()
                     devicestate.did_gps_reset = true;
                     nodeDB.saveToDisk(SEGMENT_DEVICESTATE);
                 }
-            } /*
-
+            }
             // Configure GNSS system to GPS+SBAS+GLONASS (Module may restart after this command)
             // We need set it because by default it is GPS only, and we want to use GLONASS too
             // Also we need SBAS for better accuracy and extra features
@@ -398,7 +400,7 @@ bool GPS::setup()
                 }
             } else {
                 if (strncmp(info.hwVersion, "00040007", 8) == 0) { // This PSM mode has only been tested on this hardware
-                    /*msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_PSM);
+                    msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_PSM);
                     _serial_gps->write(UBXscratch, msglen);
                     if (getACK(0x06, 0x11, 300) != GNSS_RESPONSE_OK) {
                         LOG_WARN("Unable to enable powersaving mode for GPS.\n");
@@ -416,15 +418,16 @@ bool GPS::setup()
                     }
                 }
             }
-
-            msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
-            _serial_gps->write(UBXscratch, msglen);
-            if (getACK(0x06, 0x09, 300) != GNSS_RESPONSE_OK) {
-                LOG_WARN("Unable to save GNSS module configuration.\n");
-            } else {
-                LOG_INFO("GNSS module configuration saved!\n");
+            // The T-beam 1.2 has issues.
+            if (!(HW_VENDOR == meshtastic_HardwareModel_TBEAM && PMU->getChipModel() == XPOWERS_AXP2101)) {
+                msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
+                _serial_gps->write(UBXscratch, msglen);
+                if (getACK(0x06, 0x09, 300) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("Unable to save GNSS module configuration.\n");
+                } else {
+                    LOG_INFO("GNSS module configuration saved!\n");
+                }
             }
-            */
         }
         didSerialInit = true;
     }
@@ -961,14 +964,23 @@ bool GPS::factoryReset()
         byte _message_reset1[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00,
                                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x1C, 0xA2};
         _serial_gps->write(_message_reset1, sizeof(_message_reset1));
-        delay(1000);
+        if (getACK(0x05, 0x01, 10000)) {
+            LOG_INFO("Get ack success!\n");
+        }
+        delay(100);
         byte _message_reset2[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00,
                                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x1B, 0xA1};
         _serial_gps->write(_message_reset2, sizeof(_message_reset2));
-        delay(1000);
+        if (getACK(0x05, 0x01, 10000)) {
+            LOG_INFO("Get ack success!\n");
+        }
+        delay(100);
         byte _message_reset3[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                                  0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x03, 0x2B, 0x7E};
+                                  0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x03, 0x1D, 0xB3};
         _serial_gps->write(_message_reset3, sizeof(_message_reset3));
+        if (getACK(0x05, 0x01, 10000)) {
+            LOG_INFO("Get ack success!\n");
+        }
     } else {
         // send the UBLOX Factory Reset Command regardless of detect state, something is very wrong, just assume it's UBLOX.
         // Factory Reset
@@ -979,10 +991,9 @@ bool GPS::factoryReset()
     delay(1000);
 
     // Reset device ram to COLDSTART state
-    byte _message_CFG_RST_COLDSTART[] = {0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0xFF, 0xB9, 0x00, 0x00, 0xC6, 0x8B};
-    _serial_gps->write(_message_CFG_RST_COLDSTART, sizeof(_message_CFG_RST_COLDSTART));
-    // getACK("$GPTXT,01,01,02,SW=", 1000); // Using this to capture the bootup messages and wait for 1 second
-    delay(1000);
+    // byte _message_CFG_RST_COLDSTART[] = {0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0xFF, 0xB9, 0x00, 0x00, 0xC6, 0x8B};
+    // _serial_gps->write(_message_CFG_RST_COLDSTART, sizeof(_message_CFG_RST_COLDSTART));
+    // delay(1000);
     return true;
 }
 
