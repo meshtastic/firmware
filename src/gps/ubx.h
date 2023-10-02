@@ -1,4 +1,4 @@
-const uint8_t GPS::_message_PMREQ[] PROGMEM = {
+uint8_t GPS::_message_PMREQ[] PROGMEM = {
     0x00, 0x00, // 4 bytes duration of request task
     0x00, 0x00, // (milliseconds)
     0x02, 0x00, // Task flag bitfield

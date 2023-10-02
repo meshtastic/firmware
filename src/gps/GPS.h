@@ -94,7 +94,7 @@ class GPS : private concurrency::OSThread
     /** If !NULL we will use this serial port to construct our GPS */
     static HardwareSerial *_serial_gps;
 
-    static const uint8_t _message_PMREQ[];
+    static uint8_t _message_PMREQ[];
     static const uint8_t _message_CFG_RXM_PSM[];
     static const uint8_t _message_CFG_RXM_ECO[];
     static const uint8_t _message_CFG_PM2[];
@@ -132,7 +132,7 @@ class GPS : private concurrency::OSThread
     // Disable the thread
     int32_t disable() override;
 
-    void setGPSPower(bool on, bool standbyOnly);
+    void setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime);
 
     /// Returns true if we have acquired GPS lock.
     virtual bool hasLock();
