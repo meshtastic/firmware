@@ -192,7 +192,7 @@ extern NodeDB nodeDB;
 #define default_sds_secs IF_ROUTER(ONE_DAY, UINT32_MAX) // Default to forever super deep sleep
 #define default_ls_secs IF_ROUTER(ONE_DAY, 5 * 60)
 #define default_min_wake_secs 10
-#define default_screen_on_secs 60 * 10
+#define default_screen_on_secs IF_ROUTER(1, 60 * 10)
 
 #define default_mqtt_address "mqtt.meshtastic.org"
 #define default_mqtt_username "meshdev"
