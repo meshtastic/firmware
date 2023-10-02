@@ -339,9 +339,9 @@ void setup()
     }
 
 #ifdef ARCH_ESP32
-    // Don't init display if we don't have one or we are waking headless due to a timer event
-    if (wakeCause == ESP_SLEEP_WAKEUP_TIMER) {
-        LOG_DEBUG("suppress screen wake because this is a headless timer wakeup");
+    // Don't init display if we don't have one or we are waking headless due to a timer or button event
+    if (wakeCause == ESP_SLEEP_WAKEUP_TIMER || wakeCause == ESP_SLEEP_WAKEUP_EXT1) {
+        LOG_DEBUG("suppress screen wake because this is a headless timer or button wakeup");
         i2cScanner->setSuppressScreen();
     }
 #endif

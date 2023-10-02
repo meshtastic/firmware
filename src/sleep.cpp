@@ -139,9 +139,6 @@ void initDeepSleep()
     if (hwReason == TG1WDT_SYS_RESET)
         reason = "intWatchdog";
 
-    if (wakeCause == ESP_SLEEP_WAKEUP_TIMER)
-        reason = "timeout";
-
     LOG_INFO("Booted, wake cause %d (boot count %d), reset_reason=%s\n", wakeCause, bootCount, reason);
 #endif
 #endif
