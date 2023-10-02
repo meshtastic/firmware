@@ -349,7 +349,6 @@ void PowerFSM_setup()
                                   "Screen-on timeout");
 
 #ifdef ARCH_ESP32
-    State *lowPowerState = &stateLS;
     // We never enter light-sleep or NB states on NRF52 (because the CPU uses so little power normally)
 
     // See: https://github.com/meshtastic/firmware/issues/1071
