@@ -20,7 +20,7 @@ HardwareSerial *GPS::_serial_gps = &Serial1;
 HardwareSerial *GPS::_serial_gps = NULL;
 #endif
 
-GPS *gps;
+GPS *gps = nullptr;
 
 /// Multiple GPS instances might use the same serial port (in sequence), but we can
 /// only init that port once.
