@@ -1220,7 +1220,7 @@ bool GPS::whileIdle()
         LOG_DEBUG("%c", c);
 #endif
         isValid |= reader.encode(c);
-        if (charsInBuf > sizeof(UBXscratch) - 10 || c == '\r'){
+        if (charsInBuf > sizeof(UBXscratch) - 10 || c == '\r') {
             if (strnstr((char *)UBXscratch, "$GPTXT,01,01,02,u-blox ag - www.u-blox.com*50", charsInBuf)) {
                 rebootsSeen++;
             }
