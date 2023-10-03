@@ -95,7 +95,29 @@ void initDeepSleep()
 {
 #ifdef ARCH_ESP32
     bootCount++;
+    const char *reason;
     wakeCause = esp_sleep_get_wakeup_cause();
+
+    switch (wakeCause) {
+    case ESP_SLEEP_WAKEUP_EXT0:
+        reason = "ext0 RTC_IO";
+        break;
+    case ESP_SLEEP_WAKEUP_EXT1:
+        reason = "ext1 RTC_CNTL";
+        break;
+    case ESP_SLEEP_WAKEUP_TIMER:
+        reason = "timer";
+        break;
+    case ESP_SLEEP_WAKEUP_TOUCHPAD:
+        reason = "touchpad";
+        break;
+    case ESP_SLEEP_WAKEUP_ULP:
+        reason = "ULP program";
+        break;
+    default:
+        reason = "reset";
+        break;
+    }
     /*
       Not using yet because we are using wake on all buttons being low
 
@@ -106,7 +128,6 @@ void initDeepSleep()
 
 #ifdef DEBUG_PORT
     // If we booted because our timer ran out or the user pressed reset, send those as fake events
-    const char *reason = "reset"; // our best guess
     RESET_REASON hwReason = rtc_get_reset_reason(0);
 
     if (hwReason == RTCWDT_BROWN_OUT_RESET)
@@ -117,9 +138,6 @@ void initDeepSleep()
 
     if (hwReason == TG1WDT_SYS_RESET)
         reason = "intWatchdog";
-
-    if (wakeCause == ESP_SLEEP_WAKEUP_TIMER)
-        reason = "timeout";
 
     LOG_INFO("Booted, wake cause %d (boot count %d), reset_reason=%s\n", wakeCause, bootCount, reason);
 #endif
@@ -175,7 +193,8 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     nodeDB.saveToDisk();
 
     // Kill GPS power completely (even if previously we just had it in sleep mode)
-    gps->setGPSPower(false, false, 0);
+    if (gps)
+        gps->setGPSPower(false, false, 0);
 
     setLed(false);
 
