@@ -395,22 +395,24 @@ bool GPS::setup()
                     LOG_WARN("Unable to enable powersaving for GPS.\n");
                 }
             } else {
-                if (strncmp(info.hwVersion, "00040007", 8) == 0) { // This PSM mode has only been tested on this hardware
-                    msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_PSM);
-                    _serial_gps->write(UBXscratch, msglen);
-                    if (getACK(0x06, 0x11, 300) != GNSS_RESPONSE_OK) {
-                        LOG_WARN("Unable to enable powersaving mode for GPS.\n");
-                    }
-                    msglen = makeUBXPacket(0x06, 0x3B, 44, _message_CFG_PM2);
-                    _serial_gps->write(UBXscratch, msglen);
-                    if (getACK(0x06, 0x3B, 300) != GNSS_RESPONSE_OK) {
-                        LOG_WARN("Unable to enable powersaving details for GPS.\n");
-                    }
-                } else {
-                    msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_ECO);
-                    _serial_gps->write(UBXscratch, msglen);
-                    if (getACK(0x06, 0x11, 300) != GNSS_RESPONSE_OK) {
-                        LOG_WARN("Unable to enable powersaving ECO mode for GPS.\n");
+                if (!(isProblematicGPS)) {
+                    if (strncmp(info.hwVersion, "00040007", 8) == 0) { // This PSM mode has only been tested on this hardware
+                        msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_PSM);
+                        _serial_gps->write(UBXscratch, msglen);
+                        if (getACK(0x06, 0x11, 300) != GNSS_RESPONSE_OK) {
+                            LOG_WARN("Unable to enable powersaving mode for GPS.\n");
+                        }
+                        msglen = makeUBXPacket(0x06, 0x3B, 44, _message_CFG_PM2);
+                        _serial_gps->write(UBXscratch, msglen);
+                        if (getACK(0x06, 0x3B, 300) != GNSS_RESPONSE_OK) {
+                            LOG_WARN("Unable to enable powersaving details for GPS.\n");
+                        }
+                    } else {
+                        msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_ECO);
+                        _serial_gps->write(UBXscratch, msglen);
+                        if (getACK(0x06, 0x11, 300) != GNSS_RESPONSE_OK) {
+                            LOG_WARN("Unable to enable powersaving ECO mode for GPS.\n");
+                        }
                     }
                 }
             }
@@ -643,7 +645,7 @@ int32_t GPS::runOnce()
         }
     }
     // At least one GPS has a bad habit of losing its mind from time to time
-    if (rebootsSeen > 1) {
+    if (rebootsSeen > 2) {
         rebootsSeen = 0;
         gps->factoryReset();
     }
