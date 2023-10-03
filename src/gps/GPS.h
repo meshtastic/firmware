@@ -154,6 +154,8 @@ class GPS : private concurrency::OSThread
     // scratch space for creating ublox packets
     uint8_t UBXscratch[250] = {0};
 
+    int rebootsSeen = 0;
+
     int getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t requestedID, uint32_t waitMillis);
     GPS_RESPONSE getACK(uint8_t c, uint8_t i, uint32_t waitMillis);
     GPS_RESPONSE getACK(const char *message, uint32_t waitMillis);

@@ -642,6 +642,11 @@ int32_t GPS::runOnce()
             }
         }
     }
+    // At least one GPS has a bad habit of losing its mind from time to time
+    if (rebootsSeen > 1) {
+        rebootsSeen = 0;
+        gps->factoryReset();
+    }
 
     // If we are overdue for an update, turn on the GPS and at least publish the current status
     uint32_t now = millis();
@@ -986,6 +991,10 @@ bool GPS::factoryReset()
         if (getACK(0x05, 0x01, 10000)) {
             LOG_INFO("Get ack success!\n");
         }
+        // Reset device ram to COLDSTART state
+        // byte _message_CFG_RST_COLDSTART[] = {0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0xFF, 0xB9, 0x00, 0x00, 0xC6, 0x8B};
+        // _serial_gps->write(_message_CFG_RST_COLDSTART, sizeof(_message_CFG_RST_COLDSTART));
+        // delay(1000);
     } else {
         // send the UBLOX Factory Reset Command regardless of detect state, something is very wrong, just assume it's UBLOX.
         // Factory Reset
@@ -1189,6 +1198,7 @@ bool GPS::hasFlow()
 
 bool GPS::whileIdle()
 {
+    int charsInBuf = 0;
     bool isValid = false;
     if (!isAwake) {
         clearBuffer();
@@ -1205,10 +1215,19 @@ bool GPS::whileIdle()
     // First consume any chars that have piled up at the receiver
     while (_serial_gps->available() > 0) {
         int c = _serial_gps->read();
+        UBXscratch[charsInBuf] = c;
 #ifdef GPS_DEBUG
         LOG_DEBUG("%c", c);
 #endif
         isValid |= reader.encode(c);
+        if (charsInBuf > sizeof(UBXscratch) - 10 || c == '\r'){
+            if (strnstr((char *)UBXscratch, "$GPTXT,01,01,02,u-blox ag - www.u-blox.com*50", charsInBuf)) {
+                rebootsSeen++;
+            }
+            charsInBuf = 0;
+        } else {
+            charsInBuf++;
+        }
     }
     return isValid;
 }
