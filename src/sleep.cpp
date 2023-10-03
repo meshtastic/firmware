@@ -193,7 +193,8 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     nodeDB.saveToDisk();
 
     // Kill GPS power completely (even if previously we just had it in sleep mode)
-    gps->setGPSPower(false, false, 0);
+    if (gps)
+        gps->setGPSPower(false, false, 0);
 
     setLed(false);
 
