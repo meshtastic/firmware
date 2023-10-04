@@ -76,28 +76,25 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
     while (millis() < startTimeout) {
         if (_serial_gps->available()) {
             b = _serial_gps->read();
+#ifdef GPS_DEBUG
+            LOG_DEBUG("%02X", (char *)buffer);
+#endif
             buffer[bytesRead] = b;
             bytesRead++;
             if ((bytesRead == 767) || (b == '\r')) {
                 if (strnstr((char *)buffer, message, bytesRead) != nullptr) {
 #ifdef GPS_DEBUG
-                    buffer[bytesRead] = '\0';
-                    LOG_DEBUG("%s\r", (char *)buffer);
+                    LOG_DEBUG("\r");
 #endif
                     return GNSS_RESPONSE_OK;
                 } else {
-#ifdef GPS_DEBUG
-                    buffer[bytesRead] = '\0';
-                    LOG_INFO("Bytes read:%s\n", (char *)buffer);
-#endif
                     bytesRead = 0;
                 }
             }
         }
     }
 #ifdef GPS_DEBUG
-    buffer[bytesRead] = '\0';
-    LOG_INFO("Bytes read:%s\n", (char *)buffer);
+    LOG_DEBUG("\n");
 #endif
     return GNSS_RESPONSE_NONE;
 }
@@ -252,10 +249,18 @@ int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
 bool GPS::setup()
 {
     int msglen = 0;
+    bool isProblematicGPS = false;
 
     if (!didSerialInit) {
 #if !defined(GPS_UC6580)
-        if (tx_gpio) {
+#ifdef HAS_PMU
+        // The T-Beam 1.2 has issues with the GPS
+        if (HW_VENDOR == meshtastic_HardwareModel_TBEAM && PMU->getChipModel() == XPOWERS_AXP2101) {
+            gnssModel = GNSS_MODEL_UBLOX;
+            isProblematicGPS = true;
+        }
+#endif
+        if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
             LOG_DEBUG("Probing for GPS at %d \n", serialSpeeds[speedSelect]);
             gnssModel = probe(serialSpeeds[speedSelect]);
             if (gnssModel == GNSS_MODEL_UNKNOWN) {
@@ -390,32 +395,36 @@ bool GPS::setup()
                     LOG_WARN("Unable to enable powersaving for GPS.\n");
                 }
             } else {
-                if (strncmp(info.hwVersion, "00040007", 8) == 0) { // This PSM mode has only been tested on this hardware
-                    msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_PSM);
-                    _serial_gps->write(UBXscratch, msglen);
-                    if (getACK(0x06, 0x11, 300) != GNSS_RESPONSE_OK) {
-                        LOG_WARN("Unable to enable powersaving mode for GPS.\n");
-                    }
-                    msglen = makeUBXPacket(0x06, 0x3B, 44, _message_CFG_PM2);
-                    _serial_gps->write(UBXscratch, msglen);
-                    if (getACK(0x06, 0x3B, 300) != GNSS_RESPONSE_OK) {
-                        LOG_WARN("Unable to enable powersaving details for GPS.\n");
-                    }
-                } else {
-                    msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_ECO);
-                    _serial_gps->write(UBXscratch, msglen);
-                    if (getACK(0x06, 0x11, 300) != GNSS_RESPONSE_OK) {
-                        LOG_WARN("Unable to enable powersaving ECO mode for GPS.\n");
+                if (!(isProblematicGPS)) {
+                    if (strncmp(info.hwVersion, "00040007", 8) == 0) { // This PSM mode has only been tested on this hardware
+                        msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_PSM);
+                        _serial_gps->write(UBXscratch, msglen);
+                        if (getACK(0x06, 0x11, 300) != GNSS_RESPONSE_OK) {
+                            LOG_WARN("Unable to enable powersaving mode for GPS.\n");
+                        }
+                        msglen = makeUBXPacket(0x06, 0x3B, 44, _message_CFG_PM2);
+                        _serial_gps->write(UBXscratch, msglen);
+                        if (getACK(0x06, 0x3B, 300) != GNSS_RESPONSE_OK) {
+                            LOG_WARN("Unable to enable powersaving details for GPS.\n");
+                        }
+                    } else {
+                        msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_ECO);
+                        _serial_gps->write(UBXscratch, msglen);
+                        if (getACK(0x06, 0x11, 300) != GNSS_RESPONSE_OK) {
+                            LOG_WARN("Unable to enable powersaving ECO mode for GPS.\n");
+                        }
                     }
                 }
             }
-
-            msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
-            _serial_gps->write(UBXscratch, msglen);
-            if (getACK(0x06, 0x09, 300) != GNSS_RESPONSE_OK) {
-                LOG_WARN("Unable to save GNSS module configuration.\n");
-            } else {
-                LOG_INFO("GNSS module configuration saved!\n");
+            // The T-beam 1.2 has issues.
+            if (!(isProblematicGPS)) {
+                msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
+                _serial_gps->write(UBXscratch, msglen);
+                if (getACK(0x06, 0x09, 300) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("Unable to save GNSS module configuration.\n");
+                } else {
+                    LOG_INFO("GNSS module configuration saved!\n");
+                }
             }
         }
         didSerialInit = true;
@@ -634,6 +643,11 @@ int32_t GPS::runOnce()
                 return disable(); // Stop the GPS thread as it can do nothing useful until next reboot.
             }
         }
+    }
+    // At least one GPS has a bad habit of losing its mind from time to time
+    if (rebootsSeen > 2) {
+        rebootsSeen = 0;
+        gps->factoryReset();
     }
 
     // If we are overdue for an update, turn on the GPS and at least publish the current status
@@ -958,11 +972,38 @@ bool GPS::factoryReset()
     digitalWrite(PIN_GPS_REINIT, 1);
 #endif
 
-    // send the UBLOX Factory Reset Command regardless of detect state, something is very wrong, just assume it's UBLOX.
-    // Factory Reset
-    byte _message_reset[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF, 0xFB, 0x00, 0x00, 0x00,
-                             0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x17, 0x2B, 0x7E};
-    _serial_gps->write(_message_reset, sizeof(_message_reset));
+    if (HW_VENDOR == meshtastic_HardwareModel_TBEAM) {
+        byte _message_reset1[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00,
+                                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x1C, 0xA2};
+        _serial_gps->write(_message_reset1, sizeof(_message_reset1));
+        if (getACK(0x05, 0x01, 10000)) {
+            LOG_INFO("Get ack success!\n");
+        }
+        delay(100);
+        byte _message_reset2[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00,
+                                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x1B, 0xA1};
+        _serial_gps->write(_message_reset2, sizeof(_message_reset2));
+        if (getACK(0x05, 0x01, 10000)) {
+            LOG_INFO("Get ack success!\n");
+        }
+        delay(100);
+        byte _message_reset3[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                  0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x03, 0x1D, 0xB3};
+        _serial_gps->write(_message_reset3, sizeof(_message_reset3));
+        if (getACK(0x05, 0x01, 10000)) {
+            LOG_INFO("Get ack success!\n");
+        }
+        // Reset device ram to COLDSTART state
+        // byte _message_CFG_RST_COLDSTART[] = {0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0xFF, 0xB9, 0x00, 0x00, 0xC6, 0x8B};
+        // _serial_gps->write(_message_CFG_RST_COLDSTART, sizeof(_message_CFG_RST_COLDSTART));
+        // delay(1000);
+    } else {
+        // send the UBLOX Factory Reset Command regardless of detect state, something is very wrong, just assume it's UBLOX.
+        // Factory Reset
+        byte _message_reset[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF, 0xFB, 0x00, 0x00, 0x00,
+                                 0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x17, 0x2B, 0x7E};
+        _serial_gps->write(_message_reset, sizeof(_message_reset));
+    }
     delay(1000);
     return true;
 }
@@ -1159,6 +1200,7 @@ bool GPS::hasFlow()
 
 bool GPS::whileIdle()
 {
+    int charsInBuf = 0;
     bool isValid = false;
     if (!isAwake) {
         clearBuffer();
@@ -1175,10 +1217,20 @@ bool GPS::whileIdle()
     // First consume any chars that have piled up at the receiver
     while (_serial_gps->available() > 0) {
         int c = _serial_gps->read();
-        // LOG_DEBUG("%c", c);
+        UBXscratch[charsInBuf] = c;
+#ifdef GPS_DEBUG
+        LOG_DEBUG("%c", c);
+#endif
         isValid |= reader.encode(c);
+        if (charsInBuf > sizeof(UBXscratch) - 10 || c == '\r') {
+            if (strnstr((char *)UBXscratch, "$GPTXT,01,01,02,u-blox ag - www.u-blox.com*50", charsInBuf)) {
+                rebootsSeen++;
+            }
+            charsInBuf = 0;
+        } else {
+            charsInBuf++;
+        }
     }
-
     return isValid;
 }
 void GPS::enable()
