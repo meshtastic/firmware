@@ -3,6 +3,8 @@
 #include "MeshPacketQueue.h"
 #include "RadioInterface.h"
 #include "concurrency/NotifiedWorkerThread.h"
+#include "main.h"
+#include "target_specific.h"
 
 #include <RadioLib.h>
 
@@ -176,4 +178,30 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     virtual void addReceiveMetadata(meshtastic_MeshPacket *mp) = 0;
 
     virtual void setStandby() = 0;
+
+    void setCpuLowPower()
+    {
+        // This may cause crashes as debug messages continue to flow.
+    //     Serial.end();
+
+    // #ifdef PIN_SERIAL_RX1
+    //     Serial1.end();
+    // #endif
+        setBluetoothEnable(false);
+
+    #ifdef RAK4630
+    #ifdef PIN_3V3_EN
+        digitalWrite(PIN_3V3_EN, LOW);
+    #endif
+    #ifndef USE_EINK
+        // RAK-12039 set pin for Air quality sensor
+        digitalWrite(AQ_SET_PIN, LOW);
+    #endif
+    #endif
+        sd_power_mode_set(NRF_POWER_MODE_LOWPWR);
+    }
+
+    void setCpuHighPower() {
+      sd_power_mode_set(NRF_POWER_MODE_CONSTLAT);
+    }
 };

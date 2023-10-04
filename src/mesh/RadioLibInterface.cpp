@@ -102,7 +102,7 @@ bool RadioLibInterface::canSendImmediately()
 /// bluetooth comms code.  If the txmit queue is empty it might return an error
 ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
 {
-
+    setCpuHighPower();
 #ifndef DISABLE_WELCOME_UNSET
 
     if (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
@@ -303,6 +303,11 @@ void RadioLibInterface::completeSending()
         // We are done sending that packet, release it
         packetPool.release(p);
         // LOG_DEBUG("Done with send\n");
+#ifdef ARCH_NRF52        
+        //if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
+        setCpuLowPower();
+        //}
+#endif
     }
 }
 
