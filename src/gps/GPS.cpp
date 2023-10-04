@@ -448,13 +448,13 @@ void GPS::setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime)
     if (on) {
         clearBuffer(); // drop any old data waiting in the buffer before re-enabling
         if (en_gpio)
-            digitalWrite(en_gpio, on ? GPS_EN_ACTIVE : !GPS_EN_ACTIVE); // turn this on if defined, every time
+            digitalWrite(en_gpio, on ? en_active : !en_active); // turn this on if defined, every time
     }
     isInPowersave = !on;
     if (!standbyOnly && en_gpio != 0 &&
         !(HW_VENDOR == meshtastic_HardwareModel_RAK4631 && (rotaryEncoderInterruptImpl1 || upDownInterruptImpl1))) {
-        LOG_DEBUG("GPS powerdown using GPS_EN_ACTIVE\n");
-        digitalWrite(en_gpio, on ? GPS_EN_ACTIVE : !GPS_EN_ACTIVE);
+        LOG_DEBUG("GPS powerdown using %i, set to %i\n", en_gpio, en_active);
+        digitalWrite(en_gpio, on ? en_active : !en_active);
         return;
     }
 #ifdef HAS_PMU // We only have PMUs on the T-Beam, and that board has a tiny battery to save GPS ephemera, so treat as a standby.
@@ -873,6 +873,7 @@ GPS *GPS::createGps()
     int8_t _rx_gpio = config.position.rx_gpio;
     int8_t _tx_gpio = config.position.tx_gpio;
     int8_t _en_gpio = config.position.gps_en_gpio;
+    bool _en_active = true;
 #if defined(HAS_GPS) && !defined(ARCH_ESP32)
     _rx_gpio = 1; // We only specify GPS serial ports on ESP32. Otherwise, these are just flags.
     _tx_gpio = 1;
@@ -886,8 +887,23 @@ GPS *GPS::createGps()
         _tx_gpio = GPS_TX_PIN;
 #endif
 #if defined(PIN_GPS_EN)
+#if HW_VENDOR == meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER
+    LOG_DEBUG("en_gpio: %i\n", _en_gpio);
+    // if (!_en_gpio) {
+    LOG_DEBUG("heltec version: %i\n", heltec_version);
+    if (heltec_version == 5) {
+        _en_gpio = VEXT_ENABLE_V05;
+        _en_active = true;
+    } else {
+        _en_gpio = PIN_GPS_EN;
+        _en_active = GPS_EN_ACTIVE;
+    }
+    //}
+#else
     if (!_en_gpio)
         _en_gpio = PIN_GPS_EN;
+    _en_active = GPS_EN_ACTIVE;
+#endif
 #endif
     if (!_rx_gpio || !_serial_gps) // Configured to have no GPS at all
         return nullptr;
@@ -896,10 +912,11 @@ GPS *GPS::createGps()
     new_gps->rx_gpio = _rx_gpio;
     new_gps->tx_gpio = _tx_gpio;
     new_gps->en_gpio = _en_gpio;
+    new_gps->en_active = _en_active;
 
     if (_en_gpio != 0) {
         LOG_DEBUG("Setting %d to output.\n", _en_gpio);
-        digitalWrite(_en_gpio, !GPS_EN_ACTIVE);
+        digitalWrite(_en_gpio, !_en_active);
         pinMode(_en_gpio, OUTPUT);
     }
 
@@ -1065,7 +1082,7 @@ bool GPS::lookForLocation()
 
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
     fixType = atoi(gsafixtype.value()); // will set to zero if no data
-    // LOG_DEBUG("FIX QUAL=%d, TYPE=%d\n", fixQual, fixType);
+                                        // LOG_DEBUG("FIX QUAL=%d, TYPE=%d\n", fixQual, fixType);
 #endif
 
     // check if GPS has an acceptable lock
