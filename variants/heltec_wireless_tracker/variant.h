@@ -45,7 +45,7 @@
 
 #define VGNSS_CTRL_V03 37 // Heltec Tracker needs this pulled low for GPS
 #define VGNSS_CTRL_V05 -1 // Heltec Tracker needs this pulled low for GPS
-#define PIN_GPS_EN VGNSS_CTRL
+#define PIN_GPS_EN VGNSS_CTRL_V03
 #define GPS_EN_ACTIVE LOW
 
 #define GPS_RESET_MODE LOW

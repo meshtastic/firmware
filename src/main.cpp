@@ -237,8 +237,14 @@ void setup()
 
 #ifdef ST7735_BL_V03 // Heltec Wireless Tracker PCB Change Detect/Hack
 
+    rtc_clk_32k_enable(true);
     CALIBRATE_ONE(RTC_CAL_RTC_MUX);
-    CALIBRATE_ONE(RTC_CAL_32K_XTAL);
+    if (CALIBRATE_ONE(RTC_CAL_32K_XTAL) != 0) {
+        rtc_clk_slow_freq_set(RTC_SLOW_FREQ_32K_XTAL);
+        CALIBRATE_ONE(RTC_CAL_RTC_MUX);
+        CALIBRATE_ONE(RTC_CAL_32K_XTAL);
+    }
+
     if (rtc_clk_slow_freq_get() != RTC_SLOW_FREQ_32K_XTAL) {
         heltec_version = 3;
     } else {
