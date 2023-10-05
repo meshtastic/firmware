@@ -180,15 +180,18 @@ void cpuDeepSleep(uint32_t msecToWake)
     digitalWrite(AQ_SET_PIN, LOW);
 #endif
 #endif
-    // FIXME, use system off mode with ram retention for key state?
-    // FIXME, use non-init RAM per
-    // https://devzone.nordicsemi.com/f/nordic-q-a/48919/ram-retention-settings-with-softdevice-enabled
-
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER && config.power.is_power_saving == true) {
+    // Sleepy trackers or sensors can low power "sleep"
+    // Don't enter this if we're sleeping portMAX_DELAY, since that's a shutdown event
+    if (msecToWake != portMAX_DELAY &&
+        (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER || config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR) &&
+        config.power.is_power_saving == true) {
         sd_power_mode_set(NRF_POWER_MODE_LOWPWR);
         delay(msecToWake);
         NVIC_SystemReset();
     } else {
+        // FIXME, use system off mode with ram retention for key state?
+        // FIXME, use non-init RAM per
+        // https://devzone.nordicsemi.com/f/nordic-q-a/48919/ram-retention-settings-with-softdevice-enabled
         auto ok = sd_power_system_off();
         if (ok != NRF_SUCCESS) {
             LOG_ERROR("FIXME: Ignoring soft device (EasyDMA pending?) and forcing system-off!\n");
