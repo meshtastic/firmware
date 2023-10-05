@@ -215,3 +215,32 @@ void clearBonds()
     }
     nrf52Bluetooth->clearBonds();
 }
+
+void setCpuLowPower()
+{
+    LOG_DEBUG("Setting CPU to LOW power\n");
+    // This may cause crashes as debug messages continue to flow.
+    Serial.end();
+
+#ifdef PIN_SERIAL_RX1
+    Serial1.end();
+#endif
+    setBluetoothEnable(false);
+
+#ifdef RAK4630
+#ifdef PIN_3V3_EN
+    digitalWrite(PIN_3V3_EN, LOW);
+#endif
+#ifndef USE_EINK
+    // RAK-12039 set pin for Air quality sensor
+    digitalWrite(AQ_SET_PIN, LOW);
+#endif
+#endif
+    sd_power_mode_set(NRF_POWER_MODE_LOWPWR);
+}
+
+void setCpuHighPower()
+{
+    LOG_DEBUG("Setting CPU to HIGH power\n");
+    sd_power_mode_set(NRF_POWER_MODE_CONSTLAT);
+}

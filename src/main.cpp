@@ -625,7 +625,10 @@ void setup()
 
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 
-    gps = GPS::createGps();
+    if (config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER) {
+        gps = GPS::createGps();
+    }
+
     if (gps) {
         gpsStatus->observe(&gps->newStatus);
     } else {
@@ -810,6 +813,10 @@ void setup()
     powerFSMthread = new PowerFSMThread();
 
     setCPUFast(false); // 80MHz is fine for our slow peripherals
+    // Power saving Repeaters turn pretty much everything off except the radio and CPU
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER && config.power.is_power_saving) {
+        setCpuLowPower();
+    }
 }
 
 uint32_t rebootAtMsec;   // If not zero we will reboot at this time (used to reboot shortly after the update completes)

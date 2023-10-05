@@ -8,3 +8,7 @@
 void setBluetoothEnable(bool on);
 
 void getMacAddr(uint8_t *dmac);
+
+void setCpuHighPower();
+
+void setCpuLowPower();
