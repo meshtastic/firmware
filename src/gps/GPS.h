@@ -62,7 +62,6 @@ class GPS : private concurrency::OSThread
     uint32_t rx_gpio = 0;
     uint32_t tx_gpio = 0;
     uint32_t en_gpio = 0;
-    bool en_active = true;
     int32_t averageLockTime = 0;
     uint32_t GPSCycles = 0;
 
