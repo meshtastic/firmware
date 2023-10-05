@@ -202,7 +202,13 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     digitalWrite(RESET_OLED, 1); // put the display in reset before killing its power
 #endif
 
-#ifdef VEXT_ENABLE
+#if defined(VEXT_ENABLE_V03)
+    if (heltec_version == 3) {
+        digitalWrite(VEXT_ENABLE_V03, 1); // turn off the display power
+    } else {
+        digitalWrite(VEXT_ENABLE_V05, 0); // turn off the display power
+    }
+#elif defined(VEXT_ENABLE)
     digitalWrite(VEXT_ENABLE, 1); // turn off the display power
 #endif
 
