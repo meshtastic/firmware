@@ -178,9 +178,9 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
     service.sendToMesh(p, RX_SRC_LOCAL, true);
 
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER && config.power.is_power_saving) {
-        LOG_DEBUG("Starting next execution in 3 seconds and then going to sleep.\n");
+        LOG_DEBUG("Starting next execution in 5 seconds and then going to sleep.\n");
         sleepOnNextExecution = true;
-        setIntervalFromNow(3000);
+        setIntervalFromNow(5000);
     }
 }
 
