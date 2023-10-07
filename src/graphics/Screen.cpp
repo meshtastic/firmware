@@ -1621,65 +1621,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
     } else {
         // Codes:
         // https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/wifi.html#wi-fi-reason-code
-        if (getWifiDisconnectReason() == 2) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Authentication Invalid");
-        } else if (getWifiDisconnectReason() == 3) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "De-authenticated");
-        } else if (getWifiDisconnectReason() == 4) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Disassociated Expired");
-        } else if (getWifiDisconnectReason() == 5) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "AP - Too Many Clients");
-        } else if (getWifiDisconnectReason() == 6) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "NOT_AUTHED");
-        } else if (getWifiDisconnectReason() == 7) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "NOT_ASSOCED");
-        } else if (getWifiDisconnectReason() == 8) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Disassociated");
-        } else if (getWifiDisconnectReason() == 9) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "ASSOC_NOT_AUTHED");
-        } else if (getWifiDisconnectReason() == 10) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "DISASSOC_PWRCAP_BAD");
-        } else if (getWifiDisconnectReason() == 11) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "DISASSOC_SUPCHAN_BAD");
-        } else if (getWifiDisconnectReason() == 13) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IE_INVALID");
-        } else if (getWifiDisconnectReason() == 14) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "MIC_FAILURE");
-        } else if (getWifiDisconnectReason() == 15) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "AP Handshake Timeout");
-        } else if (getWifiDisconnectReason() == 16) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "GROUP_KEY_UPDATE_TIMEOUT");
-        } else if (getWifiDisconnectReason() == 17) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IE_IN_4WAY_DIFFERS");
-        } else if (getWifiDisconnectReason() == 18) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Invalid Group Cipher");
-        } else if (getWifiDisconnectReason() == 19) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Invalid Pairwise Cipher");
-        } else if (getWifiDisconnectReason() == 20) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "AKMP_INVALID");
-        } else if (getWifiDisconnectReason() == 21) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "UNSUPP_RSN_IE_VERSION");
-        } else if (getWifiDisconnectReason() == 22) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "INVALID_RSN_IE_CAP");
-        } else if (getWifiDisconnectReason() == 23) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "802_1X_AUTH_FAILED");
-        } else if (getWifiDisconnectReason() == 24) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "CIPHER_SUITE_REJECTED");
-        } else if (getWifiDisconnectReason() == 200) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "BEACON_TIMEOUT");
-        } else if (getWifiDisconnectReason() == 201) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "AP Not Found");
-        } else if (getWifiDisconnectReason() == 202) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "AUTH_FAIL");
-        } else if (getWifiDisconnectReason() == 203) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "ASSOC_FAIL");
-        } else if (getWifiDisconnectReason() == 204) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "HANDSHAKE_TIMEOUT");
-        } else if (getWifiDisconnectReason() == 205) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Connection Failed");
-        } else {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Unknown Status");
-        }
+        display->drawString(x, y + FONT_HEIGHT_SMALL * 1, getWifiDisconnectReasonName(getWifiDisconnectReason()));
     }
 
     display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
@@ -1792,23 +1734,6 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
         display->setPixel(0, 0);
     heartbeat = !heartbeat;
 #endif
-}
-// adjust Brightness cycle through 1 to 254 as long as attachDuringLongPress is true
-void Screen::adjustBrightness()
-{
-    if (!useDisplay)
-        return;
-
-    if (brightness == 254) {
-        brightness = 0;
-    } else {
-        brightness++;
-    }
-    int width = brightness / (254.00 / SCREEN_WIDTH);
-    dispdev.drawRect(0, 30, SCREEN_WIDTH, 4);
-    dispdev.fillRect(0, 31, width, 2);
-    dispdev.display();
-    dispdev.setBrightness(brightness);
 }
 
 int Screen::handleStatusUpdate(const meshtastic::Status *arg)

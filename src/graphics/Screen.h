@@ -19,7 +19,6 @@ class Screen
     void setup() {}
     void setOn(bool) {}
     void print(const char *) {}
-    void adjustBrightness() {}
     void doDeepSleep() {}
     void forceDisplay() {}
     void startBluetoothPinScreen(uint32_t pin) {}
@@ -161,7 +160,6 @@ class Screen : public concurrency::OSThread
     void showNextFrame() { enqueueCmd(ScreenCmd{.cmd = Cmd::SHOW_NEXT_FRAME}); }
 
     // Implementation to Adjust Brightness
-    void adjustBrightness();
     uint8_t brightness = BRIGHTNESS_DEFAULT;
 
     /// Starts showing the Bluetooth PIN screen.
