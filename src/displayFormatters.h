@@ -34,7 +34,7 @@ static const char *getPresetDisplayName(meshtastic_Config_LoRaConfig_ModemPreset
 }
 
 #ifdef ARCH_ESP32
-inline static const char *getWifiDisconnectReasonName(uint8_t reasonCode) 
+inline static const char *getWifiDisconnectReasonName(uint8_t reasonCode)
 {
     if (reasonCode == 2) {
         return "Authentication Invalid";
@@ -95,5 +95,5 @@ inline static const char *getWifiDisconnectReasonName(uint8_t reasonCode)
     } else {
         return "Unknown Status";
     }
-} 
+}
 #endif
