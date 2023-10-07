@@ -16,6 +16,10 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 
     bool wasBroadcast = mp.to == NODENUM_BROADCAST;
 
+    if (hasChanged) {
+        nodeDB.updateFrom(mp);
+    }
+
     // Show new nodes on LCD screen
     if (wasBroadcast) {
         String lcd = String("Joined: ") + p.long_name + "\n";
