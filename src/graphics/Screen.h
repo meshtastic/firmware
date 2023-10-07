@@ -363,6 +363,9 @@ class Screen : public concurrency::OSThread
     /// Try to start drawing ASAP
     void setFastFramerate();
 
+    // Sets frame up for immediate drawing
+    void setFrameImmediateDraw(FrameCallback *drawFrames);
+
     /// Called when debug screen is to be drawn, calls through to debugInfo.drawFrame.
     static void drawDebugInfoTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 

@@ -160,32 +160,7 @@ static void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDispl
              xstr(APP_VERSION_SHORT)); // Note: we don't bother printing region or now, it makes the string too long
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(buf), y + 0, buf);
     screen->forceDisplay();
-
     // FIXME - draw serial # somewhere?
-}
-
-#ifdef ARCH_ESP32
-static void drawFrameResume(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    uint16_t x_offset = display->width() / 2;
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->setFont(FONT_MEDIUM);
-    display->drawString(x_offset + x, 26 + y, "Resuming...");
-}
-#endif
-
-static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-#ifdef ARCH_ESP32
-    if (wakeCause == ESP_SLEEP_WAKEUP_TIMER || wakeCause == ESP_SLEEP_WAKEUP_EXT1) {
-        drawFrameResume(display, state, x, y);
-    } else
-#endif
-    {
-        // Draw region in upper left
-        const char *region = myRegion ? myRegion->name : NULL;
-        drawIconScreen(region, display, state, x, y);
-    }
 }
 
 static void drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -235,6 +210,28 @@ static void drawOEMBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
     // Draw region in upper left
     const char *region = myRegion ? myRegion->name : NULL;
     drawOEMIconScreen(region, display, state, x, y);
+}
+
+static void drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *message)
+{
+    uint16_t x_offset = display->width() / 2;
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->setFont(FONT_MEDIUM);
+    display->drawString(x_offset + x, 26 + y, message);
+}
+
+static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+#ifdef ARCH_ESP32
+    if (wakeCause == ESP_SLEEP_WAKEUP_TIMER || wakeCause == ESP_SLEEP_WAKEUP_EXT1) {
+        drawFrameText(display, state, x, y, "Resuming...");
+    } else
+#endif
+    {
+        // Draw region in upper left
+        const char *region = myRegion ? myRegion->name : NULL;
+        drawIconScreen(region, display, state, x, y);
+    }
 }
 
 // Used on boot when a certificate is being created
@@ -335,22 +332,6 @@ static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, 
     deviceName.concat(getDeviceName());
     y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_LARGE - 6 : y_offset + FONT_HEIGHT_LARGE + 5;
     display->drawString(x_offset + x, y_offset + y, deviceName);
-}
-
-static void drawFrameShutdown(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    uint16_t x_offset = display->width() / 2;
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->setFont(FONT_MEDIUM);
-    display->drawString(x_offset + x, 26 + y, "Shutting down...");
-}
-
-static void drawFrameReboot(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    uint16_t x_offset = display->width() / 2;
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->setFont(FONT_MEDIUM);
-    display->drawString(x_offset + x, 26 + y, "Rebooting...");
 }
 
 static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -923,20 +904,6 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     drawColumns(display, x, y, fields);
 }
 
-// #ifdef RAK4630
-// Screen::Screen(uint8_t address, int sda, int scl) : OSThread("Screen"), cmdQueue(32), dispdev(address, sda, scl),
-// dispdev_oled(address, sda, scl), ui(&dispdev)
-// {
-//     address_found = address;
-//     cmdQueue.setReader(this);
-//     if (screen_found) {
-//         (void)dispdev;
-//         AutoOLEDWire dispdev = dispdev_oled;
-//         (void)ui;
-//         OLEDDisplayUi ui(&dispdev);
-//     }
-// }
-// #else
 Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_OledType screenType, OLEDDISPLAY_GEOMETRY geometry)
     : concurrency::OSThread("Screen"), address_found(address), model(screenType), geometry(geometry), cmdQueue(32),
       dispdev(address.address, -1, -1, geometry, (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE),
@@ -944,7 +911,7 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 {
     cmdQueue.setReader(this);
 }
-// #endif
+
 /**
  * Prepare the display for the unit going to the lowest power mode possible.  Most screens will just
  * poweroff, but eink screens will show a "I'm sleeping" graphic, possibly with a QR code
@@ -1261,11 +1228,8 @@ void Screen::setWelcomeFrames()
 {
     if (address_found.address) {
         // LOG_DEBUG("showing Welcome frames\n");
-        ui.disableAllIndicators();
-
-        static FrameCallback welcomeFrames[] = {drawWelcomeScreen};
-        ui.setFrames(welcomeFrames, 1);
-        ui.update();
+        static FrameCallback frames[] = {drawWelcomeScreen};
+        setFrameImmediateDraw(frames);
     }
 }
 
@@ -1352,12 +1316,15 @@ void Screen::handleStartBluetoothPinScreen(uint32_t pin)
     LOG_DEBUG("showing bluetooth screen\n");
     showingNormalScreen = false;
 
-    static FrameCallback btFrames[] = {drawFrameBluetooth};
-
+    static FrameCallback frames[] = {drawFrameBluetooth};
     snprintf(btPIN, sizeof(btPIN), "%06u", pin);
+    setFrameImmediateDraw(frames);
+}
 
+void Screen::setFrameImmediateDraw(FrameCallback *drawFrames)
+{
     ui.disableAllIndicators();
-    ui.setFrames(btFrames, 1);
+    ui.setFrames(drawFrames, 1);
     setFastFramerate();
 }
 
@@ -1366,11 +1333,12 @@ void Screen::handleShutdownScreen()
     LOG_DEBUG("showing shutdown screen\n");
     showingNormalScreen = false;
 
-    static FrameCallback shutdownFrames[] = {drawFrameShutdown};
+    auto frame = [](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
+        drawFrameText(display, state, x, y, "Shutting down...");
+    };
+    static FrameCallback frames[] = {frame};
 
-    ui.disableAllIndicators();
-    ui.setFrames(shutdownFrames, 1);
-    setFastFramerate();
+    setFrameImmediateDraw(frames);
 }
 
 void Screen::handleRebootScreen()
@@ -1378,11 +1346,11 @@ void Screen::handleRebootScreen()
     LOG_DEBUG("showing reboot screen\n");
     showingNormalScreen = false;
 
-    static FrameCallback rebootFrames[] = {drawFrameReboot};
-
-    ui.disableAllIndicators();
-    ui.setFrames(rebootFrames, 1);
-    setFastFramerate();
+    auto frame = [](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
+        drawFrameText(display, state, x, y, "Rebooting...");
+    };
+    static FrameCallback frames[] = {frame};
+    setFrameImmediateDraw(frames);
 }
 
 void Screen::handleStartFirmwareUpdateScreen()
@@ -1390,11 +1358,8 @@ void Screen::handleStartFirmwareUpdateScreen()
     LOG_DEBUG("showing firmware screen\n");
     showingNormalScreen = false;
 
-    static FrameCallback btFrames[] = {drawFrameFirmware};
-
-    ui.disableAllIndicators();
-    ui.setFrames(btFrames, 1);
-    setFastFramerate();
+    static FrameCallback frames[] = {drawFrameFirmware};
+    setFrameImmediateDraw(frames);
 }
 
 void Screen::blink()
