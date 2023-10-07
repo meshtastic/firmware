@@ -27,6 +27,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "displayFormatters.h"
 #include "error.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
@@ -1725,37 +1726,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
             display->drawString(x + 1, y, String("USB"));
     }
 
-    auto mode = "";
-
-    switch (config.lora.modem_preset) {
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
-        mode = "ShortS";
-        break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
-        mode = "ShortF";
-        break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
-        mode = "MedS";
-        break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
-        mode = "MedF";
-        break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
-        mode = "LongS";
-        break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST:
-        mode = "LongF";
-        break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
-        mode = "LongM";
-        break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW:
-        mode = "VeryL";
-        break;
-    default:
-        mode = "Custom";
-        break;
-    }
+    auto mode = getPresetDisplayName(config.lora.modem_preset, true);
 
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(mode), y, mode);
     if (config.display.heading_bold)
