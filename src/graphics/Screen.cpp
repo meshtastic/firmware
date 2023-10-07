@@ -1668,7 +1668,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
             display->drawString(x + 1, y, String("USB"));
     }
 
-    auto mode = getPresetDisplayName(config.lora.modem_preset, true);
+    auto mode = getModemPresetDisplayName(config.lora.modem_preset, true);
 
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(mode), y, mode);
     if (config.display.heading_bold)

@@ -1,6 +1,6 @@
 #pragma once
 
-static const char *getPresetDisplayName(meshtastic_Config_LoRaConfig_ModemPreset preset, bool useShortName = false)
+static const char *getModemPresetDisplayName(meshtastic_Config_LoRaConfig_ModemPreset preset, bool useShortName = false)
 {
     switch (preset) {
     case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
