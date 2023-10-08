@@ -1621,7 +1621,8 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
     } else {
         // Codes:
         // https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/wifi.html#wi-fi-reason-code
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 1, getWifiDisconnectReasonName(getWifiDisconnectReason()));
+        display->drawString(x, y + FONT_HEIGHT_SMALL * 1,
+                            WiFi.disconnectReasonName(static_cast<wifi_err_reason_t>(getWifiDisconnectReason())));
     }
 
     display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
@@ -1668,7 +1669,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
             display->drawString(x + 1, y, String("USB"));
     }
 
-    auto mode = getModemPresetDisplayName(config.lora.modem_preset, true);
+    auto mode = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, true);
 
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(mode), y, mode);
     if (config.display.heading_bold)
