@@ -687,8 +687,8 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
         LOG_INFO("updatePosition LOCAL pos@%x, time=%u, latI=%d, lonI=%d, alt=%d\n", p.timestamp, p.time, p.latitude_i,
                  p.longitude_i, p.altitude);
 
+        setLocalPosition(p);
         info->position = ConvertToPositionLite(p);
-        localPosition = p;
     } else if ((p.time > 0) && !p.latitude_i && !p.longitude_i && !p.timestamp && !p.location_source) {
         // FIXME SPECIAL TIME SETTING PACKET FROM EUD TO RADIO
         // (stop-gap fix for issue #900)

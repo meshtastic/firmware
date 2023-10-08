@@ -44,10 +44,10 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 
     // FIXME this can in fact happen with packets sent from EUD (src=RX_SRC_USER)
     // to set fixed location, EUD-GPS location or just the time (see also issue #900)
+    bool isLocal = false;
     if (nodeDB.getNodeNum() == getFrom(&mp)) {
         LOG_DEBUG("Incoming update from MYSELF\n");
-        // LOG_DEBUG("Ignored an incoming update from MYSELF\n");
-        // return false;
+        nodeDB.setLocalPosition(p);
     }
 
     // Log packet size and data fields
@@ -64,7 +64,8 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
         tv.tv_sec = secs;
         tv.tv_usec = 0;
 
-        perhapsSetRTC(RTCQualityFromNet, &tv);
+        // Set from phone RTC Quality to RTCQualityNTP since it should be approximately so
+        perhapsSetRTC(isLocal ? RTCQualityNTP : RTCQualityFromNet, &tv);
     }
 
     nodeDB.updatePosition(getFrom(&mp), p);
@@ -94,8 +95,9 @@ meshtastic_MeshPacket *PositionModule::allocReply()
 
     // Populate a Position struct with ONLY the requested fields
     meshtastic_Position p = meshtastic_Position_init_default; //   Start with an empty structure
+    // if localPosition is totally empty, put our last saved position (lite) in there
     if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0) {
-        localPosition = ConvertToPosition(node->position);
+        nodeDB.setLocalPosition(ConvertToPosition(node->position));
     }
     localPosition.seq_number++;
 
@@ -263,6 +265,23 @@ struct SmartPosition PositionModule::getDistanceTraveledSinceLastSend(meshtastic
     // Determine the distance in meters between two points on the globe
     float distanceTraveledSinceLastSend = GeoCoord::latLongToMeter(
         lastGpsLatitude * 1e-7, lastGpsLongitude * 1e-7, currentPosition.latitude_i * 1e-7, currentPosition.longitude_i * 1e-7);
+
+#ifdef GPS_EXTRAVERBOSE
+        LOG_DEBUG("--------LAST POSITION------------------------------------\n");
+        LOG_DEBUG("lastGpsLatitude=%i, lastGpsLatitude=%i\n", lastGpsLatitude, lastGpsLongitude);
+
+        LOG_DEBUG("--------CURRENT POSITION---------------------------------\n");
+        LOG_DEBUG("currentPosition.latitude_i=%i, currentPosition.longitude_i=%i\n", lastGpsLatitude, lastGpsLongitude);
+
+        LOG_DEBUG("--------SMART POSITION-----------------------------------\n");
+        LOG_DEBUG("hasTraveledOverThreshold=%i, distanceTraveled=%d, distanceThreshold=% u\n",
+                  abs(distanceTraveledSinceLastSend) >= distanceTravelThreshold, abs(distanceTraveledSinceLastSend),
+                  distanceTravelThreshold);
+
+        if (abs(distanceTraveledSinceLastSend) >= distanceTravelThreshold) {
+            LOG_DEBUG("\n\n\nSMART SEEEEEEEEENDING\n\n\n");
+        }
+#endif
 
     return SmartPosition{.distanceTraveled = abs(distanceTraveledSinceLastSend),
                          .distanceThreshold = distanceTravelThreshold,
