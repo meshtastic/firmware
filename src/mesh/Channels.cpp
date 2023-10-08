@@ -1,8 +1,8 @@
 #include "Channels.h"
 #include "CryptoEngine.h"
+#include "DisplayFormatters.h"
 #include "NodeDB.h"
 #include "configuration.h"
-#include "DisplayFormatters.h"
 
 #include <assert.h>
 
