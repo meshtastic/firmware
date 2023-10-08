@@ -267,20 +267,20 @@ struct SmartPosition PositionModule::getDistanceTraveledSinceLastSend(meshtastic
         lastGpsLatitude * 1e-7, lastGpsLongitude * 1e-7, currentPosition.latitude_i * 1e-7, currentPosition.longitude_i * 1e-7);
 
 #ifdef GPS_EXTRAVERBOSE
-        LOG_DEBUG("--------LAST POSITION------------------------------------\n");
-        LOG_DEBUG("lastGpsLatitude=%i, lastGpsLatitude=%i\n", lastGpsLatitude, lastGpsLongitude);
+    LOG_DEBUG("--------LAST POSITION------------------------------------\n");
+    LOG_DEBUG("lastGpsLatitude=%i, lastGpsLatitude=%i\n", lastGpsLatitude, lastGpsLongitude);
 
-        LOG_DEBUG("--------CURRENT POSITION---------------------------------\n");
-        LOG_DEBUG("currentPosition.latitude_i=%i, currentPosition.longitude_i=%i\n", lastGpsLatitude, lastGpsLongitude);
+    LOG_DEBUG("--------CURRENT POSITION---------------------------------\n");
+    LOG_DEBUG("currentPosition.latitude_i=%i, currentPosition.longitude_i=%i\n", lastGpsLatitude, lastGpsLongitude);
 
-        LOG_DEBUG("--------SMART POSITION-----------------------------------\n");
-        LOG_DEBUG("hasTraveledOverThreshold=%i, distanceTraveled=%d, distanceThreshold=% u\n",
-                  abs(distanceTraveledSinceLastSend) >= distanceTravelThreshold, abs(distanceTraveledSinceLastSend),
-                  distanceTravelThreshold);
+    LOG_DEBUG("--------SMART POSITION-----------------------------------\n");
+    LOG_DEBUG("hasTraveledOverThreshold=%i, distanceTraveled=%d, distanceThreshold=% u\n",
+              abs(distanceTraveledSinceLastSend) >= distanceTravelThreshold, abs(distanceTraveledSinceLastSend),
+              distanceTravelThreshold);
 
-        if (abs(distanceTraveledSinceLastSend) >= distanceTravelThreshold) {
-            LOG_DEBUG("\n\n\nSMART SEEEEEEEEENDING\n\n\n");
-        }
+    if (abs(distanceTraveledSinceLastSend) >= distanceTravelThreshold) {
+        LOG_DEBUG("\n\n\nSMART SEEEEEEEEENDING\n\n\n");
+    }
 #endif
 
     return SmartPosition{.distanceTraveled = abs(distanceTraveledSinceLastSend),
