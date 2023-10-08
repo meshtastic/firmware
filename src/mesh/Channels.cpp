@@ -2,7 +2,7 @@
 #include "CryptoEngine.h"
 #include "NodeDB.h"
 #include "configuration.h"
-#include "displayFormatters.h"
+#include "DisplayFormatters.h"
 
 #include <assert.h>
 

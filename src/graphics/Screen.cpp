@@ -27,7 +27,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "displayFormatters.h"
+#include "DisplayFormatters.h"
 #include "error.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
