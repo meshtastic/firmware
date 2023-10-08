@@ -47,6 +47,7 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     bool isLocal = false;
     if (nodeDB.getNodeNum() == getFrom(&mp)) {
         LOG_DEBUG("Incoming update from MYSELF\n");
+        isLocal = true;
         nodeDB.setLocalPosition(p);
     }
 
