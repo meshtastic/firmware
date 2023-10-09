@@ -611,7 +611,7 @@ int32_t GPS::runOnce()
             return 2000; // Setup failed, re-run in two seconds
 
         // We have now loaded our saved preferences from flash
-        if (config.position.gps_enabled == false && config.position.fixed_position == false) {
+        if (config.position.gps_enabled == false) {
             return disable();
         }
         // ONCE we will factory reset the GPS for bug #327
@@ -703,8 +703,8 @@ int32_t GPS::runOnce()
     // If state has changed do a publish
     publishUpdate();
 
-    if (config.position.gps_enabled == false) // This should trigger if GPS is disabled but fixed_position is true
-        return disable();
+    if (config.position.fixed_position == true && hasValidLocation)
+        return disable(); // This should trigger when we have a fixed position, and get that first position
 
     // 9600bps is approx 1 byte per msec, so considering our buffer size we never need to wake more often than 200ms
     // if not awake we can run super infrquently (once every 5 secs?) to see if we need to wake.
