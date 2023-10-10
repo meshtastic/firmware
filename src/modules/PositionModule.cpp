@@ -33,6 +33,9 @@ void PositionModule::clearPosition()
     meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
     node->position.latitude_i = 0;
     node->position.longitude_i = 0;
+    node->position.altitude = 0;
+    node->position.time = 0;
+    nodeDB.setLocalPosition(meshtastic_Position_init_default);
 }
 
 bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Position *pptr)
