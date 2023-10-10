@@ -164,11 +164,28 @@ static void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDispl
     // FIXME - draw serial # somewhere?
 }
 
+#ifdef ARCH_ESP32
+static void drawFrameResume(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    uint16_t x_offset = display->width() / 2;
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->setFont(FONT_MEDIUM);
+    display->drawString(x_offset + x, 26 + y, "Resuming...");
+}
+#endif
+
 static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    // Draw region in upper left
-    const char *region = myRegion ? myRegion->name : NULL;
-    drawIconScreen(region, display, state, x, y);
+#ifdef ARCH_ESP32
+    if (wakeCause == ESP_SLEEP_WAKEUP_TIMER || wakeCause == ESP_SLEEP_WAKEUP_EXT1) {
+        drawFrameResume(display, state, x, y);
+    } else
+#endif
+    {
+        // Draw region in upper left
+        const char *region = myRegion ? myRegion->name : NULL;
+        drawIconScreen(region, display, state, x, y);
+    }
 }
 
 static void drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)

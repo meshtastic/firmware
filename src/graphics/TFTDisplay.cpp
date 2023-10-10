@@ -1,4 +1,5 @@
 #include "configuration.h"
+#include "main.h"
 
 #ifndef TFT_BACKLIGHT_ON
 #define TFT_BACKLIGHT_ON HIGH
@@ -81,8 +82,16 @@ class LGFX : public lgfx::LGFX_Device
         {
             auto cfg = _light_instance.config(); // Gets a structure for backlight settings.
 
+#ifdef ST7735_BL_V03
+            if (heltec_version == 3) {
+                cfg.pin_bl = ST7735_BL_V03;
+            } else {
+                cfg.pin_bl = ST7735_BL_V05;
+            }
+#else
             cfg.pin_bl = ST7735_BL; // Pin number to which the backlight is connected
-            cfg.invert = true;      // true to invert the brightness of the backlight
+#endif
+            cfg.invert = true; // true to invert the brightness of the backlight
             // cfg.freq = 44100;    // PWM frequency of backlight
             // cfg.pwm_channel = 1; // PWM channel number to use
 
@@ -364,8 +373,22 @@ void TFTDisplay::sendCommand(uint8_t com)
     // handle display on/off directly
     switch (com) {
     case DISPLAYON: {
+#if defined(ST7735_BACKLIGHT_EN_V03) && defined(TFT_BACKLIGHT_ON)
+        if (heltec_version == 3) {
+            digitalWrite(ST7735_BACKLIGHT_EN_V03, TFT_BACKLIGHT_ON);
+        } else {
+            digitalWrite(ST7735_BACKLIGHT_EN_V05, TFT_BACKLIGHT_ON);
+        }
+#endif
 #if defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
         digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
+#endif
+#ifdef VTFT_CTRL_V03
+        if (heltec_version == 3) {
+            digitalWrite(VTFT_CTRL_V03, LOW);
+        } else {
+            digitalWrite(VTFT_CTRL_V05, LOW);
+        }
 #endif
 #ifdef VTFT_CTRL
         digitalWrite(VTFT_CTRL, LOW);
@@ -376,8 +399,22 @@ void TFTDisplay::sendCommand(uint8_t com)
         break;
     }
     case DISPLAYOFF: {
+#if defined(ST7735_BACKLIGHT_EN_V03) && defined(TFT_BACKLIGHT_ON)
+        if (heltec_version == 3) {
+            digitalWrite(ST7735_BACKLIGHT_EN_V03, !TFT_BACKLIGHT_ON);
+        } else {
+            digitalWrite(ST7735_BACKLIGHT_EN_V05, !TFT_BACKLIGHT_ON);
+        }
+#endif
 #if defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
         digitalWrite(TFT_BL, !TFT_BACKLIGHT_ON);
+#endif
+#ifdef VTFT_CTRL_V03
+        if (heltec_version == 3) {
+            digitalWrite(VTFT_CTRL_V03, HIGH);
+        } else {
+            digitalWrite(VTFT_CTRL_V05, HIGH);
+        }
 #endif
 #ifdef VTFT_CTRL
         digitalWrite(VTFT_CTRL, HIGH);
@@ -434,6 +471,16 @@ bool TFTDisplay::connect()
 #ifdef TFT_BL
     digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
     pinMode(TFT_BL, OUTPUT);
+#endif
+
+#ifdef ST7735_BACKLIGHT_EN_V03
+    if (heltec_version == 3) {
+        digitalWrite(ST7735_BACKLIGHT_EN_V03, TFT_BACKLIGHT_ON);
+        pinMode(ST7735_BACKLIGHT_EN_V03, OUTPUT);
+    } else {
+        digitalWrite(ST7735_BACKLIGHT_EN_V05, TFT_BACKLIGHT_ON);
+        pinMode(ST7735_BACKLIGHT_EN_V05, OUTPUT);
+    }
 #endif
 
     tft.init();

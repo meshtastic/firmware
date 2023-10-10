@@ -30,10 +30,14 @@ typedef enum _meshtastic_Config_DeviceConfig_Role {
    or any other packet type. They will simply rebroadcast any mesh packets on the same frequency, channel num, spread factor, and coding rate. */
     meshtastic_Config_DeviceConfig_Role_REPEATER = 4,
     /* Tracker device role
-   Position Mesh packets will be prioritized higher and sent more frequently by default. */
+   Position Mesh packets will be prioritized higher and sent more frequently by default.
+   When used in conjunction with power.is_power_saving = true, nodes will wake up, 
+   send position, and then sleep for position.position_broadcast_secs seconds. */
     meshtastic_Config_DeviceConfig_Role_TRACKER = 5,
     /* Sensor device role
-   Telemetry Mesh packets will be prioritized higher and sent more frequently by default. */
+   Telemetry Mesh packets will be prioritized higher and sent more frequently by default.
+   When used in conjunction with power.is_power_saving = true, nodes will wake up, 
+   send environment telemetry, and then sleep for telemetry.environment_update_interval seconds. */
     meshtastic_Config_DeviceConfig_Role_SENSOR = 6
 } meshtastic_Config_DeviceConfig_Role;
 
