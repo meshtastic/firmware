@@ -1,5 +1,6 @@
 #include "Channels.h"
 #include "CryptoEngine.h"
+#include "DisplayFormatters.h"
 #include "NodeDB.h"
 #include "configuration.h"
 
@@ -239,38 +240,9 @@ const char *Channels::getName(size_t chIndex)
     const char *channelName = channelSettings.name;
     if (!*channelName) { // emptystring
         // Per mesh.proto spec, if bandwidth is specified we must ignore modemPreset enum, we assume that in that case
-        // the app fucked up and forgot to set channelSettings.name
-
+        // the app effed up and forgot to set channelSettings.name
         if (config.lora.use_preset) {
-            switch (config.lora.modem_preset) {
-            case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
-                channelName = "ShortSlow";
-                break;
-            case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
-                channelName = "ShortFast";
-                break;
-            case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
-                channelName = "MediumSlow";
-                break;
-            case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
-                channelName = "MediumFast";
-                break;
-            case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
-                channelName = "LongSlow";
-                break;
-            case meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST:
-                channelName = "LongFast";
-                break;
-            case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
-                channelName = "LongMod";
-                break;
-            case meshtastic_Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW:
-                channelName = "VLongSlow";
-                break;
-            default:
-                channelName = "Invalid";
-                break;
-            }
+            channelName = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false);
         } else {
             channelName = "Custom";
         }
