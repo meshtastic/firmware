@@ -121,8 +121,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_PICOMPUTER_S3
 #elif defined(HELTEC_HT62)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_HT62
-#elif defined(E22_900M_S3)
-#define HW_VENDOR meshtastic_HardwareModel_E22_900M_S3
+#elif defined(EBYTE_ESP32_S3)
+#define HW_VENDOR meshtastic_HardwareModel_EBYTE_ESP32_S3
 #endif
 
 // -----------------------------------------------------------------------------
