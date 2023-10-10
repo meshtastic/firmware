@@ -101,11 +101,7 @@ typedef struct _meshtastic_AirQualityMetrics {
 
 /* Types of Measurements the telemetry module is equipped to handle */
 typedef struct _meshtastic_Telemetry {
-    /* This is usually not sent over the mesh (to save space), but it is sent
- from the phone so that the local device can set its RTC If it is sent over
- the mesh (because there are devices on the mesh without GPS), it will only
- be sent by devices which has a hardware GPS clock (IE Mobile Phone).
- seconds since 1970 */
+    /* Seconds since 1970 - or 0 for unknown/unset */
     uint32_t time;
     pb_size_t which_variant;
     union {

@@ -15,12 +15,12 @@ NOTE: For debugging only
 */
 void NeighborInfoModule::printNeighborInfo(const char *header, const meshtastic_NeighborInfo *np)
 {
-    LOG_DEBUG("%s NEIGHBORINFO PACKET from Node %d to Node %d (last sent by %d)\n", header, np->node_id, nodeDB.getNodeNum(),
-              np->last_sent_by_id);
+    LOG_DEBUG("%s NEIGHBORINFO PACKET from Node 0x%x to Node 0x%x (last sent by 0x%x)\n", header, np->node_id,
+              nodeDB.getNodeNum(), np->last_sent_by_id);
     LOG_DEBUG("----------------\n");
     LOG_DEBUG("Packet contains %d neighbors\n", np->neighbors_count);
     for (int i = 0; i < np->neighbors_count; i++) {
-        LOG_DEBUG("Neighbor %d: node_id=%d, snr=%.2f\n", i, np->neighbors[i].node_id, np->neighbors[i].snr);
+        LOG_DEBUG("Neighbor %d: node_id=0x%x, snr=%.2f\n", i, np->neighbors[i].node_id, np->neighbors[i].snr);
     }
     LOG_DEBUG("----------------\n");
 }
@@ -31,12 +31,12 @@ NOTE: for debugging only
 void NeighborInfoModule::printNodeDBNodes(const char *header)
 {
     int num_nodes = nodeDB.getNumMeshNodes();
-    LOG_DEBUG("%s NODEDB SELECTION from Node %d:\n", header, nodeDB.getNodeNum());
+    LOG_DEBUG("%s NODEDB SELECTION from Node 0x%x:\n", header, nodeDB.getNodeNum());
     LOG_DEBUG("----------------\n");
     LOG_DEBUG("DB contains %d nodes\n", num_nodes);
     for (int i = 0; i < num_nodes; i++) {
         const meshtastic_NodeInfoLite *dbEntry = nodeDB.getMeshNodeByIndex(i);
-        LOG_DEBUG("     Node %d: node_id=%d, snr=%.2f\n", i, dbEntry->num, dbEntry->snr);
+        LOG_DEBUG("     Node %d: node_id=0x%x, snr=%.2f\n", i, dbEntry->num, dbEntry->snr);
     }
     LOG_DEBUG("----------------\n");
 }
@@ -48,12 +48,12 @@ NOTE: for debugging only
 void NeighborInfoModule::printNodeDBNeighbors(const char *header)
 {
     int num_neighbors = getNumNeighbors();
-    LOG_DEBUG("%s NODEDB SELECTION from Node %d:\n", header, nodeDB.getNodeNum());
+    LOG_DEBUG("%s NODEDB SELECTION from Node 0x%x:\n", header, nodeDB.getNodeNum());
     LOG_DEBUG("----------------\n");
     LOG_DEBUG("DB contains %d neighbors\n", num_neighbors);
     for (int i = 0; i < num_neighbors; i++) {
         const meshtastic_Neighbor *dbEntry = getNeighborByIndex(i);
-        LOG_DEBUG("     Node %d: node_id=%d, snr=%.2f\n", i, dbEntry->node_id, dbEntry->snr);
+        LOG_DEBUG("     Node %d: node_id=0x%x, snr=%.2f\n", i, dbEntry->node_id, dbEntry->snr);
     }
     LOG_DEBUG("----------------\n");
 }
@@ -66,7 +66,7 @@ NOTE: For debugging only
 void NeighborInfoModule::printNodeDBSelection(const char *header, const meshtastic_NeighborInfo *np)
 {
     int num_neighbors = getNumNeighbors();
-    LOG_DEBUG("%s NODEDB SELECTION from Node %d:\n", header, nodeDB.getNodeNum());
+    LOG_DEBUG("%s NODEDB SELECTION from Node 0x%x:\n", header, nodeDB.getNodeNum());
     LOG_DEBUG("----------------\n");
     LOG_DEBUG("Selected %d neighbors of %d DB neighbors\n", np->neighbors_count, num_neighbors);
     for (int i = 0; i < num_neighbors; i++) {
@@ -78,9 +78,9 @@ void NeighborInfoModule::printNodeDBSelection(const char *header, const meshtast
             }
         }
         if (!chosen) {
-            LOG_DEBUG("     Node %d: neighbor=%d, snr=%.2f\n", i, dbEntry->node_id, dbEntry->snr);
+            LOG_DEBUG("     Node %d: neighbor=0x%x, snr=%.2f\n", i, dbEntry->node_id, dbEntry->snr);
         } else {
-            LOG_DEBUG("---> Node %d: neighbor=%d, snr=%.2f\n", i, dbEntry->node_id, dbEntry->snr);
+            LOG_DEBUG("---> Node %d: neighbor=0x%x, snr=%.2f\n", i, dbEntry->node_id, dbEntry->snr);
         }
     }
     LOG_DEBUG("----------------\n");
@@ -104,23 +104,13 @@ NeighborInfoModule::NeighborInfoModule()
 }
 
 /*
-Allocate a zeroed neighbor info packet
-*/
-meshtastic_NeighborInfo *NeighborInfoModule::allocateNeighborInfoPacket()
-{
-    meshtastic_NeighborInfo *neighborInfo = (meshtastic_NeighborInfo *)malloc(sizeof(meshtastic_NeighborInfo));
-    memset(neighborInfo, 0, sizeof(meshtastic_NeighborInfo));
-    return neighborInfo;
-}
-
-/*
 Collect neighbor info from the nodeDB's history, capping at a maximum number of entries and max time
 Assumes that the neighborInfo packet has been allocated
 @returns the number of entries collected
 */
 uint32_t NeighborInfoModule::collectNeighborInfo(meshtastic_NeighborInfo *neighborInfo)
 {
-    int my_node_id = nodeDB.getNodeNum();
+    uint my_node_id = nodeDB.getNodeNum();
     neighborInfo->node_id = my_node_id;
     neighborInfo->last_sent_by_id = my_node_id;
     neighborInfo->node_broadcast_interval_secs = moduleConfig.neighbor_info.update_interval;
@@ -184,14 +174,14 @@ size_t NeighborInfoModule::cleanUpNeighbors()
 /* Send neighbor info to the mesh */
 void NeighborInfoModule::sendNeighborInfo(NodeNum dest, bool wantReplies)
 {
-    meshtastic_NeighborInfo *neighborInfo = allocateNeighborInfoPacket();
-    collectNeighborInfo(neighborInfo);
-    meshtastic_MeshPacket *p = allocDataProtobuf(*neighborInfo);
+    meshtastic_NeighborInfo neighborInfo = meshtastic_NeighborInfo_init_zero;
+    collectNeighborInfo(&neighborInfo);
+    meshtastic_MeshPacket *p = allocDataProtobuf(neighborInfo);
     // send regardless of whether or not we have neighbors in our DB,
     // because we want to get neighbors for the next cycle
     p->to = dest;
     p->decoded.want_response = wantReplies;
-    printNeighborInfo("SENDING", neighborInfo);
+    printNeighborInfo("SENDING", &neighborInfo);
     service.sendToMesh(p, RX_SRC_LOCAL, true);
 }
 
@@ -212,8 +202,10 @@ Pass it to an upper client; do not persist this data on the mesh
 */
 bool NeighborInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_NeighborInfo *np)
 {
-    printNeighborInfo("RECEIVED", np);
-    updateNeighbors(mp, np);
+    if (enabled) {
+        printNeighborInfo("RECEIVED", np);
+        updateNeighbors(mp, np);
+    }
     // Allow others to handle this packet
     return false;
 }
@@ -255,7 +247,7 @@ void NeighborInfoModule::updateNeighbors(const meshtastic_MeshPacket &mp, const 
 }
 
 meshtastic_Neighbor *NeighborInfoModule::getOrCreateNeighbor(NodeNum originalSender, NodeNum n,
-                                                             uint32_t node_broadcast_interval_secs, int snr)
+                                                             uint32_t node_broadcast_interval_secs, float snr)
 {
     // our node and the phone are the same node (not neighbors)
     if (n == 0) {
@@ -277,7 +269,7 @@ meshtastic_Neighbor *NeighborInfoModule::getOrCreateNeighbor(NodeNum originalSen
     }
     // otherwise, allocate one and assign data to it
     // TODO: max memory for the database should take neighbors into account, but currently doesn't
-    if (*numNeighbors < MAX_NUM_NODES) {
+    if (*numNeighbors < MAX_NUM_NEIGHBORS) {
         (*numNeighbors)++;
     }
     meshtastic_Neighbor *new_nbr = &neighbors[((*numNeighbors) - 1)];

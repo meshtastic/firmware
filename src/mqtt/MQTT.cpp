@@ -455,6 +455,13 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, ChannelIndex chIndex)
 {
     auto &ch = channels.getByIndex(chIndex);
 
+    if (&mp.decoded && strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0 &&
+        (mp.decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
+         mp.decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP)) {
+        LOG_DEBUG("MQTT onSend - Ignoring range test or detection sensor message on public mqtt\n");
+        return;
+    }
+
     if (ch.settings.uplink_enabled) {
         const char *channelId = channels.getGlobalId(chIndex); // FIXME, for now we just use the human name for the channel
 
@@ -509,34 +516,34 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
     JSONObject msgPayload;
     JSONObject jsonObj;
 
-    switch (mp->decoded.portnum) {
-    case meshtastic_PortNum_TEXT_MESSAGE_APP: {
-        msgType = "text";
-        // convert bytes to string
-        LOG_DEBUG("got text message of size %u\n", mp->decoded.payload.size);
-        char payloadStr[(mp->decoded.payload.size) + 1];
-        memcpy(payloadStr, mp->decoded.payload.bytes, mp->decoded.payload.size);
-        payloadStr[mp->decoded.payload.size] = 0; // null terminated string
-        // check if this is a JSON payload
-        JSONValue *json_value = JSON::Parse(payloadStr);
-        if (json_value != NULL) {
-            LOG_INFO("text message payload is of type json\n");
-            // if it is, then we can just use the json object
-            jsonObj["payload"] = json_value;
-        } else {
-            // if it isn't, then we need to create a json object
-            // with the string as the value
-            LOG_INFO("text message payload is of type plaintext\n");
-            msgPayload["text"] = new JSONValue(payloadStr);
-            jsonObj["payload"] = new JSONValue(msgPayload);
+    if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+        switch (mp->decoded.portnum) {
+        case meshtastic_PortNum_TEXT_MESSAGE_APP: {
+            msgType = "text";
+            // convert bytes to string
+            LOG_DEBUG("got text message of size %u\n", mp->decoded.payload.size);
+            char payloadStr[(mp->decoded.payload.size) + 1];
+            memcpy(payloadStr, mp->decoded.payload.bytes, mp->decoded.payload.size);
+            payloadStr[mp->decoded.payload.size] = 0; // null terminated string
+            // check if this is a JSON payload
+            JSONValue *json_value = JSON::Parse(payloadStr);
+            if (json_value != NULL) {
+                LOG_INFO("text message payload is of type json\n");
+                // if it is, then we can just use the json object
+                jsonObj["payload"] = json_value;
+            } else {
+                // if it isn't, then we need to create a json object
+                // with the string as the value
+                LOG_INFO("text message payload is of type plaintext\n");
+                msgPayload["text"] = new JSONValue(payloadStr);
+                jsonObj["payload"] = new JSONValue(msgPayload);
+            }
+            break;
         }
-        break;
-    }
-    case meshtastic_PortNum_TELEMETRY_APP: {
-        msgType = "telemetry";
-        meshtastic_Telemetry scratch;
-        meshtastic_Telemetry *decoded = NULL;
-        if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+        case meshtastic_PortNum_TELEMETRY_APP: {
+            msgType = "telemetry";
+            meshtastic_Telemetry scratch;
+            meshtastic_Telemetry *decoded = NULL;
             memset(&scratch, 0, sizeof(scratch));
             if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &meshtastic_Telemetry_msg, &scratch)) {
                 decoded = &scratch;
@@ -557,14 +564,12 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
             } else {
                 LOG_ERROR("Error decoding protobuf for telemetry message!\n");
             }
-        };
-        break;
-    }
-    case meshtastic_PortNum_NODEINFO_APP: {
-        msgType = "nodeinfo";
-        meshtastic_User scratch;
-        meshtastic_User *decoded = NULL;
-        if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+            break;
+        }
+        case meshtastic_PortNum_NODEINFO_APP: {
+            msgType = "nodeinfo";
+            meshtastic_User scratch;
+            meshtastic_User *decoded = NULL;
             memset(&scratch, 0, sizeof(scratch));
             if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &meshtastic_User_msg, &scratch)) {
                 decoded = &scratch;
@@ -576,14 +581,12 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
             } else {
                 LOG_ERROR("Error decoding protobuf for nodeinfo message!\n");
             }
-        };
-        break;
-    }
-    case meshtastic_PortNum_POSITION_APP: {
-        msgType = "position";
-        meshtastic_Position scratch;
-        meshtastic_Position *decoded = NULL;
-        if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+            break;
+        }
+        case meshtastic_PortNum_POSITION_APP: {
+            msgType = "position";
+            meshtastic_Position scratch;
+            meshtastic_Position *decoded = NULL;
             memset(&scratch, 0, sizeof(scratch));
             if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &meshtastic_Position_msg, &scratch)) {
                 decoded = &scratch;
@@ -620,15 +623,12 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
             } else {
                 LOG_ERROR("Error decoding protobuf for position message!\n");
             }
-        };
-        break;
-    }
-
-    case meshtastic_PortNum_WAYPOINT_APP: {
-        msgType = "position";
-        meshtastic_Waypoint scratch;
-        meshtastic_Waypoint *decoded = NULL;
-        if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+            break;
+        }
+        case meshtastic_PortNum_WAYPOINT_APP: {
+            msgType = "position";
+            meshtastic_Waypoint scratch;
+            meshtastic_Waypoint *decoded = NULL;
             memset(&scratch, 0, sizeof(scratch));
             if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &meshtastic_Waypoint_msg, &scratch)) {
                 decoded = &scratch;
@@ -643,30 +643,40 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
             } else {
                 LOG_ERROR("Error decoding protobuf for position message!\n");
             }
-        };
-        break;
-    }
-    case meshtastic_PortNum_NEIGHBORINFO_APP: {
-        msgType = "neighborinfo";
-        meshtastic_NeighborInfo scratch;
-        meshtastic_NeighborInfo *decoded = NULL;
-        if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+            break;
+        }
+        case meshtastic_PortNum_NEIGHBORINFO_APP: {
+            msgType = "neighborinfo";
+            meshtastic_NeighborInfo scratch;
+            meshtastic_NeighborInfo *decoded = NULL;
             memset(&scratch, 0, sizeof(scratch));
             if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &meshtastic_NeighborInfo_msg,
                                      &scratch)) {
                 decoded = &scratch;
                 msgPayload["node_id"] = new JSONValue((uint)decoded->node_id);
+                msgPayload["node_broadcast_interval_secs"] = new JSONValue((uint)decoded->node_broadcast_interval_secs);
+                msgPayload["last_sent_by_id"] = new JSONValue((uint)decoded->last_sent_by_id);
                 msgPayload["neighbors_count"] = new JSONValue(decoded->neighbors_count);
-                msgPayload["neighbors"] = new JSONValue(decoded->neighbors);
+                JSONArray neighbors;
+                for (uint8_t i = 0; i < decoded->neighbors_count; i++) {
+                    JSONObject neighborObj;
+                    neighborObj["node_id"] = new JSONValue((uint)decoded->neighbors[i].node_id);
+                    neighborObj["snr"] = new JSONValue((int)decoded->neighbors[i].snr);
+                    neighbors.push_back(new JSONValue(neighborObj));
+                }
+                msgPayload["neighbors"] = new JSONValue(neighbors);
+                jsonObj["payload"] = new JSONValue(msgPayload);
             } else {
                 LOG_ERROR("Error decoding protobuf for neighborinfo message!\n");
             }
-        };
-        break;
-    }
-    // add more packet types here if needed
-    default:
-        break;
+            break;
+        }
+        // add more packet types here if needed
+        default:
+            break;
+        }
+    } else {
+        LOG_WARN("Couldn't convert encrypted payload of MeshPacket to JSON\n");
     }
 
     jsonObj["id"] = new JSONValue((uint)mp->id);

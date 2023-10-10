@@ -16,8 +16,8 @@
 #include "buzz/buzz.h"
 #include "configuration.h"
 #include "main.h"
+#include "meshUtils.h"
 #include "sleep.h"
-#include "utils.h"
 
 #ifdef DEBUG_HEAP_MQTT
 #include "mqtt/MQTT.h"
@@ -175,9 +175,21 @@ class AnalogBatteryLevel : public HasBatteryLevel
             uint32_t raw = 0;
 #ifdef ARCH_ESP32
 #ifndef BAT_MEASURE_ADC_UNIT // ADC1
+#ifdef ADC_CTRL
+            if (heltec_version == 5) {
+                pinMode(ADC_CTRL, OUTPUT);
+                digitalWrite(ADC_CTRL, HIGH);
+                delay(10);
+            }
+#endif
             for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
                 raw += adc1_get_raw(adc_channel);
             }
+#ifdef ADC_CTRL
+            if (heltec_version == 5) {
+                digitalWrite(ADC_CTRL, LOW);
+            }
+#endif
 #else  // ADC2
             int32_t adc_buf = 0;
             for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
@@ -221,10 +233,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /**
      * return true if there is a battery installed in this unit
      */
-    virtual bool isBatteryConnect() override
-    {
-        return getBatteryPercent() != -1;
-    }
+    virtual bool isBatteryConnect() override { return getBatteryPercent() != -1; }
 
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
     /// in power
@@ -245,10 +254,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
     /// Assume charging if we have a battery and external power is connected.
     /// we can't be smart enough to say 'full'?
-    virtual bool isCharging() override
-    {
-        return isBatteryConnect() && isVbusIn();
-    }
+    virtual bool isCharging() override { return isBatteryConnect() && isVbusIn(); }
 
   private:
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
@@ -420,7 +426,7 @@ void Power::shutdown()
 #ifdef PIN_LED3
     ledOff(PIN_LED2);
 #endif
-    doDeepSleep(DELAY_FOREVER);
+    doDeepSleep(DELAY_FOREVER, false);
 #endif
 }
 

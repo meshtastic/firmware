@@ -111,6 +111,10 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_T_WATCH_S3 = 51,
     /* Bobricius Picomputer with ESP32-S3 CPU, Keyboard and IPS display */
     meshtastic_HardwareModel_PICOMPUTER_S3 = 52,
+    /* Heltec HT-CT62 with ESP32-C3 CPU and SX1262 LoRa */
+    meshtastic_HardwareModel_HELTEC_HT62 = 53,
+    /* E22-900M series modules with ESP32-S3 */
+    meshtastic_HardwareModel_E22_900M_S3 = 54,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -297,9 +301,8 @@ typedef struct _meshtastic_Position {
     /* In meters above MSL (but see issue #359) */
     int32_t altitude;
     /* This is usually not sent over the mesh (to save space), but it is sent
- from the phone so that the local device can set its RTC If it is sent over
- the mesh (because there are devices on the mesh without GPS), it will only
- be sent by devices which has a hardware GPS clock.
+ from the phone so that the local device can set its time if it is sent over
+ the mesh (because there are devices on the mesh without GPS or RTC).
  seconds since 1970 */
     uint32_t time;
     /* TODO: REPLACE */

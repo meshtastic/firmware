@@ -9,10 +9,10 @@
 #include "BleOta.h"
 #include "mesh/http/WiFiAPClient.h"
 
+#include "meshUtils.h"
 #include "sleep.h"
 #include "soc/rtc.h"
 #include "target_specific.h"
-#include "utils.h"
 #include <Preferences.h>
 #include <driver/rtc_io.h>
 #include <nvs.h>
@@ -193,16 +193,12 @@ void cpuDeepSleep(uint32_t msecToWake)
         rtc_gpio_isolate((gpio_num_t)rtcGpios[i]);
 #endif
 
-    // FIXME, disable internal rtc pullups/pulldowns on the non isolated pins. for inputs that we aren't using
-    // to detect wake and in normal operation the external part drives them hard.
-
-    // We want RTC peripherals to stay on
-    esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
-
+        // FIXME, disable internal rtc pullups/pulldowns on the non isolated pins. for inputs that we aren't using
+        // to detect wake and in normal operation the external part drives them hard.
 #ifdef BUTTON_PIN
-    // Only GPIOs which are have RTC functionality can be used in this bit map: 0,2,4,12-15,25-27,32-39.
+        // Only GPIOs which are have RTC functionality can be used in this bit map: 0,2,4,12-15,25-27,32-39.
 #if SOC_RTCIO_HOLD_SUPPORTED
-    uint64_t gpioMask = (1ULL << config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
+    uint64_t gpioMask = (1ULL << (config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
 #endif
 
 #ifdef BUTTON_NEED_PULLUP
@@ -217,6 +213,9 @@ void cpuDeepSleep(uint32_t msecToWake)
     esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ALL_LOW);
 #endif
 #endif
+
+    // We want RTC peripherals to stay on
+    esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
 
     esp_sleep_enable_timer_wakeup(msecToWake * 1000ULL); // call expects usecs
     esp_deep_sleep_start();                              // TBD mA sleep current (battery)

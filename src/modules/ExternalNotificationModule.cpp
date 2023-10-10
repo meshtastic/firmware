@@ -27,7 +27,6 @@
 
 #ifdef HAS_NCP5623
 #include <graphics/RAKled.h>
-NCP5623 rgb;
 
 uint8_t red = 0;
 uint8_t green = 0;
@@ -128,6 +127,11 @@ int32_t ExternalNotificationModule::runOnce()
     }
 }
 
+bool ExternalNotificationModule::wantPacket(const meshtastic_MeshPacket *p)
+{
+    return MeshService::isTextPayload(p);
+}
+
 /**
  * Sets the external notification on for the specified index.
  *
@@ -212,8 +216,8 @@ void ExternalNotificationModule::stopNow()
 }
 
 ExternalNotificationModule::ExternalNotificationModule()
-    : SinglePortModule("ExternalNotificationModule", meshtastic_PortNum_TEXT_MESSAGE_APP), concurrency::OSThread(
-                                                                                               "ExternalNotificationModule")
+    : SinglePortModule("ExternalNotificationModule", meshtastic_PortNum_TEXT_MESSAGE_APP),
+      concurrency::OSThread("ExternalNotificationModule")
 {
     /*
         Uncomment the preferences below if you want to use the module

@@ -2,10 +2,10 @@
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 
-//#define HAS_SCREEN 0
+// #define HAS_SCREEN 0
 
-//#define HAS_SDCARD
-//#define SDCARD_USE_SPI1
+// #define HAS_SDCARD
+// #define SDCARD_USE_SPI1
 
 #define USE_SSD1306
 #define I2C_SDA 12
@@ -14,13 +14,13 @@
 #define LED_PIN 46
 #define LED_STATE_ON 0 // State when LED is litted
 
-//#define BUTTON_PIN 15 // Pico OLED 1.3 User key 0 - removed User key 1 (17)
+// #define BUTTON_PIN 15 // Pico OLED 1.3 User key 0 - removed User key 1 (17)
 
 #define BUTTON_PIN 40
-//#define BUTTON_PIN 0 // This is the BOOT button pad at the moment
-//#define BUTTON_NEED_PULLUP
+// #define BUTTON_PIN 0 // This is the BOOT button pad at the moment
+// #define BUTTON_NEED_PULLUP
 
-//#define USE_RF95   // RFM95/SX127x
+// #define USE_RF95   // RFM95/SX127x
 
 #undef RF95_SCK
 #undef RF95_MISO
@@ -43,10 +43,11 @@
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_BUSY
 #define SX126X_RESET LORA_RESET
-#define SX126X_E22
+#define SX126X_DIO2_AS_RF_SWITCH
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
 #endif
 
-//#define USE_SX1280
+// #define USE_SX1280
 #ifdef USE_SX1280
 #define RF95_MISO 1
 #define RF95_SCK 3
@@ -61,13 +62,13 @@
 #define SX128X_RESET LORA_RESET
 #endif
 
-//#define USE_EINK
+// #define USE_EINK
 /*
  * eink display pins
  */
-//#define PIN_EINK_CS
-//#define PIN_EINK_BUSY
-//#define PIN_EINK_DC
-//#define PIN_EINK_RES    (-1)
-//#define PIN_EINK_SCLK   3
-//#define PIN_EINK_MOSI   4
+// #define PIN_EINK_CS
+// #define PIN_EINK_BUSY
+// #define PIN_EINK_DC
+// #define PIN_EINK_RES    (-1)
+// #define PIN_EINK_SCLK   3
+// #define PIN_EINK_MOSI   4

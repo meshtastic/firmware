@@ -30,7 +30,7 @@ uint8_t read_from_14004(TwoWire *i2cBus, uint8_t reg, uint8_t *data, uint8_t len
 
 int32_t KbI2cBase::runOnce()
 {
-    if (cardkb_found.address != CARDKB_ADDR && cardkb_found.address != TDECK_KB_ADDR) {
+    if (cardkb_found.address == 0x00) {
         // Input device is not detected.
         return INT32_MAX;
     }
@@ -41,11 +41,19 @@ int32_t KbI2cBase::runOnce()
 #ifdef I2C_SDA1
             LOG_DEBUG("Using I2C Bus 1 (the second one)\n");
             i2cBus = &Wire1;
+            if (cardkb_found.address == BBQ10_KB_ADDR) {
+                Q10keyboard.begin(BBQ10_KB_ADDR, &Wire1);
+                Q10keyboard.setBacklight(0);
+            }
             break;
 #endif
         case ScanI2C::WIRE:
             LOG_DEBUG("Using I2C Bus 0 (the first one)\n");
             i2cBus = &Wire;
+            if (cardkb_found.address == BBQ10_KB_ADDR) {
+                Q10keyboard.begin(BBQ10_KB_ADDR, &Wire);
+                Q10keyboard.setBacklight(0);
+            }
             break;
         case ScanI2C::NO_I2C:
         default:
@@ -53,7 +61,105 @@ int32_t KbI2cBase::runOnce()
         }
     }
 
-    if (kb_model == 0x02) {
+    switch (kb_model) {
+    case 0x11: { // BB Q10
+        int keyCount = Q10keyboard.keyCount();
+        while (keyCount--) {
+            const BBQ10Keyboard::KeyEvent key = Q10keyboard.keyEvent();
+            if ((key.key != 0x00) && (key.state == BBQ10Keyboard::StateRelease)) {
+                InputEvent e;
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+                e.source = this->_originName;
+                switch (key.key) {
+                case 'p': // TAB
+                case 't': // TAB as well
+                    if (is_sym) {
+                        e.inputEvent = ANYKEY;
+                        e.kbchar = 0x09; // TAB Scancode
+                        is_sym = false;  // reset sym state after second keypress
+                    } else {
+                        e.inputEvent = ANYKEY;
+                        e.kbchar = key.key;
+                    }
+                    break;
+                case 'q': // ESC
+                    if (is_sym) {
+                        e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL;
+                        e.kbchar = 0x1b;
+                        is_sym = false; // reset sym state after second keypress
+                    } else {
+                        e.inputEvent = ANYKEY;
+                        e.kbchar = key.key;
+                    }
+                    break;
+                case 0x08: // Back
+                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK;
+                    e.kbchar = key.key;
+                    break;
+                case 'e': // sym e
+                    if (is_sym) {
+                        e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP;
+                        e.kbchar = 0xb5;
+                        is_sym = false; // reset sym state after second keypress
+                    } else {
+                        e.inputEvent = ANYKEY;
+                        e.kbchar = key.key;
+                    }
+                    break;
+                case 'x': // sym x
+                    if (is_sym) {
+                        e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN;
+                        e.kbchar = 0xb6;
+                        is_sym = false; // reset sym state after second keypress
+                    } else {
+                        e.inputEvent = ANYKEY;
+                        e.kbchar = key.key;
+                    }
+                    break;
+                case 's': // sym s
+                    if (is_sym) {
+                        e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT;
+                        e.kbchar = 0x00; // tweak for destSelect
+                        is_sym = false;  // reset sym state after second keypress
+                    } else {
+                        e.inputEvent = ANYKEY;
+                        e.kbchar = key.key;
+                    }
+                    break;
+                case 'f': // sym f
+                    if (is_sym) {
+                        e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
+                        e.kbchar = 0x00; // tweak for destSelect
+                        is_sym = false;  // reset sym state after second keypress
+                    } else {
+                        e.inputEvent = ANYKEY;
+                        e.kbchar = key.key;
+                    }
+                    break;
+                case 0x13: // Code scanner says the SYM key is 0x13
+                    is_sym = !is_sym;
+                    break;
+                case 0x0a: // apparently Enter on Q10 is a line feed instead of carriage return
+                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
+                    break;
+                case 0x00: // nopress
+                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+                    break;
+                default: // all other keys
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = key.key;
+                    is_sym = false; // reset sym state after second keypress
+                    break;
+                }
+
+                if (e.inputEvent != meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE) {
+                    this->notifyObservers(&e);
+                }
+            }
+        }
+        break;
+    }
+    case 0x02: {
         // RAK14004
         uint8_t rDataBuf[8] = {0};
         uint8_t PrintDataBuf = 0;
@@ -74,9 +180,12 @@ int32_t KbI2cBase::runOnce()
             e.kbchar = PrintDataBuf;
             this->notifyObservers(&e);
         }
-    } else if (kb_model == 0x00 || kb_model == 0x10) {
-        // m5 cardkb and T-Deck
-        i2cBus->requestFrom(kb_model == 0x00 ? CARDKB_ADDR : TDECK_KB_ADDR, 1);
+        break;
+    }
+    case 0x00:   // CARDKB
+    case 0x10: { // T-DECK
+
+        i2cBus->requestFrom((int)cardkb_found.address, 1);
 
         while (i2cBus->available()) {
             char c = i2cBus->read();
@@ -93,17 +202,19 @@ int32_t KbI2cBase::runOnce()
                 break;
             case 0xb5: // Up
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP;
+                e.kbchar = 0xb5;
                 break;
             case 0xb6: // Down
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN;
+                e.kbchar = 0xb6;
                 break;
             case 0xb4: // Left
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT;
-                e.kbchar = c;
+                e.kbchar = 0xb4;
                 break;
             case 0xb7: // Right
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
-                e.kbchar = c;
+                e.kbchar = 0xb7;
                 break;
             case 0x0d: // Enter
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
@@ -121,7 +232,9 @@ int32_t KbI2cBase::runOnce()
                 this->notifyObservers(&e);
             }
         }
-    } else {
+        break;
+    }
+    default:
         LOG_WARN("Unknown kb_model 0x%02x\n", kb_model);
     }
     return 300;
