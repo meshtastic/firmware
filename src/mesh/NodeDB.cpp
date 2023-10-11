@@ -688,7 +688,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
                  p.longitude_i, p.altitude);
 
         setLocalPosition(p);
-        info->position = ConvertToPositionLite(p);
+        info->position = TypeConversions::ConvertToPositionLite(p);
     } else if ((p.time > 0) && !p.latitude_i && !p.longitude_i && !p.timestamp && !p.location_source) {
         // FIXME SPECIAL TIME SETTING PACKET FROM EUD TO RADIO
         // (stop-gap fix for issue #900)
@@ -706,7 +706,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
         uint32_t tmp_time = info->position.time;
 
         // Next, update atomically
-        info->position = ConvertToPositionLite(p);
+        info->position = TypeConversions::ConvertToPositionLite(p);
 
         // Last, restore any fields that may have been overwritten
         if (!info->position.time)
