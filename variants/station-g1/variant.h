@@ -1,10 +1,12 @@
 // #define BUTTON_NEED_PULLUP // if set we need to turn on the internal CPU pullup during sleep
 
-#define I2C_SDA 21
-#define I2C_SCL 22
+// i2c channel on external IO connector. NOTE sensors have had trouble on I2C ports other than 0
+#define I2C_SDA 14  
+#define I2C_SCL 15
 
-#define I2C_SDA1 14 // Second i2c channel on external IO connector
-#define I2C_SCL1 15 // Second i2c channel on external IO connector
+// i2c channel of internal OLED display
+#define I2C_SDA1 21 
+#define I2C_SCL1 22 
 
 #define BUTTON_PIN 36 // The middle button GPIO on the Nano G1
 // #define BUTTON_PIN_ALT 13 // Alternate GPIO for an external button if needed. Does anyone use this? It is not documented
