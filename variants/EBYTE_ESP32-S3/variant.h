@@ -4,8 +4,7 @@
 // FIXME: implement SX12 module type autodetection and have setup for each case (add E32 support)
 // E32 has same pinout except having extra pins. I assume that the GND on it is connected internally to other GNDs so it is not a problem to NC the extra GND pins.
 
-// FIXME: Update repository name
-// Example schematic: https://github.com/S5NC/E22-900M_S3/blob/main/schematic.pdf
+// Example schematic: https://github.com/S5NC/EBYTE_ESP32-S3/blob/main/schematic.pdf
 
 // For each EBYTE module pin in this section, provide the pin number of the ESP32-S3 you connected it to
 // The ESP32-S3 is great because YOU CAN USE PRACTICALLY ANY PINS for the connections, but avoid some pins (such as on the WROOM
