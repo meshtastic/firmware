@@ -33,6 +33,9 @@ void PositionModule::clearPosition()
     meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
     node->position.latitude_i = 0;
     node->position.longitude_i = 0;
+    node->position.altitude = 0;
+    node->position.time = 0;
+    nodeDB.setLocalPosition(meshtastic_Position_init_default);
 }
 
 bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Position *pptr)
@@ -98,7 +101,7 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     meshtastic_Position p = meshtastic_Position_init_default; //   Start with an empty structure
     // if localPosition is totally empty, put our last saved position (lite) in there
     if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0) {
-        nodeDB.setLocalPosition(ConvertToPosition(node->position));
+        nodeDB.setLocalPosition(TypeConversions::ConvertToPosition(node->position));
     }
     localPosition.seq_number++;
 
