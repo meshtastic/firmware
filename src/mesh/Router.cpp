@@ -248,6 +248,13 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
+        auto hash = channels.setActiveByIndex(chIndex);
+        if (hash < 0)
+            // No suitable channel could be found for sending
+            return meshtastic_Routing_Error_NO_CHANNEL;
+
+        // Now the packet channel should be the hash (no longer the index)
+        p->channel = hash;
 
         bool shouldActuallyEncrypt = true;
 
@@ -316,15 +323,18 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
         config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING)
         return false;
 
-    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag)
-        return true; // If packet was already decoded just return
-
     // assert(p->which_payloadVariant == MeshPacket_encrypted_tag);
 
     // Try to find a channel that works with this hash
     for (ChannelIndex chIndex = 0; chIndex < channels.getNumChannels(); chIndex++) {
         // Try to use this hash/channel pair
         if (channels.decryptForHash(chIndex, p->channel)) {
+
+            if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+                p->channel = chIndex;
+                return true; // If packet was already decoded set channel index and return
+            }
+
             // Try to decrypt the packet if we can
             size_t rawSize = p->encrypted.size;
             assert(rawSize <= sizeof(bytes));
@@ -424,14 +434,6 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 
         // printBytes("plaintext", bytes, numbytes);
 
-        ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
-        auto hash = channels.setActiveByIndex(chIndex);
-        if (hash < 0)
-            // No suitable channel could be found for sending
-            return meshtastic_Routing_Error_NO_CHANNEL;
-
-        // Now that we are encrypting the packet channel should be the hash (no longer the index)
-        p->channel = hash;
         crypto->encrypt(getFrom(p), p->id, numbytes, bytes);
 
         // Copy back into the packet and set the variant type
