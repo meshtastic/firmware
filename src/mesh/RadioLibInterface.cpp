@@ -361,9 +361,10 @@ void RadioLibInterface::handleReceiveInterrupt()
             mp->channel = h->channel;
             assert(HOP_MAX <= PACKET_FLAGS_HOP_MASK); // If hopmax changes, carefully check this code
             mp->hop_limit = h->flags & PACKET_FLAGS_HOP_MASK;
+            mp->original_hop_limit = (h->flags & PACKET_FLAGS_ORIG_HOP_MASK) >> PACKET_FLAGS_ORIG_HOP_SHIFT;
             mp->want_ack = !!(h->flags & PACKET_FLAGS_WANT_ACK_MASK);
-            mp->next_hop = nodeDB.findMatchingNodeNum(h->next_hop);
-            mp->current_relayer = nodeDB.findMatchingNodeNum(h->current_relayer);
+            mp->next_hop = h->next_hop;
+            mp->relay_node = h->relay_node;
 
             addReceiveMetadata(mp);
 

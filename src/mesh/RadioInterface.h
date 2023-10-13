@@ -12,6 +12,8 @@
 
 #define PACKET_FLAGS_HOP_MASK 0x07
 #define PACKET_FLAGS_WANT_ACK_MASK 0x08
+#define PACKET_FLAGS_ORIG_HOP_MASK 0x70
+#define PACKET_FLAGS_ORIG_HOP_SHIFT 4
 
 /**
  * This structure has to exactly match the wire layout when sent over the radio link.  Used to keep compatibility
@@ -35,8 +37,8 @@ typedef struct {
     // Last byte of the NodeNum of the next-hop for this packet
     uint8_t next_hop;
 
-    // Last byte of the NodeNum of the current relayer of this packet
-    uint8_t current_relayer;
+    // Last byte of the NodeNum of the node that will relay/relayed this packet
+    uint8_t relay_node;
 } PacketHeader;
 
 /**

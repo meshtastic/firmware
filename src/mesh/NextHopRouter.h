@@ -4,7 +4,7 @@
 
 /*
   Router which only relays if it is the next hop for a packet.
-  The next hop is set by the current relayer of a packet, which bases this on information from either the NeighborInfoModule, or a
+  The next hop is set by the relay node of a packet, which bases this on information from either the NeighborInfoModule, or a
   previous successful delivery via flooding. It is only used for DMs and not used for broadcasts. Using the NeighborInfoModule, it
   can derive the next hop of neighbors and that of neighbors of neighbors. For others, it has no information in the beginning,
   which results into falling back to the FloodingRouter. Upon successful delivery via flooding, it updates the next hop of the
@@ -40,10 +40,12 @@ class NextHopRouter : public FloodingRouter
      */
     virtual void sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c) override;
 
+    constexpr static uint8_t NO_NEXT_HOP_PREFERENCE = 0;
+
   private:
     /**
-     * Get the next hop for a destination, given the current relayer
+     * Get the next hop for a destination, given the relay node
      * @return the node number of the next hop, 0 if no preference (fallback to FloodingRouter)
      */
-    uint32_t getNextHop(NodeNum to, NodeNum current_relayer);
+    uint8_t getNextHop(NodeNum to, uint8_t relay_node);
 };

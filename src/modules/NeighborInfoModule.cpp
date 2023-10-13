@@ -161,7 +161,7 @@ size_t NeighborInfoModule::cleanUpNeighbors()
             // Clear all next hops of nodes that had this neighbor as next hop
             for (unsigned int j = 0; j < nodeDB.getNumMeshNodes(); j++) {
                 meshtastic_NodeInfoLite *node = nodeDB.getMeshNodeByIndex(j);
-                if (node->next_hop == neighbors[index].node_id) {
+                if (node->next_hop == (uint8_t)(neighbors[index].node_id & 0xFF)) {
                     node->next_hop = 0;
                 }
             }
@@ -251,7 +251,7 @@ void NeighborInfoModule::updateNextHops(meshtastic_NeighborInfo *np)
     meshtastic_NodeInfoLite *currentNode = nodeDB.getMeshNode(np->node_id);
     // Check if the sender of this neighborInfo packet is a neighbor of ourselves
     if (currentNode && isANeighbor(np->node_id)) {
-        currentNode->next_hop = np->node_id; // Set the next hop to the sender of this packet
+        currentNode->next_hop = (uint8_t)(np->node_id & 0xFF); // Set the next hop to the sender of this packet
         for (uint8_t i = 0; i < np->neighbors_count; i++) {
             if (isANeighbor(np->neighbors[i].node_id))
                 continue; // This node is a neighbor of ourselves
@@ -259,7 +259,7 @@ void NeighborInfoModule::updateNextHops(meshtastic_NeighborInfo *np)
             meshtastic_NodeInfoLite *neighborOfCurrentNode = nodeDB.getMeshNode(np->neighbors[i].node_id);
             // Update next hop of this node to the sender of this packet, because it is the most recent neighbor
             if (neighborOfCurrentNode)
-                neighborOfCurrentNode->next_hop = currentNode->num;
+                neighborOfCurrentNode->next_hop = (uint8_t)(currentNode->num & 0xFF);
         }
     } else if (currentNode) { // Sender is not a neighbor
         // Find common neighbors and use the most recent as next hop to this node
@@ -270,7 +270,7 @@ void NeighborInfoModule::updateNextHops(meshtastic_NeighborInfo *np)
             if (neighborOfCurrentNode && isANeighbor(neighborOfCurrentNode->num)) {
                 // This neighbor was heard more recently than the current next hop
                 if (neighborOfCurrentNode->last_heard > maxLastHeard) {
-                    currentNode->next_hop = neighborOfCurrentNode->num;
+                    currentNode->next_hop = (uint8_t)(neighborOfCurrentNode->num & 0xFF);
                     maxLastHeard = neighborOfCurrentNode->last_heard;
                     LOG_DEBUG("More recent node found, so update next_hop of %x to %x\n", currentNode->num,
                               neighborOfCurrentNode->num);

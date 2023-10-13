@@ -71,11 +71,11 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
         i->second.nextTxMsec += iface->getPacketTime(p);
     }
 
-    /* Resend implicit ACKs for repeated packets (current relayer is the same as original transmitter)
-     * this way if an implicit ACK is dropped and a packet is resent we'll rebroadcast again.
-     * Resending real ACKs is omitted, as you might receive a packet multiple times due to flooding and
-     * flooding this ACK back to the original sender already adds redundancy. */
-    if (wasSeenRecently(p, false) && p->current_relayer == p->from && !MeshModule::currentReply && p->to != nodeDB.getNodeNum()) {
+    /* Resend implicit ACKs for repeated packets (hop limit is the original setting) this way if an implicit ACK is dropped and a
+     * packet is resent we'll rebroadcast again. Resending real ACKs is omitted, as you might receive a packet multiple times due
+     * to flooding and flooding this ACK back to the original sender already adds redundancy. */
+    if (wasSeenRecently(p, false) && (p->original_hop_limit == p->hop_limit) && !MeshModule::currentReply &&
+        p->to != nodeDB.getNodeNum()) {
         // retransmission on broadcast has hop_limit still equal to HOP_RELIABLE
         LOG_DEBUG("Resending implicit ack for a repeated floodmsg\n");
         meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p);
@@ -224,12 +224,12 @@ int32_t ReliableRouter::doRetransmissions()
 
                 if (config.lora.next_hop_routing && p.numRetransmissions == 1) {
                     // Last retransmission, reset next_hop (fallback to FloodingRouter)
-                    p.packet->next_hop = 0;
+                    p.packet->next_hop = NO_NEXT_HOP_PREFERENCE;
                     // Also reset it in the nodeDB
                     meshtastic_NodeInfoLite *sentTo = nodeDB.getMeshNode(p.packet->to);
                     if (sentTo) {
-                        LOG_DEBUG("Resetting next hop for packet with dest %x\n", p.packet->to);
-                        sentTo->next_hop = 0;
+                        LOG_DEBUG("Resetting next hop for packet with dest 0x%x\n", p.packet->to);
+                        sentTo->next_hop = NO_NEXT_HOP_PREFERENCE;
                     }
                 }
 

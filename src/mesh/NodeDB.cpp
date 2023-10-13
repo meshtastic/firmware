@@ -791,6 +791,11 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         if (mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP) {
             info->channel = mp.channel;
         }
+
+        // If this packet didn't travel any hops, then it was sent directly to us, so we know what to use as next hop to this node
+        if (mp.original_hop_limit == mp.hop_limit) {
+            info->next_hop = (uint8_t)(mp.from & 0xFF);
+        }
     }
 }
 
@@ -812,16 +817,6 @@ meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
             return &meshNodes[i];
 
     return NULL;
-}
-
-// Find a node in the database that matches the last byte, return 0 if not found
-NodeNum NodeDB::findMatchingNodeNum(uint8_t last_byte)
-{
-    for (int i = 0; i < *numMeshNodes; i++)
-        if ((uint8_t)(meshNodes[i].num & 0xFF) == last_byte)
-            return meshNodes[i].num;
-
-    return 0;
 }
 
 /// Find a node in our DB, create an empty NodeInfo if missing

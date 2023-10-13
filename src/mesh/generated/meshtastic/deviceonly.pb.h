@@ -65,8 +65,8 @@ typedef struct _meshtastic_NodeInfoLite {
     meshtastic_DeviceMetrics device_metrics;
     /* local channel index we heard that node on. Only populated if its not the default channel. */
     uint8_t channel;
-    /* Node number of the node to use as a next hop in order to reach this node. */
-    uint32_t next_hop;
+    /* Last byte of the node number of the node to use as a next hop in order to reach this node. */
+    uint8_t next_hop;
 } meshtastic_NodeInfoLite;
 
 /* The on-disk saved channels */
@@ -317,8 +317,8 @@ extern const pb_msgdesc_t meshtastic_NodeRemoteHardwarePin_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define meshtastic_ChannelFile_size              638
-#define meshtastic_DeviceState_size              17490
-#define meshtastic_NodeInfoLite_size             157
+#define meshtastic_DeviceState_size              17193
+#define meshtastic_NodeInfoLite_size             154
 #define meshtastic_NodeRemoteHardwarePin_size    29
 #define meshtastic_OEMStore_size                 3220
 #define meshtastic_PositionLite_size             28

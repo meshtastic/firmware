@@ -240,7 +240,11 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     // the lora we need to make sure we have replaced it with our local address
     p->from = getFrom(p);
 
-    p->current_relayer = getNodeNum(); // set the current relayer to us
+    // If we are the original transmitter, set the original hop limit
+    if (p->from == nodeDB.getNodeNum())
+        p->original_hop_limit = config.lora.hop_limit ? config.lora.hop_limit : HOP_RELIABLE;
+
+    p->relay_node = (uint8_t)(getNodeNum() & 0xFF); // set the current relayer to us
 
     // If the packet hasn't yet been encrypted, do so now (it might already be encrypted if we are just forwarding it)
 
