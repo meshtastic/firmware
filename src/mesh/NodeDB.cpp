@@ -795,6 +795,9 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         // If this packet didn't travel any hops, then it was sent directly to us, so we know what to use as next hop to this node
         if (mp.original_hop_limit == mp.hop_limit) {
             info->next_hop = (uint8_t)(mp.from & 0xFF);
+        } else if (mp.relay_node && (mp.original_hop_limit - mp.hop_limit == 1)) {
+            // This packet traveled one hop, so we can use the relay_node as next_hop
+            info->next_hop = (uint8_t)(mp.relay_node & 0xFF);
         }
     }
 }
