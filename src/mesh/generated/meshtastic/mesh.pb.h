@@ -113,8 +113,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_PICOMPUTER_S3 = 52,
     /* Heltec HT-CT62 with ESP32-C3 CPU and SX1262 LoRa */
     meshtastic_HardwareModel_HELTEC_HT62 = 53,
-    /* E22-900M series modules with ESP32-S3 */
-    meshtastic_HardwareModel_E22_900M_S3 = 54,
+    /* EBYTE SPI LoRa module and ESP32-S3 */
+    meshtastic_HardwareModel_EBYTE_ESP32_S3 = 54,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
