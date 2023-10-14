@@ -66,14 +66,11 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
 
                 tosend->hop_limit--; // bump down the hop count
                 NextHopRouter::send(tosend);
-            } else if (p->next_hop == 0) {
+            } else if (p->next_hop == NO_NEXT_HOP_PREFERENCE) {
                 // No preference for next hop, use FloodingRouter
                 LOG_DEBUG("No preference for next hop, using FloodingRouter\n");
                 FloodingRouter::sniffReceived(p, c);
-            } else if (p->to == NODENUM_BROADCAST) {
-                // TODO: Smarter way of handling broadcasts
-                FloodingRouter::sniffReceived(p, c);
-            }
+            } // else don't relay
         }
     } else {
         LOG_DEBUG("Not rebroadcasting. Role = Role_ClientMute\n");

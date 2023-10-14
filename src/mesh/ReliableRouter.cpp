@@ -33,7 +33,7 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
         }
     }
 
-    return config.lora.next_hop_routing ? NextHopRouter::send(p) : FloodingRouter::send(p);
+    return (config.lora.next_hop_routing && p->to != NODENUM_BROADCAST) ? NextHopRouter::send(p) : FloodingRouter::send(p);
 }
 
 bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
@@ -132,8 +132,9 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
         }
     }
 
-    // handle the packet as normal
-    config.lora.next_hop_routing ? NextHopRouter::sniffReceived(p, c) : FloodingRouter::sniffReceived(p, c);
+    // For DMs, we use the NextHopRouter, whereas for broadcasts, we use the FloodingRouter
+    config.lora.next_hop_routing && (p->to != NODENUM_BROADCAST) ? NextHopRouter::sniffReceived(p, c)
+                                                                 : FloodingRouter::sniffReceived(p, c);
 }
 
 #define NUM_RETRANSMISSIONS 3
@@ -222,21 +223,23 @@ int32_t ReliableRouter::doRetransmissions()
                 LOG_DEBUG("Sending reliable retransmission fr=0x%x,to=0x%x,id=0x%x, tries left=%d\n", p.packet->from,
                           p.packet->to, p.packet->id, p.numRetransmissions);
 
-                if (config.lora.next_hop_routing && p.numRetransmissions == 1) {
-                    // Last retransmission, reset next_hop (fallback to FloodingRouter)
-                    p.packet->next_hop = NO_NEXT_HOP_PREFERENCE;
-                    // Also reset it in the nodeDB
-                    meshtastic_NodeInfoLite *sentTo = nodeDB.getMeshNode(p.packet->to);
-                    if (sentTo) {
-                        LOG_DEBUG("Resetting next hop for packet with dest 0x%x\n", p.packet->to);
-                        sentTo->next_hop = NO_NEXT_HOP_PREFERENCE;
+                if (config.lora.next_hop_routing && p.packet->to != NODENUM_BROADCAST) {
+                    if (p.numRetransmissions == 1) {
+                        // Last retransmission, reset next_hop (fallback to FloodingRouter)
+                        p.packet->next_hop = NO_NEXT_HOP_PREFERENCE;
+                        // Also reset it in the nodeDB
+                        meshtastic_NodeInfoLite *sentTo = nodeDB.getMeshNode(p.packet->to);
+                        if (sentTo) {
+                            LOG_DEBUG("Resetting next hop for packet with dest 0x%x\n", p.packet->to);
+                            sentTo->next_hop = NO_NEXT_HOP_PREFERENCE;
+                        }
                     }
+                    NextHopRouter::send(packetPool.allocCopy(*p.packet));
+                } else {
+                    // Note: we call the superclass version because we don't want to have our version of send() add a new
+                    // retransmission record
+                    FloodingRouter::send(packetPool.allocCopy(*p.packet));
                 }
-
-                // Note: we call the superclass version because we don't want to have our version of send() add a new
-                // retransmission record
-                config.lora.next_hop_routing ? NextHopRouter::send(packetPool.allocCopy(*p.packet))
-                                             : FloodingRouter::send(packetPool.allocCopy(*p.packet));
 
                 // Queue again
                 --p.numRetransmissions;
