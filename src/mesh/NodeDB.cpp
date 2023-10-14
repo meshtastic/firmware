@@ -289,6 +289,10 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
         config.device.node_info_broadcast_secs = ONE_DAY;
         config.position.position_broadcast_smart_enabled = false;
         config.position.position_broadcast_secs = ONE_DAY;
+        // Remove Altitude MSL from flags since CoTs use HAE (height above ellipsoid)
+        config.position.position_flags =
+            (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_SPEED |
+             meshtastic_Config_PositionConfig_PositionFlags_HEADING | meshtastic_Config_PositionConfig_PositionFlags_DOP);
         moduleConfig.telemetry.device_update_interval = ONE_DAY;
     }
 }
