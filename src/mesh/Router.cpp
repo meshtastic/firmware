@@ -323,18 +323,15 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
         config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING)
         return false;
 
+    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag)
+        return true; // If packet was already decoded just return
+
     // assert(p->which_payloadVariant == MeshPacket_encrypted_tag);
 
     // Try to find a channel that works with this hash
     for (ChannelIndex chIndex = 0; chIndex < channels.getNumChannels(); chIndex++) {
         // Try to use this hash/channel pair
         if (channels.decryptForHash(chIndex, p->channel)) {
-
-            if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
-                p->channel = chIndex;
-                return true; // If packet was already decoded set channel index and return
-            }
-
             // Try to decrypt the packet if we can
             size_t rawSize = p->encrypted.size;
             assert(rawSize <= sizeof(bytes));
