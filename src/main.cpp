@@ -29,6 +29,7 @@
 #include "target_specific.h"
 #include <Wire.h>
 #include <memory>
+#include <utility>
 // #include <driver/rtc_io.h>
 
 #include "mesh/eth/ethClient.h"
@@ -122,9 +123,8 @@ uint32_t serialSinceMsec;
 
 bool pmu_found;
 
-// Array map of sensor types (as array index) and i2c address as value we'll find in the i2c scan
-uint8_t nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1] = {
-    0}; // one is enough, missing elements will be initialized to 0 anyway.
+// Array map of sensor types with i2c address and wire as we'll find in the i2c scan
+std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1] = {};
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
 
@@ -491,7 +491,8 @@ void setup()
     {                                                                                                                            \
         auto found = i2cScanner->find(SCANNER_T);                                                                                \
         if (found.type != ScanI2C::DeviceType::NONE) {                                                                           \
-            nodeTelemetrySensorsMap[PB_T] = found.address.address;                                                               \
+            nodeTelemetrySensorsMap[PB_T].first = found.address.address;                                                         \
+            nodeTelemetrySensorsMap[PB_T].second = i2cScanner->fetchI2CBus(found.address);                                       \
             LOG_DEBUG("found i2c sensor %s\n", STRING(PB_T));                                                                    \
         }                                                                                                                        \
     }

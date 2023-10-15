@@ -13,7 +13,7 @@ int32_t LPS22HBSensor::runOnce()
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    status = lps22hb.begin_I2C(nodeTelemetrySensorsMap[sensorType]);
+    status = lps22hb.begin_I2C(nodeTelemetrySensorsMap[sensorType].first, nodeTelemetrySensorsMap[sensorType].second);
     return initI2CSensor();
 }
 
