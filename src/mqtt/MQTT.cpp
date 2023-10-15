@@ -133,9 +133,15 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
             if (strcmp(e.gateway_id, owner.id) == 0)
                 LOG_INFO("Ignoring downlink message we originally sent.\n");
             else {
-                if (e.packet) {
+                // Find channel by channel_id and check downlink_enabled
+                meshtastic_Channel ch = channels.getByName(e.channel_id);
+                if (strcmp(e.channel_id, channels.getGlobalId(ch.index)) == 0 && e.packet && ch.settings.downlink_enabled) {
                     LOG_INFO("Received MQTT topic %s, len=%u\n", topic, length);
                     meshtastic_MeshPacket *p = packetPool.allocCopy(*e.packet);
+
+                    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+                        p->channel = ch.index;
+                    }
 
                     // ignore messages sent by us or if we don't have the channel key
                     if (router && p->from != nodeDB.getNodeNum() && perhapsDecode(p))
