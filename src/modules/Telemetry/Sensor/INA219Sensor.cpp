@@ -13,8 +13,8 @@ int32_t INA219Sensor::runOnce()
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
     if (!ina219.success()) {
-        ina219 = Adafruit_INA219(nodeTelemetrySensorsMap[sensorType]);
-        status = ina219.begin();
+        ina219 = Adafruit_INA219(nodeTelemetrySensorsMap[sensorType].first);
+        status = ina219.begin(nodeTelemetrySensorsMap[sensorType].second);
     } else {
         status = ina219.success();
     }

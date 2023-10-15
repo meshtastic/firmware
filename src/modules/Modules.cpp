@@ -88,7 +88,7 @@ void setupModules()
 #endif
 #if HAS_SENSOR
         new EnvironmentTelemetryModule();
-        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_PMSA003I] > 0) {
+        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_PMSA003I].first > 0) {
             new AirQualityTelemetryModule();
         }
 #endif
