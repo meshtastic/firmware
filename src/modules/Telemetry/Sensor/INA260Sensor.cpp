@@ -14,7 +14,7 @@ int32_t INA260Sensor::runOnce()
     }
 
     if (!status) {
-        status = ina260.begin(nodeTelemetrySensorsMap[sensorType]);
+        status = ina260.begin(nodeTelemetrySensorsMap[sensorType].first, nodeTelemetrySensorsMap[sensorType].second);
     }
     return initI2CSensor();
 }
