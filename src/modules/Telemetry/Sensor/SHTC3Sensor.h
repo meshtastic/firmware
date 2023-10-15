@@ -2,7 +2,7 @@
 #include "TelemetrySensor.h"
 #include <Adafruit_SHTC3.h>
 
-class SHTC3Sensor : virtual public TelemetrySensor
+class SHTC3Sensor : public TelemetrySensor
 {
   private:
     Adafruit_SHTC3 shtc3 = Adafruit_SHTC3();
