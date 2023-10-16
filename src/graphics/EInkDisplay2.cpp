@@ -7,9 +7,9 @@
 #include "main.h"
 #include <SPI.h>
 
-// #ifdef HELTEC_WIRELESS_PAPER
-// SPIClass *hspi = NULL;
-// #endif
+#if defined(HELTEC_WIRELESS_PAPER)// || defined(LORA_TYPE)
+SPIClass *hspi = NULL;
+#endif
 
 #define COLORED GxEPD_BLACK
 #define UNCOLORED GxEPD_WHITE
@@ -39,6 +39,10 @@
 
 // 4.2 inch 300x400 - GxEPD2_420_M01
 #define TECHO_DISPLAY_MODEL GxEPD2_420_M01
+
+#elif defined(LORA_TYPE)
+// 1.54 inch 200x200 - GxEPD2_154_M09
+#define TECHO_DISPLAY_MODEL GxEPD2_154_GDEY0154D67
 
 #elif defined(M5_COREINK)
 // M5Stack CoreInk
@@ -146,7 +150,7 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
         //  4.2 inch 300x400 - GxEPD2_420_M01
         adafruitDisplay->nextPage();
 
-#elif defined(PCA10059) || defined(M5_COREINK)
+#elif defined(PCA10059) || defined(M5_COREINK) || defined(LORA_TYPE)
         adafruitDisplay->nextPage();
 
 #elif defined(PRIVATE_HW) || defined(my)
@@ -247,6 +251,12 @@ bool EInkDisplay::connect()
         adafruitDisplay->setRotation(3);
         adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
     }
+#elif defined(LORA_TYPE)
+    auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
+    adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+    adafruitDisplay->init(115200, true, 40, false, SPI, SPISettings(4000000, MSBFIRST, SPI_MODE0));
+    adafruitDisplay->setRotation(3);
+    adafruitDisplay->setPartialWindow(0, 0, EPD_WIDTH, EPD_HEIGHT);
 #elif defined(M5_COREINK)
     auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
     adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);

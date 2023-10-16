@@ -121,6 +121,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_PICOMPUTER_S3
 #elif defined(HELTEC_HT62)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_HT62
+#elif defined(LORA_TYPE)
+#define HW_VENDOR meshtastic_HardwareModel_LORA_TYPE
 #endif
 
 // -----------------------------------------------------------------------------

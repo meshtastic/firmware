@@ -615,9 +615,14 @@ void setup()
     SPI.begin();
 #else
     // ESP32
+#ifdef LORA_TYPE
+    SPI.begin(PIN_EINK_SCLK, 15, PIN_EINK_MOSI, PIN_EINK_CS);
+#else
     SPI.begin(RF95_SCK, RF95_MISO, RF95_MOSI, RF95_NSS);
+#endif
     LOG_WARN("SPI.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)\n", RF95_SCK, RF95_MISO, RF95_MOSI, RF95_NSS);
     SPI.setFrequency(4000000);
+
 #endif
 
     // Initialize the screen first so we can show the logo while we start up everything else.
@@ -661,8 +666,13 @@ void setup()
     digitalWrite(SX126X_ANT_SW, 1);
 #endif
 
+
 #ifdef HW_SPI1_DEVICE
     LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI1, spiSettings);
+#elif LORA_TYPE
+    SPIClass radioSPI(VSPI);
+    radioSPI.begin(RF95_SCK, RF95_MISO, RF95_MOSI, RF95_NSS);
+    LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(radioSPI, spiSettings);
 #else // HW_SPI1_DEVICE
     LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
 #endif
