@@ -692,6 +692,10 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
     jsonObj["channel"] = new JSONValue((uint)mp->channel);
     jsonObj["type"] = new JSONValue(msgType.c_str());
     jsonObj["sender"] = new JSONValue(owner.id);
+    if (mp->rx_rssi != 0)
+        jsonObj["rssi"] = new JSONValue(mp->rx_rssi);
+    if (mp->rx_snr != 0)
+        jsonObj["snr"] = new JSONValue(mp->rx_snr);
 
     // serialize and write it to the stream
     JSONValue *value = new JSONValue(jsonObj);
