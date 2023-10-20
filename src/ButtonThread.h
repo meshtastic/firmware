@@ -164,15 +164,17 @@ class ButtonThread : public concurrency::OSThread
 
     static void userButtonMultiPressed()
     {
-#if defined(GPS_POWER_TOGGLE)
-        if (config.position.gps_enabled) {
-            LOG_DEBUG("Flag set to false for gps power\n");
-        } else {
-            LOG_DEBUG("Flag set to true to restore power\n");
+        if (!config.device.disable_triple_click && (gps != nullptr)) {
+            config.position.gps_enabled = !(config.position.gps_enabled);
+            if (config.position.gps_enabled) {
+                LOG_DEBUG("Flag set to true to restore power\n");
+                gps->enable();
+
+            } else {
+                LOG_DEBUG("Flag set to false for gps power\n");
+                gps->disable();
+            }
         }
-        config.position.gps_enabled = !(config.position.gps_enabled);
-        doGPSpowersave(config.position.gps_enabled);
-#endif
     }
 
     static void userButtonPressedLongStart()

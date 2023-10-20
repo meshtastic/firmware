@@ -90,39 +90,34 @@ void setLed(bool ledOn)
 #endif
 }
 
-void setGPSPower(bool on)
-{
-    LOG_INFO("Setting GPS power=%d\n", on);
-
-#ifdef PIN_GPS_EN
-    digitalWrite(PIN_GPS_EN, on ? 1 : 0);
-#endif
-
-#ifdef HAS_PMU
-    if (pmu_found && PMU) {
-        uint8_t model = PMU->getChipModel();
-        if (model == XPOWERS_AXP2101) {
-            if (HW_VENDOR == meshtastic_HardwareModel_TBEAM) {
-                // t-beam v1.2 GNSS power channel
-                on ? PMU->enablePowerOutput(XPOWERS_ALDO3) : PMU->disablePowerOutput(XPOWERS_ALDO3);
-            } else if (HW_VENDOR == meshtastic_HardwareModel_LILYGO_TBEAM_S3_CORE) {
-                // t-beam-s3-core GNSS  power channel
-                on ? PMU->enablePowerOutput(XPOWERS_ALDO4) : PMU->disablePowerOutput(XPOWERS_ALDO4);
-            }
-        } else if (model == XPOWERS_AXP192) {
-            // t-beam v1.1 GNSS  power channel
-            on ? PMU->enablePowerOutput(XPOWERS_LDO3) : PMU->disablePowerOutput(XPOWERS_LDO3);
-        }
-    }
-#endif
-}
-
 // Perform power on init that we do on each wake from deep sleep
 void initDeepSleep()
 {
 #ifdef ARCH_ESP32
     bootCount++;
+    const char *reason;
     wakeCause = esp_sleep_get_wakeup_cause();
+
+    switch (wakeCause) {
+    case ESP_SLEEP_WAKEUP_EXT0:
+        reason = "ext0 RTC_IO";
+        break;
+    case ESP_SLEEP_WAKEUP_EXT1:
+        reason = "ext1 RTC_CNTL";
+        break;
+    case ESP_SLEEP_WAKEUP_TIMER:
+        reason = "timer";
+        break;
+    case ESP_SLEEP_WAKEUP_TOUCHPAD:
+        reason = "touchpad";
+        break;
+    case ESP_SLEEP_WAKEUP_ULP:
+        reason = "ULP program";
+        break;
+    default:
+        reason = "reset";
+        break;
+    }
     /*
       Not using yet because we are using wake on all buttons being low
 
@@ -133,7 +128,6 @@ void initDeepSleep()
 
 #ifdef DEBUG_PORT
     // If we booted because our timer ran out or the user pressed reset, send those as fake events
-    const char *reason = "reset"; // our best guess
     RESET_REASON hwReason = rtc_get_reset_reason(0);
 
     if (hwReason == RTCWDT_BROWN_OUT_RESET)
@@ -144,9 +138,6 @@ void initDeepSleep()
 
     if (hwReason == TG1WDT_SYS_RESET)
         reason = "intWatchdog";
-
-    if (wakeCause == ESP_SLEEP_WAKEUP_TIMER)
-        reason = "timeout";
 
     LOG_INFO("Booted, wake cause %d (boot count %d), reset_reason=%s\n", wakeCause, bootCount, reason);
 #endif
@@ -162,16 +153,18 @@ bool doPreflightSleep()
 }
 
 /// Tell devices we are going to sleep and wait for them to handle things
-static void waitEnterSleep()
+static void waitEnterSleep(bool skipPreflight = false)
 {
-    uint32_t now = millis();
-    while (!doPreflightSleep()) {
-        delay(100); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
+    if (!skipPreflight) {
+        uint32_t now = millis();
+        while (!doPreflightSleep()) {
+            delay(100); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
 
-        if (millis() - now > 30 * 1000) { // If we wait too long just report an error and go to sleep
-            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_SLEEP_ENTER_WAIT);
-            assert(0); // FIXME - for now we just restart, need to fix bug #167
-            break;
+            if (millis() - now > 30 * 1000) { // If we wait too long just report an error and go to sleep
+                RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_SLEEP_ENTER_WAIT);
+                assert(0); // FIXME - for now we just restart, need to fix bug #167
+                break;
+            }
         }
     }
 
@@ -182,31 +175,7 @@ static void waitEnterSleep()
     notifySleep.notifyObservers(NULL);
 }
 
-void doGPSpowersave(bool on)
-{
-#if defined(HAS_PMU) || defined(PIN_GPS_EN)
-    if (on) {
-        LOG_INFO("Turning GPS back on\n");
-        gps->forceWake(1);
-        setGPSPower(1);
-    } else {
-        LOG_INFO("Turning off GPS chip\n");
-        notifyGPSSleep.notifyObservers(NULL);
-        setGPSPower(0);
-    }
-#endif
-#ifdef PIN_GPS_WAKE
-    if (on) {
-        LOG_INFO("Waking GPS");
-        gps->forceWake(1);
-    } else {
-        LOG_INFO("GPS entering sleep");
-        notifyGPSSleep.notifyObservers(NULL);
-    }
-#endif
-}
-
-void doDeepSleep(uint32_t msecToWake)
+void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
 {
     if (INCLUDE_vTaskSuspend && (msecToWake == portMAX_DELAY)) {
         LOG_INFO("Entering deep sleep forever\n");
@@ -216,7 +185,7 @@ void doDeepSleep(uint32_t msecToWake)
 
     // not using wifi yet, but once we are this is needed to shutoff the radio hw
     // esp_wifi_stop();
-    waitEnterSleep();
+    waitEnterSleep(skipPreflight);
     notifyDeepSleep.notifyObservers(NULL);
 
     screen->doDeepSleep(); // datasheet says this will draw only 10ua
@@ -224,7 +193,8 @@ void doDeepSleep(uint32_t msecToWake)
     nodeDB.saveToDisk();
 
     // Kill GPS power completely (even if previously we just had it in sleep mode)
-    setGPSPower(false);
+    if (gps)
+        gps->setGPSPower(false, false, 0);
 
     setLed(false);
 
@@ -232,7 +202,13 @@ void doDeepSleep(uint32_t msecToWake)
     digitalWrite(RESET_OLED, 1); // put the display in reset before killing its power
 #endif
 
-#ifdef VEXT_ENABLE
+#if defined(VEXT_ENABLE_V03)
+    if (heltec_version == 3) {
+        digitalWrite(VEXT_ENABLE_V03, 1); // turn off the display power
+    } else {
+        digitalWrite(VEXT_ENABLE_V05, 0); // turn off the display power
+    }
+#elif defined(VEXT_ENABLE)
     digitalWrite(VEXT_ENABLE, 1); // turn off the display power
 #endif
 
@@ -278,7 +254,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 {
     // LOG_DEBUG("Enter light sleep\n");
 
-    waitEnterSleep();
+    waitEnterSleep(false);
 
     uint64_t sleepUsec = sleepMsec * 1000LL;
 

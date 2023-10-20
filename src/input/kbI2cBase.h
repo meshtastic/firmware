@@ -19,4 +19,5 @@ class KbI2cBase : public Observable<const InputEvent *>, public concurrency::OST
     TwoWire *i2cBus = 0;
 
     BBQ10Keyboard Q10keyboard;
+    bool is_sym = false;
 };

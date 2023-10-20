@@ -24,6 +24,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #if HAS_SCREEN
 #include <OLEDDisplay.h>
 
+#include "DisplayFormatters.h"
 #include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -160,15 +161,7 @@ static void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDispl
              xstr(APP_VERSION_SHORT)); // Note: we don't bother printing region or now, it makes the string too long
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(buf), y + 0, buf);
     screen->forceDisplay();
-
     // FIXME - draw serial # somewhere?
-}
-
-static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    // Draw region in upper left
-    const char *region = myRegion ? myRegion->name : NULL;
-    drawIconScreen(region, display, state, x, y);
 }
 
 static void drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -218,6 +211,28 @@ static void drawOEMBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
     // Draw region in upper left
     const char *region = myRegion ? myRegion->name : NULL;
     drawOEMIconScreen(region, display, state, x, y);
+}
+
+static void drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *message)
+{
+    uint16_t x_offset = display->width() / 2;
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->setFont(FONT_MEDIUM);
+    display->drawString(x_offset + x, 26 + y, message);
+}
+
+static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+#ifdef ARCH_ESP32
+    if (wakeCause == ESP_SLEEP_WAKEUP_TIMER || wakeCause == ESP_SLEEP_WAKEUP_EXT1) {
+        drawFrameText(display, state, x, y, "Resuming...");
+    } else
+#endif
+    {
+        // Draw region in upper left
+        const char *region = myRegion ? myRegion->name : NULL;
+        drawIconScreen(region, display, state, x, y);
+    }
 }
 
 // Used on boot when a certificate is being created
@@ -318,22 +333,6 @@ static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, 
     deviceName.concat(getDeviceName());
     y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_LARGE - 6 : y_offset + FONT_HEIGHT_LARGE + 5;
     display->drawString(x_offset + x, y_offset + y, deviceName);
-}
-
-static void drawFrameShutdown(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    uint16_t x_offset = display->width() / 2;
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->setFont(FONT_MEDIUM);
-    display->drawString(x_offset + x, 26 + y, "Shutting down...");
-}
-
-static void drawFrameReboot(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    uint16_t x_offset = display->width() / 2;
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->setFont(FONT_MEDIUM);
-    display->drawString(x_offset + x, 26 + y, "Rebooting...");
 }
 
 static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -906,20 +905,6 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     drawColumns(display, x, y, fields);
 }
 
-// #ifdef RAK4630
-// Screen::Screen(uint8_t address, int sda, int scl) : OSThread("Screen"), cmdQueue(32), dispdev(address, sda, scl),
-// dispdev_oled(address, sda, scl), ui(&dispdev)
-// {
-//     address_found = address;
-//     cmdQueue.setReader(this);
-//     if (screen_found) {
-//         (void)dispdev;
-//         AutoOLEDWire dispdev = dispdev_oled;
-//         (void)ui;
-//         OLEDDisplayUi ui(&dispdev);
-//     }
-// }
-// #else
 Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_OledType screenType, OLEDDISPLAY_GEOMETRY geometry)
     : concurrency::OSThread("Screen"), address_found(address), model(screenType), geometry(geometry), cmdQueue(32),
       dispdev(address.address, -1, -1, geometry, (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE),
@@ -927,7 +912,7 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 {
     cmdQueue.setReader(this);
 }
-// #endif
+
 /**
  * Prepare the display for the unit going to the lowest power mode possible.  Most screens will just
  * poweroff, but eink screens will show a "I'm sleeping" graphic, possibly with a QR code
@@ -1244,11 +1229,8 @@ void Screen::setWelcomeFrames()
 {
     if (address_found.address) {
         // LOG_DEBUG("showing Welcome frames\n");
-        ui.disableAllIndicators();
-
-        static FrameCallback welcomeFrames[] = {drawWelcomeScreen};
-        ui.setFrames(welcomeFrames, 1);
-        ui.update();
+        static FrameCallback frames[] = {drawWelcomeScreen};
+        setFrameImmediateDraw(frames);
     }
 }
 
@@ -1335,12 +1317,15 @@ void Screen::handleStartBluetoothPinScreen(uint32_t pin)
     LOG_DEBUG("showing bluetooth screen\n");
     showingNormalScreen = false;
 
-    static FrameCallback btFrames[] = {drawFrameBluetooth};
-
+    static FrameCallback frames[] = {drawFrameBluetooth};
     snprintf(btPIN, sizeof(btPIN), "%06u", pin);
+    setFrameImmediateDraw(frames);
+}
 
+void Screen::setFrameImmediateDraw(FrameCallback *drawFrames)
+{
     ui.disableAllIndicators();
-    ui.setFrames(btFrames, 1);
+    ui.setFrames(drawFrames, 1);
     setFastFramerate();
 }
 
@@ -1349,11 +1334,12 @@ void Screen::handleShutdownScreen()
     LOG_DEBUG("showing shutdown screen\n");
     showingNormalScreen = false;
 
-    static FrameCallback shutdownFrames[] = {drawFrameShutdown};
+    auto frame = [](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
+        drawFrameText(display, state, x, y, "Shutting down...");
+    };
+    static FrameCallback frames[] = {frame};
 
-    ui.disableAllIndicators();
-    ui.setFrames(shutdownFrames, 1);
-    setFastFramerate();
+    setFrameImmediateDraw(frames);
 }
 
 void Screen::handleRebootScreen()
@@ -1361,11 +1347,11 @@ void Screen::handleRebootScreen()
     LOG_DEBUG("showing reboot screen\n");
     showingNormalScreen = false;
 
-    static FrameCallback rebootFrames[] = {drawFrameReboot};
-
-    ui.disableAllIndicators();
-    ui.setFrames(rebootFrames, 1);
-    setFastFramerate();
+    auto frame = [](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
+        drawFrameText(display, state, x, y, "Rebooting...");
+    };
+    static FrameCallback frames[] = {frame};
+    setFrameImmediateDraw(frames);
 }
 
 void Screen::handleStartFirmwareUpdateScreen()
@@ -1373,11 +1359,8 @@ void Screen::handleStartFirmwareUpdateScreen()
     LOG_DEBUG("showing firmware screen\n");
     showingNormalScreen = false;
 
-    static FrameCallback btFrames[] = {drawFrameFirmware};
-
-    ui.disableAllIndicators();
-    ui.setFrames(btFrames, 1);
-    setFastFramerate();
+    static FrameCallback frames[] = {drawFrameFirmware};
+    setFrameImmediateDraw(frames);
 }
 
 void Screen::blink()
@@ -1638,65 +1621,8 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
     } else {
         // Codes:
         // https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/wifi.html#wi-fi-reason-code
-        if (getWifiDisconnectReason() == 2) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Authentication Invalid");
-        } else if (getWifiDisconnectReason() == 3) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "De-authenticated");
-        } else if (getWifiDisconnectReason() == 4) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Disassociated Expired");
-        } else if (getWifiDisconnectReason() == 5) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "AP - Too Many Clients");
-        } else if (getWifiDisconnectReason() == 6) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "NOT_AUTHED");
-        } else if (getWifiDisconnectReason() == 7) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "NOT_ASSOCED");
-        } else if (getWifiDisconnectReason() == 8) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Disassociated");
-        } else if (getWifiDisconnectReason() == 9) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "ASSOC_NOT_AUTHED");
-        } else if (getWifiDisconnectReason() == 10) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "DISASSOC_PWRCAP_BAD");
-        } else if (getWifiDisconnectReason() == 11) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "DISASSOC_SUPCHAN_BAD");
-        } else if (getWifiDisconnectReason() == 13) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IE_INVALID");
-        } else if (getWifiDisconnectReason() == 14) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "MIC_FAILURE");
-        } else if (getWifiDisconnectReason() == 15) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "AP Handshake Timeout");
-        } else if (getWifiDisconnectReason() == 16) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "GROUP_KEY_UPDATE_TIMEOUT");
-        } else if (getWifiDisconnectReason() == 17) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "IE_IN_4WAY_DIFFERS");
-        } else if (getWifiDisconnectReason() == 18) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Invalid Group Cipher");
-        } else if (getWifiDisconnectReason() == 19) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Invalid Pairwise Cipher");
-        } else if (getWifiDisconnectReason() == 20) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "AKMP_INVALID");
-        } else if (getWifiDisconnectReason() == 21) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "UNSUPP_RSN_IE_VERSION");
-        } else if (getWifiDisconnectReason() == 22) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "INVALID_RSN_IE_CAP");
-        } else if (getWifiDisconnectReason() == 23) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "802_1X_AUTH_FAILED");
-        } else if (getWifiDisconnectReason() == 24) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "CIPHER_SUITE_REJECTED");
-        } else if (getWifiDisconnectReason() == 200) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "BEACON_TIMEOUT");
-        } else if (getWifiDisconnectReason() == 201) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "AP Not Found");
-        } else if (getWifiDisconnectReason() == 202) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "AUTH_FAIL");
-        } else if (getWifiDisconnectReason() == 203) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "ASSOC_FAIL");
-        } else if (getWifiDisconnectReason() == 204) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "HANDSHAKE_TIMEOUT");
-        } else if (getWifiDisconnectReason() == 205) {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Connection Failed");
-        } else {
-            display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Unknown Status");
-        }
+        display->drawString(x, y + FONT_HEIGHT_SMALL * 1,
+                            WiFi.disconnectReasonName(static_cast<wifi_err_reason_t>(getWifiDisconnectReason())));
     }
 
     display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
@@ -1743,37 +1669,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
             display->drawString(x + 1, y, String("USB"));
     }
 
-    auto mode = "";
-
-    switch (config.lora.modem_preset) {
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
-        mode = "ShortS";
-        break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
-        mode = "ShortF";
-        break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
-        mode = "MedS";
-        break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
-        mode = "MedF";
-        break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
-        mode = "LongS";
-        break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST:
-        mode = "LongF";
-        break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
-        mode = "LongM";
-        break;
-    case meshtastic_Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW:
-        mode = "VeryL";
-        break;
-    default:
-        mode = "Custom";
-        break;
-    }
+    auto mode = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, true);
 
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(mode), y, mode);
     if (config.display.heading_bold)
@@ -1839,23 +1735,6 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
         display->setPixel(0, 0);
     heartbeat = !heartbeat;
 #endif
-}
-// adjust Brightness cycle through 1 to 254 as long as attachDuringLongPress is true
-void Screen::adjustBrightness()
-{
-    if (!useDisplay)
-        return;
-
-    if (brightness == 254) {
-        brightness = 0;
-    } else {
-        brightness++;
-    }
-    int width = brightness / (254.00 / SCREEN_WIDTH);
-    dispdev.drawRect(0, 30, SCREEN_WIDTH, 4);
-    dispdev.fillRect(0, 31, width, 2);
-    dispdev.display();
-    dispdev.setBrightness(brightness);
 }
 
 int Screen::handleStatusUpdate(const meshtastic::Status *arg)

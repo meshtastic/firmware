@@ -89,8 +89,8 @@ static const uint8_t A7 = PIN_A7;
 
 // Other pins
 #define PIN_AREF (0xff)
-//#define PIN_NFC1 (9)
-//#define PIN_NFC2 (10)
+// #define PIN_NFC1 (9)
+// #define PIN_NFC2 (10)
 
 static const uint8_t AREF = PIN_AREF;
 
@@ -158,7 +158,8 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define SX126X_RESET (0 + 17)
 #define SX126X_TXEN (0 + 24)
 #define SX126X_RXEN (0 + 22)
-#define SX126X_E22 // Not really an E22 but this board clones using DIO3 for tcxo control
+// Not really an E22 but this board clones using DIO3 for tcxo control
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
 // FIXME, to prevent burning out parts I've set the power level super low, because I don't have
 // an antenna wired up

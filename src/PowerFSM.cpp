@@ -8,7 +8,6 @@
  * actions to be taken upon entering or exiting each state.
  */
 #include "PowerFSM.h"
-#include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "configuration.h"
@@ -46,7 +45,7 @@ static void sdsEnter()
 {
     LOG_DEBUG("Enter state: SDS\n");
     // FIXME - make sure GPS and LORA radio are off first - because we want close to zero current draw
-    doDeepSleep(getConfiguredOrDefaultMs(config.power.sds_secs));
+    doDeepSleep(getConfiguredOrDefaultMs(config.power.sds_secs), false);
 }
 
 extern Power *power;
@@ -137,9 +136,6 @@ static void lsIdle()
 static void lsExit()
 {
     LOG_INFO("Exit state: LS\n");
-    // setGPSPower(true); // restore GPS power
-    if (gps)
-        gps->forceWake(true);
 }
 
 static void nbEnter()
@@ -249,6 +245,8 @@ Fsm powerFSM(&stateBOOT);
 void PowerFSM_setup()
 {
     bool isRouter = (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ? 1 : 0);
+    bool isTrackerOrSensor = config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
+                             config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR;
     bool hasPower = isPowered();
 
     LOG_INFO("PowerFSM init, USB power=%d\n", hasPower ? 1 : 0);
@@ -352,12 +350,12 @@ void PowerFSM_setup()
                                   getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL,
                                   "Screen-on timeout");
 
+// We never enter light-sleep or NB states on NRF52 (because the CPU uses so little power normally)
 #ifdef ARCH_ESP32
-    State *lowPowerState = &stateLS;
-    // We never enter light-sleep or NB states on NRF52 (because the CPU uses so little power normally)
-
     // See: https://github.com/meshtastic/firmware/issues/1071
-    if (isRouter || config.power.is_power_saving) {
+    // Don't add power saving transitions if we are a power saving tracker or sensor. Sleep will be initiatiated through the
+    // modules
+    if ((isRouter || config.power.is_power_saving) && !isTrackerOrSensor) {
         powerFSM.add_timed_transition(&stateNB, &stateLS,
                                       getConfiguredOrDefaultMs(config.power.min_wake_secs, default_min_wake_secs), NULL,
                                       "Min wake timeout");
@@ -365,10 +363,6 @@ void PowerFSM_setup()
                                       getConfiguredOrDefaultMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs),
                                       NULL, "Bluetooth timeout");
     }
-
-    if (config.power.sds_secs != UINT32_MAX)
-        powerFSM.add_timed_transition(lowPowerState, &stateSDS, getConfiguredOrDefaultMs(config.power.sds_secs), NULL,
-                                      "mesh timeout");
 #endif
 
     powerFSM.run_machine(); // run one iteration of the state machine, so we run our on enter tasks for the initial DARK state

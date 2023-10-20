@@ -29,6 +29,7 @@
 #include "target_specific.h"
 #include <Wire.h>
 #include <memory>
+#include <utility>
 // #include <driver/rtc_io.h>
 
 #include "mesh/eth/ethClient.h"
@@ -73,6 +74,7 @@ NRF52Bluetooth *nrf52Bluetooth;
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 #include "AccelerometerThread.h"
+#include "AmbientLightingThread.h"
 #endif
 
 using namespace concurrency;
@@ -121,9 +123,8 @@ uint32_t serialSinceMsec;
 
 bool pmu_found;
 
-// Array map of sensor types (as array index) and i2c address as value we'll find in the i2c scan
-uint8_t nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1] = {
-    0}; // one is enough, missing elements will be initialized to 0 anyway.
+// Array map of sensor types with i2c address and wire as we'll find in the i2c scan
+std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1] = {};
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
 
@@ -144,6 +145,25 @@ const char *getDeviceName()
     }
     return name;
 }
+
+#ifdef VEXT_ENABLE_V03
+
+#include <soc/rtc.h>
+
+static uint32_t calibrate_one(rtc_cal_sel_t cal_clk, const char *name)
+{
+    const uint32_t cal_count = 1000;
+    uint32_t cali_val;
+    for (int i = 0; i < 5; ++i) {
+        cali_val = rtc_clk_cal(cal_clk, cal_count);
+    }
+    return cali_val;
+}
+
+int heltec_version = 3;
+
+#define CALIBRATE_ONE(cali_clk) calibrate_one(cali_clk, #cali_clk)
+#endif
 
 static int32_t ledBlinker()
 {
@@ -169,6 +189,7 @@ static OSThread *buttonThread;
 uint32_t ButtonThread::longPressTime = 0;
 #endif
 static OSThread *accelerometerThread;
+static OSThread *ambientLightingThread;
 SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 
 RadioInterface *rIf = NULL;
@@ -214,12 +235,59 @@ void setup()
     digitalWrite(PIN_EINK_PWR_ON, HIGH);
 #endif
 
-#ifdef VEXT_ENABLE
+#ifdef ST7735_BL_V03 // Heltec Wireless Tracker PCB Change Detect/Hack
+
+    rtc_clk_32k_enable(true);
+    CALIBRATE_ONE(RTC_CAL_RTC_MUX);
+    if (CALIBRATE_ONE(RTC_CAL_32K_XTAL) != 0) {
+        rtc_clk_slow_freq_set(RTC_SLOW_FREQ_32K_XTAL);
+        CALIBRATE_ONE(RTC_CAL_RTC_MUX);
+        CALIBRATE_ONE(RTC_CAL_32K_XTAL);
+    }
+
+    if (rtc_clk_slow_freq_get() != RTC_SLOW_FREQ_32K_XTAL) {
+        heltec_version = 3;
+    } else {
+        heltec_version = 5;
+    }
+#endif
+
+#if defined(VEXT_ENABLE_V03)
+    if (heltec_version == 3) {
+        pinMode(VEXT_ENABLE_V03, OUTPUT);
+        digitalWrite(VEXT_ENABLE_V03, 0); // turn on the display power
+        LOG_DEBUG("HELTEC Detect Tracker V1.0\n");
+    } else {
+        pinMode(VEXT_ENABLE_V05, OUTPUT);
+        digitalWrite(VEXT_ENABLE_V05, 1); // turn on the display power
+        LOG_DEBUG("HELTEC Detect Tracker V1.1\n");
+    }
+#elif defined(VEXT_ENABLE)
     pinMode(VEXT_ENABLE, OUTPUT);
     digitalWrite(VEXT_ENABLE, 0); // turn on the display power
 #endif
 
-#ifdef VGNSS_CTRL
+#if defined(VGNSS_CTRL_V03)
+    if (heltec_version == 3) {
+        pinMode(VGNSS_CTRL_V03, OUTPUT);
+        digitalWrite(VGNSS_CTRL_V03, LOW);
+    } else {
+        pinMode(VGNSS_CTRL_V05, OUTPUT);
+        digitalWrite(VGNSS_CTRL_V05, LOW);
+    }
+#endif
+
+#if defined(VTFT_CTRL_V03)
+    if (heltec_version == 3) {
+        pinMode(VTFT_CTRL_V03, OUTPUT);
+        digitalWrite(VTFT_CTRL_V03, LOW);
+    } else {
+        pinMode(VTFT_CTRL_V05, OUTPUT);
+        digitalWrite(VTFT_CTRL_V05, LOW);
+    }
+#endif
+
+#if defined(VGNSS_CTRL)
     pinMode(VGNSS_CTRL, OUTPUT);
     digitalWrite(VGNSS_CTRL, LOW);
 #endif
@@ -409,14 +477,6 @@ void setup()
 // Only one supported RGB LED currently
 #ifdef HAS_NCP5623
     rgb_found = i2cScanner->find(ScanI2C::DeviceType::NCP5623);
-
-    // Start the RGB LED at 50%
-
-    if (rgb_found.type == ScanI2C::NCP5623) {
-        rgb.begin();
-        rgb.setCurrent(10);
-        rgb.setColor(128, 128, 128);
-    }
 #endif
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
@@ -431,7 +491,8 @@ void setup()
     {                                                                                                                            \
         auto found = i2cScanner->find(SCANNER_T);                                                                                \
         if (found.type != ScanI2C::DeviceType::NONE) {                                                                           \
-            nodeTelemetrySensorsMap[PB_T] = found.address.address;                                                               \
+            nodeTelemetrySensorsMap[PB_T].first = found.address.address;                                                         \
+            nodeTelemetrySensorsMap[PB_T].second = i2cScanner->fetchI2CBus(found.address);                                       \
             LOG_DEBUG("found i2c sensor %s\n", STRING(PB_T));                                                                    \
         }                                                                                                                        \
     }
@@ -521,6 +582,12 @@ void setup()
     }
 #endif
 
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+    if (rgb_found.type != ScanI2C::DeviceType::NONE) {
+        ambientLightingThread = new AmbientLightingThread(rgb_found.type);
+    }
+#endif
+
 #ifdef T_WATCH_S3
     drv.begin();
     drv.selectLibrary(1);
@@ -558,14 +625,12 @@ void setup()
 
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 
-    gps = createGps();
-
+    gps = GPS::createGps();
     if (gps) {
         gpsStatus->observe(&gps->newStatus);
     } else {
-        LOG_WARN("No GPS found - running without GPS\n");
+        LOG_DEBUG("Running without GPS.\n");
     }
-
     nodeStatus->observe(&nodeDB.newStatus);
 
     service.init();
@@ -589,17 +654,6 @@ void setup()
 #endif
 
     screen->print("Started...\n");
-
-    // We have now loaded our saved preferences from flash
-
-    // ONCE we will factory reset the GPS for bug #327
-    if (gps && !devicestate.did_gps_reset) {
-        LOG_WARN("GPS FactoryReset requested\n");
-        if (gps->factoryReset()) { // If we don't succeed try again next time
-            devicestate.did_gps_reset = true;
-            nodeDB.saveToDisk(SEGMENT_DEVICESTATE);
-        }
-    }
 
 #ifdef SX126X_ANT_SW
     // make analog PA vs not PA switch on SX126x eval board work properly
@@ -755,7 +809,6 @@ void setup()
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
     powerFSMthread = new PowerFSMThread();
 
-    // setBluetoothEnable(false); we now don't start bluetooth until we enter the proper state
     setCPUFast(false); // 80MHz is fine for our slow peripherals
 }
 

@@ -31,6 +31,8 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
      */
     void sendOurPosition(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false, uint8_t channel = 0);
 
+    void handleNewPosition();
+
   protected:
     /** Called to handle a particular incoming message
 
@@ -44,6 +46,18 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
 
     /** Does our periodic broadcast */
     virtual int32_t runOnce() override;
+
+  private:
+    struct SmartPosition getDistanceTraveledSinceLastSend(meshtastic_PositionLite currentPosition);
+
+    /** Only used in power saving trackers for now */
+    void clearPosition();
+};
+
+struct SmartPosition {
+    float distanceTraveled;
+    uint32_t distanceThreshold;
+    bool hasTraveledOverThreshold;
 };
 
 extern PositionModule *positionModule;

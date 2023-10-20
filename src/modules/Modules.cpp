@@ -31,7 +31,7 @@
 #if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)
 #include "modules/ExternalNotificationModule.h"
 #include "modules/RangeTestModule.h"
-#if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(CONFIG_IDF_TARGET_ESP32S2)
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)) && !defined(CONFIG_IDF_TARGET_ESP32S2)
 #include "modules/SerialModule.h"
 #endif
 #endif
@@ -60,9 +60,15 @@ void setupModules()
         new ReplyModule();
 #if HAS_BUTTON
         rotaryEncoderInterruptImpl1 = new RotaryEncoderInterruptImpl1();
-        rotaryEncoderInterruptImpl1->init();
+        if (!rotaryEncoderInterruptImpl1->init()) {
+            delete rotaryEncoderInterruptImpl1;
+            rotaryEncoderInterruptImpl1 = nullptr;
+        }
         upDownInterruptImpl1 = new UpDownInterruptImpl1();
-        upDownInterruptImpl1->init();
+        if (!upDownInterruptImpl1->init()) {
+            delete upDownInterruptImpl1;
+            upDownInterruptImpl1 = nullptr;
+        }
         cardKbI2cImpl = new CardKbI2cImpl();
         cardKbI2cImpl->init();
 #ifdef INPUTBROKER_MATRIX_TYPE
@@ -82,11 +88,12 @@ void setupModules()
 #endif
 #if HAS_SENSOR
         new EnvironmentTelemetryModule();
-        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_PMSA003I] > 0) {
+        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_PMSA003I].first > 0) {
             new AirQualityTelemetryModule();
         }
 #endif
-#if (defined(ARCH_ESP32) || defined(ARCH_NRF52)) && !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3)
+#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)) && !defined(CONFIG_IDF_TARGET_ESP32S2) &&               \
+    !defined(CONFIG_IDF_TARGET_ESP32C3)
         new SerialModule();
 #endif
 #ifdef ARCH_ESP32

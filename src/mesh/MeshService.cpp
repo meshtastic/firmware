@@ -335,13 +335,11 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
     // Used fixed position if configured regalrdless of GPS lock
     if (config.position.fixed_position) {
         LOG_WARN("Using fixed position\n");
-        pos = ConvertToPosition(node->position);
+        pos = TypeConversions::ConvertToPosition(node->position);
     }
 
-    // Finally add a fresh timestamp and battery level reading
-    // I KNOW this is redundant with refreshLocalMeshNode() above, but these are
-    //   inexpensive nonblocking calls and can be refactored in due course
-    pos.time = getValidTime(RTCQualityGPS);
+    // Add a fresh timestamp
+    pos.time = getValidTime(RTCQualityFromNet);
 
     // In debug logs, identify position by @timestamp:stage (stage 4 = nodeDB)
     LOG_DEBUG("onGPSChanged() pos@%x, time=%u, lat=%d, lon=%d, alt=%d\n", pos.timestamp, pos.time, pos.latitude_i,
