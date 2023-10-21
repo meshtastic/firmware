@@ -1,11 +1,23 @@
+/**
+ * @file Power.cpp
+ * @brief This file contains the implementation of the Power class, which is responsible for managing power-related functionality
+ * of the device. It includes battery level sensing, power management unit (PMU) control, and power state machine management. The
+ * Power class is used by the main device class to manage power-related functionality.
+ *
+ * The file also includes implementations of various battery level sensors, such as the AnalogBatteryLevel class, which assumes
+ * the battery voltage is attached via a voltage-divider to an analog input.
+ *
+ * This file is part of the Meshtastic project.
+ * For more information, see: https://meshtastic.org/
+ */
 #include "power.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "buzz/buzz.h"
 #include "configuration.h"
 #include "main.h"
+#include "meshUtils.h"
 #include "sleep.h"
-#include "utils.h"
 
 #ifdef DEBUG_HEAP_MQTT
 #include "mqtt/MQTT.h"
@@ -163,9 +175,21 @@ class AnalogBatteryLevel : public HasBatteryLevel
             uint32_t raw = 0;
 #ifdef ARCH_ESP32
 #ifndef BAT_MEASURE_ADC_UNIT // ADC1
+#ifdef ADC_CTRL
+            if (heltec_version == 5) {
+                pinMode(ADC_CTRL, OUTPUT);
+                digitalWrite(ADC_CTRL, HIGH);
+                delay(10);
+            }
+#endif
             for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
                 raw += adc1_get_raw(adc_channel);
             }
+#ifdef ADC_CTRL
+            if (heltec_version == 5) {
+                digitalWrite(ADC_CTRL, LOW);
+            }
+#endif
 #else  // ADC2
             int32_t adc_buf = 0;
             for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
@@ -209,10 +233,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /**
      * return true if there is a battery installed in this unit
      */
-    virtual bool isBatteryConnect() override
-    {
-        return getBatteryPercent() != -1;
-    }
+    virtual bool isBatteryConnect() override { return getBatteryPercent() != -1; }
 
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
     /// in power
@@ -233,10 +254,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
     /// Assume charging if we have a battery and external power is connected.
     /// we can't be smart enough to say 'full'?
-    virtual bool isCharging() override
-    {
-        return isBatteryConnect() && isVbusIn();
-    }
+    virtual bool isCharging() override { return isBatteryConnect() && isVbusIn(); }
 
   private:
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
@@ -263,9 +281,10 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #if defined(HAS_TELEMETRY) && !defined(ARCH_PORTDUINO)
     uint16_t getINAVoltage()
     {
-        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219] == config.power.device_battery_ina_address) {
+        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first == config.power.device_battery_ina_address) {
             return ina219Sensor.getBusVoltageMv();
-        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260] == config.power.device_battery_ina_address) {
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first ==
+                   config.power.device_battery_ina_address) {
             return ina260Sensor.getBusVoltageMv();
         }
         return 0;
@@ -276,11 +295,12 @@ class AnalogBatteryLevel : public HasBatteryLevel
         if (!config.power.device_battery_ina_address) {
             return false;
         }
-        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219] == config.power.device_battery_ina_address) {
+        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first == config.power.device_battery_ina_address) {
             if (!ina219Sensor.isInitialized())
                 return ina219Sensor.runOnce() > 0;
             return ina219Sensor.isRunning();
-        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260] == config.power.device_battery_ina_address) {
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first ==
+                   config.power.device_battery_ina_address) {
             if (!ina260Sensor.isInitialized())
                 return ina260Sensor.runOnce() > 0;
             return ina260Sensor.isRunning();
@@ -366,6 +386,11 @@ bool Power::analogInit()
 #endif
 }
 
+/**
+ * Initializes the Power class.
+ *
+ * @return true if the setup was successful, false otherwise.
+ */
 bool Power::setup()
 {
     bool found = axpChipInit();
@@ -403,7 +428,7 @@ void Power::shutdown()
 #ifdef PIN_LED3
     ledOff(PIN_LED2);
 #endif
-    doDeepSleep(DELAY_FOREVER);
+    doDeepSleep(DELAY_FOREVER, false);
 #endif
 }
 

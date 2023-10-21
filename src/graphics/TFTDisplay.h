@@ -3,7 +3,7 @@
 #include <OLEDDisplay.h>
 
 /**
- * An adapter class that allows using the TFT_eSPI library as if it was an OLEDDisplay implementation.
+ * An adapter class that allows using the LovyanGFX library as if it was an OLEDDisplay implementation.
  *
  * Remaining TODO:
  * optimize display() to only draw changed pixels (see other OLED subclasses for examples)
@@ -22,13 +22,18 @@ class TFTDisplay : public OLEDDisplay
     // Write the buffer to the display memory
     virtual void display(void) override;
 
+    // Turn the display upside down
+    virtual void flipScreenVertically();
+
+    // Touch screen (static handlers)
+    static bool hasTouch(void);
+    static bool getTouch(int16_t *x, int16_t *y);
+
     /**
      * shim to make the abstraction happy
      *
      */
     void setDetected(uint8_t detected);
-
-    void getTouch(int *x, int *y);
 
   protected:
     // the header size of the buffer used, e.g. for the SPI command header

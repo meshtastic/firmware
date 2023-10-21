@@ -19,7 +19,6 @@ class Screen
     void setup() {}
     void setOn(bool) {}
     void print(const char *) {}
-    void adjustBrightness() {}
     void doDeepSleep() {}
     void forceDisplay() {}
     void startBluetoothPinScreen(uint32_t pin) {}
@@ -53,6 +52,7 @@ class Screen
 #include "commands.h"
 #include "concurrency/LockGuard.h"
 #include "concurrency/OSThread.h"
+#include "input/InputBroker.h"
 #include "mesh/MeshModule.h"
 #include "power.h"
 #include <string>
@@ -118,6 +118,8 @@ class Screen : public concurrency::OSThread
         CallbackObserver<Screen, const meshtastic_MeshPacket *>(this, &Screen::handleTextMessage);
     CallbackObserver<Screen, const UIFrameEvent *> uiFrameEventObserver =
         CallbackObserver<Screen, const UIFrameEvent *>(this, &Screen::handleUIFrameEvent);
+    CallbackObserver<Screen, const InputEvent *> inputObserver =
+        CallbackObserver<Screen, const InputEvent *>(this, &Screen::handleInputEvent);
 
   public:
     explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
@@ -152,11 +154,12 @@ class Screen : public concurrency::OSThread
 
     void blink();
 
-    /// Handles a button press.
+    /// Handle button press, trackball or swipe action)
     void onPress() { enqueueCmd(ScreenCmd{.cmd = Cmd::ON_PRESS}); }
+    void showPrevFrame() { enqueueCmd(ScreenCmd{.cmd = Cmd::SHOW_PREV_FRAME}); }
+    void showNextFrame() { enqueueCmd(ScreenCmd{.cmd = Cmd::SHOW_NEXT_FRAME}); }
 
     // Implementation to Adjust Brightness
-    void adjustBrightness();
     uint8_t brightness = BRIGHTNESS_DEFAULT;
 
     /// Starts showing the Bluetooth PIN screen.
@@ -301,9 +304,11 @@ class Screen : public concurrency::OSThread
     // Use this handle to set things like battery status, user count, GPS status, etc.
     DebugInfo *debug_info() { return &debugInfo; }
 
+    // Handle observer events
     int handleStatusUpdate(const meshtastic::Status *arg);
     int handleTextMessage(const meshtastic_MeshPacket *arg);
     int handleUIFrameEvent(const UIFrameEvent *arg);
+    int handleInputEvent(const InputEvent *arg);
 
     /// Used to force (super slow) eink displays to draw critical frames
     void forceDisplay();
@@ -312,13 +317,6 @@ class Screen : public concurrency::OSThread
     void setSSLFrames();
 
     void setWelcomeFrames();
-
-    void getTouch(int *x, int *y)
-    {
-#if defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ST7789_CS)
-        dispdev.getTouch(x, y);
-#endif
-    };
 
   protected:
     /// Updates the UI.
@@ -350,6 +348,8 @@ class Screen : public concurrency::OSThread
     // Implementations of various commands, called from doTask().
     void handleSetOn(bool on);
     void handleOnPress();
+    void handleShowNextFrame();
+    void handleShowPrevFrame();
     void handleStartBluetoothPinScreen(uint32_t pin);
     void handlePrint(const char *text);
     void handleStartFirmwareUpdateScreen();
@@ -360,6 +360,9 @@ class Screen : public concurrency::OSThread
 
     /// Try to start drawing ASAP
     void setFastFramerate();
+
+    // Sets frame up for immediate drawing
+    void setFrameImmediateDraw(FrameCallback *drawFrames);
 
     /// Called when debug screen is to be drawn, calls through to debugInfo.drawFrame.
     static void drawDebugInfoTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);

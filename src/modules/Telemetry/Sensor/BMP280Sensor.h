@@ -2,7 +2,7 @@
 #include "TelemetrySensor.h"
 #include <Adafruit_BMP280.h>
 
-class BMP280Sensor : virtual public TelemetrySensor
+class BMP280Sensor : public TelemetrySensor
 {
   private:
     Adafruit_BMP280 bmp280;

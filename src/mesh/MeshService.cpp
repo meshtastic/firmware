@@ -82,8 +82,13 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
     powerFSM.trigger(EVENT_PACKET_FOR_PHONE); // Possibly keep the node from sleeping
 
     nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
-    if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB.getMeshNode(mp->from)->has_user &&
-        nodeInfoModule) {
+    if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+        mp->decoded.portnum == meshtastic_PortNum_TELEMETRY_APP && mp->decoded.request_id > 0) {
+        LOG_DEBUG(
+            "Received telemetry response. Skip sending our NodeInfo because this potentially a Repeater which will ignore our "
+            "request for its NodeInfo.\n");
+    } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB.getMeshNode(mp->from)->has_user &&
+               nodeInfoModule) {
         LOG_INFO("Heard a node on channel %d we don't know, sending NodeInfo and asking for a response.\n", mp->channel);
         nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
     }
@@ -315,28 +320,26 @@ meshtastic_NodeInfoLite *MeshService::refreshLocalMeshNode()
 int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
 {
     // Update our local node info with our position (even if we don't decide to update anyone else)
-    meshtastic_NodeInfoLite *node = refreshLocalMeshNode();
+    const meshtastic_NodeInfoLite *node = refreshLocalMeshNode();
     meshtastic_Position pos = meshtastic_Position_init_default;
 
     if (newStatus->getHasLock()) {
         // load data from GPS object, will add timestamp + battery further down
         pos = gps->p;
     } else {
-        // The GPS has lost lock, if we are fixed position we should just keep using
-        // the old position
+        // The GPS has lost lock
 #ifdef GPS_EXTRAVERBOSE
         LOG_DEBUG("onGPSchanged() - lost validLocation\n");
 #endif
-        if (config.position.fixed_position) {
-            LOG_WARN("Using fixed position\n");
-            pos = ConvertToPosition(node->position);
-        }
+    }
+    // Used fixed position if configured regalrdless of GPS lock
+    if (config.position.fixed_position) {
+        LOG_WARN("Using fixed position\n");
+        pos = TypeConversions::ConvertToPosition(node->position);
     }
 
-    // Finally add a fresh timestamp and battery level reading
-    // I KNOW this is redundant with refreshLocalMeshNode() above, but these are
-    //   inexpensive nonblocking calls and can be refactored in due course
-    pos.time = getValidTime(RTCQualityGPS);
+    // Add a fresh timestamp
+    pos.time = getValidTime(RTCQualityFromNet);
 
     // In debug logs, identify position by @timestamp:stage (stage 4 = nodeDB)
     LOG_DEBUG("onGPSChanged() pos@%x, time=%u, lat=%d, lon=%d, alt=%d\n", pos.timestamp, pos.time, pos.latitude_i,

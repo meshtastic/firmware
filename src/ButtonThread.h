@@ -101,23 +101,8 @@ class ButtonThread : public concurrency::OSThread
 #endif
         // if (!canSleep) LOG_DEBUG("Suppressing sleep!\n");
         // else LOG_DEBUG("sleep ok\n");
-#if defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ST7789_CS)
-        int x, y = 0;
-        screen->getTouch(&x, &y);
-        if (x > 0 && y > 0) {
-#ifdef T_WATCH_S3
-            drv.setWaveform(0, 75);
-            drv.setWaveform(1, 0); // end waveform
-            drv.go();
-#endif
-            LOG_DEBUG("touch %d %d\n", x, y);
-            powerFSM.trigger(EVENT_PRESS);
-            return 500; // Check for next touch every 500ms
-        }
 
-#endif
-
-        return 5;
+        return 50;
     }
 
   private:
@@ -179,15 +164,17 @@ class ButtonThread : public concurrency::OSThread
 
     static void userButtonMultiPressed()
     {
-#if defined(GPS_POWER_TOGGLE)
-        if (config.position.gps_enabled) {
-            LOG_DEBUG("Flag set to false for gps power\n");
-        } else {
-            LOG_DEBUG("Flag set to true to restore power\n");
+        if (!config.device.disable_triple_click && (gps != nullptr)) {
+            config.position.gps_enabled = !(config.position.gps_enabled);
+            if (config.position.gps_enabled) {
+                LOG_DEBUG("Flag set to true to restore power\n");
+                gps->enable();
+
+            } else {
+                LOG_DEBUG("Flag set to false for gps power\n");
+                gps->disable();
+            }
         }
-        config.position.gps_enabled = !(config.position.gps_enabled);
-        doGPSpowersave(config.position.gps_enabled);
-#endif
     }
 
     static void userButtonPressedLongStart()

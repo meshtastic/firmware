@@ -21,7 +21,7 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 {
     if (wasSeenRecently(p)) { // Note: this will also add a recent packet record
         printPacket("Ignoring incoming msg, because we've already seen it", p);
-        if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER &&
+        if (!moduleConfig.mqtt.enabled && config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER &&
             config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT &&
             config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER) {
             // cancel rebroadcast of this message *if* there was already one, unless we're a router/repeater!
@@ -49,10 +49,13 @@ void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
 
                 tosend->hop_limit--; // bump down the hop count
 
-                // If it is a traceRoute request, update the route that it went via me
-                if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && traceRouteModule &&
-                    traceRouteModule->wantPacket(p)) {
-                    traceRouteModule->updateRoute(tosend);
+                if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+                    // If it is a traceRoute request, update the route that it went via me
+                    if (traceRouteModule && traceRouteModule->wantPacket(p))
+                        traceRouteModule->updateRoute(tosend);
+                    // If it is a neighborInfo packet, update last_sent_by_id
+                    if (neighborInfoModule && neighborInfoModule->wantPacket(p))
+                        neighborInfoModule->updateLastSentById(tosend);
                 }
 
                 LOG_INFO("Rebroadcasting received floodmsg to neighbors\n");

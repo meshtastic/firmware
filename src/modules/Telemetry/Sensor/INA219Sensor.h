@@ -3,7 +3,7 @@
 #include "VoltageSensor.h"
 #include <Adafruit_INA219.h>
 
-class INA219Sensor : virtual public TelemetrySensor, VoltageSensor
+class INA219Sensor : public TelemetrySensor, VoltageSensor
 {
   private:
     Adafruit_INA219 ina219;

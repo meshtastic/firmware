@@ -20,6 +20,10 @@ enum cannedMessageModuleRunState {
  */
 #define CANNED_MESSAGE_MODULE_MESSAGES_SIZE 800
 
+#ifndef CANNED_MESSAGE_MODULE_ENABLE
+#define CANNED_MESSAGE_MODULE_ENABLE 0
+#endif
+
 class CannedMessageModule : public SinglePortModule, public Observable<const UIFrameEvent *>, private concurrency::OSThread
 {
     CallbackObserver<CannedMessageModule, const InputEvent *> inputObserver =
@@ -30,6 +34,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     const char *getCurrentMessage();
     const char *getPrevMessage();
     const char *getNextMessage();
+    const char *getMessageByIndex(int index);
     const char *getNodeName(NodeNum node);
     bool shouldDraw();
     void eventUp();

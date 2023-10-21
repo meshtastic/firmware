@@ -1,5 +1,9 @@
 #define LED_PIN 18
 
+// Enable bus for external periherals
+#define I2C_SDA SDA
+#define I2C_SCL SCL
+
 #define USE_EINK
 /*
  * eink display pins
@@ -36,4 +40,6 @@
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET
-#define SX126X_E22
+
+#define SX126X_DIO2_AS_RF_SWITCH
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8

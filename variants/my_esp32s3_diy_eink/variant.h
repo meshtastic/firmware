@@ -2,22 +2,22 @@
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 
-//#define HAS_SCREEN 0
-//#define HAS_SDCARD
-//#define SDCARD_USE_SPI1
+// #define HAS_SCREEN 0
+// #define HAS_SDCARD
+// #define SDCARD_USE_SPI1
 
-//#define USE_SSD1306
+// #define USE_SSD1306
 
 #define I2C_SDA 18 // 1 // I2C pins for this board
 #define I2C_SCL 17 // 2
 
-//#define LED_PIN 38     // This is a RGB LED not a standard LED
+// #define LED_PIN 38     // This is a RGB LED not a standard LED
 
 #define BUTTON_PIN 0 // This is the BOOT button
 #define BUTTON_NEED_PULLUP
 
-//#define USE_RF95 // RFM95/SX127x
-//#define USE_SX1262
+// #define USE_RF95 // RFM95/SX127x
+// #define USE_SX1262
 #define USE_SX1280
 
 #define RF95_MISO 3

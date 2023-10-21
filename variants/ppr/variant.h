@@ -89,8 +89,8 @@ static const uint8_t A7 = PIN_A7;
 
 // Other pins
 #define PIN_AREF (0xff)
-//#define PIN_NFC1 (9)
-//#define PIN_NFC2 (10)
+// #define PIN_NFC1 (9)
+// #define PIN_NFC2 (10)
 
 static const uint8_t AREF = PIN_AREF;
 
@@ -103,8 +103,8 @@ static const uint8_t AREF = PIN_AREF;
 #define PIN_SERIAL1_TX (9)
 
 // Connected to Jlink CDC
-//#define PIN_SERIAL2_RX (8)
-//#define PIN_SERIAL2_TX (6)
+// #define PIN_SERIAL2_RX (8)
+// #define PIN_SERIAL2_TX (6)
 
 /*
  * SPI Interfaces
@@ -138,7 +138,8 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // #define SX126X_ANT_SW (32 + 10)
 #define SX126X_RXEN (22)
 #define SX126X_TXEN (24)
-#define SX126X_E22 // Indicates this SX1262 is inside of an ebyte E22 module and special config should be done for that
+// Indicates this SX1262 is inside of an ebyte E22 module and special config should be done for that
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
 // ERC12864-10 LCD
 #define ERC12864_CS (32 + 4)

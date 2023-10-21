@@ -1,6 +1,4 @@
 {
-  "editor.formatOnSave": false,
-  "editor.defaultFormatter": "trunk.io",
   "files.associations": {
     "*.tpp": "cpp",
     "__bit_reference": "cpp",
@@ -19,5 +17,8 @@
     "unordered_set": "cpp",
     "vector": "cpp",
     "ios": "cpp"
-  }
+  },
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "trunk.io",
+  "trunk.enableWindows": true
 }

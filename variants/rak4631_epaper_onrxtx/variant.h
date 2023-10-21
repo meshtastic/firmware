@@ -43,7 +43,7 @@ extern "C" {
 
 #define PIN_BUTTON1 9 // Pin for button on E-ink button module or IO expansion
 #define BUTTON_NEED_PULLUP
-//#define PIN_BUTTON2 12
+// #define PIN_BUTTON2 12
 
 /*
  * Analog pins
@@ -69,8 +69,8 @@ static const uint8_t A7 = PIN_A7;
 
 // Other pins
 #define PIN_AREF (2)
-//#define PIN_NFC1 (9)
-//#define PIN_NFC2 (10)
+// #define PIN_NFC1 (9)
+// #define PIN_NFC2 (10)
 
 static const uint8_t AREF = PIN_AREF;
 
@@ -111,7 +111,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_EINK_CS (0 + 16)   // TX1
 #define PIN_EINK_BUSY (0 + 15) // RX1
 #define PIN_EINK_DC (0 + 17)   // IO1
-//#define PIN_EINK_RES  (-1)     //first try without RESET then connect it to AIN (AIN0 5 )
+// #define PIN_EINK_RES  (-1)     //first try without RESET then connect it to AIN (AIN0 5 )
 #define PIN_EINK_RES (0 + 5)   // 2.13 BN Display needs RESET
 #define PIN_EINK_SCLK (0 + 14) // SCL
 #define PIN_EINK_MOSI (0 + 13) // SDA
@@ -155,7 +155,9 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // #define SX126X_TXEN (39)
 // #define SX126X_RXEN (37)
 #define SX126X_POWER_EN (37)
-#define SX126X_E22 // DIO2 controlls an antenna switch and the TCXO voltage is controlled by DIO3
+// DIO2 controlls an antenna switch and the TCXO voltage is controlled by DIO3
+#define SX126X_DIO2_AS_RF_SWITCH
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
 // enables 3.3V periphery like GPS or IO Module
 #define PIN_3V3_EN (34)
@@ -171,36 +173,36 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // Therefore must be 1 to keep peripherals powered
 // Power is on the controllable 3V3_S rail
 // #define PIN_GPS_RESET (34)
-//#define PIN_GPS_EN PIN_3V3_EN
-//#define PIN_GPS_PPS (17) // Pulse per second input from the GPS
+// #define PIN_GPS_EN PIN_3V3_EN
+// #define PIN_GPS_PPS (17) // Pulse per second input from the GPS
 
-//#define GPS_RX_PIN PIN_SERIAL1_RX
-//#define GPS_TX_PIN PIN_SERIAL1_TX
+// #define GPS_RX_PIN PIN_SERIAL1_RX
+// #define GPS_TX_PIN PIN_SERIAL1_TX
 
 // RAK12002 RTC Module
 #define RV3028_RTC (uint8_t)0b1010010
 
 // Battery
 // The battery sense is hooked to pin A0 (5)
-//#define BATTERY_PIN PIN_A0
+// #define BATTERY_PIN PIN_A0
 // and has 12 bit resolution
-//#define BATTERY_SENSE_RESOLUTION_BITS 12
-//#define BATTERY_SENSE_RESOLUTION 4096.0
+// #define BATTERY_SENSE_RESOLUTION_BITS 12
+// #define BATTERY_SENSE_RESOLUTION 4096.0
 // Definition of milliVolt per LSB => 3.0V ADC range and 12-bit ADC resolution = 3000mV/4096
-//#define VBAT_MV_PER_LSB (0.73242188F)
+// #define VBAT_MV_PER_LSB (0.73242188F)
 // Voltage divider value => 1.5M + 1M voltage divider on VBAT = (1.5M / (1M + 1.5M))
-//#define VBAT_DIVIDER (0.4F)
+// #define VBAT_DIVIDER (0.4F)
 // Compensation factor for the VBAT divider
-//#define VBAT_DIVIDER_COMP (1.73)
+// #define VBAT_DIVIDER_COMP (1.73)
 // Fixed calculation of milliVolt from compensation value
-//#define REAL_VBAT_MV_PER_LSB (VBAT_DIVIDER_COMP * VBAT_MV_PER_LSB)
-//#undef AREF_VOLTAGE
-//#define AREF_VOLTAGE 3.0
-//#define VBAT_AR_INTERNAL AR_INTERNAL_3_0
-//#define ADC_MULTIPLIER VBAT_DIVIDER_COMP // REAL_VBAT_MV_PER_LSB
-//#define VBAT_RAW_TO_SCALED(x) (REAL_VBAT_MV_PER_LSB * x)
+// #define REAL_VBAT_MV_PER_LSB (VBAT_DIVIDER_COMP * VBAT_MV_PER_LSB)
+// #undef AREF_VOLTAGE
+// #define AREF_VOLTAGE 3.0
+// #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
+// #define ADC_MULTIPLIER VBAT_DIVIDER_COMP // REAL_VBAT_MV_PER_LSB
+// #define VBAT_RAW_TO_SCALED(x) (REAL_VBAT_MV_PER_LSB * x)
 
-//#define HAS_RTC 1
+// #define HAS_RTC 1
 
 #ifdef __cplusplus
 }

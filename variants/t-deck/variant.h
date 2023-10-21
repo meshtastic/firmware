@@ -15,17 +15,20 @@
 #define TFT_WIDTH 240
 #define TFT_OFFSET_X 0
 #define TFT_OFFSET_Y 0
+#define TFT_OFFSET_ROTATION 0
 #define SCREEN_ROTATE
-#define SCREEN_TRANSITION_FRAMERATE 1 // fps
+#define SCREEN_TRANSITION_FRAMERATE 5
+
+#define HAS_TOUCHSCREEN 1
 #define SCREEN_TOUCH_INT 16
+#define TOUCH_I2C_PORT 0
 #define TOUCH_SLAVE_ADDRESS 0x5D // GT911
 
 #define BUTTON_PIN 0
 // #define BUTTON_NEED_PULLUP
 
-#define HAS_GPS 0
-#undef GPS_RX_PIN
-#undef GPS_TX_PIN
+#define GPS_RX_PIN 44
+#define GPS_TX_PIN 43
 
 // Have SPI interface SD card slot
 #define HAS_SDCARD 1
@@ -38,19 +41,31 @@
 #define BATTERY_PIN 4 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 // ratio of voltage divider = 2.0 (RD2=100k, RD3=100k)
 #define ADC_MULTIPLIER 2.11 // 2.0 + 10% for correction of display undervoltage.
-#define ADC_CHANNEL ADC1_GPIO1_CHANNEL
+#define ADC_CHANNEL ADC1_GPIO4_CHANNEL
 
 // keyboard
 #define I2C_SDA 18 // I2C pins for this board
 #define I2C_SCL 8
-#define BOARD_POWERON 10 // must be set to HIGH
-#define KB_SLAVE_ADDRESS 0x55
-#define KB_BL_PIN 46 // INT, set to INPUT
-#define KB_UP 2
-#define KB_DOWN 3
-#define KB_LEFT 1
-#define KB_RIGHT 15
+#define KB_POWERON 10                  // must be set to HIGH
+#define KB_SLAVE_ADDRESS TDECK_KB_ADDR // 0x55
+#define KB_BL_PIN 46                   // not used for now
+#define CANNED_MESSAGE_MODULE_ENABLE 1
 
+// trackball
+#define HAS_TRACKBALL 1
+#define TB_UP 3
+#define TB_DOWN 15
+#define TB_LEFT 1
+#define TB_RIGHT 2
+#define TB_PRESS BUTTON_PIN
+
+// microphone
+#define ES7210_SCK 47
+#define ES7210_DIN 14
+#define ES7210_LRCK 21
+#define ES7210_MCLK 48
+
+// LoRa
 #define USE_SX1262
 #define USE_SX1268
 
@@ -69,6 +84,8 @@
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET
-#define SX126X_E22 // Not really an E22 but TTGO seems to be trying to clone that
+// Not really an E22 but TTGO seems to be trying to clone that
+#define SX126X_DIO2_AS_RF_SWITCH
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
 // Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the sx1262interface
 // code)

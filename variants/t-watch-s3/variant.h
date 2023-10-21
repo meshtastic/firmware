@@ -15,11 +15,15 @@
 #define TFT_WIDTH 240
 #define TFT_OFFSET_X 0
 #define TFT_OFFSET_Y 0
+#define TFT_OFFSET_ROTATION 2
 #define SCREEN_ROTATE
-#define SCREEN_TRANSITION_FRAMERATE 1 // fps
+#define SCREEN_TRANSITION_FRAMERATE 5 // fps
+
+#define HAS_TOUCHSCREEN 1
 #define SCREEN_TOUCH_INT 16
-#define SCREEN_TOUCH_USE_I2C1 1
-#define TOUCH_SLAVE_ADDRESS 0x38 // GT911
+#define SCREEN_TOUCH_USE_I2C1
+#define TOUCH_I2C_PORT 1
+#define TOUCH_SLAVE_ADDRESS 0x38
 
 #define I2C_SDA1 39 // Used for capacitive touch
 #define I2C_SCL1 40 // Used for capacitive touch
@@ -67,6 +71,8 @@
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET
-#define SX126X_E22 // Not really an E22 but TTGO seems to be trying to clone that
-                   // Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for
-                   // the sx1262interface code)
+// Not really an E22 but TTGO seems to be trying to clone that
+#define SX126X_DIO2_AS_RF_SWITCH
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
+// Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for
+// the sx1262interface code)

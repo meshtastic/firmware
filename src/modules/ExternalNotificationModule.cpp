@@ -1,3 +1,18 @@
+/**
+ * @file ExternalNotificationModule.cpp
+ * @brief Implementation of the ExternalNotificationModule class.
+ *
+ * This file contains the implementation of the ExternalNotificationModule class, which is responsible for handling external
+ * notifications such as vibration, buzzer, and LED lights. The class provides methods to turn on and off the external
+ * notification outputs and to play ringtones using PWM buzzer. It also includes default configurations and a runOnce() method to
+ * handle the module's behavior.
+ *
+ * Documentation:
+ * https://meshtastic.org/docs/settings/moduleconfig/external-notification
+ *
+ * @author Jm Casler & Meshtastic Team
+ * @date [Insert Date]
+ */
 #include "ExternalNotificationModule.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -16,7 +31,6 @@
 
 #ifdef HAS_NCP5623
 #include <graphics/RAKled.h>
-NCP5623 rgb;
 
 uint8_t red = 0;
 uint8_t green = 0;
@@ -117,6 +131,16 @@ int32_t ExternalNotificationModule::runOnce()
     }
 }
 
+bool ExternalNotificationModule::wantPacket(const meshtastic_MeshPacket *p)
+{
+    return MeshService::isTextPayload(p);
+}
+
+/**
+ * Sets the external notification on for the specified index.
+ *
+ * @param index The index of the external notification to turn on.
+ */
 void ExternalNotificationModule::setExternalOn(uint8_t index)
 {
     externalCurrentState[index] = 1;
@@ -196,8 +220,8 @@ void ExternalNotificationModule::stopNow()
 }
 
 ExternalNotificationModule::ExternalNotificationModule()
-    : SinglePortModule("ExternalNotificationModule", meshtastic_PortNum_TEXT_MESSAGE_APP), concurrency::OSThread(
-                                                                                               "ExternalNotificationModule")
+    : SinglePortModule("ExternalNotificationModule", meshtastic_PortNum_TEXT_MESSAGE_APP),
+      concurrency::OSThread("ExternalNotificationModule")
 {
     /*
         Uncomment the preferences below if you want to use the module

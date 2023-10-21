@@ -155,9 +155,16 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         // app not to send locations on our behalf.
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_my_info_tag;
         fromRadioScratch.my_info = myNodeInfo;
-        state = STATE_SEND_NODEINFO;
+        state = STATE_SEND_METADATA;
 
         service.refreshLocalMeshNode(); // Update my NodeInfo because the client will be asking for it soon.
+        break;
+
+    case STATE_SEND_METADATA:
+        LOG_INFO("getFromRadio=STATE_SEND_METADATA\n");
+        fromRadioScratch.which_payload_variant = meshtastic_FromRadio_metadata_tag;
+        fromRadioScratch.metadata = getDeviceMetadata();
+        state = STATE_SEND_NODEINFO;
         break;
 
     case STATE_SEND_NODEINFO: {
@@ -279,6 +286,14 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_remote_hardware_tag;
             fromRadioScratch.moduleConfig.payload_variant.remote_hardware = moduleConfig.remote_hardware;
             break;
+        case meshtastic_ModuleConfig_neighbor_info_tag:
+            fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_neighbor_info_tag;
+            fromRadioScratch.moduleConfig.payload_variant.neighbor_info = moduleConfig.neighbor_info;
+            break;
+        case meshtastic_ModuleConfig_detection_sensor_tag:
+            fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_detection_sensor_tag;
+            fromRadioScratch.moduleConfig.payload_variant.detection_sensor = moduleConfig.detection_sensor;
+            break;
         default:
             LOG_ERROR("Unknown module config type %d\n", config_state);
         }
@@ -286,15 +301,11 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         config_state++;
         // Advance when we have sent all of our ModuleConfig objects
         if (config_state > (_meshtastic_AdminMessage_ModuleConfigType_MAX + 1)) {
-            state = STATE_SEND_METADATA;
+            state = STATE_SEND_COMPLETE_ID;
             config_state = 0;
         }
         break;
-    case STATE_SEND_METADATA:
-        fromRadioScratch.which_payload_variant = meshtastic_FromRadio_metadata_tag;
-        fromRadioScratch.metadata = getDeviceMetadata();
-        state = STATE_SEND_COMPLETE_ID;
-        break;
+
     case STATE_SEND_COMPLETE_ID:
         LOG_INFO("getFromRadio=STATE_SEND_COMPLETE_ID\n");
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_config_complete_id_tag;
@@ -394,7 +405,7 @@ bool PhoneAPI::available()
         if (nodeInfoForPhone.num == 0) {
             auto nextNode = nodeDB.readNextMeshNode(readIndex);
             if (nextNode) {
-                nodeInfoForPhone = ConvertToNodeInfo(nextNode);
+                nodeInfoForPhone = TypeConversions::ConvertToNodeInfo(nextNode);
             }
         }
         return true; // Always say we have something, because we might need to advance our state machine

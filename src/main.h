@@ -66,11 +66,13 @@ extern uint32_t shutdownAtMsec;
 
 extern uint32_t serialSinceMsec;
 
+extern int heltec_version;
+
 // If a thread does something that might need for it to be rescheduled ASAP it can set this flag
 // This will suppress the current delay and instead try to run ASAP.
 extern bool runASAP;
 
-void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop(), clearBonds();
+void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop(), rp2040Setup(), clearBonds();
 
 meshtastic_DeviceMetadata getDeviceMetadata();
 

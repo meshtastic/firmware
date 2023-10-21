@@ -17,6 +17,10 @@ static uint32_t
     timeStartMsec; // Once we have a GPS lock, this is where we hold the initial msec clock that corresponds to that time
 static uint64_t zeroOffsetSecs; // GPS based time in secs since 1970 - only updated once on initial lock
 
+/**
+ * Reads the current date and time from the RTC module and updates the system time.
+ * @return True if the RTC was successfully read and the system time was updated, false otherwise.
+ */
 void readFromRTC()
 {
     struct timeval tv; /* btw settimeofday() is helpful here too*/
@@ -83,7 +87,15 @@ void readFromRTC()
 #endif
 }
 
-/// If we haven't yet set our RTC this boot, set it from a GPS derived time
+/**
+ * Sets the RTC (Real-Time Clock) if the provided time is of higher quality than the current RTC time.
+ *
+ * @param q The quality of the provided time.
+ * @param tv A pointer to a timeval struct containing the time to potentially set the RTC to.
+ * @return True if the RTC was set, false otherwise.
+ *
+ * If we haven't yet set our RTC this boot, set it from a GPS derived time
+ */
 bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
 {
     static uint32_t lastSetMsec = 0;
@@ -91,9 +103,8 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
 
     bool shouldSet;
     if (q > currentQuality) {
-        currentQuality = q;
         shouldSet = true;
-        LOG_DEBUG("Upgrading time to RTC %ld secs (quality %d)\n", tv->tv_sec, q);
+        LOG_DEBUG("Upgrading time to quality %d\n", q);
     } else if (q == RTCQualityGPS && (now - lastSetMsec) > (12 * 60 * 60 * 1000UL)) {
         // Every 12 hrs we will slam in a new GPS time, to correct for local RTC clock drift
         shouldSet = true;
@@ -102,12 +113,12 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
         shouldSet = false;
 
     if (shouldSet) {
+        currentQuality = q;
         lastSetMsec = now;
 
         // This delta value works on all platforms
         timeStartMsec = now;
         zeroOffsetSecs = tv->tv_sec;
-
         // If this platform has a setable RTC, set it
 #ifdef RV3028_RTC
         if (rtc_found.address == RV3028_RTC) {
@@ -151,6 +162,13 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
     }
 }
 
+/**
+ * Sets the RTC time if the provided time is of higher quality than the current RTC time.
+ *
+ * @param q The quality of the provided time.
+ * @param t The time to potentially set the RTC to.
+ * @return True if the RTC was set to the provided time, false otherwise.
+ */
 bool perhapsSetRTC(RTCQuality q, struct tm &t)
 {
     /* Convert to unix time
@@ -171,11 +189,22 @@ bool perhapsSetRTC(RTCQuality q, struct tm &t)
     }
 }
 
+/**
+ * Returns the current time in seconds since the Unix epoch (January 1, 1970).
+ *
+ * @return The current time in seconds since the Unix epoch.
+ */
 uint32_t getTime()
 {
     return (((uint32_t)millis() - timeStartMsec) / 1000) + zeroOffsetSecs;
 }
 
+/**
+ * Returns the current time from the RTC if the quality of the time is at least minQuality.
+ *
+ * @param minQuality The minimum quality of the RTC time required for it to be considered valid.
+ * @return The current time from the RTC if it meets the minimum quality requirement, or 0 if the time is not valid.
+ */
 uint32_t getValidTime(RTCQuality minQuality)
 {
     return (currentQuality >= minQuality) ? getTime() : 0;

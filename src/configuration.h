@@ -98,8 +98,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Define if screen should be mirrored left to right
 // #define SCREEN_MIRROR
 
-// The m5stack I2C Keyboard (also RAK14004)
+// I2C Keyboards (M5Stack, RAK14004, T-Deck)
 #define CARDKB_ADDR 0x5F
+#define TDECK_KB_ADDR 0x55
+#define BBQ10_KB_ADDR 0x1F
 
 // -----------------------------------------------------------------------------
 // SENSOR
@@ -143,8 +145,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define GPS_BAUDRATE 9600
 
 #ifndef GPS_THREAD_INTERVAL
-#define GPS_THREAD_INTERVAL 100
+#define GPS_THREAD_INTERVAL 200
 #endif
+
+// convert 24-bit color to 16-bit (56K)
+#define COLOR565(r, g, b) (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | ((b & 0xF8) >> 3))
 
 /* Step #1: offer chance for variant-specific defines */
 #include "variant.h"
@@ -172,6 +177,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #ifndef HAS_BUTTON
 #define HAS_BUTTON 0
+#endif
+#ifndef HAS_TRACKBALL
+#define HAS_TRACKBALL 0
+#endif
+#ifndef HAS_TOUCHSCREEN
+#define HAS_TOUCHSCREEN 0
 #endif
 #ifndef HAS_TELEMETRY
 #define HAS_TELEMETRY 0
