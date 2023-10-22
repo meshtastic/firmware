@@ -1,0 +1,81 @@
+Components
+    New LDO
+        - Does it power on and can it be used?
+    New USB
+        - As above
+        - Test charging works
+    Buttons switched to pulled up
+        - Test buttons work
+    Wifi
+        - Get it connected with the wifi for uploading code remotely
+    
+    Lora SX1262 (as opposed to previous sx1276)
+        - Connected and sending basic packet
+        - Integrate with meshtastic
+    New gps with ipex connector
+        - Connected with tiny library
+        - Integrate with meshtastic
+    LSM303AGRTR - Accelerometer and Mag
+        - Connected with library 
+        - Rewrite library from before (with mag angle)
+        - Wake on Accelerometer?
+
+    INA231AIYFFR (Battery reader i2c) 0x40?
+        - Get reading voltage
+        - Get reading power usage
+        - Write measurer for pinging it
+        - Test usage with different Components
+        - Test charging rate?
+        - integrate with Meshtastic + battery icon
+
+    New screen connection / SPI pins
+        - Display something using the library as before
+        - Test out colour and buffer?
+    New screen Load mosfets
+        - As above test it can be powered on etc
+    Touch i2c 0x15?
+        - Get gestures working
+        - get the interrupt working
+
+pins
+    Buttons
+        Button1 - 36
+        Button2 - 38
+
+    SX1263
+        SXRST = 21
+        SXD0 - 22
+        MOSI - 8
+        MISO - 19
+        SCK - 7
+        SXSS(Chip select) - 5
+
+    gps
+        TX2 - 20
+        RX2 - 4
+        FORCEON - 13
+
+    screen
+        LCDRST - 2
+        LCDCS - 15
+        MOSI - 8
+        MISO - 19
+        SCK - 7
+        LCD D/C - 12
+        LCD PSU - 14
+        BL - 27
+
+    Touch
+        SDA - 25
+        SCL - 26
+        Interupt - 35 
+
+    Batt reader
+        SDA - 25
+        SCL - 26
+        Interupt - 34
+
+    Accelerometer
+        SDA - 25
+        SCL - 26
+        Interupt - 39
