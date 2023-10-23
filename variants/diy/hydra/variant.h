@@ -6,6 +6,7 @@
 #define GPS_TX_PIN 15
 #define GPS_RX_PIN 12
 #define PIN_GPS_EN 4
+#define GPS_POWER_TOGGLE // Moved definition from platformio.ini to here
 
 #define BUTTON_PIN 39  // The middle button GPIO on the T-Beam
 #define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
