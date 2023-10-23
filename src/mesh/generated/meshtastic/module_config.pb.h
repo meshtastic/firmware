@@ -232,6 +232,9 @@ typedef struct _meshtastic_ModuleConfig_ExternalNotificationConfig {
  Default is 0 which means don't repeat at all. 60 would mean blink
  and/or beep for 60 seconds */
     uint16_t nag_timeout;
+    /* When true, enables devices with native I2S audio output to use the RTTTL over speaker like a buzzer
+ T-Watch S3 and T-Deck for example have this capability */
+    bool use_i2s_as_buzzer;
 } meshtastic_ModuleConfig_ExternalNotificationConfig;
 
 /* Store and Forward Module Config */
@@ -431,7 +434,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_DetectionSensorConfig_init_default {0, 0, 0, 0, "", 0, 0, 0}
 #define meshtastic_ModuleConfig_AudioConfig_init_default {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
-#define meshtastic_ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_default {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_RangeTestConfig_init_default {0, 0, 0}
 #define meshtastic_ModuleConfig_TelemetryConfig_init_default {0, 0, 0, 0, 0, 0, 0}
@@ -445,7 +448,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_DetectionSensorConfig_init_zero {0, 0, 0, 0, "", 0, 0, 0}
 #define meshtastic_ModuleConfig_AudioConfig_init_zero {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
-#define meshtastic_ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_zero {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_RangeTestConfig_init_zero {0, 0, 0}
 #define meshtastic_ModuleConfig_TelemetryConfig_init_zero {0, 0, 0, 0, 0, 0, 0}
@@ -502,6 +505,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_alert_bell_vibra_tag 12
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_alert_bell_buzzer_tag 13
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_nag_timeout_tag 14
+#define meshtastic_ModuleConfig_ExternalNotificationConfig_use_i2s_as_buzzer_tag 15
 #define meshtastic_ModuleConfig_StoreForwardConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_StoreForwardConfig_heartbeat_tag 2
 #define meshtastic_ModuleConfig_StoreForwardConfig_records_tag 3
@@ -657,7 +661,8 @@ X(a, STATIC,   SINGULAR, BOOL,     alert_message_vibra,  10) \
 X(a, STATIC,   SINGULAR, BOOL,     alert_message_buzzer,  11) \
 X(a, STATIC,   SINGULAR, BOOL,     alert_bell_vibra,  12) \
 X(a, STATIC,   SINGULAR, BOOL,     alert_bell_buzzer,  13) \
-X(a, STATIC,   SINGULAR, UINT32,   nag_timeout,      14)
+X(a, STATIC,   SINGULAR, UINT32,   nag_timeout,      14) \
+X(a, STATIC,   SINGULAR, BOOL,     use_i2s_as_buzzer,  15)
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_DEFAULT NULL
 
@@ -755,7 +760,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_AudioConfig_size 19
 #define meshtastic_ModuleConfig_CannedMessageConfig_size 49
 #define meshtastic_ModuleConfig_DetectionSensorConfig_size 44
-#define meshtastic_ModuleConfig_ExternalNotificationConfig_size 40
+#define meshtastic_ModuleConfig_ExternalNotificationConfig_size 42
 #define meshtastic_ModuleConfig_MQTTConfig_size  222
 #define meshtastic_ModuleConfig_NeighborInfoConfig_size 8
 #define meshtastic_ModuleConfig_RangeTestConfig_size 10

@@ -175,7 +175,7 @@ extern const pb_msgdesc_t meshtastic_LocalModuleConfig_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define meshtastic_LocalConfig_size              463
-#define meshtastic_LocalModuleConfig_size        609
+#define meshtastic_LocalModuleConfig_size        611
 
 #ifdef __cplusplus
 } /* extern "C" */
