@@ -24,11 +24,6 @@
 #include <Arduino.h>
 #include "main.h"
 
-#if defined(T_WATCH_S3)
-#include <ESP8266SAM.h>
-#endif
-
-
 #ifdef HAS_NCP5623
 #include <graphics/RAKled.h>
 
@@ -53,6 +48,8 @@ uint8_t blue = 0;
 #define EXT_NOTIFICATION_MODULE_OUTPUT 0
 #endif
 #define EXT_NOTIFICATION_MODULE_OUTPUT_MS 1000
+
+#define EXT_NOTIFICATION_DEFAULT_THREAD_MS 25
 
 #define ASCII_BELL 0x07
 
@@ -119,15 +116,24 @@ int32_t ExternalNotificationModule::runOnce()
 
         // now let the PWM buzzer play
         if (moduleConfig.external_notification.use_pwm) {
+#ifdef HAS_I2S
+            if (audioThread->isPlaying()) {
+                // Continue playing
+            }
+            else if (isNagging && (nagCycleCutoff >= millis())) {
+                audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
+            }
+#else
             if (rtttl::isPlaying()) {
                 rtttl::play();
             } else if (isNagging && (nagCycleCutoff >= millis())) {
                 // start the song again if we have time left
                 rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
             }
+#endif
         }
 
-        return 25;
+        return EXT_NOTIFICATION_DEFAULT_THREAD_MS;
     }
 }
 
@@ -211,6 +217,9 @@ bool ExternalNotificationModule::getExternal(uint8_t index)
 void ExternalNotificationModule::stopNow()
 {
     rtttl::stop();
+#ifdef HAS_I2S
+    audioThread->stop();
+#endif
     nagCycleCutoff = 1; // small value
     isNagging = false;
     setIntervalFromNow(0);
@@ -294,7 +303,7 @@ ExternalNotificationModule::ExternalNotificationModule()
 ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
     if (moduleConfig.external_notification.enabled) {
-#if defined(T_WATCH_S3)
+#ifdef T_WATCH_S3
         drv.setWaveform(0, 75);
         drv.setWaveform(1, 56);
         drv.setWaveform(2, 0);
@@ -309,14 +318,15 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                     containsBell = true;
                 }
             }
-#if defined(T_WATCH_S3)
-            ESP8266SAM *sam = new ESP8266SAM;
-            sam->Say(audioOut, "Text message received");
-            delay(1000);
-            static char textBuffer[237];
-            snprintf(textBuffer, sizeof(textBuffer), "%s", p.payload.bytes);
-            sam->Say(audioOut, textBuffer);
-#endif
+
+// #ifdef T_WATCH_S3
+//             ESP8266SAM *sam = new ESP8266SAM;
+//             sam->Say(audioOut, "Text message received");
+//             delay(50);
+//             static char textBuffer[237];
+//             snprintf(textBuffer, sizeof(textBuffer), "%s", p.payload.bytes);
+//             sam->Say(audioOut, textBuffer);
+// #endif
 
             if (moduleConfig.external_notification.alert_bell) {
                 if (containsBell) {
@@ -351,7 +361,11 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                     if (!moduleConfig.external_notification.use_pwm) {
                         setExternalOn(2);
                     } else {
+#ifdef HAS_I2S
+                        audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
+#else
                         rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
+#endif
                     }
                     if (moduleConfig.external_notification.nag_timeout) {
                         nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
@@ -389,7 +403,11 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 if (!moduleConfig.external_notification.use_pwm) {
                     setExternalOn(2);
                 } else {
+#ifdef HAS_I2S
+                    audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
+#else
                     rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
+#endif                
                 }
                 if (moduleConfig.external_notification.nag_timeout) {
                     nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;

@@ -245,9 +245,10 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 1000;
     moduleConfig.external_notification.nag_timeout = 60;
 #endif
-#ifdef T_WATCH_S3
-    // Don't worry about the other settings, we'll use the DRV2056 behavior for notifications
+#ifdef HAS_I2S 
+    // Don't worry about the other settings for T-Watch, we'll also use the DRV2056 behavior for notifications
     moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.use_pwm = true;
 #endif
     moduleConfig.has_canned_message = true;
 

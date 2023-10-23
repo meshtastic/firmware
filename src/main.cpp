@@ -77,6 +77,11 @@ NRF52Bluetooth *nrf52Bluetooth;
 #include "AmbientLightingThread.h"
 #endif
 
+#ifdef HAS_I2S
+#include "AudioThread.h"
+AudioThread *audioThread;
+#endif
+
 using namespace concurrency;
 
 // We always create a screen object, but we only init it if we find the hardware
@@ -114,7 +119,6 @@ ATECCX08A atecc;
 
 #ifdef T_WATCH_S3
 Adafruit_DRV2605 drv;
-AudioOutputI2S *audioOut;
 #endif
 
 bool isVibrating = false;
@@ -560,11 +564,6 @@ void setup()
     // Buttons. Moved here cause we need NodeDB to be initialized
     buttonThread = new ButtonThread();
 #endif
-#if defined(T_WATCH_S3)
-    audioOut = new AudioOutputI2S(1, AudioOutputI2S::EXTERNAL_I2S);
-    audioOut->SetPinout(DAC_I2S_BCK, DAC_I2S_WS, DAC_I2S_DOUT);
-    audioOut->SetGain(0.3);
-#endif
 
     playStartMelody();
 
@@ -798,6 +797,11 @@ void setup()
     initApiServer(TCPPort);
 #endif
 
+#ifdef HAS_I2S
+    LOG_DEBUG("Starting audio thread\n");
+    audioThread = new AudioThread();
+#endif
+
     // Start airtime logger thread.
     airTime = new AirTime();
 
@@ -815,10 +819,7 @@ void setup()
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
     powerFSMthread = new PowerFSMThread();
-
     setCPUFast(false); // 80MHz is fine for our slow peripherals
-
-
 }
 
 uint32_t rebootAtMsec;   // If not zero we will reboot at this time (used to reboot shortly after the update completes)
