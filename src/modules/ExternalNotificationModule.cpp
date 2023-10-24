@@ -20,9 +20,9 @@
 #include "Router.h"
 #include "buzz/buzz.h"
 #include "configuration.h"
+#include "main.h"
 #include "mesh/generated/meshtastic/rtttl.pb.h"
 #include <Arduino.h>
-#include "main.h"
 
 #ifdef HAS_NCP5623
 #include <graphics/RAKled.h>
@@ -114,23 +114,24 @@ int32_t ExternalNotificationModule::runOnce()
 #endif
         }
 
-        // now let the PWM buzzer play
-        if (moduleConfig.external_notification.use_pwm) {
+        // Play RTTTL over i2s audio interface if enabled as buzzer
 #ifdef HAS_I2S
+        if (moduleConfig.external_notification.use_i2s_as_buzzer) {
             if (audioThread->isPlaying()) {
                 // Continue playing
-            }
-            else if (isNagging && (nagCycleCutoff >= millis())) {
+            } else if (isNagging && (nagCycleCutoff >= millis())) {
                 audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
             }
-#else
+        }
+#endif
+        // now let the PWM buzzer play
+        if (moduleConfig.external_notification.use_pwm) {
             if (rtttl::isPlaying()) {
                 rtttl::play();
             } else if (isNagging && (nagCycleCutoff >= millis())) {
                 // start the song again if we have time left
                 rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
             }
-#endif
         }
 
         return EXT_NOTIFICATION_DEFAULT_THREAD_MS;
@@ -319,14 +320,14 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-// #ifdef T_WATCH_S3
-//             ESP8266SAM *sam = new ESP8266SAM;
-//             sam->Say(audioOut, "Text message received");
-//             delay(50);
-//             static char textBuffer[237];
-//             snprintf(textBuffer, sizeof(textBuffer), "%s", p.payload.bytes);
-//             sam->Say(audioOut, textBuffer);
-// #endif
+            // #ifdef T_WATCH_S3
+            //             ESP8266SAM *sam = new ESP8266SAM;
+            //             sam->Say(audioOut, "Text message received");
+            //             delay(50);
+            //             static char textBuffer[237];
+            //             snprintf(textBuffer, sizeof(textBuffer), "%s", p.payload.bytes);
+            //             sam->Say(audioOut, textBuffer);
+            // #endif
 
             if (moduleConfig.external_notification.alert_bell) {
                 if (containsBell) {
@@ -404,10 +405,12 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                     setExternalOn(2);
                 } else {
 #ifdef HAS_I2S
-                    audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
+                    if (moduleConfig.external_notification.use_i2s_as_buzzer) {
+                        audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
+                    }
 #else
                     rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
-#endif                
+#endif
                 }
                 if (moduleConfig.external_notification.nag_timeout) {
                     nagCycleCutoff = millis() + moduleConfig.external_notification.nag_timeout * 1000;
