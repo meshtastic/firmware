@@ -248,7 +248,7 @@ void NodeDB::installDefaultModuleConfig()
 #ifdef HAS_I2S
     // Don't worry about the other settings for T-Watch, we'll also use the DRV2056 behavior for notifications
     moduleConfig.external_notification.enabled = true;
-    moduleConfig.external_notification.use_pwm = true;
+    moduleConfig.external_notification.use_i2s_as_buzzer = true;
 #endif
     moduleConfig.has_canned_message = true;
 

@@ -241,6 +241,8 @@ ExternalNotificationModule::ExternalNotificationModule()
     // moduleConfig.external_notification.alert_message = true;
     // moduleConfig.external_notification.alert_message_buzzer = true;
     // moduleConfig.external_notification.alert_message_vibra = true;
+    // moduleConfig.external_notification.use_i2s_as_buzzer = true;
+
 
     // moduleConfig.external_notification.active = true;
     // moduleConfig.external_notification.alert_bell = 1;
@@ -249,6 +251,10 @@ ExternalNotificationModule::ExternalNotificationModule()
     // moduleConfig.external_notification.output_buzzer = 10; // RAK4631 IO6
     // moduleConfig.external_notification.output_vibra = 28; // RAK4631 IO7
     // moduleConfig.external_notification.nag_timeout = 300;
+
+    moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.nag_timeout = 300;
+    moduleConfig.external_notification.use_i2s_as_buzzer = true;
 
     if (moduleConfig.external_notification.enabled) {
         if (!nodeDB.loadProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, sizeof(meshtastic_RTTTLConfig),
