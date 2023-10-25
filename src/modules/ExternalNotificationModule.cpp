@@ -252,9 +252,9 @@ ExternalNotificationModule::ExternalNotificationModule()
     // moduleConfig.external_notification.output_vibra = 28; // RAK4631 IO7
     // moduleConfig.external_notification.nag_timeout = 300;
 
-    moduleConfig.external_notification.enabled = true;
-    moduleConfig.external_notification.nag_timeout = 300;
-    moduleConfig.external_notification.use_i2s_as_buzzer = true;
+    // moduleConfig.external_notification.enabled = true;
+    // moduleConfig.external_notification.nag_timeout = 300;
+    // moduleConfig.external_notification.use_i2s_as_buzzer = true;
 
     if (moduleConfig.external_notification.enabled) {
         if (!nodeDB.loadProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, sizeof(meshtastic_RTTTLConfig),
@@ -407,7 +407,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             if (moduleConfig.external_notification.alert_message_buzzer) {
                 LOG_INFO("externalNotificationModule - Notification Module (Buzzer)\n");
                 isNagging = true;
-                if (!moduleConfig.external_notification.use_pwm) {
+                if (!moduleConfig.external_notification.use_pwm && !moduleConfig.external_notification.use_i2s_as_buzzer) {
                     setExternalOn(2);
                 } else {
 #ifdef HAS_I2S
