@@ -676,8 +676,8 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
     channels.onConfigChanged();
 
     service.reloadOwner(false);
-    service.reloadConfig(SEGMENT_CONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
-}
+    saveChanges(SEGMENT_CONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
+    }
 
 AdminModule::AdminModule() : ProtobufModule("Admin", meshtastic_PortNum_ADMIN_APP, &meshtastic_AdminMessage_msg)
 {
