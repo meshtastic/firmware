@@ -21,6 +21,7 @@
 #include "Sensor/MCP9808Sensor.h"
 #include "Sensor/SHT31Sensor.h"
 #include "Sensor/SHTC3Sensor.h"
+#include "Sensor/INA3221Sensor.h"
 
 BMP280Sensor bmp280Sensor;
 BME280Sensor bme280Sensor;
@@ -29,6 +30,7 @@ MCP9808Sensor mcp9808Sensor;
 SHTC3Sensor shtc3Sensor;
 LPS22HBSensor lps22hbSensor;
 SHT31Sensor sht31Sensor;
+INA3221Sensor ina3221Sensor;;
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
@@ -101,7 +103,9 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = ina219Sensor.runOnce();
             if (ina260Sensor.hasSensor() && !ina260Sensor.isInitialized())
                 result = ina260Sensor.runOnce();
-        }
+            if (ina3221Sensor.hasSensor())
+                result = ina3221Sensor.runOnce();        
+                }
         return result;
     } else {
         // if we somehow got to a second run of this module with measurement disabled, then just wait forever
@@ -200,10 +204,12 @@ bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPac
         const char *sender = getSenderShortName(mp);
 
         LOG_INFO("(Received from %s): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, "
-                 "temperature=%f, voltage=%f\n",
+                 "temperature=%f, voltage=%f\n, voltage2=%f, current2=%f, voltage3=%f, current3=%f",
                  sender, t->variant.environment_metrics.barometric_pressure, t->variant.environment_metrics.current,
                  t->variant.environment_metrics.gas_resistance, t->variant.environment_metrics.relative_humidity,
-                 t->variant.environment_metrics.temperature, t->variant.environment_metrics.voltage);
+                 t->variant.environment_metrics.temperature, t->variant.environment_metrics.voltage,
+                 t->variant.environment_metrics.voltage2, t->variant.environment_metrics.current2,
+                 t->variant.environment_metrics.voltage3, t->variant.environment_metrics.current3);
 #endif
         // release previous packet before occupying a new spot
         if (lastMeasurementPacket != nullptr)
@@ -228,6 +234,11 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.variant.environment_metrics.relative_humidity = 0;
     m.variant.environment_metrics.temperature = 0;
     m.variant.environment_metrics.voltage = 0;
+    m.variant.environment_metrics.voltage2 = 0;
+    m.variant.environment_metrics.current2 = 0;
+    m.variant.environment_metrics.voltage3 = 0;
+    m.variant.environment_metrics.current3 = 0;
+    
 
     if (sht31Sensor.hasSensor())
         valid = sht31Sensor.getMetrics(&m);
@@ -247,14 +258,18 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         valid = ina219Sensor.getMetrics(&m);
     if (ina260Sensor.hasSensor())
         valid = ina260Sensor.getMetrics(&m);
+    if (ina3221Sensor.hasSensor())
+        valid = ina3221Sensor.getMetrics(&m);
+
 
     if (valid) {
-        LOG_INFO("(Sending): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f, "
-                 "voltage=%f\n",
-                 m.variant.environment_metrics.barometric_pressure, m.variant.environment_metrics.current,
-                 m.variant.environment_metrics.gas_resistance, m.variant.environment_metrics.relative_humidity,
-                 m.variant.environment_metrics.temperature, m.variant.environment_metrics.voltage);
-
+        LOG_INFO("(Sending): barometric_pressure=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f\n",
+                 m.variant.environment_metrics.barometric_pressure, m.variant.environment_metrics.gas_resistance,
+                 m.variant.environment_metrics.relative_humidity, m.variant.environment_metrics.temperature);
+        LOG_INFO("(Sending): voltage=%f, current=%f, voltage2=%f, current2=%f, voltage3=%f, current3=%f\n",
+                 m.variant.environment_metrics.voltage, m.variant.environment_metrics.current,
+                 m.variant.environment_metrics.voltage2, m.variant.environment_metrics.current2,
+                 m.variant.environment_metrics.voltage3, m.variant.environment_metrics.current3);
         sensor_read_error_count = 0;
 
         meshtastic_MeshPacket *p = allocDataProtobuf(m);
