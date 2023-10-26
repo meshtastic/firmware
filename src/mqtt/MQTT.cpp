@@ -565,6 +565,10 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
                     msgPayload["gas_resistance"] = new JSONValue(decoded->variant.environment_metrics.gas_resistance);
                     msgPayload["voltage"] = new JSONValue(decoded->variant.environment_metrics.voltage);
                     msgPayload["current"] = new JSONValue(decoded->variant.environment_metrics.current);
+                    msgPayload["voltage2"] = new JSONValue(decoded->variant.environment_metrics.voltage2);
+                    msgPayload["current2"] = new JSONValue(decoded->variant.environment_metrics.current2);
+                    msgPayload["voltage3"] = new JSONValue(decoded->variant.environment_metrics.voltage3);
+                    msgPayload["current3"] = new JSONValue(decoded->variant.environment_metrics.current3);
                 }
                 jsonObj["payload"] = new JSONValue(msgPayload);
             } else {
