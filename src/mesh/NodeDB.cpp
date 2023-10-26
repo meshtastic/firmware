@@ -254,6 +254,8 @@ void NodeDB::installDefaultModuleConfig()
     strncpy(moduleConfig.mqtt.address, default_mqtt_address, sizeof(moduleConfig.mqtt.address));
     strncpy(moduleConfig.mqtt.username, default_mqtt_username, sizeof(moduleConfig.mqtt.username));
     strncpy(moduleConfig.mqtt.password, default_mqtt_password, sizeof(moduleConfig.mqtt.password));
+    strncpy(moduleConfig.mqtt.root, default_mqtt_root, sizeof(moduleConfig.mqtt.root));
+    moduleConfig.mqtt.encryption_enabled = true;
 
     moduleConfig.has_neighbor_info = true;
     moduleConfig.neighbor_info.enabled = false;

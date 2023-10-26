@@ -13,7 +13,9 @@ int32_t INA3221Sensor::runOnce()
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
     if (!status) {
-        status = false;
+        ina3221.setAddr(INA3221_ADDR42_SDA);
+        ina3221.begin();
+        status = true;
     } else {
         status = true;
     }
@@ -26,6 +28,10 @@ bool INA3221Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     measurement->variant.environment_metrics.voltage = ina3221.getVoltage(INA3221_CH1);
     measurement->variant.environment_metrics.current = ina3221.getCurrent(INA3221_CH1);
+    measurement->variant.environment_metrics.voltage2 = ina3221.getVoltage(INA3221_CH2);
+    measurement->variant.environment_metrics.current2 = ina3221.getCurrent(INA3221_CH2);
+    measurement->variant.environment_metrics.voltage3 = ina3221.getVoltage(INA3221_CH3);
+    measurement->variant.environment_metrics.current3 = ina3221.getCurrent(INA3221_CH3);
     return true;
 }
 
