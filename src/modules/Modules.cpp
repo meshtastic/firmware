@@ -23,6 +23,7 @@
 #if HAS_SENSOR
 #include "modules/Telemetry/AirQualityTelemetry.h"
 #include "modules/Telemetry/EnvironmentTelemetry.h"
+#include "modules/Telemetry/PowerTelemetry.h"
 #endif
 #ifdef ARCH_ESP32
 #include "modules/esp32/AudioModule.h"
@@ -88,6 +89,7 @@ void setupModules()
 #endif
 #if HAS_SENSOR
         new EnvironmentTelemetryModule();
+        new PowerTelemetryModule();
         if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_PMSA003I].first > 0) {
             new AirQualityTelemetryModule();
         }
