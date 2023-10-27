@@ -51,9 +51,9 @@ int32_t PowerTelemetryModule::runOnce()
         without having to configure it from the PythonAPI or WebUI.
     */
 
-    moduleConfig.telemetry.power_measurement_enabled = 1;
-    moduleConfig.telemetry.power_screen_enabled = 1;
-    moduleConfig.telemetry.power_update_interval = 45;
+   // moduleConfig.telemetry.power_measurement_enabled = 1;
+   // moduleConfig.telemetry.power_screen_enabled = 1;
+   // moduleConfig.telemetry.power_update_interval = 45;
 
     if (!(moduleConfig.telemetry.power_measurement_enabled)) {
         // If this module is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
