@@ -11,9 +11,6 @@
 #include <AudioOutputI2S.h>
 #include <ESP8266SAM.h>
 
-// const char example[] PROGMEM =
-// "smb:d=4,o=5,b=100:16e6,16e6,32p,8e6,16c6,8e6,8g6,8p,8g,8p,8c6,16p,8g,16p,8e,16p,8a,8b,16a#,8a,16g.,16e6,16g6,8a6,16f6,8g6,8e6,16c6,16d6,8b,16p,8c6,16p,8g,16p,8e,16p,8a,8b,16a#,8a,16g.,16e6,16g6,8a6,16f6,8g6,8e6,16c6,16d6,8b,8p,16g6,16f#6,16f6,16d#6,16p,16e6,16p,16g#,16a,16c6,16p,16a,16c6,16d6,8p,16g6,16f#6,16f6,16d#6,16p,16e6,16p,16c7,16p,16c7,16c7,p,16g6,16f#6,16f6,16d#6,16p,16e6,16p,16g#,16a,16c6,16p,16a,16c6,16d6,8p,16d#6,8p,16d6,8p,16c6";
-
 #define AUDIO_THREAD_INTERVAL_MS 25
 
 class AudioThread : public concurrency::OSThread
@@ -29,20 +26,23 @@ class AudioThread : public concurrency::OSThread
         i2sRtttl->begin(rtttlFile, audioOut);
     }
 
-    bool isPlaying() { return i2sRtttl->isRunning() && i2sRtttl->loop(); }
+    bool isPlaying()
+    {
+        if (i2sRtttl != nullptr) {
+            return i2sRtttl->isRunning() && i2sRtttl->loop();
+        }
+        return false;
+    }
 
     void stop() { i2sRtttl->stop(); }
-
-    /*
-            if (i2sRtttl->isRunning() && !i2sRtttl->loop()) {
-                i2sRtttl->stop();
-            }
-    */
 
   protected:
     int32_t runOnce() override
     {
         canSleep = true; // Assume we should not keep the board awake
+        // if (i2sRtttl != nullptr && i2sRtttl->isRunning()) {
+        //     i2sRtttl->loop();
+        // }
         return AUDIO_THREAD_INTERVAL_MS;
     }
 
@@ -51,10 +51,14 @@ class AudioThread : public concurrency::OSThread
     {
         audioOut = new AudioOutputI2S(1, AudioOutputI2S::EXTERNAL_I2S);
         audioOut->SetPinout(DAC_I2S_BCK, DAC_I2S_WS, DAC_I2S_DOUT);
+#ifdef T_DECK
+        audioOut->SetGain(0.1);
+#else
         audioOut->SetGain(0.3);
+#endif
     };
 
-    AudioGeneratorRTTTL *i2sRtttl;
+    AudioGeneratorRTTTL *i2sRtttl = nullptr;
     AudioOutputI2S *audioOut;
 
     AudioFileSourcePROGMEM *rtttlFile;

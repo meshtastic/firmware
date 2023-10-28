@@ -639,6 +639,11 @@ void setup()
     }
     nodeStatus->observe(&nodeDB.newStatus);
 
+#ifdef HAS_I2S
+    LOG_DEBUG("Starting audio thread\n");
+    audioThread = new AudioThread();
+#endif
+
     service.init();
 
     // Now that the mesh service is created, create any modules
@@ -795,11 +800,6 @@ void setup()
 
 #ifdef ARCH_PORTDUINO
     initApiServer(TCPPort);
-#endif
-
-#ifdef HAS_I2S
-    LOG_DEBUG("Starting audio thread\n");
-    audioThread = new AudioThread();
 #endif
 
     // Start airtime logger thread.
