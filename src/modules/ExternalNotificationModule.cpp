@@ -327,15 +327,6 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                 }
             }
 
-            // #ifdef T_WATCH_S3
-            //             ESP8266SAM *sam = new ESP8266SAM;
-            //             sam->Say(audioOut, "Text message received");
-            //             delay(50);
-            //             static char textBuffer[237];
-            //             snprintf(textBuffer, sizeof(textBuffer), "%s", p.payload.bytes);
-            //             sam->Say(audioOut, textBuffer);
-            // #endif
-
             if (moduleConfig.external_notification.alert_bell) {
                 if (containsBell) {
                     LOG_INFO("externalNotificationModule - Notification Bell\n");
