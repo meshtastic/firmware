@@ -90,11 +90,13 @@
 #define SX126X_RXEN RADIOLIB_NC
 */
 
+// Status
+#define LED_PIN 1
 // External notification
-// FIXME: Omitted EXT_NOTIFY_OUT as doesn't seem to have any effect
-// #define EXT_NOTIFY_OUT 1 // The GPIO pin that acts as the external notification output (here we connect an LED to MCU pin 1)
-// LED
-#define LED_PIN 2
+// FIXME: Check if EXT_NOTIFY_OUT actualy has any effect and removes the need for setting the external notication pin in the app/preferences
+#define EXT_NOTIFY_OUT 2 // The GPIO pin that acts as the external notification output (here we connect an LED to it)
+// Buzzer
+#define PIN_BUZZER 11
 // I2C
 #define I2C_SCL 18
 #define I2C_SDA 8
@@ -110,25 +112,22 @@
 // In the EU (and UK), as of now, you are allowed 27 dBm ERP which is 29.15 EIRP.
 // https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32022D0180
 // https://www.legislation.gov.uk/uksi/1999/930/schedule/6/made
-// To respect the 29.15 dBm EIRP (at SPECIFIC frequencies, others are lower) EU limit with a 2.5 dBi gain antenna, assuming
-// the E22-900M30S outputs with a gain of 7.5 dBm (calculated measured value), output <= 19.15 (so 19) dBm from the E22-900M30S's
-// SX1262. It is worth noting that if you are in this situation and don't have a HAM license, you may be better off with a lower
-// gain antenna, and output the difference as a higher total power input into the antenna, as your EIRP would be the same, but you
-// would get a wider angle of coverage. Also take VSWR into account (https://www.everythingrf.com/tech-resources/vswr).
+// To respect the 29.15 dBm EIRP (at SPECIFIC frequencies, others are lower) EU limit with a 2.5 dBi gain antenna, consulting https://github.com/S5NC/EBYTE_ESP32-S3/blob/main/power%20testing.txt, assuming 0.1 dBm insertion loss, output 20 dBm from the E22-900M30S's SX1262. It is worth noting that if you are in this situation and don't have a HAM license, you may be better off with a lower gain antenna, and output the difference as a higher total power input into the antenna, as your EIRP would be the same, but you would get a wider angle of coverage. Also take insertion loss and possibly VSWR into account (https://www.everythingrf.com/tech-resources/vswr).
 // Please check regulations yourself and check airtime, usage (for example whether you are airborne), frequency, and power laws.
 #define SX126X_MAX_POWER 22 // SX126xInterface.cpp defaults to 22 if not defined, but here we define it for good practice
 
-// FIXME: change behavior in src to default to not having screen if is undefined
-// FIXME: remove 0/1 option for HAS_SCREEN, change to being defined or not
-// FIXME: check if it actually causes a crash when not specifiying that a display isn't present
 // Display
-#define HAS_SCREEN 0 // Assume no screen present by default to prevent crash(?)
+// FIXME: change behavior in src to default to not having screen if is undefined
+// FIXME: remove 0/1 option for HAS_SCREEN in src, change to being defined or not
+// FIXME: check if it actually causes a crash when not specifiying that a display isn't present
+#define HAS_SCREEN 0 // Assume no screen present by default to prevent crash...
 
-// FIXME: change behavior in src to default to not having GPS if is undefined
-// FIXME: remove 0/1 option for HAS_GPS, change to being defined or not
-// FIXME: check if it actually causes a crash when not specifiying that a GPS isn't present
 // GPS
-#define HAS_GPS 0 // Assume GPS present by default to prevent crash(?)
+// FIXME: remove 0/1 option for HAS_GPS in src, change to being defined or not
+// #define HAS_GPS 0 // Don't need to set this to 0 to prevent a crash as it doesn't crash if GPS not found, will probe by default
+#define PIN_GPS_EN 15
+#define GPS_TX_PIN 16
+#define GPS_RX_PIN 17
 
 /////////////////////////////////////////////////////////////////////////////////
 //                                                                             //
