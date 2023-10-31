@@ -131,6 +131,13 @@ class NodeDB
     meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
     size_t getNumMeshNodes() { return *numMeshNodes; }
 
+    void setLocalPosition(meshtastic_Position position)
+    {
+        LOG_DEBUG("Setting local position: latitude=%i, longitude=%i, time=%i\n", position.latitude_i, position.longitude_i,
+                  position.time);
+        localPosition = position;
+    }
+
   private:
     /// Find a node in our DB, create an empty NodeInfoLite if missing
     meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
@@ -197,6 +204,7 @@ extern NodeDB nodeDB;
 #define default_mqtt_address "mqtt.meshtastic.org"
 #define default_mqtt_username "meshdev"
 #define default_mqtt_password "large4cats"
+#define default_mqtt_root "msh"
 
 inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval)
 {

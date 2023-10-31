@@ -33,8 +33,15 @@ typedef enum _meshtastic_Config_DeviceConfig_Role {
    Position Mesh packets will be prioritized higher and sent more frequently by default. */
     meshtastic_Config_DeviceConfig_Role_TRACKER = 5,
     /* Sensor device role
-   Telemetry Mesh packets will be prioritized higher and sent more frequently by default. */
-    meshtastic_Config_DeviceConfig_Role_SENSOR = 6
+   Telemetry Mesh packets will be prioritized higher and sent more frequently by default.
+   When used in conjunction with power.is_power_saving = true, nodes will wake up, 
+   send environment telemetry, and then sleep for telemetry.environment_update_interval seconds. */
+    meshtastic_Config_DeviceConfig_Role_SENSOR = 6,
+    /* TAK device role
+    Used for nodes dedicated for connection to an ATAK EUD.
+    Turns off many of the routine broadcasts to favor CoT packet stream
+    from the Meshtastic ATAK plugin -> IMeshService -> Node */
+    meshtastic_Config_DeviceConfig_Role_TAK = 7
 } meshtastic_Config_DeviceConfig_Role;
 
 /* Defines the device's behavior for how messages are rebroadcast */
@@ -472,8 +479,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_Config_DeviceConfig_Role_MIN meshtastic_Config_DeviceConfig_Role_CLIENT
-#define _meshtastic_Config_DeviceConfig_Role_MAX meshtastic_Config_DeviceConfig_Role_SENSOR
-#define _meshtastic_Config_DeviceConfig_Role_ARRAYSIZE ((meshtastic_Config_DeviceConfig_Role)(meshtastic_Config_DeviceConfig_Role_SENSOR+1))
+#define _meshtastic_Config_DeviceConfig_Role_MAX meshtastic_Config_DeviceConfig_Role_TAK
+#define _meshtastic_Config_DeviceConfig_Role_ARRAYSIZE ((meshtastic_Config_DeviceConfig_Role)(meshtastic_Config_DeviceConfig_Role_TAK+1))
 
 #define _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN meshtastic_Config_DeviceConfig_RebroadcastMode_ALL
 #define _meshtastic_Config_DeviceConfig_RebroadcastMode_MAX meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY

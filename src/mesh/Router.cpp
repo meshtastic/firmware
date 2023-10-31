@@ -255,29 +255,12 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
 
-        bool shouldActuallyEncrypt = true;
-
         if (moduleConfig.mqtt.enabled) {
-            // check if we should send decrypted packets to mqtt
 
-            // truth table:
-            /* mqtt_server  mqtt_encryption_enabled should_encrypt
-             *    not set                        0              1
-             *    not set                        1              1
-             *        set                        0              0
-             *        set                        1              1
-             *
-             * => so we only decrypt mqtt if they have a custom mqtt server AND mqtt_encryption_enabled is FALSE
-             */
-
-            if (*moduleConfig.mqtt.address && !moduleConfig.mqtt.encryption_enabled) {
-                shouldActuallyEncrypt = false;
-            }
-
-            LOG_INFO("Should encrypt MQTT?: %d\n", shouldActuallyEncrypt);
+            LOG_INFO("Should encrypt MQTT?: %d\n", moduleConfig.mqtt.encryption_enabled);
 
             // the packet is currently in a decrypted state.  send it now if they want decrypted packets
-            if (mqtt && !shouldActuallyEncrypt)
+            if (mqtt && !moduleConfig.mqtt.encryption_enabled)
                 mqtt->onSend(*p, chIndex);
         }
 
@@ -290,7 +273,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         if (moduleConfig.mqtt.enabled) {
             // the packet is now encrypted.
             // check if we should send encrypted packets to mqtt
-            if (mqtt && shouldActuallyEncrypt)
+            if (mqtt && moduleConfig.mqtt.encryption_enabled)
                 mqtt->onSend(*p, chIndex);
         }
     }

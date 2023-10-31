@@ -405,7 +405,7 @@ bool PhoneAPI::available()
         if (nodeInfoForPhone.num == 0) {
             auto nextNode = nodeDB.readNextMeshNode(readIndex);
             if (nextNode) {
-                nodeInfoForPhone = ConvertToNodeInfo(nextNode);
+                nodeInfoForPhone = TypeConversions::ConvertToNodeInfo(nextNode);
             }
         }
         return true; // Always say we have something, because we might need to advance our state machine

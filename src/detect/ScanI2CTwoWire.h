@@ -18,6 +18,8 @@ class ScanI2CTwoWire : public ScanI2C
 
     ScanI2C::FoundDevice find(ScanI2C::DeviceType) const override;
 
+    TwoWire *fetchI2CBus(ScanI2C::DeviceAddress) const;
+
     bool exists(ScanI2C::DeviceType) const override;
 
     size_t countDevices() const override;
@@ -51,6 +53,4 @@ class ScanI2CTwoWire : public ScanI2C
     uint16_t getRegisterValue(const RegisterLocation &, ResponseWidth) const;
 
     DeviceType probeOLED(ScanI2C::DeviceAddress) const;
-
-    TwoWire *fetchI2CBus(ScanI2C::DeviceAddress) const;
 };
