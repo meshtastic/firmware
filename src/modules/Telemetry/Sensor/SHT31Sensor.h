@@ -2,7 +2,7 @@
 #include "TelemetrySensor.h"
 #include <Adafruit_SHT31.h>
 
-class SHT31Sensor : virtual public TelemetrySensor
+class SHT31Sensor : public TelemetrySensor
 {
   private:
     Adafruit_SHT31 sht31 = Adafruit_SHT31();

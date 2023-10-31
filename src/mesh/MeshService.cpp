@@ -267,14 +267,22 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
 
 void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 {
+    perhapsDecode(p);
+
     if (toPhoneQueue.numFree() == 0) {
-        LOG_WARN("ToPhone queue is full, discarding oldest\n");
-        meshtastic_MeshPacket *d = toPhoneQueue.dequeuePtr(0);
-        if (d)
-            releaseToPool(d);
+        if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
+            p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP) {
+            LOG_WARN("ToPhone queue is full, discarding oldest\n");
+            meshtastic_MeshPacket *d = toPhoneQueue.dequeuePtr(0);
+            if (d)
+                releaseToPool(d);
+        } else {
+            LOG_WARN("ToPhone queue is full, dropping packet.\n");
+            releaseToPool(p);
+            return;
+        }
     }
 
-    perhapsDecode(p);
     assert(toPhoneQueue.enqueue(p, 0));
     fromNum++;
 }
@@ -335,7 +343,7 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
     // Used fixed position if configured regalrdless of GPS lock
     if (config.position.fixed_position) {
         LOG_WARN("Using fixed position\n");
-        pos = ConvertToPosition(node->position);
+        pos = TypeConversions::ConvertToPosition(node->position);
     }
 
     // Add a fresh timestamp

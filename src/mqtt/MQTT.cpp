@@ -133,9 +133,15 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
             if (strcmp(e.gateway_id, owner.id) == 0)
                 LOG_INFO("Ignoring downlink message we originally sent.\n");
             else {
-                if (e.packet) {
+                // Find channel by channel_id and check downlink_enabled
+                meshtastic_Channel ch = channels.getByName(e.channel_id);
+                if (strcmp(e.channel_id, channels.getGlobalId(ch.index)) == 0 && e.packet && ch.settings.downlink_enabled) {
                     LOG_INFO("Received MQTT topic %s, len=%u\n", topic, length);
                     meshtastic_MeshPacket *p = packetPool.allocCopy(*e.packet);
+
+                    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+                        p->channel = ch.index;
+                    }
 
                     // ignore messages sent by us or if we don't have the channel key
                     if (router && p->from != nodeDB.getNodeNum() && perhapsDecode(p))
@@ -686,6 +692,10 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
     jsonObj["channel"] = new JSONValue((uint)mp->channel);
     jsonObj["type"] = new JSONValue(msgType.c_str());
     jsonObj["sender"] = new JSONValue(owner.id);
+    if (mp->rx_rssi != 0)
+        jsonObj["rssi"] = new JSONValue((int)mp->rx_rssi);
+    if (mp->rx_snr != 0)
+        jsonObj["snr"] = new JSONValue((float)mp->rx_snr);
 
     // serialize and write it to the stream
     JSONValue *value = new JSONValue(jsonObj);
