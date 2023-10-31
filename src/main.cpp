@@ -29,6 +29,7 @@
 #include "target_specific.h"
 #include <Wire.h>
 #include <memory>
+#include <utility>
 // #include <driver/rtc_io.h>
 
 #include "mesh/eth/ethClient.h"
@@ -122,9 +123,8 @@ uint32_t serialSinceMsec;
 
 bool pmu_found;
 
-// Array map of sensor types (as array index) and i2c address as value we'll find in the i2c scan
-uint8_t nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1] = {
-    0}; // one is enough, missing elements will be initialized to 0 anyway.
+// Array map of sensor types with i2c address and wire as we'll find in the i2c scan
+std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1] = {};
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
 
@@ -145,6 +145,25 @@ const char *getDeviceName()
     }
     return name;
 }
+
+#ifdef VEXT_ENABLE_V03
+
+#include <soc/rtc.h>
+
+static uint32_t calibrate_one(rtc_cal_sel_t cal_clk, const char *name)
+{
+    const uint32_t cal_count = 1000;
+    uint32_t cali_val;
+    for (int i = 0; i < 5; ++i) {
+        cali_val = rtc_clk_cal(cal_clk, cal_count);
+    }
+    return cali_val;
+}
+
+int heltec_version = 3;
+
+#define CALIBRATE_ONE(cali_clk) calibrate_one(cali_clk, #cali_clk)
+#endif
 
 static int32_t ledBlinker()
 {
@@ -216,9 +235,61 @@ void setup()
     digitalWrite(PIN_EINK_PWR_ON, HIGH);
 #endif
 
-#ifdef VEXT_ENABLE
+#ifdef ST7735_BL_V03 // Heltec Wireless Tracker PCB Change Detect/Hack
+
+    rtc_clk_32k_enable(true);
+    CALIBRATE_ONE(RTC_CAL_RTC_MUX);
+    if (CALIBRATE_ONE(RTC_CAL_32K_XTAL) != 0) {
+        rtc_clk_slow_freq_set(RTC_SLOW_FREQ_32K_XTAL);
+        CALIBRATE_ONE(RTC_CAL_RTC_MUX);
+        CALIBRATE_ONE(RTC_CAL_32K_XTAL);
+    }
+
+    if (rtc_clk_slow_freq_get() != RTC_SLOW_FREQ_32K_XTAL) {
+        heltec_version = 3;
+    } else {
+        heltec_version = 5;
+    }
+#endif
+
+#if defined(VEXT_ENABLE_V03)
+    if (heltec_version == 3) {
+        pinMode(VEXT_ENABLE_V03, OUTPUT);
+        digitalWrite(VEXT_ENABLE_V03, 0); // turn on the display power
+        LOG_DEBUG("HELTEC Detect Tracker V1.0\n");
+    } else {
+        pinMode(VEXT_ENABLE_V05, OUTPUT);
+        digitalWrite(VEXT_ENABLE_V05, 1); // turn on the display power
+        LOG_DEBUG("HELTEC Detect Tracker V1.1\n");
+    }
+#elif defined(VEXT_ENABLE)
     pinMode(VEXT_ENABLE, OUTPUT);
     digitalWrite(VEXT_ENABLE, 0); // turn on the display power
+#endif
+
+#if defined(VGNSS_CTRL_V03)
+    if (heltec_version == 3) {
+        pinMode(VGNSS_CTRL_V03, OUTPUT);
+        digitalWrite(VGNSS_CTRL_V03, LOW);
+    } else {
+        pinMode(VGNSS_CTRL_V05, OUTPUT);
+        digitalWrite(VGNSS_CTRL_V05, LOW);
+    }
+#endif
+
+#if defined(VTFT_CTRL_V03)
+    if (heltec_version == 3) {
+        pinMode(VTFT_CTRL_V03, OUTPUT);
+        digitalWrite(VTFT_CTRL_V03, LOW);
+    } else {
+        pinMode(VTFT_CTRL_V05, OUTPUT);
+        digitalWrite(VTFT_CTRL_V05, LOW);
+    }
+#endif
+
+#if defined(VGNSS_CTRL)
+    pinMode(VGNSS_CTRL, OUTPUT);
+    digitalWrite(VGNSS_CTRL, LOW);
 #endif
 
 #if defined(VTFT_CTRL)
@@ -420,7 +491,8 @@ void setup()
     {                                                                                                                            \
         auto found = i2cScanner->find(SCANNER_T);                                                                                \
         if (found.type != ScanI2C::DeviceType::NONE) {                                                                           \
-            nodeTelemetrySensorsMap[PB_T] = found.address.address;                                                               \
+            nodeTelemetrySensorsMap[PB_T].first = found.address.address;                                                         \
+            nodeTelemetrySensorsMap[PB_T].second = i2cScanner->fetchI2CBus(found.address);                                       \
             LOG_DEBUG("found i2c sensor %s\n", STRING(PB_T));                                                                    \
         }                                                                                                                        \
     }

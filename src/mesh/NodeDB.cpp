@@ -254,6 +254,8 @@ void NodeDB::installDefaultModuleConfig()
     strncpy(moduleConfig.mqtt.address, default_mqtt_address, sizeof(moduleConfig.mqtt.address));
     strncpy(moduleConfig.mqtt.username, default_mqtt_username, sizeof(moduleConfig.mqtt.username));
     strncpy(moduleConfig.mqtt.password, default_mqtt_password, sizeof(moduleConfig.mqtt.password));
+    strncpy(moduleConfig.mqtt.root, default_mqtt_root, sizeof(moduleConfig.mqtt.root));
+    moduleConfig.mqtt.encryption_enabled = true;
 
     moduleConfig.has_neighbor_info = true;
     moduleConfig.neighbor_info.enabled = false;
@@ -285,6 +287,15 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
     } else if (role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
         moduleConfig.telemetry.environment_measurement_enabled = true;
         moduleConfig.telemetry.environment_update_interval = 300;
+    } else if (role == meshtastic_Config_DeviceConfig_Role_TAK) {
+        config.device.node_info_broadcast_secs = ONE_DAY;
+        config.position.position_broadcast_smart_enabled = false;
+        config.position.position_broadcast_secs = ONE_DAY;
+        // Remove Altitude MSL from flags since CoTs use HAE (height above ellipsoid)
+        config.position.position_flags =
+            (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_SPEED |
+             meshtastic_Config_PositionConfig_PositionFlags_HEADING | meshtastic_Config_PositionConfig_PositionFlags_DOP);
+        moduleConfig.telemetry.device_update_interval = ONE_DAY;
     }
 }
 
@@ -687,8 +698,8 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
         LOG_INFO("updatePosition LOCAL pos@%x, time=%u, latI=%d, lonI=%d, alt=%d\n", p.timestamp, p.time, p.latitude_i,
                  p.longitude_i, p.altitude);
 
-        info->position = ConvertToPositionLite(p);
-        localPosition = p;
+        setLocalPosition(p);
+        info->position = TypeConversions::ConvertToPositionLite(p);
     } else if ((p.time > 0) && !p.latitude_i && !p.longitude_i && !p.timestamp && !p.location_source) {
         // FIXME SPECIAL TIME SETTING PACKET FROM EUD TO RADIO
         // (stop-gap fix for issue #900)
@@ -706,7 +717,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
         uint32_t tmp_time = info->position.time;
 
         // Next, update atomically
-        info->position = ConvertToPositionLite(p);
+        info->position = TypeConversions::ConvertToPositionLite(p);
 
         // Last, restore any fields that may have been overwritten
         if (!info->position.time)
