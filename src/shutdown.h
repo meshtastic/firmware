@@ -14,7 +14,7 @@ void powerCommandsCheck()
         NVIC_SystemReset();
 #elif defined(ARCH_RP2040)
         rp2040.reboot();
-#elif defined(ARCH_RASPBERRY_PI)
+#elif (defined(ARCH_RASPBERRY_PI) || defined(ARCH_PORTDUINO))
         exit(EXIT_SUCCESS);
 #else
         rebootAtMsec = -1;
