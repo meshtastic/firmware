@@ -378,6 +378,11 @@ void AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         moduleConfig.has_detection_sensor = true;
         moduleConfig.detection_sensor = c.payload_variant.detection_sensor;
         break;
+    case meshtastic_ModuleConfig_ambient_lighting_tag:
+        LOG_INFO("Setting module config: Ambient Lighting\n");
+        moduleConfig.has_ambient_lighting = true;
+        moduleConfig.ambient_lighting = c.payload_variant.ambient_lighting;
+        break;
     }
 
     saveChanges(SEGMENT_MODULECONFIG);
@@ -522,6 +527,11 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             LOG_INFO("Getting module config: Detection Sensor\n");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_detection_sensor_tag;
             res.get_module_config_response.payload_variant.detection_sensor = moduleConfig.detection_sensor;
+            break;
+        case meshtastic_AdminMessage_ModuleConfigType_AMBIENTLIGHTING_CONFIG:
+            LOG_INFO("Getting module config: Ambient Lighting\n");
+            res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_ambient_lighting_tag;
+            res.get_module_config_response.payload_variant.ambient_lighting = moduleConfig.ambient_lighting;
             break;
         }
 
