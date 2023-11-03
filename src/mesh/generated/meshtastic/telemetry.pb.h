@@ -39,7 +39,9 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* High accuracy temperature and humidity */
     meshtastic_TelemetrySensorType_SHT31 = 12,
     /* PM2.5 air quality sensor */
-    meshtastic_TelemetrySensorType_PMSA003I = 13
+    meshtastic_TelemetrySensorType_PMSA003I = 13,
+    /* INA3221 3 Channel Voltage / Current Sensor */
+    meshtastic_TelemetrySensorType_INA3221 = 14
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -65,11 +67,27 @@ typedef struct _meshtastic_EnvironmentMetrics {
     float barometric_pressure;
     /* Gas resistance in MOhm measured */
     float gas_resistance;
-    /* Voltage measured */
+    /* Voltage measured (To be depreciated in favor of PowerMetrics in Meshtastic 3.x) */
     float voltage;
-    /* Current measured */
+    /* Current measured (To be depreciated in favor of PowerMetrics in Meshtastic 3.x) */
     float current;
 } meshtastic_EnvironmentMetrics;
+
+/* Power Metrics (voltage / current / etc) */
+typedef struct _meshtastic_PowerMetrics {
+    /* Voltage (Ch1) */
+    float ch1_voltage;
+    /* Current (Ch1) */
+    float ch1_current;
+    /* Voltage (Ch2) */
+    float ch2_voltage;
+    /* Current (Ch2) */
+    float ch2_current;
+    /* Voltage (Ch3) */
+    float ch3_voltage;
+    /* Current (Ch3) */
+    float ch3_current;
+} meshtastic_PowerMetrics;
 
 /* Air quality metrics */
 typedef struct _meshtastic_AirQualityMetrics {
@@ -111,6 +129,8 @@ typedef struct _meshtastic_Telemetry {
         meshtastic_EnvironmentMetrics environment_metrics;
         /* Air quality metrics */
         meshtastic_AirQualityMetrics air_quality_metrics;
+        /* Power Metrics */
+        meshtastic_PowerMetrics power_metrics;
     } variant;
 } meshtastic_Telemetry;
 
@@ -121,8 +141,9 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_PMSA003I
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_PMSA003I+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_INA3221
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_INA3221+1))
+
 
 
 
@@ -132,10 +153,12 @@ extern "C" {
 /* Initializer values for message structs */
 #define meshtastic_DeviceMetrics_init_default    {0, 0, 0, 0}
 #define meshtastic_EnvironmentMetrics_init_default {0, 0, 0, 0, 0, 0}
+#define meshtastic_PowerMetrics_init_default     {0, 0, 0, 0, 0, 0}
 #define meshtastic_AirQualityMetrics_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Telemetry_init_default        {0, 0, {meshtastic_DeviceMetrics_init_default}}
 #define meshtastic_DeviceMetrics_init_zero       {0, 0, 0, 0}
 #define meshtastic_EnvironmentMetrics_init_zero  {0, 0, 0, 0, 0, 0}
+#define meshtastic_PowerMetrics_init_zero        {0, 0, 0, 0, 0, 0}
 #define meshtastic_AirQualityMetrics_init_zero   {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Telemetry_init_zero           {0, 0, {meshtastic_DeviceMetrics_init_zero}}
 
@@ -150,6 +173,12 @@ extern "C" {
 #define meshtastic_EnvironmentMetrics_gas_resistance_tag 4
 #define meshtastic_EnvironmentMetrics_voltage_tag 5
 #define meshtastic_EnvironmentMetrics_current_tag 6
+#define meshtastic_PowerMetrics_ch1_voltage_tag  1
+#define meshtastic_PowerMetrics_ch1_current_tag  2
+#define meshtastic_PowerMetrics_ch2_voltage_tag  3
+#define meshtastic_PowerMetrics_ch2_current_tag  4
+#define meshtastic_PowerMetrics_ch3_voltage_tag  5
+#define meshtastic_PowerMetrics_ch3_current_tag  6
 #define meshtastic_AirQualityMetrics_pm10_standard_tag 1
 #define meshtastic_AirQualityMetrics_pm25_standard_tag 2
 #define meshtastic_AirQualityMetrics_pm100_standard_tag 3
@@ -166,6 +195,7 @@ extern "C" {
 #define meshtastic_Telemetry_device_metrics_tag  2
 #define meshtastic_Telemetry_environment_metrics_tag 3
 #define meshtastic_Telemetry_air_quality_metrics_tag 4
+#define meshtastic_Telemetry_power_metrics_tag   5
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_DeviceMetrics_FIELDLIST(X, a) \
@@ -185,6 +215,16 @@ X(a, STATIC,   SINGULAR, FLOAT,    voltage,           5) \
 X(a, STATIC,   SINGULAR, FLOAT,    current,           6)
 #define meshtastic_EnvironmentMetrics_CALLBACK NULL
 #define meshtastic_EnvironmentMetrics_DEFAULT NULL
+
+#define meshtastic_PowerMetrics_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, FLOAT,    ch1_voltage,       1) \
+X(a, STATIC,   SINGULAR, FLOAT,    ch1_current,       2) \
+X(a, STATIC,   SINGULAR, FLOAT,    ch2_voltage,       3) \
+X(a, STATIC,   SINGULAR, FLOAT,    ch2_current,       4) \
+X(a, STATIC,   SINGULAR, FLOAT,    ch3_voltage,       5) \
+X(a, STATIC,   SINGULAR, FLOAT,    ch3_current,       6)
+#define meshtastic_PowerMetrics_CALLBACK NULL
+#define meshtastic_PowerMetrics_DEFAULT NULL
 
 #define meshtastic_AirQualityMetrics_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   pm10_standard,     1) \
@@ -206,21 +246,25 @@ X(a, STATIC,   SINGULAR, UINT32,   particles_100um,  12)
 X(a, STATIC,   SINGULAR, FIXED32,  time,              1) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,device_metrics,variant.device_metrics),   2) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,environment_metrics,variant.environment_metrics),   3) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,air_quality_metrics,variant.air_quality_metrics),   4)
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,air_quality_metrics,variant.air_quality_metrics),   4) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,power_metrics,variant.power_metrics),   5)
 #define meshtastic_Telemetry_CALLBACK NULL
 #define meshtastic_Telemetry_DEFAULT NULL
 #define meshtastic_Telemetry_variant_device_metrics_MSGTYPE meshtastic_DeviceMetrics
 #define meshtastic_Telemetry_variant_environment_metrics_MSGTYPE meshtastic_EnvironmentMetrics
 #define meshtastic_Telemetry_variant_air_quality_metrics_MSGTYPE meshtastic_AirQualityMetrics
+#define meshtastic_Telemetry_variant_power_metrics_MSGTYPE meshtastic_PowerMetrics
 
 extern const pb_msgdesc_t meshtastic_DeviceMetrics_msg;
 extern const pb_msgdesc_t meshtastic_EnvironmentMetrics_msg;
+extern const pb_msgdesc_t meshtastic_PowerMetrics_msg;
 extern const pb_msgdesc_t meshtastic_AirQualityMetrics_msg;
 extern const pb_msgdesc_t meshtastic_Telemetry_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_DeviceMetrics_fields &meshtastic_DeviceMetrics_msg
 #define meshtastic_EnvironmentMetrics_fields &meshtastic_EnvironmentMetrics_msg
+#define meshtastic_PowerMetrics_fields &meshtastic_PowerMetrics_msg
 #define meshtastic_AirQualityMetrics_fields &meshtastic_AirQualityMetrics_msg
 #define meshtastic_Telemetry_fields &meshtastic_Telemetry_msg
 
@@ -228,6 +272,7 @@ extern const pb_msgdesc_t meshtastic_Telemetry_msg;
 #define meshtastic_AirQualityMetrics_size        72
 #define meshtastic_DeviceMetrics_size            21
 #define meshtastic_EnvironmentMetrics_size       30
+#define meshtastic_PowerMetrics_size             30
 #define meshtastic_Telemetry_size                79
 
 #ifdef __cplusplus
