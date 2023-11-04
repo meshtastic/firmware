@@ -23,6 +23,8 @@
 #if HAS_SENSOR
 #include "modules/Telemetry/AirQualityTelemetry.h"
 #include "modules/Telemetry/EnvironmentTelemetry.h"
+#endif
+#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
 #include "modules/Telemetry/PowerTelemetry.h"
 #endif
 #ifdef ARCH_ESP32

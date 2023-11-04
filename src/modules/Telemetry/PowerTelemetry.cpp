@@ -12,7 +12,9 @@
 #include "sleep.h"
 #include "target_specific.h"
 
+#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
 INA3221Sensor ina3221Sensor;
+#endif
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
