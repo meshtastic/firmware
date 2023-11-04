@@ -64,7 +64,17 @@ int32_t PowerTelemetryModule::runOnce()
     if (firstTime) {
         // This is the first time the OSThread library has called this function, so do some setup
         firstTime = 0;
-
+#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
+        if (moduleConfig.telemetry.power_measurement_enabled) {
+            LOG_INFO("Power Telemetry: Initializing\n");
+            // it's possible to have this module enabled, only for displaying values on the screen.
+            // therefore, we should only enable the sensor loop if measurement is also enabled
+            if (ina219Sensor.hasSensor() && !ina219Sensor.isInitialized())
+                result = ina219Sensor.runOnce();
+            if (ina260Sensor.hasSensor() && !ina260Sensor.isInitialized())
+                result = ina260Sensor.runOnce();
+        }
+#else
         if (moduleConfig.telemetry.power_measurement_enabled) {
             LOG_INFO("Power Telemetry: Initializing\n");
             // it's possible to have this module enabled, only for displaying values on the screen.
@@ -76,6 +86,7 @@ int32_t PowerTelemetryModule::runOnce()
             if (ina3221Sensor.hasSensor() && !ina3221Sensor.isInitialized())
                 result = ina3221Sensor.runOnce();
         }
+#endif
         return result;
     } else {
         // if we somehow got to a second run of this module with measurement disabled, then just wait forever
@@ -195,8 +206,10 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         valid = ina219Sensor.getMetrics(&m);
     if (ina260Sensor.hasSensor())
         valid = ina260Sensor.getMetrics(&m);
+#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
     if (ina3221Sensor.hasSensor())
         valid = ina3221Sensor.getMetrics(&m);
+#endif
 
     if (valid) {
         LOG_INFO("(Sending): ch1_voltage=%f, ch1_current=%f, ch2_voltage=%f, ch2_current=%f, "
