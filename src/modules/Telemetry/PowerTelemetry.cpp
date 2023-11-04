@@ -73,21 +73,13 @@ int32_t PowerTelemetryModule::runOnce()
                 result = ina219Sensor.runOnce();
             if (ina260Sensor.hasSensor() && !ina260Sensor.isInitialized())
                 result = ina260Sensor.runOnce();
-        }
-#else
-        if (moduleConfig.telemetry.power_measurement_enabled) {
-            LOG_INFO("Power Telemetry: Initializing\n");
-            // it's possible to have this module enabled, only for displaying values on the screen.
-            // therefore, we should only enable the sensor loop if measurement is also enabled
-            if (ina219Sensor.hasSensor() && !ina219Sensor.isInitialized())
-                result = ina219Sensor.runOnce();
-            if (ina260Sensor.hasSensor() && !ina260Sensor.isInitialized())
-                result = ina260Sensor.runOnce();
             if (ina3221Sensor.hasSensor() && !ina3221Sensor.isInitialized())
                 result = ina3221Sensor.runOnce();
         }
-#endif
         return result;
+#else
+        return disable();
+#endif
     } else {
         // if we somehow got to a second run of this module with measurement disabled, then just wait forever
         if (!moduleConfig.telemetry.power_measurement_enabled)
@@ -201,12 +193,11 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.variant.power_metrics.ch2_current = 0;
     m.variant.power_metrics.ch3_voltage = 0;
     m.variant.power_metrics.ch3_current = 0;
-
+#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
     if (ina219Sensor.hasSensor())
         valid = ina219Sensor.getMetrics(&m);
     if (ina260Sensor.hasSensor())
         valid = ina260Sensor.getMetrics(&m);
-#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
     if (ina3221Sensor.hasSensor())
         valid = ina3221Sensor.getMetrics(&m);
 #endif
