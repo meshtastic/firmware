@@ -5,7 +5,6 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
-#include "Sensor/INA3221Sensor.h"
 #include "configuration.h"
 #include "main.h"
 #include "power.h"
@@ -13,6 +12,7 @@
 #include "target_specific.h"
 
 #if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
+#include "Sensor/INA3221Sensor.h"
 INA3221Sensor ina3221Sensor;
 #endif
 
