@@ -1,10 +1,10 @@
+// Supporting information: https://github.com/S5NC/EBYTE_ESP32-S3/
+
 // Originally developed for E22-900M30S with ESP32-S3-WROOM-1-N4
 // NOTE: Uses ESP32-S3-WROOM-1-N4.json in boards folder (via platformio.ini board field), assumes 4 MB (quad SPI) flash, no PSRAM
 
 // FIXME: implement SX12 module type autodetection and have setup for each case (add E32 support)
 // E32 has same pinout except having extra pins. I assume that the GND on it is connected internally to other GNDs so it is not a problem to NC the extra GND pins.
-
-// Example schematic: https://github.com/S5NC/EBYTE_ESP32-S3/blob/main/schematic.pdf
 
 // For each EBYTE module pin in this section, provide the pin number of the ESP32-S3 you connected it to
 // The ESP32-S3 is great because YOU CAN USE PRACTICALLY ANY PINS for the connections, but avoid some pins (such as on the WROOM
