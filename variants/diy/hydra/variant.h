@@ -18,6 +18,7 @@
 
 // Radio
 #define USE_SX1262 // E22-900M30S uses SX1262
+#define USE_SX1268 // E22-400M30S uses SX1268
 #define SX126X_MAX_POWER                                                                                                         \
     22 // Outputting 22dBm from SX1262 results in ~30dBm E22-900M30S output (module only uses last stage of the YP2233W PA)
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8 // E22 series TCXO reference voltage is 1.8V
