@@ -8,7 +8,7 @@
  * handle the module's behavior.
  *
  * Documentation:
- * https://meshtastic.org/docs/settings/moduleconfig/external-notification
+ * https://meshtastic.org/docs/configuration/module/external-notification
  *
  * @author Jm Casler & Meshtastic Team
  * @date [Insert Date]
@@ -39,7 +39,7 @@ uint8_t blue = 0;
 
 /*
     Documentation:
-        https://meshtastic.org/docs/settings/moduleconfig/external-notification
+        https://meshtastic.org/docs/configuration/module/external-notification
 */
 
 // Default configurations
