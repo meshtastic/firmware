@@ -105,6 +105,10 @@ class LGFX : public lgfx::LGFX_Device
 
 static LGFX tft;
 
+#elif defined(RAK14014)
+#include <TFT_eSPI.h>
+TFT_eSPI tft = TFT_eSPI();
+
 #elif defined(ST7789_CS)
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
 
@@ -327,7 +331,7 @@ static TFT_eSPI tft = TFT_eSPI(); // Invoke library, pins defined in User_Setup.
 
 #endif
 
-#if defined(ST7735_CS) || defined(ST7789_CS) || defined(ILI9341_DRIVER)
+#if defined(ST7735_CS) || defined(ST7789_CS) || defined(ILI9341_DRIVER) || defined(RAK14014)
 #include "SPILock.h"
 #include "TFTDisplay.h"
 #include <SPI.h>
@@ -393,7 +397,9 @@ void TFTDisplay::sendCommand(uint8_t com)
 #ifdef VTFT_CTRL
         digitalWrite(VTFT_CTRL, LOW);
 #endif
-#ifndef M5STACK
+
+#ifdef RAK14014
+#elif !defined(M5STACK)
         tft.setBrightness(128);
 #endif
         break;
@@ -419,7 +425,8 @@ void TFTDisplay::sendCommand(uint8_t com)
 #ifdef VTFT_CTRL
         digitalWrite(VTFT_CTRL, HIGH);
 #endif
-#ifndef M5STACK
+#ifdef RAK14014
+#elif !defined(M5STACK)
         tft.setBrightness(0);
 #endif
         break;
@@ -441,7 +448,8 @@ void TFTDisplay::flipScreenVertically()
 
 bool TFTDisplay::hasTouch(void)
 {
-#ifndef M5STACK
+#ifdef RAK14014
+#elif !defined(M5STACK)
     return tft.touch() != nullptr;
 #else
     return false;
@@ -450,7 +458,8 @@ bool TFTDisplay::hasTouch(void)
 
 bool TFTDisplay::getTouch(int16_t *x, int16_t *y)
 {
-#ifndef M5STACK
+#ifdef RAK14014
+#elif !defined(M5STACK)
     return tft.getTouch(x, y);
 #else
     return false;
@@ -471,6 +480,9 @@ bool TFTDisplay::connect()
 #ifdef TFT_BL
     digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
     pinMode(TFT_BL, OUTPUT);
+    // pinMode(PIN_3V3_EN, OUTPUT);
+    // digitalWrite(PIN_3V3_EN, HIGH);
+    LOG_INFO("Power to TFT Backlight\n");
 #endif
 
 #ifdef ST7735_BACKLIGHT_EN_V03
@@ -484,16 +496,21 @@ bool TFTDisplay::connect()
 #endif
 
     tft.init();
+
 #if defined(M5STACK)
     tft.setRotation(0);
+#elif defined(RAK14014)
+    tft.setRotation(1);
+    tft.setSwapBytes(true);
+    tft.fillScreen(TFT_BLACK);
 #elif defined(T_DECK) || defined(PICOMPUTER_S3)
     tft.setRotation(1); // T-Deck has the TFT in landscape
 #elif defined(T_WATCH_S3)
     tft.setRotation(2); // T-Watch S3 left-handed orientation
 #else
     tft.setRotation(3); // Orient horizontal and wide underneath the silkscreen name label
-#endif
     tft.fillScreen(TFT_BLACK);
+#endif
     return true;
 }
 
