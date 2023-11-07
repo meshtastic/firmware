@@ -25,6 +25,7 @@ class ScanI2C
         BMP_280,
         INA260,
         INA219,
+        INA3221,
         MCP9808,
         SHT31,
         SHTC3,

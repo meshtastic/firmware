@@ -384,27 +384,27 @@ void RadioInterface::applyModemConfig()
         switch (loraConfig.modem_preset) {
         case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
             bw = (myRegion->wideLora) ? 812.5 : 250;
-            cr = 8;
+            cr = 5;
             sf = 7;
             break;
         case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
             bw = (myRegion->wideLora) ? 812.5 : 250;
-            cr = 8;
+            cr = 5;
             sf = 8;
             break;
         case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
             bw = (myRegion->wideLora) ? 812.5 : 250;
-            cr = 8;
+            cr = 5;
             sf = 9;
             break;
         case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
             bw = (myRegion->wideLora) ? 812.5 : 250;
-            cr = 8;
+            cr = 5;
             sf = 10;
             break;
         default: // Config_LoRaConfig_ModemPreset_LONG_FAST is default. Gracefully use this is preset is something illegal.
             bw = (myRegion->wideLora) ? 812.5 : 250;
-            cr = 8;
+            cr = 5;
             sf = 11;
             break;
         case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
