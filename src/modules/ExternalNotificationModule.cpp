@@ -111,7 +111,7 @@ int32_t ExternalNotificationModule::runOnce()
 
                 if (ascending) { // fade in
                     brightnessIndex++;
-                    if (brightnessIndex > sizeof(brightnessValues - 1)) {
+                    if (brightnessIndex == (sizeof(brightnessValues) - 1)) {
                         ascending = false;
                     }
                 } else {
