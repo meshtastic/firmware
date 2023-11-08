@@ -42,10 +42,7 @@ template <typename T> bool SX128xInterface<T>::init()
 
     RadioLibInterface::init();
 
-    if (power == 0)
-        power = SX128X_MAX_POWER;
-
-    if (power > SX128X_MAX_POWER) // This chip has lower power limits than some
+    if (power > SX128X_MAX_POWER) // Note: this chip has lower power limits than some
         power = SX128X_MAX_POWER;
 
     limitPower();
