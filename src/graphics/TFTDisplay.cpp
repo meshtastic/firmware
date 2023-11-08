@@ -502,15 +502,16 @@ bool TFTDisplay::connect()
 #elif defined(RAK14014)
     tft.setRotation(1);
     tft.setSwapBytes(true);
-    tft.fillScreen(TFT_BLACK);
+//    tft.fillScreen(TFT_BLACK);
 #elif defined(T_DECK) || defined(PICOMPUTER_S3)
     tft.setRotation(1); // T-Deck has the TFT in landscape
 #elif defined(T_WATCH_S3)
     tft.setRotation(2); // T-Watch S3 left-handed orientation
 #else
     tft.setRotation(3); // Orient horizontal and wide underneath the silkscreen name label
-    tft.fillScreen(TFT_BLACK);
 #endif
+    tft.fillScreen(TFT_BLACK);
+
     return true;
 }
 
