@@ -92,13 +92,13 @@
 */
 
 // Status
-#define LED_PIN 2
+#define LED_PIN 1
 // External notification
 // FIXME: Check if EXT_NOTIFY_OUT actualy has any effect and removes the need for setting the external notication pin in the
 // app/preferences
-#define EXT_NOTIFY_OUT 1 // The GPIO pin that acts as the external notification output (here we connect an LED to it)
+#define EXT_NOTIFY_OUT 2 // The GPIO pin that acts as the external notification output (here we connect an LED to it)
 // Buzzer
-// #define PIN_BUZZER 11
+#define PIN_BUZZER 11
 // I2C
 #define I2C_SCL 18
 #define I2C_SDA 8
