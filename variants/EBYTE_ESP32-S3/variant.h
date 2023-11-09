@@ -4,7 +4,8 @@
 // NOTE: Uses ESP32-S3-WROOM-1-N4.json in boards folder (via platformio.ini board field), assumes 4 MB (quad SPI) flash, no PSRAM
 
 // FIXME: implement SX12 module type autodetection and have setup for each case (add E32 support)
-// E32 has same pinout except having extra pins. I assume that the GND on it is connected internally to other GNDs so it is not a problem to NC the extra GND pins.
+// E32 has same pinout except having extra pins. I assume that the GND on it is connected internally to other GNDs so it is not a
+// problem to NC the extra GND pins.
 
 // For each EBYTE module pin in this section, provide the pin number of the ESP32-S3 you connected it to
 // The ESP32-S3 is great because YOU CAN USE PRACTICALLY ANY PINS for the connections, but avoid some pins (such as on the WROOM
@@ -12,9 +13,9 @@
 // application schematic) (0, 3, 45, 46), USB-reserved (19, 20), and pins which aren't present on the WROOM-2 module for
 // compatiblity as it uses octal SPI, or are likely connected internally in either WROOM version (26-37), and avoid pins whose
 // voltages are set by the SPI voltage (47, 48), and pins that don't exist (22-25) You can ALSO set the SPI pins (SX126X_CS,
-// SX126X_SCK, SX126X_MISO, SX126X_MOSI) to any pin with the ESP32-S3 due to \ GPIO Matrix / IO MUX / RTC IO MUX \, and also the serial
-// pins, but this isn't recommended for Serial0 as the WROOM modules have a 499 Ohm resistor on U0TXD (to reduce harmonics but
-// also acting as a sort of protection)
+// SX126X_SCK, SX126X_MISO, SX126X_MOSI) to any pin with the ESP32-S3 due to \ GPIO Matrix / IO MUX / RTC IO MUX \, and also the
+// serial pins, but this isn't recommended for Serial0 as the WROOM modules have a 499 Ohm resistor on U0TXD (to reduce harmonics
+// but also acting as a sort of protection)
 
 // We have many free pins on the ESP32-S3-WROOM-X-Y module, perhaps it is best to use one of its pins to control TXEN, and use
 // DIO2 as an extra interrupt, but right now Meshtastic does not benefit from having another interrupt pin available.
@@ -91,12 +92,13 @@
 */
 
 // Status
-#define LED_PIN 1
+#define LED_PIN 2
 // External notification
-// FIXME: Check if EXT_NOTIFY_OUT actualy has any effect and removes the need for setting the external notication pin in the app/preferences
-#define EXT_NOTIFY_OUT 2 // The GPIO pin that acts as the external notification output (here we connect an LED to it)
+// FIXME: Check if EXT_NOTIFY_OUT actualy has any effect and removes the need for setting the external notication pin in the
+// app/preferences
+#define EXT_NOTIFY_OUT 1 // The GPIO pin that acts as the external notification output (here we connect an LED to it)
 // Buzzer
-#define PIN_BUZZER 11
+// #define PIN_BUZZER 11
 // I2C
 #define I2C_SCL 18
 #define I2C_SDA 8
@@ -112,8 +114,13 @@
 // In the EU (and UK), as of now, you are allowed 27 dBm ERP which is 29.15 EIRP.
 // https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32022D0180
 // https://www.legislation.gov.uk/uksi/1999/930/schedule/6/made
-// To respect the 29.15 dBm EIRP (at SPECIFIC frequencies, others are lower) EU limit with a 2.5 dBi gain antenna, consulting https://github.com/S5NC/EBYTE_ESP32-S3/blob/main/power%20testing.txt, assuming 0.1 dBm insertion loss, output 20 dBm from the E22-900M30S's SX1262. It is worth noting that if you are in this situation and don't have a HAM license, you may be better off with a lower gain antenna, and output the difference as a higher total power input into the antenna, as your EIRP would be the same, but you would get a wider angle of coverage. Also take insertion loss and possibly VSWR into account (https://www.everythingrf.com/tech-resources/vswr).
-// Please check regulations yourself and check airtime, usage (for example whether you are airborne), frequency, and power laws.
+// To respect the 29.15 dBm EIRP (at SPECIFIC frequencies, others are lower) EU limit with a 2.5 dBi gain antenna, consulting
+// https://github.com/S5NC/EBYTE_ESP32-S3/blob/main/power%20testing.txt, assuming 0.1 dBm insertion loss, output 20 dBm from the
+// E22-900M30S's SX1262. It is worth noting that if you are in this situation and don't have a HAM license, you may be better off
+// with a lower gain antenna, and output the difference as a higher total power input into the antenna, as your EIRP would be the
+// same, but you would get a wider angle of coverage. Also take insertion loss and possibly VSWR into account
+// (https://www.everythingrf.com/tech-resources/vswr). Please check regulations yourself and check airtime, usage (for example
+// whether you are airborne), frequency, and power laws.
 #define SX126X_MAX_POWER 22 // SX126xInterface.cpp defaults to 22 if not defined, but here we define it for good practice
 
 // Display
@@ -125,9 +132,9 @@
 // GPS
 // FIXME: remove 0/1 option for HAS_GPS in src, change to being defined or not
 // #define HAS_GPS 0 // Don't need to set this to 0 to prevent a crash as it doesn't crash if GPS not found, will probe by default
-#define PIN_GPS_EN 15
-#define GPS_TX_PIN 16
-#define GPS_RX_PIN 17
+// #define PIN_GPS_EN 15
+// #define GPS_TX_PIN 16
+// #define GPS_RX_PIN 17
 
 /////////////////////////////////////////////////////////////////////////////////
 //                                                                             //
