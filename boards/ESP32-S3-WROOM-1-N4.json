@@ -5,12 +5,12 @@
     },
     "core": "esp32",
     "extra_flags": [
-      "-DARDUINO_USB_CDC_ON_BOOT=0",
-      "-DARDUINO_USB_MSC_ON_BOOT=0",
-      "-DARDUINO_USB_DFU_ON_BOOT=0",
-      "-DARDUINO_USB_MODE=0",
-      "-DARDUINO_RUNNING_CORE=1",
-      "-DARDUINO_EVENT_RUNNING_CORE=1"
+      "-D ARDUINO_USB_CDC_ON_BOOT=0",
+      "-D ARDUINO_USB_MSC_ON_BOOT=0",
+      "-D ARDUINO_USB_DFU_ON_BOOT=0",
+      "-D ARDUINO_USB_MODE=0",
+      "-D ARDUINO_RUNNING_CORE=1",
+      "-D ARDUINO_EVENT_RUNNING_CORE=1"
     ],
     "f_cpu": "240000000L",
     "f_flash": "80000000L",
