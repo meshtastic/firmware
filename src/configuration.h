@@ -188,6 +188,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef HAS_TELEMETRY
 #define HAS_TELEMETRY 0
 #endif
+#ifndef HAS_SENSOR
+#define HAS_SENSOR 0
+#endif
 #ifndef HAS_RADIO
 #define HAS_RADIO 0
 #endif
