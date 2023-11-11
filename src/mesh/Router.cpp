@@ -305,6 +305,7 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
     for (ChannelIndex chIndex = 0; chIndex < channels.getNumChannels(); chIndex++) {
         // Try to use this hash/channel pair
         if (channels.decryptForHash(chIndex, p->channel)) {
+            // TODO: not working for unencrypted channel
             if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
                 // packet is not encoded, just set channel and return
                 p->channel = chIndex; 
@@ -317,6 +318,7 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
             memcpy(bytes, p->encrypted.bytes,
                    rawSize); // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf
             crypto->decrypt(p->from, p->id, rawSize, bytes);
+            p->channel = chIndex; 
 
             // printBytes("plaintext", bytes, p->encrypted.size);
 
