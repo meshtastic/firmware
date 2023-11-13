@@ -43,6 +43,7 @@ template <typename T> bool SX126xInterface<T>::init()
     bool useRegulatorLDO = false; // Seems to depend on the connection to pin 9/DCC_SW - if an inductor DCDC?
 
     RadioLibInterface::init();
+
     if (power > SX126X_MAX_POWER) // Clamp power to maximum defined level
         power = SX126X_MAX_POWER;
 
