@@ -4,6 +4,10 @@
 
 #define ARDUINO_ARCH_AVR
 
+#ifndef HAS_WIFI
+#define HAS_WIFI 1
+#endif
+
 #undef CBC
 #define CBC 0
 #undef CTR
