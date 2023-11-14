@@ -9,6 +9,7 @@
 #include <NimBLEDevice.h>
 
 NimBLECharacteristic *fromNumCharacteristic;
+NimBLECharacteristic *BatteryCharacteristic;
 NimBLEServer *bleServer;
 
 static bool passkeyShowing;
@@ -181,6 +182,18 @@ void NimbleBluetooth::setupService()
     FromRadioCharacteristic->setCallbacks(fromRadioCallbacks);
 
     bleService->start();
+
+    // Setup the battery service
+    NimBLEService *batteryService = bleServer->createService(NimBLEUUID((uint16_t)0x180f)); // 0x180F is the Battery Service
+    BatteryCharacteristic = batteryService->createCharacteristic( // 0x2A19 is the Battery Level characteristic)
+        (uint16_t)0x2a19, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+
+    NimBLE2904 *batteryLevelDescriptor = (NimBLE2904 *)BatteryCharacteristic->createDescriptor((uint16_t)0x2904);
+    batteryLevelDescriptor->setFormat(NimBLE2904::FORMAT_UINT8);
+    batteryLevelDescriptor->setNamespace(1);
+    batteryLevelDescriptor->setUnit(0x27ad);
+
+    batteryService->start();
 }
 
 void NimbleBluetooth::startAdvertising()
@@ -188,13 +201,15 @@ void NimbleBluetooth::startAdvertising()
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->reset();
     pAdvertising->addServiceUUID(MESH_SERVICE_UUID);
+    pAdvertising->addServiceUUID(NimBLEUUID((uint16_t)0x180f)); // 0x180F is the Battery Service
     pAdvertising->start(0);
 }
 
 /// Given a level between 0-100, update the BLE attribute
 void updateBatteryLevel(uint8_t level)
 {
-    // blebas.write(level);
+    BatteryCharacteristic->setValue(&level, 1);
+    BatteryCharacteristic->notify();
 }
 
 void NimbleBluetooth::clearBonds()
