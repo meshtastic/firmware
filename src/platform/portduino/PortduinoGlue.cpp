@@ -7,8 +7,11 @@
 
 #include <Utility.h>
 #include <assert.h>
+#ifdef ARCH_RASPBERRY_PI
+#include "pigpio.h"
+#else
 #include <linux/gpio/LinuxGPIOPin.h>
-
+#endif
 // FIXME - move setBluetoothEnable into a HALPlatform class
 
 void setBluetoothEnable(bool on)
@@ -89,12 +92,15 @@ void portduinoSetup()
     printf("Setting up Meshtastic on Portduino...\n");
 
 #ifdef ARCH_RASPBERRY_PI
-    printf("using GPIOD Version: %s\n", gpiod_version_string());
+    return;
+/*
+    //printf("using GPIOD Version: %s\n", gpiod_version_string());
+    gpioInitialise();
     // We need to create SPI
     SPI.begin();
     if (!spiChip->isSimulated()) {
         printf("Connecting to RFM95 board...\n");
-        loraIrq = new LinuxGPIOPin(LORA_DIO0, GPIOD_CHIP_LABEL, LORA_DIO0_LABEL, "loraIrq");
+        loraIrq = new LinuxGPIOPin(LORA_DIO0, "gpiochip0", LORA_DIO0_LABEL, "loraIrq");
         loraIrq->setSilent();
         gpioBind(loraIrq);
 
@@ -151,7 +157,8 @@ void portduinoSetup()
         gpioBind(new SimGPIOPin(SX126X_RESET, "fakeLoraReset"));
         gpioBind(new SimGPIOPin(LORA_DIO1, "fakeLoraIrq"));
     }
-
+*/
+#endif
     // gpioBind((new SimGPIOPin(LORA_RESET, "LORA_RESET")));
     // gpioBind((new SimGPIOPin(RF95_NSS, "RF95_NSS"))->setSilent());
 }
