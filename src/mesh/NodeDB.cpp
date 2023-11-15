@@ -327,7 +327,7 @@ void NodeDB::removeNodeByNum(uint nodeNum)
 {
     int newPos = 0, removed = 0;
     for (int i = 0; i < *numMeshNodes; i++) {
-        if (meshNodes[i].num == nodeNum)
+        if (meshNodes[i].num != nodeNum)
             meshNodes[newPos++] = meshNodes[i];
         else
             removed++;
