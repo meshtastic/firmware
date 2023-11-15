@@ -67,6 +67,10 @@ NRF52Bluetooth *nrf52Bluetooth;
 #include "platform/portduino/SimRadio.h"
 #endif
 
+#if defined(HAS_RADIO) && defined(ARCH_PORTDUINO)
+#include "platform/portduino/PiHal.h"
+#endif
+
 #if HAS_BUTTON
 #include "ButtonThread.h"
 #endif
@@ -662,7 +666,20 @@ void setup()
     digitalWrite(SX126X_ANT_SW, 1);
 #endif
 
-#ifdef HW_SPI1_DEVICE
+#ifdef ARCH_RASPBERRY_PI
+    PiHal *RadioLibHAL = new PiHal(1);
+    if (!rIf) {
+        rIf = new SX1262Interface((LockingArduinoHal *)RadioLibHAL, 21, 16, 18, 20);
+        if (!rIf->init()) {
+            LOG_WARN("Failed to find SX1262 radio\n");
+            delete rIf;
+            rIf = NULL;
+        } else {
+            LOG_INFO("SX1262 Radio init succeeded, using SX1262 radio\n");
+        }
+    }
+
+#elif HW_SPI1_DEVICE
     LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI1, spiSettings);
 #else // HW_SPI1_DEVICE
     LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
@@ -708,7 +725,7 @@ void setup()
     }
 #endif
 
-#if defined(USE_SX1262)
+#if defined(USE_SX1262) && !defined(ARCH_RASPBERRY_PI)
     if (!rIf) {
         rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
