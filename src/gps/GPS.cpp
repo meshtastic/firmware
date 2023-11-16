@@ -8,6 +8,7 @@
 
 #ifdef ARCH_PORTDUINO
 #include "meshUtils.h"
+#include <ctime>
 #endif
 
 #ifndef GPS_RESET_MODE
