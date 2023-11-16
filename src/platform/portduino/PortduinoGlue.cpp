@@ -106,7 +106,8 @@ void portduinoSetup()
     } catch (YAML::Exception e) {
         std::cout << "*** Exception " << e.what() << std::endl;
     }
-    if (!yamlConfig) {
+    if (yamlConfig.IsNull()) {
+        std::cout << "Looking in /etc/meshtastic/" << std::endl;
         try {
             yamlConfig = YAML::LoadFile("/etc/meshtastic/config.yaml");
         } catch (YAML::Exception e) {
