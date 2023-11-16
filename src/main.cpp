@@ -67,8 +67,11 @@ NRF52Bluetooth *nrf52Bluetooth;
 #include "platform/portduino/SimRadio.h"
 #endif
 
-#if defined(HAS_RADIO) && defined(ARCH_PORTDUINO)
+#ifdef ARCH_RASPBERRY_PI
 #include "platform/portduino/PiHal.h"
+#include <fstream>
+#include <iostream>
+#include <string>
 #endif
 
 #if HAS_BUTTON
@@ -132,11 +135,27 @@ std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySenso
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
 
+#ifdef ARCH_RASPBERRY_PI
+void getPiMacAddr(uint8_t *dmac)
+{
+    std::fstream macIdentity;
+    macIdentity.open("/sys/kernel/debug/bluetooth/hci0/identity", std::ios::in);
+    std::string macLine;
+    getline(macIdentity, macLine);
+    macIdentity.close();
+
+    dmac[0] = strtol(macLine.substr(0, 2).c_str(), NULL, 16);
+    dmac[1] = strtol(macLine.substr(3, 2).c_str(), NULL, 16);
+    dmac[2] = strtol(macLine.substr(6, 2).c_str(), NULL, 16);
+    dmac[3] = strtol(macLine.substr(9, 2).c_str(), NULL, 16);
+    dmac[4] = strtol(macLine.substr(12, 2).c_str(), NULL, 16);
+    dmac[5] = strtol(macLine.substr(15, 2).c_str(), NULL, 16);
+}
+#endif
+
 const char *getDeviceName()
 {
     uint8_t dmac[6];
-
-    getMacAddr(dmac);
 
     // Meshtastic_ab3c or Shortname_abcd
     static char name[20];
@@ -679,7 +698,7 @@ void setup()
         }
     }
 
-#elif HW_SPI1_DEVICE
+#elif defined(HW_SPI1_DEVICE)
     LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI1, spiSettings);
 #else // HW_SPI1_DEVICE
     LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
