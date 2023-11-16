@@ -14,6 +14,7 @@
 #include "yaml-cpp/yaml.h"
 #include <iostream>
 #include <map>
+#include <unistd.h>
 
 std::map<int, int> settingsMap;
 
@@ -101,19 +102,24 @@ void portduinoSetup()
 
 #ifdef ARCH_RASPBERRY_PI
     YAML::Node yamlConfig;
-    try {
-        yamlConfig = YAML::LoadFile("config.yaml");
-    } catch (YAML::Exception e) {
-        std::cout << "*** Exception " << e.what() << std::endl;
-    }
-    if (yamlConfig.IsNull()) {
-        std::cout << "Looking in /etc/meshtastic/" << std::endl;
+
+    if (access("config.yaml", R_OK) == 0) {
+        try {
+            yamlConfig = YAML::LoadFile("config.yaml");
+        } catch (YAML::Exception e) {
+            std::cout << "*** Exception " << e.what() << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    } else if (access("/etc/meshtastic/config.yaml", R_OK) == 0) {
         try {
             yamlConfig = YAML::LoadFile("/etc/meshtastic/config.yaml");
         } catch (YAML::Exception e) {
             std::cout << "*** Exception " << e.what() << std::endl;
             exit(EXIT_FAILURE);
         }
+    } else {
+        std::cout << "No 'config.yaml' found, exiting." << std::endl;
+        exit(EXIT_FAILURE);
     }
 
     try {
