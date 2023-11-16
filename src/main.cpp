@@ -156,7 +156,11 @@ void getPiMacAddr(uint8_t *dmac)
 const char *getDeviceName()
 {
     uint8_t dmac[6];
-
+#ifdef ARCH_RASPBERRY_PI
+    getPiMacAddr(dmac);
+#else
+    getMacAddr(dmac);
+#endif
     // Meshtastic_ab3c or Shortname_abcd
     static char name[20];
     snprintf(name, sizeof(name), "%02x%02x", dmac[4], dmac[5]);
