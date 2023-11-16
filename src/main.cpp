@@ -697,9 +697,9 @@ void setup()
             rIf = new SX1262Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[sx126x_cs], settingsMap[sx126x_dio1],
                                       settingsMap[sx126x_reset], settingsMap[sx126x_busy]);
             if (!rIf->init()) {
-                LOG_WARN("Failed to find SX1262 radio\n");
+                LOG_ERROR("Failed to find SX1262 radio\n");
                 delete rIf;
-                rIf = NULL;
+                exit(EXIT_FAILURE);
             } else {
                 LOG_INFO("SX1262 Radio init succeeded, using SX1262 radio\n");
             }
@@ -710,9 +710,10 @@ void setup()
             rIf = new RF95Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[rf95_nss], settingsMap[rf95_irq],
                                     settingsMap[rf95_reset], settingsMap[rf95_dio1]);
             if (!rIf->init()) {
-                LOG_WARN("Failed to find RF95 radio\n");
+                LOG_ERROR("Failed to find RF95 radio\n");
                 delete rIf;
                 rIf = NULL;
+                exit(EXIT_FAILURE);
             } else {
                 LOG_INFO("RF95 Radio init succeeded, using RF95 radio\n");
             }
