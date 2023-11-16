@@ -7,13 +7,15 @@
 
 #include <Utility.h>
 #include <assert.h>
+
 #ifdef ARCH_RASPBERRY_PI
 #include "pigpio.h"
+
 #else
 #include <linux/gpio/LinuxGPIOPin.h>
 #endif
-// FIXME - move setBluetoothEnable into a HALPlatform class
 
+// FIXME - move setBluetoothEnable into a HALPlatform class
 void setBluetoothEnable(bool on)
 {
     // not needed
@@ -93,30 +95,9 @@ void portduinoSetup()
 
 #ifdef ARCH_RASPBERRY_PI
     return;
-/*
-    //printf("using GPIOD Version: %s\n", gpiod_version_string());
-    gpioInitialise();
-    // We need to create SPI
-    SPI.begin();
-    if (!spiChip->isSimulated()) {
-        printf("Connecting to RFM95 board...\n");
-        loraIrq = new LinuxGPIOPin(LORA_DIO0, "gpiochip0", LORA_DIO0_LABEL, "loraIrq");
-        loraIrq->setSilent();
-        gpioBind(loraIrq);
-
-#if (RF95_NSS != RADIOLIB_NC)
-        auto loraCs = new LinuxGPIOPin(RF95_NSS, GPIOD_CHIP_LABEL, RF95_NSS_LABEL, "loraCs");
-        loraCs->setSilent();
-        gpioBind(loraCs);
 #endif
 
-        auto loraReset = new LinuxGPIOPin(LORA_RESET, GPIOD_CHIP_LABEL, LORA_RESET_LABEL, "loraReset");
-        loraReset->setSilent();
-        gpioBind(loraReset);
-
-    } else
-
-#elif defined(PORTDUINO_LINUX_HARDWARE)
+#ifdef defined(PORTDUINO_LINUX_HARDWARE)
     SPI.begin(); // We need to create SPI
     bool usePineLora = !spiChip->isSimulated();
     if (usePineLora) {
@@ -157,8 +138,6 @@ void portduinoSetup()
         gpioBind(new SimGPIOPin(SX126X_RESET, "fakeLoraReset"));
         gpioBind(new SimGPIOPin(LORA_DIO1, "fakeLoraIrq"));
     }
-*/
-#endif
     // gpioBind((new SimGPIOPin(LORA_RESET, "LORA_RESET")));
     // gpioBind((new SimGPIOPin(RF95_NSS, "RF95_NSS"))->setSilent());
 }

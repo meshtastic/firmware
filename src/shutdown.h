@@ -14,6 +14,8 @@ void powerCommandsCheck()
         NVIC_SystemReset();
 #elif defined(ARCH_RP2040)
         rp2040.reboot();
+#elif defined(ARCH_RASPBERRY_PI)
+        exit(EXIT_SUCCESS);
 #else
         rebootAtMsec = -1;
         LOG_WARN("FIXME implement reboot for this platform. Note that some settings require a restart to be applied.\n");

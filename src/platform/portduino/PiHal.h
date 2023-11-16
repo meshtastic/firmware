@@ -78,7 +78,6 @@ class PiHal : public RadioLibHal
 
     void attachInterrupt(uint32_t interruptNum, void (*interruptCb)(void), uint32_t mode) override
     {
-        LOG_DEBUG("Here to enable pin %d!\n", interruptNum);
         if (interruptNum == RADIOLIB_NC) {
             return;
         }
@@ -87,18 +86,15 @@ class PiHal : public RadioLibHal
         } else {
             gpioSetAlertFunc(interruptNum, (gpioISRFunc_t)interruptCb);
         }
-        LOG_DEBUG("Pin enabled %d!\n", interruptNum);
     }
 
     void detachInterrupt(uint32_t interruptNum) override
     {
-        LOG_DEBUG("Here for pin %d!\n", interruptNum);
         if (interruptNum == RADIOLIB_NC) {
             return;
         }
 
         gpioSetAlertFunc(interruptNum, NULL);
-        LOG_DEBUG("Finished\n");
     }
 
     void delay(unsigned long ms) override { gpioDelay(ms * 1000); }
