@@ -56,6 +56,7 @@ extern graphics::Screen *screen;
 
 // Return a human readable string of the form "Meshtastic_ab13"
 const char *getDeviceName();
+void getPiMacAddr(uint8_t *dmac);
 
 extern uint32_t timeLastPowered;
 
