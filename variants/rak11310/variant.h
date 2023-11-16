@@ -22,6 +22,8 @@
 // ratio of voltage divider = 3.0 (R17=200k, R18=100k)
 #define ADC_MULTIPLIER 3.1 // 3.0 + a bit for being optimistic
 
+#define DETECTION_SENSOR_EN 28
+
 #define USE_SX1262
 
 #undef RF95_SCK
