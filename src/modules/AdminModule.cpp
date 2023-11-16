@@ -182,6 +182,12 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         }
         break;
     }
+    case meshtastic_AdminMessage_remove_by_nodenum_tag: {
+        LOG_INFO("Client is receiving a remove_nodenum command.\n");
+        nodeDB.removeNodeByNum(r->remove_by_nodenum);
+        reboot(DEFAULT_REBOOT_SECONDS);
+        break;
+    }
 #ifdef ARCH_PORTDUINO
     case meshtastic_AdminMessage_exit_simulator_tag:
         LOG_INFO("Exiting simulator\n");
