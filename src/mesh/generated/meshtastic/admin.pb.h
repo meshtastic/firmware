@@ -145,6 +145,8 @@ typedef struct _meshtastic_AdminMessage {
         char set_canned_message_module_messages[201];
         /* Set the ringtone for ExternalNotification. */
         char set_ringtone_message[231];
+        /* Remove the node by the specified node-num from the NodeDB on the device */
+        uint32_t remove_by_nodenum;
         /* Begins an edit transaction for config, module config, owner, and channel settings changes
      This will delay the standard *implicit* save to the file system and subsequent reboot behavior until committed (commit_edit_settings) */
         bool begin_edit_settings;
@@ -226,6 +228,7 @@ extern "C" {
 #define meshtastic_AdminMessage_set_module_config_tag 35
 #define meshtastic_AdminMessage_set_canned_message_module_messages_tag 36
 #define meshtastic_AdminMessage_set_ringtone_message_tag 37
+#define meshtastic_AdminMessage_remove_by_nodenum_tag 38
 #define meshtastic_AdminMessage_begin_edit_settings_tag 64
 #define meshtastic_AdminMessage_commit_edit_settings_tag 65
 #define meshtastic_AdminMessage_reboot_ota_seconds_tag 95
@@ -262,6 +265,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_config,set_config),  34)
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_module_config,set_module_config),  35) \
 X(a, STATIC,   ONEOF,    STRING,   (payload_variant,set_canned_message_module_messages,set_canned_message_module_messages),  36) \
 X(a, STATIC,   ONEOF,    STRING,   (payload_variant,set_ringtone_message,set_ringtone_message),  37) \
+X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,remove_by_nodenum,remove_by_nodenum),  38) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,begin_edit_settings,begin_edit_settings),  64) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,commit_edit_settings,commit_edit_settings),  65) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,reboot_ota_seconds,reboot_ota_seconds),  95) \
