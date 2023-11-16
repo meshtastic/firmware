@@ -341,7 +341,7 @@ typedef struct _meshtastic_Config_NetworkConfig {
  acquire an address via DHCP */
     char wifi_ssid[33];
     /* If set, will be use to authenticate to the named wifi */
-    char wifi_psk[64];
+    char wifi_psk[65];
     /* NTP server to use if WiFi is conneced, defaults to `0.pool.ntp.org` */
     char ntp_server[33];
     /* Enable Ethernet */
@@ -792,10 +792,10 @@ extern const pb_msgdesc_t meshtastic_Config_BluetoothConfig_msg;
 #define meshtastic_Config_DisplayConfig_size     28
 #define meshtastic_Config_LoRaConfig_size        79
 #define meshtastic_Config_NetworkConfig_IpV4Config_size 20
-#define meshtastic_Config_NetworkConfig_size     195
+#define meshtastic_Config_NetworkConfig_size     196
 #define meshtastic_Config_PositionConfig_size    60
 #define meshtastic_Config_PowerConfig_size       40
-#define meshtastic_Config_size                   198
+#define meshtastic_Config_size                   199
 
 #ifdef __cplusplus
 } /* extern "C" */
