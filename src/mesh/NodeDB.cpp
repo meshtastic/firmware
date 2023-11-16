@@ -323,6 +323,20 @@ void NodeDB::resetNodes()
         neighborInfoModule->resetNeighbors();
 }
 
+void NodeDB::removeNodeByNum(uint nodeNum)
+{
+    int newPos = 0, removed = 0;
+    for (int i = 0; i < *numMeshNodes; i++) {
+        if (meshNodes[i].num != nodeNum)
+            meshNodes[newPos++] = meshNodes[i];
+        else
+            removed++;
+    }
+    *numMeshNodes -= removed;
+    LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Saving changes...\n", removed);
+    saveDeviceStateToDisk();
+}
+
 void NodeDB::cleanupMeshDB()
 {
     int newPos = 0, removed = 0;
@@ -421,7 +435,11 @@ void NodeDB::init()
  */
 void NodeDB::pickNewNodeNum()
 {
+#ifdef ARCH_RASPBERRY_PI
+    getPiMacAddr(ourMacAddr); // Make sure ourMacAddr is set
+#else
     getMacAddr(ourMacAddr); // Make sure ourMacAddr is set
+#endif
 
     // Pick an initial nodenum based on the macaddr
     NodeNum nodeNum = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
@@ -433,6 +451,7 @@ void NodeDB::pickNewNodeNum()
         LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, so trying for 0x%x\n", nodeNum, candidate);
         nodeNum = candidate;
     }
+    LOG_WARN("Using nodenum 0x%x \n", nodeNum);
 
     myNodeInfo.my_node_num = nodeNum;
 }

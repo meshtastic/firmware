@@ -24,6 +24,9 @@
 #include "modules/Telemetry/AirQualityTelemetry.h"
 #include "modules/Telemetry/EnvironmentTelemetry.h"
 #endif
+#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
+#include "modules/Telemetry/PowerTelemetry.h"
+#endif
 #ifdef ARCH_ESP32
 #include "modules/esp32/AudioModule.h"
 #include "modules/esp32/StoreForwardModule.h"
@@ -91,6 +94,9 @@ void setupModules()
         if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_PMSA003I].first > 0) {
             new AirQualityTelemetryModule();
         }
+#endif
+#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
+        new PowerTelemetryModule();
 #endif
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)) && !defined(CONFIG_IDF_TARGET_ESP32S2) &&               \
     !defined(CONFIG_IDF_TARGET_ESP32C3)

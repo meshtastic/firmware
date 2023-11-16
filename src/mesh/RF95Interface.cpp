@@ -37,9 +37,6 @@ bool RF95Interface::init()
 {
     RadioLibInterface::init();
 
-    if (power == 0)
-        power = POWER_DEFAULT;
-
     if (power > MAX_POWER) // This chip has lower power limits than some
         power = MAX_POWER;
 

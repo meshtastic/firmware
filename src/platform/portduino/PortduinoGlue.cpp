@@ -7,10 +7,15 @@
 
 #include <Utility.h>
 #include <assert.h>
+
+#ifdef ARCH_RASPBERRY_PI
+#include "pigpio.h"
+
+#else
 #include <linux/gpio/LinuxGPIOPin.h>
+#endif
 
 // FIXME - move setBluetoothEnable into a HALPlatform class
-
 void setBluetoothEnable(bool on)
 {
     // not needed
@@ -88,7 +93,11 @@ void portduinoSetup()
 {
     printf("Setting up Meshtastic on Portduino...\n");
 
-#ifdef PORTDUINO_LINUX_HARDWARE
+#ifdef ARCH_RASPBERRY_PI
+    return;
+#endif
+
+#ifdef defined(PORTDUINO_LINUX_HARDWARE)
     SPI.begin(); // We need to create SPI
     bool usePineLora = !spiChip->isSimulated();
     if (usePineLora) {
@@ -129,7 +138,6 @@ void portduinoSetup()
         gpioBind(new SimGPIOPin(SX126X_RESET, "fakeLoraReset"));
         gpioBind(new SimGPIOPin(LORA_DIO1, "fakeLoraIrq"));
     }
-
     // gpioBind((new SimGPIOPin(LORA_RESET, "LORA_RESET")));
     // gpioBind((new SimGPIOPin(RF95_NSS, "RF95_NSS"))->setSilent());
 }
