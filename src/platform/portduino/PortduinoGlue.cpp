@@ -100,10 +100,22 @@ void portduinoSetup()
     printf("Setting up Meshtastic on Portduino...\n");
 
 #ifdef ARCH_RASPBERRY_PI
-    std::string filename = "/etc/meshtastic/config.yaml";
+    YAML::Node yamlConfig;
     try {
-        YAML::Node yamlConfig = YAML::LoadFile("/etc/meshtastic/config.yaml");
+        yamlConfig = YAML::LoadFile("config.yaml");
+    } catch (YAML::Exception e) {
+        std::cout << "*** Exception " << e.what() << std::endl;
+    }
+    if (!yamlConfig) {
+        try {
+            yamlConfig = YAML::LoadFile("/etc/meshtastic/config.yaml");
+        } catch (YAML::Exception e) {
+            std::cout << "*** Exception " << e.what() << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    }
 
+    try {
         settingsMap[use_sx1262] = yamlConfig["USE_SX1262"].as<bool>(false);
         settingsMap[sx126x_dio2_as_rf_switch] = yamlConfig["SX126X_DIO2_AS_RF_SWITCH"].as<bool>(false);
         settingsMap[sx126x_cs] = yamlConfig["SX126X_CS"].as<int>(RADIOLIB_NC);
@@ -120,14 +132,6 @@ void portduinoSetup()
         std::cout << "*** Exception " << e.what() << std::endl;
         exit(EXIT_FAILURE);
     }
-    if (settingsMap[use_sx1262])
-        std::cout << "using SX1262!\n";
-    // LOG_DEBUG("Made it here!\n");
-
-    // Open config file
-    // load into memory
-    // yaml convert
-    // store config object globally
     return;
 #endif
 
