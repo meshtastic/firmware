@@ -323,6 +323,20 @@ void NodeDB::resetNodes()
         neighborInfoModule->resetNeighbors();
 }
 
+void NodeDB::removeNodeByNum(uint nodeNum)
+{
+    int newPos = 0, removed = 0;
+    for (int i = 0; i < *numMeshNodes; i++) {
+        if (meshNodes[i].num != nodeNum)
+            meshNodes[newPos++] = meshNodes[i];
+        else
+            removed++;
+    }
+    *numMeshNodes -= removed;
+    LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Saving changes...\n", removed);
+    saveDeviceStateToDisk();
+}
+
 void NodeDB::cleanupMeshDB()
 {
     int newPos = 0, removed = 0;
