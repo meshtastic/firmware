@@ -33,7 +33,7 @@ template <typename T> bool SX128xInterface<T>::init()
 
 #if defined(SX128X_RXEN) && (SX128X_RXEN != RADIOLIB_NC) // set not rx or tx mode
     pinMode(SX128X_RXEN, OUTPUT);
-    digitalWrite(SX128X_RXEN, LOW);                      // Set low before becoming an output
+    digitalWrite(SX128X_RXEN, LOW); // Set low before becoming an output
 #endif
 #if defined(SX128X_TXEN) && (SX128X_TXEN != RADIOLIB_NC)
     pinMode(SX128X_TXEN, OUTPUT);
