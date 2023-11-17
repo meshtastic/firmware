@@ -52,6 +52,7 @@ static const adc_atten_t atten = ADC_ATTENUATION;
 #if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
 INA260Sensor ina260Sensor;
 INA219Sensor ina219Sensor;
+INA3221Sensor ina3221Sensor;
 #endif
 
 #ifdef HAS_PMU
@@ -286,6 +287,9 @@ class AnalogBatteryLevel : public HasBatteryLevel
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first ==
                    config.power.device_battery_ina_address) {
             return ina260Sensor.getBusVoltageMv();
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA3221].first ==
+                   config.power.device_battery_ina_address) {
+            return ina3221Sensor.getBusVoltageMv();
         }
         return 0;
     }
