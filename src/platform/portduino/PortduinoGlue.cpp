@@ -9,7 +9,14 @@
 #include <assert.h>
 
 #ifdef ARCH_RASPBERRY_PI
+#include "PortduinoGlue.h"
 #include "pigpio.h"
+#include "yaml-cpp/yaml.h"
+#include <iostream>
+#include <map>
+#include <unistd.h>
+
+std::map<int, int> settingsMap;
 
 #else
 #include <linux/gpio/LinuxGPIOPin.h>
@@ -27,7 +34,7 @@ void cpuDeepSleep(uint32_t msecs)
 }
 
 void updateBatteryLevel(uint8_t level) NOT_IMPLEMENTED("updateBatteryLevel");
-
+#ifndef ARCH_RASPBERRY_PI
 /** a simulated pin for busted IRQ hardware
  * Porduino helper class to do this i2c based polling:
  */
@@ -54,7 +61,7 @@ class PolledIrqPin : public GPIOPin
 };
 
 static GPIOPin *loraIrq;
-
+#endif
 int TCPPort = 4403;
 
 static error_t parse_opt(int key, char *arg, struct argp_state *state)
@@ -94,6 +101,48 @@ void portduinoSetup()
     printf("Setting up Meshtastic on Portduino...\n");
 
 #ifdef ARCH_RASPBERRY_PI
+    YAML::Node yamlConfig;
+
+    if (access("config.yaml", R_OK) == 0) {
+        try {
+            yamlConfig = YAML::LoadFile("config.yaml");
+        } catch (YAML::Exception e) {
+            std::cout << "*** Exception " << e.what() << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    } else if (access("/etc/meshtasticd/config.yaml", R_OK) == 0) {
+        try {
+            yamlConfig = YAML::LoadFile("/etc/meshtasticd/config.yaml");
+        } catch (YAML::Exception e) {
+            std::cout << "*** Exception " << e.what() << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    } else {
+        std::cout << "No 'config.yaml' found, exiting." << std::endl;
+        exit(EXIT_FAILURE);
+    }
+
+    try {
+        settingsMap[use_sx1262] = yamlConfig["USE_SX1262"].as<bool>(false);
+        settingsMap[sx126x_dio2_as_rf_switch] = yamlConfig["SX126X_DIO2_AS_RF_SWITCH"].as<bool>(false);
+        settingsMap[sx126x_cs] = yamlConfig["SX126X_CS"].as<int>(RADIOLIB_NC);
+        settingsMap[sx126x_dio1] = yamlConfig["SX126X_DIO1"].as<int>(RADIOLIB_NC);
+        settingsMap[sx126x_busy] = yamlConfig["SX126X_BUSY"].as<int>(RADIOLIB_NC);
+        settingsMap[sx126x_reset] = yamlConfig["SX126X_RESET"].as<int>(RADIOLIB_NC);
+        settingsMap[use_rf95] = yamlConfig["USE_RF95"].as<bool>(false);
+        settingsMap[rf95_nss] = yamlConfig["RF95_NSS"].as<int>(RADIOLIB_NC);
+        settingsMap[rf95_irq] = yamlConfig["RF95_IRQ"].as<int>(RADIOLIB_NC);
+        settingsMap[rf95_reset] = yamlConfig["RF95_RESET"].as<int>(RADIOLIB_NC);
+        settingsMap[rf95_dio1] = yamlConfig["RF95_DIO1"].as<int>(RADIOLIB_NC);
+
+    } catch (YAML::Exception e) {
+        std::cout << "*** Exception " << e.what() << std::endl;
+        exit(EXIT_FAILURE);
+    }
+    if (access("/sys/kernel/debug/bluetooth/hci0/identity", R_OK) != 0) {
+        std::cout << "Cannot read Bluetooth MAC Address. Please run as root" << std::endl;
+        exit(EXIT_FAILURE);
+    }
     return;
 #endif
 
@@ -121,7 +170,7 @@ void portduinoSetup()
         gpioBind(loraCs);
     } else
 #endif
-
+#ifndef ARCH_RASPBERRY_PI
     {
         // Set the random seed equal to TCPPort to have a different seed per instance
         randomSeed(TCPPort);
@@ -140,4 +189,5 @@ void portduinoSetup()
     }
     // gpioBind((new SimGPIOPin(LORA_RESET, "LORA_RESET")));
     // gpioBind((new SimGPIOPin(RF95_NSS, "RF95_NSS"))->setSilent());
+#endif
 }
