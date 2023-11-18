@@ -25,6 +25,6 @@ jobs:
       - name: Store binaries as an artifact
         uses: actions/upload-artifact@v3
         with:
-          name: firmware-native-${{ steps.version.outputs.version }}.zip
+          name: firmware-raspbian-${{ steps.version.outputs.version }}.zip
           path: |
             release/meshtasticd_linux_arm64
