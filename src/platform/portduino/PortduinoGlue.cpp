@@ -110,9 +110,9 @@ void portduinoSetup()
             std::cout << "*** Exception " << e.what() << std::endl;
             exit(EXIT_FAILURE);
         }
-    } else if (access("/etc/meshtastic/config.yaml", R_OK) == 0) {
+    } else if (access("/etc/meshtasticd/config.yaml", R_OK) == 0) {
         try {
-            yamlConfig = YAML::LoadFile("/etc/meshtastic/config.yaml");
+            yamlConfig = YAML::LoadFile("/etc/meshtasticd/config.yaml");
         } catch (YAML::Exception e) {
             std::cout << "*** Exception " << e.what() << std::endl;
             exit(EXIT_FAILURE);

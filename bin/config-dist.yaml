@@ -1,3 +1,6 @@
+# Define your devices here.
+# Use Broadcom pin numbering
+
 #Waveshare SX126X XXXM
 
 #USE_SX1262: true
@@ -13,3 +16,11 @@
 #SX126X_CS: 7
 #SX126X_DIO1: 17
 #SX126X_RESET: 22
+
+#Adafruit RFM9x
+
+#USE_RF95: true
+#RF95_RESET: 25
+#RF95_NSS: 7
+#RF95_IRQ: 22
+#RF95_DIO1: 23
