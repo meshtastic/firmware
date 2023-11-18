@@ -1,7 +1,7 @@
 name: Build Raspbian
 
-on:
-  workflow_call:
+on: workflow_call
+
 jobs:
   build-raspbian:
     runs-on: [self-hosted, linux, ARM64]
