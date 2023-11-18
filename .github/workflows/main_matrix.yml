@@ -228,6 +228,9 @@ jobs:
         with:
           path: ./
 
+      - name: Display structure of downloaded files
+        run: ls -R
+
       - name: Get release version string
         run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
