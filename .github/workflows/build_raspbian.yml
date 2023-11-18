@@ -10,10 +10,24 @@ jobs:
   build-raspbian:
     runs-on: [self-hosted, linux, ARM64]
     steps:
-      - uses: actions/checkout@v3
-      - name: Build base
-        id: base
-        uses: ./.github/actions/setup-base
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
+
+      - name: Upgrade python tools
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install -U platformio adafruit-nrfutil
+          pip install -U meshtastic --pre
+
+      - name: Upgrade platformio
+        shell: bash
+        run: |
+          pio upgrade
 
       - name: Build Raspbian
         run: bin/build-native.sh
@@ -25,6 +39,6 @@ jobs:
       - name: Store binaries as an artifact
         uses: actions/upload-artifact@v3
         with:
-          name: firmware-native-${{ steps.version.outputs.version }}.zip
+          name: firmware-raspbian-${{ steps.version.outputs.version }}.zip
           path: |
             release/meshtasticd_linux_arm64
