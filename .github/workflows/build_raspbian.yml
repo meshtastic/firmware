@@ -2,6 +2,10 @@ name: Build Raspbian
 
 on: workflow_call
 
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   build-raspbian:
     runs-on: [self-hosted, linux, ARM64]
