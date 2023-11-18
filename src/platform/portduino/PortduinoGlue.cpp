@@ -139,6 +139,10 @@ void portduinoSetup()
         std::cout << "*** Exception " << e.what() << std::endl;
         exit(EXIT_FAILURE);
     }
+    if (access("/sys/kernel/debug/bluetooth/hci0/identity", R_OK) != 0) {
+        std::cout << "Cannot read Bluetooth MAC Address. Please run as root" << std::endl;
+        exit(EXIT_FAILURE);
+    }
     return;
 #endif
 
