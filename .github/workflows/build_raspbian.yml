@@ -1,0 +1,30 @@
+name: Build Raspbian
+
+on: workflow_call
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-raspbian:
+    runs-on: [self-hosted, linux, ARM64]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build base
+        id: base
+        uses: ./.github/actions/setup-base
+
+      - name: Build Raspbian
+        run: bin/build-native.sh
+
+      - name: Get release version string
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        id: version
+
+      - name: Store binaries as an artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: firmware-native-${{ steps.version.outputs.version }}.zip
+          path: |
+            release/meshtasticd_linux_arm64

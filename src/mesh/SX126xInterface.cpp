@@ -2,6 +2,9 @@
 #include "configuration.h"
 #include "error.h"
 #include "mesh/NodeDB.h"
+#ifdef ARCH_RASPBERRY_PI
+#include "PortduinoGlue.h"
+#endif
 
 // Particular boards might define a different max power based on what their hardware can do, default to max power output if not
 // specified (may be dangerous if using external PA and SX126x power config forgotten)
@@ -74,6 +77,12 @@ template <typename T> bool SX126xInterface<T>::init()
 #ifdef SX126X_DIO2_AS_RF_SWITCH
     LOG_DEBUG("Setting DIO2 as RF switch\n");
     bool dio2AsRfSwitch = true;
+#elif defined(ARCH_RASPBERRY_PI)
+    bool dio2AsRfSwitch = false;
+    if (settingsMap[sx126x_dio2_as_rf_switch]) {
+        LOG_DEBUG("Setting DIO2 as RF switch\n");
+        dio2AsRfSwitch = true;
+    }
 #else
     LOG_DEBUG("Setting DIO2 as not RF switch\n");
     bool dio2AsRfSwitch = false;
