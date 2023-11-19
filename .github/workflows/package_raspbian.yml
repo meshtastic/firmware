@@ -1,0 +1,34 @@
+name: Package Raspbian
+
+on: workflow_dispatch
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-raspbian:
+    uses: ./.github/workflows/build_raspbian.yml
+
+  package-raspbian:
+    runs-on: [self-hosted, linux, ARM64]
+    steps:
+      - name: build .debpkg
+        run: |
+          mkdir -p .debpkg/usr/sbin
+          mkdir -p .debpkg/etc/meshtasticd
+          mkdir -p .debpkg/usr/lib/systemd/system/
+          cp release/meshtasticd_linux_arm64 /usr/sbin/meshtasticd
+          cp bin/config-dist.yaml /etc/meshtasticd/config.yaml
+          chmod +x .debpkg/usr/sbin/meshtasticd
+          cp bin/meshtasticd.service /usr/lib/systemd/system/meshtasticd.service
+
+      - uses: jiro4989/build-deb-action@v3
+        with:
+          package: meshtasticd
+          package_root: .debpkg
+          maintainer: Jonathan Bennett
+          version: ${{ github.ref }} # refs/tags/v*.*.*
+          arch: arm64
+          depends: libyaml-cpp0.7
+          desc: Native Linux Meshtastic binary.
