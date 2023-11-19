@@ -10,6 +10,8 @@ jobs:
   package-raspbian:
     runs-on: [self-hosted, linux, ARM64]
     steps:
+      - uses: actions/checkout@v2
+      
       - uses: ./.github/workflows/build_raspbian.yml
       
       - name: build .debpkg
