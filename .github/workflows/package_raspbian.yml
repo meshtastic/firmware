@@ -7,29 +7,43 @@ permissions:
   packages: write
 
 jobs:
+  build-raspbian:
+    uses: ./.github/workflows/build_raspbian.yml
+    
   package-raspbian:
     runs-on: [self-hosted, linux, ARM64]
+    needs: build-raspbian
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       
-      - uses: ./.github/workflows/build_raspbian.yml
+      - name: Get release version string
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        id: version
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: firmware-raspbian-${{ steps.version.outputs.version }}.zip
+
+      - name: Display structure of downloaded files
+        run: ls -R
       
       - name: build .debpkg
         run: |
           mkdir -p .debpkg/usr/sbin
           mkdir -p .debpkg/etc/meshtasticd
           mkdir -p .debpkg/usr/lib/systemd/system/
-          cp release/meshtasticd_linux_arm64 /usr/sbin/meshtasticd
-          cp bin/config-dist.yaml /etc/meshtasticd/config.yaml
+          cp release/meshtasticd_linux_arm64 .debpkg/usr/sbin/meshtasticd
+          cp bin/config-dist.yaml .debpkg/etc/meshtasticd/config.yaml
           chmod +x .debpkg/usr/sbin/meshtasticd
-          cp bin/meshtasticd.service /usr/lib/systemd/system/meshtasticd.service
+          cp bin/meshtasticd.service .debpkg/usr/lib/systemd/system/meshtasticd.service
 
       - uses: jiro4989/build-deb-action@v3
         with:
           package: meshtasticd
           package_root: .debpkg
           maintainer: Jonathan Bennett
-          version: ${{ github.ref }} # refs/tags/v*.*.*
+          version: ${{ steps.version.outputs.version }} # refs/tags/v*.*.*
           arch: arm64
           depends: libyaml-cpp0.7
           desc: Native Linux Meshtastic binary.
