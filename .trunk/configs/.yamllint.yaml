@@ -3,7 +3,7 @@ rules:
     required: only-when-needed
     extra-allowed: ["{|}"]
   empty-values:
-    forbid-in-block-mappings: true
+    forbid-in-block-mappings: false
     forbid-in-flow-mappings: true
   key-duplicates: {}
   octal-values:
