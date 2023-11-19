@@ -7,12 +7,11 @@ permissions:
   packages: write
 
 jobs:
-  build-raspbian:
-    uses: ./.github/workflows/build_raspbian.yml
-
   package-raspbian:
     runs-on: [self-hosted, linux, ARM64]
     steps:
+      - uses: ./.github/workflows/build_raspbian.yml
+      
       - name: build .debpkg
         run: |
           mkdir -p .debpkg/usr/sbin
