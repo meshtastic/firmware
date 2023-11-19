@@ -317,7 +317,6 @@ void NodeDB::installDefaultChannels()
 void NodeDB::resetNodes()
 {
     devicestate.node_db_lite_count = 1;
-    // memset(devicestate.node_db_lite, 0, sizeof(devicestate.node_db_lite));
     std::fill(&devicestate.node_db_lite[1], &devicestate.node_db_lite[MAX_NUM_NODES - 1], meshtastic_NodeInfoLite());
     saveDeviceStateToDisk();
     if (neighborInfoModule && moduleConfig.neighbor_info.enabled)
