@@ -47,3 +47,9 @@ jobs:
           arch: arm64
           depends: libyaml-cpp0.7
           desc: Native Linux Meshtastic binary.
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: artifact-deb
+          path: |
+            ./*.deb
