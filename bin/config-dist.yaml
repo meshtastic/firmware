@@ -1,26 +1,21 @@
-# Define your devices here.
-# Use Broadcom pin numbering
+# Define your devices here using Broadcom pin numbering
+# Uncomment the block that corresponds to your hardware
+---
+Lora:
+#  Module: sx1262  # Waveshare SX126X XXXM
+#  DIO2_AS_RF_SWITCH: true
+#  CS: 21
+#  IRQ: 16
+#  Busy: 20
+#  Reset: 18
 
-#Waveshare SX126X XXXM
+#  Module: sx1262  # Waveshare SX1302 LISTEN ONLY AT THIS TIME!
+#  CS: 7
+#  IRQ: 17
+#  Reset: 22
 
-#USE_SX1262: true
-#SX126X_DIO2_AS_RF_SWITCH: true
-#SX126X_CS: 21
-#SX126X_DIO1: 16
-#SX126X_BUSY: 20
-#SX126X_RESET: 18
-
-#Waveshare SX1302 LISTEN ONLY AT THIS TIME!
-
-#USE_SX1262: true
-#SX126X_CS: 7
-#SX126X_DIO1: 17
-#SX126X_RESET: 22
-
-#Adafruit RFM9x
-
-#USE_RF95: true
-#RF95_RESET: 25
-#RF95_NSS: 7
-#RF95_IRQ: 22
-#RF95_DIO1: 23
+#  Module: RF95  # Adafruit RFM9x
+#  Reset: 25
+#  CS: 7
+#  IRQ: 22
+#  Busy: 23

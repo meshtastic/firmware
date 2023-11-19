@@ -123,17 +123,21 @@ void portduinoSetup()
     }
 
     try {
-        settingsMap[use_sx1262] = yamlConfig["USE_SX1262"].as<bool>(false);
-        settingsMap[sx126x_dio2_as_rf_switch] = yamlConfig["SX126X_DIO2_AS_RF_SWITCH"].as<bool>(false);
-        settingsMap[sx126x_cs] = yamlConfig["SX126X_CS"].as<int>(RADIOLIB_NC);
-        settingsMap[sx126x_dio1] = yamlConfig["SX126X_DIO1"].as<int>(RADIOLIB_NC);
-        settingsMap[sx126x_busy] = yamlConfig["SX126X_BUSY"].as<int>(RADIOLIB_NC);
-        settingsMap[sx126x_reset] = yamlConfig["SX126X_RESET"].as<int>(RADIOLIB_NC);
-        settingsMap[use_rf95] = yamlConfig["USE_RF95"].as<bool>(false);
-        settingsMap[rf95_nss] = yamlConfig["RF95_NSS"].as<int>(RADIOLIB_NC);
-        settingsMap[rf95_irq] = yamlConfig["RF95_IRQ"].as<int>(RADIOLIB_NC);
-        settingsMap[rf95_reset] = yamlConfig["RF95_RESET"].as<int>(RADIOLIB_NC);
-        settingsMap[rf95_dio1] = yamlConfig["RF95_DIO1"].as<int>(RADIOLIB_NC);
+        if (yamlConfig["Lora"]) {
+            settingsMap[use_sx1262] = false;
+            settingsMap[use_rf95] = false;
+
+            if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "sx1262") {
+                settingsMap[use_sx1262] = true;
+            } else if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "RF95") {
+                settingsMap[use_rf95] = true;
+            }
+            settingsMap[dio2_as_rf_switch] = yamlConfig["Lora"]["DIO2_AS_RF_SWITCH"].as<bool>(false);
+            settingsMap[cs] = yamlConfig["Lora"]["CS"].as<int>(RADIOLIB_NC);
+            settingsMap[irq] = yamlConfig["Lora"]["IRQ"].as<int>(RADIOLIB_NC);
+            settingsMap[busy] = yamlConfig["Lora"]["Busy"].as<int>(RADIOLIB_NC);
+            settingsMap[reset] = yamlConfig["Lora"]["Reset"].as<int>(RADIOLIB_NC);
+        }
 
     } catch (YAML::Exception e) {
         std::cout << "*** Exception " << e.what() << std::endl;

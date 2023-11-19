@@ -79,7 +79,7 @@ template <typename T> bool SX126xInterface<T>::init()
     bool dio2AsRfSwitch = true;
 #elif defined(ARCH_RASPBERRY_PI)
     bool dio2AsRfSwitch = false;
-    if (settingsMap[sx126x_dio2_as_rf_switch]) {
+    if (settingsMap[dio2_as_rf_switch]) {
         LOG_DEBUG("Setting DIO2 as RF switch\n");
         dio2AsRfSwitch = true;
     }
