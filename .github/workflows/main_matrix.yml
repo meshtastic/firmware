@@ -252,6 +252,8 @@ jobs:
             ./firmware-*-ota.zip
             ./device-*.sh
             ./device-*.bat
+            ./meshtasticd_linux_arm64
+            ./config-dist.yaml
           retention-days: 90
 
       - uses: actions/download-artifact@v3
@@ -312,7 +314,7 @@ jobs:
         with:
           name: firmware-${{ steps.version.outputs.version }}
           path: ./output
-          
+
       - uses: actions/download-artifact@v3
         with:
           name: artifact-deb
