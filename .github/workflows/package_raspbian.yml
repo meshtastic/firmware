@@ -9,13 +9,13 @@ permissions:
 jobs:
   build-raspbian:
     uses: ./.github/workflows/build_raspbian.yml
-    
+
   package-raspbian:
     runs-on: ubuntu-latest
     needs: build-raspbian
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Get release version string
         run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
@@ -27,7 +27,7 @@ jobs:
 
       - name: Display structure of downloaded files
         run: ls -R
-      
+
       - name: build .debpkg
         run: |
           mkdir -p .debpkg/usr/sbin
