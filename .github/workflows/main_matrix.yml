@@ -103,7 +103,6 @@ jobs:
   build-nrf52:
     strategy:
       fail-fast: false
-      max-parallel: 2
       matrix:
         include:
           - board: rak4631
@@ -128,6 +127,12 @@ jobs:
     uses: ./.github/workflows/build_rpi2040.yml
     with:
       board: ${{ matrix.board }}
+
+  build-raspbian:
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+    uses: ./.github/workflows/build_raspbian.yml
 
   build-native:
     runs-on: ubuntu-latest
@@ -204,7 +209,14 @@ jobs:
   gather-artifacts:
     runs-on: ubuntu-latest
     needs:
-      [build-esp32, build-esp32-s3, build-nrf52, build-native, build-rpi2040]
+      [
+        build-esp32,
+        build-esp32-s3,
+        build-nrf52,
+        build-raspbian,
+        build-native,
+        build-rpi2040,
+      ]
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -216,12 +228,15 @@ jobs:
         with:
           path: ./
 
+      - name: Display structure of downloaded files
+        run: ls -R
+
       - name: Get release version string
         run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
       - name: Move files up
-        run: mv -b -t ./ ./*tbeam-2*/littlefs*.bin ./*tbeam-2*/bleota.bin ./*tbeam-s3*/bleota-s3.bin ./**/firmware*.bin ./*t-echo*/Meshtastic_nRF52_factory_erase.uf2 ./**/firmware-*.uf2 ./**/firmware-*-ota.zip ./**/*.elf ./*native*/*device-*.sh ./*native*/*device-*.bat
+        run: mv -b -t ./ ./*tbeam-2*/littlefs*.bin ./*tbeam-2*/bleota.bin ./*tbeam-s3*/bleota-s3.bin ./**/firmware*.bin ./*t-echo*/Meshtastic_nRF52_factory_erase.uf2 ./**/firmware-*.uf2 ./**/firmware-*-ota.zip ./**/*.elf ./*native*/*device-*.sh ./*native*/*device-*.bat ./firmware-raspbian-*/release/meshtasticd_linux_arm64 ./firmware-raspbian-*/bin/config-dist.yaml
 
       - name: Repackage in single firmware zip
         uses: actions/upload-artifact@v3
@@ -293,6 +308,9 @@ jobs:
         with:
           name: firmware-${{ steps.version.outputs.version }}
           path: ./output
+
+      - name: Display structure of downloaded files
+        run: ls -R
 
       - name: Device scripts permissions
         run: |
