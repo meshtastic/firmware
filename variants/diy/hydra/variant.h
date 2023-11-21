@@ -18,7 +18,7 @@
 
 // Radio
 #define USE_SX1262 // E22-900M30S uses SX1262 - 868Mhz
-#define USE_SX1262 // E22-300M30S uses SX1268 - 433Mhz
+#define USE_SX1268 // E22-300M30S uses SX1268 - 433Mhz
 
 #define SX126X_MAX_POWER                                                                                                         \
     22 // Outputting 22dBm from SX1262 results in ~30dBm E22-900M30S output (module only uses last stage of the YP2233W PA)
