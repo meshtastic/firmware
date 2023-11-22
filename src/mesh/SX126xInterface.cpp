@@ -53,6 +53,8 @@ template <typename T> bool SX126xInterface<T>::init()
     limitPower();
 
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage, useRegulatorLDO);
+    res = lora.setFrequency(getFreq(), true); // FIXME: Work-around to calibrate the SX126x's image to the correct frequency band. This method only exists on the SX1262 and SX1268 in RadioLib, though the SX1261 supports it, but as we only use the SX1262 and SX1268 in Meshtastic this is not a problem (for now).
+
     // \todo Display actual typename of the adapter, not just `SX126x`
     LOG_INFO("SX126x init result %d\n", res);
     if (res == RADIOLIB_ERR_CHIP_NOT_FOUND)
@@ -181,7 +183,7 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
     err = lora.setPreambleLength(preambleLength);
     assert(err == RADIOLIB_ERR_NONE);
 
-    err = lora.setFrequency(getFreq());
+    err = lora.setFrequency(getFreq(), true); // FIXME: Adding "true" is a work-around to calibrate the SX126x's image to the correct frequency band. This method only exists on the SX1262 and SX1268 in RadioLib, though the SX1261 supports it, but as we only use the SX1262 and SX1268 in Meshtastic this is not a problem (for now). See the other line with a similar comment in this file.
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
