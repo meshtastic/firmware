@@ -69,6 +69,7 @@ NRF52Bluetooth *nrf52Bluetooth;
 
 #ifdef ARCH_RASPBERRY_PI
 #include "platform/portduino/PiHal.h"
+#include "platform/portduino/PortduinoGlue.h"
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -690,15 +691,32 @@ void setup()
 #endif
 
 #ifdef ARCH_RASPBERRY_PI
-    PiHal *RadioLibHAL = new PiHal(1);
-    if (!rIf) {
-        rIf = new SX1262Interface((LockingArduinoHal *)RadioLibHAL, 21, 16, 18, 20);
-        if (!rIf->init()) {
-            LOG_WARN("Failed to find SX1262 radio\n");
-            delete rIf;
-            rIf = NULL;
-        } else {
-            LOG_INFO("SX1262 Radio init succeeded, using SX1262 radio\n");
+    if (settingsMap[use_sx1262]) {
+        if (!rIf) {
+            PiHal *RadioLibHAL = new PiHal(1);
+            rIf = new SX1262Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
+                                      settingsMap[busy]);
+            if (!rIf->init()) {
+                LOG_ERROR("Failed to find SX1262 radio\n");
+                delete rIf;
+                exit(EXIT_FAILURE);
+            } else {
+                LOG_INFO("SX1262 Radio init succeeded, using SX1262 radio\n");
+            }
+        }
+    } else if (settingsMap[use_rf95]) {
+        if (!rIf) {
+            PiHal *RadioLibHAL = new PiHal(1);
+            rIf = new RF95Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
+                                    settingsMap[busy]);
+            if (!rIf->init()) {
+                LOG_ERROR("Failed to find RF95 radio\n");
+                delete rIf;
+                rIf = NULL;
+                exit(EXIT_FAILURE);
+            } else {
+                LOG_INFO("RF95 Radio init succeeded, using RF95 radio\n");
+            }
         }
     }
 
