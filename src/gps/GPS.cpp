@@ -17,6 +17,9 @@
 
 #if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32)
 HardwareSerial *GPS::_serial_gps = &Serial1;
+#elif defined(ARCH_RASPBERRY_PI)
+// need a translation layer to make _serial_gps work with pigpio https://abyz.me.uk/rpi/pigpio/cif.html#serOpen
+HardwareSerial *GPS::_serial_gps = NULL;
 #else
 HardwareSerial *GPS::_serial_gps = NULL;
 #endif
