@@ -215,6 +215,9 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
+// Testing USB detection
+#define NRF_APM
+
 // enables 3.3V periphery like GPS or IO Module
 #define PIN_3V3_EN (34)
 
@@ -226,7 +229,7 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // Power is on the controllable 3V3_S rail
 // #define PIN_GPS_RESET (34)
 // #define PIN_GPS_EN PIN_3V3_EN
-#define PIN_GPS_PPS (17) // Pulse per second input from the GPS
+#define PIN_GPS_PPS (17) // Pulse per second input fr#om the GPS
 
 #define GPS_RX_PIN PIN_SERIAL1_RX
 #define GPS_TX_PIN PIN_SERIAL1_TX
