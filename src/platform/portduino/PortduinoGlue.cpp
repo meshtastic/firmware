@@ -7,10 +7,22 @@
 
 #include <Utility.h>
 #include <assert.h>
+
+#ifdef ARCH_RASPBERRY_PI
+#include "PortduinoGlue.h"
+#include "pigpio.h"
+#include "yaml-cpp/yaml.h"
+#include <iostream>
+#include <map>
+#include <unistd.h>
+
+std::map<int, int> settingsMap;
+
+#else
 #include <linux/gpio/LinuxGPIOPin.h>
+#endif
 
 // FIXME - move setBluetoothEnable into a HALPlatform class
-
 void setBluetoothEnable(bool on)
 {
     // not needed
@@ -22,7 +34,7 @@ void cpuDeepSleep(uint32_t msecs)
 }
 
 void updateBatteryLevel(uint8_t level) NOT_IMPLEMENTED("updateBatteryLevel");
-
+#ifndef ARCH_RASPBERRY_PI
 /** a simulated pin for busted IRQ hardware
  * Porduino helper class to do this i2c based polling:
  */
@@ -49,7 +61,7 @@ class PolledIrqPin : public GPIOPin
 };
 
 static GPIOPin *loraIrq;
-
+#endif
 int TCPPort = 4403;
 
 static error_t parse_opt(int key, char *arg, struct argp_state *state)
@@ -88,7 +100,57 @@ void portduinoSetup()
 {
     printf("Setting up Meshtastic on Portduino...\n");
 
-#ifdef PORTDUINO_LINUX_HARDWARE
+#ifdef ARCH_RASPBERRY_PI
+    YAML::Node yamlConfig;
+
+    if (access("config.yaml", R_OK) == 0) {
+        try {
+            yamlConfig = YAML::LoadFile("config.yaml");
+        } catch (YAML::Exception e) {
+            std::cout << "*** Exception " << e.what() << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    } else if (access("/etc/meshtasticd/config.yaml", R_OK) == 0) {
+        try {
+            yamlConfig = YAML::LoadFile("/etc/meshtasticd/config.yaml");
+        } catch (YAML::Exception e) {
+            std::cout << "*** Exception " << e.what() << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    } else {
+        std::cout << "No 'config.yaml' found, exiting." << std::endl;
+        exit(EXIT_FAILURE);
+    }
+
+    try {
+        if (yamlConfig["Lora"]) {
+            settingsMap[use_sx1262] = false;
+            settingsMap[use_rf95] = false;
+
+            if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "sx1262") {
+                settingsMap[use_sx1262] = true;
+            } else if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "RF95") {
+                settingsMap[use_rf95] = true;
+            }
+            settingsMap[dio2_as_rf_switch] = yamlConfig["Lora"]["DIO2_AS_RF_SWITCH"].as<bool>(false);
+            settingsMap[cs] = yamlConfig["Lora"]["CS"].as<int>(RADIOLIB_NC);
+            settingsMap[irq] = yamlConfig["Lora"]["IRQ"].as<int>(RADIOLIB_NC);
+            settingsMap[busy] = yamlConfig["Lora"]["Busy"].as<int>(RADIOLIB_NC);
+            settingsMap[reset] = yamlConfig["Lora"]["Reset"].as<int>(RADIOLIB_NC);
+        }
+
+    } catch (YAML::Exception e) {
+        std::cout << "*** Exception " << e.what() << std::endl;
+        exit(EXIT_FAILURE);
+    }
+    if (access("/sys/kernel/debug/bluetooth/hci0/identity", R_OK) != 0) {
+        std::cout << "Cannot read Bluetooth MAC Address. Please run as root" << std::endl;
+        exit(EXIT_FAILURE);
+    }
+    return;
+#endif
+
+#ifdef defined(PORTDUINO_LINUX_HARDWARE)
     SPI.begin(); // We need to create SPI
     bool usePineLora = !spiChip->isSimulated();
     if (usePineLora) {
@@ -112,7 +174,7 @@ void portduinoSetup()
         gpioBind(loraCs);
     } else
 #endif
-
+#ifndef ARCH_RASPBERRY_PI
     {
         // Set the random seed equal to TCPPort to have a different seed per instance
         randomSeed(TCPPort);
@@ -129,7 +191,7 @@ void portduinoSetup()
         gpioBind(new SimGPIOPin(SX126X_RESET, "fakeLoraReset"));
         gpioBind(new SimGPIOPin(LORA_DIO1, "fakeLoraIrq"));
     }
-
     // gpioBind((new SimGPIOPin(LORA_RESET, "LORA_RESET")));
     // gpioBind((new SimGPIOPin(RF95_NSS, "RF95_NSS"))->setSilent());
+#endif
 }
