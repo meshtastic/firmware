@@ -370,7 +370,7 @@ JSONValue::JSONValue(int m_integer_value)
  *
  * @param uint m_integer_value The number to use as the value
  */
-JSONValue::JSONValue(uint m_integer_value)
+JSONValue::JSONValue(unsigned int m_integer_value)
 {
     type = JSONType_Number;
     number_value = (double)m_integer_value;

@@ -323,7 +323,7 @@ void NodeDB::resetNodes()
         neighborInfoModule->resetNeighbors();
 }
 
-void NodeDB::removeNodeByNum(uint nodeNum)
+void NodeDB::removeNodeByNum(NodeNum nodeNum)
 {
     int newPos = 0, removed = 0;
     for (int i = 0; i < *numMeshNodes; i++) {
@@ -420,7 +420,7 @@ void NodeDB::init()
         saveWhat |= SEGMENT_CHANNELS;
 
     if (!devicestate.node_remote_hardware_pins) {
-        meshtastic_NodeRemoteHardwarePin empty[12] = {meshtastic_RemoteHardwarePin_init_default};
+        meshtastic_NodeRemoteHardwarePin empty[12] = {meshtastic_NodeRemoteHardwarePin_init_default};
         memcpy(devicestate.node_remote_hardware_pins, empty, sizeof(empty));
     }
 
