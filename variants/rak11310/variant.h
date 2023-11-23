@@ -4,13 +4,6 @@
 
 #define ARDUINO_ARCH_AVR
 
-#undef CBC
-#define CBC 0
-#undef CTR
-#define CTR 1
-#undef ECB
-#define ECB 0
-
 #define LED_CONN PIN_LED2
 #define LED_PIN LED_BUILTIN
 
