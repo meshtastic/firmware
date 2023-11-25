@@ -1,6 +1,8 @@
 name: Package Raspbian
 
-on: workflow_call
+on:
+  workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: write
