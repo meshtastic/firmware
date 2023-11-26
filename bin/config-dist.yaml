@@ -24,3 +24,8 @@ Lora:
 #  Reset: 22
 #  CS: 7
 #  IRQ: 25
+
+# Define GPIO buttons here:
+
+GPIO:
+#  User: 6
