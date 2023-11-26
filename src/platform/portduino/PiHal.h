@@ -7,6 +7,8 @@
 // include the library for Raspberry GPIO pins
 #include "pigpio.h"
 
+#include "linux/gpio/LinuxGPIOPin.h"
+
 // create a new Raspberry Pi hardware abstraction layer
 // using the pigpio library
 // the HAL must inherit from the base RadioLibHal class
@@ -54,8 +56,7 @@ class PiHal : public RadioLibHal
         if (pin == RADIOLIB_NC) {
             return;
         }
-
-        gpioSetMode(pin, mode);
+        ::pinMode(pin, RADIOLIB_ARDUINOHAL_PIN_MODE_CAST mode);
     }
 
     void digitalWrite(uint32_t pin, uint32_t value) override
@@ -63,8 +64,7 @@ class PiHal : public RadioLibHal
         if (pin == RADIOLIB_NC) {
             return;
         }
-
-        gpioWrite(pin, value);
+        ::digitalWrite(pin, RADIOLIB_ARDUINOHAL_PIN_STATUS_CAST value);
     }
 
     uint32_t digitalRead(uint32_t pin) override
@@ -73,7 +73,7 @@ class PiHal : public RadioLibHal
             return (0);
         }
 
-        return (gpioRead(pin));
+        return (::digitalRead(pin));
     }
 
     void attachInterrupt(uint32_t interruptNum, void (*interruptCb)(void), uint32_t mode) override
@@ -81,11 +81,7 @@ class PiHal : public RadioLibHal
         if (interruptNum == RADIOLIB_NC) {
             return;
         }
-        if (gpioRead(interruptNum) == 1) {
-            interruptCb();
-        } else {
-            gpioSetAlertFunc(interruptNum, (gpioISRFunc_t)interruptCb);
-        }
+        ::attachInterrupt(interruptNum, interruptCb, RADIOLIB_ARDUINOHAL_INTERRUPT_MODE_CAST mode);
     }
 
     void detachInterrupt(uint32_t interruptNum) override
@@ -94,7 +90,7 @@ class PiHal : public RadioLibHal
             return;
         }
 
-        gpioSetAlertFunc(interruptNum, NULL);
+        ::detachInterrupt(interruptNum);
     }
 
     void delay(unsigned long ms) override { gpioDelay(ms * 1000); }
@@ -111,19 +107,8 @@ class PiHal : public RadioLibHal
             return (0);
         }
 
-        this->pinMode(pin, PI_INPUT);
-        uint32_t start = this->micros();
-        uint32_t curtick = this->micros();
-
-        while (this->digitalRead(pin) == state) {
-            if ((this->micros() - curtick) > timeout) {
-                return (0);
-            }
-        }
-
-        return (this->micros() - start);
+        return (::pulseIn(pin, state, timeout));
     }
-
     void spiBegin()
     {
         if (_spiHandle < 0) {

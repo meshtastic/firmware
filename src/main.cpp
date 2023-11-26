@@ -75,7 +75,7 @@ NRF52Bluetooth *nrf52Bluetooth;
 #include <string>
 #endif
 
-#if HAS_BUTTON
+#if HAS_BUTTON || defined(ARCH_RASPBERRY_PI)
 #include "ButtonThread.h"
 #endif
 #include "PowerFSMThread.h"
@@ -206,13 +206,13 @@ static int32_t ledBlinker()
 
 uint32_t timeLastPowered = 0;
 
-#if HAS_BUTTON
+#if HAS_BUTTON || defined(ARCH_RASPBERRY_PI)
 bool ButtonThread::shutdown_on_long_stop = false;
 #endif
 
 static Periodic *ledPeriodic;
 static OSThread *powerFSMthread;
-#if HAS_BUTTON
+#if HAS_BUTTON || defined(ARCH_RASPBERRY_PI)
 static OSThread *buttonThread;
 uint32_t ButtonThread::longPressTime = 0;
 #endif
@@ -583,7 +583,7 @@ void setup()
     else
         router = new ReliableRouter();
 
-#if HAS_BUTTON
+#if HAS_BUTTON || defined(ARCH_RASPBERRY_PI)
     // Buttons. Moved here cause we need NodeDB to be initialized
     buttonThread = new ButtonThread();
 #endif
