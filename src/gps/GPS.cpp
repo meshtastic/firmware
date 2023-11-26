@@ -503,8 +503,7 @@ void GPS::setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime)
             }
             msglen = gps->makeUBXPacket(0x02, 0x41, 0x08, gps->_message_PMREQ);
             gps->_serial_gps->write(gps->UBXscratch, msglen);
-        }
-        else if (gnssModel == GNSS_MODEL_MTK) {
+        } else if (gnssModel == GNSS_MODEL_MTK) {
             // Enter soft standby mode
             LOG_DEBUG("L76K entering standby mode\n");
             gps->_serial_gps->write("$PMTK161,0*28\r\n");
