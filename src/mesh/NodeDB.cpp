@@ -200,7 +200,7 @@ void NodeDB::installDefaultConfig()
     config.position.position_flags =
         (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL |
          meshtastic_Config_PositionConfig_PositionFlags_SPEED | meshtastic_Config_PositionConfig_PositionFlags_HEADING |
-         meshtastic_Config_PositionConfig_PositionFlags_DOP);
+         meshtastic_Config_PositionConfig_PositionFlags_DOP | meshtastic_Config_PositionConfig_PositionFlags_SATINVIEW);
 
 #ifdef T_WATCH_S3
     config.display.screen_on_secs = 30;
@@ -316,8 +316,8 @@ void NodeDB::installDefaultChannels()
 
 void NodeDB::resetNodes()
 {
-    devicestate.node_db_lite_count = 0;
-    memset(devicestate.node_db_lite, 0, sizeof(devicestate.node_db_lite));
+    devicestate.node_db_lite_count = 1;
+    std::fill(&devicestate.node_db_lite[1], &devicestate.node_db_lite[MAX_NUM_NODES - 1], meshtastic_NodeInfoLite());
     saveDeviceStateToDisk();
     if (neighborInfoModule && moduleConfig.neighbor_info.enabled)
         neighborInfoModule->resetNeighbors();
