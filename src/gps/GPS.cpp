@@ -505,17 +505,20 @@ void GPS::setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime)
             gps->_serial_gps->write(gps->UBXscratch, msglen);
         } else if (gnssModel == GNSS_MODEL_MTK) {
             // Enter soft standby mode
-            LOG_DEBUG("L76K entering standby mode\n");
+            LOG_DEBUG("L76K entering soft standby mode\n");
             gps->_serial_gps->write("$PMTK161,0*28\r\n");
+            gps->_serial_gps->flush();
+            delay(250);
         }
     } else {
         if (gnssModel == GNSS_MODEL_UBLOX) {
             gps->_serial_gps->write(0xFF);
             clearBuffer(); // This often returns old data, so drop it
         } else if (gnssModel == GNSS_MODEL_MTK) {
-            LOG_DEBUG("L76K exit standby mode\n");
+            LOG_DEBUG("L76K exit soft standby mode\n");
             // Start vehicle mode (to exit standby mode)
             gps->_serial_gps->write("$PCAS11,3*1E\r\n");
+            delay(250);
         }
     }
 }
