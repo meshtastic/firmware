@@ -320,7 +320,9 @@ meshtastic_NodeInfoLite *MeshService::refreshLocalMeshNode()
 
     position.time = getValidTime(RTCQualityFromNet);
 
-    updateBatteryLevel(powerStatus->getBatteryChargePercent());
+    if (powerStatus->getHasBattery() == 1) {
+        updateBatteryLevel(powerStatus->getBatteryChargePercent());
+    }
 
     return node;
 }
