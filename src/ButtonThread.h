@@ -37,6 +37,9 @@ class ButtonThread : public concurrency::OSThread
 #ifdef BUTTON_PIN_TOUCH
     OneButton userButtonTouch;
 #endif
+#if defined(ARCH_RASPBERRY_PI)
+    OneButton userButton;
+#endif
     static bool shutdown_on_long_stop;
 
   public:
@@ -45,8 +48,13 @@ class ButtonThread : public concurrency::OSThread
     // callback returns the period for the next callback invocation (or 0 if we should no longer be called)
     ButtonThread() : OSThread("Button")
     {
-#ifdef BUTTON_PIN
+#if defined(ARCH_RASPBERRY_PI)
+        if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC)
+            userButton = OneButton(settingsMap[user], true, true);
+#elif defined(BUTTON_PIN)
+
         userButton = OneButton(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, true, true);
+#endif
 #ifdef INPUT_PULLUP_SENSE
         // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
         pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT_PULLUP_SENSE);
@@ -58,6 +66,10 @@ class ButtonThread : public concurrency::OSThread
         userButton.attachMultiClick(userButtonMultiPressed);
         userButton.attachLongPressStart(userButtonPressedLongStart);
         userButton.attachLongPressStop(userButtonPressedLongStop);
+#if defined(ARCH_RASPBERRY_PI)
+        if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC)
+            wakeOnIrq(settingsMap[user], FALLING);
+#else
         wakeOnIrq(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, FALLING);
 #endif
 #ifdef BUTTON_PIN_ALT
@@ -87,9 +99,14 @@ class ButtonThread : public concurrency::OSThread
     {
         canSleep = true; // Assume we should not keep the board awake
 
-#ifdef BUTTON_PIN
+#if defined(BUTTON_PIN)
         userButton.tick();
         canSleep &= userButton.isIdle();
+#elif defined(ARCH_RASPBERRY_PI)
+        if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC) {
+            userButton.tick();
+            canSleep &= userButton.isIdle();
+        }
 #endif
 #ifdef BUTTON_PIN_ALT
         userButtonAlt.tick();
@@ -118,6 +135,13 @@ class ButtonThread : public concurrency::OSThread
 #ifdef BUTTON_PIN
         if (((config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN) !=
              moduleConfig.canned_message.inputbroker_pin_press) ||
+            !moduleConfig.canned_message.enabled) {
+            powerFSM.trigger(EVENT_PRESS);
+        }
+#endif
+#if defined(ARCH_RASPBERRY_PI)
+        if ((settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC) &&
+                (settingsMap[user] != moduleConfig.canned_message.inputbroker_pin_press) ||
             !moduleConfig.canned_message.enabled) {
             powerFSM.trigger(EVENT_PRESS);
         }
