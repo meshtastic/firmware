@@ -103,6 +103,8 @@ void portduinoSetup()
 
 #ifdef ARCH_RASPBERRY_PI
     gpioInit();
+
+    std::string gpioChipName = "gpiochip";
     YAML::Node yamlConfig;
 
     if (access("config.yaml", R_OK) == 0) {
@@ -139,6 +141,8 @@ void portduinoSetup()
             settingsMap[irq] = yamlConfig["Lora"]["IRQ"].as<int>(RADIOLIB_NC);
             settingsMap[busy] = yamlConfig["Lora"]["Busy"].as<int>(RADIOLIB_NC);
             settingsMap[reset] = yamlConfig["Lora"]["Reset"].as<int>(RADIOLIB_NC);
+            settingsMap[gpiochip] = yamlConfig["Lora"]["gpiochip"].as<int>(0);
+            gpioChipName += std::to_string(settingsMap[gpiochip]);
         }
         if (yamlConfig["GPIO"]) {
             settingsMap[user] = yamlConfig["GPIO"]["User"].as<int>(RADIOLIB_NC);
@@ -155,27 +159,27 @@ void portduinoSetup()
 
     // Need to bind all the configured GPIO pins so they're not simulated
     if (settingsMap.count(cs) > 0 && settingsMap[cs] != RADIOLIB_NC) {
-        if (initGPIOPin(settingsMap[cs]) != ERRNO_OK) {
+        if (initGPIOPin(settingsMap[cs], gpioChipName) != ERRNO_OK) {
             settingsMap[cs] = RADIOLIB_NC;
         }
     }
     if (settingsMap.count(irq) > 0 && settingsMap[irq] != RADIOLIB_NC) {
-        if (initGPIOPin(settingsMap[irq]) != ERRNO_OK) {
+        if (initGPIOPin(settingsMap[irq], gpioChipName) != ERRNO_OK) {
             settingsMap[irq] = RADIOLIB_NC;
         }
     }
     if (settingsMap.count(busy) > 0 && settingsMap[busy] != RADIOLIB_NC) {
-        if (initGPIOPin(settingsMap[busy]) != ERRNO_OK) {
+        if (initGPIOPin(settingsMap[busy], gpioChipName) != ERRNO_OK) {
             settingsMap[busy] = RADIOLIB_NC;
         }
     }
     if (settingsMap.count(reset) > 0 && settingsMap[reset] != RADIOLIB_NC) {
-        if (initGPIOPin(settingsMap[reset]) != ERRNO_OK) {
+        if (initGPIOPin(settingsMap[reset], gpioChipName) != ERRNO_OK) {
             settingsMap[reset] = RADIOLIB_NC;
         }
     }
     if (settingsMap.count(user) > 0 && settingsMap[user] != RADIOLIB_NC) {
-        if (initGPIOPin(settingsMap[user]) != ERRNO_OK) {
+        if (initGPIOPin(settingsMap[user], gpioChipName) != ERRNO_OK) {
             settingsMap[user] = RADIOLIB_NC;
         }
     }
@@ -230,12 +234,12 @@ void portduinoSetup()
 }
 
 #ifdef ARCH_RASPBERRY_PI
-int initGPIOPin(int pinNum)
+int initGPIOPin(int pinNum, std::string gpioChipName)
 {
     std::string gpio_name = "GPIO" + std::to_string(pinNum);
     try {
         GPIOPin *csPin;
-        csPin = new LinuxGPIOPin(pinNum, "gpiochip0", pinNum, gpio_name.c_str());
+        csPin = new LinuxGPIOPin(pinNum, gpioChipName.c_str(), pinNum, gpio_name.c_str());
         csPin->setSilent();
         gpioBind(csPin);
         return ERRNO_OK;
