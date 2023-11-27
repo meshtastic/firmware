@@ -48,6 +48,7 @@ class ButtonThread : public concurrency::OSThread
     // callback returns the period for the next callback invocation (or 0 if we should no longer be called)
     ButtonThread() : OSThread("Button")
     {
+#if defined(ARCH_RASPBERRY_PI) || defined(BUTTON_PIN)
 #if defined(ARCH_RASPBERRY_PI)
         if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC)
             userButton = OneButton(settingsMap[user], true, true);
@@ -71,6 +72,7 @@ class ButtonThread : public concurrency::OSThread
             wakeOnIrq(settingsMap[user], FALLING);
 #else
         wakeOnIrq(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, FALLING);
+#endif
 #endif
 #ifdef BUTTON_PIN_ALT
         userButtonAlt = OneButton(BUTTON_PIN_ALT, true, true);
