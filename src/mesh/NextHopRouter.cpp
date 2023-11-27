@@ -19,7 +19,7 @@ ErrorCode NextHopRouter::send(meshtastic_MeshPacket *p)
 bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 {
     if (wasSeenRecently(p)) { // Note: this will also add a recent packet record
-        if (p->next_hop == (uint8_t)(getNodeNum() & 0xFF)) {
+        if (p->next_hop == nodeDB.getLastByteOfNodeNum(getNodeNum())) {
             LOG_DEBUG("Ignoring incoming msg, because we've already seen it.\n");
         } else {
             LOG_DEBUG("Ignoring incoming msg, because we've already seen it and cancel any outgoing packets.\n");
@@ -51,7 +51,7 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
 
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE) {
         if ((p->to != getNodeNum()) && (getFrom(p) != getNodeNum())) {
-            if (p->next_hop == (uint8_t)(getNodeNum() & 0xFF)) {
+            if (p->next_hop == nodeDB.getLastByteOfNodeNum(getNodeNum())) {
                 meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
                 LOG_INFO("Relaying received next-hop message coming from %x\n", p->relay_node);
 

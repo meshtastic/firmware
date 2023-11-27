@@ -241,10 +241,10 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     p->from = getFrom(p);
 
     // If we are the original transmitter, set the original hop limit
-    if (p->from == nodeDB.getNodeNum())
+    if (p->from == getNodeNum())
         p->original_hop_limit = config.lora.hop_limit ? config.lora.hop_limit : HOP_RELIABLE;
 
-    p->relay_node = (uint8_t)(getNodeNum() & 0xFF); // set the current relayer to us
+    p->relay_node = nodeDB.getLastByteOfNodeNum(getNodeNum()); // set the relayer to us
 
     // If the packet hasn't yet been encrypted, do so now (it might already be encrypted if we are just forwarding it)
 
