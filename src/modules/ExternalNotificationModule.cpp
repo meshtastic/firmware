@@ -8,7 +8,7 @@
  * handle the module's behavior.
  *
  * Documentation:
- * https://meshtastic.org/docs/settings/moduleconfig/external-notification
+ * https://meshtastic.org/docs/configuration/module/external-notification
  *
  * @author Jm Casler & Meshtastic Team
  * @date [Insert Date]
@@ -31,6 +31,10 @@
 uint8_t red = 0;
 uint8_t green = 0;
 uint8_t blue = 0;
+uint8_t colorState = 1;
+uint8_t brightnessIndex = 0;
+uint8_t brightnessValues[] = {0, 10, 20, 30, 50, 90, 160, 170}; // blue gets multiplied by 1.5
+bool ascending = true;
 #endif
 
 #ifndef PIN_BUZZER
@@ -39,7 +43,7 @@ uint8_t blue = 0;
 
 /*
     Documentation:
-        https://meshtastic.org/docs/settings/moduleconfig/external-notification
+        https://meshtastic.org/docs/configuration/module/external-notification
 */
 
 // Default configurations
@@ -100,11 +104,26 @@ int32_t ExternalNotificationModule::runOnce()
             }
 #ifdef HAS_NCP5623
             if (rgb_found.type == ScanI2C::NCP5623) {
-                green = (green + 50) % 255;
-                red = abs(red - green) % 255;
-                blue = abs(blue / red) % 255;
-
+                red = (colorState & 4) ? brightnessValues[brightnessIndex] : 0;          // Red enabled on colorState = 4,5,6,7
+                green = (colorState & 2) ? brightnessValues[brightnessIndex] : 0;        // Green enabled on colorState = 2,3,6,7
+                blue = (colorState & 1) ? (brightnessValues[brightnessIndex] * 1.5) : 0; // Blue enabled on colorState = 1,3,5,7
                 rgb.setColor(red, green, blue);
+
+                if (ascending) { // fade in
+                    brightnessIndex++;
+                    if (brightnessIndex == (sizeof(brightnessValues) - 1)) {
+                        ascending = false;
+                    }
+                } else {
+                    brightnessIndex--; // fade out
+                }
+                if (brightnessIndex == 0) {
+                    ascending = true;
+                    colorState++; // next color
+                    if (colorState > 7) {
+                        colorState = 1;
+                    }
+                }
             }
 #endif
 

@@ -4,13 +4,6 @@
 
 #define ARDUINO_ARCH_AVR
 
-#undef CBC
-#define CBC 0
-#undef CTR
-#define CTR 1
-#undef ECB
-#define ECB 0
-
 #define LED_CONN PIN_LED2
 #define LED_PIN LED_BUILTIN
 
@@ -21,6 +14,8 @@
 #define BATTERY_PIN 26
 // ratio of voltage divider = 3.0 (R17=200k, R18=100k)
 #define ADC_MULTIPLIER 3.1 // 3.0 + a bit for being optimistic
+
+#define DETECTION_SENSOR_EN 28
 
 #define USE_SX1262
 

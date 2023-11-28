@@ -59,7 +59,7 @@ extern "C" {
  * Buttons
  */
 
-#define PIN_BUTTON1 9 // Pin for button on E-ink button module or IO expansion
+#define PIN_BUTTON1 9 // Pin for button on E-ink button module or IO expansion such as the RAK14014 or RAK14015 TFT modules
 #define BUTTON_NEED_PULLUP
 #define PIN_BUTTON2 12
 #define PIN_BUTTON3 24
@@ -177,6 +177,27 @@ static const uint8_t SCK = PIN_SPI_SCK;
    SPI_CS    <->  P0.26 (Arduino GPIO number 26)
  */
 
+// No reason not to have the RAK Wireless pin defs here too.  This allows code from example RAK sketches to run without
+// modification.
+
+static const uint8_t WB_IO1 = 17;      // SLOT_A SLOT_B
+static const uint8_t WB_IO2 = 34;      // SLOT_A SLOT_B
+static const uint8_t WB_IO3 = 21;      // SLOT_C
+static const uint8_t WB_IO4 = 4;       // SLOT_C
+static const uint8_t WB_IO5 = 9;       // SLOT_D
+static const uint8_t WB_IO6 = 10;      // SLOT_D
+static const uint8_t WB_SW1 = 33;      // IO_SLOT
+static const uint8_t WB_A0 = 5;        // IO_SLOT
+static const uint8_t WB_A1 = 31;       // IO_SLOT
+static const uint8_t WB_I2C1_SDA = 13; // SENSOR_SLOT IO_SLOT
+static const uint8_t WB_I2C1_SCL = 14; // SENSOR_SLOT IO_SLOT
+static const uint8_t WB_I2C2_SDA = 24; // IO_SLOT
+static const uint8_t WB_I2C2_SCL = 25; // IO_SLOT
+static const uint8_t WB_SPI_CS = 26;   // IO_SLOT
+static const uint8_t WB_SPI_CLK = 3;   // IO_SLOT
+static const uint8_t WB_SPI_MISO = 29; // IO_SLOT
+static const uint8_t WB_SPI_MOSI = 30; // IO_SLOT
+
 // RAK4630 LoRa module
 
 /* Setup of the SX1262 LoRa module ( https://docs.rakwireless.com/Product-Categories/WisBlock/RAK4631/Datasheet/ )
@@ -200,8 +221,6 @@ control of the antenna switch
 SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 
 */
-
-#define DETECTION_SENSOR_EN 4
 
 #define USE_SX1262
 #define SX126X_CS (42)
@@ -228,7 +247,7 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // Therefore must be 1 to keep peripherals powered
 // Power is on the controllable 3V3_S rail
 // #define PIN_GPS_RESET (34)
-// #define PIN_GPS_EN PIN_3V3_EN
+#define PIN_GPS_EN PIN_3V3_EN
 #define PIN_GPS_PPS (17) // Pulse per second input from the GPS
 
 #define GPS_RX_PIN PIN_SERIAL1_RX
@@ -277,6 +296,34 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #ifdef __cplusplus
 }
 #endif
+
+#define RAK14014 // Tell it we have a RAK14014
+#define USER_SETUP_LOADED 1
+#define DISABLE_ALL_LIBRARY_WARNINGS 1
+#define ST7789_DRIVER 1
+#define TFT_WIDTH 240
+#define TFT_HEIGHT 320
+#define TFT_MISO WB_SPI_MISO
+#define TFT_MOSI WB_SPI_MOSI
+#define TFT_SCLK WB_SPI_CLK
+#define TFT_CS WB_SPI_CS
+#define TFT_DC WB_IO4
+#define TFT_RST -1
+#define TFT_BL WB_IO3
+#define LOAD_GLCD 1
+#define LOAD_GFXFF 1
+#define TFT_RGB_ORDER 0
+#define SPI_FREQUENCY 50000000
+#define TFT_SPI_PORT SPI1
+#define ST7789_CS WB_SPI_CS // Adds compatibility with the rest of the checking for a ST7789 TFT.
+
+#define SCREEN_ROTATE
+#define SCREEN_TRANSITION_FRAMERATE 5
+
+#define HAS_TOUCHSCREEN 0
+#define SCREEN_TOUCH_INT 10 // From tp.h on the tracker open source code.
+#define TOUCH_I2C_PORT 0
+#define TOUCH_SLAVE_ADDRESS 0x5D // GT911
 
 /*----------------------------------------------------------------------------
  *        Arduino objects - C++ only
