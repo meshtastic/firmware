@@ -99,6 +99,8 @@
 #define EXT_NOTIFY_OUT 2 // The GPIO pin that acts as the external notification output (here we connect an LED to it)
 // Buzzer
 #define PIN_BUZZER 11
+// Buttons
+#define BUTTON_PIN 0 // Use the BOOT button as the user button
 // I2C
 #define I2C_SCL 18
 #define I2C_SDA 8
