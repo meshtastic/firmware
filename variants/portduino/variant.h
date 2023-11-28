@@ -9,10 +9,10 @@
 #define USE_SX1262
 
 // Fake SPI device selections
-#define RF95_SCK 5
-#define RF95_MISO 19
-#define RF95_MOSI 27
-#define RF95_NSS RADIOLIB_NC // the ch341f spi controller does CS for us
+#define SPI_SCK 5
+#define SPI_MISO 19
+#define SPI_MOSI 27
+#define SPI_NSS RADIOLIB_NC // the ch341f spi controller does CS for us
 
 #define LORA_DIO0 26 // a No connect on the SX1262 module
 #define LORA_RESET 14

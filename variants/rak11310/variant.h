@@ -26,17 +26,17 @@
 
 #define USE_SX1262
 
-#undef RF95_SCK
-#undef RF95_MISO
-#undef RF95_MOSI
-#undef RF95_NSS
+#undef SPI_SCK
+#undef SPI_MISO
+#undef SPI_MOSI
+#undef SPI_NSS
 
 // RAK BSP somehow uses SPI1 instead of SPI0
 #define HW_SPI1_DEVICE
-#define RF95_SCK PIN_SPI0_SCK
-#define RF95_MOSI PIN_SPI0_MOSI
-#define RF95_MISO PIN_SPI0_MISO
-#define RF95_NSS PIN_SPI0_SS
+#define SPI_SCK PIN_SPI0_SCK
+#define SPI_MOSI PIN_SPI0_MOSI
+#define SPI_MISO PIN_SPI0_MISO
+#define SPI_NSS PIN_SPI0_SS
 
 #define LORA_DIO0 RADIOLIB_NC
 #define LORA_RESET 14
@@ -45,7 +45,7 @@
 #define LORA_DIO3 RADIOLIB_NC
 
 #ifdef USE_SX1262
-#define SX126X_CS RF95_NSS
+#define SX126X_CS SPI_NSS
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET

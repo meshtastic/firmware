@@ -628,24 +628,24 @@ void setup()
     initSPI();
 #ifdef ARCH_RP2040
 #ifdef HW_SPI1_DEVICE
-    SPI1.setSCK(RF95_SCK);
-    SPI1.setTX(RF95_MOSI);
-    SPI1.setRX(RF95_MISO);
-    pinMode(RF95_NSS, OUTPUT);
-    digitalWrite(RF95_NSS, HIGH);
+    SPI1.setSCK(SPI_SCK);
+    SPI1.setTX(SPI_MOSI);
+    SPI1.setRX(SPI_MISO);
+    pinMode(SPI_NSS, OUTPUT);
+    digitalWrite(SPI_NSS, HIGH);
     SPI1.begin(false);
 #else                      // HW_SPI1_DEVICE
-    SPI.setSCK(RF95_SCK);
-    SPI.setTX(RF95_MOSI);
-    SPI.setRX(RF95_MISO);
+    SPI.setSCK(SPI_SCK);
+    SPI.setTX(SPI_MOSI);
+    SPI.setRX(SPI_MISO);
     SPI.begin(false);
 #endif                     // HW_SPI1_DEVICE
 #elif !defined(ARCH_ESP32) // ARCH_RP2040
     SPI.begin();
 #else
     // ESP32
-    SPI.begin(RF95_SCK, RF95_MISO, RF95_MOSI, RF95_NSS);
-    LOG_WARN("SPI.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)\n", RF95_SCK, RF95_MISO, RF95_MOSI, RF95_NSS);
+    SPI.begin(SPI_SCK, SPI_MISO, SPI_MOSI, SPI_NSS);
+    LOG_WARN("SPI.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)\n", SPI_SCK, SPI_MISO, SPI_MOSI, SPI_NSS);
     SPI.setFrequency(4000000);
 #endif
 
@@ -755,7 +755,7 @@ void setup()
 
 #if defined(RF95_IRQ)
     if (!rIf) {
-        rIf = new RF95Interface(RadioLibHAL, RF95_NSS, RF95_IRQ, RF95_RESET, RF95_DIO1);
+        rIf = new RF95Interface(RadioLibHAL, SPI_NSS, RF95_IRQ, RF95_RESET, RF95_DIO1);
         if (!rIf->init()) {
             LOG_WARN("Failed to find RF95 radio\n");
             delete rIf;

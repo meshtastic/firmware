@@ -22,14 +22,14 @@
 #define LORA_RXEN 14 // Input - RF switch RX control, connecting external MCU IO, valid in high level
 #define LORA_TXEN 13 // Input - RF switch TX control, connecting external MCU IO or DIO2, valid in high level
 
-#undef RF95_SCK
-#define RF95_SCK 18
-#undef RF95_MISO
-#define RF95_MISO 19
-#undef RF95_MOSI
-#define RF95_MOSI 23
-#undef RF95_NSS
-#define RF95_NSS 5
+#undef SPI_SCK
+#define SPI_SCK 18
+#undef SPI_MISO
+#define SPI_MISO 19
+#undef SPI_MOSI
+#define SPI_MOSI 23
+#undef SPI_NSS
+#define SPI_NSS 5
 
 // RX/TX for RFM95/SX127x
 #define RF95_RXEN LORA_RXEN

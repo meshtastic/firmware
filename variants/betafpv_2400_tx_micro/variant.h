@@ -9,10 +9,10 @@
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 
-#define RF95_SCK 18
-#define RF95_MISO 19
-#define RF95_MOSI 23
-#define RF95_NSS 5
+#define SPI_SCK 18
+#define SPI_MISO 19
+#define SPI_MOSI 23
+#define SPI_NSS 5
 #define RF95_FAN_EN 17
 
 #define LED_PIN 16 // This is a LED_WS2812 not a standard LED

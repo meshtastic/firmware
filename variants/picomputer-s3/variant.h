@@ -15,10 +15,10 @@
 
 #define USE_RF95 // RFM95/SX127x
 
-#define RF95_SCK SCK   // 21
-#define RF95_MISO MISO // 39
-#define RF95_MOSI MOSI // 38
-#define RF95_NSS SS    // 40
+#define SPI_SCK SCK   // 21
+#define SPI_MISO MISO // 39
+#define SPI_MOSI MOSI // 38
+#define SPI_NSS SS    // 40
 #define LORA_RESET RADIOLIB_NC
 
 // per SX1276_Receive_Interrupt/utilities.h
