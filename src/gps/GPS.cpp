@@ -437,8 +437,8 @@ bool GPS::setup()
     notifyDeepSleepObserver.observe(&notifyDeepSleep);
     notifyGPSSleepObserver.observe(&notifyGPSSleep);
 
-#ifdef RAK4630
-    // If we are using the RAK4630 and we have no other peripherals on the I2C bus or module interest in 3V3_S
+#if defined(RAK4630) && defined(PIN_3V3_EN)
+    // If we are using the RAK4630 and we have no other peripherals on the I2C bus or module interest in 3V3_S,
     // then we can safely set en_gpio turn off power to 3V3 (IO2) to hard sleep the GPS
     if (rtc_found.port == ScanI2C::DeviceType::NONE && rgb_found.type == ScanI2C::DeviceType::NONE &&
         accelerometer_found.port == ScanI2C::DeviceType::NONE && !moduleConfig.detection_sensor.enabled &&
