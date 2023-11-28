@@ -33,25 +33,26 @@ bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 
 void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c)
 {
+    NodeNum ourNodeNum = getNodeNum();
     bool isAck =
         ((c && c->error_reason == meshtastic_Routing_Error_NONE)); // consider only ROUTING_APP message without error as ACK
-    if (isAck) {
-        // Update next-hop of this successful transmission to the relay node, but ONLY if "from" is not 0 or ourselves (means
-        // implicit ACK or someone is relaying our ACK)
-        if (p->from != 0 && p->from != getNodeNum()) {
+    if (isAck || (p->to == ourNodeNum)) {
+        // Update next-hop for the original transmitter of this successful transmission to the relay node, but ONLY if "from" is
+        // not 0 or ourselves (means implicit ACK or someone is relaying our ACK)
+        if (p->from != 0 && p->from != ourNodeNum) {
             if (p->relay_node) {
-                meshtastic_NodeInfoLite *sentTo = nodeDB.getMeshNode(p->from);
-                if (sentTo) {
-                    LOG_DEBUG("Update next hop of 0x%x to 0x%x based on received ACK.\n", p->from, p->relay_node);
-                    sentTo->next_hop = p->relay_node;
+                meshtastic_NodeInfoLite *origTx = nodeDB.getMeshNode(p->from);
+                if (origTx) {
+                    LOG_DEBUG("Update next hop of 0x%x to 0x%x based on received DM or ACK.\n", p->from, p->relay_node);
+                    origTx->next_hop = p->relay_node;
                 }
             }
         }
     }
 
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE) {
-        if ((p->to != getNodeNum()) && (getFrom(p) != getNodeNum())) {
-            if (p->next_hop == nodeDB.getLastByteOfNodeNum(getNodeNum())) {
+        if ((p->to != ourNodeNum) && (getFrom(p) != ourNodeNum)) {
+            if (p->next_hop == nodeDB.getLastByteOfNodeNum(ourNodeNum)) {
                 meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
                 LOG_INFO("Relaying received next-hop message coming from %x\n", p->relay_node);
 
