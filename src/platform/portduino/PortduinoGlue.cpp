@@ -147,6 +147,13 @@ void portduinoSetup()
         if (yamlConfig["GPIO"]) {
             settingsMap[user] = yamlConfig["GPIO"]["User"].as<int>(RADIOLIB_NC);
         }
+        if (yamlConfig["GPS"]) {
+            std::string serialPath = yamlConfig["GPS"]["SerialPath"].as<std::string>("");
+            if (serialPath != "") {
+                Serial1.setPath(serialPath);
+                settingsMap[has_gps] = 1;
+            }
+        }
 
     } catch (YAML::Exception e) {
         std::cout << "*** Exception " << e.what() << std::endl;

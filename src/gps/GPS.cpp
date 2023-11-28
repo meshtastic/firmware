@@ -7,6 +7,7 @@
 #include "ubx.h"
 
 #ifdef ARCH_PORTDUINO
+#include "PortduinoGlue.h"
 #include "meshUtils.h"
 #include <ctime>
 #endif
@@ -15,11 +16,8 @@
 #define GPS_RESET_MODE HIGH
 #endif
 
-#if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32)
+#if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32) || defined(ARCH_RASPBERRY_PI)
 HardwareSerial *GPS::_serial_gps = &Serial1;
-#elif defined(ARCH_RASPBERRY_PI)
-// need a translation layer to make _serial_gps work with pigpio https://abyz.me.uk/rpi/pigpio/cif.html#serOpen
-HardwareSerial *GPS::_serial_gps = NULL;
 #else
 HardwareSerial *GPS::_serial_gps = NULL;
 #endif
@@ -907,6 +905,10 @@ GPS *GPS::createGps()
 #if defined(PIN_GPS_EN)
     if (!_en_gpio)
         _en_gpio = PIN_GPS_EN;
+#endif
+#ifdef ARCH_RASPBERRY_PI
+    if (!settingsMap[has_gps])
+        return nullptr;
 #endif
     if (!_rx_gpio || !_serial_gps) // Configured to have no GPS at all
         return nullptr;
