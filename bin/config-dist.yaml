@@ -33,3 +33,8 @@ Lora:
 
 GPIO:
 #  User: 6
+
+# Define GPS
+
+GPS:
+#  SerialPath: /dev/ttyS0
