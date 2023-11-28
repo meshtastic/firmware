@@ -28,7 +28,7 @@
 #define SPI_SCK 5
 #define SPI_MISO 3
 #define SPI_MOSI 6
-#define SPI_NSS 7
+#define RADIO_NSS 7
 #define LORA_RESET 8
 
 // per SX1276_Receive_Interrupt/utilities.h
@@ -40,7 +40,7 @@
 
 // per SX1262_Receive_Interrupt/utilities.h
 #ifdef USE_SX1262
-#define SX126X_CS SPI_NSS
+#define SX126X_CS RADIO_NSS
 #define SX126X_DIO1 33
 #define SX126X_BUSY 34
 #define SX126X_RESET LORA_RESET
@@ -50,7 +50,7 @@
 
 // per SX128x_Receive_Interrupt/utilities.h
 #ifdef USE_SX1280
-#define SX128X_CS SPI_NSS
+#define SX128X_CS RADIO_NSS
 #define SX128X_DIO1 9
 #define SX128X_DIO2 33
 #define SX128X_DIO3 34

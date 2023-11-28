@@ -26,7 +26,7 @@
 #define SPI_SCK 5
 #define SPI_MISO 19
 #define SPI_MOSI 27
-#define SPI_NSS 18
+#define RADIO_NSS 18
 
 // supported modules list
 #define USE_RF95 // RFM95/SX127x

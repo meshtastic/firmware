@@ -50,7 +50,7 @@
 #define SPI_SCK 12
 #define SPI_MISO 13
 #define SPI_MOSI 11
-#define SPI_NSS 10
+#define RADIO_NSS 10
 
 #define GPS_RX_PIN 9
 #define GPS_TX_PIN 8

@@ -23,13 +23,13 @@
 #define SPI_MISO 3
 #define SPI_SCK 5
 #define SPI_MOSI 6
-#define SPI_NSS 7
+#define RADIO_NSS 7
 
 #define LORA_RESET 8
 #define LORA_DIO1 16
 
 #ifdef USE_SX1262
-#define SX126X_CS SPI_NSS // FIXME - we really should define LORA_CS instead
+#define SX126X_CS RADIO_NSS // FIXME - we really should define LORA_CS instead
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY 15
 #define SX126X_RESET LORA_RESET
@@ -38,7 +38,7 @@
 #endif
 
 #ifdef USE_SX1280
-#define SX128X_CS SPI_NSS
+#define SX128X_CS RADIO_NSS
 #define SX128X_DIO1 LORA_DIO1
 #define SX128X_BUSY 15
 #define SX128X_RESET LORA_RESET

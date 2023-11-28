@@ -25,7 +25,7 @@
 
 const uint32_t g_ADigitalPinMap[] = {
     25, // D0  SPI_MISO
-    24, // D1  SPI_NSS
+    24, // D1  RADIO_NSS
     23, // D2  SPI_SCK
     4,  // D3  VBAT
     11, // D4  DIO1

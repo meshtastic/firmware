@@ -17,19 +17,19 @@
 #undef SPI_SCK
 #undef SPI_MISO
 #undef SPI_MOSI
-#undef SPI_NSS
+#undef RADIO_NSS
 
 #define USE_SX1262
 #define SPI_SCK 10
 #define SPI_MISO 6
 #define SPI_MOSI 7
-#define SPI_NSS 8
+#define RADIO_NSS 8
 #define LORA_DIO0 RADIOLIB_NC
 #define LORA_RESET 5
 #define LORA_DIO1 3
 #define LORA_DIO2 RADIOLIB_NC
 #define LORA_BUSY 4
-#define SX126X_CS SPI_NSS
+#define SX126X_CS RADIO_NSS
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_BUSY
 #define SX126X_RESET LORA_RESET

@@ -28,8 +28,8 @@
 #define SPI_MISO 19
 #undef SPI_MOSI
 #define SPI_MOSI 23
-#undef SPI_NSS
-#define SPI_NSS 5
+#undef RADIO_NSS
+#define RADIO_NSS 5
 
 // RX/TX for RFM95/SX127x
 #define RF95_RXEN LORA_RXEN

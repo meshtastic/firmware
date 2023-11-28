@@ -37,7 +37,7 @@
 #undef SPI_SCK
 #undef SPI_MISO
 #undef SPI_MOSI
-#undef SPI_NSS
+#undef RADIO_NSS
 #define USE_RF95
 // #define USE_SX1280
 
@@ -45,7 +45,7 @@
 #define SPI_SCK 18
 #define SPI_MISO 34
 #define SPI_MOSI 23
-#define SPI_NSS 14
+#define RADIO_NSS 14
 #define LORA_DIO0 25
 #define LORA_RESET 26
 #define LORA_DIO1 RADIOLIB_NC
@@ -56,11 +56,11 @@
 #define SPI_SCK 18
 #define SPI_MISO 34
 #define SPI_MOSI 23
-#define SPI_NSS 14
+#define RADIO_NSS 14
 #define LORA_RESET 26
 #define LORA_DIO1 25
 #define LORA_DIO2 13
-#define SX128X_CS SPI_NSS
+#define SX128X_CS RADIO_NSS
 #define SX128X_DIO1 LORA_DIO1
 #define SX128X_BUSY LORA_DIO2
 #define SX128X_RESET LORA_RESET

@@ -25,7 +25,7 @@
 #undef SPI_SCK
 #undef SPI_MISO
 #undef SPI_MOSI
-#undef SPI_NSS
+#undef RADIO_NSS
 
 // WaveShare Core1262-868M OK
 // https://www.waveshare.com/wiki/Core1262-868M
@@ -35,11 +35,11 @@
 #define SPI_MISO 39
 #define SPI_SCK 21
 #define SPI_MOSI 38
-#define SPI_NSS 17
+#define RADIO_NSS 17
 #define LORA_RESET 42
 #define LORA_DIO1 5
 #define LORA_BUSY 47
-#define SX126X_CS SPI_NSS
+#define SX126X_CS RADIO_NSS
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_BUSY
 #define SX126X_RESET LORA_RESET
@@ -52,11 +52,11 @@
 #define SPI_MISO 1
 #define SPI_SCK 3
 #define SPI_MOSI 4
-#define SPI_NSS 2
+#define RADIO_NSS 2
 #define LORA_RESET 17
 #define LORA_DIO1 12
 #define LORA_BUSY 47
-#define SX128X_CS SPI_NSS
+#define SX128X_CS RADIO_NSS
 #define SX128X_DIO1 LORA_DIO1
 #define SX128X_BUSY LORA_BUSY
 #define SX128X_RESET LORA_RESET

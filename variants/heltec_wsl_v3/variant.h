@@ -24,9 +24,9 @@
 #define SPI_SCK 9
 #define SPI_MISO 11
 #define SPI_MOSI 10
-#define SPI_NSS 8
+#define RADIO_NSS 8
 
-#define SX126X_CS SPI_NSS
+#define SX126X_CS RADIO_NSS
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET

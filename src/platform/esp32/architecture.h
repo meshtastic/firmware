@@ -132,7 +132,7 @@
 #define SPI_SCK 5
 #define SPI_MISO 19
 #define SPI_MOSI 27
-#define SPI_NSS 18
+#define RADIO_NSS 18
 #endif
 
 #define SERIAL0_RX_GPIO 3 // Always GPIO3 on ESP32

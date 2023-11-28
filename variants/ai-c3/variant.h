@@ -10,7 +10,7 @@
 #define SPI_SCK 4
 #define SPI_MISO 5
 #define SPI_MOSI 6
-#define SPI_NSS 7
+#define RADIO_NSS 7
 
 #define LORA_DIO0 10
 #define LORA_DIO1 3
@@ -19,7 +19,7 @@
 // WaveShare Core1262-868M
 // https://www.waveshare.com/wiki/Core1262-868M
 #define USE_SX1262
-#define SX126X_CS SPI_NSS
+#define SX126X_CS RADIO_NSS
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY 10
 #define SX126X_RESET LORA_RESET

@@ -72,8 +72,8 @@ static const uint8_t SCK = 33;
 #define SPI_MISO MISO
 #undef SPI_MOSI
 #define SPI_MOSI MOSI
-#undef SPI_NSS
-#define SPI_NSS SS
+#undef RADIO_NSS
+#define RADIO_NSS SS
 
 #define USE_SX1262
 #define SX126X_CS SS // NSS for SX126X

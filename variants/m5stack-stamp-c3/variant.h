@@ -12,7 +12,7 @@
 #undef SPI_SCK
 #undef SPI_MISO
 #undef SPI_MOSI
-#undef SPI_NSS
+#undef RADIO_NSS
 
 // Adafruit RFM95W OK
 // https://www.adafruit.com/product/3072
@@ -20,7 +20,7 @@
 #define SPI_SCK 4
 #define SPI_MISO 5
 #define SPI_MOSI 6
-#define SPI_NSS 7
+#define RADIO_NSS 7
 #define LORA_DIO0 10
 #define LORA_RESET 8
 #define LORA_DIO1 RADIOLIB_NC
@@ -32,13 +32,13 @@
 // #define SPI_SCK 4
 // #define SPI_MISO 5
 // #define SPI_MOSI 6
-// #define SPI_NSS 7
+// #define RADIO_NSS 7
 // #define LORA_DIO0 RADIOLIB_NC
 // #define LORA_RESET 8
 // #define LORA_DIO1 10
 // #define LORA_DIO2 RADIOLIB_NC
 // #define LORA_BUSY 18
-// #define SX126X_CS SPI_NSS
+// #define SX126X_CS RADIO_NSS
 // #define SX126X_DIO1 LORA_DIO1
 // #define SX126X_BUSY LORA_BUSY
 // #define SX126X_RESET LORA_RESET
@@ -50,13 +50,13 @@
 // #define SPI_SCK 4
 // #define SPI_MISO 5
 // #define SPI_MOSI 6
-// #define SPI_NSS 7
+// #define RADIO_NSS 7
 // #define LORA_DIO0 -1
 // #define LORA_DIO1 10
 // #define LORA_DIO2 21
 // #define LORA_RESET 8
 // #define LORA_BUSY 1
-// #define SX128X_CS SPI_NSS
+// #define SX128X_CS RADIO_NSS
 // #define SX128X_DIO1 LORA_DIO1
 // #define SX128X_BUSY LORA_BUSY
 // #define SX128X_RESET LORA_RESET

@@ -38,8 +38,8 @@
 // E22_TXEN_CONNECTED_TO_DIO2 wasn't defined, so RXEN wasn't controlled. Commented it out to maintain behavior, but shouldn't be.
 // Need to comment out defining SX126X_RXEN as LORA_RXEN too
 // #define LORA_RXEN 17 // Input - RF switch RX control, connecting external MCU IO, valid in high level
-#undef SPI_NSS
-#define SPI_NSS 16
+#undef RADIO_NSS
+#define RADIO_NSS 16
 #define SX126X_BUSY 22
 #define SX126X_CS 16
 
@@ -49,8 +49,8 @@
 #define LORA_DIO2 35 // BUSY for SX1262/SX1268
 #define LORA_TXEN NOT_A_PIN // Input - RF switch TX control, connecting external MCU IO or DIO2, valid in high level
 #define LORA_RXEN 21  // Input - RF switch RX control, connecting external MCU IO, valid in high level
-#undef SPI_NSS
-#define SPI_NSS 33
+#undef RADIO_NSS
+#define RADIO_NSS 33
 #define SX126X_BUSY 35
 #define SX126X_CS 33
 */

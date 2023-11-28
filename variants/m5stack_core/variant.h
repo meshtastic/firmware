@@ -15,12 +15,12 @@
 #undef SPI_SCK
 #undef SPI_MISO
 #undef SPI_MOSI
-#undef SPI_NSS
+#undef RADIO_NSS
 
 #define SPI_SCK 18
 #define SPI_MISO 19
 #define SPI_MOSI 23
-#define SPI_NSS 5
+#define RADIO_NSS 5
 
 #define USE_RF95
 #define LORA_DIO0 36 // a No connect on the SX1262 module

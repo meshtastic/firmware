@@ -12,7 +12,7 @@
 #define SPI_SCK 18
 #define SPI_MISO 19
 #define SPI_MOSI 23
-#define SPI_NSS 5
+#define RADIO_NSS 5
 #define RF95_FAN_EN 17
 
 #define LED_PIN 16 // This is a LED_WS2812 not a standard LED
