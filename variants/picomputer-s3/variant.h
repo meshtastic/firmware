@@ -18,7 +18,7 @@
 #define LORA_SCK SCK   // 21
 #define LORA_MISO MISO // 39
 #define LORA_MOSI MOSI // 38
-#define LORA_CS SS    // 40
+#define LORA_CS SS     // 40
 #define LORA_RESET RADIOLIB_NC
 
 // per SX1276_Receive_Interrupt/utilities.h
