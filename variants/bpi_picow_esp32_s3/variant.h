@@ -25,7 +25,7 @@
 #undef LORA_SCK
 #undef LORA_MISO
 #undef LORA_MOSI
-#undef LORA_NSS
+#undef LORA_CS
 
 // WaveShare Core1262-868M OK
 // https://www.waveshare.com/wiki/Core1262-868M
@@ -35,11 +35,11 @@
 #define LORA_MISO 39
 #define LORA_SCK 21
 #define LORA_MOSI 38
-#define LORA_NSS 17
+#define LORA_CS 17
 #define LORA_RESET 42
 #define LORA_DIO1 5
 #define LORA_BUSY 47
-#define SX126X_CS LORA_NSS
+#define SX126X_CS LORA_CS
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_BUSY
 #define SX126X_RESET LORA_RESET
@@ -52,11 +52,11 @@
 #define LORA_MISO 1
 #define LORA_SCK 3
 #define LORA_MOSI 4
-#define LORA_NSS 2
+#define LORA_CS 2
 #define LORA_RESET 17
 #define LORA_DIO1 12
 #define LORA_BUSY 47
-#define SX128X_CS LORA_NSS
+#define SX128X_CS LORA_CS
 #define SX128X_DIO1 LORA_DIO1
 #define SX128X_BUSY LORA_BUSY
 #define SX128X_RESET LORA_RESET

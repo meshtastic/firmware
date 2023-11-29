@@ -84,7 +84,7 @@ extern "C" {
 #define LORA_SCK SCK
 #define LORA_MISO MI
 #define LORA_MOSI MO
-#define LORA_NSS SS
+#define LORA_CS SS
 
 // enables 3.3V periphery like GPS or IO Module
 #define PIN_3V3_EN (-1)
@@ -95,7 +95,7 @@ extern "C" {
 #define USE_SX1262
 
 // common pinouts for SX126X modules
-#define SX126X_CS LORA_NSS // NSS for SX126X
+#define SX126X_CS LORA_CS // NSS for SX126X
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET

@@ -12,7 +12,7 @@
 #define LORA_SCK 5
 #define LORA_MISO 19
 #define LORA_MOSI 27
-#define LORA_NSS RADIOLIB_NC // the ch341f spi controller does CS for us
+#define LORA_CS RADIOLIB_NC // the ch341f spi controller does CS for us
 
 #define LORA_DIO0 26 // a No connect on the SX1262 module
 #define LORA_RESET 14

@@ -631,8 +631,8 @@ void setup()
     SPI1.setSCK(LORA_SCK);
     SPI1.setTX(LORA_MOSI);
     SPI1.setRX(LORA_MISO);
-    pinMode(LORA_NSS, OUTPUT);
-    digitalWrite(LORA_NSS, HIGH);
+    pinMode(LORA_CS, OUTPUT);
+    digitalWrite(LORA_CS, HIGH);
     SPI1.begin(false);
 #else                      // HW_SPI1_DEVICE
     SPI.setSCK(LORA_SCK);
@@ -644,8 +644,8 @@ void setup()
     SPI.begin();
 #else
     // ESP32
-    SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_NSS);
-    LOG_WARN("SPI.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)\n", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_NSS);
+    SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
+    LOG_WARN("SPI.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)\n", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     SPI.setFrequency(4000000);
 #endif
 
@@ -755,7 +755,7 @@ void setup()
 
 #if defined(RF95_IRQ)
     if (!rIf) {
-        rIf = new RF95Interface(RadioLibHAL, LORA_NSS, RF95_IRQ, RF95_RESET, RF95_DIO1);
+        rIf = new RF95Interface(RadioLibHAL, LORA_CS, RF95_IRQ, RF95_RESET, RF95_DIO1);
         if (!rIf->init()) {
             LOG_WARN("Failed to find RF95 radio\n");
             delete rIf;

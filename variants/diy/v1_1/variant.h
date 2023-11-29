@@ -28,8 +28,8 @@
 #define LORA_MISO 19
 #undef LORA_MOSI
 #define LORA_MOSI 23
-#undef LORA_NSS
-#define LORA_NSS 5
+#undef LORA_CS
+#define LORA_CS 5
 
 // RX/TX for RFM95/SX127x
 #define RF95_RXEN LORA_RXEN

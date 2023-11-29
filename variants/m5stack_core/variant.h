@@ -15,12 +15,12 @@
 #undef LORA_SCK
 #undef LORA_MISO
 #undef LORA_MOSI
-#undef LORA_NSS
+#undef LORA_CS
 
 #define LORA_SCK 18
 #define LORA_MISO 19
 #define LORA_MOSI 23
-#define LORA_NSS 5
+#define LORA_CS 5
 
 #define USE_RF95
 #define LORA_DIO0 36 // a No connect on the SX1262 module

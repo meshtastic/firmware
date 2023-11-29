@@ -192,6 +192,6 @@ void portduinoSetup()
         gpioBind(new SimGPIOPin(LORA_DIO1, "fakeLoraIrq"));
     }
     // gpioBind((new SimGPIOPin(LORA_RESET, "LORA_RESET")));
-    // gpioBind((new SimGPIOPin(LORA_NSS, "LORA_NSS"))->setSilent());
+    // gpioBind((new SimGPIOPin(LORA_CS, "LORA_CS"))->setSilent());
 #endif
 }

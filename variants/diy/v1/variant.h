@@ -26,7 +26,7 @@
 #define LORA_SCK 5
 #define LORA_MISO 19
 #define LORA_MOSI 27
-#define LORA_NSS 18
+#define LORA_CS 18
 
 // supported modules list
 #define USE_RF95 // RFM95/SX127x

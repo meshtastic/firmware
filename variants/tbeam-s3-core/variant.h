@@ -50,7 +50,7 @@
 #define LORA_SCK 12
 #define LORA_MISO 13
 #define LORA_MOSI 11
-#define LORA_NSS 10
+#define LORA_CS 10
 
 #define GPS_RX_PIN 9
 #define GPS_TX_PIN 8

@@ -132,7 +132,7 @@
 #define LORA_SCK 5
 #define LORA_MISO 19
 #define LORA_MOSI 27
-#define LORA_NSS 18
+#define LORA_CS 18
 #endif
 
 #define SERIAL0_RX_GPIO 3 // Always GPIO3 on ESP32

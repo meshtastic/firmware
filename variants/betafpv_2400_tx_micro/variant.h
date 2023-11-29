@@ -12,7 +12,7 @@
 #define LORA_SCK 18
 #define LORA_MISO 19
 #define LORA_MOSI 23
-#define LORA_NSS 5
+#define LORA_CS 5
 #define RF95_FAN_EN 17
 
 #define LED_PIN 16 // This is a LED_WS2812 not a standard LED
