@@ -1,5 +1,6 @@
 #if defined(ARCH_RASPBERRY_PI)
-#define NO_SCREEN
+#define HAS_WIRE 1
+#define HAS_SCREEN 1
 
 #else // Pine64 mode.
 

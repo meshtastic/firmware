@@ -68,6 +68,7 @@ NRF52Bluetooth *nrf52Bluetooth;
 #endif
 
 #ifdef ARCH_RASPBERRY_PI
+#include "linux/LinuxHardwareI2C.h"
 #include "platform/portduino/PortduinoGlue.h"
 #include <fstream>
 #include <iostream>
