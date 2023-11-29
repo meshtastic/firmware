@@ -19,6 +19,11 @@
 #include "meshUtils.h"
 #include "sleep.h"
 
+// Working USB detection for powered/charging states on the RAK platform
+#ifdef NRF_APM
+#include "nrfx_power.h"
+#endif
+
 #ifdef DEBUG_HEAP_MQTT
 #include "mqtt/MQTT.h"
 #include "target_specific.h"
@@ -460,10 +465,25 @@ void Power::readPowerStatus()
             }
         }
 
+        OptionalBool NRF_USB = OptFalse;
+
+#ifdef NRF_APM // Section of code detects USB power on the RAK4631 and updates the power states.  Takes 20 seconds or so to detect
+               // changes.
+
+        nrfx_power_usb_state_t nrf_usb_state = nrfx_power_usbstatus_get();
+
+        if (nrf_usb_state == NRFX_POWER_USB_STATE_DISCONNECTED) {
+            powerFSM.trigger(EVENT_POWER_DISCONNECTED);
+            NRF_USB = OptFalse;
+        } else {
+            powerFSM.trigger(EVENT_POWER_CONNECTED);
+            NRF_USB = OptTrue;
+        }
+#endif
         // Notify any status instances that are observing us
-        const PowerStatus powerStatus2 =
-            PowerStatus(hasBattery ? OptTrue : OptFalse, batteryLevel->isVbusIn() ? OptTrue : OptFalse,
-                        batteryLevel->isCharging() ? OptTrue : OptFalse, batteryVoltageMv, batteryChargePercent);
+        const PowerStatus powerStatus2 = PowerStatus(
+            hasBattery ? OptTrue : OptFalse, batteryLevel->isVbusIn() || NRF_USB == OptTrue ? OptTrue : OptFalse,
+            batteryLevel->isCharging() || NRF_USB == OptTrue ? OptTrue : OptFalse, batteryVoltageMv, batteryChargePercent);
         LOG_DEBUG("Battery: usbPower=%d, isCharging=%d, batMv=%d, batPct=%d\n", powerStatus2.getHasUSB(),
                   powerStatus2.getIsCharging(), powerStatus2.getBatteryVoltageMv(), powerStatus2.getBatteryChargePercent());
         newStatus.notifyObservers(&powerStatus2);

@@ -200,7 +200,7 @@ void NodeDB::installDefaultConfig()
     config.position.position_flags =
         (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL |
          meshtastic_Config_PositionConfig_PositionFlags_SPEED | meshtastic_Config_PositionConfig_PositionFlags_HEADING |
-         meshtastic_Config_PositionConfig_PositionFlags_DOP);
+         meshtastic_Config_PositionConfig_PositionFlags_DOP | meshtastic_Config_PositionConfig_PositionFlags_SATINVIEW);
 
 #ifdef T_WATCH_S3
     config.display.screen_on_secs = 30;

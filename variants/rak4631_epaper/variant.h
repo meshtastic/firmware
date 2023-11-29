@@ -209,6 +209,9 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // RAK12002 RTC Module
 #define RV3028_RTC (uint8_t)0b1010010
 
+// Testing USB detection
+#define NRF_APM
+
 // Battery
 // The battery sense is hooked to pin A0 (5)
 #define BATTERY_PIN PIN_A0
