@@ -262,6 +262,20 @@ bool GPS::setup()
             isProblematicGPS = true;
         }
 #endif
+
+#if defined(RAK4630) && defined(PIN_3V3_EN)
+        // If we are using the RAK4630 and we have no other peripherals on the I2C bus or module interest in 3V3_S,
+        // then we can safely set en_gpio turn off power to 3V3 (IO2) to hard sleep the GPS
+        if (rtc_found.port == ScanI2C::DeviceType::NONE && rgb_found.type == ScanI2C::DeviceType::NONE &&
+            accelerometer_found.port == ScanI2C::DeviceType::NONE && !moduleConfig.detection_sensor.enabled &&
+            !moduleConfig.telemetry.air_quality_enabled && !moduleConfig.telemetry.environment_measurement_enabled &&
+            config.power.device_battery_ina_address == 0 && en_gpio == 0) {
+            LOG_DEBUG("Since no problematic peripherals or interested modules were found, setting power save GPS_EN to pin %i\n",
+                      PIN_3V3_EN);
+            en_gpio = PIN_3V3_EN;
+        }
+#endif
+
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
             LOG_DEBUG("Probing for GPS at %d \n", serialSpeeds[speedSelect]);
             gnssModel = probe(serialSpeeds[speedSelect]);
@@ -434,6 +448,7 @@ bool GPS::setup()
 
     notifyDeepSleepObserver.observe(&notifyDeepSleep);
     notifyGPSSleepObserver.observe(&notifyGPSSleep);
+
     return true;
 }
 
