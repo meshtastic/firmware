@@ -22,12 +22,12 @@
 // In receiving, set RXEN as high communication level, TXEN is lowlevel;
 // Before powering off, set TXEN、RXEN as low level.
 
-#undef RF95_SCK
-#define RF95_SCK 18
-#undef RF95_MISO
-#define RF95_MISO 19
-#undef RF95_MOSI
-#define RF95_MOSI 23
+#undef LORA_SCK
+#define LORA_SCK 18
+#undef LORA_MISO
+#define LORA_MISO 19
+#undef LORA_MOSI
+#define LORA_MOSI 23
 
 // PINS FOR THE 900M22S
 
@@ -38,8 +38,8 @@
 // E22_TXEN_CONNECTED_TO_DIO2 wasn't defined, so RXEN wasn't controlled. Commented it out to maintain behavior, but shouldn't be.
 // Need to comment out defining SX126X_RXEN as LORA_RXEN too
 // #define LORA_RXEN 17 // Input - RF switch RX control, connecting external MCU IO, valid in high level
-#undef RF95_NSS
-#define RF95_NSS 16
+#undef LORA_CS
+#define LORA_CS 16
 #define SX126X_BUSY 22
 #define SX126X_CS 16
 
@@ -49,8 +49,8 @@
 #define LORA_DIO2 35 // BUSY for SX1262/SX1268
 #define LORA_TXEN NOT_A_PIN // Input - RF switch TX control, connecting external MCU IO or DIO2, valid in high level
 #define LORA_RXEN 21  // Input - RF switch RX control, connecting external MCU IO, valid in high level
-#undef RF95_NSS
-#define RF95_NSS 33
+#undef LORA_CS
+#define LORA_CS 33
 #define SX126X_BUSY 35
 #define SX126X_CS 33
 */
