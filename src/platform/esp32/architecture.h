@@ -130,11 +130,11 @@
 // -----------------------------------------------------------------------------
 
 // NRF52 boards will define this in variant.h
-#ifndef RF95_SCK
-#define RF95_SCK 5
-#define RF95_MISO 19
-#define RF95_MOSI 27
-#define RF95_NSS 18
+#ifndef LORA_SCK
+#define LORA_SCK 5
+#define LORA_MISO 19
+#define LORA_MOSI 27
+#define LORA_CS 18
 #endif
 
 #define SERIAL0_RX_GPIO 3 // Always GPIO3 on ESP32
