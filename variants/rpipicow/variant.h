@@ -4,13 +4,6 @@
 
 #define ARDUINO_ARCH_AVR
 
-#undef CBC
-#define CBC 0
-#undef CTR
-#define CTR 1
-#undef ECB
-#define ECB 0
-
 #define USE_SH1106 1
 
 // default I2C pins:
