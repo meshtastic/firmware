@@ -47,10 +47,10 @@
 #define PMU_USE_WIRE1
 #define RTC_USE_WIRE1
 
-#define RF95_SCK 12
-#define RF95_MISO 13
-#define RF95_MOSI 11
-#define RF95_NSS 10
+#define LORA_SCK 12
+#define LORA_MISO 13
+#define LORA_MOSI 11
+#define LORA_NSS 10
 
 #define GPS_RX_PIN 9
 #define GPS_TX_PIN 8

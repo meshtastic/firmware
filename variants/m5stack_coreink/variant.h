@@ -34,18 +34,18 @@
 // BUZZER
 #define PIN_BUZZER 2
 
-#undef RF95_SCK
-#undef RF95_MISO
-#undef RF95_MOSI
-#undef RF95_NSS
+#undef LORA_SCK
+#undef LORA_MISO
+#undef LORA_MOSI
+#undef LORA_NSS
 #define USE_RF95
 // #define USE_SX1280
 
 #ifdef USE_RF95
-#define RF95_SCK 18
-#define RF95_MISO 34
-#define RF95_MOSI 23
-#define RF95_NSS 14
+#define LORA_SCK 18
+#define LORA_MISO 34
+#define LORA_MOSI 23
+#define LORA_NSS 14
 #define LORA_DIO0 25
 #define LORA_RESET 26
 #define LORA_DIO1 RADIOLIB_NC
@@ -53,14 +53,14 @@
 #endif
 
 #ifdef USE_SX1280
-#define RF95_SCK 18
-#define RF95_MISO 34
-#define RF95_MOSI 23
-#define RF95_NSS 14
+#define LORA_SCK 18
+#define LORA_MISO 34
+#define LORA_MOSI 23
+#define LORA_NSS 14
 #define LORA_RESET 26
 #define LORA_DIO1 25
 #define LORA_DIO2 13
-#define SX128X_CS RF95_NSS
+#define SX128X_CS LORA_NSS
 #define SX128X_DIO1 LORA_DIO1
 #define SX128X_BUSY LORA_DIO2
 #define SX128X_RESET LORA_RESET

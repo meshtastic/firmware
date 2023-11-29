@@ -25,15 +25,15 @@
 
 #define USE_SX1262
 
-#undef RF95_SCK
-#undef RF95_MISO
-#undef RF95_MOSI
-#undef RF95_NSS
+#undef LORA_SCK
+#undef LORA_MISO
+#undef LORA_MOSI
+#undef LORA_NSS
 
-#define RF95_SCK 10
-#define RF95_MISO 12
-#define RF95_MOSI 11
-#define RF95_NSS 3
+#define LORA_SCK 10
+#define LORA_MISO 12
+#define LORA_MOSI 11
+#define LORA_NSS 3
 
 #define LORA_DIO0 RADIOLIB_NC
 #define LORA_RESET 15
@@ -42,7 +42,7 @@
 #define LORA_DIO3 RADIOLIB_NC
 
 #ifdef USE_SX1262
-#define SX126X_CS RF95_NSS
+#define SX126X_CS LORA_NSS
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET

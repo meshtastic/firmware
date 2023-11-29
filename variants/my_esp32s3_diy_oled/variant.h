@@ -20,16 +20,16 @@
 // #define USE_SX1262
 #define USE_SX1280
 
-#define RF95_MISO 3
-#define RF95_SCK 5
-#define RF95_MOSI 6
-#define RF95_NSS 7
+#define LORA_MISO 3
+#define LORA_SCK 5
+#define LORA_MOSI 6
+#define LORA_NSS 7
 
 #define LORA_RESET 8
 #define LORA_DIO1 16
 
 #ifdef USE_SX1262
-#define SX126X_CS RF95_NSS // FIXME - we really should define LORA_CS instead
+#define SX126X_CS LORA_NSS // FIXME - we really should define LORA_CS instead
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY 15
 #define SX126X_RESET LORA_RESET
@@ -38,7 +38,7 @@
 #endif
 
 #ifdef USE_SX1280
-#define SX128X_CS RF95_NSS
+#define SX128X_CS LORA_NSS
 #define SX128X_DIO1 LORA_DIO1
 #define SX128X_BUSY 15
 #define SX128X_RESET LORA_RESET
