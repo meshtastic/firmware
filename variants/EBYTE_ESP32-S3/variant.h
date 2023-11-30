@@ -36,9 +36,9 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 #define SX126X_CS 14    // EBYTE module's NSS pin
-#define SX126X_SCK 21   // EBYTE module's SCK pin
-#define SX126X_MOSI 38  // EBYTE module's MOSI pin
-#define SX126X_MISO 39  // EBYTE module's MISO pin
+#define LORA_SCK 21   // EBYTE module's SCK pin
+#define LORA_MOSI 38  // EBYTE module's MOSI pin
+#define LORA_MISO 39  // EBYTE module's MISO pin
 #define SX126X_RESET 40 // EBYTE module's NRST pin
 #define SX126X_BUSY 41  // EBYTE module's BUSY pin
 #define SX126X_DIO1 42  // EBYTE module's DIO1 pin
@@ -162,24 +162,7 @@ being defined but having no value #if (!defined(E22_RXEN) || !(0 <= E22_RXEN && 
 // https://github.com/jgromes/RadioLib/issues/12#issuecomment-520695575), so set it as such
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
-// Even if the module is not RF95 some pins used in src are still named as such due to relics of the past, see
-// https://github.com/meshtastic/firmware/blob/8b82ae6fe3f36fbadc0dee87a82fc7e5c520a6f3/src/main.cpp#L533-L554
-// Some boards (for example station-g1) don't define these pins, but they are still needed, instead the default ones from
-// https://github.com/meshtastic/firmware/blob/61f6fb22c5de371783a86a5a7db7ea446e6202e7/src/main.cpp#L544-L549
-// FIXME: rename the constants in the files above (and all variant files which don't use the RF95) to remove ambiguity and use the
-// respective definitions in each src file
-#define RF95_NSS                                                                                                                 \
-    SX126X_CS // The names SX126X_CS and RF95_SCK are both used in src, we define SX126X_SCK in the configuration to stop users
-              // wondering why an RF95 is defined when the module isn't an RF95
-#define RF95_SCK                                                                                                                 \
-    SX126X_SCK // The name SX126X_SCK is never used in src, RF95_SCK is the name used in src, but we define SX126X_SCK in the
-               // configuration to stop users wondering why an RF95 is defined when the module isn't an RF95
-#define RF95_MOSI                                                                                                                \
-    SX126X_MOSI // The name SX126X_MOSI is never used in src, RF95_MOSI is the name used in src, but we define SX126X_MOSI in the
-                // configuration to stop users wondering why an RF95 is defined when the module isn't an RF95
-#define RF95_MISO                                                                                                                \
-    SX126X_MISO // The name SX126X_MISO is never used in src, RF95_MISO is the name used in src, but we define SX126X_MISO in the
-                // configuration to stop users wondering why an RF95 is defined when the module isn't an RF95
+#define LORA_CS SX126X_CS // FIXME: for some reason both are used in /src
 
 // Many of the below values would only be used if USE_RF95 was defined, but it's not as we aren't actually using an RF95, just
 // that the 4 pins above are named like it If they aren't used they don't need to be defined and doing so cause confusion to those
