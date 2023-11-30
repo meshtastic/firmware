@@ -25,10 +25,10 @@ static const uint8_t TX = UART_TX;
 static const uint8_t RX = UART_RX;
 
 // Default SPI will be mapped to Radio
-static const uint8_t SS = SX126X_CS;
-static const uint8_t SCK = SX126X_SCK;
-static const uint8_t MOSI = SX126X_MOSI;
-static const uint8_t MISO = SX126X_MISO;
+static const uint8_t SS = LORA_CS;
+static const uint8_t SCK = LORA_SCK;
+static const uint8_t MOSI = LORA_MOSI;
+static const uint8_t MISO = LORA_MISO;
 
 // The default Wire will be mapped to PMU and RTC
 static const uint8_t SCL = I2C_SCL;
