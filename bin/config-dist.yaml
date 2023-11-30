@@ -24,3 +24,17 @@ Lora:
 #  Reset: 22
 #  CS: 7
 #  IRQ: 25
+
+# Set gpio chip to use in /dev/. Defaults to 0.
+# Notably the Raspberry Pi 5 puts the GPIO header on gpiochip4
+#  gpiochip: 4
+
+# Define GPIO buttons here:
+
+GPIO:
+#  User: 6
+
+# Define GPS
+
+GPS:
+#  SerialPath: /dev/ttyS0
