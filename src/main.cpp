@@ -68,14 +68,14 @@ NRF52Bluetooth *nrf52Bluetooth;
 #endif
 
 #ifdef ARCH_RASPBERRY_PI
-#include "platform/portduino/PiHal.h"
+#include "linux/LinuxHardwareI2C.h"
 #include "platform/portduino/PortduinoGlue.h"
 #include <fstream>
 #include <iostream>
 #include <string>
 #endif
 
-#if HAS_BUTTON
+#if HAS_BUTTON || defined(ARCH_RASPBERRY_PI)
 #include "ButtonThread.h"
 #endif
 #include "PowerFSMThread.h"
@@ -206,13 +206,13 @@ static int32_t ledBlinker()
 
 uint32_t timeLastPowered = 0;
 
-#if HAS_BUTTON
+#if HAS_BUTTON || defined(ARCH_RASPBERRY_PI)
 bool ButtonThread::shutdown_on_long_stop = false;
 #endif
 
 static Periodic *ledPeriodic;
 static OSThread *powerFSMthread;
-#if HAS_BUTTON
+#if HAS_BUTTON || defined(ARCH_RASPBERRY_PI)
 static OSThread *buttonThread;
 uint32_t ButtonThread::longPressTime = 0;
 #endif
@@ -583,7 +583,7 @@ void setup()
     else
         router = new ReliableRouter();
 
-#if HAS_BUTTON
+#if HAS_BUTTON || defined(ARCH_RASPBERRY_PI)
     // Buttons. Moved here cause we need NodeDB to be initialized
     buttonThread = new ButtonThread();
 #endif
@@ -693,7 +693,7 @@ void setup()
 #ifdef ARCH_RASPBERRY_PI
     if (settingsMap[use_sx1262]) {
         if (!rIf) {
-            PiHal *RadioLibHAL = new PiHal(1);
+            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
             rIf = new SX1262Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
                                       settingsMap[busy]);
             if (!rIf->init()) {
@@ -706,7 +706,7 @@ void setup()
         }
     } else if (settingsMap[use_rf95]) {
         if (!rIf) {
-            PiHal *RadioLibHAL = new PiHal(1);
+            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
             rIf = new RF95Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
                                     settingsMap[busy]);
             if (!rIf->init()) {
