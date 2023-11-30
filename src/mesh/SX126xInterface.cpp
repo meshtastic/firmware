@@ -167,11 +167,6 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
-    // Hmm - seems to lower SNR when the signal levels are high.  Leaving off for now...
-    // TODO: Confirm gain registers are okay now
-    // err = lora.setRxGain(true);
-    // assert(err == RADIOLIB_ERR_NONE);
-
     err = lora.setSyncWord(syncWord);
     assert(err == RADIOLIB_ERR_NONE);
 
