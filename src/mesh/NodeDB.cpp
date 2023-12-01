@@ -253,7 +253,7 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.enabled = true;
     moduleConfig.external_notification.alert_message = true;
     moduleConfig.external_notification.output_ms = 100;
-    moduleConfig.external_notification.active true;
+    moduleConfig.external_notification.active = true;
 #endif
     moduleConfig.has_canned_message = true;
 
