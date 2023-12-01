@@ -821,6 +821,14 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         if (mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP) {
             info->channel = mp.channel;
         }
+
+        // If this packet didn't travel any hops, then it was sent directly to us, so we know what to use as next hop to this node
+        if (mp.original_hop_limit == mp.hop_limit) {
+            info->next_hop = getLastByteOfNodeNum(mp.from);
+        } else if (mp.relay_node && (mp.original_hop_limit - mp.hop_limit == 1)) {
+            // This packet traveled one hop, so we can use the relay_node as next_hop
+            info->next_hop = getLastByteOfNodeNum(mp.relay_node);
+        }
     }
 }
 

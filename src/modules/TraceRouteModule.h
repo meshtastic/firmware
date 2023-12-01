@@ -9,8 +9,9 @@ class TraceRouteModule : public ProtobufModule<meshtastic_RouteDiscovery>
   public:
     TraceRouteModule();
 
-    // Let FloodingRouter call updateRoute upon rebroadcasting a TraceRoute request
+    // Let FloodingRouter/NextHopRouter call updateRoute upon rebroadcasting a TraceRoute request
     friend class FloodingRouter;
+    friend class NextHopRouter;
 
   protected:
     bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_RouteDiscovery *r) override;

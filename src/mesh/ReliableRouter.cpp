@@ -33,7 +33,7 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
         }
     }
 
-    return FloodingRouter::send(p);
+    return (config.lora.next_hop_routing && p->to != NODENUM_BROADCAST) ? NextHopRouter::send(p) : FloodingRouter::send(p);
 }
 
 bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
@@ -71,11 +71,11 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
         i->second.nextTxMsec += iface->getPacketTime(p);
     }
 
-    /* Resend implicit ACKs for repeated packets (assuming the original packet was sent with HOP_RELIABLE)
-     * this way if an implicit ACK is dropped and a packet is resent we'll rebroadcast again.
-     * Resending real ACKs is omitted, as you might receive a packet multiple times due to flooding and
-     * flooding this ACK back to the original sender already adds redundancy. */
-    if (wasSeenRecently(p, false) && p->hop_limit == HOP_RELIABLE && !MeshModule::currentReply && p->to != nodeDB.getNodeNum()) {
+    /* Resend implicit ACKs for repeated packets (hop limit is the original setting) this way if an implicit ACK is dropped and a
+     * packet is resent we'll rebroadcast again. Resending real ACKs is omitted, as you might receive a packet multiple times due
+     * to flooding and flooding this ACK back to the original sender already adds redundancy. */
+    if (wasSeenRecently(p, false) && (p->original_hop_limit == p->hop_limit) && !MeshModule::currentReply &&
+        p->to != nodeDB.getNodeNum()) {
         // retransmission on broadcast has hop_limit still equal to HOP_RELIABLE
         LOG_DEBUG("Resending implicit ack for a repeated floodmsg\n");
         meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p);
@@ -83,7 +83,7 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
         Router::send(tosend);
     }
 
-    return FloodingRouter::shouldFilterReceived(p);
+    return config.lora.next_hop_routing ? NextHopRouter::shouldFilterReceived(p) : FloodingRouter::shouldFilterReceived(p);
 }
 
 /**
@@ -132,8 +132,9 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
         }
     }
 
-    // handle the packet as normal
-    FloodingRouter::sniffReceived(p, c);
+    // For DMs, we use the NextHopRouter, whereas for broadcasts, we use the FloodingRouter
+    config.lora.next_hop_routing && (p->to != NODENUM_BROADCAST) ? NextHopRouter::sniffReceived(p, c)
+                                                                 : FloodingRouter::sniffReceived(p, c);
 }
 
 #define NUM_RETRANSMISSIONS 3
@@ -222,9 +223,23 @@ int32_t ReliableRouter::doRetransmissions()
                 LOG_DEBUG("Sending reliable retransmission fr=0x%x,to=0x%x,id=0x%x, tries left=%d\n", p.packet->from,
                           p.packet->to, p.packet->id, p.numRetransmissions);
 
-                // Note: we call the superclass version because we don't want to have our version of send() add a new
-                // retransmission record
-                FloodingRouter::send(packetPool.allocCopy(*p.packet));
+                if (config.lora.next_hop_routing && p.packet->to != NODENUM_BROADCAST) {
+                    if (p.numRetransmissions == 1) {
+                        // Last retransmission, reset next_hop (fallback to FloodingRouter)
+                        p.packet->next_hop = NO_NEXT_HOP_PREFERENCE;
+                        // Also reset it in the nodeDB
+                        meshtastic_NodeInfoLite *sentTo = nodeDB.getMeshNode(p.packet->to);
+                        if (sentTo) {
+                            LOG_DEBUG("Resetting next hop for packet with dest 0x%x\n", p.packet->to);
+                            sentTo->next_hop = NO_NEXT_HOP_PREFERENCE;
+                        }
+                    }
+                    NextHopRouter::send(packetPool.allocCopy(*p.packet));
+                } else {
+                    // Note: we call the superclass version because we don't want to have our version of send() add a new
+                    // retransmission record
+                    FloodingRouter::send(packetPool.allocCopy(*p.packet));
+                }
 
                 // Queue again
                 --p.numRetransmissions;
