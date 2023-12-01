@@ -2,6 +2,9 @@
 #include "configuration.h"
 #include "error.h"
 #include "mesh/NodeDB.h"
+#ifdef ARCH_RASPBERRY_PI
+#include "PortduinoGlue.h"
+#endif
 
 // Particular boards might define a different max power based on what their hardware can do, default to max power output if not
 // specified (may be dangerous if using external PA and SX126x power config forgotten)
@@ -74,6 +77,12 @@ template <typename T> bool SX126xInterface<T>::init()
 #ifdef SX126X_DIO2_AS_RF_SWITCH
     LOG_DEBUG("Setting DIO2 as RF switch\n");
     bool dio2AsRfSwitch = true;
+#elif defined(ARCH_RASPBERRY_PI)
+    bool dio2AsRfSwitch = false;
+    if (settingsMap[dio2_as_rf_switch]) {
+        LOG_DEBUG("Setting DIO2 as RF switch\n");
+        dio2AsRfSwitch = true;
+    }
 #else
     LOG_DEBUG("Setting DIO2 as not RF switch\n");
     bool dio2AsRfSwitch = false;
@@ -241,7 +250,7 @@ template <typename T> void SX126xInterface<T>::startReceive()
     // We use a 16 bit preamble so this should save some power by letting radio sit in standby mostly.
     // Furthermore, we need the PREAMBLE_DETECTED and HEADER_VALID IRQ flag to detect whether we are actively receiving
     int err = lora.startReceiveDutyCycleAuto(preambleLength, 8,
-                                             RADIOLIB_SX126X_IRQ_RX_DEFAULT | RADIOLIB_SX126X_IRQ_RADIOLIB_PREAMBLE_DETECTED |
+                                             RADIOLIB_SX126X_IRQ_RX_DEFAULT | RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED |
                                                  RADIOLIB_SX126X_IRQ_HEADER_VALID);
     assert(err == RADIOLIB_ERR_NONE);
 
@@ -275,7 +284,7 @@ template <typename T> bool SX126xInterface<T>::isActivelyReceiving()
     // received and handled the interrupt for reading the packet/handling errors.
 
     uint16_t irq = lora.getIrqStatus();
-    bool detected = (irq & (RADIOLIB_SX126X_IRQ_HEADER_VALID | RADIOLIB_SX126X_IRQ_RADIOLIB_PREAMBLE_DETECTED));
+    bool detected = (irq & (RADIOLIB_SX126X_IRQ_HEADER_VALID | RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED));
     // Handle false detections
     if (detected) {
         uint32_t now = millis();

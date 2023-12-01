@@ -200,7 +200,7 @@ void NodeDB::installDefaultConfig()
     config.position.position_flags =
         (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL |
          meshtastic_Config_PositionConfig_PositionFlags_SPEED | meshtastic_Config_PositionConfig_PositionFlags_HEADING |
-         meshtastic_Config_PositionConfig_PositionFlags_DOP);
+         meshtastic_Config_PositionConfig_PositionFlags_DOP | meshtastic_Config_PositionConfig_PositionFlags_SATINVIEW);
 
 #ifdef T_WATCH_S3
     config.display.screen_on_secs = 30;
@@ -316,8 +316,8 @@ void NodeDB::installDefaultChannels()
 
 void NodeDB::resetNodes()
 {
-    devicestate.node_db_lite_count = 0;
-    memset(devicestate.node_db_lite, 0, sizeof(devicestate.node_db_lite));
+    devicestate.node_db_lite_count = 1;
+    std::fill(&devicestate.node_db_lite[1], &devicestate.node_db_lite[MAX_NUM_NODES - 1], meshtastic_NodeInfoLite());
     saveDeviceStateToDisk();
     if (neighborInfoModule && moduleConfig.neighbor_info.enabled)
         neighborInfoModule->resetNeighbors();
@@ -370,7 +370,6 @@ void NodeDB::installDefaultDeviceState()
     pickNewNodeNum(); // based on macaddr now
     snprintf(owner.long_name, sizeof(owner.long_name), "Meshtastic %02x%02x", ourMacAddr[4], ourMacAddr[5]);
     snprintf(owner.short_name, sizeof(owner.short_name), "%02x%02x", ourMacAddr[4], ourMacAddr[5]);
-
     snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum()); // Default node ID now based on nodenum
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
 }
@@ -395,6 +394,8 @@ void NodeDB::init()
 
     // Set our board type so we can share it with others
     owner.hw_model = HW_VENDOR;
+    // Ensure user (nodeinfo) role is set to whatever we're configured to
+    owner.role = config.device.role;
 
     // Include our owner in the node db under our nodenum
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());

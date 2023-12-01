@@ -68,13 +68,14 @@ NRF52Bluetooth *nrf52Bluetooth;
 #endif
 
 #ifdef ARCH_RASPBERRY_PI
-#include "platform/portduino/PiHal.h"
+#include "linux/LinuxHardwareI2C.h"
+#include "platform/portduino/PortduinoGlue.h"
 #include <fstream>
 #include <iostream>
 #include <string>
 #endif
 
-#if HAS_BUTTON
+#if HAS_BUTTON || defined(ARCH_RASPBERRY_PI)
 #include "ButtonThread.h"
 #endif
 #include "PowerFSMThread.h"
@@ -205,13 +206,13 @@ static int32_t ledBlinker()
 
 uint32_t timeLastPowered = 0;
 
-#if HAS_BUTTON
+#if HAS_BUTTON || defined(ARCH_RASPBERRY_PI)
 bool ButtonThread::shutdown_on_long_stop = false;
 #endif
 
 static Periodic *ledPeriodic;
 static OSThread *powerFSMthread;
-#if HAS_BUTTON
+#if HAS_BUTTON || defined(ARCH_RASPBERRY_PI)
 static OSThread *buttonThread;
 uint32_t ButtonThread::longPressTime = 0;
 #endif
@@ -582,7 +583,7 @@ void setup()
     else
         router = new ReliableRouter();
 
-#if HAS_BUTTON
+#if HAS_BUTTON || defined(ARCH_RASPBERRY_PI)
     // Buttons. Moved here cause we need NodeDB to be initialized
     buttonThread = new ButtonThread();
 #endif
@@ -627,16 +628,16 @@ void setup()
     initSPI();
 #ifdef ARCH_RP2040
 #ifdef HW_SPI1_DEVICE
-    SPI1.setSCK(RF95_SCK);
-    SPI1.setTX(RF95_MOSI);
-    SPI1.setRX(RF95_MISO);
-    pinMode(RF95_NSS, OUTPUT);
-    digitalWrite(RF95_NSS, HIGH);
+    SPI1.setSCK(LORA_SCK);
+    SPI1.setTX(LORA_MOSI);
+    SPI1.setRX(LORA_MISO);
+    pinMode(LORA_CS, OUTPUT);
+    digitalWrite(LORA_CS, HIGH);
     SPI1.begin(false);
-#else  // HW_SPI1_DEVICE
-    SPI.setSCK(RF95_SCK);
-    SPI.setTX(RF95_MOSI);
-    SPI.setRX(RF95_MISO);
+#else                      // HW_SPI1_DEVICE
+    SPI.setSCK(LORA_SCK);
+    SPI.setTX(LORA_MOSI);
+    SPI.setRX(LORA_MISO);
     SPI.begin(false);
 #endif // HW_SPI1_DEVICE
 #elif defined(ARCH_APOLLO3)
@@ -646,8 +647,8 @@ void setup()
     SPI.begin();
 #else
     // ESP32
-    SPI.begin(RF95_SCK, RF95_MISO, RF95_MOSI, RF95_NSS);
-    LOG_WARN("SPI.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)\n", RF95_SCK, RF95_MISO, RF95_MOSI, RF95_NSS);
+    SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
+    LOG_WARN("SPI.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)\n", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     SPI.setFrequency(4000000);
 #endif
 
@@ -693,15 +694,32 @@ void setup()
 #endif
 
 #ifdef ARCH_RASPBERRY_PI
-    PiHal *RadioLibHAL = new PiHal(1);
-    if (!rIf) {
-        rIf = new SX1262Interface((LockingArduinoHal *)RadioLibHAL, 21, 16, 18, 20);
-        if (!rIf->init()) {
-            LOG_WARN("Failed to find SX1262 radio\n");
-            delete rIf;
-            rIf = NULL;
-        } else {
-            LOG_INFO("SX1262 Radio init succeeded, using SX1262 radio\n");
+    if (settingsMap[use_sx1262]) {
+        if (!rIf) {
+            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+            rIf = new SX1262Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
+                                      settingsMap[busy]);
+            if (!rIf->init()) {
+                LOG_ERROR("Failed to find SX1262 radio\n");
+                delete rIf;
+                exit(EXIT_FAILURE);
+            } else {
+                LOG_INFO("SX1262 Radio init succeeded, using SX1262 radio\n");
+            }
+        }
+    } else if (settingsMap[use_rf95]) {
+        if (!rIf) {
+            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+            rIf = new RF95Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
+                                    settingsMap[busy]);
+            if (!rIf->init()) {
+                LOG_ERROR("Failed to find RF95 radio\n");
+                delete rIf;
+                rIf = NULL;
+                exit(EXIT_FAILURE);
+            } else {
+                LOG_INFO("RF95 Radio init succeeded, using RF95 radio\n");
+            }
         }
     }
 
@@ -740,7 +758,7 @@ void setup()
 
 #if defined(RF95_IRQ)
     if (!rIf) {
-        rIf = new RF95Interface(RadioLibHAL, RF95_NSS, RF95_IRQ, RF95_RESET, RF95_DIO1);
+        rIf = new RF95Interface(RadioLibHAL, LORA_CS, RF95_IRQ, RF95_RESET, RF95_DIO1);
         if (!rIf->init()) {
             LOG_WARN("Failed to find RF95 radio\n");
             delete rIf;

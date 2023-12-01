@@ -2,7 +2,9 @@
 
 #include "concurrency/LockGuard.h"
 #include "configuration.h"
-
+#if defined(ARCH_RASPBERRY_PI)
+#include "linux/LinuxHardwareI2C.h"
+#endif
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 #include "main.h" // atecc
 #endif
@@ -162,7 +164,14 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
 
     for (addr.address = 1; addr.address < 127; addr.address++) {
         i2cBus->beginTransmission(addr.address);
+#ifdef ARCH_PORTDUINO
+        if (i2cBus->read() != -1)
+            err = 0;
+        else
+            err = 2;
+#else
         err = i2cBus->endTransmission();
+#endif
         type = NONE;
         if (err == 0) {
             LOG_DEBUG("I2C device found at address 0x%x\n", addr.address);

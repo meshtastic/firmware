@@ -1,0 +1,9 @@
+[unit]
+description=Meshtastic Native Daemon
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/meshtasticd
+
+[Install]
+WantedBy=multi-user.target

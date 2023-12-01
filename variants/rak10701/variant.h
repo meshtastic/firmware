@@ -234,6 +234,9 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
+// Testing USB detection
+#define NRF_APM
+
 // enables 3.3V periphery like GPS or IO Module
 #define PIN_3V3_EN (34)
 
