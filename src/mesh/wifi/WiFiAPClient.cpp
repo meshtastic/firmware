@@ -1,25 +1,28 @@
-#include "mesh/http/WiFiAPClient.h"
+#include "mesh/wifi/WiFiAPClient.h"
 #include "NodeDB.h"
 #include "RTC.h"
 #include "concurrency/Periodic.h"
 #include "configuration.h"
 #include "main.h"
 #include "mesh/api/WiFiServerAPI.h"
-#include "mesh/http/WebServer.h"
 #include "mqtt/MQTT.h"
 #include "target_specific.h"
-#include <ESPmDNS.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
+#ifndef ARCH_RP2040
+#include "mesh/http/WebServer.h"
+#include <ESPmDNS.h>
 #include <esp_wifi.h>
+static void WiFiEvent(WiFiEvent_t event);
+#else
+#include <ESP8266mDNS.h>
+#endif
 
 #ifndef DISABLE_NTP
 #include <NTPClient.h>
 #endif
 
 using namespace concurrency;
-
-static void WiFiEvent(WiFiEvent_t event);
 
 // NTP
 WiFiUDP ntpUDP;
@@ -43,78 +46,6 @@ WiFiUDP syslogClient;
 Syslog syslog(syslogClient);
 
 Periodic *wifiReconnect;
-
-static int32_t reconnectWiFi()
-{
-    const char *wifiName = config.network.wifi_ssid;
-    const char *wifiPsw = config.network.wifi_psk;
-
-    if (config.network.wifi_enabled && needReconnect) {
-
-        if (!*wifiPsw) // Treat empty password as no password
-            wifiPsw = NULL;
-
-        needReconnect = false;
-
-        // Make sure we clear old connection credentials
-        WiFi.disconnect(false, true);
-        LOG_INFO("Reconnecting to WiFi access point %s\n", wifiName);
-
-        delay(5000);
-
-        if (!WiFi.isConnected()) {
-            WiFi.begin(wifiName, wifiPsw);
-        }
-    }
-
-#ifndef DISABLE_NTP
-    if (WiFi.isConnected() && (((millis() - lastrun_ntp) > 43200000) || (lastrun_ntp == 0))) { // every 12 hours
-        LOG_DEBUG("Updating NTP time from %s\n", config.network.ntp_server);
-        if (timeClient.update()) {
-            LOG_DEBUG("NTP Request Success - Setting RTCQualityNTP if needed\n");
-
-            struct timeval tv;
-            tv.tv_sec = timeClient.getEpochTime();
-            tv.tv_usec = 0;
-
-            perhapsSetRTC(RTCQualityNTP, &tv);
-            lastrun_ntp = millis();
-
-        } else {
-            LOG_DEBUG("NTP Update failed\n");
-        }
-    }
-#endif
-
-    if (config.network.wifi_enabled && !WiFi.isConnected()) {
-        return 1000; // check once per second
-    } else {
-        return 300000; // every 5 minutes
-    }
-}
-
-bool isWifiAvailable()
-{
-
-    if (config.network.wifi_enabled && (config.network.wifi_ssid[0])) {
-        return true;
-    } else {
-        return false;
-    }
-}
-
-// Disable WiFi
-void deinitWifi()
-{
-    LOG_INFO("WiFi deinit\n");
-
-    if (isWifiAvailable()) {
-        WiFi.disconnect(true);
-        WiFi.mode(WIFI_MODE_NULL);
-        LOG_INFO("WiFi Turned Off\n");
-        // WiFi.printDiag(Serial);
-    }
-}
 
 static void onNetworkConnected()
 {
@@ -158,7 +89,9 @@ static void onNetworkConnected()
             syslog.enable();
         }
 
+#ifndef ARCH_RP2040
         initWebServer();
+#endif
         initApiServer();
 
         APStartupComplete = true;
@@ -169,6 +102,89 @@ static void onNetworkConnected()
         mqtt->reconnect();
 }
 
+static int32_t reconnectWiFi()
+{
+    const char *wifiName = config.network.wifi_ssid;
+    const char *wifiPsw = config.network.wifi_psk;
+
+    if (config.network.wifi_enabled && needReconnect) {
+
+        if (!*wifiPsw) // Treat empty password as no password
+            wifiPsw = NULL;
+
+        needReconnect = false;
+
+        // Make sure we clear old connection credentials
+#ifdef ARCH_ESP32
+        WiFi.disconnect(false, true);
+#else
+        WiFi.disconnect(false);
+#endif
+        LOG_INFO("Reconnecting to WiFi access point %s\n", wifiName);
+
+        delay(5000);
+
+        if (!WiFi.isConnected()) {
+            WiFi.begin(wifiName, wifiPsw);
+        }
+    }
+
+#ifndef DISABLE_NTP
+    if (WiFi.isConnected() && (((millis() - lastrun_ntp) > 43200000) || (lastrun_ntp == 0))) { // every 12 hours
+        LOG_DEBUG("Updating NTP time from %s\n", config.network.ntp_server);
+        if (timeClient.update()) {
+            LOG_DEBUG("NTP Request Success - Setting RTCQualityNTP if needed\n");
+
+            struct timeval tv;
+            tv.tv_sec = timeClient.getEpochTime();
+            tv.tv_usec = 0;
+
+            perhapsSetRTC(RTCQualityNTP, &tv);
+            lastrun_ntp = millis();
+
+        } else {
+            LOG_DEBUG("NTP Update failed\n");
+        }
+    }
+#endif
+
+    if (config.network.wifi_enabled && !WiFi.isConnected()) {
+        return 1000; // check once per second
+    } else {
+#ifdef ARCH_RP2040
+        onNetworkConnected(); // will only do anything once
+#endif
+        return 300000; // every 5 minutes
+    }
+}
+
+bool isWifiAvailable()
+{
+
+    if (config.network.wifi_enabled && (config.network.wifi_ssid[0])) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+// Disable WiFi
+void deinitWifi()
+{
+    LOG_INFO("WiFi deinit\n");
+
+    if (isWifiAvailable()) {
+#ifdef ARCH_ESP32
+        WiFi.disconnect(true, false);
+#else
+        WiFi.disconnect(true);
+#endif
+        WiFi.mode(WIFI_OFF);
+        LOG_INFO("WiFi Turned Off\n");
+        // WiFi.printDiag(Serial);
+    }
+}
+
 // Startup WiFi
 bool initWifi()
 {
@@ -177,10 +193,10 @@ bool initWifi()
         const char *wifiName = config.network.wifi_ssid;
         const char *wifiPsw = config.network.wifi_psk;
 
-        createSSLCert();
-
+#ifndef ARCH_RP2040
+        createSSLCert();                        // For WebServer
         esp_wifi_set_storage(WIFI_STORAGE_RAM); // Disable flash storage for WiFi credentials
-
+#endif
         if (!*wifiPsw) // Treat empty password as no password
             wifiPsw = NULL;
 
@@ -189,17 +205,17 @@ bool initWifi()
             getMacAddr(dmac);
             snprintf(ourHost, sizeof(ourHost), "Meshtastic-%02x%02x", dmac[4], dmac[5]);
 
-            WiFi.mode(WIFI_MODE_STA);
+            WiFi.mode(WIFI_STA);
             WiFi.setHostname(ourHost);
-            WiFi.onEvent(WiFiEvent);
-            WiFi.setAutoReconnect(true);
-            WiFi.setSleep(false);
             if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_STATIC &&
                 config.network.ipv4_config.ip != 0) {
                 WiFi.config(config.network.ipv4_config.ip, config.network.ipv4_config.gateway, config.network.ipv4_config.subnet,
-                            config.network.ipv4_config.dns,
-                            config.network.ipv4_config.dns); // Wifi wants two DNS servers... set both to the same value
+                            config.network.ipv4_config.dns);
             }
+#ifndef ARCH_RP2040
+            WiFi.onEvent(WiFiEvent);
+            WiFi.setAutoReconnect(true);
+            WiFi.setSleep(false);
 
             // This is needed to improve performance.
             esp_wifi_set_ps(WIFI_PS_NONE); // Disable radio power saving
@@ -218,7 +234,7 @@ bool initWifi()
                     wifiDisconnectReason = info.wifi_sta_disconnected.reason;
                 },
                 WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
-
+#endif
             LOG_DEBUG("JOINING WIFI soon: ssid=%s\n", wifiName);
             wifiReconnect = new Periodic("WifiConnect", reconnectWiFi);
         }
@@ -229,6 +245,7 @@ bool initWifi()
     }
 }
 
+#ifndef ARCH_RP2040
 // Called by the Espressif SDK to
 static void WiFiEvent(WiFiEvent_t event)
 {
@@ -369,6 +386,7 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     }
 }
+#endif
 
 uint8_t getWifiDisconnectReason()
 {

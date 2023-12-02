@@ -123,6 +123,7 @@ jobs:
       matrix:
         include:
           - board: pico
+          - board: picow
           - board: rak11310
     uses: ./.github/workflows/build_rpi2040.yml
     with:
