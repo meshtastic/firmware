@@ -21,7 +21,7 @@
 #include <pb_encode.h>
 
 #ifdef ARCH_ESP32
-#include "mesh/http/WiFiAPClient.h"
+#include "mesh/wifi/WiFiAPClient.h"
 #include "modules/esp32/StoreForwardModule.h"
 #include <Preferences.h>
 #include <nvs_flash.h>
