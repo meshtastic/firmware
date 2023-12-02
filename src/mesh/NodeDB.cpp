@@ -249,6 +249,12 @@ void NodeDB::installDefaultModuleConfig()
     // Don't worry about the other settings, we'll use the DRV2056 behavior for notifications
     moduleConfig.external_notification.enabled = true;
 #endif
+#ifdef NANO_G2_ULTRA
+    moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.alert_message = true;
+    moduleConfig.external_notification.output_ms = 100;
+    moduleConfig.external_notification.active = true;
+#endif
     moduleConfig.has_canned_message = true;
 
     strncpy(moduleConfig.mqtt.address, default_mqtt_address, sizeof(moduleConfig.mqtt.address));
