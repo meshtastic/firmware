@@ -22,8 +22,8 @@ SX128xInterface<T>::SX128xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs
 template <typename T> bool SX128xInterface<T>::init()
 {
 #ifdef SX128X_POWER_EN
-    digitalWrite(SX128X_POWER_EN, HIGH);
     pinMode(SX128X_POWER_EN, OUTPUT);
+    digitalWrite(SX128X_POWER_EN, HIGH);
 #endif
 
 #ifdef RF95_FAN_EN
@@ -32,12 +32,12 @@ template <typename T> bool SX128xInterface<T>::init()
 #endif
 
 #if defined(SX128X_RXEN) && (SX128X_RXEN != RADIOLIB_NC) // set not rx or tx mode
-    digitalWrite(SX128X_RXEN, LOW);                      // Set low before becoming an output
     pinMode(SX128X_RXEN, OUTPUT);
+    digitalWrite(SX128X_RXEN, LOW); // Set low before becoming an output
 #endif
 #if defined(SX128X_TXEN) && (SX128X_TXEN != RADIOLIB_NC)
-    digitalWrite(SX128X_TXEN, LOW);
     pinMode(SX128X_TXEN, OUTPUT);
+    digitalWrite(SX128X_TXEN, LOW);
 #endif
 
     RadioLibInterface::init();
