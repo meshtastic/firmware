@@ -478,8 +478,8 @@ bool TFTDisplay::connect()
     LOG_INFO("Doing TFT init\n");
 
 #ifdef TFT_BL
-    digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
     pinMode(TFT_BL, OUTPUT);
+    digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
     // pinMode(PIN_3V3_EN, OUTPUT);
     // digitalWrite(PIN_3V3_EN, HIGH);
     LOG_INFO("Power to TFT Backlight\n");
@@ -487,11 +487,11 @@ bool TFTDisplay::connect()
 
 #ifdef ST7735_BACKLIGHT_EN_V03
     if (heltec_version == 3) {
-        digitalWrite(ST7735_BACKLIGHT_EN_V03, TFT_BACKLIGHT_ON);
         pinMode(ST7735_BACKLIGHT_EN_V03, OUTPUT);
+        digitalWrite(ST7735_BACKLIGHT_EN_V03, TFT_BACKLIGHT_ON);
     } else {
-        digitalWrite(ST7735_BACKLIGHT_EN_V05, TFT_BACKLIGHT_ON);
         pinMode(ST7735_BACKLIGHT_EN_V05, OUTPUT);
+        digitalWrite(ST7735_BACKLIGHT_EN_V05, TFT_BACKLIGHT_ON);
     }
 #endif
 
