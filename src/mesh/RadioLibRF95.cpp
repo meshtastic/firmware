@@ -1,9 +1,6 @@
 #include "RadioLibRF95.h"
 #include "configuration.h"
 
-#define RF95_CHIP_VERSION 0x12
-#define RF95_ALT_VERSION 0x11 // Supposedly some versions of the chip have id 0x11
-
 // From datasheet but radiolib doesn't know anything about this
 #define SX127X_REG_TCXO 0x4B
 
@@ -13,9 +10,8 @@ int16_t RadioLibRF95::begin(float freq, float bw, uint8_t sf, uint8_t cr, uint8_
                             uint8_t gain)
 {
     // execute common part
-    int16_t state = SX127x::begin(RF95_CHIP_VERSION, syncWord, preambleLength);
-    if (state != RADIOLIB_ERR_NONE)
-        state = SX127x::begin(RF95_ALT_VERSION, syncWord, preambleLength);
+    uint8_t rf95versions[2] = {0x12, 0x11};
+    int16_t state = SX127x::begin(rf95versions, sizeof(rf95versions), syncWord, preambleLength);
     RADIOLIB_ASSERT(state);
 
     // current limit was removed from module' ctor

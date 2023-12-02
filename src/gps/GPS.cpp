@@ -7,6 +7,7 @@
 #include "ubx.h"
 
 #ifdef ARCH_PORTDUINO
+#include "PortduinoGlue.h"
 #include "meshUtils.h"
 #include <ctime>
 #endif
@@ -15,11 +16,8 @@
 #define GPS_RESET_MODE HIGH
 #endif
 
-#if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32)
+#if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32) || defined(ARCH_RASPBERRY_PI)
 HardwareSerial *GPS::_serial_gps = &Serial1;
-#elif defined(ARCH_RASPBERRY_PI)
-// need a translation layer to make _serial_gps work with pigpio https://abyz.me.uk/rpi/pigpio/cif.html#serOpen
-HardwareSerial *GPS::_serial_gps = NULL;
 #else
 HardwareSerial *GPS::_serial_gps = NULL;
 #endif
@@ -497,14 +495,14 @@ void GPS::setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime)
 #ifdef PIN_GPS_STANDBY // Specifically the standby pin for L76K and clones
     if (on) {
         LOG_INFO("Waking GPS");
-        digitalWrite(PIN_GPS_STANDBY, 1);
         pinMode(PIN_GPS_STANDBY, OUTPUT);
+        digitalWrite(PIN_GPS_STANDBY, 1);
         return;
     } else {
         LOG_INFO("GPS entering sleep");
         // notifyGPSSleep.notifyObservers(NULL);
-        digitalWrite(PIN_GPS_STANDBY, 0);
         pinMode(PIN_GPS_STANDBY, OUTPUT);
+        digitalWrite(PIN_GPS_STANDBY, 0);
         return;
     }
 #endif
@@ -908,6 +906,10 @@ GPS *GPS::createGps()
     if (!_en_gpio)
         _en_gpio = PIN_GPS_EN;
 #endif
+#ifdef ARCH_RASPBERRY_PI
+    if (!settingsMap[has_gps])
+        return nullptr;
+#endif
     if (!_rx_gpio || !_serial_gps) // Configured to have no GPS at all
         return nullptr;
 
@@ -918,8 +920,8 @@ GPS *GPS::createGps()
 
     if (_en_gpio != 0) {
         LOG_DEBUG("Setting %d to output.\n", _en_gpio);
-        digitalWrite(_en_gpio, !GPS_EN_ACTIVE);
         pinMode(_en_gpio, OUTPUT);
+        digitalWrite(_en_gpio, !GPS_EN_ACTIVE);
     }
 
 #ifdef PIN_GPS_PPS
@@ -939,8 +941,8 @@ GPS *GPS::createGps()
     new_gps->setGPSPower(true, false, 0);
 
 #ifdef PIN_GPS_RESET
-    digitalWrite(PIN_GPS_RESET, GPS_RESET_MODE); // assert for 10ms
     pinMode(PIN_GPS_RESET, OUTPUT);
+    digitalWrite(PIN_GPS_RESET, GPS_RESET_MODE); // assert for 10ms
     delay(10);
     digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
 #endif
@@ -985,8 +987,8 @@ bool GPS::factoryReset()
 {
 #ifdef PIN_GPS_REINIT
     // The L76K GNSS on the T-Echo requires the RESET pin to be pulled LOW
-    digitalWrite(PIN_GPS_REINIT, 0);
     pinMode(PIN_GPS_REINIT, OUTPUT);
+    digitalWrite(PIN_GPS_REINIT, 0);
     delay(150); // The L76K datasheet calls for at least 100MS delay
     digitalWrite(PIN_GPS_REINIT, 1);
 #endif
