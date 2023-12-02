@@ -1564,7 +1564,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 // Jm
 void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-#if HAS_WIFI
+#if HAS_WIFI && !defined(ARCH_RASPBERRY_PI)
     const char *wifiName = config.network.wifi_ssid;
 
     display->setFont(FONT_SMALL);

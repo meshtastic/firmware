@@ -66,7 +66,15 @@ NRF52Bluetooth *nrf52Bluetooth;
 #include "platform/portduino/SimRadio.h"
 #endif
 
-#if HAS_BUTTON
+#ifdef ARCH_RASPBERRY_PI
+#include "linux/LinuxHardwareI2C.h"
+#include "platform/portduino/PortduinoGlue.h"
+#include <fstream>
+#include <iostream>
+#include <string>
+#endif
+
+#if HAS_BUTTON || defined(ARCH_RASPBERRY_PI)
 #include "ButtonThread.h"
 #endif
 #include "PowerFSMThread.h"
@@ -127,12 +135,32 @@ std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySenso
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
 
+#ifdef ARCH_RASPBERRY_PI
+void getPiMacAddr(uint8_t *dmac)
+{
+    std::fstream macIdentity;
+    macIdentity.open("/sys/kernel/debug/bluetooth/hci0/identity", std::ios::in);
+    std::string macLine;
+    getline(macIdentity, macLine);
+    macIdentity.close();
+
+    dmac[0] = strtol(macLine.substr(0, 2).c_str(), NULL, 16);
+    dmac[1] = strtol(macLine.substr(3, 2).c_str(), NULL, 16);
+    dmac[2] = strtol(macLine.substr(6, 2).c_str(), NULL, 16);
+    dmac[3] = strtol(macLine.substr(9, 2).c_str(), NULL, 16);
+    dmac[4] = strtol(macLine.substr(12, 2).c_str(), NULL, 16);
+    dmac[5] = strtol(macLine.substr(15, 2).c_str(), NULL, 16);
+}
+#endif
+
 const char *getDeviceName()
 {
     uint8_t dmac[6];
-
+#ifdef ARCH_RASPBERRY_PI
+    getPiMacAddr(dmac);
+#else
     getMacAddr(dmac);
-
+#endif
     // Meshtastic_ab3c or Shortname_abcd
     static char name[20];
     snprintf(name, sizeof(name), "%02x%02x", dmac[4], dmac[5]);
@@ -177,13 +205,13 @@ static int32_t ledBlinker()
 
 uint32_t timeLastPowered = 0;
 
-#if HAS_BUTTON
+#if HAS_BUTTON || defined(ARCH_RASPBERRY_PI)
 bool ButtonThread::shutdown_on_long_stop = false;
 #endif
 
 static Periodic *ledPeriodic;
 static OSThread *powerFSMthread;
-#if HAS_BUTTON
+#if HAS_BUTTON || defined(ARCH_RASPBERRY_PI)
 static OSThread *buttonThread;
 uint32_t ButtonThread::longPressTime = 0;
 #endif
@@ -501,6 +529,7 @@ void setup()
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::BMP_280, meshtastic_TelemetrySensorType_BMP280)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::INA260, meshtastic_TelemetrySensorType_INA260)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::INA219, meshtastic_TelemetrySensorType_INA219)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::INA3221, meshtastic_TelemetrySensorType_INA3221)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::MCP9808, meshtastic_TelemetrySensorType_MCP9808)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::MCP9808, meshtastic_TelemetrySensorType_MCP9808)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::SHT31, meshtastic_TelemetrySensorType_SHT31)
@@ -553,7 +582,7 @@ void setup()
     else
         router = new ReliableRouter();
 
-#if HAS_BUTTON
+#if HAS_BUTTON || defined(ARCH_RASPBERRY_PI)
     // Buttons. Moved here cause we need NodeDB to be initialized
     buttonThread = new ButtonThread();
 #endif
@@ -598,24 +627,24 @@ void setup()
     initSPI();
 #ifdef ARCH_RP2040
 #ifdef HW_SPI1_DEVICE
-    SPI1.setSCK(RF95_SCK);
-    SPI1.setTX(RF95_MOSI);
-    SPI1.setRX(RF95_MISO);
-    pinMode(RF95_NSS, OUTPUT);
-    digitalWrite(RF95_NSS, HIGH);
+    SPI1.setSCK(LORA_SCK);
+    SPI1.setTX(LORA_MOSI);
+    SPI1.setRX(LORA_MISO);
+    pinMode(LORA_CS, OUTPUT);
+    digitalWrite(LORA_CS, HIGH);
     SPI1.begin(false);
 #else                      // HW_SPI1_DEVICE
-    SPI.setSCK(RF95_SCK);
-    SPI.setTX(RF95_MOSI);
-    SPI.setRX(RF95_MISO);
+    SPI.setSCK(LORA_SCK);
+    SPI.setTX(LORA_MOSI);
+    SPI.setRX(LORA_MISO);
     SPI.begin(false);
 #endif                     // HW_SPI1_DEVICE
 #elif !defined(ARCH_ESP32) // ARCH_RP2040
     SPI.begin();
 #else
     // ESP32
-    SPI.begin(RF95_SCK, RF95_MISO, RF95_MOSI, RF95_NSS);
-    LOG_WARN("SPI.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)\n", RF95_SCK, RF95_MISO, RF95_MOSI, RF95_NSS);
+    SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
+    LOG_WARN("SPI.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)\n", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     SPI.setFrequency(4000000);
 #endif
 
@@ -660,7 +689,37 @@ void setup()
     digitalWrite(SX126X_ANT_SW, 1);
 #endif
 
-#ifdef HW_SPI1_DEVICE
+#ifdef ARCH_RASPBERRY_PI
+    if (settingsMap[use_sx1262]) {
+        if (!rIf) {
+            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+            rIf = new SX1262Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
+                                      settingsMap[busy]);
+            if (!rIf->init()) {
+                LOG_ERROR("Failed to find SX1262 radio\n");
+                delete rIf;
+                exit(EXIT_FAILURE);
+            } else {
+                LOG_INFO("SX1262 Radio init succeeded, using SX1262 radio\n");
+            }
+        }
+    } else if (settingsMap[use_rf95]) {
+        if (!rIf) {
+            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+            rIf = new RF95Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
+                                    settingsMap[busy]);
+            if (!rIf->init()) {
+                LOG_ERROR("Failed to find RF95 radio\n");
+                delete rIf;
+                rIf = NULL;
+                exit(EXIT_FAILURE);
+            } else {
+                LOG_INFO("RF95 Radio init succeeded, using RF95 radio\n");
+            }
+        }
+    }
+
+#elif defined(HW_SPI1_DEVICE)
     LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI1, spiSettings);
 #else // HW_SPI1_DEVICE
     LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
@@ -695,7 +754,7 @@ void setup()
 
 #if defined(RF95_IRQ)
     if (!rIf) {
-        rIf = new RF95Interface(RadioLibHAL, RF95_NSS, RF95_IRQ, RF95_RESET, RF95_DIO1);
+        rIf = new RF95Interface(RadioLibHAL, LORA_CS, RF95_IRQ, RF95_RESET, RF95_DIO1);
         if (!rIf->init()) {
             LOG_WARN("Failed to find RF95 radio\n");
             delete rIf;
@@ -706,7 +765,7 @@ void setup()
     }
 #endif
 
-#if defined(USE_SX1262)
+#if defined(USE_SX1262) && !defined(ARCH_RASPBERRY_PI)
     if (!rIf) {
         rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {

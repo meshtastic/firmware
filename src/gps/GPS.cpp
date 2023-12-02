@@ -7,14 +7,16 @@
 #include "ubx.h"
 
 #ifdef ARCH_PORTDUINO
+#include "PortduinoGlue.h"
 #include "meshUtils.h"
+#include <ctime>
 #endif
 
 #ifndef GPS_RESET_MODE
 #define GPS_RESET_MODE HIGH
 #endif
 
-#if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32)
+#if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32) || defined(ARCH_RASPBERRY_PI)
 HardwareSerial *GPS::_serial_gps = &Serial1;
 #else
 HardwareSerial *GPS::_serial_gps = NULL;
@@ -260,6 +262,20 @@ bool GPS::setup()
             isProblematicGPS = true;
         }
 #endif
+
+#if defined(RAK4630) && defined(PIN_3V3_EN)
+        // If we are using the RAK4630 and we have no other peripherals on the I2C bus or module interest in 3V3_S,
+        // then we can safely set en_gpio turn off power to 3V3 (IO2) to hard sleep the GPS
+        if (rtc_found.port == ScanI2C::DeviceType::NONE && rgb_found.type == ScanI2C::DeviceType::NONE &&
+            accelerometer_found.port == ScanI2C::DeviceType::NONE && !moduleConfig.detection_sensor.enabled &&
+            !moduleConfig.telemetry.air_quality_enabled && !moduleConfig.telemetry.environment_measurement_enabled &&
+            config.power.device_battery_ina_address == 0 && en_gpio == 0) {
+            LOG_DEBUG("Since no problematic peripherals or interested modules were found, setting power save GPS_EN to pin %i\n",
+                      PIN_3V3_EN);
+            en_gpio = PIN_3V3_EN;
+        }
+#endif
+
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
             LOG_DEBUG("Probing for GPS at %d \n", serialSpeeds[speedSelect]);
             gnssModel = probe(serialSpeeds[speedSelect]);
@@ -432,6 +448,7 @@ bool GPS::setup()
 
     notifyDeepSleepObserver.observe(&notifyDeepSleep);
     notifyGPSSleepObserver.observe(&notifyGPSSleep);
+
     return true;
 }
 
@@ -478,14 +495,14 @@ void GPS::setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime)
 #ifdef PIN_GPS_STANDBY // Specifically the standby pin for L76K and clones
     if (on) {
         LOG_INFO("Waking GPS");
-        digitalWrite(PIN_GPS_STANDBY, 1);
         pinMode(PIN_GPS_STANDBY, OUTPUT);
+        digitalWrite(PIN_GPS_STANDBY, 1);
         return;
     } else {
         LOG_INFO("GPS entering sleep");
         // notifyGPSSleep.notifyObservers(NULL);
-        digitalWrite(PIN_GPS_STANDBY, 0);
         pinMode(PIN_GPS_STANDBY, OUTPUT);
+        digitalWrite(PIN_GPS_STANDBY, 0);
         return;
     }
 #endif
@@ -889,6 +906,10 @@ GPS *GPS::createGps()
     if (!_en_gpio)
         _en_gpio = PIN_GPS_EN;
 #endif
+#ifdef ARCH_RASPBERRY_PI
+    if (!settingsMap[has_gps])
+        return nullptr;
+#endif
     if (!_rx_gpio || !_serial_gps) // Configured to have no GPS at all
         return nullptr;
 
@@ -899,8 +920,8 @@ GPS *GPS::createGps()
 
     if (_en_gpio != 0) {
         LOG_DEBUG("Setting %d to output.\n", _en_gpio);
-        digitalWrite(_en_gpio, !GPS_EN_ACTIVE);
         pinMode(_en_gpio, OUTPUT);
+        digitalWrite(_en_gpio, !GPS_EN_ACTIVE);
     }
 
 #ifdef PIN_GPS_PPS
@@ -920,8 +941,8 @@ GPS *GPS::createGps()
     new_gps->setGPSPower(true, false, 0);
 
 #ifdef PIN_GPS_RESET
-    digitalWrite(PIN_GPS_RESET, GPS_RESET_MODE); // assert for 10ms
     pinMode(PIN_GPS_RESET, OUTPUT);
+    digitalWrite(PIN_GPS_RESET, GPS_RESET_MODE); // assert for 10ms
     delay(10);
     digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
 #endif
@@ -966,8 +987,8 @@ bool GPS::factoryReset()
 {
 #ifdef PIN_GPS_REINIT
     // The L76K GNSS on the T-Echo requires the RESET pin to be pulled LOW
-    digitalWrite(PIN_GPS_REINIT, 0);
     pinMode(PIN_GPS_REINIT, OUTPUT);
+    digitalWrite(PIN_GPS_REINIT, 0);
     delay(150); // The L76K datasheet calls for at least 100MS delay
     digitalWrite(PIN_GPS_REINIT, 1);
 #endif

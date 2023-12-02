@@ -200,7 +200,7 @@ void NodeDB::installDefaultConfig()
     config.position.position_flags =
         (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL |
          meshtastic_Config_PositionConfig_PositionFlags_SPEED | meshtastic_Config_PositionConfig_PositionFlags_HEADING |
-         meshtastic_Config_PositionConfig_PositionFlags_DOP);
+         meshtastic_Config_PositionConfig_PositionFlags_DOP | meshtastic_Config_PositionConfig_PositionFlags_SATINVIEW);
 
 #ifdef T_WATCH_S3
     config.display.screen_on_secs = 30;
@@ -248,6 +248,12 @@ void NodeDB::installDefaultModuleConfig()
 #ifdef T_WATCH_S3
     // Don't worry about the other settings, we'll use the DRV2056 behavior for notifications
     moduleConfig.external_notification.enabled = true;
+#endif
+#ifdef NANO_G2_ULTRA
+    moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.alert_message = true;
+    moduleConfig.external_notification.output_ms = 100;
+    moduleConfig.external_notification.active = true;
 #endif
     moduleConfig.has_canned_message = true;
 
@@ -316,11 +322,25 @@ void NodeDB::installDefaultChannels()
 
 void NodeDB::resetNodes()
 {
-    devicestate.node_db_lite_count = 0;
-    memset(devicestate.node_db_lite, 0, sizeof(devicestate.node_db_lite));
+    devicestate.node_db_lite_count = 1;
+    std::fill(&devicestate.node_db_lite[1], &devicestate.node_db_lite[MAX_NUM_NODES - 1], meshtastic_NodeInfoLite());
     saveDeviceStateToDisk();
     if (neighborInfoModule && moduleConfig.neighbor_info.enabled)
         neighborInfoModule->resetNeighbors();
+}
+
+void NodeDB::removeNodeByNum(uint nodeNum)
+{
+    int newPos = 0, removed = 0;
+    for (int i = 0; i < *numMeshNodes; i++) {
+        if (meshNodes[i].num != nodeNum)
+            meshNodes[newPos++] = meshNodes[i];
+        else
+            removed++;
+    }
+    *numMeshNodes -= removed;
+    LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Saving changes...\n", removed);
+    saveDeviceStateToDisk();
 }
 
 void NodeDB::cleanupMeshDB()
@@ -356,7 +376,6 @@ void NodeDB::installDefaultDeviceState()
     pickNewNodeNum(); // based on macaddr now
     snprintf(owner.long_name, sizeof(owner.long_name), "Meshtastic %02x%02x", ourMacAddr[4], ourMacAddr[5]);
     snprintf(owner.short_name, sizeof(owner.short_name), "%02x%02x", ourMacAddr[4], ourMacAddr[5]);
-
     snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum()); // Default node ID now based on nodenum
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
 }
@@ -381,6 +400,8 @@ void NodeDB::init()
 
     // Set our board type so we can share it with others
     owner.hw_model = HW_VENDOR;
+    // Ensure user (nodeinfo) role is set to whatever we're configured to
+    owner.role = config.device.role;
 
     // Include our owner in the node db under our nodenum
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
@@ -421,7 +442,11 @@ void NodeDB::init()
  */
 void NodeDB::pickNewNodeNum()
 {
+#ifdef ARCH_RASPBERRY_PI
+    getPiMacAddr(ourMacAddr); // Make sure ourMacAddr is set
+#else
     getMacAddr(ourMacAddr); // Make sure ourMacAddr is set
+#endif
 
     // Pick an initial nodenum based on the macaddr
     NodeNum nodeNum = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
@@ -433,6 +458,7 @@ void NodeDB::pickNewNodeNum()
         LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, so trying for 0x%x\n", nodeNum, candidate);
         nodeNum = candidate;
     }
+    LOG_WARN("Using nodenum 0x%x \n", nodeNum);
 
     myNodeInfo.my_node_num = nodeNum;
 }

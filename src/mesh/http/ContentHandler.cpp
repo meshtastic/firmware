@@ -144,8 +144,8 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
 
     /*
         For documentation, see:
-            https://meshtastic.org/docs/developers/device/http-api
-            https://meshtastic.org/docs/developers/device/device-api
+            https://meshtastic.org/docs/development/device/http-api
+            https://meshtastic.org/docs/development/device/client-api
     */
 
     // Get access to the parameters
@@ -194,8 +194,8 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
 
     /*
         For documentation, see:
-            https://meshtastic.org/docs/developers/device/http-api
-            https://meshtastic.org/docs/developers/device/device-api
+            https://meshtastic.org/docs/development/device/http-api
+            https://meshtastic.org/docs/development/device/client-api
     */
 
     res->setHeader("Content-Type", "application/x-protobuf");
