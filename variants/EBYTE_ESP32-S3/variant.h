@@ -132,11 +132,12 @@
 #define HAS_SCREEN 0 // Assume no screen present by default to prevent crash...
 
 // GPS
-// FIXME: remove 0/1 option for HAS_GPS in src, change to being defined or not
-// #define HAS_GPS 0 // Don't need to set this to 0 to prevent a crash as it doesn't crash if GPS not found, will probe by default
-// #define PIN_GPS_EN 15
-// #define GPS_TX_PIN 16
-// #define GPS_RX_PIN 17
+// FIXME: unsure what to define HAS_GPS as if GPS isn't always present
+#define HAS_GPS 1 // Don't need to set this to 0 to prevent a crash as it doesn't crash if GPS not found, will probe by default
+#define PIN_GPS_EN 15
+#define GPS_EN_ACTIVE 1
+#define GPS_TX_PIN 16
+#define GPS_RX_PIN 17
 
 /////////////////////////////////////////////////////////////////////////////////
 //                                                                             //
