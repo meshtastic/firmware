@@ -7,9 +7,9 @@
 #include "mesh/Router.h"
 #include "mesh/generated/meshtastic/mqtt.pb.h"
 #include "mesh/generated/meshtastic/telemetry.pb.h"
-#include "mesh/http/WiFiAPClient.h"
 #include "sleep.h"
 #if HAS_WIFI
+#include "mesh/wifi/WiFiAPClient.h"
 #include <WiFi.h>
 #endif
 #include "mqtt/JSON.h"
