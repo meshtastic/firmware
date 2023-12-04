@@ -9,13 +9,11 @@
 #include "target_specific.h"
 #include <WiFi.h>
 #include <WiFiUdp.h>
-#ifndef ARCH_RP2040
+#ifdef ARCH_ESP32
 #include "mesh/http/WebServer.h"
 #include <ESPmDNS.h>
 #include <esp_wifi.h>
 static void WiFiEvent(WiFiEvent_t event);
-#else
-#include <ESP8266mDNS.h>
 #endif
 
 #ifndef DISABLE_NTP
@@ -53,6 +51,7 @@ static void onNetworkConnected()
         // Start web server
         LOG_INFO("Starting network services\n");
 
+#ifdef ARCH_ESP32
         // start mdns
         if (!MDNS.begin("Meshtastic")) {
             LOG_ERROR("Error setting up MDNS responder!\n");
@@ -62,6 +61,9 @@ static void onNetworkConnected()
             MDNS.addService("http", "tcp", 80);
             MDNS.addService("https", "tcp", 443);
         }
+#else // ESP32 handles this in WiFiEvent
+        LOG_INFO("Obtained IP address: %s\n", WiFi.localIP().toString().c_str());
+#endif
 
 #ifndef DISABLE_NTP
         LOG_INFO("Starting NTP time client\n");
