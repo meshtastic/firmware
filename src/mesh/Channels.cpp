@@ -204,7 +204,7 @@ meshtastic_Channel &Channels::getByIndex(ChannelIndex chIndex)
         memset(ch, 0, sizeof(meshtastic_Channel));
         // ch.index -1 means we don't know the channel locally and need to look it up by settings.name
         // not sure this is handled right everywhere
-        ch->index = -1; //TODO: -1 causes crash somewhere
+        ch->index = -1; // TODO: -1 causes crash somewhere
         return *ch;
     }
 }

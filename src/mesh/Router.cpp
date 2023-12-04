@@ -308,7 +308,7 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
             // TODO: not working for unencrypted channel
             if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
                 // packet is not encoded, just set channel and return
-                p->channel = chIndex; 
+                p->channel = chIndex;
                 return true;
             }
 
@@ -318,7 +318,7 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
             memcpy(bytes, p->encrypted.bytes,
                    rawSize); // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf
             crypto->decrypt(p->from, p->id, rawSize, bytes);
-            p->channel = chIndex; 
+            p->channel = chIndex;
 
             // printBytes("plaintext", bytes, p->encrypted.size);
 
