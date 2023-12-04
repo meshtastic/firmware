@@ -127,12 +127,20 @@
 // LoRa SPI
 // -----------------------------------------------------------------------------
 
-// NRF52 boards will define this in variant.h
-#ifndef RF95_SCK
-#define RF95_SCK 5
-#define RF95_MISO 19
-#define RF95_MOSI 27
-#define RF95_NSS 18
+// If an SPI-related pin used by the LoRa module isn't defined, use the conventional pin number for it.
+// FIXME: these pins should really be defined in each variant.h file to prevent breakages if the defaults change, currently many
+// ESP32 variants don't define these pins in their variant.h file.
+#ifndef LORA_SCK
+#define LORA_SCK 5
+#endif
+#ifndef LORA_MISO
+#define LORA_MISO 19
+#endif
+#ifndef LORA_MOSI
+#define LORA_MOSI 27
+#endif
+#ifndef LORA_CS
+#define LORA_CS 18
 #endif
 
-#define SERIAL0_RX_GPIO 3 // Always GPIO3 on ESP32
+#define SERIAL0_RX_GPIO 3 // Always GPIO3 on ESP32 // FIXME: may be different on ESP32-S3, etc.

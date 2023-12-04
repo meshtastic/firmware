@@ -12,15 +12,15 @@
 
 #define PIN_BUZZER 25
 
-#undef RF95_SCK
-#undef RF95_MISO
-#undef RF95_MOSI
-#undef RF95_NSS
+#undef LORA_SCK
+#undef LORA_MISO
+#undef LORA_MOSI
+#undef LORA_CS
 
-#define RF95_SCK 18
-#define RF95_MISO 19
-#define RF95_MOSI 23
-#define RF95_NSS 5
+#define LORA_SCK 18
+#define LORA_MISO 19
+#define LORA_MOSI 23
+#define LORA_CS 5
 
 #define USE_RF95
 #define LORA_DIO0 36 // a No connect on the SX1262 module

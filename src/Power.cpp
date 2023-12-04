@@ -435,7 +435,7 @@ void Power::shutdown()
     ledOff(PIN_LED2);
 #endif
 #ifdef PIN_LED3
-    ledOff(PIN_LED2);
+    ledOff(PIN_LED3);
 #endif
     doDeepSleep(DELAY_FOREVER, false);
 #endif

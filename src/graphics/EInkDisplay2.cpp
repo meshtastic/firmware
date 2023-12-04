@@ -46,7 +46,7 @@
 #define TECHO_DISPLAY_MODEL GxEPD2_154_M09
 
 #elif defined(HELTEC_WIRELESS_PAPER)
-//#define TECHO_DISPLAY_MODEL GxEPD2_213_T5D
+// #define TECHO_DISPLAY_MODEL GxEPD2_213_T5D
 #define TECHO_DISPLAY_MODEL GxEPD2_213_BN
 #endif
 
@@ -193,14 +193,14 @@ bool EInkDisplay::connect()
     LOG_INFO("Doing EInk init\n");
 
 #ifdef PIN_EINK_PWR_ON
-    digitalWrite(PIN_EINK_PWR_ON, HIGH); // If we need to assert a pin to power external peripherals
     pinMode(PIN_EINK_PWR_ON, OUTPUT);
+    digitalWrite(PIN_EINK_PWR_ON, HIGH); // If we need to assert a pin to power external peripherals
 #endif
 
 #ifdef PIN_EINK_EN
     // backlight power, HIGH is backlight on, LOW is off
-    digitalWrite(PIN_EINK_EN, LOW);
     pinMode(PIN_EINK_EN, OUTPUT);
+    digitalWrite(PIN_EINK_EN, LOW);
 #endif
 
 #if defined(TTGO_T_ECHO)
