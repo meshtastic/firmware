@@ -21,7 +21,7 @@
 #include <pb_encode.h>
 
 #ifdef ARCH_ESP32
-#include "mesh/http/WiFiAPClient.h"
+#include "mesh/wifi/WiFiAPClient.h"
 #include "modules/esp32/StoreForwardModule.h"
 #include <Preferences.h>
 #include <nvs_flash.h>
@@ -248,6 +248,12 @@ void NodeDB::installDefaultModuleConfig()
 #ifdef T_WATCH_S3
     // Don't worry about the other settings, we'll use the DRV2056 behavior for notifications
     moduleConfig.external_notification.enabled = true;
+#endif
+#ifdef NANO_G2_ULTRA
+    moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.alert_message = true;
+    moduleConfig.external_notification.output_ms = 100;
+    moduleConfig.external_notification.active = true;
 #endif
     moduleConfig.has_canned_message = true;
 
