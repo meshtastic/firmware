@@ -293,7 +293,7 @@ bool GPS::setup()
             gnssModel = GNSS_MODEL_UNKNOWN;
         }
 #else
-        gnssModel = GNSS_MODEL_UC6850;
+        gnssModel = GNSS_MODEL_UC6580;
 #endif
 
         if (gnssModel == GNSS_MODEL_MTK) {
@@ -311,10 +311,10 @@ bool GPS::setup()
             // Switch to Vehicle Mode, since SoftRF enables Aviation < 2g
             _serial_gps->write("$PCAS11,3*1E\r\n");
             delay(250);
-        } else if (gnssModel == GNSS_MODEL_UC6850) {
+        } else if (gnssModel == GNSS_MODEL_UC6580) {
 
-            // use GPS + GLONASS
-            _serial_gps->write("$CFGSYS,h15\r\n");
+            // use GPS L1 & L5 + BDS B1I & B2a + GLONASS L1 + GALILEO E1 & E5a + SBAS
+            _serial_gps->write("$CFGSYS,h25155\r\n");
             delay(250);
         } else if (gnssModel == GNSS_MODEL_UBLOX) {
             // Configure GNSS system to GPS+SBAS+GLONASS (Module may restart after this command)
