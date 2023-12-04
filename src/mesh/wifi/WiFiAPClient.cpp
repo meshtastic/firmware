@@ -91,7 +91,7 @@ static void onNetworkConnected()
             syslog.enable();
         }
 
-#ifndef ARCH_RP2040
+#ifdef ARCH_ESP32
         initWebServer();
 #endif
         initApiServer();
@@ -247,7 +247,7 @@ bool initWifi()
     }
 }
 
-#ifndef ARCH_RP2040
+#ifdef ARCH_ESP32
 // Called by the Espressif SDK to
 static void WiFiEvent(WiFiEvent_t event)
 {
@@ -281,11 +281,11 @@ static void WiFiEvent(WiFiEvent_t event)
         LOG_INFO("Authentication mode of access point has changed\n");
         break;
     case ARDUINO_EVENT_WIFI_STA_GOT_IP:
-        LOG_INFO("Obtained IP address: ", WiFi.localIPv6());
+        LOG_INFO("Obtained IP address: %s\n", WiFi.localIP().toString().c_str());
         onNetworkConnected();
         break;
     case ARDUINO_EVENT_WIFI_STA_GOT_IP6:
-        LOG_INFO("Obtained IP6 address: %s", WiFi.localIPv6());
+        LOG_INFO("Obtained IP6 address: %s\n", WiFi.localIPv6().toString().c_str());
         break;
     case ARDUINO_EVENT_WIFI_STA_LOST_IP:
         LOG_INFO("Lost IP address and IP address is reset to 0\n");
