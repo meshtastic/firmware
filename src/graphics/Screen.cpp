@@ -43,7 +43,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "sleep.h"
 #include "target_specific.h"
 
-#if HAS_WIFI
+#if HAS_WIFI && !defined(ARCH_RASPBERRY_PI)
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 
@@ -1297,7 +1297,7 @@ void Screen::setFrames()
     // call a method on debugInfoScreen object (for more details)
     normalFrames[numframes++] = &Screen::drawDebugInfoSettingsTrampoline;
 
-#if HAS_WIFI
+#if HAS_WIFI && !defined(ARCH_RASPBERRY_PI)
     if (isWifiAvailable()) {
         // call a method on debugInfoScreen object (for more details)
         normalFrames[numframes++] = &Screen::drawDebugInfoWiFiTrampoline;
