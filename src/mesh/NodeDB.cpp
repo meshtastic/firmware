@@ -309,8 +309,7 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
         config.position.position_broadcast_secs = UINT32_MAX;
         moduleConfig.neighbor_info.update_interval = UINT32_MAX;
         moduleConfig.telemetry.device_update_interval = UINT32_MAX;
-        moduleConfig.telemetry.environment_update_interval = UINT32_MAX
-        moduleConfig.telemetry.air_quality_interval = UINT32_MAX;
+        moduleConfig.telemetry.environment_update_interval = UINT32_MAX moduleConfig.telemetry.air_quality_interval = UINT32_MAX;
     }
 }
 

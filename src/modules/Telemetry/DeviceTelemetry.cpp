@@ -18,7 +18,7 @@ int32_t DeviceTelemetryModule::runOnce()
     if (((lastSentToMesh == 0) ||
          ((now - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.telemetry.device_update_interval))) &&
         airTime->isTxAllowedChannelUtil() && airTime->isTxAllowedAirUtil() &&
-        config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER && 
+        config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
         sendTelemetry();
         lastSentToMesh = now;
