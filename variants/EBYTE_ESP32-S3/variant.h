@@ -93,6 +93,7 @@
 
 // Status
 #define LED_PIN 1
+#define LED_INVERTED 0
 // External notification
 // FIXME: Check if EXT_NOTIFY_OUT actualy has any effect and removes the need for setting the external notication pin in the
 // app/preferences
