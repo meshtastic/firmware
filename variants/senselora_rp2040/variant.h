@@ -4,9 +4,9 @@
 
 #define ARDUINO_ARCH_AVR
 
-//#define USE_SH1106 1
+#define USE_SH1106 1
 
-#define BUTTON_PIN 2
+#define BUTTON_PIN 2 
 
 #define I2C_SDA1 6
 #define I2C_SCL1 7
