@@ -67,6 +67,10 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_STATION_G1 = 25,
     /* RAK11310 (RP2040 + SX1262) */
     meshtastic_HardwareModel_RAK11310 = 26,
+    /* Makerfabs SenseLoRA Receiver (RP2040 + RFM96) */
+    meshtastic_HardwareModel_SENSELORA_RP2040 = 27,
+    /* Makerfabs SenseLoRA Industrial Monitor (ESP32-S3 + RFM96) */
+    meshtastic_HardwareModel_SENSELORA_S3 = 28,
     /* ---------------------------------------------------------------------------
  Less common/prototype boards listed here (needs one more byte over the air)
  --------------------------------------------------------------------------- */

@@ -1,5 +1,4 @@
 #pragma once
-
 void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer);
 
 // Declare some handler functions for the various URLs on the server

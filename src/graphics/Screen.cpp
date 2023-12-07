@@ -43,9 +43,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "sleep.h"
 #include "target_specific.h"
 
+#if HAS_WIFI && !defined(ARCH_RASPBERRY_PI)
+#include "mesh/wifi/WiFiAPClient.h"
+#endif
+
 #ifdef ARCH_ESP32
 #include "esp_task_wdt.h"
-#include "mesh/http/WiFiAPClient.h"
 #include "modules/esp32/StoreForwardModule.h"
 #endif
 
@@ -1294,7 +1297,7 @@ void Screen::setFrames()
     // call a method on debugInfoScreen object (for more details)
     normalFrames[numframes++] = &Screen::drawDebugInfoSettingsTrampoline;
 
-#ifdef ARCH_ESP32
+#if HAS_WIFI && !defined(ARCH_RASPBERRY_PI)
     if (isWifiAvailable()) {
         // call a method on debugInfoScreen object (for more details)
         normalFrames[numframes++] = &Screen::drawDebugInfoWiFiTrampoline;
@@ -1618,12 +1621,19 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Connection Failed");
     } else if (WiFi.status() == WL_IDLE_STATUS) {
         display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Idle ... Reconnecting");
-    } else {
+    }
+#ifdef ARCH_ESP32
+    else {
         // Codes:
         // https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/wifi.html#wi-fi-reason-code
         display->drawString(x, y + FONT_HEIGHT_SMALL * 1,
                             WiFi.disconnectReasonName(static_cast<wifi_err_reason_t>(getWifiDisconnectReason())));
     }
+#else
+    else {
+        display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Unkown status: " + String(WiFi.status()));
+    }
+#endif
 
     display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
 

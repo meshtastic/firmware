@@ -1,7 +1,7 @@
 #pragma once
 #include "ProtobufModule.h"
-#ifdef ARCH_ESP32
-#include "mesh/http/WiFiAPClient.h"
+#if HAS_WIFI
+#include "mesh/wifi/WiFiAPClient.h"
 #endif
 
 /**

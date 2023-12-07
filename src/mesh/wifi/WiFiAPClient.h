@@ -5,7 +5,7 @@
 #include <Arduino.h>
 #include <functional>
 
-#ifdef ARCH_ESP32
+#if defined(HAS_WIFI) && !defined(ARCH_PORTDUINO)
 #include <WiFi.h>
 #endif
 
