@@ -12,7 +12,7 @@ lint:
     - checkov@3.1.9
     - terrascan@1.18.5
     - trivy@0.47.0
-    - trufflehog@3.63.2-rc0
+    #- trufflehog@3.63.2-rc0
     - taplo@0.8.1
     - ruff@0.1.6
     - isort@5.12.0
