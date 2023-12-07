@@ -1,0 +1,38 @@
+// #define RADIOLIB_CUSTOM_ARDUINO 1
+// #define RADIOLIB_TONE_UNSUPPORTED 1
+// #define RADIOLIB_SOFTWARE_SERIAL_UNSUPPORTED 1
+
+#define ARDUINO_ARCH_AVR
+
+#define USE_SSD1306 1
+
+#define BUTTON_PIN 2
+
+#define I2C_SDA1 6
+#define I2C_SCL1 7
+
+#define PIN_SPI_MISO (16u)
+#define PIN_SPI_MOSI (19u)
+#define PIN_SPI_SCK (18u)
+#define PIN_SPI_SS (17u)
+
+#define LED_PIN PIN_LED
+
+#undef BATTERY_PIN
+
+#undef LORA_SCK
+#undef LORA_MISO
+#undef LORA_MOSI
+#undef LORA_CS
+
+#define USE_RF95
+#define LORA_SCK PIN_SPI_SCK
+#define LORA_MISO PIN_SPI_MISO
+#define LORA_MOSI PIN_SPI_MOSI
+#define LORA_CS PIN_SPI_SS
+
+#define LORA_DIO0 21
+#define LORA_DIO1 22
+#define LORA_DIO2 23
+#define LORA_DIO5 24
+#define LORA_RST 20
