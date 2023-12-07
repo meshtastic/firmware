@@ -15,7 +15,6 @@ lint:
     - trufflehog@3.63.2-rc0
     - taplo@0.8.1
     - ruff@0.1.6
-    - yamllint@1.33.0
     - isort@5.12.0
     - markdownlint@0.37.0
     - oxipng@9.0.0
