@@ -4,7 +4,8 @@
 
 #define ARDUINO_ARCH_AVR
 
-#define USE_SH1106 1
+#define USE_SSD1306 1
+
 
 #define BUTTON_PIN 2 
 
@@ -25,6 +26,7 @@
 #undef LORA_MOSI
 #undef LORA_CS
 
+#define USE_RF95
 #define LORA_SCK PIN_SPI_SCK
 #define LORA_MISO PIN_SPI_MISO
 #define LORA_MOSI PIN_SPI_MOSI
