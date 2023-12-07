@@ -6,8 +6,7 @@
 
 #define USE_SSD1306 1
 
-
-#define BUTTON_PIN 2 
+#define BUTTON_PIN 2
 
 #define I2C_SDA1 6
 #define I2C_SCL1 7
