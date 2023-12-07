@@ -121,6 +121,12 @@
 #define HW_VENDOR meshtastic_HardwareModel_PICOMPUTER_S3
 #elif defined(HELTEC_HT62)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_HT62
+#elif defined(SENSELORA_RP2040)
+#define HW_VENDOR meshtastic_HardwareModel_SENSELORA_RP2040
+#elif defined(SENSELORA_S3)
+#define HW_VENDOR meshtastic_HardwareModel_SENSELORA_S3
+#elif defined(HELTEC_HT62)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_HT62
 #endif
 
 // -----------------------------------------------------------------------------
