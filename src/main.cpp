@@ -32,9 +32,6 @@
 #include <utility>
 // #include <driver/rtc_io.h>
 
-#include "mesh/eth/ethClient.h"
-#include "mesh/http/WiFiAPClient.h"
-
 #ifdef ARCH_ESP32
 #include "mesh/http/WebServer.h"
 #include "nimble/NimbleBluetooth.h"
@@ -48,10 +45,12 @@ NRF52Bluetooth *nrf52Bluetooth;
 
 #if HAS_WIFI
 #include "mesh/api/WiFiServerAPI.h"
+#include "mesh/wifi/WiFiAPClient.h"
 #endif
 
 #if HAS_ETHERNET
 #include "mesh/api/ethServerAPI.h"
+#include "mesh/eth/ethClient.h"
 #endif
 #include "mqtt/MQTT.h"
 
@@ -839,10 +838,14 @@ void setup()
 
 #ifndef ARCH_PORTDUINO
     // Initialize Wifi
+#if HAS_WIFI
     initWifi();
+#endif
 
+#if HAS_ETHERNET
     // Initialize Ethernet
     initEthernet();
+#endif
 #endif
 
 #ifdef ARCH_ESP32
