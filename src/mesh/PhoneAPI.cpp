@@ -36,7 +36,9 @@ void PhoneAPI::handleStartConfig()
     if (!isConnected()) {
         onConnectionChanged(true);
         observe(&service.fromNumChanged);
+#ifdef FSCom
         observe(&xModem.packetReady);
+#endif
     }
 
     // even if we were already connected - restart our state machine
@@ -53,7 +55,9 @@ void PhoneAPI::close()
         state = STATE_SEND_NOTHING;
 
         unobserve(&service.fromNumChanged);
+#ifdef FSCom
         unobserve(&xModem.packetReady);
+#endif
         releasePhonePacket(); // Don't leak phone packets on shutdown
         releaseQueueStatusPhonePacket();
         releaseMqttClientProxyPhonePacket();
@@ -101,7 +105,9 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
             break;
         case meshtastic_ToRadio_xmodemPacket_tag:
             LOG_INFO("Got xmodem packet\n");
+#ifdef FSCom
             xModem.handlePacket(toRadioScratch.xmodemPacket);
+#endif
             break;
         case meshtastic_ToRadio_mqttClientProxyMessage_tag:
             LOG_INFO("Got MqttClientProxy message\n");
@@ -429,12 +435,14 @@ bool PhoneAPI::available()
         if (hasPacket)
             return true;
 
+#ifdef FSCom
         if (xmodemPacketForPhone.control == meshtastic_XModem_Control_NUL)
             xmodemPacketForPhone = xModem.getForPhone();
         if (xmodemPacketForPhone.control != meshtastic_XModem_Control_NUL) {
             xModem.resetForPhone();
             return true;
         }
+#endif
 
         if (!packetForPhone)
             packetForPhone = service.getForPhone();

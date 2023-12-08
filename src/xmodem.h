@@ -38,6 +38,8 @@
 
 #define MAXRETRANS 25
 
+#ifdef FSCom
+
 class XModemAdapter
 {
   public:
@@ -75,3 +77,4 @@ class XModemAdapter
 };
 
 extern XModemAdapter xModem;
+#endif // FSCom
