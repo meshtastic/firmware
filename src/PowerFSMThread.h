@@ -33,7 +33,7 @@ class PowerFSMThread : public OSThread
             powerFSM.trigger(EVENT_SHUTDOWN);
         }
 
-        return 10;
+        return 100;
     }
 };
 
