@@ -1,7 +1,7 @@
 #include "NeighborInfoModule.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "RTC.h"
+#include "gps/RTC.h"
 
 #define MAX_NUM_NEIGHBORS 10 // also defined in NeighborInfo protobuf options
 NeighborInfoModule *neighborInfoModule;

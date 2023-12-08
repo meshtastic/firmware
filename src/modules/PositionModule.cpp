@@ -2,7 +2,7 @@
 #include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "RTC.h"
+#include "gps/RTC.h"
 #include "Router.h"
 #include "TypeConversions.h"
 #include "airtime.h"

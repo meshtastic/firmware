@@ -33,7 +33,33 @@ SPIClass SPI1(HSPI);
  */
 bool copyFile(const char *from, const char *to)
 {
-#ifdef FSCom
+#if defined(ARCH_STM32WL) || defined(ARCH_APOLLO3)
+  unsigned char cbuffer[2048];
+
+  // Var to hold the result of actions
+  OSFS::result r;
+
+  r = OSFS::getFile(from, cbuffer);
+
+  if (r == notfound) {
+  	LOG_ERROR("Failed to open source file %s\n", from);
+    return false;
+  } else if (r == noerr) {
+    r = OSFS::newFile(to, cbuffer, true);
+    if (r == noerr) {
+      return true;
+    } else {
+    	LOG_ERROR("OSFS Error %d\n", r);
+      return false;
+    }
+
+  } else {
+  	LOG_ERROR("OSFS Error %d\n", r);
+    return false;
+  }
+return true;
+
+#elif defined(FSCom)
     unsigned char cbuffer[16];
 
     File f1 = FSCom.open(from, FILE_O_READ);
@@ -56,8 +82,8 @@ bool copyFile(const char *from, const char *to)
     f2.flush();
     f2.close();
     f1.close();
-#endif
     return true;
+#endif
 }
 
 /**
@@ -70,7 +96,13 @@ bool copyFile(const char *from, const char *to)
  */
 bool renameFile(const char *pathFrom, const char *pathTo)
 {
-#ifdef FSCom
+#if defined(ARCH_STM32WL) || defined(ARCH_APOLLO3)
+    if (copyFile(pathFrom, pathTo) && (OSFS::deleteFile(pathFrom) == OSFS::result::NO_ERROR)) {
+        return true;
+    } else {
+        return false;
+    }
+#elif defined(FSCom)
 #ifdef ARCH_ESP32
     // rename was fixed for ESP32 IDF LittleFS in April
     return FSCom.rename(pathFrom, pathTo);
@@ -82,7 +114,6 @@ bool renameFile(const char *pathFrom, const char *pathTo)
     }
 #endif
 #endif
-    return true;
 }
 
 /**

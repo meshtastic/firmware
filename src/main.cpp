@@ -79,7 +79,7 @@ NRF52Bluetooth *nrf52Bluetooth;
 #endif
 #include "PowerFSMThread.h"
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(ARCH_APOLLO3)
 #include "AccelerometerThread.h"
 #include "AmbientLightingThread.h"
 #endif
@@ -610,7 +610,7 @@ void setup()
     }
 #endif
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(ARCH_APOLLO3)
     if (rgb_found.type != ScanI2C::DeviceType::NONE) {
         ambientLightingThread = new AmbientLightingThread(rgb_found.type);
     }

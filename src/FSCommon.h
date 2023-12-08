@@ -21,10 +21,32 @@ using namespace LittleFS_Namespace;
 #endif
 
 #if defined(ARCH_APOLLO3)
-#include "platform/apollo3/InternalFileSystem.h" // Apollo3
-#define FSCom InternalFS
-#define FSBegin() FSCom.begin()
-using namespace LittleFS_Namespace;
+// Apollo series 2 Kbytes (8 rows of 256 bytes)
+#include <EEPROM.h>
+#include <OSFS.h>
+
+uint16_t OSFS::startOfEEPROM = 1;
+uint16_t OSFS::endOfEEPROM = 2048;
+
+// Useful consts
+const OSFS::result noerr = OSFS::result::NO_ERROR;
+const OSFS::result notfound = OSFS::result::FILE_NOT_FOUND;
+
+// 3) How do I read from the medium?
+void OSFS::readNBytes(uint16_t address, unsigned int num, byte* output) {
+	for (uint16_t i = address; i < address + num; i++) {
+		*output = EEPROM.read(i);
+		output++;
+	}
+}
+
+// 4) How to I write to the medium?
+void OSFS::writeNBytes(uint16_t address, unsigned int num, const byte* input) {
+	for (uint16_t i = address; i < address + num; i++) {
+		EEPROM.update(i, *input);
+		input++;
+	}
+}
 #endif
 
 #if defined(ARCH_RP2040)

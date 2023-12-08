@@ -176,6 +176,9 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_WIRE_SDA WB_I2C1_SDA
 #define PIN_WIRE_SCL WB_I2C1_SCL
 
+#define VARIANT_Wire_SDA PIN_WIRE_SDA 
+#define VARIANT_Wire_SCL PIN_WIRE_SCL
+
 #ifdef __cplusplus
 }
 #endif
