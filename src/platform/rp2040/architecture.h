@@ -25,4 +25,6 @@
 #define HW_VENDOR meshtastic_HardwareModel_RPI_PICO
 #elif defined(RAK11310)
 #define HW_VENDOR meshtastic_HardwareModel_RAK11310
+#elif defined(SENSELORA_RP2040)
+#define HW_VENDOR meshtastic_HardwareModel_SENSELORA_RP2040
 #endif
