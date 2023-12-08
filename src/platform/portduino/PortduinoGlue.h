@@ -2,9 +2,33 @@
 #ifdef ARCH_RASPBERRY_PI
 #include <map>
 
-extern std::map<int, int> settingsMap;
+enum configNames {
+    use_sx1262,
+    cs,
+    irq,
+    busy,
+    reset,
+    dio2_as_rf_switch,
+    use_rf95,
+    user,
+    gpiochip,
+    has_gps,
+    touchscreenModule,
+    touchscreenCS,
+    touchscreenIRQ,
+    displayPanel,
+    displayWidth,
+    displayHeight,
+    displayCS,
+    displayDC,
+    displayBacklight,
+    displayReset,
+    displayRotate
+};
+enum { no_screen, st7789 };
+enum { no_touchscreen, xpt2046 };
 
-enum { use_sx1262, cs, irq, busy, reset, dio2_as_rf_switch, use_rf95, user, gpiochip, has_gps };
+extern std::map<configNames, int> settingsMap;
 int initGPIOPin(int pinNum, std::string gpioChipname);
 
 #endif

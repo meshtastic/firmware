@@ -44,7 +44,7 @@
 void setupModules()
 {
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER) {
-#if HAS_BUTTON
+#if HAS_BUTTON || ARCH_RASPBERRY_PI
         inputBroker = new InputBroker();
 #endif
         adminModule = new AdminModule();
@@ -61,7 +61,7 @@ void setupModules()
 
         new RemoteHardwareModule();
         new ReplyModule();
-#if HAS_BUTTON
+#if HAS_BUTTON || ARCH_RASPBERRY_PI
         rotaryEncoderInterruptImpl1 = new RotaryEncoderInterruptImpl1();
         if (!rotaryEncoderInterruptImpl1->init()) {
             delete rotaryEncoderInterruptImpl1;

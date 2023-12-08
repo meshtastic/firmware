@@ -17,7 +17,7 @@
 #include <map>
 #include <unistd.h>
 
-std::map<int, int> settingsMap;
+std::map<configNames, int> settingsMap;
 
 #else
 #include <linux/gpio/LinuxGPIOPin.h>
@@ -154,6 +154,25 @@ void portduinoSetup()
                 settingsMap[has_gps] = 1;
             }
         }
+        settingsMap[displayPanel] = no_screen;
+        if (yamlConfig["Display"]) {
+            if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ST7789")
+                settingsMap[displayPanel] = st7789;
+            settingsMap[displayHeight] = yamlConfig["Display"]["Height"].as<int>(0);
+            settingsMap[displayWidth] = yamlConfig["Display"]["Width"].as<int>(0);
+            settingsMap[displayDC] = yamlConfig["Display"]["DC"].as<int>(-1);
+            settingsMap[displayCS] = yamlConfig["Display"]["CS"].as<int>(-1);
+            settingsMap[displayBacklight] = yamlConfig["Display"]["Backlight"].as<int>(-1);
+            settingsMap[displayReset] = yamlConfig["Display"]["Reset"].as<int>(-1);
+            settingsMap[displayRotate] = yamlConfig["Display"]["Rotate"].as<bool>(false);
+        }
+        settingsMap[touchscreenModule] = no_touchscreen;
+        if (yamlConfig["Touchscreen"]) {
+            if (yamlConfig["Touchscreen"]["Module"].as<std::string>("") == "XPT2046")
+                settingsMap[touchscreenModule] = xpt2046;
+            settingsMap[touchscreenCS] = yamlConfig["Touchscreen"]["CS"].as<int>(-1);
+            settingsMap[touchscreenIRQ] = yamlConfig["Touchscreen"]["IRQ"].as<int>(-1);
+        }
 
     } catch (YAML::Exception e) {
         std::cout << "*** Exception " << e.what() << std::endl;
@@ -190,6 +209,15 @@ void portduinoSetup()
             settingsMap[user] = RADIOLIB_NC;
         }
     }
+
+    // initGPIOPin(8, "tftCS");
+    std::cout << gpioChipName << std::endl;
+
+    initGPIOPin(22, gpioChipName); // RS
+    initGPIOPin(17, gpioChipName); // RS
+    initGPIOPin(7, gpioChipName);  // touch cs
+    initGPIOPin(8, gpioChipName);  // touch cs
+    initGPIOPin(18, gpioChipName); // touch cs
 
     return;
 #endif
@@ -250,8 +278,9 @@ int initGPIOPin(int pinNum, std::string gpioChipName)
         csPin->setSilent();
         gpioBind(csPin);
         return ERRNO_OK;
-    } catch (std::invalid_argument &e) {
-        std::cout << "Warning, cannot claim pin" << gpio_name << std::endl;
+    } catch (...) {
+        std::exception_ptr p = std::current_exception();
+        std::cout << "Warning, cannot claim pin " << gpio_name << (p ? p.__cxa_exception_type()->name() : "null") << std::endl;
         return ERRNO_DISABLED;
     }
 }

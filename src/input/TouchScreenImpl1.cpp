@@ -2,6 +2,9 @@
 #include "InputBroker.h"
 #include "PowerFSM.h"
 #include "configuration.h"
+#ifdef ARCH_RASPBERRY_PI
+#include "platform/portduino/PortduinoGlue.h"
+#endif
 
 TouchScreenImpl1 *touchScreenImpl1;
 
@@ -12,7 +15,14 @@ TouchScreenImpl1::TouchScreenImpl1(uint16_t width, uint16_t height, bool (*getTo
 
 void TouchScreenImpl1::init()
 {
-#if !HAS_TOUCHSCREEN
+#if ARCH_RASPBERRY_PI
+    if (settingsMap[touchscreenModule]) {
+        TouchScreenBase::init(true);
+        inputBroker->registerSource(this);
+    } else {
+        TouchScreenBase::init(false);
+    }
+#elif !HAS_TOUCHSCREEN
     TouchScreenBase::init(false);
     return;
 #else
