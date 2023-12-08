@@ -583,7 +583,9 @@ void setup()
     // If we're taking on the repeater role, use flood router and turn off 3V3_S rail because peripherals are not needed
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
         router = new FloodingRouter();
+#ifdef PIN_3V3_EN
         digitalWrite(PIN_3V3_EN, LOW);
+#endif
     } else
         router = new ReliableRouter();
 
