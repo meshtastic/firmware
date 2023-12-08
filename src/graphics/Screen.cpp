@@ -1005,7 +1005,7 @@ void Screen::setup()
 #endif
 
 #ifdef USE_SH1107_128_64
-    dispdev->setSubtype(7);
+    static_cast<SH1106Wire *>(dispdev)->setSubtype(7);
 #endif
 
     // Initialising the UI will init the display too.
@@ -1077,7 +1077,8 @@ void Screen::setup()
         touchScreenImpl1->init();
     }
 #elif HAS_TOUCHSCREEN
-    touchScreenImpl1 = new TouchScreenImpl1(dispdev->getWidth(), dispdev->getHeight(), dispdev->getTouch);
+    touchScreenImpl1 =
+        new TouchScreenImpl1(dispdev->getWidth(), dispdev->getHeight(), static_cast<TFTDisplay *>(dispdev)->getTouch);
     touchScreenImpl1->init();
 #endif
 
@@ -1098,7 +1099,7 @@ void Screen::forceDisplay()
 {
     // Nasty hack to force epaper updates for 'key' frames.  FIXME, cleanup.
 #ifdef USE_EINK
-    dispdev->forceDisplay();
+    static_cast<EInkDisplay *>(dispdev)->forceDisplay();
 #endif
 }
 
