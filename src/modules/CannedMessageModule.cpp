@@ -69,7 +69,7 @@ CannedMessageModule::CannedMessageModule()
     if (moduleConfig.canned_message.enabled || CANNED_MESSAGE_MODULE_ENABLE) {
         this->loadProtoForModule();
         if ((this->splitConfiguredMessages() <= 0) && (cardkb_found.address == 0x00) && !INPUTBROKER_MATRIX_TYPE &&
-            settingsStrings[keyboardDevice] == "" && !CANNED_MESSAGE_MODULE_ENABLE) { // TODO: check for input type
+            !CANNED_MESSAGE_MODULE_ENABLE) {
             LOG_INFO("CannedMessageModule: No messages are configured. Module is disabled\n");
             this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
             disable();

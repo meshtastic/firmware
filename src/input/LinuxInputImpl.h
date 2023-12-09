@@ -1,3 +1,4 @@
+#ifdef ARCH_RASPBERRY_PI
 #pragma once
 #include "LinuxInput.h"
 #include "main.h"
@@ -17,3 +18,4 @@ class LinuxInputImpl : public LinuxInput
     void init();
 };
 extern LinuxInputImpl *aLinuxInputImpl;
+#endif

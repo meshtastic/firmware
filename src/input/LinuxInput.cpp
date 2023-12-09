@@ -1,7 +1,7 @@
+#if ARCH_RASPBERRY_PI
 #include "LinuxInput.h"
 #include "configuration.h"
 
-#if ARCH_RASPBERRY_PI
 #include "platform/portduino/PortduinoGlue.h"
 #include <assert.h>
 #include <ctype.h>

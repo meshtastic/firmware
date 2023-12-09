@@ -1,8 +1,7 @@
 #pragma once
-
+#if ARCH_RASPBERRY_PI
 #include "InputBroker.h"
 #include "concurrency/OSThread.h"
-#if ARCH_RASPBERRY_PI
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -15,7 +14,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#endif
+
 #define MAX_EVENTS 10
 
 class LinuxInput : public Observable<const InputEvent *>, public concurrency::OSThread
@@ -62,3 +61,4 @@ class LinuxInput : public Observable<const InputEvent *>, public concurrency::OS
                                 {'7', '&'}, {'8', '*'}, {'9', '('},  {'0', ')'}, {'.', '>'},  {',', '<'}, {'-', '_'}, {'=', '+'},
                                 {'[', '{'}, {']', '}'}, {'\\', '|'}, {';', ':'}, {'\'', '"'}, {'/', '?'}};
 };
+#endif
