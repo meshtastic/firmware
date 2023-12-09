@@ -454,7 +454,7 @@ void TFTDisplay::sendCommand(uint8_t com)
     switch (com) {
     case DISPLAYON: {
 #if ARCH_RASPBERRY_PI
-        if (settingsMap[displayBacklight])
+        if (settingsMap[displayBacklight] > 0)
             digitalWrite(settingsMap[displayBacklight], TFT_BACKLIGHT_ON);
 #elif defined(ST7735_BACKLIGHT_EN_V03) && defined(TFT_BACKLIGHT_ON)
         if (heltec_version == 3) {
@@ -485,7 +485,7 @@ void TFTDisplay::sendCommand(uint8_t com)
     }
     case DISPLAYOFF: {
 #if ARCH_RASPBERRY_PI
-        if (settingsMap[displayBacklight])
+        if (settingsMap[displayBacklight] > 0)
             digitalWrite(settingsMap[displayBacklight], !TFT_BACKLIGHT_ON);
 #elif defined(ST7735_BACKLIGHT_EN_V03) && defined(TFT_BACKLIGHT_ON)
         if (heltec_version == 3) {

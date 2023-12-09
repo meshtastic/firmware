@@ -210,14 +210,22 @@ void portduinoSetup()
         }
     }
 
-    // initGPIOPin(8, "tftCS");
-    std::cout << gpioChipName << std::endl;
-
-    initGPIOPin(22, gpioChipName); // RS
-    initGPIOPin(17, gpioChipName); // RS
-    initGPIOPin(7, gpioChipName);  // touch cs
-    initGPIOPin(8, gpioChipName);  // touch cs
-    initGPIOPin(18, gpioChipName); // touch cs
+    if (settingsMap[displayPanel] != no_screen) {
+        if (settingsMap[displayCS] > 0)
+            initGPIOPin(settingsMap[displayCS], gpioChipName);
+        if (settingsMap[displayDC] > 0)
+            initGPIOPin(settingsMap[displayDC], gpioChipName);
+        if (settingsMap[displayBacklight] > 0)
+            initGPIOPin(settingsMap[displayBacklight], gpioChipName);
+        if (settingsMap[displayReset] > 0)
+            initGPIOPin(settingsMap[displayReset], gpioChipName);
+    }
+    if (settingsMap[touchscreenModule] != no_touchscreen) {
+        if (settingsMap[touchscreenCS] > 0)
+            initGPIOPin(settingsMap[touchscreenCS], gpioChipName);
+        if (settingsMap[touchscreenIRQ] > 0)
+            initGPIOPin(settingsMap[touchscreenIRQ], gpioChipName);
+    }
 
     return;
 #endif
