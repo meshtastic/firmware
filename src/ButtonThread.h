@@ -5,6 +5,7 @@
 #include "configuration.h"
 #include "graphics/Screen.h"
 #include "main.h"
+#include "modules/ExternalNotificationModule.h"
 #include "power.h"
 #include <OneButton.h>
 
@@ -151,6 +152,13 @@ class ButtonThread : public concurrency::OSThread
     }
     static void userButtonPressedLong()
     {
+#ifdef T_DECK
+        // False positive long-press triggered on T-Deck with i2s audio, so short circuit
+        if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) 
+        {
+            return;
+        }
+#endif
         // LOG_DEBUG("Long press!\n");
         // If user button is held down for 5 seconds, shutdown the device.
         if ((millis() - longPressTime > 5000) && (longPressTime > 0)) {
