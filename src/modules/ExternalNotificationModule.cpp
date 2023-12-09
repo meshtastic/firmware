@@ -72,11 +72,12 @@ int32_t ExternalNotificationModule::runOnce()
     if (!moduleConfig.external_notification.enabled) {
         return INT32_MAX; // we don't need this thread here...
     } else {
+
+        bool isPlaying = rtttl::isPlaying();
 #ifdef HAS_I2S
-        if ((nagCycleCutoff < millis()) && !rtttl::isPlaying() && !audioThread->isPlaying()) {
-#else
-        if ((nagCycleCutoff < millis()) && !rtttl::isPlaying() {
+        isPlaying = rtttl::isPlaying() || audioThread->isPlaying();
 #endif
+        if ((nagCycleCutoff < millis()) && !isPlaying) {
             // let the song finish if we reach timeout
             nagCycleCutoff = UINT32_MAX;
             LOG_INFO("Turning off external notification: ");
