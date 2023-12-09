@@ -220,8 +220,11 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
     if (validEvent) {
         // Let runOnce to be called immediately.
-        // setIntervalFromNow(0); // on fast keypresses, this isn't fast enough.
-        runOnce();
+        if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_SELECT) {
+            setIntervalFromNow(0); // on fast keypresses, this isn't fast enough.
+        } else {
+            runOnce();
+        }
     }
 
     return 0;
