@@ -72,7 +72,7 @@ int32_t ExternalNotificationModule::runOnce()
     if (!moduleConfig.external_notification.enabled) {
         return INT32_MAX; // we don't need this thread here...
     } else {
-        if ((nagCycleCutoff < millis()) && !rtttl::isPlaying()) {
+        if ((nagCycleCutoff < millis()) && !rtttl::isPlaying() && !audioThread->isPlaying()) {
             // let the song finish if we reach timeout
             nagCycleCutoff = UINT32_MAX;
             LOG_INFO("Turning off external notification: ");
@@ -186,6 +186,7 @@ void ExternalNotificationModule::setExternalOn(uint8_t index)
             digitalWrite(output, (moduleConfig.external_notification.active ? true : false));
         break;
     }
+
 #ifdef HAS_NCP5623
     if (rgb_found.type == ScanI2C::NCP5623) {
         rgb.setColor(red, green, blue);
@@ -270,11 +271,12 @@ ExternalNotificationModule::ExternalNotificationModule()
     // moduleConfig.external_notification.output_vibra = 28; // RAK4631 IO7
     // moduleConfig.external_notification.nag_timeout = 300;
 
-    moduleConfig.external_notification.enabled = true;
-    moduleConfig.external_notification.nag_timeout = 300;
-    moduleConfig.external_notification.output_ms = 1000;
-    moduleConfig.external_notification.use_i2s_as_buzzer = true;
-    moduleConfig.external_notification.alert_message_buzzer = true;
+    // T-Watch / T-Deck i2s audio as buzzer:
+    // moduleConfig.external_notification.enabled = true;
+    // moduleConfig.external_notification.nag_timeout = 300;
+    // moduleConfig.external_notification.output_ms = 1000;
+    // moduleConfig.external_notification.use_i2s_as_buzzer = true;
+    // moduleConfig.external_notification.alert_message_buzzer = true;
 
     if (moduleConfig.external_notification.enabled) {
         if (!nodeDB.loadProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, sizeof(meshtastic_RTTTLConfig),
