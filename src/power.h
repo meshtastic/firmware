@@ -25,8 +25,10 @@ extern RTC_NOINIT_ATTR uint64_t RTC_reg_b;
 #if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
 #include "modules/Telemetry/Sensor/INA219Sensor.h"
 #include "modules/Telemetry/Sensor/INA260Sensor.h"
+#include "modules/Telemetry/Sensor/INA3221Sensor.h"
 extern INA260Sensor ina260Sensor;
 extern INA219Sensor ina219Sensor;
+extern INA3221Sensor ina3221Sensor;
 #endif
 
 class Power : private concurrency::OSThread

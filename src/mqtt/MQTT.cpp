@@ -7,9 +7,9 @@
 #include "mesh/Router.h"
 #include "mesh/generated/meshtastic/mqtt.pb.h"
 #include "mesh/generated/meshtastic/telemetry.pb.h"
-#include "mesh/http/WiFiAPClient.h"
 #include "sleep.h"
 #if HAS_WIFI
+#include "mesh/wifi/WiFiAPClient.h"
 #include <WiFi.h>
 #endif
 #include "mqtt/JSON.h"
@@ -565,6 +565,13 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
                     msgPayload["gas_resistance"] = new JSONValue(decoded->variant.environment_metrics.gas_resistance);
                     msgPayload["voltage"] = new JSONValue(decoded->variant.environment_metrics.voltage);
                     msgPayload["current"] = new JSONValue(decoded->variant.environment_metrics.current);
+                } else if (decoded->which_variant == meshtastic_Telemetry_power_metrics_tag) {
+                    msgPayload["voltage_ch1"] = new JSONValue(decoded->variant.power_metrics.ch1_voltage);
+                    msgPayload["current_ch1"] = new JSONValue(decoded->variant.power_metrics.ch1_current);
+                    msgPayload["voltage_ch2"] = new JSONValue(decoded->variant.power_metrics.ch2_voltage);
+                    msgPayload["current_ch2"] = new JSONValue(decoded->variant.power_metrics.ch2_current);
+                    msgPayload["voltage_ch3"] = new JSONValue(decoded->variant.power_metrics.ch3_voltage);
+                    msgPayload["current_ch3"] = new JSONValue(decoded->variant.power_metrics.ch3_current);
                 }
                 jsonObj["payload"] = new JSONValue(msgPayload);
             } else {

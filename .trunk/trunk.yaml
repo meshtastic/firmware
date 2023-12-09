@@ -27,7 +27,7 @@ lint:
     - shellcheck@0.9.0
     - black@23.9.1
     - git-diff-check
-    - gitleaks@8.18.0
+    - gitleaks@8.18.1
     - clang-format@16.0.3
     - prettier@3.0.3
   disabled:
