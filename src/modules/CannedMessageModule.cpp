@@ -1,4 +1,7 @@
 #include "configuration.h"
+#if ARCH_RASPBERRY_PI
+#include "PortduinoGlue.h"
+#endif
 #if HAS_SCREEN
 #include "CannedMessageModule.h"
 #include "FSCommon.h"
@@ -66,7 +69,7 @@ CannedMessageModule::CannedMessageModule()
     if (moduleConfig.canned_message.enabled || CANNED_MESSAGE_MODULE_ENABLE) {
         this->loadProtoForModule();
         if ((this->splitConfiguredMessages() <= 0) && (cardkb_found.address == 0x00) && !INPUTBROKER_MATRIX_TYPE &&
-            !CANNED_MESSAGE_MODULE_ENABLE) {
+            settingsStrings[keyboardDevice] == "" && !CANNED_MESSAGE_MODULE_ENABLE) { // TODO: check for input type
             LOG_INFO("CannedMessageModule: No messages are configured. Module is disabled\n");
             this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
             disable();
@@ -163,9 +166,14 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     }
     if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL)) {
         LOG_DEBUG("Canned message event Cancel\n");
-        // emulate a timeout. Same result
-        this->lastTouchMillis = 0;
-        validEvent = true;
+        UIFrameEvent e = {false, true};
+        e.frameChanged = true;
+        this->currentMessageIndex = -1;
+        this->freetext = ""; // clear freetext
+        this->cursor = 0;
+        this->destSelect = false;
+        this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+        this->notifyObservers(&e);
     }
     if ((event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK)) ||
         (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) ||
@@ -212,7 +220,8 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
     if (validEvent) {
         // Let runOnce to be called immediately.
-        setIntervalFromNow(0);
+        // setIntervalFromNow(0); // on fast keypresses, this isn't fast enough.
+        runOnce();
     }
 
     return 0;

@@ -17,6 +17,9 @@
 #include "modules/TextMessageModule.h"
 #include "modules/TraceRouteModule.h"
 #include "modules/WaypointModule.h"
+#if ARCH_RASPBERRY_PI
+#include "input/LinuxInputImpl.h"
+#endif
 #if HAS_TELEMETRY
 #include "modules/Telemetry/DeviceTelemetry.h"
 #endif
@@ -79,6 +82,10 @@ void setupModules()
         kbMatrixImpl->init();
 #endif // INPUTBROKER_MATRIX_TYPE
 #endif // HAS_BUTTON
+#if ARCH_RASPBERRY_PI
+        aLinuxInputImpl = new LinuxInputImpl();
+        aLinuxInputImpl->init();
+#endif
 #if HAS_TRACKBALL
         trackballInterruptImpl1 = new TrackballInterruptImpl1();
         trackballInterruptImpl1->init();

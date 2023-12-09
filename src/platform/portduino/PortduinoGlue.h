@@ -23,12 +23,14 @@ enum configNames {
     displayDC,
     displayBacklight,
     displayReset,
-    displayRotate
+    displayRotate,
+    keyboardDevice
 };
 enum { no_screen, st7789 };
 enum { no_touchscreen, xpt2046 };
 
 extern std::map<configNames, int> settingsMap;
+extern std::map<configNames, std::string> settingsStrings;
 int initGPIOPin(int pinNum, std::string gpioChipname);
 
 #endif

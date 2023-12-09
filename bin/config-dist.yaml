@@ -57,3 +57,8 @@ Touchscreen:
 #  Module: XPT2046
 #  CS: 7
 #  IRQ: 17
+
+### Configure device for direct keyboard input
+
+Input:
+#  KeyboardDevice: /dev/input/event0

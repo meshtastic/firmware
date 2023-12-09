@@ -18,6 +18,7 @@
 #include <unistd.h>
 
 std::map<configNames, int> settingsMap;
+std::map<configNames, std::string> settingsStrings;
 
 #else
 #include <linux/gpio/LinuxGPIOPin.h>
@@ -172,6 +173,9 @@ void portduinoSetup()
                 settingsMap[touchscreenModule] = xpt2046;
             settingsMap[touchscreenCS] = yamlConfig["Touchscreen"]["CS"].as<int>(-1);
             settingsMap[touchscreenIRQ] = yamlConfig["Touchscreen"]["IRQ"].as<int>(-1);
+        }
+        if (yamlConfig["Input"]) {
+            settingsStrings[keyboardDevice] = (yamlConfig["Input"]["KeyboardDevice"]).as<std::string>("");
         }
 
     } catch (YAML::Exception e) {
