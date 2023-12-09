@@ -208,8 +208,7 @@ class ButtonThread : public concurrency::OSThread
     {
 #ifdef T_DECK
         // False positive long-press triggered on T-Deck with i2s audio, so short circuit
-        if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) 
-        {
+        if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) {
             return;
         }
 #endif

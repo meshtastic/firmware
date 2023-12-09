@@ -34,15 +34,14 @@ class AudioThread : public concurrency::OSThread
         return false;
     }
 
-    void stop() 
-    { 
-      if (i2sRtttl != nullptr)
-      {
-        i2sRtttl->stop();
-        i2sRtttl = nullptr;
-      }
+    void stop()
+    {
+        if (i2sRtttl != nullptr) {
+            i2sRtttl->stop();
+            i2sRtttl = nullptr;
+        }
 
-      setCPUFast(false); 
+        setCPUFast(false);
     }
 
   protected:
@@ -60,11 +59,7 @@ class AudioThread : public concurrency::OSThread
     {
         audioOut = new AudioOutputI2S(1, AudioOutputI2S::EXTERNAL_I2S);
         audioOut->SetPinout(DAC_I2S_BCK, DAC_I2S_WS, DAC_I2S_DOUT);
-#ifdef T_DECK
-        audioOut->SetGain(0.1);
-#else
-        audioOut->SetGain(0.1);
-#endif
+        audioOut->SetGain(0.2);
     };
 
     AudioGeneratorRTTTL *i2sRtttl = nullptr;
