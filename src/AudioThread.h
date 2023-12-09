@@ -42,7 +42,7 @@ class AudioThread : public concurrency::OSThread
         i2sRtttl = nullptr;
       }
 
-      setCPUFast(true); 
+      setCPUFast(false); 
     }
 
   protected:
@@ -63,7 +63,7 @@ class AudioThread : public concurrency::OSThread
 #ifdef T_DECK
         audioOut->SetGain(0.1);
 #else
-        audioOut->SetGain(0.3);
+        audioOut->SetGain(0.1);
 #endif
     };
 
