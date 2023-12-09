@@ -30,6 +30,7 @@
 
 #define TFT_BL ST7789_BACKLIGHT_EN
 
+#define HAS_I2S
 #define DAC_I2S_BCK 48
 #define DAC_I2S_WS 15
 #define DAC_I2S_DOUT 46

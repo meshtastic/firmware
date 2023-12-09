@@ -34,7 +34,16 @@ class AudioThread : public concurrency::OSThread
         return false;
     }
 
-    void stop() { i2sRtttl->stop(); }
+    void stop() 
+    { 
+      if (i2sRtttl != nullptr)
+      {
+        i2sRtttl->stop();
+        i2sRtttl = nullptr;
+      }
+
+      setCPUFast(true); 
+    }
 
   protected:
     int32_t runOnce() override
