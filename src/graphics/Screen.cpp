@@ -976,7 +976,9 @@ void Screen::handleSetOn(bool on)
 #ifdef T_WATCH_S3
             PMU->enablePowerOutput(XPOWERS_ALDO2);
 #endif
+#if !ARCH_RASPBERRY_PI
             dispdev->displayOn();
+#endif
             dispdev->displayOn();
             enabled = true;
             setInterval(0); // Draw ASAP
@@ -1058,6 +1060,9 @@ void Screen::setup()
     uint8_t dmac[6];
     getMacAddr(dmac);
     snprintf(ourId, sizeof(ourId), "%02x%02x", dmac[4], dmac[5]);
+#if ARCH_RASPBERRY_PI
+    handleSetOn(false); // force clean init
+#endif
 
     // Turn on the display.
     handleSetOn(true);

@@ -422,19 +422,25 @@ TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY g
 }
 
 // Write the buffer to the display memory
-void TFTDisplay::display(void)
+void TFTDisplay::display(bool fromBlank)
 {
+    if (fromBlank)
+        tft->clear();
     concurrency::LockGuard g(spiLock);
 
     uint16_t x, y;
 
     for (y = 0; y < displayHeight; y++) {
         for (x = 0; x < displayWidth; x++) {
-            // get src pixel in the page based ordering the OLED lib uses FIXME, super inefficent
             auto isset = buffer[x + (y / 8) * displayWidth] & (1 << (y & 7));
-            auto dblbuf_isset = buffer_back[x + (y / 8) * displayWidth] & (1 << (y & 7));
-            if (isset != dblbuf_isset) {
-                tft->drawPixel(x, y, isset ? TFT_MESH : TFT_BLACK);
+            if (!fromBlank) {
+                // get src pixel in the page based ordering the OLED lib uses FIXME, super inefficent
+                auto dblbuf_isset = buffer_back[x + (y / 8) * displayWidth] & (1 << (y & 7));
+                if (isset != dblbuf_isset) {
+                    tft->drawPixel(x, y, isset ? TFT_MESH : TFT_BLACK);
+                }
+            } else if (isset) {
+                tft->drawPixel(x, y, TFT_MESH);
             }
         }
     }
@@ -454,6 +460,7 @@ void TFTDisplay::sendCommand(uint8_t com)
     switch (com) {
     case DISPLAYON: {
 #if ARCH_RASPBERRY_PI
+        display(true);
         if (settingsMap[displayBacklight] > 0)
             digitalWrite(settingsMap[displayBacklight], TFT_BACKLIGHT_ON);
 #elif defined(ST7735_BACKLIGHT_EN_V03) && defined(TFT_BACKLIGHT_ON)
@@ -485,6 +492,7 @@ void TFTDisplay::sendCommand(uint8_t com)
     }
     case DISPLAYOFF: {
 #if ARCH_RASPBERRY_PI
+        tft->clear();
         if (settingsMap[displayBacklight] > 0)
             digitalWrite(settingsMap[displayBacklight], !TFT_BACKLIGHT_ON);
 #elif defined(ST7735_BACKLIGHT_EN_V03) && defined(TFT_BACKLIGHT_ON)
