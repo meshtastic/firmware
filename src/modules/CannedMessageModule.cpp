@@ -1,6 +1,7 @@
 #include "configuration.h"
 #if HAS_SCREEN
 #include "CannedMessageModule.h"
+#include "Channels.h"
 #include "FSCommon.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -179,10 +180,10 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         if (!event->kbchar) {
             if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
                 this->payload = 0xb4;
-                this->destSelect = true;
+                this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
             } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
                 this->payload = 0xb7;
-                this->destSelect = true;
+                this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
             }
         } else {
             // pass the pressed key
@@ -222,10 +223,11 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     return 0;
 }
 
-void CannedMessageModule::sendText(NodeNum dest, const char *message, bool wantReplies)
+void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const char *message, bool wantReplies)
 {
     meshtastic_MeshPacket *p = allocDataPacket();
     p->to = dest;
+    p->channel = channel;
     p->want_ack = true;
     p->decoded.payload.size = strlen(message);
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
@@ -258,7 +260,7 @@ int32_t CannedMessageModule::runOnce()
         this->currentMessageIndex = -1;
         this->freetext = ""; // clear freetext
         this->cursor = 0;
-        this->destSelect = false;
+        this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
         this->notifyObservers(&e);
     } else if (((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)) &&
                ((millis() - this->lastTouchMillis) > INACTIVATE_AFTER_MS)) {
@@ -268,13 +270,13 @@ int32_t CannedMessageModule::runOnce()
         this->currentMessageIndex = -1;
         this->freetext = ""; // clear freetext
         this->cursor = 0;
-        this->destSelect = false;
+        this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         this->notifyObservers(&e);
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_SELECT) {
         if (this->payload == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
             if (this->freetext.length() > 0) {
-                sendText(this->dest, this->freetext.c_str(), true);
+                sendText(this->dest, indexChannels[this->channel], this->freetext.c_str(), true);
                 this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
             } else {
                 LOG_DEBUG("Reset message is empty.\n");
@@ -286,7 +288,7 @@ int32_t CannedMessageModule::runOnce()
                     powerFSM.trigger(EVENT_PRESS);
                     return INT32_MAX;
                 } else {
-                    sendText(NODENUM_BROADCAST, this->messages[this->currentMessageIndex], true);
+                    sendText(NODENUM_BROADCAST, channels.getPrimaryIndex(), this->messages[this->currentMessageIndex], true);
                 }
                 this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
             } else {
@@ -298,7 +300,7 @@ int32_t CannedMessageModule::runOnce()
         this->currentMessageIndex = -1;
         this->freetext = ""; // clear freetext
         this->cursor = 0;
-        this->destSelect = false;
+        this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
         this->notifyObservers(&e);
         return 2000;
     } else if ((this->runState != CANNED_MESSAGE_RUN_STATE_FREETEXT) && (this->currentMessageIndex == -1)) {
@@ -311,7 +313,7 @@ int32_t CannedMessageModule::runOnce()
             this->currentMessageIndex = getPrevIndex();
             this->freetext = ""; // clear freetext
             this->cursor = 0;
-            this->destSelect = false;
+            this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
             this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
             LOG_DEBUG("MOVE UP (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
         }
@@ -320,14 +322,14 @@ int32_t CannedMessageModule::runOnce()
             this->currentMessageIndex = this->getNextIndex();
             this->freetext = ""; // clear freetext
             this->cursor = 0;
-            this->destSelect = false;
+            this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
             this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
             LOG_DEBUG("MOVE DOWN (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
         }
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT || this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
         switch (this->payload) {
         case 0xb4: // left
-            if (this->destSelect) {
+            if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
                 size_t numMeshNodes = nodeDB.getNumMeshNodes();
                 if (this->dest == NODENUM_BROADCAST) {
                     this->dest = nodeDB.getNodeNum();
@@ -342,6 +344,19 @@ int32_t CannedMessageModule::runOnce()
                 if (this->dest == nodeDB.getNodeNum()) {
                     this->dest = NODENUM_BROADCAST;
                 }
+            } else if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL) {
+                for (unsigned int i = 0; i < channels.getNumChannels(); i++) {
+                    if ((channels.getByIndex(i).role == meshtastic_Channel_Role_SECONDARY) ||
+                        (channels.getByIndex(i).role == meshtastic_Channel_Role_PRIMARY)) {
+                        indexChannels[numChannels] = i;
+                        numChannels++;
+                    }
+                }
+                if (this->channel == 0) {
+                    this->channel = numChannels - 1;
+                } else {
+                    this->channel--;
+                }
             } else {
                 if (this->cursor > 0) {
                     this->cursor--;
@@ -349,7 +364,7 @@ int32_t CannedMessageModule::runOnce()
             }
             break;
         case 0xb7: // right
-            if (this->destSelect) {
+            if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
                 size_t numMeshNodes = nodeDB.getNumMeshNodes();
                 if (this->dest == NODENUM_BROADCAST) {
                     this->dest = nodeDB.getNodeNum();
@@ -363,6 +378,19 @@ int32_t CannedMessageModule::runOnce()
                 }
                 if (this->dest == nodeDB.getNodeNum()) {
                     this->dest = NODENUM_BROADCAST;
+                }
+            } else if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL) {
+                for (unsigned int i = 0; i < channels.getNumChannels(); i++) {
+                    if ((channels.getByIndex(i).role == meshtastic_Channel_Role_SECONDARY) ||
+                        (channels.getByIndex(i).role == meshtastic_Channel_Role_PRIMARY)) {
+                        indexChannels[numChannels] = i;
+                        numChannels++;
+                    }
+                }
+                if (this->channel == numChannels - 1) {
+                    this->channel = 0;
+                } else {
+                    this->channel++;
                 }
             } else {
                 if (this->cursor < this->freetext.length()) {
@@ -388,10 +416,12 @@ int32_t CannedMessageModule::runOnce()
                 }
                 break;
             case 0x09: // tab
-                if (this->destSelect) {
-                    this->destSelect = false;
+                if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL) {
+                    this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
+                } else if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
+                    this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL;
                 } else {
-                    this->destSelect = true;
+                    this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
                 }
                 break;
             case 0xb4: // left
@@ -512,18 +542,34 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
     } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->setFont(FONT_SMALL);
-        if (this->destSelect) {
+        if (this->destSelect != CANNED_MESSAGE_DESTINATION_TYPE_NONE) {
             display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
             display->setColor(BLACK);
-            display->drawStringf(1 + x, 0 + y, buffer, "To: %s", cannedMessageModule->getNodeName(this->dest));
         }
-        display->drawStringf(0 + x, 0 + y, buffer, "To: %s", cannedMessageModule->getNodeName(this->dest));
+        switch (this->destSelect) {
+        case CANNED_MESSAGE_DESTINATION_TYPE_NODE:
+            display->drawStringf(1 + x, 0 + y, buffer, "To: >%s<@%s", cannedMessageModule->getNodeName(this->dest),
+                                 channels.getName(indexChannels[this->channel]));
+            display->drawStringf(0 + x, 0 + y, buffer, "To: >%s<@%s", cannedMessageModule->getNodeName(this->dest),
+                                 channels.getName(indexChannels[this->channel]));
+            break;
+        case CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL:
+            display->drawStringf(1 + x, 0 + y, buffer, "To: %s@>%s<", cannedMessageModule->getNodeName(this->dest),
+                                 channels.getName(indexChannels[this->channel]));
+            display->drawStringf(0 + x, 0 + y, buffer, "To: %s@>%s<", cannedMessageModule->getNodeName(this->dest),
+                                 channels.getName(indexChannels[this->channel]));
+            break;
+        default:
+            display->drawStringf(0 + x, 0 + y, buffer, "To: %s@%s", cannedMessageModule->getNodeName(this->dest),
+                                 channels.getName(indexChannels[this->channel]));
+            break;
+        }
         // used chars right aligned
         uint16_t charsLeft =
             meshtastic_Constants_DATA_PAYLOAD_LEN - this->freetext.length() - (moduleConfig.canned_message.send_bell ? 1 : 0);
         snprintf(buffer, sizeof(buffer), "%d left", charsLeft);
         display->drawString(x + display->getWidth() - display->getStringWidth(buffer), y + 0, buffer);
-        if (this->destSelect) {
+        if (this->destSelect != CANNED_MESSAGE_DESTINATION_TYPE_NONE) {
             display->drawString(x + display->getWidth() - display->getStringWidth(buffer) - 1, y + 0, buffer);
         }
         display->setColor(WHITE);
