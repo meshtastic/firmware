@@ -233,7 +233,9 @@ void CannedMessageModule::sendText(NodeNum dest, const char *message, bool wantR
 
     LOG_INFO("Sending message id=%d, dest=%x, msg=%.*s\n", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
 
-    service.sendToMesh(p);
+    service.sendToMesh(
+        p, RX_SRC_LOCAL,
+        true); // send to mesh, cc to phone. Even if there's no phone connected, this stores the message to match ACKs
 }
 
 int32_t CannedMessageModule::runOnce()
@@ -245,7 +247,7 @@ int32_t CannedMessageModule::runOnce()
     // LOG_DEBUG("Check status\n");
     UIFrameEvent e = {false, true};
     if ((this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) ||
-        (this->runState == CANNED_MESSAGE_RUN_STATE_ACK_RECEIVED)) {
+        (this->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED)) {
         // TODO: might have some feedback of sendig state
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         e.frameChanged = true;
@@ -484,14 +486,15 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 {
     char buffer[50];
 
-    if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_ACK_RECEIVED) {
+    if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) {
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->setFont(FONT_MEDIUM);
         String displayString;
-        if (this->ack)
+        if (this->ack) {
             displayString = "Delivered to\n%s";
-        else
+        } else {
             displayString = "Delivery failed\nto %s";
+        }
         display->drawStringf(display->getWidth() / 2 + x, 0 + y + 12, buffer, displayString,
                              cannedMessageModule->getNodeName(this->incoming));
     } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {
@@ -564,8 +567,8 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
         if (mp.decoded.request_id != 0) {
             UIFrameEvent e = {false, true};
             e.frameChanged = true;
-            this->runState = CANNED_MESSAGE_RUN_STATE_ACK_RECEIVED;
-            this->incoming = mp.decoded.request_id;
+            this->runState = CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED;
+            this->incoming = service.getNodenumFromRequestId(mp.decoded.request_id);
             meshtastic_Routing decoded = meshtastic_Routing_init_default;
             pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, meshtastic_Routing_fields, &decoded);
             this->ack = decoded.error_reason == meshtastic_Routing_Error_NONE;

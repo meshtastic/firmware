@@ -140,6 +140,22 @@ void MeshService::reloadOwner(bool shouldSave)
     }
 }
 
+// search the queue for a request id and return the matching nodenum
+NodeNum MeshService::getNodenumFromRequestId(uint32_t request_id)
+{
+    NodeNum nodenum = 0;
+    for (int i = 0; i < toPhoneQueue.numUsed(); i++) {
+        meshtastic_MeshPacket *p = toPhoneQueue.dequeuePtr(0);
+        // put it right back on the queue
+        toPhoneQueue.enqueue(p, 0);
+        if (p->id == request_id) {
+            nodenum = p->to;
+            break;
+        }
+    }
+    return nodenum;
+}
+
 /**
  *  Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)
  * Called by PhoneAPI.handleToRadio.  Note: p is a scratch buffer, this function is allowed to write to it but it can not keep a
