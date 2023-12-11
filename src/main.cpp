@@ -32,9 +32,6 @@
 #include <utility>
 // #include <driver/rtc_io.h>
 
-#include "mesh/eth/ethClient.h"
-#include "mesh/http/WiFiAPClient.h"
-
 #ifdef ARCH_ESP32
 #include "mesh/http/WebServer.h"
 #include "nimble/NimbleBluetooth.h"
@@ -48,10 +45,12 @@ NRF52Bluetooth *nrf52Bluetooth;
 
 #if HAS_WIFI
 #include "mesh/api/WiFiServerAPI.h"
+#include "mesh/wifi/WiFiAPClient.h"
 #endif
 
 #if HAS_ETHERNET
 #include "mesh/api/ethServerAPI.h"
+#include "mesh/eth/ethClient.h"
 #endif
 #include "mqtt/MQTT.h"
 
@@ -433,6 +432,10 @@ void setup()
     auto i2cCount = i2cScanner->countDevices();
     if (i2cCount == 0) {
         LOG_INFO("No I2C devices found\n");
+        Wire.end();
+#ifdef I2C_SDA1
+        Wire1.end();
+#endif
     } else {
         LOG_INFO("%i I2C devices found\n", i2cCount);
     }
@@ -577,10 +580,13 @@ void setup()
     // but we need to do this after main cpu init (esp32setup), because we need the random seed set
     nodeDB.init();
 
-    // If we're taking on the repeater role, use flood router
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER)
+    // If we're taking on the repeater role, use flood router and turn off 3V3_S rail because peripherals are not needed
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
         router = new FloodingRouter();
-    else
+#ifdef PIN_3V3_EN
+        digitalWrite(PIN_3V3_EN, LOW);
+#endif
+    } else
         router = new ReliableRouter();
 
 #if HAS_BUTTON || defined(ARCH_RASPBERRY_PI)
@@ -654,7 +660,10 @@ void setup()
 
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 
-    gps = GPS::createGps();
+    // If we're taking on the repeater role, ignore GPS
+    if (config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER) {
+        gps = GPS::createGps();
+    }
     if (gps) {
         gpsStatus->observe(&gps->newStatus);
     } else {
@@ -835,10 +844,14 @@ void setup()
 
 #ifndef ARCH_PORTDUINO
     // Initialize Wifi
+#if HAS_WIFI
     initWifi();
+#endif
 
+#if HAS_ETHERNET
     // Initialize Ethernet
     initEthernet();
+#endif
 #endif
 
 #ifdef ARCH_ESP32

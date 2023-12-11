@@ -11,7 +11,7 @@
 #ifdef ARCH_ESP32
 #include "esp32/pm.h"
 #include "esp_pm.h"
-#include "mesh/http/WiFiAPClient.h"
+#include "mesh/wifi/WiFiAPClient.h"
 #include "rom/rtc.h"
 #include <driver/rtc_io.h>
 #include <driver/uart.h>

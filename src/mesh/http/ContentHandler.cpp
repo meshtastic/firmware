@@ -5,7 +5,7 @@
 #include "main.h"
 #include "mesh/http/ContentHelper.h"
 #include "mesh/http/WebServer.h"
-#include "mesh/http/WiFiAPClient.h"
+#include "mesh/wifi/WiFiAPClient.h"
 #include "mqtt/JSON.h"
 #include "power.h"
 #include "sleep.h"

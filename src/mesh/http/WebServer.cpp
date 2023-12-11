@@ -2,7 +2,7 @@
 #include "NodeDB.h"
 #include "graphics/Screen.h"
 #include "main.h"
-#include "mesh/http/WiFiAPClient.h"
+#include "mesh/wifi/WiFiAPClient.h"
 #include "sleep.h"
 #include <HTTPBodyParser.hpp>
 #include <HTTPMultipartBodyParser.hpp>
