@@ -15,6 +15,12 @@ enum cannedMessageModuleRunState {
     CANNED_MESSAGE_RUN_STATE_ACTION_DOWN,
 };
 
+enum cannedMessageDestinationType {
+    CANNED_MESSAGE_DESTINATION_TYPE_NONE,
+    CANNED_MESSAGE_DESTINATION_TYPE_NODE,
+    CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL
+};
+
 #define CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT 50
 /**
  * Sum of CannedMessageModuleConfig part sizes.
@@ -64,7 +70,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
   protected:
     virtual int32_t runOnce() override;
 
-    void sendText(NodeNum dest, const char *message, bool wantReplies);
+    void sendText(NodeNum dest, ChannelIndex channel, const char *message, bool wantReplies);
 
     int splitConfiguredMessages();
     int getNextIndex();
@@ -93,9 +99,12 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     cannedMessageModuleRunState runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
     char payload = 0x00;
     unsigned int cursor = 0;
-    String freetext = "";    // Text Buffer for Freetext Editor
-    bool destSelect = false; // Freetext Editor Mode
+    String freetext = ""; // Text Buffer for Freetext Editor
     NodeNum dest = NODENUM_BROADCAST;
+    ChannelIndex channel = 0;
+    cannedMessageDestinationType destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
+    uint8_t numChannels = 0;
+    ChannelIndex indexChannels[MAX_NUM_CHANNELS] = {0};
     NodeNum incoming = NODENUM_BROADCAST;
     bool ack = false; // True means ACK, false means NAK (error_reason != NONE)
 
