@@ -146,12 +146,12 @@ NodeNum MeshService::getNodenumFromRequestId(uint32_t request_id)
     NodeNum nodenum = 0;
     for (int i = 0; i < toPhoneQueue.numUsed(); i++) {
         meshtastic_MeshPacket *p = toPhoneQueue.dequeuePtr(0);
-        // put it right back on the queue
-        toPhoneQueue.enqueue(p, 0);
         if (p->id == request_id) {
             nodenum = p->to;
-            break;
+            // make sure to continue this to make one full loop
         }
+        // put it right back on the queue
+        toPhoneQueue.enqueue(p, 0);
     }
     return nodenum;
 }
