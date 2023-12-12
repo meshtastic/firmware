@@ -572,17 +572,21 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                                  channels.getName(indexChannels[this->channel]));
             break;
         default:
-            display->drawStringf(0 + x, 0 + y, buffer, "To: %s@%s", cannedMessageModule->getNodeName(this->dest),
-                                 channels.getName(indexChannels[this->channel]));
+            if (display->getWidth() > 128) {
+                display->drawStringf(0 + x, 0 + y, buffer, "To: %s@%s", cannedMessageModule->getNodeName(this->dest),
+                                     channels.getName(indexChannels[this->channel]));
+            } else {
+                display->drawStringf(0 + x, 0 + y, buffer, "To: %.5s@%.5s", cannedMessageModule->getNodeName(this->dest),
+                                     channels.getName(indexChannels[this->channel]));
+            }
             break;
         }
-        // used chars right aligned
-        uint16_t charsLeft =
-            meshtastic_Constants_DATA_PAYLOAD_LEN - this->freetext.length() - (moduleConfig.canned_message.send_bell ? 1 : 0);
-        snprintf(buffer, sizeof(buffer), "%d left", charsLeft);
-        display->drawString(x + display->getWidth() - display->getStringWidth(buffer), y + 0, buffer);
-        if (this->destSelect != CANNED_MESSAGE_DESTINATION_TYPE_NONE) {
-            display->drawString(x + display->getWidth() - display->getStringWidth(buffer) - 1, y + 0, buffer);
+        // used chars right aligned, only when not editing the destination
+        if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NONE) {
+            uint16_t charsLeft =
+                meshtastic_Constants_DATA_PAYLOAD_LEN - this->freetext.length() - (moduleConfig.canned_message.send_bell ? 1 : 0);
+            snprintf(buffer, sizeof(buffer), "%d left", charsLeft);
+            display->drawString(x + display->getWidth() - display->getStringWidth(buffer), y + 0, buffer);
         }
         display->setColor(WHITE);
         display->drawStringMaxWidth(
