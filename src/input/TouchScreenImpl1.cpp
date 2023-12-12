@@ -2,6 +2,8 @@
 #include "InputBroker.h"
 #include "PowerFSM.h"
 #include "configuration.h"
+#include "modules/ExternalNotificationModule.h"
+
 #ifdef ARCH_RASPBERRY_PI
 #include "platform/portduino/PortduinoGlue.h"
 #endif
@@ -73,7 +75,11 @@ void TouchScreenImpl1::onEvent(const TouchEvent &event)
         break;
     }
     case TOUCH_ACTION_TAP: {
-        powerFSM.trigger(EVENT_INPUT);
+        if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) {
+            externalNotificationModule->stopNow();
+        } else {
+            powerFSM.trigger(EVENT_INPUT);
+        }
         break;
     }
     default:

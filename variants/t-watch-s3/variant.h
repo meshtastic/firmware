@@ -30,14 +30,17 @@
 
 #define TFT_BL ST7789_BACKLIGHT_EN
 
+#define HAS_I2S
+#define DAC_I2S_BCK 48
+#define DAC_I2S_WS 15
+#define DAC_I2S_DOUT 46
+
 #define HAS_AXP2101
 
 #define HAS_RTC 1
 
 #define I2C_SDA 10 // For QMC6310 sensors and screens
 #define I2C_SCL 11 // For QMC6310 sensors and screens
-
-#define BUTTON_PIN 0
 
 #define BMA4XX_INT 14 // Interrupt for BMA_423 axis sensor
 
