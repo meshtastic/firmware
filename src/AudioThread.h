@@ -11,7 +11,7 @@
 #include <AudioOutputI2S.h>
 #include <ESP8266SAM.h>
 
-#define AUDIO_THREAD_INTERVAL_MS 25
+#define AUDIO_THREAD_INTERVAL_MS 100
 
 class AudioThread : public concurrency::OSThread
 {
@@ -38,7 +38,12 @@ class AudioThread : public concurrency::OSThread
     {
         if (i2sRtttl != nullptr) {
             i2sRtttl->stop();
+            delete i2sRtttl;
             i2sRtttl = nullptr;
+        }
+        if (rtttlFile != nullptr) {
+            delete rtttlFile;
+            rtttlFile = nullptr;
         }
 
         setCPUFast(false);
@@ -48,6 +53,7 @@ class AudioThread : public concurrency::OSThread
     int32_t runOnce() override
     {
         canSleep = true; // Assume we should not keep the board awake
+        
         // if (i2sRtttl != nullptr && i2sRtttl->isRunning()) {
         //     i2sRtttl->loop();
         // }
