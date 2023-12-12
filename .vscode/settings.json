@@ -1,23 +1,4 @@
 {
-  "files.associations": {
-    "*.tpp": "cpp",
-    "__bit_reference": "cpp",
-    "__hash_table": "cpp",
-    "__split_buffer": "cpp",
-    "__tree": "cpp",
-    "array": "cpp",
-    "deque": "cpp",
-    "initializer_list": "cpp",
-    "list": "cpp",
-    "map": "cpp",
-    "set": "cpp",
-    "string": "cpp",
-    "string_view": "cpp",
-    "unordered_map": "cpp",
-    "unordered_set": "cpp",
-    "vector": "cpp",
-    "ios": "cpp"
-  },
   "editor.formatOnSave": true,
   "editor.defaultFormatter": "trunk.io",
   "trunk.enableWindows": true
