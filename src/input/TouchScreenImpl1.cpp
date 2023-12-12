@@ -2,6 +2,7 @@
 #include "InputBroker.h"
 #include "PowerFSM.h"
 #include "configuration.h"
+#include "modules/ExternalNotificationModule.h"
 
 TouchScreenImpl1 *touchScreenImpl1;
 
@@ -63,7 +64,11 @@ void TouchScreenImpl1::onEvent(const TouchEvent &event)
         break;
     }
     case TOUCH_ACTION_TAP: {
-        powerFSM.trigger(EVENT_INPUT);
+        if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) {
+            externalNotificationModule->stopNow();
+        } else {
+            powerFSM.trigger(EVENT_INPUT);
+        }
         break;
     }
     default:

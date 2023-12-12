@@ -152,7 +152,7 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
 #endif
 
         // nrf52 doesn't have a readable RTC (yet - software not written)
-#ifdef HAS_RTC
+#if HAS_RTC
         readFromRTC();
 #endif
 
