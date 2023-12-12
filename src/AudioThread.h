@@ -53,7 +53,7 @@ class AudioThread : public concurrency::OSThread
     int32_t runOnce() override
     {
         canSleep = true; // Assume we should not keep the board awake
-        
+
         // if (i2sRtttl != nullptr && i2sRtttl->isRunning()) {
         //     i2sRtttl->loop();
         // }
