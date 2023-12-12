@@ -65,6 +65,12 @@
 #define ES7210_LRCK 21
 #define ES7210_MCLK 48
 
+// dac / amp
+#define HAS_I2S
+#define DAC_I2S_BCK 7
+#define DAC_I2S_WS 5
+#define DAC_I2S_DOUT 6
+
 // LoRa
 #define USE_SX1262
 #define USE_SX1268

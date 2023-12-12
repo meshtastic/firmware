@@ -84,6 +84,11 @@ NRF52Bluetooth *nrf52Bluetooth;
 #include "AmbientLightingThread.h"
 #endif
 
+#ifdef HAS_I2S
+#include "AudioThread.h"
+AudioThread *audioThread;
+#endif
+
 using namespace concurrency;
 
 // We always create a screen object, but we only init it if we find the hardware
@@ -122,6 +127,7 @@ ATECCX08A atecc;
 #ifdef T_WATCH_S3
 Adafruit_DRV2605 drv;
 #endif
+
 bool isVibrating = false;
 
 bool eink_found = true;
@@ -671,6 +677,11 @@ void setup()
     }
     nodeStatus->observe(&nodeDB.newStatus);
 
+#ifdef HAS_I2S
+    LOG_DEBUG("Starting audio thread\n");
+    audioThread = new AudioThread();
+#endif
+
     service.init();
 
     // Now that the mesh service is created, create any modules
@@ -880,7 +891,6 @@ void setup()
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
     powerFSMthread = new PowerFSMThread();
-
     setCPUFast(false); // 80MHz is fine for our slow peripherals
 }
 

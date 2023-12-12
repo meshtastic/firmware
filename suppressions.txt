@@ -50,3 +50,4 @@ virtualCallInConstructor
 passedByValue:*/RedirectablePrint.h
 
 internalAstError:*/CrossPlatformCryptoEngine.cpp
+uninitMemberVar:*/AudioThread.h
