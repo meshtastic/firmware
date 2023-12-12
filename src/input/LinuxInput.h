@@ -53,7 +53,7 @@ class LinuxInput : public Observable<const InputEvent *>, public concurrency::OS
         {KEY_3, '3'},         {KEY_4, '4'},           {KEY_5, '5'},         {KEY_6, '6'},          {KEY_7, '7'},
         {KEY_8, '8'},         {KEY_9, '9'},           {KEY_0, '0'},         {KEY_DOT, '.'},        {KEY_COMMA, ','},
         {KEY_MINUS, '-'},     {KEY_EQUAL, '='},       {KEY_LEFTBRACE, '['}, {KEY_RIGHTBRACE, ']'}, {KEY_BACKSLASH, '\\'},
-        {KEY_SEMICOLON, ';'}, {KEY_APOSTROPHE, '\''}, {KEY_SLASH, '/'}};
+        {KEY_SEMICOLON, ';'}, {KEY_APOSTROPHE, '\''}, {KEY_SLASH, '/'},     {KEY_TAB, 0x09}};
     std::map<char, char> uppers{{'a', 'A'}, {'b', 'B'}, {'c', 'C'},  {'d', 'D'}, {'e', 'E'},  {'f', 'F'}, {'g', 'G'}, {'h', 'H'},
                                 {'i', 'I'}, {'j', 'J'}, {'k', 'K'},  {'l', 'L'}, {'m', 'M'},  {'n', 'N'}, {'o', 'O'}, {'p', 'P'},
                                 {'q', 'Q'}, {'r', 'R'}, {'s', 'S'},  {'t', 'T'}, {'u', 'U'},  {'v', 'V'}, {'w', 'W'}, {'x', 'X'},
