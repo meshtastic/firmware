@@ -249,6 +249,8 @@ void NodeDB::installDefaultModuleConfig()
     // Don't worry about the other settings for T-Watch, we'll also use the DRV2056 behavior for notifications
     moduleConfig.external_notification.enabled = true;
     moduleConfig.external_notification.use_i2s_as_buzzer = true;
+    moduleConfig.external_notification.alert_message_buzzer = true;
+    moduleConfig.external_notification.nag_timeout = 60;
 #endif
 #ifdef NANO_G2_ULTRA
     moduleConfig.external_notification.enabled = true;
