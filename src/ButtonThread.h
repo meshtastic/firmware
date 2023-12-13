@@ -5,6 +5,7 @@
 #include "configuration.h"
 #include "graphics/Screen.h"
 #include "main.h"
+#include "modules/ExternalNotificationModule.h"
 #include "power.h"
 #include <OneButton.h>
 
@@ -205,6 +206,12 @@ class ButtonThread : public concurrency::OSThread
 
     static void userButtonPressedLongStart()
     {
+#ifdef T_DECK
+        // False positive long-press triggered on T-Deck with i2s audio, so short circuit
+        if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) {
+            return;
+        }
+#endif
         if (millis() > 30 * 1000) {
             LOG_DEBUG("Long press start!\n");
             longPressTime = millis();

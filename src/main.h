@@ -42,6 +42,12 @@ extern ATECCX08A atecc;
 #include <Adafruit_DRV2605.h>
 extern Adafruit_DRV2605 drv;
 #endif
+
+#ifdef HAS_I2S
+#include "AudioThread.h"
+extern AudioThread *audioThread;
+#endif
+
 extern bool isVibrating;
 
 extern int TCPPort; // set by Portduino
