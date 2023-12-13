@@ -1,4 +1,7 @@
 #include "configuration.h"
+#if ARCH_RASPBERRY_PI
+#include "PortduinoGlue.h"
+#endif
 #if HAS_SCREEN
 #include "CannedMessageModule.h"
 #include "FSCommon.h"
@@ -163,9 +166,14 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     }
     if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL)) {
         LOG_DEBUG("Canned message event Cancel\n");
-        // emulate a timeout. Same result
-        this->lastTouchMillis = 0;
-        validEvent = true;
+        UIFrameEvent e = {false, true};
+        e.frameChanged = true;
+        this->currentMessageIndex = -1;
+        this->freetext = ""; // clear freetext
+        this->cursor = 0;
+        this->destSelect = false;
+        this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+        this->notifyObservers(&e);
     }
     if ((event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK)) ||
         (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) ||
@@ -212,7 +220,11 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
     if (validEvent) {
         // Let runOnce to be called immediately.
-        setIntervalFromNow(0);
+        if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_SELECT) {
+            setIntervalFromNow(0); // on fast keypresses, this isn't fast enough.
+        } else {
+            runOnce();
+        }
     }
 
     return 0;
