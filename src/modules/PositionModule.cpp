@@ -225,6 +225,9 @@ int32_t PositionModule::runOnce()
 
             LOG_INFO("Sending pos@%x:6 to mesh (wantReplies=%d)\n", localPosition.timestamp, requestReplies);
             sendOurPosition(NODENUM_BROADCAST, requestReplies);
+            if (config.device.role == meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND) {
+                sendLostAndFoundText();
+            }
         }
     } else if (config.position.position_broadcast_smart_enabled) {
         const meshtastic_NodeInfoLite *node2 = service.refreshLocalMeshNode(); // should guarantee there is now a position
@@ -259,6 +262,21 @@ int32_t PositionModule::runOnce()
     }
 
     return RUNONCE_INTERVAL; // to save power only wake for our callback occasionally
+}
+
+void PositionModule::sendLostAndFoundText()
+{
+    meshtastic_MeshPacket *p = allocDataPacket();
+    p->to = NODENUM_BROADCAST;
+    char *message = new char[60];
+    sprintf(message, "🚨I'm lost! Lat / Lon: %f, %f\a", (lastGpsLatitude * 1e-7), (lastGpsLongitude * 1e-7));
+    p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+    p->want_ack = false;
+    p->decoded.payload.size = strlen(message);
+    memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
+
+    service.sendToMesh(p, RX_SRC_LOCAL, true);
+    delete[] message;
 }
 
 struct SmartPosition PositionModule::getDistanceTraveledSinceLastSend(meshtastic_PositionLite currentPosition)
