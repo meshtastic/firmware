@@ -27,6 +27,10 @@
 #include <nvs_flash.h>
 #endif
 
+#ifdef ARCH_RASPBERRY_PI
+#include "platform/portduino/PortduinoGlue.h"
+#endif
+
 #ifdef ARCH_NRF52
 #include <bluefruit.h>
 #include <utility/bonding.h>
@@ -191,6 +195,12 @@ void NodeDB::installDefaultConfig()
     config.bluetooth.fixed_pin = defaultBLEPin;
 #if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS)
     bool hasScreen = true;
+#elif ARCH_RASPBERRY_PI
+    bool hasScreen = false;
+    if (settingsMap[displayPanel])
+        hasScreen = true;
+    else
+        hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
 #else
     bool hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
 #endif
