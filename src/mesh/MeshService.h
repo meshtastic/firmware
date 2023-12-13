@@ -82,6 +82,9 @@ class MeshService
     /// Return the next MqttClientProxyMessage packet destined to the phone.
     meshtastic_MqttClientProxyMessage *getMqttClientProxyMessageForPhone() { return toPhoneMqttProxyQueue.dequeuePtr(0); }
 
+    // search the queue for a request id and return the matching nodenum
+    NodeNum getNodenumFromRequestId(uint32_t request_id);
+
     // Release QueueStatus packet to pool
     void releaseQueueStatusToPool(meshtastic_QueueStatus *p) { queueStatusPool.release(p); }
 

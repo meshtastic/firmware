@@ -324,6 +324,8 @@ class Screen : public concurrency::OSThread
     // Called periodically from the main loop.
     int32_t runOnce() final;
 
+    bool isAUTOOled = false;
+
   private:
     struct ScreenCmd {
         Cmd cmd;
@@ -385,22 +387,10 @@ class Screen : public concurrency::OSThread
     DebugInfo debugInfo;
 
     /// Display device
+    OLEDDisplay *dispdev;
 
-#if defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SH1107_128_64)
-    SH1106Wire dispdev;
-#elif defined(USE_SSD1306)
-    SSD1306Wire dispdev;
-#elif defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(RAK14014)
-    TFTDisplay dispdev;
-#elif defined(USE_EINK)
-    EInkDisplay dispdev;
-#elif defined(USE_ST7567)
-    ST7567Wire dispdev;
-#else
-    AutoOLEDWire dispdev;
-#endif
     /// UI helper for rendering to frames and switching between them
-    OLEDDisplayUi ui;
+    OLEDDisplayUi *ui;
 };
 
 } // namespace graphics
