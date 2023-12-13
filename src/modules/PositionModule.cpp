@@ -276,6 +276,7 @@ void PositionModule::sendLostAndFoundText()
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
 
     service.sendToMesh(p, RX_SRC_LOCAL, true);
+    delete[] message;
 }
 
 struct SmartPosition PositionModule::getDistanceTraveledSinceLastSend(meshtastic_PositionLite currentPosition)
