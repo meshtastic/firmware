@@ -17,7 +17,8 @@
 #include <map>
 #include <unistd.h>
 
-std::map<int, int> settingsMap;
+std::map<configNames, int> settingsMap;
+std::map<configNames, std::string> settingsStrings;
 
 #else
 #include <linux/gpio/LinuxGPIOPin.h>
@@ -154,6 +155,28 @@ void portduinoSetup()
                 settingsMap[has_gps] = 1;
             }
         }
+        settingsMap[displayPanel] = no_screen;
+        if (yamlConfig["Display"]) {
+            if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ST7789")
+                settingsMap[displayPanel] = st7789;
+            settingsMap[displayHeight] = yamlConfig["Display"]["Height"].as<int>(0);
+            settingsMap[displayWidth] = yamlConfig["Display"]["Width"].as<int>(0);
+            settingsMap[displayDC] = yamlConfig["Display"]["DC"].as<int>(-1);
+            settingsMap[displayCS] = yamlConfig["Display"]["CS"].as<int>(-1);
+            settingsMap[displayBacklight] = yamlConfig["Display"]["Backlight"].as<int>(-1);
+            settingsMap[displayReset] = yamlConfig["Display"]["Reset"].as<int>(-1);
+            settingsMap[displayRotate] = yamlConfig["Display"]["Rotate"].as<bool>(false);
+        }
+        settingsMap[touchscreenModule] = no_touchscreen;
+        if (yamlConfig["Touchscreen"]) {
+            if (yamlConfig["Touchscreen"]["Module"].as<std::string>("") == "XPT2046")
+                settingsMap[touchscreenModule] = xpt2046;
+            settingsMap[touchscreenCS] = yamlConfig["Touchscreen"]["CS"].as<int>(-1);
+            settingsMap[touchscreenIRQ] = yamlConfig["Touchscreen"]["IRQ"].as<int>(-1);
+        }
+        if (yamlConfig["Input"]) {
+            settingsStrings[keyboardDevice] = (yamlConfig["Input"]["KeyboardDevice"]).as<std::string>("");
+        }
 
     } catch (YAML::Exception e) {
         std::cout << "*** Exception " << e.what() << std::endl;
@@ -189,6 +212,23 @@ void portduinoSetup()
         if (initGPIOPin(settingsMap[user], gpioChipName) != ERRNO_OK) {
             settingsMap[user] = RADIOLIB_NC;
         }
+    }
+
+    if (settingsMap[displayPanel] != no_screen) {
+        if (settingsMap[displayCS] > 0)
+            initGPIOPin(settingsMap[displayCS], gpioChipName);
+        if (settingsMap[displayDC] > 0)
+            initGPIOPin(settingsMap[displayDC], gpioChipName);
+        if (settingsMap[displayBacklight] > 0)
+            initGPIOPin(settingsMap[displayBacklight], gpioChipName);
+        if (settingsMap[displayReset] > 0)
+            initGPIOPin(settingsMap[displayReset], gpioChipName);
+    }
+    if (settingsMap[touchscreenModule] != no_touchscreen) {
+        if (settingsMap[touchscreenCS] > 0)
+            initGPIOPin(settingsMap[touchscreenCS], gpioChipName);
+        if (settingsMap[touchscreenIRQ] > 0)
+            initGPIOPin(settingsMap[touchscreenIRQ], gpioChipName);
     }
 
     return;
@@ -250,8 +290,9 @@ int initGPIOPin(int pinNum, std::string gpioChipName)
         csPin->setSilent();
         gpioBind(csPin);
         return ERRNO_OK;
-    } catch (std::invalid_argument &e) {
-        std::cout << "Warning, cannot claim pin" << gpio_name << std::endl;
+    } catch (...) {
+        std::exception_ptr p = std::current_exception();
+        std::cout << "Warning, cannot claim pin " << gpio_name << (p ? p.__cxa_exception_type()->name() : "null") << std::endl;
         return ERRNO_DISABLED;
     }
 }

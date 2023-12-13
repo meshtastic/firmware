@@ -27,6 +27,10 @@
 #include <nvs_flash.h>
 #endif
 
+#ifdef ARCH_RASPBERRY_PI
+#include "platform/portduino/PortduinoGlue.h"
+#endif
+
 #ifdef ARCH_NRF52
 #include <bluefruit.h>
 #include <utility/bonding.h>
@@ -191,6 +195,12 @@ void NodeDB::installDefaultConfig()
     config.bluetooth.fixed_pin = defaultBLEPin;
 #if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS)
     bool hasScreen = true;
+#elif ARCH_RASPBERRY_PI
+    bool hasScreen = false;
+    if (settingsMap[displayPanel])
+        hasScreen = true;
+    else
+        hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
 #else
     bool hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
 #endif
@@ -245,9 +255,12 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 1000;
     moduleConfig.external_notification.nag_timeout = 60;
 #endif
-#ifdef T_WATCH_S3
-    // Don't worry about the other settings, we'll use the DRV2056 behavior for notifications
+#ifdef HAS_I2S
+    // Don't worry about the other settings for T-Watch, we'll also use the DRV2056 behavior for notifications
     moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.use_i2s_as_buzzer = true;
+    moduleConfig.external_notification.alert_message_buzzer = true;
+    moduleConfig.external_notification.nag_timeout = 60;
 #endif
 #ifdef NANO_G2_ULTRA
     moduleConfig.external_notification.enabled = true;

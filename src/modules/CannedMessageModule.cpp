@@ -1,4 +1,7 @@
 #include "configuration.h"
+#if ARCH_RASPBERRY_PI
+#include "PortduinoGlue.h"
+#endif
 #if HAS_SCREEN
 #include "CannedMessageModule.h"
 #include "FSCommon.h"
@@ -163,9 +166,14 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     }
     if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL)) {
         LOG_DEBUG("Canned message event Cancel\n");
-        // emulate a timeout. Same result
-        this->lastTouchMillis = 0;
-        validEvent = true;
+        UIFrameEvent e = {false, true};
+        e.frameChanged = true;
+        this->currentMessageIndex = -1;
+        this->freetext = ""; // clear freetext
+        this->cursor = 0;
+        this->destSelect = false;
+        this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+        this->notifyObservers(&e);
     }
     if ((event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK)) ||
         (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) ||
@@ -212,7 +220,11 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
     if (validEvent) {
         // Let runOnce to be called immediately.
-        setIntervalFromNow(0);
+        if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_SELECT) {
+            setIntervalFromNow(0); // on fast keypresses, this isn't fast enough.
+        } else {
+            runOnce();
+        }
     }
 
     return 0;
@@ -233,7 +245,9 @@ void CannedMessageModule::sendText(NodeNum dest, const char *message, bool wantR
 
     LOG_INFO("Sending message id=%d, dest=%x, msg=%.*s\n", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
 
-    service.sendToMesh(p);
+    service.sendToMesh(
+        p, RX_SRC_LOCAL,
+        true); // send to mesh, cc to phone. Even if there's no phone connected, this stores the message to match ACKs
 }
 
 int32_t CannedMessageModule::runOnce()
@@ -244,7 +258,8 @@ int32_t CannedMessageModule::runOnce()
     }
     // LOG_DEBUG("Check status\n");
     UIFrameEvent e = {false, true};
-    if (this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {
+    if ((this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) ||
+        (this->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED)) {
         // TODO: might have some feedback of sendig state
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         e.frameChanged = true;
@@ -483,7 +498,18 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 {
     char buffer[50];
 
-    if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {
+    if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) {
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->setFont(FONT_MEDIUM);
+        String displayString;
+        if (this->ack) {
+            displayString = "Delivered to\n%s";
+        } else {
+            displayString = "Delivery failed\nto %s";
+        }
+        display->drawStringf(display->getWidth() / 2 + x, 0 + y + 12, buffer, displayString,
+                             cannedMessageModule->getNodeName(this->incoming));
+    } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->setFont(FONT_MEDIUM);
         display->drawString(display->getWidth() / 2 + x, 0 + y + 12, "Sending...");
@@ -544,6 +570,27 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             }
         }
     }
+}
+
+ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &mp)
+{
+    if (mp.decoded.portnum == meshtastic_PortNum_ROUTING_APP) {
+        // look for a request_id
+        if (mp.decoded.request_id != 0) {
+            UIFrameEvent e = {false, true};
+            e.frameChanged = true;
+            this->runState = CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED;
+            this->incoming = service.getNodenumFromRequestId(mp.decoded.request_id);
+            meshtastic_Routing decoded = meshtastic_Routing_init_default;
+            pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, meshtastic_Routing_fields, &decoded);
+            this->ack = decoded.error_reason == meshtastic_Routing_Error_NONE;
+            this->notifyObservers(&e);
+            // run the next time 2 seconds later
+            setIntervalFromNow(2000);
+        }
+    }
+
+    return ProcessMessage::CONTINUE;
 }
 
 void CannedMessageModule::loadProtoForModule()

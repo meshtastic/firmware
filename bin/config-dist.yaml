@@ -1,5 +1,5 @@
-# Define your devices here using Broadcom pin numbering
-# Uncomment the block that corresponds to your hardware
+### Define your devices here using Broadcom pin numbering
+### Uncomment the block that corresponds to your hardware
 ---
 Lora:
 #  Module: sx1262  # Waveshare SX126X XXXM
@@ -25,16 +25,40 @@ Lora:
 #  CS: 7
 #  IRQ: 25
 
-# Set gpio chip to use in /dev/. Defaults to 0.
-# Notably the Raspberry Pi 5 puts the GPIO header on gpiochip4
+### Set gpio chip to use in /dev/. Defaults to 0.
+### Notably the Raspberry Pi 5 puts the GPIO header on gpiochip4
 #  gpiochip: 4
 
-# Define GPIO buttons here:
+### Define GPIO buttons here:
 
 GPIO:
 #  User: 6
 
-# Define GPS
+### Define GPS
 
 GPS:
 #  SerialPath: /dev/ttyS0
+
+### Set up SPI displays here. Note that I2C displays are generally auto-detected.
+
+Display:
+
+### Waveshare 2.8inch RPi LCD
+#  Panel: ST7789
+#  CS: 8
+#  DC: 22        # Data/Command pin
+#  Backlight: 18
+#  Width: 240
+#  Height: 320
+#  Reset: 27
+#  Rotate: true
+
+Touchscreen:
+#  Module: XPT2046
+#  CS: 7
+#  IRQ: 17
+
+### Configure device for direct keyboard input
+
+Input:
+#  KeyboardDevice: /dev/input/event0

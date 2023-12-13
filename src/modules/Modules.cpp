@@ -17,6 +17,9 @@
 #include "modules/TextMessageModule.h"
 #include "modules/TraceRouteModule.h"
 #include "modules/WaypointModule.h"
+#if ARCH_RASPBERRY_PI
+#include "input/LinuxInputImpl.h"
+#endif
 #if HAS_TELEMETRY
 #include "modules/Telemetry/DeviceTelemetry.h"
 #endif
@@ -44,7 +47,7 @@
 void setupModules()
 {
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER) {
-#if HAS_BUTTON
+#if HAS_BUTTON || ARCH_RASPBERRY_PI
         inputBroker = new InputBroker();
 #endif
         adminModule = new AdminModule();
@@ -61,7 +64,7 @@ void setupModules()
 
         new RemoteHardwareModule();
         new ReplyModule();
-#if HAS_BUTTON
+#if HAS_BUTTON || ARCH_RASPBERRY_PI
         rotaryEncoderInterruptImpl1 = new RotaryEncoderInterruptImpl1();
         if (!rotaryEncoderInterruptImpl1->init()) {
             delete rotaryEncoderInterruptImpl1;
@@ -79,6 +82,10 @@ void setupModules()
         kbMatrixImpl->init();
 #endif // INPUTBROKER_MATRIX_TYPE
 #endif // HAS_BUTTON
+#if ARCH_RASPBERRY_PI
+        aLinuxInputImpl = new LinuxInputImpl();
+        aLinuxInputImpl->init();
+#endif
 #if HAS_TRACKBALL
         trackballInterruptImpl1 = new TrackballInterruptImpl1();
         trackballInterruptImpl1->init();

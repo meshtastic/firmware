@@ -52,6 +52,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "modules/esp32/StoreForwardModule.h"
 #endif
 
+#if ARCH_RASPBERRY_PI
+#include "platform/portduino/PortduinoGlue.h"
+#endif
+
 #ifdef OLED_RU
 #include "fonts/OLEDDisplayFontsRU.h"
 #endif
@@ -909,10 +913,40 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 }
 
 Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_OledType screenType, OLEDDISPLAY_GEOMETRY geometry)
-    : concurrency::OSThread("Screen"), address_found(address), model(screenType), geometry(geometry), cmdQueue(32),
-      dispdev(address.address, -1, -1, geometry, (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE),
-      ui(&dispdev)
+    : concurrency::OSThread("Screen"), address_found(address), model(screenType), geometry(geometry), cmdQueue(32)
 {
+#if defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SH1107_128_64)
+    dispdev = new SH1106Wire(address.address, -1, -1, geometry,
+                             (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+#elif defined(USE_SSD1306)
+    dispdev = new SSD1306Wire(address.address, -1, -1, geometry,
+                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+#elif defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(RAK14014)
+    dispdev = new TFTDisplay(address.address, -1, -1, geometry,
+                             (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+#elif defined(USE_EINK)
+    dispdev = new EInkDisplay(address.address, -1, -1, geometry,
+                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+#elif defined(USE_ST7567)
+    dispdev = new ST7567Wire(address.address, -1, -1, geometry,
+                             (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+#elif ARCH_RASPBERRY_PI
+    if (settingsMap[displayPanel] == st7789) {
+        LOG_DEBUG("Making TFTDisplay!\n");
+        dispdev = new TFTDisplay(address.address, -1, -1, geometry,
+                                 (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+    } else {
+        dispdev = new AutoOLEDWire(address.address, -1, -1, geometry,
+                                   (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+        isAUTOOled = true;
+    }
+#else
+    dispdev = new AutoOLEDWire(address.address, -1, -1, geometry,
+                               (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+    isAUTOOled = true;
+#endif
+
+    ui = new OLEDDisplayUi(dispdev);
     cmdQueue.setReader(this);
 }
 
@@ -925,8 +959,8 @@ void Screen::doDeepSleep()
 #ifdef USE_EINK
     static FrameCallback sleepFrames[] = {drawSleepScreen};
     static const int sleepFrameCount = sizeof(sleepFrames) / sizeof(sleepFrames[0]);
-    ui.setFrames(sleepFrames, sleepFrameCount);
-    ui.update();
+    ui->setFrames(sleepFrames, sleepFrameCount);
+    ui->update();
 #endif
     setOn(false);
 }
@@ -942,14 +976,16 @@ void Screen::handleSetOn(bool on)
 #ifdef T_WATCH_S3
             PMU->enablePowerOutput(XPOWERS_ALDO2);
 #endif
-            dispdev.displayOn();
-            dispdev.displayOn();
+#if !ARCH_RASPBERRY_PI
+            dispdev->displayOn();
+#endif
+            dispdev->displayOn();
             enabled = true;
             setInterval(0); // Draw ASAP
             runASAP = true;
         } else {
             LOG_INFO("Turning off screen\n");
-            dispdev.displayOff();
+            dispdev->displayOff();
 #ifdef T_WATCH_S3
             PMU->disablePowerOutput(XPOWERS_ALDO2);
 #endif
@@ -966,32 +1002,33 @@ void Screen::setup()
     useDisplay = true;
 
 #ifdef AutoOLEDWire_h
-    dispdev.setDetected(model);
+    if (isAUTOOled)
+        static_cast<AutoOLEDWire *>(dispdev)->setDetected(model);
 #endif
 
 #ifdef USE_SH1107_128_64
-    dispdev.setSubtype(7);
+    static_cast<SH1106Wire *>(dispdev)->setSubtype(7);
 #endif
 
     // Initialising the UI will init the display too.
-    ui.init();
+    ui->init();
 
-    displayWidth = dispdev.width();
-    displayHeight = dispdev.height();
+    displayWidth = dispdev->width();
+    displayHeight = dispdev->height();
 
-    ui.setTimePerTransition(0);
+    ui->setTimePerTransition(0);
 
-    ui.setIndicatorPosition(BOTTOM);
+    ui->setIndicatorPosition(BOTTOM);
     // Defines where the first frame is located in the bar.
-    ui.setIndicatorDirection(LEFT_RIGHT);
-    ui.setFrameAnimation(SLIDE_LEFT);
+    ui->setIndicatorDirection(LEFT_RIGHT);
+    ui->setFrameAnimation(SLIDE_LEFT);
     // Don't show the page swipe dots while in boot screen.
-    ui.disableAllIndicators();
+    ui->disableAllIndicators();
     // Store a pointer to Screen so we can get to it from static functions.
-    ui.getUiState()->userData = this;
+    ui->getUiState()->userData = this;
 
     // Set the utf8 conversion function
-    dispdev.setFontTableLookupFunction(customFontTableLookup);
+    dispdev->setFontTableLookupFunction(customFontTableLookup);
 
     if (strlen(oemStore.oem_text) > 0)
         logo_timeout *= 2;
@@ -999,23 +1036,23 @@ void Screen::setup()
     // Add frames.
     static FrameCallback bootFrames[] = {drawBootScreen};
     static const int bootFrameCount = sizeof(bootFrames) / sizeof(bootFrames[0]);
-    ui.setFrames(bootFrames, bootFrameCount);
+    ui->setFrames(bootFrames, bootFrameCount);
     // No overlays.
-    ui.setOverlays(nullptr, 0);
+    ui->setOverlays(nullptr, 0);
 
     // Require presses to switch between frames.
-    ui.disableAutoTransition();
+    ui->disableAutoTransition();
 
     // Set up a log buffer with 3 lines, 32 chars each.
-    dispdev.setLogBuffer(3, 32);
+    dispdev->setLogBuffer(3, 32);
 
 #ifdef SCREEN_MIRROR
-    dispdev.mirrorScreen();
+    dispdev->mirrorScreen();
 #else
     // Standard behaviour is to FLIP the screen (needed on T-Beam). If this config item is set, unflip it, and thereby logically
     // flip it. If you have a headache now, you're welcome.
     if (!config.display.flip_screen) {
-        dispdev.flipScreenVertically();
+        dispdev->flipScreenVertically();
     }
 #endif
 
@@ -1023,20 +1060,30 @@ void Screen::setup()
     uint8_t dmac[6];
     getMacAddr(dmac);
     snprintf(ourId, sizeof(ourId), "%02x%02x", dmac[4], dmac[5]);
+#if ARCH_RASPBERRY_PI
+    handleSetOn(false); // force clean init
+#endif
 
     // Turn on the display.
     handleSetOn(true);
 
     // On some ssd1306 clones, the first draw command is discarded, so draw it
     // twice initially. Skip this for EINK Displays to save a few seconds during boot
-    ui.update();
+    ui->update();
 #ifndef USE_EINK
-    ui.update();
+    ui->update();
 #endif
     serialSinceMsec = millis();
 
-#if HAS_TOUCHSCREEN
-    touchScreenImpl1 = new TouchScreenImpl1(dispdev.getWidth(), dispdev.getHeight(), dispdev.getTouch);
+#if ARCH_RASPBERRY_PI
+    if (settingsMap[touchscreenModule]) {
+        touchScreenImpl1 =
+            new TouchScreenImpl1(dispdev->getWidth(), dispdev->getHeight(), static_cast<TFTDisplay *>(dispdev)->getTouch);
+        touchScreenImpl1->init();
+    }
+#elif HAS_TOUCHSCREEN
+    touchScreenImpl1 =
+        new TouchScreenImpl1(dispdev->getWidth(), dispdev->getHeight(), static_cast<TFTDisplay *>(dispdev)->getTouch);
     touchScreenImpl1->init();
 #endif
 
@@ -1057,7 +1104,7 @@ void Screen::forceDisplay()
 {
     // Nasty hack to force epaper updates for 'key' frames.  FIXME, cleanup.
 #ifdef USE_EINK
-    dispdev.forceDisplay();
+    static_cast<EInkDisplay *>(dispdev)->forceDisplay();
 #endif
 }
 
@@ -1088,10 +1135,10 @@ int32_t Screen::runOnce()
             // Change frames.
             static FrameCallback bootOEMFrames[] = {drawOEMBootScreen};
             static const int bootOEMFrameCount = sizeof(bootOEMFrames) / sizeof(bootOEMFrames[0]);
-            ui.setFrames(bootOEMFrames, bootOEMFrameCount);
-            ui.update();
+            ui->setFrames(bootOEMFrames, bootOEMFrameCount);
+            ui->update();
 #ifndef USE_EINK
-            ui.update();
+            ui->update();
 #endif
             showingOEMBootScreen = false;
         }
@@ -1164,16 +1211,16 @@ int32_t Screen::runOnce()
 
     // this must be before the frameState == FIXED check, because we always
     // want to draw at least one FIXED frame before doing forceDisplay
-    ui.update();
+    ui->update();
 
     // Switch to a low framerate (to save CPU) when we are not in transition
     // but we should only call setTargetFPS when framestate changes, because
     // otherwise that breaks animations.
-    if (targetFramerate != IDLE_FRAMERATE && ui.getUiState()->frameState == FIXED) {
-        // oldFrameState = ui.getUiState()->frameState;
+    if (targetFramerate != IDLE_FRAMERATE && ui->getUiState()->frameState == FIXED) {
+        // oldFrameState = ui->getUiState()->frameState;
         targetFramerate = IDLE_FRAMERATE;
 
-        ui.setTargetFPS(targetFramerate);
+        ui->setTargetFPS(targetFramerate);
         forceDisplay();
     }
 
@@ -1189,7 +1236,7 @@ int32_t Screen::runOnce()
     }
 
     // LOG_DEBUG("want fps %d, fixed=%d\n", targetFramerate,
-    // ui.getUiState()->frameState); If we are scrolling we need to be called
+    // ui->getUiState()->frameState); If we are scrolling we need to be called
     // soon, otherwise just 1 fps (to save CPU) We also ask to be called twice
     // as fast as we really need so that any rounding errors still result with
     // the correct framerate
@@ -1221,8 +1268,8 @@ void Screen::setSSLFrames()
     if (address_found.address) {
         // LOG_DEBUG("showing SSL frames\n");
         static FrameCallback sslFrames[] = {drawSSLScreen};
-        ui.setFrames(sslFrames, 1);
-        ui.update();
+        ui->setFrames(sslFrames, 1);
+        ui->update();
     }
 }
 
@@ -1306,8 +1353,8 @@ void Screen::setFrames()
 
     LOG_DEBUG("Finished building frames. numframes: %d\n", numframes);
 
-    ui.setFrames(normalFrames, numframes);
-    ui.enableAllIndicators();
+    ui->setFrames(normalFrames, numframes);
+    ui->enableAllIndicators();
 
     prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list
                     // just changed)
@@ -1327,8 +1374,8 @@ void Screen::handleStartBluetoothPinScreen(uint32_t pin)
 
 void Screen::setFrameImmediateDraw(FrameCallback *drawFrames)
 {
-    ui.disableAllIndicators();
-    ui.setFrames(drawFrames, 1);
+    ui->disableAllIndicators();
+    ui->setFrames(drawFrames, 1);
     setFastFramerate();
 }
 
@@ -1370,17 +1417,17 @@ void Screen::blink()
 {
     setFastFramerate();
     uint8_t count = 10;
-    dispdev.setBrightness(254);
+    dispdev->setBrightness(254);
     while (count > 0) {
-        dispdev.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-        dispdev.display();
+        dispdev->fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+        dispdev->display();
         delay(50);
-        dispdev.clear();
-        dispdev.display();
+        dispdev->clear();
+        dispdev->display();
         delay(50);
         count = count - 1;
     }
-    dispdev.setBrightness(brightness);
+    dispdev->setBrightness(brightness);
 }
 
 std::string Screen::drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint32_t seconds)
@@ -1408,15 +1455,15 @@ void Screen::handlePrint(const char *text)
     if (!useDisplay || !showingNormalScreen)
         return;
 
-    dispdev.print(text);
+    dispdev->print(text);
 }
 
 void Screen::handleOnPress()
 {
     // If screen was off, just wake it, otherwise advance to next frame
     // If we are in a transition, the press must have bounced, drop it.
-    if (ui.getUiState()->frameState == FIXED) {
-        ui.nextFrame();
+    if (ui->getUiState()->frameState == FIXED) {
+        ui->nextFrame();
         lastScreenTransition = millis();
         setFastFramerate();
     }
@@ -1426,8 +1473,8 @@ void Screen::handleShowPrevFrame()
 {
     // If screen was off, just wake it, otherwise go back to previous frame
     // If we are in a transition, the press must have bounced, drop it.
-    if (ui.getUiState()->frameState == FIXED) {
-        ui.previousFrame();
+    if (ui->getUiState()->frameState == FIXED) {
+        ui->previousFrame();
         lastScreenTransition = millis();
         setFastFramerate();
     }
@@ -1437,8 +1484,8 @@ void Screen::handleShowNextFrame()
 {
     // If screen was off, just wake it, otherwise advance to next frame
     // If we are in a transition, the press must have bounced, drop it.
-    if (ui.getUiState()->frameState == FIXED) {
-        ui.nextFrame();
+    if (ui->getUiState()->frameState == FIXED) {
+        ui->nextFrame();
         lastScreenTransition = millis();
         setFastFramerate();
     }
@@ -1453,7 +1500,7 @@ void Screen::setFastFramerate()
     // We are about to start a transition so speed up fps
     targetFramerate = SCREEN_TRANSITION_FRAMERATE;
 
-    ui.setTargetFPS(targetFramerate);
+    ui->setTargetFPS(targetFramerate);
     setInterval(0); // redraw ASAP
     runASAP = true;
 }
@@ -1540,7 +1587,8 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         }
 #endif
     } else {
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)) &&                                \
+        // TODO: Raspberry Pi supports more than just the one screen size
+#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS) || ARCH_RASPBERRY_PI) &&           \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
         display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8,
                                imgInfoL1);
@@ -1780,7 +1828,7 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
             setFastFramerate();
             // TODO: We might also want switch to corresponding frame,
             //       but we don't know the exact frame number.
-            // ui.switchToFrame(0);
+            // ui->switchToFrame(0);
         }
     }
 

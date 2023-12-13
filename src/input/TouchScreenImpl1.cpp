@@ -2,6 +2,11 @@
 #include "InputBroker.h"
 #include "PowerFSM.h"
 #include "configuration.h"
+#include "modules/ExternalNotificationModule.h"
+
+#ifdef ARCH_RASPBERRY_PI
+#include "platform/portduino/PortduinoGlue.h"
+#endif
 
 TouchScreenImpl1 *touchScreenImpl1;
 
@@ -12,7 +17,14 @@ TouchScreenImpl1::TouchScreenImpl1(uint16_t width, uint16_t height, bool (*getTo
 
 void TouchScreenImpl1::init()
 {
-#if !HAS_TOUCHSCREEN
+#if ARCH_RASPBERRY_PI
+    if (settingsMap[touchscreenModule]) {
+        TouchScreenBase::init(true);
+        inputBroker->registerSource(this);
+    } else {
+        TouchScreenBase::init(false);
+    }
+#elif !HAS_TOUCHSCREEN
     TouchScreenBase::init(false);
     return;
 #else
@@ -63,7 +75,11 @@ void TouchScreenImpl1::onEvent(const TouchEvent &event)
         break;
     }
     case TOUCH_ACTION_TAP: {
-        powerFSM.trigger(EVENT_INPUT);
+        if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) {
+            externalNotificationModule->stopNow();
+        } else {
+            powerFSM.trigger(EVENT_INPUT);
+        }
         break;
     }
     default:

@@ -20,7 +20,8 @@ class TFTDisplay : public OLEDDisplay
     TFTDisplay(uint8_t, int, int, OLEDDISPLAY_GEOMETRY, HW_I2C);
 
     // Write the buffer to the display memory
-    virtual void display(void) override;
+    virtual void display() override { display(false); };
+    virtual void display(bool fromBlank);
 
     // Turn the display upside down
     virtual void flipScreenVertically();
