@@ -1,5 +1,8 @@
 {
   "build": {
+    "arduino": {
+      "variant_h": "variant_RAK3172_MODULE.h"
+    },
     "core": "stm32",
     "cpu": "cortex-m4",
     "extra_flags": "-DSTM32WLxx -DSTM32WLE5xx -DARDUINO_GENERIC_WLE5CCUX",
