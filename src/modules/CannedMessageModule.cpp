@@ -176,7 +176,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         this->currentMessageIndex = -1;
         this->freetext = ""; // clear freetext
         this->cursor = 0;
-        this->destSelect = false;
+        this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         this->notifyObservers(&e);
     }
