@@ -184,7 +184,7 @@ void Channels::onConfigChanged()
 {
     // Make sure the phone hasn't mucked anything up
     for (int i = 0; i < channelFile.channels_count; i++) {
-        meshtastic_Channel &ch = fixupChannel(i);
+        const meshtastic_Channel &ch = fixupChannel(i);
 
         if (ch.role == meshtastic_Channel_Role_PRIMARY)
             primaryIndex = i;
