@@ -21,7 +21,7 @@ class PowerFSMThread : public OSThread
 
         /// If we are in power state we force the CPU to wake every 10ms to check for serial characters (we don't yet wake
         /// cpu for serial rx - FIXME)
-        const auto state = powerFSM.getState();
+        const State *state = powerFSM.getState();
         canSleep = (state != &statePOWER) && (state != &stateSERIAL);
 
         if (powerStatus->getHasUSB()) {

@@ -519,10 +519,10 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
     // the created jsonObj is immutable after creation, so
     // we need to do the heavy lifting before assembling it.
     std::string msgType;
-    JSONObject msgPayload;
     JSONObject jsonObj;
 
     if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+        JSONObject msgPayload;
         switch (mp->decoded.portnum) {
         case meshtastic_PortNum_TEXT_MESSAGE_APP: {
             msgType = "text";
