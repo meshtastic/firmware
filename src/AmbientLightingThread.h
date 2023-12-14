@@ -10,7 +10,7 @@ namespace concurrency
 class AmbientLightingThread : public concurrency::OSThread
 {
   public:
-    AmbientLightingThread(ScanI2C::DeviceType type) : OSThread("AmbientLightingThread")
+    explicit AmbientLightingThread(ScanI2C::DeviceType type) : OSThread("AmbientLightingThread")
     {
         // Uncomment to test module
         // moduleConfig.ambient_lighting.led_state = true;
