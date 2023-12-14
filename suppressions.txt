@@ -51,3 +51,6 @@ passedByValue:*/RedirectablePrint.h
 
 internalAstError:*/CrossPlatformCryptoEngine.cpp
 uninitMemberVar:*/AudioThread.h
+// False positive
+constVariableReference:*/Channels.cpp
+constParameterPointer:*/unishox2.c
