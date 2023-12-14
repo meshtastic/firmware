@@ -73,12 +73,12 @@ extern "C" {
 
 #define PIN_SPI_MISO (32 + 15) // P1.15 47
 #define PIN_SPI_MOSI (32 + 14) // P1.14 46
-#define PIN_SPI_SCK  (32 + 13) // P1.13 45
-#define PIN_SPI_NSS  (32 + 12) // P1.12 44
+#define PIN_SPI_SCK (32 + 13)  // P1.13 45
+#define PIN_SPI_NSS (32 + 12)  // P1.12 44
 
-#define LORA_RESET   (32 + 10) // P1.10 42 // RST
-#define LORA_DIO1    (32 + 08) // P1.08 40 // IRQ
-#define LORA_DIO2    (32 + 11) // P1.11 43 // BUSY
+#define LORA_RESET (32 + 10) // P1.10 42 // RST
+#define LORA_DIO1 (32 + 08)  // P1.08 40 // IRQ
+#define LORA_DIO2 (32 + 11)  // P1.11 43 // BUSY
 #define LORA_SCK PIN_SPI_SCK
 #define LORA_MISO PIN_SPI_MISO
 #define LORA_MOSI PIN_SPI_MOSI
@@ -86,16 +86,16 @@ extern "C" {
 
 // supported modules list
 #define USE_LR1110
- 
-#define LR1110_IRQ_PIN      LORA_DIO1
-#define LR1110_NRESER_PIN	  LORA_RESET
-#define LR1110_BUSY_PIN	    LORA_DIO2
-#define LR1110_SPI_NSS_PIN 	LORA_CS
-#define LR1110_SPI_SCK_PIN	LORA_SCK
-#define LR1110_SPI_MOSI_PIN	LORA_MOSI
-#define LR1110_SPI_MISO_PIN	LORA_MISO
 
-#define LR1110_GNSS_ANT_PIN	(32 + 5) // P1.05 37
+#define LR1110_IRQ_PIN LORA_DIO1
+#define LR1110_NRESER_PIN LORA_RESET
+#define LR1110_BUSY_PIN LORA_DIO2
+#define LR1110_SPI_NSS_PIN LORA_CS
+#define LR1110_SPI_SCK_PIN LORA_SCK
+#define LR1110_SPI_MOSI_PIN LORA_MOSI
+#define LR1110_SPI_MISO_PIN LORA_MISO
+
+#define LR1110_GNSS_ANT_PIN (32 + 5) // P1.05 37
 
 #ifdef __cplusplus
 }
