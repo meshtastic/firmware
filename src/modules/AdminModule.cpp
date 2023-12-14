@@ -622,12 +622,12 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
 #if HAS_BLUETOOTH
     conn.has_bluetooth = true;
     conn.bluetooth.pin = config.bluetooth.fixed_pin;
-#endif
 #ifdef ARCH_ESP32
     conn.bluetooth.is_connected = nimbleBluetooth->isConnected();
     conn.bluetooth.rssi = nimbleBluetooth->getRssi();
 #elif defined(ARCH_NRF52)
     conn.bluetooth.is_connected = nrf52Bluetooth->isConnected();
+#endif
 #endif
     conn.has_serial = true; // No serial-less devices
     conn.serial.is_connected = powerFSM.getState() == &stateSERIAL;
