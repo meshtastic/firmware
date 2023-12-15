@@ -1,10 +1,13 @@
-#include "api/WiFiServerAPI.h"
 #include "buzz.h"
 #include "configuration.h"
 #include "graphics/Screen.h"
-#include "input/LinuxInputImpl.h"
 #include "main.h"
 #include "power.h"
+#if ARCH_RASPBERRY_PI
+#include "api/WiFiServerAPI.h"
+#include "input/LinuxInputImpl.h"
+
+#endif
 
 void powerCommandsCheck()
 {
