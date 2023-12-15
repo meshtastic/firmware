@@ -21,6 +21,7 @@ class LinuxInput : public Observable<const InputEvent *>, public concurrency::OS
 {
   public:
     explicit LinuxInput(const char *name);
+    void deInit(); // Strictly for cleanly "rebooting" the binary on native
 
   protected:
     virtual int32_t runOnce() override;
