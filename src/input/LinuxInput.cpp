@@ -23,6 +23,11 @@ LinuxInput::LinuxInput(const char *name) : concurrency::OSThread(name)
     this->_originName = name;
 }
 
+void LinuxInput::deInit()
+{
+    close(fd);
+}
+
 int32_t LinuxInput::runOnce()
 {
 
