@@ -51,7 +51,7 @@ void getMacAddr(uint8_t *dmac)
 
 static void initBrownout()
 {
-    auto vccthresh = POWER_POFCON_THRESHOLD_V17;
+    auto vccthresh = POWER_POFCON_THRESHOLD_V24;
 
     auto err_code = sd_power_pof_enable(POWER_POFCON_POF_Enabled);
     assert(err_code == NRF_SUCCESS);
