@@ -742,6 +742,20 @@ void setup()
                 LOG_INFO("RF95 Radio init succeeded, using RF95 radio\n");
             }
         }
+     } else if (settingsMap[use_sx1280]) {
+        if (!rIf) {
+            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+            rIf = new SX1280Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
+                                      settingsMap[busy]);
+            if (!rIf->init()) {
+                LOG_ERROR("Failed to find SX1280 radio\n");
+                delete rIf;
+                rIf = NULL;
+                exit(EXIT_FAILURE);
+            } else {
+                LOG_INFO("SX1280 Radio init succeeded, using SX1280 radio\n");
+            }
+        }
     }
 
 #elif defined(HW_SPI1_DEVICE)
