@@ -18,7 +18,7 @@ class PaxcounterModule : private concurrency::OSThread, public ProtobufModule<me
     PaxcounterModule();
 
   protected:
-    struct count_payload_t count_from_libpax;
+    struct count_payload_t count_from_libpax = {0, 0, 0};
     virtual int32_t runOnce() override;
     bool sendInfo(NodeNum dest = NODENUM_BROADCAST);
     virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Paxcount *p) override;
