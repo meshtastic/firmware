@@ -79,6 +79,9 @@ typedef enum _meshtastic_PortNum {
     /* Used for the python IP tunnel feature
  ENCODING: IP Packet. Handled by the python API, firmware ignores this one and pases on. */
     meshtastic_PortNum_IP_TUNNEL_APP = 33,
+    /* Paxcounter lib included in the firmware
+ ENCODING: protobuf */
+    meshtastic_PortNum_PAXCOUNTER_APP = 34,
     /* Provides a hardware serial interface to send and receive from the Meshtastic network.
  Connect to the RX/TX pins of a device with 38400 8N1. Packets received from the Meshtastic
  network is forwarded to the RX pin while sending a packet to TX will go out to the Mesh network.
