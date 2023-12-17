@@ -742,7 +742,7 @@ void setup()
                 LOG_INFO("RF95 Radio init succeeded, using RF95 radio\n");
             }
         }
-     } else if (settingsMap[use_sx1280]) {
+    } else if (settingsMap[use_sx1280]) {
         if (!rIf) {
             LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
             rIf = new SX1280Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
