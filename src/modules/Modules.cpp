@@ -31,7 +31,10 @@
 #include "modules/Telemetry/PowerTelemetry.h"
 #endif
 #ifdef ARCH_ESP32
+#ifdef USE_SX1280
 #include "modules/esp32/AudioModule.h"
+#endif
+#include "modules/esp32/PaxcounterModule.h"
 #include "modules/esp32/StoreForwardModule.h"
 #endif
 #if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)
@@ -111,9 +114,11 @@ void setupModules()
 #endif
 #ifdef ARCH_ESP32
         // Only run on an esp32 based device.
+#ifdef USE_SX1280
         audioModule = new AudioModule();
-
+#endif
         storeForwardModule = new StoreForwardModule();
+        paxcounterModule = new PaxcounterModule();
 #endif
 #if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)
         externalNotificationModule = new ExternalNotificationModule();
