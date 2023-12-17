@@ -3,7 +3,7 @@
 #include "SinglePortModule.h"
 #include "concurrency/NotifiedWorkerThread.h"
 #include "configuration.h"
-#if defined(ARCH_ESP32)
+#if defined(ARCH_ESP32) && defined(USE_SX1280)
 #include "NodeDB.h"
 #include <Arduino.h>
 #include <ButterworthFilter.h>
