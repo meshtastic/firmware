@@ -402,11 +402,8 @@ bool Power::analogInit()
  */
 bool Power::setup()
 {
-    bool found = axpChipInit();
+    bool found = axpChipInit() || analogInit();
 
-    if (!found) {
-        found = analogInit();
-    }
     enabled = found;
     low_voltage_counter = 0;
 

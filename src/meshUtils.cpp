@@ -39,10 +39,11 @@
  */
 char *strnstr(const char *s, const char *find, size_t slen)
 {
-    char c, sc;
-    size_t len;
-
+    char c;
     if ((c = *find++) != '\0') {
+        char sc;
+        size_t len;
+
         len = strlen(find);
         do {
             do {
