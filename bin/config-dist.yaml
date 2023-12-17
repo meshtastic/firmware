@@ -25,7 +25,7 @@ Lora:
 #  CS: 7
 #  IRQ: 25
 
-#  Module: sx1280  # SX180
+#  Module: sx1280  # SX1280
 #  CS: 21
 #  IRQ: 16
 #  Busy: 20
