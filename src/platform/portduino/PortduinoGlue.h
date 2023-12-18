@@ -10,6 +10,7 @@ enum configNames {
     reset,
     dio2_as_rf_switch,
     use_rf95,
+    use_sx1280,
     user,
     gpiochip,
     has_gps,
