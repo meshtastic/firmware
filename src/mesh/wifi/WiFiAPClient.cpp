@@ -38,7 +38,8 @@ bool APStartupComplete = 0;
 
 unsigned long lastrun_ntp = 0;
 
-bool needReconnect = true; // If we create our reconnector, run it once at the beginning
+bool needReconnect = true;   // If we create our reconnector, run it once at the beginning
+bool isReconnecting = false; // If we are currently reconnecting
 
 WiFiUDP syslogClient;
 Syslog syslog(syslogClient);
@@ -115,6 +116,7 @@ static int32_t reconnectWiFi()
             wifiPsw = NULL;
 
         needReconnect = false;
+        isReconnecting = true;
 
         // Make sure we clear old connection credentials
 #ifdef ARCH_ESP32
@@ -129,6 +131,7 @@ static int32_t reconnectWiFi()
         if (!WiFi.isConnected()) {
             WiFi.begin(wifiName, wifiPsw);
         }
+        isReconnecting = false;
     }
 
 #ifndef DISABLE_NTP
@@ -277,10 +280,12 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
         LOG_INFO("Disconnected from WiFi access point\n");
-        WiFi.disconnect(false, true);
-        syslog.disable();
-        needReconnect = true;
-        wifiReconnect->setIntervalFromNow(1000);
+        if (!isReconnecting) {
+            WiFi.disconnect(false, true);
+            syslog.disable();
+            needReconnect = true;
+            wifiReconnect->setIntervalFromNow(1000);
+        }
         break;
     case ARDUINO_EVENT_WIFI_STA_AUTHMODE_CHANGE:
         LOG_INFO("Authentication mode of access point has changed\n");
@@ -294,10 +299,12 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case ARDUINO_EVENT_WIFI_STA_LOST_IP:
         LOG_INFO("Lost IP address and IP address is reset to 0\n");
-        WiFi.disconnect(false, true);
-        syslog.disable();
-        needReconnect = true;
-        wifiReconnect->setIntervalFromNow(1000);
+        if (!isReconnecting) {
+            WiFi.disconnect(false, true);
+            syslog.disable();
+            needReconnect = true;
+            wifiReconnect->setIntervalFromNow(1000);
+        }
         break;
     case ARDUINO_EVENT_WPS_ER_SUCCESS:
         LOG_INFO("WiFi Protected Setup (WPS): succeeded in enrollee mode\n");
