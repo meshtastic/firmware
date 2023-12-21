@@ -143,8 +143,8 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                         p->channel = ch.index;
                     }
 
-                    // ignore messages sent by us or if we don't have the channel key
-                    if (router && p->from != nodeDB.getNodeNum() && perhapsDecode(p))
+                    // ignore messages if we don't have the channel key
+                    if (router && perhapsDecode(p))
                         router->enqueueReceivedMessage(p);
                     else
                         packetPool.release(p);
