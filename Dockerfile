@@ -27,7 +27,7 @@ RUN wget https://raw.githubusercontent.com/platformio/platformio-core-installer/
 	source ~/.platformio/penv/bin/activate && \
 	./bin/build-native.sh
 
-FROM frolvlad/alpine-glibc
+FROM frolvlad/alpine-glibc:glibc-2.31
 
 RUN apk --update add --no-cache g++ shadow && \
 	groupadd -g 1000 mesh && useradd -ml -u 1000 -g 1000 mesh
