@@ -19,15 +19,18 @@ void powerCommandsCheck()
         NVIC_SystemReset();
 #elif defined(ARCH_RP2040)
         rp2040.reboot();
-#elif defined(ARCH_RASPBERRY_PI) || defined(ARCH_PORTDUINO)
+#elif defined(ARCH_RASPBERRY_PI)
         deInitApiServer();
-#if defined(ARCH_RASPBERRY_PI)
         if (aLinuxInputImpl)
             aLinuxInputImpl->deInit();
-#endif
         SPI.end();
         Wire.end();
         Serial1.end();
+        reboot();
+#elif defined(ARCH_PORTDUINO)
+        deInitApiServer();
+        SPI.end();
+        Wire.end();
         reboot();
 #else
         rebootAtMsec = -1;
