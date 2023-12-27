@@ -129,6 +129,8 @@ class MeshService
 
     bool isToPhoneQueueEmpty();
 
+    ErrorCode sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, ErrorCode res, uint32_t mesh_packet_id);
+
   private:
     /// Called when our gps position has changed - updates nodedb and sends Location message out into the mesh
     /// returns 0 to allow further processing
@@ -138,8 +140,6 @@ class MeshService
     /// needs to keep the packet around it makes a copy
     int handleFromRadio(const meshtastic_MeshPacket *p);
     friend class RoutingModule;
-
-    ErrorCode sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, ErrorCode res, uint32_t mesh_packet_id);
 };
 
 extern MeshService service;

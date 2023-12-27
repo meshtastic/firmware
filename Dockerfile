@@ -36,6 +36,6 @@ COPY --from=builder /tmp/firmware/release/meshtasticd_linux_amd64 /home/mesh/
 
 USER mesh
 WORKDIR /home/mesh
-CMD sh -cx "./meshtasticd_linux_amd64 --hwid '$RANDOM'"
+CMD sh -cx "./meshtasticd_linux_amd64 --hwid '${HWID:-$RANDOM}'"
 
 HEALTHCHECK NONE
