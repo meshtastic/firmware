@@ -21,10 +21,14 @@
 #include <pb_encode.h>
 
 #ifdef ARCH_ESP32
-#include "mesh/http/WiFiAPClient.h"
+#include "mesh/wifi/WiFiAPClient.h"
 #include "modules/esp32/StoreForwardModule.h"
 #include <Preferences.h>
 #include <nvs_flash.h>
+#endif
+
+#ifdef ARCH_RASPBERRY_PI
+#include "platform/portduino/PortduinoGlue.h"
 #endif
 
 #ifdef ARCH_NRF52
@@ -191,6 +195,12 @@ void NodeDB::installDefaultConfig()
     config.bluetooth.fixed_pin = defaultBLEPin;
 #if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS)
     bool hasScreen = true;
+#elif ARCH_RASPBERRY_PI
+    bool hasScreen = false;
+    if (settingsMap[displayPanel])
+        hasScreen = true;
+    else
+        hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
 #else
     bool hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
 #endif
@@ -245,9 +255,18 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 1000;
     moduleConfig.external_notification.nag_timeout = 60;
 #endif
-#ifdef T_WATCH_S3
-    // Don't worry about the other settings, we'll use the DRV2056 behavior for notifications
+#ifdef HAS_I2S
+    // Don't worry about the other settings for T-Watch, we'll also use the DRV2056 behavior for notifications
     moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.use_i2s_as_buzzer = true;
+    moduleConfig.external_notification.alert_message_buzzer = true;
+    moduleConfig.external_notification.nag_timeout = 60;
+#endif
+#ifdef NANO_G2_ULTRA
+    moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.alert_message = true;
+    moduleConfig.external_notification.output_ms = 100;
+    moduleConfig.external_notification.active = true;
 #endif
     moduleConfig.has_canned_message = true;
 
@@ -287,6 +306,9 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
     } else if (role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
         moduleConfig.telemetry.environment_measurement_enabled = true;
         moduleConfig.telemetry.environment_update_interval = 300;
+    } else if (role == meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND) {
+        config.position.position_broadcast_smart_enabled = false;
+        config.position.position_broadcast_secs = 300; // Every 5 minutes
     } else if (role == meshtastic_Config_DeviceConfig_Role_TAK) {
         config.device.node_info_broadcast_secs = ONE_DAY;
         config.position.position_broadcast_smart_enabled = false;
@@ -296,6 +318,15 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
             (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_SPEED |
              meshtastic_Config_PositionConfig_PositionFlags_HEADING | meshtastic_Config_PositionConfig_PositionFlags_DOP);
         moduleConfig.telemetry.device_update_interval = ONE_DAY;
+    } else if (role == meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
+        config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY;
+        config.device.node_info_broadcast_secs = UINT32_MAX;
+        config.position.position_broadcast_smart_enabled = false;
+        config.position.position_broadcast_secs = UINT32_MAX;
+        moduleConfig.neighbor_info.update_interval = UINT32_MAX;
+        moduleConfig.telemetry.device_update_interval = UINT32_MAX;
+        moduleConfig.telemetry.environment_update_interval = UINT32_MAX;
+        moduleConfig.telemetry.air_quality_interval = UINT32_MAX;
     }
 }
 

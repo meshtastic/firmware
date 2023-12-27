@@ -52,6 +52,7 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
 
     /** Only used in power saving trackers for now */
     void clearPosition();
+    void sendLostAndFoundText();
 };
 
 struct SmartPosition {

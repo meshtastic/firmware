@@ -7,7 +7,7 @@
 #include "nimble/NimbleBluetooth.h"
 #endif
 #include "BleOta.h"
-#include "mesh/http/WiFiAPClient.h"
+#include "mesh/wifi/WiFiAPClient.h"
 
 #include "meshUtils.h"
 #include "sleep.h"

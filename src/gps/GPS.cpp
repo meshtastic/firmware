@@ -293,7 +293,7 @@ bool GPS::setup()
             gnssModel = GNSS_MODEL_UNKNOWN;
         }
 #else
-        gnssModel = GNSS_MODEL_UC6850;
+        gnssModel = GNSS_MODEL_UC6580;
 #endif
 
         if (gnssModel == GNSS_MODEL_MTK) {
@@ -311,11 +311,23 @@ bool GPS::setup()
             // Switch to Vehicle Mode, since SoftRF enables Aviation < 2g
             _serial_gps->write("$PCAS11,3*1E\r\n");
             delay(250);
-        } else if (gnssModel == GNSS_MODEL_UC6850) {
-
-            // use GPS + GLONASS
-            _serial_gps->write("$CFGSYS,h15\r\n");
+        } else if (gnssModel == GNSS_MODEL_UC6580) {
+            // The Unicore UC6580 can use a lot of sat systems, enable it to
+            // use GPS L1 & L5 + BDS B1I & B2a + GLONASS L1 + GALILEO E1 & E5a + SBAS
+            // This will reset the receiver, so wait a bit afterwards
+            // The paranoid will wait for the OK*04 confirmation response after each command.
+            _serial_gps->write("$CFGSYS,h25155\r\n");
+            delay(750);
+            // Must be done after the CFGSYS command
+            // Turn off GSV messages, we don't really care about which and where the sats are, maybe someday.
+            _serial_gps->write("$CFGMSG,0,3,0\r\n");
             delay(250);
+            // Turn off NOTICE __TXT messages, these may provide Unicore some info but we don't care.
+            _serial_gps->write("$CFGMSG,6,0,0\r\n");
+            delay(250);
+            _serial_gps->write("$CFGMSG,6,1,0\r\n");
+            delay(250);
+
         } else if (gnssModel == GNSS_MODEL_UBLOX) {
             // Configure GNSS system to GPS+SBAS+GLONASS (Module may restart after this command)
             // We need set it because by default it is GPS only, and we want to use GLONASS too
@@ -495,14 +507,14 @@ void GPS::setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime)
 #ifdef PIN_GPS_STANDBY // Specifically the standby pin for L76K and clones
     if (on) {
         LOG_INFO("Waking GPS");
-        digitalWrite(PIN_GPS_STANDBY, 1);
         pinMode(PIN_GPS_STANDBY, OUTPUT);
+        digitalWrite(PIN_GPS_STANDBY, 1);
         return;
     } else {
         LOG_INFO("GPS entering sleep");
         // notifyGPSSleep.notifyObservers(NULL);
-        digitalWrite(PIN_GPS_STANDBY, 0);
         pinMode(PIN_GPS_STANDBY, OUTPUT);
+        digitalWrite(PIN_GPS_STANDBY, 0);
         return;
     }
 #endif
@@ -563,15 +575,20 @@ void GPS::setAwake(bool on)
         if ((int32_t)getSleepTime() - averageLockTime >
             15 * 60 * 1000) { // 15 minutes is probably long enough to make a complete poweroff worth it.
             setGPSPower(on, false, getSleepTime() - averageLockTime);
+            return;
         } else if ((int32_t)getSleepTime() - averageLockTime > 10000) { // 10 seconds is enough for standby
 #ifdef GPS_UC6580
             setGPSPower(on, false, getSleepTime() - averageLockTime);
 #else
             setGPSPower(on, true, getSleepTime() - averageLockTime);
 #endif
-        } else if (averageLockTime > 20000) {
+            return;
+        }
+        if (averageLockTime > 20000) {
             averageLockTime -= 1000; // eventually want to sleep again.
         }
+        if (on)
+            setGPSPower(true, true, 0); // make sure we don't have a fallthrough where GPS is stuck off
     }
 }
 
@@ -920,8 +937,8 @@ GPS *GPS::createGps()
 
     if (_en_gpio != 0) {
         LOG_DEBUG("Setting %d to output.\n", _en_gpio);
-        digitalWrite(_en_gpio, !GPS_EN_ACTIVE);
         pinMode(_en_gpio, OUTPUT);
+        digitalWrite(_en_gpio, !GPS_EN_ACTIVE);
     }
 
 #ifdef PIN_GPS_PPS
@@ -941,8 +958,8 @@ GPS *GPS::createGps()
     new_gps->setGPSPower(true, false, 0);
 
 #ifdef PIN_GPS_RESET
-    digitalWrite(PIN_GPS_RESET, GPS_RESET_MODE); // assert for 10ms
     pinMode(PIN_GPS_RESET, OUTPUT);
+    digitalWrite(PIN_GPS_RESET, GPS_RESET_MODE); // assert for 10ms
     delay(10);
     digitalWrite(PIN_GPS_RESET, !GPS_RESET_MODE);
 #endif
@@ -987,8 +1004,8 @@ bool GPS::factoryReset()
 {
 #ifdef PIN_GPS_REINIT
     // The L76K GNSS on the T-Echo requires the RESET pin to be pulled LOW
-    digitalWrite(PIN_GPS_REINIT, 0);
     pinMode(PIN_GPS_REINIT, OUTPUT);
+    digitalWrite(PIN_GPS_REINIT, 0);
     delay(150); // The L76K datasheet calls for at least 100MS delay
     digitalWrite(PIN_GPS_REINIT, 1);
 #endif

@@ -43,7 +43,18 @@ typedef enum _meshtastic_Config_DeviceConfig_Role {
     Used for nodes dedicated for connection to an ATAK EUD.
     Turns off many of the routine broadcasts to favor CoT packet stream
     from the Meshtastic ATAK plugin -> IMeshService -> Node */
-    meshtastic_Config_DeviceConfig_Role_TAK = 7
+    meshtastic_Config_DeviceConfig_Role_TAK = 7,
+    /* Client Hidden device role
+    Used for nodes that "only speak when spoken to"
+    Turns all of the routine broadcasts but allows for ad-hoc communication
+    Still rebroadcasts, but with local only rebroadcast mode (known meshes only)
+    Can be used for clandestine operation or to dramatically reduce airtime / power consumption */
+    meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN = 8,
+    /* Lost and Found device role
+    Used to automatically send a text message to the mesh 
+    with the current position of the device on a frequent interval:
+    "I'm lost! Position: lat / long" */
+    meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND = 9
 } meshtastic_Config_DeviceConfig_Role;
 
 /* Defines the device's behavior for how messages are rebroadcast */
@@ -56,7 +67,10 @@ typedef enum _meshtastic_Config_DeviceConfig_RebroadcastMode {
     meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING = 1,
     /* Ignores observed messages from foreign meshes that are open or those which it cannot decrypt.
  Only rebroadcasts message on the nodes local primary / secondary channels. */
-    meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY = 2
+    meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY = 2,
+    /* Ignores observed messages from foreign meshes like LOCAL_ONLY,
+ but takes it step further by also ignoring messages from nodenums not in the node's known list (NodeDB) */
+    meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY = 3
 } meshtastic_Config_DeviceConfig_RebroadcastMode;
 
 /* Bit field of boolean configuration options, indicating which optional
@@ -479,12 +493,12 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_Config_DeviceConfig_Role_MIN meshtastic_Config_DeviceConfig_Role_CLIENT
-#define _meshtastic_Config_DeviceConfig_Role_MAX meshtastic_Config_DeviceConfig_Role_TAK
-#define _meshtastic_Config_DeviceConfig_Role_ARRAYSIZE ((meshtastic_Config_DeviceConfig_Role)(meshtastic_Config_DeviceConfig_Role_TAK+1))
+#define _meshtastic_Config_DeviceConfig_Role_MAX meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND
+#define _meshtastic_Config_DeviceConfig_Role_ARRAYSIZE ((meshtastic_Config_DeviceConfig_Role)(meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND+1))
 
 #define _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN meshtastic_Config_DeviceConfig_RebroadcastMode_ALL
-#define _meshtastic_Config_DeviceConfig_RebroadcastMode_MAX meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY
-#define _meshtastic_Config_DeviceConfig_RebroadcastMode_ARRAYSIZE ((meshtastic_Config_DeviceConfig_RebroadcastMode)(meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY+1))
+#define _meshtastic_Config_DeviceConfig_RebroadcastMode_MAX meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY
+#define _meshtastic_Config_DeviceConfig_RebroadcastMode_ARRAYSIZE ((meshtastic_Config_DeviceConfig_RebroadcastMode)(meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY+1))
 
 #define _meshtastic_Config_PositionConfig_PositionFlags_MIN meshtastic_Config_PositionConfig_PositionFlags_UNSET
 #define _meshtastic_Config_PositionConfig_PositionFlags_MAX meshtastic_Config_PositionConfig_PositionFlags_SPEED

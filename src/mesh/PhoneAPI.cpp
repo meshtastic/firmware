@@ -298,6 +298,10 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_ambient_lighting_tag;
             fromRadioScratch.moduleConfig.payload_variant.ambient_lighting = moduleConfig.ambient_lighting;
             break;
+        case meshtastic_ModuleConfig_paxcounter_tag:
+            fromRadioScratch.moduleConfig.which_payload_variant = meshtastic_ModuleConfig_paxcounter_tag;
+            fromRadioScratch.moduleConfig.payload_variant.paxcounter = moduleConfig.paxcounter;
+            break;
         default:
             LOG_ERROR("Unknown module config type %d\n", config_state);
         }

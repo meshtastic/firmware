@@ -402,11 +402,8 @@ bool Power::analogInit()
  */
 bool Power::setup()
 {
-    bool found = axpChipInit();
+    bool found = axpChipInit() || analogInit();
 
-    if (!found) {
-        found = analogInit();
-    }
     enabled = found;
     low_voltage_counter = 0;
 
@@ -435,7 +432,7 @@ void Power::shutdown()
     ledOff(PIN_LED2);
 #endif
 #ifdef PIN_LED3
-    ledOff(PIN_LED2);
+    ledOff(PIN_LED3);
 #endif
     doDeepSleep(DELAY_FOREVER, false);
 #endif
