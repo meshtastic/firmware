@@ -374,7 +374,7 @@ void setup()
     Wire1.setSCL(I2C_SCL1);
     Wire1.begin();
 #elif defined(I2C_SDA1) && !defined(ARCH_RP2040)
-    Wire1.begin(I2C_SDA1, I2C_SCL);
+    Wire1.begin(I2C_SDA1, I2C_SCL1);
 #endif
 
 #if defined(I2C_SDA) && defined(ARCH_RP2040)
