@@ -142,7 +142,9 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         //   source at all)
         return 0;
     }
-
+    if (this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {
+        return 0; // Ignore input while sending
+    }
     bool validEvent = false;
     if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP)) {
         if (this->messagesCount > 0) {

@@ -369,11 +369,19 @@ void setup()
 
 #endif
 
-#ifdef I2C_SDA1
+#if defined(I2C_SDA1) && defined(ARCH_RP2040)
+    Wire1.setSDA(I2C_SDA1);
+    Wire1.setSCL(I2C_SCL1);
+    Wire1.begin();
+#elif defined(I2C_SDA1) && !defined(ARCH_RP2040)
     Wire1.begin(I2C_SDA1, I2C_SCL1);
 #endif
 
-#ifdef I2C_SDA
+#if defined(I2C_SDA) && defined(ARCH_RP2040)
+    Wire.setSDA(I2C_SDA);
+    Wire.setSCL(I2C_SCL);
+    Wire.begin();
+#elif defined(I2C_SDA) && !defined(ARCH_RP2040)
     Wire.begin(I2C_SDA, I2C_SCL);
 #elif HAS_WIRE
     Wire.begin();
@@ -423,12 +431,22 @@ void setup()
 
     LOG_INFO("Scanning for i2c devices...\n");
 
-#ifdef I2C_SDA1
+#if defined(I2C_SDA1) && defined(ARCH_RP2040)
+    Wire1.setSDA(I2C_SDA1);
+    Wire1.setSCL(I2C_SCL1);
+    Wire1.begin();
+    i2cScanner->scanPort(ScanI2C::I2CPort::WIRE1);
+#elif defined(I2C_SDA1) && !defined(ARCH_RP2040)
     Wire1.begin(I2C_SDA1, I2C_SCL1);
     i2cScanner->scanPort(ScanI2C::I2CPort::WIRE1);
 #endif
 
-#ifdef I2C_SDA
+#if defined(I2C_SDA) && defined(ARCH_RP2040)
+    Wire.setSDA(I2C_SDA);
+    Wire.setSCL(I2C_SCL);
+    Wire.begin();
+    i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
+#elif defined(I2C_SDA) && !defined(ARCH_RP2040)
     Wire.begin(I2C_SDA, I2C_SCL);
     i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
 #elif HAS_WIRE
@@ -740,6 +758,20 @@ void setup()
                 exit(EXIT_FAILURE);
             } else {
                 LOG_INFO("RF95 Radio init succeeded, using RF95 radio\n");
+            }
+        }
+    } else if (settingsMap[use_sx1280]) {
+        if (!rIf) {
+            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+            rIf = new SX1280Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
+                                      settingsMap[busy]);
+            if (!rIf->init()) {
+                LOG_ERROR("Failed to find SX1280 radio\n");
+                delete rIf;
+                rIf = NULL;
+                exit(EXIT_FAILURE);
+            } else {
+                LOG_INFO("SX1280 Radio init succeeded, using SX1280 radio\n");
             }
         }
     }

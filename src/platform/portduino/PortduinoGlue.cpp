@@ -131,11 +131,14 @@ void portduinoSetup()
         if (yamlConfig["Lora"]) {
             settingsMap[use_sx1262] = false;
             settingsMap[use_rf95] = false;
+            settingsMap[use_sx1280] = false;
 
             if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "sx1262") {
                 settingsMap[use_sx1262] = true;
             } else if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "RF95") {
                 settingsMap[use_rf95] = true;
+            } else if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "sx1280") {
+                settingsMap[use_sx1280] = true;
             }
             settingsMap[dio2_as_rf_switch] = yamlConfig["Lora"]["DIO2_AS_RF_SWITCH"].as<bool>(false);
             settingsMap[cs] = yamlConfig["Lora"]["CS"].as<int>(RADIOLIB_NC);
