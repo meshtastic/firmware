@@ -27,6 +27,11 @@ void powerCommandsCheck()
         Wire.end();
         Serial1.end();
         reboot();
+#elif defined(ARCH_PORTDUINO)
+        deInitApiServer();
+        SPI.end();
+        Wire.end();
+        reboot();
 #else
         rebootAtMsec = -1;
         LOG_WARN("FIXME implement reboot for this platform. Note that some settings require a restart to be applied.\n");
