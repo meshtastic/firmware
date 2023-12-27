@@ -1,4 +1,5 @@
 #include "configuration.h"
+#include <Adafruit_TinyUSB.h>
 #include <Adafruit_nRFCrypto.h>
 #include <SPI.h>
 #include <Wire.h>
@@ -214,4 +215,9 @@ void clearBonds()
         nrf52Bluetooth->setup();
     }
     nrf52Bluetooth->clearBonds();
+}
+
+void enterDfuMode()
+{
+    enterUf2Dfu();
 }
