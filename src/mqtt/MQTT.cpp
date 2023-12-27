@@ -729,6 +729,7 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
             jsonObj["payload"] = new JSONValue(msgPayload);
             break;
         }
+#ifdef ARCH_ESP32
         case meshtastic_PortNum_PAXCOUNTER_APP: {
             msgType = "paxcounter";
             meshtastic_Paxcount scratch;
@@ -745,6 +746,7 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
             }
             break;
         }
+#endif
         // add more packet types here if needed
         default:
             break;
