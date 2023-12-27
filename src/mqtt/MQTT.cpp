@@ -7,6 +7,9 @@
 #include "mesh/Router.h"
 #include "mesh/generated/meshtastic/mqtt.pb.h"
 #include "mesh/generated/meshtastic/telemetry.pb.h"
+#if defined(ARCH_ESP32)
+#include "../mesh/generated/meshtastic/paxcount.pb.h"
+#endif
 #include "sleep.h"
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
@@ -684,6 +687,66 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
             }
             break;
         }
+        case meshtastic_PortNum_TRACEROUTE_APP: {
+            if (mp->decoded.request_id) { // Only report the traceroute response
+                msgType = "traceroute";
+                meshtastic_RouteDiscovery scratch;
+                meshtastic_RouteDiscovery *decoded = NULL;
+                memset(&scratch, 0, sizeof(scratch));
+                if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &meshtastic_RouteDiscovery_msg,
+                                         &scratch)) {
+                    decoded = &scratch;
+                    JSONArray route; // Route this message took
+                    // Lambda function for adding a long name to the route
+                    auto addToRoute = [](JSONArray *route, NodeNum num) {
+                        char long_name[40] = "Unknown";
+                        meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(num);
+                        bool name_known = node ? node->has_user : false;
+                        if (name_known)
+                            memcpy(long_name, node->user.long_name, sizeof(long_name));
+                        route->push_back(new JSONValue(long_name));
+                    };
+                    addToRoute(&route, mp->to); // Started at the original transmitter (destination of response)
+                    for (uint8_t i = 0; i < decoded->route_count; i++) {
+                        addToRoute(&route, decoded->route[i]);
+                    }
+                    addToRoute(&route, mp->from); // Ended at the original destination (source of response)
+
+                    msgPayload["route"] = new JSONValue(route);
+                    jsonObj["payload"] = new JSONValue(msgPayload);
+                } else {
+                    LOG_ERROR("Error decoding protobuf for traceroute message!\n");
+                }
+            }
+            break;
+        }
+        case meshtastic_PortNum_DETECTION_SENSOR_APP: {
+            msgType = "detection";
+            char payloadStr[(mp->decoded.payload.size) + 1];
+            memcpy(payloadStr, mp->decoded.payload.bytes, mp->decoded.payload.size);
+            payloadStr[mp->decoded.payload.size] = 0; // null terminated string
+            msgPayload["text"] = new JSONValue(payloadStr);
+            jsonObj["payload"] = new JSONValue(msgPayload);
+            break;
+        }
+#ifdef ARCH_ESP32
+        case meshtastic_PortNum_PAXCOUNTER_APP: {
+            msgType = "paxcounter";
+            meshtastic_Paxcount scratch;
+            meshtastic_Paxcount *decoded = NULL;
+            memset(&scratch, 0, sizeof(scratch));
+            if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &meshtastic_Paxcount_msg, &scratch)) {
+                decoded = &scratch;
+                msgPayload["wifi_count"] = new JSONValue((uint)decoded->wifi);
+                msgPayload["ble_count"] = new JSONValue((uint)decoded->ble);
+                msgPayload["uptime"] = new JSONValue((uint)decoded->uptime);
+                jsonObj["payload"] = new JSONValue(msgPayload);
+            } else {
+                LOG_ERROR("Error decoding protobuf for Paxcount message!\n");
+            }
+            break;
+        }
+#endif
         // add more packet types here if needed
         default:
             break;
