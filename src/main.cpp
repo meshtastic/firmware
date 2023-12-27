@@ -369,11 +369,19 @@ void setup()
 
 #endif
 
-#ifdef I2C_SDA1
-    Wire1.begin(I2C_SDA1, I2C_SCL1);
+#if defined(I2C_SDA1) && defined(ARCH_RP2040)
+    Wire1.setSDA(I2C_SDA1);
+    Wire1.setSCL(I2C_SCL1);
+    Wire1.begin();
+#elif defined(I2C_SDA1) && !defined(ARCH_RP2040)
+    Wire1.begin(I2C_SDA1, I2C_SCL);
 #endif
 
-#ifdef I2C_SDA
+#if defined(I2C_SDA) && defined(ARCH_RP2040)
+    Wire.setSDA(I2C_SDA);
+    Wire.setSCL(I2C_SCL);
+    Wire.begin();
+#elif defined(I2C_SDA) && !defined(ARCH_RP2040)
     Wire.begin(I2C_SDA, I2C_SCL);
 #elif HAS_WIRE
     Wire.begin();
@@ -423,12 +431,22 @@ void setup()
 
     LOG_INFO("Scanning for i2c devices...\n");
 
-#ifdef I2C_SDA1
+#if defined(I2C_SDA1) && defined(ARCH_RP2040)
+    Wire1.setSDA(I2C_SDA1);
+    Wire1.setSCL(I2C_SCL1);
+    Wire1.begin();
+    i2cScanner->scanPort(ScanI2C::I2CPort::WIRE1);
+#elif defined(I2C_SDA1) && !defined(ARCH_RP2040)
     Wire1.begin(I2C_SDA1, I2C_SCL1);
     i2cScanner->scanPort(ScanI2C::I2CPort::WIRE1);
 #endif
 
-#ifdef I2C_SDA
+#if defined(I2C_SDA) && defined(ARCH_RP2040)
+    Wire.setSDA(I2C_SDA);
+    Wire.setSCL(I2C_SCL);
+    Wire.begin();
+    i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
+#elif defined(I2C_SDA) && !defined(ARCH_RP2040)
     Wire.begin(I2C_SDA, I2C_SCL);
     i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
 #elif HAS_WIRE
