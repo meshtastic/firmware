@@ -328,9 +328,9 @@ int RadioInterface::notifyDeepSleepCb(void *unused)
  * djb2 by Dan Bernstein.
  * http://www.cse.yorku.ca/~oz/hash.html
  */
-unsigned long hash(const char *str)
+uint32_t hash(const char *str)
 {
-    unsigned long hash = 5381;
+    uint32_t hash = 5381;
     int c;
 
     while ((c = *str++) != 0)
