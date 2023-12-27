@@ -131,7 +131,7 @@ typedef struct _meshtastic_AdminMessage {
         bool get_node_remote_hardware_pins_request;
         /* Respond with the mesh's nodes with their available gpio pins for RemoteHardware module use */
         meshtastic_NodeRemoteHardwarePinsResponse get_node_remote_hardware_pins_response;
-        /* Enter (serial) DFU mode
+        /* Enter (UF2) DFU mode
      Only implemented on NRF52 currently */
         bool enter_dfu_mode_request;
         /* Set the owner for this node */
