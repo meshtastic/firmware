@@ -92,8 +92,9 @@ bool RemoteHardwareModule::handleReceivedProtobuf(const meshtastic_MeshPacket &r
             watchGpios = p.gpio_mask;
             lastWatchMsec = 0; // Force a new publish soon
             previousWatch =
-                ~watchGpios; // generate a 'previous' value which is guaranteed to not match (to force an initial publish)
-            enabled = true;  // Let our thread run at least once
+                ~watchGpios;   // generate a 'previous' value which is guaranteed to not match (to force an initial publish)
+            enabled = true;    // Let our thread run at least once
+            setInterval(2000); // Set a new interval so we'll run soon
             LOG_INFO("Now watching GPIOs 0x%llx\n", watchGpios);
             break;
         }
@@ -118,6 +119,7 @@ int32_t RemoteHardwareModule::runOnce()
 
         if (now - lastWatchMsec >= WATCH_INTERVAL_MSEC) {
             uint64_t curVal = digitalReads(watchGpios);
+            lastWatchMsec = now;
 
             if (curVal != previousWatch) {
                 previousWatch = curVal;
@@ -136,5 +138,5 @@ int32_t RemoteHardwareModule::runOnce()
         return disable();
     }
 
-    return 200; // Poll our GPIOs every 200ms (FIXME, make adjustable via protobuf arg)
+    return 2000; // Poll our GPIOs every 2000ms
 }
