@@ -10,6 +10,7 @@
 #if defined(ARCH_ESP32)
 #include "../mesh/generated/meshtastic/paxcount.pb.h"
 #endif
+#include "mesh/generated/meshtastic/remote_hardware.pb.h"
 #include "sleep.h"
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
@@ -747,6 +748,28 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
             break;
         }
 #endif
+        case meshtastic_PortNum_REMOTE_HARDWARE_APP: {
+            meshtastic_HardwareMessage scratch;
+            meshtastic_HardwareMessage *decoded = NULL;
+            memset(&scratch, 0, sizeof(scratch));
+            if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &meshtastic_HardwareMessage_msg,
+                                     &scratch)) {
+                decoded = &scratch;
+                if (decoded->type == meshtastic_HardwareMessage_Type_GPIOS_CHANGED) {
+                    msgType = "gpios_changed";
+                    msgPayload["gpio_value"] = new JSONValue((uint)decoded->gpio_value);
+                    jsonObj["payload"] = new JSONValue(msgPayload);
+                } else if (decoded->type == meshtastic_HardwareMessage_Type_READ_GPIOS_REPLY) {
+                    msgType = "gpios_read_reply";
+                    msgPayload["gpio_value"] = new JSONValue((uint)decoded->gpio_value);
+                    msgPayload["gpio_mask"] = new JSONValue((uint)decoded->gpio_mask);
+                    jsonObj["payload"] = new JSONValue(msgPayload);
+                }
+            } else {
+                LOG_ERROR("Error decoding protobuf for RemoteHardware message!\n");
+            }
+            break;
+        }
         // add more packet types here if needed
         default:
             break;
