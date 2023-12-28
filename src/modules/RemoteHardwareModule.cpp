@@ -56,7 +56,7 @@ bool RemoteHardwareModule::handleReceivedProtobuf(const meshtastic_MeshPacket &r
         LOG_INFO("Received RemoteHardware type=%d\n", p.type);
 
         switch (p.type) {
-        case meshtastic_HardwareMessage_Type_WRITE_GPIOS:
+        case meshtastic_HardwareMessage_Type_WRITE_GPIOS: {
             // Print notification to LCD screen
             screen->print("Write GPIOs\n");
 
@@ -69,6 +69,7 @@ bool RemoteHardwareModule::handleReceivedProtobuf(const meshtastic_MeshPacket &r
             pinModes(p.gpio_mask, OUTPUT);
 
             break;
+        }
 
         case meshtastic_HardwareMessage_Type_READ_GPIOS: {
             // Print notification to LCD screen
