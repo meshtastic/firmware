@@ -10,7 +10,6 @@
 
 #include "PortduinoGlue.h"
 #include "linux/gpio/LinuxGPIOPin.h"
-#include "pigpio.h"
 #include "yaml-cpp/yaml.h"
 #include <iostream>
 #include <map>
