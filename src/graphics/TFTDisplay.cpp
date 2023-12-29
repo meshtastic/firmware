@@ -344,8 +344,12 @@ class LGFX : public lgfx::LGFX_Device
   public:
     LGFX(void)
     {
-
-        _panel_instance = new lgfx::Panel_ST7789;
+        if (settingsMap[displayPanel] == st7789)
+            _panel_instance = new lgfx::Panel_ST7789;
+        else if (settingsMap[displayPanel] == st7735)
+            _panel_instance = new lgfx::Panel_ST7735;
+        else if (settingsMap[displayPanel] == st7735s)
+            _panel_instance = new lgfx::Panel_ST7735S;
         auto buscfg = _bus_instance.config();
         buscfg.spi_mode = 0;
 

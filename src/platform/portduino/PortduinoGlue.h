@@ -27,7 +27,7 @@ enum configNames {
     displayRotate,
     keyboardDevice
 };
-enum { no_screen, st7789 };
+enum { no_screen, st7789, st7735, st7735s };
 enum { no_touchscreen, xpt2046 };
 
 extern std::map<configNames, int> settingsMap;

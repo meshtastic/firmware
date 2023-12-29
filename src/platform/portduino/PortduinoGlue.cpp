@@ -123,8 +123,9 @@ void portduinoSetup()
             exit(EXIT_FAILURE);
         }
     } else {
-        std::cout << "No 'config.yaml' found, exiting." << std::endl;
-        exit(EXIT_FAILURE);
+        std::cout << "No 'config.yaml' found, running simulated." << std::endl;
+        return;
+        // exit(EXIT_FAILURE);
     }
 
     try {
@@ -162,6 +163,10 @@ void portduinoSetup()
         if (yamlConfig["Display"]) {
             if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ST7789")
                 settingsMap[displayPanel] = st7789;
+            else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ST7735")
+                settingsMap[displayPanel] = st7735;
+            else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ST7735S")
+                settingsMap[displayPanel] = st7735s;
             settingsMap[displayHeight] = yamlConfig["Display"]["Height"].as<int>(0);
             settingsMap[displayWidth] = yamlConfig["Display"]["Width"].as<int>(0);
             settingsMap[displayDC] = yamlConfig["Display"]["DC"].as<int>(-1);
@@ -183,10 +188,6 @@ void portduinoSetup()
 
     } catch (YAML::Exception e) {
         std::cout << "*** Exception " << e.what() << std::endl;
-        exit(EXIT_FAILURE);
-    }
-    if (access("/sys/kernel/debug/bluetooth/hci0/identity", R_OK) != 0) {
-        std::cout << "Cannot read Bluetooth MAC Address. Please run as root" << std::endl;
         exit(EXIT_FAILURE);
     }
 
