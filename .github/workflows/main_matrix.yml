@@ -120,7 +120,6 @@ jobs:
   build-rpi2040:
     strategy:
       fail-fast: false
-      max-parallel: 2
       matrix:
         include:
           - board: pico
