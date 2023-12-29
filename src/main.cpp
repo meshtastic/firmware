@@ -141,32 +141,12 @@ std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySenso
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
 
-#ifdef ARCH_RASPBERRY_PI
-void getPiMacAddr(uint8_t *dmac)
-{
-    std::fstream macIdentity;
-    macIdentity.open("/sys/kernel/debug/bluetooth/hci0/identity", std::ios::in);
-    std::string macLine;
-    getline(macIdentity, macLine);
-    macIdentity.close();
-
-    dmac[0] = strtol(macLine.substr(0, 2).c_str(), NULL, 16);
-    dmac[1] = strtol(macLine.substr(3, 2).c_str(), NULL, 16);
-    dmac[2] = strtol(macLine.substr(6, 2).c_str(), NULL, 16);
-    dmac[3] = strtol(macLine.substr(9, 2).c_str(), NULL, 16);
-    dmac[4] = strtol(macLine.substr(12, 2).c_str(), NULL, 16);
-    dmac[5] = strtol(macLine.substr(15, 2).c_str(), NULL, 16);
-}
-#endif
-
 const char *getDeviceName()
 {
     uint8_t dmac[6];
-#ifdef ARCH_RASPBERRY_PI
-    getPiMacAddr(dmac);
-#else
+
     getMacAddr(dmac);
-#endif
+
     // Meshtastic_ab3c or Shortname_abcd
     static char name[20];
     snprintf(name, sizeof(name), "%02x%02x", dmac[4], dmac[5]);

@@ -467,11 +467,8 @@ void NodeDB::init()
  */
 void NodeDB::pickNewNodeNum()
 {
-#ifdef ARCH_RASPBERRY_PI
-    getPiMacAddr(ourMacAddr); // Make sure ourMacAddr is set
-#else
+
     getMacAddr(ourMacAddr); // Make sure ourMacAddr is set
-#endif
 
     // Pick an initial nodenum based on the macaddr
     NodeNum nodeNum = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
