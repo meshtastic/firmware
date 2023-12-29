@@ -2,7 +2,7 @@
 #include "configuration.h"
 #include "error.h"
 #include "mesh/NodeDB.h"
-#ifdef ARCH_RASPBERRY_PI
+#ifdef ARCH_PORTDUINO
 #include "PortduinoGlue.h"
 #endif
 
@@ -77,7 +77,7 @@ template <typename T> bool SX126xInterface<T>::init()
 #ifdef SX126X_DIO2_AS_RF_SWITCH
     LOG_DEBUG("Setting DIO2 as RF switch\n");
     bool dio2AsRfSwitch = true;
-#elif defined(ARCH_RASPBERRY_PI)
+#elif defined(ARCH_PORTDUINO)
     bool dio2AsRfSwitch = false;
     if (settingsMap[dio2_as_rf_switch]) {
         LOG_DEBUG("Setting DIO2 as RF switch\n");

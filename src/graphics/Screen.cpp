@@ -43,7 +43,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "sleep.h"
 #include "target_specific.h"
 
-#if HAS_WIFI && !defined(ARCH_RASPBERRY_PI)
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 
@@ -52,7 +52,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "modules/esp32/StoreForwardModule.h"
 #endif
 
-#if ARCH_RASPBERRY_PI
+#if ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
@@ -930,7 +930,7 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #elif defined(USE_ST7567)
     dispdev = new ST7567Wire(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
-#elif ARCH_RASPBERRY_PI
+#elif ARCH_PORTDUINO
     if (settingsMap[displayPanel] != no_screen) {
         LOG_DEBUG("Making TFTDisplay!\n");
         dispdev = new TFTDisplay(address.address, -1, -1, geometry,
@@ -976,7 +976,7 @@ void Screen::handleSetOn(bool on)
 #ifdef T_WATCH_S3
             PMU->enablePowerOutput(XPOWERS_ALDO2);
 #endif
-#if !ARCH_RASPBERRY_PI
+#if !ARCH_PORTDUINO
             dispdev->displayOn();
 #endif
             dispdev->displayOn();
@@ -1060,7 +1060,7 @@ void Screen::setup()
     uint8_t dmac[6];
     getMacAddr(dmac);
     snprintf(ourId, sizeof(ourId), "%02x%02x", dmac[4], dmac[5]);
-#if ARCH_RASPBERRY_PI
+#if ARCH_PORTDUINO
     handleSetOn(false); // force clean init
 #endif
 
@@ -1075,7 +1075,7 @@ void Screen::setup()
 #endif
     serialSinceMsec = millis();
 
-#if ARCH_RASPBERRY_PI
+#if ARCH_PORTDUINO
     if (settingsMap[touchscreenModule]) {
         touchScreenImpl1 =
             new TouchScreenImpl1(dispdev->getWidth(), dispdev->getHeight(), static_cast<TFTDisplay *>(dispdev)->getTouch);
@@ -1344,7 +1344,7 @@ void Screen::setFrames()
     // call a method on debugInfoScreen object (for more details)
     normalFrames[numframes++] = &Screen::drawDebugInfoSettingsTrampoline;
 
-#if HAS_WIFI && !defined(ARCH_RASPBERRY_PI)
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
     if (isWifiAvailable()) {
         // call a method on debugInfoScreen object (for more details)
         normalFrames[numframes++] = &Screen::drawDebugInfoWiFiTrampoline;
@@ -1588,7 +1588,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 #endif
     } else {
         // TODO: Raspberry Pi supports more than just the one screen size
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS) || ARCH_RASPBERRY_PI) &&           \
+#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS) || ARCH_PORTDUINO) &&              \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
         display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8,
                                imgInfoL1);
@@ -1615,7 +1615,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 // Jm
 void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-#if HAS_WIFI && !defined(ARCH_RASPBERRY_PI)
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
     const char *wifiName = config.network.wifi_ssid;
 
     display->setFont(FONT_SMALL);

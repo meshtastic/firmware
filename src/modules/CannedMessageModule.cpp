@@ -1,5 +1,5 @@
 #include "configuration.h"
-#if ARCH_RASPBERRY_PI
+#if ARCH_PORTDUINO
 #include "PortduinoGlue.h"
 #endif
 #if HAS_SCREEN

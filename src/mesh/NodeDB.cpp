@@ -27,7 +27,7 @@
 #include <nvs_flash.h>
 #endif
 
-#ifdef ARCH_RASPBERRY_PI
+#ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
@@ -195,7 +195,7 @@ void NodeDB::installDefaultConfig()
     config.bluetooth.fixed_pin = defaultBLEPin;
 #if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS)
     bool hasScreen = true;
-#elif ARCH_RASPBERRY_PI
+#elif ARCH_PORTDUINO
     bool hasScreen = false;
     if (settingsMap[displayPanel])
         hasScreen = true;

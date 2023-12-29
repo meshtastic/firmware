@@ -66,7 +66,7 @@ NRF52Bluetooth *nrf52Bluetooth;
 #include "platform/portduino/SimRadio.h"
 #endif
 
-#ifdef ARCH_RASPBERRY_PI
+#ifdef ARCH_PORTDUINO
 #include "linux/LinuxHardwareI2C.h"
 #include "platform/portduino/PortduinoGlue.h"
 #include <fstream>
@@ -74,7 +74,7 @@ NRF52Bluetooth *nrf52Bluetooth;
 #include <string>
 #endif
 
-#if HAS_BUTTON || defined(ARCH_RASPBERRY_PI)
+#if HAS_BUTTON || defined(ARCH_PORTDUINO)
 #include "ButtonThread.h"
 #endif
 #include "PowerFSMThread.h"
@@ -191,13 +191,13 @@ static int32_t ledBlinker()
 
 uint32_t timeLastPowered = 0;
 
-#if HAS_BUTTON || defined(ARCH_RASPBERRY_PI)
+#if HAS_BUTTON || defined(ARCH_PORTDUINO)
 bool ButtonThread::shutdown_on_long_stop = false;
 #endif
 
 static Periodic *ledPeriodic;
 static OSThread *powerFSMthread;
-#if HAS_BUTTON || defined(ARCH_RASPBERRY_PI)
+#if HAS_BUTTON || defined(ARCH_PORTDUINO)
 static OSThread *buttonThread;
 uint32_t ButtonThread::longPressTime = 0;
 #endif
@@ -593,7 +593,7 @@ void setup()
     } else
         router = new ReliableRouter();
 
-#if HAS_BUTTON || defined(ARCH_RASPBERRY_PI)
+#if HAS_BUTTON || defined(ARCH_PORTDUINO)
     // Buttons. Moved here cause we need NodeDB to be initialized
     buttonThread = new ButtonThread();
 #endif
@@ -695,7 +695,7 @@ void setup()
 // the current region name)
 #if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS)
     screen->setup();
-#elif ARCH_RASPBERRY_PI
+#elif defined(ARCH_PORTDUINO)
     if (screen_found.port != ScanI2C::I2CPort::NO_I2C || settingsMap[displayPanel]) {
         screen->setup();
     }
@@ -712,7 +712,7 @@ void setup()
     digitalWrite(SX126X_ANT_SW, 1);
 #endif
 
-#ifdef ARCH_RASPBERRY_PI
+#ifdef ARCH_PORTDUINO
     if (settingsMap[use_sx1262]) {
         if (!rIf) {
             LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
@@ -802,7 +802,7 @@ void setup()
     }
 #endif
 
-#if defined(USE_SX1262) && !defined(ARCH_RASPBERRY_PI)
+#if defined(USE_SX1262) && !defined(ARCH_PORTDUINO)
     if (!rIf) {
         rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {

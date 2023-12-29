@@ -1,5 +1,4 @@
 #pragma once
-#ifdef ARCH_RASPBERRY_PI
 #include <map>
 
 enum configNames {
@@ -33,5 +32,3 @@ enum { no_touchscreen, xpt2046 };
 extern std::map<configNames, int> settingsMap;
 extern std::map<configNames, std::string> settingsStrings;
 int initGPIOPin(int pinNum, std::string gpioChipname);
-
-#endif

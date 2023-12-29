@@ -8,7 +8,6 @@
 #include <Utility.h>
 #include <assert.h>
 
-#ifdef ARCH_RASPBERRY_PI
 #include "PortduinoGlue.h"
 #include "linux/gpio/LinuxGPIOPin.h"
 #include "pigpio.h"
@@ -19,10 +18,6 @@
 
 std::map<configNames, int> settingsMap;
 std::map<configNames, std::string> settingsStrings;
-
-#else
-#include <linux/gpio/LinuxGPIOPin.h>
-#endif
 
 // FIXME - move setBluetoothEnable into a HALPlatform class
 void setBluetoothEnable(bool on)
@@ -36,34 +31,7 @@ void cpuDeepSleep(uint32_t msecs)
 }
 
 void updateBatteryLevel(uint8_t level) NOT_IMPLEMENTED("updateBatteryLevel");
-#ifndef ARCH_RASPBERRY_PI
-/** a simulated pin for busted IRQ hardware
- * Porduino helper class to do this i2c based polling:
- */
-class PolledIrqPin : public GPIOPin
-{
-  public:
-    PolledIrqPin() : GPIOPin(LORA_DIO1, "loraIRQ") {}
 
-    /// Read the low level hardware for this pin
-    virtual PinStatus readPinHardware()
-    {
-        if (isrPinStatus < 0)
-            return LOW; // No interrupt handler attached, don't bother polling i2c right now
-        else {
-            extern RadioInterface *rIf; // FIXME, temporary hack until we know if we need to keep this
-
-            assert(rIf);
-            RadioLibInterface *rIf95 = static_cast<RadioLibInterface *>(rIf);
-            bool p = rIf95->isIRQPending();
-            log(SysGPIO, LogDebug, "PolledIrqPin::readPinHardware(%s, %d, %d)", getName(), getPinNum(), p);
-            return p ? HIGH : LOW;
-        }
-    }
-};
-
-static GPIOPin *loraIrq;
-#endif
 int TCPPort = 4403;
 
 static error_t parse_opt(int key, char *arg, struct argp_state *state)
@@ -101,8 +69,6 @@ void portduinoCustomInit()
 void portduinoSetup()
 {
     printf("Setting up Meshtastic on Portduino...\n");
-
-#ifdef ARCH_RASPBERRY_PI
     gpioInit();
 
     std::string gpioChipName = "gpiochip";
@@ -124,8 +90,23 @@ void portduinoSetup()
         }
     } else {
         std::cout << "No 'config.yaml' found, running simulated." << std::endl;
+        // Set the random seed equal to TCPPort to have a different seed per instance
+        randomSeed(TCPPort);
+
+        /* Aren't all pins defaulted to simulated?
+        auto fakeBusy = new SimGPIOPin(SX126X_BUSY, "fakeBusy");
+        fakeBusy->writePin(LOW);
+        fakeBusy->setSilent(true);
+        gpioBind(fakeBusy);
+
+        auto cs = new SimGPIOPin(SX126X_CS, "fakeLoraCS");
+        cs->setSilent(true);
+        gpioBind(cs);
+
+        gpioBind(new SimGPIOPin(SX126X_RESET, "fakeLoraReset"));
+        gpioBind(new SimGPIOPin(LORA_DIO1, "fakeLoraIrq"));
+        */
         return;
-        // exit(EXIT_FAILURE);
     }
 
     try {
@@ -236,55 +217,8 @@ void portduinoSetup()
     }
 
     return;
-#endif
-
-#ifdef defined(PORTDUINO_LINUX_HARDWARE)
-    SPI.begin(); // We need to create SPI
-    bool usePineLora = !spiChip->isSimulated();
-    if (usePineLora) {
-        printf("Connecting to PineLora board...\n");
-
-        // FIXME: remove this hack once interrupts are confirmed to work on new pine64 board
-        // loraIrq = new PolledIrqPin();
-        loraIrq = new LinuxGPIOPin(LORA_DIO1, "ch341", "int", "loraIrq"); // or "err"?
-        loraIrq->setSilent();
-        gpioBind(loraIrq);
-
-        // BUSY hw was busted on current board - just use the simulated pin (which will read low)
-        auto busy = new LinuxGPIOPin(SX126X_BUSY, "ch341", "slct", "loraBusy");
-        busy->setSilent();
-        gpioBind(busy);
-
-        gpioBind(new LinuxGPIOPin(SX126X_RESET, "ch341", "ini", "loraReset"));
-
-        auto loraCs = new LinuxGPIOPin(SX126X_CS, "ch341", "cs0", "loraCs");
-        loraCs->setSilent();
-        gpioBind(loraCs);
-    } else
-#endif
-#ifndef ARCH_RASPBERRY_PI
-    {
-        // Set the random seed equal to TCPPort to have a different seed per instance
-        randomSeed(TCPPort);
-
-        auto fakeBusy = new SimGPIOPin(SX126X_BUSY, "fakeBusy");
-        fakeBusy->writePin(LOW);
-        fakeBusy->setSilent(true);
-        gpioBind(fakeBusy);
-
-        auto cs = new SimGPIOPin(SX126X_CS, "fakeLoraCS");
-        cs->setSilent(true);
-        gpioBind(cs);
-
-        gpioBind(new SimGPIOPin(SX126X_RESET, "fakeLoraReset"));
-        gpioBind(new SimGPIOPin(LORA_DIO1, "fakeLoraIrq"));
-    }
-    // gpioBind((new SimGPIOPin(LORA_RESET, "LORA_RESET")));
-    // gpioBind((new SimGPIOPin(LORA_CS, "LORA_CS"))->setSilent());
-#endif
 }
 
-#ifdef ARCH_RASPBERRY_PI
 int initGPIOPin(int pinNum, std::string gpioChipName)
 {
     std::string gpio_name = "GPIO" + std::to_string(pinNum);
@@ -300,4 +234,3 @@ int initGPIOPin(int pinNum, std::string gpioChipName)
         return ERRNO_DISABLED;
     }
 }
-#endif

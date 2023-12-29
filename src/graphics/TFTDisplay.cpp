@@ -1,6 +1,6 @@
 #include "configuration.h"
 #include "main.h"
-#if ARCH_RASPBERRY_PI
+#if ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
@@ -331,7 +331,7 @@ static LGFX *tft = nullptr;
 #include <TFT_eSPI.h> // Graphics and font library for ILI9341 driver chip
 
 static TFT_eSPI *tft = nullptr; // Invoke library, pins defined in User_Setup.h
-#elif ARCH_RASPBERRY_PI
+#elif ARCH_PORTDUINO
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
 
 class LGFX : public lgfx::LGFX_Device
@@ -403,7 +403,7 @@ class LGFX : public lgfx::LGFX_Device
 static LGFX *tft = nullptr;
 #endif
 
-#if defined(ST7735_CS) || defined(ST7789_CS) || defined(ILI9341_DRIVER) || defined(RAK14014) || ARCH_RASPBERRY_PI
+#if defined(ST7735_CS) || defined(ST7789_CS) || defined(ILI9341_DRIVER) || defined(RAK14014) || ARCH_PORTDUINO
 #include "SPILock.h"
 #include "TFTDisplay.h"
 #include <SPI.h>
@@ -411,7 +411,7 @@ static LGFX *tft = nullptr;
 TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY geometry, HW_I2C i2cBus)
 {
     LOG_DEBUG("TFTDisplay!\n");
-#if ARCH_RASPBERRY_PI
+#if ARCH_PORTDUINO
     if (settingsMap[displayRotate]) {
         setGeometry(GEOMETRY_RAWMODE, settingsMap[configNames::displayHeight], settingsMap[configNames::displayWidth]);
     } else {
@@ -463,7 +463,7 @@ void TFTDisplay::sendCommand(uint8_t com)
     // handle display on/off directly
     switch (com) {
     case DISPLAYON: {
-#if ARCH_RASPBERRY_PI
+#if ARCH_PORTDUINO
         display(true);
         if (settingsMap[displayBacklight] > 0)
             digitalWrite(settingsMap[displayBacklight], TFT_BACKLIGHT_ON);
@@ -495,7 +495,7 @@ void TFTDisplay::sendCommand(uint8_t com)
         break;
     }
     case DISPLAYOFF: {
-#if ARCH_RASPBERRY_PI
+#if ARCH_PORTDUINO
         tft->clear();
         if (settingsMap[displayBacklight] > 0)
             digitalWrite(settingsMap[displayBacklight], !TFT_BACKLIGHT_ON);
