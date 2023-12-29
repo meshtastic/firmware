@@ -16,6 +16,11 @@ runs:
       run: |
         sudo apt-get install -y cppcheck
 
+    - name: Install libbluetooth
+      shell: bash
+      run: |
+        sudo apt-get install -y libbluetooth-dev
+
     - name: Setup Python
       uses: actions/setup-python@v4
       with:
