@@ -142,12 +142,7 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                 if (strcmp(e.channel_id, channels.getGlobalId(ch.index)) == 0 && e.packet && ch.settings.downlink_enabled) {
                     LOG_INFO("Received MQTT topic %s, len=%u\n", topic, length);
                     meshtastic_MeshPacket *p = packetPool.allocCopy(*e.packet);
-
-                    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
-                        p->channel = ch.index;
-                    }
-
-                    // ignore messages if we don't have the channel key
+                    p->channel = ch.index;
                     if (router && perhapsDecode(p))
                         router->enqueueReceivedMessage(p);
                     else
