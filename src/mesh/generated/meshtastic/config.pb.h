@@ -201,7 +201,12 @@ typedef enum _meshtastic_Config_LoRaConfig_RegionCode {
     /* Ukraine 433mhz */
     meshtastic_Config_LoRaConfig_RegionCode_UA_433 = 14,
     /* Ukraine 868mhz */
-    meshtastic_Config_LoRaConfig_RegionCode_UA_868 = 15
+    meshtastic_Config_LoRaConfig_RegionCode_UA_868 = 15,
+    /* Malaysia 433mhz */
+    meshtastic_Config_LoRaConfig_RegionCode_MY_433 = 16,
+    /* Malaysia 919mhz */
+    meshtastic_Config_LoRaConfig_RegionCode_MY_919 = 17
+
 } meshtastic_Config_LoRaConfig_RegionCode;
 
 /* Standard predefined channel settings
