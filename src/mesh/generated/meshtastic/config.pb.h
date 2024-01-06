@@ -285,10 +285,7 @@ typedef struct _meshtastic_Config_PositionConfig {
  or zero for the default of once every 30 seconds
  or a very large value (maxint) to update only once at boot. */
     uint32_t gps_update_interval;
-    /* How long should we try to get our position during each gps_update_interval attempt?  (in seconds)
- Or if zero, use the default of 30 seconds.
- If we don't get a new gps fix in that time, the gps will be put into sleep until  the next gps_update_rate
- window. */
+    /* Deprecated in favor of using smart / regular broadcast intervals as implicit attempt time */
     uint32_t gps_attempt_time;
     /* Bit field of boolean configuration options for POSITION messages
  (bitwise OR of PositionFlags) */
