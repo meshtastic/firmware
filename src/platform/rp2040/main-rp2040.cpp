@@ -36,3 +36,8 @@ void rp2040Setup()
     */
     randomSeed(rp2040.hwrand32());
 }
+
+void enterDfuMode()
+{
+    reset_usb_boot(0, 0);
+}
