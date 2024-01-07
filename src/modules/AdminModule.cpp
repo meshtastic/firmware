@@ -185,7 +185,6 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     case meshtastic_AdminMessage_remove_by_nodenum_tag: {
         LOG_INFO("Client is receiving a remove_nodenum command.\n");
         nodeDB.removeNodeByNum(r->remove_by_nodenum);
-        reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
     case meshtastic_AdminMessage_enter_dfu_mode_request_tag: {
