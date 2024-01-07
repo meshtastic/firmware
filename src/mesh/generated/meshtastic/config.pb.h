@@ -43,7 +43,18 @@ typedef enum _meshtastic_Config_DeviceConfig_Role {
     Used for nodes dedicated for connection to an ATAK EUD.
     Turns off many of the routine broadcasts to favor CoT packet stream
     from the Meshtastic ATAK plugin -> IMeshService -> Node */
-    meshtastic_Config_DeviceConfig_Role_TAK = 7
+    meshtastic_Config_DeviceConfig_Role_TAK = 7,
+    /* Client Hidden device role
+    Used for nodes that "only speak when spoken to"
+    Turns all of the routine broadcasts but allows for ad-hoc communication
+    Still rebroadcasts, but with local only rebroadcast mode (known meshes only)
+    Can be used for clandestine operation or to dramatically reduce airtime / power consumption */
+    meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN = 8,
+    /* Lost and Found device role
+    Used to automatically send a text message to the mesh 
+    with the current position of the device on a frequent interval:
+    "I'm lost! Position: lat / long" */
+    meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND = 9
 } meshtastic_Config_DeviceConfig_Role;
 
 /* Defines the device's behavior for how messages are rebroadcast */
@@ -56,7 +67,10 @@ typedef enum _meshtastic_Config_DeviceConfig_RebroadcastMode {
     meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING = 1,
     /* Ignores observed messages from foreign meshes that are open or those which it cannot decrypt.
  Only rebroadcasts message on the nodes local primary / secondary channels. */
-    meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY = 2
+    meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY = 2,
+    /* Ignores observed messages from foreign meshes like LOCAL_ONLY,
+ but takes it step further by also ignoring messages from nodenums not in the node's known list (NodeDB) */
+    meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY = 3
 } meshtastic_Config_DeviceConfig_RebroadcastMode;
 
 /* Bit field of boolean configuration options, indicating which optional
@@ -187,7 +201,11 @@ typedef enum _meshtastic_Config_LoRaConfig_RegionCode {
     /* Ukraine 433mhz */
     meshtastic_Config_LoRaConfig_RegionCode_UA_433 = 14,
     /* Ukraine 868mhz */
-    meshtastic_Config_LoRaConfig_RegionCode_UA_868 = 15
+    meshtastic_Config_LoRaConfig_RegionCode_UA_868 = 15,
+    /* Malaysia 433mhz */
+    meshtastic_Config_LoRaConfig_RegionCode_MY_433 = 16,
+    /* Malaysia 919mhz */
+    meshtastic_Config_LoRaConfig_RegionCode_MY_919 = 17
 } meshtastic_Config_LoRaConfig_RegionCode;
 
 /* Standard predefined channel settings
@@ -267,10 +285,7 @@ typedef struct _meshtastic_Config_PositionConfig {
  or zero for the default of once every 30 seconds
  or a very large value (maxint) to update only once at boot. */
     uint32_t gps_update_interval;
-    /* How long should we try to get our position during each gps_update_interval attempt?  (in seconds)
- Or if zero, use the default of 30 seconds.
- If we don't get a new gps fix in that time, the gps will be put into sleep until  the next gps_update_rate
- window. */
+    /* Deprecated in favor of using smart / regular broadcast intervals as implicit attempt time */
     uint32_t gps_attempt_time;
     /* Bit field of boolean configuration options for POSITION messages
  (bitwise OR of PositionFlags) */
@@ -479,12 +494,12 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_Config_DeviceConfig_Role_MIN meshtastic_Config_DeviceConfig_Role_CLIENT
-#define _meshtastic_Config_DeviceConfig_Role_MAX meshtastic_Config_DeviceConfig_Role_TAK
-#define _meshtastic_Config_DeviceConfig_Role_ARRAYSIZE ((meshtastic_Config_DeviceConfig_Role)(meshtastic_Config_DeviceConfig_Role_TAK+1))
+#define _meshtastic_Config_DeviceConfig_Role_MAX meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND
+#define _meshtastic_Config_DeviceConfig_Role_ARRAYSIZE ((meshtastic_Config_DeviceConfig_Role)(meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND+1))
 
 #define _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN meshtastic_Config_DeviceConfig_RebroadcastMode_ALL
-#define _meshtastic_Config_DeviceConfig_RebroadcastMode_MAX meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY
-#define _meshtastic_Config_DeviceConfig_RebroadcastMode_ARRAYSIZE ((meshtastic_Config_DeviceConfig_RebroadcastMode)(meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY+1))
+#define _meshtastic_Config_DeviceConfig_RebroadcastMode_MAX meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY
+#define _meshtastic_Config_DeviceConfig_RebroadcastMode_ARRAYSIZE ((meshtastic_Config_DeviceConfig_RebroadcastMode)(meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY+1))
 
 #define _meshtastic_Config_PositionConfig_PositionFlags_MIN meshtastic_Config_PositionConfig_PositionFlags_UNSET
 #define _meshtastic_Config_PositionConfig_PositionFlags_MAX meshtastic_Config_PositionConfig_PositionFlags_SPEED
@@ -511,8 +526,8 @@ extern "C" {
 #define _meshtastic_Config_DisplayConfig_DisplayMode_ARRAYSIZE ((meshtastic_Config_DisplayConfig_DisplayMode)(meshtastic_Config_DisplayConfig_DisplayMode_COLOR+1))
 
 #define _meshtastic_Config_LoRaConfig_RegionCode_MIN meshtastic_Config_LoRaConfig_RegionCode_UNSET
-#define _meshtastic_Config_LoRaConfig_RegionCode_MAX meshtastic_Config_LoRaConfig_RegionCode_UA_868
-#define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_UA_868+1))
+#define _meshtastic_Config_LoRaConfig_RegionCode_MAX meshtastic_Config_LoRaConfig_RegionCode_MY_919
+#define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_MY_919+1))
 
 #define _meshtastic_Config_LoRaConfig_ModemPreset_MIN meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST
 #define _meshtastic_Config_LoRaConfig_ModemPreset_MAX meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE

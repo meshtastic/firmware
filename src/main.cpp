@@ -84,6 +84,11 @@ NRF52Bluetooth *nrf52Bluetooth;
 #include "AmbientLightingThread.h"
 #endif
 
+#ifdef HAS_I2S
+#include "AudioThread.h"
+AudioThread *audioThread;
+#endif
+
 using namespace concurrency;
 
 // We always create a screen object, but we only init it if we find the hardware
@@ -122,6 +127,7 @@ ATECCX08A atecc;
 #ifdef T_WATCH_S3
 Adafruit_DRV2605 drv;
 #endif
+
 bool isVibrating = false;
 
 bool eink_found = true;
@@ -363,11 +369,19 @@ void setup()
 
 #endif
 
-#ifdef I2C_SDA1
+#if defined(I2C_SDA1) && defined(ARCH_RP2040)
+    Wire1.setSDA(I2C_SDA1);
+    Wire1.setSCL(I2C_SCL1);
+    Wire1.begin();
+#elif defined(I2C_SDA1) && !defined(ARCH_RP2040)
     Wire1.begin(I2C_SDA1, I2C_SCL1);
 #endif
 
-#ifdef I2C_SDA
+#if defined(I2C_SDA) && defined(ARCH_RP2040)
+    Wire.setSDA(I2C_SDA);
+    Wire.setSCL(I2C_SCL);
+    Wire.begin();
+#elif defined(I2C_SDA) && !defined(ARCH_RP2040)
     Wire.begin(I2C_SDA, I2C_SCL);
 #elif HAS_WIRE
     Wire.begin();
@@ -417,12 +431,22 @@ void setup()
 
     LOG_INFO("Scanning for i2c devices...\n");
 
-#ifdef I2C_SDA1
+#if defined(I2C_SDA1) && defined(ARCH_RP2040)
+    Wire1.setSDA(I2C_SDA1);
+    Wire1.setSCL(I2C_SCL1);
+    Wire1.begin();
+    i2cScanner->scanPort(ScanI2C::I2CPort::WIRE1);
+#elif defined(I2C_SDA1) && !defined(ARCH_RP2040)
     Wire1.begin(I2C_SDA1, I2C_SCL1);
     i2cScanner->scanPort(ScanI2C::I2CPort::WIRE1);
 #endif
 
-#ifdef I2C_SDA
+#if defined(I2C_SDA) && defined(ARCH_RP2040)
+    Wire.setSDA(I2C_SDA);
+    Wire.setSCL(I2C_SCL);
+    Wire.begin();
+    i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
+#elif defined(I2C_SDA) && !defined(ARCH_RP2040)
     Wire.begin(I2C_SDA, I2C_SCL);
     i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
 #elif HAS_WIRE
@@ -432,6 +456,10 @@ void setup()
     auto i2cCount = i2cScanner->countDevices();
     if (i2cCount == 0) {
         LOG_INFO("No I2C devices found\n");
+        Wire.end();
+#ifdef I2C_SDA1
+        Wire1.end();
+#endif
     } else {
         LOG_INFO("%i I2C devices found\n", i2cCount);
     }
@@ -576,10 +604,13 @@ void setup()
     // but we need to do this after main cpu init (esp32setup), because we need the random seed set
     nodeDB.init();
 
-    // If we're taking on the repeater role, use flood router
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER)
+    // If we're taking on the repeater role, use flood router and turn off 3V3_S rail because peripherals are not needed
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
         router = new FloodingRouter();
-    else
+#ifdef PIN_3V3_EN
+        digitalWrite(PIN_3V3_EN, LOW);
+#endif
+    } else
         router = new ReliableRouter();
 
 #if HAS_BUTTON || defined(ARCH_RASPBERRY_PI)
@@ -653,13 +684,21 @@ void setup()
 
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 
-    gps = GPS::createGps();
+    // If we're taking on the repeater role, ignore GPS
+    if (config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER) {
+        gps = GPS::createGps();
+    }
     if (gps) {
         gpsStatus->observe(&gps->newStatus);
     } else {
         LOG_DEBUG("Running without GPS.\n");
     }
     nodeStatus->observe(&nodeDB.newStatus);
+
+#ifdef HAS_I2S
+    LOG_DEBUG("Starting audio thread\n");
+    audioThread = new AudioThread();
+#endif
 
     service.init();
 
@@ -676,6 +715,10 @@ void setup()
 // the current region name)
 #if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS)
     screen->setup();
+#elif ARCH_RASPBERRY_PI
+    if (screen_found.port != ScanI2C::I2CPort::NO_I2C || settingsMap[displayPanel]) {
+        screen->setup();
+    }
 #else
     if (screen_found.port != ScanI2C::I2CPort::NO_I2C)
         screen->setup();
@@ -715,6 +758,20 @@ void setup()
                 exit(EXIT_FAILURE);
             } else {
                 LOG_INFO("RF95 Radio init succeeded, using RF95 radio\n");
+            }
+        }
+    } else if (settingsMap[use_sx1280]) {
+        if (!rIf) {
+            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+            rIf = new SX1280Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
+                                      settingsMap[busy]);
+            if (!rIf->init()) {
+                LOG_ERROR("Failed to find SX1280 radio\n");
+                delete rIf;
+                rIf = NULL;
+                exit(EXIT_FAILURE);
+            } else {
+                LOG_INFO("SX1280 Radio init succeeded, using SX1280 radio\n");
             }
         }
     }
@@ -870,7 +927,6 @@ void setup()
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
     powerFSMthread = new PowerFSMThread();
-
     setCPUFast(false); // 80MHz is fine for our slow peripherals
 }
 

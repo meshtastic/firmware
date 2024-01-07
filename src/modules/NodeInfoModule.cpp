@@ -83,13 +83,11 @@ NodeInfoModule::NodeInfoModule()
 
 int32_t NodeInfoModule::runOnce()
 {
-    static uint32_t currentGeneration;
-
     // If we changed channels, ask everyone else for their latest info
     bool requestReplies = currentGeneration != radioGeneration;
     currentGeneration = radioGeneration;
 
-    if (airTime->isTxAllowedAirUtil()) {
+    if (airTime->isTxAllowedAirUtil() && config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
         LOG_INFO("Sending our nodeinfo to mesh (wantReplies=%d)\n", requestReplies);
         sendOurNodeInfo(NODENUM_BROADCAST, requestReplies); // Send our info (don't request replies)
     }

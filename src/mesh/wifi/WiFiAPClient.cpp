@@ -9,13 +9,11 @@
 #include "target_specific.h"
 #include <WiFi.h>
 #include <WiFiUdp.h>
-#ifndef ARCH_RP2040
+#ifdef ARCH_ESP32
 #include "mesh/http/WebServer.h"
 #include <ESPmDNS.h>
 #include <esp_wifi.h>
 static void WiFiEvent(WiFiEvent_t event);
-#else
-#include <ESP8266mDNS.h>
 #endif
 
 #ifndef DISABLE_NTP
@@ -40,7 +38,8 @@ bool APStartupComplete = 0;
 
 unsigned long lastrun_ntp = 0;
 
-bool needReconnect = true; // If we create our reconnector, run it once at the beginning
+bool needReconnect = true;   // If we create our reconnector, run it once at the beginning
+bool isReconnecting = false; // If we are currently reconnecting
 
 WiFiUDP syslogClient;
 Syslog syslog(syslogClient);
@@ -53,6 +52,7 @@ static void onNetworkConnected()
         // Start web server
         LOG_INFO("Starting network services\n");
 
+#ifdef ARCH_ESP32
         // start mdns
         if (!MDNS.begin("Meshtastic")) {
             LOG_ERROR("Error setting up MDNS responder!\n");
@@ -62,6 +62,9 @@ static void onNetworkConnected()
             MDNS.addService("http", "tcp", 80);
             MDNS.addService("https", "tcp", 443);
         }
+#else // ESP32 handles this in WiFiEvent
+        LOG_INFO("Obtained IP address: %s\n", WiFi.localIP().toString().c_str());
+#endif
 
 #ifndef DISABLE_NTP
         LOG_INFO("Starting NTP time client\n");
@@ -89,7 +92,7 @@ static void onNetworkConnected()
             syslog.enable();
         }
 
-#ifndef ARCH_RP2040
+#ifdef ARCH_ESP32
         initWebServer();
 #endif
         initApiServer();
@@ -113,6 +116,7 @@ static int32_t reconnectWiFi()
             wifiPsw = NULL;
 
         needReconnect = false;
+        isReconnecting = true;
 
         // Make sure we clear old connection credentials
 #ifdef ARCH_ESP32
@@ -127,6 +131,7 @@ static int32_t reconnectWiFi()
         if (!WiFi.isConnected()) {
             WiFi.begin(wifiName, wifiPsw);
         }
+        isReconnecting = false;
     }
 
 #ifndef DISABLE_NTP
@@ -149,6 +154,11 @@ static int32_t reconnectWiFi()
 #endif
 
     if (config.network.wifi_enabled && !WiFi.isConnected()) {
+#ifdef ARCH_RP2040 // (ESP32 handles this in WiFiEvent)
+        /* If APStartupComplete, but we're not connected, try again.
+           Shouldn't try again before APStartupComplete. */
+        needReconnect = APStartupComplete;
+#endif
         return 1000; // check once per second
     } else {
 #ifdef ARCH_RP2040
@@ -245,7 +255,7 @@ bool initWifi()
     }
 }
 
-#ifndef ARCH_RP2040
+#ifdef ARCH_ESP32
 // Called by the Espressif SDK to
 static void WiFiEvent(WiFiEvent_t event)
 {
@@ -270,27 +280,31 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
         LOG_INFO("Disconnected from WiFi access point\n");
-        WiFi.disconnect(false, true);
-        syslog.disable();
-        needReconnect = true;
-        wifiReconnect->setIntervalFromNow(1000);
+        if (!isReconnecting) {
+            WiFi.disconnect(false, true);
+            syslog.disable();
+            needReconnect = true;
+            wifiReconnect->setIntervalFromNow(1000);
+        }
         break;
     case ARDUINO_EVENT_WIFI_STA_AUTHMODE_CHANGE:
         LOG_INFO("Authentication mode of access point has changed\n");
         break;
     case ARDUINO_EVENT_WIFI_STA_GOT_IP:
-        LOG_INFO("Obtained IP address: ", WiFi.localIPv6());
+        LOG_INFO("Obtained IP address: %s\n", WiFi.localIP().toString().c_str());
         onNetworkConnected();
         break;
     case ARDUINO_EVENT_WIFI_STA_GOT_IP6:
-        LOG_INFO("Obtained IP6 address: %s", WiFi.localIPv6());
+        LOG_INFO("Obtained IP6 address: %s\n", WiFi.localIPv6().toString().c_str());
         break;
     case ARDUINO_EVENT_WIFI_STA_LOST_IP:
         LOG_INFO("Lost IP address and IP address is reset to 0\n");
-        WiFi.disconnect(false, true);
-        syslog.disable();
-        needReconnect = true;
-        wifiReconnect->setIntervalFromNow(1000);
+        if (!isReconnecting) {
+            WiFi.disconnect(false, true);
+            syslog.disable();
+            needReconnect = true;
+            wifiReconnect->setIntervalFromNow(1000);
+        }
         break;
     case ARDUINO_EVENT_WPS_ER_SUCCESS:
         LOG_INFO("WiFi Protected Setup (WPS): succeeded in enrollee mode\n");

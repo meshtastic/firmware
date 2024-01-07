@@ -123,6 +123,10 @@
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_HT62
 #elif defined(EBYTE_ESP32_S3)
 #define HW_VENDOR meshtastic_HardwareModel_EBYTE_ESP32_S3
+#elif defined(SENSELORA_S3)
+#define HW_VENDOR meshtastic_HardwareModel_SENSELORA_S3
+#elif defined(HELTEC_HT62)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_HT62
 #endif
 
 // -----------------------------------------------------------------------------

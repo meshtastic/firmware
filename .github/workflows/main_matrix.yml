@@ -66,6 +66,7 @@ jobs:
           - board: tlora-v2-1-1_6
           - board: tlora-v2-1-1_8
           - board: tbeam
+          - board: heltec-ht62-esp32c3-sx1262
           - board: heltec-v1
           - board: heltec-v2_0
           - board: heltec-v2_1
@@ -119,12 +120,12 @@ jobs:
   build-rpi2040:
     strategy:
       fail-fast: false
-      max-parallel: 2
       matrix:
         include:
           - board: pico
           - board: picow
           - board: rak11310
+          - board: senselora_rp2040
     uses: ./.github/workflows/build_rpi2040.yml
     with:
       board: ${{ matrix.board }}
@@ -211,6 +212,9 @@ jobs:
           repository: ${{github.event.pull_request.head.repo.full_name}}
 
   gather-artifacts:
+    permissions:
+      contents: write
+      pull-requests: write
     runs-on: ubuntu-latest
     needs:
       [
@@ -284,14 +288,13 @@ jobs:
       - name: Create request artifacts
         continue-on-error: true # FIXME: Why are we getting 502, but things still work?
         if: ${{ github.event_name == 'pull_request_target' || github.event_name == 'pull_request' }}
-        uses: gavv/pull-request-artifacts@v1.1.0
+        uses: gavv/pull-request-artifacts@v2.1.0
         with:
           commit: ${{ (github.event.pull_request_target || github.event.pull_request).head.sha }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           artifacts-token: ${{ secrets.ARTIFACTS_TOKEN }}
           artifacts-repo: meshtastic/artifacts
           artifacts-branch: device
-          artifacts-dir: pr
           artifacts: ./firmware-${{ steps.version.outputs.version }}.zip
 
   release-artifacts:
