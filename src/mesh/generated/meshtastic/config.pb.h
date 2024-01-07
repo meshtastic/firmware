@@ -201,7 +201,11 @@ typedef enum _meshtastic_Config_LoRaConfig_RegionCode {
     /* Ukraine 433mhz */
     meshtastic_Config_LoRaConfig_RegionCode_UA_433 = 14,
     /* Ukraine 868mhz */
-    meshtastic_Config_LoRaConfig_RegionCode_UA_868 = 15
+    meshtastic_Config_LoRaConfig_RegionCode_UA_868 = 15,
+    /* Malaysia 433mhz */
+    meshtastic_Config_LoRaConfig_RegionCode_MY_433 = 16,
+    /* Malaysia 919mhz */
+    meshtastic_Config_LoRaConfig_RegionCode_MY_919 = 17
 } meshtastic_Config_LoRaConfig_RegionCode;
 
 /* Standard predefined channel settings
@@ -281,10 +285,7 @@ typedef struct _meshtastic_Config_PositionConfig {
  or zero for the default of once every 30 seconds
  or a very large value (maxint) to update only once at boot. */
     uint32_t gps_update_interval;
-    /* How long should we try to get our position during each gps_update_interval attempt?  (in seconds)
- Or if zero, use the default of 30 seconds.
- If we don't get a new gps fix in that time, the gps will be put into sleep until  the next gps_update_rate
- window. */
+    /* Deprecated in favor of using smart / regular broadcast intervals as implicit attempt time */
     uint32_t gps_attempt_time;
     /* Bit field of boolean configuration options for POSITION messages
  (bitwise OR of PositionFlags) */
@@ -525,8 +526,8 @@ extern "C" {
 #define _meshtastic_Config_DisplayConfig_DisplayMode_ARRAYSIZE ((meshtastic_Config_DisplayConfig_DisplayMode)(meshtastic_Config_DisplayConfig_DisplayMode_COLOR+1))
 
 #define _meshtastic_Config_LoRaConfig_RegionCode_MIN meshtastic_Config_LoRaConfig_RegionCode_UNSET
-#define _meshtastic_Config_LoRaConfig_RegionCode_MAX meshtastic_Config_LoRaConfig_RegionCode_UA_868
-#define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_UA_868+1))
+#define _meshtastic_Config_LoRaConfig_RegionCode_MAX meshtastic_Config_LoRaConfig_RegionCode_MY_919
+#define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_MY_919+1))
 
 #define _meshtastic_Config_LoRaConfig_ModemPreset_MIN meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST
 #define _meshtastic_Config_LoRaConfig_ModemPreset_MAX meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE

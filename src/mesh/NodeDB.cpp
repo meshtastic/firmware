@@ -223,7 +223,6 @@ void NodeDB::installDefaultConfig()
 void NodeDB::initConfigIntervals()
 {
     config.position.gps_update_interval = default_gps_update_interval;
-    config.position.gps_attempt_time = default_gps_attempt_time;
     config.position.position_broadcast_secs = default_broadcast_interval_secs;
 
     config.power.ls_secs = default_ls_secs;
@@ -301,8 +300,6 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
         initModuleConfigIntervals();
     } else if (role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
         config.display.screen_on_secs = 1;
-    } else if (role == meshtastic_Config_DeviceConfig_Role_TRACKER) {
-        config.position.gps_update_interval = 30;
     } else if (role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
         moduleConfig.telemetry.environment_measurement_enabled = true;
         moduleConfig.telemetry.environment_update_interval = 300;
