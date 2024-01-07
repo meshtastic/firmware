@@ -35,13 +35,13 @@
 //                                                                              //
 //////////////////////////////////////////////////////////////////////////////////
 
-#define SX126X_CS 14    // EBYTE module's NSS pin
-#define LORA_SCK 21   // EBYTE module's SCK pin
-#define LORA_MOSI 38  // EBYTE module's MOSI pin
-#define LORA_MISO 39  // EBYTE module's MISO pin
+#define SX126X_CS    14 // EBYTE module's NSS pin // FIXME: rename to SX126X_SS
+#define LORA_SCK     21 // EBYTE module's SCK pin
+#define LORA_MOSI    38 // EBYTE module's MOSI pin
+#define LORA_MISO    39 // EBYTE module's MISO pin
 #define SX126X_RESET 40 // EBYTE module's NRST pin
-#define SX126X_BUSY 41  // EBYTE module's BUSY pin
-#define SX126X_DIO1 42  // EBYTE module's DIO1 pin
+#define SX126X_BUSY  41 // EBYTE module's BUSY pin
+#define SX126X_DIO1  42 // EBYTE module's DIO1 pin
 // We don't define a pin for SX126X_DIO2 as Meshtastic doesn't use it as an interrupt output, so it is never connected to an MCU
 // pin! Also E22 module datasheets say not to connect it to an MCU pin.
 // We don't define a pin for SX126X_DIO3 as Meshtastic doesn't use it as an interrupt output, so it is never connected to an MCU
@@ -104,7 +104,7 @@
 #define BUTTON_PIN 0 // Use the BOOT button as the user button
 // I2C
 #define I2C_SCL 18
-#define I2C_SDA 8
+#define I2C_SDA  8
 // UART
 #define UART_TX 43
 #define UART_RX 44
