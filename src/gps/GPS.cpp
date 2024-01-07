@@ -601,7 +601,7 @@ uint32_t GPS::getWakeTime() const
     if (t == UINT32_MAX)
         return t; // already maxint
 
-    return t * 1000;
+    return getConfiguredOrDefaultMs(t, default_broadcast_interval_secs);
 }
 
 /** Get how long we should sleep between aqusition attempts in msecs
