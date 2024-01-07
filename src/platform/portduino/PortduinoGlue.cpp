@@ -71,6 +71,7 @@ void portduinoSetup()
     gpioInit();
 
     std::string gpioChipName = "gpiochip";
+
     YAML::Node yamlConfig;
 
     if (access("config.yaml", R_OK) == 0) {
@@ -128,6 +129,8 @@ void portduinoSetup()
             settingsMap[reset] = yamlConfig["Lora"]["Reset"].as<int>(RADIOLIB_NC);
             settingsMap[gpiochip] = yamlConfig["Lora"]["gpiochip"].as<int>(0);
             gpioChipName += std::to_string(settingsMap[gpiochip]);
+
+            settingsStrings[spidev] = "/dev/" + yamlConfig["Lora"]["spidev"].as<std::string>("spidev0.0");
         }
         if (yamlConfig["GPIO"]) {
             settingsMap[user] = yamlConfig["GPIO"]["User"].as<int>(RADIOLIB_NC);

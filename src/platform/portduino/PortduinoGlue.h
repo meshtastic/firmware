@@ -12,6 +12,7 @@ enum configNames {
     use_sx1280,
     user,
     gpiochip,
+    spidev,
     has_gps,
     touchscreenModule,
     touchscreenCS,

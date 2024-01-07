@@ -14,6 +14,12 @@ Lora:
 #  IRQ: 17
 #  Reset: 22
 
+#  Module: sx1262  # pinedio
+#  CS: 0
+#  IRQ: 10
+#  Busy: 11
+#  spidev: spidev0.1
+
 #  Module: RF95  # Adafruit RFM9x
 #  Reset: 25
 #  CS: 7
@@ -34,6 +40,10 @@ Lora:
 ### Set gpio chip to use in /dev/. Defaults to 0.
 ### Notably the Raspberry Pi 5 puts the GPIO header on gpiochip4
 #  gpiochip: 4
+
+### Specify the SPI device to use in /dev/. Defaults to spidev0.0
+### Some devices, like the pinedio, may require spidev0.1 as a workaround.
+#  spidev: spidev0.0
 
 ### Define GPIO buttons here:
 
