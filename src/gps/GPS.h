@@ -70,7 +70,7 @@ class GPS : private concurrency::OSThread
 
     /**
      * hasValidLocation - indicates that the position variables contain a complete
-     *   GPS location, valid and fresh (< gps_update_interval + gps_attempt_time)
+     *   GPS location, valid and fresh (< gps_update_interval + position_broadcast_secs)
      */
     bool hasValidLocation = false; // default to false, until we complete our first read
 

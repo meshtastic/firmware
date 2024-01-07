@@ -596,10 +596,11 @@ void GPS::setAwake(bool on)
  */
 uint32_t GPS::getWakeTime() const
 {
-    uint32_t t = config.position.gps_attempt_time;
+    uint32_t t = config.position.position_broadcast_secs;
 
     if (t == UINT32_MAX)
         return t; // already maxint
+
     return t * 1000;
 }
 
