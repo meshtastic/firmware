@@ -68,6 +68,18 @@ Display:
 #  Height: 320
 #  Reset: 27
 #  Rotate: true
+#  Invert: true
+
+### Waveshare 1.44inch LCD HAT
+#  Panel: ST7735S
+#  CS: 8         #Chip Select
+#  DC: 25        # Data/Command pin
+#  Backlight: 24
+#  Width: 128
+#  Height: 128
+#  Reset: 27
+#  OffsetX: 0
+#  OffsetY: 0
 
 Touchscreen:
 #  Module: XPT2046

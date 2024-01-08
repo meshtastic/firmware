@@ -156,7 +156,10 @@ void portduinoSetup()
             settingsMap[displayCS] = yamlConfig["Display"]["CS"].as<int>(-1);
             settingsMap[displayBacklight] = yamlConfig["Display"]["Backlight"].as<int>(-1);
             settingsMap[displayReset] = yamlConfig["Display"]["Reset"].as<int>(-1);
+            settingsMap[displayOffsetX] = yamlConfig["Display"]["OffsetX"].as<int>(0);
+            settingsMap[displayOffsetY] = yamlConfig["Display"]["OffsetY"].as<int>(0);
             settingsMap[displayRotate] = yamlConfig["Display"]["Rotate"].as<bool>(false);
+            settingsMap[displayInvert] = yamlConfig["Display"]["Invert"].as<bool>(false);
         }
         settingsMap[touchscreenModule] = no_touchscreen;
         if (yamlConfig["Touchscreen"]) {

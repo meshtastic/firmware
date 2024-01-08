@@ -25,6 +25,9 @@ enum configNames {
     displayBacklight,
     displayReset,
     displayRotate,
+    displayOffsetX,
+    displayOffsetY,
+    displayInvert,
     keyboardDevice
 };
 enum { no_screen, st7789, st7735, st7735s };

@@ -360,19 +360,14 @@ class LGFX : public lgfx::LGFX_Device
 
         auto cfg = _panel_instance->config(); // Gets a structure for display panel settings.
         LOG_DEBUG("Height: %d, Width: %d \n", settingsMap[displayHeight], settingsMap[displayWidth]);
-        cfg.pin_cs = settingsMap[displayCS];           // Pin number where CS is connected (-1 = disable)
+        cfg.pin_cs = settingsMap[displayCS]; // Pin number where CS is connected (-1 = disable)
+        cfg.pin_rst = settingsMap[displayReset];
         cfg.panel_width = settingsMap[displayWidth];   // actual displayable width
         cfg.panel_height = settingsMap[displayHeight]; // actual displayable height
-        cfg.offset_x = 0;                              // Panel offset amount in X direction
-        cfg.offset_y = 0;                              // Panel offset amount in Y direction
+        cfg.offset_x = settingsMap[displayOffsetX];    // Panel offset amount in X direction
+        cfg.offset_y = settingsMap[displayOffsetY];    // Panel offset amount in Y direction
         cfg.offset_rotation = 0;                       // Rotation direction value offset 0~7 (4~7 is mirrored)
-        cfg.dummy_read_pixel = 9;                      // Number of bits for dummy read before pixel readout
-        cfg.dummy_read_bits = 1;                       // Number of bits for dummy read before non-pixel data read
-        cfg.readable = true;                           // Set to true if data can be read
-        cfg.invert = true;                             // Set to true if the light/darkness of the panel is reversed
-        cfg.rgb_order = false;                         // Set to true if the panel's red and blue are swapped
-        cfg.dlen_16bit = false; // Set to true for panels that transmit data length in 16-bit units with 16-bit parallel or SPI
-        cfg.bus_shared = true;  // If the bus is shared with the SD card, set to true (bus control with drawJpgFile etc.)
+        cfg.invert = settingsMap[displayInvert];       // Set to true if the light/darkness of the panel is reversed
 
         _panel_instance->config(cfg);
 
