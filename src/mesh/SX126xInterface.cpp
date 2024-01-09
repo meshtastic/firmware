@@ -30,18 +30,25 @@ template <typename T> bool SX126xInterface<T>::init()
     digitalWrite(SX126X_POWER_EN, HIGH);
 #endif
 
+#if ARCH_PORTDUINO
+    float tcxoVoltage = 0;
+    if (settingsMap[dio3_tcxo_voltage])
+        tcxoVoltage = 1.8;
 // FIXME: correct logic to default to not using TCXO if no voltage is specified for SX126X_DIO3_TCXO_VOLTAGE
-#if !defined(SX126X_DIO3_TCXO_VOLTAGE)
+#elif !defined(SX126X_DIO3_TCXO_VOLTAGE)
     float tcxoVoltage =
         0; // "TCXO reference voltage to be set on DIO3. Defaults to 1.6 V, set to 0 to skip." per
            // https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/SX126x/SX126x.h#L471C26-L471C104
     // (DIO3 is free to be used as an IRQ)
-    LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE not defined, not using DIO3 as TCXO reference voltage\n");
 #else
     float tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE;
-    LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE defined, using DIO3 as TCXO reference voltage at %f V\n", SX126X_DIO3_TCXO_VOLTAGE);
     // (DIO3 is not free to be used as an IRQ)
 #endif
+    if (tcxoVoltage == 0)
+        LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE not defined, not using DIO3 as TCXO reference voltage\n");
+    else
+        LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE defined, using DIO3 as TCXO reference voltage at %f V\n", tcxoVoltage);
+
     // FIXME: May want to set depending on a definition, currently all SX126x variant files use the DC-DC regulator option
     bool useRegulatorLDO = false; // Seems to depend on the connection to pin 9/DCC_SW - if an inductor DCDC?
 

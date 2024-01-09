@@ -8,6 +8,7 @@ enum configNames {
     busy,
     reset,
     dio2_as_rf_switch,
+    dio3_tcxo_voltage,
     use_rf95,
     use_sx1280,
     user,
