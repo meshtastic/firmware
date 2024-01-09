@@ -424,7 +424,8 @@ TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY g
 void TFTDisplay::display(bool fromBlank)
 {
     if (fromBlank)
-        tft->clear();
+        tft->fillScreen(TFT_BLACK);
+    // tft->clear();
     concurrency::LockGuard g(spiLock);
 
     uint16_t x, y;
