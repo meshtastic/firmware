@@ -15,7 +15,16 @@
 #define PIN_EINK_SCLK 3
 #define PIN_EINK_MOSI 2
 
-#define VEXT_ENABLE Vext // active low, powers the oled display and the lora antenna boost
+/*
+ * SPI interfaces
+ */
+#define SPI_INTERFACES_COUNT 2
+
+#define PIN_SPI_MISO 10 // MISO      P0.17
+#define PIN_SPI_MOSI 11 // MOSI      P0.15
+#define PIN_SPI_SCK 9   // SCK       P0.13
+
+#define VEXT_ENABLE 45 // active low, powers the oled display and the lora antenna boost
 #define BUTTON_PIN 0
 
 #define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage

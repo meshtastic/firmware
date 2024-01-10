@@ -7,9 +7,9 @@
 #include "main.h"
 #include <SPI.h>
 
-// #ifdef HELTEC_WIRELESS_PAPER
-// SPIClass *hspi = NULL;
-// #endif
+#ifdef HELTEC_WIRELESS_PAPER
+SPIClass *hspi = NULL;
+#endif
 
 #define COLORED GxEPD_BLACK
 #define UNCOLORED GxEPD_WHITE
@@ -47,7 +47,7 @@
 
 #elif defined(HELTEC_WIRELESS_PAPER)
 // #define TECHO_DISPLAY_MODEL GxEPD2_213_T5D
-#define TECHO_DISPLAY_MODEL GxEPD2_213_BN
+#define TECHO_DISPLAY_MODEL GxEPD2_213_FC1
 #endif
 
 GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT> *adafruitDisplay;
@@ -71,7 +71,7 @@ EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY
     // setGeometry(GEOMETRY_RAWMODE, 200, 200);
 
 #elif defined(HELTEC_WIRELESS_PAPER)
-    // setGeometry(GEOMETRY_RAWMODE, 212, 104);
+    // GxEPD2_213_BN - 2.13 inch b/w 250x122
     setGeometry(GEOMETRY_RAWMODE, 250, 122);
 #elif defined(MAKERPYTHON)
     // GxEPD2_290_T5D
@@ -119,7 +119,6 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
         // tft.drawBitmap(0, 0, buffer, 128, 64, TFT_YELLOW, TFT_BLACK);
         for (uint32_t y = 0; y < displayHeight; y++) {
             for (uint32_t x = 0; x < displayWidth; x++) {
-
                 // get src pixel in the page based ordering the OLED lib uses FIXME, super inefficient
                 auto b = buffer[x + (y / 8) * displayWidth];
                 auto isset = b & (1 << (y & 7));
@@ -148,7 +147,8 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
 
 #elif defined(PCA10059) || defined(M5_COREINK)
         adafruitDisplay->nextPage();
-
+#elif defined(HELTEC_WIRELESS_PAPER)
+        adafruitDisplay->nextPage();
 #elif defined(PRIVATE_HW) || defined(my)
         adafruitDisplay->nextPage();
 
@@ -231,13 +231,16 @@ bool EInkDisplay::connect()
     }
 #elif defined(HELTEC_WIRELESS_PAPER)
     {
-        auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
+        hspi = new SPIClass(HSPI);
+        hspi->begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS); // SCLK, MISO, MOSI, SS
+        delay(100);
+        pinMode(Vext, OUTPUT);
+        digitalWrite(Vext, LOW);
+        delay(100);
+        auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, *hspi);
         adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);
-        // hspi = new SPIClass(HSPI);
-        // hspi->begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS); // SCLK, MISO, MOSI, SS
-        adafruitDisplay->init(115200, true, 10, false, SPI, SPISettings(6000000, MSBFIRST, SPI_MODE0));
+        adafruitDisplay->init();
         adafruitDisplay->setRotation(3);
-        adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
     }
 #elif defined(PCA10059)
     {
