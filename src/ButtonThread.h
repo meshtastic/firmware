@@ -138,6 +138,7 @@ class ButtonThread : public concurrency::OSThread
 #ifdef BUTTON_PIN
         if (((config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN) !=
              moduleConfig.canned_message.inputbroker_pin_press) ||
+            !(moduleConfig.canned_message.updown1_enabled || moduleConfig.canned_message.rotary1_enabled) ||
             !moduleConfig.canned_message.enabled) {
             powerFSM.trigger(EVENT_PRESS);
         }
