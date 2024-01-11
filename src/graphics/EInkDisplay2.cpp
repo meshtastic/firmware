@@ -93,6 +93,12 @@ EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY
     setGeometry(GEOMETRY_RAWMODE, 296, 128);
     LOG_DEBUG("GEOMETRY_RAWMODE, 296, 128\n");
 
+#elif defined(ESP32S3_ZERO)
+
+    // GxEPD2_290_T94_V2
+    setGeometry(GEOMETRY_RAWMODE, EPD_HEIGHT, EPD_WIDTH);
+    LOG_DEBUG("GEOMETRY_RAWMODE, 296, 128\n");
+
 #endif
     // setGeometry(GEOMETRY_RAWMODE, 128, 64); // old resolution
     // setGeometry(GEOMETRY_128_64); // We originally used this because I wasn't sure if rawmode worked - it does
@@ -151,7 +157,9 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
         adafruitDisplay->nextPage();
 #elif defined(PRIVATE_HW) || defined(my)
         adafruitDisplay->nextPage();
-
+#elif defined(ESP32S3_ZERO)
+        adafruitDisplay->nextPage();
+        
 #endif
 
         // Put screen to sleep to save power (possibly not necessary because we already did poweroff inside of display)
@@ -256,7 +264,7 @@ bool EInkDisplay::connect()
     adafruitDisplay->init(115200, true, 40, false, SPI, SPISettings(4000000, MSBFIRST, SPI_MODE0));
     adafruitDisplay->setRotation(0);
     adafruitDisplay->setPartialWindow(0, 0, EPD_WIDTH, EPD_HEIGHT);
-#elif defined(my)
+#elif defined(my) || defined(ESP32S3_ZERO)
     {
         auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
         adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);
