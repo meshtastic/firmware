@@ -40,8 +40,8 @@
 #undef LORA_MOSI
 #undef LORA_CS
 
-// #define USE_RF95
-#define USE_SX1262
+#define USE_RF95
+//#define USE_SX1262
 // #define USE_SX1280
 
 #ifdef USE_RF95
@@ -68,8 +68,6 @@
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET
-// #define SX126X_TXEN 33
-// #define SX126X_RXEN 32
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 #endif
