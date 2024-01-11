@@ -3,15 +3,16 @@
 #define I2C_SCL 22
 
 // 7-07-2023 Or enable Secondary I2C Bus
-// #define I2C_SDA1 32
-// #define I2C_SCL1 33
+// #define I2C_SDA1 32 T
+// #define I2C_SCL1 33 R
 
+// #define HAS_GPS 0
 #define HAS_GPS 1
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 // Use Secondary I2C Bus as GPS Serial
 #define GPS_RX_PIN 33
-#define GPS_TX_PIN 32
+// #define GPS_TX_PIN 32
 
 // Green LED
 #define LED_INVERTED 0
@@ -38,7 +39,9 @@
 #undef LORA_MISO
 #undef LORA_MOSI
 #undef LORA_CS
-#define USE_RF95
+
+// #define USE_RF95
+#define USE_SX1262
 // #define USE_SX1280
 
 #ifdef USE_RF95
@@ -50,6 +53,25 @@
 #define LORA_RESET 26
 #define LORA_DIO1 RADIOLIB_NC
 #define LORA_DIO2 RADIOLIB_NC
+#endif
+
+// https://www.waveshare.com/core1262-868m.htm
+#ifdef USE_SX1262
+#define LORA_SCK 18
+#define LORA_MISO 34
+#define LORA_MOSI 23
+#define LORA_CS 14
+#define LORA_RESET 26
+#define LORA_DIO1 25
+#define LORA_DIO2 32 // 33 // (13 not working)  //BUSY pin on SX1262
+#define SX126X_CS LORA_CS
+#define SX126X_DIO1 LORA_DIO1
+#define SX126X_BUSY LORA_DIO2
+#define SX126X_RESET LORA_RESET
+// #define SX126X_TXEN 33
+// #define SX126X_RXEN 32
+#define SX126X_DIO2_AS_RF_SWITCH
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
 #endif
 
 #ifdef USE_SX1280
@@ -90,5 +112,6 @@
 //   |
 //  GND
 // https://github.com/m5stack/M5Core-Ink/blob/master/examples/Basics/FactoryTest/FactoryTest.ino#L58
-#define ADC_MULTIPLIER 5 // Just a guess for now... more detailed getBatVoltage above
-// https://embeddedexplorer.com/esp32-adc-esp-idf-tutorial/
+#define ADC_MULTIPLIER                                                                                                           \
+    5 // Just a guess for now... more detailed getBatVoltage above
+      // https://embeddedexplorer.com/esp32-adc-esp-idf-tutorial/
