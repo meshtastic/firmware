@@ -100,6 +100,12 @@ template <typename T> bool SX126xInterface<T>::init()
 
     // If a pin isn't defined, we set it to RADIOLIB_NC, it is safe to always do external RF switching with RADIOLIB_NC as it has
     // no effect
+#if ARCH_PORTDUINO
+    if (res == RADIOLIB_ERR_NONE) {
+        LOG_DEBUG("Using MCU pin %i as RXEN and pin %i as TXEN to control RF switching\n", settingsMap[rxen], settingsMap[txen]);
+        lora.setRfSwitchPins(settingsMap[rxen], settingsMap[txen]);
+    }
+#else
 #ifndef SX126X_RXEN
 #define SX126X_RXEN RADIOLIB_NC
     LOG_DEBUG("SX126X_RXEN not defined, defaulting to RADIOLIB_NC\n");
@@ -112,7 +118,7 @@ template <typename T> bool SX126xInterface<T>::init()
         LOG_DEBUG("Using MCU pin %i as RXEN and pin %i as TXEN to control RF switching\n", SX126X_RXEN, SX126X_TXEN);
         lora.setRfSwitchPins(SX126X_RXEN, SX126X_TXEN);
     }
-
+#endif
     if (config.lora.sx126x_rx_boosted_gain) {
         uint16_t result = lora.setRxBoostedGainMode(true);
         LOG_INFO("Set RX gain to boosted mode; result: %d\n", result);

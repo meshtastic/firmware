@@ -4,6 +4,10 @@
 #include "configuration.h"
 #include "error.h"
 
+#if ARCH_PORTDUINO
+#include "PortduinoGlue.h"
+#endif
+
 #define MAX_POWER 20
 // if we use 20 we are limited to 1% duty cycle or hw might overheat.  For continuous operation set a limit of 17
 // In theory up to 27 dBm is possible, but the modules installed in most radios can cope with a max of 20.  So BIG WARNING
@@ -23,10 +27,18 @@ void RF95Interface::setTransmitEnable(bool txon)
 {
 #ifdef RF95_TXEN
     digitalWrite(RF95_TXEN, txon ? 1 : 0);
+#elif ARCH_PORTDUINO
+    if (settingsMap[txen] != RADIOLIB_NC) {
+        digitalWrite(settingsMap[txen], txon ? 1 : 0);
+    }
 #endif
 
 #ifdef RF95_RXEN
     digitalWrite(RF95_RXEN, txon ? 0 : 1);
+#elif ARCH_PORTDUINO
+    if (settingsMap[rxen] != RADIOLIB_NC) {
+        digitalWrite(settingsMap[rxen], txon ? 0 : 1);
+    }
 #endif
 }
 
@@ -62,6 +74,16 @@ bool RF95Interface::init()
 #ifdef RF95_RXEN
     pinMode(RF95_RXEN, OUTPUT);
     digitalWrite(RF95_RXEN, 1);
+#endif
+#if ARCH_PORTDUINO
+    if (settingsMap[txen] != RADIOLIB_NC) {
+        pinMode(settingsMap[txen], OUTPUT);
+        digitalWrite(settingsMap[txen], 0);
+    }
+    if (settingsMap[rxen] != RADIOLIB_NC) {
+        pinMode(settingsMap[rxen], OUTPUT);
+        digitalWrite(settingsMap[rxen], 0);
+    }
 #endif
     setTransmitEnable(false);
 

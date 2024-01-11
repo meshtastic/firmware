@@ -128,6 +128,8 @@ void portduinoSetup()
             settingsMap[irq] = yamlConfig["Lora"]["IRQ"].as<int>(RADIOLIB_NC);
             settingsMap[busy] = yamlConfig["Lora"]["Busy"].as<int>(RADIOLIB_NC);
             settingsMap[reset] = yamlConfig["Lora"]["Reset"].as<int>(RADIOLIB_NC);
+            settingsMap[txen] = yamlConfig["Lora"]["TXen"].as<int>(RADIOLIB_NC);
+            settingsMap[rxen] = yamlConfig["Lora"]["RXen"].as<int>(RADIOLIB_NC);
             settingsMap[gpiochip] = yamlConfig["Lora"]["gpiochip"].as<int>(0);
             gpioChipName += std::to_string(settingsMap[gpiochip]);
 
@@ -202,6 +204,16 @@ void portduinoSetup()
     if (settingsMap.count(user) > 0 && settingsMap[user] != RADIOLIB_NC) {
         if (initGPIOPin(settingsMap[user], gpioChipName) != ERRNO_OK) {
             settingsMap[user] = RADIOLIB_NC;
+        }
+    }
+    if (settingsMap.count(rxen) > 0 && settingsMap[rxen] != RADIOLIB_NC) {
+        if (initGPIOPin(settingsMap[rxen], gpioChipName) != ERRNO_OK) {
+            settingsMap[rxen] = RADIOLIB_NC;
+        }
+    }
+    if (settingsMap.count(txen) > 0 && settingsMap[txen] != RADIOLIB_NC) {
+        if (initGPIOPin(settingsMap[txen], gpioChipName) != ERRNO_OK) {
+            settingsMap[txen] = RADIOLIB_NC;
         }
     }
 

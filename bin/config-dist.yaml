@@ -39,6 +39,9 @@ Lora:
 
 #  DIO3_TCXO_VOLTAGE: true  # the Waveshare Core1262 and others are known to need this setting
 
+#  TXen: x  # TX and RX enable pins
+#  RXen: x
+
 ### Set gpio chip to use in /dev/. Defaults to 0.
 ### Notably the Raspberry Pi 5 puts the GPIO header on gpiochip4
 #  gpiochip: 4
