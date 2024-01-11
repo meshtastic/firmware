@@ -12,7 +12,7 @@
 #undef GPS_TX_PIN
 // Use Secondary I2C Bus as GPS Serial
 #define GPS_RX_PIN 33
-// #define GPS_TX_PIN 32
+// #define GPS_TX_PIN 32 (now used by SX1262 BUSY)
 
 // Green LED
 #define LED_INVERTED 0
