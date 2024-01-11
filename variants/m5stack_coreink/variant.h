@@ -110,5 +110,5 @@
 //   |
 //  GND
 // https://github.com/m5stack/M5Core-Ink/blob/master/examples/Basics/FactoryTest/FactoryTest.ino#L58
-#define ADC_MULTIPLIER 5 // Just a guess for now... more detailed getBatVoltage above
+#define ADC_MULTIPLIER 5
 // https://embeddedexplorer.com/esp32-adc-esp-idf-tutorial/
