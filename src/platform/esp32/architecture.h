@@ -119,8 +119,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_BETAFPV_900_NANO_TX
 #elif defined(PICOMPUTER_S3)
 #define HW_VENDOR meshtastic_HardwareModel_PICOMPUTER_S3
-#elif defined(HELTEC_HT62)
-#define HW_VENDOR meshtastic_HardwareModel_HELTEC_HT62
+#elif defined(ESP32S3_ZERO)
+#define HW_VENDOR meshtastic_HardwareModel_ESP32S3_ZERO
 #elif defined(SENSELORA_S3)
 #define HW_VENDOR meshtastic_HardwareModel_SENSELORA_S3
 #elif defined(HELTEC_HT62)
