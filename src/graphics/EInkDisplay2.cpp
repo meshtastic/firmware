@@ -96,7 +96,7 @@ EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY
 #elif defined(ESP32_S3_PICO)
 
     // GxEPD2_290_T94_V2
-    setGeometry(GEOMETRY_RAWMODE, EPD_HEIGHT, EPD_WIDTH);
+    setGeometry(GEOMETRY_RAWMODE, EPD_WIDTH, EPD_HEIGHT);
     LOG_DEBUG("GEOMETRY_RAWMODE, 296, 128\n");
 
 #endif
