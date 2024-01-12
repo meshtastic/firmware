@@ -66,7 +66,7 @@ NRF52Bluetooth *nrf52Bluetooth;
 #include "platform/portduino/SimRadio.h"
 #endif
 
-#ifdef ARCH_RASPBERRY_PI
+#ifdef ARCH_PORTDUINO
 #include "linux/LinuxHardwareI2C.h"
 #include "platform/portduino/PortduinoGlue.h"
 #include <fstream>
@@ -74,7 +74,7 @@ NRF52Bluetooth *nrf52Bluetooth;
 #include <string>
 #endif
 
-#if HAS_BUTTON || defined(ARCH_RASPBERRY_PI)
+#if HAS_BUTTON || defined(ARCH_PORTDUINO)
 #include "ButtonThread.h"
 #endif
 #include "PowerFSMThread.h"
@@ -141,32 +141,12 @@ std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySenso
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
 
-#ifdef ARCH_RASPBERRY_PI
-void getPiMacAddr(uint8_t *dmac)
-{
-    std::fstream macIdentity;
-    macIdentity.open("/sys/kernel/debug/bluetooth/hci0/identity", std::ios::in);
-    std::string macLine;
-    getline(macIdentity, macLine);
-    macIdentity.close();
-
-    dmac[0] = strtol(macLine.substr(0, 2).c_str(), NULL, 16);
-    dmac[1] = strtol(macLine.substr(3, 2).c_str(), NULL, 16);
-    dmac[2] = strtol(macLine.substr(6, 2).c_str(), NULL, 16);
-    dmac[3] = strtol(macLine.substr(9, 2).c_str(), NULL, 16);
-    dmac[4] = strtol(macLine.substr(12, 2).c_str(), NULL, 16);
-    dmac[5] = strtol(macLine.substr(15, 2).c_str(), NULL, 16);
-}
-#endif
-
 const char *getDeviceName()
 {
     uint8_t dmac[6];
-#ifdef ARCH_RASPBERRY_PI
-    getPiMacAddr(dmac);
-#else
+
     getMacAddr(dmac);
-#endif
+
     // Meshtastic_ab3c or Shortname_abcd
     static char name[20];
     snprintf(name, sizeof(name), "%02x%02x", dmac[4], dmac[5]);
@@ -211,13 +191,13 @@ static int32_t ledBlinker()
 
 uint32_t timeLastPowered = 0;
 
-#if HAS_BUTTON || defined(ARCH_RASPBERRY_PI)
+#if HAS_BUTTON || defined(ARCH_PORTDUINO)
 bool ButtonThread::shutdown_on_long_stop = false;
 #endif
 
 static Periodic *ledPeriodic;
 static OSThread *powerFSMthread;
-#if HAS_BUTTON || defined(ARCH_RASPBERRY_PI)
+#if HAS_BUTTON || defined(ARCH_PORTDUINO)
 static OSThread *buttonThread;
 uint32_t ButtonThread::longPressTime = 0;
 #endif
@@ -613,7 +593,7 @@ void setup()
     } else
         router = new ReliableRouter();
 
-#if HAS_BUTTON || defined(ARCH_RASPBERRY_PI)
+#if HAS_BUTTON || defined(ARCH_PORTDUINO)
     // Buttons. Moved here cause we need NodeDB to be initialized
     buttonThread = new ButtonThread();
 #endif
@@ -664,12 +644,14 @@ void setup()
     pinMode(LORA_CS, OUTPUT);
     digitalWrite(LORA_CS, HIGH);
     SPI1.begin(false);
-#else                      // HW_SPI1_DEVICE
+#else  // HW_SPI1_DEVICE
     SPI.setSCK(LORA_SCK);
     SPI.setTX(LORA_MOSI);
     SPI.setRX(LORA_MISO);
     SPI.begin(false);
-#endif                     // HW_SPI1_DEVICE
+#endif // HW_SPI1_DEVICE
+#elif ARCH_PORTDUINO
+    SPI.begin(settingsStrings[spidev].c_str());
 #elif !defined(ARCH_ESP32) // ARCH_RP2040
     SPI.begin();
 #else
@@ -715,7 +697,7 @@ void setup()
 // the current region name)
 #if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS)
     screen->setup();
-#elif ARCH_RASPBERRY_PI
+#elif defined(ARCH_PORTDUINO)
     if (screen_found.port != ScanI2C::I2CPort::NO_I2C || settingsMap[displayPanel]) {
         screen->setup();
     }
@@ -732,7 +714,7 @@ void setup()
     digitalWrite(SX126X_ANT_SW, 1);
 #endif
 
-#ifdef ARCH_RASPBERRY_PI
+#ifdef ARCH_PORTDUINO
     if (settingsMap[use_sx1262]) {
         if (!rIf) {
             LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
@@ -822,7 +804,7 @@ void setup()
     }
 #endif
 
-#if defined(USE_SX1262) && !defined(ARCH_RASPBERRY_PI)
+#if defined(USE_SX1262) && !defined(ARCH_PORTDUINO)
     if (!rIf) {
         rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
