@@ -17,6 +17,7 @@
 
 std::map<configNames, int> settingsMap;
 std::map<configNames, std::string> settingsStrings;
+char *configPath = nullptr;
 
 // FIXME - move setBluetoothEnable into a HALPlatform class
 void setBluetoothEnable(bool on)
@@ -40,7 +41,10 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
         if (sscanf(arg, "%d", &TCPPort) < 1)
             return ARGP_ERR_UNKNOWN;
         else
-            printf("Using TCP port %d\n", TCPPort);
+            printf("Using config file %d\n", TCPPort);
+        break;
+    case 'c':
+        configPath = arg;
         break;
     case ARGP_KEY_ARG:
         return 0;
@@ -52,7 +56,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 
 void portduinoCustomInit()
 {
-    static struct argp_option options[] = {{"port", 'p', "PORT", 0, "The TCP port to use."}, {0}};
+    static struct argp_option options[] = {{"port", 'p', "PORT", 0, "The TCP port to use."},
+                                           {"config", 'c', "CONFIG_PATH", 0, "Full path of the .yaml config file to use."},
+                                           {0}};
     static void *childArguments;
     static char doc[] = "Meshtastic native build.";
     static char args_doc[] = "...";
@@ -74,7 +80,14 @@ void portduinoSetup()
 
     YAML::Node yamlConfig;
 
-    if (access("config.yaml", R_OK) == 0) {
+    if (configPath != nullptr && access(configPath, R_OK) == 0) {
+        try {
+            yamlConfig = YAML::LoadFile(configPath);
+        } catch (YAML::Exception e) {
+            std::cout << "*** Exception " << e.what() << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    } else if (access("config.yaml", R_OK) == 0) {
         try {
             yamlConfig = YAML::LoadFile("config.yaml");
         } catch (YAML::Exception e) {
