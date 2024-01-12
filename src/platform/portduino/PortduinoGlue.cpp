@@ -80,11 +80,11 @@ void portduinoSetup()
 
     YAML::Node yamlConfig;
 
-    if (configPath != nullptr && access(configPath, R_OK) == 0) {
+    if (configPath != nullptr) {
         try {
             yamlConfig = YAML::LoadFile(configPath);
         } catch (YAML::Exception e) {
-            std::cout << "*** Exception " << e.what() << std::endl;
+            std::cout << "Could not open " << configPath << " because of error: " << e.what() << std::endl;
             exit(EXIT_FAILURE);
         }
     } else if (access("config.yaml", R_OK) == 0) {
