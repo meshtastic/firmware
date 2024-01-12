@@ -4,7 +4,7 @@
 #include "configuration.h"
 #include "modules/ExternalNotificationModule.h"
 
-#ifdef ARCH_RASPBERRY_PI
+#ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
@@ -17,7 +17,7 @@ TouchScreenImpl1::TouchScreenImpl1(uint16_t width, uint16_t height, bool (*getTo
 
 void TouchScreenImpl1::init()
 {
-#if ARCH_RASPBERRY_PI
+#if ARCH_PORTDUINO
     if (settingsMap[touchscreenModule]) {
         TouchScreenBase::init(true);
         inputBroker->registerSource(this);

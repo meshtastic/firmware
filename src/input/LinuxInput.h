@@ -1,5 +1,5 @@
 #pragma once
-#if ARCH_RASPBERRY_PI
+#if ARCH_PORTDUINO
 #include "InputBroker.h"
 #include "concurrency/OSThread.h"
 #include <assert.h>
