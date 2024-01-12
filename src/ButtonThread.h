@@ -38,7 +38,7 @@ class ButtonThread : public concurrency::OSThread
 #ifdef BUTTON_PIN_TOUCH
     OneButton userButtonTouch;
 #endif
-#if defined(ARCH_RASPBERRY_PI)
+#if defined(ARCH_PORTDUINO)
     OneButton userButton;
 #endif
     static bool shutdown_on_long_stop;
@@ -49,8 +49,8 @@ class ButtonThread : public concurrency::OSThread
     // callback returns the period for the next callback invocation (or 0 if we should no longer be called)
     ButtonThread() : OSThread("Button")
     {
-#if defined(ARCH_RASPBERRY_PI) || defined(BUTTON_PIN)
-#if defined(ARCH_RASPBERRY_PI)
+#if defined(ARCH_PORTDUINO) || defined(BUTTON_PIN)
+#if defined(ARCH_PORTDUINO)
         if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC)
             userButton = OneButton(settingsMap[user], true, true);
 #elif defined(BUTTON_PIN)
@@ -68,7 +68,7 @@ class ButtonThread : public concurrency::OSThread
         userButton.attachMultiClick(userButtonMultiPressed);
         userButton.attachLongPressStart(userButtonPressedLongStart);
         userButton.attachLongPressStop(userButtonPressedLongStop);
-#if defined(ARCH_RASPBERRY_PI)
+#if defined(ARCH_PORTDUINO)
         if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC)
             wakeOnIrq(settingsMap[user], FALLING);
 #else
@@ -105,7 +105,7 @@ class ButtonThread : public concurrency::OSThread
 #if defined(BUTTON_PIN)
         userButton.tick();
         canSleep &= userButton.isIdle();
-#elif defined(ARCH_RASPBERRY_PI)
+#elif defined(ARCH_PORTDUINO)
         if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC) {
             userButton.tick();
             canSleep &= userButton.isIdle();
@@ -143,7 +143,7 @@ class ButtonThread : public concurrency::OSThread
             powerFSM.trigger(EVENT_PRESS);
         }
 #endif
-#if defined(ARCH_RASPBERRY_PI)
+#if defined(ARCH_PORTDUINO)
         if ((settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC) &&
                 (settingsMap[user] != moduleConfig.canned_message.inputbroker_pin_press) ||
             !moduleConfig.canned_message.enabled) {
