@@ -14,14 +14,7 @@ rm -r $OUTDIR/* || true
 
 # Important to pull latest version of libs into all device flavors, otherwise some devices might be stale
 platformio pkg update
-
-if command -v raspi-config &>/dev/null; then
-	pio run --environment raspbian
-	cp .pio/build/raspbian/program $OUTDIR/meshtasticd_linux_arm64
-else
-	pio run --environment native
-	cp .pio/build/native/program $OUTDIR/meshtasticd_linux_amd64
-fi
-
+pio run --environment native
+cp .pio/build/native/program $OUTDIR/meshtasticd_linux
 cp bin/device-install.* $OUTDIR
 cp bin/device-update.* $OUTDIR
