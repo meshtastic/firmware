@@ -16,7 +16,7 @@
 #define GPS_RESET_MODE HIGH
 #endif
 
-#if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32) || defined(ARCH_RASPBERRY_PI)
+#if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32) || defined(aLinuxInputImpl)
 HardwareSerial *GPS::_serial_gps = &Serial1;
 #else
 HardwareSerial *GPS::_serial_gps = NULL;
@@ -596,11 +596,12 @@ void GPS::setAwake(bool on)
  */
 uint32_t GPS::getWakeTime() const
 {
-    uint32_t t = config.position.gps_attempt_time;
+    uint32_t t = config.position.position_broadcast_secs;
 
     if (t == UINT32_MAX)
         return t; // already maxint
-    return t * 1000;
+
+    return getConfiguredOrDefaultMs(t, default_broadcast_interval_secs);
 }
 
 /** Get how long we should sleep between aqusition attempts in msecs
@@ -923,7 +924,7 @@ GPS *GPS::createGps()
     if (!_en_gpio)
         _en_gpio = PIN_GPS_EN;
 #endif
-#ifdef ARCH_RASPBERRY_PI
+#ifdef ARCH_PORTDUINO
     if (!settingsMap[has_gps])
         return nullptr;
 #endif
