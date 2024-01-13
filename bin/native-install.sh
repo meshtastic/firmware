@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-cp release/meshtasticd_linux_arm64 /usr/sbin/meshtasticd
+cp release/meshtasticd_linux /usr/sbin/meshtasticd
 mkdir /etc/meshtasticd
 if [[ -f "/etc/meshtasticd/config.yaml" ]]; then
 	cp bin/config-dist.yaml /etc/meshtasticd/config-upgrade.yaml
