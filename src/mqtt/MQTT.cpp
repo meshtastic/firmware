@@ -7,9 +7,13 @@
 #include "mesh/Router.h"
 #include "mesh/generated/meshtastic/mqtt.pb.h"
 #include "mesh/generated/meshtastic/telemetry.pb.h"
-#include "mesh/http/WiFiAPClient.h"
+#if defined(ARCH_ESP32)
+#include "../mesh/generated/meshtastic/paxcount.pb.h"
+#endif
+#include "mesh/generated/meshtastic/remote_hardware.pb.h"
 #include "sleep.h"
 #if HAS_WIFI
+#include "mesh/wifi/WiFiAPClient.h"
 #include <WiFi.h>
 #endif
 #include "mqtt/JSON.h"
@@ -133,12 +137,18 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
             if (strcmp(e.gateway_id, owner.id) == 0)
                 LOG_INFO("Ignoring downlink message we originally sent.\n");
             else {
-                if (e.packet) {
+                // Find channel by channel_id and check downlink_enabled
+                meshtastic_Channel ch = channels.getByName(e.channel_id);
+                if (strcmp(e.channel_id, channels.getGlobalId(ch.index)) == 0 && e.packet && ch.settings.downlink_enabled) {
                     LOG_INFO("Received MQTT topic %s, len=%u\n", topic, length);
                     meshtastic_MeshPacket *p = packetPool.allocCopy(*e.packet);
 
-                    // ignore messages sent by us or if we don't have the channel key
-                    if (router && p->from != nodeDB.getNodeNum() && perhapsDecode(p))
+                    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+                        p->channel = ch.index;
+                    }
+
+                    // ignore messages if we don't have the channel key
+                    if (router && perhapsDecode(p))
                         router->enqueueReceivedMessage(p);
                     else
                         packetPool.release(p);
@@ -513,10 +523,10 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
     // the created jsonObj is immutable after creation, so
     // we need to do the heavy lifting before assembling it.
     std::string msgType;
-    JSONObject msgPayload;
     JSONObject jsonObj;
 
     if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+        JSONObject msgPayload;
         switch (mp->decoded.portnum) {
         case meshtastic_PortNum_TEXT_MESSAGE_APP: {
             msgType = "text";
@@ -559,6 +569,13 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
                     msgPayload["gas_resistance"] = new JSONValue(decoded->variant.environment_metrics.gas_resistance);
                     msgPayload["voltage"] = new JSONValue(decoded->variant.environment_metrics.voltage);
                     msgPayload["current"] = new JSONValue(decoded->variant.environment_metrics.current);
+                } else if (decoded->which_variant == meshtastic_Telemetry_power_metrics_tag) {
+                    msgPayload["voltage_ch1"] = new JSONValue(decoded->variant.power_metrics.ch1_voltage);
+                    msgPayload["current_ch1"] = new JSONValue(decoded->variant.power_metrics.ch1_current);
+                    msgPayload["voltage_ch2"] = new JSONValue(decoded->variant.power_metrics.ch2_voltage);
+                    msgPayload["current_ch2"] = new JSONValue(decoded->variant.power_metrics.ch2_current);
+                    msgPayload["voltage_ch3"] = new JSONValue(decoded->variant.power_metrics.ch3_voltage);
+                    msgPayload["current_ch3"] = new JSONValue(decoded->variant.power_metrics.ch3_current);
                 }
                 jsonObj["payload"] = new JSONValue(msgPayload);
             } else {
@@ -671,6 +688,88 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
             }
             break;
         }
+        case meshtastic_PortNum_TRACEROUTE_APP: {
+            if (mp->decoded.request_id) { // Only report the traceroute response
+                msgType = "traceroute";
+                meshtastic_RouteDiscovery scratch;
+                meshtastic_RouteDiscovery *decoded = NULL;
+                memset(&scratch, 0, sizeof(scratch));
+                if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &meshtastic_RouteDiscovery_msg,
+                                         &scratch)) {
+                    decoded = &scratch;
+                    JSONArray route; // Route this message took
+                    // Lambda function for adding a long name to the route
+                    auto addToRoute = [](JSONArray *route, NodeNum num) {
+                        char long_name[40] = "Unknown";
+                        meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(num);
+                        bool name_known = node ? node->has_user : false;
+                        if (name_known)
+                            memcpy(long_name, node->user.long_name, sizeof(long_name));
+                        route->push_back(new JSONValue(long_name));
+                    };
+                    addToRoute(&route, mp->to); // Started at the original transmitter (destination of response)
+                    for (uint8_t i = 0; i < decoded->route_count; i++) {
+                        addToRoute(&route, decoded->route[i]);
+                    }
+                    addToRoute(&route, mp->from); // Ended at the original destination (source of response)
+
+                    msgPayload["route"] = new JSONValue(route);
+                    jsonObj["payload"] = new JSONValue(msgPayload);
+                } else {
+                    LOG_ERROR("Error decoding protobuf for traceroute message!\n");
+                }
+            }
+            break;
+        }
+        case meshtastic_PortNum_DETECTION_SENSOR_APP: {
+            msgType = "detection";
+            char payloadStr[(mp->decoded.payload.size) + 1];
+            memcpy(payloadStr, mp->decoded.payload.bytes, mp->decoded.payload.size);
+            payloadStr[mp->decoded.payload.size] = 0; // null terminated string
+            msgPayload["text"] = new JSONValue(payloadStr);
+            jsonObj["payload"] = new JSONValue(msgPayload);
+            break;
+        }
+#ifdef ARCH_ESP32
+        case meshtastic_PortNum_PAXCOUNTER_APP: {
+            msgType = "paxcounter";
+            meshtastic_Paxcount scratch;
+            meshtastic_Paxcount *decoded = NULL;
+            memset(&scratch, 0, sizeof(scratch));
+            if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &meshtastic_Paxcount_msg, &scratch)) {
+                decoded = &scratch;
+                msgPayload["wifi_count"] = new JSONValue((uint)decoded->wifi);
+                msgPayload["ble_count"] = new JSONValue((uint)decoded->ble);
+                msgPayload["uptime"] = new JSONValue((uint)decoded->uptime);
+                jsonObj["payload"] = new JSONValue(msgPayload);
+            } else {
+                LOG_ERROR("Error decoding protobuf for Paxcount message!\n");
+            }
+            break;
+        }
+#endif
+        case meshtastic_PortNum_REMOTE_HARDWARE_APP: {
+            meshtastic_HardwareMessage scratch;
+            meshtastic_HardwareMessage *decoded = NULL;
+            memset(&scratch, 0, sizeof(scratch));
+            if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &meshtastic_HardwareMessage_msg,
+                                     &scratch)) {
+                decoded = &scratch;
+                if (decoded->type == meshtastic_HardwareMessage_Type_GPIOS_CHANGED) {
+                    msgType = "gpios_changed";
+                    msgPayload["gpio_value"] = new JSONValue((uint)decoded->gpio_value);
+                    jsonObj["payload"] = new JSONValue(msgPayload);
+                } else if (decoded->type == meshtastic_HardwareMessage_Type_READ_GPIOS_REPLY) {
+                    msgType = "gpios_read_reply";
+                    msgPayload["gpio_value"] = new JSONValue((uint)decoded->gpio_value);
+                    msgPayload["gpio_mask"] = new JSONValue((uint)decoded->gpio_mask);
+                    jsonObj["payload"] = new JSONValue(msgPayload);
+                }
+            } else {
+                LOG_ERROR("Error decoding protobuf for RemoteHardware message!\n");
+            }
+            break;
+        }
         // add more packet types here if needed
         default:
             break;
@@ -686,6 +785,10 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
     jsonObj["channel"] = new JSONValue((uint)mp->channel);
     jsonObj["type"] = new JSONValue(msgType.c_str());
     jsonObj["sender"] = new JSONValue(owner.id);
+    if (mp->rx_rssi != 0)
+        jsonObj["rssi"] = new JSONValue((int)mp->rx_rssi);
+    if (mp->rx_snr != 0)
+        jsonObj["snr"] = new JSONValue((float)mp->rx_snr);
 
     // serialize and write it to the stream
     JSONValue *value = new JSONValue(jsonObj);

@@ -61,7 +61,7 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
              p.altitude_geoidal_separation, p.PDOP, p.HDOP, p.VDOP, p.sats_in_view, p.fix_quality, p.fix_type, p.timestamp,
              p.time);
 
-    if (p.time) {
+    if (p.time && channels.getByIndex(mp.channel).role == meshtastic_Channel_Role_PRIMARY) {
         struct timeval tv;
         uint32_t secs = p.time;
 
@@ -87,6 +87,7 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 meshtastic_MeshPacket *PositionModule::allocReply()
 {
     if (ignoreRequest) {
+        ignoreRequest = false; // Reset for next request
         return nullptr;
     }
 
@@ -150,6 +151,7 @@ meshtastic_MeshPacket *PositionModule::allocReply()
         LOG_INFO("Stripping time %u from position send\n", p.time);
         p.time = 0;
     } else {
+        p.time = getValidTime(RTCQualityDevice);
         LOG_INFO("Providing time to mesh %u\n", p.time);
     }
 
@@ -166,7 +168,7 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
 
     meshtastic_MeshPacket *p = allocReply();
     if (p == nullptr) {
-        LOG_WARN("allocReply returned a nullptr");
+        LOG_WARN("allocReply returned a nullptr\n");
         return;
     }
 
@@ -225,6 +227,9 @@ int32_t PositionModule::runOnce()
 
             LOG_INFO("Sending pos@%x:6 to mesh (wantReplies=%d)\n", localPosition.timestamp, requestReplies);
             sendOurPosition(NODENUM_BROADCAST, requestReplies);
+            if (config.device.role == meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND) {
+                sendLostAndFoundText();
+            }
         }
     } else if (config.position.position_broadcast_smart_enabled) {
         const meshtastic_NodeInfoLite *node2 = service.refreshLocalMeshNode(); // should guarantee there is now a position
@@ -259,6 +264,21 @@ int32_t PositionModule::runOnce()
     }
 
     return RUNONCE_INTERVAL; // to save power only wake for our callback occasionally
+}
+
+void PositionModule::sendLostAndFoundText()
+{
+    meshtastic_MeshPacket *p = allocDataPacket();
+    p->to = NODENUM_BROADCAST;
+    char *message = new char[60];
+    sprintf(message, "🚨I'm lost! Lat / Lon: %f, %f\a", (lastGpsLatitude * 1e-7), (lastGpsLongitude * 1e-7));
+    p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+    p->want_ack = false;
+    p->decoded.payload.size = strlen(message);
+    memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
+
+    service.sendToMesh(p, RX_SRC_LOCAL, true);
+    delete[] message;
 }
 
 struct SmartPosition PositionModule::getDistanceTraveledSinceLastSend(meshtastic_PositionLite currentPosition)

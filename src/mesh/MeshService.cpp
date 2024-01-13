@@ -140,6 +140,22 @@ void MeshService::reloadOwner(bool shouldSave)
     }
 }
 
+// search the queue for a request id and return the matching nodenum
+NodeNum MeshService::getNodenumFromRequestId(uint32_t request_id)
+{
+    NodeNum nodenum = 0;
+    for (int i = 0; i < toPhoneQueue.numUsed(); i++) {
+        meshtastic_MeshPacket *p = toPhoneQueue.dequeuePtr(0);
+        if (p->id == request_id) {
+            nodenum = p->to;
+            // make sure to continue this to make one full loop
+        }
+        // put it right back on the queue
+        toPhoneQueue.enqueue(p, 0);
+    }
+    return nodenum;
+}
+
 /**
  *  Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)
  * Called by PhoneAPI.handleToRadio.  Note: p is a scratch buffer, this function is allowed to write to it but it can not keep a
@@ -267,14 +283,22 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
 
 void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 {
+    perhapsDecode(p);
+
     if (toPhoneQueue.numFree() == 0) {
-        LOG_WARN("ToPhone queue is full, discarding oldest\n");
-        meshtastic_MeshPacket *d = toPhoneQueue.dequeuePtr(0);
-        if (d)
-            releaseToPool(d);
+        if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
+            p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP) {
+            LOG_WARN("ToPhone queue is full, discarding oldest\n");
+            meshtastic_MeshPacket *d = toPhoneQueue.dequeuePtr(0);
+            if (d)
+                releaseToPool(d);
+        } else {
+            LOG_WARN("ToPhone queue is full, dropping packet.\n");
+            releaseToPool(p);
+            return;
+        }
     }
 
-    perhapsDecode(p);
     assert(toPhoneQueue.enqueue(p, 0));
     fromNum++;
 }
@@ -312,7 +336,9 @@ meshtastic_NodeInfoLite *MeshService::refreshLocalMeshNode()
 
     position.time = getValidTime(RTCQualityFromNet);
 
-    updateBatteryLevel(powerStatus->getBatteryChargePercent());
+    if (powerStatus->getHasBattery() == 1) {
+        updateBatteryLevel(powerStatus->getBatteryChargePercent());
+    }
 
     return node;
 }

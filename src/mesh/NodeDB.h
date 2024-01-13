@@ -111,7 +111,7 @@ class NodeDB
     /// Return the number of nodes we've heard from recently (within the last 2 hrs?)
     size_t getNumOnlineMeshNodes();
 
-    void initConfigIntervals(), initModuleConfigIntervals(), resetNodes();
+    void initConfigIntervals(), initModuleConfigIntervals(), resetNodes(), removeNodeByNum(uint nodeNum);
 
     bool factoryReset();
 
@@ -179,9 +179,6 @@ extern NodeDB nodeDB;
         prefs.gps_update_interval = oneday
 
         prefs.is_power_saving = True
-
-        # allow up to five minutes for each new GPS lock attempt
-        prefs.gps_attempt_time = 300
 */
 
 // Our delay functions check for this for times that should never expire
@@ -192,7 +189,6 @@ extern NodeDB nodeDB;
 
 #define ONE_DAY 24 * 60 * 60
 
-#define default_gps_attempt_time IF_ROUTER(5 * 60, 15 * 60)
 #define default_gps_update_interval IF_ROUTER(ONE_DAY, 2 * 60)
 #define default_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 15 * 60)
 #define default_wait_bluetooth_secs IF_ROUTER(1, 60)
@@ -204,6 +200,7 @@ extern NodeDB nodeDB;
 #define default_mqtt_address "mqtt.meshtastic.org"
 #define default_mqtt_username "meshdev"
 #define default_mqtt_password "large4cats"
+#define default_mqtt_root "msh"
 
 inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval)
 {

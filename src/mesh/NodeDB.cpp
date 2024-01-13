@@ -21,10 +21,14 @@
 #include <pb_encode.h>
 
 #ifdef ARCH_ESP32
-#include "mesh/http/WiFiAPClient.h"
+#include "mesh/wifi/WiFiAPClient.h"
 #include "modules/esp32/StoreForwardModule.h"
 #include <Preferences.h>
 #include <nvs_flash.h>
+#endif
+
+#ifdef ARCH_PORTDUINO
+#include "platform/portduino/PortduinoGlue.h"
 #endif
 
 #ifdef ARCH_NRF52
@@ -191,6 +195,12 @@ void NodeDB::installDefaultConfig()
     config.bluetooth.fixed_pin = defaultBLEPin;
 #if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS)
     bool hasScreen = true;
+#elif ARCH_PORTDUINO
+    bool hasScreen = false;
+    if (settingsMap[displayPanel])
+        hasScreen = true;
+    else
+        hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
 #else
     bool hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
 #endif
@@ -200,7 +210,7 @@ void NodeDB::installDefaultConfig()
     config.position.position_flags =
         (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL |
          meshtastic_Config_PositionConfig_PositionFlags_SPEED | meshtastic_Config_PositionConfig_PositionFlags_HEADING |
-         meshtastic_Config_PositionConfig_PositionFlags_DOP);
+         meshtastic_Config_PositionConfig_PositionFlags_DOP | meshtastic_Config_PositionConfig_PositionFlags_SATINVIEW);
 
 #ifdef T_WATCH_S3
     config.display.screen_on_secs = 30;
@@ -213,7 +223,6 @@ void NodeDB::installDefaultConfig()
 void NodeDB::initConfigIntervals()
 {
     config.position.gps_update_interval = default_gps_update_interval;
-    config.position.gps_attempt_time = default_gps_attempt_time;
     config.position.position_broadcast_secs = default_broadcast_interval_secs;
 
     config.power.ls_secs = default_ls_secs;
@@ -245,15 +254,26 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 1000;
     moduleConfig.external_notification.nag_timeout = 60;
 #endif
-#ifdef T_WATCH_S3
-    // Don't worry about the other settings, we'll use the DRV2056 behavior for notifications
+#ifdef HAS_I2S
+    // Don't worry about the other settings for T-Watch, we'll also use the DRV2056 behavior for notifications
     moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.use_i2s_as_buzzer = true;
+    moduleConfig.external_notification.alert_message_buzzer = true;
+    moduleConfig.external_notification.nag_timeout = 60;
+#endif
+#ifdef NANO_G2_ULTRA
+    moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.alert_message = true;
+    moduleConfig.external_notification.output_ms = 100;
+    moduleConfig.external_notification.active = true;
 #endif
     moduleConfig.has_canned_message = true;
 
     strncpy(moduleConfig.mqtt.address, default_mqtt_address, sizeof(moduleConfig.mqtt.address));
     strncpy(moduleConfig.mqtt.username, default_mqtt_username, sizeof(moduleConfig.mqtt.username));
     strncpy(moduleConfig.mqtt.password, default_mqtt_password, sizeof(moduleConfig.mqtt.password));
+    strncpy(moduleConfig.mqtt.root, default_mqtt_root, sizeof(moduleConfig.mqtt.root));
+    moduleConfig.mqtt.encryption_enabled = true;
 
     moduleConfig.has_neighbor_info = true;
     moduleConfig.neighbor_info.enabled = false;
@@ -280,11 +300,12 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
         initModuleConfigIntervals();
     } else if (role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
         config.display.screen_on_secs = 1;
-    } else if (role == meshtastic_Config_DeviceConfig_Role_TRACKER) {
-        config.position.gps_update_interval = 30;
     } else if (role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
         moduleConfig.telemetry.environment_measurement_enabled = true;
         moduleConfig.telemetry.environment_update_interval = 300;
+    } else if (role == meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND) {
+        config.position.position_broadcast_smart_enabled = false;
+        config.position.position_broadcast_secs = 300; // Every 5 minutes
     } else if (role == meshtastic_Config_DeviceConfig_Role_TAK) {
         config.device.node_info_broadcast_secs = ONE_DAY;
         config.position.position_broadcast_smart_enabled = false;
@@ -294,6 +315,15 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
             (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_SPEED |
              meshtastic_Config_PositionConfig_PositionFlags_HEADING | meshtastic_Config_PositionConfig_PositionFlags_DOP);
         moduleConfig.telemetry.device_update_interval = ONE_DAY;
+    } else if (role == meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
+        config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY;
+        config.device.node_info_broadcast_secs = UINT32_MAX;
+        config.position.position_broadcast_smart_enabled = false;
+        config.position.position_broadcast_secs = UINT32_MAX;
+        moduleConfig.neighbor_info.update_interval = UINT32_MAX;
+        moduleConfig.telemetry.device_update_interval = UINT32_MAX;
+        moduleConfig.telemetry.environment_update_interval = UINT32_MAX;
+        moduleConfig.telemetry.air_quality_interval = UINT32_MAX;
     }
 }
 
@@ -314,11 +344,25 @@ void NodeDB::installDefaultChannels()
 
 void NodeDB::resetNodes()
 {
-    devicestate.node_db_lite_count = 0;
-    memset(devicestate.node_db_lite, 0, sizeof(devicestate.node_db_lite));
+    devicestate.node_db_lite_count = 1;
+    std::fill(&devicestate.node_db_lite[1], &devicestate.node_db_lite[MAX_NUM_NODES - 1], meshtastic_NodeInfoLite());
     saveDeviceStateToDisk();
     if (neighborInfoModule && moduleConfig.neighbor_info.enabled)
         neighborInfoModule->resetNeighbors();
+}
+
+void NodeDB::removeNodeByNum(uint nodeNum)
+{
+    int newPos = 0, removed = 0;
+    for (int i = 0; i < *numMeshNodes; i++) {
+        if (meshNodes[i].num != nodeNum)
+            meshNodes[newPos++] = meshNodes[i];
+        else
+            removed++;
+    }
+    *numMeshNodes -= removed;
+    LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Saving changes...\n", removed);
+    saveDeviceStateToDisk();
 }
 
 void NodeDB::cleanupMeshDB()
@@ -354,7 +398,6 @@ void NodeDB::installDefaultDeviceState()
     pickNewNodeNum(); // based on macaddr now
     snprintf(owner.long_name, sizeof(owner.long_name), "Meshtastic %02x%02x", ourMacAddr[4], ourMacAddr[5]);
     snprintf(owner.short_name, sizeof(owner.short_name), "%02x%02x", ourMacAddr[4], ourMacAddr[5]);
-
     snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum()); // Default node ID now based on nodenum
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
 }
@@ -379,6 +422,8 @@ void NodeDB::init()
 
     // Set our board type so we can share it with others
     owner.hw_model = HW_VENDOR;
+    // Ensure user (nodeinfo) role is set to whatever we're configured to
+    owner.role = config.device.role;
 
     // Include our owner in the node db under our nodenum
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
@@ -419,6 +464,7 @@ void NodeDB::init()
  */
 void NodeDB::pickNewNodeNum()
 {
+
     getMacAddr(ourMacAddr); // Make sure ourMacAddr is set
 
     // Pick an initial nodenum based on the macaddr
@@ -431,6 +477,7 @@ void NodeDB::pickNewNodeNum()
         LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, so trying for 0x%x\n", nodeNum, candidate);
         nodeNum = candidate;
     }
+    LOG_WARN("Using nodenum 0x%x \n", nodeNum);
 
     myNodeInfo.my_node_num = nodeNum;
 }

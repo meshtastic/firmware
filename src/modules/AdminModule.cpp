@@ -182,6 +182,18 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         }
         break;
     }
+    case meshtastic_AdminMessage_remove_by_nodenum_tag: {
+        LOG_INFO("Client is receiving a remove_nodenum command.\n");
+        nodeDB.removeNodeByNum(r->remove_by_nodenum);
+        break;
+    }
+    case meshtastic_AdminMessage_enter_dfu_mode_request_tag: {
+        LOG_INFO("Client is requesting to enter DFU mode.\n");
+#if defined(ARCH_NRF52) || defined(ARCH_RP2040)
+        enterDfuMode();
+#endif
+        break;
+    }
 #ifdef ARCH_PORTDUINO
     case meshtastic_AdminMessage_exit_simulator_tag:
         LOG_INFO("Exiting simulator\n");
@@ -378,6 +390,16 @@ void AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         moduleConfig.has_detection_sensor = true;
         moduleConfig.detection_sensor = c.payload_variant.detection_sensor;
         break;
+    case meshtastic_ModuleConfig_ambient_lighting_tag:
+        LOG_INFO("Setting module config: Ambient Lighting\n");
+        moduleConfig.has_ambient_lighting = true;
+        moduleConfig.ambient_lighting = c.payload_variant.ambient_lighting;
+        break;
+    case meshtastic_ModuleConfig_paxcounter_tag:
+        LOG_INFO("Setting module config: Paxcounter\n");
+        moduleConfig.has_paxcounter = true;
+        moduleConfig.paxcounter = c.payload_variant.paxcounter;
+        break;
     }
 
     saveChanges(SEGMENT_MODULECONFIG);
@@ -523,6 +545,16 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_detection_sensor_tag;
             res.get_module_config_response.payload_variant.detection_sensor = moduleConfig.detection_sensor;
             break;
+        case meshtastic_AdminMessage_ModuleConfigType_AMBIENTLIGHTING_CONFIG:
+            LOG_INFO("Getting module config: Ambient Lighting\n");
+            res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_ambient_lighting_tag;
+            res.get_module_config_response.payload_variant.ambient_lighting = moduleConfig.ambient_lighting;
+            break;
+        case meshtastic_AdminMessage_ModuleConfigType_PAXCOUNTER_CONFIG:
+            LOG_INFO("Getting module config: Paxcounter\n");
+            res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_paxcounter_tag;
+            res.get_module_config_response.payload_variant.paxcounter = moduleConfig.paxcounter;
+            break;
         }
 
         // NOTE: The phone app needs to know the ls_secsvalue so it can properly expect sleep behavior.
@@ -606,12 +638,12 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
 #if HAS_BLUETOOTH
     conn.has_bluetooth = true;
     conn.bluetooth.pin = config.bluetooth.fixed_pin;
-#endif
 #ifdef ARCH_ESP32
     conn.bluetooth.is_connected = nimbleBluetooth->isConnected();
     conn.bluetooth.rssi = nimbleBluetooth->getRssi();
 #elif defined(ARCH_NRF52)
     conn.bluetooth.is_connected = nrf52Bluetooth->isConnected();
+#endif
 #endif
     conn.has_serial = true; // No serial-less devices
     conn.serial.is_connected = powerFSM.getState() == &stateSERIAL;
@@ -676,7 +708,7 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
     channels.onConfigChanged();
 
     service.reloadOwner(false);
-    service.reloadConfig(SEGMENT_CONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
+    saveChanges(SEGMENT_CONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
 }
 
 AdminModule::AdminModule() : ProtobufModule("Admin", meshtastic_PortNum_ADMIN_APP, &meshtastic_AdminMessage_msg)

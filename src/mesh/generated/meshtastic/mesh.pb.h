@@ -67,6 +67,10 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_STATION_G1 = 25,
     /* RAK11310 (RP2040 + SX1262) */
     meshtastic_HardwareModel_RAK11310 = 26,
+    /* Makerfabs SenseLoRA Receiver (RP2040 + RFM96) */
+    meshtastic_HardwareModel_SENSELORA_RP2040 = 27,
+    /* Makerfabs SenseLoRA Industrial Monitor (ESP32-S3 + RFM96) */
+    meshtastic_HardwareModel_SENSELORA_S3 = 28,
     /* ---------------------------------------------------------------------------
  Less common/prototype boards listed here (needs one more byte over the air)
  --------------------------------------------------------------------------- */
@@ -402,6 +406,8 @@ typedef struct _meshtastic_User {
  If this user is a licensed operator, set this flag.
  Also, "long_name" should be their licence number. */
     bool is_licensed;
+    /* Indicates that the user's role in the mesh */
+    meshtastic_Config_DeviceConfig_Role role;
 } meshtastic_User;
 
 /* A message used in our Dynamic Source Routing protocol (RFC 4728 based) */
@@ -826,6 +832,7 @@ extern "C" {
 #define meshtastic_Position_altitude_source_ENUMTYPE meshtastic_Position_AltSource
 
 #define meshtastic_User_hw_model_ENUMTYPE meshtastic_HardwareModel
+#define meshtastic_User_role_ENUMTYPE meshtastic_Config_DeviceConfig_Role
 
 
 #define meshtastic_Routing_variant_error_reason_ENUMTYPE meshtastic_Routing_Error
@@ -854,7 +861,7 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_Position_init_default         {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define meshtastic_User_init_default             {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0}
+#define meshtastic_User_init_default             {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN}
 #define meshtastic_RouteDiscovery_init_default   {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define meshtastic_Routing_init_default          {0, {meshtastic_RouteDiscovery_init_default}}
 #define meshtastic_Data_init_default             {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
@@ -872,7 +879,7 @@ extern "C" {
 #define meshtastic_Neighbor_init_default         {0, 0, 0, 0}
 #define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0}
 #define meshtastic_Position_init_zero            {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define meshtastic_User_init_zero                {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0}
+#define meshtastic_User_init_zero                {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN}
 #define meshtastic_RouteDiscovery_init_zero      {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define meshtastic_Routing_init_zero             {0, {meshtastic_RouteDiscovery_init_zero}}
 #define meshtastic_Data_init_zero                {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
@@ -919,6 +926,7 @@ extern "C" {
 #define meshtastic_User_macaddr_tag              4
 #define meshtastic_User_hw_model_tag             5
 #define meshtastic_User_is_licensed_tag          6
+#define meshtastic_User_role_tag                 7
 #define meshtastic_RouteDiscovery_route_tag      1
 #define meshtastic_Routing_route_request_tag     1
 #define meshtastic_Routing_route_reply_tag       2
@@ -1047,7 +1055,8 @@ X(a, STATIC,   SINGULAR, STRING,   long_name,         2) \
 X(a, STATIC,   SINGULAR, STRING,   short_name,        3) \
 X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, macaddr,           4) \
 X(a, STATIC,   SINGULAR, UENUM,    hw_model,          5) \
-X(a, STATIC,   SINGULAR, BOOL,     is_licensed,       6)
+X(a, STATIC,   SINGULAR, BOOL,     is_licensed,       6) \
+X(a, STATIC,   SINGULAR, UENUM,    role,              7)
 #define meshtastic_User_CALLBACK NULL
 #define meshtastic_User_DEFAULT NULL
 
@@ -1280,13 +1289,13 @@ extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
 #define meshtastic_MyNodeInfo_size               18
 #define meshtastic_NeighborInfo_size             258
 #define meshtastic_Neighbor_size                 22
-#define meshtastic_NodeInfo_size                 261
+#define meshtastic_NodeInfo_size                 263
 #define meshtastic_Position_size                 137
 #define meshtastic_QueueStatus_size              23
 #define meshtastic_RouteDiscovery_size           40
 #define meshtastic_Routing_size                  42
 #define meshtastic_ToRadio_size                  504
-#define meshtastic_User_size                     77
+#define meshtastic_User_size                     79
 #define meshtastic_Waypoint_size                 165
 
 #ifdef __cplusplus

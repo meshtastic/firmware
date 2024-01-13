@@ -23,7 +23,7 @@ struct uBloxGnssModelInfo {
 typedef enum {
     GNSS_MODEL_MTK,
     GNSS_MODEL_UBLOX,
-    GNSS_MODEL_UC6850,
+    GNSS_MODEL_UC6580,
     GNSS_MODEL_UNKNOWN,
 } GnssModel_t;
 
@@ -70,7 +70,7 @@ class GPS : private concurrency::OSThread
 
     /**
      * hasValidLocation - indicates that the position variables contain a complete
-     *   GPS location, valid and fresh (< gps_update_interval + gps_attempt_time)
+     *   GPS location, valid and fresh (< gps_update_interval + position_broadcast_secs)
      */
     bool hasValidLocation = false; // default to false, until we complete our first read
 

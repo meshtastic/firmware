@@ -256,29 +256,12 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         // Now the packet channel should be the hash (no longer the index)
         p->channel = hash;
 
-        bool shouldActuallyEncrypt = true;
-
         if (moduleConfig.mqtt.enabled) {
-            // check if we should send decrypted packets to mqtt
 
-            // truth table:
-            /* mqtt_server  mqtt_encryption_enabled should_encrypt
-             *    not set                        0              1
-             *    not set                        1              1
-             *        set                        0              0
-             *        set                        1              1
-             *
-             * => so we only decrypt mqtt if they have a custom mqtt server AND mqtt_encryption_enabled is FALSE
-             */
-
-            if (*moduleConfig.mqtt.address && !moduleConfig.mqtt.encryption_enabled) {
-                shouldActuallyEncrypt = false;
-            }
-
-            LOG_INFO("Should encrypt MQTT?: %d\n", shouldActuallyEncrypt);
+            LOG_INFO("Should encrypt MQTT?: %d\n", moduleConfig.mqtt.encryption_enabled);
 
             // the packet is currently in a decrypted state.  send it now if they want decrypted packets
-            if (mqtt && !shouldActuallyEncrypt)
+            if (mqtt && !moduleConfig.mqtt.encryption_enabled)
                 mqtt->onSend(*p, chIndex);
         }
 
@@ -291,7 +274,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         if (moduleConfig.mqtt.enabled) {
             // the packet is now encrypted.
             // check if we should send encrypted packets to mqtt
-            if (mqtt && shouldActuallyEncrypt)
+            if (mqtt && moduleConfig.mqtt.encryption_enabled)
                 mqtt->onSend(*p, chIndex);
         }
     }
@@ -322,6 +305,12 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER &&
         config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING)
         return false;
+
+    if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY &&
+        !nodeDB.getMeshNode(p->from)->has_user) {
+        LOG_DEBUG("Node 0x%x not in NodeDB. Rebroadcast mode KNOWN_ONLY will ignore packet\n", p->from);
+        return false;
+    }
 
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag)
         return true; // If packet was already decoded just return

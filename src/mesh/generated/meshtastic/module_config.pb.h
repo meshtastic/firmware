@@ -170,6 +170,13 @@ typedef struct _meshtastic_ModuleConfig_AudioConfig {
     uint8_t i2s_sck;
 } meshtastic_ModuleConfig_AudioConfig;
 
+/* Config for the Paxcounter Module */
+typedef struct _meshtastic_ModuleConfig_PaxcounterConfig {
+    /* Enable the Paxcounter Module */
+    bool enabled;
+    uint32_t paxcounter_update_interval;
+} meshtastic_ModuleConfig_PaxcounterConfig;
+
 /* Serial Config */
 typedef struct _meshtastic_ModuleConfig_SerialConfig {
     /* Preferences for the SerialModule */
@@ -232,6 +239,9 @@ typedef struct _meshtastic_ModuleConfig_ExternalNotificationConfig {
  Default is 0 which means don't repeat at all. 60 would mean blink
  and/or beep for 60 seconds */
     uint16_t nag_timeout;
+    /* When true, enables devices with native I2S audio output to use the RTTTL over speaker like a buzzer
+ T-Watch S3 and T-Deck for example have this capability */
+    bool use_i2s_as_buzzer;
 } meshtastic_ModuleConfig_ExternalNotificationConfig;
 
 /* Store and Forward Module Config */
@@ -278,6 +288,15 @@ typedef struct _meshtastic_ModuleConfig_TelemetryConfig {
     /* Interval in seconds of how often we should try to send our
  air quality metrics to the mesh */
     uint32_t air_quality_interval;
+    /* Interval in seconds of how often we should try to send our
+ air quality metrics to the mesh */
+    bool power_measurement_enabled;
+    /* Interval in seconds of how often we should try to send our
+ air quality metrics to the mesh */
+    uint32_t power_update_interval;
+    /* Interval in seconds of how often we should try to send our
+ air quality metrics to the mesh */
+    bool power_screen_enabled;
 } meshtastic_ModuleConfig_TelemetryConfig;
 
 /* TODO: REPLACE */
@@ -372,6 +391,8 @@ typedef struct _meshtastic_ModuleConfig {
         meshtastic_ModuleConfig_AmbientLightingConfig ambient_lighting;
         /* TODO: REPLACE */
         meshtastic_ModuleConfig_DetectionSensorConfig detection_sensor;
+        /* TODO: REPLACE */
+        meshtastic_ModuleConfig_PaxcounterConfig paxcounter;
     } payload_variant;
 } meshtastic_ModuleConfig;
 
@@ -408,6 +429,7 @@ extern "C" {
 
 #define meshtastic_ModuleConfig_AudioConfig_bitrate_ENUMTYPE meshtastic_ModuleConfig_AudioConfig_Audio_Baud
 
+
 #define meshtastic_ModuleConfig_SerialConfig_baud_ENUMTYPE meshtastic_ModuleConfig_SerialConfig_Serial_Baud
 #define meshtastic_ModuleConfig_SerialConfig_mode_ENUMTYPE meshtastic_ModuleConfig_SerialConfig_Serial_Mode
 
@@ -430,11 +452,12 @@ extern "C" {
 #define meshtastic_ModuleConfig_NeighborInfoConfig_init_default {0, 0}
 #define meshtastic_ModuleConfig_DetectionSensorConfig_init_default {0, 0, 0, 0, "", 0, 0, 0}
 #define meshtastic_ModuleConfig_AudioConfig_init_default {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_PaxcounterConfig_init_default {0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
-#define meshtastic_ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_default {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_RangeTestConfig_init_default {0, 0, 0}
-#define meshtastic_ModuleConfig_TelemetryConfig_init_default {0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_TelemetryConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define meshtastic_ModuleConfig_AmbientLightingConfig_init_default {0, 0, 0, 0, 0}
 #define meshtastic_RemoteHardwarePin_init_default {0, "", _meshtastic_RemoteHardwarePinType_MIN}
@@ -444,11 +467,12 @@ extern "C" {
 #define meshtastic_ModuleConfig_NeighborInfoConfig_init_zero {0, 0}
 #define meshtastic_ModuleConfig_DetectionSensorConfig_init_zero {0, 0, 0, 0, "", 0, 0, 0}
 #define meshtastic_ModuleConfig_AudioConfig_init_zero {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_PaxcounterConfig_init_zero {0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
-#define meshtastic_ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_zero {0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_RangeTestConfig_init_zero {0, 0, 0}
-#define meshtastic_ModuleConfig_TelemetryConfig_init_zero {0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_TelemetryConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
 #define meshtastic_ModuleConfig_AmbientLightingConfig_init_zero {0, 0, 0, 0, 0}
 #define meshtastic_RemoteHardwarePin_init_zero   {0, "", _meshtastic_RemoteHardwarePinType_MIN}
@@ -480,6 +504,8 @@ extern "C" {
 #define meshtastic_ModuleConfig_AudioConfig_i2s_sd_tag 5
 #define meshtastic_ModuleConfig_AudioConfig_i2s_din_tag 6
 #define meshtastic_ModuleConfig_AudioConfig_i2s_sck_tag 7
+#define meshtastic_ModuleConfig_PaxcounterConfig_enabled_tag 1
+#define meshtastic_ModuleConfig_PaxcounterConfig_paxcounter_update_interval_tag 2
 #define meshtastic_ModuleConfig_SerialConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_SerialConfig_echo_tag 2
 #define meshtastic_ModuleConfig_SerialConfig_rxd_tag 3
@@ -502,6 +528,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_alert_bell_vibra_tag 12
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_alert_bell_buzzer_tag 13
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_nag_timeout_tag 14
+#define meshtastic_ModuleConfig_ExternalNotificationConfig_use_i2s_as_buzzer_tag 15
 #define meshtastic_ModuleConfig_StoreForwardConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_StoreForwardConfig_heartbeat_tag 2
 #define meshtastic_ModuleConfig_StoreForwardConfig_records_tag 3
@@ -517,6 +544,9 @@ extern "C" {
 #define meshtastic_ModuleConfig_TelemetryConfig_environment_display_fahrenheit_tag 5
 #define meshtastic_ModuleConfig_TelemetryConfig_air_quality_enabled_tag 6
 #define meshtastic_ModuleConfig_TelemetryConfig_air_quality_interval_tag 7
+#define meshtastic_ModuleConfig_TelemetryConfig_power_measurement_enabled_tag 8
+#define meshtastic_ModuleConfig_TelemetryConfig_power_update_interval_tag 9
+#define meshtastic_ModuleConfig_TelemetryConfig_power_screen_enabled_tag 10
 #define meshtastic_ModuleConfig_CannedMessageConfig_rotary1_enabled_tag 1
 #define meshtastic_ModuleConfig_CannedMessageConfig_inputbroker_pin_a_tag 2
 #define meshtastic_ModuleConfig_CannedMessageConfig_inputbroker_pin_b_tag 3
@@ -551,6 +581,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_neighbor_info_tag 10
 #define meshtastic_ModuleConfig_ambient_lighting_tag 11
 #define meshtastic_ModuleConfig_detection_sensor_tag 12
+#define meshtastic_ModuleConfig_paxcounter_tag   13
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_ModuleConfig_FIELDLIST(X, a) \
@@ -565,7 +596,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,audio,payload_variant.audio)
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,remote_hardware,payload_variant.remote_hardware),   9) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,neighbor_info,payload_variant.neighbor_info),  10) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,ambient_lighting,payload_variant.ambient_lighting),  11) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,detection_sensor,payload_variant.detection_sensor),  12)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,detection_sensor,payload_variant.detection_sensor),  12) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,paxcounter,payload_variant.paxcounter),  13)
 #define meshtastic_ModuleConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_DEFAULT NULL
 #define meshtastic_ModuleConfig_payload_variant_mqtt_MSGTYPE meshtastic_ModuleConfig_MQTTConfig
@@ -580,6 +612,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,detection_sensor,payload_var
 #define meshtastic_ModuleConfig_payload_variant_neighbor_info_MSGTYPE meshtastic_ModuleConfig_NeighborInfoConfig
 #define meshtastic_ModuleConfig_payload_variant_ambient_lighting_MSGTYPE meshtastic_ModuleConfig_AmbientLightingConfig
 #define meshtastic_ModuleConfig_payload_variant_detection_sensor_MSGTYPE meshtastic_ModuleConfig_DetectionSensorConfig
+#define meshtastic_ModuleConfig_payload_variant_paxcounter_MSGTYPE meshtastic_ModuleConfig_PaxcounterConfig
 
 #define meshtastic_ModuleConfig_MQTTConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
@@ -631,6 +664,12 @@ X(a, STATIC,   SINGULAR, UINT32,   i2s_sck,           7)
 #define meshtastic_ModuleConfig_AudioConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_AudioConfig_DEFAULT NULL
 
+#define meshtastic_ModuleConfig_PaxcounterConfig_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
+X(a, STATIC,   SINGULAR, UINT32,   paxcounter_update_interval,   2)
+#define meshtastic_ModuleConfig_PaxcounterConfig_CALLBACK NULL
+#define meshtastic_ModuleConfig_PaxcounterConfig_DEFAULT NULL
+
 #define meshtastic_ModuleConfig_SerialConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
 X(a, STATIC,   SINGULAR, BOOL,     echo,              2) \
@@ -657,7 +696,8 @@ X(a, STATIC,   SINGULAR, BOOL,     alert_message_vibra,  10) \
 X(a, STATIC,   SINGULAR, BOOL,     alert_message_buzzer,  11) \
 X(a, STATIC,   SINGULAR, BOOL,     alert_bell_vibra,  12) \
 X(a, STATIC,   SINGULAR, BOOL,     alert_bell_buzzer,  13) \
-X(a, STATIC,   SINGULAR, UINT32,   nag_timeout,      14)
+X(a, STATIC,   SINGULAR, UINT32,   nag_timeout,      14) \
+X(a, STATIC,   SINGULAR, BOOL,     use_i2s_as_buzzer,  15)
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_DEFAULT NULL
 
@@ -684,7 +724,10 @@ X(a, STATIC,   SINGULAR, BOOL,     environment_measurement_enabled,   3) \
 X(a, STATIC,   SINGULAR, BOOL,     environment_screen_enabled,   4) \
 X(a, STATIC,   SINGULAR, BOOL,     environment_display_fahrenheit,   5) \
 X(a, STATIC,   SINGULAR, BOOL,     air_quality_enabled,   6) \
-X(a, STATIC,   SINGULAR, UINT32,   air_quality_interval,   7)
+X(a, STATIC,   SINGULAR, UINT32,   air_quality_interval,   7) \
+X(a, STATIC,   SINGULAR, BOOL,     power_measurement_enabled,   8) \
+X(a, STATIC,   SINGULAR, UINT32,   power_update_interval,   9) \
+X(a, STATIC,   SINGULAR, BOOL,     power_screen_enabled,  10)
 #define meshtastic_ModuleConfig_TelemetryConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_TelemetryConfig_DEFAULT NULL
 
@@ -725,6 +768,7 @@ extern const pb_msgdesc_t meshtastic_ModuleConfig_RemoteHardwareConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_NeighborInfoConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_DetectionSensorConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_AudioConfig_msg;
+extern const pb_msgdesc_t meshtastic_ModuleConfig_PaxcounterConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_SerialConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_ExternalNotificationConfig_msg;
 extern const pb_msgdesc_t meshtastic_ModuleConfig_StoreForwardConfig_msg;
@@ -741,6 +785,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_NeighborInfoConfig_fields &meshtastic_ModuleConfig_NeighborInfoConfig_msg
 #define meshtastic_ModuleConfig_DetectionSensorConfig_fields &meshtastic_ModuleConfig_DetectionSensorConfig_msg
 #define meshtastic_ModuleConfig_AudioConfig_fields &meshtastic_ModuleConfig_AudioConfig_msg
+#define meshtastic_ModuleConfig_PaxcounterConfig_fields &meshtastic_ModuleConfig_PaxcounterConfig_msg
 #define meshtastic_ModuleConfig_SerialConfig_fields &meshtastic_ModuleConfig_SerialConfig_msg
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_fields &meshtastic_ModuleConfig_ExternalNotificationConfig_msg
 #define meshtastic_ModuleConfig_StoreForwardConfig_fields &meshtastic_ModuleConfig_StoreForwardConfig_msg
@@ -755,14 +800,15 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_AudioConfig_size 19
 #define meshtastic_ModuleConfig_CannedMessageConfig_size 49
 #define meshtastic_ModuleConfig_DetectionSensorConfig_size 44
-#define meshtastic_ModuleConfig_ExternalNotificationConfig_size 40
+#define meshtastic_ModuleConfig_ExternalNotificationConfig_size 42
 #define meshtastic_ModuleConfig_MQTTConfig_size  222
 #define meshtastic_ModuleConfig_NeighborInfoConfig_size 8
+#define meshtastic_ModuleConfig_PaxcounterConfig_size 8
 #define meshtastic_ModuleConfig_RangeTestConfig_size 10
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_size 96
 #define meshtastic_ModuleConfig_SerialConfig_size 28
 #define meshtastic_ModuleConfig_StoreForwardConfig_size 22
-#define meshtastic_ModuleConfig_TelemetryConfig_size 26
+#define meshtastic_ModuleConfig_TelemetryConfig_size 36
 #define meshtastic_ModuleConfig_size             225
 #define meshtastic_RemoteHardwarePin_size        21
 

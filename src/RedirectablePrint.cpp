@@ -100,9 +100,9 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
                 int min = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
                 int sec = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
 
-                r += printf("%s | %02d:%02d:%02d %u ", logLevel, hour, min, sec, millis() / 1000);
+                r += ::printf("%s | %02d:%02d:%02d %u ", logLevel, hour, min, sec, millis() / 1000);
             } else
-                r += printf("%s | ??:??:?? %u ", logLevel, millis() / 1000);
+                r += ::printf("%s | ??:??:?? %u ", logLevel, millis() / 1000);
 
             auto thread = concurrency::OSThread::currentThread;
             if (thread) {
