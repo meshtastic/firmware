@@ -796,22 +796,25 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
     notifyObservers(true); // Force an update whether or not our node counts have changed
 }
 
-/** Update user info for this node based on received user data
+/** Update user info and channel for this node based on received user data
  */
-bool NodeDB::updateUser(uint32_t nodeId, const meshtastic_User &p)
+bool NodeDB::updateUser(uint32_t nodeId, const meshtastic_User &p, uint8_t channelIndex)
 {
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(nodeId);
     if (!info) {
         return false;
     }
 
-    LOG_DEBUG("old user %s/%s/%s\n", info->user.id, info->user.long_name, info->user.short_name);
+    LOG_DEBUG("old user %s/%s/%s, channel=%d\n", info->user.id, info->user.long_name, info->user.short_name, info->channel);
 
-    bool changed = memcmp(&info->user, &p,
-                          sizeof(info->user)); // Both of these blocks start as filled with zero so I think this is okay
+    // Both of info->user and p start as filled with zero so I think this is okay
+    bool changed = memcmp(&info->user, &p, sizeof(info->user)) || (info->channel != channelIndex);
 
     info->user = p;
-    LOG_DEBUG("updating changed=%d user %s/%s/%s\n", changed, info->user.id, info->user.long_name, info->user.short_name);
+    if (nodeId != getNodeNum())
+        info->channel = channelIndex; // Set channel we need to use to reach this node (but don't set our own channel)
+    LOG_DEBUG("updating changed=%d user %s/%s/%s, channel=%d\n", changed, info->user.id, info->user.long_name,
+              info->user.short_name, info->channel);
     info->has_user = true;
 
     if (changed) {
@@ -831,7 +834,7 @@ bool NodeDB::updateUser(uint32_t nodeId, const meshtastic_User &p)
 void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 {
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.from) {
-        LOG_DEBUG("Update DB node 0x%x, rx_time=%u, channel=%d\n", mp.from, mp.rx_time, mp.channel);
+        LOG_DEBUG("Update DB node 0x%x, rx_time=%u\n", mp.from, mp.rx_time);
 
         meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getFrom(&mp));
         if (!info) {
@@ -843,10 +846,6 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 
         if (mp.rx_snr)
             info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
-
-        if (mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP) {
-            info->channel = mp.channel;
-        }
     }
 }
 
