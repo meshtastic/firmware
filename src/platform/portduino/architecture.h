@@ -1,6 +1,6 @@
 #pragma once
 
-#define ARCH_PORTDUINO
+#define ARCH_PORTDUINO 1
 
 //
 // set HW_VENDOR
