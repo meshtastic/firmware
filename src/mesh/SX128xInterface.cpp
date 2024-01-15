@@ -252,7 +252,7 @@ template <typename T> void SX128xInterface<T>::startReceive()
 
     // We use the PREAMBLE_DETECTED and HEADER_VALID IRQ flag to detect whether we are actively receiving
     int err = lora.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF, RADIOLIB_SX128X_IRQ_RX_DEFAULT |
-                                                                    RADIOLIB_SX128X_IRQ_RADIOLIB_PREAMBLE_DETECTED |
+                                                                    RADIOLIB_SX128X_IRQ_PREAMBLE_DETECTED |
                                                                     RADIOLIB_SX128X_IRQ_HEADER_VALID);
 
     assert(err == RADIOLIB_ERR_NONE);
@@ -284,7 +284,7 @@ template <typename T> bool SX128xInterface<T>::isChannelActive()
 template <typename T> bool SX128xInterface<T>::isActivelyReceiving()
 {
     uint16_t irq = lora.getIrqStatus();
-    bool detected = (irq & (RADIOLIB_SX128X_IRQ_HEADER_VALID | RADIOLIB_SX128X_IRQ_RADIOLIB_PREAMBLE_DETECTED));
+    bool detected = (irq & (RADIOLIB_SX128X_IRQ_HEADER_VALID | RADIOLIB_SX128X_IRQ_PREAMBLE_DETECTED));
 
     // Handle false detections
     if (detected) {
