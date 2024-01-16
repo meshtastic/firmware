@@ -21,7 +21,7 @@ int16_t RadioLibRF95::begin(float freq, float bw, uint8_t sf, uint8_t cr, uint8_
     LOG_DEBUG("Current limit set result %d\n", state);
 
     // configure settings not accessible by API
-    state = config();
+    // state = config();
     RADIOLIB_ASSERT(state);
 
 #ifdef RF95_TCXO
@@ -75,5 +75,6 @@ bool RadioLibRF95::isReceiving()
 
 uint8_t RadioLibRF95::readReg(uint8_t addr)
 {
+    Module *mod = this->getMod();
     return mod->SPIreadRegister(addr);
 }
