@@ -320,6 +320,10 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         config.lora = c.payload_variant.lora;
         if (isRegionUnset && config.lora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
             config.lora.tx_enabled = true;
+            initRegion();
+            if (strcmp(moduleConfig.mqtt.root, default_mqtt_root) == 0) {
+                sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
+            }
         }
         break;
     case meshtastic_Config_bluetooth_tag:
