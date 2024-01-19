@@ -1052,7 +1052,11 @@ void Screen::setup()
     // Standard behaviour is to FLIP the screen (needed on T-Beam). If this config item is set, unflip it, and thereby logically
     // flip it. If you have a headache now, you're welcome.
     if (!config.display.flip_screen) {
+#if defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(RAK14014)
+        static_cast<TFTDisplay *>(dispdev)->flipScreenVertically();
+#else
         dispdev->flipScreenVertically();
+#endif
     }
 #endif
 
