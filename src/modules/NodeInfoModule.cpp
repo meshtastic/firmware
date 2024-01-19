@@ -12,7 +12,7 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 {
     auto p = *pptr;
 
-    bool hasChanged = nodeDB.updateUser(getFrom(&mp), p);
+    bool hasChanged = nodeDB.updateUser(getFrom(&mp), p, mp.channel);
 
     bool wasBroadcast = mp.to == NODENUM_BROADCAST;
 
