@@ -121,6 +121,10 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_EBYTE_ESP32_S3 = 54,
     /* Waveshare ESP32-S3-PICO with PICO LoRa HAT and 2.9inch e-Ink */
     meshtastic_HardwareModel_ESP32_S3_PICO = 55,
+    /* CircuitMess Chatter 2 LLCC68 Lora Module and ESP32 Wroom
+ Lora module can be swapped out for a Heltec RA-62 which is "almost" pin compatible
+ with one cut and one jumper Meshtastic works */
+    meshtastic_HardwareModel_CHATTER_2 = 56,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
