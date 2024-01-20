@@ -7,6 +7,7 @@
 #include "mesh/Router.h"
 #include "mesh/generated/meshtastic/mqtt.pb.h"
 #include "mesh/generated/meshtastic/telemetry.pb.h"
+#include "modules/RoutingModule.h"
 #if defined(ARCH_ESP32)
 #include "../mesh/generated/meshtastic/paxcount.pb.h"
 #endif
@@ -464,6 +465,9 @@ void MQTT::publishQueuedMessages()
 
 void MQTT::onSend(const meshtastic_MeshPacket &mp, ChannelIndex chIndex)
 {
+    if (mp.via_mqtt)
+        return; // Don't send messages that came from MQTT back into MQTT
+
     auto &ch = channels.getByIndex(chIndex);
 
     if (&mp.decoded && strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0 &&
@@ -502,6 +506,12 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, ChannelIndex chIndex)
                     publish(topicJson.c_str(), jsonString.c_str(), false);
                 }
             }
+
+            // Generate an implicit ACK towards ourselves (handled and processed only locally!) for this message.
+            // We do this because packets are not rebroadcasted back into MQTT anymore and we assume that at least one node
+            // receives it when we're connected to the broker. Then we'll stop our retransmissions.
+            if (getFrom(&mp) == nodeDB.getNodeNum())
+                routingModule->sendAckNak(meshtastic_Routing_Error_NONE, getFrom(&mp), mp.id, chIndex);
         } else {
             LOG_INFO("MQTT not connected, queueing packet\n");
             if (mqttQueue.numFree() == 0) {
