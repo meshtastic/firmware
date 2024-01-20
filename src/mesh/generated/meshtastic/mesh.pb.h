@@ -577,6 +577,8 @@ typedef struct _meshtastic_MeshPacket {
     int32_t rx_rssi;
     /* Describe if this message is delayed */
     meshtastic_MeshPacket_Delayed delayed;
+    /* Describes whether this packet passed via MQTT somewhere along the path it currently took. */
+    bool via_mqtt;
 } meshtastic_MeshPacket;
 
 /* The bluetooth to device link:
@@ -873,7 +875,7 @@ extern "C" {
 #define meshtastic_Data_init_default             {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Waypoint_init_default         {0, 0, 0, 0, 0, "", "", 0}
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
-#define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN}
+#define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0}
 #define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0}
 #define meshtastic_MyNodeInfo_init_default       {0, 0, 0}
 #define meshtastic_LogRecord_init_default        {"", 0, "", _meshtastic_LogRecord_Level_MIN}
@@ -891,7 +893,7 @@ extern "C" {
 #define meshtastic_Data_init_zero                {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Waypoint_init_zero            {0, 0, 0, 0, 0, "", "", 0}
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
-#define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN}
+#define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0}
 #define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0}
 #define meshtastic_MyNodeInfo_init_zero          {0, 0, 0}
 #define meshtastic_LogRecord_init_zero           {"", 0, "", _meshtastic_LogRecord_Level_MIN}
@@ -970,6 +972,7 @@ extern "C" {
 #define meshtastic_MeshPacket_priority_tag       11
 #define meshtastic_MeshPacket_rx_rssi_tag        12
 #define meshtastic_MeshPacket_delayed_tag        13
+#define meshtastic_MeshPacket_via_mqtt_tag       14
 #define meshtastic_NodeInfo_num_tag              1
 #define meshtastic_NodeInfo_user_tag             2
 #define meshtastic_NodeInfo_position_tag         3
@@ -1125,7 +1128,8 @@ X(a, STATIC,   SINGULAR, UINT32,   hop_limit,         9) \
 X(a, STATIC,   SINGULAR, BOOL,     want_ack,         10) \
 X(a, STATIC,   SINGULAR, UENUM,    priority,         11) \
 X(a, STATIC,   SINGULAR, INT32,    rx_rssi,          12) \
-X(a, STATIC,   SINGULAR, UENUM,    delayed,          13)
+X(a, STATIC,   SINGULAR, UENUM,    delayed,          13) \
+X(a, STATIC,   SINGULAR, BOOL,     via_mqtt,         14)
 #define meshtastic_MeshPacket_CALLBACK NULL
 #define meshtastic_MeshPacket_DEFAULT NULL
 #define meshtastic_MeshPacket_payload_variant_decoded_MSGTYPE meshtastic_Data
@@ -1290,7 +1294,7 @@ extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
 #define meshtastic_DeviceMetadata_size           46
 #define meshtastic_FromRadio_size                510
 #define meshtastic_LogRecord_size                81
-#define meshtastic_MeshPacket_size               321
+#define meshtastic_MeshPacket_size               323
 #define meshtastic_MqttClientProxyMessage_size   501
 #define meshtastic_MyNodeInfo_size               18
 #define meshtastic_NeighborInfo_size             258
