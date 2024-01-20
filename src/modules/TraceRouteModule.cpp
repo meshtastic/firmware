@@ -77,6 +77,8 @@ meshtastic_MeshPacket *TraceRouteModule::allocReply()
 
     // Create a MeshPacket with this payload and set it as the reply
     meshtastic_MeshPacket *reply = allocDataProtobuf(*updated);
+    // If the request went via MQTT, mark it in the reply as well (for the rare case where reply might not go back via MQTT)
+    reply->via_mqtt = req.via_mqtt;
 
     return reply;
 }
