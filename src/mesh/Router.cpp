@@ -467,10 +467,10 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 {
     // assert(radioConfig.has_preferences);
-    bool ignore = is_in_repeated(config.lora.ignore_incoming, p->from);
+    bool ignore = is_in_repeated(config.lora.ignore_incoming, p->from) || (config.lora.ignore_mqtt && p->via_mqtt);
 
     if (ignore) {
-        LOG_DEBUG("Ignoring incoming message, 0x%x is in our ignore list\n", p->from);
+        LOG_DEBUG("Ignoring incoming message, 0x%x is in our ignore list or came via MQTT\n", p->from);
     } else if (ignore |= shouldFilterReceived(p)) {
         LOG_DEBUG("Incoming message was filtered 0x%x\n", p->from);
     }
