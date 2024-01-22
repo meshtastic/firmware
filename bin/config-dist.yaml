@@ -95,3 +95,8 @@ Touchscreen:
 
 Input:
 #  KeyboardDevice: /dev/input/event0
+
+###
+
+Logging:
+#  DebugMode: true
