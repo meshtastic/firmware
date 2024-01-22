@@ -53,7 +53,7 @@
 
 // Option 1: E22's TXEN pin connected to E22's DIO2 pin, E22's RXEN pin connected to NEGATED output of E22's DIO2 pin (more
 // expensive option hardware-wise, is the 'most proper' way, removes need for routing one/two traces from MCU to RF switching
-// pins)
+// pins), however you can't have E22 in low-power 'sleep' mode (TXEN and RXEN both low cannot be achieved this this option).
 /*
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_TXEN RADIOLIB_NC
