@@ -48,8 +48,16 @@
 // pin! Also E22 module datasheets say to use it as the TCXO's reference voltage.
 // E32 module (which uses SX1276) may not have ability to set TCXO voltage using a DIO pin.
 
+// The radio module needs to be told whether to enable RX mode or TX mode. Each radio module takes different actions based on
+// these values, but generally the path from the antenna to SX1262 is changed from signal output to signal input. Also, if there
+// are LNAs (Low-Noise Amplifiers) or PAs (Power Amplifiers) in the output or input paths, their power is also controlled by
+// these pins. You should never have both TXEN and RXEN set high, this can cause problems for some radio modules, and is
+// commonly referred to as 'undefined behaviour' in datasheets. For the SX1262, you shouldn't connect DIO2 to the MCU. DIO2 is
+// an output only, and can be controlled via SPI instructions, the use for this is to save an MCU pin by using the DIO2 pin to
+// control the RF switching mode.
+
 // Choose ONLY ONE option from below, comment in/out the '/*'s and '*/'s
-// SX126X_TXEN is the E22's TXEN pin, SX126X_RXEN is the E22's RXEN pin
+// SX126X_TXEN is the E22's [SX1262's] TXEN pin, SX126X_RXEN is the E22's [SX1262's] RXEN pin
 
 // Option 1: E22's TXEN pin connected to E22's DIO2 pin, E22's RXEN pin connected to NEGATED output of E22's DIO2 pin (more
 // expensive option hardware-wise, is the 'most proper' way, removes need for routing one/two traces from MCU to RF switching
@@ -61,7 +69,7 @@
 */
 
 // Option 2: E22's TXEN pin connected to E22's DIO2 pin, E22's RXEN pin connected to MCU pin (cheaper option hardware-wise,
-// removes need for routing another trace from MCU to an RF switching pin)
+// removes need for routing another trace from MCU to an RF switching pin).
 // /*
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_TXEN RADIOLIB_NC
@@ -69,10 +77,10 @@
 // */
 
 // Option 3: E22's TXEN pin connected to MCU pin, E22's RXEN pin connected to MCU pin (cheaper option hardware-wise, allows for
-// ramping up PA before transmission (add feature yourself in RadioLib) if PA takes a while to stabilise)
-// Don't define DIO2_AS_RF_SWITCH because we only use DIO2 or an MCU pin mutually exclusively to connect to E22's TXEN to prevent
+// ramping up PA before transmission (add/expand on feature yourself in RadioLib) if PA takes a while to stabilise)
+// Don't define DIO2_AS_RF_SWITCH because we only use DIO2 or an MCU pin mutually exclusively to connect to E22's TXEN (to prevent
 // a short if they are both connected at the same time (suboptimal PCB design) and there's a slight non-neglibible delay and/or
-// voltage difference between DIO2 and TXEN
+// voltage difference between DIO2 and TXEN). Can use DIO2 as an IRQ (but not in Meshtastic at the moment).
 /*
 #define SX126X_TXEN 9
 #define SX126X_RXEN 10
@@ -80,11 +88,11 @@
 
 // (NOT RECOMMENDED, if need to ramp up PA before transmission, better to use option 3)
 // Option 4: E22's TXEN pin connected to MCU pin, E22's RXEN pin connected to NEGATED output of E22's DIO2 pin (more expensive
-// option hardware-wise, allows for ramping up PA before transmission (add feature yourself in RadioLib) if PA takes a while to
-// stabilise, removes need for routing another trace from MCU to an RF switching pin, however may mean if in RadioLib you don't
-// tell DIO2 to go high to indicate transmission (so the negated output goes to RXEN to turn the LNA off) then you may end up
-// enabling E22's TXEN and RXEN pins at the same time whilst you ramp up the PA which is not ideal, changing DIO2's switching
-// advance in RadioLib may not even be possible, may be baked into the SX126x)
+// option hardware-wise, allows for ramping up PA before transmission (add/expand on feature yourself in RadioLib) if PA takes
+// a while to stabilise, removes need for routing another trace from MCU to an RF switching pin, however may mean if in
+// RadioLib you don't tell DIO2 to go high to indicate transmission (so the negated output goes to RXEN to turn the LNA off)
+// then you may end up enabling E22's TXEN and RXEN pins at the same time whilst you ramp up the PA which is not ideal,
+// changing DIO2's switching advance in RadioLib may not even be possible, may be baked into the SX126x).
 /*
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_TXEN 9
