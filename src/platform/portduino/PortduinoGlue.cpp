@@ -81,6 +81,7 @@ void portduinoSetup()
     YAML::Node yamlConfig;
 
     if (configPath != nullptr) {
+        std::cout << "Using " << configPath << " as config file" << std::endl;
         try {
             yamlConfig = YAML::LoadFile(configPath);
         } catch (YAML::Exception e) {
@@ -88,6 +89,7 @@ void portduinoSetup()
             exit(EXIT_FAILURE);
         }
     } else if (access("config.yaml", R_OK) == 0) {
+        std::cout << "Using local config.yaml as config file" << std::endl;
         try {
             yamlConfig = YAML::LoadFile("config.yaml");
         } catch (YAML::Exception e) {
@@ -95,6 +97,7 @@ void portduinoSetup()
             exit(EXIT_FAILURE);
         }
     } else if (access("/etc/meshtasticd/config.yaml", R_OK) == 0) {
+        std::cout << "Using /etc/meshtasticd/config.yaml as config file" << std::endl;
         try {
             yamlConfig = YAML::LoadFile("/etc/meshtasticd/config.yaml");
         } catch (YAML::Exception e) {
@@ -105,24 +108,13 @@ void portduinoSetup()
         std::cout << "No 'config.yaml' found, running simulated." << std::endl;
         // Set the random seed equal to TCPPort to have a different seed per instance
         randomSeed(TCPPort);
-
-        /* Aren't all pins defaulted to simulated?
-        auto fakeBusy = new SimGPIOPin(SX126X_BUSY, "fakeBusy");
-        fakeBusy->writePin(LOW);
-        fakeBusy->setSilent(true);
-        gpioBind(fakeBusy);
-
-        auto cs = new SimGPIOPin(SX126X_CS, "fakeLoraCS");
-        cs->setSilent(true);
-        gpioBind(cs);
-
-        gpioBind(new SimGPIOPin(SX126X_RESET, "fakeLoraReset"));
-        gpioBind(new SimGPIOPin(LORA_DIO1, "fakeLoraIrq"));
-        */
         return;
     }
 
     try {
+        if (yamlConfig["Logging"]) {
+            settingsMap[debugmode] = yamlConfig["Logging"]["DebugMode"].as<bool>(false);
+        }
         if (yamlConfig["Lora"]) {
             settingsMap[use_sx1262] = false;
             settingsMap[use_rf95] = false;

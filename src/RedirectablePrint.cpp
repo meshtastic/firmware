@@ -10,6 +10,10 @@
 #include <sys/time.h>
 #include <time.h>
 
+#ifdef ARCH_PORTDUINO
+#include "platform/portduino/PortduinoGlue.h"
+#endif
+
 /**
  * A printer that doesn't go anywhere
  */
@@ -68,6 +72,10 @@ size_t RedirectablePrint::vprintf(const char *format, va_list arg)
 
 size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
 {
+#ifdef ARCH_PORTDUINO
+    if (!settingsMap[debugmode] && strcmp(logLevel, "DEBUG") == 0)
+        return 0;
+#endif
     if (moduleConfig.serial.override_console_serial_port && strcmp(logLevel, "DEBUG") == 0) {
         return 0;
     }
