@@ -280,6 +280,7 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
 
 void AdminModule::handleSetConfig(const meshtastic_Config &c)
 {
+    auto changes = SEGMENT_CONFIG;
     auto existingRole = config.device.role;
     bool isRegionUnset = (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);
 
@@ -320,6 +321,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         config.lora = c.payload_variant.lora;
         if (isRegionUnset && config.lora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
             config.lora.tx_enabled = true;
+            initRegion();
+            if (strcmp(moduleConfig.mqtt.root, default_mqtt_root) == 0) {
+                sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
+                changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
+            }
         }
         break;
     case meshtastic_Config_bluetooth_tag:
@@ -329,7 +335,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         break;
     }
 
-    saveChanges(SEGMENT_CONFIG);
+    saveChanges(changes);
 }
 
 void AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)

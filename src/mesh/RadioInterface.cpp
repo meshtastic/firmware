@@ -287,15 +287,14 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
         out += " encrypted";
     }
 
-    if (p->rx_time != 0) {
+    if (p->rx_time != 0)
         out += DEBUG_PORT.mt_sprintf(" rxtime=%u", p->rx_time);
-    }
-    if (p->rx_snr != 0.0) {
+    if (p->rx_snr != 0.0)
         out += DEBUG_PORT.mt_sprintf(" rxSNR=%g", p->rx_snr);
-    }
-    if (p->rx_rssi != 0) {
+    if (p->rx_rssi != 0)
         out += DEBUG_PORT.mt_sprintf(" rxRSSI=%i", p->rx_rssi);
-    }
+    if (p->via_mqtt != 0)
+        out += DEBUG_PORT.mt_sprintf(" via MQTT");
     if (p->priority != 0)
         out += DEBUG_PORT.mt_sprintf(" priority=%d", p->priority);
 
@@ -554,7 +553,7 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
         LOG_WARN("hop limit %d is too high, setting to %d\n", p->hop_limit, HOP_RELIABLE);
         p->hop_limit = HOP_RELIABLE;
     }
-    h->flags = p->hop_limit | (p->want_ack ? PACKET_FLAGS_WANT_ACK_MASK : 0);
+    h->flags = p->hop_limit | (p->want_ack ? PACKET_FLAGS_WANT_ACK_MASK : 0) | (p->via_mqtt ? PACKET_FLAGS_VIA_MQTT_MASK : 0);
 
     // if the sender nodenum is zero, that means uninitialized
     assert(h->from);

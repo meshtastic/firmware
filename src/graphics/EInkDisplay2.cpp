@@ -55,7 +55,7 @@ GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT> *adafruitDisplay;
 EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY geometry, HW_I2C i2cBus)
 {
 #if defined(TTGO_T_ECHO)
-    setGeometry(GEOMETRY_RAWMODE, TECHO_DISPLAY_MODEL::WIDTH, TECHO_DISPLAY_MODEL::HEIGHT);
+    setGeometry(GEOMETRY_RAWMODE, 200, 200);
 #elif defined(RAK4630)
 
     // GxEPD2_213_BN - RAK14000 2.13 inch b/w 250x122
@@ -129,8 +129,7 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
         LOG_DEBUG("Updating E-Paper... ");
 
 #if defined(TTGO_T_ECHO)
-        // ePaper.Reset(); // wake the screen from sleep
-        adafruitDisplay->display(false); // FIXME, use partial update mode
+        adafruitDisplay->nextPage();
 #elif defined(RAK4630) || defined(MAKERPYTHON)
 
         // RAK14000 2.13 inch b/w 250x122 actually now does support partial updates
@@ -210,6 +209,7 @@ bool EInkDisplay::connect()
         adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);
         adafruitDisplay->init();
         adafruitDisplay->setRotation(3);
+        adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
     }
 #elif defined(RAK4630) || defined(MAKERPYTHON)
     {
