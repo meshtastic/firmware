@@ -99,4 +99,4 @@ Input:
 ###
 
 Logging:
-#  DebugMode: true
+  LogLevel: info # debug, info, warn, error
