@@ -31,7 +31,8 @@ enum configNames {
     displayOffsetX,
     displayOffsetY,
     displayInvert,
-    keyboardDevice
+    keyboardDevice,
+    debugmode
 };
 enum { no_screen, st7789, st7735, st7735s };
 enum { no_touchscreen, xpt2046 };
