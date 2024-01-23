@@ -248,7 +248,6 @@ void setup()
     digitalWrite(PIN_EINK_PWR_ON, HIGH);
 #endif
 
-// See Example https://github.com/Xinyuan-LilyGO/LilyGo-LoRa-Series/blob/master/examples/RadioLibExamples/SX1276/SX1276_Receive_Interrupt/boards.h#L336
 #if defined(TLORA_V2_1_6_TXCO)
     pinMode(TLORA_V2_1_6_TXCO, OUTPUT);
     digitalWrite(TLORA_V2_1_6_TXCO, HIGH);
