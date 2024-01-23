@@ -1,4 +1,3 @@
-
 //////////////////////////////////////////////////////////////////////////////////
 //                                                                              //
 //   Have custom connections or functionality? Configure them in this section   //
@@ -6,40 +5,39 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 // Debugging
-//#define GPS_DEBUG
-//#define GPS_EXTRAVERBOSE
+// #define GPS_DEBUG
+// #define GPS_EXTRAVERBOSE
 
 // Lora
-//#define USE_LLCC68  // For original Chatter2 with LLCC68 module
-#define USE_SX1262  // Use this if Lora module swapped for HT-RA62
+// #define USE_LLCC68  // For original Chatter2 with LLCC68 module
+#define USE_SX1262 // Use this if Lora module swapped for HT-RA62
 
-#define SX126X_CS 14    // module's NSS pin
-#define LORA_SCK 16   // module's SCK pin
-#define LORA_MOSI 5  // module's MOSI pin
-#define LORA_MISO 17  // module's MISO pin
-#define SX126X_RESET RADIOLIB_NC // module's NRST pin
-#define SX126X_BUSY 4  // module's BUSY pin works for both LLCC68 and RA-62 with cut & jumper
-#define SX126X_DIO1 18  // module's DIO1 pin
-#define SX126X_DIO2_AS_RF_SWITCH // module's DIO2 pin
+#define SX126X_CS 14                 // module's NSS pin
+#define LORA_SCK 16                  // module's SCK pin
+#define LORA_MOSI 5                  // module's MOSI pin
+#define LORA_MISO 17                 // module's MISO pin
+#define SX126X_RESET RADIOLIB_NC     // module's NRST pin
+#define SX126X_BUSY 4                // module's BUSY pin works for both LLCC68 and RA-62 with cut & jumper
+#define SX126X_DIO1 18               // module's DIO1 pin
+#define SX126X_DIO2_AS_RF_SWITCH     // module's DIO2 pin
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8 // module's DIO pin
 #define SX126X_TXEN RADIOLIB_NC
 #define SX126X_RXEN RADIOLIB_NC
 
-
 // Status
-//#define LED_PIN 1
+// #define LED_PIN 1
 // External notification
 // FIXME: Check if EXT_NOTIFY_OUT actualy has any effect and removes the need for setting the external notication pin in the
 // app/preferences
-//#define EXT_NOTIFY_OUT 2 // The GPIO pin that acts as the external notification output (here we connect an LED to it)
+// #define EXT_NOTIFY_OUT 2 // The GPIO pin that acts as the external notification output (here we connect an LED to it)
 
 // Buzzer
 #define PIN_BUZZER 19
 // Buttons
 #define BUTTON_PIN 36 // Use the WAKE button as the user button
 // I2C
-//#define I2C_SCL 27
-//#define I2C_SDA 26
+// #define I2C_SCL 27
+// #define I2C_SDA 26
 
 #define SX126X_MAX_POWER 22 // SX126xInterface.cpp defaults to 22 if not defined, but here we define it for good practice
 
@@ -73,20 +71,22 @@
 
 #define BATTERY_PIN 34 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define ADC_CHANNEL ADC1_GPIO34_CHANNEL
-#define ADC_ATTENUATION ADC_ATTEN_DB_2_5 // 2_5-> 100mv-1250mv, 11-> 150mv-3100mv for ESP32
-                                         // ESP32-S2/C3/S3 are different
-                                         // lower dB for lower voltage rnage 
-#define ADC_MULTIPLIER 5.0  // VBATT---10k--pin34---2.5K---GND
-                            // Chatter2 uses 3 AAA cells
-#define BAT_FULLVOLT 4800   // with the 5.0 divider, input to BATTERY_PIN is 900mv
+#define ADC_ATTENUATION                                                                                                          \
+    ADC_ATTEN_DB_2_5 // 2_5-> 100mv-1250mv, 11-> 150mv-3100mv for ESP32
+                     // ESP32-S2/C3/S3 are different
+                     // lower dB for lower voltage rnage
+#define ADC_MULTIPLIER                                                                                                           \
+    5.0                   // VBATT---10k--pin34---2.5K---GND
+                          // Chatter2 uses 3 AAA cells
+#define BAT_FULLVOLT 4800 // with the 5.0 divider, input to BATTERY_PIN is 900mv
 #define BAT_EMPTYVOLT 3300
 #undef EXT_PWR_DETECT
 
 // GPS
 // FIXME: unsure what to define HAS_GPS as if GPS isn't always present
 #define HAS_GPS 1 // Don't need to set this to 0 to prevent a crash as it doesn't crash if GPS not found, will probe by default
-//#define PIN_GPS_EN 15
-//#define GPS_EN_ACTIVE 1
+// #define PIN_GPS_EN 15
+// #define GPS_EN_ACTIVE 1
 #undef GPS_TX_PIN
 #undef GPS_RX_PIN
 #define GPS_TX_PIN 13

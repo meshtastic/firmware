@@ -175,7 +175,8 @@ void cpuDeepSleep(uint32_t msecToWake)
     some current will flow through these external and internal resistors, increasing deep
     sleep current above the minimal possible value.
 
-    Note: we don't isolate pins that are used for the LORA, LED, i2c, or ST7735 Display for the Chatter2, spi or the wake button(s), maybe we should not include any other GPIOs...
+    Note: we don't isolate pins that are used for the LORA, LED, i2c, or ST7735 Display for the Chatter2, spi or the wake
+    button(s), maybe we should not include any other GPIOs...
     */
 #if SOC_RTCIO_HOLD_SUPPORTED
     static const uint8_t rtcGpios[] = {/* 0, */ 2,
@@ -185,8 +186,8 @@ void cpuDeepSleep(uint32_t msecToWake)
     /* 14, */ /* 15, */
 #endif
                                        /* 25, */ /* 26, */ /* 27, */
-                                       /* 32, */         /* 33, */ 34, 35,
-                                       /* 36, */          37
+                                       /* 32, */ /* 33, */ 34, 35,
+                                       /* 36, */ 37
                                        /* 38, 39 */};
 
     for (int i = 0; i < sizeof(rtcGpios); i++)
