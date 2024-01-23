@@ -204,6 +204,8 @@ int32_t PositionModule::runOnce()
     }
 
     meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
+    if (node == nullptr)
+        return RUNONCE_INTERVAL;
 
     // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();
