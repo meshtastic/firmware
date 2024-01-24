@@ -248,7 +248,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
-        meshtastic_MeshPacket *p_decoded = p;
+        meshtastic_MeshPacket *p_decoded = new meshtastic_MeshPacket(*p);
 
         auto encodeResult = perhapsEncode(p);
         if (encodeResult != meshtastic_Routing_Error_NONE) {
@@ -261,6 +261,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             if (mqtt)
                 mqtt->onSend(*p, *p_decoded, chIndex);
         }
+        delete p_decoded;
     }
 
     assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
