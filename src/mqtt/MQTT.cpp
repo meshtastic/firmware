@@ -131,7 +131,10 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
         }
         delete json_value;
     } else {
-        if (!pb_decode_from_bytes(payload, length, &meshtastic_ServiceEnvelope_msg, &e)) {
+        if (length == 0) {
+            LOG_WARN("Empty MQTT payload received, topic %s!\n", topic);
+            return;
+        } else if (!pb_decode_from_bytes(payload, length, &meshtastic_ServiceEnvelope_msg, &e)) {
             LOG_ERROR("Invalid MQTT service envelope, topic %s, len %u!\n", topic, length);
             return;
         } else {
