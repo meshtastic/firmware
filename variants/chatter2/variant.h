@@ -9,7 +9,7 @@
 // #define GPS_EXTRAVERBOSE
 
 // Lora
-#define USE_LLCC68  // Original Chatter2 with LLCC68 module
+#define USE_LLCC68 // Original Chatter2 with LLCC68 module
 #define USE_SX1262 // Added for when Lora module is swapped for HT-RA62
 
 #define SX126X_CS 14                 // module's NSS pin
