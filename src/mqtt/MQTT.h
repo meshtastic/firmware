@@ -48,14 +48,14 @@ class MQTT : private concurrency::OSThread
     MQTT();
 
     /**
-     * Publish a packet on the glboal MQTT server.
+     * Publish a packet on the global MQTT server.
      * This hook must be called **after** the packet is encrypted (including the channel being changed to a hash).
      * @param chIndex the index of the channel for this message
      *
      * Note: for messages we are forwarding on the mesh that we can't find the channel for (because we don't have the keys), we
      * can not forward those messages to the cloud - because no way to find a global channel ID.
      */
-    void onSend(const meshtastic_MeshPacket &mp, ChannelIndex chIndex);
+    void onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &mp_decoded, ChannelIndex chIndex);
 
     /** Attempt to connect to server if necessary
      */
