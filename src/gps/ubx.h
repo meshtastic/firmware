@@ -16,18 +16,31 @@ const uint8_t GPS::_message_CFG_RXM_ECO[] PROGMEM = {
 };
 
 const uint8_t GPS::_message_CFG_PM2[] PROGMEM = {
-    0x01, 0x06, 0x00, 0x00, // version, Reserved
-    0x0E, 0x81, 0x43, 0x01, // flags
-    0xE8, 0x03, 0x00, 0x00, // update period 1000 ms
-    0x10, 0x27, 0x00, 0x00, // search period 10s
-    0x00, 0x00, 0x00, 0x00, // Grod offset 0
-    0x01, 0x00,             // onTime 1 second
-    0x00, 0x00,             // min search time 0
-    0x2C, 0x01,             // reserved
-    0x00, 0x00, 0x4F, 0xC1, // reserved
-    0x03, 0x00, 0x87, 0x02, // reserved
-    0x00, 0x00, 0xFF, 0x00, // reserved
-    0x01, 0x00, 0xD6, 0x4D  // reserved
+    0x01, // version
+    0x06, // Reserved, set to 0x06 by u-Center
+    0x00, // Reserved
+    0x00, // Reserved
+    0x0E, 0x81,
+    0x43, 0x01, // flags-> cyclic mode, wait for normal fix ok, do not wake to update RTC or EPH, doNotEnterOff, LimitPeakCurrent
+    0xE8, 0x03,
+    0x00, 0x00, // update period 1000 ms
+    0x10, 0x27,
+    0x00, 0x00, // search period 10s
+    0x00, 0x00,
+    0x00, 0x00, // Grid offset 0
+    0x01, 0x00, // onTime 1 second
+    0x00, 0x00, // min search time 0
+    0x00, 0x00, // 0x2C, 0x01,             // reserved
+    0x00, 0x00, // 0x00, 0x00, // reserved
+    0x00, 0x00,
+    0x00, 0x00, // 0x4F, 0xC1, 0x03, 0x00, // reserved
+    0x00, 0x00,
+    0x00, 0x00, // 0x87, 0x02, 0x00, 0x00, // reserved
+    0x00,       // 0xFF,                   // reserved
+    0x00,       // 0x00,                   // reserved
+    0x00, 0x00, // 0x00, 0x00,             // reserved
+    0x00, 0x00,
+    0x00, 0x00 // 0x64, 0x40, 0x01, 0x00  // reserved
 };
 
 const uint8_t GPS::_message_GNSS_7[] = {
@@ -57,6 +70,7 @@ const uint8_t GPS::_message_GNSS[] = {
     0x06, 0x08, 0x0e, 0x00, 0x01, 0x00, 0x01, 0x01  // GLONASS
 };
 
+/*
 // Enable interference resistance, because we are using LoRa, WiFi and Bluetooth on same board,
 // and we need to reduce interference from them
 const uint8_t GPS::_message_JAM[] = {
@@ -72,7 +86,9 @@ const uint8_t GPS::_message_JAM[] = {
     // (enabled)
     0x1E, 0x03, 0x00, 0x01 // config2: Extra settings for jamming/interference monitor
 };
-
+*/
+const uint8_t GPS::_message_JAM[] = {0xf3, 0xac, 0x62, 0xad, 0x1e, 0xc3, 0x42, 0x01};
+/*
 // Configure navigation engine expert settings:
 const uint8_t GPS::_message_NAVX5[] = {
     0x00, 0x00, // msgVer (0 for this version)
@@ -103,6 +119,13 @@ const uint8_t GPS::_message_NAVX5[] = {
     0x00, 0x00, 0x00,                   // Reserved
     0x01,                               // useAdr (Enable/disable ADR sensor fusion) = 1 (enabled)
 };
+*/
+
+const uint8_t GPS::_message_NAVX5[] = {0x00, 0x00, 0x4c, 0x66, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x10, 0x06, 0x00,
+                                       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+                                       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01
+
+};
 
 // Set GPS update rate to 1Hz
 // Lowering the update rate helps to save power.
@@ -111,58 +134,88 @@ const uint8_t GPS::_message_NAVX5[] = {
 const uint8_t GPS::_message_1HZ[] = {
     0xE8, 0x03, // Measurement Rate (1000ms for 1Hz)
     0x01, 0x00, // Navigation rate, always 1 in GPS mode
-    0x01, 0x00, // Time reference
+    0x01, 0x00  // Time reference
 };
 
-// Disable GGL. GGL - Geographic position (latitude and longitude), which provides the current geographical
+// Disable GLL. GLL - Geographic position (latitude and longitude), which provides the current geographical
 // coordinates.
-const uint8_t GPS::_message_GGL[] = {
-    0xF0, 0x01,            // NMEA ID for GLL
-    0x01,                  // I/O Target 0=I/O, 1=UART1, 2=UART2, 3=USB, 4=SPI
-    0x00,                  // Disable
-    0x01, 0x01, 0x01, 0x01 // Reserved
+const uint8_t GPS::_message_GLL[] = {
+    0xF0, 0x01, // NMEA ID for GLL
+    0x00,       // Rate for DDC
+    0x00,       // Rate for UART1
+    0x00,       // Rate for UART2
+    0x00,       // Rate for USB
+    0x00,       // Rate for SPI
+    0x00        // Reserved
 };
 
 // Enable GSA. GSA - GPS DOP and active satellites, used for detailing the satellites used in the positioning and
 // the DOP (Dilution of Precision)
 const uint8_t GPS::_message_GSA[] = {
-    0xF0, 0x02,            // NMEA ID for GSA
-    0x01,                  // I/O Target 0=I/O, 1=UART1, 2=UART2, 3=USB, 4=SPI
-    0x01,                  // Enable
-    0x01, 0x01, 0x01, 0x01 // Reserved
+    0xF0, 0x02, // NMEA ID for GSA
+    0x00,       // Rate for DDC
+    0x01,       // Rate for UART1
+    0x00,       // Rate for UART2
+    0x00,       // Rate for USB
+    0x00,       // Rate for SPI
+    0x00        // Reserved
 };
 
 // Disable GSV. GSV - Satellites in view, details the number and location of satellites in view.
 const uint8_t GPS::_message_GSV[] = {
-    0xF0, 0x03,            // NMEA ID for GSV
-    0x01,                  // I/O Target 0=I/O, 1=UART1, 2=UART2, 3=USB, 4=SPI
-    0x00,                  // Disable
-    0x01, 0x01, 0x01, 0x01 // Reserved
+    0xF0, 0x03, // NMEA ID for GSV
+    0x00,       // Rate for DDC
+    0x00,       // Rate for UART1
+    0x00,       // Rate for UART2
+    0x00,       // Rate for USB
+    0x00,       // Rate for SPI
+    0x00        // Reserved
 };
 
 // Disable VTG. VTG - Track made good and ground speed, which provides course and speed information relative to
 // the ground.
 const uint8_t GPS::_message_VTG[] = {
-    0xF0, 0x05,            // NMEA ID for VTG
-    0x01,                  // I/O Target 0=I/O, 1=UART1, 2=UART2, 3=USB, 4=SPI
-    0x00,                  // Disable
-    0x01, 0x01, 0x01, 0x01 // Reserved
+    0xF0, 0x05, // NMEA ID for VTG
+    0x00,       // Rate for DDC
+    0x00,       // Rate for UART1
+    0x00,       // Rate for UART2
+    0x00,       // Rate for USB
+    0x00,       // Rate for SPI
+    0x00        // Reserved
 };
 
 // Enable RMC. RMC - Recommended Minimum data, the essential gps pvt (position, velocity, time) data.
 const uint8_t GPS::_message_RMC[] = {
-    0xF0, 0x04,            // NMEA ID for RMC
-    0x01,                  // I/O Target 0=I/O, 1=UART1, 2=UART2, 3=USB, 4=SPI
-    0x01,                  // Enable
-    0x01, 0x01, 0x01, 0x01 // Reserved
+    0xF0, 0x04, // NMEA ID for RMC
+    0x00,       // Rate for DDC
+    0x01,       // Rate for UART1
+    0x00,       // Rate for UART2
+    0x00,       // Rate for USB
+    0x00,       // Rate for SPI
+    0x00        // Reserved
 };
 
 // Enable GGA. GGA - Global Positioning System Fix Data, which provides 3D location and accuracy data.
 const uint8_t GPS::_message_GGA[] = {
-    0xF0, 0x00,            // NMEA ID for GGA
-    0x01,                  // I/O Target 0=I/O, 1=UART1, 2=UART2, 3=USB, 4=SPI
-    0x01,                  // Enable
-    0x01, 0x01, 0x01, 0x01 // Reserved
+    0xF0, 0x00, // NMEA ID for GGA
+    0x00,       // Rate for DDC
+    0x01,       // Rate for UART1
+    0x00,       // Rate for UART2
+    0x00,       // Rate for USB
+    0x00,       // Rate for SPI
+    0x00        // Reserved
+};
+
+// Disable UBX-AID-ALPSRV as it may confuse TinyGPS. The Neo-6 seems to send this message
+// whether the AID Autonomous is enabled or not
+const uint8_t GPS::_message_AID[] = {
+    0x0B, 0x32, // NMEA ID for UBX-AID-ALPSRV
+    0x00,       // Rate for DDC
+    0x00,       // Rate for UART1
+    0x00,       // Rate for UART2
+    0x00,       // Rate for USB
+    0x00,       // Rate for SPI
+    0x00        // Reserved
 };
 
 // The Power Management configuration allows the GPS module to operate in different power modes for optimized
@@ -188,5 +241,5 @@ const uint8_t GPS::_message_SAVE[] = {
     0x00, 0x00, 0x00, 0x00, // clearMask: no sections cleared
     0xFF, 0xFF, 0x00, 0x00, // saveMask: save all sections
     0x00, 0x00, 0x00, 0x00, // loadMask: no sections loaded
-    0x0F                    // deviceMask: BBR, Flash, EEPROM, and SPI Flash
+    0x17                    // deviceMask: BBR, Flash, EEPROM, and SPI Flash
 };
