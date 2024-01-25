@@ -248,28 +248,21 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
-
-        if (moduleConfig.mqtt.enabled) {
-
-            LOG_INFO("Should encrypt MQTT?: %d\n", moduleConfig.mqtt.encryption_enabled);
-
-            // the packet is currently in a decrypted state.  send it now if they want decrypted packets
-            if (mqtt && !moduleConfig.mqtt.encryption_enabled)
-                mqtt->onSend(*p, chIndex);
-        }
+        meshtastic_MeshPacket *p_decoded = packetPool.allocCopy(*p);
 
         auto encodeResult = perhapsEncode(p);
         if (encodeResult != meshtastic_Routing_Error_NONE) {
+            packetPool.release(p_decoded);
             abortSendAndNak(encodeResult, p);
             return encodeResult; // FIXME - this isn't a valid ErrorCode
         }
 
         if (moduleConfig.mqtt.enabled) {
-            // the packet is now encrypted.
-            // check if we should send encrypted packets to mqtt
-            if (mqtt && moduleConfig.mqtt.encryption_enabled)
-                mqtt->onSend(*p, chIndex);
+            LOG_INFO("Should encrypt MQTT?: %d\n", moduleConfig.mqtt.encryption_enabled);
+            if (mqtt)
+                mqtt->onSend(*p, *p_decoded, chIndex);
         }
+        packetPool.release(p_decoded);
     }
 
     assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
