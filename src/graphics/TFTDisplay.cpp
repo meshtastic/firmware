@@ -19,6 +19,10 @@
 #define TFT_BL ST7735_BACKLIGHT_EN
 #endif
 
+#ifndef TFT_INVERT
+#define TFT_INVERT true
+#endif
+
 class LGFX : public lgfx::LGFX_Device
 {
     lgfx::Panel_ST7735S _panel_instance;
@@ -68,7 +72,7 @@ class LGFX : public lgfx::LGFX_Device
             cfg.dummy_read_pixel = 8;      // Number of bits for dummy read before pixel readout
             cfg.dummy_read_bits = 1;       // Number of bits for dummy read before non-pixel data read
             cfg.readable = true;           // Set to true if data can be read
-            cfg.invert = true;             // Set to true if the light/darkness of the panel is reversed
+            cfg.invert = TFT_INVERT;       // Set to true if the light/darkness of the panel is reversed
             cfg.rgb_order = false;         // Set to true if the panel's red and blue are swapped
             cfg.dlen_16bit =
                 false;             // Set to true for panels that transmit data length in 16-bit units with 16-bit parallel or SPI
@@ -598,7 +602,7 @@ bool TFTDisplay::connect()
     tft->setRotation(1);
     tft->setSwapBytes(true);
 //    tft->fillScreen(TFT_BLACK);
-#elif defined(T_DECK) || defined(PICOMPUTER_S3)
+#elif defined(T_DECK) || defined(PICOMPUTER_S3) || defined(CHATTER_2)
     tft->setRotation(1); // T-Deck has the TFT in landscape
 #elif defined(T_WATCH_S3)
     tft->setRotation(2); // T-Watch S3 left-handed orientation
