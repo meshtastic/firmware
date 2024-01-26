@@ -131,7 +131,10 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
         }
         delete json_value;
     } else {
-        if (!pb_decode_from_bytes(payload, length, &meshtastic_ServiceEnvelope_msg, &e)) {
+        if (length == 0) {
+            LOG_WARN("Empty MQTT payload received, topic %s!\n", topic);
+            return;
+        } else if (!pb_decode_from_bytes(payload, length, &meshtastic_ServiceEnvelope_msg, &e)) {
             LOG_ERROR("Invalid MQTT service envelope, topic %s, len %u!\n", topic, length);
             return;
         } else {
@@ -463,7 +466,7 @@ void MQTT::publishQueuedMessages()
     }
 }
 
-void MQTT::onSend(const meshtastic_MeshPacket &mp, ChannelIndex chIndex)
+void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &mp_decoded, ChannelIndex chIndex)
 {
     if (mp.via_mqtt)
         return; // Don't send messages that came from MQTT back into MQTT
@@ -483,7 +486,13 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, ChannelIndex chIndex)
         meshtastic_ServiceEnvelope *env = mqttPool.allocZeroed();
         env->channel_id = (char *)channelId;
         env->gateway_id = owner.id;
-        env->packet = (meshtastic_MeshPacket *)&mp;
+
+        if (moduleConfig.mqtt.encryption_enabled) {
+            env->packet = (meshtastic_MeshPacket *)&mp;
+        } else {
+            env->packet = (meshtastic_MeshPacket *)&mp_decoded;
+        }
+
         LOG_DEBUG("MQTT onSend - Publishing portnum %i message\n", env->packet->decoded.portnum);
 
         if (moduleConfig.mqtt.proxy_to_client_enabled || this->isConnectedDirectly()) {
@@ -498,7 +507,7 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, ChannelIndex chIndex)
 
             if (moduleConfig.mqtt.json_enabled) {
                 // handle json topic
-                auto jsonString = this->meshPacketToJson((meshtastic_MeshPacket *)&mp);
+                auto jsonString = this->meshPacketToJson((meshtastic_MeshPacket *)&mp_decoded);
                 if (jsonString.length() != 0) {
                     std::string topicJson = jsonTopic + channelId + "/" + owner.id;
                     LOG_INFO("JSON publish message to %s, %u bytes: %s\n", topicJson.c_str(), jsonString.length(),
