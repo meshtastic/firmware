@@ -79,6 +79,7 @@ jobs:
           - board: m5stack-core
           - board: m5stack-coreink
           - board: nano-g1-explorer
+          - board: chatter2
     uses: ./.github/workflows/build_esp32.yml
     with:
       board: ${{ matrix.board }}
