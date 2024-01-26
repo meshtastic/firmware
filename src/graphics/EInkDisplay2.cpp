@@ -223,11 +223,8 @@ bool EInkDisplay::connect()
     {
         if (eink_found) {
             auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
-
             adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);
-
             adafruitDisplay->init(115200, true, 10, false, SPI1, SPISettings(4000000, MSBFIRST, SPI_MODE0));
-
             // RAK14000 2.13 inch b/w 250x122 does actually now support partial updates
             adafruitDisplay->setRotation(3);
             // Partial update support for  1.54, 2.13 RAK14000 b/w , 2.9 and 4.2
@@ -259,11 +256,11 @@ bool EInkDisplay::connect()
         adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
     }
 #elif defined(M5_COREINK)
-    auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
-    adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);
-    adafruitDisplay->init(115200, true, 40, false, SPI, SPISettings(4000000, MSBFIRST, SPI_MODE0));
-    adafruitDisplay->setRotation(0);
-    adafruitDisplay->setPartialWindow(0, 0, EPD_WIDTH, EPD_HEIGHT);
+        auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
+        adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+        adafruitDisplay->init(115200, true, 40, false, SPI, SPISettings(4000000, MSBFIRST, SPI_MODE0));
+        adafruitDisplay->setRotation(0);
+        adafruitDisplay->setPartialWindow(0, 0, EPD_WIDTH, EPD_HEIGHT);
 #elif defined(my) || defined(ESP32_S3_PICO)
     {
         auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
@@ -278,7 +275,6 @@ bool EInkDisplay::connect()
     // adafruitDisplay->fillScreen(UNCOLORED);
     // adafruitDisplay->drawCircle(100, 100, 20, COLORED);
     // adafruitDisplay->display(false);
-
     return true;
 }
 
