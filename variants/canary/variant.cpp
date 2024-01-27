@@ -44,4 +44,14 @@ void initVariant()
 
     pinMode(PIN_PWR_EN, OUTPUT);
     digitalWrite(PIN_PWR_EN, HIGH);
+
+    pinMode(GPS_RESET_PIN, OUTPUT);
+    digitalWrite(GPS_RESET_PIN, HIGH);
+
+    pinMode(GPS_RESET_PIN, OUTPUT);
+    digitalWrite(GPS_RESET_PIN, HIGH);
+
+    pinMode(LORA_RF_PWR, OUTPUT);
+    digitalWrite(LORA_RF_PWR, HIGH);
+
 }

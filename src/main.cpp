@@ -629,11 +629,7 @@ void setup()
 
 #if defined(USE_SX1262)
     if (!rIf) {
-#if defined(CANARY_V1_0)
-        rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO3, SX126X_RESET, SX126X_BUSY);
-#else
         rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
-#endif
         if (!rIf->init()) {
             LOG_WARN("Failed to find SX1262 radio\n");
             delete rIf;

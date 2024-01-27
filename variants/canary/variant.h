@@ -109,11 +109,13 @@ static const uint8_t A0 = PIN_A0;
 #define RADIOLIB_DEBUG 1
 #define USE_SX1262
 #define SX126X_CS (GPIO_PORT0 + 24)
-//#define SX126X_DIO1 () // LORA_SW_PW_ON
-#define SX126X_DIO3 (GPIO_PORT0 + 21) // LORA_IRQ
+#define SX126X_DIO1 (GPIO_PORT1 + 11)
+//#define SX126X_DIO3 (GPIO_PORT0 + 21)
 //#define SX126X_DIO2 () // LORA_BUSY // LoRa RX/TX
 #define SX126X_BUSY (GPIO_PORT0 + 17)
 #define SX126X_RESET (GPIO_PORT0 + 25)
+#define LORA_RF_PWR (GPIO_PORT0 + 28) // LORA_RF_SWITCH
+//#define SX126X_E22
 
 // #define LORA_DISABLE_SENDING // Define this to disable transmission for testing (power testing etc...)
 
@@ -137,6 +139,8 @@ static const uint8_t A0 = PIN_A0;
 #define PIN_SERIAL1_RX GPS_TX_PIN
 #define PIN_SERIAL1_TX GPS_RX_PIN
 
+#define GPS_RESET_PIN (GPIO_PORT1 + 5) // GPS reset pin
+
 /*
  * SPI Interfaces
  */
@@ -155,7 +159,7 @@ static const uint8_t A0 = PIN_A0;
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
 #define USE_SEGGER 1
 
-#define LORA_DISABLE_SENDING 1
+//#define LORA_DISABLE_SENDING 1
 
 // Battery
 // The battery sense is hooked to pin A0 (4)
