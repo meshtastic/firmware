@@ -56,6 +56,7 @@ static const uint8_t SCK = 33;
 #define LED_PIN LED_BLUE
 
 #define PIN_VBAT WB_A0
+#define BATTERY_PIN PIN_VBAT
 
 // https://docs.rakwireless.com/Product-Categories/WisBlock/RAK13300/
 

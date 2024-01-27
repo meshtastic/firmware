@@ -197,11 +197,11 @@ class AnalogBatteryLevel : public HasBatteryLevel
         } else {
             return last_read_value;
         }
-        return 0;
 #endif // BATTERY_PIN
+        return 0;
     }
 
-#if defined(ARCH_ESP32) && !defined(HAS_PMU)
+#if defined(ARCH_ESP32) && !defined(HAS_PMU) && defined(BATTERY_PIN)
     /**
      * ESP32 specific function for getting calibrated ADC reads
      */
