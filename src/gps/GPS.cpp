@@ -16,7 +16,7 @@
 #define GPS_RESET_MODE HIGH
 #endif
 
-#if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32) || defined(aLinuxInputImpl)
+#if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
 HardwareSerial *GPS::_serial_gps = &Serial1;
 #else
 HardwareSerial *GPS::_serial_gps = NULL;
