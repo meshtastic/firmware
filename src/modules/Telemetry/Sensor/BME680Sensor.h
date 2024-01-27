@@ -6,7 +6,7 @@
 
 #include "bme680_iaq_33v_3s_4d/bsec_iaq.h"
 
-class BME680Sensor : virtual public TelemetrySensor
+class BME680Sensor : public TelemetrySensor
 {
   private:
     Bsec2 bme680;

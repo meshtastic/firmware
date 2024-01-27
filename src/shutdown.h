@@ -3,6 +3,11 @@
 #include "graphics/Screen.h"
 #include "main.h"
 #include "power.h"
+#if defined(ARCH_PORTDUINO)
+#include "api/WiFiServerAPI.h"
+#include "input/LinuxInputImpl.h"
+
+#endif
 
 void powerCommandsCheck()
 {
@@ -14,9 +19,17 @@ void powerCommandsCheck()
         NVIC_SystemReset();
 #elif defined(ARCH_RP2040)
         rp2040.reboot();
+#elif defined(ARCH_PORTDUINO)
+        deInitApiServer();
+        if (aLinuxInputImpl)
+            aLinuxInputImpl->deInit();
+        SPI.end();
+        Wire.end();
+        Serial1.end();
+        reboot();
 #else
         rebootAtMsec = -1;
-        LOG_WARN("FIXME implement reboot for this platform. Skipping for now.\n");
+        LOG_WARN("FIXME implement reboot for this platform. Note that some settings require a restart to be applied.\n");
 #endif
     }
 
@@ -31,6 +44,8 @@ void powerCommandsCheck()
 #if defined(ARCH_NRF52) || defined(ARCH_ESP32)
         playShutdownMelody();
         power->shutdown();
+#elif defined(ARCH_PORTDUINO)
+        exit(EXIT_SUCCESS);
 #else
         LOG_WARN("FIXME implement shutdown for this platform");
 #endif

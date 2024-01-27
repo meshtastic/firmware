@@ -1,0 +1,62 @@
+name: Package Raspbian
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-raspbian:
+    uses: ./.github/workflows/build_raspbian.yml
+
+  package-raspbian:
+    runs-on: ubuntu-latest
+    needs: build-raspbian
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
+
+      - name: Get release version string
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        id: version
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: firmware-raspbian-${{ steps.version.outputs.version }}.zip
+
+      - name: Display structure of downloaded files
+        run: ls -R
+
+      - name: build .debpkg
+        run: |
+          mkdir -p .debpkg/usr/sbin
+          mkdir -p .debpkg/etc/meshtasticd
+          mkdir -p .debpkg/usr/lib/systemd/system/
+          cp release/meshtasticd_linux_aarch64 .debpkg/usr/sbin/meshtasticd
+          cp bin/config-dist.yaml .debpkg/etc/meshtasticd/config.yaml
+          chmod +x .debpkg/usr/sbin/meshtasticd
+          cp bin/meshtasticd.service .debpkg/usr/lib/systemd/system/meshtasticd.service
+
+      - uses: jiro4989/build-deb-action@v3
+        with:
+          package: meshtasticd
+          package_root: .debpkg
+          maintainer: Jonathan Bennett
+          version: ${{ steps.version.outputs.version }} # refs/tags/v*.*.*
+          arch: arm64
+          depends: libyaml-cpp0.7
+          desc: Native Linux Meshtastic binary.
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: artifact-deb
+          path: |
+            ./*.deb

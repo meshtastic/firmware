@@ -23,7 +23,7 @@ void UpDownInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinPress,
     attachInterrupt(this->_pinDown, onIntDown, RISING);
     attachInterrupt(this->_pinUp, onIntUp, RISING);
 
-    LOG_DEBUG("GPIO initialized (%d, %d, %d)\n", this->_pinDown, this->_pinUp, pinPress);
+    LOG_DEBUG("Up/down/press GPIO initialized (%d, %d, %d)\n", this->_pinUp, this->_pinDown, pinPress);
 }
 
 void UpDownInterruptBase::intPressHandler()

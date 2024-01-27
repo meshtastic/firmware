@@ -20,7 +20,7 @@ int32_t BME680Sensor::runOnce()
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    if (!bme680.begin(nodeTelemetrySensorsMap[sensorType], Wire))
+    if (!bme680.begin(nodeTelemetrySensorsMap[sensorType].first, *nodeTelemetrySensorsMap[sensorType].second))
         checkStatus("begin");
 
     if (bme680.status == BSEC_OK) {

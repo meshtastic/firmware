@@ -15,16 +15,25 @@
 #define TFT_WIDTH 240
 #define TFT_OFFSET_X 0
 #define TFT_OFFSET_Y 0
+#define TFT_OFFSET_ROTATION 2
 #define SCREEN_ROTATE
-#define SCREEN_TRANSITION_FRAMERATE 1 // fps
+#define SCREEN_TRANSITION_FRAMERATE 5 // fps
+
+#define HAS_TOUCHSCREEN 1
 #define SCREEN_TOUCH_INT 16
-#define SCREEN_TOUCH_USE_I2C1 1
-#define TOUCH_SLAVE_ADDRESS 0x38 // GT911
+#define SCREEN_TOUCH_USE_I2C1
+#define TOUCH_I2C_PORT 1
+#define TOUCH_SLAVE_ADDRESS 0x38
 
 #define I2C_SDA1 39 // Used for capacitive touch
 #define I2C_SCL1 40 // Used for capacitive touch
 
 #define TFT_BL ST7789_BACKLIGHT_EN
+
+#define HAS_I2S
+#define DAC_I2S_BCK 48
+#define DAC_I2S_WS 15
+#define DAC_I2S_DOUT 46
 
 #define HAS_AXP2101
 
@@ -32,8 +41,6 @@
 
 #define I2C_SDA 10 // For QMC6310 sensors and screens
 #define I2C_SCL 11 // For QMC6310 sensors and screens
-
-#define BUTTON_PIN 0
 
 #define BMA4XX_INT 14 // Interrupt for BMA_423 axis sensor
 
@@ -44,10 +51,10 @@
 #define USE_SX1262
 #define USE_SX1268
 
-#define RF95_SCK 3
-#define RF95_MISO 4
-#define RF95_MOSI 1
-#define RF95_NSS 5
+#define LORA_SCK 3
+#define LORA_MISO 4
+#define LORA_MOSI 1
+#define LORA_CS 5
 
 #define LORA_DIO0 -1 // a No connect on the SX1262 module
 #define LORA_RESET 8
@@ -55,10 +62,12 @@
 #define LORA_DIO2 7 // SX1262 BUSY
 #define LORA_DIO3   // Not connected on PCB, but internally on the TTGO SX1262, if DIO3 is high the TXCO is enabled
 
-#define SX126X_CS RF95_NSS // FIXME - we really should define LORA_CS instead
+#define SX126X_CS LORA_CS // FIXME - we really should define LORA_CS instead
 #define SX126X_DIO1 LORA_DIO1
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET
-#define SX126X_E22 // Not really an E22 but TTGO seems to be trying to clone that
-                   // Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for
-                   // the sx1262interface code)
+// Not really an E22 but TTGO seems to be trying to clone that
+#define SX126X_DIO2_AS_RF_SWITCH
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
+// Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for
+// the sx1262interface code)

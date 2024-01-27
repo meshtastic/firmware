@@ -153,7 +153,12 @@ void Router::setReceivedMessage()
 
 meshtastic_QueueStatus Router::getQueueStatus()
 {
-    return iface->getQueueStatus();
+    if (!iface) {
+        meshtastic_QueueStatus qs;
+        qs.res = qs.mesh_packet_id = qs.free = qs.maxlen = 0;
+        return qs;
+    } else
+        return iface->getQueueStatus();
 }
 
 ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
@@ -243,45 +248,21 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
-
-        bool shouldActuallyEncrypt = true;
-
-        if (moduleConfig.mqtt.enabled) {
-            // check if we should send decrypted packets to mqtt
-
-            // truth table:
-            /* mqtt_server  mqtt_encryption_enabled should_encrypt
-             *    not set                        0              1
-             *    not set                        1              1
-             *        set                        0              0
-             *        set                        1              1
-             *
-             * => so we only decrypt mqtt if they have a custom mqtt server AND mqtt_encryption_enabled is FALSE
-             */
-
-            if (*moduleConfig.mqtt.address && !moduleConfig.mqtt.encryption_enabled) {
-                shouldActuallyEncrypt = false;
-            }
-
-            LOG_INFO("Should encrypt MQTT?: %d\n", shouldActuallyEncrypt);
-
-            // the packet is currently in a decrypted state.  send it now if they want decrypted packets
-            if (mqtt && !shouldActuallyEncrypt)
-                mqtt->onSend(*p, chIndex);
-        }
+        meshtastic_MeshPacket *p_decoded = packetPool.allocCopy(*p);
 
         auto encodeResult = perhapsEncode(p);
         if (encodeResult != meshtastic_Routing_Error_NONE) {
+            packetPool.release(p_decoded);
             abortSendAndNak(encodeResult, p);
             return encodeResult; // FIXME - this isn't a valid ErrorCode
         }
 
         if (moduleConfig.mqtt.enabled) {
-            // the packet is now encrypted.
-            // check if we should send encrypted packets to mqtt
-            if (mqtt && shouldActuallyEncrypt)
-                mqtt->onSend(*p, chIndex);
+            LOG_INFO("Should encrypt MQTT?: %d\n", moduleConfig.mqtt.encryption_enabled);
+            if (mqtt)
+                mqtt->onSend(*p, *p_decoded, chIndex);
         }
+        packetPool.release(p_decoded);
     }
 
     assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
@@ -310,6 +291,12 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER &&
         config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_ALL_SKIP_DECODING)
         return false;
+
+    if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY &&
+        !nodeDB.getMeshNode(p->from)->has_user) {
+        LOG_DEBUG("Node 0x%x not in NodeDB. Rebroadcast mode KNOWN_ONLY will ignore packet\n", p->from);
+        return false;
+    }
 
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag)
         return true; // If packet was already decoded just return
@@ -473,10 +460,10 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 {
     // assert(radioConfig.has_preferences);
-    bool ignore = is_in_repeated(config.lora.ignore_incoming, p->from);
+    bool ignore = is_in_repeated(config.lora.ignore_incoming, p->from) || (config.lora.ignore_mqtt && p->via_mqtt);
 
     if (ignore) {
-        LOG_DEBUG("Ignoring incoming message, 0x%x is in our ignore list\n", p->from);
+        LOG_DEBUG("Ignoring incoming message, 0x%x is in our ignore list or came via MQTT\n", p->from);
     } else if (ignore |= shouldFilterReceived(p)) {
         LOG_DEBUG("Incoming message was filtered 0x%x\n", p->from);
     }

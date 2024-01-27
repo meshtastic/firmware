@@ -10,6 +10,10 @@
 #include <sys/time.h>
 #include <time.h>
 
+#ifdef ARCH_PORTDUINO
+#include "platform/portduino/PortduinoGlue.h"
+#endif
+
 /**
  * A printer that doesn't go anywhere
  */
@@ -18,6 +22,12 @@ NoopPrint noopPrint;
 #if HAS_WIFI || HAS_ETHERNET
 extern Syslog syslog;
 #endif
+void RedirectablePrint::rpInit()
+{
+#ifdef HAS_FREE_RTOS
+    inDebugPrint = xSemaphoreCreateMutexStatic(&this->_MutexStorageSpace);
+#endif
+}
 
 void RedirectablePrint::setDestination(Print *_dest)
 {
@@ -62,13 +72,20 @@ size_t RedirectablePrint::vprintf(const char *format, va_list arg)
 
 size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
 {
+#ifdef ARCH_PORTDUINO
+    if (!settingsMap[debugmode] && strcmp(logLevel, "DEBUG") == 0)
+        return 0;
+#endif
     if (moduleConfig.serial.override_console_serial_port && strcmp(logLevel, "DEBUG") == 0) {
         return 0;
     }
     size_t r = 0;
-
+#ifdef HAS_FREE_RTOS
+    if (inDebugPrint != nullptr && xSemaphoreTake(inDebugPrint, portMAX_DELAY) == pdTRUE) {
+#else
     if (!inDebugPrint) {
         inDebugPrint = true;
+#endif
 
         va_list arg;
         va_start(arg, format);
@@ -90,10 +107,17 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
                 int hour = hms / SEC_PER_HOUR;
                 int min = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
                 int sec = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
-
+#ifdef ARCH_PORTDUINO
+                r += ::printf("%s | %02d:%02d:%02d %u ", logLevel, hour, min, sec, millis() / 1000);
+#else
                 r += printf("%s | %02d:%02d:%02d %u ", logLevel, hour, min, sec, millis() / 1000);
+#endif
             } else
+#ifdef ARCH_PORTDUINO
+                r += ::printf("%s | ??:??:?? %u ", logLevel, millis() / 1000);
+#else
                 r += printf("%s | ??:??:?? %u ", logLevel, millis() / 1000);
+#endif
 
             auto thread = concurrency::OSThread::currentThread;
             if (thread) {
@@ -141,7 +165,11 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
         va_end(arg);
 
         isContinuationMessage = !hasNewline;
+#ifdef HAS_FREE_RTOS
+        xSemaphoreGive(inDebugPrint);
+#else
         inDebugPrint = false;
+#endif
     }
 
     return r;

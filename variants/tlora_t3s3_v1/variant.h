@@ -1,8 +1,3 @@
-#undef GPS_RX_PIN
-#undef GPS_TX_PIN
-
-#define PIN_GPS_EN 42 // GPS power enable pin
-
 #define HAS_SDCARD
 #define SDCARD_USE_SPI1
 
@@ -30,10 +25,10 @@
 #define USE_SX1262
 #define USE_SX1280
 
-#define RF95_SCK 5
-#define RF95_MISO 3
-#define RF95_MOSI 6
-#define RF95_NSS 7
+#define LORA_SCK 5
+#define LORA_MISO 3
+#define LORA_MOSI 6
+#define LORA_CS 7
 #define LORA_RESET 8
 
 // per SX1276_Receive_Interrupt/utilities.h
@@ -45,16 +40,17 @@
 
 // per SX1262_Receive_Interrupt/utilities.h
 #ifdef USE_SX1262
-#define SX126X_CS RF95_NSS
+#define SX126X_CS LORA_CS
 #define SX126X_DIO1 33
 #define SX126X_BUSY 34
 #define SX126X_RESET LORA_RESET
-#define SX126X_E22
+#define SX126X_DIO2_AS_RF_SWITCH
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
 #endif
 
 // per SX128x_Receive_Interrupt/utilities.h
 #ifdef USE_SX1280
-#define SX128X_CS RF95_NSS
+#define SX128X_CS LORA_CS
 #define SX128X_DIO1 9
 #define SX128X_DIO2 33
 #define SX128X_DIO3 34

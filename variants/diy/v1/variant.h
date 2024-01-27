@@ -23,10 +23,10 @@
 #define LORA_DIO2 32  // BUSY for SX1262/SX1268
 #define LORA_DIO3     // Not connected on PCB, but internally on the TTGO SX1262/SX1268, if DIO3 is high the TXCO is enabled
 
-#define RF95_SCK 5
-#define RF95_MISO 19
-#define RF95_MOSI 27
-#define RF95_NSS 18
+#define LORA_SCK 5
+#define LORA_MISO 19
+#define LORA_MOSI 27
+#define LORA_CS 18
 
 // supported modules list
 #define USE_RF95 // RFM95/SX127x
@@ -52,5 +52,5 @@
 #ifdef EBYTE_E22
 // Internally the TTGO module hooks the SX126x-DIO2 in to control the TX/RX switch
 // (which is the default for the sx1262interface code)
-#define SX126X_E22
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
 #endif

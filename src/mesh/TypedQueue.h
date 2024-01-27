@@ -27,6 +27,8 @@ template <class T> class TypedQueue
 
     bool isEmpty() { return uxQueueMessagesWaiting(h) == 0; }
 
+    int numUsed() { return uxQueueMessagesWaiting(h); }
+
     /** euqueue a packet.  Also, maxWait used to default to portMAX_DELAY, but we now want to callers to THINK about what blocking
      * they want */
     bool enqueue(T x, TickType_t maxWait)
@@ -79,6 +81,8 @@ template <class T> class TypedQueue
     int numFree() { return 1; } // Always claim 1 free, because we can grow to any size
 
     bool isEmpty() { return q.empty(); }
+
+    int numUsed() { return q.size(); }
 
     bool enqueue(T x, TickType_t maxWait = portMAX_DELAY)
     {

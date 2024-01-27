@@ -32,7 +32,7 @@ IF EXIST %FILENAME% IF x%FILENAME:update=%==x%FILENAME% (
 	%PYTHON% -m esptool --baud 115200 write_flash 0x00 %FILENAME%
     
     @REM Account for S3 board's different OTA partition
-    IF x%FILENAME:s3=%==x%FILENAME% IF x%FILENAME:v3=%==x%FILENAME% (
+    IF x%FILENAME:s3=%==x%FILENAME% IF x%FILENAME:v3=%==x%FILENAME% IF x%FILENAME:t-deck=%==x%FILENAME% IF x%FILENAME:wireless-paper=%==x%FILENAME% IF x%FILENAME:wireless-tracker=%==x%FILENAME% (
         %PYTHON% -m esptool --baud 115200 write_flash 0x260000 bleota.bin
 	) else (
         %PYTHON% -m esptool --baud 115200 write_flash 0x260000 bleota-s3.bin

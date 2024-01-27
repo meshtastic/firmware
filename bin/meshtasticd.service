@@ -1,0 +1,12 @@
+[Unit]
+Description=Meshtastic Native Daemon
+After=network-online.target
+
+[Service]
+User=root
+Group=root
+Type=simple
+ExecStart=/usr/sbin/meshtasticd
+
+[Install]
+WantedBy=multi-user.target

@@ -159,7 +159,8 @@ static const uint8_t A0 = PIN_A0;
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
 #define USE_SEGGER 1
 
-//#define LORA_DISABLE_SENDING 1
+#define LORA_DISABLE_SENDING 0
+#define SX126X_DIO2_AS_RF_SWITCH 1
 
 // Battery
 // The battery sense is hooked to pin A0 (4)

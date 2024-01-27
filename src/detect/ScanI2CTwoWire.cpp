@@ -2,7 +2,9 @@
 
 #include "concurrency/LockGuard.h"
 #include "configuration.h"
-
+#if defined(ARCH_PORTDUINO)
+#include "linux/LinuxHardwareI2C.h"
+#endif
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 #include "main.h" // atecc
 #endif
@@ -162,7 +164,14 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
 
     for (addr.address = 1; addr.address < 127; addr.address++) {
         i2cBus->beginTransmission(addr.address);
+#ifdef ARCH_PORTDUINO
+        if (i2cBus->read() != -1)
+            err = 0;
+        else
+            err = 2;
+#else
         err = i2cBus->endTransmission();
+#endif
         type = NONE;
         if (err == 0) {
             LOG_DEBUG("I2C device found at address 0x%x\n", addr.address);
@@ -212,6 +221,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                 }
                 break;
 
+                SCAN_SIMPLE_CASE(TDECK_KB_ADDR, TDECKKB, "T-Deck keyboard found\n");
+                SCAN_SIMPLE_CASE(BBQ10_KB_ADDR, BBQ10KB, "BB Q10 keyboard found\n");
                 SCAN_SIMPLE_CASE(ST7567_ADDRESS, SCREEN_ST7567, "st7567 display found\n");
 #ifdef HAS_NCP5623
                 SCAN_SIMPLE_CASE(NCP5623_ADDR, NCP5623, "NCP5623 RGB LED found\n");
@@ -249,7 +260,10 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                     type = INA219;
                 }
                 break;
-
+            case INA3221_ADDR:
+                LOG_INFO("INA3221 sensor found at address 0x%x\n", (uint8_t)addr.address);
+                type = INA3221;
+                break;
             case MCP9808_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x07), 2);
                 if (registerValue == 0x0400) {

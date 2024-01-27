@@ -37,7 +37,9 @@ body:
         - T-Lora v1
         - T-Lora v1.3
         - T-Lora v2 1.6
+        - T-Deck
         - T-Echo
+        - T-Watch
         - Rak4631
         - Rak11200
         - Rak11310
@@ -45,6 +47,8 @@ body:
         - Heltec v2
         - Heltec v2.1
         - Heltec V3
+        - Heltec Wireless Paper
+        - Heltec Wireless Tracker
         - Raspberry Pi Pico (W)
         - Relay v1
         - Relay v2

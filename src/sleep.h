@@ -4,7 +4,7 @@
 #include "Observer.h"
 #include "configuration.h"
 
-void doDeepSleep(uint32_t msecToWake), cpuDeepSleep(uint32_t msecToWake);
+void doDeepSleep(uint32_t msecToWake, bool skipPreflight), cpuDeepSleep(uint32_t msecToWake);
 
 #ifdef ARCH_ESP32
 #include "esp_sleep.h"
@@ -18,8 +18,6 @@ extern esp_sleep_source_t wakeCause;
 extern XPowersLibInterface *PMU;
 #endif
 
-void setGPSPower(bool on);
-void doGPSpowersave(bool on);
 // Perform power on init that we do on each wake from deep sleep
 void initDeepSleep();
 

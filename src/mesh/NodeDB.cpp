@@ -15,15 +15,20 @@
 #include "error.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
+#include "modules/NeighborInfoModule.h"
 #include <ErriezCRC32.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
 
 #ifdef ARCH_ESP32
-#include "mesh/http/WiFiAPClient.h"
+#include "mesh/wifi/WiFiAPClient.h"
 #include "modules/esp32/StoreForwardModule.h"
 #include <Preferences.h>
 #include <nvs_flash.h>
+#endif
+
+#ifdef ARCH_PORTDUINO
+#include "platform/portduino/PortduinoGlue.h"
 #endif
 
 #ifdef ARCH_NRF52
@@ -63,11 +68,7 @@ uint32_t error_address = 0;
 
 static uint8_t ourMacAddr[6];
 
-NodeDB::NodeDB()
-    : nodes(devicestate.node_db), numNodes(&devicestate.node_db_count), meshNodes(devicestate.node_db_lite),
-      numMeshNodes(&devicestate.node_db_lite_count)
-{
-}
+NodeDB::NodeDB() : meshNodes(devicestate.node_db_lite), numMeshNodes(&devicestate.node_db_lite_count) {}
 
 /**
  * Most (but not always) of the time we want to treat packets 'from' the local phone (where from == 0), as if they originated on
@@ -109,7 +110,6 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_TW;
 
         // Enter super deep sleep soon and stay there not very long
-        // radioConfig.preferences.mesh_sds_timeout_secs = 10;
         // radioConfig.preferences.sds_secs = 60;
     }
 
@@ -166,13 +166,22 @@ void NodeDB::installDefaultConfig()
     config.has_bluetooth = true;
     config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
 
-    config.lora.sx126x_rx_boosted_gain = false;
+    config.lora.sx126x_rx_boosted_gain = true;
     config.lora.tx_enabled =
         true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
     config.lora.override_duty_cycle = false;
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
     config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
     config.lora.hop_limit = HOP_RELIABLE;
+    config.lora.ignore_mqtt = false;
+#ifdef PIN_GPS_EN
+    config.position.gps_en_gpio = PIN_GPS_EN;
+#endif
+#ifdef GPS_POWER_TOGGLE
+    config.device.disable_triple_click = false;
+#else
+    config.device.disable_triple_click = true;
+#endif
     config.position.gps_enabled = true;
     config.position.position_broadcast_smart_enabled = true;
     config.position.broadcast_smart_minimum_distance = 100;
@@ -187,6 +196,12 @@ void NodeDB::installDefaultConfig()
     config.bluetooth.fixed_pin = defaultBLEPin;
 #if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS)
     bool hasScreen = true;
+#elif ARCH_PORTDUINO
+    bool hasScreen = false;
+    if (settingsMap[displayPanel])
+        hasScreen = true;
+    else
+        hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
 #else
     bool hasScreen = screen_found.port != ScanI2C::I2CPort::NO_I2C;
 #endif
@@ -194,7 +209,9 @@ void NodeDB::installDefaultConfig()
                                       : meshtastic_Config_BluetoothConfig_PairingMode_FIXED_PIN;
     // for backward compat, default position flags are ALT+MSL
     config.position.position_flags =
-        (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL);
+        (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL |
+         meshtastic_Config_PositionConfig_PositionFlags_SPEED | meshtastic_Config_PositionConfig_PositionFlags_HEADING |
+         meshtastic_Config_PositionConfig_PositionFlags_DOP | meshtastic_Config_PositionConfig_PositionFlags_SATINVIEW);
 
 #ifdef T_WATCH_S3
     config.display.screen_on_secs = 30;
@@ -207,11 +224,9 @@ void NodeDB::installDefaultConfig()
 void NodeDB::initConfigIntervals()
 {
     config.position.gps_update_interval = default_gps_update_interval;
-    config.position.gps_attempt_time = default_gps_attempt_time;
     config.position.position_broadcast_secs = default_broadcast_interval_secs;
 
     config.power.ls_secs = default_ls_secs;
-    config.power.mesh_sds_timeout_secs = default_mesh_sds_timeout_secs;
     config.power.min_wake_secs = default_min_wake_secs;
     config.power.sds_secs = default_sds_secs;
     config.power.wait_bluetooth_secs = default_wait_bluetooth_secs;
@@ -240,15 +255,41 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 1000;
     moduleConfig.external_notification.nag_timeout = 60;
 #endif
-#ifdef T_WATCH_S3
-    // Don't worry about the other settings, we'll use the DRV2056 behavior for notifications
+#ifdef HAS_I2S
+    // Don't worry about the other settings for T-Watch, we'll also use the DRV2056 behavior for notifications
     moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.use_i2s_as_buzzer = true;
+    moduleConfig.external_notification.alert_message_buzzer = true;
+    moduleConfig.external_notification.nag_timeout = 60;
+#endif
+#ifdef NANO_G2_ULTRA
+    moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.alert_message = true;
+    moduleConfig.external_notification.output_ms = 100;
+    moduleConfig.external_notification.active = true;
 #endif
     moduleConfig.has_canned_message = true;
 
     strncpy(moduleConfig.mqtt.address, default_mqtt_address, sizeof(moduleConfig.mqtt.address));
     strncpy(moduleConfig.mqtt.username, default_mqtt_username, sizeof(moduleConfig.mqtt.username));
     strncpy(moduleConfig.mqtt.password, default_mqtt_password, sizeof(moduleConfig.mqtt.password));
+    strncpy(moduleConfig.mqtt.root, default_mqtt_root, sizeof(moduleConfig.mqtt.root));
+    moduleConfig.mqtt.encryption_enabled = true;
+
+    moduleConfig.has_neighbor_info = true;
+    moduleConfig.neighbor_info.enabled = false;
+
+    moduleConfig.has_detection_sensor = true;
+    moduleConfig.detection_sensor.enabled = false;
+    moduleConfig.detection_sensor.detection_triggered_high = true;
+    moduleConfig.detection_sensor.minimum_broadcast_secs = 45;
+
+    moduleConfig.has_ambient_lighting = true;
+    moduleConfig.ambient_lighting.current = 10;
+    // Default to a color based on our node number
+    moduleConfig.ambient_lighting.red = (myNodeInfo.my_node_num & 0xFF0000) >> 16;
+    moduleConfig.ambient_lighting.green = (myNodeInfo.my_node_num & 0x00FF00) >> 8;
+    moduleConfig.ambient_lighting.blue = myNodeInfo.my_node_num & 0x0000FF;
 
     initModuleConfigIntervals();
 }
@@ -260,11 +301,30 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
         initModuleConfigIntervals();
     } else if (role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
         config.display.screen_on_secs = 1;
-    } else if (role == meshtastic_Config_DeviceConfig_Role_TRACKER) {
-        config.position.gps_update_interval = 30;
     } else if (role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
         moduleConfig.telemetry.environment_measurement_enabled = true;
         moduleConfig.telemetry.environment_update_interval = 300;
+    } else if (role == meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND) {
+        config.position.position_broadcast_smart_enabled = false;
+        config.position.position_broadcast_secs = 300; // Every 5 minutes
+    } else if (role == meshtastic_Config_DeviceConfig_Role_TAK) {
+        config.device.node_info_broadcast_secs = ONE_DAY;
+        config.position.position_broadcast_smart_enabled = false;
+        config.position.position_broadcast_secs = ONE_DAY;
+        // Remove Altitude MSL from flags since CoTs use HAE (height above ellipsoid)
+        config.position.position_flags =
+            (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_SPEED |
+             meshtastic_Config_PositionConfig_PositionFlags_HEADING | meshtastic_Config_PositionConfig_PositionFlags_DOP);
+        moduleConfig.telemetry.device_update_interval = ONE_DAY;
+    } else if (role == meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
+        config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY;
+        config.device.node_info_broadcast_secs = UINT32_MAX;
+        config.position.position_broadcast_smart_enabled = false;
+        config.position.position_broadcast_secs = UINT32_MAX;
+        moduleConfig.neighbor_info.update_interval = UINT32_MAX;
+        moduleConfig.telemetry.device_update_interval = UINT32_MAX;
+        moduleConfig.telemetry.environment_update_interval = UINT32_MAX;
+        moduleConfig.telemetry.air_quality_interval = UINT32_MAX;
     }
 }
 
@@ -273,6 +333,7 @@ void NodeDB::initModuleConfigIntervals()
     moduleConfig.telemetry.device_update_interval = default_broadcast_interval_secs;
     moduleConfig.telemetry.environment_update_interval = default_broadcast_interval_secs;
     moduleConfig.telemetry.air_quality_interval = default_broadcast_interval_secs;
+    moduleConfig.neighbor_info.update_interval = default_broadcast_interval_secs;
 }
 
 void NodeDB::installDefaultChannels()
@@ -284,12 +345,38 @@ void NodeDB::installDefaultChannels()
 
 void NodeDB::resetNodes()
 {
-    devicestate.node_db_count = 0;
-    memset(devicestate.node_db, 0, sizeof(devicestate.node_db));
-
-    devicestate.node_db_lite_count = 0;
-    memset(devicestate.node_db_lite, 0, sizeof(devicestate.node_db_lite));
+    devicestate.node_db_lite_count = 1;
+    std::fill(&devicestate.node_db_lite[1], &devicestate.node_db_lite[MAX_NUM_NODES - 1], meshtastic_NodeInfoLite());
     saveDeviceStateToDisk();
+    if (neighborInfoModule && moduleConfig.neighbor_info.enabled)
+        neighborInfoModule->resetNeighbors();
+}
+
+void NodeDB::removeNodeByNum(uint nodeNum)
+{
+    int newPos = 0, removed = 0;
+    for (int i = 0; i < *numMeshNodes; i++) {
+        if (meshNodes[i].num != nodeNum)
+            meshNodes[newPos++] = meshNodes[i];
+        else
+            removed++;
+    }
+    *numMeshNodes -= removed;
+    LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Saving changes...\n", removed);
+    saveDeviceStateToDisk();
+}
+
+void NodeDB::cleanupMeshDB()
+{
+    int newPos = 0, removed = 0;
+    for (int i = 0; i < *numMeshNodes; i++) {
+        if (meshNodes[i].has_user)
+            meshNodes[newPos++] = meshNodes[i];
+        else
+            removed++;
+    }
+    *numMeshNodes -= removed;
+    LOG_DEBUG("cleanupMeshDB purged %d entries\n", removed);
 }
 
 void NodeDB::installDefaultDeviceState()
@@ -297,12 +384,11 @@ void NodeDB::installDefaultDeviceState()
     LOG_INFO("Installing default DeviceState\n");
     memset(&devicestate, 0, sizeof(meshtastic_DeviceState));
 
-    *numNodes = 0;
+    *numMeshNodes = 0;
 
     // init our devicestate with valid flags so protobuf writing/reading will work
     devicestate.has_my_node = true;
     devicestate.has_owner = true;
-    devicestate.node_db_count = 0;
     devicestate.node_db_lite_count = 0;
     devicestate.version = DEVICESTATE_CUR_VER;
     devicestate.receive_queue_count = 0; // Not yet implemented FIXME
@@ -313,7 +399,6 @@ void NodeDB::installDefaultDeviceState()
     pickNewNodeNum(); // based on macaddr now
     snprintf(owner.long_name, sizeof(owner.long_name), "Meshtastic %02x%02x", ourMacAddr[4], ourMacAddr[5]);
     snprintf(owner.short_name, sizeof(owner.short_name), "%02x%02x", ourMacAddr[4], ourMacAddr[5]);
-
     snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum()); // Default node ID now based on nodenum
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
 }
@@ -322,6 +407,7 @@ void NodeDB::init()
 {
     LOG_INFO("Initializing NodeDB\n");
     loadFromDisk();
+    cleanupMeshDB();
 
     uint32_t devicestateCRC = crc32Buffer(&devicestate, sizeof(devicestate));
     uint32_t configCRC = crc32Buffer(&config, sizeof(config));
@@ -330,33 +416,20 @@ void NodeDB::init()
     int saveWhat = 0;
 
     // likewise - we always want the app requirements to come from the running appload
-    myNodeInfo.min_app_version = 20300;         // format is Mmmss (where M is 1+the numeric major number. i.e. 20120 means 1.1.20
-    myNodeInfo.max_channels = MAX_NUM_CHANNELS; // tell others the max # of channels we can understand
+    myNodeInfo.min_app_version = 30200; // format is Mmmss (where M is 1+the numeric major number. i.e. 30200 means 2.2.00
     // Note! We do this after loading saved settings, so that if somehow an invalid nodenum was stored in preferences we won't
     // keep using that nodenum forever. Crummy guess at our nodenum (but we will check against the nodedb to avoid conflicts)
-    strncpy(myNodeInfo.firmware_version, optstr(APP_VERSION), sizeof(myNodeInfo.firmware_version));
     pickNewNodeNum();
 
     // Set our board type so we can share it with others
     owner.hw_model = HW_VENDOR;
+    // Ensure user (nodeinfo) role is set to whatever we're configured to
+    owner.role = config.device.role;
 
     // Include our owner in the node db under our nodenum
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
     info->user = owner;
     info->has_user = true;
-
-    if (*numNodes > 0) {
-        LOG_DEBUG("Legacy NodeDB detected... Migrating to NodeDBLite\n");
-        uint32_t readIndex = 0;
-        const meshtastic_NodeInfo *oldNodeInfo = nodeDB.readNextNodeInfo(readIndex);
-        while (oldNodeInfo != NULL) {
-            migrateToNodeInfoLite(oldNodeInfo);
-            oldNodeInfo = nodeDB.readNextNodeInfo(readIndex);
-        }
-        LOG_DEBUG("Migration complete! Clearing out legacy NodeDB...\n");
-        devicestate.node_db_count = 0;
-        memset(devicestate.node_db, 0, sizeof(devicestate.node_db));
-    }
 
 #ifdef ARCH_ESP32
     Preferences preferences;
@@ -367,7 +440,7 @@ void NodeDB::init()
 #endif
 
     resetRadioConfig(); // If bogus settings got saved, then fix them
-    LOG_DEBUG("region=%d, NODENUM=0x%x, dbsize=%d\n", config.lora.region, myNodeInfo.my_node_num, *numNodes);
+    LOG_DEBUG("region=%d, NODENUM=0x%x, dbsize=%d\n", config.lora.region, myNodeInfo.my_node_num, *numMeshNodes);
 
     if (devicestateCRC != crc32Buffer(&devicestate, sizeof(devicestate)))
         saveWhat |= SEGMENT_DEVICESTATE;
@@ -392,25 +465,22 @@ void NodeDB::init()
  */
 void NodeDB::pickNewNodeNum()
 {
-    NodeNum r = myNodeInfo.my_node_num;
 
     getMacAddr(ourMacAddr); // Make sure ourMacAddr is set
 
     // Pick an initial nodenum based on the macaddr
-    r = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
-
-    if (r == NODENUM_BROADCAST || r < NUM_RESERVED)
-        r = NUM_RESERVED; // don't pick a reserved node number
+    NodeNum nodeNum = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
 
     meshtastic_NodeInfoLite *found;
-    while ((found = getMeshNode(r)) && memcmp(found->user.macaddr, owner.macaddr, sizeof(owner.macaddr))) {
-        // FIXME: input for random() is int, so NODENUM_BROADCAST becomes -1
-        NodeNum n = random(NUM_RESERVED, NODENUM_BROADCAST); // try a new random choice
-        LOG_WARN("NOTE! Our desired nodenum 0x%x is in use, so trying for 0x%x\n", r, n);
-        r = n;
+    while ((nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED) ||
+           ((found = getMeshNode(nodeNum)) && memcmp(found->user.macaddr, owner.macaddr, sizeof(owner.macaddr)) != 0)) {
+        NodeNum candidate = random(NUM_RESERVED, LONG_MAX); // try a new random choice
+        LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, so trying for 0x%x\n", nodeNum, candidate);
+        nodeNum = candidate;
     }
+    LOG_WARN("Using nodenum 0x%x \n", nodeNum);
 
-    myNodeInfo.my_node_num = r;
+    myNodeInfo.my_node_num = nodeNum;
 }
 
 static const char *prefFileName = "/prefs/db.proto";
@@ -613,14 +683,6 @@ void NodeDB::saveToDisk(int saveWhat)
     }
 }
 
-const meshtastic_NodeInfo *NodeDB::readNextNodeInfo(uint32_t &readIndex)
-{
-    if (readIndex < *numNodes)
-        return &nodes[readIndex++];
-    else
-        return NULL;
-}
-
 const meshtastic_NodeInfoLite *NodeDB::readNextMeshNode(uint32_t &readIndex)
 {
     if (readIndex < *numMeshNodes)
@@ -682,8 +744,8 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
         LOG_INFO("updatePosition LOCAL pos@%x, time=%u, latI=%d, lonI=%d, alt=%d\n", p.timestamp, p.time, p.latitude_i,
                  p.longitude_i, p.altitude);
 
-        info->position = ConvertToPositionLite(p);
-        localPosition = p;
+        setLocalPosition(p);
+        info->position = TypeConversions::ConvertToPositionLite(p);
     } else if ((p.time > 0) && !p.latitude_i && !p.longitude_i && !p.timestamp && !p.location_source) {
         // FIXME SPECIAL TIME SETTING PACKET FROM EUD TO RADIO
         // (stop-gap fix for issue #900)
@@ -701,7 +763,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
         uint32_t tmp_time = info->position.time;
 
         // Next, update atomically
-        info->position = ConvertToPositionLite(p);
+        info->position = TypeConversions::ConvertToPositionLite(p);
 
         // Last, restore any fields that may have been overwritten
         if (!info->position.time)
@@ -735,22 +797,25 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
     notifyObservers(true); // Force an update whether or not our node counts have changed
 }
 
-/** Update user info for this node based on received user data
+/** Update user info and channel for this node based on received user data
  */
-bool NodeDB::updateUser(uint32_t nodeId, const meshtastic_User &p)
+bool NodeDB::updateUser(uint32_t nodeId, const meshtastic_User &p, uint8_t channelIndex)
 {
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(nodeId);
     if (!info) {
         return false;
     }
 
-    LOG_DEBUG("old user %s/%s/%s\n", info->user.id, info->user.long_name, info->user.short_name);
+    LOG_DEBUG("old user %s/%s/%s, channel=%d\n", info->user.id, info->user.long_name, info->user.short_name, info->channel);
 
-    bool changed = memcmp(&info->user, &p,
-                          sizeof(info->user)); // Both of these blocks start as filled with zero so I think this is okay
+    // Both of info->user and p start as filled with zero so I think this is okay
+    bool changed = memcmp(&info->user, &p, sizeof(info->user)) || (info->channel != channelIndex);
 
     info->user = p;
-    LOG_DEBUG("updating changed=%d user %s/%s/%s\n", changed, info->user.id, info->user.long_name, info->user.short_name);
+    if (nodeId != getNodeNum())
+        info->channel = channelIndex; // Set channel we need to use to reach this node (but don't set our own channel)
+    LOG_DEBUG("updating changed=%d user %s/%s/%s, channel=%d\n", changed, info->user.id, info->user.long_name,
+              info->user.short_name, info->channel);
     info->has_user = true;
 
     if (changed) {
@@ -770,7 +835,7 @@ bool NodeDB::updateUser(uint32_t nodeId, const meshtastic_User &p)
 void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 {
     if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.from) {
-        LOG_DEBUG("Update DB node 0x%x, rx_time=%u, channel=%d\n", mp.from, mp.rx_time, mp.channel);
+        LOG_DEBUG("Update DB node 0x%x, rx_time=%u\n", mp.from, mp.rx_time);
 
         meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getFrom(&mp));
         if (!info) {
@@ -782,31 +847,16 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 
         if (mp.rx_snr)
             info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
-
-        if (mp.decoded.portnum == meshtastic_PortNum_NODEINFO_APP) {
-            info->channel = mp.channel;
-        }
     }
 }
 
 uint8_t NodeDB::getMeshNodeChannel(NodeNum n)
 {
-    meshtastic_NodeInfoLite *info = getMeshNode(n);
+    const meshtastic_NodeInfoLite *info = getMeshNode(n);
     if (!info) {
         return 0; // defaults to PRIMARY
     }
     return info->channel;
-}
-
-/// Find a node in our DB, return null for missing
-/// NOTE: This function might be called from an ISR
-meshtastic_NodeInfo *NodeDB::getNodeInfo(NodeNum n)
-{
-    for (int i = 0; i < *numNodes; i++)
-        if (nodes[i].num == n)
-            return &nodes[i];
-
-    return NULL;
 }
 
 /// Find a node in our DB, return null for missing
@@ -827,11 +877,13 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
 
     if (!lite) {
         if ((*numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < meshtastic_NodeInfoLite_size * 3)) {
-            screen->print("warning: node_db_lite full! erasing oldest entry\n");
+            if (screen)
+                screen->print("warning: node_db_lite full! erasing oldest entry\n");
+            LOG_INFO("warning: node_db_lite full! erasing oldest entry\n");
             // look for oldest node and erase it
             uint32_t oldest = UINT32_MAX;
             int oldestIndex = -1;
-            for (int i = 0; i < *numMeshNodes; i++) {
+            for (int i = 1; i < *numMeshNodes; i++) {
                 if (meshNodes[i].last_heard < oldest) {
                     oldest = meshNodes[i].last_heard;
                     oldestIndex = i;
@@ -852,57 +904,6 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
     }
 
     return lite;
-}
-
-void NodeDB::migrateToNodeInfoLite(const meshtastic_NodeInfo *node)
-{
-    meshtastic_NodeInfoLite *lite = getMeshNode(node->num);
-
-    if (!lite) {
-        if ((*numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < meshtastic_NodeInfoLite_size * 3)) {
-            screen->print("warning: node_db_lite full! erasing oldest entry\n");
-            // look for oldest node and erase it
-            uint32_t oldest = UINT32_MAX;
-            int oldestIndex = -1;
-            for (int i = 0; i < *numMeshNodes; i++) {
-                if (meshNodes[i].last_heard < oldest) {
-                    oldest = meshNodes[i].last_heard;
-                    oldestIndex = i;
-                }
-            }
-            // Shove the remaining nodes down the chain
-            for (int i = oldestIndex; i < *numMeshNodes - 1; i++) {
-                meshNodes[i] = meshNodes[i + 1];
-            }
-            (*numMeshNodes)--;
-        }
-        // add the node at the end
-        lite = &meshNodes[(*numMeshNodes)++];
-
-        // everything is missing except the nodenum
-        memset(lite, 0, sizeof(*lite));
-        lite->num = node->num;
-        lite->snr = node->snr;
-        lite->last_heard = node->last_heard;
-        lite->channel = node->channel;
-
-        if (node->has_position) {
-            lite->has_position = true;
-            lite->position.latitude_i = node->position.latitude_i;
-            lite->position.longitude_i = node->position.longitude_i;
-            lite->position.altitude = node->position.altitude;
-            lite->position.location_source = node->position.location_source;
-            lite->position.time = node->position.time;
-        }
-        if (node->has_user) {
-            lite->has_user = true;
-            lite->user = node->user;
-        }
-        if (node->has_device_metrics) {
-            lite->has_device_metrics = true;
-            lite->device_metrics = node->device_metrics;
-        }
-    }
 }
 
 /// Record an error that should be reported via analytics

@@ -13,7 +13,8 @@ int32_t BMP280Sensor::runOnce()
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    status = bmp280.begin(nodeTelemetrySensorsMap[sensorType]);
+    bmp280 = Adafruit_BMP280(nodeTelemetrySensorsMap[sensorType].second);
+    status = bmp280.begin(nodeTelemetrySensorsMap[sensorType].first);
 
     bmp280.setSampling(Adafruit_BMP280::MODE_FORCED,
                        Adafruit_BMP280::SAMPLING_X1, // Temp. oversampling

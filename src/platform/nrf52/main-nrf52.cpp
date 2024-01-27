@@ -1,4 +1,5 @@
 #include "configuration.h"
+#include <Adafruit_TinyUSB.h>
 #include <Adafruit_nRFCrypto.h>
 #include <SPI.h>
 #include <Wire.h>
@@ -51,7 +52,7 @@ void getMacAddr(uint8_t *dmac)
 
 static void initBrownout()
 {
-    auto vccthresh = POWER_POFCON_THRESHOLD_V17;
+    auto vccthresh = POWER_POFCON_THRESHOLD_V24;
 
     auto err_code = sd_power_pof_enable(POWER_POFCON_POF_Enabled);
     assert(err_code == NRF_SUCCESS);
@@ -180,14 +181,24 @@ void cpuDeepSleep(uint32_t msecToWake)
     digitalWrite(AQ_SET_PIN, LOW);
 #endif
 #endif
-    // FIXME, use system off mode with ram retention for key state?
-    // FIXME, use non-init RAM per
-    // https://devzone.nordicsemi.com/f/nordic-q-a/48919/ram-retention-settings-with-softdevice-enabled
-
-    auto ok = sd_power_system_off();
-    if (ok != NRF_SUCCESS) {
-        LOG_ERROR("FIXME: Ignoring soft device (EasyDMA pending?) and forcing system-off!\n");
-        NRF_POWER->SYSTEMOFF = 1;
+    // Sleepy trackers or sensors can low power "sleep"
+    // Don't enter this if we're sleeping portMAX_DELAY, since that's a shutdown event
+    if (msecToWake != portMAX_DELAY &&
+        (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
+         config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR) &&
+        config.power.is_power_saving == true) {
+        sd_power_mode_set(NRF_POWER_MODE_LOWPWR);
+        delay(msecToWake);
+        NVIC_SystemReset();
+    } else {
+        // FIXME, use system off mode with ram retention for key state?
+        // FIXME, use non-init RAM per
+        // https://devzone.nordicsemi.com/f/nordic-q-a/48919/ram-retention-settings-with-softdevice-enabled
+        auto ok = sd_power_system_off();
+        if (ok != NRF_SUCCESS) {
+            LOG_ERROR("FIXME: Ignoring soft device (EasyDMA pending?) and forcing system-off!\n");
+            NRF_POWER->SYSTEMOFF = 1;
+        }
     }
 
     // The following code should not be run, because we are off
@@ -204,4 +215,9 @@ void clearBonds()
         nrf52Bluetooth->setup();
     }
     nrf52Bluetooth->clearBonds();
+}
+
+void enterDfuMode()
+{
+    enterUf2Dfu();
 }
