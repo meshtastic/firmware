@@ -1,0 +1,45 @@
+name: Build Raspbian
+
+on: workflow_call
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-raspbian:
+    runs-on: [self-hosted, linux, ARM64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
+
+      - name: Upgrade python tools
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install -U platformio adafruit-nrfutil
+          pip install -U meshtastic --pre
+
+      - name: Upgrade platformio
+        shell: bash
+        run: |
+          pio upgrade
+
+      - name: Build Raspbian
+        run: bin/build-native.sh
+
+      - name: Get release version string
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        id: version
+
+      - name: Store binaries as an artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: firmware-raspbian-${{ steps.version.outputs.version }}.zip
+          path: |
+            release/meshtasticd_linux_aarch64
+            bin/config-dist.yaml

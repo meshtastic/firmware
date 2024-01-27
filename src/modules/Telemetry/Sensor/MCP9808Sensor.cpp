@@ -12,7 +12,7 @@ int32_t MCP9808Sensor::runOnce()
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    status = mcp9808.begin(nodeTelemetrySensorsMap[sensorType]);
+    status = mcp9808.begin(nodeTelemetrySensorsMap[sensorType].first, nodeTelemetrySensorsMap[sensorType].second);
     return initI2CSensor();
 }
 

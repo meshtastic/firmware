@@ -182,6 +182,18 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         }
         break;
     }
+    case meshtastic_AdminMessage_remove_by_nodenum_tag: {
+        LOG_INFO("Client is receiving a remove_nodenum command.\n");
+        nodeDB.removeNodeByNum(r->remove_by_nodenum);
+        break;
+    }
+    case meshtastic_AdminMessage_enter_dfu_mode_request_tag: {
+        LOG_INFO("Client is requesting to enter DFU mode.\n");
+#if defined(ARCH_NRF52) || defined(ARCH_RP2040)
+        enterDfuMode();
+#endif
+        break;
+    }
 #ifdef ARCH_PORTDUINO
     case meshtastic_AdminMessage_exit_simulator_tag:
         LOG_INFO("Exiting simulator\n");
@@ -268,6 +280,7 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
 
 void AdminModule::handleSetConfig(const meshtastic_Config &c)
 {
+    auto changes = SEGMENT_CONFIG;
     auto existingRole = config.device.role;
     bool isRegionUnset = (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);
 
@@ -308,6 +321,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         config.lora = c.payload_variant.lora;
         if (isRegionUnset && config.lora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
             config.lora.tx_enabled = true;
+            initRegion();
+            if (strcmp(moduleConfig.mqtt.root, default_mqtt_root) == 0) {
+                sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
+                changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
+            }
         }
         break;
     case meshtastic_Config_bluetooth_tag:
@@ -317,7 +335,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         break;
     }
 
-    saveChanges(SEGMENT_CONFIG);
+    saveChanges(changes);
 }
 
 void AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
@@ -367,6 +385,26 @@ void AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         LOG_INFO("Setting module config: Remote Hardware\n");
         moduleConfig.has_remote_hardware = true;
         moduleConfig.remote_hardware = c.payload_variant.remote_hardware;
+        break;
+    case meshtastic_ModuleConfig_neighbor_info_tag:
+        LOG_INFO("Setting module config: Neighbor Info\n");
+        moduleConfig.has_neighbor_info = true;
+        moduleConfig.neighbor_info = c.payload_variant.neighbor_info;
+        break;
+    case meshtastic_ModuleConfig_detection_sensor_tag:
+        LOG_INFO("Setting module config: Detection Sensor\n");
+        moduleConfig.has_detection_sensor = true;
+        moduleConfig.detection_sensor = c.payload_variant.detection_sensor;
+        break;
+    case meshtastic_ModuleConfig_ambient_lighting_tag:
+        LOG_INFO("Setting module config: Ambient Lighting\n");
+        moduleConfig.has_ambient_lighting = true;
+        moduleConfig.ambient_lighting = c.payload_variant.ambient_lighting;
+        break;
+    case meshtastic_ModuleConfig_paxcounter_tag:
+        LOG_INFO("Setting module config: Paxcounter\n");
+        moduleConfig.has_paxcounter = true;
+        moduleConfig.paxcounter = c.payload_variant.paxcounter;
         break;
     }
 
@@ -503,6 +541,26 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_remote_hardware_tag;
             res.get_module_config_response.payload_variant.remote_hardware = moduleConfig.remote_hardware;
             break;
+        case meshtastic_AdminMessage_ModuleConfigType_NEIGHBORINFO_CONFIG:
+            LOG_INFO("Getting module config: Neighbor Info\n");
+            res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_neighbor_info_tag;
+            res.get_module_config_response.payload_variant.neighbor_info = moduleConfig.neighbor_info;
+            break;
+        case meshtastic_AdminMessage_ModuleConfigType_DETECTIONSENSOR_CONFIG:
+            LOG_INFO("Getting module config: Detection Sensor\n");
+            res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_detection_sensor_tag;
+            res.get_module_config_response.payload_variant.detection_sensor = moduleConfig.detection_sensor;
+            break;
+        case meshtastic_AdminMessage_ModuleConfigType_AMBIENTLIGHTING_CONFIG:
+            LOG_INFO("Getting module config: Ambient Lighting\n");
+            res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_ambient_lighting_tag;
+            res.get_module_config_response.payload_variant.ambient_lighting = moduleConfig.ambient_lighting;
+            break;
+        case meshtastic_AdminMessage_ModuleConfigType_PAXCOUNTER_CONFIG:
+            LOG_INFO("Getting module config: Paxcounter\n");
+            res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_paxcounter_tag;
+            res.get_module_config_response.payload_variant.paxcounter = moduleConfig.paxcounter;
+            break;
         }
 
         // NOTE: The phone app needs to know the ls_secsvalue so it can properly expect sleep behavior.
@@ -586,12 +644,12 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
 #if HAS_BLUETOOTH
     conn.has_bluetooth = true;
     conn.bluetooth.pin = config.bluetooth.fixed_pin;
-#endif
 #ifdef ARCH_ESP32
     conn.bluetooth.is_connected = nimbleBluetooth->isConnected();
     conn.bluetooth.rssi = nimbleBluetooth->getRssi();
 #elif defined(ARCH_NRF52)
     conn.bluetooth.is_connected = nrf52Bluetooth->isConnected();
+#endif
 #endif
     conn.has_serial = true; // No serial-less devices
     conn.serial.is_connected = powerFSM.getState() == &stateSERIAL;
@@ -656,7 +714,7 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
     channels.onConfigChanged();
 
     service.reloadOwner(false);
-    service.reloadConfig(SEGMENT_CONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
+    saveChanges(SEGMENT_CONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
 }
 
 AdminModule::AdminModule() : ProtobufModule("Admin", meshtastic_PortNum_ADMIN_APP, &meshtastic_AdminMessage_msg)

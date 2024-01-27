@@ -117,34 +117,36 @@
 #define HW_VENDOR meshtastic_HardwareModel_NANO_G1_EXPLORER
 #elif defined(BETAFPV_900_TX_NANO)
 #define HW_VENDOR meshtastic_HardwareModel_BETAFPV_900_NANO_TX
-#endif
-
-//
-// Standard definitions for ESP32 targets
-//
-
-#define GPS_SERIAL_NUM 1
-#ifndef GPS_RX_PIN
-#define GPS_RX_PIN 34
-#endif
-#ifndef GPS_TX_PIN
-#ifdef USE_JTAG
-#define GPS_TX_PIN -1
-#else
-#define GPS_TX_PIN 12
-#endif
+#elif defined(PICOMPUTER_S3)
+#define HW_VENDOR meshtastic_HardwareModel_PICOMPUTER_S3
+#elif defined(HELTEC_HT62)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_HT62
+#elif defined(SENSELORA_S3)
+#define HW_VENDOR meshtastic_HardwareModel_SENSELORA_S3
+#elif defined(HELTEC_HT62)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_HT62
+#elif defined(CHATTER_2)
+#define HW_VENDOR meshtastic_HardwareModel_CHATTER_2
 #endif
 
 // -----------------------------------------------------------------------------
 // LoRa SPI
 // -----------------------------------------------------------------------------
 
-// NRF52 boards will define this in variant.h
-#ifndef RF95_SCK
-#define RF95_SCK 5
-#define RF95_MISO 19
-#define RF95_MOSI 27
-#define RF95_NSS 18
+// If an SPI-related pin used by the LoRa module isn't defined, use the conventional pin number for it.
+// FIXME: these pins should really be defined in each variant.h file to prevent breakages if the defaults change, currently many
+// ESP32 variants don't define these pins in their variant.h file.
+#ifndef LORA_SCK
+#define LORA_SCK 5
+#endif
+#ifndef LORA_MISO
+#define LORA_MISO 19
+#endif
+#ifndef LORA_MOSI
+#define LORA_MOSI 27
+#endif
+#ifndef LORA_CS
+#define LORA_CS 18
 #endif
 
-#define SERIAL0_RX_GPIO 3 // Always GPIO3 on ESP32
+#define SERIAL0_RX_GPIO 3 // Always GPIO3 on ESP32 // FIXME: may be different on ESP32-S3, etc.

@@ -12,7 +12,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # Install build deps
 USER root
 RUN apt-get update && \
-	apt-get -y install wget python3 g++ zip python3-venv git vim ca-certificates
+	apt-get -y install wget python3 g++ zip python3-venv git vim ca-certificates libgpiod-dev libyaml-cpp-dev libbluetooth-dev
 
 # create a non-priveleged user & group
 RUN groupadd -g 1000 mesh && useradd -ml -u 1000 -g 1000 mesh
@@ -27,15 +27,15 @@ RUN wget https://raw.githubusercontent.com/platformio/platformio-core-installer/
 	source ~/.platformio/penv/bin/activate && \
 	./bin/build-native.sh
 
-FROM frolvlad/alpine-glibc
+FROM frolvlad/alpine-glibc:glibc-2.31
 
 RUN apk --update add --no-cache g++ shadow && \
 	groupadd -g 1000 mesh && useradd -ml -u 1000 -g 1000 mesh
 
-COPY --from=builder /tmp/firmware/release/meshtasticd_linux_amd64 /home/mesh/
+COPY --from=builder /tmp/firmware/release/meshtasticd_linux_x86_64 /home/mesh/
 
 USER mesh
 WORKDIR /home/mesh
-CMD sh -cx "./meshtasticd_linux_amd64 --hwid '$RANDOM'"
+CMD sh -cx "./meshtasticd_linux_x86_64 --hwid '${HWID:-$RANDOM}'"
 
 HEALTHCHECK NONE

@@ -25,7 +25,7 @@ bool pb_decode_from_bytes(const uint8_t *srcbuf, size_t srcbufsize, const pb_msg
 {
     pb_istream_t stream = pb_istream_from_buffer(srcbuf, srcbufsize);
     if (!pb_decode(&stream, fields, dest_struct)) {
-        LOG_ERROR("Can't decode protobuf reason='%s', pb_msgdesc 0x%p\n", PB_GET_ERROR(&stream), fields);
+        LOG_ERROR("Can't decode protobuf reason='%s', pb_msgdesc %p\n", PB_GET_ERROR(&stream), fields);
         return false;
     } else {
         return true;

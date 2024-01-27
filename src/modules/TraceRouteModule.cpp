@@ -66,7 +66,7 @@ meshtastic_MeshPacket *TraceRouteModule::allocReply()
 
     // Copy the payload of the current request
     auto req = *currentRequest;
-    auto &p = req.decoded;
+    const auto &p = req.decoded;
     meshtastic_RouteDiscovery scratch;
     meshtastic_RouteDiscovery *updated = NULL;
     memset(&scratch, 0, sizeof(scratch));

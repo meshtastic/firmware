@@ -96,8 +96,8 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define SX128X_CS (0 + 23)
 #define SX128X_DIO1 (0 + 4)
 #define SX128X_BUSY (0 + 7)
-//#define SX128X_TXEN  (32 + 9)
-//#define SX128X_RXEN  (0 + 12)
+// #define SX128X_TXEN  (32 + 9)
+// #define SX128X_RXEN  (0 + 12)
 #define SX128X_RESET LORA_RESET
 
 #define PIN_GPS_EN (-1)

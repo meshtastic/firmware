@@ -19,7 +19,7 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define SEGMENT_DEVICESTATE 4
 #define SEGMENT_CHANNELS 8
 
-#define DEVICESTATE_CUR_VER 20
+#define DEVICESTATE_CUR_VER 22
 #define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
 
 extern meshtastic_DeviceState devicestate;
@@ -45,9 +45,6 @@ class NodeDB
     // Eventually use a smarter datastructure
     // HashMap<NodeNum, NodeInfo> nodes;
     // Note: these two references just point into our static array we serialize to/from disk
-    meshtastic_NodeInfo *nodes;
-    pb_size_t *numNodes;
-
     meshtastic_NodeInfoLite *meshNodes;
     pb_size_t *numMeshNodes;
 
@@ -87,9 +84,9 @@ class NodeDB
      */
     void updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxSource src = RX_SRC_RADIO);
 
-    /** Update user info for this node based on received user data
+    /** Update user info and channel for this node based on received user data
      */
-    bool updateUser(uint32_t nodeId, const meshtastic_User &p);
+    bool updateUser(uint32_t nodeId, const meshtastic_User &p, uint8_t channelIndex = 0);
 
     /// @return our node number
     NodeNum getNodeNum() { return myNodeInfo.my_node_num; }
@@ -114,7 +111,7 @@ class NodeDB
     /// Return the number of nodes we've heard from recently (within the last 2 hrs?)
     size_t getNumOnlineMeshNodes();
 
-    void initConfigIntervals(), initModuleConfigIntervals(), resetNodes();
+    void initConfigIntervals(), initModuleConfigIntervals(), resetNodes(), removeNodeByNum(uint nodeNum);
 
     bool factoryReset();
 
@@ -134,21 +131,16 @@ class NodeDB
     meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
     size_t getNumMeshNodes() { return *numMeshNodes; }
 
+    void setLocalPosition(meshtastic_Position position)
+    {
+        LOG_DEBUG("Setting local position: latitude=%i, longitude=%i, time=%i\n", position.latitude_i, position.longitude_i,
+                  position.time);
+        localPosition = position;
+    }
+
   private:
     /// Find a node in our DB, create an empty NodeInfoLite if missing
     meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
-    void migrateToNodeInfoLite(const meshtastic_NodeInfo *node);
-    /// Find a node in our DB, return null for missing
-    meshtastic_NodeInfo *getNodeInfo(NodeNum n);
-    /// Allow the bluetooth layer to read our next nodeinfo record, or NULL if done reading
-    const meshtastic_NodeInfo *readNextNodeInfo(uint32_t &readIndex);
-    size_t getNumNodes() { return *numNodes; }
-
-    meshtastic_NodeInfo *getNodeByIndex(size_t x)
-    {
-        assert(x < *numNodes);
-        return &nodes[x];
-    }
 
     /// Notify observers of changes to the DB
     void notifyObservers(bool forceUpdate = false)
@@ -160,6 +152,9 @@ class NodeDB
 
     /// read our db from flash
     void loadFromDisk();
+
+    /// purge db entries without user info
+    void cleanupMeshDB();
 
     /// Reinit device state from scratch (not loading from disk)
     void installDefaultDeviceState(), installDefaultChannels(), installDefaultConfig(), installDefaultModuleConfig();
@@ -174,7 +169,6 @@ extern NodeDB nodeDB;
 
         # prefs.position_broadcast_secs = FIXME possibly broadcast only once an hr
         prefs.wait_bluetooth_secs = 1  # Don't stay in bluetooth mode
-        prefs.mesh_sds_timeout_secs = never
         # try to stay in light sleep one full day, then briefly wake and sleep again
 
         prefs.ls_secs = oneday
@@ -185,9 +179,6 @@ extern NodeDB nodeDB;
         prefs.gps_update_interval = oneday
 
         prefs.is_power_saving = True
-
-        # allow up to five minutes for each new GPS lock attempt
-        prefs.gps_attempt_time = 300
 */
 
 // Our delay functions check for this for times that should never expire
@@ -198,19 +189,18 @@ extern NodeDB nodeDB;
 
 #define ONE_DAY 24 * 60 * 60
 
-#define default_gps_attempt_time IF_ROUTER(5 * 60, 15 * 60)
 #define default_gps_update_interval IF_ROUTER(ONE_DAY, 2 * 60)
 #define default_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 15 * 60)
 #define default_wait_bluetooth_secs IF_ROUTER(1, 60)
-#define default_mesh_sds_timeout_secs IF_ROUTER(NODE_DELAY_FOREVER, 2 * 60 * 60)
 #define default_sds_secs IF_ROUTER(ONE_DAY, UINT32_MAX) // Default to forever super deep sleep
 #define default_ls_secs IF_ROUTER(ONE_DAY, 5 * 60)
 #define default_min_wake_secs 10
-#define default_screen_on_secs 60 * 10
+#define default_screen_on_secs IF_ROUTER(1, 60 * 10)
 
 #define default_mqtt_address "mqtt.meshtastic.org"
 #define default_mqtt_username "meshdev"
 #define default_mqtt_password "large4cats"
+#define default_mqtt_root "msh"
 
 inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval)
 {
@@ -226,12 +216,16 @@ inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t d
     return defaultInterval * 1000;
 }
 
+inline uint32_t getConfiguredOrDefault(uint32_t configured, uint32_t defaultValue)
+{
+    if (configured > 0)
+        return configured;
+
+    return defaultValue;
+}
+
 /// Sometimes we will have Position objects that only have a time, so check for
 /// valid lat/lon
-static inline bool hasValidPosition(const meshtastic_NodeInfo *n)
-{
-    return n->has_position && (n->position.latitude_i != 0 || n->position.longitude_i != 0);
-}
 static inline bool hasValidPosition(const meshtastic_NodeInfoLite *n)
 {
     return n->has_position && (n->position.latitude_i != 0 || n->position.longitude_i != 0);

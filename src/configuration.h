@@ -57,8 +57,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define REQUIRE_RADIO true // If true, we will fail to start if the radio is not found
 
 /// Convert a preprocessor name into a quoted string
-#define xstr(s) str(s)
-#define str(s) #s
+#define xstr(s) ystr(s)
+#define ystr(s) #s
 
 /// Convert a preprocessor name into a quoted string and if that string is empty use "unset"
 #define optstr(s) (xstr(s)[0] ? xstr(s) : "unset")
@@ -98,8 +98,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Define if screen should be mirrored left to right
 // #define SCREEN_MIRROR
 
-// The m5stack I2C Keyboard (also RAK14004)
+// I2C Keyboards (M5Stack, RAK14004, T-Deck)
 #define CARDKB_ADDR 0x5F
+#define TDECK_KB_ADDR 0x55
+#define BBQ10_KB_ADDR 0x1F
 
 // -----------------------------------------------------------------------------
 // SENSOR
@@ -109,6 +111,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MCP9808_ADDR 0x18
 #define INA_ADDR 0x40
 #define INA_ADDR_ALTERNATE 0x41
+#define INA3221_ADDR 0x42
 #define QMC6310_ADDR 0x1C
 #define QMI8658_ADDR 0x6B
 #define QMC5883L_ADDR 0x1E
@@ -135,6 +138,19 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 
 #define ATECC608B_ADDR 0x35
+
+// -----------------------------------------------------------------------------
+// GPS
+// -----------------------------------------------------------------------------
+
+#define GPS_BAUDRATE 9600
+
+#ifndef GPS_THREAD_INTERVAL
+#define GPS_THREAD_INTERVAL 200
+#endif
+
+// convert 24-bit color to 16-bit (56K)
+#define COLOR565(r, g, b) (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | ((b & 0xF8) >> 3))
 
 /* Step #1: offer chance for variant-specific defines */
 #include "variant.h"
@@ -176,8 +192,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef HAS_BUTTON
 #define HAS_BUTTON 0
 #endif
+#ifndef HAS_TRACKBALL
+#define HAS_TRACKBALL 0
+#endif
+#ifndef HAS_TOUCHSCREEN
+#define HAS_TOUCHSCREEN 0
+#endif
 #ifndef HAS_TELEMETRY
 #define HAS_TELEMETRY 0
+#endif
+#ifndef HAS_SENSOR
+#define HAS_SENSOR 0
 #endif
 #ifndef HAS_RADIO
 #define HAS_RADIO 0

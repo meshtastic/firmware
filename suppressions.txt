@@ -28,6 +28,9 @@ useInitializationList
 //unreadVariable:src/graphics/Screen.cpp
 unreadVariable
 
+// I don't want to go back and cast function pointers just to appease a tools insatiable thirst for immutability
+constParameterCallback
+
 redundantInitialization
 
 //cstyleCast:src/mesh/MemoryPool.h:71
@@ -47,3 +50,7 @@ virtualCallInConstructor
 passedByValue:*/RedirectablePrint.h
 
 internalAstError:*/CrossPlatformCryptoEngine.cpp
+uninitMemberVar:*/AudioThread.h
+// False positive
+constVariableReference:*/Channels.cpp
+constParameterPointer:*/unishox2.c

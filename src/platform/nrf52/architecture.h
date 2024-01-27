@@ -46,6 +46,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_RAK4631
 #elif defined(TTGO_T_ECHO)
 #define HW_VENDOR meshtastic_HardwareModel_T_ECHO
+#elif defined(NANO_G2_ULTRA)
+#define HW_VENDOR meshtastic_HardwareModel_NANO_G2_ULTRA
 #elif defined(CANARY_V1_0)
 #define HW_VENDOR meshtastic_HardwareModel_CANARY_V1_0
 #elif defined(NORDIC_PCA10059)

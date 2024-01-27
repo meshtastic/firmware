@@ -53,7 +53,15 @@ typedef enum _meshtastic_AdminMessage_ModuleConfigType {
     /* TODO: REPLACE */
     meshtastic_AdminMessage_ModuleConfigType_AUDIO_CONFIG = 7,
     /* TODO: REPLACE */
-    meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG = 8
+    meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG = 8,
+    /* TODO: REPLACE */
+    meshtastic_AdminMessage_ModuleConfigType_NEIGHBORINFO_CONFIG = 9,
+    /* TODO: REPLACE */
+    meshtastic_AdminMessage_ModuleConfigType_AMBIENTLIGHTING_CONFIG = 10,
+    /* TODO: REPLACE */
+    meshtastic_AdminMessage_ModuleConfigType_DETECTIONSENSOR_CONFIG = 11,
+    /* TODO: REPLACE */
+    meshtastic_AdminMessage_ModuleConfigType_PAXCOUNTER_CONFIG = 12
 } meshtastic_AdminMessage_ModuleConfigType;
 
 /* Struct definitions */
@@ -123,6 +131,9 @@ typedef struct _meshtastic_AdminMessage {
         bool get_node_remote_hardware_pins_request;
         /* Respond with the mesh's nodes with their available gpio pins for RemoteHardware module use */
         meshtastic_NodeRemoteHardwarePinsResponse get_node_remote_hardware_pins_response;
+        /* Enter (UF2) DFU mode
+     Only implemented on NRF52 currently */
+        bool enter_dfu_mode_request;
         /* Set the owner for this node */
         meshtastic_User set_owner;
         /* Set channels (using the new API).
@@ -139,6 +150,8 @@ typedef struct _meshtastic_AdminMessage {
         char set_canned_message_module_messages[201];
         /* Set the ringtone for ExternalNotification. */
         char set_ringtone_message[231];
+        /* Remove the node by the specified node-num from the NodeDB on the device */
+        uint32_t remove_by_nodenum;
         /* Begins an edit transaction for config, module config, owner, and channel settings changes
      This will delay the standard *implicit* save to the file system and subsequent reboot behavior until committed (commit_edit_settings) */
         bool begin_edit_settings;
@@ -172,8 +185,8 @@ extern "C" {
 #define _meshtastic_AdminMessage_ConfigType_ARRAYSIZE ((meshtastic_AdminMessage_ConfigType)(meshtastic_AdminMessage_ConfigType_BLUETOOTH_CONFIG+1))
 
 #define _meshtastic_AdminMessage_ModuleConfigType_MIN meshtastic_AdminMessage_ModuleConfigType_MQTT_CONFIG
-#define _meshtastic_AdminMessage_ModuleConfigType_MAX meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG
-#define _meshtastic_AdminMessage_ModuleConfigType_ARRAYSIZE ((meshtastic_AdminMessage_ModuleConfigType)(meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG+1))
+#define _meshtastic_AdminMessage_ModuleConfigType_MAX meshtastic_AdminMessage_ModuleConfigType_PAXCOUNTER_CONFIG
+#define _meshtastic_AdminMessage_ModuleConfigType_ARRAYSIZE ((meshtastic_AdminMessage_ModuleConfigType)(meshtastic_AdminMessage_ModuleConfigType_PAXCOUNTER_CONFIG+1))
 
 #define meshtastic_AdminMessage_payload_variant_get_config_request_ENUMTYPE meshtastic_AdminMessage_ConfigType
 #define meshtastic_AdminMessage_payload_variant_get_module_config_request_ENUMTYPE meshtastic_AdminMessage_ModuleConfigType
@@ -214,12 +227,14 @@ extern "C" {
 #define meshtastic_AdminMessage_set_ham_mode_tag 18
 #define meshtastic_AdminMessage_get_node_remote_hardware_pins_request_tag 19
 #define meshtastic_AdminMessage_get_node_remote_hardware_pins_response_tag 20
+#define meshtastic_AdminMessage_enter_dfu_mode_request_tag 21
 #define meshtastic_AdminMessage_set_owner_tag    32
 #define meshtastic_AdminMessage_set_channel_tag  33
 #define meshtastic_AdminMessage_set_config_tag   34
 #define meshtastic_AdminMessage_set_module_config_tag 35
 #define meshtastic_AdminMessage_set_canned_message_module_messages_tag 36
 #define meshtastic_AdminMessage_set_ringtone_message_tag 37
+#define meshtastic_AdminMessage_remove_by_nodenum_tag 38
 #define meshtastic_AdminMessage_begin_edit_settings_tag 64
 #define meshtastic_AdminMessage_commit_edit_settings_tag 65
 #define meshtastic_AdminMessage_reboot_ota_seconds_tag 95
@@ -250,12 +265,14 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,get_device_connection_status
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_ham_mode,set_ham_mode),  18) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,get_node_remote_hardware_pins_request,get_node_remote_hardware_pins_request),  19) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,get_node_remote_hardware_pins_response,get_node_remote_hardware_pins_response),  20) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,enter_dfu_mode_request,enter_dfu_mode_request),  21) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_owner,set_owner),  32) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_channel,set_channel),  33) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_config,set_config),  34) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_module_config,set_module_config),  35) \
 X(a, STATIC,   ONEOF,    STRING,   (payload_variant,set_canned_message_module_messages,set_canned_message_module_messages),  36) \
 X(a, STATIC,   ONEOF,    STRING,   (payload_variant,set_ringtone_message,set_ringtone_message),  37) \
+X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,remove_by_nodenum,remove_by_nodenum),  38) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,begin_edit_settings,begin_edit_settings),  64) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,commit_edit_settings,commit_edit_settings),  65) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,reboot_ota_seconds,reboot_ota_seconds),  95) \

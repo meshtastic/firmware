@@ -5,6 +5,7 @@
 #include "configuration.h"
 #include "graphics/Screen.h"
 #include "main.h"
+#include "modules/ExternalNotificationModule.h"
 #include "power.h"
 #include <OneButton.h>
 
@@ -37,6 +38,9 @@ class ButtonThread : public concurrency::OSThread
 #ifdef BUTTON_PIN_TOUCH
     OneButton userButtonTouch;
 #endif
+#if defined(ARCH_PORTDUINO)
+    OneButton userButton;
+#endif
     static bool shutdown_on_long_stop;
 
   public:
@@ -45,8 +49,14 @@ class ButtonThread : public concurrency::OSThread
     // callback returns the period for the next callback invocation (or 0 if we should no longer be called)
     ButtonThread() : OSThread("Button")
     {
-#ifdef BUTTON_PIN
+#if defined(ARCH_PORTDUINO) || defined(BUTTON_PIN)
+#if defined(ARCH_PORTDUINO)
+        if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC)
+            userButton = OneButton(settingsMap[user], true, true);
+#elif defined(BUTTON_PIN)
+
         userButton = OneButton(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, true, true);
+#endif
 #ifdef INPUT_PULLUP_SENSE
         // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
         pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT_PULLUP_SENSE);
@@ -58,7 +68,12 @@ class ButtonThread : public concurrency::OSThread
         userButton.attachMultiClick(userButtonMultiPressed);
         userButton.attachLongPressStart(userButtonPressedLongStart);
         userButton.attachLongPressStop(userButtonPressedLongStop);
+#if defined(ARCH_PORTDUINO)
+        if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC)
+            wakeOnIrq(settingsMap[user], FALLING);
+#else
         wakeOnIrq(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, FALLING);
+#endif
 #endif
 #ifdef BUTTON_PIN_ALT
         userButtonAlt = OneButton(BUTTON_PIN_ALT, true, true);
@@ -87,9 +102,14 @@ class ButtonThread : public concurrency::OSThread
     {
         canSleep = true; // Assume we should not keep the board awake
 
-#ifdef BUTTON_PIN
+#if defined(BUTTON_PIN)
         userButton.tick();
         canSleep &= userButton.isIdle();
+#elif defined(ARCH_PORTDUINO)
+        if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC) {
+            userButton.tick();
+            canSleep &= userButton.isIdle();
+        }
 #endif
 #ifdef BUTTON_PIN_ALT
         userButtonAlt.tick();
@@ -101,23 +121,8 @@ class ButtonThread : public concurrency::OSThread
 #endif
         // if (!canSleep) LOG_DEBUG("Suppressing sleep!\n");
         // else LOG_DEBUG("sleep ok\n");
-#if defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ST7789_CS)
-        int x, y = 0;
-        screen->getTouch(&x, &y);
-        if (x > 0 && y > 0) {
-#ifdef T_WATCH_S3
-            drv.setWaveform(0, 75);
-            drv.setWaveform(1, 0); // end waveform
-            drv.go();
-#endif
-            LOG_DEBUG("touch %d %d\n", x, y);
-            powerFSM.trigger(EVENT_PRESS);
-            return 150; // Check for next touch every in 150ms
-        }
 
-#endif
-
-        return 5;
+        return 50;
     }
 
   private:
@@ -133,6 +138,14 @@ class ButtonThread : public concurrency::OSThread
 #ifdef BUTTON_PIN
         if (((config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN) !=
              moduleConfig.canned_message.inputbroker_pin_press) ||
+            !(moduleConfig.canned_message.updown1_enabled || moduleConfig.canned_message.rotary1_enabled) ||
+            !moduleConfig.canned_message.enabled) {
+            powerFSM.trigger(EVENT_PRESS);
+        }
+#endif
+#if defined(ARCH_PORTDUINO)
+        if ((settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC) &&
+                (settingsMap[user] != moduleConfig.canned_message.inputbroker_pin_press) ||
             !moduleConfig.canned_message.enabled) {
             powerFSM.trigger(EVENT_PRESS);
         }
@@ -179,19 +192,27 @@ class ButtonThread : public concurrency::OSThread
 
     static void userButtonMultiPressed()
     {
-#if defined(GPS_POWER_TOGGLE)
-        if (config.position.gps_enabled) {
-            LOG_DEBUG("Flag set to false for gps power\n");
-        } else {
-            LOG_DEBUG("Flag set to true to restore power\n");
+        if (!config.device.disable_triple_click && (gps != nullptr)) {
+            config.position.gps_enabled = !(config.position.gps_enabled);
+            if (config.position.gps_enabled) {
+                LOG_DEBUG("Flag set to true to restore power\n");
+                gps->enable();
+
+            } else {
+                LOG_DEBUG("Flag set to false for gps power\n");
+                gps->disable();
+            }
         }
-        config.position.gps_enabled = !(config.position.gps_enabled);
-        doGPSpowersave(config.position.gps_enabled);
-#endif
     }
 
     static void userButtonPressedLongStart()
     {
+#ifdef T_DECK
+        // False positive long-press triggered on T-Deck with i2s audio, so short circuit
+        if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) {
+            return;
+        }
+#endif
         if (millis() > 30 * 1000) {
             LOG_DEBUG("Long press start!\n");
             longPressTime = millis();

@@ -12,6 +12,7 @@
 
 #define PACKET_FLAGS_HOP_MASK 0x07
 #define PACKET_FLAGS_WANT_ACK_MASK 0x08
+#define PACKET_FLAGS_VIA_MQTT_MASK 0x10
 
 /**
  * This structure has to exactly match the wire layout when sent over the radio link.  Used to keep compatibility
@@ -56,7 +57,7 @@ class RadioInterface
 
     float bw = 125;
     uint8_t sf = 9;
-    uint8_t cr = 7;
+    uint8_t cr = 5;
     /** Slottime is the minimum time to wait, consisting of:
       - CAD duration (maximum of SX126x and SX127x);
       - roundtrip air propagation time (assuming max. 30km between nodes);

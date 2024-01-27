@@ -15,4 +15,6 @@ enum class Cmd {
     PRINT,
     START_SHUTDOWN_SCREEN,
     START_REBOOT_SCREEN,
+    SHOW_PREV_FRAME,
+    SHOW_NEXT_FRAME
 };

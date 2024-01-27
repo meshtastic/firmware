@@ -108,9 +108,24 @@ const RegionInfo regions[] = {
     RDEF(UA_868, 868.0f, 868.6f, 1, 0, 14, true, false, false),
 
     /*
+        Malaysia
+        433 - 435 MHz at 100mW, no restrictions.
+        https://www.mcmc.gov.my/skmmgovmy/media/General/pdf/Short-Range-Devices-Specification.pdf
+    */
+    RDEF(MY_433, 433.0f, 435.0f, 100, 0, 20, true, false, false),
+
+    /*
+        Malaysia
+        919 - 923 Mhz at 500mW, no restrictions.
+        923 - 924 MHz at 500mW with 1% duty cycle OR frequency hopping.
+        Frequency hopping is used for 919 - 923 MHz.
+        https://www.mcmc.gov.my/skmmgovmy/media/General/pdf/Short-Range-Devices-Specification.pdf
+    */
+    RDEF(MY_919, 919.0f, 924.0f, 100, 0, 27, true, true, false),
+
+    /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
     */
-
     RDEF(LORA_24, 2400.0f, 2483.5f, 100, 0, 10, true, false, true),
 
     /*
@@ -272,15 +287,14 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
         out += " encrypted";
     }
 
-    if (p->rx_time != 0) {
+    if (p->rx_time != 0)
         out += DEBUG_PORT.mt_sprintf(" rxtime=%u", p->rx_time);
-    }
-    if (p->rx_snr != 0.0) {
+    if (p->rx_snr != 0.0)
         out += DEBUG_PORT.mt_sprintf(" rxSNR=%g", p->rx_snr);
-    }
-    if (p->rx_rssi != 0) {
+    if (p->rx_rssi != 0)
         out += DEBUG_PORT.mt_sprintf(" rxRSSI=%i", p->rx_rssi);
-    }
+    if (p->via_mqtt != 0)
+        out += DEBUG_PORT.mt_sprintf(" via MQTT");
     if (p->priority != 0)
         out += DEBUG_PORT.mt_sprintf(" priority=%d", p->priority);
 
@@ -328,9 +342,9 @@ int RadioInterface::notifyDeepSleepCb(void *unused)
  * djb2 by Dan Bernstein.
  * http://www.cse.yorku.ca/~oz/hash.html
  */
-unsigned long hash(const char *str)
+uint32_t hash(const char *str)
 {
-    unsigned long hash = 5381;
+    uint32_t hash = 5381;
     int c;
 
     while ((c = *str++) != 0)
@@ -384,27 +398,27 @@ void RadioInterface::applyModemConfig()
         switch (loraConfig.modem_preset) {
         case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
             bw = (myRegion->wideLora) ? 812.5 : 250;
-            cr = 8;
+            cr = 5;
             sf = 7;
             break;
         case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
             bw = (myRegion->wideLora) ? 812.5 : 250;
-            cr = 8;
+            cr = 5;
             sf = 8;
             break;
         case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
             bw = (myRegion->wideLora) ? 812.5 : 250;
-            cr = 8;
+            cr = 5;
             sf = 9;
             break;
         case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
             bw = (myRegion->wideLora) ? 812.5 : 250;
-            cr = 8;
+            cr = 5;
             sf = 10;
             break;
         default: // Config_LoRaConfig_ModemPreset_LONG_FAST is default. Gracefully use this is preset is something illegal.
             bw = (myRegion->wideLora) ? 812.5 : 250;
-            cr = 8;
+            cr = 5;
             sf = 11;
             break;
         case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
@@ -448,7 +462,9 @@ void RadioInterface::applyModemConfig()
         power = myRegion->powerLimit;
 
     if (power == 0)
-        power = 17; // Default to default power if we don't have a valid power
+        power = 17; // Default to this power level if we don't have a valid regional power limit (powerLimit of myRegion defaults
+                    // to 0, currently no region has an actual power limit of 0 [dBm] so we can assume regions which have this
+                    // variable set to 0 don't have a valid power limit)
 
     // Set final tx_power back onto config
     loraConfig.tx_power = (int8_t)power; // cppcheck-suppress assignmentAddressToInteger
@@ -534,10 +550,10 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
     h->id = p->id;
     h->channel = p->channel;
     if (p->hop_limit > HOP_MAX) {
-        LOG_WARN("hop limit %d is too high, setting to %d\n", p->hop_limit, HOP_MAX);
-        p->hop_limit = HOP_MAX;
+        LOG_WARN("hop limit %d is too high, setting to %d\n", p->hop_limit, HOP_RELIABLE);
+        p->hop_limit = HOP_RELIABLE;
     }
-    h->flags = p->hop_limit | (p->want_ack ? PACKET_FLAGS_WANT_ACK_MASK : 0);
+    h->flags = p->hop_limit | (p->want_ack ? PACKET_FLAGS_WANT_ACK_MASK : 0) | (p->via_mqtt ? PACKET_FLAGS_VIA_MQTT_MASK : 0);
 
     // if the sender nodenum is zero, that means uninitialized
     assert(h->from);
