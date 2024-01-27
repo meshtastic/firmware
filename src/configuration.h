@@ -142,8 +142,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // GPS
 // -----------------------------------------------------------------------------
-
+#ifndef GPS_BAUDRATE
 #define GPS_BAUDRATE 9600
+#endif
 
 #ifndef GPS_THREAD_INTERVAL
 #define GPS_THREAD_INTERVAL 200
