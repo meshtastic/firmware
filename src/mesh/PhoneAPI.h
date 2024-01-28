@@ -108,8 +108,8 @@ class PhoneAPI
     /// Hookable to find out when connection changes
     virtual void onConnectionChanged(bool connected) {}
 
-    /// If we haven't heard from the other side in a while then say not connected
-    void checkConnectionTimeout();
+    /// If we haven't heard from the other side in a while then say not connected. Returns true if timeout occurred
+    bool checkConnectionTimeout();
 
     /// Check the current underlying physical link to see if the client is currently connected
     virtual bool checkIsConnected() = 0;
