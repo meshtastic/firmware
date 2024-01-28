@@ -46,7 +46,7 @@ extern "C" {
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LEDs
-#define PIN_LED1 (GPIO_PORT1 + 1) // blue P1.01
+#define PIN_LED1 (GPIO_PORT1 + 1)  // blue P1.01
 #define PIN_LED2 (GPIO_PORT0 + 14) // yellow P0.14
 #define PIN_LED3 (GPIO_PORT1 + 3)  // green P1.03
 
@@ -110,8 +110,8 @@ static const uint8_t A0 = PIN_A0;
 #define USE_SX1262
 #define SX126X_CS (GPIO_PORT0 + 24)
 #define SX126X_DIO1 (GPIO_PORT1 + 11)
-//#define SX126X_DIO3 (GPIO_PORT0 + 21)
-//#define SX126X_DIO2 () // LORA_BUSY // LoRa RX/TX
+// #define SX126X_DIO3 (GPIO_PORT0 + 21)
+// #define SX126X_DIO2 () // LORA_BUSY // LoRa RX/TX
 #define SX126X_BUSY (GPIO_PORT0 + 17)
 #define SX126X_RESET (GPIO_PORT0 + 25)
 #define LORA_RF_PWR (GPIO_PORT0 + 28) // LORA_RF_SWITCH
@@ -121,7 +121,7 @@ static const uint8_t A0 = PIN_A0;
  */
 #define HAS_GPS 1
 #define GPS_UBLOX
-#define GPS_BAUDRATE 38400 
+#define GPS_BAUDRATE 38400
 
 // #define PIN_GPS_WAKE (GPIO_PORT1 + 2) // An output to wake GPS, low means allow sleep, high means force wake
 // Seems to be missing on this new board
@@ -146,8 +146,8 @@ static const uint8_t A0 = PIN_A0;
 #define PIN_SPI_MOSI (GPIO_PORT0 + 22)
 #define PIN_SPI_SCK (GPIO_PORT0 + 19)
 
-//#define PIN_SPI1_MISO (GPIO_PORT1 + 6) // FIXME not really needed, but for now the SPI code requires something to be defined,
-// pick an used GPIO #define PIN_SPI1_MOSI (GPIO_PORT1 + 8) #define PIN_SPI1_SCK (GPIO_PORT1 + 9)
+// #define PIN_SPI1_MISO (GPIO_PORT1 + 6) // FIXME not really needed, but for now the SPI code requires something to be defined,
+//  pick an used GPIO #define PIN_SPI1_MOSI (GPIO_PORT1 + 8) #define PIN_SPI1_SCK (GPIO_PORT1 + 9)
 
 #define PIN_PWR_EN (GPIO_PORT0 + 12)
 
@@ -176,7 +176,6 @@ static const uint8_t A0 = PIN_A0;
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER VBAT_DIVIDER_COMP
 #define VBAT_RAW_TO_SCALED(x) (REAL_VBAT_MV_PER_LSB * x)
-
 
 #ifdef __cplusplus
 }

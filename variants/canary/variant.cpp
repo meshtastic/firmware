@@ -53,5 +53,4 @@ void initVariant()
     // Pull the LoRa out of reset
     pinMode(LORA_RF_PWR, OUTPUT);
     digitalWrite(LORA_RF_PWR, HIGH);
-
 }

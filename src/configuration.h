@@ -162,7 +162,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 /* Step #3: mop up with disabled values for HAS_ options not handled by the above two */
 
-
 // -----------------------------------------------------------------------------
 // GPS
 // -----------------------------------------------------------------------------
@@ -173,7 +172,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef GPS_THREAD_INTERVAL
 #define GPS_THREAD_INTERVAL 100
 #endif
-
 
 #ifndef HAS_WIFI
 #define HAS_WIFI 0
