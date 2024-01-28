@@ -32,7 +32,7 @@ const uint32_t g_ADigitalPinMap[] = {
 
 void initVariant()
 {
-    // LED1 & LED2
+    // LEDs
     pinMode(PIN_LED1, OUTPUT);
     ledOff(PIN_LED1);
 
@@ -42,15 +42,15 @@ void initVariant()
     pinMode(PIN_LED3, OUTPUT);
     ledOff(PIN_LED3);
 
+    // Turn on power to the GPS and LoRa
     pinMode(PIN_PWR_EN, OUTPUT);
     digitalWrite(PIN_PWR_EN, HIGH);
 
+    // Pull the GPS out of reset
     pinMode(GPS_RESET_PIN, OUTPUT);
     digitalWrite(GPS_RESET_PIN, HIGH);
 
-    pinMode(GPS_RESET_PIN, OUTPUT);
-    digitalWrite(GPS_RESET_PIN, HIGH);
-
+    // Pull the LoRa out of reset
     pinMode(LORA_RF_PWR, OUTPUT);
     digitalWrite(LORA_RF_PWR, HIGH);
 

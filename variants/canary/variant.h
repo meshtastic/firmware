@@ -115,11 +115,6 @@ static const uint8_t A0 = PIN_A0;
 #define SX126X_BUSY (GPIO_PORT0 + 17)
 #define SX126X_RESET (GPIO_PORT0 + 25)
 #define LORA_RF_PWR (GPIO_PORT0 + 28) // LORA_RF_SWITCH
-//#define SX126X_E22
-
-// #define LORA_DISABLE_SENDING // Define this to disable transmission for testing (power testing etc...)
-
-// #undef SX126X_CS
 
 /*
  * GPS pins
