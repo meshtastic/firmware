@@ -408,7 +408,7 @@ bool GPS::setup()
                 LOG_WARN("Unable to enable NMEA GGA.\n");
             }
 
-            msglen = makeUBXPacket(0x06, 0x01, sizeof(_message_RMC), _message_AID);
+            msglen = makeUBXPacket(0x06, 0x01, sizeof(_message_AID), _message_AID);
             _serial_gps->write(UBXscratch, msglen);
             if (getACK(0x06, 0x01, 300) != GNSS_RESPONSE_OK) {
                 LOG_WARN("Unable to disable UBX-AID.\n");
