@@ -16,5 +16,13 @@
 #define USE_RF95
 #define LORA_DIO0 26 // a No connect on the SX1262 module
 #define LORA_RESET 23
+
+// In the T3 V1.6.1 TXCO version, Radio DIO1 is connected to Radio’s
+// internal temperature-compensated crystal oscillator enable
+#ifdef TLORA_V2_1_6_TXCO
+#define LORA_DIO1 RADIOLIB_NC
+#else
 #define LORA_DIO1 33 // https://www.thethingsnetwork.org/forum/t/big-esp32-sx127x-topic-part-3/18436
+#endif
+
 #define LORA_DIO2 32 // Not really used
