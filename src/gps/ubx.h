@@ -69,62 +69,59 @@ const uint8_t GPS::_message_GNSS[] = {
     0x01, 0x01, 0x03, 0x00, 0x01, 0x00, 0x01, 0x01, // SBAS
     0x06, 0x08, 0x0e, 0x00, 0x01, 0x00, 0x01, 0x01  // GLONASS
 };
+// Enable jamming/interference monitor
 
-/*
-// Enable interference resistance, because we are using LoRa, WiFi and Bluetooth on same board,
-// and we need to reduce interference from them
+// For Neo-6
 const uint8_t GPS::_message_JAM[] = {
-    // bbThreshold (Broadband jamming detection threshold) is set to 0x3F (63 in decimal)
-    // cwThreshold (CW jamming detection threshold) is set to 0x10 (16 in decimal)
-    // algorithmBits (Reserved algorithm settings) is set to 0x16B156 as recommended
-    // enable (Enable interference detection) is set to 1 (enabled)
-    0x3F, 0x10, 0xB1, 0x56, // config: Interference config word
-    // generalBits (General settings) is set to 0x31E as recommended
-    // antSetting (Antenna setting, 0=unknown, 1=passive, 2=active) is set to 0 (unknown)
-    // ToDo: Set to 1 (passive) or 2 (active) if known, for example from UBX-MON-HW, or from board info
-    // enable2 (Set to 1 to scan auxiliary bands, u-blox 8 / u-blox M8 only, otherwise ignored) is set to 1
-    // (enabled)
-    0x1E, 0x03, 0x00, 0x01 // config2: Extra settings for jamming/interference monitor
+    0xf3, 0xac, 0x62, 0xad, // config1 bbThreshold = 3, cwThreshold = 15, enable = 1, reserved bits 0x16B156
+    0x1e, 0x03, 0x00, 0x00  // config2 antennaSetting Unknown = 0, reserved 3, = 0x00,0x00, reserved 2 = 0x31E
+};
+/* // WIP GPS reconfig
+// For Neo-6, Max-7 and Neo-7
+const uint8_t GPS::_message_JAM_6_7[] = {
+    0xf3, 0xac, 0x62, 0xad,  // config1 bbThreshold = 3, cwThreshold = 15, enable = 1, reserved bits 0x16B156
+    0x1e, 0x03, 0x00, 0x00   // config2 antennaSetting Unknown = 0, reserved 3, = 0x00,0x00, reserved 2 = 0x31E
+};
+
+// For M8
+const uint8_t GPS::_message_JAM_8[] = {
+    0xf3, 0xac, 0x62, 0xad,  // config1 bbThreshold = 3, cwThreshold = 15, enable1 = 1, reserved bits 0x16B156
+    0x1e, 0x43, 0x00, 0x00   // config2 antennaSetting Unknown = 0, enable2 = 1, generalBits = 0x31E
 };
 */
-const uint8_t GPS::_message_JAM[] = {0xf3, 0xac, 0x62, 0xad, 0x1e, 0xc3, 0x42, 0x01};
-/*
+
 // Configure navigation engine expert settings:
+// there are many variations of what were Reserved fields for the Neo-6 in later versions
+// ToDo: check UBX-MON-VER for module type and protocol version
+
+// For the Neo-6
 const uint8_t GPS::_message_NAVX5[] = {
-    0x00, 0x00, // msgVer (0 for this version)
-    // minMax flag = 1: apply min/max SVs settings
-    // minCno flag = 1: apply minimum C/N0 setting
-    // initial3dfix flag = 0: apply initial 3D fix settings
-    // aop flag = 1: apply aopCfg (useAOP flag) settings (AssistNow Autonomous)
-    0x1B, 0x00, // mask1 (First parameters bitmask)
-    // adr flag = 0: apply ADR sensor fusion on/off setting (useAdr flag)
-    // If firmware is not ADR/UDR, enabling this flag will fail configuration
-    // ToDo: check this with UBX-MON-VER
-    0x00, 0x00, 0x00, 0x00,             // mask2 (Second parameters bitmask)
-    0x00, 0x00,                         // Reserved
-    0x03,                               // minSVs (Minimum number of satellites for navigation) = 3
-    0x10,                               // maxSVs (Maximum number of satellites for navigation) = 16
-    0x06,                               // minCNO (Minimum satellite signal level for navigation) = 6 dBHz
-    0x00,                               // Reserved
-    0x00,                               // iniFix3D (Initial fix must be 3D) = 0 (disabled)
-    0x00, 0x00,                         // Reserved
-    0x00,                               // ackAiding (Issue acknowledgements for assistance message input) = 0 (disabled)
-    0x00, 0x00,                         // Reserved
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Reserved
-    0x00,                               // Reserved
-    0x01,                               // aopCfg (AssistNow Autonomous configuration) = 1 (enabled)
-    0x00, 0x00,                         // Reserved
-    0x00, 0x00,                         // Reserved
-    0x00, 0x00, 0x00, 0x00,             // Reserved
-    0x00, 0x00, 0x00,                   // Reserved
-    0x01,                               // useAdr (Enable/disable ADR sensor fusion) = 1 (enabled)
-};
-*/
-
-const uint8_t GPS::_message_NAVX5[] = {0x00, 0x00, 0x4c, 0x66, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x10, 0x06, 0x00,
-                                       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
-                                       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01
-
+    0x00, 0x00,             // msgVer (0 for this version)
+    0x4c, 0x66,             // mask1
+    0x00, 0x00, 0x00, 0x00, // Reserved 0
+    0x00,                   // Reserved 1
+    0x00,                   // Reserved 2
+    0x03,                   // minSVs (Minimum number of satellites for navigation) = 3
+    0x10,                   // maxSVs (Maximum number of satellites for navigation) = 16
+    0x06,                   // minCNO (Minimum satellite signal level for navigation) = 6 dBHz
+    0x00,                   // Reserved 5
+    0x00,                   // iniFix3D (Initial fix must be 3D) (0 = false 1 = true)
+    0x00,                   // Reserved 6
+    0x00,                   // Reserved 7
+    0x00,                   // Reserved 8
+    0x00, 0x00,             // wknRollover 0 = firmware default
+    0x00, 0x00, 0x00, 0x00, // Reserved 9
+    0x00,                   // Reserved 10
+    0x00,                   // Reserved 11
+    0x00,                   // usePPP (Precice Point Positioning) (0 = false, 1 = true)
+    0x01,                   // useAOP  (AssistNow Autonomous configuration) = 1 (enabled)
+    0x00,                   // Reserved 12
+    0x00,                   // Reserved 13
+    0x00, 0x00,             // aopOrbMaxErr = 0 to reset to firmware default
+    0x00,                   // Reserved 14
+    0x00,                   // Reserved 15
+    0x00, 0x00,             // Reserved 3
+    0x00, 0x00, 0x00, 0x00  // Reserved 4
 };
 
 // Set GPS update rate to 1Hz
@@ -234,7 +231,7 @@ const uint8_t GPS::_message_PMS[] = {
     0x03,       // Power setup value
     0x00, 0x00, // period: not applicable, set to 0
     0x00, 0x00, // onTime: not applicable, set to 0
-    0x97, 0x6F  // reserved, generated by u-center
+    0x00, 0x00  // reserved, generated by u-center
 };
 
 const uint8_t GPS::_message_SAVE[] = {
