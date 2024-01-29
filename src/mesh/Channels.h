@@ -32,7 +32,7 @@ class Channels
     Channels() {}
 
     /// Well known channel names
-    static const char *adminChannel, *gpioChannel, *serialChannel;
+    static const char *adminChannel, *gpioChannel, *serialChannel, *mqttChannel;
 
     const meshtastic_ChannelSettings &getPrimary() { return getByIndex(getPrimaryIndex()).settings; }
 

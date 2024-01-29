@@ -15,6 +15,7 @@ Channels channels;
 const char *Channels::adminChannel = "admin";
 const char *Channels::gpioChannel = "gpio";
 const char *Channels::serialChannel = "serial";
+const char *Channels::mqttChannel = "mqtt";
 
 uint8_t xorHash(const uint8_t *p, size_t len)
 {
