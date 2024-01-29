@@ -150,6 +150,9 @@ void portduinoSetup()
                 settingsMap[has_gps] = 1;
             }
         }
+        if (yamlConfig["I2C"]) {
+            settingsStrings[i2cdev] = yamlConfig["I2C"]["I2CDevice"].as<std::string>("");
+        }
         settingsMap[displayPanel] = no_screen;
         if (yamlConfig["Display"]) {
             if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ST7789")
