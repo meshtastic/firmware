@@ -16,6 +16,7 @@ enum configNames {
     user,
     gpiochip,
     spidev,
+    i2cdev,
     has_gps,
     touchscreenModule,
     touchscreenCS,
