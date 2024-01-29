@@ -5,6 +5,7 @@
 #include "concurrency/OSThread.h"
 #include "mesh/Channels.h"
 #include "mesh/generated/meshtastic/mqtt.pb.h"
+#include "mqtt/JSON.h"
 #if HAS_WIFI
 #include <WiFiClient.h>
 #define HAS_NETWORKING 1
@@ -99,6 +100,9 @@ class MQTT : private concurrency::OSThread
 
     void publishStatus();
     void publishQueuedMessages();
+
+    // returns true if this is a valid JSON envelope which we accept on downlink
+    bool isValidJsonEnvelope(JSONObject &json);
 
     /// Return 0 if sleep is okay, veto sleep if we are connected to pubsub server
     // int preflightSleepCb(void *unused = NULL) { return pubSub.connected() ? 1 : 0; }
