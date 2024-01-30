@@ -248,6 +248,11 @@ void setup()
     digitalWrite(PIN_EINK_PWR_ON, HIGH);
 #endif
 
+#if defined(LORA_TCXO_GPIO)
+    pinMode(LORA_TCXO_GPIO, OUTPUT);
+    digitalWrite(LORA_TCXO_GPIO, HIGH);
+#endif
+
 #ifdef ST7735_BL_V03 // Heltec Wireless Tracker PCB Change Detect/Hack
 
     rtc_clk_32k_enable(true);
