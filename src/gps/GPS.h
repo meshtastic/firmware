@@ -103,11 +103,12 @@ class GPS : private concurrency::OSThread
     static const uint8_t _message_JAM[];
     static const uint8_t _message_NAVX5[];
     static const uint8_t _message_1HZ[];
-    static const uint8_t _message_GGL[];
+    static const uint8_t _message_GLL[];
     static const uint8_t _message_GSA[];
     static const uint8_t _message_GSV[];
     static const uint8_t _message_VTG[];
     static const uint8_t _message_RMC[];
+    static const uint8_t _message_AID[];
     static const uint8_t _message_GGA[];
     static const uint8_t _message_PMS[];
     static const uint8_t _message_SAVE[];
