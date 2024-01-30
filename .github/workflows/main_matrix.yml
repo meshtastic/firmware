@@ -64,6 +64,7 @@ jobs:
           - board: tlora-v1
           - board: tlora_v1_3
           - board: tlora-v2-1-1_6
+          - board: tlora-v2-1-1_6-tcxo
           - board: tlora-v2-1-1_8
           - board: tbeam
           - board: heltec-ht62-esp32c3-sx1262
