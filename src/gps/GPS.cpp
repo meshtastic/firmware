@@ -1121,6 +1121,10 @@ bool GPS::lookForLocation()
               reader.date.age(), reader.time.age());
 #endif // GPS_EXTRAVERBOSE
 
+    // Is this a new point or are we re-reading the previous one?
+    if (!reader.location.isUpdated())
+        return false;
+    
     // check if a complete GPS solution set is available for reading
     //   tinyGPSDatum::age() also includes isValid() test
     // FIXME
@@ -1132,10 +1136,6 @@ bool GPS::lookForLocation()
         LOG_WARN("SOME data is TOO OLD: LOC %u, TIME %u, DATE %u\n", reader.location.age(), reader.time.age(), reader.date.age());
         return false;
     }
-
-    // Is this a new point or are we re-reading the previous one?
-    if (!reader.location.isUpdated())
-        return false;
 
     // We know the solution is fresh and valid, so just read the data
     auto loc = reader.location.value();
