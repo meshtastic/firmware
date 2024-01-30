@@ -113,7 +113,15 @@ void portduinoSetup()
 
     try {
         if (yamlConfig["Logging"]) {
-            settingsMap[debugmode] = yamlConfig["Logging"]["DebugMode"].as<bool>(false);
+            if (yamlConfig["Logging"]["LogLevel"].as<std::string>("info") == "debug") {
+                settingsMap[logoutputlevel] = level_debug;
+            } else if (yamlConfig["Logging"]["LogLevel"].as<std::string>("info") == "info") {
+                settingsMap[logoutputlevel] = level_info;
+            } else if (yamlConfig["Logging"]["LogLevel"].as<std::string>("info") == "warn") {
+                settingsMap[logoutputlevel] = level_warn;
+            } else if (yamlConfig["Logging"]["LogLevel"].as<std::string>("info") == "error") {
+                settingsMap[logoutputlevel] = level_error;
+            }
         }
         if (yamlConfig["Lora"]) {
             settingsMap[use_sx1262] = false;
