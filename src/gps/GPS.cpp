@@ -1118,7 +1118,7 @@ bool GPS::lookForLocation()
     // Is this a new point or are we re-reading the previous one?
     if (!reader.location.isUpdated())
         return false;
-    
+
     // check if a complete GPS solution set is available for reading
     //   tinyGPSDatum::age() also includes isValid() test
     // FIXME
