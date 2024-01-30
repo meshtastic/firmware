@@ -251,17 +251,9 @@ int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
 bool GPS::setup()
 {
     int msglen = 0;
-    bool isProblematicGPS = false;
 
     if (!didSerialInit) {
 #if !defined(GPS_UC6580)
-#ifdef HAS_PMU
-        // The T-Beam 1.2 has issues with the GPS
-        if (HW_VENDOR == meshtastic_HardwareModel_TBEAM && PMU->getChipModel() == XPOWERS_AXP2101) {
-            gnssModel = GNSS_MODEL_UBLOX;
-            isProblematicGPS = true;
-        }
-#endif
 
 #if defined(RAK4630) && defined(PIN_3V3_EN)
         // If we are using the RAK4630 and we have no other peripherals on the I2C bus or module interest in 3V3_S,
@@ -380,7 +372,7 @@ bool GPS::setup()
                 LOG_WARN("Unable to set GPS update rate.\n");
             }
 
-            msglen = makeUBXPacket(0x06, 0x01, sizeof(_message_GGL), _message_GGL);
+            msglen = makeUBXPacket(0x06, 0x01, sizeof(_message_GLL), _message_GLL);
             _serial_gps->write(UBXscratch, msglen);
             if (getACK(0x06, 0x01, 300) != GNSS_RESPONSE_OK) {
                 LOG_WARN("Unable to disable NMEA GGL.\n");
@@ -416,6 +408,12 @@ bool GPS::setup()
                 LOG_WARN("Unable to enable NMEA GGA.\n");
             }
 
+            msglen = makeUBXPacket(0x06, 0x01, sizeof(_message_AID), _message_AID);
+            _serial_gps->write(UBXscratch, msglen);
+            if (getACK(0x06, 0x01, 300) != GNSS_RESPONSE_OK) {
+                LOG_WARN("Unable to disable UBX-AID.\n");
+            }
+
             if (uBloxProtocolVersion >= 18) {
                 msglen = makeUBXPacket(0x06, 0x86, sizeof(_message_PMS), _message_PMS);
                 _serial_gps->write(UBXscratch, msglen);
@@ -423,36 +421,31 @@ bool GPS::setup()
                     LOG_WARN("Unable to enable powersaving for GPS.\n");
                 }
             } else {
-                if (!(isProblematicGPS)) {
-                    if (strncmp(info.hwVersion, "00040007", 8) == 0) { // This PSM mode has only been tested on this hardware
-                        msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_PSM);
-                        _serial_gps->write(UBXscratch, msglen);
-                        if (getACK(0x06, 0x11, 300) != GNSS_RESPONSE_OK) {
-                            LOG_WARN("Unable to enable powersaving mode for GPS.\n");
-                        }
-                        msglen = makeUBXPacket(0x06, 0x3B, 44, _message_CFG_PM2);
-                        _serial_gps->write(UBXscratch, msglen);
-                        if (getACK(0x06, 0x3B, 300) != GNSS_RESPONSE_OK) {
-                            LOG_WARN("Unable to enable powersaving details for GPS.\n");
-                        }
-                    } else {
-                        msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_ECO);
-                        _serial_gps->write(UBXscratch, msglen);
-                        if (getACK(0x06, 0x11, 300) != GNSS_RESPONSE_OK) {
-                            LOG_WARN("Unable to enable powersaving ECO mode for GPS.\n");
-                        }
+                if (strncmp(info.hwVersion, "00040007", 8) == 0) { // This PSM mode is only for Neo-6
+                    msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_ECO);
+                    _serial_gps->write(UBXscratch, msglen);
+                    if (getACK(0x06, 0x11, 300) != GNSS_RESPONSE_OK) {
+                        LOG_WARN("Unable to enable powersaving ECO mode for Neo-6.\n");
+                    }
+                    msglen = makeUBXPacket(0x06, 0x3B, 44, _message_CFG_PM2);
+                    _serial_gps->write(UBXscratch, msglen);
+                    if (getACK(0x06, 0x3B, 300) != GNSS_RESPONSE_OK) {
+                        LOG_WARN("Unable to enable powersaving details for GPS.\n");
+                    }
+                } else {
+                    msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_PSM);
+                    _serial_gps->write(UBXscratch, msglen);
+                    if (getACK(0x06, 0x11, 300) != GNSS_RESPONSE_OK) {
+                        LOG_WARN("Unable to enable powersaving mode for GPS.\n");
                     }
                 }
             }
-            // The T-beam 1.2 has issues.
-            if (!(isProblematicGPS)) {
-                msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
-                _serial_gps->write(UBXscratch, msglen);
-                if (getACK(0x06, 0x09, 300) != GNSS_RESPONSE_OK) {
-                    LOG_WARN("Unable to save GNSS module configuration.\n");
-                } else {
-                    LOG_INFO("GNSS module configuration saved!\n");
-                }
+            msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
+            _serial_gps->write(UBXscratch, msglen);
+            if (getACK(0x06, 0x09, 2000) != GNSS_RESPONSE_OK) {
+                LOG_WARN("Unable to save GNSS module configuration.\n");
+            } else {
+                LOG_INFO("GNSS module configuration saved!\n");
             }
         }
         didSerialInit = true;
@@ -682,7 +675,8 @@ int32_t GPS::runOnce()
     // At least one GPS has a bad habit of losing its mind from time to time
     if (rebootsSeen > 2) {
         rebootsSeen = 0;
-        gps->factoryReset();
+        LOG_DEBUG("Would normally factoryReset()\n");
+        // gps->factoryReset();
     }
 
     // If we are overdue for an update, turn on the GPS and at least publish the current status
