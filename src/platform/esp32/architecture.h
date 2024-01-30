@@ -127,6 +127,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_HT62
 #elif defined(CHATTER_2)
 #define HW_VENDOR meshtastic_HardwareModel_CHATTER_2
+#elif defined(TLORA_V1_6_1_TCXO)
+#define HW_VENDOR meshtastic_HardwareModel_TLORA_V1_6_1_TCXO
 #endif
 
 // -----------------------------------------------------------------------------

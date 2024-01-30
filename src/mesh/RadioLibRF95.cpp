@@ -25,8 +25,9 @@ int16_t RadioLibRF95::begin(float freq, float bw, uint8_t sf, uint8_t cr, uint8_
     RADIOLIB_ASSERT(state);
 
 #ifdef RF95_TCXO
-    state = _mod->SPIsetRegValue(RADIOLIB_SX127X_REG_TCXO, 0x10 | _mod->SPIgetRegValue(RADIOLIB_SX127X_REG_TCXO));
-    RADIOLIB_ASSERT(state);
+    // There is no variant to use this, comment it out
+    // state = _mod->SPIsetRegValue(RADIOLIB_SX127X_REG_TCXO, 0x10 | _mod->SPIgetRegValue(RADIOLIB_SX127X_REG_TCXO));
+    // RADIOLIB_ASSERT(state);
 #endif
 
     // configure publicly accessible settings
