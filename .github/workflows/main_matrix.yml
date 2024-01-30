@@ -247,7 +247,7 @@ jobs:
         id: version
 
       - name: Move files up
-        run: mv -b -t ./ ./*tbeam-2*/littlefs*.bin ./*tbeam-2*/bleota.bin ./*tbeam-s3*/bleota-s3.bin ./**/firmware*.bin ./*t-echo*/Meshtastic_nRF52_factory_erase.uf2 ./**/firmware-*.uf2 ./**/firmware-*-ota.zip ./**/*.elf ./*native*/*device-*.sh ./*native*/*device-*.bat ./firmware-raspbian-*/release/meshtasticd_linux_aarch64 ./firmware-raspbian-*/bin/config-dist.yaml
+        run: mv -b -t ./ ./*tbeam-2*/littlefs*.bin ./*tbeam-2*/bleota.bin ./*tbeam-s3*/bleota-s3.bin ./**/firmware*.bin ./*t-echo*/Meshtastic_nRF52_factory_erase_v2.uf2 ./**/firmware-*.uf2 ./**/firmware-*-ota.zip ./**/*.elf ./*native*/*device-*.sh ./*native*/*device-*.bat ./firmware-raspbian-*/release/meshtasticd_linux_aarch64 ./firmware-raspbian-*/bin/config-dist.yaml
 
       - name: Repackage in single firmware zip
         uses: actions/upload-artifact@v3

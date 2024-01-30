@@ -3,6 +3,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include <FSCommon.h>
 #ifdef ARCH_ESP32
 #include "BleOta.h"
 #endif
@@ -192,6 +193,15 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #if defined(ARCH_NRF52) || defined(ARCH_RP2040)
         enterDfuMode();
 #endif
+        break;
+    }
+    case meshtastic_AdminMessage_delete_file_request_tag: {
+        LOG_DEBUG("Client is requesting to delete file: %s\n", r->delete_file_request);
+        if (FSCom.remove(r->delete_file_request)) {
+            LOG_DEBUG("Successfully deleted file\n");
+        } else {
+            LOG_DEBUG("Failed to delete file\n");
+        }
         break;
     }
 #ifdef ARCH_PORTDUINO
