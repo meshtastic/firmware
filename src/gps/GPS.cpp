@@ -252,6 +252,11 @@ bool GPS::setup()
 {
     int msglen = 0;
 
+    if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
+        LOG_INFO("GPS set to not-present. Skipping probe\n");
+        return false;
+    }
+
     if (!didSerialInit) {
 #if !defined(GPS_UC6580)
 
