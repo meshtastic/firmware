@@ -182,7 +182,11 @@ void NodeDB::installDefaultConfig()
 #else
     config.device.disable_triple_click = true;
 #endif
+#if HAS_GPS == 0
+    config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT;
+#else
     config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+#endif
     config.position.position_broadcast_smart_enabled = true;
     config.position.broadcast_smart_minimum_distance = 100;
     config.position.broadcast_smart_minimum_interval_secs = 30;
@@ -452,6 +456,11 @@ void NodeDB::init()
     if (!devicestate.node_remote_hardware_pins) {
         meshtastic_NodeRemoteHardwarePin empty[12] = {meshtastic_RemoteHardwarePin_init_default};
         memcpy(devicestate.node_remote_hardware_pins, empty, sizeof(empty));
+    }
+
+    if (config.position.gps_enabled) {
+        config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+        config.position.gps_enabled = 0;
     }
 
     saveToDisk(saveWhat);

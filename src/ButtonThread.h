@@ -193,26 +193,8 @@ class ButtonThread : public concurrency::OSThread
     static void userButtonMultiPressed()
     {
         if (!config.device.disable_triple_click && (gps != nullptr)) {
-            config.position.gps_mode = toggleGpsMode(config.position.gps_mode);
-            if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
-                LOG_DEBUG("Flag set to true to restore power\n");
-                gps->enable();
-
-            } else {
-                LOG_DEBUG("Flag set to false for gps power\n");
-                gps->disable();
-            }
+            gps->toggleGpsMode();
         }
-    }
-
-    static meshtastic_Config_PositionConfig_GpsMode toggleGpsMode(meshtastic_Config_PositionConfig_GpsMode currentMode)
-    {
-        if (currentMode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT)
-            return meshtastic_Config_PositionConfig_GpsMode_DISABLED;
-        else if (currentMode == meshtastic_Config_PositionConfig_GpsMode_DISABLED)
-            return meshtastic_Config_PositionConfig_GpsMode_ENABLED;
-
-        return meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT;
     }
 
     static void userButtonPressedLongStart()

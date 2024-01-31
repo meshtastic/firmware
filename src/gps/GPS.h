@@ -90,6 +90,8 @@ class GPS : private concurrency::OSThread
     CallbackObserver<GPS, void *> notifyDeepSleepObserver = CallbackObserver<GPS, void *>(this, &GPS::prepareDeepSleep);
     CallbackObserver<GPS, void *> notifyGPSSleepObserver = CallbackObserver<GPS, void *>(this, &GPS::prepareDeepSleep);
 
+    void toggleGpsMode();
+
   public:
     /** If !NULL we will use this serial port to construct our GPS */
     static HardwareSerial *_serial_gps;
