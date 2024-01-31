@@ -561,10 +561,13 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
 // Draw status when gps is disabled by PMU
 static void drawGPSpowerstat(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
-    String displayLine = "GPS disabled";
+    String displayLine = "GPS power save";
+    if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
+        displayLine = "GPS not present";
+    }
     int16_t xPos = display->getStringWidth(displayLine);
 
-    if (!config.position.gps_enabled) {
+    if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         display->drawString(x + xPos, y, displayLine);
     }
 }
@@ -1549,7 +1552,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 3, nodeStatus);
     }
     // Display GPS status
-    if (!config.position.gps_enabled) {
+    if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         drawGPSpowerstat(display, x, y + 2, gpsStatus);
     } else {
         if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
@@ -1777,7 +1780,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     char chUtil[13];
     snprintf(chUtil, sizeof(chUtil), "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), y + FONT_HEIGHT_SMALL * 1, chUtil);
-    if (config.position.gps_enabled) {
+    if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         // Line 3
         if (config.display.gps_format !=
             meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DMS) // if DMS then don't draw altitude

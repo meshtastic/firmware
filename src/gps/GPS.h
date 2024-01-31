@@ -144,7 +144,7 @@ class GPS : private concurrency::OSThread
     /// Return true if we are connected to a GPS
     bool isConnected() const { return hasGPS; }
 
-    bool isPowerSaving() const { return !config.position.gps_enabled; }
+    bool isPowerSaving() const { return config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED; }
 
     // Empty the input buffer as quickly as possible
     void clearBuffer();

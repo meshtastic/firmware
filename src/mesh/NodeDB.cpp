@@ -182,7 +182,7 @@ void NodeDB::installDefaultConfig()
 #else
     config.device.disable_triple_click = true;
 #endif
-    config.position.gps_enabled = true;
+    config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
     config.position.position_broadcast_smart_enabled = true;
     config.position.broadcast_smart_minimum_distance = 100;
     config.position.broadcast_smart_minimum_interval_secs = 30;
