@@ -16,8 +16,8 @@
  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-#ifndef _VARIANT_CANARY_V1_0_
-#define _VARIANT_CANARY_V1_0_
+#ifndef _VARIANT_CANARYONE
+#define _VARIANT_CANARYONE
 
 /** Master clock frequency */
 #define VARIANT_MCK (64000000ul)
@@ -34,7 +34,7 @@
 extern "C" {
 #endif // __cplusplus
 
-#define CANARY_V1_0
+#define CANARYONE
 
 #define GPIO_PORT0 0
 #define GPIO_PORT1 32

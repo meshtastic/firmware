@@ -8,9 +8,9 @@
     "extra_flags": "-DARDUINO_NRF52840_CANARY -DNRF52840_XXAA",
     "f_cpu": "64000000L",
     "hwids": [["0x239A", "0x4405"]],
-    "usb_product": "Canary",
+    "usb_product": "CanaryOne",
     "mcu": "nrf52840",
-    "variant": "canary",
+    "variant": "canaryone",
     "variants_dir": "variants",
     "bsp": {
       "name": "adafruit"

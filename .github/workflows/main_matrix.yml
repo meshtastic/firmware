@@ -111,7 +111,7 @@ jobs:
           - board: rak4631_eink
           - board: monteops_hw1
           - board: t-echo
-          - board: canary
+          - board: canaryone
           - board: pca10059_diy_eink
           - board: feather_diy
           - board: nano-g2-ultra
