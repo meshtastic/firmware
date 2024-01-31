@@ -108,6 +108,15 @@ typedef enum _meshtastic_Config_PositionConfig_PositionFlags {
     meshtastic_Config_PositionConfig_PositionFlags_SPEED = 512
 } meshtastic_Config_PositionConfig_PositionFlags;
 
+typedef enum _meshtastic_Config_PositionConfig_GpsMode {
+    /* GPS is present but disabled */
+    meshtastic_Config_PositionConfig_GpsMode_DISABLED = 0,
+    /* GPS is present and enabled */
+    meshtastic_Config_PositionConfig_GpsMode_ENABLED = 1,
+    /* GPS is not present on the device */
+    meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT = 2
+} meshtastic_Config_PositionConfig_GpsMode;
+
 typedef enum _meshtastic_Config_NetworkConfig_AddressMode {
     /* obtain ip address via DHCP */
     meshtastic_Config_NetworkConfig_AddressMode_DHCP = 0,
@@ -300,6 +309,8 @@ typedef struct _meshtastic_Config_PositionConfig {
     uint32_t broadcast_smart_minimum_interval_secs;
     /* (Re)define PIN_GPS_EN for your board. */
     uint32_t gps_en_gpio;
+    /* Set where GPS is enabled, disabled, or not present */
+    meshtastic_Config_PositionConfig_GpsMode gps_mode;
 } meshtastic_Config_PositionConfig;
 
 /* Power Config\
@@ -507,6 +518,10 @@ extern "C" {
 #define _meshtastic_Config_PositionConfig_PositionFlags_MAX meshtastic_Config_PositionConfig_PositionFlags_SPEED
 #define _meshtastic_Config_PositionConfig_PositionFlags_ARRAYSIZE ((meshtastic_Config_PositionConfig_PositionFlags)(meshtastic_Config_PositionConfig_PositionFlags_SPEED+1))
 
+#define _meshtastic_Config_PositionConfig_GpsMode_MIN meshtastic_Config_PositionConfig_GpsMode_DISABLED
+#define _meshtastic_Config_PositionConfig_GpsMode_MAX meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT
+#define _meshtastic_Config_PositionConfig_GpsMode_ARRAYSIZE ((meshtastic_Config_PositionConfig_GpsMode)(meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT+1))
+
 #define _meshtastic_Config_NetworkConfig_AddressMode_MIN meshtastic_Config_NetworkConfig_AddressMode_DHCP
 #define _meshtastic_Config_NetworkConfig_AddressMode_MAX meshtastic_Config_NetworkConfig_AddressMode_STATIC
 #define _meshtastic_Config_NetworkConfig_AddressMode_ARRAYSIZE ((meshtastic_Config_NetworkConfig_AddressMode)(meshtastic_Config_NetworkConfig_AddressMode_STATIC+1))
@@ -543,6 +558,7 @@ extern "C" {
 #define meshtastic_Config_DeviceConfig_role_ENUMTYPE meshtastic_Config_DeviceConfig_Role
 #define meshtastic_Config_DeviceConfig_rebroadcast_mode_ENUMTYPE meshtastic_Config_DeviceConfig_RebroadcastMode
 
+#define meshtastic_Config_PositionConfig_gps_mode_ENUMTYPE meshtastic_Config_PositionConfig_GpsMode
 
 
 #define meshtastic_Config_NetworkConfig_address_mode_ENUMTYPE meshtastic_Config_NetworkConfig_AddressMode
@@ -562,7 +578,7 @@ extern "C" {
 /* Initializer values for message structs */
 #define meshtastic_Config_init_default           {0, {meshtastic_Config_DeviceConfig_init_default}}
 #define meshtastic_Config_DeviceConfig_init_default {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0}
-#define meshtastic_Config_PositionConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_Config_PositionConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _meshtastic_Config_PositionConfig_GpsMode_MIN}
 #define meshtastic_Config_PowerConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_default {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_default, ""}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_default {0, 0, 0, 0}
@@ -571,7 +587,7 @@ extern "C" {
 #define meshtastic_Config_BluetoothConfig_init_default {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0}
 #define meshtastic_Config_init_zero              {0, {meshtastic_Config_DeviceConfig_init_zero}}
 #define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0}
-#define meshtastic_Config_PositionConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_Config_PositionConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _meshtastic_Config_PositionConfig_GpsMode_MIN}
 #define meshtastic_Config_PowerConfig_init_zero  {0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_zero {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_zero, ""}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_zero {0, 0, 0, 0}
@@ -602,6 +618,7 @@ extern "C" {
 #define meshtastic_Config_PositionConfig_broadcast_smart_minimum_distance_tag 10
 #define meshtastic_Config_PositionConfig_broadcast_smart_minimum_interval_secs_tag 11
 #define meshtastic_Config_PositionConfig_gps_en_gpio_tag 12
+#define meshtastic_Config_PositionConfig_gps_mode_tag 13
 #define meshtastic_Config_PowerConfig_is_power_saving_tag 1
 #define meshtastic_Config_PowerConfig_on_battery_shutdown_after_secs_tag 2
 #define meshtastic_Config_PowerConfig_adc_multiplier_override_tag 3
@@ -704,7 +721,8 @@ X(a, STATIC,   SINGULAR, UINT32,   rx_gpio,           8) \
 X(a, STATIC,   SINGULAR, UINT32,   tx_gpio,           9) \
 X(a, STATIC,   SINGULAR, UINT32,   broadcast_smart_minimum_distance,  10) \
 X(a, STATIC,   SINGULAR, UINT32,   broadcast_smart_minimum_interval_secs,  11) \
-X(a, STATIC,   SINGULAR, UINT32,   gps_en_gpio,      12)
+X(a, STATIC,   SINGULAR, UINT32,   gps_en_gpio,      12) \
+X(a, STATIC,   SINGULAR, UENUM,    gps_mode,         13)
 #define meshtastic_Config_PositionConfig_CALLBACK NULL
 #define meshtastic_Config_PositionConfig_DEFAULT NULL
 
@@ -810,7 +828,7 @@ extern const pb_msgdesc_t meshtastic_Config_BluetoothConfig_msg;
 #define meshtastic_Config_LoRaConfig_size        80
 #define meshtastic_Config_NetworkConfig_IpV4Config_size 20
 #define meshtastic_Config_NetworkConfig_size     196
-#define meshtastic_Config_PositionConfig_size    60
+#define meshtastic_Config_PositionConfig_size    62
 #define meshtastic_Config_PowerConfig_size       40
 #define meshtastic_Config_size                   199
 
