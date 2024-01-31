@@ -132,7 +132,7 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                 // Generate an implicit ACK towards ourselves (handled and processed only locally!) for this message.
                 // We do this because packets are not rebroadcasted back into MQTT anymore and we assume that at least one node
                 // receives it when we get our own packet back. Then we'll stop our retransmissions.
-                if (e.packet && getFrom(e.packet) == nodeDB.getNodeNum() && e.packet->to == NODENUM_BROADCAST)
+                if (e.packet && getFrom(e.packet) == nodeDB.getNodeNum())
                     routingModule->sendAckNak(meshtastic_Routing_Error_NONE, getFrom(e.packet), e.packet->id, ch.index);
                 else
                     LOG_INFO("Ignoring downlink message we originally sent.\n");
