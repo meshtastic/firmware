@@ -64,7 +64,7 @@ typedef enum _meshtastic_HardwareModel {
     /* LoRAType device: https://loratype.org/ */
     meshtastic_HardwareModel_LORA_TYPE = 19,
     /* CanaryRadio.io LLC Handheld https://canaryradio.io */
-    meshtastic_HardwareModel_CANARY_V1_0 = 22,
+    meshtastic_HardwareModel_CANARYONE = 22,
     /* B&Q Consulting Station Edition G1: https://uniteng.com/wiki/doku.php?id=meshtastic:station */
     meshtastic_HardwareModel_STATION_G1 = 25,
     /* RAK11310 (RP2040 + SX1262) */
