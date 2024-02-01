@@ -562,8 +562,8 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
 static void drawGPSpowerstat(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
     String displayLine = "GPS power save";
-    if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
-        displayLine = "GPS not present";
+    if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
+        displayLine = "No GPS Module";
     }
     int16_t xPos = display->getStringWidth(displayLine);
 
@@ -1790,9 +1790,6 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
         drawGPScoordinates(display, x, y + FONT_HEIGHT_SMALL * 3, gpsStatus);
     } else {
         drawGPSpowerstat(display, x - (SCREEN_WIDTH / 4), y + FONT_HEIGHT_SMALL * 2, gpsStatus);
-#ifdef GPS_POWER_TOGGLE
-        display->drawString(x + 30, (y + FONT_HEIGHT_SMALL * 3), " by button");
-#endif
     }
     /* Display a heartbeat pixel that blinks every time the frame is redrawn */
 #ifdef SHOW_REDRAWS
