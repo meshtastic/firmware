@@ -685,7 +685,8 @@ void setup()
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 
     // If we're taking on the repeater role, ignore GPS
-    if (config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER) {
+    if (config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER &&
+        config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
         gps = GPS::createGps();
     }
     if (gps) {
