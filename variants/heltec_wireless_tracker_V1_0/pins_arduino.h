@@ -5,8 +5,8 @@
 #include <stdint.h>
 
 #define WIFI_LoRa_32_V3 true
-#define DISPLAY_HEIGHT 64
-#define DISPLAY_WIDTH 128
+#define DISPLAY_HEIGHT 80
+#define DISPLAY_WIDTH 160
 
 #define USB_VID 0x303a
 #define USB_PID 0x1001

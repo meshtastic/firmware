@@ -182,19 +182,15 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #ifdef ARCH_ESP32
 #ifndef BAT_MEASURE_ADC_UNIT // ADC1
 #ifdef ADC_CTRL
-            if (heltec_version == 5) {
-                pinMode(ADC_CTRL, OUTPUT);
-                digitalWrite(ADC_CTRL, HIGH);
-                delay(10);
-            }
+            pinMode(ADC_CTRL, OUTPUT);
+            digitalWrite(ADC_CTRL, HIGH);
+            delay(10);
 #endif
             for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
                 raw += adc1_get_raw(adc_channel);
             }
 #ifdef ADC_CTRL
-            if (heltec_version == 5) {
-                digitalWrite(ADC_CTRL, LOW);
-            }
+            digitalWrite(ADC_CTRL, LOW);
 #endif
 #else  // ADC2
             int32_t adc_buf = 0;
