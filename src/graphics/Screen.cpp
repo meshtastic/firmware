@@ -558,18 +558,20 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
     }
 }
 
-// Draw status when gps is disabled by PMU
+// Draw status when GPS is disabled or not present
 static void drawGPSpowerstat(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
-    String displayLine = "GPS power save";
-    if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
-        displayLine = "No GPS Module";
+    String displayLine;
+    int pos;
+    if (y < FONT_HEIGHT_SMALL) { // Line 1: use short string
+        displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
+        pos = SCREEN_WIDTH - display->getStringWidth(displayLine);
+    } else {
+        displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "GPS not present"
+                                                                                                       : "GPS is disabled";
+        pos = (SCREEN_WIDTH - display->getStringWidth(displayLine)) / 2;
     }
-    int16_t xPos = display->getStringWidth(displayLine);
-
-    if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
-        display->drawString(x + xPos, y, displayLine);
-    }
+    display->drawString(x + pos, y, displayLine);
 }
 
 static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
@@ -597,7 +599,7 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
     String displayLine = "";
 
     if (!gps->getIsConnected() && !config.position.fixed_position) {
-        displayLine = "No GPS Module";
+        displayLine = "No GPS present";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else if (!gps->getHasLock() && !config.position.fixed_position) {
         displayLine = "No GPS Lock";
@@ -1789,7 +1791,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
         // Line 4
         drawGPScoordinates(display, x, y + FONT_HEIGHT_SMALL * 3, gpsStatus);
     } else {
-        drawGPSpowerstat(display, x - (SCREEN_WIDTH / 4), y + FONT_HEIGHT_SMALL * 2, gpsStatus);
+        drawGPSpowerstat(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
     }
     /* Display a heartbeat pixel that blinks every time the frame is redrawn */
 #ifdef SHOW_REDRAWS
