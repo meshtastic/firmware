@@ -71,6 +71,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_SENSELORA_RP2040 = 27,
     /* Makerfabs SenseLoRA Industrial Monitor (ESP32-S3 + RFM96) */
     meshtastic_HardwareModel_SENSELORA_S3 = 28,
+    /* Canary Radio Company - CanaryOne: https://canaryradio.io/products/canaryone */
+    meshtastic_HardwareModel_CANARYONE = 29,
     /* ---------------------------------------------------------------------------
  Less common/prototype boards listed here (needs one more byte over the air)
  --------------------------------------------------------------------------- */
