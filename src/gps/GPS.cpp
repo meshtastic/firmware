@@ -604,7 +604,7 @@ uint32_t GPS::getSleepTime() const
     uint32_t t = config.position.gps_update_interval;
 
     // We'll not need the GPS thread to wake up again after first acq. with fixed position.
-    if (!config.position.gps_enabled || config.position.fixed_position)
+    if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED || config.position.fixed_position)
         t = UINT32_MAX; // Sleep forever now
 
     if (t == UINT32_MAX)
@@ -625,21 +625,24 @@ void GPS::publishUpdate()
         // Notify any status instances that are observing us
         const meshtastic::GPSStatus status = meshtastic::GPSStatus(hasValidLocation, isConnected(), isPowerSaving(), p);
         newStatus.notifyObservers(&status);
-        if (config.position.gps_enabled)
+        if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
             positionModule->handleNewPosition();
+        }
     }
 }
 
 int32_t GPS::runOnce()
 {
     if (!GPSInitFinished) {
-        if (!_serial_gps)
+        if (!_serial_gps || config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
+            LOG_INFO("GPS set to not-present. Skipping probe.\n");
             return disable();
+        }
         if (!setup())
             return 2000; // Setup failed, re-run in two seconds
 
         // We have now loaded our saved preferences from flash
-        if (config.position.gps_enabled == false) {
+        if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
             return disable();
         }
         // ONCE we will factory reset the GPS for bug #327
@@ -662,7 +665,7 @@ int32_t GPS::runOnce()
         // if we have received valid NMEA claim we are connected
         setConnected();
     } else {
-        if ((config.position.gps_enabled == 1) && (gnssModel == GNSS_MODEL_UBLOX)) {
+        if ((config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) && (gnssModel == GNSS_MODEL_UBLOX)) {
             // reset the GPS on next bootup
             if (devicestate.did_gps_reset && (millis() - lastWakeStartMsec > 60000) && !hasFlow()) {
                 LOG_DEBUG("GPS is not communicating, trying factory reset on next bootup.\n");
@@ -902,7 +905,7 @@ GPS *GPS::createGps()
     int8_t _rx_gpio = config.position.rx_gpio;
     int8_t _tx_gpio = config.position.tx_gpio;
     int8_t _en_gpio = config.position.gps_en_gpio;
-#if defined(HAS_GPS) && !defined(ARCH_ESP32)
+#if HAS_GPS && !defined(ARCH_ESP32)
     _rx_gpio = 1; // We only specify GPS serial ports on ESP32. Otherwise, these are just flags.
     _tx_gpio = 1;
 #endif
@@ -1098,7 +1101,7 @@ bool GPS::lookForLocation()
 
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
     fixType = atoi(gsafixtype.value()); // will set to zero if no data
-    // LOG_DEBUG("FIX QUAL=%d, TYPE=%d\n", fixQual, fixType);
+                                        // LOG_DEBUG("FIX QUAL=%d, TYPE=%d\n", fixQual, fixType);
 #endif
 
     // check if GPS has an acceptable lock
@@ -1280,4 +1283,17 @@ int32_t GPS::disable()
     setAwake(false);
 
     return INT32_MAX;
+}
+
+void GPS::toggleGpsMode()
+{
+    if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+        config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
+        LOG_DEBUG("Flag set to false for gps power. GpsMode: DISABLED\n");
+        disable();
+    } else if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED) {
+        config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+        LOG_DEBUG("Flag set to true to restore power. GpsMode: ENABLED\n");
+        enable();
+    }
 }
