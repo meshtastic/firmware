@@ -60,6 +60,11 @@ GPIO:
 GPS:
 #  SerialPath: /dev/ttyS0
 
+### Specify I2C device, or leave blank for none
+
+I2C:
+#  I2CDevice: /dev/i2c-1
+
 ### Set up SPI displays here. Note that I2C displays are generally auto-detected.
 
 Display:
@@ -99,4 +104,4 @@ Input:
 ###
 
 Logging:
-#  DebugMode: true
+  LogLevel: info # debug, info, warn, error

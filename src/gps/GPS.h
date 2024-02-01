@@ -103,11 +103,12 @@ class GPS : private concurrency::OSThread
     static const uint8_t _message_JAM[];
     static const uint8_t _message_NAVX5[];
     static const uint8_t _message_1HZ[];
-    static const uint8_t _message_GGL[];
+    static const uint8_t _message_GLL[];
     static const uint8_t _message_GSA[];
     static const uint8_t _message_GSV[];
     static const uint8_t _message_VTG[];
     static const uint8_t _message_RMC[];
+    static const uint8_t _message_AID[];
     static const uint8_t _message_GGA[];
     static const uint8_t _message_PMS[];
     static const uint8_t _message_SAVE[];
@@ -132,6 +133,9 @@ class GPS : private concurrency::OSThread
     // Disable the thread
     int32_t disable() override;
 
+    // toggle between enabled/disabled
+    void toggleGpsMode();
+
     void setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime);
 
     /// Returns true if we have acquired GPS lock.
@@ -143,7 +147,7 @@ class GPS : private concurrency::OSThread
     /// Return true if we are connected to a GPS
     bool isConnected() const { return hasGPS; }
 
-    bool isPowerSaving() const { return !config.position.gps_enabled; }
+    bool isPowerSaving() const { return config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED; }
 
     // Empty the input buffer as quickly as possible
     void clearBuffer();
