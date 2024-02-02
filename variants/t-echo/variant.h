@@ -43,16 +43,16 @@ extern "C" {
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LEDs
-#define PIN_LED1 (0 + 14) // blue (confirmed on boards marked v1.0, date 2021-6-28)
-#define PIN_LED2 (32 + 1) // green
+#define PIN_LED1 (32 + 1) // green (confirmed on boards marked v1.0, date 2021-6-28)
+#define PIN_LED2 (0 + 14) // blue
 #define PIN_LED3 (32 + 3) // red
 
 #define LED_RED PIN_LED3
-#define LED_BLUE PIN_LED1
-#define LED_GREEN PIN_LED2
+#define LED_BLUE PIN_LED2
+#define LED_GREEN PIN_LED1
 
-#define LED_BUILTIN LED_BLUE
-#define LED_CONN PIN_GREEN
+#define LED_BUILTIN LED_GREEN
+#define LED_CONN LED_BLUE
 
 #define LED_STATE_ON 0 // State when LED is lit
 #define LED_INVERTED 1

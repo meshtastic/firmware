@@ -246,10 +246,9 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.has_store_forward = true;
     moduleConfig.has_telemetry = true;
     moduleConfig.has_external_notification = true;
-#if defined(RAK4630) || defined(RAK11310)
-    // Default to RAK led pin 2 (blue)
+#if defined(RAK4630) || defined(RAK11310) || defined(TTGO_T_ECHO) // TODO #if defined(LED_BLUE) && (LED_BLUE > 0) ?
     moduleConfig.external_notification.enabled = true;
-    moduleConfig.external_notification.output = PIN_LED2;
+    moduleConfig.external_notification.output = LED_BLUE;
     moduleConfig.external_notification.active = true;
     moduleConfig.external_notification.alert_message = true;
     moduleConfig.external_notification.output_ms = 1000;
