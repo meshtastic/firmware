@@ -2,7 +2,15 @@ uint8_t GPS::_message_PMREQ[] PROGMEM = {
     0x00, 0x00, // 4 bytes duration of request task
     0x00, 0x00, // (milliseconds)
     0x02, 0x00, // Task flag bitfield
-    0x00, 0x00  // byte index 1 = sleep mode
+    0x00, 0x00, // byte index 1 = sleep mode
+};
+
+uint8_t GPS::_message_PMREQ_10[] PROGMEM = {
+    0x00, 0x00,                                    // 4 bytes duration of request task
+    0x00, 0x00,                                    // (milliseconds)
+    0x02, 0x00,                                    // Task flag bitfield
+    0x00, 0x00,                                    // byte index 1 = sleep mode
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 // wakeupSources
 };
 
 const uint8_t GPS::_message_CFG_RXM_PSM[] PROGMEM = {
@@ -21,8 +29,8 @@ const uint8_t GPS::_message_CFG_PM2[] PROGMEM = {
     0x00,                   // Reserved 1, set to 0x06 by u-Center
     0x00,                   // Reserved 2
     0x00,                   // Reserved 1
-    0x00, 0x11, 0x03, 0x00, // flags-> cyclic mode, wait for normal fix ok, do not wake to update RTC or EPH, doNotEnterOff,
-                            //    LimitPeakCurrent
+    0x00, 0x11, 0x03, 0x00, // flags-> cyclic mode, wait for normal fix ok, do not wake to update RTC, doNotEnterOff,
+                            // LimitPeakCurrent
     0xE8, 0x03, 0x00, 0x00, // update period 1000 ms
     0x10, 0x27, 0x00, 0x00, // search period 10s
     0x00, 0x00, 0x00, 0x00, // Grid offset 0
@@ -54,36 +62,63 @@ const uint8_t GPS::_message_GNSS_7[] = {
 // to overwrite a saved state with identical values, no ACK/NAK is received, contrary to
 // what is specified in the Ublox documentation.
 // There is also a possibility that the module may be GPS-only.
-const uint8_t GPS::_message_GNSS[] = {
-    0x00, // msgVer (0 for this version)
-    0x00, // numTrkChHw (max number of hardware channels, read only, so it's always 0)
-    0xff, // numTrkChUse (max number of channels to use, 0xff = max available)
-    0x03, // numConfigBlocks (number of GNSS systems), most modules support maximum 3 GNSS systems
-    // GNSS config format: gnssId, resTrkCh, maxTrkCh, reserved1, flags
+
+// For M8 GPS, GLONASS, Galileo, SBAS, QZSS
+const uint8_t GPS::_message_GNSS_8[] = {
+    0x00,                                           // msgVer (0 for this version)
+    0x00,                                           // numTrkChHw (max number of hardware channels, read only, so it's always 0)
+    0xff,                                           // numTrkChUse (max number of channels to use, 0xff = max available)
+    0x05,                                           // numConfigBlocks (number of GNSS systems)
+                                                    // GNSS config format: gnssId, resTrkCh, maxTrkCh, reserved1, flags
     0x00, 0x08, 0x10, 0x00, 0x01, 0x00, 0x01, 0x01, // GPS
     0x01, 0x01, 0x03, 0x00, 0x01, 0x00, 0x01, 0x01, // SBAS
-    0x06, 0x08, 0x0e, 0x00, 0x01, 0x00, 0x01, 0x01  // GLONASS
+    0x02, 0x04, 0x08, 0x00, 0x01, 0x00, 0x01, 0x01, // Galileo
+    0x05, 0x00, 0x03, 0x00, 0x01, 0x00, 0x01, 0x01, // QZSS
+    0x06, 0x08, 0x0E, 0x00, 0x01, 0x00, 0x01, 0x01  // GLONASS
+};
+/*
+// For M8 GPS, GLONASS, BeiDou, SBAS, QZSS
+const uint8_t GPS::_message_GNSS_8_B[] = {
+ 0x00, // msgVer (0 for this version)
+ 0x00, // numTrkChHw (max number of hardware channels, read only, so it's always 0)
+ 0xff, // numTrkChUse (max number of channels to use, 0xff = max available) read only for protocol >23
+ 0x05, // numConfigBlocks (number of GNSS systems)
+       // GNSS config format: gnssId, resTrkCh, maxTrkCh, reserved1, flags
+ 0x00, 0x08, 0x10, 0x00, 0x01, 0x00, 0x01, 0x01, // GPS
+ 0x01, 0x01, 0x03, 0x00, 0x01, 0x00, 0x01, 0x01, // SBAS
+ 0x03, 0x08, 0x10, 0x00, 0x01, 0x00, 0x01, 0x01, // BeiDou
+ 0x05, 0x00, 0x03, 0x00, 0x01, 0x00, 0x01, 0x01, // QZSS
+ 0x06, 0x08, 0x0E, 0x00, 0x01, 0x00, 0x01, 0x01  // GLONASS
+};
+*/
+
+// For M8 we want to enable NMEA version 4.10 messages to allow for Galileo and or BeiDou
+const uint8_t GPS::_message_NMEA[]{
+    0x00,                              // filter flags
+    0x41,                              // NMEA Version
+    0x00,                              // Max number of SVs to report per TaklerId
+    0x02,                              // flags
+    0x00, 0x00, 0x00, 0x00,            // gnssToFilter
+    0x00,                              // svNumbering
+    0x00,                              // mainTalkerId
+    0x00,                              // gsvTalkerId
+    0x01,                              // Message version
+    0x00, 0x00,                        // bdsTalkerId 2 chars 0=default
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00 // Reserved
 };
 // Enable jamming/interference monitor
 
-// For Neo-6
-const uint8_t GPS::_message_JAM[] = {
-    0xf3, 0xac, 0x62, 0xad, // config1 bbThreshold = 3, cwThreshold = 15, enable = 1, reserved bits 0x16B156
-    0x1e, 0x03, 0x00, 0x00  // config2 antennaSetting Unknown = 0, reserved 3, = 0x00,0x00, reserved 2 = 0x31E
-};
-/* // WIP GPS reconfig
 // For Neo-6, Max-7 and Neo-7
 const uint8_t GPS::_message_JAM_6_7[] = {
-    0xf3, 0xac, 0x62, 0xad,  // config1 bbThreshold = 3, cwThreshold = 15, enable = 1, reserved bits 0x16B156
-    0x1e, 0x03, 0x00, 0x00   // config2 antennaSetting Unknown = 0, reserved 3, = 0x00,0x00, reserved 2 = 0x31E
+    0xf3, 0xac, 0x62, 0xad, // config1 bbThreshold = 3, cwThreshold = 15, enable = 1, reserved bits 0x16B156
+    0x1e, 0x03, 0x00, 0x00  // config2 antennaSetting Unknown = 0, reserved 3, = 0x00,0x00, reserved 2 = 0x31E
 };
 
 // For M8
 const uint8_t GPS::_message_JAM_8[] = {
-    0xf3, 0xac, 0x62, 0xad,  // config1 bbThreshold = 3, cwThreshold = 15, enable1 = 1, reserved bits 0x16B156
-    0x1e, 0x43, 0x00, 0x00   // config2 antennaSetting Unknown = 0, enable2 = 1, generalBits = 0x31E
+    0xf3, 0xac, 0x62, 0xad, // config1 bbThreshold = 3, cwThreshold = 15, enable1 = 1, reserved bits 0x16B156
+    0x1e, 0x43, 0x00, 0x00  // config2 antennaSetting Unknown = 0, enable2 = 1, generalBits = 0x31E
 };
-*/
 
 // Configure navigation engine expert settings:
 // there are many variations of what were Reserved fields for the Neo-6 in later versions
@@ -118,11 +153,38 @@ const uint8_t GPS::_message_NAVX5[] = {
     0x00, 0x00,             // Reserved 3
     0x00, 0x00, 0x00, 0x00  // Reserved 4
 };
+// For the M8
+const uint8_t GPS::_message_NAVX5_8[] = {
+    0x02, 0x00,             // msgVer (2 for this version)
+    0x4c, 0x66,             // mask1
+    0x00, 0x00, 0x00, 0x00, // mask2
+    0x00, 0x00,             // Reserved 1
+    0x03,                   // minSVs (Minimum number of satellites for navigation) = 3
+    0x10,                   // maxSVs (Maximum number of satellites for navigation) = 16
+    0x06,                   // minCNO (Minimum satellite signal level for navigation) = 6 dBHz
+    0x00,                   // Reserved 2
+    0x00,                   // iniFix3D (Initial fix must be 3D) (0 = false 1 = true)
+    0x00, 0x00,             // Reserved 3
+    0x00,                   // ackAiding
+    0x00, 0x00,             // wknRollover 0 = firmware default
+    0x00,                   // sigAttenCompMode
+    0x00,                   // Reserved 4
+    0x00, 0x00,             // Reserved 5
+    0x00, 0x00,             // Reserved 6
+    0x00,                   // usePPP (Precice Point Positioning) (0 = false, 1 = true)
+    0x01,                   // aopCfg  (AssistNow Autonomous configuration) = 1 (enabled)
+    0x00, 0x00,             // Reserved 7
+    0x00, 0x00,             // aopOrbMaxErr = 0 to reset to firmware default
+    0x00, 0x00, 0x00, 0x00, // Reserved 8
+    0x00, 0x00, 0x00,       // Reserved 9
+    0x00                    // useAdr
+};
 
 // Set GPS update rate to 1Hz
 // Lowering the update rate helps to save power.
 // Additionally, for some new modules like the M9/M10, an update rate lower than 5Hz
 // is recommended to avoid a known issue with satellites disappearing.
+// The module defaults for M8, M9, M10 are the same as we use here so no update is necessary
 const uint8_t GPS::_message_1HZ[] = {
     0xE8, 0x03, // Measurement Rate (1000ms for 1Hz)
     0x01, 0x00, // Navigation rate, always 1 in GPS mode
