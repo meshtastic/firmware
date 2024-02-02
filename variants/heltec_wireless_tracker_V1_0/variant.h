@@ -20,8 +20,8 @@
 #define SPI_FREQUENCY 40000000
 #define SPI_READ_FREQUENCY 16000000
 #define SCREEN_ROTATE
-#define TFT_HEIGHT 160
-#define TFT_WIDTH 80
+#define TFT_HEIGHT DISPLAY_WIDTH
+#define TFT_WIDTH DISPLAY_HEIGHT
 #define TFT_OFFSET_X 26
 #define TFT_OFFSET_Y -1
 #define VTFT_CTRL_V03 46 // Heltec Tracker needs this pulled low for TFT
