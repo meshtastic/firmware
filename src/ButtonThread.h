@@ -193,15 +193,7 @@ class ButtonThread : public concurrency::OSThread
     static void userButtonMultiPressed()
     {
         if (!config.device.disable_triple_click && (gps != nullptr)) {
-            config.position.gps_enabled = !(config.position.gps_enabled);
-            if (config.position.gps_enabled) {
-                LOG_DEBUG("Flag set to true to restore power\n");
-                gps->enable();
-
-            } else {
-                LOG_DEBUG("Flag set to false for gps power\n");
-                gps->disable();
-            }
+            gps->toggleGpsMode();
         }
     }
 

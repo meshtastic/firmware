@@ -558,15 +558,20 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
     }
 }
 
-// Draw status when gps is disabled by PMU
+// Draw status when GPS is disabled or not present
 static void drawGPSpowerstat(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
-    String displayLine = "GPS disabled";
-    int16_t xPos = display->getStringWidth(displayLine);
-
-    if (!config.position.gps_enabled) {
-        display->drawString(x + xPos, y, displayLine);
+    String displayLine;
+    int pos;
+    if (y < FONT_HEIGHT_SMALL) { // Line 1: use short string
+        displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
+        pos = SCREEN_WIDTH - display->getStringWidth(displayLine);
+    } else {
+        displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "GPS not present"
+                                                                                                       : "GPS is disabled";
+        pos = (SCREEN_WIDTH - display->getStringWidth(displayLine)) / 2;
     }
+    display->drawString(x + pos, y, displayLine);
 }
 
 static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
@@ -594,7 +599,7 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
     String displayLine = "";
 
     if (!gps->getIsConnected() && !config.position.fixed_position) {
-        displayLine = "No GPS Module";
+        displayLine = "No GPS present";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else if (!gps->getHasLock() && !config.position.fixed_position) {
         displayLine = "No GPS Lock";
@@ -1549,7 +1554,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 3, nodeStatus);
     }
     // Display GPS status
-    if (!config.position.gps_enabled) {
+    if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         drawGPSpowerstat(display, x, y + 2, gpsStatus);
     } else {
         if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
@@ -1777,7 +1782,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     char chUtil[13];
     snprintf(chUtil, sizeof(chUtil), "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), y + FONT_HEIGHT_SMALL * 1, chUtil);
-    if (config.position.gps_enabled) {
+    if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         // Line 3
         if (config.display.gps_format !=
             meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DMS) // if DMS then don't draw altitude
@@ -1786,10 +1791,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
         // Line 4
         drawGPScoordinates(display, x, y + FONT_HEIGHT_SMALL * 3, gpsStatus);
     } else {
-        drawGPSpowerstat(display, x - (SCREEN_WIDTH / 4), y + FONT_HEIGHT_SMALL * 2, gpsStatus);
-#ifdef GPS_POWER_TOGGLE
-        display->drawString(x + 30, (y + FONT_HEIGHT_SMALL * 3), " by button");
-#endif
+        drawGPSpowerstat(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
     }
     /* Display a heartbeat pixel that blinks every time the frame is redrawn */
 #ifdef SHOW_REDRAWS
