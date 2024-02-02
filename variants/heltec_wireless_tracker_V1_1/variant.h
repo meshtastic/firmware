@@ -2,6 +2,10 @@
 
 #define HELTEC_TRACKER_V1_X
 
+// I2C
+#define I2C_SDA SDA
+#define I2C_SCL SCL
+
 // ST7735S TFT LCD
 #define ST7735S 1 // there are different (sub-)versions of ST7735
 #define ST7735_CS 38
@@ -19,7 +23,7 @@
 #define TFT_HEIGHT 160
 #define TFT_WIDTH 80
 #define TFT_OFFSET_X 26
-#define TFT_OFFSET_Y 0
+#define TFT_OFFSET_Y -1
 #define SCREEN_TRANSITION_FRAMERATE 1 // fps
 #define DISPLAY_FORCE_SMALL_FONTS
 
