@@ -2,7 +2,7 @@
 
 #include "concurrency/LockGuard.h"
 #include "configuration.h"
-#if defined(ARCH_RASPBERRY_PI)
+#if defined(ARCH_PORTDUINO)
 #include "linux/LinuxHardwareI2C.h"
 #endif
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)

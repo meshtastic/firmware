@@ -16,7 +16,7 @@
 #define GPS_RESET_MODE HIGH
 #endif
 
-#if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32) || defined(ARCH_RASPBERRY_PI)
+#if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
 HardwareSerial *GPS::_serial_gps = &Serial1;
 #else
 HardwareSerial *GPS::_serial_gps = NULL;
@@ -251,17 +251,9 @@ int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
 bool GPS::setup()
 {
     int msglen = 0;
-    bool isProblematicGPS = false;
 
     if (!didSerialInit) {
 #if !defined(GPS_UC6580)
-#ifdef HAS_PMU
-        // The T-Beam 1.2 has issues with the GPS
-        if (HW_VENDOR == meshtastic_HardwareModel_TBEAM && PMU->getChipModel() == XPOWERS_AXP2101) {
-            gnssModel = GNSS_MODEL_UBLOX;
-            isProblematicGPS = true;
-        }
-#endif
 
 #if defined(RAK4630) && defined(PIN_3V3_EN)
         // If we are using the RAK4630 and we have no other peripherals on the I2C bus or module interest in 3V3_S,
@@ -380,7 +372,7 @@ bool GPS::setup()
                 LOG_WARN("Unable to set GPS update rate.\n");
             }
 
-            msglen = makeUBXPacket(0x06, 0x01, sizeof(_message_GGL), _message_GGL);
+            msglen = makeUBXPacket(0x06, 0x01, sizeof(_message_GLL), _message_GLL);
             _serial_gps->write(UBXscratch, msglen);
             if (getACK(0x06, 0x01, 300) != GNSS_RESPONSE_OK) {
                 LOG_WARN("Unable to disable NMEA GGL.\n");
@@ -416,6 +408,12 @@ bool GPS::setup()
                 LOG_WARN("Unable to enable NMEA GGA.\n");
             }
 
+            msglen = makeUBXPacket(0x06, 0x01, sizeof(_message_AID), _message_AID);
+            _serial_gps->write(UBXscratch, msglen);
+            if (getACK(0x06, 0x01, 300) != GNSS_RESPONSE_OK) {
+                LOG_WARN("Unable to disable UBX-AID.\n");
+            }
+
             if (uBloxProtocolVersion >= 18) {
                 msglen = makeUBXPacket(0x06, 0x86, sizeof(_message_PMS), _message_PMS);
                 _serial_gps->write(UBXscratch, msglen);
@@ -423,36 +421,31 @@ bool GPS::setup()
                     LOG_WARN("Unable to enable powersaving for GPS.\n");
                 }
             } else {
-                if (!(isProblematicGPS)) {
-                    if (strncmp(info.hwVersion, "00040007", 8) == 0) { // This PSM mode has only been tested on this hardware
-                        msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_PSM);
-                        _serial_gps->write(UBXscratch, msglen);
-                        if (getACK(0x06, 0x11, 300) != GNSS_RESPONSE_OK) {
-                            LOG_WARN("Unable to enable powersaving mode for GPS.\n");
-                        }
-                        msglen = makeUBXPacket(0x06, 0x3B, 44, _message_CFG_PM2);
-                        _serial_gps->write(UBXscratch, msglen);
-                        if (getACK(0x06, 0x3B, 300) != GNSS_RESPONSE_OK) {
-                            LOG_WARN("Unable to enable powersaving details for GPS.\n");
-                        }
-                    } else {
-                        msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_ECO);
-                        _serial_gps->write(UBXscratch, msglen);
-                        if (getACK(0x06, 0x11, 300) != GNSS_RESPONSE_OK) {
-                            LOG_WARN("Unable to enable powersaving ECO mode for GPS.\n");
-                        }
+                if (strncmp(info.hwVersion, "00040007", 8) == 0) { // This PSM mode is only for Neo-6
+                    msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_ECO);
+                    _serial_gps->write(UBXscratch, msglen);
+                    if (getACK(0x06, 0x11, 300) != GNSS_RESPONSE_OK) {
+                        LOG_WARN("Unable to enable powersaving ECO mode for Neo-6.\n");
+                    }
+                    msglen = makeUBXPacket(0x06, 0x3B, 44, _message_CFG_PM2);
+                    _serial_gps->write(UBXscratch, msglen);
+                    if (getACK(0x06, 0x3B, 300) != GNSS_RESPONSE_OK) {
+                        LOG_WARN("Unable to enable powersaving details for GPS.\n");
+                    }
+                } else {
+                    msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_PSM);
+                    _serial_gps->write(UBXscratch, msglen);
+                    if (getACK(0x06, 0x11, 300) != GNSS_RESPONSE_OK) {
+                        LOG_WARN("Unable to enable powersaving mode for GPS.\n");
                     }
                 }
             }
-            // The T-beam 1.2 has issues.
-            if (!(isProblematicGPS)) {
-                msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
-                _serial_gps->write(UBXscratch, msglen);
-                if (getACK(0x06, 0x09, 300) != GNSS_RESPONSE_OK) {
-                    LOG_WARN("Unable to save GNSS module configuration.\n");
-                } else {
-                    LOG_INFO("GNSS module configuration saved!\n");
-                }
+            msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
+            _serial_gps->write(UBXscratch, msglen);
+            if (getACK(0x06, 0x09, 2000) != GNSS_RESPONSE_OK) {
+                LOG_WARN("Unable to save GNSS module configuration.\n");
+            } else {
+                LOG_INFO("GNSS module configuration saved!\n");
             }
         }
         didSerialInit = true;
@@ -596,11 +589,12 @@ void GPS::setAwake(bool on)
  */
 uint32_t GPS::getWakeTime() const
 {
-    uint32_t t = config.position.gps_attempt_time;
+    uint32_t t = config.position.position_broadcast_secs;
 
     if (t == UINT32_MAX)
         return t; // already maxint
-    return t * 1000;
+
+    return getConfiguredOrDefaultMs(t, default_broadcast_interval_secs);
 }
 
 /** Get how long we should sleep between aqusition attempts in msecs
@@ -610,7 +604,7 @@ uint32_t GPS::getSleepTime() const
     uint32_t t = config.position.gps_update_interval;
 
     // We'll not need the GPS thread to wake up again after first acq. with fixed position.
-    if (!config.position.gps_enabled || config.position.fixed_position)
+    if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED || config.position.fixed_position)
         t = UINT32_MAX; // Sleep forever now
 
     if (t == UINT32_MAX)
@@ -631,21 +625,24 @@ void GPS::publishUpdate()
         // Notify any status instances that are observing us
         const meshtastic::GPSStatus status = meshtastic::GPSStatus(hasValidLocation, isConnected(), isPowerSaving(), p);
         newStatus.notifyObservers(&status);
-        if (config.position.gps_enabled)
+        if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
             positionModule->handleNewPosition();
+        }
     }
 }
 
 int32_t GPS::runOnce()
 {
     if (!GPSInitFinished) {
-        if (!_serial_gps)
+        if (!_serial_gps || config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
+            LOG_INFO("GPS set to not-present. Skipping probe.\n");
             return disable();
+        }
         if (!setup())
             return 2000; // Setup failed, re-run in two seconds
 
         // We have now loaded our saved preferences from flash
-        if (config.position.gps_enabled == false) {
+        if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
             return disable();
         }
         // ONCE we will factory reset the GPS for bug #327
@@ -668,7 +665,7 @@ int32_t GPS::runOnce()
         // if we have received valid NMEA claim we are connected
         setConnected();
     } else {
-        if ((config.position.gps_enabled == 1) && (gnssModel == GNSS_MODEL_UBLOX)) {
+        if ((config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) && (gnssModel == GNSS_MODEL_UBLOX)) {
             // reset the GPS on next bootup
             if (devicestate.did_gps_reset && (millis() - lastWakeStartMsec > 60000) && !hasFlow()) {
                 LOG_DEBUG("GPS is not communicating, trying factory reset on next bootup.\n");
@@ -681,7 +678,8 @@ int32_t GPS::runOnce()
     // At least one GPS has a bad habit of losing its mind from time to time
     if (rebootsSeen > 2) {
         rebootsSeen = 0;
-        gps->factoryReset();
+        LOG_DEBUG("Would normally factoryReset()\n");
+        // gps->factoryReset();
     }
 
     // If we are overdue for an update, turn on the GPS and at least publish the current status
@@ -907,7 +905,7 @@ GPS *GPS::createGps()
     int8_t _rx_gpio = config.position.rx_gpio;
     int8_t _tx_gpio = config.position.tx_gpio;
     int8_t _en_gpio = config.position.gps_en_gpio;
-#if defined(HAS_GPS) && !defined(ARCH_ESP32)
+#if HAS_GPS && !defined(ARCH_ESP32)
     _rx_gpio = 1; // We only specify GPS serial ports on ESP32. Otherwise, these are just flags.
     _tx_gpio = 1;
 #endif
@@ -923,7 +921,7 @@ GPS *GPS::createGps()
     if (!_en_gpio)
         _en_gpio = PIN_GPS_EN;
 #endif
-#ifdef ARCH_RASPBERRY_PI
+#ifdef ARCH_PORTDUINO
     if (!settingsMap[has_gps])
         return nullptr;
 #endif
@@ -1103,7 +1101,7 @@ bool GPS::lookForLocation()
 
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
     fixType = atoi(gsafixtype.value()); // will set to zero if no data
-    // LOG_DEBUG("FIX QUAL=%d, TYPE=%d\n", fixQual, fixType);
+                                        // LOG_DEBUG("FIX QUAL=%d, TYPE=%d\n", fixQual, fixType);
 #endif
 
     // check if GPS has an acceptable lock
@@ -1120,6 +1118,10 @@ bool GPS::lookForLocation()
               reader.date.age(), reader.time.age());
 #endif // GPS_EXTRAVERBOSE
 
+    // Is this a new point or are we re-reading the previous one?
+    if (!reader.location.isUpdated())
+        return false;
+
     // check if a complete GPS solution set is available for reading
     //   tinyGPSDatum::age() also includes isValid() test
     // FIXME
@@ -1131,10 +1133,6 @@ bool GPS::lookForLocation()
         LOG_WARN("SOME data is TOO OLD: LOC %u, TIME %u, DATE %u\n", reader.location.age(), reader.time.age(), reader.date.age());
         return false;
     }
-
-    // Is this a new point or are we re-reading the previous one?
-    if (!reader.location.isUpdated())
-        return false;
 
     // We know the solution is fresh and valid, so just read the data
     auto loc = reader.location.value();
@@ -1285,4 +1283,17 @@ int32_t GPS::disable()
     setAwake(false);
 
     return INT32_MAX;
+}
+
+void GPS::toggleGpsMode()
+{
+    if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+        config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
+        LOG_DEBUG("Flag set to false for gps power. GpsMode: DISABLED\n");
+        disable();
+    } else if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED) {
+        config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+        LOG_DEBUG("Flag set to true to restore power. GpsMode: ENABLED\n");
+        enable();
+    }
 }

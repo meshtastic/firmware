@@ -12,6 +12,7 @@
 
 #define PACKET_FLAGS_HOP_MASK 0x07
 #define PACKET_FLAGS_WANT_ACK_MASK 0x08
+#define PACKET_FLAGS_VIA_MQTT_MASK 0x10
 
 /**
  * This structure has to exactly match the wire layout when sent over the radio link.  Used to keep compatibility
