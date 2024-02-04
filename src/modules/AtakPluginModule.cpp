@@ -72,8 +72,10 @@ void AtakPluginModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtast
         decompressedCopy->decoded.payload.size =
             pb_encode_to_bytes(decompressedCopy->decoded.payload.bytes, sizeof(decompressedCopy->decoded.payload),
                                meshtastic_TAK_Packet_fields, &uncompressed);
+
+        LOG_DEBUG("Compressed callsign: %d bytes\n", strlen(t->callsign_variant.callsign_compressed));
+        LOG_DEBUG("Decompressed callsign: '%s' @ %d bytes\n", uncompressed.callsign_variant.callsign_uncompressed, length);
         service.sendToPhone(decompressedCopy);
-        delete decompressedCopy;
     }
     return;
 }
