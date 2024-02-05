@@ -124,6 +124,13 @@ const RegionInfo regions[] = {
     RDEF(MY_919, 919.0f, 924.0f, 100, 0, 27, true, true, false),
 
     /*
+        Singapore
+        SG_923 Band 30d: 917 - 925 MHz at 100mW, no restrictions.
+        https://www.imda.gov.sg/-/media/imda/files/regulation-licensing-and-consultations/ict-standards/telecommunication-standards/radio-comms/imdatssrd.pdf
+    */
+    RDEF(SG_923, 917.0f, 925.0f, 100, 0, 20, true, false, false),
+
+    /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
     */
     RDEF(LORA_24, 2400.0f, 2483.5f, 100, 0, 10, true, false, true),
