@@ -95,13 +95,17 @@ class GPS : private concurrency::OSThread
     static HardwareSerial *_serial_gps;
 
     static uint8_t _message_PMREQ[];
+    static uint8_t _message_PMREQ_10[];
     static const uint8_t _message_CFG_RXM_PSM[];
     static const uint8_t _message_CFG_RXM_ECO[];
     static const uint8_t _message_CFG_PM2[];
     static const uint8_t _message_GNSS_7[];
-    static const uint8_t _message_GNSS[];
-    static const uint8_t _message_JAM[];
+    static const uint8_t _message_GNSS_8[];
+    static const uint8_t _message_JAM_6_7[];
+    static const uint8_t _message_JAM_8[];
     static const uint8_t _message_NAVX5[];
+    static const uint8_t _message_NAVX5_8[];
+    static const uint8_t _message_NMEA[];
     static const uint8_t _message_1HZ[];
     static const uint8_t _message_GLL[];
     static const uint8_t _message_GSA[];
