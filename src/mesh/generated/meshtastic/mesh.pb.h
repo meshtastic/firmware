@@ -813,9 +813,9 @@ typedef struct _meshtastic_TAK_Packet {
     pb_size_t which_callsign_variant;
     union {
         /* Uncompressed callsign from ATAK */
-        char callsign_uncompressed[64];
+        char callsign_uncompressed[512];
         /* Compressed callsign using unishox2 for the wire */
-        char callsign_compressed[64];
+        char callsign_compressed[241];
     } callsign_variant;
     pb_size_t which_payload_variant;
     union {
