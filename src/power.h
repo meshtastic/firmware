@@ -11,10 +11,10 @@
 #endif
 
 #ifndef OCV_ARRAY
-//{4200,4050,3990,3890,3790,3700,3650,3550,3450,3300,3200} //4.2 to 3.2
-//{4200,4050,3990,3890,3790,3700,3650,3550,3400,3300,3000} //4.2 to 3.0
-//{4150,4050,3990,3890,3790,3690,3620,3520,3420,3300,3100} //4.15 to 3.1
-#define OCV_ARRAY {4150,4050,3990,3890,3790,3690,3620,3520,3420,3300,3100}
+// 4200,4050,3990,3890,3790,3700,3650,3550,3450,3300,3200 //4.2 to 3.2
+// 4200,4050,3990,3890,3790,3700,3650,3550,3400,3300,3000 //4.2 to 3.0
+// 4150,4050,3990,3890,3790,3690,3620,3520,3420,3300,3100 //4.15 to 3.1
+#define OCV_ARRAY 4150, 4050, 3990, 3890, 3790, 3690, 3620, 3520, 3420, 3300, 3100
 #endif
 
 #ifndef NUM_CELLS
@@ -48,7 +48,8 @@ class Power : private concurrency::OSThread
     virtual bool setup();
     virtual int32_t runOnce() override;
     void setStatusHandler(meshtastic::PowerStatus *handler) { statusHandler = handler; }
-    const uint16_t OCV[11] = OCV_ARRAY;
+    const uint16_t OCV[11] = {OCV_ARRAY};
+
   protected:
     meshtastic::PowerStatus *statusHandler;
 
@@ -58,7 +59,7 @@ class Power : private concurrency::OSThread
     bool analogInit();
 
   private:
-    //open circuit voltage lookup table
+    // open circuit voltage lookup table
     uint8_t low_voltage_counter;
 #ifdef DEBUG_HEAP
     uint32_t lastheap;

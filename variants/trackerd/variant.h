@@ -10,7 +10,7 @@
 
 #define LED_PIN 13 // 13 red, 2 blue, 15 red
 
-//#define HAS_BUTTON 0
+// #define HAS_BUTTON 0
 #define BUTTON_PIN 0
 #define BUTTON_NEED_PULLUP
 
@@ -42,5 +42,5 @@
 #define ADC_MULTIPLIER VBAT_DIVIDER_COMP
 #define VBAT_RAW_TO_SCALED(x) (REAL_VBAT_MV_PER_LSB * x)
 
-//#define BATTERY_SENSE_SAMPLES 15 // Set the number of samples, It has an effect of increasing sensitivity.
-//#define ADC_MULTIPLIER 3.3
+// #define BATTERY_SENSE_SAMPLES 15 // Set the number of samples, It has an effect of increasing sensitivity.
+// #define ADC_MULTIPLIER 3.3
