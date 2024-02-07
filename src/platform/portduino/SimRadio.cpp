@@ -198,6 +198,8 @@ void SimRadio::startSend(meshtastic_MeshPacket *txp)
     p->decoded.payload.size =
         pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Compressed_msg, &c);
     p->decoded.portnum = meshtastic_PortNum_SIMULATOR_APP;
+
+    service.sendQueueStatusToPhone(router->getQueueStatus(), 0, p->id);
     service.sendToPhone(p); // Sending back to simulator
 }
 

@@ -1,6 +1,6 @@
 #include "configuration.h"
 #include "main.h"
-#if ARCH_RASPBERRY_PI
+#if ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
@@ -23,6 +23,10 @@ extern SX1509 gpioExtender;
 
 #if defined(ST7735_BACKLIGHT_EN) && !defined(TFT_BL)
 #define TFT_BL ST7735_BACKLIGHT_EN
+#endif
+
+#ifndef TFT_INVERT
+#define TFT_INVERT true
 #endif
 
 class LGFX : public lgfx::LGFX_Device
@@ -74,7 +78,7 @@ class LGFX : public lgfx::LGFX_Device
             cfg.dummy_read_pixel = 8;      // Number of bits for dummy read before pixel readout
             cfg.dummy_read_bits = 1;       // Number of bits for dummy read before non-pixel data read
             cfg.readable = true;           // Set to true if data can be read
-            cfg.invert = true;             // Set to true if the light/darkness of the panel is reversed
+            cfg.invert = TFT_INVERT;       // Set to true if the light/darkness of the panel is reversed
             cfg.rgb_order = false;         // Set to true if the panel's red and blue are swapped
             cfg.dlen_16bit =
                 false;             // Set to true for panels that transmit data length in 16-bit units with 16-bit parallel or SPI
@@ -337,7 +341,7 @@ static LGFX *tft = nullptr;
 #include <TFT_eSPI.h> // Graphics and font library for ILI9341 driver chip
 
 static TFT_eSPI *tft = nullptr; // Invoke library, pins defined in User_Setup.h
-#elif ARCH_RASPBERRY_PI
+#elif ARCH_PORTDUINO
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
 
 class LGFX : public lgfx::LGFX_Device
@@ -350,8 +354,12 @@ class LGFX : public lgfx::LGFX_Device
   public:
     LGFX(void)
     {
-
-        _panel_instance = new lgfx::Panel_ST7789;
+        if (settingsMap[displayPanel] == st7789)
+            _panel_instance = new lgfx::Panel_ST7789;
+        else if (settingsMap[displayPanel] == st7735)
+            _panel_instance = new lgfx::Panel_ST7735;
+        else if (settingsMap[displayPanel] == st7735s)
+            _panel_instance = new lgfx::Panel_ST7735S;
         auto buscfg = _bus_instance.config();
         buscfg.spi_mode = 0;
 
@@ -362,19 +370,14 @@ class LGFX : public lgfx::LGFX_Device
 
         auto cfg = _panel_instance->config(); // Gets a structure for display panel settings.
         LOG_DEBUG("Height: %d, Width: %d \n", settingsMap[displayHeight], settingsMap[displayWidth]);
-        cfg.pin_cs = settingsMap[displayCS];           // Pin number where CS is connected (-1 = disable)
+        cfg.pin_cs = settingsMap[displayCS]; // Pin number where CS is connected (-1 = disable)
+        cfg.pin_rst = settingsMap[displayReset];
         cfg.panel_width = settingsMap[displayWidth];   // actual displayable width
         cfg.panel_height = settingsMap[displayHeight]; // actual displayable height
-        cfg.offset_x = 0;                              // Panel offset amount in X direction
-        cfg.offset_y = 0;                              // Panel offset amount in Y direction
+        cfg.offset_x = settingsMap[displayOffsetX];    // Panel offset amount in X direction
+        cfg.offset_y = settingsMap[displayOffsetY];    // Panel offset amount in Y direction
         cfg.offset_rotation = 0;                       // Rotation direction value offset 0~7 (4~7 is mirrored)
-        cfg.dummy_read_pixel = 9;                      // Number of bits for dummy read before pixel readout
-        cfg.dummy_read_bits = 1;                       // Number of bits for dummy read before non-pixel data read
-        cfg.readable = true;                           // Set to true if data can be read
-        cfg.invert = true;                             // Set to true if the light/darkness of the panel is reversed
-        cfg.rgb_order = false;                         // Set to true if the panel's red and blue are swapped
-        cfg.dlen_16bit = false; // Set to true for panels that transmit data length in 16-bit units with 16-bit parallel or SPI
-        cfg.bus_shared = true;  // If the bus is shared with the SD card, set to true (bus control with drawJpgFile etc.)
+        cfg.invert = settingsMap[displayInvert];       // Set to true if the light/darkness of the panel is reversed
 
         _panel_instance->config(cfg);
 
@@ -405,7 +408,7 @@ class LGFX : public lgfx::LGFX_Device
 static LGFX *tft = nullptr;
 #endif
 
-#if defined(ST7735_CS) || defined(ST7789_CS) || defined(ILI9341_DRIVER) || defined(RAK14014) || ARCH_RASPBERRY_PI
+#if defined(ST7735_CS) || defined(ST7789_CS) || defined(ILI9341_DRIVER) || defined(RAK14014) || ARCH_PORTDUINO
 #include "SPILock.h"
 #include "TFTDisplay.h"
 #include <SPI.h>
@@ -413,7 +416,7 @@ static LGFX *tft = nullptr;
 TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY geometry, HW_I2C i2cBus)
 {
     LOG_DEBUG("TFTDisplay!\n");
-#if ARCH_RASPBERRY_PI
+#if ARCH_PORTDUINO
     if (settingsMap[displayRotate]) {
         setGeometry(GEOMETRY_RAWMODE, settingsMap[configNames::displayHeight], settingsMap[configNames::displayWidth]);
     } else {
@@ -431,7 +434,8 @@ TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY g
 void TFTDisplay::display(bool fromBlank)
 {
     if (fromBlank)
-        tft->clear();
+        tft->fillScreen(TFT_BLACK);
+    // tft->clear();
     concurrency::LockGuard g(spiLock);
 
     uint16_t x, y;
@@ -465,7 +469,7 @@ void TFTDisplay::sendCommand(uint8_t com)
     // handle display on/off directly
     switch (com) {
     case DISPLAYON: {
-#if ARCH_RASPBERRY_PI
+#if ARCH_PORTDUINO
         display(true);
         if (settingsMap[displayBacklight] > 0)
             digitalWrite(settingsMap[displayBacklight], TFT_BACKLIGHT_ON);
@@ -497,7 +501,7 @@ void TFTDisplay::sendCommand(uint8_t com)
         break;
     }
     case DISPLAYOFF: {
-#if ARCH_RASPBERRY_PI
+#if ARCH_PORTDUINO
         tft->clear();
         if (settingsMap[displayBacklight] > 0)
             digitalWrite(settingsMap[displayBacklight], !TFT_BACKLIGHT_ON);
@@ -604,7 +608,7 @@ bool TFTDisplay::connect()
     tft->setRotation(1);
     tft->setSwapBytes(true);
 //    tft->fillScreen(TFT_BLACK);
-#elif defined(T_DECK) || defined(PICOMPUTER_S3)
+#elif defined(T_DECK) || defined(PICOMPUTER_S3) || defined(CHATTER_2)
     tft->setRotation(1); // T-Deck has the TFT in landscape
 #elif defined(T_WATCH_S3)
     tft->setRotation(2); // T-Watch S3 left-handed orientation

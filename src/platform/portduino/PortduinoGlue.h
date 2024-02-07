@@ -1,5 +1,4 @@
 #pragma once
-#ifdef ARCH_RASPBERRY_PI
 #include <map>
 
 enum configNames {
@@ -8,10 +7,16 @@ enum configNames {
     irq,
     busy,
     reset,
+    txen,
+    rxen,
     dio2_as_rf_switch,
+    dio3_tcxo_voltage,
     use_rf95,
+    use_sx1280,
     user,
     gpiochip,
+    spidev,
+    i2cdev,
     has_gps,
     touchscreenModule,
     touchscreenCS,
@@ -24,13 +29,16 @@ enum configNames {
     displayBacklight,
     displayReset,
     displayRotate,
-    keyboardDevice
+    displayOffsetX,
+    displayOffsetY,
+    displayInvert,
+    keyboardDevice,
+    logoutputlevel
 };
-enum { no_screen, st7789 };
+enum { no_screen, st7789, st7735, st7735s };
 enum { no_touchscreen, xpt2046 };
+enum { level_error, level_warn, level_info, level_debug };
 
 extern std::map<configNames, int> settingsMap;
 extern std::map<configNames, std::string> settingsStrings;
 int initGPIOPin(int pinNum, std::string gpioChipname);
-
-#endif

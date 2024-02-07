@@ -62,7 +62,6 @@ extern graphics::Screen *screen;
 
 // Return a human readable string of the form "Meshtastic_ab13"
 const char *getDeviceName();
-void getPiMacAddr(uint8_t *dmac);
 
 extern uint32_t timeLastPowered;
 
@@ -77,7 +76,7 @@ extern int heltec_version;
 // This will suppress the current delay and instead try to run ASAP.
 extern bool runASAP;
 
-void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop(), rp2040Setup(), clearBonds();
+void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop(), rp2040Setup(), clearBonds(), enterDfuMode();
 
 meshtastic_DeviceMetadata getDeviceMetadata();
 

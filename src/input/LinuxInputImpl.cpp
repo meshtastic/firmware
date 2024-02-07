@@ -1,6 +1,7 @@
-#if ARCH_RASPBERRY_PI
-#include "LinuxInputImpl.h"
+#include "configuration.h"
+#if ARCH_PORTDUINO
 #include "InputBroker.h"
+#include "LinuxInputImpl.h"
 
 LinuxInputImpl *aLinuxInputImpl;
 

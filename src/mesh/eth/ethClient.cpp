@@ -97,11 +97,6 @@ static int32_t reconnectETH()
     return 5000; // every 5 seconds
 }
 
-static uint32_t bigToLittleEndian(uint32_t value)
-{
-    return ((value >> 24) & 0xFF) | ((value >> 8) & 0xFF00) | ((value << 8) & 0xFF0000) | ((value << 24) & 0xFF000000);
-}
-
 // Startup Ethernet
 bool initEthernet()
 {
@@ -130,14 +125,7 @@ bool initEthernet()
             status = Ethernet.begin(mac);
         } else if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_STATIC) {
             LOG_INFO("starting Ethernet Static\n");
-
-            IPAddress ip = IPAddress(bigToLittleEndian(config.network.ipv4_config.ip));
-            IPAddress dns = IPAddress(bigToLittleEndian(config.network.ipv4_config.dns));
-            IPAddress gateway = IPAddress(bigToLittleEndian(config.network.ipv4_config.gateway));
-            IPAddress subnet = IPAddress(bigToLittleEndian(config.network.ipv4_config.subnet));
-
-            Ethernet.begin(mac, ip, dns, gateway, subnet);
-
+            Ethernet.begin(mac, config.network.ipv4_config.ip, config.network.ipv4_config.dns, config.network.ipv4_config.subnet);
             status = 1;
         } else {
             LOG_INFO("Ethernet Disabled\n");

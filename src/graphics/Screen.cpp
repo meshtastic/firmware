@@ -43,7 +43,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "sleep.h"
 #include "target_specific.h"
 
-#if HAS_WIFI && !defined(ARCH_RASPBERRY_PI)
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 
@@ -52,7 +52,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "modules/esp32/StoreForwardModule.h"
 #endif
 
-#if ARCH_RASPBERRY_PI
+#if ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
@@ -558,15 +558,20 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
     }
 }
 
-// Draw status when gps is disabled by PMU
+// Draw status when GPS is disabled or not present
 static void drawGPSpowerstat(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
-    String displayLine = "GPS disabled";
-    int16_t xPos = display->getStringWidth(displayLine);
-
-    if (!config.position.gps_enabled) {
-        display->drawString(x + xPos, y, displayLine);
+    String displayLine;
+    int pos;
+    if (y < FONT_HEIGHT_SMALL) { // Line 1: use short string
+        displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
+        pos = SCREEN_WIDTH - display->getStringWidth(displayLine);
+    } else {
+        displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "GPS not present"
+                                                                                                       : "GPS is disabled";
+        pos = (SCREEN_WIDTH - display->getStringWidth(displayLine)) / 2;
     }
+    display->drawString(x + pos, y, displayLine);
 }
 
 static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
@@ -594,7 +599,7 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
     String displayLine = "";
 
     if (!gps->getIsConnected() && !config.position.fixed_position) {
-        displayLine = "No GPS Module";
+        displayLine = "No GPS present";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else if (!gps->getHasLock() && !config.position.fixed_position) {
         displayLine = "No GPS Lock";
@@ -930,8 +935,8 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #elif defined(USE_ST7567)
     dispdev = new ST7567Wire(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
-#elif ARCH_RASPBERRY_PI
-    if (settingsMap[displayPanel] == st7789) {
+#elif ARCH_PORTDUINO
+    if (settingsMap[displayPanel] != no_screen) {
         LOG_DEBUG("Making TFTDisplay!\n");
         dispdev = new TFTDisplay(address.address, -1, -1, geometry,
                                  (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
@@ -976,7 +981,7 @@ void Screen::handleSetOn(bool on)
 #ifdef T_WATCH_S3
             PMU->enablePowerOutput(XPOWERS_ALDO2);
 #endif
-#if !ARCH_RASPBERRY_PI
+#if !ARCH_PORTDUINO
             dispdev->displayOn();
 #endif
             dispdev->displayOn();
@@ -1052,7 +1057,11 @@ void Screen::setup()
     // Standard behaviour is to FLIP the screen (needed on T-Beam). If this config item is set, unflip it, and thereby logically
     // flip it. If you have a headache now, you're welcome.
     if (!config.display.flip_screen) {
+#if defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(RAK14014)
+        static_cast<TFTDisplay *>(dispdev)->flipScreenVertically();
+#else
         dispdev->flipScreenVertically();
+#endif
     }
 #endif
 
@@ -1060,7 +1069,7 @@ void Screen::setup()
     uint8_t dmac[6];
     getMacAddr(dmac);
     snprintf(ourId, sizeof(ourId), "%02x%02x", dmac[4], dmac[5]);
-#if ARCH_RASPBERRY_PI
+#if ARCH_PORTDUINO
     handleSetOn(false); // force clean init
 #endif
 
@@ -1075,7 +1084,7 @@ void Screen::setup()
 #endif
     serialSinceMsec = millis();
 
-#if ARCH_RASPBERRY_PI
+#if ARCH_PORTDUINO
     if (settingsMap[touchscreenModule]) {
         touchScreenImpl1 =
             new TouchScreenImpl1(dispdev->getWidth(), dispdev->getHeight(), static_cast<TFTDisplay *>(dispdev)->getTouch);
@@ -1344,7 +1353,7 @@ void Screen::setFrames()
     // call a method on debugInfoScreen object (for more details)
     normalFrames[numframes++] = &Screen::drawDebugInfoSettingsTrampoline;
 
-#if HAS_WIFI && !defined(ARCH_RASPBERRY_PI)
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
     if (isWifiAvailable()) {
         // call a method on debugInfoScreen object (for more details)
         normalFrames[numframes++] = &Screen::drawDebugInfoWiFiTrampoline;
@@ -1545,7 +1554,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 3, nodeStatus);
     }
     // Display GPS status
-    if (!config.position.gps_enabled) {
+    if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         drawGPSpowerstat(display, x, y + 2, gpsStatus);
     } else {
         if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
@@ -1588,7 +1597,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 #endif
     } else {
         // TODO: Raspberry Pi supports more than just the one screen size
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS) || ARCH_RASPBERRY_PI) &&           \
+#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS) || ARCH_PORTDUINO) &&              \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
         display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8,
                                imgInfoL1);
@@ -1615,7 +1624,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 // Jm
 void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-#if HAS_WIFI && !defined(ARCH_RASPBERRY_PI)
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
     const char *wifiName = config.network.wifi_ssid;
 
     display->setFont(FONT_SMALL);
@@ -1773,7 +1782,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     char chUtil[13];
     snprintf(chUtil, sizeof(chUtil), "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), y + FONT_HEIGHT_SMALL * 1, chUtil);
-    if (config.position.gps_enabled) {
+    if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         // Line 3
         if (config.display.gps_format !=
             meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DMS) // if DMS then don't draw altitude
@@ -1782,10 +1791,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
         // Line 4
         drawGPScoordinates(display, x, y + FONT_HEIGHT_SMALL * 3, gpsStatus);
     } else {
-        drawGPSpowerstat(display, x - (SCREEN_WIDTH / 4), y + FONT_HEIGHT_SMALL * 2, gpsStatus);
-#ifdef GPS_POWER_TOGGLE
-        display->drawString(x + 30, (y + FONT_HEIGHT_SMALL * 3), " by button");
-#endif
+        drawGPSpowerstat(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
     }
     /* Display a heartbeat pixel that blinks every time the frame is redrawn */
 #ifdef SHOW_REDRAWS

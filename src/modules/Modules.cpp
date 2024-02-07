@@ -17,7 +17,7 @@
 #include "modules/TextMessageModule.h"
 #include "modules/TraceRouteModule.h"
 #include "modules/WaypointModule.h"
-#if ARCH_RASPBERRY_PI
+#if ARCH_PORTDUINO
 #include "input/LinuxInputImpl.h"
 #endif
 #if HAS_TELEMETRY
@@ -31,7 +31,10 @@
 #include "modules/Telemetry/PowerTelemetry.h"
 #endif
 #ifdef ARCH_ESP32
+#ifdef USE_SX1280
 #include "modules/esp32/AudioModule.h"
+#endif
+#include "modules/esp32/PaxcounterModule.h"
 #include "modules/esp32/StoreForwardModule.h"
 #endif
 #if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)
@@ -47,7 +50,7 @@
 void setupModules()
 {
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER) {
-#if HAS_BUTTON || ARCH_RASPBERRY_PI
+#if HAS_BUTTON || ARCH_PORTDUINO
         inputBroker = new InputBroker();
 #endif
         adminModule = new AdminModule();
@@ -64,7 +67,7 @@ void setupModules()
 
         new RemoteHardwareModule();
         new ReplyModule();
-#if HAS_BUTTON || ARCH_RASPBERRY_PI
+#if HAS_BUTTON || ARCH_PORTDUINO
         rotaryEncoderInterruptImpl1 = new RotaryEncoderInterruptImpl1();
         if (!rotaryEncoderInterruptImpl1->init()) {
             delete rotaryEncoderInterruptImpl1;
@@ -82,7 +85,7 @@ void setupModules()
         kbMatrixImpl->init();
 #endif // INPUTBROKER_MATRIX_TYPE
 #endif // HAS_BUTTON
-#if ARCH_RASPBERRY_PI
+#if ARCH_PORTDUINO
         aLinuxInputImpl = new LinuxInputImpl();
         aLinuxInputImpl->init();
 #endif
@@ -111,9 +114,11 @@ void setupModules()
 #endif
 #ifdef ARCH_ESP32
         // Only run on an esp32 based device.
+#ifdef USE_SX1280
         audioModule = new AudioModule();
-
+#endif
         storeForwardModule = new StoreForwardModule();
+        paxcounterModule = new PaxcounterModule();
 #endif
 #if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)
         externalNotificationModule = new ExternalNotificationModule();

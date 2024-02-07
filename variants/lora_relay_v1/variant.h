@@ -80,6 +80,7 @@ static const uint8_t A5 = PIN_A5;
 // Other pins
 #define PIN_AREF PIN_A5
 #define PIN_VBAT PIN_A4
+#define BATTERY_PIN PIN_VBAT
 #define PIN_NFC1 (33)
 #define PIN_NFC2 (2)
 #define PIN_PIEZO (37)

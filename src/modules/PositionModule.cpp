@@ -61,7 +61,7 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
              p.altitude_geoidal_separation, p.PDOP, p.HDOP, p.VDOP, p.sats_in_view, p.fix_quality, p.fix_type, p.timestamp,
              p.time);
 
-    if (p.time) {
+    if (p.time && channels.getByIndex(mp.channel).role == meshtastic_Channel_Role_PRIMARY) {
         struct timeval tv;
         uint32_t secs = p.time;
 
@@ -87,6 +87,7 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 meshtastic_MeshPacket *PositionModule::allocReply()
 {
     if (ignoreRequest) {
+        ignoreRequest = false; // Reset for next request
         return nullptr;
     }
 
@@ -150,6 +151,7 @@ meshtastic_MeshPacket *PositionModule::allocReply()
         LOG_INFO("Stripping time %u from position send\n", p.time);
         p.time = 0;
     } else {
+        p.time = getValidTime(RTCQualityDevice);
         LOG_INFO("Providing time to mesh %u\n", p.time);
     }
 
@@ -166,7 +168,7 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
 
     meshtastic_MeshPacket *p = allocReply();
     if (p == nullptr) {
-        LOG_WARN("allocReply returned a nullptr");
+        LOG_WARN("allocReply returned a nullptr\n");
         return;
     }
 
@@ -202,6 +204,8 @@ int32_t PositionModule::runOnce()
     }
 
     meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
+    if (node == nullptr)
+        return RUNONCE_INTERVAL;
 
     // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();

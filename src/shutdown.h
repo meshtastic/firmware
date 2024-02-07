@@ -3,7 +3,7 @@
 #include "graphics/Screen.h"
 #include "main.h"
 #include "power.h"
-#if ARCH_RASPBERRY_PI
+#if defined(ARCH_PORTDUINO)
 #include "api/WiFiServerAPI.h"
 #include "input/LinuxInputImpl.h"
 
@@ -19,7 +19,7 @@ void powerCommandsCheck()
         NVIC_SystemReset();
 #elif defined(ARCH_RP2040)
         rp2040.reboot();
-#elif defined(ARCH_RASPBERRY_PI)
+#elif defined(ARCH_PORTDUINO)
         deInitApiServer();
         if (aLinuxInputImpl)
             aLinuxInputImpl->deInit();
@@ -44,7 +44,7 @@ void powerCommandsCheck()
 #if defined(ARCH_NRF52) || defined(ARCH_ESP32)
         playShutdownMelody();
         power->shutdown();
-#elif ARCH_RASPBERRY_PI
+#elif defined(ARCH_PORTDUINO)
         exit(EXIT_SUCCESS);
 #else
         LOG_WARN("FIXME implement shutdown for this platform");

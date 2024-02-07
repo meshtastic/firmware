@@ -43,9 +43,9 @@ extern "C" {
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LEDs
-#define PIN_LED1 (0 + 14) // 13 red (confirmed on 1.0 board)
-#define PIN_LED2 (0 + 15) // 14 blue
-#define PIN_LED3 (0 + 13) // 15 green
+#define PIN_LED1 (0 + 14) // blue (confirmed on boards marked v1.0, date 2021-6-28)
+#define PIN_LED2 (32 + 1) // green
+#define PIN_LED3 (32 + 3) // red
 
 #define LED_RED PIN_LED3
 #define LED_BLUE PIN_LED1
@@ -213,7 +213,7 @@ External serial flash WP25R1635FZUIL0
 // Voltage divider value => 100K + 100K voltage divider on VBAT = (100K / (100K + 100K))
 #define VBAT_DIVIDER (0.5F)
 // Compensation factor for the VBAT divider
-#define VBAT_DIVIDER_COMP (2.0)
+#define VBAT_DIVIDER_COMP (2.0F)
 // Fixed calculation of milliVolt from compensation value
 #define REAL_VBAT_MV_PER_LSB (VBAT_DIVIDER_COMP * VBAT_MV_PER_LSB)
 #undef AREF_VOLTAGE
