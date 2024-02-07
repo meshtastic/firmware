@@ -66,6 +66,12 @@ typedef enum _meshtastic_MemberRole {
 } meshtastic_MemberRole;
 
 /* Struct definitions */
+/* ATAK GeoChat message */
+typedef struct _meshtastic_GeoChat {
+    /* The text message */
+    char message[200];
+} meshtastic_GeoChat;
+
 /* ATAK Group
  <__group role='Team Member' name='Cyan'/> */
 typedef struct _meshtastic_Group {
@@ -108,22 +114,24 @@ typedef struct _meshtastic_PLI {
 
 /* Packets for the official ATAK Plugin */
 typedef struct _meshtastic_TAKPacket {
+    /* Are the payloads strings compressed for LoRA transport? */
+    bool is_compressed;
     /* The contact / callsign for ATAK user */
     bool has_contact;
     meshtastic_Contact contact;
     /* The group for ATAK user */
     bool has_group;
     meshtastic_Group group;
+    /* The status of the ATAK EUD */
+    bool has_status;
+    meshtastic_Status status;
     pb_size_t which_payload_variant;
     union {
         /* TAK position report */
         meshtastic_PLI pli;
-        /* Other binary data */
-        pb_callback_t data;
+        /* ATAK GeoChat message */
+        meshtastic_GeoChat chat;
     } payload_variant;
-    /* The status of the ATAK EUD */
-    bool has_status;
-    meshtastic_Status status;
 } meshtastic_TAKPacket;
 
 
@@ -141,6 +149,7 @@ extern "C" {
 #define _meshtastic_MemberRole_ARRAYSIZE ((meshtastic_MemberRole)(meshtastic_MemberRole_K9+1))
 
 
+
 #define meshtastic_Group_role_ENUMTYPE meshtastic_MemberRole
 #define meshtastic_Group_team_ENUMTYPE meshtastic_Team
 
@@ -149,18 +158,21 @@ extern "C" {
 
 
 /* Initializer values for message structs */
-#define meshtastic_TAKPacket_init_default        {false, meshtastic_Contact_init_default, false, meshtastic_Group_init_default, 0, {meshtastic_PLI_init_default}, false, meshtastic_Status_init_default}
+#define meshtastic_TAKPacket_init_default        {0, false, meshtastic_Contact_init_default, false, meshtastic_Group_init_default, false, meshtastic_Status_init_default, 0, {meshtastic_PLI_init_default}}
+#define meshtastic_GeoChat_init_default          {""}
 #define meshtastic_Group_init_default            {_meshtastic_MemberRole_MIN, _meshtastic_Team_MIN}
 #define meshtastic_Status_init_default           {0}
 #define meshtastic_Contact_init_default          {""}
 #define meshtastic_PLI_init_default              {0, 0, 0, 0, 0}
-#define meshtastic_TAKPacket_init_zero           {false, meshtastic_Contact_init_zero, false, meshtastic_Group_init_zero, 0, {meshtastic_PLI_init_zero}, false, meshtastic_Status_init_zero}
+#define meshtastic_TAKPacket_init_zero           {0, false, meshtastic_Contact_init_zero, false, meshtastic_Group_init_zero, false, meshtastic_Status_init_zero, 0, {meshtastic_PLI_init_zero}}
+#define meshtastic_GeoChat_init_zero             {""}
 #define meshtastic_Group_init_zero               {_meshtastic_MemberRole_MIN, _meshtastic_Team_MIN}
 #define meshtastic_Status_init_zero              {0}
 #define meshtastic_Contact_init_zero             {""}
 #define meshtastic_PLI_init_zero                 {0, 0, 0, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
+#define meshtastic_GeoChat_message_tag           1
 #define meshtastic_Group_role_tag                1
 #define meshtastic_Group_team_tag                2
 #define meshtastic_Status_battery_tag            1
@@ -170,25 +182,33 @@ extern "C" {
 #define meshtastic_PLI_altitude_tag              3
 #define meshtastic_PLI_speed_tag                 4
 #define meshtastic_PLI_course_tag                5
-#define meshtastic_TAKPacket_contact_tag         1
-#define meshtastic_TAKPacket_group_tag           2
-#define meshtastic_TAKPacket_pli_tag             3
-#define meshtastic_TAKPacket_data_tag            4
-#define meshtastic_TAKPacket_status_tag          5
+#define meshtastic_TAKPacket_is_compressed_tag   1
+#define meshtastic_TAKPacket_contact_tag         2
+#define meshtastic_TAKPacket_group_tag           3
+#define meshtastic_TAKPacket_status_tag          4
+#define meshtastic_TAKPacket_pli_tag             5
+#define meshtastic_TAKPacket_chat_tag            6
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_TAKPacket_FIELDLIST(X, a) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  contact,           1) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  group,             2) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,pli,payload_variant.pli),   3) \
-X(a, CALLBACK, ONEOF,    BYTES,    (payload_variant,data,payload_variant.data),   4) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  status,            5)
-#define meshtastic_TAKPacket_CALLBACK pb_default_field_callback
+X(a, STATIC,   SINGULAR, BOOL,     is_compressed,     1) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  contact,           2) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  group,             3) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  status,            4) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,pli,payload_variant.pli),   5) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,chat,payload_variant.chat),   6)
+#define meshtastic_TAKPacket_CALLBACK NULL
 #define meshtastic_TAKPacket_DEFAULT NULL
 #define meshtastic_TAKPacket_contact_MSGTYPE meshtastic_Contact
 #define meshtastic_TAKPacket_group_MSGTYPE meshtastic_Group
-#define meshtastic_TAKPacket_payload_variant_pli_MSGTYPE meshtastic_PLI
 #define meshtastic_TAKPacket_status_MSGTYPE meshtastic_Status
+#define meshtastic_TAKPacket_payload_variant_pli_MSGTYPE meshtastic_PLI
+#define meshtastic_TAKPacket_payload_variant_chat_MSGTYPE meshtastic_GeoChat
+
+#define meshtastic_GeoChat_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, STRING,   message,           1)
+#define meshtastic_GeoChat_CALLBACK NULL
+#define meshtastic_GeoChat_DEFAULT NULL
 
 #define meshtastic_Group_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    role,              1) \
@@ -216,6 +236,7 @@ X(a, STATIC,   SINGULAR, UINT32,   course,            5)
 #define meshtastic_PLI_DEFAULT NULL
 
 extern const pb_msgdesc_t meshtastic_TAKPacket_msg;
+extern const pb_msgdesc_t meshtastic_GeoChat_msg;
 extern const pb_msgdesc_t meshtastic_Group_msg;
 extern const pb_msgdesc_t meshtastic_Status_msg;
 extern const pb_msgdesc_t meshtastic_Contact_msg;
@@ -223,17 +244,19 @@ extern const pb_msgdesc_t meshtastic_PLI_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_TAKPacket_fields &meshtastic_TAKPacket_msg
+#define meshtastic_GeoChat_fields &meshtastic_GeoChat_msg
 #define meshtastic_Group_fields &meshtastic_Group_msg
 #define meshtastic_Status_fields &meshtastic_Status_msg
 #define meshtastic_Contact_fields &meshtastic_Contact_msg
 #define meshtastic_PLI_fields &meshtastic_PLI_msg
 
 /* Maximum encoded size of messages (where known) */
-/* meshtastic_TAKPacket_size depends on runtime parameters */
 #define meshtastic_Contact_size                  121
+#define meshtastic_GeoChat_size                  202
 #define meshtastic_Group_size                    4
 #define meshtastic_PLI_size                      26
 #define meshtastic_Status_size                   3
+#define meshtastic_TAKPacket_size                341
 
 #ifdef __cplusplus
 } /* extern "C" */
