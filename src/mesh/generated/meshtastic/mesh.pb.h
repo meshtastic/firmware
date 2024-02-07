@@ -796,36 +796,6 @@ typedef struct _meshtastic_FromRadio {
     };
 } meshtastic_FromRadio;
 
-/* Position Location Information from ATAK */
-typedef struct _meshtastic_TAK_PLI {
-    /* The new preferred location encoding, multiply by 1e-7 to get degrees
- in floating point */
-    int32_t latitude_i;
-    /* The new preferred location encoding, multiply by 1e-7 to get degrees
- in floating point */
-    int32_t longitude_i;
-    /* Altitude */
-    int32_t altitude;
-} meshtastic_TAK_PLI;
-
-/* Packets for the official ATAK Plugin */
-typedef struct _meshtastic_TAK_Packet {
-    pb_size_t which_callsign_variant;
-    union {
-        /* Uncompressed callsign from ATAK */
-        char callsign_uncompressed[512];
-        /* Compressed callsign using unishox2 for the wire */
-        char callsign_compressed[241];
-    } callsign_variant;
-    pb_size_t which_payload_variant;
-    union {
-        /* TAK position report */
-        meshtastic_TAK_PLI tak_pli;
-        /* Other binary data */
-        pb_callback_t data;
-    } payload_variant;
-} meshtastic_TAK_Packet;
-
 
 #ifdef __cplusplus
 extern "C" {
@@ -899,8 +869,6 @@ extern "C" {
 #define meshtastic_DeviceMetadata_hw_model_ENUMTYPE meshtastic_HardwareModel
 
 
-
-
 /* Initializer values for message structs */
 #define meshtastic_Position_init_default         {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_User_init_default             {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN}
@@ -920,8 +888,6 @@ extern "C" {
 #define meshtastic_NeighborInfo_init_default     {0, 0, 0, 0, {meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default}}
 #define meshtastic_Neighbor_init_default         {0, 0, 0, 0}
 #define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0}
-#define meshtastic_TAK_Packet_init_default       {0, {""}, 0, {meshtastic_TAK_PLI_init_default}}
-#define meshtastic_TAK_PLI_init_default          {0, 0, 0}
 #define meshtastic_Position_init_zero            {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_User_init_zero                {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN}
 #define meshtastic_RouteDiscovery_init_zero      {0, {0, 0, 0, 0, 0, 0, 0, 0}}
@@ -940,8 +906,6 @@ extern "C" {
 #define meshtastic_NeighborInfo_init_zero        {0, 0, 0, 0, {meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero}}
 #define meshtastic_Neighbor_init_zero            {0, 0, 0, 0}
 #define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0}
-#define meshtastic_TAK_Packet_init_zero          {0, {""}, 0, {meshtastic_TAK_PLI_init_zero}}
-#define meshtastic_TAK_PLI_init_zero             {0, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_Position_latitude_i_tag       1
@@ -1068,13 +1032,6 @@ extern "C" {
 #define meshtastic_FromRadio_xmodemPacket_tag    12
 #define meshtastic_FromRadio_metadata_tag        13
 #define meshtastic_FromRadio_mqttClientProxyMessage_tag 14
-#define meshtastic_TAK_PLI_latitude_i_tag        1
-#define meshtastic_TAK_PLI_longitude_i_tag       2
-#define meshtastic_TAK_PLI_altitude_tag          3
-#define meshtastic_TAK_Packet_callsign_uncompressed_tag 1
-#define meshtastic_TAK_Packet_callsign_compressed_tag 2
-#define meshtastic_TAK_Packet_tak_pli_tag        3
-#define meshtastic_TAK_Packet_data_tag           4
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_Position_FIELDLIST(X, a) \
@@ -1294,22 +1251,6 @@ X(a, STATIC,   SINGULAR, BOOL,     hasRemoteHardware,  10)
 #define meshtastic_DeviceMetadata_CALLBACK NULL
 #define meshtastic_DeviceMetadata_DEFAULT NULL
 
-#define meshtastic_TAK_Packet_FIELDLIST(X, a) \
-X(a, STATIC,   ONEOF,    STRING,   (callsign_variant,callsign_uncompressed,callsign_variant.callsign_uncompressed),   1) \
-X(a, STATIC,   ONEOF,    STRING,   (callsign_variant,callsign_compressed,callsign_variant.callsign_compressed),   2) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,tak_pli,payload_variant.tak_pli),   3) \
-X(a, CALLBACK, ONEOF,    BYTES,    (payload_variant,data,payload_variant.data),   4)
-#define meshtastic_TAK_Packet_CALLBACK pb_default_field_callback
-#define meshtastic_TAK_Packet_DEFAULT NULL
-#define meshtastic_TAK_Packet_payload_variant_tak_pli_MSGTYPE meshtastic_TAK_PLI
-
-#define meshtastic_TAK_PLI_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, SFIXED32, latitude_i,        1) \
-X(a, STATIC,   SINGULAR, SFIXED32, longitude_i,       2) \
-X(a, STATIC,   SINGULAR, INT32,    altitude,          3)
-#define meshtastic_TAK_PLI_CALLBACK NULL
-#define meshtastic_TAK_PLI_DEFAULT NULL
-
 extern const pb_msgdesc_t meshtastic_Position_msg;
 extern const pb_msgdesc_t meshtastic_User_msg;
 extern const pb_msgdesc_t meshtastic_RouteDiscovery_msg;
@@ -1328,8 +1269,6 @@ extern const pb_msgdesc_t meshtastic_Compressed_msg;
 extern const pb_msgdesc_t meshtastic_NeighborInfo_msg;
 extern const pb_msgdesc_t meshtastic_Neighbor_msg;
 extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
-extern const pb_msgdesc_t meshtastic_TAK_Packet_msg;
-extern const pb_msgdesc_t meshtastic_TAK_PLI_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_Position_fields &meshtastic_Position_msg
@@ -1350,11 +1289,8 @@ extern const pb_msgdesc_t meshtastic_TAK_PLI_msg;
 #define meshtastic_NeighborInfo_fields &meshtastic_NeighborInfo_msg
 #define meshtastic_Neighbor_fields &meshtastic_Neighbor_msg
 #define meshtastic_DeviceMetadata_fields &meshtastic_DeviceMetadata_msg
-#define meshtastic_TAK_Packet_fields &meshtastic_TAK_Packet_msg
-#define meshtastic_TAK_PLI_fields &meshtastic_TAK_PLI_msg
 
 /* Maximum encoded size of messages (where known) */
-/* meshtastic_TAK_Packet_size depends on runtime parameters */
 #define meshtastic_Compressed_size               243
 #define meshtastic_Data_size                     270
 #define meshtastic_DeviceMetadata_size           46
@@ -1370,7 +1306,6 @@ extern const pb_msgdesc_t meshtastic_TAK_PLI_msg;
 #define meshtastic_QueueStatus_size              23
 #define meshtastic_RouteDiscovery_size           40
 #define meshtastic_Routing_size                  42
-#define meshtastic_TAK_PLI_size                  21
 #define meshtastic_ToRadio_size                  504
 #define meshtastic_User_size                     79
 #define meshtastic_Waypoint_size                 165

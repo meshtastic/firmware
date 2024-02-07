@@ -60,12 +60,6 @@ PB_BIND(meshtastic_Neighbor, meshtastic_Neighbor, AUTO)
 PB_BIND(meshtastic_DeviceMetadata, meshtastic_DeviceMetadata, AUTO)
 
 
-PB_BIND(meshtastic_TAK_Packet, meshtastic_TAK_Packet, 2)
-
-
-PB_BIND(meshtastic_TAK_PLI, meshtastic_TAK_PLI, AUTO)
-
-
 
 
 
