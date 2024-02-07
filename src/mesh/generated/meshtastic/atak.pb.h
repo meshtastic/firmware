@@ -98,8 +98,12 @@ typedef struct _meshtastic_PLI {
     /* The new preferred location encoding, multiply by 1e-7 to get degrees
  in floating point */
     int32_t longitude_i;
-    /* Altitude */
-    int32_t altitude;
+    /* Altitude (ATAK prefers HAE) */
+    uint32_t altitude;
+    /* Speed */
+    uint32_t speed;
+    /* Course in degrees */
+    uint16_t course;
 } meshtastic_PLI;
 
 /* Packets for the official ATAK Plugin */
@@ -149,12 +153,12 @@ extern "C" {
 #define meshtastic_Group_init_default            {_meshtastic_MemberRole_MIN, _meshtastic_Team_MIN}
 #define meshtastic_Status_init_default           {0}
 #define meshtastic_Contact_init_default          {""}
-#define meshtastic_PLI_init_default              {0, 0, 0}
+#define meshtastic_PLI_init_default              {0, 0, 0, 0, 0}
 #define meshtastic_TAKPacket_init_zero           {false, meshtastic_Contact_init_zero, false, meshtastic_Group_init_zero, 0, {meshtastic_PLI_init_zero}, false, meshtastic_Status_init_zero}
 #define meshtastic_Group_init_zero               {_meshtastic_MemberRole_MIN, _meshtastic_Team_MIN}
 #define meshtastic_Status_init_zero              {0}
 #define meshtastic_Contact_init_zero             {""}
-#define meshtastic_PLI_init_zero                 {0, 0, 0}
+#define meshtastic_PLI_init_zero                 {0, 0, 0, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_Group_role_tag                1
@@ -164,6 +168,8 @@ extern "C" {
 #define meshtastic_PLI_latitude_i_tag            1
 #define meshtastic_PLI_longitude_i_tag           2
 #define meshtastic_PLI_altitude_tag              3
+#define meshtastic_PLI_speed_tag                 4
+#define meshtastic_PLI_course_tag                5
 #define meshtastic_TAKPacket_contact_tag         1
 #define meshtastic_TAKPacket_group_tag           2
 #define meshtastic_TAKPacket_pli_tag             3
@@ -203,7 +209,9 @@ X(a, STATIC,   SINGULAR, STRING,   callsign,          1)
 #define meshtastic_PLI_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, SFIXED32, latitude_i,        1) \
 X(a, STATIC,   SINGULAR, SFIXED32, longitude_i,       2) \
-X(a, STATIC,   SINGULAR, INT32,    altitude,          3)
+X(a, STATIC,   SINGULAR, UINT32,   altitude,          3) \
+X(a, STATIC,   SINGULAR, UINT32,   speed,             4) \
+X(a, STATIC,   SINGULAR, UINT32,   course,            5)
 #define meshtastic_PLI_CALLBACK NULL
 #define meshtastic_PLI_DEFAULT NULL
 
@@ -224,7 +232,7 @@ extern const pb_msgdesc_t meshtastic_PLI_msg;
 /* meshtastic_TAKPacket_size depends on runtime parameters */
 #define meshtastic_Contact_size                  121
 #define meshtastic_Group_size                    4
-#define meshtastic_PLI_size                      21
+#define meshtastic_PLI_size                      26
 #define meshtastic_Status_size                   3
 
 #ifdef __cplusplus
