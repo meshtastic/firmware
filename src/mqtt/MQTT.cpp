@@ -52,11 +52,8 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
             JSONObject json;
             json = json_value->AsObject();
 
-            // parse the channel name from the topic string
-            char *ptr = strtok(topic, "/");
-            for (int i = 0; i < 3; i++) {
-                ptr = strtok(NULL, "/");
-            }
+            // parse the channel name from the topic string by looking at the last occurrence of "/"
+            char *ptr = strrchr(topic, '/');
             meshtastic_Channel sendChannel = channels.getByName(ptr);
             // We allow downlink JSON packets only on a channel named "mqtt"
             if (strncasecmp(channels.getGlobalId(sendChannel.index), Channels::mqttChannel, strlen(Channels::mqttChannel)) == 0 &&
