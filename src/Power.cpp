@@ -396,10 +396,8 @@ bool Power::analogInit()
 #else
     analogReference(AR_INTERNAL); // 3.6V
 #endif
-    analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS); // Default of 12 is not very linear. Recommended to use 10 or 11
-                                                         // depending on needed resolution.
-
 #endif // ARCH_NRF52
+    analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS);
 
     batteryLevel = &analogLevel;
     return true;
