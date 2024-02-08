@@ -391,7 +391,7 @@ bool Power::analogInit()
 #endif
 #endif // ARCH_NRF52
     analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS);
-  
+
     batteryLevel = &analogLevel;
     return true;
 #else
