@@ -169,6 +169,8 @@ void portduinoSetup()
                 settingsMap[displayPanel] = st7735;
             else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ST7735S")
                 settingsMap[displayPanel] = st7735s;
+            else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ILI9341")
+                settingsMap[displayPanel] = ili9341;
             settingsMap[displayHeight] = yamlConfig["Display"]["Height"].as<int>(0);
             settingsMap[displayWidth] = yamlConfig["Display"]["Width"].as<int>(0);
             settingsMap[displayDC] = yamlConfig["Display"]["DC"].as<int>(-1);
@@ -184,6 +186,8 @@ void portduinoSetup()
         if (yamlConfig["Touchscreen"]) {
             if (yamlConfig["Touchscreen"]["Module"].as<std::string>("") == "XPT2046")
                 settingsMap[touchscreenModule] = xpt2046;
+            else if (yamlConfig["Touchscreen"]["Module"].as<std::string>("") == "STMPE610")
+                settingsMap[touchscreenModule] = stmpe610;
             settingsMap[touchscreenCS] = yamlConfig["Touchscreen"]["CS"].as<int>(-1);
             settingsMap[touchscreenIRQ] = yamlConfig["Touchscreen"]["IRQ"].as<int>(-1);
         }
