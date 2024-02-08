@@ -135,7 +135,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
         if (v < noBatVolt)
             return -1; // If voltage is super low assume no battery installed
 
-#ifdef ARCH_ESP32
+#ifdef NO_BATTERY_LEVEL_ON_CHARGE
         // This does not work on a RAK4631 with battery connected
         if (v > chargingVolt)
             return 0; // While charging we can't report % full on the battery
@@ -147,8 +147,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
          * @date    06/02/2024
          */
         float battery_SOC = 0.0;
-        uint16_t voltage = v / NUM_CELLS;
-        const uint16_t OCV[NUM_OCV_POINTS] = {OCV_ARRAY};
+        uint16_t voltage = v / NUM_CELLS; // single cell voltage (average)
         for (int i = 0; i < NUM_OCV_POINTS; i++) {
             if (OCV[i] <= voltage) {
                 if (i == 0) {
@@ -236,6 +235,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #endif
         for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
             raw += adc1_get_raw(adc_channel);
+            delayMicroseconds(100);
         }
 #ifdef ADC_CTRL
         digitalWrite(ADC_CTRL, LOW);
@@ -287,10 +287,8 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /// in power
 
     /// For heltecs with no battery connected, the measured voltage is 2204, so
-    // need to be higher than that, in this case is 2500mV
+    // need to be higher than that, in this case is 2500mV (3000-500)
     const uint16_t OCV[NUM_OCV_POINTS] = {OCV_ARRAY};
-    const float fullVolt = OCV[0] * NUM_CELLS;
-    const float emptyVolt = OCV[NUM_OCV_POINTS - 1] * NUM_CELLS;
     const float chargingVolt = (OCV[0] + 10) * NUM_CELLS;
     const float noBatVolt = (OCV[NUM_OCV_POINTS - 1] - 500) * NUM_CELLS;
 
