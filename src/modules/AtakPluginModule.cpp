@@ -77,8 +77,8 @@ void AtakPluginModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtast
             LOG_DEBUG("Compressed callsign: %d bytes\n", strlen(t->contact.callsign));
             LOG_DEBUG("Decompressed callsign: '%s' @ %d bytes\n", uncompressed.contact.callsign, length);
 
-            auto length = unishox2_decompress_simple(t->contact.device_callsign, sizeof(t->contact.device_callsign),
-                                                     uncompressed.contact.device_callsign);
+            length = unishox2_decompress_simple(t->contact.device_callsign, sizeof(t->contact.device_callsign),
+                                                uncompressed.contact.device_callsign);
 
             LOG_DEBUG("Compressed device_callsign: %d bytes\n", strlen(t->contact.device_callsign));
             LOG_DEBUG("Decompressed device_callsign: '%s' @ %d bytes\n", uncompressed.contact.device_callsign, length);
