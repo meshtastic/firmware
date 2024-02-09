@@ -398,7 +398,7 @@ void handleStatic(HTTPRequest *req, HTTPResponse *res)
             if (!file.available()) {
                 LOG_WARN("File not available - %s\n", filenameGzip.c_str());
                 res->println("Web server is running.<br><br>The content you are looking for can't be found. Please see: <a "
-                             "href=https://meshtastic.org/docs/getting-started/faq#wifi--web-browser>FAQ</a>.<br><br><a "
+                             "href=https://meshtastic.org/docs/software/web-client/>FAQ</a>.<br><br><a "
                              "href=/admin>admin</a>");
 
                 return;
