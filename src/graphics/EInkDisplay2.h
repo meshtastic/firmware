@@ -2,6 +2,11 @@
 
 #include <OLEDDisplay.h>
 
+#if defined(HELTEC_WIRELESS_PAPER_V1_0)
+// Re-enable SPI after deep sleep: rtc_gpio_hold_dis()
+#include "driver/rtc_io.h"
+#endif
+
 /**
  * An adapter class that allows using the GxEPD2 library as if it was an OLEDDisplay implementation.
  *
