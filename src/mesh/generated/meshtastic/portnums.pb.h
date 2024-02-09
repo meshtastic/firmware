@@ -119,6 +119,9 @@ typedef enum _meshtastic_PortNum {
     /* Aggregates edge info for the network by sending out a list of each node's neighbors
  ENCODING: Protobuf */
     meshtastic_PortNum_NEIGHBORINFO_APP = 71,
+    /* ATAK Plugin
+ Portnum for payloads from the official Meshtastic ATAK plugin */
+    meshtastic_PortNum_ATAK_PLUGIN = 72,
     /* Private applications should use portnums >= 256.
  To simplify initial development and testing you can use "PRIVATE_APP"
  in your code without needing to rebuild protobuf files (via [regen-protos.sh](https://github.com/meshtastic/firmware/blob/master/bin/regen-protos.sh)) */

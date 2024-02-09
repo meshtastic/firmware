@@ -352,6 +352,8 @@ class LGFX : public lgfx::LGFX_Device
             _panel_instance = new lgfx::Panel_ST7735;
         else if (settingsMap[displayPanel] == st7735s)
             _panel_instance = new lgfx::Panel_ST7735S;
+        else if (settingsMap[displayPanel] == ili9341)
+            _panel_instance = new lgfx::Panel_ILI9341;
         auto buscfg = _bus_instance.config();
         buscfg.spi_mode = 0;
 
@@ -377,6 +379,8 @@ class LGFX : public lgfx::LGFX_Device
         if (settingsMap[touchscreenModule]) {
             if (settingsMap[touchscreenModule] == xpt2046) {
                 _touch_instance = new lgfx::Touch_XPT2046;
+            } else if (settingsMap[touchscreenModule] == stmpe610) {
+                _touch_instance = new lgfx::Touch_STMPE610;
             }
             auto touch_cfg = _touch_instance->config();
 
