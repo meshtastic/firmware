@@ -52,11 +52,10 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
             JSONObject json;
             json = json_value->AsObject();
 
-            // parse the channel name from the topic string
-            char *ptr = strtok(topic, "/");
-            for (int i = 0; i < 3; i++) {
-                ptr = strtok(NULL, "/");
-            }
+            // parse the channel name from the topic string by looking for "json/"
+            const char *jsonSlash = "json/";
+            char *ptr = strstr(topic, jsonSlash) + sizeof(jsonSlash) + 1; // set pointer to after "json/"
+            ptr = strtok(ptr, "/") ? strtok(ptr, "/") : ptr; // if another "/" was added, parse string up to that character
             meshtastic_Channel sendChannel = channels.getByName(ptr);
             // We allow downlink JSON packets only on a channel named "mqtt"
             if (strncasecmp(channels.getGlobalId(sendChannel.index), Channels::mqttChannel, strlen(Channels::mqttChannel)) == 0 &&
@@ -70,7 +69,9 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                         // construct protobuf data packet using TEXT_MESSAGE, send it to the mesh
                         meshtastic_MeshPacket *p = router->allocForSending();
                         p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
-                        p->channel = sendChannel.index;
+                        if (json.find("channel") != json.end() && json["channel"]->IsNumber() &&
+                            (json["channel"]->AsNumber() < channels.getNumChannels()))
+                            p->channel = json["channel"]->AsNumber();
                         if (json.find("to") != json.end() && json["to"]->IsNumber())
                             p->to = json["to"]->AsNumber();
                         if (jsonPayloadStr.length() <= sizeof(p->decoded.payload.bytes)) {
@@ -98,7 +99,9 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                         // construct protobuf data packet using POSITION, send it to the mesh
                         meshtastic_MeshPacket *p = router->allocForSending();
                         p->decoded.portnum = meshtastic_PortNum_POSITION_APP;
-                        p->channel = sendChannel.index;
+                        if (json.find("channel") != json.end() && json["channel"]->IsNumber() &&
+                            (json["channel"]->AsNumber() < channels.getNumChannels()))
+                            p->channel = json["channel"]->AsNumber();
                         if (json.find("to") != json.end() && json["to"]->IsNumber())
                             p->to = json["to"]->AsNumber();
                         p->decoded.payload.size =
@@ -127,11 +130,17 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
             LOG_ERROR("Invalid MQTT service envelope, topic %s, len %u!\n", topic, length);
             return;
         } else {
-            if (strcmp(e.gateway_id, owner.id) == 0)
-                LOG_INFO("Ignoring downlink message we originally sent.\n");
-            else {
+            meshtastic_Channel ch = channels.getByName(e.channel_id);
+            if (strcmp(e.gateway_id, owner.id) == 0) {
+                // Generate an implicit ACK towards ourselves (handled and processed only locally!) for this message.
+                // We do this because packets are not rebroadcasted back into MQTT anymore and we assume that at least one node
+                // receives it when we get our own packet back. Then we'll stop our retransmissions.
+                if (e.packet && getFrom(e.packet) == nodeDB.getNodeNum())
+                    routingModule->sendAckNak(meshtastic_Routing_Error_NONE, getFrom(e.packet), e.packet->id, ch.index);
+                else
+                    LOG_INFO("Ignoring downlink message we originally sent.\n");
+            } else {
                 // Find channel by channel_id and check downlink_enabled
-                meshtastic_Channel ch = channels.getByName(e.channel_id);
                 if (strcmp(e.channel_id, channels.getGlobalId(ch.index)) == 0 && e.packet && ch.settings.downlink_enabled) {
                     LOG_INFO("Received MQTT topic %s, len=%u\n", topic, length);
                     meshtastic_MeshPacket *p = packetPool.allocCopy(*e.packet);
@@ -505,11 +514,6 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
                 }
             }
 
-            // Generate an implicit ACK towards ourselves (handled and processed only locally!) for this message.
-            // We do this because packets are not rebroadcasted back into MQTT anymore and we assume that at least one node
-            // receives it when we're connected to the broker. Then we'll stop our retransmissions.
-            if (getFrom(&mp) == nodeDB.getNodeNum())
-                routingModule->sendAckNak(meshtastic_Routing_Error_NONE, getFrom(&mp), mp.id, chIndex);
         } else {
             LOG_INFO("MQTT not connected, queueing packet\n");
             if (mqttQueue.numFree() == 0) {

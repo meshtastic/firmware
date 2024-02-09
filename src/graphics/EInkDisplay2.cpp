@@ -7,7 +7,7 @@
 #include "main.h"
 #include <SPI.h>
 
-#ifdef HELTEC_WIRELESS_PAPER
+#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0)
 SPIClass *hspi = NULL;
 #endif
 
@@ -48,6 +48,11 @@ SPIClass *hspi = NULL;
 #elif defined(HELTEC_WIRELESS_PAPER)
 // #define TECHO_DISPLAY_MODEL GxEPD2_213_T5D
 #define TECHO_DISPLAY_MODEL GxEPD2_213_FC1
+
+#elif defined(HELTEC_WIRELESS_PAPER_V1_0)
+// 2.13" 122x250 - DEPG0213BNS800
+#define TECHO_DISPLAY_MODEL GxEPD2_213_BN
+
 #endif
 
 GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT> *adafruitDisplay;
@@ -69,6 +74,17 @@ EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY
 
     // GxEPD2_154_M09
     // setGeometry(GEOMETRY_RAWMODE, 200, 200);
+
+#elif defined(HELTEC_WIRELESS_PAPER_V1_0)
+
+    // The display's memory is actually 128px x 250px
+    // Setting the buffersize manually prevents 122/8 truncating to a 15 byte width
+    // (Or something like that..)
+
+    this->geometry = GEOMETRY_RAWMODE;
+    this->displayWidth = 250;
+    this->displayHeight = 122;
+    this->displayBufferSize = 250 * (128 / 8);
 
 #elif defined(HELTEC_WIRELESS_PAPER)
     // GxEPD2_213_BN - 2.13 inch b/w 250x122
@@ -152,6 +168,8 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
 
 #elif defined(PCA10059) || defined(M5_COREINK)
         adafruitDisplay->nextPage();
+#elif defined(HELTEC_WIRELESS_PAPER_V1_0)
+        adafruitDisplay->nextPage();
 #elif defined(HELTEC_WIRELESS_PAPER)
         adafruitDisplay->nextPage();
 #elif defined(my)
@@ -233,6 +251,43 @@ bool EInkDisplay::connect()
         } else {
             (void)adafruitDisplay;
         }
+    }
+
+#elif defined(HELTEC_WIRELESS_PAPER_V1_0)
+    {
+        // Is this a normal boot, or a wake from deep sleep?
+        esp_sleep_wakeup_cause_t wakeReason = esp_sleep_get_wakeup_cause();
+
+        // If waking from sleep, need to reverse rtc_gpio_isolate(), called in cpuDeepSleep()
+        // Otherwise, SPI won't work
+        if (wakeReason != ESP_SLEEP_WAKEUP_UNDEFINED) {
+            // HSPI + other display pins
+            rtc_gpio_hold_dis((gpio_num_t)PIN_EINK_SCLK);
+            rtc_gpio_hold_dis((gpio_num_t)PIN_EINK_DC);
+            rtc_gpio_hold_dis((gpio_num_t)PIN_EINK_RES);
+            rtc_gpio_hold_dis((gpio_num_t)PIN_EINK_BUSY);
+            rtc_gpio_hold_dis((gpio_num_t)PIN_EINK_CS);
+            rtc_gpio_hold_dis((gpio_num_t)PIN_EINK_MOSI);
+        }
+
+        // Start HSPI
+        hspi = new SPIClass(HSPI);
+        hspi->begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS); // SCLK, MISO, MOSI, SS
+
+        // Enable VExt (ACTIVE LOW)
+        // Unsure if called elsewhere first?
+        delay(100);
+        pinMode(Vext, OUTPUT);
+        digitalWrite(Vext, LOW);
+        delay(100);
+
+        // Create GxEPD2 objects
+        auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, *hspi);
+        adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);
+
+        // Init GxEPD2
+        adafruitDisplay->init();
+        adafruitDisplay->setRotation(3);
     }
 #elif defined(HELTEC_WIRELESS_PAPER)
     {
