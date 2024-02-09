@@ -209,7 +209,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
             scaled = operativeAdcMultiplier * ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * raw;
 #endif
             // LOG_DEBUG("battery gpio %d raw val=%u scaled=%u\n", BATTERY_PIN, raw, (uint32_t)(scaled));
-            last_read_value = scaled;
+            last_read_value += (scaled - last_read_value) * 0.5; // Virtual LPF
             return scaled;
         } else {
             return last_read_value;
@@ -235,7 +235,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #endif
         for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
             raw += adc1_get_raw(adc_channel);
-            delayMicroseconds(100);
+            // delayMicroseconds(100);
         }
 #ifdef ADC_CTRL
         digitalWrite(ADC_CTRL, LOW);
@@ -291,8 +291,9 @@ class AnalogBatteryLevel : public HasBatteryLevel
     const uint16_t OCV[NUM_OCV_POINTS] = {OCV_ARRAY};
     const float chargingVolt = (OCV[0] + 10) * NUM_CELLS;
     const float noBatVolt = (OCV[NUM_OCV_POINTS - 1] - 500) * NUM_CELLS;
-
-    float last_read_value = 0.0;
+    // Start value from minimum voltage for the filter to not start from 0
+    // that could trigger some events.
+    float last_read_value = (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
     uint32_t last_read_time_ms = 0;
 
 #if defined(HAS_TELEMETRY) && !defined(ARCH_PORTDUINO)
