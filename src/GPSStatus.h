@@ -57,8 +57,10 @@ class GPSStatus : public Status
 #endif
             meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
             return node->position.latitude_i;
-        } else {
+        } else if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
             return p.latitude_i;
+        } else {
+            return 0;
         }
     }
 
@@ -70,8 +72,10 @@ class GPSStatus : public Status
 #endif
             meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
             return node->position.longitude_i;
-        } else {
+        } else if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
             return p.longitude_i;
+        } else {
+            return 0;
         }
     }
 
@@ -83,25 +87,18 @@ class GPSStatus : public Status
 #endif
             meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
             return node->position.altitude;
-        } else {
+        } else if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
             return p.altitude;
+        } else {
+            return 0;
         }
     }
 
-    uint32_t getDOP() const
-    {
-        return p.PDOP;
-    }
+    uint32_t getDOP() const { return p.PDOP; }
 
-    uint32_t getHeading() const
-    {
-        return p.ground_track;
-    }
+    uint32_t getHeading() const { return p.ground_track; }
 
-    uint32_t getNumSatellites() const
-    {
-        return p.sats_in_view;
-    }
+    uint32_t getNumSatellites() const { return p.sats_in_view; }
 
     bool matches(const GPSStatus *newStatus) const
     {

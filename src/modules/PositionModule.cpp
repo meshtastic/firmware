@@ -27,6 +27,18 @@ PositionModule::PositionModule()
     }
 }
 
+void PositionModule::clearLastPosition()
+{
+    LOG_DEBUG("Clearing last position saved\n");
+    meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
+    node->position.latitude_i = 0;
+    node->position.longitude_i = 0;
+    node->position.altitude = 0;
+    node->position.time = 0;
+    lastGpsLatitude = 0;
+    lastGpsLongitude = 0;
+}
+
 void PositionModule::clearPosition()
 {
     LOG_DEBUG("Clearing position on startup for sleepy tracker (ー。ー) zzz\n");

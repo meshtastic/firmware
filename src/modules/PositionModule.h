@@ -33,6 +33,8 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
 
     void handleNewPosition();
 
+    void clearLastPosition();
+
   protected:
     /** Called to handle a particular incoming message
 

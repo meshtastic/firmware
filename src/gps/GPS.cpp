@@ -1301,6 +1301,7 @@ bool GPS::whileIdle()
     }
     return isValid;
 }
+
 void GPS::enable()
 {
     enabled = true;
@@ -1313,7 +1314,10 @@ int32_t GPS::disable()
     enabled = false;
     setInterval(INT32_MAX);
     setAwake(false);
-
+    // reset position data if location is disabled and not fixed
+    if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED && !config.position.fixed_position) {
+        positionModule->clearLastPosition();
+    }
     return INT32_MAX;
 }
 
