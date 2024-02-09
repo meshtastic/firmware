@@ -18,6 +18,9 @@ class AtakPluginModule : public ProtobufModule<meshtastic_TAKPacket>, private co
     virtual void alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic_TAKPacket *t) override;
     /* Does our periodic broadcast */
     int32_t runOnce() override;
+
+  private:
+    meshtastic_TAKPacket cloneTAKPacketData(meshtastic_TAKPacket *t);
 };
 
 extern AtakPluginModule *atakPluginModule;
