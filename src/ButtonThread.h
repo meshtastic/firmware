@@ -54,15 +54,18 @@ class ButtonThread : public concurrency::OSThread
         if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC)
             userButton = OneButton(settingsMap[user], true, true);
 #elif defined(BUTTON_PIN)
-
-        userButton = OneButton(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, true, true);
+        int pin = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
+        userButton = OneButton(pin, true, true);
 #endif
+
 #ifdef INPUT_PULLUP_SENSE
         // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
-        pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT_PULLUP_SENSE);
+        pinMode(pin, INPUT_PULLUP_SENSE);
 #endif
         userButton.attachClick(userButtonPressed);
-        userButton.setClickMs(300);
+        userButton.setClickMs(400);
+        userButton.setPressMs(1000);
+        userButton.setDebounceMs(10);
         userButton.attachDuringLongPress(userButtonPressedLong);
         userButton.attachDoubleClick(userButtonDoublePressed);
         userButton.attachMultiClick(userButtonMultiPressed);
@@ -72,7 +75,15 @@ class ButtonThread : public concurrency::OSThread
         if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC)
             wakeOnIrq(settingsMap[user], FALLING);
 #else
-        wakeOnIrq(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, FALLING);
+        static OneButton *pBtn = &userButton; // only one instance of ButtonThread is created, so static is safe
+        attachInterrupt(
+            pin,
+            []() {
+                BaseType_t higherWake = 0;
+                mainDelay.interruptFromISR(&higherWake);
+                pBtn->tick();
+            },
+            CHANGE);
 #endif
 #endif
 #ifdef BUTTON_PIN_ALT
@@ -194,6 +205,7 @@ class ButtonThread : public concurrency::OSThread
     {
         if (!config.device.disable_triple_click && (gps != nullptr)) {
             gps->toggleGpsMode();
+            screen->forceDisplay();
         }
     }
 
