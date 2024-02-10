@@ -84,6 +84,15 @@ void AtakPluginModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtast
             LOG_DEBUG("Uncompressed chat message '%s' - %d bytes\n", t->payload_variant.chat.message,
                       strlen(t->payload_variant.chat.message));
             LOG_DEBUG("Compressed chat message '%s' - %d bytes\n", compressed.payload_variant.chat.message, length);
+
+            if (t->payload_variant.chat.has_to) {
+                compressed.payload_variant.chat.has_to = true;
+                length = unishox2_compress_simple(t->payload_variant.chat.to, strlen(t->payload_variant.chat.to),
+                                                  compressed.payload_variant.chat.to);
+                LOG_DEBUG("Uncompressed chat to '%s' - %d bytes\n", t->payload_variant.chat.to,
+                          strlen(t->payload_variant.chat.to));
+                LOG_DEBUG("Compressed chat to '%s' - %d bytes\n", compressed.payload_variant.chat.to, length);
+            }
         }
         mp.decoded.payload.size = pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes),
                                                      meshtastic_TAKPacket_fields, &compressed);
@@ -117,6 +126,14 @@ void AtakPluginModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtast
                                                      uncompressed.payload_variant.chat.message);
             LOG_DEBUG("Compressed chat message: %d bytes\n", strlen(t->payload_variant.chat.message));
             LOG_DEBUG("Decompressed chat message: '%s' @ %d bytes\n", uncompressed.payload_variant.chat.message, length);
+
+            if (t->payload_variant.chat.has_to) {
+                uncompressed.payload_variant.chat.has_to = true;
+                length = unishox2_decompress_simple(t->payload_variant.chat.to, strlen(t->payload_variant.chat.to),
+                                                    uncompressed.payload_variant.chat.to);
+                LOG_DEBUG("Compressed chat to: %d bytes\n", strlen(t->payload_variant.chat.to));
+                LOG_DEBUG("Decompressed chat to: '%s' @ %d bytes\n", uncompressed.payload_variant.chat.to, length);
+            }
         }
         decompressedCopy->decoded.payload.size =
             pb_encode_to_bytes(decompressedCopy->decoded.payload.bytes, sizeof(decompressedCopy->decoded.payload),
