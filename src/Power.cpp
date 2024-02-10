@@ -164,7 +164,8 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #endif
 
 #ifndef BATTERY_SENSE_SAMPLES
-#define BATTERY_SENSE_SAMPLES 30
+#define BATTERY_SENSE_SAMPLES                                                                                                    \
+    30 // Set the number of samples, it has an effect of increasing sensitivity in complex electromagnetic environment.
 #endif
 
 #ifdef BATTERY_PIN
@@ -176,65 +177,70 @@ class AnalogBatteryLevel : public HasBatteryLevel
         if (millis() - last_read_time_ms > min_read_interval) {
             last_read_time_ms = millis();
 
-            // Set the number of samples, it has an effect of increasing sensitivity, especially in complex electromagnetic
-            // environment.
             uint32_t raw = 0;
-#ifdef ARCH_ESP32
-#ifndef BAT_MEASURE_ADC_UNIT // ADC1
-#ifdef ADC_CTRL
-            if (heltec_version == 5) {
-                pinMode(ADC_CTRL, OUTPUT);
-                digitalWrite(ADC_CTRL, HIGH);
-                delay(10);
-            }
-#endif
-            for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
-                raw += adc1_get_raw(adc_channel);
-            }
-#ifdef ADC_CTRL
-            if (heltec_version == 5) {
-                digitalWrite(ADC_CTRL, LOW);
-            }
-#endif
-#else  // ADC2
-            int32_t adc_buf = 0;
-            for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
-                // ADC2 wifi bug workaround, see
-                // https://github.com/espressif/arduino-esp32/issues/102
-                WRITE_PERI_REG(SENS_SAR_READ_CTRL2_REG, RTC_reg_b);
-                SET_PERI_REG_MASK(SENS_SAR_READ_CTRL2_REG, SENS_SAR2_DATA_INV);
-                adc2_get_raw(adc_channel, ADC_WIDTH_BIT_12, &adc_buf);
-                raw += adc_buf;
-            }
-#endif // BAT_MEASURE_ADC_UNIT
-#else  // !ARCH_ESP32
+            float scaled = 0;
+
+#ifdef ARCH_ESP32 // ADC block for espressif platforms
+            raw = espAdcRead();
+            scaled = esp_adc_cal_raw_to_voltage(raw, adc_characs);
+            scaled *= operativeAdcMultiplier;
+#else // block for all other platforms
             for (uint32_t i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
                 raw += analogRead(BATTERY_PIN);
             }
-#endif
             raw = raw / BATTERY_SENSE_SAMPLES;
-            float scaled;
-#ifdef ARCH_ESP32
-            scaled = esp_adc_cal_raw_to_voltage(raw, adc_characs);
-            scaled *= operativeAdcMultiplier;
-#else
-#ifndef VBAT_RAW_TO_SCALED
-            scaled = 1000.0 * operativeAdcMultiplier * (AREF_VOLTAGE / 1024.0) * raw;
-#else
-            scaled = VBAT_RAW_TO_SCALED(raw); // defined in variant.h
-#endif // VBAT RAW TO SCALED
-#endif // ARCH_ESP32
-       // LOG_DEBUG("battery gpio %d raw val=%u scaled=%u\n", BATTERY_PIN, raw, (uint32_t)(scaled));
-
+            scaled = operativeAdcMultiplier * ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * raw;
+#endif
+            // LOG_DEBUG("battery gpio %d raw val=%u scaled=%u\n", BATTERY_PIN, raw, (uint32_t)(scaled));
             last_read_value = scaled;
             return scaled;
         } else {
             return last_read_value;
         }
-#else
-        return 0;
 #endif // BATTERY_PIN
+        return 0;
     }
+
+#if defined(ARCH_ESP32) && !defined(HAS_PMU) && defined(BATTERY_PIN)
+    /**
+     * ESP32 specific function for getting calibrated ADC reads
+     */
+    uint32_t espAdcRead()
+    {
+
+        uint32_t raw = 0;
+
+#ifndef BAT_MEASURE_ADC_UNIT // ADC1
+#ifdef ADC_CTRL
+        if (heltec_version == 5) {
+            pinMode(ADC_CTRL, OUTPUT);
+            digitalWrite(ADC_CTRL, HIGH);
+            delay(10);
+        }
+#endif
+        for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
+            raw += adc1_get_raw(adc_channel);
+        }
+#ifdef ADC_CTRL
+        if (heltec_version == 5) {
+            digitalWrite(ADC_CTRL, LOW);
+        }
+#endif
+#else  // ADC2
+        int32_t adc_buf = 0;
+        for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
+            // ADC2 wifi bug workaround, see
+            // https://github.com/espressif/arduino-esp32/issues/102
+            WRITE_PERI_REG(SENS_SAR_READ_CTRL2_REG, RTC_reg_b);
+            SET_PERI_REG_MASK(SENS_SAR_READ_CTRL2_REG, SENS_SAR2_DATA_INV);
+            adc2_get_raw(adc_channel, ADC_WIDTH_BIT_12, &adc_buf);
+            raw += adc_buf;
+        }
+#endif // BAT_MEASURE_ADC_UNIT
+        raw = raw / BATTERY_SENSE_SAMPLES;
+        return raw;
+    }
+#endif
 
     /**
      * return true if there is a battery installed in this unit
@@ -383,10 +389,8 @@ bool Power::analogInit()
 #else
     analogReference(AR_INTERNAL); // 3.6V
 #endif
-    analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS); // Default of 12 is not very linear. Recommended to use 10 or 11
-                                                         // depending on needed resolution.
-
 #endif // ARCH_NRF52
+    analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS);
 
     batteryLevel = &analogLevel;
     return true;

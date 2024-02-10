@@ -16,6 +16,7 @@ enum configNames {
     user,
     gpiochip,
     spidev,
+    i2cdev,
     has_gps,
     touchscreenModule,
     touchscreenCS,
@@ -32,10 +33,11 @@ enum configNames {
     displayOffsetY,
     displayInvert,
     keyboardDevice,
-    debugmode
+    logoutputlevel
 };
-enum { no_screen, st7789, st7735, st7735s };
-enum { no_touchscreen, xpt2046 };
+enum { no_screen, st7789, st7735, st7735s, ili9341 };
+enum { no_touchscreen, xpt2046, stmpe610 };
+enum { level_error, level_warn, level_info, level_debug };
 
 extern std::map<configNames, int> settingsMap;
 extern std::map<configNames, std::string> settingsStrings;

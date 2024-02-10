@@ -60,6 +60,11 @@ GPIO:
 GPS:
 #  SerialPath: /dev/ttyS0
 
+### Specify I2C device, or leave blank for none
+
+I2C:
+#  I2CDevice: /dev/i2c-1
+
 ### Set up SPI displays here. Note that I2C displays are generally auto-detected.
 
 Display:
@@ -86,7 +91,19 @@ Display:
 #  OffsetX: 0
 #  OffsetY: 0
 
+### Adafruit PiTFT 2.8 TFT+Touchscreen
+#  Panel: ILI9341
+#  CS: 8
+#  DC: 25
+#  Backlight: 2
+#  Width: 320
+#  Height: 240
+
 Touchscreen:
+#  Module: STMPE610
+#  CS: 7
+#  IRQ: 24
+
 #  Module: XPT2046
 #  CS: 7
 #  IRQ: 17
@@ -99,4 +116,4 @@ Input:
 ###
 
 Logging:
-#  DebugMode: true
+  LogLevel: info # debug, info, warn, error

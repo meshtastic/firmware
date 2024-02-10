@@ -73,6 +73,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_SENSELORA_RP2040 = 27,
     /* Makerfabs SenseLoRA Industrial Monitor (ESP32-S3 + RFM96) */
     meshtastic_HardwareModel_SENSELORA_S3 = 28,
+    /* Canary Radio Company - CanaryOne: https://canaryradio.io/products/canaryone */
+    meshtastic_HardwareModel_CANARYONE = 29,
     /* ---------------------------------------------------------------------------
  Less common/prototype boards listed here (needs one more byte over the air)
  --------------------------------------------------------------------------- */
@@ -127,6 +129,12 @@ typedef enum _meshtastic_HardwareModel {
  Lora module can be swapped out for a Heltec RA-62 which is "almost" pin compatible
  with one cut and one jumper Meshtastic works */
     meshtastic_HardwareModel_CHATTER_2 = 56,
+    /* Heltec Wireless Paper, With ESP32-S3 CPU and E-Ink display
+ Older "V1.0" Variant, has no "version sticker"
+ E-Ink model is DEPG0213BNS800
+ Tab on the screen protector is RED
+ Flex connector marking is FPC-7528B */
+    meshtastic_HardwareModel_HELTEC_WIRELESS_PAPER_V1_0 = 57,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
