@@ -129,6 +129,7 @@ jobs:
           - board: picow
           - board: rak11310
           - board: senselora_rp2040
+          - board: rp2040-lora
     uses: ./.github/workflows/build_rpi2040.yml
     with:
       board: ${{ matrix.board }}
