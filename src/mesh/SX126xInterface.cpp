@@ -44,10 +44,14 @@ template <typename T> bool SX126xInterface<T>::init()
     float tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE;
     // (DIO3 is not free to be used as an IRQ)
 #endif
-    if (tcxoVoltage == 0)
+
+#ifdef DEBUG_PORT
+    if (tcxoVoltage == 0) {
         LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE not defined, not using DIO3 as TCXO reference voltage\n");
-    else
+    } else {
         LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE defined, using DIO3 as TCXO reference voltage at %f V\n", tcxoVoltage);
+    }
+#endif
 
     // FIXME: May want to set depending on a definition, currently all SX126x variant files use the DC-DC regulator option
     bool useRegulatorLDO = false; // Seems to depend on the connection to pin 9/DCC_SW - if an inductor DCDC?
@@ -119,6 +123,7 @@ template <typename T> bool SX126xInterface<T>::init()
         lora.setRfSwitchPins(SX126X_RXEN, SX126X_TXEN);
     }
 #endif
+#ifdef DEBUG_PORT
     if (config.lora.sx126x_rx_boosted_gain) {
         uint16_t result = lora.setRxBoostedGainMode(true);
         LOG_INFO("Set RX gain to boosted mode; result: %d\n", result);
@@ -126,6 +131,13 @@ template <typename T> bool SX126xInterface<T>::init()
         uint16_t result = lora.setRxBoostedGainMode(false);
         LOG_INFO("Set RX gain to power saving mode (boosted mode off); result: %d\n", result);
     }
+#else
+    if (config.lora.sx126x_rx_boosted_gain) {
+        lora.setRxBoostedGainMode(true);
+    } else {
+        lora.setRxBoostedGainMode(false);
+    }
+#endif
 
 #if 0
     // Read/write a register we are not using (only used for FSK mode) to test SPI comms

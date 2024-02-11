@@ -9,11 +9,13 @@
 
 SerialConsole *console;
 
+#ifdef DEBUG_PORT
 void consoleInit()
 {
     new SerialConsole(); // Must be dynamically allocated because we are now inheriting from thread
     DEBUG_PORT.rpInit(); // Simply sets up semaphore
 }
+#endif
 
 void consolePrintf(const char *format, ...)
 {
