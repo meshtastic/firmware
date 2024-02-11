@@ -9,7 +9,7 @@
 PB_BIND(meshtastic_TAKPacket, meshtastic_TAKPacket, 2)
 
 
-PB_BIND(meshtastic_GeoChat, meshtastic_GeoChat, AUTO)
+PB_BIND(meshtastic_GeoChat, meshtastic_GeoChat, 2)
 
 
 PB_BIND(meshtastic_Group, meshtastic_Group, AUTO)
