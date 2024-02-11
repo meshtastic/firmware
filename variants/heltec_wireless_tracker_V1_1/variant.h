@@ -35,6 +35,7 @@
 #define ADC_ATTENUATION ADC_ATTEN_DB_2_5 // lower dB for high resistance voltage divider
 #define ADC_MULTIPLIER 4.9
 #define ADC_CTRL 2 // active HIGH, powers the voltage divider. Only on 1.1
+#define ADC_CTRL_ENABLED HIGH
 
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
