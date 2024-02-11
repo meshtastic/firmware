@@ -395,7 +395,10 @@ bool Power::analogInit()
     analogReference(AR_INTERNAL); // 3.6V
 #endif
 #endif // ARCH_NRF52
+
+#ifndef ARCH_ESP32
     analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS);
+#endif
 
     batteryLevel = &analogLevel;
     return true;
