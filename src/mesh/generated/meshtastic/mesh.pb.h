@@ -73,6 +73,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_SENSELORA_S3 = 28,
     /* Canary Radio Company - CanaryOne: https://canaryradio.io/products/canaryone */
     meshtastic_HardwareModel_CANARYONE = 29,
+    /* Waveshare RP2040 LoRa - https://www.waveshare.com/rp2040-lora.htm */
+    meshtastic_HardwareModel_RP2040_LORA = 30,
     /* ---------------------------------------------------------------------------
  Less common/prototype boards listed here (needs one more byte over the air)
  --------------------------------------------------------------------------- */
