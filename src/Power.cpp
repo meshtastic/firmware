@@ -209,6 +209,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     {
 
         uint32_t raw = 0;
+        uint8_t raw_c = 0;
 
 #ifndef BAT_MEASURE_ADC_UNIT // ADC1
 #ifdef ADC_CTRL
@@ -239,7 +240,6 @@ class AnalogBatteryLevel : public HasBatteryLevel
         // ADC2 wifi bug workaround not required, breaks compile
         // On ESP32S3, ADC2 can take turns with Wifi (?)
 
-        const uint8_t max_attempts = 10;
         int32_t adc_buf;
         esp_err_t read_result;
 
@@ -248,20 +248,12 @@ class AnalogBatteryLevel : public HasBatteryLevel
             adc_buf = 0;
             read_result = -1;
 
-            // Multiple attempts to read, incase WiFi blocks (very uncommon?)
-            for (int attempts = 0; attempts < max_attempts; attempts++) {
-                read_result = adc2_get_raw(adc_channel, ADC_WIDTH_BIT_12, &adc_buf);
-                if (read_result == ESP_OK)
-                    break;
-            }
-
-            // Handle the result
-            if (read_result == ESP_OK)
+            read_result = adc2_get_raw(adc_channel, ADC_WIDTH_BIT_12, &adc_buf);
+            if (read_result == ESP_OK) {
                 raw += adc_buf;
-            else {
-                // How to handle read failure?
-                // adc_buf += 0 (implied)
-                LOG_DEBUG("Failed to read ADC2 after %u attempts\n", max_attempts);
+                raw_c++; // Count valid samples
+            } else {
+                LOG_DEBUG("An attempt to sample ADC2 failed\n");
             }
         }
 
@@ -274,6 +266,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
             SET_PERI_REG_MASK(SENS_SAR_READ_CTRL2_REG, SENS_SAR2_DATA_INV);
             adc2_get_raw(adc_channel, ADC_WIDTH_BIT_12, &adc_buf);
             raw += adc_buf;
+            raw_c++;
         }
 #endif
 
@@ -284,8 +277,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #endif // End ADC_CTRL
 
 #endif // End BAT_MEASURE_ADC_UNIT
-        raw = raw / BATTERY_SENSE_SAMPLES;
-        return raw;
+        return (raw / (raw_c < 1 ? 1 : raw_c));
     }
 #endif
 
