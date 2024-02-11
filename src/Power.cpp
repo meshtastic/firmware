@@ -182,7 +182,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
 #ifndef BATTERY_SENSE_SAMPLES
 #define BATTERY_SENSE_SAMPLES                                                                                                    \
-    30 // Set the number of samples, it has an effect of increasing sensitivity in complex electromagnetic environment.
+    15 // Set the number of samples, it has an effect of increasing sensitivity in complex electromagnetic environment.
 #endif
 
 #ifdef BATTERY_PIN
@@ -208,12 +208,10 @@ class AnalogBatteryLevel : public HasBatteryLevel
             raw = raw / BATTERY_SENSE_SAMPLES;
             scaled = operativeAdcMultiplier * ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * raw;
 #endif
-            // LOG_DEBUG("battery gpio %d raw val=%u scaled=%u\n", BATTERY_PIN, raw, (uint32_t)(scaled));
             last_read_value += (scaled - last_read_value) * 0.5; // Virtual LPF
-            return scaled;
-        } else {
-            return last_read_value;
+            //LOG_DEBUG("battery gpio %d raw val=%u scaled=%u filtered=%u\n", BATTERY_PIN, raw, (uint32_t)(scaled), (uint32_t) (last_read_value));
         }
+        return last_read_value;
 #endif // BATTERY_PIN
         return 0;
     }
@@ -226,19 +224,24 @@ class AnalogBatteryLevel : public HasBatteryLevel
     {
 
         uint32_t raw = 0;
+        uint8_t raw_c = 0; //raw reading counter
 
 #ifndef BAT_MEASURE_ADC_UNIT // ADC1
-#ifdef ADC_CTRL
+#ifdef ADC_CTRL //enable adc voltage divider when we need to read
         pinMode(ADC_CTRL, OUTPUT);
-        digitalWrite(ADC_CTRL, HIGH);
+        digitalWrite(ADC_CTRL, ADC_CTRL_ENABLED);
         delay(10);
 #endif
         for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
-            raw += adc1_get_raw(adc_channel);
+            int val_ = adc1_get_raw(adc_channel);
+            if(val_ >= 0){ //save only valid readings
+                raw += val_;
+                raw_c ++;
+            }
             // delayMicroseconds(100);
         }
-#ifdef ADC_CTRL
-        digitalWrite(ADC_CTRL, LOW);
+#ifdef ADC_CTRL //disable adc voltage divider when we need to read
+        digitalWrite(ADC_CTRL, !ADC_CTRL_ENABLED);
 #endif
 #else  // ADC2
         int32_t adc_buf = 0;
@@ -249,10 +252,10 @@ class AnalogBatteryLevel : public HasBatteryLevel
             SET_PERI_REG_MASK(SENS_SAR_READ_CTRL2_REG, SENS_SAR2_DATA_INV);
             adc2_get_raw(adc_channel, ADC_WIDTH_BIT_12, &adc_buf);
             raw += adc_buf;
+            raw_c ++;
         }
 #endif // BAT_MEASURE_ADC_UNIT
-        raw = raw / BATTERY_SENSE_SAMPLES;
-        return raw;
+        return (raw / (raw_c < 1 ? 1 : raw_c));
     }
 #endif
 
@@ -383,10 +386,6 @@ bool Power::analogInit()
     } else {
         LOG_INFO("ADCmod: ADC characterization based on default reference voltage\n");
     }
-#if defined(HELTEC_V3) || defined(HELTEC_WSL_V3)
-    pinMode(37, OUTPUT); // needed for P channel mosfet to work
-    digitalWrite(37, LOW);
-#endif
 #endif // ARCH_ESP32
 
 #ifdef ARCH_NRF52
