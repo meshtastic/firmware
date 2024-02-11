@@ -219,7 +219,11 @@ void StoreForwardModule::sendPayload(NodeNum dest, uint32_t packetHistory_index)
     sf.variant.text.size = this->packetHistoryTXQueue[packetHistory_index].payload_size;
     memcpy(sf.variant.text.bytes, this->packetHistoryTXQueue[packetHistory_index].payload,
            this->packetHistoryTXQueue[packetHistory_index].payload_size);
-    sf.rr = meshtastic_StoreAndForward_RequestResponse_UNSET;
+    if (this->packetHistoryTXQueue[packetHistory_index].to == NODENUM_BROADCAST) {
+        sf.rr = meshtastic_StoreAndForward_RequestResponse_ROUTER_TEXT_BROADCAST;
+    } else {
+        sf.rr = meshtastic_StoreAndForward_RequestResponse_ROUTER_TEXT_DIRECT;
+    }
 
     p->decoded.payload.size =
         pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_StoreAndForward_msg, &sf);
