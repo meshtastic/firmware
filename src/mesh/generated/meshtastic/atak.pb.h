@@ -71,7 +71,8 @@ typedef struct _meshtastic_GeoChat {
     /* The text message */
     char message[200];
     /* Uid recipient of the message */
-    pb_callback_t to;
+    bool has_to;
+    char to[120];
 } meshtastic_GeoChat;
 
 /* ATAK Group
@@ -95,7 +96,9 @@ typedef struct _meshtastic_Status {
  <contact endpoint='0.0.0.0:4242:tcp' phone='+12345678' callsign='FALKE'/> */
 typedef struct _meshtastic_Contact {
     /* Callsign */
-    char callsign[120]; /* IP address of endpoint in integer form (0.0.0.0 default) */
+    char callsign[120];
+    /* Device callsign */
+    char device_callsign[120]; /* IP address of endpoint in integer form (0.0.0.0 default) */
 } meshtastic_Contact;
 
 /* Position Location Information from ATAK */
@@ -161,16 +164,16 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_TAKPacket_init_default        {0, false, meshtastic_Contact_init_default, false, meshtastic_Group_init_default, false, meshtastic_Status_init_default, 0, {meshtastic_PLI_init_default}}
-#define meshtastic_GeoChat_init_default          {"", {{NULL}, NULL}}
+#define meshtastic_GeoChat_init_default          {"", false, ""}
 #define meshtastic_Group_init_default            {_meshtastic_MemberRole_MIN, _meshtastic_Team_MIN}
 #define meshtastic_Status_init_default           {0}
-#define meshtastic_Contact_init_default          {""}
+#define meshtastic_Contact_init_default          {"", ""}
 #define meshtastic_PLI_init_default              {0, 0, 0, 0, 0}
 #define meshtastic_TAKPacket_init_zero           {0, false, meshtastic_Contact_init_zero, false, meshtastic_Group_init_zero, false, meshtastic_Status_init_zero, 0, {meshtastic_PLI_init_zero}}
-#define meshtastic_GeoChat_init_zero             {"", {{NULL}, NULL}}
+#define meshtastic_GeoChat_init_zero             {"", false, ""}
 #define meshtastic_Group_init_zero               {_meshtastic_MemberRole_MIN, _meshtastic_Team_MIN}
 #define meshtastic_Status_init_zero              {0}
-#define meshtastic_Contact_init_zero             {""}
+#define meshtastic_Contact_init_zero             {"", ""}
 #define meshtastic_PLI_init_zero                 {0, 0, 0, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -180,6 +183,7 @@ extern "C" {
 #define meshtastic_Group_team_tag                2
 #define meshtastic_Status_battery_tag            1
 #define meshtastic_Contact_callsign_tag          1
+#define meshtastic_Contact_device_callsign_tag   2
 #define meshtastic_PLI_latitude_i_tag            1
 #define meshtastic_PLI_longitude_i_tag           2
 #define meshtastic_PLI_altitude_tag              3
@@ -210,8 +214,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,chat,payload_variant.chat), 
 
 #define meshtastic_GeoChat_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   message,           1) \
-X(a, CALLBACK, OPTIONAL, STRING,   to,                2)
-#define meshtastic_GeoChat_CALLBACK pb_default_field_callback
+X(a, STATIC,   OPTIONAL, STRING,   to,                2)
+#define meshtastic_GeoChat_CALLBACK NULL
 #define meshtastic_GeoChat_DEFAULT NULL
 
 #define meshtastic_Group_FIELDLIST(X, a) \
@@ -226,7 +230,8 @@ X(a, STATIC,   SINGULAR, UINT32,   battery,           1)
 #define meshtastic_Status_DEFAULT NULL
 
 #define meshtastic_Contact_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, STRING,   callsign,          1)
+X(a, STATIC,   SINGULAR, STRING,   callsign,          1) \
+X(a, STATIC,   SINGULAR, STRING,   device_callsign,   2)
 #define meshtastic_Contact_CALLBACK NULL
 #define meshtastic_Contact_DEFAULT NULL
 
@@ -255,12 +260,12 @@ extern const pb_msgdesc_t meshtastic_PLI_msg;
 #define meshtastic_PLI_fields &meshtastic_PLI_msg
 
 /* Maximum encoded size of messages (where known) */
-/* meshtastic_TAKPacket_size depends on runtime parameters */
-/* meshtastic_GeoChat_size depends on runtime parameters */
-#define meshtastic_Contact_size                  121
+#define meshtastic_Contact_size                  242
+#define meshtastic_GeoChat_size                  323
 #define meshtastic_Group_size                    4
 #define meshtastic_PLI_size                      26
 #define meshtastic_Status_size                   3
+#define meshtastic_TAKPacket_size                584
 
 #ifdef __cplusplus
 } /* extern "C" */
