@@ -30,6 +30,10 @@ typedef enum _meshtastic_StoreAndForward_RequestResponse {
     meshtastic_StoreAndForward_RequestResponse_ROUTER_HISTORY = 6,
     /* Router is responding to a request for stats. */
     meshtastic_StoreAndForward_RequestResponse_ROUTER_STATS = 7,
+    /* Router sends a text message from its history that was a direct message. */
+    meshtastic_StoreAndForward_RequestResponse_ROUTER_TEXT_DIRECT = 8,
+    /* Router sends a text message from its history that was a broadcast. */
+    meshtastic_StoreAndForward_RequestResponse_ROUTER_TEXT_BROADCAST = 9,
     /* Client is an in error state. */
     meshtastic_StoreAndForward_RequestResponse_CLIENT_ERROR = 64,
     /* Client has requested a replay from the router. */
