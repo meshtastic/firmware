@@ -127,8 +127,6 @@ class AnalogBatteryLevel : public HasBatteryLevel
 {
     /**
      * Battery state of charge, from 0 to 100 or -1 for unknown
-     *
-     * FIXME - use a lipo lookup table, the current % full is super wrong
      */
     virtual int getBatteryPercent() override
     {
@@ -142,8 +140,30 @@ class AnalogBatteryLevel : public HasBatteryLevel
         if (v > chargingVolt)
             return 0; // While charging we can't report % full on the battery
 #endif
-
-        return clamp((int)(100 * (v - emptyVolt) / (fullVolt - emptyVolt)), 0, 100);
+        /**
+         * @brief   Battery voltage lookup table interpolation to obtain a more
+         * precise percentage rather than the old proportional one.
+         * @author  Gabriele Russo
+         * @date    06/02/2024
+         */
+        float battery_SOC = 0.0;
+        uint16_t voltage = v/NUM_CELLS;
+        const uint16_t OCV[NUM_OCV_POINTS] = OCV_ARRAY;
+        for (int i = 0; i < NUM_OCV_POINTS; i++){
+            if (OCV[i] <= voltage){
+                if (i == 0) {
+                    battery_SOC = 100.0;  // 100% full
+                }
+                else {
+                    // interpolate between OCV[i] and OCV[i-1]
+                    battery_SOC = (float) 100.0 / (NUM_OCV_POINTS - 1.0) *
+                        (NUM_OCV_POINTS - 1.0 - i + ((float)voltage - OCV[i]) /
+                            (OCV[i-1] - OCV[i]));
+                }
+                break;
+            }
+        }
+        return clamp((int)(battery_SOC),0,100);
     }
 
     /**
@@ -272,21 +292,14 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
     /// in power
 
-#ifndef BAT_FULLVOLT
-#define BAT_FULLVOLT 4200
-#endif
-#ifndef BAT_EMPTYVOLT
-#define BAT_EMPTYVOLT 3270
-#endif
-#ifndef BAT_CHARGINGVOLT
-#define BAT_CHARGINGVOLT 4210
-#endif
-#ifndef BAT_NOBATVOLT
-#define BAT_NOBATVOLT 2230
-#endif
+    /// For heltecs with no battery connected, the measured voltage is 2204, so
+    //need to be higher than that, in this case is 2500mV
+    const uint16_t OCV[NUM_OCV_POINTS] = OCV_ARRAY;
+    const float fullVolt = OCV[0]*NUM_CELLS;
+    const float emptyVolt = OCV[NUM_OCV_POINTS-1]*NUM_CELLS;
+    const float chargingVolt = (OCV[0]+10)*NUM_CELLS;
+    const float noBatVolt = (OCV[NUM_OCV_POINTS-1]-500)*NUM_CELLS;
 
-    /// For heltecs with no battery connected, the measured voltage is 2204, so raising to 2230 from 2100
-    const float fullVolt = BAT_FULLVOLT, emptyVolt = BAT_EMPTYVOLT, chargingVolt = BAT_CHARGINGVOLT, noBatVolt = BAT_NOBATVOLT;
     float last_read_value = 0.0;
     uint32_t last_read_time_ms = 0;
 
@@ -461,10 +474,10 @@ void Power::readPowerStatus()
                 batteryChargePercent = batteryLevel->getBatteryPercent();
             } else {
                 // If the AXP192 returns a percentage less than 0, the feature is either not supported or there is an error
-                // In that case, we compute an estimate of the charge percent based on maximum and minimum voltages defined in
-                // power.h
+                // In that case, we compute an estimate of the charge percent based on open circuite voltage table defined
+                // in power.h
                 batteryChargePercent =
-                    clamp((int)(((batteryVoltageMv - BAT_MILLIVOLTS_EMPTY) * 1e2) / (BAT_MILLIVOLTS_FULL - BAT_MILLIVOLTS_EMPTY)),
+                    clamp((int)(((batteryVoltageMv - (OCV[NUM_OCV_POINTS-1]*NUM_CELLS)) * 1e2) / ((OCV[0]*NUM_CELLS) - (OCV[NUM_OCV_POINTS-1]*NUM_CELLS))),
                           0, 100);
             }
         }
@@ -530,10 +543,11 @@ void Power::readPowerStatus()
 
 #endif
 
-        // If we have a battery at all and it is less than 10% full, force deep sleep if we have more than 10 low readings in
-        // a row
+        // If we have a battery at all and it is less than 0%, force deep sleep if we have more than 10 low readings in
+        // a row. NOTE: min LiIon/LiPo voltage is 2.0 to 2.5V, current OCV min is set to 3100 that is large enough.
+        // 
         if (powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
-            if (batteryLevel->getBattVoltage() < MIN_BAT_MILLIVOLTS) {
+            if (batteryLevel->getBattVoltage() < OCV[NUM_OCV_POINTS-1]) {
                 low_voltage_counter++;
                 LOG_DEBUG("Low voltage counter: %d/10\n", low_voltage_counter);
                 if (low_voltage_counter > 10) {
