@@ -109,8 +109,9 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_BETAFPV_900_NANO_TX = 46,
     /* Raspberry Pi Pico (W) with Waveshare SX1262 LoRa Node Module */
     meshtastic_HardwareModel_RPI_PICO = 47,
-    /* Heltec Wireless Tracker with ESP32-S3 CPU, built-in GPS, and TFT */
-    meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER = 48,
+    /* Heltec Wireless Tracker with ESP32-S3 CPU, built-in GPS, and TFT
+ Newer V1.1, version is written on the PCB near the display. */
+    meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER_V1_1 = 48,
     /* Heltec Wireless Paper with ESP32-S3 CPU and E-Ink display */
     meshtastic_HardwareModel_HELTEC_WIRELESS_PAPER = 49,
     /* LilyGo T-Deck with ESP32-S3 CPU, Keyboard and IPS display */
@@ -135,6 +136,9 @@ typedef enum _meshtastic_HardwareModel {
  Tab on the screen protector is RED
  Flex connector marking is FPC-7528B */
     meshtastic_HardwareModel_HELTEC_WIRELESS_PAPER_V1_0 = 57,
+    /* Heltec Wireless Tracker with ESP32-S3 CPU, built-in GPS, and TFT
+ Older "V1.0" Variant */
+    meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER_V1_0 = 58,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
