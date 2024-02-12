@@ -135,7 +135,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
         if (v < noBatVolt)
             return -1; // If voltage is super low assume no battery installed
 
-#ifdef ARCH_ESP32
+#ifdef NO_BATTERY_LEVEL_ON_CHARGE
         // This does not work on a RAK4631 with battery connected
         if (v > chargingVolt)
             return 0; // While charging we can't report % full on the battery
@@ -147,23 +147,20 @@ class AnalogBatteryLevel : public HasBatteryLevel
          * @date    06/02/2024
          */
         float battery_SOC = 0.0;
-        uint16_t voltage = v/NUM_CELLS;
-        const uint16_t OCV[NUM_OCV_POINTS] = OCV_ARRAY;
-        for (int i = 0; i < NUM_OCV_POINTS; i++){
-            if (OCV[i] <= voltage){
+        uint16_t voltage = v / NUM_CELLS; // single cell voltage (average)
+        for (int i = 0; i < NUM_OCV_POINTS; i++) {
+            if (OCV[i] <= voltage) {
                 if (i == 0) {
-                    battery_SOC = 100.0;  // 100% full
-                }
-                else {
+                    battery_SOC = 100.0; // 100% full
+                } else {
                     // interpolate between OCV[i] and OCV[i-1]
-                    battery_SOC = (float) 100.0 / (NUM_OCV_POINTS - 1.0) *
-                        (NUM_OCV_POINTS - 1.0 - i + ((float)voltage - OCV[i]) /
-                            (OCV[i-1] - OCV[i]));
+                    battery_SOC = (float)100.0 / (NUM_OCV_POINTS - 1.0) *
+                                  (NUM_OCV_POINTS - 1.0 - i + ((float)voltage - OCV[i]) / (OCV[i - 1] - OCV[i]));
                 }
                 break;
             }
         }
-        return clamp((int)(battery_SOC),0,100);
+        return clamp((int)(battery_SOC), 0, 100);
     }
 
     /**
@@ -212,7 +209,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
             scaled = operativeAdcMultiplier * ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * raw;
 #endif
             // LOG_DEBUG("battery gpio %d raw val=%u scaled=%u\n", BATTERY_PIN, raw, (uint32_t)(scaled));
-            last_read_value = scaled;
+            last_read_value += (scaled - last_read_value) * 0.5; // Virtual LPF
             return scaled;
         } else {
             return last_read_value;
@@ -232,19 +229,16 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
 #ifndef BAT_MEASURE_ADC_UNIT // ADC1
 #ifdef ADC_CTRL
-        if (heltec_version == 5) {
-            pinMode(ADC_CTRL, OUTPUT);
-            digitalWrite(ADC_CTRL, HIGH);
-            delay(10);
-        }
+        pinMode(ADC_CTRL, OUTPUT);
+        digitalWrite(ADC_CTRL, HIGH);
+        delay(10);
 #endif
         for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
             raw += adc1_get_raw(adc_channel);
+            // delayMicroseconds(100);
         }
 #ifdef ADC_CTRL
-        if (heltec_version == 5) {
-            digitalWrite(ADC_CTRL, LOW);
-        }
+        digitalWrite(ADC_CTRL, LOW);
 #endif
 #else  // ADC2
         int32_t adc_buf = 0;
@@ -293,14 +287,13 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /// in power
 
     /// For heltecs with no battery connected, the measured voltage is 2204, so
-    //need to be higher than that, in this case is 2500mV
-    const uint16_t OCV[NUM_OCV_POINTS] = OCV_ARRAY;
-    const float fullVolt = OCV[0]*NUM_CELLS;
-    const float emptyVolt = OCV[NUM_OCV_POINTS-1]*NUM_CELLS;
-    const float chargingVolt = (OCV[0]+10)*NUM_CELLS;
-    const float noBatVolt = (OCV[NUM_OCV_POINTS-1]-500)*NUM_CELLS;
-
-    float last_read_value = 0.0;
+    // need to be higher than that, in this case is 2500mV (3000-500)
+    const uint16_t OCV[NUM_OCV_POINTS] = {OCV_ARRAY};
+    const float chargingVolt = (OCV[0] + 10) * NUM_CELLS;
+    const float noBatVolt = (OCV[NUM_OCV_POINTS - 1] - 500) * NUM_CELLS;
+    // Start value from minimum voltage for the filter to not start from 0
+    // that could trigger some events.
+    float last_read_value = (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
     uint32_t last_read_time_ms = 0;
 
 #if defined(HAS_TELEMETRY) && !defined(ARCH_PORTDUINO)
@@ -476,9 +469,9 @@ void Power::readPowerStatus()
                 // If the AXP192 returns a percentage less than 0, the feature is either not supported or there is an error
                 // In that case, we compute an estimate of the charge percent based on open circuite voltage table defined
                 // in power.h
-                batteryChargePercent =
-                    clamp((int)(((batteryVoltageMv - (OCV[NUM_OCV_POINTS-1]*NUM_CELLS)) * 1e2) / ((OCV[0]*NUM_CELLS) - (OCV[NUM_OCV_POINTS-1]*NUM_CELLS))),
-                          0, 100);
+                batteryChargePercent = clamp((int)(((batteryVoltageMv - (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS)) * 1e2) /
+                                                   ((OCV[0] * NUM_CELLS) - (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS))),
+                                             0, 100);
             }
         }
 
@@ -545,9 +538,9 @@ void Power::readPowerStatus()
 
         // If we have a battery at all and it is less than 0%, force deep sleep if we have more than 10 low readings in
         // a row. NOTE: min LiIon/LiPo voltage is 2.0 to 2.5V, current OCV min is set to 3100 that is large enough.
-        // 
+        //
         if (powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
-            if (batteryLevel->getBattVoltage() < OCV[NUM_OCV_POINTS-1]) {
+            if (batteryLevel->getBattVoltage() < OCV[NUM_OCV_POINTS - 1]) {
                 low_voltage_counter++;
                 LOG_DEBUG("Low voltage counter: %d/10\n", low_voltage_counter);
                 if (low_voltage_counter > 10) {
