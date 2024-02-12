@@ -130,9 +130,10 @@ uint32_t StoreForwardModule::historyQueueCreate(uint32_t msAgo, uint32_t to, uin
 {
 
     this->packetHistoryTXQueue_size = 0;
-    uint32_t last_index = *last_request_index;
+    // If our history was cleared, ignore what the client is telling us
+    uint32_t last_index = *last_request_index >= this->packetHistoryCurrent ? 0 : *last_request_index;
 
-    for (int i = *last_request_index; i < this->packetHistoryCurrent; i++) {
+    for (int i = last_index; i < this->packetHistoryCurrent; i++) {
         /*
             LOG_DEBUG("SF historyQueueCreate\n");
             LOG_DEBUG("SF historyQueueCreate - time %d\n", this->packetHistory[i].time);
@@ -153,14 +154,13 @@ uint32_t StoreForwardModule::historyQueueCreate(uint32_t msAgo, uint32_t to, uin
                 memcpy(this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].payload, this->packetHistory[i].payload,
                        meshtastic_Constants_DATA_PAYLOAD_LEN);
                 this->packetHistoryTXQueue_size++;
-                last_index = i + 1; // Set to one higher such that we don't send the same message again
+                *last_request_index = i + 1; // Set to one higher such that we don't send the same message again
 
                 LOG_DEBUG("*** PacketHistoryStruct time=%d, msg=%s\n", this->packetHistory[i].time,
                           this->packetHistory[i].payload);
             }
         }
     }
-    *last_request_index = last_index;
     return this->packetHistoryTXQueue_size;
 }
 
