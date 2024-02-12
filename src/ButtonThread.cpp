@@ -73,9 +73,9 @@ ButtonThread::ButtonThread() : OSThread("Button")
     pinMode(BUTTON_PIN_ALT, INPUT_PULLUP_SENSE);
 #endif
     userButtonAlt.attachClick(userButtonPressed);
-    userButton.setClickMs(250);
-    userButton.setPressMs(c_longPressTime);
-    userButton.setDebounceMs(1);
+    userButtonAlt.setClickMs(250);
+    userButtonAlt.setPressMs(c_longPressTime);
+    userButtonAlt.setDebounceMs(1);
     userButtonAlt.attachDoubleClick(userButtonDoublePressed);
     userButtonAlt.attachLongPressStart(userButtonPressedLongStart);
     userButtonAlt.attachLongPressStop(userButtonPressedLongStop);
