@@ -191,15 +191,10 @@ static int32_t ledBlinker()
 
 uint32_t timeLastPowered = 0;
 
-#if HAS_BUTTON || defined(ARCH_PORTDUINO)
-bool ButtonThread::shutdown_on_long_stop = false;
-#endif
-
 static Periodic *ledPeriodic;
 static OSThread *powerFSMthread;
 #if HAS_BUTTON || defined(ARCH_PORTDUINO)
 static OSThread *buttonThread;
-uint32_t ButtonThread::longPressTime = 0;
 #endif
 static OSThread *accelerometerThread;
 static OSThread *ambientLightingThread;
