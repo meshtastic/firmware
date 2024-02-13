@@ -10,7 +10,7 @@ uint8_t GPS::_message_PMREQ_10[] PROGMEM = {
     0x00, 0x00, 0x00,       // Reserved 1
     0x00, 0x00, 0x00, 0x00, // 4 bytes duration of request task (milliseconds)
     0x06, 0x00, 0x00, 0x00, // Bitfield, set backup =1 and force =1
-    0x00, 0x00, 0x00, 0x00  // wakeupSources
+    0x08, 0x00, 0x00, 0x00  // wakeupSources Wake on uartrx
 };
 
 const uint8_t GPS::_message_CFG_RXM_PSM[] PROGMEM = {
