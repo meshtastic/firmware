@@ -77,9 +77,9 @@
                      // lower dB for lower voltage rnage
 #define ADC_MULTIPLIER                                                                                                           \
     5.0                   // VBATT---10k--pin34---2.5K---GND
-                          // Chatter2 uses 3 AAA cells
-#define BAT_FULLVOLT 4800 // with the 5.0 divider, input to BATTERY_PIN is 900mv
-#define BAT_EMPTYVOLT 3300
+// Chatter2 uses 3 AAA cells
+#define CELL_TYPE_ALKALINE
+#define NUM_CELLS 3
 #undef EXT_PWR_DETECT
 
 // GPS
