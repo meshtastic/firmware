@@ -111,7 +111,7 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_RPI_PICO = 47,
     /* Heltec Wireless Tracker with ESP32-S3 CPU, built-in GPS, and TFT
  Newer V1.1, version is written on the PCB near the display. */
-    meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER_V1_1 = 48,
+    meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER = 48,
     /* Heltec Wireless Paper with ESP32-S3 CPU and E-Ink display */
     meshtastic_HardwareModel_HELTEC_WIRELESS_PAPER = 49,
     /* LilyGo T-Deck with ESP32-S3 CPU, Keyboard and IPS display */
