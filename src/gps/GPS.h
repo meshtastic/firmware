@@ -106,6 +106,7 @@ class GPS : private concurrency::OSThread
     static const uint8_t _message_NAVX5[];
     static const uint8_t _message_NAVX5_8[];
     static const uint8_t _message_NMEA[];
+    static const uint8_t _message_DISABLE_TXT_INFO[];
     static const uint8_t _message_1HZ[];
     static const uint8_t _message_GLL[];
     static const uint8_t _message_GSA[];
@@ -116,6 +117,21 @@ class GPS : private concurrency::OSThread
     static const uint8_t _message_GGA[];
     static const uint8_t _message_PMS[];
     static const uint8_t _message_SAVE[];
+
+    // VALSET Commands for M10
+    static const uint8_t _message_VALSET_PM[];
+    static const uint8_t _message_VALSET_PM_RAM[];
+    static const uint8_t _message_VALSET_PM_BBR[];
+    static const uint8_t _message_VALSET_ITFM_RAM[];
+    static const uint8_t _message_VALSET_ITFM_BBR[];
+    static const uint8_t _message_VALSET_DISABLE_NMEA_RAM[];
+    static const uint8_t _message_VALSET_DISABLE_NMEA_BBR[];
+    static const uint8_t _message_VALSET_DISABLE_TXT_INFO_RAM[];
+    static const uint8_t _message_VALSET_DISABLE_TXT_INFO_BBR[];
+    static const uint8_t _message_VALSET_ENABLE_NMEA_RAM[];
+    static const uint8_t _message_VALSET_ENABLE_NMEA_BBR[];
+    static const uint8_t _message_VALSET_DISABLE_SBAS_RAM[];
+    static const uint8_t _message_VALSET_DISABLE_SBAS_BBR[];
 
     meshtastic_Position p = meshtastic_Position_init_default;
 

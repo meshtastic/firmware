@@ -5,6 +5,14 @@
 #define I2C_SCL SCL
 
 #define USE_EINK
+
+// Settings for Dynamic Partial mode
+// Change between partial and full refresh config, or skip update, balancing urgency and display health.
+#define USE_EINK_DYNAMIC_PARTIAL
+#define EINK_LOWPRIORITY_LIMIT_SECONDS 30
+#define EINK_HIGHPRIORITY_LIMIT_SECONDS 1
+#define EINK_PARTIAL_REPEAT_LIMIT 5
+
 /*
  * eink display pins
  */
@@ -27,10 +35,12 @@
 #define VEXT_ENABLE 45 // active low, powers the oled display and the lora antenna boost
 #define BUTTON_PIN 0
 
-#define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define ADC_CHANNEL ADC1_GPIO1_CHANNEL
-#define ADC_ATTENUATION ADC_ATTEN_DB_2_5 // lower dB for high resistance voltage divider
-#define ADC_MULTIPLIER 4.9
+#define ADC_CTRL 19
+#define BATTERY_PIN 20
+#define ADC_CHANNEL ADC2_GPIO20_CHANNEL
+#define ADC_MULTIPLIER 2                // Voltage divider is roughly 1:1
+#define BAT_MEASURE_ADC_UNIT 2          // Use ADC2
+#define ADC_ATTENUATION ADC_ATTEN_DB_11 // Voltage divider output is quite high
 
 #define USE_SX1262
 

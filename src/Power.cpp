@@ -209,6 +209,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     {
 
         uint32_t raw = 0;
+        uint8_t raw_c = 0;
 
 #ifndef BAT_MEASURE_ADC_UNIT // ADC1
 #ifdef ADC_CTRL
@@ -226,7 +227,37 @@ class AnalogBatteryLevel : public HasBatteryLevel
             digitalWrite(ADC_CTRL, LOW);
         }
 #endif
-#else  // ADC2
+#else // ADC2
+#ifdef ADC_CTRL
+#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0)
+        pinMode(ADC_CTRL, OUTPUT);
+        digitalWrite(ADC_CTRL, LOW); // ACTIVE LOW
+        delay(10);
+#endif
+#endif // End ADC_CTRL
+
+#ifdef CONFIG_IDF_TARGET_ESP32S3 // ESP32S3
+        // ADC2 wifi bug workaround not required, breaks compile
+        // On ESP32S3, ADC2 can take turns with Wifi (?)
+
+        int32_t adc_buf;
+        esp_err_t read_result;
+
+        // Multiple samples
+        for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
+            adc_buf = 0;
+            read_result = -1;
+
+            read_result = adc2_get_raw(adc_channel, ADC_WIDTH_BIT_12, &adc_buf);
+            if (read_result == ESP_OK) {
+                raw += adc_buf;
+                raw_c++; // Count valid samples
+            } else {
+                LOG_DEBUG("An attempt to sample ADC2 failed\n");
+            }
+        }
+
+#else // Other ESP32
         int32_t adc_buf = 0;
         for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
             // ADC2 wifi bug workaround, see
@@ -235,10 +266,18 @@ class AnalogBatteryLevel : public HasBatteryLevel
             SET_PERI_REG_MASK(SENS_SAR_READ_CTRL2_REG, SENS_SAR2_DATA_INV);
             adc2_get_raw(adc_channel, ADC_WIDTH_BIT_12, &adc_buf);
             raw += adc_buf;
+            raw_c++;
         }
-#endif // BAT_MEASURE_ADC_UNIT
-        raw = raw / BATTERY_SENSE_SAMPLES;
-        return raw;
+#endif
+
+#ifdef ADC_CTRL
+#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0)
+        digitalWrite(ADC_CTRL, HIGH);
+#endif
+#endif // End ADC_CTRL
+
+#endif // End BAT_MEASURE_ADC_UNIT
+        return (raw / (raw_c < 1 ? 1 : raw_c));
     }
 #endif
 
@@ -364,8 +403,11 @@ bool Power::analogInit()
     adc1_config_channel_atten(adc_channel, atten);
 #else // ADC2
     adc2_config_channel_atten(adc_channel, atten);
+#ifndef CONFIG_IDF_TARGET_ESP32S3
     // ADC2 wifi bug workaround
+    // Not required with ESP32S3, breaks compile
     RTC_reg_b = READ_PERI_REG(SENS_SAR_READ_CTRL2_REG);
+#endif
 #endif
     // calibrate ADC
     esp_adc_cal_value_t val_type = esp_adc_cal_characterize(unit, atten, width, DEFAULT_VREF, adc_characs);
@@ -374,7 +416,14 @@ bool Power::analogInit()
         LOG_INFO("ADCmod: ADC characterization based on Two Point values stored in eFuse\n");
     } else if (val_type == ESP_ADC_CAL_VAL_EFUSE_VREF) {
         LOG_INFO("ADCmod: ADC characterization based on reference voltage stored in eFuse\n");
-    } else {
+    }
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+    // ESP32S3
+    else if (val_type == ESP_ADC_CAL_VAL_EFUSE_TP_FIT) {
+        LOG_INFO("ADCmod: ADC Characterization based on Two Point values and fitting curve coefficients stored in eFuse\n");
+    }
+#endif
+    else {
         LOG_INFO("ADCmod: ADC characterization based on default reference voltage\n");
     }
 #if defined(HELTEC_V3) || defined(HELTEC_WSL_V3)
@@ -390,7 +439,10 @@ bool Power::analogInit()
     analogReference(AR_INTERNAL); // 3.6V
 #endif
 #endif // ARCH_NRF52
+
+#ifndef ARCH_ESP32
     analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS);
+#endif
 
     batteryLevel = &analogLevel;
     return true;
