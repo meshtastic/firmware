@@ -209,7 +209,8 @@ class AnalogBatteryLevel : public HasBatteryLevel
             scaled = operativeAdcMultiplier * ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * raw;
 #endif
             last_read_value += (scaled - last_read_value) * 0.5; // Virtual LPF
-            //LOG_DEBUG("battery gpio %d raw val=%u scaled=%u filtered=%u\n", BATTERY_PIN, raw, (uint32_t)(scaled), (uint32_t) (last_read_value));
+            // LOG_DEBUG("battery gpio %d raw val=%u scaled=%u filtered=%u\n", BATTERY_PIN, raw, (uint32_t)(scaled), (uint32_t)
+            // (last_read_value));
         }
         return last_read_value;
 #endif // BATTERY_PIN
@@ -224,23 +225,23 @@ class AnalogBatteryLevel : public HasBatteryLevel
     {
 
         uint32_t raw = 0;
-        uint8_t raw_c = 0; //raw reading counter
+        uint8_t raw_c = 0; // raw reading counter
 
 #ifndef BAT_MEASURE_ADC_UNIT // ADC1
-#ifdef ADC_CTRL //enable adc voltage divider when we need to read
+#ifdef ADC_CTRL              // enable adc voltage divider when we need to read
         pinMode(ADC_CTRL, OUTPUT);
         digitalWrite(ADC_CTRL, ADC_CTRL_ENABLED);
         delay(10);
 #endif
         for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
             int val_ = adc1_get_raw(adc_channel);
-            if(val_ >= 0){ //save only valid readings
+            if (val_ >= 0) { // save only valid readings
                 raw += val_;
-                raw_c ++;
+                raw_c++;
             }
             // delayMicroseconds(100);
         }
-#ifdef ADC_CTRL //disable adc voltage divider when we need to read
+#ifdef ADC_CTRL // disable adc voltage divider when we need to read
         digitalWrite(ADC_CTRL, !ADC_CTRL_ENABLED);
 #endif
 #else  // ADC2
@@ -252,7 +253,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
             SET_PERI_REG_MASK(SENS_SAR_READ_CTRL2_REG, SENS_SAR2_DATA_INV);
             adc2_get_raw(adc_channel, ADC_WIDTH_BIT_12, &adc_buf);
             raw += adc_buf;
-            raw_c ++;
+            raw_c++;
         }
 #endif // BAT_MEASURE_ADC_UNIT
         return (raw / (raw_c < 1 ? 1 : raw_c));
