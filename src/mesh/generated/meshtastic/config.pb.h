@@ -12,46 +12,45 @@
 /* Enum definitions */
 /* Defines the device's role on the Mesh network */
 typedef enum _meshtastic_Config_DeviceConfig_Role {
-    /* Client device role */
+    /* Description: App connected or stand alone messaging device.
+ Technical Details: Default Role */
     meshtastic_Config_DeviceConfig_Role_CLIENT = 0,
-    /* Client Mute device role
-   Same as a client except packets will not hop over this node, does not contribute to routing packets for mesh. */
+    /* Description: Device that does not forward packets from other devices. */
     meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE = 1,
-    /* Router device role.
-   Mesh packets will prefer to be routed over this node. This node will not be used by client apps.
-   The wifi/ble radios and the oled screen will be put to sleep.
+    /* Description: Infrastructure node for extending network coverage by relaying messages. Visible in Nodes list.
+ Technical Details: Mesh packets will prefer to be routed over this node. This node will not be used by client apps.
+   The wifi radio and the oled screen will be put to sleep.
    This mode may still potentially have higher power usage due to it's preference in message rebroadcasting on the mesh. */
     meshtastic_Config_DeviceConfig_Role_ROUTER = 2,
-    /* Router Client device role
-   Mesh packets will prefer to be routed over this node. The Router Client can be used as both a Router and an app connected Client. */
+    /* Description: Combination of both ROUTER and CLIENT. Not for mobile devices. */
     meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT = 3,
-    /* Repeater device role
-   Mesh packets will simply be rebroadcasted over this node. Nodes configured with this role will not originate NodeInfo, Position, Telemetry
+    /* Description: Infrastructure node for extending network coverage by relaying messages with minimal overhead. Not visible in Nodes list.
+ Technical Details: Mesh packets will simply be rebroadcasted over this node. Nodes configured with this role will not originate NodeInfo, Position, Telemetry
    or any other packet type. They will simply rebroadcast any mesh packets on the same frequency, channel num, spread factor, and coding rate. */
     meshtastic_Config_DeviceConfig_Role_REPEATER = 4,
-    /* Tracker device role
-   Position Mesh packets will be prioritized higher and sent more frequently by default.
+    /* Description: Broadcasts GPS position packets as priority.
+ Technical Details: Position Mesh packets will be prioritized higher and sent more frequently by default.
    When used in conjunction with power.is_power_saving = true, nodes will wake up, 
    send position, and then sleep for position.position_broadcast_secs seconds. */
     meshtastic_Config_DeviceConfig_Role_TRACKER = 5,
-    /* Sensor device role
-   Telemetry Mesh packets will be prioritized higher and sent more frequently by default.
+    /* Description: Broadcasts telemetry packets as priority.
+ Technical Details: Telemetry Mesh packets will be prioritized higher and sent more frequently by default.
    When used in conjunction with power.is_power_saving = true, nodes will wake up, 
    send environment telemetry, and then sleep for telemetry.environment_update_interval seconds. */
     meshtastic_Config_DeviceConfig_Role_SENSOR = 6,
-    /* TAK device role
-    Used for nodes dedicated for connection to an ATAK EUD.
+    /* Description: Optimized for ATAK system communication, reduces routine broadcasts.
+ Technical Details: Used for nodes dedicated for connection to an ATAK EUD.
     Turns off many of the routine broadcasts to favor CoT packet stream
     from the Meshtastic ATAK plugin -> IMeshService -> Node */
     meshtastic_Config_DeviceConfig_Role_TAK = 7,
-    /* Client Hidden device role
-    Used for nodes that "only speak when spoken to"
+    /* Description: Device that only broadcasts as needed for stealth or power savings.
+ Technical Details: Used for nodes that "only speak when spoken to"
     Turns all of the routine broadcasts but allows for ad-hoc communication
     Still rebroadcasts, but with local only rebroadcast mode (known meshes only)
     Can be used for clandestine operation or to dramatically reduce airtime / power consumption */
     meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN = 8,
-    /* Lost and Found device role
-    Used to automatically send a text message to the mesh 
+    /* Description: Broadcasts location as message to default channel regularly for to assist with device recovery.
+ Technical Details: Used to automatically send a text message to the mesh 
     with the current position of the device on a frequent interval:
     "I'm lost! Position: lat / long" */
     meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND = 9
@@ -313,6 +312,9 @@ typedef struct _meshtastic_Config_PositionConfig {
     uint32_t gps_en_gpio;
     /* Set where GPS is enabled, disabled, or not present */
     meshtastic_Config_PositionConfig_GpsMode gps_mode;
+    /* Set GPS precision in bits per channel, or 0 for disabled */
+    pb_size_t channel_precision_count;
+    uint32_t channel_precision[8];
 } meshtastic_Config_PositionConfig;
 
 /* Power Config\
@@ -580,7 +582,7 @@ extern "C" {
 /* Initializer values for message structs */
 #define meshtastic_Config_init_default           {0, {meshtastic_Config_DeviceConfig_init_default}}
 #define meshtastic_Config_DeviceConfig_init_default {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0}
-#define meshtastic_Config_PositionConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _meshtastic_Config_PositionConfig_GpsMode_MIN}
+#define meshtastic_Config_PositionConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _meshtastic_Config_PositionConfig_GpsMode_MIN, 0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define meshtastic_Config_PowerConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_default {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_default, ""}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_default {0, 0, 0, 0}
@@ -589,7 +591,7 @@ extern "C" {
 #define meshtastic_Config_BluetoothConfig_init_default {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0}
 #define meshtastic_Config_init_zero              {0, {meshtastic_Config_DeviceConfig_init_zero}}
 #define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0}
-#define meshtastic_Config_PositionConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _meshtastic_Config_PositionConfig_GpsMode_MIN}
+#define meshtastic_Config_PositionConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _meshtastic_Config_PositionConfig_GpsMode_MIN, 0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define meshtastic_Config_PowerConfig_init_zero  {0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_zero {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_zero, ""}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_zero {0, 0, 0, 0}
@@ -621,6 +623,7 @@ extern "C" {
 #define meshtastic_Config_PositionConfig_broadcast_smart_minimum_interval_secs_tag 11
 #define meshtastic_Config_PositionConfig_gps_en_gpio_tag 12
 #define meshtastic_Config_PositionConfig_gps_mode_tag 13
+#define meshtastic_Config_PositionConfig_channel_precision_tag 14
 #define meshtastic_Config_PowerConfig_is_power_saving_tag 1
 #define meshtastic_Config_PowerConfig_on_battery_shutdown_after_secs_tag 2
 #define meshtastic_Config_PowerConfig_adc_multiplier_override_tag 3
@@ -724,7 +727,8 @@ X(a, STATIC,   SINGULAR, UINT32,   tx_gpio,           9) \
 X(a, STATIC,   SINGULAR, UINT32,   broadcast_smart_minimum_distance,  10) \
 X(a, STATIC,   SINGULAR, UINT32,   broadcast_smart_minimum_interval_secs,  11) \
 X(a, STATIC,   SINGULAR, UINT32,   gps_en_gpio,      12) \
-X(a, STATIC,   SINGULAR, UENUM,    gps_mode,         13)
+X(a, STATIC,   SINGULAR, UENUM,    gps_mode,         13) \
+X(a, STATIC,   REPEATED, UINT32,   channel_precision,  14)
 #define meshtastic_Config_PositionConfig_CALLBACK NULL
 #define meshtastic_Config_PositionConfig_DEFAULT NULL
 
@@ -830,7 +834,7 @@ extern const pb_msgdesc_t meshtastic_Config_BluetoothConfig_msg;
 #define meshtastic_Config_LoRaConfig_size        80
 #define meshtastic_Config_NetworkConfig_IpV4Config_size 20
 #define meshtastic_Config_NetworkConfig_size     196
-#define meshtastic_Config_PositionConfig_size    62
+#define meshtastic_Config_PositionConfig_size    110
 #define meshtastic_Config_PowerConfig_size       40
 #define meshtastic_Config_size                   199
 

@@ -244,7 +244,37 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #ifdef ADC_CTRL // disable adc voltage divider when we need to read
         digitalWrite(ADC_CTRL, !ADC_CTRL_ENABLED);
 #endif
-#else  // ADC2
+#else // ADC2
+#ifdef ADC_CTRL
+#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0)
+        pinMode(ADC_CTRL, OUTPUT);
+        digitalWrite(ADC_CTRL, LOW); // ACTIVE LOW
+        delay(10);
+#endif
+#endif // End ADC_CTRL
+
+#ifdef CONFIG_IDF_TARGET_ESP32S3 // ESP32S3
+        // ADC2 wifi bug workaround not required, breaks compile
+        // On ESP32S3, ADC2 can take turns with Wifi (?)
+
+        int32_t adc_buf;
+        esp_err_t read_result;
+
+        // Multiple samples
+        for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
+            adc_buf = 0;
+            read_result = -1;
+
+            read_result = adc2_get_raw(adc_channel, ADC_WIDTH_BIT_12, &adc_buf);
+            if (read_result == ESP_OK) {
+                raw += adc_buf;
+                raw_c++; // Count valid samples
+            } else {
+                LOG_DEBUG("An attempt to sample ADC2 failed\n");
+            }
+        }
+
+#else // Other ESP32
         int32_t adc_buf = 0;
         for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
             // ADC2 wifi bug workaround, see
@@ -256,6 +286,14 @@ class AnalogBatteryLevel : public HasBatteryLevel
             raw_c++;
         }
 #endif // BAT_MEASURE_ADC_UNIT
+
+#ifdef ADC_CTRL
+#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0)
+        digitalWrite(ADC_CTRL, HIGH);
+#endif
+#endif // End ADC_CTRL
+
+#endif // End BAT_MEASURE_ADC_UNIT
         return (raw / (raw_c < 1 ? 1 : raw_c));
     }
 #endif
@@ -374,8 +412,11 @@ bool Power::analogInit()
     adc1_config_channel_atten(adc_channel, atten);
 #else // ADC2
     adc2_config_channel_atten(adc_channel, atten);
+#ifndef CONFIG_IDF_TARGET_ESP32S3
     // ADC2 wifi bug workaround
+    // Not required with ESP32S3, breaks compile
     RTC_reg_b = READ_PERI_REG(SENS_SAR_READ_CTRL2_REG);
+#endif
 #endif
     // calibrate ADC
     esp_adc_cal_value_t val_type = esp_adc_cal_characterize(unit, atten, width, DEFAULT_VREF, adc_characs);
@@ -384,7 +425,14 @@ bool Power::analogInit()
         LOG_INFO("ADCmod: ADC characterization based on Two Point values stored in eFuse\n");
     } else if (val_type == ESP_ADC_CAL_VAL_EFUSE_VREF) {
         LOG_INFO("ADCmod: ADC characterization based on reference voltage stored in eFuse\n");
-    } else {
+    }
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+    // ESP32S3
+    else if (val_type == ESP_ADC_CAL_VAL_EFUSE_TP_FIT) {
+        LOG_INFO("ADCmod: ADC Characterization based on Two Point values and fitting curve coefficients stored in eFuse\n");
+    }
+#endif
+    else {
         LOG_INFO("ADCmod: ADC characterization based on default reference voltage\n");
     }
 #endif // ARCH_ESP32
