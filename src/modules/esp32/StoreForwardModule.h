@@ -13,7 +13,6 @@ struct PacketHistoryStruct {
     uint32_t to;
     uint32_t from;
     uint8_t channel;
-    bool ack;
     uint8_t payload[meshtastic_Constants_DATA_PAYLOAD_LEN];
     pb_size_t payload_size;
 };
@@ -32,7 +31,7 @@ class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<
     uint32_t packetHistoryTXQueue_size = 0;
     uint32_t packetHistoryTXQueue_index = 0;
 
-    uint32_t packetTimeMax = 5000;
+    uint32_t packetTimeMax = 5000; // Interval between sending history packets as a server.
 
     bool is_client = false;
     bool is_server = false;
@@ -41,7 +40,7 @@ class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<
     StoreForwardModule();
 
     unsigned long lastHeartbeat = 0;
-    uint32_t heartbeatInterval = 300;
+    uint32_t heartbeatInterval = default_broadcast_interval_secs;
 
     /**
      Update our local reference of when we last saw that node.
@@ -49,9 +48,9 @@ class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<
      */
     void historyAdd(const meshtastic_MeshPacket &mp);
     void statsSend(uint32_t to);
-    void historySend(uint32_t msAgo, uint32_t to);
+    void historySend(uint32_t msAgo, uint32_t to, uint32_t last_request_index = 0);
 
-    uint32_t historyQueueCreate(uint32_t msAgo, uint32_t to);
+    uint32_t historyQueueCreate(uint32_t msAgo, uint32_t to, uint32_t *last_request_index);
 
     /**
      * Send our payload into the mesh
@@ -79,16 +78,16 @@ class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<
     void populatePSRAM();
 
     // S&F Defaults
-    uint32_t historyReturnMax = 250;    // 250 records
-    uint32_t historyReturnWindow = 240; // 4 hours
+    uint32_t historyReturnMax = 25;     // Return maximum of 25 records by default.
+    uint32_t historyReturnWindow = 240; // Return history of last 4 hours by default.
     uint32_t records = 0;               // Calculated
     bool heartbeat = false;             // No heartbeat.
 
     // stats
-    uint32_t requests = 0;
-    uint32_t requests_history = 0;
+    uint32_t requests = 0;         // Number of times any client sent a request to the S&F.
+    uint32_t requests_history = 0; // Number of times the history was requested.
 
-    uint32_t retry_delay = 0;
+    uint32_t retry_delay = 0; // If server is busy, retry after this delay (in ms).
 
   protected:
     virtual int32_t runOnce() override;
