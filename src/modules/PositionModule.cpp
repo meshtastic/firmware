@@ -172,6 +172,7 @@ meshtastic_MeshPacket *PositionModule::allocReply()
 
 meshtastic_MeshPacket *PositionModule::allocAtakPli()
 {
+    LOG_INFO("Sending TAK PLI packet\n");
     meshtastic_MeshPacket *mp = allocDataPacket();
     mp->decoded.portnum = meshtastic_PortNum_ATAK_PLUGIN;
 
