@@ -274,7 +274,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
             }
         }
 
-#else // Other ESP32
+#else  // Other ESP32
         int32_t adc_buf = 0;
         for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
             // ADC2 wifi bug workaround, see
