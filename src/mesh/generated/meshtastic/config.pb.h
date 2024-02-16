@@ -38,7 +38,7 @@ typedef enum _meshtastic_Config_DeviceConfig_Role {
    When used in conjunction with power.is_power_saving = true, nodes will wake up, 
    send environment telemetry, and then sleep for telemetry.environment_update_interval seconds. */
     meshtastic_Config_DeviceConfig_Role_SENSOR = 6,
-    /* Description: Optimized for ATAK system communication, reduces routine broadcasts.
+    /* Description: Optimized for ATAK system communication and reduces routine broadcasts.
  Technical Details: Used for nodes dedicated for connection to an ATAK EUD.
     Turns off many of the routine broadcasts to favor CoT packet stream
     from the Meshtastic ATAK plugin -> IMeshService -> Node */
@@ -53,7 +53,12 @@ typedef enum _meshtastic_Config_DeviceConfig_Role {
  Technical Details: Used to automatically send a text message to the mesh 
     with the current position of the device on a frequent interval:
     "I'm lost! Position: lat / long" */
-    meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND = 9
+    meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND = 9,
+    /* Description: Enables automatic TAK PLI broadcasts and reduces routine broadcasts.
+ Technical Details: Turns off many of the routine broadcasts to favor ATAK CoT packet stream
+    and automatic TAK PLI (position location information) broadcasts.
+    Uses position module configuration to determine TAK PLI broadcast interval. */
+    meshtastic_Config_DeviceConfig_Role_TAK_TRACKER = 10
 } meshtastic_Config_DeviceConfig_Role;
 
 /* Defines the device's behavior for how messages are rebroadcast */
@@ -511,8 +516,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_Config_DeviceConfig_Role_MIN meshtastic_Config_DeviceConfig_Role_CLIENT
-#define _meshtastic_Config_DeviceConfig_Role_MAX meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND
-#define _meshtastic_Config_DeviceConfig_Role_ARRAYSIZE ((meshtastic_Config_DeviceConfig_Role)(meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND+1))
+#define _meshtastic_Config_DeviceConfig_Role_MAX meshtastic_Config_DeviceConfig_Role_TAK_TRACKER
+#define _meshtastic_Config_DeviceConfig_Role_ARRAYSIZE ((meshtastic_Config_DeviceConfig_Role)(meshtastic_Config_DeviceConfig_Role_TAK_TRACKER+1))
 
 #define _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN meshtastic_Config_DeviceConfig_RebroadcastMode_ALL
 #define _meshtastic_Config_DeviceConfig_RebroadcastMode_MAX meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY
