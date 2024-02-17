@@ -29,4 +29,6 @@
 #define HW_VENDOR meshtastic_HardwareModel_SENSELORA_RP2040
 #elif defined(RP2040_LORA)
 #define HW_VENDOR meshtastic_HardwareModel_RP2040_LORA
+#elif defined(RP2040_E22900M30S)
+#define HW_VENDOR meshtastic_HardwareModel_RP2040_E22900M30S
 #endif

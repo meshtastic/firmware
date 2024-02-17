@@ -130,6 +130,7 @@ jobs:
           - board: rak11310
           - board: senselora_rp2040
           - board: rp2040-lora
+          - board: rp2040-E22900M30S
     uses: ./.github/workflows/build_rpi2040.yml
     with:
       board: ${{ matrix.board }}
