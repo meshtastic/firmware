@@ -139,6 +139,9 @@ typedef enum _meshtastic_HardwareModel {
     /* Heltec Wireless Tracker with ESP32-S3 CPU, built-in GPS, and TFT
  Older "V1.0" Variant */
     meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER_V1_0 = 58,
+
+    meshtastic_HardwareModel_RP2040_E22900M30S = 59, 
+    /*diy board*/
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
