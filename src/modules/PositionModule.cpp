@@ -8,8 +8,14 @@
 #include "airtime.h"
 #include "configuration.h"
 #include "gps/GeoCoord.h"
+#include "main.h"
+#include "meshtastic/atak.pb.h"
 #include "sleep.h"
 #include "target_specific.h"
+
+extern "C" {
+#include "mesh/compression/unishox2.h"
+}
 
 PositionModule *positionModule;
 
@@ -18,11 +24,14 @@ PositionModule::PositionModule()
       concurrency::OSThread("PositionModule")
 {
     isPromiscuous = true; // We always want to update our nodedb, even if we are sniffing on others
-    if (config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER)
+    if (config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER &&
+        config.device.role != meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)
         setIntervalFromNow(60 * 1000);
 
     // Power saving trackers should clear their position on startup to avoid waking up and sending a stale position
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER && config.power.is_power_saving) {
+    if ((config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
+         config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) &&
+        config.power.is_power_saving) {
         clearPosition();
     }
 }
@@ -157,7 +166,45 @@ meshtastic_MeshPacket *PositionModule::allocReply()
 
     LOG_INFO("Position reply: time=%i, latI=%i, lonI=-%i\n", p.time, p.latitude_i, p.longitude_i);
 
+    // TAK Tracker devices should send their position in a TAK packet over the ATAK port
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)
+        return allocAtakPli();
+
     return allocDataProtobuf(p);
+}
+
+meshtastic_MeshPacket *PositionModule::allocAtakPli()
+{
+    LOG_INFO("Sending TAK PLI packet\n");
+    meshtastic_MeshPacket *mp = allocDataPacket();
+    mp->decoded.portnum = meshtastic_PortNum_ATAK_PLUGIN;
+
+    meshtastic_TAKPacket takPacket = {.is_compressed = true,
+                                      .has_contact = true,
+                                      .contact = {0},
+                                      .has_group = true,
+                                      .group = {meshtastic_MemberRole_TeamMember, meshtastic_Team_Cyan},
+                                      .has_status = true,
+                                      .status =
+                                          {
+                                              .battery = powerStatus->getBatteryChargePercent(),
+                                          },
+                                      .which_payload_variant = meshtastic_TAKPacket_pli_tag,
+                                      {.pli = {
+                                           .latitude_i = localPosition.latitude_i,
+                                           .longitude_i = localPosition.longitude_i,
+                                           .altitude = localPosition.altitude_hae > 0 ? localPosition.altitude_hae : 0,
+                                           .speed = localPosition.ground_speed,
+                                           .course = static_cast<uint16_t>(localPosition.ground_track),
+                                       }}};
+
+    auto length = unishox2_compress_simple(owner.long_name, strlen(owner.long_name), takPacket.contact.device_callsign);
+    LOG_DEBUG("Uncompressed device_callsign '%s' - %d bytes\n", owner.long_name, strlen(owner.long_name));
+    LOG_DEBUG("Compressed device_callsign '%s' - %d bytes\n", takPacket.contact.device_callsign, length);
+    length = unishox2_compress_simple(owner.long_name, strlen(owner.long_name), takPacket.contact.callsign);
+    mp->decoded.payload.size =
+        pb_encode_to_bytes(mp->decoded.payload.bytes, sizeof(mp->decoded.payload.bytes), &meshtastic_TAKPacket_msg, &takPacket);
+    return mp;
 }
 
 void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t channel)
@@ -174,7 +221,8 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
 
     p->to = dest;
     p->decoded.want_response = config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ? false : wantReplies;
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER)
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
+        config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)
         p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
     else
         p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
@@ -185,7 +233,9 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
 
     service.sendToMesh(p, RX_SRC_LOCAL, true);
 
-    if (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER && config.power.is_power_saving) {
+    if ((config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
+         config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) &&
+        config.power.is_power_saving) {
         LOG_DEBUG("Starting next execution in 5 seconds and then going to sleep.\n");
         sleepOnNextExecution = true;
         setIntervalFromNow(5000);
@@ -212,7 +262,8 @@ int32_t PositionModule::runOnce()
     uint32_t intervalMs = getConfiguredOrDefaultMs(config.position.position_broadcast_secs, default_broadcast_interval_secs);
     uint32_t msSinceLastSend = now - lastGpsSend;
     // Only send packets if the channel util. is less than 25% utilized or we're a tracker with less than 40% utilized.
-    if (!airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER)) {
+    if (!airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER &&
+                                         config.device.role != meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)) {
         return RUNONCE_INTERVAL;
     }
 
