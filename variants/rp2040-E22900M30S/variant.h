@@ -20,12 +20,10 @@
 #define LED_PIN PIN_LED
 
 #define BATTERY_PIN 27
-//#define ADC_ATTENUATION                                                                                                          \
-    ADC_ATTEN_DB_11 // 2_5-> 100mv-1250mv, 11-> 150mv-3100mv for ESP32
+#define ADC_ATTENUATION  ADC_ATTEN_DB_11 // 2_5-> 100mv-1250mv, 11-> 150mv-3100mv for ESP32
                      // ESP32-S2/C3/S3 are different
                      // lower dB for lower voltage rnage
-#define ADC_MULTIPLIER                                                                                                           \
-    3                   // VBATT---200k--pin27---100K---GND
+#define ADC_MULTIPLIER  3.035                   // VBATT---200k--pin27---100K---GND
 
 //#define ADC_CHANNEL ADC1_GPIO27_CHANNEL
 //#define BAT_FULLVOLT 4200 // with the 5.0 divider, input to BATTERY_PIN is 900mv
