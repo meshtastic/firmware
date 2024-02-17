@@ -25,7 +25,7 @@
                      // ESP32-S2/C3/S3 are different
                      // lower dB for lower voltage rnage
 #define ADC_MULTIPLIER                                                                                                           \
-    9.1                   // VBATT---200k--pin27---100K---GND
+    3                   // VBATT---200k--pin27---100K---GND
 
 //#define ADC_CHANNEL ADC1_GPIO27_CHANNEL
 //#define BAT_FULLVOLT 4200 // with the 5.0 divider, input to BATTERY_PIN is 900mv
@@ -65,5 +65,5 @@
 #define LORA_DIO2 SX126X_DIO2 // Compatibility with variant file configuration structure
 #define LORA_BUSY SX126X_BUSY // Compatibility with variant file configuration structure
 #define LORA_RESET SX126X_RESET
-//#define SX126X_DIO3_TCXO_VOLTAGE 1.8
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
 #endif
