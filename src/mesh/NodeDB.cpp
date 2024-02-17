@@ -325,6 +325,17 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
             (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_SPEED |
              meshtastic_Config_PositionConfig_PositionFlags_HEADING | meshtastic_Config_PositionConfig_PositionFlags_DOP);
         moduleConfig.telemetry.device_update_interval = ONE_DAY;
+    } else if (role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) {
+        config.device.node_info_broadcast_secs = ONE_DAY;
+        config.position.position_broadcast_smart_enabled = true;
+        config.position.position_broadcast_secs = 3 * 60; // Every 3 minutes
+        config.position.broadcast_smart_minimum_distance = 20;
+        config.position.broadcast_smart_minimum_interval_secs = 15;
+        // Remove Altitude MSL from flags since CoTs use HAE (height above ellipsoid)
+        config.position.position_flags =
+            (meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE | meshtastic_Config_PositionConfig_PositionFlags_SPEED |
+             meshtastic_Config_PositionConfig_PositionFlags_HEADING | meshtastic_Config_PositionConfig_PositionFlags_DOP);
+        moduleConfig.telemetry.device_update_interval = ONE_DAY;
     } else if (role == meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
         config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY;
         config.device.node_info_broadcast_secs = UINT32_MAX;
