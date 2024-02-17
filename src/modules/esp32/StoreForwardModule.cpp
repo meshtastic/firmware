@@ -100,7 +100,8 @@ void StoreForwardModule::populatePSRAM()
  */
 void StoreForwardModule::historySend(uint32_t msAgo, uint32_t to, uint32_t last_request_index)
 {
-    uint32_t queueSize = storeForwardModule->historyQueueCreate(msAgo, to, &last_request_index);
+    uint32_t lastIndex = last_request_index ? last_request_index : lastRequest[to];
+    uint32_t queueSize = storeForwardModule->historyQueueCreate(msAgo, to, &lastIndex);
 
     if (queueSize) {
         LOG_INFO("*** S&F - Sending %u message(s)\n", queueSize);
@@ -114,7 +115,8 @@ void StoreForwardModule::historySend(uint32_t msAgo, uint32_t to, uint32_t last_
     sf.which_variant = meshtastic_StoreAndForward_history_tag;
     sf.variant.history.history_messages = queueSize;
     sf.variant.history.window = msAgo;
-    sf.variant.history.last_request = last_request_index;
+    sf.variant.history.last_request = lastIndex;
+    lastRequest[to] = lastIndex;
     storeForwardModule->sendMessage(to, sf);
 }
 

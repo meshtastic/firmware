@@ -7,6 +7,7 @@
 #include "configuration.h"
 #include <Arduino.h>
 #include <functional>
+#include <unordered_map>
 
 struct PacketHistoryStruct {
     uint32_t time;
@@ -35,6 +36,9 @@ class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<
 
     bool is_client = false;
     bool is_server = false;
+
+    // Unordered_map stores the last request for each nodeNum (`to` field)
+    std::unordered_map<int16_t, int16_t> lastRequest;
 
   public:
     StoreForwardModule();
