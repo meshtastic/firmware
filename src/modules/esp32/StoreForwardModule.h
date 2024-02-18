@@ -7,6 +7,7 @@
 #include "configuration.h"
 #include <Arduino.h>
 #include <functional>
+#include <unordered_map>
 
 struct PacketHistoryStruct {
     uint32_t time;
@@ -36,6 +37,9 @@ class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<
     bool is_client = false;
     bool is_server = false;
 
+    // Unordered_map stores the last request for each nodeNum (`to` field)
+    std::unordered_map<NodeNum, uint32_t> lastRequest;
+
   public:
     StoreForwardModule();
 
@@ -48,7 +52,7 @@ class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<
      */
     void historyAdd(const meshtastic_MeshPacket &mp);
     void statsSend(uint32_t to);
-    void historySend(uint32_t msAgo, uint32_t to, uint32_t last_request_index = 0);
+    void historySend(uint32_t msAgo, uint32_t to);
 
     uint32_t historyQueueCreate(uint32_t msAgo, uint32_t to, uint32_t *last_request_index);
 
