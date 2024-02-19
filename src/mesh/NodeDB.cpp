@@ -195,6 +195,13 @@ void NodeDB::installDefaultConfig()
     config.position.position_broadcast_smart_enabled = true;
     config.position.broadcast_smart_minimum_distance = 100;
     config.position.broadcast_smart_minimum_interval_secs = 30;
+
+    config.position.channel_precision_count = 8;
+    config.position.channel_precision[0] = 32;
+    for (int n = 1; n < 8; n++) {
+        config.position.channel_precision[n] = 0;
+    }
+
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER)
         config.device.node_info_broadcast_secs = 3 * 60 * 60;
     config.device.serial_enabled = true;

@@ -84,7 +84,8 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     nodeDB.updatePosition(getFrom(&mp), p);
 
     // Only respond to location requests on the channel where we broadcast location.
-    if (channels.getByIndex(mp.channel).role == meshtastic_Channel_Role_PRIMARY) {
+
+    if (config.position.channel_precision[mp.channel] != 0) {
         ignoreRequest = false;
     } else {
         ignoreRequest = true;
@@ -116,8 +117,9 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     localPosition.seq_number++;
 
     // lat/lon are unconditionally included - IF AVAILABLE!
-    p.latitude_i = localPosition.latitude_i;
-    p.longitude_i = localPosition.longitude_i;
+    LOG_DEBUG("Sending location with precision %i\n", precision);
+    p.latitude_i = localPosition.latitude_i & (INT32_MAX << (32 - precision));
+    p.longitude_i = localPosition.longitude_i & (INT32_MAX << (32 - precision));
     p.time = localPosition.time;
 
     if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE) {
@@ -212,6 +214,9 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
     // cancel any not yet sent (now stale) position packets
     if (prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
         service.cancelSending(prevPacketId);
+
+    // Set's the class precision value for this particular packet
+    precision = config.position.channel_precision[channel];
 
     meshtastic_MeshPacket *p = allocReply();
     if (p == nullptr) {
