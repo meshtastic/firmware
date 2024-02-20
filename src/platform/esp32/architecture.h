@@ -109,7 +109,7 @@
 #ifdef HELTEC_TRACKER_V1_0
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER_V1_0
 #else
-#define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER_V1_1
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER
 #endif
 #elif defined(HELTEC_WIRELESS_PAPER_V1_0)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_PAPER_V1_0

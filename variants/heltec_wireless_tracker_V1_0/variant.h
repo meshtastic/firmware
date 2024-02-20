@@ -24,7 +24,7 @@
 #define TFT_WIDTH DISPLAY_HEIGHT
 #define TFT_OFFSET_X 26
 #define TFT_OFFSET_Y -1
-#define VTFT_CTRL_V03 46 // Heltec Tracker needs this pulled low for TFT
+#define VTFT_CTRL_V03 46              // Heltec Tracker needs this pulled low for TFT
 #define SCREEN_TRANSITION_FRAMERATE 1 // fps
 #define DISPLAY_FORCE_SMALL_FONTS
 

@@ -480,7 +480,7 @@ void TFTDisplay::sendCommand(uint8_t com)
 #endif
 
 #ifdef VTFT_CTRL_V03
-            digitalWrite(VTFT_CTRL_V03, LOW);
+        digitalWrite(VTFT_CTRL_V03, LOW);
 #endif
 
 #ifdef VTFT_CTRL
@@ -579,10 +579,10 @@ bool TFTDisplay::connect()
 #endif
 
 #ifdef ST7735_BL_V03
-        digitalWrite(ST7735_BL_V03, TFT_BACKLIGHT_ON);
+    digitalWrite(ST7735_BL_V03, TFT_BACKLIGHT_ON);
 #elif defined(ST7735_BL_V05)
-        pinMode(ST7735_BL_V05, OUTPUT);
-        digitalWrite(ST7735_BL_V05, TFT_BACKLIGHT_ON);
+    pinMode(ST7735_BL_V05, OUTPUT);
+    digitalWrite(ST7735_BL_V05, TFT_BACKLIGHT_ON);
 #endif
 
     tft->init();

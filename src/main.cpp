@@ -228,13 +228,13 @@ void setup()
     pinMode(VEXT_ENABLE_V03, OUTPUT);
     pinMode(ST7735_BL_V03, OUTPUT);
     digitalWrite(VEXT_ENABLE_V03, 0); // turn on the display power and antenna boost
-    digitalWrite(ST7735_BL_V03, 1); // display backligth on
+    digitalWrite(ST7735_BL_V03, 1);   // display backligth on
     LOG_DEBUG("HELTEC Detect Tracker V1.0\n");
 #elif defined(VEXT_ENABLE_V05)
     pinMode(VEXT_ENABLE_V05, OUTPUT);
     pinMode(ST7735_BL_V05, OUTPUT);
     digitalWrite(VEXT_ENABLE_V05, 1); // turn on the lora antenna boost
-    digitalWrite(ST7735_BL_V05, 1); // turn on display backligth
+    digitalWrite(ST7735_BL_V05, 1);   // turn on display backligth
     LOG_DEBUG("HELTEC Detect Tracker V1.1\n");
 #elif defined(VEXT_ENABLE)
     pinMode(VEXT_ENABLE, OUTPUT);
