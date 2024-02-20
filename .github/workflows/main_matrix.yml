@@ -93,6 +93,7 @@ jobs:
           - board: heltec-v3
           - board: heltec-wsl-v3
           - board: heltec-wireless-tracker
+          - board: heltec-wireless-tracker-V1-0
           - board: heltec-wireless-paper
           - board: tbeam-s3-core
           - board: tlora-t3s3-v1
