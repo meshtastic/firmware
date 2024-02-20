@@ -56,6 +56,7 @@ meshtastic_Channel &Channels::fixupChannel(ChannelIndex chIndex)
     if (!ch.has_settings) {
         // No settings! Must disable and skip
         ch.role = meshtastic_Channel_Role_DISABLED;
+        config.position.channel_precision[chIndex] = 0;
         memset(&ch.settings, 0, sizeof(ch.settings));
         ch.has_settings = true;
     } else {
@@ -90,6 +91,7 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
 
     ch.has_settings = true;
     ch.role = meshtastic_Channel_Role_PRIMARY;
+    config.position.channel_precision[chIndex] = 32;
 }
 
 CryptoKey Channels::getKey(ChannelIndex chIndex)
