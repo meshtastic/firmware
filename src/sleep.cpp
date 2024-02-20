@@ -240,6 +240,11 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     }
 #endif
 
+    if (msecToWake < portMAX_DELAY && (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+                                       config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER)) {
+        enableLoraInterrupt();
+    }
+
     cpuDeepSleep(msecToWake);
 }
 
@@ -294,12 +299,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     gpio_wakeup_enable((gpio_num_t)BUTTON_PIN, GPIO_INTR_LOW_LEVEL);
 #endif
 #endif
-#if defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
-    gpio_wakeup_enable((gpio_num_t)LORA_DIO1, GPIO_INTR_HIGH_LEVEL); // SX126x/SX128x interrupt, active high
-#endif
-#ifdef RF95_IRQ
-    gpio_wakeup_enable((gpio_num_t)RF95_IRQ, GPIO_INTR_HIGH_LEVEL); // RF95 interrupt, active high
-#endif
+    enableLoraInterrupt();
 #ifdef PMU_IRQ
     // wake due to PMU can happen repeatedly if there is no battery installed or the battery fills
     if (pmu_found)
@@ -358,5 +358,15 @@ void enableModemSleep()
     esp32_config.light_sleep_enable = false;
     int rv = esp_pm_configure(&esp32_config);
     LOG_DEBUG("Sleep request result %x\n", rv);
+}
+
+void enableLoraInterrupt()
+{
+#if defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
+    gpio_wakeup_enable((gpio_num_t)LORA_DIO1, GPIO_INTR_HIGH_LEVEL); // SX126x/SX128x interrupt, active high
+#endif
+#ifdef RF95_IRQ
+    gpio_wakeup_enable((gpio_num_t)RF95_IRQ, GPIO_INTR_HIGH_LEVEL); // RF95 interrupt, active high
+#endif
 }
 #endif
