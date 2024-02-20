@@ -104,7 +104,6 @@ RotaryEncoderInterruptBaseStateType RotaryEncoderInterruptBase::intHandler(bool 
             newState = ROTARY_EVENT_OCCURRED;
             if ((this->action != ROTARY_ACTION_PRESSED) && (this->action != action)) {
                 this->action = action;
-                LOG_DEBUG("Rotary action\n");
             }
         }
     } else if (!actualPinRaising && (otherPinLevel == HIGH)) {

@@ -15,7 +15,7 @@
 #define ST7735_RESET 39
 #define ST7735_MISO -1
 #define ST7735_BUSY -1
-#define ST7735_BL_V05 21 /* V1.1 PCB marking */
+#define ST7735_BL_V03 45
 #define ST7735_SPI_HOST SPI3_HOST
 #define SPI_FREQUENCY 40000000
 #define SPI_READ_FREQUENCY 16000000
@@ -24,18 +24,17 @@
 #define TFT_WIDTH DISPLAY_HEIGHT
 #define TFT_OFFSET_X 26
 #define TFT_OFFSET_Y -1
+#define VTFT_CTRL_V03 46              // Heltec Tracker needs this pulled low for TFT
 #define SCREEN_TRANSITION_FRAMERATE 3 // fps
 #define DISPLAY_FORCE_SMALL_FONTS
 
-#define VEXT_ENABLE_V05 3 // active HIGH, powers the lora antenna boost
+#define VEXT_ENABLE_V03 Vext // active low, powers the oled display and the lora antenna boost
 #define BUTTON_PIN 0
 
 #define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define ADC_CHANNEL ADC1_GPIO1_CHANNEL
 #define ADC_ATTENUATION ADC_ATTEN_DB_2_5 // lower dB for high resistance voltage divider
 #define ADC_MULTIPLIER 4.9
-#define ADC_CTRL 2 // active HIGH, powers the voltage divider. Only on 1.1
-#define ADC_CTRL_ENABLED HIGH
 
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
@@ -43,6 +42,10 @@
 #define GPS_TX_PIN 34
 #define PIN_GPS_RESET 35
 #define PIN_GPS_PPS 36
+
+#define VGNSS_CTRL_V03 37 // Heltec Tracker needs this pulled low for GPS
+#define PIN_GPS_EN VGNSS_CTRL_V03
+#define GPS_EN_ACTIVE LOW
 
 #define GPS_RESET_MODE LOW
 #define GPS_UC6580

@@ -127,8 +127,6 @@ class AnalogBatteryLevel : public HasBatteryLevel
 {
     /**
      * Battery state of charge, from 0 to 100 or -1 for unknown
-     *
-     * FIXME - use a lipo lookup table, the current % full is super wrong
      */
     virtual int getBatteryPercent() override
     {
@@ -137,13 +135,32 @@ class AnalogBatteryLevel : public HasBatteryLevel
         if (v < noBatVolt)
             return -1; // If voltage is super low assume no battery installed
 
-#ifdef ARCH_ESP32
+#ifdef NO_BATTERY_LEVEL_ON_CHARGE
         // This does not work on a RAK4631 with battery connected
         if (v > chargingVolt)
             return 0; // While charging we can't report % full on the battery
 #endif
-
-        return clamp((int)(100 * (v - emptyVolt) / (fullVolt - emptyVolt)), 0, 100);
+        /**
+         * @brief   Battery voltage lookup table interpolation to obtain a more
+         * precise percentage rather than the old proportional one.
+         * @author  Gabriele Russo
+         * @date    06/02/2024
+         */
+        float battery_SOC = 0.0;
+        uint16_t voltage = v / NUM_CELLS; // single cell voltage (average)
+        for (int i = 0; i < NUM_OCV_POINTS; i++) {
+            if (OCV[i] <= voltage) {
+                if (i == 0) {
+                    battery_SOC = 100.0; // 100% full
+                } else {
+                    // interpolate between OCV[i] and OCV[i-1]
+                    battery_SOC = (float)100.0 / (NUM_OCV_POINTS - 1.0) *
+                                  (NUM_OCV_POINTS - 1.0 - i + ((float)voltage - OCV[i]) / (OCV[i - 1] - OCV[i]));
+                }
+                break;
+            }
+        }
+        return clamp((int)(battery_SOC), 0, 100);
     }
 
     /**
@@ -165,7 +182,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
 #ifndef BATTERY_SENSE_SAMPLES
 #define BATTERY_SENSE_SAMPLES                                                                                                    \
-    30 // Set the number of samples, it has an effect of increasing sensitivity in complex electromagnetic environment.
+    15 // Set the number of samples, it has an effect of increasing sensitivity in complex electromagnetic environment.
 #endif
 
 #ifdef BATTERY_PIN
@@ -191,12 +208,11 @@ class AnalogBatteryLevel : public HasBatteryLevel
             raw = raw / BATTERY_SENSE_SAMPLES;
             scaled = operativeAdcMultiplier * ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * raw;
 #endif
-            // LOG_DEBUG("battery gpio %d raw val=%u scaled=%u\n", BATTERY_PIN, raw, (uint32_t)(scaled));
-            last_read_value = scaled;
-            return scaled;
-        } else {
-            return last_read_value;
+            last_read_value += (scaled - last_read_value) * 0.5; // Virtual LPF
+            // LOG_DEBUG("battery gpio %d raw val=%u scaled=%u filtered=%u\n", BATTERY_PIN, raw, (uint32_t)(scaled), (uint32_t)
+            // (last_read_value));
         }
+        return last_read_value;
 #endif // BATTERY_PIN
         return 0;
     }
@@ -209,23 +225,24 @@ class AnalogBatteryLevel : public HasBatteryLevel
     {
 
         uint32_t raw = 0;
-        uint8_t raw_c = 0;
+        uint8_t raw_c = 0; // raw reading counter
 
 #ifndef BAT_MEASURE_ADC_UNIT // ADC1
-#ifdef ADC_CTRL
-        if (heltec_version == 5) {
-            pinMode(ADC_CTRL, OUTPUT);
-            digitalWrite(ADC_CTRL, HIGH);
-            delay(10);
-        }
+#ifdef ADC_CTRL              // enable adc voltage divider when we need to read
+        pinMode(ADC_CTRL, OUTPUT);
+        digitalWrite(ADC_CTRL, ADC_CTRL_ENABLED);
+        delay(10);
 #endif
         for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
-            raw += adc1_get_raw(adc_channel);
+            int val_ = adc1_get_raw(adc_channel);
+            if (val_ >= 0) { // save only valid readings
+                raw += val_;
+                raw_c++;
+            }
+            // delayMicroseconds(100);
         }
-#ifdef ADC_CTRL
-        if (heltec_version == 5) {
-            digitalWrite(ADC_CTRL, LOW);
-        }
+#ifdef ADC_CTRL // disable adc voltage divider when we need to read
+        digitalWrite(ADC_CTRL, !ADC_CTRL_ENABLED);
 #endif
 #else // ADC2
 #ifdef ADC_CTRL
@@ -257,7 +274,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
             }
         }
 
-#else // Other ESP32
+#else  // Other ESP32
         int32_t adc_buf = 0;
         for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
             // ADC2 wifi bug workaround, see
@@ -268,7 +285,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
             raw += adc_buf;
             raw_c++;
         }
-#endif
+#endif // BAT_MEASURE_ADC_UNIT
 
 #ifdef ADC_CTRL
 #if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0)
@@ -311,22 +328,14 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
     /// in power
 
-#ifndef BAT_FULLVOLT
-#define BAT_FULLVOLT 4200
-#endif
-#ifndef BAT_EMPTYVOLT
-#define BAT_EMPTYVOLT 3270
-#endif
-#ifndef BAT_CHARGINGVOLT
-#define BAT_CHARGINGVOLT 4210
-#endif
-#ifndef BAT_NOBATVOLT
-#define BAT_NOBATVOLT 2230
-#endif
-
-    /// For heltecs with no battery connected, the measured voltage is 2204, so raising to 2230 from 2100
-    const float fullVolt = BAT_FULLVOLT, emptyVolt = BAT_EMPTYVOLT, chargingVolt = BAT_CHARGINGVOLT, noBatVolt = BAT_NOBATVOLT;
-    float last_read_value = 0.0;
+    /// For heltecs with no battery connected, the measured voltage is 2204, so
+    // need to be higher than that, in this case is 2500mV (3000-500)
+    const uint16_t OCV[NUM_OCV_POINTS] = {OCV_ARRAY};
+    const float chargingVolt = (OCV[0] + 10) * NUM_CELLS;
+    const float noBatVolt = (OCV[NUM_OCV_POINTS - 1] - 500) * NUM_CELLS;
+    // Start value from minimum voltage for the filter to not start from 0
+    // that could trigger some events.
+    float last_read_value = (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
     uint32_t last_read_time_ms = 0;
 
 #if defined(HAS_TELEMETRY) && !defined(ARCH_PORTDUINO)
@@ -426,10 +435,6 @@ bool Power::analogInit()
     else {
         LOG_INFO("ADCmod: ADC characterization based on default reference voltage\n");
     }
-#if defined(HELTEC_V3) || defined(HELTEC_WSL_V3)
-    pinMode(37, OUTPUT); // needed for P channel mosfet to work
-    digitalWrite(37, LOW);
-#endif
 #endif // ARCH_ESP32
 
 #ifdef ARCH_NRF52
@@ -510,11 +515,11 @@ void Power::readPowerStatus()
                 batteryChargePercent = batteryLevel->getBatteryPercent();
             } else {
                 // If the AXP192 returns a percentage less than 0, the feature is either not supported or there is an error
-                // In that case, we compute an estimate of the charge percent based on maximum and minimum voltages defined in
-                // power.h
-                batteryChargePercent =
-                    clamp((int)(((batteryVoltageMv - BAT_MILLIVOLTS_EMPTY) * 1e2) / (BAT_MILLIVOLTS_FULL - BAT_MILLIVOLTS_EMPTY)),
-                          0, 100);
+                // In that case, we compute an estimate of the charge percent based on open circuite voltage table defined
+                // in power.h
+                batteryChargePercent = clamp((int)(((batteryVoltageMv - (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS)) * 1e2) /
+                                                   ((OCV[0] * NUM_CELLS) - (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS))),
+                                             0, 100);
             }
         }
 
@@ -579,10 +584,11 @@ void Power::readPowerStatus()
 
 #endif
 
-        // If we have a battery at all and it is less than 10% full, force deep sleep if we have more than 10 low readings in
-        // a row
+        // If we have a battery at all and it is less than 0%, force deep sleep if we have more than 10 low readings in
+        // a row. NOTE: min LiIon/LiPo voltage is 2.0 to 2.5V, current OCV min is set to 3100 that is large enough.
+        //
         if (powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
-            if (batteryLevel->getBattVoltage() < MIN_BAT_MILLIVOLTS) {
+            if (batteryLevel->getBattVoltage() < OCV[NUM_OCV_POINTS - 1]) {
                 low_voltage_counter++;
                 LOG_DEBUG("Low voltage counter: %d/10\n", low_voltage_counter);
                 if (low_voltage_counter > 10) {

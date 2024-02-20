@@ -203,11 +203,10 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
 #endif
 
 #if defined(VEXT_ENABLE_V03)
-    if (heltec_version == 3) {
-        digitalWrite(VEXT_ENABLE_V03, 1); // turn off the display power
-    } else {
-        digitalWrite(VEXT_ENABLE_V05, 0); // turn off the display power
-    }
+    digitalWrite(VEXT_ENABLE_V03, 1); // turn off the display power
+#elif defined(VEXT_ENABLE_V05)
+    digitalWrite(VEXT_ENABLE_V05, 0); // turn off the lora amplifier power
+    digitalWrite(ST7735_BL_V05, 0);   // turn off the display power
 #elif defined(VEXT_ENABLE)
     digitalWrite(VEXT_ENABLE, 1); // turn off the display power
 #endif
