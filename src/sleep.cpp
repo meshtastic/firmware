@@ -373,8 +373,12 @@ void enableLoraInterrupt()
 {
 #if SOC_PM_SUPPORT_EXT_WAKEUP && defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
     rtc_gpio_pulldown_en((gpio_num_t)LORA_DIO1);
+#if defined(LORA_RESET) && (LORA_RESET != RADIOLIB_NC)
     rtc_gpio_pullup_en((gpio_num_t)LORA_RESET);
+#endif
+#if defined(LORA_CS) && (LORA_CS != RADIOLIB_NC)
     rtc_gpio_pullup_en((gpio_num_t)LORA_CS);
+#endif
     // Setup deep sleep with wakeup by external source
     esp_sleep_enable_ext0_wakeup((gpio_num_t)LORA_DIO1, RISING);
 #elif defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
