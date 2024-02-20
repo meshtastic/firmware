@@ -380,6 +380,7 @@ typedef struct _meshtastic_Position {
     /* A sequence number, incremented with each Position message to help
    detect lost updates if needed */
     uint32_t seq_number;
+    uint32_t precision_bits;
 } meshtastic_Position;
 
 /* Broadcast when a newly powered mesh node wants to find a node num it can use
@@ -882,7 +883,7 @@ extern "C" {
 
 
 /* Initializer values for message structs */
-#define meshtastic_Position_init_default         {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_Position_init_default         {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_User_init_default             {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN}
 #define meshtastic_RouteDiscovery_init_default   {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define meshtastic_Routing_init_default          {0, {meshtastic_RouteDiscovery_init_default}}
@@ -900,7 +901,7 @@ extern "C" {
 #define meshtastic_NeighborInfo_init_default     {0, 0, 0, 0, {meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default}}
 #define meshtastic_Neighbor_init_default         {0, 0, 0, 0}
 #define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0}
-#define meshtastic_Position_init_zero            {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_Position_init_zero            {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_User_init_zero                {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN}
 #define meshtastic_RouteDiscovery_init_zero      {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define meshtastic_Routing_init_zero             {0, {meshtastic_RouteDiscovery_init_zero}}
@@ -942,6 +943,7 @@ extern "C" {
 #define meshtastic_Position_sensor_id_tag        20
 #define meshtastic_Position_next_update_tag      21
 #define meshtastic_Position_seq_number_tag       22
+#define meshtastic_Position_precision_bits_tag   23
 #define meshtastic_User_id_tag                   1
 #define meshtastic_User_long_name_tag            2
 #define meshtastic_User_short_name_tag           3
@@ -1068,7 +1070,8 @@ X(a, STATIC,   SINGULAR, UINT32,   fix_type,         18) \
 X(a, STATIC,   SINGULAR, UINT32,   sats_in_view,     19) \
 X(a, STATIC,   SINGULAR, UINT32,   sensor_id,        20) \
 X(a, STATIC,   SINGULAR, UINT32,   next_update,      21) \
-X(a, STATIC,   SINGULAR, UINT32,   seq_number,       22)
+X(a, STATIC,   SINGULAR, UINT32,   seq_number,       22) \
+X(a, STATIC,   SINGULAR, UINT32,   precision_bits,   23)
 #define meshtastic_Position_CALLBACK NULL
 #define meshtastic_Position_DEFAULT NULL
 
@@ -1313,8 +1316,8 @@ extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
 #define meshtastic_MyNodeInfo_size               18
 #define meshtastic_NeighborInfo_size             258
 #define meshtastic_Neighbor_size                 22
-#define meshtastic_NodeInfo_size                 263
-#define meshtastic_Position_size                 137
+#define meshtastic_NodeInfo_size                 270
+#define meshtastic_Position_size                 144
 #define meshtastic_QueueStatus_size              23
 #define meshtastic_RouteDiscovery_size           40
 #define meshtastic_Routing_size                  42

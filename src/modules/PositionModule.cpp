@@ -120,6 +120,7 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     LOG_DEBUG("Sending location with precision %i\n", precision);
     p.latitude_i = localPosition.latitude_i & (INT32_MAX << (32 - precision));
     p.longitude_i = localPosition.longitude_i & (INT32_MAX << (32 - precision));
+    p.precision_bits = precision;
     p.time = localPosition.time;
 
     if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE) {
