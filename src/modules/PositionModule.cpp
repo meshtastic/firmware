@@ -23,6 +23,7 @@ PositionModule::PositionModule()
     : ProtobufModule("position", meshtastic_PortNum_POSITION_APP, &meshtastic_Position_msg),
       concurrency::OSThread("PositionModule")
 {
+    precision = 0;        // safe starting value
     isPromiscuous = true; // We always want to update our nodedb, even if we are sniffing on others
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)
