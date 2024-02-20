@@ -45,3 +45,4 @@ extern Observable<void *> notifyDeepSleep;
 extern Observable<void *> notifyGPSSleep;
 void enableModemSleep();
 void enableLoraInterrupt();
+bool canLoraWake(uint32_t msecToWake);

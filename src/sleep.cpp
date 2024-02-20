@@ -186,7 +186,11 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     // not using wifi yet, but once we are this is needed to shutoff the radio hw
     // esp_wifi_stop();
     waitEnterSleep(skipPreflight);
-    notifyDeepSleep.notifyObservers(NULL);
+    if (canLoraWake(msecToWake)) {
+        notifySleep.notifyObservers(NULL);
+    } else {
+        notifyDeepSleep.notifyObservers(NULL);
+    }
 
     screen->doDeepSleep(); // datasheet says this will draw only 10ua
 
@@ -240,8 +244,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     }
 #endif
 
-    if (msecToWake < portMAX_DELAY && (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
-                                       config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER)) {
+    if (canLoraWake(msecToWake)) {
         enableLoraInterrupt();
     }
 
@@ -360,9 +363,21 @@ void enableModemSleep()
     LOG_DEBUG("Sleep request result %x\n", rv);
 }
 
+bool canLoraWake(uint32_t msecToWake)
+{
+    return msecToWake < portMAX_DELAY && (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+                                          config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER);
+}
+
 void enableLoraInterrupt()
 {
-#if defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
+#if SOC_PM_SUPPORT_EXT_WAKEUP && defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
+    rtc_gpio_pulldown_en((gpio_num_t)LORA_DIO1);
+    rtc_gpio_pullup_en((gpio_num_t)LORA_RESET);
+    rtc_gpio_pullup_en((gpio_num_t)LORA_CS);
+    // Setup deep sleep with wakeup by external source
+    esp_sleep_enable_ext0_wakeup((gpio_num_t)LORA_DIO1, RISING);
+#elif defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
     gpio_wakeup_enable((gpio_num_t)LORA_DIO1, GPIO_INTR_HIGH_LEVEL); // SX126x/SX128x interrupt, active high
 #endif
 #ifdef RF95_IRQ
