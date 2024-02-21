@@ -485,13 +485,14 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
         env->channel_id = (char *)channelId;
         env->gateway_id = owner.id;
 
+        LOG_DEBUG("MQTT onSend - Publishing ");
         if (moduleConfig.mqtt.encryption_enabled) {
             env->packet = (meshtastic_MeshPacket *)&mp;
+            LOG_DEBUG("encrypted message\n");
         } else {
             env->packet = (meshtastic_MeshPacket *)&mp_decoded;
+            LOG_DEBUG("portnum %i message\n", env->packet->decoded.portnum);
         }
-
-        LOG_DEBUG("MQTT onSend - Publishing portnum %i message\n", env->packet->decoded.portnum);
 
         if (moduleConfig.mqtt.proxy_to_client_enabled || this->isConnectedDirectly()) {
             // FIXME - this size calculation is super sloppy, but it will go away once we dynamically alloc meshpackets

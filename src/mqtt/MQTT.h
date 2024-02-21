@@ -50,7 +50,8 @@ class MQTT : private concurrency::OSThread
 
     /**
      * Publish a packet on the global MQTT server.
-     * This hook must be called **after** the packet is encrypted (including the channel being changed to a hash).
+     * @param mp the encrypted packet to publish
+     * @param mp_decoded the decrypted packet to publish
      * @param chIndex the index of the channel for this message
      *
      * Note: for messages we are forwarding on the mesh that we can't find the channel for (because we don't have the keys), we
