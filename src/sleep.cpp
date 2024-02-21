@@ -187,7 +187,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     // esp_wifi_stop();
     waitEnterSleep(skipPreflight);
 #ifdef ARCH_ESP32
-    if (canLoraWake(msecToWake)) {
+    if (shouldLoraWake(msecToWake)) {
         notifySleep.notifyObservers(NULL);
     } else {
         notifyDeepSleep.notifyObservers(NULL);
@@ -249,7 +249,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
 #endif
 
 #ifdef ARCH_ESP32
-    if (canLoraWake(msecToWake)) {
+    if (shouldLoraWake(msecToWake)) {
         enableLoraInterrupt();
     }
 #endif
@@ -368,7 +368,7 @@ void enableModemSleep()
     LOG_DEBUG("Sleep request result %x\n", rv);
 }
 
-bool canLoraWake(uint32_t msecToWake)
+bool shouldLoraWake(uint32_t msecToWake)
 {
     return msecToWake < portMAX_DELAY && (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
                                           config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER);

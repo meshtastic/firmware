@@ -46,5 +46,5 @@ extern Observable<void *> notifyGPSSleep;
 void enableModemSleep();
 #ifdef ARCH_ESP32
 void enableLoraInterrupt();
-bool canLoraWake(uint32_t msecToWake);
+bool shouldLoraWake(uint32_t msecToWake);
 #endif
