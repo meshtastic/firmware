@@ -89,6 +89,11 @@ NRF52Bluetooth *nrf52Bluetooth;
 AudioThread *audioThread;
 #endif
 
+#ifdef USE_PACKET_API
+#include "sharedMem/MeshPacketServer.h"
+#include "sharedMem/PacketClient.h"
+#endif
+
 using namespace concurrency;
 
 // We always create a screen object, but we only init it if we find the hardware
@@ -858,6 +863,11 @@ void setup()
 
 #ifdef ARCH_PORTDUINO
     initApiServer(TCPPort);
+#endif
+
+#ifdef USE_PACKET_API
+    MeshPacketServer::init();
+    PacketClient::init();
 #endif
 
     // Start airtime logger thread.
