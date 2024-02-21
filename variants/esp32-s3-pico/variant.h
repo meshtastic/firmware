@@ -11,9 +11,9 @@
 // #define LED_PIN PIN_LED
 // Board has RGB LED 21
 
-//The usbPower state is revered ?
-//DEBUG | ??:??:?? 365 [Power] Battery: usbPower=0, isCharging=0, batMv=4116, batPct=90
-//DEBUG | ??:??:?? 385 [Power] Battery: usbPower=1, isCharging=1, batMv=4243, batPct=0
+// The usbPower state is revered ?
+// DEBUG | ??:??:?? 365 [Power] Battery: usbPower=0, isCharging=0, batMv=4116, batPct=90
+// DEBUG | ??:??:?? 385 [Power] Battery: usbPower=1, isCharging=1, batMv=4243, batPct=0
 
 // https://www.waveshare.com/img/devkit/ESP32-S3-Pico/ESP32-S3-Pico-details-inter-1.jpg
 // digram is incorrect labeled as battery pin is getting readings on GPIO7_CH1?
