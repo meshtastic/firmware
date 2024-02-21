@@ -73,6 +73,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_SENSELORA_S3 = 28,
     /* Canary Radio Company - CanaryOne: https://canaryradio.io/products/canaryone */
     meshtastic_HardwareModel_CANARYONE = 29,
+    /* Waveshare RP2040 LoRa - https://www.waveshare.com/rp2040-lora.htm */
+    meshtastic_HardwareModel_RP2040_LORA = 30,
     /* ---------------------------------------------------------------------------
  Less common/prototype boards listed here (needs one more byte over the air)
  --------------------------------------------------------------------------- */
@@ -107,7 +109,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_BETAFPV_900_NANO_TX = 46,
     /* Raspberry Pi Pico (W) with Waveshare SX1262 LoRa Node Module */
     meshtastic_HardwareModel_RPI_PICO = 47,
-    /* Heltec Wireless Tracker with ESP32-S3 CPU, built-in GPS, and TFT */
+    /* Heltec Wireless Tracker with ESP32-S3 CPU, built-in GPS, and TFT
+ Newer V1.1, version is written on the PCB near the display. */
     meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER = 48,
     /* Heltec Wireless Paper with ESP32-S3 CPU and E-Ink display */
     meshtastic_HardwareModel_HELTEC_WIRELESS_PAPER = 49,
@@ -127,6 +130,15 @@ typedef enum _meshtastic_HardwareModel {
  Lora module can be swapped out for a Heltec RA-62 which is "almost" pin compatible
  with one cut and one jumper Meshtastic works */
     meshtastic_HardwareModel_CHATTER_2 = 56,
+    /* Heltec Wireless Paper, With ESP32-S3 CPU and E-Ink display
+ Older "V1.0" Variant, has no "version sticker"
+ E-Ink model is DEPG0213BNS800
+ Tab on the screen protector is RED
+ Flex connector marking is FPC-7528B */
+    meshtastic_HardwareModel_HELTEC_WIRELESS_PAPER_V1_0 = 57,
+    /* Heltec Wireless Tracker with ESP32-S3 CPU, built-in GPS, and TFT
+ Older "V1.0" Variant */
+    meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER_V1_0 = 58,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */

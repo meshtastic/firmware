@@ -1,16 +1,16 @@
+// Power Management
+
 uint8_t GPS::_message_PMREQ[] PROGMEM = {
-    0x00, 0x00, // 4 bytes duration of request task
-    0x00, 0x00, // (milliseconds)
-    0x02, 0x00, // Task flag bitfield
-    0x00, 0x00, // byte index 1 = sleep mode
+    0x00, 0x00, 0x00, 0x00, // 4 bytes duration of request task (milliseconds)
+    0x02, 0x00, 0x00, 0x00  // Bitfield, set backup = 1
 };
 
 uint8_t GPS::_message_PMREQ_10[] PROGMEM = {
-    0x00, 0x00,                                    // 4 bytes duration of request task
-    0x00, 0x00,                                    // (milliseconds)
-    0x02, 0x00,                                    // Task flag bitfield
-    0x00, 0x00,                                    // byte index 1 = sleep mode
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 // wakeupSources
+    0x00,                   // version (0 for this version)
+    0x00, 0x00, 0x00,       // Reserved 1
+    0x00, 0x00, 0x00, 0x00, // 4 bytes duration of request task (milliseconds)
+    0x06, 0x00, 0x00, 0x00, // Bitfield, set backup =1 and force =1
+    0x08, 0x00, 0x00, 0x00  // wakeupSources Wake on uartrx
 };
 
 const uint8_t GPS::_message_CFG_RXM_PSM[] PROGMEM = {
@@ -46,6 +46,9 @@ const uint8_t GPS::_message_CFG_PM2[] PROGMEM = {
     0x00, 0x00, 0x00, 0x00  // 0x64, 0x40, 0x01, 0x00  // reserved 11
 };
 
+// Constallation setup, none required for Neo-6
+
+// For Neo-7 GPS & SBAS
 const uint8_t GPS::_message_GNSS_7[] = {
     0x00, // msgVer (0 for this version)
     0x00, // numTrkChHw (max number of hardware channels, read only, so it's always 0)
@@ -210,7 +213,7 @@ const uint8_t GPS::_message_GSA[] = {
     0x00,       // Rate for DDC
     0x01,       // Rate for UART1
     0x00,       // Rate for UART2
-    0x00,       // Rate for USB
+    0x01,       // Rate for USB usefull for native linux
     0x00,       // Rate for SPI
     0x00        // Reserved
 };
@@ -244,7 +247,7 @@ const uint8_t GPS::_message_RMC[] = {
     0x00,       // Rate for DDC
     0x01,       // Rate for UART1
     0x00,       // Rate for UART2
-    0x00,       // Rate for USB
+    0x01,       // Rate for USB usefull for native linux
     0x00,       // Rate for SPI
     0x00        // Reserved
 };
@@ -255,7 +258,7 @@ const uint8_t GPS::_message_GGA[] = {
     0x00,       // Rate for DDC
     0x01,       // Rate for UART1
     0x00,       // Rate for UART2
-    0x00,       // Rate for USB
+    0x01,       // Rate for USB, usefull for native linux
     0x00,       // Rate for SPI
     0x00        // Reserved
 };
@@ -272,6 +275,20 @@ const uint8_t GPS::_message_AID[] = {
     0x00        // Reserved
 };
 
+// Turn off TEXT INFO Messages for all but M10 series
+
+// B5 62 06 02 0A 00 01 00 00 00 03 03 00 03 03 00 1F 20
+const uint8_t GPS::_message_DISABLE_TXT_INFO[] = {
+    0x01,             // Protocol ID for NMEA
+    0x00, 0x00, 0x00, // Reserved
+    0x03,             // I2C
+    0x03,             // I/O Port 1
+    0x00,             // I/O Port 2
+    0x03,             // USB
+    0x03,             // SPI
+    0x00              // Reserved
+};
+
 // The Power Management configuration allows the GPS module to operate in different power modes for optimized
 // power consumption. The modes supported are: 0x00 = Full power: The module operates at full power with no power
 // saving. 0x01 = Balanced: The module dynamically adjusts the tracking behavior to balance power consumption.
@@ -283,7 +300,7 @@ const uint8_t GPS::_message_AID[] = {
 // is set to Interval; otherwise, it must be set to '0'. The 'onTime' field specifies the duration of the ON phase
 // and must be smaller than the period. It is only valid when the powerSetupValue is set to Interval; otherwise,
 // it must be set to '0'.
-// This command applies to M8 and higher products
+// This command applies to M8 products
 const uint8_t GPS::_message_PMS[] = {
     0x00,       // Version (0)
     0x03,       // Power setup value 3 = Agresssive 1Hz
@@ -298,3 +315,139 @@ const uint8_t GPS::_message_SAVE[] = {
     0x00, 0x00, 0x00, 0x00, // loadMask: no sections loaded
     0x17                    // deviceMask: BBR, Flash, EEPROM, and SPI Flash
 };
+
+// As the M10 has no flash, the best we can do to preserve the config is to set it in RAM and BBR.
+// BBR will survive a restart, and power off for a while, but modules with small backup
+// batteries or super caps will not retain the config for a long power off time.
+
+// VALSET Commands for M10
+// Please refer to the M10 Protocol Specification:
+// https://content.u-blox.com/sites/default/files/u-blox-M10-SPG-5.10_InterfaceDescription_UBX-21035062.pdf
+// Where the VALSET/VALGET/VALDEL commands are described in detail.
+// and:
+// https://content.u-blox.com/sites/default/files/u-blox-M10-ROM-5.10_ReleaseNotes_UBX-22001426.pdf
+// for interesting insights.
+/*
+CFG-PM2 has been replaced by many CFG-PM commands
+OPERATEMODE E1 2 (0 | 1 | 2)
+POSUPDATEPERIOD U4 1000ms for M10 must be >= 5s try 5
+ACQPERIOD U4 10 seems ok for M10 def ok
+GRIDOFFSET U4 0 seems ok for M10 def ok
+ONTIME U2 1 will try 1
+MINACQTIME U1 0 will try 0 def ok
+MAXACQTIME U1 stick with default of 0 def ok
+DONOTENTEROFF L 1 stay at 1
+WAITTIMEFIX  L 1 stay with 1
+UPDATEEPH L 1 changed to 1 for gps rework default is 1
+EXTINTWAKE L 0 no ext ints
+EXTINTBACKUP L 0 no ext ints
+EXTINTINACTIVE L 0 no ext ints
+EXTINTACTIVITY U4 0 no ext ints
+LIMITPEAKCURRENT L 1 stay with 1
+*/
+// CFG-PMS has been removed
+
+// Ram layer config message:
+// b5 62 06 8a 26 00 00 01 00 00 01 00 d0 20 02 02 00 d0 40 05 00 00 00 05 00 d0 30 01 00 08 00 d0 10 01 09 00 d0 10 01 10 00 d0
+// 10 01 8b de
+
+// BBR layer config message:
+// b5 62 06 8a 26 00 00 02 00 00 01 00 d0 20 02 02 00 d0 40 05 00 00 00 05 00 d0 30 01 00 08 00 d0 10 01 09 00 d0 10 01 10 00 d0
+// 10 01 8c 03
+
+const uint8_t GPS::_message_VALSET_PM_RAM[] = {0x00, 0x01, 0x00, 0x00, 0x01, 0x00, 0xd0, 0x20, 0x02, 0x02, 0x00, 0xd0, 0x40,
+                                               0x05, 0x00, 0x00, 0x00, 0x05, 0x00, 0xd0, 0x30, 0x01, 0x00, 0x08, 0x00, 0xd0,
+                                               0x10, 0x01, 0x09, 0x00, 0xd0, 0x10, 0x01, 0x10, 0x00, 0xd0, 0x10, 0x01};
+const uint8_t GPS::_message_VALSET_PM_BBR[] = {0x00, 0x02, 0x00, 0x00, 0x01, 0x00, 0xd0, 0x20, 0x02, 0x02, 0x00, 0xd0, 0x40,
+                                               0x05, 0x00, 0x00, 0x00, 0x05, 0x00, 0xd0, 0x30, 0x01, 0x00, 0x08, 0x00, 0xd0,
+                                               0x10, 0x01, 0x09, 0x00, 0xd0, 0x10, 0x01, 0x10, 0x00, 0xd0, 0x10, 0x01};
+
+/*
+CFG-ITFM replaced by 5 valset messages which can be combined into one for RAM and one for BBR
+
+20410001 bbthreshold U1 3
+20410002 cwthreshold U1 15
+1041000d enable L        0 -> 1
+20410010 ant E1          0
+10410013 enable aux L    0 -> 1
+
+
+b5 62 06 8a 0e 00 00 01 00 00 0d 00 41 10 01 13 00 41 10 01 63 c6
+*/
+const uint8_t GPS::_message_VALSET_ITFM_RAM[] = {0x00, 0x01, 0x00, 0x00, 0x0d, 0x00, 0x41,
+                                                 0x10, 0x01, 0x13, 0x00, 0x41, 0x10, 0x01};
+const uint8_t GPS::_message_VALSET_ITFM_BBR[] = {0x00, 0x02, 0x00, 0x00, 0x0d, 0x00, 0x41,
+                                                 0x10, 0x01, 0x13, 0x00, 0x41, 0x10, 0x01};
+
+// Turn off all NMEA messages:
+// Ram layer config message:
+// b5 62 06 8a 22 00 00 01 00 00 c0 00 91 20 00 ca 00 91 20 00 c5 00 91 20 00 ac 00 91 20 00 b1 00 91 20 00 bb 00 91 20 00 40 8f
+
+// Disable GLL, GSV, VTG messages in BBR layer
+// BBR layer config message:
+// b5 62 06 8a 13 00 00 02 00 00 ca 00 91 20 00 c5 00 91 20 00 b1 00 91 20 00 f8 4e
+
+const uint8_t GPS::_message_VALSET_DISABLE_NMEA_RAM[] = {
+    /*0x00, 0x01, 0x00, 0x00, 0xca, 0x00, 0x91, 0x20, 0x00, 0xc5, 0x00, 0x91, 0x20, 0x00, 0xb1, 0x00, 0x91, 0x20, 0x00 */
+    0x00, 0x01, 0x00, 0x00, 0xc0, 0x00, 0x91, 0x20, 0x00, 0xca, 0x00, 0x91, 0x20, 0x00, 0xc5, 0x00, 0x91,
+    0x20, 0x00, 0xac, 0x00, 0x91, 0x20, 0x00, 0xb1, 0x00, 0x91, 0x20, 0x00, 0xbb, 0x00, 0x91, 0x20, 0x00};
+
+const uint8_t GPS::_message_VALSET_DISABLE_NMEA_BBR[] = {0x00, 0x02, 0x00, 0x00, 0xca, 0x00, 0x91, 0x20, 0x00, 0xc5,
+                                                         0x00, 0x91, 0x20, 0x00, 0xb1, 0x00, 0x91, 0x20, 0x00};
+
+// Turn off text info messages:
+// Ram layer config message:
+// b5 62 06 8a 09 00 00 01 00 00 07 00 92 20 06 59 50
+
+// BBR layer config message:
+// b5 62 06 8a 09 00 00 02 00 00 07 00 92 20 06 5a 58
+
+// Turn NMEA GSA, GGA, RMC messages on:
+// Ram layer config message:
+// b5 62 06 8a 13 00 00 01 00 00 c0 00 91 20 01 bb 00 91 20 01 ac 00 91 20 01 e1 3b
+
+// BBR layer config message:
+// b5 62 06 8a 13 00 00 02 00 00 c0 00 91 20 01 bb 00 91 20 01 ac 00 91 20 01 e2 4d
+
+const uint8_t GPS::_message_VALSET_DISABLE_TXT_INFO_RAM[] = {0x00, 0x01, 0x00, 0x00, 0x07, 0x00, 0x92, 0x20, 0x03};
+const uint8_t GPS::_message_VALSET_DISABLE_TXT_INFO_BBR[] = {0x00, 0x02, 0x00, 0x00, 0x07, 0x00, 0x92, 0x20, 0x03};
+const uint8_t GPS::_message_VALSET_ENABLE_NMEA_RAM[] = {0x00, 0x01, 0x00, 0x00, 0xc0, 0x00, 0x91, 0x20, 0x01, 0xbb,
+                                                        0x00, 0x91, 0x20, 0x01, 0xac, 0x00, 0x91, 0x20, 0x01};
+const uint8_t GPS::_message_VALSET_ENABLE_NMEA_BBR[] = {0x00, 0x02, 0x00, 0x00, 0xc0, 0x00, 0x91, 0x20, 0x01, 0xbb,
+                                                        0x00, 0x91, 0x20, 0x01, 0xac, 0x00, 0x91, 0x20, 0x01};
+const uint8_t GPS::_message_VALSET_DISABLE_SBAS_RAM[] = {0x00, 0x01, 0x00, 0x00, 0x20, 0x00, 0x31,
+                                                         0x10, 0x00, 0x05, 0x00, 0x31, 0x10, 0x00};
+const uint8_t GPS::_message_VALSET_DISABLE_SBAS_BBR[] = {0x00, 0x02, 0x00, 0x00, 0x20, 0x00, 0x31,
+                                                         0x10, 0x00, 0x05, 0x00, 0x31, 0x10, 0x00};
+/*
+Operational issues with the M10:
+
+PowerSave doesn't work with SBAS, seems like you can have SBAS enabled, but it will never lock
+onto the SBAS sats.
+PowerSave doesn't work with BDS B1C, u-blox says use B1l instead.
+BDS B1l cannot be enabled with BDS B1C or GLONASS L1OF, so GLONASS will work with B1C, but not B1l
+So no powersave with GLONASS and BDS B1l enabled.
+So disable GLONASS and use BDS B1l, which is part of the default M10 config.
+
+GNSS configuration:
+
+Default GNSS configuration is: GPS, Galileo, BDS B1l, with QZSS and SBAS enabled.
+The PMREQ puts the receiver to sleep and wakeup re-acquires really fast and seems to not need
+the PM config. Lets try without it.
+PMREQ sort of works with SBAS, but the awake time is too short to re-acquire any SBAS sats.
+The defination of "Got Fix" doesn't seem to include SBAS. Much more too this...
+Even if it was, it can take minutes (up to 12.5),
+even under good sat visability conditions to re-acquire the SBAS data.
+
+Another effect fo the quick transition to sleep is that no other sats will be acquired so the
+sat count will tend to remain at what the initial fix was.
+*/
+
+// GNSS disable SBAS as recommended by u-blox if using GNSS defaults and power save mode
+/*
+Ram layer config message:
+b5 62 06 8a 0e 00 00 01 00 00 20 00 31 10 00 05 00 31 10 00 46 87
+
+BBR layer config message:
+b5 62 06 8a 0e 00 00 02 00 00 20 00 31 10 00 05 00 31 10 00 47 94
+*/
