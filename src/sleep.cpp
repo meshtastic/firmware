@@ -186,11 +186,15 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     // not using wifi yet, but once we are this is needed to shutoff the radio hw
     // esp_wifi_stop();
     waitEnterSleep(skipPreflight);
+#ifdef ARCH_ESP32
     if (canLoraWake(msecToWake)) {
         notifySleep.notifyObservers(NULL);
     } else {
         notifyDeepSleep.notifyObservers(NULL);
     }
+#else
+    notifyDeepSleep.notifyObservers(NULL);
+#endif
 
     screen->doDeepSleep(); // datasheet says this will draw only 10ua
 
@@ -244,10 +248,11 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     }
 #endif
 
+#ifdef ARCH_ESP32
     if (canLoraWake(msecToWake)) {
         enableLoraInterrupt();
     }
-
+#endif
     cpuDeepSleep(msecToWake);
 }
 
