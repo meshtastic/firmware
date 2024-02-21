@@ -362,6 +362,12 @@ void EInkDisplay::lowPriority()
     isHighPriority = false;
 }
 
+// Full-refresh is explicitly requested for next one update - no skipping please
+void EInkDisplay::demandFullRefresh()
+{
+    demandingFull = true;
+}
+
 // configure display for partial-refresh
 void EInkDisplay::configForPartialRefresh()
 {
@@ -383,6 +389,49 @@ void EInkDisplay::configForFullRefresh()
     adafruitDisplay->setFullWindow();
 #endif
 }
+
+#ifdef EINK_PARTIAL_ERASURE_LIMIT
+// Count black pixels in an image. Used for "erasure tracking"
+int32_t EInkDisplay::countBlackPixels()
+{
+    int32_t blackCount = 0; // Signed, to avoid underflow when comparing
+    for (uint16_t b = 0; b < (displayWidth / 8) * displayHeight; b++) {
+        for (uint8_t i = 0; i < 7; i++) {
+            // Check if each bit is black or white
+            blackCount += (buffer[b] >> i) & 1;
+        }
+    }
+    return blackCount;
+}
+
+// Evaluate the (rough) amount of black->white pixel change since last full refresh
+bool EInkDisplay::tooManyErasures()
+{
+    // Ideally, we would compare the new and old buffers, to count *actual* white-to-black pixel changes
+    // but that would require substantially more "code tampering"
+
+    // Get the black pixel stats for this image
+    int32_t blackCount = countBlackPixels();
+    int32_t blackDifference = blackCount - prevBlackCount;
+
+    // Update the running total of "erasures" - black pixels which have become white, since last full-refresh
+    if (blackDifference < 0)
+        erasedSinceFull -= blackDifference;
+
+    // Store black pixel count for next time
+    prevBlackCount = blackCount;
+
+    // Log the running total - help devs setup new boards
+    LOG_DEBUG("Dynamic Partial: erasedSinceFull=%hu, EINK_PARTIAL_ERASURE_LIMIT=%hu\n", erasedSinceFull,
+              EINK_PARTIAL_ERASURE_LIMIT);
+
+    // Check if too many pixels have been erased
+    if (erasedSinceFull > EINK_PARTIAL_ERASURE_LIMIT)
+        return true; // Too many
+    else
+        return false; // Still okay
+}
+#endif // ifdef EINK_PARTIAL_BRIGHTEN_LIMIT_PX
 
 bool EInkDisplay::newImageMatchesOld()
 {
@@ -416,15 +465,19 @@ bool EInkDisplay::determineRefreshMode()
         missedHighPriorityUpdate = false;
     }
 
-    // Abort: if too soon for a new frame
-    if (isHighPriority && partialRefreshCount > 0 && sinceLast < highPriorityLimitMsec) {
-        LOG_DEBUG("Update skipped: exceeded EINK_HIGHPRIORITY_LIMIT_SECONDS\n");
+    // Abort: if too soon for a new frame (unless demanding full)
+    if (!demandingFull && isHighPriority && partialRefreshCount > 0 && sinceLast < highPriorityLimitMsec) {
+        LOG_DEBUG("Dynamic Partial: update skipped. Exceeded EINK_HIGHPRIORITY_LIMIT_SECONDS\n");
         missedHighPriorityUpdate = true;
         return false;
     }
-    if (!isHighPriority && sinceLast < lowPriorityLimitMsec) {
+    if (!demandingFull && !isHighPriority && !demandingFull && sinceLast < lowPriorityLimitMsec) {
         return false;
     }
+
+    // If demanded full refresh: give it to them
+    if (demandingFull)
+        needsFull = true;
 
     // Check if old image (partial) should be redrawn (as full), for image quality
     if (partialRefreshCount > 0 && !isHighPriority)
@@ -434,7 +487,14 @@ bool EInkDisplay::determineRefreshMode()
     if (partialRefreshCount >= partialRefreshLimit)
         needsFull = true;
 
+#ifdef EINK_PARTIAL_ERASURE_LIMIT
+    // Some displays struggle with erasing black pixels to white, during partial refresh
+    if (tooManyErasures())
+        needsFull = true;
+#endif
+
     // If image matches
+    // (Block must run, even if full already selected, to store hash for next time)
     if (newImageMatchesOld()) {
         // If low priority: limit rate
         // otherwise, every loop() will run the hash method
@@ -453,9 +513,11 @@ bool EInkDisplay::determineRefreshMode()
         if (partialRefreshCount > 0)
             configForFullRefresh();
 
-        LOG_DEBUG("Conditions met for full-refresh\n");
+        LOG_DEBUG("Dynamic Partial: conditions met for full-refresh\n");
         partialRefreshCount = 0;
         needsFull = false;
+        demandingFull = false;
+        erasedSinceFull = 0; // Reset the count for EINK_PARTIAL_ERASURE_LIMIT - tracks ghosting buildup
     }
 
     // If options allow a partial refresh
@@ -463,7 +525,7 @@ bool EInkDisplay::determineRefreshMode()
         if (partialRefreshCount == 0)
             configForPartialRefresh();
 
-        LOG_DEBUG("Conditions met for partial-refresh\n");
+        LOG_DEBUG("Dynamic Partial: conditions met for partial-refresh\n");
         partialRefreshCount++;
     }
 

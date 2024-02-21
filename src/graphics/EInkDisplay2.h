@@ -64,8 +64,10 @@ class EInkDisplay : public OLEDDisplay
 
     // Use full refresh if EITHER:
     // * lowPriority() was set
+    // * demandFullRefresh() was called - (single shot)
     // * too many partial updates in a row: protect display - (EINK_PARTIAL_REPEAT_LIMIT)
     // * no recent updates, and last update was partial: redraw for image quality (EINK_LOWPRIORITY_LIMIT_SECONDS)
+    // * (optional) too many "erasures" since full-refresh (black pixels cleared to white)
 
     // Rate limit if:
     // * lowPriority() - (EINK_LOWPRIORITY_LIMIT_SECONDS)
@@ -74,6 +76,7 @@ class EInkDisplay : public OLEDDisplay
     // Skip update entirely if ALL criteria met:
     // * new image matches old image
     // * lowPriority()
+    // * no call to demandFullRefresh()
     // * not redrawing for image quality
     // * not refreshing for display health
 
@@ -89,24 +92,33 @@ class EInkDisplay : public OLEDDisplay
         #define EINK_LOWPRIORITY_LIMIT_SECONDS 30
         #define EINK_HIGHPRIORITY_LIMIT_SECONDS 1
         #define EINK_PARTIAL_REPEAT_LIMIT 5
+        #define EINK_PARTIAL_ERASURE_LIMIT 300     // optional
     */
 
   public:
-    void highPriority(); // Suggest partial refresh
-    void lowPriority();  // Suggest full refresh
+    void highPriority();      // Suggest partial refresh
+    void lowPriority();       // Suggest full refresh
+    void demandFullRefresh(); // For next update: explicitly request full refresh
 
   protected:
     void configForPartialRefresh(); // Display specific code to select partial refresh mode
     void configForFullRefresh();    // Display specific code to return to full refresh mode
     bool newImageMatchesOld();      // Is the new update actually different to the last image?
     bool determineRefreshMode();    // Called immediately before data written to display - choose refresh mode, or abort update
+#ifdef EINK_PARTIAL_ERASURE_LIMIT
+    int32_t countBlackPixels(); // Calculate the number of black pixels in the new image
+    bool tooManyErasures();     // Has too much "ghosting" (black pixels erased to white) accumulated since last full-refresh?
+#endif
 
     bool isHighPriority = true;            // Does the method calling update believe that this is urgent?
     bool needsFull = false;                // Is a full refresh forced? (display health)
+    bool demandingFull = false;            // Was full refresh specifically requested? (splash screens, etc)
     bool missedHighPriorityUpdate = false; // Was a high priority update skipped for rate-limiting?
     uint16_t partialRefreshCount = 0;      // How many partials have occurred since last full refresh?
     uint32_t lastUpdateMsec = 0;           // When did the last update occur?
     uint32_t prevImageHash = 0;            // Used to check if update will change screen image (skippable or not)
+    int32_t prevBlackCount = 0;            // How many black pixels were in the previous image
+    uint32_t erasedSinceFull = 0;          // How many black pixels have been set back to white since last full-refresh? (roughly)
 
     // Set in variant.h
     const uint32_t lowPriorityLimitMsec = (uint32_t)1000 * EINK_LOWPRIORITY_LIMIT_SECONDS;   // Max rate for partial refreshes
@@ -117,5 +129,6 @@ class EInkDisplay : public OLEDDisplay
     // Tolerate calls to these methods anywhere, just to be safe
     void highPriority() {}
     void lowPriority() {}
+    void demandFullRefresh() {}
 #endif
 };
