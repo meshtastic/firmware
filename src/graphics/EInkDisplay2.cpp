@@ -65,7 +65,7 @@ EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY
 
     // GxEPD2_213_BN - RAK14000 2.13 inch b/w 250x122
     setGeometry(GEOMETRY_RAWMODE, 250, 122);
-
+    this->displayBufferSize = 250 * (128 / 8);
     // GxEPD2_420_M01
     // setGeometry(GEOMETRY_RAWMODE, 300, 400);
 
