@@ -193,7 +193,7 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
                                       {.pli = {
                                            .latitude_i = localPosition.latitude_i,
                                            .longitude_i = localPosition.longitude_i,
-                                           .altitude = localPosition.altitude_hae > 0 ? localPosition.altitude_hae : 0,
+                                           .altitude = localPosition.altitude_hae,
                                            .speed = localPosition.ground_speed,
                                            .course = static_cast<uint16_t>(localPosition.ground_track),
                                        }}};
