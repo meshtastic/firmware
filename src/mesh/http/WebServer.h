@@ -1,3 +1,4 @@
+#ifdef PORTDUINO_LINUX_HARDWARE
 #pragma once
 
 #include "PhoneAPI.h"
@@ -20,3 +21,4 @@ class WebServerThread : private concurrency::OSThread
 };
 
 extern WebServerThread *webServerThread;
+#endif

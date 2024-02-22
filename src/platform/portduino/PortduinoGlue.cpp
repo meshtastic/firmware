@@ -195,6 +195,11 @@ void portduinoSetup()
             settingsStrings[keyboardDevice] = (yamlConfig["Input"]["KeyboardDevice"]).as<std::string>("");
         }
 
+        if (yamlConfig["Webserver"]) {
+            settingsMap[webserverport] = (yamlConfig["Webserver"]["Port"]).as<int>(-1);
+            settingsStrings[webserverrootpath] = (yamlConfig["Webserver"]["RootPath"]).as<std::string>("");
+        }
+
     } catch (YAML::Exception e) {
         std::cout << "*** Exception " << e.what() << std::endl;
         exit(EXIT_FAILURE);

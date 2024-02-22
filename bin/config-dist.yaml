@@ -117,3 +117,7 @@ Input:
 
 Logging:
   LogLevel: info # debug, info, warn, error
+
+Webserver:
+  Port: 9001 # Port for Webserver & Webservices
+  RootPath: /home/user/web # Root Dir of WebServer

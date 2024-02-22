@@ -1,3 +1,4 @@
+#ifndef PORTDUINO_LINUX_HARDWARE
 #include "mesh/http/WebServer.h"
 #include "NodeDB.h"
 #include "graphics/Screen.h"
@@ -211,3 +212,4 @@ void initWebServer()
         LOG_ERROR("Web Servers Failed! ;-( \n");
     }
 }
+#endif

@@ -31,3 +31,7 @@ venv/
 release/
 .vscode/extensions.json
 /compile_commands.json
+src/mesh/http/certificate.pem
+src/mesh/http/private_key.pem
+arch/portduino/portduino.ini
+.vscode/extensions.json
