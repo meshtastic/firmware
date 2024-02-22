@@ -110,7 +110,7 @@ typedef struct _meshtastic_PLI {
  in floating point */
     int32_t longitude_i;
     /* Altitude (ATAK prefers HAE) */
-    uint32_t altitude;
+    int32_t altitude;
     /* Speed */
     uint32_t speed;
     /* Course in degrees */
@@ -238,7 +238,7 @@ X(a, STATIC,   SINGULAR, STRING,   device_callsign,   2)
 #define meshtastic_PLI_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, SFIXED32, latitude_i,        1) \
 X(a, STATIC,   SINGULAR, SFIXED32, longitude_i,       2) \
-X(a, STATIC,   SINGULAR, UINT32,   altitude,          3) \
+X(a, STATIC,   SINGULAR, INT32,    altitude,          3) \
 X(a, STATIC,   SINGULAR, UINT32,   speed,             4) \
 X(a, STATIC,   SINGULAR, UINT32,   course,            5)
 #define meshtastic_PLI_CALLBACK NULL
@@ -263,7 +263,7 @@ extern const pb_msgdesc_t meshtastic_PLI_msg;
 #define meshtastic_Contact_size                  242
 #define meshtastic_GeoChat_size                  323
 #define meshtastic_Group_size                    4
-#define meshtastic_PLI_size                      26
+#define meshtastic_PLI_size                      31
 #define meshtastic_Status_size                   3
 #define meshtastic_TAKPacket_size                584
 
