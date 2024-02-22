@@ -444,6 +444,11 @@ bool GPS::setup()
                     if (getACK(0x06, 0x86, 500) != GNSS_RESPONSE_OK) {
                         LOG_WARN("Unable to enable powersaving for GPS.\n");
                     }
+                    msglen = makeUBXPacket(0x06, 0x3B, sizeof(_message_CFG_PM2), _message_CFG_PM2);
+                    _serial_gps->write(UBXscratch, msglen);
+                    if (getACK(0x06, 0x3B, 500) != GNSS_RESPONSE_OK) {
+                        LOG_WARN("Unable to enable powersaving details for GPS.\n");
+                    }
                     // For M8 we want to enable NMEA vserion 4.10 so we can see the additional sats.
                     if (strncmp(info.hwVersion, "00080000", 8) == 0) {
                         msglen = makeUBXPacket(0x06, 0x17, sizeof(_message_NMEA), _message_NMEA);
@@ -476,6 +481,12 @@ bool GPS::setup()
                         _serial_gps->write(UBXscratch, msglen);
                         if (getACK(0x06, 0x11, 500) != GNSS_RESPONSE_OK) {
                             LOG_WARN("Unable to enable powersaving mode for GPS.\n");
+                        }
+
+                        msglen = makeUBXPacket(0x06, 0x3B, sizeof(_message_CFG_PM2), _message_CFG_PM2);
+                        _serial_gps->write(UBXscratch, msglen);
+                        if (getACK(0x06, 0x3B, 500) != GNSS_RESPONSE_OK) {
+                            LOG_WARN("Unable to enable powersaving details for GPS.\n");
                         }
                     }
                 }
