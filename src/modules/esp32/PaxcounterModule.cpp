@@ -87,4 +87,25 @@ int32_t PaxcounterModule::runOnce()
     }
 }
 
+// TODO: Probably we could get this from Screen or other central class
+#define FONT_SMALL ArialMT_Plain_10
+#define FONT_MEDIUM ArialMT_Plain_16
+#define FONT_LARGE ArialMT_Plain_24
+
+void PaxcounterModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    char buffer[50];
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    display->drawString(x + 0, y + 0, "PAX");
+
+    libpax_counter_count(&count_from_libpax);
+
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->setFont(FONT_SMALL);
+    display->drawStringf(display->getWidth() / 2 + x, 0 + y + 12,
+                         buffer, "WiFi: %d\nBLE: %d\nuptime: %ds",
+                         count_from_libpax.wifi_count, count_from_libpax.ble_count, millis() / 1000);
+}
+
 #endif
