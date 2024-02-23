@@ -10,6 +10,10 @@
 #include <sys/time.h>
 #include <time.h>
 
+#ifdef ARCH_PORTDUINO
+#include "platform/portduino/PortduinoGlue.h"
+#endif
+
 /**
  * A printer that doesn't go anywhere
  */
@@ -68,7 +72,15 @@ size_t RedirectablePrint::vprintf(const char *format, va_list arg)
 
 size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
 {
-    if (moduleConfig.serial.override_console_serial_port && strcmp(logLevel, "DEBUG") == 0) {
+#ifdef ARCH_PORTDUINO
+    if (settingsMap[logoutputlevel] < level_debug && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0)
+        return 0;
+    else if (settingsMap[logoutputlevel] < level_info && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_INFO) == 0)
+        return 0;
+    else if (settingsMap[logoutputlevel] < level_warn && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_WARN) == 0)
+        return 0;
+#endif
+    if (moduleConfig.serial.override_console_serial_port && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0) {
         return 0;
     }
     size_t r = 0;
@@ -99,10 +111,17 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
                 int hour = hms / SEC_PER_HOUR;
                 int min = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
                 int sec = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
-
+#ifdef ARCH_PORTDUINO
+                r += ::printf("%s | %02d:%02d:%02d %u ", logLevel, hour, min, sec, millis() / 1000);
+#else
                 r += printf("%s | %02d:%02d:%02d %u ", logLevel, hour, min, sec, millis() / 1000);
+#endif
             } else
+#ifdef ARCH_PORTDUINO
+                r += ::printf("%s | ??:??:?? %u ", logLevel, millis() / 1000);
+#else
                 r += printf("%s | ??:??:?? %u ", logLevel, millis() / 1000);
+#endif
 
             auto thread = concurrency::OSThread::currentThread;
             if (thread) {

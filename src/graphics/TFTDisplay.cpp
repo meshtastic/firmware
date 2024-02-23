@@ -1,5 +1,8 @@
 #include "configuration.h"
 #include "main.h"
+#if ARCH_PORTDUINO
+#include "platform/portduino/PortduinoGlue.h"
+#endif
 
 #ifndef TFT_BACKLIGHT_ON
 #define TFT_BACKLIGHT_ON HIGH
@@ -14,6 +17,10 @@
 
 #if defined(ST7735_BACKLIGHT_EN) && !defined(TFT_BL)
 #define TFT_BL ST7735_BACKLIGHT_EN
+#endif
+
+#ifndef TFT_INVERT
+#define TFT_INVERT true
 #endif
 
 class LGFX : public lgfx::LGFX_Device
@@ -65,7 +72,7 @@ class LGFX : public lgfx::LGFX_Device
             cfg.dummy_read_pixel = 8;      // Number of bits for dummy read before pixel readout
             cfg.dummy_read_bits = 1;       // Number of bits for dummy read before non-pixel data read
             cfg.readable = true;           // Set to true if data can be read
-            cfg.invert = true;             // Set to true if the light/darkness of the panel is reversed
+            cfg.invert = TFT_INVERT;       // Set to true if the light/darkness of the panel is reversed
             cfg.rgb_order = false;         // Set to true if the panel's red and blue are swapped
             cfg.dlen_16bit =
                 false;             // Set to true for panels that transmit data length in 16-bit units with 16-bit parallel or SPI
@@ -83,11 +90,9 @@ class LGFX : public lgfx::LGFX_Device
             auto cfg = _light_instance.config(); // Gets a structure for backlight settings.
 
 #ifdef ST7735_BL_V03
-            if (heltec_version == 3) {
-                cfg.pin_bl = ST7735_BL_V03;
-            } else {
-                cfg.pin_bl = ST7735_BL_V05;
-            }
+            cfg.pin_bl = ST7735_BL_V03;
+#elif defined(ST7735_BL_V05)
+            cfg.pin_bl = ST7735_BL_V05;
 #else
             cfg.pin_bl = ST7735_BL; // Pin number to which the backlight is connected
 #endif
@@ -103,7 +108,11 @@ class LGFX : public lgfx::LGFX_Device
     }
 };
 
-static LGFX tft;
+static LGFX *tft = nullptr;
+
+#elif defined(RAK14014)
+#include <TFT_eSPI.h>
+TFT_eSPI *tft = nullptr;
 
 #elif defined(ST7789_CS)
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
@@ -229,7 +238,7 @@ class LGFX : public lgfx::LGFX_Device
     }
 };
 
-static LGFX tft;
+static LGFX *tft = nullptr;
 
 #elif defined(ILI9341_DRIVER)
 
@@ -318,23 +327,99 @@ class LGFX : public lgfx::LGFX_Device
     }
 };
 
-static LGFX tft;
+static LGFX *tft = nullptr;
 
 #elif defined(ST7735_CS)
 #include <TFT_eSPI.h> // Graphics and font library for ILI9341 driver chip
 
-static TFT_eSPI tft = TFT_eSPI(); // Invoke library, pins defined in User_Setup.h
+static TFT_eSPI *tft = nullptr; // Invoke library, pins defined in User_Setup.h
+#elif ARCH_PORTDUINO
+#include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
 
+class LGFX : public lgfx::LGFX_Device
+{
+    lgfx::Panel_LCD *_panel_instance;
+    lgfx::Bus_SPI _bus_instance;
+
+    lgfx::ITouch *_touch_instance;
+
+  public:
+    LGFX(void)
+    {
+        if (settingsMap[displayPanel] == st7789)
+            _panel_instance = new lgfx::Panel_ST7789;
+        else if (settingsMap[displayPanel] == st7735)
+            _panel_instance = new lgfx::Panel_ST7735;
+        else if (settingsMap[displayPanel] == st7735s)
+            _panel_instance = new lgfx::Panel_ST7735S;
+        else if (settingsMap[displayPanel] == ili9341)
+            _panel_instance = new lgfx::Panel_ILI9341;
+        auto buscfg = _bus_instance.config();
+        buscfg.spi_mode = 0;
+
+        buscfg.pin_dc = settingsMap[displayDC]; // Set SPI DC pin number (-1 = disable)
+
+        _bus_instance.config(buscfg);            // applies the set value to the bus.
+        _panel_instance->setBus(&_bus_instance); // set the bus on the panel.
+
+        auto cfg = _panel_instance->config(); // Gets a structure for display panel settings.
+        LOG_DEBUG("Height: %d, Width: %d \n", settingsMap[displayHeight], settingsMap[displayWidth]);
+        cfg.pin_cs = settingsMap[displayCS]; // Pin number where CS is connected (-1 = disable)
+        cfg.pin_rst = settingsMap[displayReset];
+        cfg.panel_width = settingsMap[displayWidth];   // actual displayable width
+        cfg.panel_height = settingsMap[displayHeight]; // actual displayable height
+        cfg.offset_x = settingsMap[displayOffsetX];    // Panel offset amount in X direction
+        cfg.offset_y = settingsMap[displayOffsetY];    // Panel offset amount in Y direction
+        cfg.offset_rotation = 0;                       // Rotation direction value offset 0~7 (4~7 is mirrored)
+        cfg.invert = settingsMap[displayInvert];       // Set to true if the light/darkness of the panel is reversed
+
+        _panel_instance->config(cfg);
+
+        // Configure settings for touch  control.
+        if (settingsMap[touchscreenModule]) {
+            if (settingsMap[touchscreenModule] == xpt2046) {
+                _touch_instance = new lgfx::Touch_XPT2046;
+            } else if (settingsMap[touchscreenModule] == stmpe610) {
+                _touch_instance = new lgfx::Touch_STMPE610;
+            }
+            auto touch_cfg = _touch_instance->config();
+
+            touch_cfg.pin_cs = settingsMap[touchscreenCS];
+            touch_cfg.x_min = 0;
+            touch_cfg.x_max = settingsMap[displayHeight] - 1;
+            touch_cfg.y_min = 0;
+            touch_cfg.y_max = settingsMap[displayWidth] - 1;
+            touch_cfg.pin_int = settingsMap[touchscreenIRQ];
+            touch_cfg.bus_shared = true;
+            touch_cfg.offset_rotation = 1;
+
+            _touch_instance->config(touch_cfg);
+            _panel_instance->setTouch(_touch_instance);
+        }
+
+        setPanel(_panel_instance); // Sets the panel to use.
+    }
+};
+
+static LGFX *tft = nullptr;
 #endif
 
-#if defined(ST7735_CS) || defined(ST7789_CS) || defined(ILI9341_DRIVER)
+#if defined(ST7735_CS) || defined(ST7789_CS) || defined(ILI9341_DRIVER) || defined(RAK14014) || ARCH_PORTDUINO
 #include "SPILock.h"
 #include "TFTDisplay.h"
 #include <SPI.h>
 
 TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY geometry, HW_I2C i2cBus)
 {
-#ifdef SCREEN_ROTATE
+    LOG_DEBUG("TFTDisplay!\n");
+#if ARCH_PORTDUINO
+    if (settingsMap[displayRotate]) {
+        setGeometry(GEOMETRY_RAWMODE, settingsMap[configNames::displayHeight], settingsMap[configNames::displayWidth]);
+    } else {
+        setGeometry(GEOMETRY_RAWMODE, settingsMap[configNames::displayWidth], settingsMap[configNames::displayHeight]);
+    }
+
+#elif defined(SCREEN_ROTATE)
     setGeometry(GEOMETRY_RAWMODE, TFT_HEIGHT, TFT_WIDTH);
 #else
     setGeometry(GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT);
@@ -342,19 +427,26 @@ TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY g
 }
 
 // Write the buffer to the display memory
-void TFTDisplay::display(void)
+void TFTDisplay::display(bool fromBlank)
 {
+    if (fromBlank)
+        tft->fillScreen(TFT_BLACK);
+    // tft->clear();
     concurrency::LockGuard g(spiLock);
 
     uint16_t x, y;
 
     for (y = 0; y < displayHeight; y++) {
         for (x = 0; x < displayWidth; x++) {
-            // get src pixel in the page based ordering the OLED lib uses FIXME, super inefficent
             auto isset = buffer[x + (y / 8) * displayWidth] & (1 << (y & 7));
-            auto dblbuf_isset = buffer_back[x + (y / 8) * displayWidth] & (1 << (y & 7));
-            if (isset != dblbuf_isset) {
-                tft.drawPixel(x, y, isset ? TFT_MESH : TFT_BLACK);
+            if (!fromBlank) {
+                // get src pixel in the page based ordering the OLED lib uses FIXME, super inefficent
+                auto dblbuf_isset = buffer_back[x + (y / 8) * displayWidth] & (1 << (y & 7));
+                if (isset != dblbuf_isset) {
+                    tft->drawPixel(x, y, isset ? TFT_MESH : TFT_BLACK);
+                }
+            } else if (isset) {
+                tft->drawPixel(x, y, TFT_MESH);
             }
         }
     }
@@ -373,54 +465,57 @@ void TFTDisplay::sendCommand(uint8_t com)
     // handle display on/off directly
     switch (com) {
     case DISPLAYON: {
-#if defined(ST7735_BACKLIGHT_EN_V03) && defined(TFT_BACKLIGHT_ON)
-        if (heltec_version == 3) {
-            digitalWrite(ST7735_BACKLIGHT_EN_V03, TFT_BACKLIGHT_ON);
-        } else {
-            digitalWrite(ST7735_BACKLIGHT_EN_V05, TFT_BACKLIGHT_ON);
-        }
+#if ARCH_PORTDUINO
+        display(true);
+        if (settingsMap[displayBacklight] > 0)
+            digitalWrite(settingsMap[displayBacklight], TFT_BACKLIGHT_ON);
+#elif defined(ST7735_BL_V03)
+        digitalWrite(ST7735_BL_V03, TFT_BACKLIGHT_ON);
+#elif defined(ST7735_BL_V05)
+        pinMode(ST7735_BL_V05, OUTPUT);
+        digitalWrite(ST7735_BL_V05, TFT_BACKLIGHT_ON);
 #endif
 #if defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
         digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
 #endif
+
 #ifdef VTFT_CTRL_V03
-        if (heltec_version == 3) {
-            digitalWrite(VTFT_CTRL_V03, LOW);
-        } else {
-            digitalWrite(VTFT_CTRL_V05, LOW);
-        }
+        digitalWrite(VTFT_CTRL_V03, LOW);
 #endif
+
 #ifdef VTFT_CTRL
         digitalWrite(VTFT_CTRL, LOW);
 #endif
-#ifndef M5STACK
-        tft.setBrightness(128);
+
+#ifdef RAK14014
+#elif !defined(M5STACK)
+        tft->setBrightness(172);
 #endif
         break;
     }
     case DISPLAYOFF: {
-#if defined(ST7735_BACKLIGHT_EN_V03) && defined(TFT_BACKLIGHT_ON)
-        if (heltec_version == 3) {
-            digitalWrite(ST7735_BACKLIGHT_EN_V03, !TFT_BACKLIGHT_ON);
-        } else {
-            digitalWrite(ST7735_BACKLIGHT_EN_V05, !TFT_BACKLIGHT_ON);
-        }
+#if ARCH_PORTDUINO
+        tft->clear();
+        if (settingsMap[displayBacklight] > 0)
+            digitalWrite(settingsMap[displayBacklight], !TFT_BACKLIGHT_ON);
+#elif defined(ST7735_BL_V03)
+        digitalWrite(ST7735_BL_V03, !TFT_BACKLIGHT_ON);
+#elif defined(ST7735_BL_V05)
+        pinMode(ST7735_BL_V05, OUTPUT);
+        digitalWrite(ST7735_BL_V05, !TFT_BACKLIGHT_ON);
 #endif
 #if defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
         digitalWrite(TFT_BL, !TFT_BACKLIGHT_ON);
 #endif
 #ifdef VTFT_CTRL_V03
-        if (heltec_version == 3) {
-            digitalWrite(VTFT_CTRL_V03, HIGH);
-        } else {
-            digitalWrite(VTFT_CTRL_V05, HIGH);
-        }
+        digitalWrite(VTFT_CTRL_V03, HIGH);
 #endif
 #ifdef VTFT_CTRL
         digitalWrite(VTFT_CTRL, HIGH);
 #endif
-#ifndef M5STACK
-        tft.setBrightness(0);
+#ifdef RAK14014
+#elif !defined(M5STACK)
+        tft->setBrightness(0);
 #endif
         break;
     }
@@ -435,14 +530,15 @@ void TFTDisplay::flipScreenVertically()
 {
 #if defined(T_WATCH_S3)
     LOG_DEBUG("Flip TFT vertically\n"); // T-Watch S3 right-handed orientation
-    tft.setRotation(0);
+    tft->setRotation(0);
 #endif
 }
 
 bool TFTDisplay::hasTouch(void)
 {
-#ifndef M5STACK
-    return tft.touch() != nullptr;
+#ifdef RAK14014
+#elif !defined(M5STACK)
+    return tft->touch() != nullptr;
 #else
     return false;
 #endif
@@ -450,8 +546,9 @@ bool TFTDisplay::hasTouch(void)
 
 bool TFTDisplay::getTouch(int16_t *x, int16_t *y)
 {
-#ifndef M5STACK
-    return tft.getTouch(x, y);
+#ifdef RAK14014
+#elif !defined(M5STACK)
+    return tft->getTouch(x, y);
 #else
     return false;
 #endif
@@ -467,33 +564,44 @@ bool TFTDisplay::connect()
 {
     concurrency::LockGuard g(spiLock);
     LOG_INFO("Doing TFT init\n");
+#ifdef RAK14014
+    tft = new TFT_eSPI;
+#else
+    tft = new LGFX;
+#endif
 
 #ifdef TFT_BL
-    digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
     pinMode(TFT_BL, OUTPUT);
+    digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
+    // pinMode(PIN_3V3_EN, OUTPUT);
+    // digitalWrite(PIN_3V3_EN, HIGH);
+    LOG_INFO("Power to TFT Backlight\n");
 #endif
 
-#ifdef ST7735_BACKLIGHT_EN_V03
-    if (heltec_version == 3) {
-        digitalWrite(ST7735_BACKLIGHT_EN_V03, TFT_BACKLIGHT_ON);
-        pinMode(ST7735_BACKLIGHT_EN_V03, OUTPUT);
-    } else {
-        digitalWrite(ST7735_BACKLIGHT_EN_V05, TFT_BACKLIGHT_ON);
-        pinMode(ST7735_BACKLIGHT_EN_V05, OUTPUT);
-    }
+#ifdef ST7735_BL_V03
+    digitalWrite(ST7735_BL_V03, TFT_BACKLIGHT_ON);
+#elif defined(ST7735_BL_V05)
+    pinMode(ST7735_BL_V05, OUTPUT);
+    digitalWrite(ST7735_BL_V05, TFT_BACKLIGHT_ON);
 #endif
 
-    tft.init();
+    tft->init();
+
 #if defined(M5STACK)
-    tft.setRotation(0);
-#elif defined(T_DECK) || defined(PICOMPUTER_S3)
-    tft.setRotation(1); // T-Deck has the TFT in landscape
+    tft->setRotation(0);
+#elif defined(RAK14014)
+    tft->setRotation(1);
+    tft->setSwapBytes(true);
+//    tft->fillScreen(TFT_BLACK);
+#elif defined(T_DECK) || defined(PICOMPUTER_S3) || defined(CHATTER_2)
+    tft->setRotation(1); // T-Deck has the TFT in landscape
 #elif defined(T_WATCH_S3)
-    tft.setRotation(2); // T-Watch S3 left-handed orientation
+    tft->setRotation(2); // T-Watch S3 left-handed orientation
 #else
-    tft.setRotation(3); // Orient horizontal and wide underneath the silkscreen name label
+    tft->setRotation(3); // Orient horizontal and wide underneath the silkscreen name label
 #endif
-    tft.fillScreen(TFT_BLACK);
+    tft->fillScreen(TFT_BLACK);
+
     return true;
 }
 

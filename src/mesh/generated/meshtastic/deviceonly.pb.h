@@ -312,11 +312,11 @@ extern const pb_msgdesc_t meshtastic_NodeRemoteHardwarePin_msg;
 #define meshtastic_NodeRemoteHardwarePin_fields &meshtastic_NodeRemoteHardwarePin_msg
 
 /* Maximum encoded size of messages (where known) */
-#define meshtastic_ChannelFile_size              638
-#define meshtastic_DeviceState_size              16854
-#define meshtastic_NodeInfoLite_size             151
+#define meshtastic_ChannelFile_size              702
+#define meshtastic_DeviceState_size              17062
+#define meshtastic_NodeInfoLite_size             153
 #define meshtastic_NodeRemoteHardwarePin_size    29
-#define meshtastic_OEMStore_size                 3218
+#define meshtastic_OEMStore_size                 3246
 #define meshtastic_PositionLite_size             28
 
 #ifdef __cplusplus

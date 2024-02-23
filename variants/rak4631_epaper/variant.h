@@ -209,6 +209,9 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // RAK12002 RTC Module
 #define RV3028_RTC (uint8_t)0b1010010
 
+// Testing USB detection
+#define NRF_APM
+
 // Battery
 // The battery sense is hooked to pin A0 (5)
 #define BATTERY_PIN PIN_A0
@@ -220,7 +223,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // Voltage divider value => 1.5M + 1M voltage divider on VBAT = (1.5M / (1M + 1.5M))
 #define VBAT_DIVIDER (0.4F)
 // Compensation factor for the VBAT divider
-#define VBAT_DIVIDER_COMP (1.73)
+#define VBAT_DIVIDER_COMP (1.73F)
 // Fixed calculation of milliVolt from compensation value
 #define REAL_VBAT_MV_PER_LSB (VBAT_DIVIDER_COMP * VBAT_MV_PER_LSB)
 #undef AREF_VOLTAGE

@@ -42,6 +42,12 @@ extern ATECCX08A atecc;
 #include <Adafruit_DRV2605.h>
 extern Adafruit_DRV2605 drv;
 #endif
+
+#ifdef HAS_I2S
+#include "AudioThread.h"
+extern AudioThread *audioThread;
+#endif
+
 extern bool isVibrating;
 
 extern int TCPPort; // set by Portduino
@@ -64,13 +70,11 @@ extern uint32_t shutdownAtMsec;
 
 extern uint32_t serialSinceMsec;
 
-extern int heltec_version;
-
 // If a thread does something that might need for it to be rescheduled ASAP it can set this flag
 // This will suppress the current delay and instead try to run ASAP.
 extern bool runASAP;
 
-void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop(), rp2040Setup(), clearBonds();
+void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop(), rp2040Setup(), clearBonds(), enterDfuMode();
 
 meshtastic_DeviceMetadata getDeviceMetadata();
 

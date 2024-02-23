@@ -67,6 +67,14 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_STATION_G1 = 25,
     /* RAK11310 (RP2040 + SX1262) */
     meshtastic_HardwareModel_RAK11310 = 26,
+    /* Makerfabs SenseLoRA Receiver (RP2040 + RFM96) */
+    meshtastic_HardwareModel_SENSELORA_RP2040 = 27,
+    /* Makerfabs SenseLoRA Industrial Monitor (ESP32-S3 + RFM96) */
+    meshtastic_HardwareModel_SENSELORA_S3 = 28,
+    /* Canary Radio Company - CanaryOne: https://canaryradio.io/products/canaryone */
+    meshtastic_HardwareModel_CANARYONE = 29,
+    /* Waveshare RP2040 LoRa - https://www.waveshare.com/rp2040-lora.htm */
+    meshtastic_HardwareModel_RP2040_LORA = 30,
     /* ---------------------------------------------------------------------------
  Less common/prototype boards listed here (needs one more byte over the air)
  --------------------------------------------------------------------------- */
@@ -101,7 +109,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_BETAFPV_900_NANO_TX = 46,
     /* Raspberry Pi Pico (W) with Waveshare SX1262 LoRa Node Module */
     meshtastic_HardwareModel_RPI_PICO = 47,
-    /* Heltec Wireless Tracker with ESP32-S3 CPU, built-in GPS, and TFT */
+    /* Heltec Wireless Tracker with ESP32-S3 CPU, built-in GPS, and TFT
+ Newer V1.1, version is written on the PCB near the display. */
     meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER = 48,
     /* Heltec Wireless Paper with ESP32-S3 CPU and E-Ink display */
     meshtastic_HardwareModel_HELTEC_WIRELESS_PAPER = 49,
@@ -115,6 +124,21 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_HELTEC_HT62 = 53,
     /* EBYTE SPI LoRa module and ESP32-S3 */
     meshtastic_HardwareModel_EBYTE_ESP32_S3 = 54,
+    /* Waveshare ESP32-S3-PICO with PICO LoRa HAT and 2.9inch e-Ink */
+    meshtastic_HardwareModel_ESP32_S3_PICO = 55,
+    /* CircuitMess Chatter 2 LLCC68 Lora Module and ESP32 Wroom
+ Lora module can be swapped out for a Heltec RA-62 which is "almost" pin compatible
+ with one cut and one jumper Meshtastic works */
+    meshtastic_HardwareModel_CHATTER_2 = 56,
+    /* Heltec Wireless Paper, With ESP32-S3 CPU and E-Ink display
+ Older "V1.0" Variant, has no "version sticker"
+ E-Ink model is DEPG0213BNS800
+ Tab on the screen protector is RED
+ Flex connector marking is FPC-7528B */
+    meshtastic_HardwareModel_HELTEC_WIRELESS_PAPER_V1_0 = 57,
+    /* Heltec Wireless Tracker with ESP32-S3 CPU, built-in GPS, and TFT
+ Older "V1.0" Variant */
+    meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER_V1_0 = 58,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -356,6 +380,8 @@ typedef struct _meshtastic_Position {
     /* A sequence number, incremented with each Position message to help
    detect lost updates if needed */
     uint32_t seq_number;
+    /* Indicates the bits of precision set by the sending node */
+    uint32_t precision_bits;
 } meshtastic_Position;
 
 /* Broadcast when a newly powered mesh node wants to find a node num it can use
@@ -402,6 +428,8 @@ typedef struct _meshtastic_User {
  If this user is a licensed operator, set this flag.
  Also, "long_name" should be their licence number. */
     bool is_licensed;
+    /* Indicates that the user's role in the mesh */
+    meshtastic_Config_DeviceConfig_Role role;
 } meshtastic_User;
 
 /* A message used in our Dynamic Source Routing protocol (RFC 4728 based) */
@@ -565,6 +593,8 @@ typedef struct _meshtastic_MeshPacket {
     int32_t rx_rssi;
     /* Describe if this message is delayed */
     meshtastic_MeshPacket_Delayed delayed;
+    /* Describes whether this packet passed via MQTT somewhere along the path it currently took. */
+    bool via_mqtt;
 } meshtastic_MeshPacket;
 
 /* The bluetooth to device link:
@@ -826,6 +856,7 @@ extern "C" {
 #define meshtastic_Position_altitude_source_ENUMTYPE meshtastic_Position_AltSource
 
 #define meshtastic_User_hw_model_ENUMTYPE meshtastic_HardwareModel
+#define meshtastic_User_role_ENUMTYPE meshtastic_Config_DeviceConfig_Role
 
 
 #define meshtastic_Routing_variant_error_reason_ENUMTYPE meshtastic_Routing_Error
@@ -853,14 +884,14 @@ extern "C" {
 
 
 /* Initializer values for message structs */
-#define meshtastic_Position_init_default         {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define meshtastic_User_init_default             {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0}
+#define meshtastic_Position_init_default         {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_User_init_default             {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN}
 #define meshtastic_RouteDiscovery_init_default   {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define meshtastic_Routing_init_default          {0, {meshtastic_RouteDiscovery_init_default}}
 #define meshtastic_Data_init_default             {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Waypoint_init_default         {0, 0, 0, 0, 0, "", "", 0}
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
-#define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN}
+#define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0}
 #define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0}
 #define meshtastic_MyNodeInfo_init_default       {0, 0, 0}
 #define meshtastic_LogRecord_init_default        {"", 0, "", _meshtastic_LogRecord_Level_MIN}
@@ -871,14 +902,14 @@ extern "C" {
 #define meshtastic_NeighborInfo_init_default     {0, 0, 0, 0, {meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default}}
 #define meshtastic_Neighbor_init_default         {0, 0, 0, 0}
 #define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0}
-#define meshtastic_Position_init_zero            {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define meshtastic_User_init_zero                {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0}
+#define meshtastic_Position_init_zero            {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_User_init_zero                {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN}
 #define meshtastic_RouteDiscovery_init_zero      {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define meshtastic_Routing_init_zero             {0, {meshtastic_RouteDiscovery_init_zero}}
 #define meshtastic_Data_init_zero                {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Waypoint_init_zero            {0, 0, 0, 0, 0, "", "", 0}
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
-#define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN}
+#define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0}
 #define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0}
 #define meshtastic_MyNodeInfo_init_zero          {0, 0, 0}
 #define meshtastic_LogRecord_init_zero           {"", 0, "", _meshtastic_LogRecord_Level_MIN}
@@ -913,12 +944,14 @@ extern "C" {
 #define meshtastic_Position_sensor_id_tag        20
 #define meshtastic_Position_next_update_tag      21
 #define meshtastic_Position_seq_number_tag       22
+#define meshtastic_Position_precision_bits_tag   23
 #define meshtastic_User_id_tag                   1
 #define meshtastic_User_long_name_tag            2
 #define meshtastic_User_short_name_tag           3
 #define meshtastic_User_macaddr_tag              4
 #define meshtastic_User_hw_model_tag             5
 #define meshtastic_User_is_licensed_tag          6
+#define meshtastic_User_role_tag                 7
 #define meshtastic_RouteDiscovery_route_tag      1
 #define meshtastic_Routing_route_request_tag     1
 #define meshtastic_Routing_route_reply_tag       2
@@ -956,6 +989,7 @@ extern "C" {
 #define meshtastic_MeshPacket_priority_tag       11
 #define meshtastic_MeshPacket_rx_rssi_tag        12
 #define meshtastic_MeshPacket_delayed_tag        13
+#define meshtastic_MeshPacket_via_mqtt_tag       14
 #define meshtastic_NodeInfo_num_tag              1
 #define meshtastic_NodeInfo_user_tag             2
 #define meshtastic_NodeInfo_position_tag         3
@@ -1037,7 +1071,8 @@ X(a, STATIC,   SINGULAR, UINT32,   fix_type,         18) \
 X(a, STATIC,   SINGULAR, UINT32,   sats_in_view,     19) \
 X(a, STATIC,   SINGULAR, UINT32,   sensor_id,        20) \
 X(a, STATIC,   SINGULAR, UINT32,   next_update,      21) \
-X(a, STATIC,   SINGULAR, UINT32,   seq_number,       22)
+X(a, STATIC,   SINGULAR, UINT32,   seq_number,       22) \
+X(a, STATIC,   SINGULAR, UINT32,   precision_bits,   23)
 #define meshtastic_Position_CALLBACK NULL
 #define meshtastic_Position_DEFAULT NULL
 
@@ -1047,7 +1082,8 @@ X(a, STATIC,   SINGULAR, STRING,   long_name,         2) \
 X(a, STATIC,   SINGULAR, STRING,   short_name,        3) \
 X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, macaddr,           4) \
 X(a, STATIC,   SINGULAR, UENUM,    hw_model,          5) \
-X(a, STATIC,   SINGULAR, BOOL,     is_licensed,       6)
+X(a, STATIC,   SINGULAR, BOOL,     is_licensed,       6) \
+X(a, STATIC,   SINGULAR, UENUM,    role,              7)
 #define meshtastic_User_CALLBACK NULL
 #define meshtastic_User_DEFAULT NULL
 
@@ -1110,7 +1146,8 @@ X(a, STATIC,   SINGULAR, UINT32,   hop_limit,         9) \
 X(a, STATIC,   SINGULAR, BOOL,     want_ack,         10) \
 X(a, STATIC,   SINGULAR, UENUM,    priority,         11) \
 X(a, STATIC,   SINGULAR, INT32,    rx_rssi,          12) \
-X(a, STATIC,   SINGULAR, UENUM,    delayed,          13)
+X(a, STATIC,   SINGULAR, UENUM,    delayed,          13) \
+X(a, STATIC,   SINGULAR, BOOL,     via_mqtt,         14)
 #define meshtastic_MeshPacket_CALLBACK NULL
 #define meshtastic_MeshPacket_DEFAULT NULL
 #define meshtastic_MeshPacket_payload_variant_decoded_MSGTYPE meshtastic_Data
@@ -1275,18 +1312,18 @@ extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
 #define meshtastic_DeviceMetadata_size           46
 #define meshtastic_FromRadio_size                510
 #define meshtastic_LogRecord_size                81
-#define meshtastic_MeshPacket_size               321
+#define meshtastic_MeshPacket_size               323
 #define meshtastic_MqttClientProxyMessage_size   501
 #define meshtastic_MyNodeInfo_size               18
 #define meshtastic_NeighborInfo_size             258
 #define meshtastic_Neighbor_size                 22
-#define meshtastic_NodeInfo_size                 261
-#define meshtastic_Position_size                 137
+#define meshtastic_NodeInfo_size                 270
+#define meshtastic_Position_size                 144
 #define meshtastic_QueueStatus_size              23
 #define meshtastic_RouteDiscovery_size           40
 #define meshtastic_Routing_size                  42
 #define meshtastic_ToRadio_size                  504
-#define meshtastic_User_size                     77
+#define meshtastic_User_size                     79
 #define meshtastic_Waypoint_size                 165
 
 #ifdef __cplusplus

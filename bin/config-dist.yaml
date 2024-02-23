@@ -1,0 +1,119 @@
+### Define your devices here using Broadcom pin numbering
+### Uncomment the block that corresponds to your hardware
+---
+Lora:
+#  Module: sx1262  # Waveshare SX126X XXXM
+#  DIO2_AS_RF_SWITCH: true
+#  CS: 21
+#  IRQ: 16
+#  Busy: 20
+#  Reset: 18
+
+#  Module: sx1262  # Waveshare SX1302 LISTEN ONLY AT THIS TIME!
+#  CS: 7
+#  IRQ: 17
+#  Reset: 22
+
+#  Module: sx1262  # pinedio
+#  CS: 0
+#  IRQ: 10
+#  Busy: 11
+#  spidev: spidev0.1
+
+#  Module: RF95  # Adafruit RFM9x
+#  Reset: 25
+#  CS: 7
+#  IRQ: 22
+#  Busy: 23
+
+#  Module: RF95  # Elecrow Lora RFM95 IOT https://www.elecrow.com/lora-rfm95-iot-board-for-rpi.html
+#  Reset: 22
+#  CS: 7
+#  IRQ: 25
+
+#  Module: sx1280  # SX1280
+#  CS: 21
+#  IRQ: 16
+#  Busy: 20
+#  Reset: 18
+
+#  DIO3_TCXO_VOLTAGE: true  # the Waveshare Core1262 and others are known to need this setting
+
+#  TXen: x  # TX and RX enable pins
+#  RXen: x
+
+### Set gpio chip to use in /dev/. Defaults to 0.
+### Notably the Raspberry Pi 5 puts the GPIO header on gpiochip4
+#  gpiochip: 4
+
+### Specify the SPI device to use in /dev/. Defaults to spidev0.0
+### Some devices, like the pinedio, may require spidev0.1 as a workaround.
+#  spidev: spidev0.0
+
+### Define GPIO buttons here:
+
+GPIO:
+#  User: 6
+
+### Define GPS
+
+GPS:
+#  SerialPath: /dev/ttyS0
+
+### Specify I2C device, or leave blank for none
+
+I2C:
+#  I2CDevice: /dev/i2c-1
+
+### Set up SPI displays here. Note that I2C displays are generally auto-detected.
+
+Display:
+
+### Waveshare 2.8inch RPi LCD
+#  Panel: ST7789
+#  CS: 8
+#  DC: 22        # Data/Command pin
+#  Backlight: 18
+#  Width: 240
+#  Height: 320
+#  Reset: 27
+#  Rotate: true
+#  Invert: true
+
+### Waveshare 1.44inch LCD HAT
+#  Panel: ST7735S
+#  CS: 8         #Chip Select
+#  DC: 25        # Data/Command pin
+#  Backlight: 24
+#  Width: 128
+#  Height: 128
+#  Reset: 27
+#  OffsetX: 0
+#  OffsetY: 0
+
+### Adafruit PiTFT 2.8 TFT+Touchscreen
+#  Panel: ILI9341
+#  CS: 8
+#  DC: 25
+#  Backlight: 2
+#  Width: 320
+#  Height: 240
+
+Touchscreen:
+#  Module: STMPE610
+#  CS: 7
+#  IRQ: 24
+
+#  Module: XPT2046
+#  CS: 7
+#  IRQ: 17
+
+### Configure device for direct keyboard input
+
+Input:
+#  KeyboardDevice: /dev/input/event0
+
+###
+
+Logging:
+  LogLevel: info # debug, info, warn, error

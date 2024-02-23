@@ -108,8 +108,9 @@ void MeshService::loop()
             (void)sendQueueStatusToPhone(qs, 0, 0);
     }
     if (oldFromNum != fromNum) { // We don't want to generate extra notifies for multiple new packets
-        fromNumChanged.notifyObservers(fromNum);
-        oldFromNum = fromNum;
+        int result = fromNumChanged.notifyObservers(fromNum);
+        if (result == 0) // If any observer returns non-zero, we will try again
+            oldFromNum = fromNum;
     }
 }
 
@@ -138,6 +139,22 @@ void MeshService::reloadOwner(bool shouldSave)
     if (nodeInfoModule && shouldSave) {
         nodeInfoModule->sendOurNodeInfo();
     }
+}
+
+// search the queue for a request id and return the matching nodenum
+NodeNum MeshService::getNodenumFromRequestId(uint32_t request_id)
+{
+    NodeNum nodenum = 0;
+    for (int i = 0; i < toPhoneQueue.numUsed(); i++) {
+        meshtastic_MeshPacket *p = toPhoneQueue.dequeuePtr(0);
+        if (p->id == request_id) {
+            nodenum = p->to;
+            // make sure to continue this to make one full loop
+        }
+        // put it right back on the queue
+        toPhoneQueue.enqueue(p, 0);
+    }
+    return nodenum;
 }
 
 /**
@@ -320,7 +337,9 @@ meshtastic_NodeInfoLite *MeshService::refreshLocalMeshNode()
 
     position.time = getValidTime(RTCQualityFromNet);
 
-    updateBatteryLevel(powerStatus->getBatteryChargePercent());
+    if (powerStatus->getHasBattery() == 1) {
+        updateBatteryLevel(powerStatus->getBatteryChargePercent());
+    }
 
     return node;
 }

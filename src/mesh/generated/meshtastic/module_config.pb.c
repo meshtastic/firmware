@@ -24,6 +24,9 @@ PB_BIND(meshtastic_ModuleConfig_DetectionSensorConfig, meshtastic_ModuleConfig_D
 PB_BIND(meshtastic_ModuleConfig_AudioConfig, meshtastic_ModuleConfig_AudioConfig, AUTO)
 
 
+PB_BIND(meshtastic_ModuleConfig_PaxcounterConfig, meshtastic_ModuleConfig_PaxcounterConfig, AUTO)
+
+
 PB_BIND(meshtastic_ModuleConfig_SerialConfig, meshtastic_ModuleConfig_SerialConfig, AUTO)
 
 

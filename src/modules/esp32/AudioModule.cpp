@@ -1,6 +1,6 @@
 
 #include "configuration.h"
-#if defined(ARCH_ESP32)
+#if defined(ARCH_ESP32) && defined(USE_SX1280)
 #include "AudioModule.h"
 #include "FSCommon.h"
 #include "MeshService.h"
@@ -145,7 +145,7 @@ AudioModule::AudioModule() : SinglePortModule("AudioModule", meshtastic_PortNum_
         encode_frame_num = (meshtastic_Constants_DATA_PAYLOAD_LEN - sizeof(tx_header)) / encode_codec_size;
         encode_frame_size = encode_frame_num * encode_codec_size; // max 233 bytes + 4 header bytes
         adc_buffer_size = codec2_samples_per_frame(codec2);
-        LOG_INFO(" using %d frames of %d bytes for a total payload length of %d bytes\n", encode_frame_num, encode_codec_size,
+        LOG_INFO("using %d frames of %d bytes for a total payload length of %d bytes\n", encode_frame_num, encode_codec_size,
                  encode_frame_size);
         xTaskCreate(&run_codec2, "codec2_task", 30000, NULL, 5, &codec2HandlerTask);
     } else {

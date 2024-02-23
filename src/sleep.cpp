@@ -11,7 +11,7 @@
 #ifdef ARCH_ESP32
 #include "esp32/pm.h"
 #include "esp_pm.h"
-#include "mesh/http/WiFiAPClient.h"
+#include "mesh/wifi/WiFiAPClient.h"
 #include "rom/rtc.h"
 #include <driver/rtc_io.h>
 #include <driver/uart.h>
@@ -203,11 +203,10 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
 #endif
 
 #if defined(VEXT_ENABLE_V03)
-    if (heltec_version == 3) {
-        digitalWrite(VEXT_ENABLE_V03, 1); // turn off the display power
-    } else {
-        digitalWrite(VEXT_ENABLE_V05, 0); // turn off the display power
-    }
+    digitalWrite(VEXT_ENABLE_V03, 1); // turn off the display power
+#elif defined(VEXT_ENABLE_V05)
+    digitalWrite(VEXT_ENABLE_V05, 0); // turn off the lora amplifier power
+    digitalWrite(ST7735_BL_V05, 0);   // turn off the display power
 #elif defined(VEXT_ENABLE)
     digitalWrite(VEXT_ENABLE, 1); // turn off the display power
 #endif

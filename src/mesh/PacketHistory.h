@@ -3,8 +3,8 @@
 #include "Router.h"
 #include <unordered_set>
 
-/// We clear our old flood record five minute after we see the last of it
-#define FLOOD_EXPIRE_TIME (5 * 60 * 1000L)
+/// We clear our old flood record 10 minutes after we see the last of it
+#define FLOOD_EXPIRE_TIME (10 * 60 * 1000L)
 
 /**
  * A record of a recent message broadcast

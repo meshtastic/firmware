@@ -201,6 +201,8 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 
 */
 
+#define DETECTION_SENSOR_EN 4
+
 #define USE_SX1262
 #define SX126X_CS (42)
 #define SX126X_DIO1 (47)
@@ -213,6 +215,9 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
+// Testing USB detection
+#define NRF_APM
+
 // enables 3.3V periphery like GPS or IO Module
 #define PIN_3V3_EN (34)
 
@@ -223,7 +228,7 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // Therefore must be 1 to keep peripherals powered
 // Power is on the controllable 3V3_S rail
 // #define PIN_GPS_RESET (34)
-#define PIN_GPS_EN PIN_3V3_EN
+// #define PIN_GPS_EN PIN_3V3_EN
 #define PIN_GPS_PPS (17) // Pulse per second input from the GPS
 
 #define GPS_RX_PIN PIN_SERIAL1_RX
@@ -249,7 +254,7 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // Voltage divider value => 1.5M + 1M voltage divider on VBAT = (1.5M / (1M + 1.5M))
 #define VBAT_DIVIDER (0.4F)
 // Compensation factor for the VBAT divider
-#define VBAT_DIVIDER_COMP (1.73)
+#define VBAT_DIVIDER_COMP (1.73F)
 // Fixed calculation of milliVolt from compensation value
 #define REAL_VBAT_MV_PER_LSB (VBAT_DIVIDER_COMP * VBAT_MV_PER_LSB)
 #undef AREF_VOLTAGE
