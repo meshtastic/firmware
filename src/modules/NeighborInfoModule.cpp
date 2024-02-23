@@ -118,7 +118,7 @@ uint32_t NeighborInfoModule::collectNeighborInfo(meshtastic_NeighborInfo *neighb
     int num_neighbors = cleanUpNeighbors();
 
     for (int i = 0; i < num_neighbors; i++) {
-        meshtastic_Neighbor *dbEntry = getNeighborByIndex(i);
+        const meshtastic_Neighbor *dbEntry = getNeighborByIndex(i);
         if ((neighborInfo->neighbors_count < MAX_NUM_NEIGHBORS) && (dbEntry->node_id != my_node_id)) {
             neighborInfo->neighbors[neighborInfo->neighbors_count].node_id = dbEntry->node_id;
             neighborInfo->neighbors[neighborInfo->neighbors_count].snr = dbEntry->snr;
@@ -146,7 +146,7 @@ size_t NeighborInfoModule::cleanUpNeighbors()
     // Find neighbors to remove
     std::vector<int> indices_to_remove;
     for (int i = 0; i < num_neighbors; i++) {
-        meshtastic_Neighbor *dbEntry = getNeighborByIndex(i);
+        const meshtastic_Neighbor *dbEntry = getNeighborByIndex(i);
         // We will remove a neighbor if we haven't heard from them in twice the broadcast interval
         if ((now - dbEntry->last_rx_time > dbEntry->node_broadcast_interval_secs * 2) && (dbEntry->node_id != my_node_id)) {
             indices_to_remove.push_back(i);

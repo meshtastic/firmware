@@ -170,7 +170,7 @@ External serial flash W25Q16JV_IQ
 // Voltage divider value => 100K + 100K voltage divider on VBAT = (100K / (100K + 100K))
 #define VBAT_DIVIDER (0.5F)
 // Compensation factor for the VBAT divider
-#define VBAT_DIVIDER_COMP (2.0)
+#define VBAT_DIVIDER_COMP (2.0F)
 // Fixed calculation of milliVolt from compensation value
 #define REAL_VBAT_MV_PER_LSB (VBAT_DIVIDER_COMP * VBAT_MV_PER_LSB)
 #undef AREF_VOLTAGE

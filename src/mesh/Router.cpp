@@ -248,28 +248,20 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
-
-        if (moduleConfig.mqtt.enabled) {
-
-            LOG_INFO("Should encrypt MQTT?: %d\n", moduleConfig.mqtt.encryption_enabled);
-
-            // the packet is currently in a decrypted state.  send it now if they want decrypted packets
-            if (mqtt && !moduleConfig.mqtt.encryption_enabled)
-                mqtt->onSend(*p, chIndex);
-        }
+        meshtastic_MeshPacket *p_decoded = packetPool.allocCopy(*p);
 
         auto encodeResult = perhapsEncode(p);
         if (encodeResult != meshtastic_Routing_Error_NONE) {
+            packetPool.release(p_decoded);
             abortSendAndNak(encodeResult, p);
             return encodeResult; // FIXME - this isn't a valid ErrorCode
         }
 
-        if (moduleConfig.mqtt.enabled) {
-            // the packet is now encrypted.
-            // check if we should send encrypted packets to mqtt
-            if (mqtt && moduleConfig.mqtt.encryption_enabled)
-                mqtt->onSend(*p, chIndex);
+        // Only publish to MQTT if we're the original transmitter of the packet
+        if (moduleConfig.mqtt.enabled && p->from == nodeDB.getNodeNum() && mqtt) {
+            mqtt->onSend(*p, *p_decoded, chIndex);
         }
+        packetPool.release(p_decoded);
     }
 
     assert(iface); // This should have been detected already in sendLocal (or we just received a packet from outside)
@@ -445,6 +437,8 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 {
     // Also, we should set the time from the ISR and it should have msec level resolution
     p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
+    // Store a copy of encrypted packet for MQTT
+    meshtastic_MeshPacket *p_encrypted = packetPool.allocCopy(*p);
 
     // Take those raw bytes and convert them back into a well structured protobuf we can understand
     bool decoded = perhapsDecode(p);
@@ -456,9 +450,15 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             printPacket("handleReceived(USER)", p);
         else
             printPacket("handleReceived(REMOTE)", p);
+
+        // Publish received message to MQTT if we're not the original transmitter of the packet
+        if (moduleConfig.mqtt.enabled && getFrom(p) != nodeDB.getNodeNum() && mqtt)
+            mqtt->onSend(*p_encrypted, *p, p->channel);
     } else {
         printPacket("packet decoding failed or skipped (no PSK?)", p);
     }
+
+    packetPool.release(p_encrypted); // Release the encrypted packet
 
     // call modules here
     MeshModule::callPlugins(*p, src);
@@ -467,10 +467,10 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 {
     // assert(radioConfig.has_preferences);
-    bool ignore = is_in_repeated(config.lora.ignore_incoming, p->from);
+    bool ignore = is_in_repeated(config.lora.ignore_incoming, p->from) || (config.lora.ignore_mqtt && p->via_mqtt);
 
     if (ignore) {
-        LOG_DEBUG("Ignoring incoming message, 0x%x is in our ignore list\n", p->from);
+        LOG_DEBUG("Ignoring incoming message, 0x%x is in our ignore list or came via MQTT\n", p->from);
     } else if (ignore |= shouldFilterReceived(p)) {
         LOG_DEBUG("Incoming message was filtered 0x%x\n", p->from);
     }

@@ -127,8 +127,6 @@ class AnalogBatteryLevel : public HasBatteryLevel
 {
     /**
      * Battery state of charge, from 0 to 100 or -1 for unknown
-     *
-     * FIXME - use a lipo lookup table, the current % full is super wrong
      */
     virtual int getBatteryPercent() override
     {
@@ -137,13 +135,32 @@ class AnalogBatteryLevel : public HasBatteryLevel
         if (v < noBatVolt)
             return -1; // If voltage is super low assume no battery installed
 
-#ifdef ARCH_ESP32
+#ifdef NO_BATTERY_LEVEL_ON_CHARGE
         // This does not work on a RAK4631 with battery connected
         if (v > chargingVolt)
             return 0; // While charging we can't report % full on the battery
 #endif
-
-        return clamp((int)(100 * (v - emptyVolt) / (fullVolt - emptyVolt)), 0, 100);
+        /**
+         * @brief   Battery voltage lookup table interpolation to obtain a more
+         * precise percentage rather than the old proportional one.
+         * @author  Gabriele Russo
+         * @date    06/02/2024
+         */
+        float battery_SOC = 0.0;
+        uint16_t voltage = v / NUM_CELLS; // single cell voltage (average)
+        for (int i = 0; i < NUM_OCV_POINTS; i++) {
+            if (OCV[i] <= voltage) {
+                if (i == 0) {
+                    battery_SOC = 100.0; // 100% full
+                } else {
+                    // interpolate between OCV[i] and OCV[i-1]
+                    battery_SOC = (float)100.0 / (NUM_OCV_POINTS - 1.0) *
+                                  (NUM_OCV_POINTS - 1.0 - i + ((float)voltage - OCV[i]) / (OCV[i - 1] - OCV[i]));
+                }
+                break;
+            }
+        }
+        return clamp((int)(battery_SOC), 0, 100);
     }
 
     /**
@@ -164,7 +181,8 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #endif
 
 #ifndef BATTERY_SENSE_SAMPLES
-#define BATTERY_SENSE_SAMPLES 30
+#define BATTERY_SENSE_SAMPLES                                                                                                    \
+    15 // Set the number of samples, it has an effect of increasing sensitivity in complex electromagnetic environment.
 #endif
 
 #ifdef BATTERY_PIN
@@ -176,65 +194,109 @@ class AnalogBatteryLevel : public HasBatteryLevel
         if (millis() - last_read_time_ms > min_read_interval) {
             last_read_time_ms = millis();
 
-            // Set the number of samples, it has an effect of increasing sensitivity, especially in complex electromagnetic
-            // environment.
             uint32_t raw = 0;
-#ifdef ARCH_ESP32
-#ifndef BAT_MEASURE_ADC_UNIT // ADC1
-#ifdef ADC_CTRL
-            if (heltec_version == 5) {
-                pinMode(ADC_CTRL, OUTPUT);
-                digitalWrite(ADC_CTRL, HIGH);
-                delay(10);
-            }
-#endif
-            for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
-                raw += adc1_get_raw(adc_channel);
-            }
-#ifdef ADC_CTRL
-            if (heltec_version == 5) {
-                digitalWrite(ADC_CTRL, LOW);
-            }
-#endif
-#else  // ADC2
-            int32_t adc_buf = 0;
-            for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
-                // ADC2 wifi bug workaround, see
-                // https://github.com/espressif/arduino-esp32/issues/102
-                WRITE_PERI_REG(SENS_SAR_READ_CTRL2_REG, RTC_reg_b);
-                SET_PERI_REG_MASK(SENS_SAR_READ_CTRL2_REG, SENS_SAR2_DATA_INV);
-                adc2_get_raw(adc_channel, ADC_WIDTH_BIT_12, &adc_buf);
-                raw += adc_buf;
-            }
-#endif // BAT_MEASURE_ADC_UNIT
-#else  // !ARCH_ESP32
+            float scaled = 0;
+
+#ifdef ARCH_ESP32 // ADC block for espressif platforms
+            raw = espAdcRead();
+            scaled = esp_adc_cal_raw_to_voltage(raw, adc_characs);
+            scaled *= operativeAdcMultiplier;
+#else // block for all other platforms
             for (uint32_t i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
                 raw += analogRead(BATTERY_PIN);
             }
-#endif
             raw = raw / BATTERY_SENSE_SAMPLES;
-            float scaled;
-#ifdef ARCH_ESP32
-            scaled = esp_adc_cal_raw_to_voltage(raw, adc_characs);
-            scaled *= operativeAdcMultiplier;
-#else
-#ifndef VBAT_RAW_TO_SCALED
-            scaled = 1000.0 * operativeAdcMultiplier * (AREF_VOLTAGE / 1024.0) * raw;
-#else
-            scaled = VBAT_RAW_TO_SCALED(raw); // defined in variant.h
-#endif // VBAT RAW TO SCALED
-#endif // ARCH_ESP32
-       // LOG_DEBUG("battery gpio %d raw val=%u scaled=%u\n", BATTERY_PIN, raw, (uint32_t)(scaled));
-
-            last_read_value = scaled;
-            return scaled;
-        } else {
-            return last_read_value;
+            scaled = operativeAdcMultiplier * ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * raw;
+#endif
+            last_read_value += (scaled - last_read_value) * 0.5; // Virtual LPF
+            // LOG_DEBUG("battery gpio %d raw val=%u scaled=%u filtered=%u\n", BATTERY_PIN, raw, (uint32_t)(scaled), (uint32_t)
+            // (last_read_value));
         }
-#else
-        return 0;
+        return last_read_value;
 #endif // BATTERY_PIN
+        return 0;
     }
+
+#if defined(ARCH_ESP32) && !defined(HAS_PMU) && defined(BATTERY_PIN)
+    /**
+     * ESP32 specific function for getting calibrated ADC reads
+     */
+    uint32_t espAdcRead()
+    {
+
+        uint32_t raw = 0;
+        uint8_t raw_c = 0; // raw reading counter
+
+#ifndef BAT_MEASURE_ADC_UNIT // ADC1
+#ifdef ADC_CTRL              // enable adc voltage divider when we need to read
+        pinMode(ADC_CTRL, OUTPUT);
+        digitalWrite(ADC_CTRL, ADC_CTRL_ENABLED);
+        delay(10);
+#endif
+        for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
+            int val_ = adc1_get_raw(adc_channel);
+            if (val_ >= 0) { // save only valid readings
+                raw += val_;
+                raw_c++;
+            }
+            // delayMicroseconds(100);
+        }
+#ifdef ADC_CTRL // disable adc voltage divider when we need to read
+        digitalWrite(ADC_CTRL, !ADC_CTRL_ENABLED);
+#endif
+#else // ADC2
+#ifdef ADC_CTRL
+#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0)
+        pinMode(ADC_CTRL, OUTPUT);
+        digitalWrite(ADC_CTRL, LOW); // ACTIVE LOW
+        delay(10);
+#endif
+#endif // End ADC_CTRL
+
+#ifdef CONFIG_IDF_TARGET_ESP32S3 // ESP32S3
+        // ADC2 wifi bug workaround not required, breaks compile
+        // On ESP32S3, ADC2 can take turns with Wifi (?)
+
+        int32_t adc_buf;
+        esp_err_t read_result;
+
+        // Multiple samples
+        for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
+            adc_buf = 0;
+            read_result = -1;
+
+            read_result = adc2_get_raw(adc_channel, ADC_WIDTH_BIT_12, &adc_buf);
+            if (read_result == ESP_OK) {
+                raw += adc_buf;
+                raw_c++; // Count valid samples
+            } else {
+                LOG_DEBUG("An attempt to sample ADC2 failed\n");
+            }
+        }
+
+#else  // Other ESP32
+        int32_t adc_buf = 0;
+        for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
+            // ADC2 wifi bug workaround, see
+            // https://github.com/espressif/arduino-esp32/issues/102
+            WRITE_PERI_REG(SENS_SAR_READ_CTRL2_REG, RTC_reg_b);
+            SET_PERI_REG_MASK(SENS_SAR_READ_CTRL2_REG, SENS_SAR2_DATA_INV);
+            adc2_get_raw(adc_channel, ADC_WIDTH_BIT_12, &adc_buf);
+            raw += adc_buf;
+            raw_c++;
+        }
+#endif // BAT_MEASURE_ADC_UNIT
+
+#ifdef ADC_CTRL
+#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0)
+        digitalWrite(ADC_CTRL, HIGH);
+#endif
+#endif // End ADC_CTRL
+
+#endif // End BAT_MEASURE_ADC_UNIT
+        return (raw / (raw_c < 1 ? 1 : raw_c));
+    }
+#endif
 
     /**
      * return true if there is a battery installed in this unit
@@ -266,22 +328,14 @@ class AnalogBatteryLevel : public HasBatteryLevel
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
     /// in power
 
-#ifndef BAT_FULLVOLT
-#define BAT_FULLVOLT 4200
-#endif
-#ifndef BAT_EMPTYVOLT
-#define BAT_EMPTYVOLT 3270
-#endif
-#ifndef BAT_CHARGINGVOLT
-#define BAT_CHARGINGVOLT 4210
-#endif
-#ifndef BAT_NOBATVOLT
-#define BAT_NOBATVOLT 2230
-#endif
-
-    /// For heltecs with no battery connected, the measured voltage is 2204, so raising to 2230 from 2100
-    const float fullVolt = BAT_FULLVOLT, emptyVolt = BAT_EMPTYVOLT, chargingVolt = BAT_CHARGINGVOLT, noBatVolt = BAT_NOBATVOLT;
-    float last_read_value = 0.0;
+    /// For heltecs with no battery connected, the measured voltage is 2204, so
+    // need to be higher than that, in this case is 2500mV (3000-500)
+    const uint16_t OCV[NUM_OCV_POINTS] = {OCV_ARRAY};
+    const float chargingVolt = (OCV[0] + 10) * NUM_CELLS;
+    const float noBatVolt = (OCV[NUM_OCV_POINTS - 1] - 500) * NUM_CELLS;
+    // Start value from minimum voltage for the filter to not start from 0
+    // that could trigger some events.
+    float last_read_value = (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
     uint32_t last_read_time_ms = 0;
 
 #if defined(HAS_TELEMETRY) && (HAS_TELEMETRY == 1) && !defined(ARCH_PORTDUINO)
@@ -358,8 +412,11 @@ bool Power::analogInit()
     adc1_config_channel_atten(adc_channel, atten);
 #else // ADC2
     adc2_config_channel_atten(adc_channel, atten);
+#ifndef CONFIG_IDF_TARGET_ESP32S3
     // ADC2 wifi bug workaround
+    // Not required with ESP32S3, breaks compile
     RTC_reg_b = READ_PERI_REG(SENS_SAR_READ_CTRL2_REG);
+#endif
 #endif
     // calibrate ADC
     esp_adc_cal_value_t val_type = esp_adc_cal_characterize(unit, atten, width, DEFAULT_VREF, adc_characs);
@@ -368,13 +425,16 @@ bool Power::analogInit()
         LOG_INFO("ADCmod: ADC characterization based on Two Point values stored in eFuse\n");
     } else if (val_type == ESP_ADC_CAL_VAL_EFUSE_VREF) {
         LOG_INFO("ADCmod: ADC characterization based on reference voltage stored in eFuse\n");
-    } else {
+    }
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+    // ESP32S3
+    else if (val_type == ESP_ADC_CAL_VAL_EFUSE_TP_FIT) {
+        LOG_INFO("ADCmod: ADC Characterization based on Two Point values and fitting curve coefficients stored in eFuse\n");
+    }
+#endif
+    else {
         LOG_INFO("ADCmod: ADC characterization based on default reference voltage\n");
     }
-#if defined(HELTEC_V3) || defined(HELTEC_WSL_V3)
-    pinMode(37, OUTPUT); // needed for P channel mosfet to work
-    digitalWrite(37, LOW);
-#endif
 #endif // ARCH_ESP32
 
 #ifdef ARCH_NRF52
@@ -383,10 +443,11 @@ bool Power::analogInit()
 #else
     analogReference(AR_INTERNAL); // 3.6V
 #endif
-    analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS); // Default of 12 is not very linear. Recommended to use 10 or 11
-                                                         // depending on needed resolution.
-
 #endif // ARCH_NRF52
+
+#ifndef ARCH_ESP32
+    analogReadResolution(BATTERY_SENSE_RESOLUTION_BITS);
+#endif
 
     batteryLevel = &analogLevel;
     return true;
@@ -402,11 +463,8 @@ bool Power::analogInit()
  */
 bool Power::setup()
 {
-    bool found = axpChipInit();
+    bool found = axpChipInit() || analogInit();
 
-    if (!found) {
-        found = analogInit();
-    }
     enabled = found;
     low_voltage_counter = 0;
 
@@ -457,11 +515,11 @@ void Power::readPowerStatus()
                 batteryChargePercent = batteryLevel->getBatteryPercent();
             } else {
                 // If the AXP192 returns a percentage less than 0, the feature is either not supported or there is an error
-                // In that case, we compute an estimate of the charge percent based on maximum and minimum voltages defined in
-                // power.h
-                batteryChargePercent =
-                    clamp((int)(((batteryVoltageMv - BAT_MILLIVOLTS_EMPTY) * 1e2) / (BAT_MILLIVOLTS_FULL - BAT_MILLIVOLTS_EMPTY)),
-                          0, 100);
+                // In that case, we compute an estimate of the charge percent based on open circuite voltage table defined
+                // in power.h
+                batteryChargePercent = clamp((int)(((batteryVoltageMv - (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS)) * 1e2) /
+                                                   ((OCV[0] * NUM_CELLS) - (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS))),
+                                             0, 100);
             }
         }
 
@@ -526,10 +584,11 @@ void Power::readPowerStatus()
 
 #endif
 
-        // If we have a battery at all and it is less than 10% full, force deep sleep if we have more than 10 low readings in
-        // a row
+        // If we have a battery at all and it is less than 0%, force deep sleep if we have more than 10 low readings in
+        // a row. NOTE: min LiIon/LiPo voltage is 2.0 to 2.5V, current OCV min is set to 3100 that is large enough.
+        //
         if (powerStatus2.getHasBattery() && !powerStatus2.getHasUSB()) {
-            if (batteryLevel->getBattVoltage() < MIN_BAT_MILLIVOLTS) {
+            if (batteryLevel->getBattVoltage() < OCV[NUM_OCV_POINTS - 1]) {
                 low_voltage_counter++;
                 LOG_DEBUG("Low voltage counter: %d/10\n", low_voltage_counter);
                 if (low_voltage_counter > 10) {

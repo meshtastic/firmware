@@ -70,7 +70,7 @@ class GPS : private concurrency::OSThread
 
     /**
      * hasValidLocation - indicates that the position variables contain a complete
-     *   GPS location, valid and fresh (< gps_update_interval + gps_attempt_time)
+     *   GPS location, valid and fresh (< gps_update_interval + position_broadcast_secs)
      */
     bool hasValidLocation = false; // default to false, until we complete our first read
 
@@ -95,22 +95,43 @@ class GPS : private concurrency::OSThread
     static HardwareSerial *_serial_gps;
 
     static uint8_t _message_PMREQ[];
+    static uint8_t _message_PMREQ_10[];
     static const uint8_t _message_CFG_RXM_PSM[];
     static const uint8_t _message_CFG_RXM_ECO[];
     static const uint8_t _message_CFG_PM2[];
     static const uint8_t _message_GNSS_7[];
-    static const uint8_t _message_GNSS[];
-    static const uint8_t _message_JAM[];
+    static const uint8_t _message_GNSS_8[];
+    static const uint8_t _message_JAM_6_7[];
+    static const uint8_t _message_JAM_8[];
     static const uint8_t _message_NAVX5[];
+    static const uint8_t _message_NAVX5_8[];
+    static const uint8_t _message_NMEA[];
+    static const uint8_t _message_DISABLE_TXT_INFO[];
     static const uint8_t _message_1HZ[];
-    static const uint8_t _message_GGL[];
+    static const uint8_t _message_GLL[];
     static const uint8_t _message_GSA[];
     static const uint8_t _message_GSV[];
     static const uint8_t _message_VTG[];
     static const uint8_t _message_RMC[];
+    static const uint8_t _message_AID[];
     static const uint8_t _message_GGA[];
     static const uint8_t _message_PMS[];
     static const uint8_t _message_SAVE[];
+
+    // VALSET Commands for M10
+    static const uint8_t _message_VALSET_PM[];
+    static const uint8_t _message_VALSET_PM_RAM[];
+    static const uint8_t _message_VALSET_PM_BBR[];
+    static const uint8_t _message_VALSET_ITFM_RAM[];
+    static const uint8_t _message_VALSET_ITFM_BBR[];
+    static const uint8_t _message_VALSET_DISABLE_NMEA_RAM[];
+    static const uint8_t _message_VALSET_DISABLE_NMEA_BBR[];
+    static const uint8_t _message_VALSET_DISABLE_TXT_INFO_RAM[];
+    static const uint8_t _message_VALSET_DISABLE_TXT_INFO_BBR[];
+    static const uint8_t _message_VALSET_ENABLE_NMEA_RAM[];
+    static const uint8_t _message_VALSET_ENABLE_NMEA_BBR[];
+    static const uint8_t _message_VALSET_DISABLE_SBAS_RAM[];
+    static const uint8_t _message_VALSET_DISABLE_SBAS_BBR[];
 
     meshtastic_Position p = meshtastic_Position_init_default;
 
@@ -132,6 +153,9 @@ class GPS : private concurrency::OSThread
     // Disable the thread
     int32_t disable() override;
 
+    // toggle between enabled/disabled
+    void toggleGpsMode();
+
     void setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime);
 
     /// Returns true if we have acquired GPS lock.
@@ -143,7 +167,7 @@ class GPS : private concurrency::OSThread
     /// Return true if we are connected to a GPS
     bool isConnected() const { return hasGPS; }
 
-    bool isPowerSaving() const { return !config.position.gps_enabled; }
+    bool isPowerSaving() const { return config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED; }
 
     // Empty the input buffer as quickly as possible
     void clearBuffer();

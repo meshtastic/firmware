@@ -108,8 +108,9 @@ void MeshService::loop()
             (void)sendQueueStatusToPhone(qs, 0, 0);
     }
     if (oldFromNum != fromNum) { // We don't want to generate extra notifies for multiple new packets
-        fromNumChanged.notifyObservers(fromNum);
-        oldFromNum = fromNum;
+        int result = fromNumChanged.notifyObservers(fromNum);
+        if (result == 0) // If any observer returns non-zero, we will try again
+            oldFromNum = fromNum;
     }
 }
 

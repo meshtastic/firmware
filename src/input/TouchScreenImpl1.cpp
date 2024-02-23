@@ -4,6 +4,10 @@
 #include "configuration.h"
 #include "modules/ExternalNotificationModule.h"
 
+#ifdef ARCH_PORTDUINO
+#include "platform/portduino/PortduinoGlue.h"
+#endif
+
 TouchScreenImpl1 *touchScreenImpl1;
 
 TouchScreenImpl1::TouchScreenImpl1(uint16_t width, uint16_t height, bool (*getTouch)(int16_t *, int16_t *))
@@ -13,7 +17,14 @@ TouchScreenImpl1::TouchScreenImpl1(uint16_t width, uint16_t height, bool (*getTo
 
 void TouchScreenImpl1::init()
 {
-#if !HAS_TOUCHSCREEN
+#if ARCH_PORTDUINO
+    if (settingsMap[touchscreenModule]) {
+        TouchScreenBase::init(true);
+        inputBroker->registerSource(this);
+    } else {
+        TouchScreenBase::init(false);
+    }
+#elif !HAS_TOUCHSCREEN
     TouchScreenBase::init(false);
     return;
 #else

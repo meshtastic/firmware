@@ -84,9 +84,9 @@ class NodeDB
      */
     void updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxSource src = RX_SRC_RADIO);
 
-    /** Update user info for this node based on received user data
+    /** Update user info and channel for this node based on received user data
      */
-    bool updateUser(uint32_t nodeId, const meshtastic_User &p);
+    bool updateUser(uint32_t nodeId, const meshtastic_User &p, uint8_t channelIndex = 0);
 
     /// @return our node number
     NodeNum getNodeNum() { return myNodeInfo.my_node_num; }
@@ -179,9 +179,6 @@ extern NodeDB nodeDB;
         prefs.gps_update_interval = oneday
 
         prefs.is_power_saving = True
-
-        # allow up to five minutes for each new GPS lock attempt
-        prefs.gps_attempt_time = 300
 */
 
 // Our delay functions check for this for times that should never expire
@@ -192,7 +189,6 @@ extern NodeDB nodeDB;
 
 #define ONE_DAY 24 * 60 * 60
 
-#define default_gps_attempt_time IF_ROUTER(5 * 60, 15 * 60)
 #define default_gps_update_interval IF_ROUTER(ONE_DAY, 2 * 60)
 #define default_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 15 * 60)
 #define default_wait_bluetooth_secs IF_ROUTER(1, 60)

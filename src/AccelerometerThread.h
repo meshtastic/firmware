@@ -42,7 +42,7 @@ namespace concurrency
 class AccelerometerThread : public concurrency::OSThread
 {
   public:
-    AccelerometerThread(ScanI2C::DeviceType type = ScanI2C::DeviceType::NONE) : OSThread("AccelerometerThread")
+    explicit AccelerometerThread(ScanI2C::DeviceType type) : OSThread("AccelerometerThread")
     {
         if (accelerometer_found.port == ScanI2C::I2CPort::NO_I2C) {
             LOG_DEBUG("AccelerometerThread disabling due to no sensors found\n");

@@ -3,6 +3,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include <FSCommon.h>
 #ifdef ARCH_ESP32
 #include "BleOta.h"
 #endif
@@ -185,7 +186,22 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     case meshtastic_AdminMessage_remove_by_nodenum_tag: {
         LOG_INFO("Client is receiving a remove_nodenum command.\n");
         nodeDB.removeNodeByNum(r->remove_by_nodenum);
-        reboot(DEFAULT_REBOOT_SECONDS);
+        break;
+    }
+    case meshtastic_AdminMessage_enter_dfu_mode_request_tag: {
+        LOG_INFO("Client is requesting to enter DFU mode.\n");
+#if defined(ARCH_NRF52) || defined(ARCH_RP2040)
+        enterDfuMode();
+#endif
+        break;
+    }
+    case meshtastic_AdminMessage_delete_file_request_tag: {
+        LOG_DEBUG("Client is requesting to delete file: %s\n", r->delete_file_request);
+        if (FSCom.remove(r->delete_file_request)) {
+            LOG_DEBUG("Successfully deleted file\n");
+        } else {
+            LOG_DEBUG("Failed to delete file\n");
+        }
         break;
     }
 #ifdef ARCH_PORTDUINO
@@ -274,6 +290,7 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
 
 void AdminModule::handleSetConfig(const meshtastic_Config &c)
 {
+    auto changes = SEGMENT_CONFIG;
     auto existingRole = config.device.role;
     bool isRegionUnset = (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);
 
@@ -314,6 +331,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         config.lora = c.payload_variant.lora;
         if (isRegionUnset && config.lora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
             config.lora.tx_enabled = true;
+            initRegion();
+            if (strcmp(moduleConfig.mqtt.root, default_mqtt_root) == 0) {
+                sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
+                changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
+            }
         }
         break;
     case meshtastic_Config_bluetooth_tag:
@@ -323,7 +345,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         break;
     }
 
-    saveChanges(SEGMENT_CONFIG);
+    saveChanges(changes);
 }
 
 void AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
@@ -388,6 +410,11 @@ void AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         LOG_INFO("Setting module config: Ambient Lighting\n");
         moduleConfig.has_ambient_lighting = true;
         moduleConfig.ambient_lighting = c.payload_variant.ambient_lighting;
+        break;
+    case meshtastic_ModuleConfig_paxcounter_tag:
+        LOG_INFO("Setting module config: Paxcounter\n");
+        moduleConfig.has_paxcounter = true;
+        moduleConfig.paxcounter = c.payload_variant.paxcounter;
         break;
     }
 
@@ -539,6 +566,11 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_ambient_lighting_tag;
             res.get_module_config_response.payload_variant.ambient_lighting = moduleConfig.ambient_lighting;
             break;
+        case meshtastic_AdminMessage_ModuleConfigType_PAXCOUNTER_CONFIG:
+            LOG_INFO("Getting module config: Paxcounter\n");
+            res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_paxcounter_tag;
+            res.get_module_config_response.payload_variant.paxcounter = moduleConfig.paxcounter;
+            break;
         }
 
         // NOTE: The phone app needs to know the ls_secsvalue so it can properly expect sleep behavior.
@@ -622,12 +654,12 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
 #if HAS_BLUETOOTH
     conn.has_bluetooth = true;
     conn.bluetooth.pin = config.bluetooth.fixed_pin;
-#endif
 #ifdef ARCH_ESP32
     conn.bluetooth.is_connected = nimbleBluetooth->isConnected();
     conn.bluetooth.rssi = nimbleBluetooth->getRssi();
 #elif defined(ARCH_NRF52)
     conn.bluetooth.is_connected = nrf52Bluetooth->isConnected();
+#endif
 #endif
     conn.has_serial = true; // No serial-less devices
     conn.serial.is_connected = powerFSM.getState() == &stateSERIAL;

@@ -187,7 +187,7 @@ int32_t KbI2cBase::runOnce()
 
         i2cBus->requestFrom((int)cardkb_found.address, 1);
 
-        while (i2cBus->available()) {
+        if (i2cBus->available()) {
             char c = i2cBus->read();
             InputEvent e;
             e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
@@ -222,7 +222,11 @@ int32_t KbI2cBase::runOnce()
             case 0x00: // nopress
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
                 break;
-            default: // all other keys
+            default:           // all other keys
+                if (c > 127) { // bogus key value
+                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
+                    break;
+                }
                 e.inputEvent = ANYKEY;
                 e.kbchar = c;
                 break;
