@@ -96,11 +96,11 @@ void StoreForwardModule::populatePSRAM()
  *
  * @param msAgo The number of milliseconds ago from which to start sending messages.
  * @param to The recipient ID to send the messages to.
- * @param last_request_index The index in the packet history of the last request from this node.
  */
-void StoreForwardModule::historySend(uint32_t msAgo, uint32_t to, uint32_t last_request_index)
+void StoreForwardModule::historySend(uint32_t msAgo, uint32_t to)
 {
-    uint32_t queueSize = storeForwardModule->historyQueueCreate(msAgo, to, &last_request_index);
+    uint32_t lastIndex = lastRequest.find(to) != lastRequest.end() ? lastRequest[to] : 0;
+    uint32_t queueSize = storeForwardModule->historyQueueCreate(msAgo, to, &lastIndex);
 
     if (queueSize) {
         LOG_INFO("*** S&F - Sending %u message(s)\n", queueSize);
@@ -114,7 +114,8 @@ void StoreForwardModule::historySend(uint32_t msAgo, uint32_t to, uint32_t last_
     sf.which_variant = meshtastic_StoreAndForward_history_tag;
     sf.variant.history.history_messages = queueSize;
     sf.variant.history.window = msAgo;
-    sf.variant.history.last_request = last_request_index;
+    sf.variant.history.last_request = lastIndex;
+    lastRequest[to] = lastIndex;
     storeForwardModule->sendMessage(to, sf);
 }
 
@@ -130,10 +131,10 @@ uint32_t StoreForwardModule::historyQueueCreate(uint32_t msAgo, uint32_t to, uin
 {
 
     this->packetHistoryTXQueue_size = 0;
-    // If our history was cleared, ignore what the client is telling us
-    uint32_t last_index = *last_request_index >= this->packetHistoryCurrent ? 0 : *last_request_index;
+    // If our history was cleared, ignore the last request index
+    uint32_t last_index = *last_request_index > this->packetHistoryCurrent ? 0 : *last_request_index;
 
-    for (int i = last_index; i < this->packetHistoryCurrent; i++) {
+    for (uint32_t i = last_index; i < this->packetHistoryCurrent; i++) {
         /*
             LOG_DEBUG("SF historyQueueCreate\n");
             LOG_DEBUG("SF historyQueueCreate - time %d\n", this->packetHistory[i].time);
@@ -398,8 +399,7 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
             } else {
                 if ((p->which_variant == meshtastic_StoreAndForward_history_tag) && (p->variant.history.window > 0)) {
                     // window is in minutes
-                    storeForwardModule->historySend(p->variant.history.window * 60000, getFrom(&mp),
-                                                    p->variant.history.last_request);
+                    storeForwardModule->historySend(p->variant.history.window * 60000, getFrom(&mp));
                 } else {
                     storeForwardModule->historySend(historyReturnWindow * 60000, getFrom(&mp)); // defaults to 4 hours
                 }

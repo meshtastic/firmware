@@ -68,7 +68,6 @@ jobs:
           - board: tlora-v2-1-1_8
           - board: tbeam
           - board: heltec-ht62-esp32c3-sx1262
-          - board: heltec-v1
           - board: heltec-v2_0
           - board: heltec-v2_1
           - board: tbeam0_7
@@ -93,6 +92,7 @@ jobs:
           - board: heltec-v3
           - board: heltec-wsl-v3
           - board: heltec-wireless-tracker
+          - board: heltec-wireless-tracker-V1-0
           - board: heltec-wireless-paper
           - board: tbeam-s3-core
           - board: tlora-t3s3-v1

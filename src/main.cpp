@@ -159,25 +159,6 @@ const char *getDeviceName()
     return name;
 }
 
-#ifdef VEXT_ENABLE_V03
-
-#include <soc/rtc.h>
-
-static uint32_t calibrate_one(rtc_cal_sel_t cal_clk, const char *name)
-{
-    const uint32_t cal_count = 1000;
-    uint32_t cali_val;
-    for (int i = 0; i < 5; ++i) {
-        cali_val = rtc_clk_cal(cal_clk, cal_count);
-    }
-    return cali_val;
-}
-
-int heltec_version = 3;
-
-#define CALIBRATE_ONE(cali_clk) calibrate_one(cali_clk, #cali_clk)
-#endif
-
 static int32_t ledBlinker()
 {
     static bool ledOn;
@@ -243,61 +224,31 @@ void setup()
     digitalWrite(PIN_EINK_PWR_ON, HIGH);
 #endif
 
-#if defined(LORA_TCXO_GPIO)
-    pinMode(LORA_TCXO_GPIO, OUTPUT);
-    digitalWrite(LORA_TCXO_GPIO, HIGH);
-#endif
-
-#ifdef ST7735_BL_V03 // Heltec Wireless Tracker PCB Change Detect/Hack
-
-    rtc_clk_32k_enable(true);
-    CALIBRATE_ONE(RTC_CAL_RTC_MUX);
-    if (CALIBRATE_ONE(RTC_CAL_32K_XTAL) != 0) {
-        rtc_clk_slow_freq_set(RTC_SLOW_FREQ_32K_XTAL);
-        CALIBRATE_ONE(RTC_CAL_RTC_MUX);
-        CALIBRATE_ONE(RTC_CAL_32K_XTAL);
-    }
-
-    if (rtc_clk_slow_freq_get() != RTC_SLOW_FREQ_32K_XTAL) {
-        heltec_version = 3;
-    } else {
-        heltec_version = 5;
-    }
-#endif
-
 #if defined(VEXT_ENABLE_V03)
-    if (heltec_version == 3) {
-        pinMode(VEXT_ENABLE_V03, OUTPUT);
-        digitalWrite(VEXT_ENABLE_V03, 0); // turn on the display power
-        LOG_DEBUG("HELTEC Detect Tracker V1.0\n");
-    } else {
-        pinMode(VEXT_ENABLE_V05, OUTPUT);
-        digitalWrite(VEXT_ENABLE_V05, 1); // turn on the display power
-        LOG_DEBUG("HELTEC Detect Tracker V1.1\n");
-    }
+    pinMode(VEXT_ENABLE_V03, OUTPUT);
+    pinMode(ST7735_BL_V03, OUTPUT);
+    digitalWrite(VEXT_ENABLE_V03, 0); // turn on the display power and antenna boost
+    digitalWrite(ST7735_BL_V03, 1);   // display backligth on
+    LOG_DEBUG("HELTEC Detect Tracker V1.0\n");
+#elif defined(VEXT_ENABLE_V05)
+    pinMode(VEXT_ENABLE_V05, OUTPUT);
+    pinMode(ST7735_BL_V05, OUTPUT);
+    digitalWrite(VEXT_ENABLE_V05, 1); // turn on the lora antenna boost
+    digitalWrite(ST7735_BL_V05, 1);   // turn on display backligth
+    LOG_DEBUG("HELTEC Detect Tracker V1.1\n");
 #elif defined(VEXT_ENABLE)
     pinMode(VEXT_ENABLE, OUTPUT);
     digitalWrite(VEXT_ENABLE, 0); // turn on the display power
 #endif
 
 #if defined(VGNSS_CTRL_V03)
-    if (heltec_version == 3) {
-        pinMode(VGNSS_CTRL_V03, OUTPUT);
-        digitalWrite(VGNSS_CTRL_V03, LOW);
-    } else {
-        pinMode(VGNSS_CTRL_V05, OUTPUT);
-        digitalWrite(VGNSS_CTRL_V05, LOW);
-    }
+    pinMode(VGNSS_CTRL_V03, OUTPUT);
+    digitalWrite(VGNSS_CTRL_V03, LOW);
 #endif
 
 #if defined(VTFT_CTRL_V03)
-    if (heltec_version == 3) {
-        pinMode(VTFT_CTRL_V03, OUTPUT);
-        digitalWrite(VTFT_CTRL_V03, LOW);
-    } else {
-        pinMode(VTFT_CTRL_V05, OUTPUT);
-        digitalWrite(VTFT_CTRL_V05, LOW);
-    }
+    pinMode(VTFT_CTRL_V03, OUTPUT);
+    digitalWrite(VTFT_CTRL_V03, LOW);
 #endif
 
 #if defined(VGNSS_CTRL)
