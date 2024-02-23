@@ -57,7 +57,7 @@ meshtastic_MeshPacket *PaxcounterModule::allocReply()
 
 int32_t PaxcounterModule::runOnce()
 {
-    if (moduleConfig.paxcounter.enabled && !config.bluetooth.enabled && !config.network.wifi_enabled) {
+    if (isActive()) {
         if (firstTime) {
             firstTime = false;
             LOG_DEBUG(

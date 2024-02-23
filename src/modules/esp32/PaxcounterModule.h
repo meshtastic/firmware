@@ -23,7 +23,9 @@ class PaxcounterModule : private concurrency::OSThread, public ProtobufModule<me
     bool sendInfo(NodeNum dest = NODENUM_BROADCAST);
     virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Paxcount *p) override;
     virtual meshtastic_MeshPacket *allocReply() override;
-    virtual bool wantUIFrame() override { return true; }
+    bool isActive() { return moduleConfig.paxcounter.enabled &&
+                               !config.bluetooth.enabled && !config.network.wifi_enabled; }
+    virtual bool wantUIFrame() override { return isActive(); }
     virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;
 };
 
