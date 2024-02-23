@@ -18,7 +18,7 @@ SPIClass *hspi = NULL;
 #define TECHO_DISPLAY_MODEL GxEPD2_154_D67
 #elif defined(RAK4630)
 
-// GxEPD2_213_BN - RAK14000 2.13 inch b/w 250x122 - changed from GxEPD2_213_B74 - which was not going to give partial update
+// GxEPD2_213_BN - RAK14000 2.13 inch b/w 250x122 - changed from GxEPD2_213_B74 - which was not going to give fast refresh
 // support
 #define TECHO_DISPLAY_MODEL GxEPD2_213_BN
 
@@ -131,8 +131,8 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
     // No need to grab this lock because we are on our own SPI bus
     // concurrency::LockGuard g(spiLock);
 
-#if defined(USE_EINK_DYNAMIC_PARTIAL)
-    // Decide if update is partial or full
+#if defined(USE_EINK_DYNAMIC_REFRESH)
+    // Decide between full refresh, fast refresh, or skipping the update
     bool continueUpdate = determineRefreshMode();
     if (!continueUpdate)
         return false;
@@ -165,12 +165,12 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
     adafruitDisplay->nextPage();
 #elif defined(RAK4630) || defined(MAKERPYTHON)
 
-    // RAK14000 2.13 inch b/w 250x122 actually now does support partial updates
+    // RAK14000 2.13 inch b/w 250x122 actually now does support fast refresh
 
     // Full update mode (slow)
-    // adafruitDisplay->display(false); // FIXME, use partial update mode
+    // adafruitDisplay->display(false); // FIXME, use fast refresh mode
 
-    // Only enable for e-Paper with support for partial updates and comment out above adafruitDisplay->display(false);
+    // Only enable for e-Paper with support for fast updates and comment out above adafruitDisplay->display(false);
     //  1.54 inch 200x200 - GxEPD2_154_M09
     //  2.13 inch 250x122 - GxEPD2_213_BN
     //  2.9 inch 296x128 - GxEPD2_290_T5D
@@ -203,7 +203,7 @@ void EInkDisplay::display(void)
     // at least one forceDisplay() keyframe.  This prevents flashing when we should the critical
     // bootscreen (that we want to look nice)
 
-#ifdef USE_EINK_DYNAMIC_PARTIAL
+#ifdef USE_EINK_DYNAMIC_REFRESH
     lowPriority();
     forceDisplay();
     highPriority();
@@ -257,9 +257,9 @@ bool EInkDisplay::connect()
             auto lowLevel = new TECHO_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
             adafruitDisplay = new GxEPD2_BW<TECHO_DISPLAY_MODEL, TECHO_DISPLAY_MODEL::HEIGHT>(*lowLevel);
             adafruitDisplay->init(115200, true, 10, false, SPI1, SPISettings(4000000, MSBFIRST, SPI_MODE0));
-            // RAK14000 2.13 inch b/w 250x122 does actually now support partial updates
+            // RAK14000 2.13 inch b/w 250x122 does actually now support fast refresh
             adafruitDisplay->setRotation(3);
-            // Partial update support for  1.54, 2.13 RAK14000 b/w , 2.9 and 4.2
+            // Fast refresh support for  1.54, 2.13 RAK14000 b/w , 2.9 and 4.2
             // adafruitDisplay->setRotation(1);
             adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
         } else {
@@ -347,10 +347,10 @@ bool EInkDisplay::connect()
     return true;
 }
 
-// Use a mix of full and partial refreshes, to preserve display health
-#if defined(USE_EINK_DYNAMIC_PARTIAL)
+// Use a mix of full refresh, fast refresh, and update skipping, to balance urgency and display health
+#if defined(USE_EINK_DYNAMIC_REFRESH)
 
-// Suggest that subsequent updates should use partial-refresh
+// Suggest that subsequent updates should use fast-refresh
 void EInkDisplay::highPriority()
 {
     isHighPriority = true;
@@ -368,8 +368,8 @@ void EInkDisplay::demandFullRefresh()
     demandingFull = true;
 }
 
-// configure display for partial-refresh
-void EInkDisplay::configForPartialRefresh()
+// configure display for fast-refresh
+void EInkDisplay::configForFastRefresh()
 {
     // Display-specific code can go here
 #if defined(PRIVATE_HW)
@@ -390,7 +390,7 @@ void EInkDisplay::configForFullRefresh()
 #endif
 }
 
-#ifdef EINK_PARTIAL_ERASURE_LIMIT
+#ifdef EINK_FASTREFRESH_ERASURE_LIMIT
 // Count black pixels in an image. Used for "erasure tracking"
 int32_t EInkDisplay::countBlackPixels()
 {
@@ -422,16 +422,16 @@ bool EInkDisplay::tooManyErasures()
     prevBlackCount = blackCount;
 
     // Log the running total - help devs setup new boards
-    LOG_DEBUG("Dynamic Partial: erasedSinceFull=%hu, EINK_PARTIAL_ERASURE_LIMIT=%hu\n", erasedSinceFull,
-              EINK_PARTIAL_ERASURE_LIMIT);
+    LOG_DEBUG("Dynamic Refresh: erasedSinceFull=%hu, EINK_FASTREFRESH_ERASURE_LIMIT=%hu\n", erasedSinceFull,
+              EINK_FASTREFRESH_ERASURE_LIMIT);
 
     // Check if too many pixels have been erased
-    if (erasedSinceFull > EINK_PARTIAL_ERASURE_LIMIT)
+    if (erasedSinceFull > EINK_FASTREFRESH_ERASURE_LIMIT)
         return true; // Too many
     else
         return false; // Still okay
 }
-#endif // ifdef EINK_PARTIAL_BRIGHTEN_LIMIT_PX
+#endif // ifdef EINK_FASTREFRESH_ERASURE_LIMIT
 
 bool EInkDisplay::newImageMatchesOld()
 {
@@ -452,7 +452,7 @@ bool EInkDisplay::newImageMatchesOld()
     return hashMatches;
 }
 
-// Change between partial and full refresh config, or skip update, balancing urgency and display health.
+// Choose between, full-refresh, fast refresh, and update skipping, to balance urgency and display health.
 bool EInkDisplay::determineRefreshMode()
 {
     uint32_t now = millis();
@@ -466,8 +466,8 @@ bool EInkDisplay::determineRefreshMode()
     }
 
     // Abort: if too soon for a new frame (unless demanding full)
-    if (!demandingFull && isHighPriority && partialRefreshCount > 0 && sinceLast < highPriorityLimitMsec) {
-        LOG_DEBUG("Dynamic Partial: update skipped. Exceeded EINK_HIGHPRIORITY_LIMIT_SECONDS\n");
+    if (!demandingFull && isHighPriority && fastRefreshCount > 0 && sinceLast < highPriorityLimitMsec) {
+        LOG_DEBUG("Dynamic Refresh: update skipped. Exceeded EINK_HIGHPRIORITY_LIMIT_SECONDS\n");
         missedHighPriorityUpdate = true;
         return false;
     }
@@ -479,16 +479,16 @@ bool EInkDisplay::determineRefreshMode()
     if (demandingFull)
         needsFull = true;
 
-    // Check if old image (partial) should be redrawn (as full), for image quality
-    if (partialRefreshCount > 0 && !isHighPriority)
+    // Check if old image (fast-refresh) should be redrawn (as full), for image quality
+    if (fastRefreshCount > 0 && !isHighPriority)
         needsFull = true;
 
-    // If too many partials, require a full-refresh (display health)
-    if (partialRefreshCount >= partialRefreshLimit)
+    // If too many fast updates, require a full-refresh (display health)
+    if (fastRefreshCount >= fastRefreshLimit)
         needsFull = true;
 
-#ifdef EINK_PARTIAL_ERASURE_LIMIT
-    // Some displays struggle with erasing black pixels to white, during partial refresh
+#ifdef EINK_FASTREFRESH_ERASURE_LIMIT
+    // Some displays struggle with erasing black pixels to white, during fast-refresh
     if (tooManyErasures())
         needsFull = true;
 #endif
@@ -510,29 +510,29 @@ bool EInkDisplay::determineRefreshMode()
 
     // If options require a full refresh
     if (!isHighPriority || needsFull) {
-        if (partialRefreshCount > 0)
+        if (fastRefreshCount > 0)
             configForFullRefresh();
 
-        LOG_DEBUG("Dynamic Partial: conditions met for full-refresh\n");
-        partialRefreshCount = 0;
+        LOG_DEBUG("Dynamic Refresh: conditions met for full-refresh\n");
+        fastRefreshCount = 0;
         needsFull = false;
         demandingFull = false;
-        erasedSinceFull = 0; // Reset the count for EINK_PARTIAL_ERASURE_LIMIT - tracks ghosting buildup
+        erasedSinceFull = 0; // Reset the count for EINK_FASTREFRESH_ERASURE_LIMIT - tracks ghosting buildup
     }
 
-    // If options allow a partial refresh
+    // If options allow a fast-refresh
     else {
-        if (partialRefreshCount == 0)
-            configForPartialRefresh();
+        if (fastRefreshCount == 0)
+            configForFastRefresh();
 
-        LOG_DEBUG("Dynamic Partial: conditions met for partial-refresh\n");
-        partialRefreshCount++;
+        LOG_DEBUG("Dynamic Refresh: conditions met for fast-refresh\n");
+        fastRefreshCount++;
     }
 
     lastUpdateMsec = now; // Mark time for rate limiting
     return true;          // Instruct calling method to continue with update
 }
 
-#endif // End USE_EINK_DYNAMIC_PARTIAL
+#endif // End USE_EINK_DYNAMIC_REFRESH
 
 #endif
