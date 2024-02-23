@@ -6,6 +6,7 @@
 #include "input/cardKbI2cImpl.h"
 #include "input/kbMatrixImpl.h"
 #include "modules/AdminModule.h"
+#include "modules/AtakPluginModule.h"
 #include "modules/CannedMessageModule.h"
 #include "modules/DetectionSensorModule.h"
 #include "modules/NeighborInfoModule.h"
@@ -61,7 +62,7 @@ void setupModules()
         traceRouteModule = new TraceRouteModule();
         neighborInfoModule = new NeighborInfoModule();
         detectionSensorModule = new DetectionSensorModule();
-
+        atakPluginModule = new AtakPluginModule();
         // Note: if the rest of meshtastic doesn't need to explicitly use your module, you do not need to assign the instance
         // to a global variable.
 

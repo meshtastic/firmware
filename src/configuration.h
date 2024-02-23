@@ -142,8 +142,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // GPS
 // -----------------------------------------------------------------------------
-
+#ifndef GPS_BAUDRATE
 #define GPS_BAUDRATE 9600
+#endif
 
 #ifndef GPS_THREAD_INTERVAL
 #define GPS_THREAD_INTERVAL 200
@@ -160,6 +161,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "architecture.h"
 
 /* Step #3: mop up with disabled values for HAS_ options not handled by the above two */
+
+// -----------------------------------------------------------------------------
+// GPS
+// -----------------------------------------------------------------------------
+
+#ifndef GPS_BAUDRATE
+#define GPS_BAUDRATE 9600
+#endif
+#ifndef GPS_THREAD_INTERVAL
+#define GPS_THREAD_INTERVAL 100
+#endif
 
 #ifndef HAS_WIFI
 #define HAS_WIFI 0

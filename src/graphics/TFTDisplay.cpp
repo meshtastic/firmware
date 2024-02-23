@@ -90,11 +90,9 @@ class LGFX : public lgfx::LGFX_Device
             auto cfg = _light_instance.config(); // Gets a structure for backlight settings.
 
 #ifdef ST7735_BL_V03
-            if (heltec_version == 3) {
-                cfg.pin_bl = ST7735_BL_V03;
-            } else {
-                cfg.pin_bl = ST7735_BL_V05;
-            }
+            cfg.pin_bl = ST7735_BL_V03;
+#elif defined(ST7735_BL_V05)
+            cfg.pin_bl = ST7735_BL_V05;
 #else
             cfg.pin_bl = ST7735_BL; // Pin number to which the backlight is connected
 #endif
@@ -354,6 +352,8 @@ class LGFX : public lgfx::LGFX_Device
             _panel_instance = new lgfx::Panel_ST7735;
         else if (settingsMap[displayPanel] == st7735s)
             _panel_instance = new lgfx::Panel_ST7735S;
+        else if (settingsMap[displayPanel] == ili9341)
+            _panel_instance = new lgfx::Panel_ILI9341;
         auto buscfg = _bus_instance.config();
         buscfg.spi_mode = 0;
 
@@ -379,6 +379,8 @@ class LGFX : public lgfx::LGFX_Device
         if (settingsMap[touchscreenModule]) {
             if (settingsMap[touchscreenModule] == xpt2046) {
                 _touch_instance = new lgfx::Touch_XPT2046;
+            } else if (settingsMap[touchscreenModule] == stmpe610) {
+                _touch_instance = new lgfx::Touch_STMPE610;
             }
             auto touch_cfg = _touch_instance->config();
 
@@ -467,30 +469,27 @@ void TFTDisplay::sendCommand(uint8_t com)
         display(true);
         if (settingsMap[displayBacklight] > 0)
             digitalWrite(settingsMap[displayBacklight], TFT_BACKLIGHT_ON);
-#elif defined(ST7735_BACKLIGHT_EN_V03) && defined(TFT_BACKLIGHT_ON)
-        if (heltec_version == 3) {
-            digitalWrite(ST7735_BACKLIGHT_EN_V03, TFT_BACKLIGHT_ON);
-        } else {
-            digitalWrite(ST7735_BACKLIGHT_EN_V05, TFT_BACKLIGHT_ON);
-        }
+#elif defined(ST7735_BL_V03)
+        digitalWrite(ST7735_BL_V03, TFT_BACKLIGHT_ON);
+#elif defined(ST7735_BL_V05)
+        pinMode(ST7735_BL_V05, OUTPUT);
+        digitalWrite(ST7735_BL_V05, TFT_BACKLIGHT_ON);
 #endif
 #if defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
         digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
 #endif
+
 #ifdef VTFT_CTRL_V03
-        if (heltec_version == 3) {
-            digitalWrite(VTFT_CTRL_V03, LOW);
-        } else {
-            digitalWrite(VTFT_CTRL_V05, LOW);
-        }
+        digitalWrite(VTFT_CTRL_V03, LOW);
 #endif
+
 #ifdef VTFT_CTRL
         digitalWrite(VTFT_CTRL, LOW);
 #endif
 
 #ifdef RAK14014
 #elif !defined(M5STACK)
-        tft->setBrightness(128);
+        tft->setBrightness(172);
 #endif
         break;
     }
@@ -499,22 +498,17 @@ void TFTDisplay::sendCommand(uint8_t com)
         tft->clear();
         if (settingsMap[displayBacklight] > 0)
             digitalWrite(settingsMap[displayBacklight], !TFT_BACKLIGHT_ON);
-#elif defined(ST7735_BACKLIGHT_EN_V03) && defined(TFT_BACKLIGHT_ON)
-        if (heltec_version == 3) {
-            digitalWrite(ST7735_BACKLIGHT_EN_V03, !TFT_BACKLIGHT_ON);
-        } else {
-            digitalWrite(ST7735_BACKLIGHT_EN_V05, !TFT_BACKLIGHT_ON);
-        }
+#elif defined(ST7735_BL_V03)
+        digitalWrite(ST7735_BL_V03, !TFT_BACKLIGHT_ON);
+#elif defined(ST7735_BL_V05)
+        pinMode(ST7735_BL_V05, OUTPUT);
+        digitalWrite(ST7735_BL_V05, !TFT_BACKLIGHT_ON);
 #endif
 #if defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
         digitalWrite(TFT_BL, !TFT_BACKLIGHT_ON);
 #endif
 #ifdef VTFT_CTRL_V03
-        if (heltec_version == 3) {
-            digitalWrite(VTFT_CTRL_V03, HIGH);
-        } else {
-            digitalWrite(VTFT_CTRL_V05, HIGH);
-        }
+        digitalWrite(VTFT_CTRL_V03, HIGH);
 #endif
 #ifdef VTFT_CTRL
         digitalWrite(VTFT_CTRL, HIGH);
@@ -584,14 +578,11 @@ bool TFTDisplay::connect()
     LOG_INFO("Power to TFT Backlight\n");
 #endif
 
-#ifdef ST7735_BACKLIGHT_EN_V03
-    if (heltec_version == 3) {
-        pinMode(ST7735_BACKLIGHT_EN_V03, OUTPUT);
-        digitalWrite(ST7735_BACKLIGHT_EN_V03, TFT_BACKLIGHT_ON);
-    } else {
-        pinMode(ST7735_BACKLIGHT_EN_V05, OUTPUT);
-        digitalWrite(ST7735_BACKLIGHT_EN_V05, TFT_BACKLIGHT_ON);
-    }
+#ifdef ST7735_BL_V03
+    digitalWrite(ST7735_BL_V03, TFT_BACKLIGHT_ON);
+#elif defined(ST7735_BL_V05)
+    pinMode(ST7735_BL_V05, OUTPUT);
+    digitalWrite(ST7735_BL_V05, TFT_BACKLIGHT_ON);
 #endif
 
     tft->init();
