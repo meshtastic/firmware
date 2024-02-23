@@ -258,7 +258,7 @@ int handleAPIv1ToRadio(const struct _u_request *req, struct _u_response *res, vo
 int handleAPIv1FromRadio(const struct _u_request *req, struct _u_response *res, void *user_data)
 {
 
-    LOG_DEBUG("handleAPIv1FromRadio radio -> web\n");
+    // LOG_DEBUG("handleAPIv1FromRadio radio -> web\n");
     std::string valueAll;
 
     // Status code is 200 OK by default.
@@ -277,7 +277,7 @@ int handleAPIv1FromRadio(const struct _u_request *req, struct _u_response *res, 
             ulfius_set_response_properties(res, U_OPT_STATUS, 200, U_OPT_BINARY_BODY, txBuf, len);
             const char *tmpa = (const char *)txBuf;
             ulfius_set_string_body_response(res, 200, tmpa);
-            LOG_DEBUG("\n----webAPI response all:----\n");
+            // LOG_DEBUG("\n----webAPI response all:----\n");
             LOG_DEBUG(tmpa);
             LOG_DEBUG("\n");
         }
@@ -286,12 +286,12 @@ int handleAPIv1FromRadio(const struct _u_request *req, struct _u_response *res, 
         len = webAPI.getFromRadio(txBuf);
         const char *tmpa = (const char *)txBuf;
         ulfius_set_binary_body_response(res, 200, tmpa, len);
-        LOG_DEBUG("\n----webAPI response:\n");
+        // LOG_DEBUG("\n----webAPI response:\n");
         LOG_DEBUG(tmpa);
         LOG_DEBUG("\n");
     }
 
-    LOG_DEBUG("end radio->web\n", len);
+    // LOG_DEBUG("end radio->web\n", len);
     return U_CALLBACK_COMPLETE;
 }
 
@@ -345,7 +345,7 @@ char *read_file_into_string(const char *filename)
 {
     FILE *file = fopen(filename, "rb");
     if (file == NULL) {
-        LOG_INFO("Fehler beim Öffnen der Datei\n");
+        LOG_ERROR("Error reading File : %s \n", filename);
         return NULL;
     }
 
@@ -357,7 +357,7 @@ char *read_file_into_string(const char *filename)
     // reserve mem for file + 1 byte
     char *buffer = (char *)malloc(filesize + 1);
     if (buffer == NULL) {
-        LOG_INFO("Speicherreservierung fehlgeschlagen\n");
+        LOG_ERROR("Malloc of mem failed for file : %s \n", filename);
         fclose(file);
         return NULL;
     }
@@ -365,7 +365,7 @@ char *read_file_into_string(const char *filename)
     // read content
     size_t readSize = fread(buffer, 1, filesize, file);
     if (readSize != filesize) {
-        LOG_INFO("Fehler beim Lesen der Datei\n");
+        LOG_ERROR("Error reading file into buffer\n");
         free(buffer);
         fclose(file);
         return NULL;
@@ -382,13 +382,13 @@ int PiWebServerThread::CheckSSLandLoad()
     // read certificate
     cert_pem = read_file_into_string("certificate.pem");
     if (cert_pem == NULL) {
-        LOG_INFO("ERROR SSL Certificate File can't be loaded\n");
+        LOG_ERROR("ERROR SSL Certificate File can't be loaded or is missing\n");
         return 1;
     }
     // read private key
     key_pem = read_file_into_string("private_key.pem");
     if (key_pem == NULL) {
-        LOG_INFO("ERROR SSL Certificate File can't be loaded\n");
+        LOG_ERROR("ERROR file private_key can't be loaded or is missing\n");
         return 2;
     }
 
@@ -402,19 +402,19 @@ int PiWebServerThread::CreateSSLCertificate()
     X509 *x509 = NULL;
 
     if (generate_rsa_key(&pkey) != 0) {
-        LOG_INFO("Error generating RSA-Key.\n");
+        LOG_ERROR("Error generating RSA-Key.\n");
         return 1;
     }
 
     if (generate_self_signed_x509(pkey, &x509) != 0) {
-        LOG_INFO("Error generating of X509-Certificat.\n");
+        LOG_ERROR("Error generating of X509-Certificat.\n");
         return 2;
     }
 
     // Ope file to write private key file
     FILE *pkey_file = fopen("private_key.pem", "wb");
     if (!pkey_file) {
-        LOG_INFO("Error opening private key file.\n");
+        LOG_ERROR("Error opening private key file.\n");
         return 3;
     }
     // write private key file
@@ -424,7 +424,7 @@ int PiWebServerThread::CreateSSLCertificate()
     // open Certificate file
     FILE *x509_file = fopen("certificate.pem", "wb");
     if (!x509_file) {
-        LOG_INFO("Error opening certificate.\n");
+        LOG_ERROR("Error opening certificate.\n");
         return 4;
     }
     // write cirtificate
@@ -446,13 +446,13 @@ PiWebServerThread::PiWebServerThread()
     if (CheckSSLandLoad() != 0) {
         CreateSSLCertificate();
         if (CheckSSLandLoad() != 0) {
-            LOG_INFO("Major Error Gen & Read SSL Certificate\n");
+            LOG_ERROR("Major Error Gen & Read SSL Certificate\n");
         }
     }
 
     if (settingsMap[webserverport] != 0) {
-        LOG_INFO("Using webserver port from yaml config.\n");
         webservport = settingsMap[webserverport];
+        LOG_INFO("Using webserver port from yaml config. %i \n", webservport);
     } else {
         LOG_INFO("No webserver port found in yaml config using default port 80.\n");
         webservport = 80;
@@ -460,7 +460,7 @@ PiWebServerThread::PiWebServerThread()
 
     // Web Content Service Instance
     if (ulfius_init_instance(&instanceWeb, webservport, NULL, DEFAULT_REALM) != U_OK) {
-        LOG_INFO("Webserver couldn't be started, abort execution\n");
+        LOG_ERROR("Webserver couldn't be started, abort execution\n");
     } else {
 
         LOG_INFO("Webserver started ....\n");
@@ -506,7 +506,7 @@ PiWebServerThread::PiWebServerThread()
             LOG_INFO("Web Server framework srated on port: %i \n", webservport);
             LOG_INFO("Web Server root %s\n", (char *)webrootpath.c_str());
         } else {
-            LOG_INFO("Error starting Web Server framework\n");
+            LOG_ERROR("Error starting Web Server framework\n");
         }
     }
 }

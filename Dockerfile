@@ -12,7 +12,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # Install build deps
 USER root
 RUN apt-get update && \
-	apt-get -y install wget python3 g++ zip python3-venv git vim ca-certificates libgpiod-dev libyaml-cpp-dev libbluetooth-dev libgpiod2 openssl libssl-dev libulfius-dev liborcania-dev bash
+	apt-get -y install wget python3 g++ zip python3-venv git vim ca-certificates libgpiod-dev libyaml-cpp-dev libbluetooth-dev libg	piod2 openssl libssl-dev libulfius-dev liborcania-dev bash
 
 # create a non-priveleged user & group
 RUN groupadd -g 1000 mesh && useradd -ml -u 1000 -g 1000 mesh
