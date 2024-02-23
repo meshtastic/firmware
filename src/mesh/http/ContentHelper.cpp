@@ -1,4 +1,3 @@
-#ifndef PORTDUINO_LINUX_HARDWARE
 #include "mesh/http/ContentHelper.h"
 // #include <Arduino.h>
 // #include "main.h"
@@ -13,4 +12,3 @@ void replaceAll(std::string &str, const std::string &from, const std::string &to
         start_pos += to.length(); // In case 'to' contains 'from', like replacing 'x' with 'yx'
     }
 }
-#endif

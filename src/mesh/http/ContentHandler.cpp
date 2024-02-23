@@ -1,4 +1,3 @@
-#ifndef PORTDUINO_LINUX_HARDWARE
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RadioLibInterface.h"
@@ -856,4 +855,3 @@ void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
     res->print(value->Stringify().c_str());
     delete value;
 }
-#endif

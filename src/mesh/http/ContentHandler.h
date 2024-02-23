@@ -1,4 +1,3 @@
-#ifndef PORTDUINO_LINUX_HARDWARE
 #pragma once
 void registerHandlers(HTTPServer *insecureServer, HTTPSServer *secureServer);
 
@@ -35,4 +34,3 @@ class HttpAPI : public PhoneAPI
     /// Check the current underlying physical link to see if the client is currently connected
     virtual bool checkIsConnected() override { return true; } // FIXME, be smarter about this
 };
-#endif
