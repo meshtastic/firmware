@@ -83,6 +83,7 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     }
 
     nodeDB.updatePosition(getFrom(&mp), p);
+    precision = channels.getByIndex(mp.channel).settings.module_settings.position_precision;
 
     return false; // Let others look at this message also if they want
 }
@@ -113,6 +114,12 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     LOG_DEBUG("Sending location with precision %i\n", precision);
     p.latitude_i = localPosition.latitude_i & (INT32_MAX << (32 - precision));
     p.longitude_i = localPosition.longitude_i & (INT32_MAX << (32 - precision));
+
+    // We want the imprecise position to be the middle of the possible location, not
+    if (precision < 31 && precision > 1) {
+        p.latitude_i += (1 << 31 - precision);
+        p.longitude_i += (1 << 31 - precision);
+    }
     p.precision_bits = precision;
     p.time = localPosition.time;
 
