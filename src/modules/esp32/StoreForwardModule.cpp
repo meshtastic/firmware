@@ -555,6 +555,8 @@ StoreForwardModule::StoreForwardModule()
                     // send heartbeat advertising?
                     if (moduleConfig.store_forward.heartbeat)
                         this->heartbeat = moduleConfig.store_forward.heartbeat;
+                    else
+                        this->heartbeat = false;
 
                     // Popupate PSRAM with our data structures.
                     this->populatePSRAM();
