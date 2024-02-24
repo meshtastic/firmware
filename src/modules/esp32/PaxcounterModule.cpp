@@ -87,6 +87,8 @@ int32_t PaxcounterModule::runOnce()
     }
 }
 
+#if HAS_SCREEN
+
 // TODO / FIXME: This code is copied from src/graphics/Screen.cpp
 //               It appears (in slightly variants) also in other modules like
 //               src/modules/Telemetry/PowerTelemetry.cpp, src/modules/Telemetry/EnvironmentTelemetry.cpp
@@ -127,5 +129,6 @@ void PaxcounterModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state
                          buffer, "WiFi: %d\nBLE: %d\nuptime: %ds",
                          count_from_libpax.wifi_count, count_from_libpax.ble_count, millis() / 1000);
 }
+#endif  // HAS_SCREEN
 
 #endif
