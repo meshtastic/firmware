@@ -88,6 +88,7 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
     channelSettings.psk.size = 1;
     strncpy(channelSettings.name, "", sizeof(channelSettings.name));
     channelSettings.module_settings.position_precision = 32; // default to sending location on the primary channel
+    channelSettings.has_module_settings = true;
 
     ch.has_settings = true;
     ch.role = meshtastic_Channel_Role_PRIMARY;
