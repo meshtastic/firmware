@@ -274,7 +274,7 @@ static void drawWelcomeScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
     if ((millis() / 10000) % 2) {
         display->drawString(x, y + FONT_HEIGHT_SMALL * 2 - 3, "Set the region using the");
         display->drawString(x, y + FONT_HEIGHT_SMALL * 3 - 3, "Meshtastic Android, iOS,");
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 4 - 3, "Flasher or CLI client.");
+        display->drawString(x, y + FONT_HEIGHT_SMALL * 4 - 3, "Web or CLI clients.");
     } else {
         display->drawString(x, y + FONT_HEIGHT_SMALL * 2 - 3, "Visit meshtastic.org");
         display->drawString(x, y + FONT_HEIGHT_SMALL * 3 - 3, "for more information.");
