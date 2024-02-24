@@ -75,6 +75,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_CANARYONE = 29,
     /* Waveshare RP2040 LoRa - https://www.waveshare.com/rp2040-lora.htm */
     meshtastic_HardwareModel_RP2040_LORA = 30,
+    /* B&Q Consulting Station G2: https://wiki.uniteng.com/en/meshtastic/station-g2 */
+    meshtastic_HardwareModel_STATION_G2 = 31,
     /* ---------------------------------------------------------------------------
  Less common/prototype boards listed here (needs one more byte over the air)
  --------------------------------------------------------------------------- */
@@ -530,8 +532,7 @@ typedef PB_BYTES_ARRAY_T(256) meshtastic_MeshPacket_encrypted_t;
 typedef struct _meshtastic_MeshPacket {
     /* The sending node number.
  Note: Our crypto implementation uses this field as well.
- See [crypto](/docs/overview/encryption) for details.
- FIXME - really should be fixed32 instead, this encoding only hurts the ble link though. */
+ See [crypto](/docs/overview/encryption) for details. */
     uint32_t from;
     /* The (immediatSee Priority description for more details.y should be fixed32 instead, this encoding only
  hurts the ble link though. */
@@ -558,9 +559,7 @@ typedef struct _meshtastic_MeshPacket {
  needs to be unique for a few minutes (long enough to last for the length of
  any ACK or the completion of a mesh broadcast flood).
  Note: Our crypto implementation uses this id as well.
- See [crypto](/docs/overview/encryption) for details.
- FIXME - really should be fixed32 instead, this encoding only
- hurts the ble link though. */
+ See [crypto](/docs/overview/encryption) for details. */
     uint32_t id;
     /* The time this message was received by the esp32 (secs since 1970).
  Note: this field is _never_ sent on the radio link itself (to save space) Times
