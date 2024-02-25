@@ -83,7 +83,13 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     }
 
     nodeDB.updatePosition(getFrom(&mp), p);
-    precision = channels.getByIndex(mp.channel).settings.module_settings.position_precision;
+    if (channels.getByIndex(mp.channel).settings.has_module_settings) {
+        precision = channels.getByIndex(mp.channel).settings.module_settings.position_precision;
+    } else if (channels.getByIndex(mp.channel).role == meshtastic_Channel_Role_PRIMARY) {
+        precision = 32;
+    } else {
+        precision = 0;
+    }
 
     return false; // Let others look at this message also if they want
 }
@@ -117,8 +123,8 @@ meshtastic_MeshPacket *PositionModule::allocReply()
 
     // We want the imprecise position to be the middle of the possible location, not
     if (precision < 31 && precision > 1) {
-        p.latitude_i += (1 << 31 - precision);
-        p.longitude_i += (1 << 31 - precision);
+        p.latitude_i += (1 << (31 - precision));
+        p.longitude_i += (1 << (31 - precision));
     }
     p.precision_bits = precision;
     p.time = localPosition.time;
@@ -217,7 +223,13 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
         service.cancelSending(prevPacketId);
 
     // Set's the class precision value for this particular packet
-    precision = channels.getByIndex(channel).settings.module_settings.position_precision;
+    if (channels.getByIndex(channel).settings.has_module_settings) {
+        precision = channels.getByIndex(channel).settings.module_settings.position_precision;
+    } else if (channels.getByIndex(channel).role == meshtastic_Channel_Role_PRIMARY) {
+        precision = 32;
+    } else {
+        precision = 0;
+    }
 
     meshtastic_MeshPacket *p = allocReply();
     if (p == nullptr) {
