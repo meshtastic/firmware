@@ -125,10 +125,9 @@ void PaxcounterModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state
 
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(FONT_SMALL);
-    display->drawStringf(display->getWidth() / 2 + x, 0 + y + 12,
-                         buffer, "WiFi: %d\nBLE: %d\nuptime: %ds",
+    display->drawStringf(display->getWidth() / 2 + x, 0 + y + 12, buffer, "WiFi: %d\nBLE: %d\nuptime: %ds",
                          count_from_libpax.wifi_count, count_from_libpax.ble_count, millis() / 1000);
 }
-#endif  // HAS_SCREEN
+#endif // HAS_SCREEN
 
 #endif
