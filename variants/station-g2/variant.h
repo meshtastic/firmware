@@ -35,9 +35,8 @@ Board Information: https://wiki.uniteng.com/en/meshtastic/station-g2
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
-#define SX126X_MAX_POWER                                                                                                         \
-    19 // Ensure the PA does not exceed the saturation output power. More
-       // Info:https://wiki.uniteng.com/en/meshtastic/station-g2#summary-for-lora-power-amplifier-conduction-test
+// Ensure the PA does not exceed the saturation output power. More Info:https://wiki.uniteng.com/en/meshtastic/station-g2#summary-for-lora-power-amplifier-conduction-test
+#define SX126X_MAX_POWER 19
 #endif
 
 #define BATTERY_PIN 4 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
