@@ -89,14 +89,12 @@ NRF52Bluetooth *nrf52Bluetooth;
 AudioThread *audioThread;
 #endif
 
-#ifdef USE_PACKET_API
+#ifdef HAS_TFT
+#include "DeviceScreen.h"
 #include "sharedMem/MeshPacketServer.h"
 #include "sharedMem/PacketClient.h"
-#endif
 
-#ifdef LGFX_TDECK
-#include "DeviceScreen.h"
-DeviceScreen *screen = nullptr;
+DeviceScreen *deviceScreen = nullptr;
 #endif
 
 using namespace concurrency;
@@ -364,10 +362,10 @@ void setup()
     // There needs to be a delay after power on, give LILYGO-KEYBOARD some startup time
     // otherwise keyboard and touch screen will not work
     delay(200);
-#ifdef LGFX_TDECK
-    screen = &DeviceScreen::create();
-    screen->init();
 #endif
+#ifdef HAS_TFT
+    deviceScreen = &DeviceScreen::create();
+    deviceScreen->init();
 #endif
 
     // Currently only the tbeam has a PMU
@@ -874,7 +872,7 @@ void setup()
     initApiServer(TCPPort);
 #endif
 
-#ifdef USE_PACKET_API
+#ifdef HAS_TFT
     MeshPacketServer::init();
     PacketClient::init();
 #endif
