@@ -518,7 +518,7 @@ PiWebServerThread::~PiWebServerThread()
 
     ulfius_stop_framework(&instanceWeb);
     ulfius_stop_framework(&instanceWeb);
-
+    free(configWeb.rootPath);
     ulfius_clean_instance(&instanceService);
     ulfius_clean_instance(&instanceService);
     free(cert_pem);
