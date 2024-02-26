@@ -89,6 +89,14 @@ int32_t PaxcounterModule::runOnce()
 
 #if HAS_SCREEN
 
+#ifdef OLED_RU
+#include "graphics/fonts/OLEDDisplayFontsRU.h"
+#endif
+
+#ifdef OLED_UA
+#include "graphics/fonts/OLEDDisplayFontsUA.h"
+#endif
+
 // TODO / FIXME: This code is copied from src/graphics/Screen.cpp
 //               It appears (in slightly variants) also in other modules like
 //               src/modules/Telemetry/PowerTelemetry.cpp, src/modules/Telemetry/EnvironmentTelemetry.cpp
