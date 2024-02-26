@@ -57,7 +57,7 @@ meshtastic_MeshPacket *PaxcounterModule::allocReply()
 
 int32_t PaxcounterModule::runOnce()
 {
-    if (moduleConfig.paxcounter.enabled && !config.bluetooth.enabled && !config.network.wifi_enabled) {
+    if (isActive()) {
         if (firstTime) {
             firstTime = false;
             LOG_DEBUG(
@@ -86,5 +86,56 @@ int32_t PaxcounterModule::runOnce()
         return disable();
     }
 }
+
+#if HAS_SCREEN
+
+#ifdef OLED_RU
+#include "graphics/fonts/OLEDDisplayFontsRU.h"
+#endif
+
+#ifdef OLED_UA
+#include "graphics/fonts/OLEDDisplayFontsUA.h"
+#endif
+
+// TODO / FIXME: This code is copied from src/graphics/Screen.cpp
+//               It appears (in slightly variants) also in other modules like
+//               src/modules/Telemetry/PowerTelemetry.cpp, src/modules/Telemetry/EnvironmentTelemetry.cpp
+//               and src/modules/CannedMessageModule.cpp
+//               It probably should go to a common header file for consistency
+#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)) &&                                \
+    !defined(DISPLAY_FORCE_SMALL_FONTS)
+// The screen is bigger so use bigger fonts
+#define FONT_SMALL ArialMT_Plain_16  // Height: 19
+#define FONT_MEDIUM ArialMT_Plain_24 // Height: 28
+#define FONT_LARGE ArialMT_Plain_24  // Height: 28
+#else
+#ifdef OLED_RU
+#define FONT_SMALL ArialMT_Plain_10_RU
+#else
+#ifdef OLED_UA
+#define FONT_SMALL ArialMT_Plain_10_UA
+#else
+#define FONT_SMALL ArialMT_Plain_10 // Height: 13
+#endif
+#endif
+#define FONT_MEDIUM ArialMT_Plain_16 // Height: 19
+#define FONT_LARGE ArialMT_Plain_24  // Height: 28
+#endif
+
+void PaxcounterModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    char buffer[50];
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    display->drawString(x + 0, y + 0, "PAX");
+
+    libpax_counter_count(&count_from_libpax);
+
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->setFont(FONT_SMALL);
+    display->drawStringf(display->getWidth() / 2 + x, 0 + y + 12, buffer, "WiFi: %d\nBLE: %d\nuptime: %ds",
+                         count_from_libpax.wifi_count, count_from_libpax.ble_count, millis() / 1000);
+}
+#endif // HAS_SCREEN
 
 #endif
