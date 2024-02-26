@@ -970,3 +970,14 @@ void loop()
     }
     // if (didWake) LOG_DEBUG("wake!\n");
 }
+
+#if HAS_TFT
+void tft_task_handler(void)
+{
+    while (true) {
+        if (deviceScreen)
+            deviceScreen->task_handler();
+        delay(20);
+    }
+}
+#endif
