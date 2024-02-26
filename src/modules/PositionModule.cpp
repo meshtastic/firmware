@@ -119,8 +119,8 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     // lat/lon are unconditionally included - IF AVAILABLE!
     LOG_DEBUG("Sending location with precision %i\n", precision);
     if (precision < 32 && precision > 0) {
-        p.latitude_i = localPosition.latitude_i & (INT32_MAX << (32 - precision));
-        p.longitude_i = localPosition.longitude_i & (INT32_MAX << (32 - precision));
+        p.latitude_i = localPosition.latitude_i & (UINT32_MAX << (32 - precision));
+        p.longitude_i = localPosition.longitude_i & (UINT32_MAX << (32 - precision));
 
         // We want the imprecise position to be the middle of the possible location, not
         p.latitude_i += (1 << (31 - precision));
