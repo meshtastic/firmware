@@ -3,6 +3,7 @@
 #include "MeshService.h"
 #include "PowerFSM.h"
 #include "RadioLibInterface.h"
+#include "buzz.h"
 #include "graphics/Screen.h"
 #include "main.h"
 #include "modules/ExternalNotificationModule.h"
