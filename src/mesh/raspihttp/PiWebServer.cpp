@@ -486,12 +486,13 @@ PiWebServerThread::PiWebServerThread()
 
         configWeb.files_path = (char *)webrootpath.c_str();
         configWeb.url_prefix = "";
+        configWeb.rootPath = strdup(portduinoVFS->mountpoint());
 
         u_map_put(instanceWeb.default_headers, "Access-Control-Allow-Origin", "*");
         // Maximum body size sent by the client is 1 Kb
         instanceWeb.max_post_body_size = 1024;
         ulfius_add_endpoint_by_val(&instanceWeb, "GET", PREFIX, "/api/v1/fromradio/*", 1, &handleAPIv1FromRadio, NULL);
-        ulfius_add_endpoint_by_val(&instanceWeb, "PUT", PREFIX, "/api/v1/toradio/*", 1, &handleAPIv1ToRadio, NULL);
+        ulfius_add_endpoint_by_val(&instanceWeb, "PUT", PREFIX, "/api/v1/toradio/*", 1, &handleAPIv1ToRadio, configWeb.rootPath);
 
         // Add callback function to all endpoints for the Web Server
         ulfius_add_endpoint_by_val(&instanceWeb, "GET", NULL, "/*", 2, &callback_static_file, &configWeb);
@@ -503,7 +504,7 @@ PiWebServerThread::PiWebServerThread()
         retssl = ulfius_start_secure_framework(&instanceWeb, key_pem, cert_pem);
 
         if (retssl == U_OK) {
-            LOG_INFO("Web Server framework srated on port: %i \n", webservport);
+            LOG_INFO("Web Server framework started on port: %i \n", webservport);
             LOG_INFO("Web Server root %s\n", (char *)webrootpath.c_str());
         } else {
             LOG_ERROR("Error starting Web Server framework\n");
