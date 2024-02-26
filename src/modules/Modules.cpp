@@ -94,7 +94,7 @@ void setupModules()
         trackballInterruptImpl1 = new TrackballInterruptImpl1();
         trackballInterruptImpl1->init();
 #endif
-#if HAS_SCREEN
+#if HAS_SCREEN || HAS_TFT
         cannedMessageModule = new CannedMessageModule();
 #endif
 #if HAS_TELEMETRY

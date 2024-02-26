@@ -1,5 +1,5 @@
 #include "sharedMem/PacketClient.h"
-#include "DebugConfiguration.h"
+#include "configuration.h"
 #include "sharedMem/SharedQueue.h"
 #include <assert.h>
 

@@ -94,6 +94,11 @@ AudioThread *audioThread;
 #include "sharedMem/PacketClient.h"
 #endif
 
+#ifdef LGFX_TDECK
+#include "DeviceScreen.h"
+DeviceScreen *screen = nullptr;
+#endif
+
 using namespace concurrency;
 
 // We always create a screen object, but we only init it if we find the hardware
@@ -352,13 +357,17 @@ void setup()
 #endif
 #endif
 
-#ifdef T_DECK
+#if defined(T_DECK)
     // enable keyboard
     pinMode(KB_POWERON, OUTPUT);
     digitalWrite(KB_POWERON, HIGH);
     // There needs to be a delay after power on, give LILYGO-KEYBOARD some startup time
     // otherwise keyboard and touch screen will not work
-    delay(800);
+    delay(200);
+#ifdef LGFX_TDECK
+    screen = &DeviceScreen::create();
+    screen->init();
+#endif
 #endif
 
     // Currently only the tbeam has a PMU
@@ -888,6 +897,11 @@ void setup()
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
     powerFSMthread = new PowerFSMThread();
     setCPUFast(false); // 80MHz is fine for our slow peripherals
+
+#ifdef ARDUINO_ARCH_ESP32
+    LOG_DEBUG("--- Free heap : %8d bytes ---\n", ESP.getFreeHeap());
+    LOG_DEBUG("--- PSRAM     : %8d bytes ---\n", ESP.getFreePsram());
+#endif
 }
 
 uint32_t rebootAtMsec;   // If not zero we will reboot at this time (used to reboot shortly after the update completes)
