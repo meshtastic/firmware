@@ -2,7 +2,6 @@
 
 #ifdef USE_EINK
 #include "EInkDisplay2.h"
-#include "GxEPD2_BW.h"
 #include "SPILock.h"
 #include "main.h"
 #include <SPI.h>

@@ -1,5 +1,7 @@
 #pragma once
 
+#ifdef USE_EINK
+
 #include "GxEPD2_BW.h"
 #include <OLEDDisplay.h>
 
@@ -58,7 +60,7 @@ class EInkDisplay : public OLEDDisplay
     virtual bool connect() override;
 
     // AdafruitGFX display object - instantiated in connect(), variant specific
-    GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT> *adafruitDisplay;
+    GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT> *adafruitDisplay = NULL;
 
     // If display uses HSPI
 #if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0)
@@ -67,5 +69,7 @@ class EInkDisplay : public OLEDDisplay
 
   private:
     // FIXME quick hack to limit drawing to a very slow rate
-    uint32_t lastDrawMsec;
+    uint32_t lastDrawMsec = 0;
 };
+
+#endif
