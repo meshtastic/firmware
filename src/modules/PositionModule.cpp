@@ -372,7 +372,7 @@ struct SmartPosition PositionModule::getDistanceTraveledSinceLastSend(meshtastic
     LOG_DEBUG("currentPosition.latitude_i=%i, currentPosition.longitude_i=%i\n", lastGpsLatitude, lastGpsLongitude);
 
     LOG_DEBUG("--------SMART POSITION-----------------------------------\n");
-    LOG_DEBUG("hasTraveledOverThreshold=%i, distanceTraveled=%d, distanceThreshold=% u\n",
+    LOG_DEBUG("hasTraveledOverThreshold=%i, distanceTraveled=%f, distanceThreshold=%f\n",
               abs(distanceTraveledSinceLastSend) >= distanceTravelThreshold, abs(distanceTraveledSinceLastSend),
               distanceTravelThreshold);
 
