@@ -102,6 +102,10 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_EINK_SCLK (0 + 2)   // EPD_SCLK
 #define PIN_EINK_MOSI (0 + 28)  // EPD_MOSI
 
+#define EINK_DISPLAY_MODEL GxEPD2_290_T5D // 2.9 inch 296x128
+#define EINK_WIDTH 296
+#define EINK_HEIGHT 128
+
 #define USE_EINK
 
 /*

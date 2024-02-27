@@ -6,13 +6,6 @@
 
 #define USE_EINK
 
-// Settings for Dynamic Refresh mode
-// Change between full-refresh, fast-refresh, or update-skipping, to balance urgency and display health.
-#define USE_EINK_DYNAMIC_REFRESH
-#define EINK_LOWPRIORITY_LIMIT_SECONDS 30
-#define EINK_HIGHPRIORITY_LIMIT_SECONDS 1
-#define EINK_FASTREFRESH_REPEAT_LIMIT 5
-
 /*
  * eink display pins
  */
@@ -22,6 +15,10 @@
 #define PIN_EINK_RES 6
 #define PIN_EINK_SCLK 3
 #define PIN_EINK_MOSI 2
+
+#define EINK_DISPLAY_MODEL GxEPD2_213_BN
+#define EINK_WIDTH 250
+#define EINK_HEIGHT 122
 
 /*
  * SPI interfaces

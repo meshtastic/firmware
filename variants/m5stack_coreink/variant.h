@@ -93,6 +93,10 @@
 #define PIN_EINK_SCLK 18 // EPD_SCLK
 #define PIN_EINK_MOSI 23 // EPD_MOSI
 
+#define EINK_DISPLAY_MODEL GxEPD2_154_M09 // 1.54 inch
+#define EINK_WIDTH 200
+#define EINK_HEIGHT 200
+
 #define BATTERY_PIN 35
 #define ADC_CHANNEL ADC1_GPIO35_CHANNEL
 // https://m5stack.oss-cn-shenzhen.aliyuncs.com/resource/docs/schematic/Core/m5paper/M5_PAPER_SCH.pdf

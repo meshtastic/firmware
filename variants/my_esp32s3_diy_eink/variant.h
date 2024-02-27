@@ -54,3 +54,7 @@
 #define PIN_EINK_RES (-1)
 #define PIN_EINK_SCLK 5
 #define PIN_EINK_MOSI 6
+
+#define EINK_DISPLAY_MODEL GxEPD2_290_T5D
+#define EINK_WIDTH 296
+#define EINK_HEIGHT 128

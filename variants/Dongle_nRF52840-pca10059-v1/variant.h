@@ -122,6 +122,10 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_EINK_SCLK (9)   // EPD_SCLK
 #define PIN_EINK_MOSI (10)  // EPD_MOSI
 
+#define EINK_DISPLAY_MODEL GxEPD2_420_M01 // 4.2 inch 300x400
+#define EINK_WIDTH 300
+#define EINK_HEIGHT 400
+
 #define USE_EINK
 
 /*
@@ -136,7 +140,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define USE_SX1262
 #define SX126X_CS (0 + 31)     // LORA_CS     P0.31
 #define SX126X_DIO1 (0 + 29)   // DIO1        P0.29
-#define SX126X_BUSY (0 + 2)    // LORA_BUSY	  P0.02
+#define SX126X_BUSY (0 + 2)    // LORA_BUSY   P0.02
 #define SX126X_RESET (32 + 15) // LORA_RESET  P1.15
 #define SX126X_TXEN (32 + 13)  // TXEN        P1.13 NiceRF 868 dont use
 #define SX126X_RXEN (32 + 10)  // RXEN        P1.10 NiceRF 868 dont use

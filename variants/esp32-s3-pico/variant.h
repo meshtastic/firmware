@@ -75,3 +75,7 @@
 #define PIN_EINK_RES 42 // 37 //(-1) // cant be MISO Waveshare ??)
 #define PIN_EINK_SCLK 35
 #define PIN_EINK_MOSI 36
+
+#define EINK_DISPLAY_MODEL GxEPD2_290_T94_V2
+#define EINK_WIDTH 296
+#define EINK_HEIGHT 128
