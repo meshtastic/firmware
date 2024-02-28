@@ -176,6 +176,11 @@ meshtastic_MeshPacket *PositionModule::allocReply()
         LOG_INFO("Providing time to mesh %u\n", p.time);
     }
 
+    if (p.latitude_i == 0 && p.longitude_i == 0) {
+        LOG_WARN("Skipping position send because lat/lon are zero!\n");
+        return nullptr;
+    }
+
     LOG_INFO("Position reply: time=%i, latI=%i, lonI=%i\n", p.time, p.latitude_i, p.longitude_i);
 
     // TAK Tracker devices should send their position in a TAK packet over the ATAK port
