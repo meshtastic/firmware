@@ -15,10 +15,6 @@
 #define PIN_EINK_SCLK 3
 #define PIN_EINK_MOSI 2
 
-#define EINK_DISPLAY_MODEL GxEPD2_213_FC1
-#define EINK_WIDTH 250
-#define EINK_HEIGHT 122
-
 /*
  * SPI interfaces
  */
