@@ -47,7 +47,8 @@ void RoutingModule::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketI
 uint8_t RoutingModule::getHopLimitForResponse(uint8_t hopStart, uint8_t hopLimit)
 {
     if (hopStart != 0) {
-        uint8_t hopsUsed = hopStart - hopLimit; // Hops used by the request
+        // Hops used by the request. If somebody in between running modified firmware modified it, ignore it
+        uint8_t hopsUsed = hopStart < hopLimit ? config.lora.hop_limit : hopStart - hopLimit;
         if (hopsUsed > config.lora.hop_limit) {
             return hopsUsed; // If the request used more hops than the limit, use the same amount of hops
         } else if (hopsUsed + 2 < config.lora.hop_limit) {
