@@ -202,13 +202,13 @@ static const uint8_t WB_SPI_MOSI = 30; // IO_SLOT
 
 /* Setup of the SX1262 LoRa module ( https://docs.rakwireless.com/Product-Categories/WisBlock/RAK4631/Datasheet/ )
 
-P1.10 	NSS 	SPI NSS (Arduino GPIO number 42)
-P1.11 	SCK 	SPI CLK (Arduino GPIO number 43)
-P1.12 	MOSI 	SPI MOSI (Arduino GPIO number 44)
-P1.13 	MISO 	SPI MISO (Arduino GPIO number 45)
-P1.14 	BUSY 	BUSY signal (Arduino GPIO number 46)
-P1.15 	DIO1 	DIO1 event interrupt (Arduino GPIO number 47)
-P1.06 	NRESET 	NRESET manual reset of the SX1262 (Arduino GPIO number 38)
+P1.10   NSS     SPI NSS (Arduino GPIO number 42)
+P1.11   SCK     SPI CLK (Arduino GPIO number 43)
+P1.12   MOSI    SPI MOSI (Arduino GPIO number 44)
+P1.13   MISO    SPI MISO (Arduino GPIO number 45)
+P1.14   BUSY    BUSY signal (Arduino GPIO number 46)
+P1.15   DIO1    DIO1 event interrupt (Arduino GPIO number 47)
+P1.06   NRESET  NRESET manual reset of the SX1262 (Arduino GPIO number 38)
 
 Important for successful SX1262 initialization:
 

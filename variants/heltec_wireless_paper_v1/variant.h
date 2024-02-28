@@ -6,13 +6,6 @@
 
 #define USE_EINK
 
-// Settings for Dynamic Refresh mode
-// Change between full-refresh, fast-refresh, or update-skipping, to balance urgency and display health.
-#define USE_EINK_DYNAMIC_REFRESH
-#define EINK_LOWPRIORITY_LIMIT_SECONDS 30
-#define EINK_HIGHPRIORITY_LIMIT_SECONDS 1
-#define EINK_FASTREFRESH_REPEAT_LIMIT 5
-
 /*
  * eink display pins
  */
