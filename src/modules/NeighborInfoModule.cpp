@@ -203,14 +203,12 @@ Pass it to an upper client; do not persist this data on the mesh
 */
 bool NeighborInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_NeighborInfo *np)
 {
-    if (enabled) {
-        if (np) {
-            printNeighborInfo("RECEIVED", np);
-            updateNeighbors(mp, np);
-        } else if (mp.hop_start != 0 && mp.hop_start == mp.hop_limit) {
-            // If the hopLimit is the same as hopStart, then it is a neighbor
-            getOrCreateNeighbor(mp.from, mp.from, 0, mp.rx_snr); // Set the broadcast interval to 0, as we don't know it
-        }
+    if (np) {
+        printNeighborInfo("RECEIVED", np);
+        updateNeighbors(mp, np);
+    } else if (mp.hop_start != 0 && mp.hop_start == mp.hop_limit) {
+        // If the hopLimit is the same as hopStart, then it is a neighbor
+        getOrCreateNeighbor(mp.from, mp.from, 0, mp.rx_snr); // Set the broadcast interval to 0, as we don't know it
     }
     // Allow others to handle this packet
     return false;
@@ -283,8 +281,10 @@ meshtastic_Neighbor *NeighborInfoModule::getOrCreateNeighbor(NodeNum originalSen
     new_nbr->snr = snr;
     new_nbr->last_rx_time = getTime();
     // Only if this is the original sender, the broadcast interval corresponds to it
-    if (originalSender == n)
+    if (originalSender == n && node_broadcast_interval_secs != 0)
         new_nbr->node_broadcast_interval_secs = node_broadcast_interval_secs;
+    else // Assume the same broadcast interval as us for the neighbor if we don't know it
+        new_nbr->node_broadcast_interval_secs = moduleConfig.neighbor_info.update_interval;
     saveProtoForModule(); // Save the new neighbor
     return new_nbr;
 }
