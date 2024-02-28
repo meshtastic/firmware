@@ -6,6 +6,28 @@
 #include "main.h"
 #include <SPI.h>
 
+/*
+    The macros EINK_DISPLAY_MODEL, EINK_WIDTH, and EINK_HEIGHT are defined as build_flags in a variant's platformio.ini
+    Previously, these macros were defined at the top of this file.
+
+    For archival reasons, note that the following configurations had also been tested during this period:
+    * ifdef RAK4631
+        - 4.2 inch
+          EINK_DISPLAY_MODEL: GxEPD2_420_M01
+          EINK_WIDTH: 300
+          EINK_WIDTH: 400
+
+        - 2.9 inch
+          EINK_DISPLAY_MODEL: GxEPD2_290_T5D
+          EINK_WIDTH: 296
+          EINK_HEIGHT: 128
+
+        - 1.54 inch
+          EINK_DISPLAY_MODEL: GxEPD2_154_M09
+          EINK_WIDTH: 200
+          EINK_HEIGHT: 200
+*/
+
 // Constructor
 EInkDisplay::EInkDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY geometry, HW_I2C i2cBus)
 {
