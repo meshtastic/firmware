@@ -91,8 +91,8 @@ AudioThread *audioThread;
 
 #ifdef HAS_TFT
 #include "DeviceScreen.h"
+#include "sharedMem/MeshPacketClient.h"
 #include "sharedMem/MeshPacketServer.h"
-#include "sharedMem/PacketClient.h"
 
 DeviceScreen *deviceScreen = nullptr;
 #endif
@@ -365,7 +365,7 @@ void setup()
 #endif
 #ifdef HAS_TFT
     deviceScreen = &DeviceScreen::create();
-    deviceScreen->init();
+    deviceScreen->init(new MeshPacketClient);
 #endif
 
     // Currently only the tbeam has a PMU
@@ -874,7 +874,6 @@ void setup()
 
 #ifdef HAS_TFT
     MeshPacketServer::init();
-    PacketClient::init();
 #endif
 
     // Start airtime logger thread.

@@ -5,17 +5,28 @@
 
 const uint32_t max_packet_queue_size = 10;
 
-PacketClient *packetClient = nullptr;
-
 void PacketClient::init(void)
 {
-    // for now we hard-code (only) one client task, but in principle one could
-    // create as many PacketServer/PacketClient pairs as desired.
-    packetClient = new PacketClient();
-    packetClient->connect(sharedQueue);
+    // sharedQueue is currently defined external, it is not shared between processes
+    connect(sharedQueue);
 }
 
 PacketClient::PacketClient() : queue(nullptr) {}
+
+bool PacketClient::connect(void)
+{
+    is_connected = true;
+}
+
+bool PacketClient::disconnect(void)
+{
+    is_connected = false;
+}
+
+bool PacketClient::isConnected(void)
+{
+    return is_connected;
+}
 
 int PacketClient::connect(SharedQueue *_queue)
 {

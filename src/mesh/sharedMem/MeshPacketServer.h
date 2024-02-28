@@ -1,3 +1,5 @@
+#pragma once
+
 #include "mesh-pb-constants.h"
 #include "sharedMem/PacketServer.h"
 
