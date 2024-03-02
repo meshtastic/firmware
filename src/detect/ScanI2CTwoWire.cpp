@@ -242,6 +242,10 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                     LOG_INFO("BME-280 sensor found at address 0x%x\n", (uint8_t)addr.address);
                     type = BME_280;
                     break;
+                case 0x55:
+                    LOG_INFO("BMP-085 or BMP-180 sensor found at address 0x%x\n", (uint8_t)addr.address);
+                    type = BMP_085;
+                    break;
                 default:
                     LOG_INFO("BMP-280 sensor found at address 0x%x\n", (uint8_t)addr.address);
                     type = BMP_280;
