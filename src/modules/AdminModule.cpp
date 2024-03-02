@@ -719,12 +719,13 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
 
     config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_LOCAL_ONLY;
     // Remove PSK of primary channel for plaintext amateur usage
-    auto primaryChannel = channels.getByIndex(channels.getPrimaryIndex());
+    /*auto primaryChannel = channels.getByIndex(channels.getPrimaryIndex());
     auto &channelSettings = primaryChannel.settings;
     channelSettings.psk.bytes[0] = 0;
     channelSettings.psk.size = 0;
     channels.setChannel(primaryChannel);
     channels.onConfigChanged();
+    */
 
     service.reloadOwner(false);
     saveChanges(SEGMENT_CONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);

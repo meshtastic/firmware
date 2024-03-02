@@ -123,6 +123,9 @@ float AirTime::utilizationTXPercent()
 
 bool AirTime::isTxAllowedChannelUtil(bool polite)
 {
+    if (config.lora.override_duty_cycle) {
+        return true;
+    }
     uint8_t percentage = (polite ? polite_channel_util_percent : max_channel_util_percent);
     if (channelUtilizationPercent() < percentage) {
         return true;
@@ -134,6 +137,9 @@ bool AirTime::isTxAllowedChannelUtil(bool polite)
 
 bool AirTime::isTxAllowedAirUtil()
 {
+    if (config.lora.override_duty_cycle) {
+        return true;
+    }
     if (!config.lora.override_duty_cycle && myRegion->dutyCycle < 100) {
         if (utilizationTXPercent() < myRegion->dutyCycle * polite_duty_cycle_percent / 100) {
             return true;

@@ -159,6 +159,7 @@ const char *getDeviceName()
     return name;
 }
 
+#ifdef RAK_4631
 static int32_t ledBlinker()
 {
     static bool ledOn;
@@ -169,6 +170,7 @@ static int32_t ledBlinker()
     // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
     return powerStatus->getIsCharging() ? 1000 : (ledOn ? 1 : 1000);
 }
+#endif
 
 uint32_t timeLastPowered = 0;
 
@@ -283,8 +285,9 @@ void setup()
 
     OSThread::setup();
 
+#ifdef RAK_4631
     ledPeriodic = new Periodic("Blink", ledBlinker);
-
+#endif
     fsInit();
 
 #if defined(_SEEED_XIAO_NRF52840_SENSE_H_)
@@ -903,8 +906,21 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     return deviceMetadata;
 }
 
+#ifdef ARCH_ESP32
+bool ledOn = false;
+#endif
+
 void loop()
 {
+    #ifdef ARCH_ESP32
+
+    // Umschalten des Zustands von ledOn bei jedem Durchlauf
+    ledOn = !ledOn;
+
+    // Aktualisieren des LED-Zustands basierend auf ledOn
+    setLed(ledOn);
+    #endif
+
     runASAP = false;
 
     // axpDebugOutput.loop();
@@ -942,9 +958,9 @@ void loop()
                   mainController.nextThread->tillRun(millis())); */
 
     // We want to sleep as long as possible here - because it saves power
-    if (!runASAP && loopCanSleep()) {
-        // if(delayMsec > 100) LOG_DEBUG("sleeping %ld\n", delayMsec);
-        mainDelay.delay(delayMsec);
+        if (!runASAP && loopCanSleep()) {
+            // if(delayMsec > 100) LOG_DEBUG("sleeping %ld\n", delayMsec);
+            mainDelay.delay(delayMsec);
+        }
+        // if (didWake) LOG_DEBUG("wake!\n");
     }
-    // if (didWake) LOG_DEBUG("wake!\n");
-}

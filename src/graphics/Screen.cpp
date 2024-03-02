@@ -121,9 +121,9 @@ static void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDispl
     display->drawXbm(x + (SCREEN_WIDTH - icon_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - icon_height) / 2 + 2,
                      icon_width, icon_height, icon_bits);
 
-    display->setFont(FONT_MEDIUM);
+    display->setFont(FONT_SMALL);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
-    const char *title = "meshtastic.org";
+    const char *title = "UNLEASHED 0.0.3b";
     display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
     display->setFont(FONT_SMALL);
 

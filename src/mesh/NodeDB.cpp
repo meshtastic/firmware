@@ -197,7 +197,7 @@ void NodeDB::installDefaultConfig()
     config.position.broadcast_smart_minimum_interval_secs = 30;
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER)
         config.device.node_info_broadcast_secs = 3 * 60 * 60;
-    config.device.serial_enabled = true;
+    config.device.serial_enabled = false;
     resetRadioConfig();
     strncpy(config.network.ntp_server, "0.pool.ntp.org", 32);
     // FIXME: Default to bluetooth capability of platform as default
