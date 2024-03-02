@@ -435,6 +435,7 @@ NodeNum Router::getNodeNum()
  */
 void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 {
+    bool skipHandle = false;
     // Also, we should set the time from the ISR and it should have msec level resolution
     p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
     // Store a copy of encrypted packet for MQTT
@@ -451,8 +452,16 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
         else
             printPacket("handleReceived(REMOTE)", p);
 
+        // Neighbor info module is disabled, ignore expensive neighbor info packets
+        if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+            p->decoded.portnum == meshtastic_PortNum_NEIGHBORINFO_APP &&
+            (!moduleConfig.has_neighbor_info || !moduleConfig.neighbor_info.enabled)) {
+            cancelSending(p->from, p->id);
+            skipHandle = true;
+        }
+
         // Publish received message to MQTT if we're not the original transmitter of the packet
-        if (moduleConfig.mqtt.enabled && getFrom(p) != nodeDB.getNodeNum() && mqtt)
+        if (!skipHandle && moduleConfig.mqtt.enabled && getFrom(p) != nodeDB.getNodeNum() && mqtt)
             mqtt->onSend(*p_encrypted, *p, p->channel);
     } else {
         printPacket("packet decoding failed or skipped (no PSK?)", p);
@@ -461,7 +470,8 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
     packetPool.release(p_encrypted); // Release the encrypted packet
 
     // call modules here
-    MeshModule::callPlugins(*p, src);
+    if (!skipHandle)
+        MeshModule::callPlugins(*p, src);
 }
 
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
@@ -469,15 +479,8 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
     // assert(radioConfig.has_preferences);
     bool ignore = is_in_repeated(config.lora.ignore_incoming, p->from) || (config.lora.ignore_mqtt && p->via_mqtt);
 
-    // Neighbor info module is disabled, ignore expensive neighbor info packets
-    if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
-        p->decoded.portnum == meshtastic_PortNum_NEIGHBORINFO_APP &&
-        (!moduleConfig.has_neighbor_info || !moduleConfig.neighbor_info.enabled))
-        ignore = true;
-
     if (ignore) {
-        LOG_DEBUG("Ignoring incoming message, 0x%x is in our ignore list, came via MQTT, or is on a portnum we haven't enabled\n",
-                  p->from);
+        LOG_DEBUG("Ignoring incoming message, 0x%x is in our ignore list or came via MQTT\n", p->from);
     } else if (ignore |= shouldFilterReceived(p)) {
         LOG_DEBUG("Incoming message was filtered 0x%x\n", p->from);
     }
