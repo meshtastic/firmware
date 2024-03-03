@@ -20,7 +20,7 @@ std::map<configNames, std::string> settingsStrings;
 char *configPath = nullptr;
 
 // FIXME - move setBluetoothEnable into a HALPlatform class
-void setBluetoothEnable(bool on)
+void setBluetoothEnable(bool enable)
 {
     // not needed
 }
