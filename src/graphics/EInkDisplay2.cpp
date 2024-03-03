@@ -87,9 +87,9 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
 #ifndef EINK_NO_HIBERNATE // Only hibernate if controller IC will preserve image memory
     // Put screen to sleep to save power (possibly not necessary because we already did poweroff inside of display)
     adafruitDisplay->hibernate();
-    LOG_DEBUG("done\n");
 #endif
 
+    LOG_DEBUG("done\n");
     return true;
 }
 
@@ -153,7 +153,7 @@ bool EInkDisplay::connect()
         }
     }
 
-#elif defined(HELTEC_WIRELESS_PAPER_V1_0)
+#elif defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_WIRELESS_PAPER)
     {
         // Is this a normal boot, or a wake from deep sleep?
         esp_sleep_wakeup_cause_t wakeReason = esp_sleep_get_wakeup_cause();
@@ -186,19 +186,6 @@ bool EInkDisplay::connect()
         adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
 
         // Init GxEPD2
-        adafruitDisplay->init();
-        adafruitDisplay->setRotation(3);
-    }
-#elif defined(HELTEC_WIRELESS_PAPER)
-    {
-        hspi = new SPIClass(HSPI);
-        hspi->begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS); // SCLK, MISO, MOSI, SS
-        delay(100);
-        pinMode(Vext, OUTPUT);
-        digitalWrite(Vext, LOW);
-        delay(100);
-        auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, *hspi);
-        adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
         adafruitDisplay->init();
         adafruitDisplay->setRotation(3);
     }
