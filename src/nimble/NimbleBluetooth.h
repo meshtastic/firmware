@@ -16,5 +16,5 @@ class NimbleBluetooth : BluetoothApi
     void startAdvertising();
 };
 
-void setBluetoothEnable(bool on);
+void setBluetoothEnable(bool enable);
 void clearNVS();
