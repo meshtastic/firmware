@@ -210,8 +210,10 @@ void NRF52Bluetooth::shutdown()
 {
     // Shutdown bluetooth for minimum power draw
     LOG_INFO("Disable NRF52 bluetooth\n");
+    if (connectionHandle != 0) {
+        Bluefruit.disconnect(connectionHandle);
+    }
     Bluefruit.Advertising.stop();
-    Bluefruit.setTxPower(0); // Minimum power
 }
 
 bool NRF52Bluetooth::isConnected()
@@ -287,6 +289,14 @@ void NRF52Bluetooth::setup()
 
         LOG_INFO("Advertising\n");
     }
+}
+
+void NRF52Bluetooth::resumeAdverising()
+{
+    Bluefruit.Advertising.restartOnDisconnect(true);
+    Bluefruit.Advertising.setInterval(32, 244); // in unit of 0.625 ms
+    Bluefruit.Advertising.setFastTimeout(30);   // number of seconds in fast mode
+    Bluefruit.Advertising.start(0);
 }
 
 /// Given a level between 0-100, update the BLE attribute
