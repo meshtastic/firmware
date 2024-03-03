@@ -949,7 +949,7 @@ void UnleashedCommands() {
       Serial.print("\nCommand received: ");
       Serial.println(incomingcommand);
       if (incomingcommand.startsWith("help")) {
-        Serial.println("Commands:");
+        Serial.println("Unleashed Firmware - Commands:");
         Serial.println("packet_send_retry: [Value] - Sets the number of retries when sending a packet (Default 3)");
       }
       if (incomingcommand.startsWith("packet_send_retry: ")) {
@@ -959,7 +959,7 @@ void UnleashedCommands() {
           packetSendRetry = newRetryValue;
           savePacketSendRetry(); // Speichere den neuen Wert im NVS
         }
-        Serial.print("packet_send_retry set to: ");
+        Serial.print("Unleashed Firmware - packet_send_retry set to: ");
         Serial.println(packetSendRetry);
       }
       incomingcommand = "";
