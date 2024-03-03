@@ -5,6 +5,8 @@
 #define I2C_SCL SCL
 
 #define USE_EINK
+#define EINK_NO_HIBERNATE
+
 /*
  * eink display pins
  */
