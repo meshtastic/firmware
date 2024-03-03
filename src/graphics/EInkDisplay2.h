@@ -5,7 +5,7 @@
 #include "GxEPD2_BW.h"
 #include <OLEDDisplay.h>
 
-#if defined(HELTEC_WIRELESS_PAPER_V1_0)
+#if defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_WIRELESS_PAPER)
 // Re-enable SPI after deep sleep: rtc_gpio_hold_dis()
 #include "driver/rtc_io.h"
 #endif
