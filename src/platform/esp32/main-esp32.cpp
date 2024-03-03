@@ -20,7 +20,7 @@
 
 #if !defined(CONFIG_IDF_TARGET_ESP32S2)
 
-void setBluetoothEnable(bool on)
+void setBluetoothEnable(bool enable)
 {
     if (!isWifiAvailable() && config.bluetooth.enabled == true) {
         if (!nimbleBluetooth) {
@@ -34,7 +34,7 @@ void setBluetoothEnable(bool on)
     }
 }
 #else
-void setBluetoothEnable(bool on) {}
+void setBluetoothEnable(bool enable) {}
 void updateBatteryLevel(uint8_t level) {}
 #endif
 
