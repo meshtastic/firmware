@@ -219,6 +219,7 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define NRF_APM
 
 // enables 3.3V periphery like GPS or IO Module
+// Do not toggle this for GPS power savings
 #define PIN_3V3_EN (34)
 
 // RAK1910 GPS module
