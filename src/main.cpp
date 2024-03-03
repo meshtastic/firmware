@@ -32,6 +32,8 @@
 #include <utility>
 // #include <driver/rtc_io.h>
 
+#include "nvs_flash.h"
+
 #ifdef ARCH_ESP32
 #include "mesh/http/WebServer.h"
 #include "nimble/NimbleBluetooth.h"
@@ -195,6 +197,17 @@ __attribute__((weak, noinline)) bool loopCanSleep()
 
 void setup()
 {
+  // NVS initialisieren
+  esp_err_t ret = nvs_flash_init();
+  if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+    // NVS-Partition löschen, wenn ein Fehler auftritt, und dann erneut initialisieren
+    ESP_ERROR_CHECK(nvs_flash_erase());
+    ret = nvs_flash_init();
+  }
+  ESP_ERROR_CHECK( ret );
+  ESP_ERROR_CHECK( ret );
+  // NVS initialisieren ENDE
+
     concurrency::hasBeenSetup = true;
     meshtastic_Config_DisplayConfig_OledType screen_model =
         meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;
@@ -910,8 +923,56 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
 bool ledOn = false;
 #endif
 
+// Globale Variablen
+String incomingcommand = "";
+int packetSendRetry = 0;
+
+void savePacketSendRetry() {
+  nvs_handle_t my_handle;
+  esp_err_t err;
+  // NVS-Handle öffnen
+  err = nvs_open("storage", NVS_READWRITE, &my_handle);
+  if (err != ESP_OK) return;
+  // packetSendRetry-Wert speichern
+  err = nvs_set_i32(my_handle, "packetSendRetry", packetSendRetry);
+  if (err != ESP_OK) return;
+  // Änderungen committen
+  nvs_commit(my_handle);
+  // NVS-Handle schließen
+  nvs_close(my_handle);
+}
+
+void UnleashedCommands() {
+  if (Serial.available() > 0) {
+    char eingabe = Serial.read();
+    if (eingabe == '\r') {
+      Serial.print("\nCommand received: ");
+      Serial.println(incomingcommand);
+      if (incomingcommand.startsWith("help")) {
+        Serial.println("Commands:");
+        Serial.println("packet_send_retry: [Value] - Sets the number of retries when sending a packet (Default 3)");
+      }
+      if (incomingcommand.startsWith("packet_send_retry: ")) {
+        String numStr = incomingcommand.substring(19);
+        int newRetryValue = numStr.toInt();
+        if (newRetryValue != packetSendRetry) {
+          packetSendRetry = newRetryValue;
+          savePacketSendRetry(); // Speichere den neuen Wert im NVS
+        }
+        Serial.print("packet_send_retry set to: ");
+        Serial.println(packetSendRetry);
+      }
+      incomingcommand = "";
+    } else if (eingabe >= 32) {
+      incomingcommand += eingabe;
+      Serial.print(eingabe);
+    }
+  }
+}
+
 void loop()
 {
+    UnleashedCommands();
     #ifdef ARCH_ESP32
 
     // Umschalten des Zustands von ledOn bei jedem Durchlauf
