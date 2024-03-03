@@ -3,7 +3,10 @@
 #include "MeshTypes.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
-#include "nvs_flash.h"
+#ifdef ARCH_ESP32
+#include <Preferences.h>
+Preferences preferences_rr;
+#endif
 
 // ReliableRouter::ReliableRouter() {}
 
@@ -137,22 +140,21 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
     FloodingRouter::sniffReceived(p, c);
 }
 
+#ifdef ARCH_ESP32
 int NUM_RETRANSMISSIONS() {
-    nvs_handle_t my_handle;
-    esp_err_t err;
-    int packetSendRetry = 0; // Lokale Variable innerhalb der Funktion
-    // NVS-Handle öffnen
-    err = nvs_open("storage", NVS_READWRITE, &my_handle);
-    if (err != ESP_OK) return 3; // Standardwert zurückgeben, wenn das Öffnen fehlschlägt
+    // Speicherbereich "storage" mit Preferences öffnen
+    preferences_rr.begin("storage", false); // false für RW-Zugriff
     // Versuche, den Wert für packetSendRetry zu lesen
-    err = nvs_get_i32(my_handle, "packetSendRetry", &packetSendRetry);
-    if (err == ESP_ERR_NVS_NOT_FOUND) {
-        packetSendRetry = 3; // Standardwert, wenn nicht gefunden
-    }
-    // NVS-Handle schließen
-    nvs_close(my_handle);
-    return packetSendRetry; // Den gelesenen oder Standardwert zurückgeben
+    // Standardwert 3 verwenden, wenn der Schlüssel nicht gefunden wird
+    int packetSendRetry = preferences_rr.getInt("packetSendRetry", 3);
+    // Preferences schließen
+    preferences_rr.end();
+    // Den gelesenen oder Standardwert zurückgeben
+    return packetSendRetry;
 }
+#else
+int NUM_RETRANSMISSIONS() { return 3;}
+#endif
 
 PendingPacket::PendingPacket(meshtastic_MeshPacket *p)
 {

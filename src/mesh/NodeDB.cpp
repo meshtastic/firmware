@@ -201,6 +201,14 @@ void NodeDB::installDefaultConfig()
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER)
         config.device.node_info_broadcast_secs = 3 * 60 * 60;
     config.device.serial_enabled = false;
+    // reset Unleashed settings
+    #ifdef ARCH_ESP32
+    Preferences preferences_ndb1;
+    preferences_ndb1.begin("storage", false); // Speicherbereich öffnen
+    preferences_ndb1.putInt("packetSendRetry", 3); // Standardwert setzen
+    preferences_ndb1.end(); // Speicherbereich schließen
+    #endif
+    // reset Unleashed settings end
     resetRadioConfig();
     strncpy(config.network.ntp_server, "0.pool.ntp.org", 32);
     // FIXME: Default to bluetooth capability of platform as default
