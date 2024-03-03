@@ -45,8 +45,8 @@ extern "C" {
 // LEDs
 #define PIN_LED1 (0 + 14) // 13 red (confirmed on 1.0 board)
 // Unused(by firmware) LEDs:
-// #define PIN_LED2 (0 + 15) // 14 blue
-// #define PIN_LED3 (0 + 13) // 15 green
+#define PIN_LED2 (0 + 15) // 14 blue
+#define PIN_LED3 (0 + 13) // 15 green
 
 #define LED_BUILTIN PIN_LED1
 
