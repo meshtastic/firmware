@@ -10,6 +10,8 @@ meshtastic_NodeInfo TypeConversions::ConvertToNodeInfo(const meshtastic_NodeInfo
     info.snr = lite->snr;
     info.last_heard = lite->last_heard;
     info.channel = lite->channel;
+    info.via_mqtt = lite->via_mqtt;
+    info.hops_away = lite->hops_away;
 
     if (lite->has_position) {
         info.has_position = true;
