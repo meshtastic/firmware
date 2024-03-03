@@ -116,6 +116,11 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     }
     localPosition.seq_number++;
 
+    if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0) {
+        LOG_WARN("Skipping position send because lat/lon are zero!\n");
+        return nullptr;
+    }
+
     // lat/lon are unconditionally included - IF AVAILABLE!
     LOG_DEBUG("Sending location with precision %i\n", precision);
     if (precision < 32 && precision > 0) {
@@ -174,11 +179,6 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     } else {
         p.time = getValidTime(RTCQualityDevice);
         LOG_INFO("Providing time to mesh %u\n", p.time);
-    }
-
-    if (p.latitude_i == 0 && p.longitude_i == 0) {
-        LOG_WARN("Skipping position send because lat/lon are zero!\n");
-        return nullptr;
     }
 
     LOG_INFO("Position reply: time=%i, latI=%i, lonI=%i\n", p.time, p.latitude_i, p.longitude_i);
