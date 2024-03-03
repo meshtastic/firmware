@@ -26,9 +26,9 @@ void setBluetoothEnable(bool enable)
         if (!nimbleBluetooth) {
             nimbleBluetooth = new NimbleBluetooth();
         }
-        if (on && !nimbleBluetooth->isActive()) {
+        if (enable && !nimbleBluetooth->isActive()) {
             nimbleBluetooth->setup();
-        } else if (!on) {
+        } else if (!enable) {
             nimbleBluetooth->shutdown();
         }
     }
