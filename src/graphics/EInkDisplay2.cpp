@@ -87,9 +87,9 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
 #ifndef EINK_NO_HIBERNATE // Only hibernate if controller IC will preserve image memory
     // Put screen to sleep to save power (possibly not necessary because we already did poweroff inside of display)
     adafruitDisplay->hibernate();
-    LOG_DEBUG("done\n");
 #endif
 
+    LOG_DEBUG("done\n");
     return true;
 }
 
