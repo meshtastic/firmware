@@ -13,6 +13,8 @@
 /**
  * An adapter class that allows using the GxEPD2 library as if it was an OLEDDisplay implementation.
  *
+ * Note: EInkDynamicDisplay derives from this class.
+ *
  * Remaining TODO:
  * optimize display() to only draw changed pixels (see other OLED subclasses for examples)
  * implement displayOn/displayOff to turn off the TFT device (and backlight)
@@ -41,7 +43,7 @@ class EInkDisplay : public OLEDDisplay
      *
      * @return true if we did draw the screen
      */
-    bool forceDisplay(uint32_t msecLimit = 1000);
+    virtual bool forceDisplay(uint32_t msecLimit = 1000);
 
     /**
      * shim to make the abstraction happy
