@@ -255,19 +255,6 @@ bool GPS::setup()
     if (!didSerialInit) {
 #if !defined(GPS_UC6580)
 
-#if defined(RAK4630) && defined(PIN_3V3_EN)
-        // If we are using the RAK4630 and we have no other peripherals on the I2C bus or module interest in 3V3_S,
-        // then we can safely set en_gpio turn off power to 3V3 (IO2) to hard sleep the GPS
-        if (rtc_found.port == ScanI2C::DeviceType::NONE && rgb_found.type == ScanI2C::DeviceType::NONE &&
-            accelerometer_found.port == ScanI2C::DeviceType::NONE && !moduleConfig.detection_sensor.enabled &&
-            !moduleConfig.telemetry.air_quality_enabled && !moduleConfig.telemetry.environment_measurement_enabled &&
-            config.power.device_battery_ina_address == 0 && en_gpio == 0) {
-            LOG_DEBUG("Since no problematic peripherals or interested modules were found, setting power save GPS_EN to pin %i\n",
-                      PIN_3V3_EN);
-            en_gpio = PIN_3V3_EN;
-        }
-#endif
-
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
             LOG_DEBUG("Probing for GPS at %d \n", serialSpeeds[speedSelect]);
             gnssModel = probe(serialSpeeds[speedSelect]);
@@ -319,7 +306,6 @@ bool GPS::setup()
             delay(250);
             _serial_gps->write("$CFGMSG,6,1,0\r\n");
             delay(250);
-
         } else if (gnssModel == GNSS_MODEL_UBLOX) {
             // Configure GNSS system to GPS+SBAS+GLONASS (Module may restart after this command)
             // We need set it because by default it is GPS only, and we want to use GLONASS too
@@ -444,6 +430,11 @@ bool GPS::setup()
                     if (getACK(0x06, 0x86, 500) != GNSS_RESPONSE_OK) {
                         LOG_WARN("Unable to enable powersaving for GPS.\n");
                     }
+                    msglen = makeUBXPacket(0x06, 0x3B, sizeof(_message_CFG_PM2), _message_CFG_PM2);
+                    _serial_gps->write(UBXscratch, msglen);
+                    if (getACK(0x06, 0x3B, 500) != GNSS_RESPONSE_OK) {
+                        LOG_WARN("Unable to enable powersaving details for GPS.\n");
+                    }
                     // For M8 we want to enable NMEA vserion 4.10 so we can see the additional sats.
                     if (strncmp(info.hwVersion, "00080000", 8) == 0) {
                         msglen = makeUBXPacket(0x06, 0x17, sizeof(_message_NMEA), _message_NMEA);
@@ -453,7 +444,6 @@ bool GPS::setup()
                             LOG_WARN("Unable to enable NMEA 4.10.\n");
                         }
                     }
-
                 } else {
                     if (strncmp(info.hwVersion, "00040007", 8) == 0) { // This PSM mode is only for Neo-6
                         msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_ECO);
@@ -476,6 +466,12 @@ bool GPS::setup()
                         _serial_gps->write(UBXscratch, msglen);
                         if (getACK(0x06, 0x11, 500) != GNSS_RESPONSE_OK) {
                             LOG_WARN("Unable to enable powersaving mode for GPS.\n");
+                        }
+
+                        msglen = makeUBXPacket(0x06, 0x3B, sizeof(_message_CFG_PM2), _message_CFG_PM2);
+                        _serial_gps->write(UBXscratch, msglen);
+                        if (getACK(0x06, 0x3B, 500) != GNSS_RESPONSE_OK) {
+                            LOG_WARN("Unable to enable powersaving details for GPS.\n");
                         }
                     }
                 }
@@ -631,12 +627,12 @@ void GPS::setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime)
 #endif
 #ifdef PIN_GPS_STANDBY // Specifically the standby pin for L76K and clones
     if (on) {
-        LOG_INFO("Waking GPS");
+        LOG_INFO("Waking GPS\n");
         pinMode(PIN_GPS_STANDBY, OUTPUT);
         digitalWrite(PIN_GPS_STANDBY, 1);
         return;
     } else {
-        LOG_INFO("GPS entering sleep");
+        LOG_INFO("GPS entering sleep\n");
         // notifyGPSSleep.notifyObservers(NULL);
         pinMode(PIN_GPS_STANDBY, OUTPUT);
         digitalWrite(PIN_GPS_STANDBY, 0);

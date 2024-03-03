@@ -106,7 +106,11 @@
 #elif defined(HELTEC_WSL_V3)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_WSL_V3
 #elif defined(HELTEC_WIRELESS_TRACKER)
+#ifdef HELTEC_TRACKER_V1_0
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER_V1_0
+#else
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER
+#endif
 #elif defined(HELTEC_WIRELESS_PAPER_V1_0)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_PAPER_V1_0
 #elif defined(HELTEC_WIRELESS_PAPER)
@@ -121,14 +125,16 @@
 #define HW_VENDOR meshtastic_HardwareModel_BETAFPV_900_NANO_TX
 #elif defined(PICOMPUTER_S3)
 #define HW_VENDOR meshtastic_HardwareModel_PICOMPUTER_S3
-#elif defined(HELTEC_HT62)
-#define HW_VENDOR meshtastic_HardwareModel_HELTEC_HT62
+#elif defined(ESP32_S3_PICO)
+#define HW_VENDOR meshtastic_HardwareModel_ESP32_S3_PICO
 #elif defined(SENSELORA_S3)
 #define HW_VENDOR meshtastic_HardwareModel_SENSELORA_S3
 #elif defined(HELTEC_HT62)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_HT62
 #elif defined(CHATTER_2)
 #define HW_VENDOR meshtastic_HardwareModel_CHATTER_2
+#elif defined(STATION_G2)
+#define HW_VENDOR meshtastic_HardwareModel_STATION_G2
 #endif
 
 // -----------------------------------------------------------------------------

@@ -31,6 +31,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "error.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
+#include "graphics/ScreenFonts.h"
 #include "graphics/images.h"
 #include "input/TouchScreenImpl1.h"
 #include "main.h"
@@ -54,14 +55,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #if ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
-#endif
-
-#ifdef OLED_RU
-#include "fonts/OLEDDisplayFontsRU.h"
-#endif
-
-#ifdef OLED_UA
-#include "fonts/OLEDDisplayFontsUA.h"
 #endif
 
 using namespace meshtastic; /** @todo remove */
@@ -111,31 +104,7 @@ static uint16_t displayWidth, displayHeight;
 #define SCREEN_WIDTH displayWidth
 #define SCREEN_HEIGHT displayHeight
 
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)) &&                                \
-    !defined(DISPLAY_FORCE_SMALL_FONTS)
-// The screen is bigger so use bigger fonts
-#define FONT_SMALL ArialMT_Plain_16  // Height: 19
-#define FONT_MEDIUM ArialMT_Plain_24 // Height: 28
-#define FONT_LARGE ArialMT_Plain_24  // Height: 28
-#else
-#ifdef OLED_RU
-#define FONT_SMALL ArialMT_Plain_10_RU
-#else
-#ifdef OLED_UA
-#define FONT_SMALL ArialMT_Plain_10_UA
-#else
-#define FONT_SMALL ArialMT_Plain_10 // Height: 13
-#endif
-#endif
-#define FONT_MEDIUM ArialMT_Plain_16 // Height: 19
-#define FONT_LARGE ArialMT_Plain_24  // Height: 28
-#endif
-
-#define fontHeight(font) ((font)[1] + 1) // height is position 1
-
-#define FONT_HEIGHT_SMALL fontHeight(FONT_SMALL)
-#define FONT_HEIGHT_MEDIUM fontHeight(FONT_MEDIUM)
-#define FONT_HEIGHT_LARGE fontHeight(FONT_LARGE)
+#include "graphics/ScreenFonts.h"
 
 #define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
 
@@ -274,7 +243,7 @@ static void drawWelcomeScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
     if ((millis() / 10000) % 2) {
         display->drawString(x, y + FONT_HEIGHT_SMALL * 2 - 3, "Set the region using the");
         display->drawString(x, y + FONT_HEIGHT_SMALL * 3 - 3, "Meshtastic Android, iOS,");
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 4 - 3, "Flasher or CLI client.");
+        display->drawString(x, y + FONT_HEIGHT_SMALL * 4 - 3, "Web or CLI clients.");
     } else {
         display->drawString(x, y + FONT_HEIGHT_SMALL * 2 - 3, "Visit meshtastic.org");
         display->drawString(x, y + FONT_HEIGHT_SMALL * 3 - 3, "for more information.");
@@ -929,9 +898,12 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #elif defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(RAK14014)
     dispdev = new TFTDisplay(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
-#elif defined(USE_EINK)
+#elif defined(USE_EINK) && !defined(USE_EINK_DYNAMICDISPLAY)
     dispdev = new EInkDisplay(address.address, -1, -1, geometry,
                               (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+#elif defined(USE_EINK) && defined(USE_EINK_DYNAMICDISPLAY)
+    dispdev = new EInkDynamicDisplay(address.address, -1, -1, geometry,
+                                     (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
 #elif defined(USE_ST7567)
     dispdev = new ST7567Wire(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
