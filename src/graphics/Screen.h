@@ -47,6 +47,7 @@ class Screen
 #endif
 
 #include "EInkDisplay2.h"
+#include "EInkDynamicDisplay.h"
 #include "TFTDisplay.h"
 #include "TypedQueue.h"
 #include "commands.h"
