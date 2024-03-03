@@ -476,13 +476,6 @@ bool GPS::setup()
                     }
                 }
 
-                msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
-                _serial_gps->write(UBXscratch, msglen);
-                if (getACK(0x06, 0x09, 2000) != GNSS_RESPONSE_OK) {
-                    LOG_WARN("Unable to save GNSS module configuration.\n");
-                } else {
-                    LOG_INFO("GNSS module configuration saved!\n");
-                }
             } else {
                 // LOG_INFO("u-blox M10 hardware found.\n");
                 delay(1000);
@@ -574,6 +567,13 @@ bool GPS::setup()
                 // As the M10 has no flash, the best we can do to preserve the config is to set it in RAM and BBR.
                 // BBR will survive a restart, and power off for a while, but modules with small backup
                 // batteries or super caps will not retain the config for a long power off time.
+            }
+            msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
+            _serial_gps->write(UBXscratch, msglen);
+            if (getACK(0x06, 0x09, 2000) != GNSS_RESPONSE_OK) {
+                LOG_WARN("Unable to save GNSS module configuration.\n");
+            } else {
+                LOG_INFO("GNSS module configuration saved!\n");
             }
         }
         didSerialInit = true;
