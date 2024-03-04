@@ -5,6 +5,7 @@
 #include "input/UpDownInterruptImpl1.h"
 #include "input/cardKbI2cImpl.h"
 #include "input/kbMatrixImpl.h"
+#include "input/kbUsbImpl.h"
 #include "modules/AdminModule.h"
 #include "modules/AtakPluginModule.h"
 #include "modules/CannedMessageModule.h"
@@ -84,6 +85,10 @@ void setupModules()
 #ifdef INPUTBROKER_MATRIX_TYPE
         kbMatrixImpl = new KbMatrixImpl();
         kbMatrixImpl->init();
+#endif // INPUTBROKER_MATRIX_TYPE
+#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32C3
+        kbUsbImpl = new KbUsbImpl();
+        kbUsbImpl->init();
 #endif // INPUTBROKER_MATRIX_TYPE
 #endif // HAS_BUTTON
 #if ARCH_PORTDUINO
