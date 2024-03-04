@@ -63,28 +63,29 @@ static void initBrownout()
     // We don't bother with setting up brownout if soft device is disabled - because during production we always use softdevice
 }
 
-static bool bleOn = false;
 static const bool useSoftDevice = true; // Set to false for easier debugging
 
-void setBluetoothEnable(bool on)
+void setBluetoothEnable(bool enable)
 {
-    if (on != bleOn && config.bluetooth.enabled == true) {
-        if (on) {
+    if (enable && config.bluetooth.enabled) {
+        if (!useSoftDevice) {
+            LOG_INFO("DISABLING NRF52 BLUETOOTH WHILE DEBUGGING\n");
+        } else {
             if (!nrf52Bluetooth) {
-                if (!useSoftDevice)
-                    LOG_INFO("DISABLING NRF52 BLUETOOTH WHILE DEBUGGING\n");
-                else {
-                    nrf52Bluetooth = new NRF52Bluetooth();
-                    nrf52Bluetooth->setup();
+                LOG_DEBUG("Initializing NRF52 Bluetooth\n");
+                nrf52Bluetooth = new NRF52Bluetooth();
+                nrf52Bluetooth->setup();
 
-                    // We delay brownout init until after BLE because BLE starts soft device
-                    initBrownout();
-                }
+                // We delay brownout init until after BLE because BLE starts soft device
+                initBrownout();
+            } else {
+                nrf52Bluetooth->resumeAdverising();
             }
-        } else if (nrf52Bluetooth) {
+        }
+    } else {
+        if (nrf52Bluetooth) {
             nrf52Bluetooth->shutdown();
         }
-        bleOn = on;
     }
 }
 
