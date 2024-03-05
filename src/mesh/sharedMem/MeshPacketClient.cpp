@@ -9,12 +9,12 @@ MeshPacketClient::MeshPacketClient() {}
 
 bool MeshPacketClient::connect(void)
 {
-    PacketClient::connect();
+    return PacketClient::connect();
 }
 
 bool MeshPacketClient::disconnect(void)
 {
-    PacketClient::disconnect();
+    return PacketClient::disconnect();
 }
 
 bool MeshPacketClient::isConnected(void)
@@ -25,15 +25,16 @@ bool MeshPacketClient::isConnected(void)
 bool MeshPacketClient::send(meshtastic_ToRadio &&to)
 {
     static uint32_t id = 0;
-    PacketClient::sendPacket(DataPacket<meshtastic_ToRadio>(++id, to));
+    return PacketClient::sendPacket(DataPacket<meshtastic_ToRadio>(++id, to));
 }
 
 meshtastic_FromRadio MeshPacketClient::receive(void)
 {
-    auto p = receivePacket()->move();
-    if (p) {
-        return static_cast<DataPacket<meshtastic_FromRadio> *>(p.get())->getData();
-    } else {
-        return meshtastic_FromRadio();
+    if (hasData()) {
+        auto p = receivePacket();
+        if (p) {
+            return static_cast<DataPacket<meshtastic_FromRadio> *>(p->move().get())->getData();
+        }
     }
+    return meshtastic_FromRadio();
 }

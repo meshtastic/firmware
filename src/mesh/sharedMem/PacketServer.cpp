@@ -11,7 +11,6 @@ void PacketServer::begin(SharedQueue *_queue)
     queue = _queue;
 }
 
-#if 1
 Packet::PacketPtr PacketServer::receivePacket(void)
 {
     assert(queue);
@@ -19,21 +18,13 @@ Packet::PacketPtr PacketServer::receivePacket(void)
         return {nullptr};
     return queue->serverReceive();
 }
-#else // template variant with typed return values
-template <> Packet::PacketPtr PacketServer::receivePacket<Packet::PacketPtr>()
-{
-    assert(queue);
-    if (queue->clientQueueSize() == 0)
-        return {nullptr};
-    return queue->serverReceive();
-}
-#endif
 
 bool PacketServer::sendPacket(Packet &&p)
 {
     assert(queue);
-    if (queue->serverQueueSize() >= max_packet_queue_size)
+    if (queue->serverQueueSize() >= max_packet_queue_size) {
         return false;
+    }
     queue->serverSend(std::move(p));
     return true;
 }

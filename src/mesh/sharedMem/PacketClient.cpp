@@ -16,11 +16,13 @@ PacketClient::PacketClient() : queue(nullptr) {}
 bool PacketClient::connect(void)
 {
     is_connected = true;
+    return is_connected;
 }
 
 bool PacketClient::disconnect(void)
 {
     is_connected = false;
+    return is_connected;
 }
 
 bool PacketClient::isConnected(void)
@@ -35,6 +37,7 @@ int PacketClient::connect(SharedQueue *_queue)
     } else if (_queue != queue) {
         LOG_WARN("Client already connected.");
     }
+    is_connected = true;
     return queue->serverQueueSize();
 }
 

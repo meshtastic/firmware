@@ -31,6 +31,6 @@ class PacketClient : public IClientBase
     virtual int connect(SharedQueue *_queue);
 
   private:
-    bool is_connected = false;
+    volatile bool is_connected = false;
     SharedQueue *queue;
 };
