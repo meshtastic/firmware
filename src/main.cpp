@@ -152,6 +152,8 @@ std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySenso
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
 
+const char *firmware_version = optstr(APP_VERSION_SHORT);
+
 const char *getDeviceName()
 {
     uint8_t dmac[6];
