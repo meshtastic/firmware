@@ -52,7 +52,7 @@ template <typename T> class PacketQueue
     {
         std::lock_guard<std::mutex> lock(mutex);
         if (queue.empty())
-            return {nullptr}; // std::move(T());
+            return {nullptr};
         auto packet = queue.front()->move();
         queue.pop();
         return packet;

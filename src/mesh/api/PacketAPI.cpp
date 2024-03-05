@@ -18,8 +18,10 @@ int32_t PacketAPI::runOnce()
 
 bool PacketAPI::receivePacket(void)
 {
-    if (server->hasData()) {
+    bool data_received = false;
+    while (server->hasData()) {
         isConnected = true;
+        data_received = true;
 
         // TODO: think about redesign or drop class MeshPacketServer
         meshtastic_ToRadio *mr;
@@ -51,9 +53,8 @@ bool PacketAPI::receivePacket(void)
             LOG_ERROR("Error: unhandled meshtastic_ToRadio variant: %d\n", mr->which_payload_variant);
             break;
         }
-        return true;
-    } else
-        return false;
+    }
+    return data_received;
 }
 
 bool PacketAPI::sendPacket(void)
@@ -61,11 +62,13 @@ bool PacketAPI::sendPacket(void)
     // fill dummy buffer; we don't use it, we directly send the fromRadio structure
     uint32_t len = getFromRadio(txBuf);
     if (len != 0) {
+        static uint32_t id = 0;
+        fromRadioScratch.id = ++id;
         // TODO: think about redesign or drop class MeshPacketServer
         // if (typeid(*server) == typeid(MeshPacketServer))
         //    return dynamic_cast<MeshPacketServer*>(server)->sendPacket(fromRadioScratch);
         // else
-        return server->sendPacket(DataPacket<meshtastic_FromRadio>(fromRadioScratch.id, fromRadioScratch));
+        return server->sendPacket(DataPacket<meshtastic_FromRadio>(id, fromRadioScratch));
     } else
         return false;
 }
