@@ -7,8 +7,6 @@
 
 PaxcounterModule *paxcounterModule;
 
-void NullFunc(){};
-
 // paxcounterModule->sendInfo(NODENUM_BROADCAST);
 
 PaxcounterModule::PaxcounterModule()
@@ -19,9 +17,13 @@ PaxcounterModule::PaxcounterModule()
 
 bool PaxcounterModule::sendInfo(NodeNum dest)
 {
-    libpax_counter_count(&count_from_libpax);
-    LOG_INFO("(Sending): pax: wifi=%d; ble=%d; uptime=%d\n", count_from_libpax.wifi_count, count_from_libpax.ble_count,
+    if (paxcounterModule->reportedDataSent)
+        return false;
+
+    LOG_INFO("(Sending): pax: wifi=%d; ble=%d; uptime=%lu\n", count_from_libpax.wifi_count, count_from_libpax.ble_count,
              millis() / 1000);
+
+    paxcounterModule->reportedDataSent = true;
 
     meshtastic_Paxcount pl = meshtastic_Paxcount_init_default;
     pl.wifi = count_from_libpax.wifi_count;
@@ -55,6 +57,14 @@ meshtastic_MeshPacket *PaxcounterModule::allocReply()
     return allocDataProtobuf(pl);
 }
 
+void PaxcounterModule::handlePaxCounterReportRequest()
+{
+    // libpax_counter_count(&paxcounterModule->count_from_libpax);
+    LOG_INFO("(Reading): libPax reported new data: wifi=%d; ble=%d; uptime=%lu\n", paxcounterModule->count_from_libpax.wifi_count,
+             paxcounterModule->count_from_libpax.ble_count, millis() / 1000);
+    paxcounterModule->reportedDataSent = false;
+}
+
 int32_t PaxcounterModule::runOnce()
 {
     if (isActive()) {
@@ -76,12 +86,14 @@ int32_t PaxcounterModule::runOnce()
             libpax_update_config(&configuration);
 
             // internal processing initialization
-            libpax_counter_init(NullFunc, &count_from_libpax, UINT16_MAX, 1);
+            libpax_counter_init(handlePaxCounterReportRequest, &count_from_libpax,
+                                moduleConfig.paxcounter.paxcounter_update_interval, 0);
             libpax_counter_start();
         } else {
             sendInfo(NODENUM_BROADCAST);
         }
-        return getConfiguredOrDefaultMs(moduleConfig.paxcounter.paxcounter_update_interval, default_broadcast_interval_secs);
+        // we check every second if the counter had new data to send
+        return 1000;
     } else {
         return disable();
     }
