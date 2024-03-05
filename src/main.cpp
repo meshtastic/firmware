@@ -33,6 +33,7 @@
 // #include <driver/rtc_io.h>
 
 #ifdef ARCH_ESP32
+#include "freertosinc.h"
 #include "mesh/http/WebServer.h"
 #include "nimble/NimbleBluetooth.h"
 NimbleBluetooth *nimbleBluetooth;
@@ -89,10 +90,12 @@ NRF52Bluetooth *nrf52Bluetooth;
 AudioThread *audioThread;
 #endif
 
-#ifdef HAS_TFT
+#if HAS_TFT
 #include "DeviceScreen.h"
 #include "sharedMem/MeshPacketClient.h"
 #include "sharedMem/MeshPacketServer.h"
+
+void tft_task_handler(void *);
 
 DeviceScreen *deviceScreen = nullptr;
 #endif
@@ -362,10 +365,6 @@ void setup()
     // There needs to be a delay after power on, give LILYGO-KEYBOARD some startup time
     // otherwise keyboard and touch screen will not work
     delay(200);
-#endif
-#ifdef HAS_TFT
-    deviceScreen = &DeviceScreen::create();
-    deviceScreen->init(new MeshPacketClient);
 #endif
 
     // Currently only the tbeam has a PMU
@@ -637,6 +636,12 @@ void setup()
     SPI.setFrequency(4000000);
 #endif
 
+#if HAS_TFT
+    MeshPacketServer::init();
+    deviceScreen = &DeviceScreen::create();
+    deviceScreen->init(new MeshPacketClient);
+#endif
+
     // Initialize the screen first so we can show the logo while we start up everything else.
     screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
 
@@ -872,10 +877,6 @@ void setup()
     initApiServer(TCPPort);
 #endif
 
-#ifdef HAS_TFT
-    MeshPacketServer::init();
-#endif
-
     // Start airtime logger thread.
     airTime = new AirTime();
 
@@ -893,11 +894,18 @@ void setup()
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
     powerFSMthread = new PowerFSMThread();
+
+#if HAS_TFT
+#ifdef HAS_FREE_RTOS
+    xTaskCreatePinnedToCore(tft_task_handler, "tft", 4096, NULL, 9, NULL, 0);
+#endif
+#else
     setCPUFast(false); // 80MHz is fine for our slow peripherals
+#endif
 
 #ifdef ARDUINO_ARCH_ESP32
-    LOG_DEBUG("--- Free heap : %8d bytes ---\n", ESP.getFreeHeap());
-    LOG_DEBUG("--- PSRAM     : %8d bytes ---\n", ESP.getFreePsram());
+    LOG_DEBUG("Free heap  : %7d bytes\n", ESP.getFreeHeap());
+    LOG_DEBUG("Free PSRAM : %7d bytes\n", ESP.getFreePsram());
 #endif
 }
 
@@ -971,12 +979,16 @@ void loop()
 }
 
 #if HAS_TFT
-void tft_task_handler(void)
+void tft_task_handler(void *param = nullptr)
 {
     while (true) {
         if (deviceScreen)
             deviceScreen->task_handler();
-        delay(20);
+#ifdef HAS_FREE_RTOS
+        vTaskDelay((TickType_t)10);
+#else
+        delay(10);
+#endif
     }
 }
 #endif
