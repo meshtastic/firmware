@@ -83,6 +83,13 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     }
 
     nodeDB.updatePosition(getFrom(&mp), p);
+    if (channels.getByIndex(mp.channel).settings.has_module_settings) {
+        precision = channels.getByIndex(mp.channel).settings.module_settings.position_precision;
+    } else if (channels.getByIndex(mp.channel).role == meshtastic_Channel_Role_PRIMARY) {
+        precision = 32;
+    } else {
+        precision = 0;
+    }
 
     return false; // Let others look at this message also if they want
 }
@@ -109,10 +116,24 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     }
     localPosition.seq_number++;
 
+    if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0) {
+        LOG_WARN("Skipping position send because lat/lon are zero!\n");
+        return nullptr;
+    }
+
     // lat/lon are unconditionally included - IF AVAILABLE!
     LOG_DEBUG("Sending location with precision %i\n", precision);
-    p.latitude_i = localPosition.latitude_i & (INT32_MAX << (32 - precision));
-    p.longitude_i = localPosition.longitude_i & (INT32_MAX << (32 - precision));
+    if (precision < 32 && precision > 0) {
+        p.latitude_i = localPosition.latitude_i & (UINT32_MAX << (32 - precision));
+        p.longitude_i = localPosition.longitude_i & (UINT32_MAX << (32 - precision));
+
+        // We want the imprecise position to be the middle of the possible location, not
+        p.latitude_i += (1 << (31 - precision));
+        p.longitude_i += (1 << (31 - precision));
+    } else {
+        p.latitude_i = localPosition.latitude_i;
+        p.longitude_i = localPosition.longitude_i;
+    }
     p.precision_bits = precision;
     p.time = localPosition.time;
 
@@ -210,7 +231,13 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
         service.cancelSending(prevPacketId);
 
     // Set's the class precision value for this particular packet
-    precision = channels.getByIndex(channel).settings.module_settings.position_precision;
+    if (channels.getByIndex(channel).settings.has_module_settings) {
+        precision = channels.getByIndex(channel).settings.module_settings.position_precision;
+    } else if (channels.getByIndex(channel).role == meshtastic_Channel_Role_PRIMARY) {
+        precision = 32;
+    } else {
+        precision = 0;
+    }
 
     meshtastic_MeshPacket *p = allocReply();
     if (p == nullptr) {
@@ -350,7 +377,7 @@ struct SmartPosition PositionModule::getDistanceTraveledSinceLastSend(meshtastic
     LOG_DEBUG("currentPosition.latitude_i=%i, currentPosition.longitude_i=%i\n", lastGpsLatitude, lastGpsLongitude);
 
     LOG_DEBUG("--------SMART POSITION-----------------------------------\n");
-    LOG_DEBUG("hasTraveledOverThreshold=%i, distanceTraveled=%d, distanceThreshold=% u\n",
+    LOG_DEBUG("hasTraveledOverThreshold=%i, distanceTraveled=%f, distanceThreshold=%f\n",
               abs(distanceTraveledSinceLastSend) >= distanceTravelThreshold, abs(distanceTraveledSinceLastSend),
               distanceTravelThreshold);
 

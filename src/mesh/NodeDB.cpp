@@ -130,6 +130,9 @@ bool NodeDB::factoryReset()
     LOG_INFO("Performing factory reset!\n");
     // first, remove the "/prefs" (this removes most prefs)
     rmDir("/prefs");
+    if (FSCom.exists("/static/rangetest.csv") && !FSCom.remove("/static/rangetest.csv")) {
+        LOG_WARN("Could not remove rangetest.csv file\n");
+    }
     // second, install default state (this will deal with the duplicate mac address issue)
     installDefaultDeviceState();
     installDefaultConfig();
@@ -903,8 +906,8 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
     if (!lite) {
         if ((*numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < meshtastic_NodeInfoLite_size * 3)) {
             if (screen)
-                screen->print("warning: node_db_lite full! erasing oldest entry\n");
-            LOG_INFO("warning: node_db_lite full! erasing oldest entry\n");
+                screen->print("Warn: node database full!\nErasing oldest entry\n");
+            LOG_INFO("Warn: node database full!\nErasing oldest entry\n");
             // look for oldest node and erase it
             uint32_t oldest = UINT32_MAX;
             int oldestIndex = -1;

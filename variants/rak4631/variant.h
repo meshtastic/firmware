@@ -181,13 +181,13 @@ static const uint8_t SCK = PIN_SPI_SCK;
 
 /* Setup of the SX1262 LoRa module ( https://docs.rakwireless.com/Product-Categories/WisBlock/RAK4631/Datasheet/ )
 
-P1.10 	NSS 	SPI NSS (Arduino GPIO number 42)
-P1.11 	SCK 	SPI CLK (Arduino GPIO number 43)
-P1.12 	MOSI 	SPI MOSI (Arduino GPIO number 44)
-P1.13 	MISO 	SPI MISO (Arduino GPIO number 45)
-P1.14 	BUSY 	BUSY signal (Arduino GPIO number 46)
-P1.15 	DIO1 	DIO1 event interrupt (Arduino GPIO number 47)
-P1.06 	NRESET 	NRESET manual reset of the SX1262 (Arduino GPIO number 38)
+P1.10   NSS     SPI NSS (Arduino GPIO number 42)
+P1.11   SCK     SPI CLK (Arduino GPIO number 43)
+P1.12   MOSI    SPI MOSI (Arduino GPIO number 44)
+P1.13   MISO    SPI MISO (Arduino GPIO number 45)
+P1.14   BUSY    BUSY signal (Arduino GPIO number 46)
+P1.15   DIO1    DIO1 event interrupt (Arduino GPIO number 47)
+P1.06   NRESET  NRESET manual reset of the SX1262 (Arduino GPIO number 38)
 
 Important for successful SX1262 initialization:
 
@@ -219,6 +219,7 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define NRF_APM
 
 // enables 3.3V periphery like GPS or IO Module
+// Do not toggle this for GPS power savings
 #define PIN_3V3_EN (34)
 
 // RAK1910 GPS module

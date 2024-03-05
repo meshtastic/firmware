@@ -3,7 +3,7 @@
 #include <stm32wle5xx.h>
 #include <stm32wlxx_hal.h>
 
-void setBluetoothEnable(bool on) {}
+void setBluetoothEnable(bool enable) {}
 
 void playStartMelody() {}
 

@@ -57,7 +57,7 @@ meshtastic_MeshPacket *PaxcounterModule::allocReply()
 
 int32_t PaxcounterModule::runOnce()
 {
-    if (moduleConfig.paxcounter.enabled && !config.bluetooth.enabled && !config.network.wifi_enabled) {
+    if (isActive()) {
         if (firstTime) {
             firstTime = false;
             LOG_DEBUG(
@@ -86,5 +86,25 @@ int32_t PaxcounterModule::runOnce()
         return disable();
     }
 }
+
+#if HAS_SCREEN
+
+#include "graphics/ScreenFonts.h"
+
+void PaxcounterModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    char buffer[50];
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    display->drawString(x + 0, y + 0, "PAX");
+
+    libpax_counter_count(&count_from_libpax);
+
+    display->setTextAlignment(TEXT_ALIGN_CENTER);
+    display->setFont(FONT_SMALL);
+    display->drawStringf(display->getWidth() / 2 + x, 0 + y + 12, buffer, "WiFi: %d\nBLE: %d\nuptime: %ds",
+                         count_from_libpax.wifi_count, count_from_libpax.ble_count, millis() / 1000);
+}
+#endif // HAS_SCREEN
 
 #endif
