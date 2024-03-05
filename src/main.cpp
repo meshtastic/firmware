@@ -529,7 +529,6 @@ void setup()
     digitalWrite(LED_PIN, 1 ^ LED_INVERTED); // turn on for now
 #endif
 
-    
     // Hello
     LOG_INFO("Meshtastic hwvendor=%d, swver=%s\n", HW_VENDOR, optstr(APP_VERSION));
 
@@ -540,7 +539,6 @@ void setup()
 #ifdef ARCH_NRF52
     nrf52Setup();
 #endif
-
 
 #ifdef ARCH_RP2040
     rp2040Setup();
