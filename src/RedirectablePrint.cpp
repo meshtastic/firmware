@@ -72,6 +72,10 @@ size_t RedirectablePrint::vprintf(const char *format, va_list arg)
 
 size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
 {
+    // Prüft, ob die Serial-Logs aktiviert sind. Wenn nicht, wird die Funktion frühzeitig beendet.
+    if (!moduleConfig.serial.enabled) {
+        return 0; // Beendet die Funktion frühzeitig, da keine Logs gesendet werden sollen.
+    }
 #ifdef ARCH_PORTDUINO
     if (settingsMap[logoutputlevel] < level_debug && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0)
         return 0;
