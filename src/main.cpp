@@ -529,6 +529,7 @@ void setup()
     digitalWrite(LED_PIN, 1 ^ LED_INVERTED); // turn on for now
 #endif
 
+    
     // Hello
     LOG_INFO("Meshtastic hwvendor=%d, swver=%s\n", HW_VENDOR, optstr(APP_VERSION));
 
@@ -539,6 +540,7 @@ void setup()
 #ifdef ARCH_NRF52
     nrf52Setup();
 #endif
+
 
 #ifdef ARCH_RP2040
     rp2040Setup();
@@ -677,6 +679,11 @@ void setup()
     // make analog PA vs not PA switch on SX126x eval board work properly
     pinMode(SX126X_ANT_SW, OUTPUT);
     digitalWrite(SX126X_ANT_SW, 1);
+#endif
+
+#ifdef CANARYONE
+    // This is required to give the GPS time to start up 
+    delay(500);
 #endif
 
 #ifdef ARCH_PORTDUINO
