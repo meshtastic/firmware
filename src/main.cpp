@@ -681,10 +681,9 @@ void setup()
     digitalWrite(SX126X_ANT_SW, 1);
 #endif
 
-#ifdef CANARYONE
-    // This is required to give the GPS time to start up as this board has a separate power supply 
-    // for the GPS and Radio which is not turned on until initVariant() is called
-    delay(100);
+#ifdef PIN_PWR_DELAY_MS
+    // This may be required to give the peripherals time to power up.
+    delay(PIN_PWR_DELAY_MS);
 #endif
 
 #ifdef ARCH_PORTDUINO
