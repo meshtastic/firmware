@@ -13,9 +13,12 @@
 class PaxcounterModule : private concurrency::OSThread, public ProtobufModule<meshtastic_Paxcount>
 {
     bool firstTime = true;
+    bool reportedDataSent = true;
 
   public:
     PaxcounterModule();
+
+    static void handlePaxCounterReportRequest();
 
   protected:
     struct count_payload_t count_from_libpax = {0, 0, 0};
