@@ -84,10 +84,10 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
     adafruitDisplay->nextPage();
 #endif
 
-#ifndef EINK_NO_HIBERNATE // Only hibernate if controller IC will preserve image memory
-    // Put screen to sleep to save power (possibly not necessary because we already did poweroff inside of display)
+    // Power off display hardware
+    // Most models: deep sleep.
+    // Wireless Paper V1.1: power off only. Deep sleep clears memory - problems with fast refresh
     adafruitDisplay->hibernate();
-#endif
 
     LOG_DEBUG("done\n");
     return true;
