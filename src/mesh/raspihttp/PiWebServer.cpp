@@ -35,6 +35,7 @@ mail:   marchammermann@googlemail.com
 
 */
 #ifdef PORTDUINO_LINUX_HARDWARE
+#if __has_include(<ulfius.h>)
 #include "PiWebServer.h"
 #include "NodeDB.h"
 #include "PhoneAPI.h"
@@ -525,4 +526,5 @@ PiWebServerThread::~PiWebServerThread()
     LOG_INFO("End framework");
 }
 
+#endif
 #endif

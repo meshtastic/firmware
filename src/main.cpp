@@ -858,7 +858,9 @@ void setup()
 #endif
 
 #ifdef ARCH_PORTDUINO
+#if __has_include(<ulfius.h>)
     piwebServerThread = new PiWebServerThread();
+#endif
     initApiServer(TCPPort);
 #endif
 

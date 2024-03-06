@@ -1,5 +1,6 @@
 #pragma once
 #ifdef PORTDUINO_LINUX_HARDWARE
+#if __has_include(<ulfius.h>)
 #include "PhoneAPI.h"
 #include "ulfius-cfg.h"
 #include "ulfius.h"
@@ -56,4 +57,5 @@ class HttpAPI : public PhoneAPI
 
 extern PiWebServerThread *piwebServerThread;
 
+#endif
 #endif
