@@ -7,7 +7,18 @@
 
 PaxcounterModule *paxcounterModule;
 
-// paxcounterModule->sendInfo(NODENUM_BROADCAST);
+/**
+ * Callback function for libpax.
+ * We only clear our sent flag here, since this function is called from another thread, so we
+ * cannot send to the mesh directly.
+ */
+void PaxcounterModule::handlePaxCounterReportRequest()
+{
+    // The libpax library already updated our data structure, just before invoking this callback.
+    LOG_INFO("PaxcounterModule: libpax reported new data: wifi=%d; ble=%d; uptime=%lu\n",
+             paxcounterModule->count_from_libpax.wifi_count, paxcounterModule->count_from_libpax.ble_count, millis() / 1000);
+    paxcounterModule->reportedDataSent = false;
+}
 
 PaxcounterModule::PaxcounterModule()
     : concurrency::OSThread("PaxcounterModule"),
@@ -15,15 +26,20 @@ PaxcounterModule::PaxcounterModule()
 {
 }
 
+/**
+ * Send the Pax information to the mesh if we got new data from libpax.
+ * This is called periodically from our runOnce() method and will actually send the data to the mesh
+ * if libpax updated it since the last transmission through the callback.
+ * @param dest - destination node (usually NODENUM_BROADCAST)
+ * @return false if sending is unnecessary, true if information was sent
+ */
 bool PaxcounterModule::sendInfo(NodeNum dest)
 {
     if (paxcounterModule->reportedDataSent)
         return false;
 
-    LOG_INFO("(Sending): pax: wifi=%d; ble=%d; uptime=%lu\n", count_from_libpax.wifi_count, count_from_libpax.ble_count,
-             millis() / 1000);
-
-    paxcounterModule->reportedDataSent = true;
+    LOG_INFO("PaxcounterModule: sending pax info wifi=%d; ble=%d; uptime=%lu\n", count_from_libpax.wifi_count,
+             count_from_libpax.ble_count, millis() / 1000);
 
     meshtastic_Paxcount pl = meshtastic_Paxcount_init_default;
     pl.wifi = count_from_libpax.wifi_count;
@@ -33,9 +49,12 @@ bool PaxcounterModule::sendInfo(NodeNum dest)
     meshtastic_MeshPacket *p = allocDataProtobuf(pl);
     p->to = dest;
     p->decoded.want_response = false;
-    p->priority = meshtastic_MeshPacket_Priority_MIN;
+    p->priority = meshtastic_MeshPacket_Priority_DEFAULT;
 
     service.sendToMesh(p, RX_SRC_LOCAL, true);
+
+    paxcounterModule->reportedDataSent = true;
+
     return true;
 }
 
@@ -55,14 +74,6 @@ meshtastic_MeshPacket *PaxcounterModule::allocReply()
     pl.ble = count_from_libpax.ble_count;
     pl.uptime = millis() / 1000;
     return allocDataProtobuf(pl);
-}
-
-void PaxcounterModule::handlePaxCounterReportRequest()
-{
-    // libpax_counter_count(&paxcounterModule->count_from_libpax);
-    LOG_INFO("(Reading): libPax reported new data: wifi=%d; ble=%d; uptime=%lu\n", paxcounterModule->count_from_libpax.wifi_count,
-             paxcounterModule->count_from_libpax.ble_count, millis() / 1000);
-    paxcounterModule->reportedDataSent = false;
 }
 
 int32_t PaxcounterModule::runOnce()
