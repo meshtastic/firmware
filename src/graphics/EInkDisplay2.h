@@ -46,6 +46,13 @@ class EInkDisplay : public OLEDDisplay
     virtual bool forceDisplay(uint32_t msecLimit = 1000);
 
     /**
+     * Run any code needed to complete an update, after the physical refresh has completed.
+     * Split from forceDisplay(), to enable async refresh in derived EInkDynamicDisplay class.
+     *
+     */
+    virtual void endUpdate();
+
+    /**
      * shim to make the abstraction happy
      *
      */
