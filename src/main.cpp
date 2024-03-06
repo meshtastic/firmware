@@ -859,7 +859,9 @@ void setup()
 
 #ifdef ARCH_PORTDUINO
 #if __has_include(<ulfius.h>)
-    piwebServerThread = new PiWebServerThread();
+    if (settingsMap[webserverport] != -1) {
+        piwebServerThread = new PiWebServerThread();
+    }
 #endif
     initApiServer(TCPPort);
 #endif

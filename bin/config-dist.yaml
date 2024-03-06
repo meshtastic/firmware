@@ -119,5 +119,5 @@ Logging:
   LogLevel: info # debug, info, warn, error
 
 Webserver:
-  Port: 9001 # Port for Webserver & Webservices
-  RootPath: /home/user/web # Root Dir of WebServer
+#  Port: 443 # Port for Webserver & Webservices
+#  RootPath: /usr/share/doc/meshtasticd/web # Root Dir of WebServer
