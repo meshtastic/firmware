@@ -44,6 +44,11 @@ class EInkDynamicDisplay : public EInkDisplay
     };
     enum reasonTypes : uint8_t { // How was the decision reached
         NO_OBJECTIONS,
+        ASYNC_REFRESH_BLOCKED_DEMANDFAST,
+        ASYNC_REFRESH_BLOCKED_COSMETIC,
+        ASYNC_REFRESH_BLOCKED_RESPONSIVE,
+        ASYNC_REFRESH_BLOCKED_BACKGROUND,
+        DISPLAY_NOT_READY_FOR_FULL,
         EXCEEDED_RATELIMIT_FAST,
         EXCEEDED_RATELIMIT_FULL,
         FLAGGED_COSMETIC,
@@ -64,7 +69,7 @@ class EInkDynamicDisplay : public EInkDisplay
     bool update();                // Trigger the display update - determine mode, then call base class
 
     // Checks as part of determineMode()
-    void checkWasFlooded();               // Was the previous frame skipped for exceeding EINK_LIMIT_RATE_RESPONSIVE_SEC?
+    void checkForPromotion();             // Was a frame skipped (rate, display busy) that should have been a FAST refresh?
     void checkRateLimiting();             // Is this frame too soon?
     void checkCosmetic();                 // Was the COSMETIC flag set?
     void checkDemandingFast();            // Was the DEMAND_FAST flag set?
@@ -98,6 +103,14 @@ class EInkDynamicDisplay : public EInkDisplay
     void resetGhostPixelTracking(); // Clear the dirty pixels array. Call when full-refresh cleans the display.
     uint8_t *dirtyPixels;           // Any pixels that have been black since last full-refresh (dynamically allocated mem)
     uint32_t ghostPixelCount = 0;   // Number of pixels with problematic ghosting. Retained here for LOG_DEBUG use
+#endif
+
+    // Conditional - async full refresh - only with modified meshtastic/GxEPD2
+#if defined(HAS_EINK_ASYNCFULL)
+    void checkAsyncFullRefresh(); // Check the status of "async full-refresh"; run the post-update code if the hardware is ready
+    void endOrDetach();           // Run the post-update code, or delegate it off to checkAsyncFullRefresh()
+    void endUpdate() override {}  // Disable base-class behavior of running post-update immediately after forceDisplay()
+    bool asyncRefreshRunning = false; // Flag, checked by checkAsyncFullRefresh()
 #endif
 };
 
