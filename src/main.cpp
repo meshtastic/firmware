@@ -69,6 +69,7 @@ NRF52Bluetooth *nrf52Bluetooth;
 
 #ifdef ARCH_PORTDUINO
 #include "linux/LinuxHardwareI2C.h"
+#include "mesh/raspihttp/PiWebServer.h"
 #include "platform/portduino/PortduinoGlue.h"
 #include <fstream>
 #include <iostream>
@@ -876,6 +877,11 @@ void setup()
 #endif
 
 #ifdef ARCH_PORTDUINO
+#if __has_include(<ulfius.h>)
+    if (settingsMap[webserverport] != -1) {
+        piwebServerThread = new PiWebServerThread();
+    }
+#endif
     initApiServer(TCPPort);
 #endif
 
