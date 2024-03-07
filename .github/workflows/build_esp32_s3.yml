@@ -34,6 +34,7 @@ jobs:
           sed -i '/DDEBUG_HEAP/d' ./arch/esp32/esp32.ini
           sed -i '/DDEBUG_HEAP/d' ./arch/esp32/esp32s2.ini
           sed -i '/DDEBUG_HEAP/d' ./arch/esp32/esp32s3.ini
+          sed -i '/DDEBUG_HEAP/d' ./arch/esp32/esp32c3.ini
       - name: Build ESP32
         run: bin/build-esp32.sh ${{ inputs.board }}
 
