@@ -699,6 +699,11 @@ void setup()
     digitalWrite(SX126X_ANT_SW, 1);
 #endif
 
+#ifdef PIN_PWR_DELAY_MS
+    // This may be required to give the peripherals time to power up.
+    delay(PIN_PWR_DELAY_MS);
+#endif
+
 #ifdef ARCH_PORTDUINO
     if (settingsMap[use_sx1262]) {
         if (!rIf) {

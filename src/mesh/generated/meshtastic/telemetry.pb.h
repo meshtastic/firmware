@@ -41,7 +41,9 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* PM2.5 air quality sensor */
     meshtastic_TelemetrySensorType_PMSA003I = 13,
     /* INA3221 3 Channel Voltage / Current Sensor */
-    meshtastic_TelemetrySensorType_INA3221 = 14
+    meshtastic_TelemetrySensorType_INA3221 = 14,
+    /* BMP085/BMP180 High accuracy temperature and pressure (older Version of BMP280) */
+    meshtastic_TelemetrySensorType_BMP085 = 15
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -141,8 +143,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_INA3221
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_INA3221+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_BMP085
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_BMP085+1))
 
 
 
