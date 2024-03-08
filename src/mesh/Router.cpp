@@ -132,9 +132,10 @@ meshtastic_MeshPacket *Router::allocForSending()
 /**
  * Send an ack or a nak packet back towards whoever sent idFrom
  */
-void Router::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex)
+void Router::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopStart,
+                        uint8_t hopLimit)
 {
-    routingModule->sendAckNak(err, to, idFrom, chIndex);
+    routingModule->sendAckNak(err, to, idFrom, chIndex, hopStart, hopLimit);
 }
 
 void Router::abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p)
@@ -239,6 +240,10 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     // Up until this point we might have been using 0 for the from address (if it started with the phone), but when we send over
     // the lora we need to make sure we have replaced it with our local address
     p->from = getFrom(p);
+
+    // If we are the original transmitter, set the hop limit with which we start
+    if (p->from == getNodeNum())
+        p->hop_start = p->hop_limit;
 
     // If the packet hasn't yet been encrypted, do so now (it might already be encrypted if we are just forwarding it)
 
