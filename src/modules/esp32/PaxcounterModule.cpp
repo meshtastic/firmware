@@ -18,6 +18,7 @@ void PaxcounterModule::handlePaxCounterReportRequest()
     LOG_INFO("PaxcounterModule: libpax reported new data: wifi=%d; ble=%d; uptime=%lu\n",
              paxcounterModule->count_from_libpax.wifi_count, paxcounterModule->count_from_libpax.ble_count, millis() / 1000);
     paxcounterModule->reportedDataSent = false;
+    paxcounterModule->setIntervalFromNow(0);
 }
 
 PaxcounterModule::PaxcounterModule()
@@ -49,7 +50,7 @@ bool PaxcounterModule::sendInfo(NodeNum dest)
     meshtastic_MeshPacket *p = allocDataProtobuf(pl);
     p->to = dest;
     p->decoded.want_response = false;
-    p->priority = meshtastic_MeshPacket_Priority_DEFAULT;
+    p->priority = meshtastic_MeshPacket_Priority_MIN;
 
     service.sendToMesh(p, RX_SRC_LOCAL, true);
 
@@ -103,8 +104,7 @@ int32_t PaxcounterModule::runOnce()
         } else {
             sendInfo(NODENUM_BROADCAST);
         }
-        // we check every second if the counter had new data to send
-        return 1000;
+        return getConfiguredOrDefaultMs(moduleConfig.paxcounter.paxcounter_update_interval, default_broadcast_interval_secs);
     } else {
         return disable();
     }
