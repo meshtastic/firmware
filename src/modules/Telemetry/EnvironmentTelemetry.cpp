@@ -16,12 +16,14 @@
 // Sensors
 #include "Sensor/BME280Sensor.h"
 #include "Sensor/BME680Sensor.h"
+#include "Sensor/BMP085Sensor.h"
 #include "Sensor/BMP280Sensor.h"
 #include "Sensor/LPS22HBSensor.h"
 #include "Sensor/MCP9808Sensor.h"
 #include "Sensor/SHT31Sensor.h"
 #include "Sensor/SHTC3Sensor.h"
 
+BMP085Sensor bmp085Sensor;
 BMP280Sensor bmp280Sensor;
 BME280Sensor bme280Sensor;
 BME680Sensor bme680Sensor;
@@ -67,6 +69,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
             LOG_INFO("Environment Telemetry: Initializing\n");
             // it's possible to have this module enabled, only for displaying values on the screen.
             // therefore, we should only enable the sensor loop if measurement is also enabled
+            if (bmp085Sensor.hasSensor())
+                result = bmp085Sensor.runOnce();
             if (bmp280Sensor.hasSensor())
                 result = bmp280Sensor.runOnce();
             if (bme280Sensor.hasSensor())
@@ -219,6 +223,8 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         valid = lps22hbSensor.getMetrics(&m);
     if (shtc3Sensor.hasSensor())
         valid = shtc3Sensor.getMetrics(&m);
+    if (bmp085Sensor.hasSensor())
+        valid = bmp085Sensor.getMetrics(&m);
     if (bmp280Sensor.hasSensor())
         valid = bmp280Sensor.getMetrics(&m);
     if (bme280Sensor.hasSensor())
