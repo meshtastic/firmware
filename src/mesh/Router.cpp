@@ -297,7 +297,7 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
         return false;
 
     if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY &&
-        !nodeDB.getMeshNode(p->from)->has_user) {
+        (nodeDB.getMeshNode(p->from) == NULL || !nodeDB.getMeshNode(p->from)->has_user)) {
         LOG_DEBUG("Node 0x%x not in NodeDB. Rebroadcast mode KNOWN_ONLY will ignore packet\n", p->from);
         return false;
     }
