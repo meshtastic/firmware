@@ -33,7 +33,10 @@ enum configNames {
     displayOffsetY,
     displayInvert,
     keyboardDevice,
-    logoutputlevel
+    logoutputlevel,
+    webserver,
+    webserverport,
+    webserverrootpath
 };
 enum { no_screen, st7789, st7735, st7735s, ili9341 };
 enum { no_touchscreen, xpt2046, stmpe610 };
