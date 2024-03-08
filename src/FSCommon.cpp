@@ -34,30 +34,30 @@ SPIClass SPI1(HSPI);
 bool copyFile(const char *from, const char *to)
 {
 #if defined(ARCH_STM32WL) || defined(ARCH_APOLLO3)
-  unsigned char cbuffer[2048];
+    unsigned char cbuffer[2048];
 
-  // Var to hold the result of actions
-  OSFS::result r;
+    // Var to hold the result of actions
+    OSFS::result r;
 
-  r = OSFS::getFile(from, cbuffer);
+    r = OSFS::getFile(from, cbuffer);
 
-  if (r == notfound) {
-  	LOG_ERROR("Failed to open source file %s\n", from);
-    return false;
-  } else if (r == noerr) {
-    r = OSFS::newFile(to, cbuffer, true);
-    if (r == noerr) {
-      return true;
+    if (r == notfound) {
+        LOG_ERROR("Failed to open source file %s\n", from);
+        return false;
+    } else if (r == noerr) {
+        r = OSFS::newFile(to, cbuffer, true);
+        if (r == noerr) {
+            return true;
+        } else {
+            LOG_ERROR("OSFS Error %d\n", r);
+            return false;
+        }
+
     } else {
-    	LOG_ERROR("OSFS Error %d\n", r);
-      return false;
+        LOG_ERROR("OSFS Error %d\n", r);
+        return false;
     }
-
-  } else {
-  	LOG_ERROR("OSFS Error %d\n", r);
-    return false;
-  }
-return true;
+    return true;
 
 #elif defined(FSCom)
     unsigned char cbuffer[16];
