@@ -119,4 +119,10 @@ class EInkDynamicDisplay : public EInkDisplay
 #endif
 };
 
+// Tidier calls to addFrameFlag() from outside class
+#define EINK_ADD_FRAMEFLAG(display, flag) static_cast<EInkDynamicDisplay *>(display)->addFrameFlag(EInkDynamicDisplay::flag)
+
+#else // !USE_EINK_DYNAMICDISPLAY
+// Dummy-macro, removes the need for include guards
+#define EINK_ADD_FRAMEFLAG(display, flag)
 #endif
