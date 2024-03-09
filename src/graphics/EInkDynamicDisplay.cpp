@@ -104,6 +104,7 @@ bool EInkDynamicDisplay::update()
         endOrDetach(); // Either endUpdate() right now (fast refresh), or set the async flag (full refresh)
 #endif
 
+    storeAndReset();        // Store the result of this loop for next time
     return refreshApproved; // (Unutilized) Base class promises to return true if update ran
 }
 
@@ -117,10 +118,8 @@ bool EInkDynamicDisplay::determineMode()
     checkRateLimiting();
 
     // If too soon for a new frame, or display busy, abort early
-    if (refresh == SKIPPED) {
-        storeAndReset();
+    if (refresh == SKIPPED)
         return false; // No refresh
-    }
 
     // -- New frame is due --
 
@@ -152,12 +151,12 @@ bool EInkDynamicDisplay::determineMode()
 #endif
 
     // Return - call a refresh or not?
-    if (refresh == SKIPPED) {
-        storeAndReset();
+    if (refresh == SKIPPED)
         return false; // Don't trigger a refresh
-    } else {
-        storeAndReset();
+    else
         return true; // Do trigger a refresh
+}
+
     }
 }
 
@@ -335,6 +334,7 @@ void EInkDynamicDisplay::hashImage()
 // Store the results of determineMode() for future use, and reset for next call
 void EInkDynamicDisplay::storeAndReset()
 {
+    previousFrameFlags = frameFlags;
     previousRefresh = refresh;
     previousReason = reason;
 

@@ -82,13 +82,14 @@ class EInkDynamicDisplay : public EInkDisplay
     void storeAndReset();     // Keep results of determineMode() for later, tidy-up for next call
 
     // What we are determining for this frame
-    frameFlagTypes frameFlags = BACKGROUND; // Frame type(s) - determineMode() input
+    frameFlagTypes frameFlags = BACKGROUND; // Frame characteristics - determineMode() input
     refreshTypes refresh = UNSPECIFIED;     // Refresh type - determineMode() output
     reasonTypes reason = NO_OBJECTIONS;     // Reason - why was refresh type used
 
     // What happened last time determineMode() ran
-    refreshTypes previousRefresh = UNSPECIFIED; // (Previous) Outcome
-    reasonTypes previousReason = NO_OBJECTIONS; // (Previous) Reason
+    frameFlagTypes previousFrameFlags = BACKGROUND; // (Previous) Frame flags
+    refreshTypes previousRefresh = UNSPECIFIED;     // (Previous) Outcome
+    reasonTypes previousReason = NO_OBJECTIONS;     // (Previous) Reason
 
     uint32_t previousRunMs = -1;       // When did determineMode() last run (rather than rejecting for rate-limiting)
     uint32_t imageHash = 0;            // Hash of the current frame. Don't bother updating if nothing has changed!
