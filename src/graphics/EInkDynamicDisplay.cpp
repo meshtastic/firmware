@@ -241,7 +241,7 @@ void EInkDynamicDisplay::checkCosmetic()
     if (frameFlags & COSMETIC) {
         refresh = FULL;
         reason = FLAGGED_COSMETIC;
-        LOG_DEBUG("refresh=FULL, reason=FLAGGED_COSMETIC\n");
+        LOG_DEBUG("refresh=FULL, reason=FLAGGED_COSMETIC, frameFlags=0x%x\n", frameFlags);
     }
 }
 
@@ -256,7 +256,7 @@ void EInkDynamicDisplay::checkDemandingFast()
     if (frameFlags & DEMAND_FAST) {
         refresh = FAST;
         reason = FLAGGED_DEMAND_FAST;
-        LOG_DEBUG("refresh=FAST, reason=FLAGGED_DEMAND_FAST\n");
+        LOG_DEBUG("refresh=FAST, reason=FLAGGED_DEMAND_FAST, frameFlags=0x%x\n", frameFlags);
     }
 }
 
@@ -276,7 +276,7 @@ void EInkDynamicDisplay::checkFrameMatchesPrevious()
     if (frameFlags == BACKGROUND && fastRefreshCount > 0) {
         refresh = FULL;
         reason = REDRAW_WITH_FULL;
-        LOG_DEBUG("refresh=FULL, reason=REDRAW_WITH_FULL\n");
+        LOG_DEBUG("refresh=FULL, reason=REDRAW_WITH_FULL, frameFlags=0x%x\n", frameFlags);
         return;
     }
 #endif
@@ -298,7 +298,7 @@ void EInkDynamicDisplay::checkConsecutiveFastRefreshes()
     if (fastRefreshCount >= EINK_LIMIT_FASTREFRESH) {
         refresh = FULL;
         reason = EXCEEDED_LIMIT_FASTREFRESH;
-        LOG_DEBUG("refresh=FULL, reason=EXCEEDED_LIMIT_FASTREFRESH\n");
+        LOG_DEBUG("refresh=FULL, reason=EXCEEDED_LIMIT_FASTREFRESH, frameFlags=0x%x\n", frameFlags);
     }
 }
 
@@ -313,7 +313,8 @@ void EInkDynamicDisplay::checkFastRequested()
         // If we want BACKGROUND to use fast. (FULL only when a limit is hit)
         refresh = FAST;
         reason = BACKGROUND_USES_FAST;
-        LOG_DEBUG("refresh=FAST, reason=BACKGROUND_USES_FAST, fastRefreshCount=%lu\n", fastRefreshCount);
+        LOG_DEBUG("refresh=FAST, reason=BACKGROUND_USES_FAST, fastRefreshCount=%lu, frameFlags=0x%x\n", fastRefreshCount,
+                  frameFlags);
 #else
         // If we do want to use FULL for BACKGROUND updates
         refresh = FULL;
@@ -326,7 +327,7 @@ void EInkDynamicDisplay::checkFastRequested()
     if (frameFlags & RESPONSIVE) {
         refresh = FAST;
         reason = NO_OBJECTIONS;
-        LOG_DEBUG("refresh=FAST, reason=NO_OBJECTIONS, fastRefreshCount=%lu\n", fastRefreshCount);
+        LOG_DEBUG("refresh=FAST, reason=NO_OBJECTIONS, fastRefreshCount=%lu, frameFlags=0x%x\n", fastRefreshCount, frameFlags);
     }
 }
 
@@ -407,7 +408,7 @@ void EInkDynamicDisplay::checkExcessiveGhosting()
     if (ghostPixelCount > EINK_LIMIT_GHOSTING_PX) {
         refresh = FULL;
         reason = EXCEEDED_GHOSTINGLIMIT;
-        LOG_DEBUG("refresh=FULL, reason=EXCEEDED_GHOSTINGLIMIT\n");
+        LOG_DEBUG("refresh=FULL, reason=EXCEEDED_GHOSTINGLIMIT, frameFlags=0x%x\n", frameFlags);
     }
 }
 
