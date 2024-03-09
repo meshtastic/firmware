@@ -232,10 +232,11 @@ void setup()
 
     initDeepSleep();
 
-    // Testing this fix für erratic T-Echo boot behaviour
-#if defined(TTGO_T_ECHO) && defined(PIN_EINK_PWR_ON)
-    pinMode(PIN_EINK_PWR_ON, OUTPUT);
-    digitalWrite(PIN_EINK_PWR_ON, HIGH);
+    // power on peripherals
+#if defined(TTGO_T_ECHO) && defined(PIN_POWER_EN)
+    pinMode(PIN_POWER_EN, OUTPUT);
+    digitalWrite(PIN_POWER_EN, HIGH);
+    digitalWrite(PIN_POWER_EN1, INPUT);
 #endif
 
 #if defined(VEXT_ENABLE_V03)
