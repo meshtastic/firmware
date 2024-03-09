@@ -655,6 +655,9 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
                 if ((int)decoded->VDOP) {
                     msgPayload["VDOP"] = new JSONValue((int)decoded->VDOP);
                 }
+                if ((int)decoded->precision_bits) {
+                    msgPayload["precision_bits"] = new JSONValue((int)decoded->precision_bits);
+                }
                 jsonObj["payload"] = new JSONValue(msgPayload);
             } else {
                 LOG_ERROR("Error decoding protobuf for position message!\n");
