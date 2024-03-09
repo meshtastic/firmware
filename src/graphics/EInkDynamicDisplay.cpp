@@ -130,11 +130,11 @@ bool EInkDynamicDisplay::determineMode()
     // Once mode determined, any remaining checks will bypass
     checkCosmetic();
     checkDemandingFast();
-    checkConsecutiveFastRefreshes();
 #ifdef EINK_LIMIT_GHOSTING_PX
     checkExcessiveGhosting();
 #endif
     checkFrameMatchesPrevious();
+    checkConsecutiveFastRefreshes();
     checkFastRequested();
 
     if (refresh == UNSPECIFIED)
@@ -244,21 +244,6 @@ void EInkDynamicDisplay::checkDemandingFast()
     }
 }
 
-// Have too many fast-refreshes occured consecutively, since last full refresh?
-void EInkDynamicDisplay::checkConsecutiveFastRefreshes()
-{
-    // If a decision was already reached, don't run the check
-    if (refresh != UNSPECIFIED)
-        return;
-
-    // If too many FAST refreshes consecutively - force a FULL refresh
-    if (fastRefreshCount >= EINK_LIMIT_FASTREFRESH) {
-        refresh = FULL;
-        reason = EXCEEDED_LIMIT_FASTREFRESH;
-        LOG_DEBUG("refresh=FULL, reason=EXCEEDED_LIMIT_FASTREFRESH\n");
-    }
-}
-
 // Does the new frame match the currently displayed image?
 void EInkDynamicDisplay::checkFrameMatchesPrevious()
 {
@@ -283,7 +268,22 @@ void EInkDynamicDisplay::checkFrameMatchesPrevious()
     // Not redrawn, not COSMETIC, not DEMAND_FAST
     refresh = SKIPPED;
     reason = FRAME_MATCHED_PREVIOUS;
-    LOG_DEBUG("refresh=SKIPPED, reason=FRAME_MATCHED_PREVIOUS\n");
+    LOG_DEBUG("refresh=SKIPPED, reason=FRAME_MATCHED_PREVIOUS, frameFlags=0x%x\n", frameFlags);
+}
+
+// Have too many fast-refreshes occured consecutively, since last full refresh?
+void EInkDynamicDisplay::checkConsecutiveFastRefreshes()
+{
+    // If a decision was already reached, don't run the check
+    if (refresh != UNSPECIFIED)
+        return;
+
+    // If too many FAST refreshes consecutively - force a FULL refresh
+    if (fastRefreshCount >= EINK_LIMIT_FASTREFRESH) {
+        refresh = FULL;
+        reason = EXCEEDED_LIMIT_FASTREFRESH;
+        LOG_DEBUG("refresh=FULL, reason=EXCEEDED_LIMIT_FASTREFRESH\n");
+    }
 }
 
 // No objections, we can perform fast-refresh, if desired
