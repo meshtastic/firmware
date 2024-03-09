@@ -25,19 +25,19 @@ EInkDynamicDisplay::~EInkDynamicDisplay()
 // Screen requests a BACKGROUND frame
 void EInkDynamicDisplay::display()
 {
-    setFrameFlag(BACKGROUND);
+    addFrameFlag(BACKGROUND);
     update();
 }
 
 // Screen requests a RESPONSIVE frame
 bool EInkDynamicDisplay::forceDisplay(uint32_t msecLimit)
 {
-    setFrameFlag(RESPONSIVE);
+    addFrameFlag(RESPONSIVE);
     return update(); // (Unutilized) Base class promises to return true if update ran
 }
 
 // Add flag for the next frame
-void EInkDynamicDisplay::setFrameFlag(frameFlagTypes flag)
+void EInkDynamicDisplay::addFrameFlag(frameFlagTypes flag)
 {
     // OR the new flag into the existing flags
     this->frameFlags = (frameFlagTypes)(this->frameFlags | flag);
@@ -169,14 +169,14 @@ void EInkDynamicDisplay::checkForPromotion()
 
     switch (previousReason) {
     case ASYNC_REFRESH_BLOCKED_DEMANDFAST:
-        setFrameFlag(DEMAND_FAST);
+        addFrameFlag(DEMAND_FAST);
         break;
     case ASYNC_REFRESH_BLOCKED_COSMETIC:
-        setFrameFlag(COSMETIC);
+        addFrameFlag(COSMETIC);
         break;
     case ASYNC_REFRESH_BLOCKED_RESPONSIVE:
     case EXCEEDED_RATELIMIT_FAST:
-        setFrameFlag(RESPONSIVE);
+        addFrameFlag(RESPONSIVE);
         break;
     default:
         break;

@@ -29,7 +29,7 @@ class EInkDynamicDisplay : public EInkDisplay
         COSMETIC = (1 << 2),    // For splashes
         DEMAND_FAST = (1 << 3), // Special case only
     };
-    void setFrameFlag(frameFlagTypes flag);
+    void addFrameFlag(frameFlagTypes flag);
 
     // Set the correct frame flag, then call universal "update()" method
     void display() override;
