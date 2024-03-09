@@ -28,6 +28,7 @@ class EInkDynamicDisplay : public EInkDisplay
         RESPONSIVE = (1 << 1),  // For frames via forceDisplay()
         COSMETIC = (1 << 2),    // For splashes
         DEMAND_FAST = (1 << 3), // Special case only
+        BLOCKING = (1 << 4),    // Modifier - block while refresh runs
     };
     void addFrameFlag(frameFlagTypes flag);
 
@@ -112,6 +113,7 @@ class EInkDynamicDisplay : public EInkDisplay
 #if defined(HAS_EINK_ASYNCFULL)
     void checkAsyncFullRefresh(); // Check the status of "async full-refresh"; run the post-update code if the hardware is ready
     void endOrDetach();           // Run the post-update code, or delegate it off to checkAsyncFullRefresh()
+    void awaitRefresh();          // Hold control while an async refresh runs
     void endUpdate() override {}  // Disable base-class behavior of running post-update immediately after forceDisplay()
     bool asyncRefreshRunning = false; // Flag, checked by checkAsyncFullRefresh()
 #endif

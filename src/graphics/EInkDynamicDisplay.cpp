@@ -458,14 +458,31 @@ void EInkDynamicDisplay::checkAsyncFullRefresh()
 // Figure out who runs the post-update code
 void EInkDynamicDisplay::endOrDetach()
 {
-    if (previousRefresh == FULL) {  // Note: previousRefresh is the refresh from this loop.
+    if (refresh == FULL) {
         asyncRefreshRunning = true; // Set the flag - picked up at start of determineMode(), next loop.
-        LOG_DEBUG("Async full-refresh begins\n");
+
+        if (frameFlags & BLOCKING)
+            awaitRefresh();
+        else
+            LOG_DEBUG("Async full-refresh begins\n");
     }
 
     // Fast Refresh
     else
         EInkDisplay::endUpdate(); // Still block while updating, but EInkDisplay needs us to call endUpdate() ourselves.
+}
+
+// Hold control while an async refresh runs
+void EInkDynamicDisplay::awaitRefresh()
+{
+    // Continually poll the BUSY pin
+    while (adafruitDisplay->epd2.isBusy())
+        yield();
+
+    // End the full-refresh process
+    adafruitDisplay->endAsyncFull(); // Run the end of nextPage() code
+    EInkDisplay::endUpdate();        // Run base-class code to finish off update (NOT our derived class override)
+    asyncRefreshRunning = false;     // Unset the flag
 }
 #endif // HAS_EINK_ASYNCFULL
 
