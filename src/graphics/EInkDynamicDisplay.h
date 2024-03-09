@@ -73,8 +73,8 @@ class EInkDynamicDisplay : public EInkDisplay
     void checkRateLimiting();             // Is this frame too soon?
     void checkCosmetic();                 // Was the COSMETIC flag set?
     void checkDemandingFast();            // Was the DEMAND_FAST flag set?
-    void checkConsecutiveFastRefreshes(); // Too many fast-refreshes consecutively?
     void checkFrameMatchesPrevious();     // Does the new frame match the existing display image?
+    void checkConsecutiveFastRefreshes(); // Too many fast-refreshes consecutively?
     void checkFastRequested();            // Was the flag set for RESPONSIVE, or only BACKGROUND?
 
     void resetRateLimiting(); // Set previousRunMs - this now counts as an update, for rate-limiting
