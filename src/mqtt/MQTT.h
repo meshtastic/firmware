@@ -80,10 +80,10 @@ class MQTT : private concurrency::OSThread
 
   private:
     std::string statusTopic = "/2/stat/";
-    std::string cryptTopic = "/2/c/";   // msh/2/c/CHANNELID/NODEID
+    std::string cryptTopic = "/2/e/";   // msh/2/e/CHANNELID/NODEID
     std::string jsonTopic = "/2/json/"; // msh/2/json/CHANNELID/NODEID
-    /** return true if we have a channel that wants uplink/downlink
-     */
+                                        /** return true if we have a channel that wants uplink/downlink
+                                         */
     bool wantsLink() const;
 
     /** Tell the server what subscriptions we want (based on channels.downlink_enabled)
