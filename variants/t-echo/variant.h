@@ -156,9 +156,9 @@ External serial flash WP25R1635FZUIL0
 #define PIN_EINK_SCLK (0 + 31)
 #define PIN_EINK_MOSI (0 + 29) // also called SDI
 
-// Controls power for the eink display - Board power is enabled either by VBUS from USB or the CPU asserting PWR_ON
-// FIXME - I think this is actually just the board power enable - it enables power to the CPU also
-#define PIN_EINK_PWR_ON (0 + 12)
+// Controls power for all peripherals (eink + GPS + LoRa + Sensor)
+#define PIN_POWER_EN (0 + 12)
+#define PIN_POWER_EN1 (0 + 13)
 
 #define USE_EINK
 
