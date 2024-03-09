@@ -938,6 +938,9 @@ void Screen::doDeepSleep()
     static const int sleepFrameCount = sizeof(sleepFrames) / sizeof(sleepFrames[0]);
     ui->setFrames(sleepFrames, sleepFrameCount);
     ui->update();
+#ifdef PIN_EINK_EN
+    digitalWrite(PIN_EINK_EN, LOW); // power off backlight
+#endif
 #endif
     setOn(false);
 }
