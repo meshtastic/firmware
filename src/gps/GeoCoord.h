@@ -11,7 +11,7 @@
 
 #define PI 3.1415926535897932384626433832795
 #define OLC_CODE_LEN 11
-#define DEG_CONVERT 180 / PI
+#define DEG_CONVERT (180 / PI)
 
 // Helper functions
 // Raises a number to an exponent, handling negative exponents.
