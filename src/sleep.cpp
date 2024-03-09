@@ -200,6 +200,13 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
 
     nodeDB.saveToDisk();
 
+#ifdef TTGO_T_ECHO
+#ifdef PIN_POWER_EN
+    pinMode(PIN_POWER_EN, INPUT); // power off peripherals
+    pinMode(PIN_POWER_EN1, INPUT_PULLDOWN);
+#endif
+#endif
+
     // Kill GPS power completely (even if previously we just had it in sleep mode)
     if (gps)
         gps->setGPSPower(false, false, 0);
