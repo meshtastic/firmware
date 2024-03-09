@@ -111,6 +111,7 @@ bool EInkDynamicDisplay::update()
 // Assess situation, pick a refresh type
 bool EInkDynamicDisplay::determineMode()
 {
+    checkInitialized();
     checkForPromotion();
 #if defined(HAS_EINK_ASYNCFULL)
     checkAsyncFullRefresh();
@@ -157,6 +158,21 @@ bool EInkDynamicDisplay::determineMode()
         return true; // Do trigger a refresh
 }
 
+// Is this the very first frame?
+void EInkDynamicDisplay::checkInitialized()
+{
+    if (!initialized) {
+        // Undo GxEPD2_BW::partialWindow(), if set by developer in EInkDisplay::connect()
+        configForFullRefresh();
+
+        // Clear any existing image, so we can draw logo with fast-refresh, but also to set GxEPD2_EPD::_initial_write
+        adafruitDisplay->clearScreen();
+
+        LOG_DEBUG("initialized, ");
+        initialized = true;
+
+        // Use a fast-refresh for the next frame; no skipping or else blank screen when waking from deep sleep
+        addFrameFlag(DEMAND_FAST);
     }
 }
 

@@ -69,6 +69,7 @@ class EInkDynamicDisplay : public EInkDisplay
     bool update();                // Trigger the display update - determine mode, then call base class
 
     // Checks as part of determineMode()
+    void checkInitialized();              // Is this the very first frame?
     void checkForPromotion();             // Was a frame skipped (rate, display busy) that should have been a FAST refresh?
     void checkRateLimiting();             // Is this frame too soon?
     void checkCosmetic();                 // Was the COSMETIC flag set?
@@ -91,6 +92,7 @@ class EInkDynamicDisplay : public EInkDisplay
     refreshTypes previousRefresh = UNSPECIFIED;     // (Previous) Outcome
     reasonTypes previousReason = NO_OBJECTIONS;     // (Previous) Reason
 
+    bool initialized = false;          // Have we drawn at least one frame yet?
     uint32_t previousRunMs = -1;       // When did determineMode() last run (rather than rejecting for rate-limiting)
     uint32_t imageHash = 0;            // Hash of the current frame. Don't bother updating if nothing has changed!
     uint32_t previousImageHash = 0;    // Hash of the previous update's frame
