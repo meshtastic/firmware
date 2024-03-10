@@ -99,7 +99,7 @@ bool EInkDynamicDisplay::update()
     if (refreshApproved) {
         EInkDisplay::forceDisplay(0); // Bypass base class' own rate-limiting system
         storeAndReset();              // Store the result of this loop for next time. Note: call *before* endOrDetach()
-        endOrDetach();                // endUpdate() right now, or set the async refresh flag (if FULL and HAS_EINK_ASYNC)
+        endOrDetach();                // endUpdate() right now, or set the async refresh flag (if FULL and HAS_EINK_ASYNCFULL)
     } else
         storeAndReset(); // No update, no post-update code, just store the results
 
@@ -158,11 +158,11 @@ bool EInkDynamicDisplay::determineMode()
     // Once mode determined, any remaining checks will bypass
     checkCosmetic();
     checkDemandingFast();
+    checkFrameMatchesPrevious();
+    checkConsecutiveFastRefreshes();
 #ifdef EINK_LIMIT_GHOSTING_PX
     checkExcessiveGhosting();
 #endif
-    checkFrameMatchesPrevious();
-    checkConsecutiveFastRefreshes();
     checkFastRequested();
 
     if (refresh == UNSPECIFIED)
