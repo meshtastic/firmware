@@ -752,14 +752,17 @@ uint32_t sinceReceived(const meshtastic_MeshPacket *p)
 
 #define NUM_ONLINE_SECS (60 * 60 * 2) // 2 hrs to consider someone offline
 
-size_t NodeDB::getNumOnlineMeshNodes()
+size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
 {
     size_t numseen = 0;
 
     // FIXME this implementation is kinda expensive
-    for (int i = 0; i < *numMeshNodes; i++)
+    for (int i = 0; i < *numMeshNodes; i++) {
+        if (localOnly && meshNodes[i].via_mqtt)
+            continue;
         if (sinceLastSeen(&meshNodes[i]) < NUM_ONLINE_SECS)
             numseen++;
+    }
 
     return numseen;
 }
