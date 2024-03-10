@@ -113,7 +113,7 @@ void RangeTestModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
     meshtastic_MeshPacket *p = allocDataPacket();
     p->to = dest;
     p->decoded.want_response = wantReplies;
-
+    p->hop_limit = 0;
     p->want_ack = true;
 
     packetSequence++;
