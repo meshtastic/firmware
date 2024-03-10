@@ -175,6 +175,9 @@ class RadioInterface
     /// Some boards (1st gen Pinetab Lora module) have broken IRQ wires, so we need to poll via i2c registers
     virtual bool isIRQPending() { return false; }
 
+    // Whether we use the default frequency slot given our LoRa config (region and modem preset)
+    static bool uses_default_frequency_slot;
+
   protected:
     int8_t power = 17; // Set by applyModemConfig()
 
