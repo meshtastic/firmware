@@ -79,9 +79,10 @@ class MQTT : private concurrency::OSThread
     virtual int32_t runOnce() override;
 
   private:
-    std::string statusTopic = "/2/stat/"; // For "online"/"offline" message and MapReport
+    std::string statusTopic = "/2/stat/"; // For "online"/"offline" message
     std::string cryptTopic = "/2/e/";     // msh/2/e/CHANNELID/NODEID
     std::string jsonTopic = "/2/json/";   // msh/2/json/CHANNELID/NODEID
+    std::string mapTopic = "/2/map/";     // For protobuf-encoded MapReport messages
 
     // For map reporting (only applies when enabled)
     uint32_t last_report_to_map = 0;
