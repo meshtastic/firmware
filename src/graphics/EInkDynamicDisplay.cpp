@@ -96,16 +96,43 @@ bool EInkDynamicDisplay::update()
 {
     // Detemine the refresh mode to use, and start the update
     bool refreshApproved = determineMode();
-    if (refreshApproved)
+    if (refreshApproved) {
         EInkDisplay::forceDisplay(0); // Bypass base class' own rate-limiting system
+        storeAndReset();              // Store the result of this loop for next time. Note: call *before* endOrDetach()
+        endOrDetach();                // endUpdate() right now, or set the async refresh flag (if FULL and HAS_EINK_ASYNC)
+    } else
+        storeAndReset(); // No update, no post-update code, just store the results
 
-#if defined(HAS_EINK_ASYNCFULL)
-    if (refreshApproved)
-        endOrDetach(); // Either endUpdate() right now (fast refresh), or set the async flag (full refresh)
-#endif
-
-    storeAndReset();        // Store the result of this loop for next time
     return refreshApproved; // (Unutilized) Base class promises to return true if update ran
+}
+
+// Figure out who runs the post-update code
+void EInkDynamicDisplay::endOrDetach()
+{
+    // If the GxEPD2 version reports that it has the async modifications
+#ifdef HAS_EINK_ASYNCFULL
+    if (previousRefresh == FULL) {
+        asyncRefreshRunning = true; // Set the flag - picked up at start of determineMode(), next loop.
+
+        if (previousFrameFlags & BLOCKING)
+            awaitRefresh();
+        else
+            LOG_DEBUG("Async full-refresh begins\n");
+    }
+
+    // Fast Refresh
+    else if (previousRefresh == FAST)
+        EInkDisplay::endUpdate(); // Still block while updating, but EInkDisplay needs us to call endUpdate() ourselves.
+
+        // Fallback - If using an unmodified version of GxEPD2 for some reason
+#else
+    if (previousRefresh == FULL || previousRefresh == FAST) { // If refresh wasn't skipped (on unspecified..)
+        LOG_WARN(
+            "GxEPD2 version has not been modified to support async refresh; using fallback behavior. Please update lib_deps in "
+            "variant's platformio.ini file\n");
+        EInkDisplay::endUpdate();
+    }
+#endif
 }
 
 // Assess situation, pick a refresh type
@@ -454,23 +481,6 @@ void EInkDynamicDisplay::checkAsyncFullRefresh()
 
     // Note: this code only works because of a modification to meshtastic/GxEPD2.
     // It is only equipped to intercept calls to nextPage()
-}
-
-// Figure out who runs the post-update code
-void EInkDynamicDisplay::endOrDetach()
-{
-    if (refresh == FULL) {
-        asyncRefreshRunning = true; // Set the flag - picked up at start of determineMode(), next loop.
-
-        if (frameFlags & BLOCKING)
-            awaitRefresh();
-        else
-            LOG_DEBUG("Async full-refresh begins\n");
-    }
-
-    // Fast Refresh
-    else
-        EInkDisplay::endUpdate(); // Still block while updating, but EInkDisplay needs us to call endUpdate() ourselves.
 }
 
 // Hold control while an async refresh runs
