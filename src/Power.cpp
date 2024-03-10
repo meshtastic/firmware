@@ -473,11 +473,6 @@ bool Power::setup()
 
 void Power::shutdown()
 {
-    screen->setOn(false);
-#if defined(USE_EINK) && defined(PIN_EINK_EN)
-    digitalWrite(PIN_EINK_EN, LOW); // power off backlight first
-#endif
-
     LOG_INFO("Shutting down\n");
 
 #ifdef HAS_PMU
