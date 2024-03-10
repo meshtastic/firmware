@@ -736,6 +736,9 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
                 if ((int)decoded->VDOP) {
                     msgPayload["VDOP"] = new JSONValue((int)decoded->VDOP);
                 }
+                if ((int)decoded->precision_bits) {
+                    msgPayload["precision_bits"] = new JSONValue((int)decoded->precision_bits);
+                }
                 jsonObj["payload"] = new JSONValue(msgPayload);
             } else {
                 LOG_ERROR("Error decoding protobuf for position message!\n");
@@ -889,6 +892,8 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
         jsonObj["rssi"] = new JSONValue((int)mp->rx_rssi);
     if (mp->rx_snr != 0)
         jsonObj["snr"] = new JSONValue((float)mp->rx_snr);
+    if (mp->hop_start != 0 && mp->hop_limit <= mp->hop_start)
+        jsonObj["hops_away"] = new JSONValue((uint)(mp->hop_start - mp->hop_limit));
 
     // serialize and write it to the stream
     JSONValue *value = new JSONValue(jsonObj);
