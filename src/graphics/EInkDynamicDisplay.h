@@ -68,6 +68,7 @@ class EInkDynamicDisplay : public EInkDisplay
     void applyRefreshMode();      // Run any relevant GxEPD2 code, so next update will use correct refresh type
     void adjustRefreshCounters(); // Update fastRefreshCount
     bool update();                // Trigger the display update - determine mode, then call base class
+    void endOrDetach();           // Run the post-update code, or delegate it off to checkAsyncFullRefresh()
 
     // Checks as part of determineMode()
     void checkInitialized();              // Is this the very first frame?
@@ -112,7 +113,6 @@ class EInkDynamicDisplay : public EInkDisplay
     // Conditional - async full refresh - only with modified meshtastic/GxEPD2
 #if defined(HAS_EINK_ASYNCFULL)
     void checkAsyncFullRefresh(); // Check the status of "async full-refresh"; run the post-update code if the hardware is ready
-    void endOrDetach();           // Run the post-update code, or delegate it off to checkAsyncFullRefresh()
     void awaitRefresh();          // Hold control while an async refresh runs
     void endUpdate() override {}  // Disable base-class behavior of running post-update immediately after forceDisplay()
     bool asyncRefreshRunning = false; // Flag, checked by checkAsyncFullRefresh()
