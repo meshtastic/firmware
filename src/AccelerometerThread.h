@@ -103,12 +103,21 @@ class AccelerometerThread : public concurrency::OSThread
 #endif
 
             struct bma423_axes_remap remap_data;
+#ifdef T_WATCH_S3
+            remap_data.x_axis = 1;
+            remap_data.x_axis_sign = 0;
+            remap_data.y_axis = 0;
+            remap_data.y_axis_sign = 0;
+            remap_data.z_axis = 2;
+            remap_data.z_axis_sign = 1;
+#else
             remap_data.x_axis = 0;
             remap_data.x_axis_sign = 1;
             remap_data.y_axis = 1;
             remap_data.y_axis_sign = 0;
             remap_data.z_axis = 2;
             remap_data.z_axis_sign = 1;
+#endif
             // Need to raise the wrist function, need to set the correct axis
             bmaSensor.setRemapAxes(&remap_data);
             // sensor.enableFeature(BMA423_STEP_CNTR, true);
