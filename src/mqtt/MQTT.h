@@ -79,10 +79,16 @@ class MQTT : private concurrency::OSThread
     virtual int32_t runOnce() override;
 
   private:
-    std::string statusTopic = "/2/stat/";
-    std::string cryptTopic = "/2/c/";   // msh/2/c/CHANNELID/NODEID
-    std::string jsonTopic = "/2/json/"; // msh/2/json/CHANNELID/NODEID
-    /** return true if we have a channel that wants uplink/downlink
+    std::string statusTopic = "/2/stat/"; // For "online"/"offline" message and MapReport
+    std::string cryptTopic = "/2/c/";     // msh/2/c/CHANNELID/NODEID
+    std::string jsonTopic = "/2/json/";   // msh/2/json/CHANNELID/NODEID
+
+    // For map reporting (only applies when enabled)
+    uint32_t last_report_to_map = 0;
+    uint32_t map_position_precision = 32;         // default to full precision
+    uint32_t map_publish_interval_secs = 60 * 15; // default to 15 minutes
+
+    /** return true if we have a channel that wants uplink/downlink or map reporting is enabled
      */
     bool wantsLink() const;
 
@@ -101,6 +107,9 @@ class MQTT : private concurrency::OSThread
 
     void publishStatus();
     void publishQueuedMessages();
+
+    // Check if we should report unencrypted information about our node for consumption by a map
+    void perhapsReportToMap();
 
     // returns true if this is a valid JSON envelope which we accept on downlink
     bool isValidJsonEnvelope(JSONObject &json);
