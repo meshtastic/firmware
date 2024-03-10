@@ -1,5 +1,6 @@
 #include "RadioInterface.h"
 #include "Channels.h"
+#include "DisplayFormatters.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -143,6 +144,7 @@ const RegionInfo regions[] = {
 };
 
 const RegionInfo *myRegion;
+bool RadioInterface::uses_default_frequency_slot = true;
 
 static uint8_t bytes[MAX_RHPACKETLEN];
 
@@ -485,6 +487,10 @@ void RadioInterface::applyModemConfig()
     const char *channelName = channels.getName(channels.getPrimaryIndex());
     // channel_num is actually (channel_num - 1), since modulus (%) returns values from 0 to (numChannels - 1)
     int channel_num = (loraConfig.channel_num ? loraConfig.channel_num - 1 : hash(channelName)) % numChannels;
+
+    // Check if we use the default frequency slot
+    RadioInterface::uses_default_frequency_slot =
+        channel_num == hash(DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false)) % numChannels;
 
     // Old frequency selection formula
     // float freq = myRegion->freqStart + ((((myRegion->freqEnd - myRegion->freqStart) / numChannels) / 2) * channel_num);

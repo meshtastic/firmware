@@ -108,8 +108,10 @@ class NodeDB
     // get channel channel index we heard a nodeNum on, defaults to 0 if not found
     uint8_t getMeshNodeChannel(NodeNum n);
 
-    /// Return the number of nodes we've heard from recently (within the last 2 hrs?)
-    size_t getNumOnlineMeshNodes();
+    /* Return the number of nodes we've heard from recently (within the last 2 hrs?)
+     * @param localOnly if true, ignore nodes heard via MQTT
+     */
+    size_t getNumOnlineMeshNodes(bool localOnly = false);
 
     void initConfigIntervals(), initModuleConfigIntervals(), resetNodes(), removeNodeByNum(uint nodeNum);
 
