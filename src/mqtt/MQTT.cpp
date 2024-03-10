@@ -185,10 +185,12 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
             statusTopic = moduleConfig.mqtt.root + statusTopic;
             cryptTopic = moduleConfig.mqtt.root + cryptTopic;
             jsonTopic = moduleConfig.mqtt.root + jsonTopic;
+            mapTopic = moduleConfig.mqtt.root + jsonTopic;
         } else {
             statusTopic = "msh" + statusTopic;
             cryptTopic = "msh" + cryptTopic;
             jsonTopic = "msh" + jsonTopic;
+            mapTopic = "msh" + mapTopic;
         }
 
         if (moduleConfig.mqtt.map_reporting_enabled && moduleConfig.mqtt.has_map_report_settings) {
@@ -605,8 +607,8 @@ void MQTT::perhapsReportToMap()
         static uint8_t bytes[meshtastic_MeshPacket_size + 64];
         size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, se);
 
-        LOG_INFO("MQTT Publish map report to %s\n", statusTopic.c_str());
-        publish(statusTopic.c_str(), bytes, numBytes, false);
+        LOG_INFO("MQTT Publish map report to %s\n", mapTopic.c_str());
+        publish(mapTopic.c_str(), bytes, numBytes, false);
 
         // Release the allocated memory for ServiceEnvelope and MeshPacket
         mqttPool.release(se);
