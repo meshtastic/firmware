@@ -114,7 +114,7 @@ void RangeTestModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
     p->to = dest;
     p->decoded.want_response = wantReplies;
     p->hop_limit = 0;
-    p->want_ack = true;
+    p->want_ack = false;
 
     packetSequence++;
 
