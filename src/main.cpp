@@ -224,6 +224,7 @@ void setup()
     pinMode(PIN_POWER_EN, OUTPUT);
     digitalWrite(PIN_POWER_EN, HIGH);
     digitalWrite(PIN_POWER_EN1, INPUT);
+    delay(200);
 #endif
 
 #if defined(VEXT_ENABLE_V03)
