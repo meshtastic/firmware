@@ -33,7 +33,9 @@
 // #include <driver/rtc_io.h>
 
 #ifdef ARCH_ESP32
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "mesh/http/WebServer.h"
+#endif
 #include "nimble/NimbleBluetooth.h"
 NimbleBluetooth *nimbleBluetooth;
 #endif
@@ -859,7 +861,7 @@ void setup()
 #endif
 #endif
 
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WEBSERVER
     // Start web server thread.
     webServerThread = new WebServerThread();
 #endif

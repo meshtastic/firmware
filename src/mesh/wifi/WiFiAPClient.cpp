@@ -4,13 +4,17 @@
 #include "concurrency/Periodic.h"
 #include "configuration.h"
 #include "main.h"
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "mesh/api/WiFiServerAPI.h"
+#endif
 #include "mqtt/MQTT.h"
 #include "target_specific.h"
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #ifdef ARCH_ESP32
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "mesh/http/WebServer.h"
+#endif
 #include <ESPmDNS.h>
 #include <esp_wifi.h>
 static void WiFiEvent(WiFiEvent_t event);
@@ -92,11 +96,13 @@ static void onNetworkConnected()
             syslog.enable();
         }
 
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
+
 #ifdef ARCH_ESP32
         initWebServer();
 #endif
         initApiServer();
-
+#endif
         APStartupComplete = true;
     }
 
@@ -146,7 +152,6 @@ static int32_t reconnectWiFi()
 
             perhapsSetRTC(RTCQualityNTP, &tv);
             lastrun_ntp = millis();
-
         } else {
             LOG_DEBUG("NTP Update failed\n");
         }
@@ -204,7 +209,9 @@ bool initWifi()
         const char *wifiPsw = config.network.wifi_psk;
 
 #ifndef ARCH_RP2040
-        createSSLCert();                        // For WebServer
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
+        createSSLCert(); // For WebServer
+#endif
         esp_wifi_set_storage(WIFI_STORAGE_RAM); // Disable flash storage for WiFi credentials
 #endif
         if (!*wifiPsw) // Treat empty password as no password
