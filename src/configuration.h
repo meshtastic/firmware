@@ -242,4 +242,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_NEIGHBORINFO 1
 #define MESHTASTIC_EXCLUDE_TRACEROUTE 1
 #define MESHTASTIC_EXCLUDE_WAYPOINT 1
+#define MESHTASTIC_EXCLUDE_INPUTBROKER 1
+#define MESHTASTIC_EXCLUDE_SERIAL 1
 #endif
