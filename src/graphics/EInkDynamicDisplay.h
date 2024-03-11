@@ -28,8 +28,9 @@ class EInkDynamicDisplay : public EInkDisplay
         RESPONSIVE = (1 << 1),  // For frames via forceDisplay()
         COSMETIC = (1 << 2),    // For splashes
         DEMAND_FAST = (1 << 3), // Special case only
+        BLOCKING = (1 << 4),    // Modifier - block while refresh runs
     };
-    void setFrameFlag(frameFlagTypes flag);
+    void addFrameFlag(frameFlagTypes flag);
 
     // Set the correct frame flag, then call universal "update()" method
     void display() override;
@@ -48,7 +49,6 @@ class EInkDynamicDisplay : public EInkDisplay
         ASYNC_REFRESH_BLOCKED_COSMETIC,
         ASYNC_REFRESH_BLOCKED_RESPONSIVE,
         ASYNC_REFRESH_BLOCKED_BACKGROUND,
-        DISPLAY_NOT_READY_FOR_FULL,
         EXCEEDED_RATELIMIT_FAST,
         EXCEEDED_RATELIMIT_FULL,
         FLAGGED_COSMETIC,
@@ -67,14 +67,16 @@ class EInkDynamicDisplay : public EInkDisplay
     void applyRefreshMode();      // Run any relevant GxEPD2 code, so next update will use correct refresh type
     void adjustRefreshCounters(); // Update fastRefreshCount
     bool update();                // Trigger the display update - determine mode, then call base class
+    void endOrDetach();           // Run the post-update code, or delegate it off to checkAsyncFullRefresh()
 
     // Checks as part of determineMode()
+    void checkInitialized();              // Is this the very first frame?
     void checkForPromotion();             // Was a frame skipped (rate, display busy) that should have been a FAST refresh?
     void checkRateLimiting();             // Is this frame too soon?
     void checkCosmetic();                 // Was the COSMETIC flag set?
     void checkDemandingFast();            // Was the DEMAND_FAST flag set?
-    void checkConsecutiveFastRefreshes(); // Too many fast-refreshes consecutively?
     void checkFrameMatchesPrevious();     // Does the new frame match the existing display image?
+    void checkConsecutiveFastRefreshes(); // Too many fast-refreshes consecutively?
     void checkFastRequested();            // Was the flag set for RESPONSIVE, or only BACKGROUND?
 
     void resetRateLimiting(); // Set previousRunMs - this now counts as an update, for rate-limiting
@@ -82,14 +84,16 @@ class EInkDynamicDisplay : public EInkDisplay
     void storeAndReset();     // Keep results of determineMode() for later, tidy-up for next call
 
     // What we are determining for this frame
-    frameFlagTypes frameFlags = BACKGROUND; // Frame type(s) - determineMode() input
+    frameFlagTypes frameFlags = BACKGROUND; // Frame characteristics - determineMode() input
     refreshTypes refresh = UNSPECIFIED;     // Refresh type - determineMode() output
     reasonTypes reason = NO_OBJECTIONS;     // Reason - why was refresh type used
 
     // What happened last time determineMode() ran
-    refreshTypes previousRefresh = UNSPECIFIED; // (Previous) Outcome
-    reasonTypes previousReason = NO_OBJECTIONS; // (Previous) Reason
+    frameFlagTypes previousFrameFlags = BACKGROUND; // (Previous) Frame flags
+    refreshTypes previousRefresh = UNSPECIFIED;     // (Previous) Outcome
+    reasonTypes previousReason = NO_OBJECTIONS;     // (Previous) Reason
 
+    bool initialized = false;          // Have we drawn at least one frame yet?
     uint32_t previousRunMs = -1;       // When did determineMode() last run (rather than rejecting for rate-limiting)
     uint32_t imageHash = 0;            // Hash of the current frame. Don't bother updating if nothing has changed!
     uint32_t previousImageHash = 0;    // Hash of the previous update's frame
@@ -108,10 +112,16 @@ class EInkDynamicDisplay : public EInkDisplay
     // Conditional - async full refresh - only with modified meshtastic/GxEPD2
 #if defined(HAS_EINK_ASYNCFULL)
     void checkAsyncFullRefresh(); // Check the status of "async full-refresh"; run the post-update code if the hardware is ready
-    void endOrDetach();           // Run the post-update code, or delegate it off to checkAsyncFullRefresh()
+    void awaitRefresh();          // Hold control while an async refresh runs
     void endUpdate() override {}  // Disable base-class behavior of running post-update immediately after forceDisplay()
     bool asyncRefreshRunning = false; // Flag, checked by checkAsyncFullRefresh()
 #endif
 };
 
+// Tidier calls to addFrameFlag() from outside class
+#define EINK_ADD_FRAMEFLAG(display, flag) static_cast<EInkDynamicDisplay *>(display)->addFrameFlag(EInkDynamicDisplay::flag)
+
+#else // !USE_EINK_DYNAMICDISPLAY
+// Dummy-macro, removes the need for include guards
+#define EINK_ADD_FRAMEFLAG(display, flag)
 #endif
