@@ -973,7 +973,9 @@ void UnleashedCommands() {
 void loop()
 {
     #ifdef ARCH_ESP32
-    UnleashedCommands();
+    if (config.device.serial_enabled = false) {
+        UnleashedCommands();
+    }
 
     // Umschalten des Zustands von ledOn bei jedem Durchlauf
     ledOn = !ledOn;
