@@ -1,4 +1,4 @@
-name: Build ESP32
+name: Build ESP32-C3
 
 on:
   workflow_call:
@@ -7,8 +7,10 @@ on:
         required: true
         type: string
 
+permissions: read-all
+
 jobs:
-  build-esp32:
+  build-esp32-c3:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -28,7 +30,6 @@ jobs:
         run: |
           tar -xf build.tar -C data/static
           rm build.tar
-
       - name: Remove debug flags for release
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
@@ -36,7 +37,6 @@ jobs:
           sed -i '/DDEBUG_HEAP/d' ./arch/esp32/esp32s2.ini
           sed -i '/DDEBUG_HEAP/d' ./arch/esp32/esp32s3.ini
           sed -i '/DDEBUG_HEAP/d' ./arch/esp32/esp32c3.ini
-
       - name: Build ESP32
         run: bin/build-esp32.sh ${{ inputs.board }}
 
@@ -44,8 +44,8 @@ jobs:
         uses: dsaltares/fetch-gh-release-asset@a40c8b4a0471f9ab81bdf73a010f74cc51476ad4
         with:
           repo: meshtastic/firmware-ota
-          file: firmware.bin
-          target: release/bleota.bin
+          file: firmware-c3.bin
+          target: release/bleota-c3.bin
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get release version string

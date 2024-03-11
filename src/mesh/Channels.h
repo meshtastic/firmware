@@ -102,6 +102,9 @@ class Channels
      */
     int16_t setActiveByIndex(ChannelIndex channelIndex);
 
+    // Returns true if we can be reached via a channel with the default settings given a region and modem preset
+    bool hasDefaultChannel();
+
   private:
     /** Given a channel index, change to use the crypto key specified by that index
      *
