@@ -2,6 +2,7 @@
 #include "CryptoEngine.h"
 #include "DisplayFormatters.h"
 #include "NodeDB.h"
+#include "RadioInterface.h"
 #include "configuration.h"
 
 #include <assert.h>
@@ -252,6 +253,25 @@ const char *Channels::getName(size_t chIndex)
     }
 
     return channelName;
+}
+
+bool Channels::hasDefaultChannel()
+{
+    // If we don't use a preset or the default frequency slot, or we override the frequency, we don't have a default channel
+    if (!config.lora.use_preset || !RadioInterface::uses_default_frequency_slot || config.lora.override_frequency)
+        return false;
+    // Check if any of the channels are using the default name and PSK
+    for (size_t i = 0; i < getNumChannels(); i++) {
+        const auto &ch = getByIndex(i);
+        if (ch.settings.psk.size == 1 && ch.settings.psk.bytes[0] == 1) {
+            const char *name = getName(i);
+            const char *presetName = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false);
+            // Check if the name is the default derived from the modem preset
+            if (strcmp(name, presetName) == 0)
+                return true;
+        }
+    }
+    return false;
 }
 
 /**
