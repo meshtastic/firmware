@@ -185,8 +185,6 @@ bool ReliableRouter::stopRetransmission(GlobalPacketId key)
     auto old = findPendingPacket(key);
     if (old) {
         auto p = old->packet;
-        auto numErased = pending.erase(key);
-        assert(numErased == 1);
         /* Only when we already transmitted a packet via LoRa, we will cancel the packet in the Tx queue
           to avoid canceling a transmission if it was ACKed super fast via MQTT */
         if (old->numRetransmissions < NUM_RETRANSMISSIONS() - 1) {
@@ -195,6 +193,8 @@ bool ReliableRouter::stopRetransmission(GlobalPacketId key)
             // now free the pooled copy for retransmission too
             packetPool.release(p);
         }
+        auto numErased = pending.erase(key);
+        assert(numErased == 1);
         return true;
     } else
         return false;
