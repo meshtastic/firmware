@@ -77,8 +77,7 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                         if (jsonPayloadStr.length() <= sizeof(p->decoded.payload.bytes)) {
                             memcpy(p->decoded.payload.bytes, jsonPayloadStr.c_str(), jsonPayloadStr.length());
                             p->decoded.payload.size = jsonPayloadStr.length();
-                            meshtastic_MeshPacket *packet = packetPool.allocCopy(*p);
-                            service.sendToMesh(packet, RX_SRC_LOCAL);
+                            service.sendToMesh(p, RX_SRC_LOCAL);
                         } else {
                             LOG_WARN("Received MQTT json payload too long, dropping\n");
                         }
@@ -186,10 +185,17 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
             statusTopic = moduleConfig.mqtt.root + statusTopic;
             cryptTopic = moduleConfig.mqtt.root + cryptTopic;
             jsonTopic = moduleConfig.mqtt.root + jsonTopic;
+            mapTopic = moduleConfig.mqtt.root + jsonTopic;
         } else {
             statusTopic = "msh" + statusTopic;
             cryptTopic = "msh" + cryptTopic;
             jsonTopic = "msh" + jsonTopic;
+            mapTopic = "msh" + mapTopic;
+        }
+
+        if (moduleConfig.mqtt.map_reporting_enabled && moduleConfig.mqtt.has_map_report_settings) {
+            map_position_precision = moduleConfig.mqtt.map_report_settings.position_precision;
+            map_publish_interval_secs = moduleConfig.mqtt.map_report_settings.publish_interval_secs;
         }
 
 #ifdef HAS_NETWORKING
@@ -365,27 +371,30 @@ void MQTT::sendSubscriptions()
 
 bool MQTT::wantsLink() const
 {
-    bool hasChannel = false;
+    bool hasChannelorMapReport = false;
 
     if (moduleConfig.mqtt.enabled) {
-        // No need for link if no channel needed it
-        size_t numChan = channels.getNumChannels();
-        for (size_t i = 0; i < numChan; i++) {
-            const auto &ch = channels.getByIndex(i);
-            if (ch.settings.uplink_enabled || ch.settings.downlink_enabled) {
-                hasChannel = true;
-                break;
+        hasChannelorMapReport = moduleConfig.mqtt.map_reporting_enabled;
+        if (!hasChannelorMapReport) {
+            // No need for link if no channel needed it
+            size_t numChan = channels.getNumChannels();
+            for (size_t i = 0; i < numChan; i++) {
+                const auto &ch = channels.getByIndex(i);
+                if (ch.settings.uplink_enabled || ch.settings.downlink_enabled) {
+                    hasChannelorMapReport = true;
+                    break;
+                }
             }
         }
     }
-    if (hasChannel && moduleConfig.mqtt.proxy_to_client_enabled)
+    if (hasChannelorMapReport && moduleConfig.mqtt.proxy_to_client_enabled)
         return true;
 
 #if HAS_WIFI
-    return hasChannel && WiFi.isConnected();
+    return hasChannelorMapReport && WiFi.isConnected();
 #endif
 #if HAS_ETHERNET
-    return hasChannel && Ethernet.linkStatus() == LinkON;
+    return hasChannelorMapReport && Ethernet.linkStatus() == LinkON;
 #endif
     return false;
 }
@@ -396,6 +405,8 @@ int32_t MQTT::runOnce()
         return disable();
 
     bool wantConnection = wantsLink();
+
+    perhapsReportToMap();
 
     // If connected poll rapidly, otherwise only occasionally check for a wifi connection change and ability to contact server
     if (moduleConfig.mqtt.proxy_to_client_enabled) {
@@ -536,6 +547,78 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
     }
 }
 
+void MQTT::perhapsReportToMap()
+{
+    if (!moduleConfig.mqtt.map_reporting_enabled || !(moduleConfig.mqtt.proxy_to_client_enabled || isConnectedDirectly()))
+        return;
+
+    if (map_position_precision == 0 || (localPosition.latitude_i == 0 && localPosition.longitude_i == 0)) {
+        LOG_WARN("MQTT Map reporting is enabled, but precision is 0 or no position available.\n");
+        return;
+    }
+
+    if (millis() - last_report_to_map < map_publish_interval_secs * 1000) {
+        return;
+    } else {
+        // Allocate ServiceEnvelope and fill it
+        meshtastic_ServiceEnvelope *se = mqttPool.allocZeroed();
+        se->channel_id = (char *)channels.getGlobalId(channels.getPrimaryIndex()); // Use primary channel as the channel_id
+        se->gateway_id = owner.id;
+
+        // Allocate MeshPacket and fill it
+        meshtastic_MeshPacket *mp = packetPool.allocZeroed();
+        mp->which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+        mp->from = nodeDB.getNodeNum();
+        mp->to = NODENUM_BROADCAST;
+        mp->decoded.portnum = meshtastic_PortNum_MAP_REPORT_APP;
+
+        // Fill MapReport message
+        meshtastic_MapReport mapReport = meshtastic_MapReport_init_default;
+        memcpy(mapReport.long_name, owner.long_name, sizeof(owner.long_name));
+        memcpy(mapReport.short_name, owner.short_name, sizeof(owner.short_name));
+        mapReport.role = config.device.role;
+        mapReport.hw_model = owner.hw_model;
+        strncpy(mapReport.firmware_version, optstr(APP_VERSION), sizeof(mapReport.firmware_version));
+        mapReport.region = config.lora.region;
+        mapReport.modem_preset = config.lora.modem_preset;
+        mapReport.has_default_channel = channels.hasDefaultChannel();
+
+        // Set position with precision (same as in PositionModule)
+        if (map_position_precision < 32 && map_position_precision > 0) {
+            mapReport.latitude_i = localPosition.latitude_i & (UINT32_MAX << (32 - map_position_precision));
+            mapReport.longitude_i = localPosition.longitude_i & (UINT32_MAX << (32 - map_position_precision));
+            mapReport.latitude_i += (1 << (31 - map_position_precision));
+            mapReport.longitude_i += (1 << (31 - map_position_precision));
+        } else {
+            mapReport.latitude_i = localPosition.latitude_i;
+            mapReport.longitude_i = localPosition.longitude_i;
+        }
+        mapReport.altitude = localPosition.altitude;
+        mapReport.position_precision = map_position_precision;
+
+        mapReport.num_online_local_nodes = nodeDB.getNumOnlineMeshNodes(true);
+
+        // Encode MapReport message and set it to MeshPacket in ServiceEnvelope
+        mp->decoded.payload.size = pb_encode_to_bytes(mp->decoded.payload.bytes, sizeof(mp->decoded.payload.bytes),
+                                                      &meshtastic_MapReport_msg, &mapReport);
+        se->packet = mp;
+
+        // FIXME - this size calculation is super sloppy, but it will go away once we dynamically alloc meshpackets
+        static uint8_t bytes[meshtastic_MeshPacket_size + 64];
+        size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, se);
+
+        LOG_INFO("MQTT Publish map report to %s\n", mapTopic.c_str());
+        publish(mapTopic.c_str(), bytes, numBytes, false);
+
+        // Release the allocated memory for ServiceEnvelope and MeshPacket
+        mqttPool.release(se);
+        packetPool.release(mp);
+
+        // Update the last report time
+        last_report_to_map = millis();
+    }
+}
+
 // converts a downstream packet into a json message
 std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
 {
@@ -654,6 +737,9 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
                 }
                 if ((int)decoded->VDOP) {
                     msgPayload["VDOP"] = new JSONValue((int)decoded->VDOP);
+                }
+                if ((int)decoded->precision_bits) {
+                    msgPayload["precision_bits"] = new JSONValue((int)decoded->precision_bits);
                 }
                 jsonObj["payload"] = new JSONValue(msgPayload);
             } else {
