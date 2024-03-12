@@ -177,7 +177,7 @@ void cpuDeepSleep(uint32_t msecToWake)
 #ifdef PIN_3V3_EN
     digitalWrite(PIN_3V3_EN, LOW);
 #endif
-#ifndef USE_EINK
+#ifdef AQ_SET_PIN
     // RAK-12039 set pin for Air quality sensor
     digitalWrite(AQ_SET_PIN, LOW);
 #endif
