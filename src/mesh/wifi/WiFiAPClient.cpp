@@ -4,9 +4,7 @@
 #include "concurrency/Periodic.h"
 #include "configuration.h"
 #include "main.h"
-#if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "mesh/api/WiFiServerAPI.h"
-#endif
 #include "mqtt/MQTT.h"
 #include "target_specific.h"
 #include <WiFi.h>
@@ -96,13 +94,10 @@ static void onNetworkConnected()
             syslog.enable();
         }
 
-#if !MESHTASTIC_EXCLUDE_WEBSERVER
-
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WEBSERVER
         initWebServer();
 #endif
         initApiServer();
-#endif
         APStartupComplete = true;
     }
 
