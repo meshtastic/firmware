@@ -4,22 +4,17 @@
 #include "concurrency/Periodic.h"
 #include "configuration.h"
 #include "main.h"
-#if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "mesh/api/WiFiServerAPI.h"
-#endif
 #include "mqtt/MQTT.h"
 #include "target_specific.h"
 #include <WiFi.h>
 #include <WiFiUdp.h>
-#ifdef ARCH_ESP32
-#if !MESHTASTIC_EXCLUDE_WEBSERVER
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "mesh/http/WebServer.h"
-#endif
 #endif
 #include <ESPmDNS.h>
 #include <esp_wifi.h>
 static void WiFiEvent(WiFiEvent_t event);
-#endif
 
 #ifndef DISABLE_NTP
 #include <NTPClient.h>
