@@ -185,7 +185,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
             statusTopic = moduleConfig.mqtt.root + statusTopic;
             cryptTopic = moduleConfig.mqtt.root + cryptTopic;
             jsonTopic = moduleConfig.mqtt.root + jsonTopic;
-            mapTopic = moduleConfig.mqtt.root + jsonTopic;
+            mapTopic = moduleConfig.mqtt.root + mapTopic;
         } else {
             statusTopic = "msh" + statusTopic;
             cryptTopic = "msh" + cryptTopic;
