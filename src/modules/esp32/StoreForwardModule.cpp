@@ -255,7 +255,7 @@ void StoreForwardModule::sendMessage(NodeNum dest, const meshtastic_StoreAndForw
 
     p->to = dest;
 
-    p->priority = meshtastic_MeshPacket_Priority_MIN;
+    p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
 
     // FIXME - Determine if the delayed packet is broadcast or delayed. For now, assume
     //  everything is broadcast.
@@ -334,7 +334,7 @@ ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &m
                         LOG_INFO("*** S&F - Busy. Try again shortly.\n");
                         meshtastic_MeshPacket *pr = allocReply();
                         pr->to = getFrom(&mp);
-                        pr->priority = meshtastic_MeshPacket_Priority_MIN;
+                        pr->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
                         pr->want_ack = false;
                         pr->decoded.want_response = false;
                         pr->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
