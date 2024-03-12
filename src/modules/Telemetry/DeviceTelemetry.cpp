@@ -91,7 +91,7 @@ bool DeviceTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     meshtastic_MeshPacket *p = allocDataProtobuf(telemetry);
     p->to = dest;
     p->decoded.want_response = false;
-    p->priority = meshtastic_MeshPacket_Priority_MIN;
+    p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
 
     nodeDB.updateTelemetry(nodeDB.getNodeNum(), telemetry, RX_SRC_LOCAL);
     if (phoneOnly) {
