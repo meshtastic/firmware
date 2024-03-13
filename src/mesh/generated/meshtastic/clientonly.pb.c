@@ -9,4 +9,7 @@
 PB_BIND(meshtastic_DeviceProfile, meshtastic_DeviceProfile, 2)
 
 
+PB_BIND(meshtastic_Heartbeat, meshtastic_Heartbeat, AUTO)
+
+
 
