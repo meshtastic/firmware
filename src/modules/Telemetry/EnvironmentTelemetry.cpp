@@ -253,7 +253,7 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
             p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
         else
-            p->priority = meshtastic_MeshPacket_Priority_MIN;
+            p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
         // release previous packet before occupying a new spot
         if (lastMeasurementPacket != nullptr)
             packetPool.release(lastMeasurementPacket);

@@ -54,6 +54,19 @@ static const adc_atten_t atten = ADC_ATTENUATION;
 #endif
 #endif // BATTERY_PIN && ARCH_ESP32
 
+#ifdef EXT_CHRG_DETECT
+#ifndef EXT_CHRG_DETECT_MODE
+static const uint8_t ext_chrg_detect_mode = INPUT;
+#else
+static const uint8_t ext_chrg_detect_mode = EXT_CHRG_DETECT_MODE;
+#endif
+#ifndef EXT_CHRG_DETECT_VALUE
+static const uint8_t ext_chrg_detect_value = HIGH;
+#else
+static const uint8_t ext_chrg_detect_value = EXT_CHRG_DETECT_VALUE;
+#endif
+#endif
+
 #if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
 INA260Sensor ina260Sensor;
 INA219Sensor ina219Sensor;
@@ -322,7 +335,14 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
     /// Assume charging if we have a battery and external power is connected.
     /// we can't be smart enough to say 'full'?
-    virtual bool isCharging() override { return isBatteryConnect() && isVbusIn(); }
+    virtual bool isCharging() override
+    {
+#ifdef EXT_CHRG_DETECT
+        return digitalRead(EXT_CHRG_DETECT) == ext_chrg_detect_value;
+#else
+        return isBatteryConnect() && isVbusIn();
+#endif
+    }
 
   private:
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
@@ -388,6 +408,9 @@ bool Power::analogInit()
 {
 #ifdef EXT_PWR_DETECT
     pinMode(EXT_PWR_DETECT, INPUT);
+#endif
+#ifdef EXT_CHRG_DETECT
+    pinMode(EXT_CHRG_DETECT, ext_chrg_detect_mode);
 #endif
 
 #ifdef BATTERY_PIN
