@@ -226,6 +226,11 @@ void setup()
     digitalWrite(PIN_POWER_EN1, INPUT);
 #endif
 
+#if defined(LORA_TCXO_GPIO)
+    pinMode(LORA_TCXO_GPIO, OUTPUT);
+    digitalWrite(LORA_TCXO_GPIO, HIGH);
+#endif
+
 #if defined(VEXT_ENABLE_V03)
     pinMode(VEXT_ENABLE_V03, OUTPUT);
     pinMode(ST7735_BL_V03, OUTPUT);
