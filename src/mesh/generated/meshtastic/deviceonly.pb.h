@@ -324,7 +324,7 @@ extern const pb_msgdesc_t meshtastic_NodeRemoteHardwarePin_msg;
 #define meshtastic_DeviceState_size              17571
 #define meshtastic_NodeInfoLite_size             158
 #define meshtastic_NodeRemoteHardwarePin_size    29
-#define meshtastic_OEMStore_size                 3262
+#define meshtastic_OEMStore_size                 3278
 #define meshtastic_PositionLite_size             28
 
 #ifdef __cplusplus
