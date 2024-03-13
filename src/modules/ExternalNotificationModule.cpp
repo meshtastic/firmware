@@ -81,7 +81,7 @@ int32_t ExternalNotificationModule::runOnce()
             // let the song finish if we reach timeout
             nagCycleCutoff = UINT32_MAX;
             LOG_INFO("Turning off external notification: ");
-            for (int i = 0; i < 2; i++) {
+            for (int i = 0; i < 3; i++) {
                 setExternalOff(i);
                 externalTurnedOn[i] = 0;
                 LOG_INFO("%d ", i);
