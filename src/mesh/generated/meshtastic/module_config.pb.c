@@ -9,7 +9,7 @@
 PB_BIND(meshtastic_ModuleConfig, meshtastic_ModuleConfig, 2)
 
 
-PB_BIND(meshtastic_ModuleConfig_MQTTConfig, meshtastic_ModuleConfig_MQTTConfig, AUTO)
+PB_BIND(meshtastic_ModuleConfig_MQTTConfig, meshtastic_ModuleConfig_MQTTConfig, 2)
 
 
 PB_BIND(meshtastic_ModuleConfig_MapReportSettings, meshtastic_ModuleConfig_MapReportSettings, AUTO)
