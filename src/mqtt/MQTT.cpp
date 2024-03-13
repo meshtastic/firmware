@@ -185,7 +185,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
             statusTopic = moduleConfig.mqtt.root + statusTopic;
             cryptTopic = moduleConfig.mqtt.root + cryptTopic;
             jsonTopic = moduleConfig.mqtt.root + jsonTopic;
-            mapTopic = moduleConfig.mqtt.root + jsonTopic;
+            mapTopic = moduleConfig.mqtt.root + mapTopic;
         } else {
             statusTopic = "msh" + statusTopic;
             cryptTopic = "msh" + cryptTopic;
@@ -552,14 +552,14 @@ void MQTT::perhapsReportToMap()
     if (!moduleConfig.mqtt.map_reporting_enabled || !(moduleConfig.mqtt.proxy_to_client_enabled || isConnectedDirectly()))
         return;
 
-    if (map_position_precision == 0 || (localPosition.latitude_i == 0 && localPosition.longitude_i == 0)) {
-        LOG_WARN("MQTT Map reporting is enabled, but precision is 0 or no position available.\n");
-        return;
-    }
-
     if (millis() - last_report_to_map < map_publish_interval_secs * 1000) {
         return;
     } else {
+        if (map_position_precision == 0 || (localPosition.latitude_i == 0 && localPosition.longitude_i == 0)) {
+            LOG_WARN("MQTT Map reporting is enabled, but precision is 0 or no position available.\n");
+            return;
+        }
+
         // Allocate ServiceEnvelope and fill it
         meshtastic_ServiceEnvelope *se = mqttPool.allocZeroed();
         se->channel_id = (char *)channels.getGlobalId(channels.getPrimaryIndex()); // Use primary channel as the channel_id

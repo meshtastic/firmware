@@ -5,7 +5,7 @@
 class SHT31Sensor : public TelemetrySensor
 {
   private:
-    Adafruit_SHT31 sht31 = Adafruit_SHT31();
+    Adafruit_SHT31 sht31;
 
   protected:
     virtual void setup() override;

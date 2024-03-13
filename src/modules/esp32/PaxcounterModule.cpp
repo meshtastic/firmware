@@ -50,7 +50,7 @@ bool PaxcounterModule::sendInfo(NodeNum dest)
     meshtastic_MeshPacket *p = allocDataProtobuf(pl);
     p->to = dest;
     p->decoded.want_response = false;
-    p->priority = meshtastic_MeshPacket_Priority_MIN;
+    p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
 
     service.sendToMesh(p, RX_SRC_LOCAL, true);
 
