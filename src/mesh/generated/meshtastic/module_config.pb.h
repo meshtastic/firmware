@@ -119,7 +119,7 @@ typedef struct _meshtastic_ModuleConfig_MQTTConfig {
     bool tls_enabled;
     /* The root topic to use for MQTT messages. Default is "msh".
  This is useful if you want to use a single MQTT server for multiple meshtastic networks and separate them via ACLs */
-    char root[16];
+    char root[32];
     /* If true, we can use the connected phone / client to proxy messages to MQTT instead of a direct connection */
     bool proxy_to_client_enabled;
     /* If true, we will periodically report unencrypted information about our node to a map via MQTT */
@@ -832,7 +832,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_CannedMessageConfig_size 49
 #define meshtastic_ModuleConfig_DetectionSensorConfig_size 44
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_size 42
-#define meshtastic_ModuleConfig_MQTTConfig_size  238
+#define meshtastic_ModuleConfig_MQTTConfig_size  254
 #define meshtastic_ModuleConfig_MapReportSettings_size 12
 #define meshtastic_ModuleConfig_NeighborInfoConfig_size 8
 #define meshtastic_ModuleConfig_PaxcounterConfig_size 8
@@ -841,7 +841,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_SerialConfig_size 28
 #define meshtastic_ModuleConfig_StoreForwardConfig_size 22
 #define meshtastic_ModuleConfig_TelemetryConfig_size 36
-#define meshtastic_ModuleConfig_size             241
+#define meshtastic_ModuleConfig_size             257
 #define meshtastic_RemoteHardwarePin_size        21
 
 #ifdef __cplusplus
