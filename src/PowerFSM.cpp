@@ -358,10 +358,10 @@ void PowerFSM_setup()
     // Don't add power saving transitions if we are a power saving tracker or sensor. Sleep will be initiatiated through the
     // modules
     if ((isRouter || config.power.is_power_saving) && !isTrackerOrSensor) {
-        powerFSM.add_timed_transition(&stateNB, isInfrastructureRole ? &stateSDS : &stateLS,
+        powerFSM.add_timed_transition(&stateNB, &stateLS,
                                       getConfiguredOrDefaultMs(config.power.min_wake_secs, default_min_wake_secs), NULL,
                                       "Min wake timeout");
-        powerFSM.add_timed_transition(&stateDARK, isInfrastructureRole ? &stateSDS : &stateLS,
+        powerFSM.add_timed_transition(&stateDARK, &stateLS,
                                       getConfiguredOrDefaultMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs),
                                       NULL, "Bluetooth timeout");
     }
