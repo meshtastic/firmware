@@ -202,8 +202,6 @@ void setupMeshService(void)
     toRadio.begin();
 }
 
-// FIXME, turn off soft device access for debugging
-static bool isSoftDeviceAllowed = true;
 static uint32_t configuredPasskey;
 
 void NRF52Bluetooth::shutdown()
@@ -281,14 +279,11 @@ void NRF52Bluetooth::setup()
     LOG_INFO("Configuring the Mesh bluetooth service\n");
     setupMeshService();
 
-    // Supposedly debugging works with soft device if you disable advertising
-    if (isSoftDeviceAllowed) {
-        // Setup the advertising packet(s)
-        LOG_INFO("Setting up the advertising payload(s)\n");
-        startAdv();
+    // Setup the advertising packet(s)
+    LOG_INFO("Setting up the advertising payload(s)\n");
+    startAdv();
 
-        LOG_INFO("Advertising\n");
-    }
+    LOG_INFO("Advertising\n");
 }
 
 void NRF52Bluetooth::resumeAdverising()

@@ -227,6 +227,11 @@ void setup()
     delay(200);
 #endif
 
+#if defined(LORA_TCXO_GPIO)
+    pinMode(LORA_TCXO_GPIO, OUTPUT);
+    digitalWrite(LORA_TCXO_GPIO, HIGH);
+#endif
+
 #if defined(VEXT_ENABLE_V03)
     pinMode(VEXT_ENABLE_V03, OUTPUT);
     pinMode(ST7735_BL_V03, OUTPUT);
@@ -343,7 +348,7 @@ void setup()
     pinMode(PIN_3V3_EN, OUTPUT);
     digitalWrite(PIN_3V3_EN, HIGH);
 #endif
-#ifndef USE_EINK
+#ifdef AQ_SET_PIN
     // RAK-12039 set pin for Air quality sensor
     pinMode(AQ_SET_PIN, OUTPUT);
     digitalWrite(AQ_SET_PIN, HIGH);

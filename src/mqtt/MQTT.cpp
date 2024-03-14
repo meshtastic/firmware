@@ -185,7 +185,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
             statusTopic = moduleConfig.mqtt.root + statusTopic;
             cryptTopic = moduleConfig.mqtt.root + cryptTopic;
             jsonTopic = moduleConfig.mqtt.root + jsonTopic;
-            mapTopic = moduleConfig.mqtt.root + jsonTopic;
+            mapTopic = moduleConfig.mqtt.root + mapTopic;
         } else {
             statusTopic = "msh" + statusTopic;
             cryptTopic = "msh" + cryptTopic;
@@ -486,9 +486,9 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
 
     auto &ch = channels.getByIndex(chIndex);
 
-    if (&mp.decoded && strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0 &&
-        (mp.decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
-         mp.decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP)) {
+    if (&mp_decoded.decoded && strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0 &&
+        (mp_decoded.decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
+         mp_decoded.decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP)) {
         LOG_DEBUG("MQTT onSend - Ignoring range test or detection sensor message on public mqtt\n");
         return;
     }
@@ -552,14 +552,14 @@ void MQTT::perhapsReportToMap()
     if (!moduleConfig.mqtt.map_reporting_enabled || !(moduleConfig.mqtt.proxy_to_client_enabled || isConnectedDirectly()))
         return;
 
-    if (map_position_precision == 0 || (localPosition.latitude_i == 0 && localPosition.longitude_i == 0)) {
-        LOG_WARN("MQTT Map reporting is enabled, but precision is 0 or no position available.\n");
-        return;
-    }
-
     if (millis() - last_report_to_map < map_publish_interval_secs * 1000) {
         return;
     } else {
+        if (map_position_precision == 0 || (localPosition.latitude_i == 0 && localPosition.longitude_i == 0)) {
+            LOG_WARN("MQTT Map reporting is enabled, but precision is 0 or no position available.\n");
+            return;
+        }
+
         // Allocate ServiceEnvelope and fill it
         meshtastic_ServiceEnvelope *se = mqttPool.allocZeroed();
         se->channel_id = (char *)channels.getGlobalId(channels.getPrimaryIndex()); // Use primary channel as the channel_id
