@@ -175,7 +175,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), pubSub(mqttClient), mqttQueue(MAX_
 MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
 #endif
 {
-    if (moduleConfig.mqtt.enabled) {
+    if (moduleConfig.mqtt.enabled && channels.anyMqttEnabled()) {
         LOG_DEBUG("Initializing MQTT\n");
 
         assert(!mqtt);
@@ -401,7 +401,7 @@ bool MQTT::wantsLink() const
 
 int32_t MQTT::runOnce()
 {
-    if (!moduleConfig.mqtt.enabled)
+    if (!moduleConfig.mqtt.enabled || !channels.anyMqttEnabled())
         return disable();
 
     bool wantConnection = wantsLink();

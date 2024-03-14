@@ -237,6 +237,16 @@ void Channels::setChannel(const meshtastic_Channel &c)
     old = c; // slam in the new settings/role
 }
 
+bool Channels::anyMqttEnabled()
+{
+    for (int i = 0; i < getNumChannels(); i++)
+        if (channelFile.channels[i].role != meshtastic_Channel_Role_DISABLED && channelFile.channels[i].has_settings &&
+            (channelFile.channels[i].settings.downlink_enabled || channelFile.channels[i].settings.uplink_enabled))
+            return true;
+
+    return false;
+}
+
 const char *Channels::getName(size_t chIndex)
 {
     // Convert the short "" representation for Default into a usable string
