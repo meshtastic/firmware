@@ -156,8 +156,8 @@
         3, 1, 3, 3, 3                                                                                                            \
     }
 
-//#define USX_HCODES_FAVOR_UMLAUT {0x00, 0x40, 0xE0, 0xC0, 0x80}
-//#define USX_HCODE_LENS_FAVOR_UMLAUT {2, 2, 3, 3, 2}
+// #define USX_HCODES_FAVOR_UMLAUT {0x00, 0x40, 0xE0, 0xC0, 0x80}
+// #define USX_HCODE_LENS_FAVOR_UMLAUT {2, 2, 3, 3, 2}
 
 /// Horizontal codes preset favouring umlaut letters
 #define USX_HCODES_FAVOR_UMLAUT                                                                                                  \

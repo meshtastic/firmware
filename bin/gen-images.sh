@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e 
+set -e
 
 # regen the design bins first
 cd design
