@@ -20,12 +20,7 @@ struct uBloxGnssModelInfo {
     char extension[10][30];
 };
 
-typedef enum {
-    GNSS_MODEL_MTK,
-    GNSS_MODEL_UBLOX,
-    GNSS_MODEL_UC6580,
-    GNSS_MODEL_UNKNOWN,
-} GnssModel_t;
+typedef enum { GNSS_MODEL_MTK, GNSS_MODEL_UBLOX, GNSS_MODEL_UC6580, GNSS_MODEL_UNKNOWN, GNSS_MODEL_MTK_L76B } GnssModel_t;
 
 typedef enum {
     GNSS_RESPONSE_NONE,
@@ -92,8 +87,11 @@ class GPS : private concurrency::OSThread
 
   public:
     /** If !NULL we will use this serial port to construct our GPS */
+#if defined(RPI_PICO_WAVESHARE)
+    static SerialUART *_serial_gps;
+#else
     static HardwareSerial *_serial_gps;
-
+#endif
     static uint8_t _message_PMREQ[];
     static uint8_t _message_PMREQ_10[];
     static const uint8_t _message_CFG_RXM_PSM[];
