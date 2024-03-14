@@ -9,12 +9,14 @@
 #include "target_specific.h"
 #include <WiFi.h>
 #include <WiFiUdp.h>
-#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WEBSERVER
+#ifdef ARCH_ESP32
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "mesh/http/WebServer.h"
 #endif
 #include <ESPmDNS.h>
 #include <esp_wifi.h>
 static void WiFiEvent(WiFiEvent_t event);
+#endif
 
 #ifndef DISABLE_NTP
 #include <NTPClient.h>
