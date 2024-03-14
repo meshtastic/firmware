@@ -1005,7 +1005,7 @@ void tft_task_handler(void *param = nullptr)
         if (deviceScreen)
             deviceScreen->task_handler();
 #ifdef HAS_FREE_RTOS
-        vTaskDelay((TickType_t)10);
+        vTaskDelay((TickType_t)5);
 #else
         delay(10);
 #endif
