@@ -390,7 +390,7 @@ bool MQTT::wantsLink() const
 
 int32_t MQTT::runOnce()
 {
-    if (!moduleConfig.mqtt.enabled || !channels.anyMqttEnabled())
+    if (!moduleConfig.mqtt.enabled)
         return disable();
 
     bool wantConnection = wantsLink();
