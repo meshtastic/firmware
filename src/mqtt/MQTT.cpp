@@ -175,7 +175,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), pubSub(mqttClient), mqttQueue(MAX_
 MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
 #endif
 {
-    if (moduleConfig.mqtt.enabled && channels.anyMqttEnabled()) {
+    if (moduleConfig.mqtt.enabled) {
         LOG_DEBUG("Initializing MQTT\n");
 
         assert(!mqtt);
