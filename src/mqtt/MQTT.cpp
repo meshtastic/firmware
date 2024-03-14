@@ -374,18 +374,7 @@ bool MQTT::wantsLink() const
     bool hasChannelorMapReport = false;
 
     if (moduleConfig.mqtt.enabled) {
-        hasChannelorMapReport = moduleConfig.mqtt.map_reporting_enabled;
-        if (!hasChannelorMapReport) {
-            // No need for link if no channel needed it
-            size_t numChan = channels.getNumChannels();
-            for (size_t i = 0; i < numChan; i++) {
-                const auto &ch = channels.getByIndex(i);
-                if (ch.settings.uplink_enabled || ch.settings.downlink_enabled) {
-                    hasChannelorMapReport = true;
-                    break;
-                }
-            }
-        }
+        hasChannelorMapReport = moduleConfig.mqtt.map_reporting_enabled || channels.anyMqttEnabled();
     }
     if (hasChannelorMapReport && moduleConfig.mqtt.proxy_to_client_enabled)
         return true;
