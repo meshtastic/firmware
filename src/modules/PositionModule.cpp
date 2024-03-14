@@ -59,9 +59,15 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     // to set fixed location, EUD-GPS location or just the time (see also issue #900)
     bool isLocal = false;
     if (nodeDB.getNodeNum() == getFrom(&mp)) {
-        LOG_DEBUG("Incoming update from MYSELF\n");
         isLocal = true;
-        nodeDB.setLocalPosition(p);
+        if (config.position.fixed_position) {
+            LOG_DEBUG("Ignore incoming position update from myself except for time, because position.fixed_position is true\n");
+            nodeDB.setLocalPosition(p, true);
+            return false;
+        } else {
+            LOG_DEBUG("Incoming update from MYSELF\n");
+            nodeDB.setLocalPosition(p);
+        }
     }
 
     // Log packet size and data fields
