@@ -105,7 +105,8 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
             break;
         case meshtastic_ToRadio_mqttClientProxyMessage_tag:
             LOG_INFO("Got MqttClientProxy message\n");
-            if (mqtt && moduleConfig.mqtt.proxy_to_client_enabled && moduleConfig.mqtt.enabled && channels.anyMqttEnabled()) {
+            if (mqtt && moduleConfig.mqtt.proxy_to_client_enabled && moduleConfig.mqtt.enabled &&
+                (channels.anyMqttEnabled() || moduleConfig.mqtt.map_reporting_enabled)) {
                 mqtt->onClientProxyReceive(toRadioScratch.mqttClientProxyMessage);
             } else {
                 LOG_WARN("MqttClientProxy message received but it is not enabled or no channels have up/downlink\n");
