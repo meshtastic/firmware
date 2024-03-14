@@ -486,9 +486,9 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
 
     auto &ch = channels.getByIndex(chIndex);
 
-    if (&mp.decoded && strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0 &&
-        (mp.decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
-         mp.decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP)) {
+    if (&mp_decoded.decoded && strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0 &&
+        (mp_decoded.decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
+         mp_decoded.decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP)) {
         LOG_DEBUG("MQTT onSend - Ignoring range test or detection sensor message on public mqtt\n");
         return;
     }
