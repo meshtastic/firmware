@@ -109,7 +109,8 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
                 (channels.anyMqttEnabled() || moduleConfig.mqtt.map_reporting_enabled)) {
                 mqtt->onClientProxyReceive(toRadioScratch.mqttClientProxyMessage);
             } else {
-                LOG_WARN("MqttClientProxy message received but it is not enabled or no channels have up/downlink\n");
+                LOG_WARN("MqttClientProxy received but proxy is not enabled, no channels have up/downlink, or map reporting "
+                         "not enabled\n");
             }
             break;
         default:
