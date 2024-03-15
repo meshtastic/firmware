@@ -30,12 +30,6 @@ typedef struct _meshtastic_DeviceProfile {
     meshtastic_LocalModuleConfig module_config;
 } meshtastic_DeviceProfile;
 
-/* A heartbeat message is sent by a node to indicate that it is still alive.
- This is currently only needed to keep serial connections alive. */
-typedef struct _meshtastic_Heartbeat {
-    char dummy_field;
-} meshtastic_Heartbeat;
-
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,9 +37,7 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_DeviceProfile_init_default    {false, "", false, "", {{NULL}, NULL}, false, meshtastic_LocalConfig_init_default, false, meshtastic_LocalModuleConfig_init_default}
-#define meshtastic_Heartbeat_init_default        {0}
 #define meshtastic_DeviceProfile_init_zero       {false, "", false, "", {{NULL}, NULL}, false, meshtastic_LocalConfig_init_zero, false, meshtastic_LocalModuleConfig_init_zero}
-#define meshtastic_Heartbeat_init_zero           {0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_DeviceProfile_long_name_tag   1
@@ -66,21 +58,13 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  module_config,     5)
 #define meshtastic_DeviceProfile_config_MSGTYPE meshtastic_LocalConfig
 #define meshtastic_DeviceProfile_module_config_MSGTYPE meshtastic_LocalModuleConfig
 
-#define meshtastic_Heartbeat_FIELDLIST(X, a) \
-
-#define meshtastic_Heartbeat_CALLBACK NULL
-#define meshtastic_Heartbeat_DEFAULT NULL
-
 extern const pb_msgdesc_t meshtastic_DeviceProfile_msg;
-extern const pb_msgdesc_t meshtastic_Heartbeat_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_DeviceProfile_fields &meshtastic_DeviceProfile_msg
-#define meshtastic_Heartbeat_fields &meshtastic_Heartbeat_msg
 
 /* Maximum encoded size of messages (where known) */
 /* meshtastic_DeviceProfile_size depends on runtime parameters */
-#define meshtastic_Heartbeat_size                0
 
 #ifdef __cplusplus
 } /* extern "C" */
