@@ -91,6 +91,5 @@ int32_t NodeInfoModule::runOnce()
         LOG_INFO("Sending our nodeinfo to mesh (wantReplies=%d)\n", requestReplies);
         sendOurNodeInfo(NODENUM_BROADCAST, requestReplies); // Send our info (don't request replies)
     }
-
-    return getConfiguredOrDefaultMs(config.device.node_info_broadcast_secs, default_broadcast_interval_secs);
+    return getConfiguredOrDefaultMs(config.device.node_info_broadcast_secs, default_node_info_broadcast_secs);
 }
