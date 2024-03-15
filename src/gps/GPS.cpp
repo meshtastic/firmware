@@ -1212,10 +1212,11 @@ bool GPS::factoryReset()
         // byte _message_CFG_RST_COLDSTART[] = {0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0xFF, 0xB9, 0x00, 0x00, 0xC6, 0x8B};
         // _serial_gps->write(_message_CFG_RST_COLDSTART, sizeof(_message_CFG_RST_COLDSTART));
         // delay(1000);
-    } else if (HW_VENDOR == meshtastic_HardwareModel_RPI_PICO) {
+    } else {
+        // fire this for good measure, if we have an L76B - won't harm other devices.
         _serial_gps->write("$PMTK104*37\r\n");
         // No PMTK_ACK for this command.
-    } else {
+        delay(100);
         // send the UBLOX Factory Reset Command regardless of detect state, something is very wrong, just assume it's UBLOX.
         // Factory Reset
         byte _message_reset[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF, 0xFB, 0x00, 0x00, 0x00,
