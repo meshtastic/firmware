@@ -101,16 +101,7 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
     // devicestate.no_save = true;
     if (devicestate.no_save) {
         LOG_DEBUG("***** DEVELOPMENT MODE - DO NOT RELEASE *****\n");
-
-        // Sleep quite frequently to stress test the BLE comms, broadcast position every 6 mins
-        config.display.screen_on_secs = 10;
-        config.power.wait_bluetooth_secs = 10;
-        config.position.position_broadcast_secs = 6 * 60;
-        config.power.ls_secs = 60;
-        config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_TW;
-
-        // Enter super deep sleep soon and stay there not very long
-        // radioConfig.preferences.sds_secs = 60;
+        // Put your development config changes here
     }
 
     // Update the global myRegion
@@ -199,7 +190,7 @@ void NodeDB::installDefaultConfig()
     config.position.broadcast_smart_minimum_distance = 100;
     config.position.broadcast_smart_minimum_interval_secs = 30;
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER)
-        config.device.node_info_broadcast_secs = 3 * 60 * 60;
+        config.device.node_info_broadcast_secs = default_node_info_broadcast_secs;
     config.device.serial_enabled = true;
     resetRadioConfig();
     strncpy(config.network.ntp_server, "0.pool.ntp.org", 32);
