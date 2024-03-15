@@ -48,8 +48,8 @@ class NodeDB
     meshtastic_NodeInfoLite *meshNodes;
     pb_size_t *numMeshNodes;
 
-  public:
-    bool updateGUI = false; // we think the gui should definitely be redrawn, screen will clear this once handled
+public:
+    bool updateGUI = false;                           // we think the gui should definitely be redrawn, screen will clear this once handled
     meshtastic_NodeInfoLite *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
     Observable<const meshtastic::NodeStatus *> newStatus;
 
@@ -135,7 +135,8 @@ class NodeDB
 
     void setLocalPosition(meshtastic_Position position, bool timeOnly = false)
     {
-        if (timeOnly) {
+        if (timeOnly)
+        {
             LOG_DEBUG("Setting local position time only: time=%i\n", position.time);
             localPosition.time = position.time;
             return;
@@ -145,7 +146,7 @@ class NodeDB
         localPosition = position;
     }
 
-  private:
+private:
     /// Find a node in our DB, create an empty NodeInfoLite if missing
     meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
 
@@ -191,7 +192,7 @@ extern NodeDB nodeDB;
 // Our delay functions check for this for times that should never expire
 #define NODE_DELAY_FOREVER 0xffffffff
 
-#define IF_ROUTER(routerVal, normalVal)                                                                                          \
+#define IF_ROUTER(routerVal, normalVal) \
     ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER) ? (routerVal) : (normalVal))
 
 #define ONE_DAY 24 * 60 * 60
@@ -203,8 +204,8 @@ extern NodeDB nodeDB;
 #define default_ls_secs IF_ROUTER(ONE_DAY, 5 * 60)
 #define default_min_wake_secs 10
 #define default_screen_on_secs IF_ROUTER(1, 60 * 10)
-#define default_node_info_broadcast_secs (3 * 60 * 60)
-#define min_node_info_broadcast_secs (60 * 60) // No regular broadcasts of more than once an hour
+#define default_node_info_broadcast_secs 3 * 60 * 60
+#define min_node_info_broadcast_secs 60 * 60 // No regular broadcasts of more than once an hour
 
 #define default_mqtt_address "mqtt.meshtastic.org"
 #define default_mqtt_username "meshdev"
@@ -252,7 +253,7 @@ extern meshtastic_CriticalErrorCode error_code;
  */
 extern uint32_t error_address;
 
-#define Module_Config_size                                                                                                       \
-    (ModuleConfig_CannedMessageConfig_size + ModuleConfig_ExternalNotificationConfig_size + ModuleConfig_MQTTConfig_size +       \
-     ModuleConfig_RangeTestConfig_size + ModuleConfig_SerialConfig_size + ModuleConfig_StoreForwardConfig_size +                 \
+#define Module_Config_size                                                                                                 \
+    (ModuleConfig_CannedMessageConfig_size + ModuleConfig_ExternalNotificationConfig_size + ModuleConfig_MQTTConfig_size + \
+     ModuleConfig_RangeTestConfig_size + ModuleConfig_SerialConfig_size + ModuleConfig_StoreForwardConfig_size +           \
      ModuleConfig_TelemetryConfig_size + ModuleConfig_size)
