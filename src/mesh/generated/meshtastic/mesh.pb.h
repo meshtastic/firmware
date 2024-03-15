@@ -819,7 +819,7 @@ typedef struct _meshtastic_ToRadio {
         /* MQTT Client Proxy Message (for client / phone subscribed to MQTT sending to device) */
         meshtastic_MqttClientProxyMessage mqttClientProxyMessage;
         /* Heartbeat message (used to keep the device connection awake on serial) */
-        meshtastic_Heartbeat hearbeat;
+        meshtastic_Heartbeat heartbeat;
     };
 } meshtastic_ToRadio;
 
@@ -1066,7 +1066,7 @@ extern "C" {
 #define meshtastic_ToRadio_disconnect_tag        4
 #define meshtastic_ToRadio_xmodemPacket_tag      5
 #define meshtastic_ToRadio_mqttClientProxyMessage_tag 6
-#define meshtastic_ToRadio_hearbeat_tag          7
+#define meshtastic_ToRadio_heartbeat_tag         7
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_Position_FIELDLIST(X, a) \
@@ -1247,13 +1247,13 @@ X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,want_config_id,want_config_i
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,disconnect,disconnect),   4) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,xmodemPacket,xmodemPacket),   5) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,mqttClientProxyMessage,mqttClientProxyMessage),   6) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,hearbeat,hearbeat),   7)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,heartbeat,heartbeat),   7)
 #define meshtastic_ToRadio_CALLBACK NULL
 #define meshtastic_ToRadio_DEFAULT NULL
 #define meshtastic_ToRadio_payload_variant_packet_MSGTYPE meshtastic_MeshPacket
 #define meshtastic_ToRadio_payload_variant_xmodemPacket_MSGTYPE meshtastic_XModem
 #define meshtastic_ToRadio_payload_variant_mqttClientProxyMessage_MSGTYPE meshtastic_MqttClientProxyMessage
-#define meshtastic_ToRadio_payload_variant_hearbeat_MSGTYPE meshtastic_Heartbeat
+#define meshtastic_ToRadio_payload_variant_heartbeat_MSGTYPE meshtastic_Heartbeat
 
 #define meshtastic_Compressed_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    portnum,           1) \
