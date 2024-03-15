@@ -1151,9 +1151,10 @@ GPS *GPS::createGps()
         LOG_DEBUG("Using GPIO%d for GPS RX\n", new_gps->rx_gpio);
         LOG_DEBUG("Using GPIO%d for GPS TX\n", new_gps->tx_gpio);
         _serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, new_gps->rx_gpio, new_gps->tx_gpio);
-
-#else
+#elif defined(ARCH_RP2040)
         _serial_gps->setFIFOSize(256);
+        _serial_gps->begin(GPS_BAUDRATE);
+#else
         _serial_gps->begin(GPS_BAUDRATE);
 #endif
 
