@@ -371,11 +371,9 @@ void MQTT::sendSubscriptions()
 
 bool MQTT::wantsLink() const
 {
-    bool hasChannelorMapReport = false;
+    bool hasChannelorMapReport =
+        moduleConfig.mqtt.enabled && (moduleConfig.mqtt.map_reporting_enabled || channels.anyMqttEnabled());
 
-    if (moduleConfig.mqtt.enabled) {
-        hasChannelorMapReport = moduleConfig.mqtt.map_reporting_enabled || channels.anyMqttEnabled();
-    }
     if (hasChannelorMapReport && moduleConfig.mqtt.proxy_to_client_enabled)
         return true;
 
