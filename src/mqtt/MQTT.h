@@ -71,6 +71,10 @@ class MQTT : private concurrency::OSThread
 
     void onClientProxyReceive(meshtastic_MqttClientProxyMessage msg);
 
+    bool isEnabled() { return this->enabled; };
+
+    void start() { setIntervalFromNow(0); };
+
   protected:
     PointerQueue<meshtastic_ServiceEnvelope> mqttQueue;
 

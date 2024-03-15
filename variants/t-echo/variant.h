@@ -158,7 +158,7 @@ External serial flash WP25R1635FZUIL0
 
 // Controls power for all peripherals (eink + GPS + LoRa + Sensor)
 #define PIN_POWER_EN (0 + 12)
-#define PIN_POWER_EN1 (0 + 13)
+// #define PIN_POWER_EN1 (0 + 13)
 
 #define USE_EINK
 
