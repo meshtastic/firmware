@@ -223,7 +223,7 @@ void setup()
 #if defined(TTGO_T_ECHO) && defined(PIN_POWER_EN)
     pinMode(PIN_POWER_EN, OUTPUT);
     digitalWrite(PIN_POWER_EN, HIGH);
-    digitalWrite(PIN_POWER_EN1, INPUT);
+    // digitalWrite(PIN_POWER_EN1, INPUT);
 #endif
 
 #if defined(LORA_TCXO_GPIO)

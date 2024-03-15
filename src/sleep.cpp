@@ -203,7 +203,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
 #ifdef TTGO_T_ECHO
 #ifdef PIN_POWER_EN
     pinMode(PIN_POWER_EN, INPUT); // power off peripherals
-    pinMode(PIN_POWER_EN1, INPUT_PULLDOWN);
+    // pinMode(PIN_POWER_EN1, INPUT_PULLDOWN);
 #endif
 #endif
 
