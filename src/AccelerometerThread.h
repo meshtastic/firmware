@@ -7,16 +7,16 @@
 #include <Adafruit_LIS3DH.h>
 #include <Adafruit_MPU6050.h>
 #include <Arduino.h>
+#include <SensorBMA423.hpp>
 #include <Wire.h>
-#include <bma.h>
 
-BMA423 bmaSensor;
+SensorBMA423 bmaSensor;
 bool BMA_IRQ = false;
 
 #define ACCELEROMETER_CHECK_INTERVAL_MS 100
 #define ACCELEROMETER_CLICK_THRESHOLD 40
 
-uint16_t readRegister(uint8_t address, uint8_t reg, uint8_t *data, uint16_t len)
+int readRegister(uint8_t address, uint8_t reg, uint8_t *data, uint8_t len)
 {
     Wire.beginTransmission(address);
     Wire.write(reg);
@@ -29,7 +29,7 @@ uint16_t readRegister(uint8_t address, uint8_t reg, uint8_t *data, uint16_t len)
     return 0; // Pass
 }
 
-uint16_t writeRegister(uint8_t address, uint8_t reg, uint8_t *data, uint16_t len)
+int writeRegister(uint8_t address, uint8_t reg, uint8_t *data, uint8_t len)
 {
     Wire.beginTransmission(address);
     Wire.write(reg);
@@ -72,24 +72,14 @@ class AccelerometerThread : public concurrency::OSThread
             lis.setRange(LIS3DH_RANGE_2_G);
             // Adjust threshold, higher numbers are less sensitive
             lis.setClick(config.device.double_tap_as_button_press ? 2 : 1, ACCELEROMETER_CLICK_THRESHOLD);
-        } else if (acceleremoter_type == ScanI2C::DeviceType::BMA423 && bmaSensor.begin(readRegister, writeRegister, delay)) {
+        } else if (acceleremoter_type == ScanI2C::DeviceType::BMA423 &&
+                   bmaSensor.begin(accelerometer_found.address, &readRegister, &writeRegister)) {
             LOG_DEBUG("BMA423 initializing\n");
-            Acfg cfg;
-            cfg.odr = BMA4_OUTPUT_DATA_RATE_100HZ;
-            cfg.range = BMA4_ACCEL_RANGE_2G;
-            cfg.bandwidth = BMA4_ACCEL_NORMAL_AVG4;
-            cfg.perf_mode = BMA4_CONTINUOUS_MODE;
-            bmaSensor.setAccelConfig(cfg);
-            bmaSensor.enableAccel();
-
-            struct bma4_int_pin_config pin_config;
-            pin_config.edge_ctrl = BMA4_LEVEL_TRIGGER;
-            pin_config.lvl = BMA4_ACTIVE_HIGH;
-            pin_config.od = BMA4_PUSH_PULL;
-            pin_config.output_en = BMA4_OUTPUT_ENABLE;
-            pin_config.input_en = BMA4_INPUT_DISABLE;
-            // The correct trigger interrupt needs to be configured as needed
-            bmaSensor.setINTPinConfig(pin_config, BMA4_INTR1_MAP);
+            bmaSensor.configAccelerometer(bmaSensor.RANGE_2G, bmaSensor.ODR_100HZ, bmaSensor.BW_NORMAL_AVG4,
+                                          bmaSensor.PERF_CONTINUOUS_MODE);
+            bmaSensor.enableAccelerometer();
+            bmaSensor.configInterrupt(BMA4_LEVEL_TRIGGER, BMA4_ACTIVE_HIGH, BMA4_PUSH_PULL, BMA4_OUTPUT_ENABLE,
+                                      BMA4_INPUT_DISABLE);
 
 #ifdef BMA423_INT
             pinMode(BMA4XX_INT, INPUT);
@@ -102,34 +92,22 @@ class AccelerometerThread : public concurrency::OSThread
                 RISING); // Select the interrupt mode according to the actual circuit
 #endif
 
-            struct bma423_axes_remap remap_data;
 #ifdef T_WATCH_S3
-            remap_data.x_axis = 1;
-            remap_data.x_axis_sign = 0;
-            remap_data.y_axis = 0;
-            remap_data.y_axis_sign = 0;
-            remap_data.z_axis = 2;
-            remap_data.z_axis_sign = 1;
-#else
-            remap_data.x_axis = 0;
-            remap_data.x_axis_sign = 1;
-            remap_data.y_axis = 1;
-            remap_data.y_axis_sign = 0;
-            remap_data.z_axis = 2;
-            remap_data.z_axis_sign = 1;
-#endif
             // Need to raise the wrist function, need to set the correct axis
-            bmaSensor.setRemapAxes(&remap_data);
-            // sensor.enableFeature(BMA423_STEP_CNTR, true);
-            bmaSensor.enableFeature(BMA423_TILT, true);
-            bmaSensor.enableFeature(BMA423_WAKEUP, true);
-            // sensor.resetStepCounter();
+            bmaSensor.setReampAxes(bmaSensor.REMAP_TOP_LAYER_RIGHT_CORNER);
+#else
+            bmaSensor.setReampAxes(bmaSensor.REMAP_BOTTOM_LAYER_BOTTOM_LEFT_CORNER);
+#endif
+            // bmaSensor.enableFeature(bmaSensor.FEATURE_STEP_CNTR, true);
+            bmaSensor.enableFeature(bmaSensor.FEATURE_TILT, true);
+            bmaSensor.enableFeature(bmaSensor.FEATURE_WAKEUP, true);
+            // bmaSensor.resetPedometer();
 
             // Turn on feature interrupt
-            bmaSensor.enableStepCountInterrupt();
-            bmaSensor.enableTiltInterrupt();
+            bmaSensor.enablePedometerIRQ();
+            bmaSensor.enableTiltIRQ();
             // It corresponds to isDoubleClick interrupt
-            bmaSensor.enableWakeupInterrupt();
+            bmaSensor.enableWakeupIRQ();
         }
     }
 
@@ -150,8 +128,8 @@ class AccelerometerThread : public concurrency::OSThread
                 buttonPress();
                 return 500;
             }
-        } else if (acceleremoter_type == ScanI2C::DeviceType::BMA423 && bmaSensor.getINT()) {
-            if (bmaSensor.isTilt() || bmaSensor.isDoubleClick()) {
+        } else if (acceleremoter_type == ScanI2C::DeviceType::BMA423 && bmaSensor.readIrqStatus() != DEV_WIRE_NONE) {
+            if (bmaSensor.isTilt() || bmaSensor.isDoubleTap()) {
                 wakeScreen();
                 return 500;
             }
