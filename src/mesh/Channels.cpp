@@ -7,6 +7,8 @@
 
 #include <assert.h>
 
+#include "mqtt/MQTT.h"
+
 /// 16 bytes of random PSK for our _public_ default channel that all devices power up on (AES128)
 static const uint8_t defaultpsk[] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,
                                      0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0x01};
@@ -193,6 +195,10 @@ void Channels::onConfigChanged()
         if (ch.role == meshtastic_Channel_Role_PRIMARY)
             primaryIndex = i;
     }
+    if (channels.anyMqttEnabled() && mqtt && !mqtt->isEnabled()) {
+        LOG_DEBUG("MQTT is enabled on at least one channel, so set MQTT thread to run immediately\n");
+        mqtt->start();
+    }
 }
 
 meshtastic_Channel &Channels::getByIndex(ChannelIndex chIndex)
@@ -235,6 +241,16 @@ void Channels::setChannel(const meshtastic_Channel &c)
                 channelFile.channels[i].role = meshtastic_Channel_Role_SECONDARY;
 
     old = c; // slam in the new settings/role
+}
+
+bool Channels::anyMqttEnabled()
+{
+    for (int i = 0; i < getNumChannels(); i++)
+        if (channelFile.channels[i].role != meshtastic_Channel_Role_DISABLED && channelFile.channels[i].has_settings &&
+            (channelFile.channels[i].settings.downlink_enabled || channelFile.channels[i].settings.uplink_enabled))
+            return true;
+
+    return false;
 }
 
 const char *Channels::getName(size_t chIndex)
