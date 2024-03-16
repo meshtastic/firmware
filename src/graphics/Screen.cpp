@@ -71,7 +71,7 @@ namespace graphics
 // #define SHOW_REDRAWS
 
 // A text message frame + debug frame + all the node infos
-static FrameCallback normalFrames[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
+FrameCallback *normalFrames;
 static uint32_t targetFramerate = IDLE_FRAMERATE;
 static char btPIN[16] = "888888";
 
@@ -893,6 +893,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_OledType screenType, OLEDDISPLAY_GEOMETRY geometry)
     : concurrency::OSThread("Screen"), address_found(address), model(screenType), geometry(geometry), cmdQueue(32)
 {
+    graphics::normalFrames = new FrameCallback[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
 #if defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SH1107_128_64)
     dispdev = new SH1106Wire(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
@@ -929,6 +930,11 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 
     ui = new OLEDDisplayUi(dispdev);
     cmdQueue.setReader(this);
+}
+
+Screen::~Screen()
+{
+    delete[] graphics::normalFrames;
 }
 
 /**

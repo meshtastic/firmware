@@ -26,6 +26,8 @@ void powerCommandsCheck()
         SPI.end();
         Wire.end();
         Serial1.end();
+        if (screen)
+            delete screen;
         reboot();
 #else
         rebootAtMsec = -1;
