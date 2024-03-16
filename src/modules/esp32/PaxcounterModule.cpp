@@ -104,7 +104,8 @@ int32_t PaxcounterModule::runOnce()
         } else {
             sendInfo(NODENUM_BROADCAST);
         }
-        return getConfiguredOrDefaultMs(moduleConfig.paxcounter.paxcounter_update_interval, default_broadcast_interval_secs);
+        return Default::getConfiguredOrDefaultMs(moduleConfig.paxcounter.paxcounter_update_interval,
+                                                 default_broadcast_interval_secs);
     } else {
         return disable();
     }
