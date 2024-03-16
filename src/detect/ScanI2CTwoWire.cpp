@@ -183,12 +183,10 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
             case ATECC608B_ADDR:
-                type = ATECC608B;
-                bool ateccInit = false;
 #ifdef RP2040_SLOW_CLOCK
-                ateccInit = atecc.begin(addr.address, Wire, Serial2);
+                bool ateccInit = atecc.begin(addr.address, Wire, Serial2);
 #else
-                ateccInit = atecc.begin(addr.address) == true;
+                bool ateccInit = atecc.begin(addr.address);
 #endif
                 if (ateccInit == true) {
                     LOG_INFO("ATECC608B initialized\n");
