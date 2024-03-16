@@ -82,9 +82,9 @@ int32_t PaxcounterModule::runOnce()
     if (isActive()) {
         if (firstTime) {
             firstTime = false;
-            LOG_DEBUG(
-                "Paxcounter starting up with interval of %d seconds\n",
-                getConfiguredOrDefault(moduleConfig.paxcounter.paxcounter_update_interval, default_broadcast_interval_secs));
+            LOG_DEBUG("Paxcounter starting up with interval of %d seconds\n",
+                      Default::getConfiguredOrDefault(moduleConfig.paxcounter.paxcounter_update_interval,
+                                                      default_broadcast_interval_secs));
             struct libpax_config_t configuration;
             libpax_default_config(&configuration);
 
