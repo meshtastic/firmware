@@ -141,7 +141,8 @@ typedef struct _meshtastic_DeviceState {
  NodeDB.cpp in the device code. */
     uint32_t version;
     /* Used only during development.
- Indicates developer is testing and changes should never be saved to flash. */
+ Indicates developer is testing and changes should never be saved to flash.
+ Deprecated in 2.3.1 */
     bool no_save;
     /* Some GPS receivers seem to have bogus settings from the factory, so we always do one factory reset. */
     bool did_gps_reset;
