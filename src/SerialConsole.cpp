@@ -72,7 +72,7 @@ bool SerialConsole::checkIsConnected()
 
 /**
  * we override this to notice when we've received a protobuf over the serial
- * stream.  Then we shunt off debug serial output.
+ * stream.  Then we shut off debug serial output.
  */
 bool SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
 {

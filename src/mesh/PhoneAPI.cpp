@@ -113,6 +113,9 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
                          "not enabled\n");
             }
             break;
+        case meshtastic_ToRadio_heartbeat_tag:
+            LOG_DEBUG("Got client heartbeat\n");
+            break;
         default:
             // Ignore nop messages
             // LOG_DEBUG("Error: unexpected ToRadio variant\n");
