@@ -3,6 +3,7 @@
 #include "Observer.h"
 #include <Arduino.h>
 #include <assert.h>
+#include <vector>
 
 #include "MeshTypes.h"
 #include "NodeStatus.h"
@@ -45,8 +46,8 @@ class NodeDB
     // Eventually use a smarter datastructure
     // HashMap<NodeNum, NodeInfo> nodes;
     // Note: these two references just point into our static array we serialize to/from disk
-    meshtastic_NodeInfoLite *meshNodes;
-    pb_size_t *numMeshNodes;
+    std::vector<meshtastic_NodeInfoLite> meshNodes;
+    pb_size_t numMeshNodes;
 
   public:
     bool updateGUI = false; // we think the gui should definitely be redrawn, screen will clear this once handled
@@ -126,12 +127,12 @@ class NodeDB
 
     meshtastic_NodeInfoLite *getMeshNodeByIndex(size_t x)
     {
-        assert(x < *numMeshNodes);
+        assert(x < numMeshNodes);
         return &meshNodes[x];
     }
 
     meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
-    size_t getNumMeshNodes() { return *numMeshNodes; }
+    size_t getNumMeshNodes() { return numMeshNodes; }
 
     void setLocalPosition(meshtastic_Position position, bool timeOnly = false)
     {

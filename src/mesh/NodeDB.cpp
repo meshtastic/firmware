@@ -17,8 +17,11 @@
 #include "mesh-pb-constants.h"
 #include "modules/NeighborInfoModule.h"
 #include <ErriezCRC32.h>
+#include <algorithm>
+#include <iostream>
 #include <pb_decode.h>
 #include <pb_encode.h>
+#include <vector>
 
 #ifdef ARCH_ESP32
 #include "mesh/wifi/WiFiAPClient.h"
@@ -46,6 +49,16 @@ meshtastic_LocalModuleConfig moduleConfig;
 meshtastic_ChannelFile channelFile;
 meshtastic_OEMStore oemStore;
 
+bool meshtastic_DeviceState_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_iter_t *field)
+{
+    std::vector<meshtastic_NodeInfoLite> *vec = (std::vector<meshtastic_NodeInfoLite> *)field->pData;
+
+    for (auto item : *vec) {
+        pb_encode_tag_for_field(ostream, field);
+        pb_encode_submessage(ostream, meshtastic_NodeInfoLite_fields, &item);
+    }
+}
+
 /** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings
  * might have changed is incremented.  Allows others to detect they might now be on a new channel.
  */
@@ -68,7 +81,12 @@ uint32_t error_address = 0;
 
 static uint8_t ourMacAddr[6];
 
-NodeDB::NodeDB() : meshNodes(devicestate.node_db_lite), numMeshNodes(&devicestate.node_db_lite_count) {}
+NodeDB::NodeDB() : meshNodes(devicestate.node_db_lite), numMeshNodes(devicestate.node_db_lite.size())
+{
+    std::cout << "test" << std::endl;
+    std::cout << MAX_NUM_NODES << std::endl;
+    meshNodes.reserve(MAX_NUM_NODES);
+}
 
 /**
  * Most (but not always) of the time we want to treat packets 'from' the local phone (where from == 0), as if they originated on
@@ -359,8 +377,8 @@ void NodeDB::installDefaultChannels()
 
 void NodeDB::resetNodes()
 {
-    devicestate.node_db_lite_count = 1;
-    std::fill(&devicestate.node_db_lite[1], &devicestate.node_db_lite[MAX_NUM_NODES - 1], meshtastic_NodeInfoLite());
+    // devicestate.node_db_lite_count = 1;
+    std::fill(devicestate.node_db_lite.begin(), devicestate.node_db_lite.end(), meshtastic_NodeInfoLite());
     saveDeviceStateToDisk();
     if (neighborInfoModule && moduleConfig.neighbor_info.enabled)
         neighborInfoModule->resetNeighbors();
@@ -369,13 +387,13 @@ void NodeDB::resetNodes()
 void NodeDB::removeNodeByNum(uint nodeNum)
 {
     int newPos = 0, removed = 0;
-    for (int i = 0; i < *numMeshNodes; i++) {
+    for (int i = 0; i < numMeshNodes; i++) {
         if (meshNodes[i].num != nodeNum)
             meshNodes[newPos++] = meshNodes[i];
         else
             removed++;
     }
-    *numMeshNodes -= removed;
+    numMeshNodes -= removed;
     LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Saving changes...\n", removed);
     saveDeviceStateToDisk();
 }
@@ -383,13 +401,13 @@ void NodeDB::removeNodeByNum(uint nodeNum)
 void NodeDB::cleanupMeshDB()
 {
     int newPos = 0, removed = 0;
-    for (int i = 0; i < *numMeshNodes; i++) {
+    for (int i = 0; i < numMeshNodes; i++) {
         if (meshNodes[i].has_user)
             meshNodes[newPos++] = meshNodes[i];
         else
             removed++;
     }
-    *numMeshNodes -= removed;
+    numMeshNodes -= removed;
     LOG_DEBUG("cleanupMeshDB purged %d entries\n", removed);
 }
 
@@ -398,12 +416,12 @@ void NodeDB::installDefaultDeviceState()
     LOG_INFO("Installing default DeviceState\n");
     memset(&devicestate, 0, sizeof(meshtastic_DeviceState));
 
-    *numMeshNodes = 0;
+    numMeshNodes = 0;
 
     // init our devicestate with valid flags so protobuf writing/reading will work
     devicestate.has_my_node = true;
     devicestate.has_owner = true;
-    devicestate.node_db_lite_count = 0;
+    // devicestate.node_db_lite_count = 0;
     devicestate.version = DEVICESTATE_CUR_VER;
     devicestate.receive_queue_count = 0; // Not yet implemented FIXME
 
@@ -454,7 +472,7 @@ void NodeDB::init()
 #endif
 
     resetRadioConfig(); // If bogus settings got saved, then fix them
-    LOG_DEBUG("region=%d, NODENUM=0x%x, dbsize=%d\n", config.lora.region, myNodeInfo.my_node_num, *numMeshNodes);
+    LOG_DEBUG("region=%d, NODENUM=0x%x, dbsize=%d\n", config.lora.region, myNodeInfo.my_node_num, numMeshNodes);
 
     if (devicestateCRC != crc32Buffer(&devicestate, sizeof(devicestate)))
         saveWhat |= SEGMENT_DEVICESTATE;
@@ -543,7 +561,7 @@ bool NodeDB::loadProto(const char *filename, size_t protoSize, size_t objSize, c
 void NodeDB::loadFromDisk()
 {
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
-    if (!loadProto(prefFileName, meshtastic_DeviceState_size, sizeof(meshtastic_DeviceState), &meshtastic_DeviceState_msg,
+    if (!loadProto(prefFileName, sizeof(meshtastic_DeviceState), sizeof(meshtastic_DeviceState), &meshtastic_DeviceState_msg,
                    &devicestate)) {
         installDefaultDeviceState(); // Our in RAM copy might now be corrupt
     } else {
@@ -658,7 +676,7 @@ void NodeDB::saveDeviceStateToDisk()
 #ifdef FSCom
         FSCom.mkdir("/prefs");
 #endif
-        saveProto(prefFileName, meshtastic_DeviceState_size, &meshtastic_DeviceState_msg, &devicestate);
+        saveProto(prefFileName, sizeof(meshtastic_DeviceState), &meshtastic_DeviceState_msg, &devicestate);
     }
 }
 
@@ -704,7 +722,7 @@ void NodeDB::saveToDisk(int saveWhat)
 
 const meshtastic_NodeInfoLite *NodeDB::readNextMeshNode(uint32_t &readIndex)
 {
-    if (readIndex < *numMeshNodes)
+    if (readIndex < numMeshNodes)
         return &meshNodes[readIndex++];
     else
         return NULL;
@@ -740,7 +758,7 @@ size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
     size_t numseen = 0;
 
     // FIXME this implementation is kinda expensive
-    for (int i = 0; i < *numMeshNodes; i++) {
+    for (int i = 0; i < numMeshNodes; i++) {
         if (localOnly && meshNodes[i].via_mqtt)
             continue;
         if (sinceLastSeen(&meshNodes[i]) < NUM_ONLINE_SECS)
@@ -891,7 +909,7 @@ uint8_t NodeDB::getMeshNodeChannel(NodeNum n)
 /// NOTE: This function might be called from an ISR
 meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
 {
-    for (int i = 0; i < *numMeshNodes; i++)
+    for (int i = 0; i < numMeshNodes; i++)
         if (meshNodes[i].num == n)
             return &meshNodes[i];
 
@@ -904,27 +922,27 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
     meshtastic_NodeInfoLite *lite = getMeshNode(n);
 
     if (!lite) {
-        if ((*numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < meshtastic_NodeInfoLite_size * 3)) {
+        if ((numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < meshtastic_NodeInfoLite_size * 3)) {
             if (screen)
                 screen->print("Warn: node database full!\nErasing oldest entry\n");
             LOG_INFO("Warn: node database full!\nErasing oldest entry\n");
             // look for oldest node and erase it
             uint32_t oldest = UINT32_MAX;
             int oldestIndex = -1;
-            for (int i = 1; i < *numMeshNodes; i++) {
+            for (int i = 1; i < numMeshNodes; i++) {
                 if (meshNodes[i].last_heard < oldest) {
                     oldest = meshNodes[i].last_heard;
                     oldestIndex = i;
                 }
             }
             // Shove the remaining nodes down the chain
-            for (int i = oldestIndex; i < *numMeshNodes - 1; i++) {
+            for (int i = oldestIndex; i < numMeshNodes - 1; i++) {
                 meshNodes[i] = meshNodes[i + 1];
             }
-            (*numMeshNodes)--;
+            (numMeshNodes)--;
         }
         // add the node at the end
-        lite = &meshNodes[(*numMeshNodes)++];
+        lite = &meshNodes[(numMeshNodes)++];
 
         // everything is missing except the nodenum
         memset(lite, 0, sizeof(*lite));
