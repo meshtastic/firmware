@@ -61,25 +61,6 @@ class Channels
 
     ChannelIndex getNumChannels() { return channelFile.channels_count; }
 
-    /**
-     * Generate a short suffix used to disambiguate channels that might have the same "name" entered by the human but different
-    PSKs.
-     * The ideas is that the PSK changing should be visible to the user so that they see they probably messed up and that's why
-    they their nodes
-     * aren't talking to each other.
-     *
-     * This string is of the form "#name-X".
-     *
-     * Where X is either:
-     * (for custom PSKS) a letter from A to Z (base26), and formed by xoring all the bytes of the PSK together,
-     * OR (for the standard minimially secure PSKs) a number from 0 to 9.
-     *
-     * This function will also need to be implemented in GUI apps that talk to the radio.
-     *
-     * https://github.com/meshtastic/firmware/issues/269
-    */
-    const char *getPrimaryName();
-
     /// Called by NodeDB on initial boot when the radio config settings are unset.  Set a default single channel config.
     void initDefaults();
 
