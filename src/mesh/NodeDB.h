@@ -191,48 +191,6 @@ extern NodeDB nodeDB;
 // Our delay functions check for this for times that should never expire
 #define NODE_DELAY_FOREVER 0xffffffff
 
-#define IF_ROUTER(routerVal, normalVal)                                                                                          \
-    ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER) ? (routerVal) : (normalVal))
-
-#define ONE_DAY 24 * 60 * 60
-
-#define default_gps_update_interval IF_ROUTER(ONE_DAY, 2 * 60)
-#define default_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 15 * 60)
-#define default_wait_bluetooth_secs IF_ROUTER(1, 60)
-#define default_sds_secs IF_ROUTER(ONE_DAY, UINT32_MAX) // Default to forever super deep sleep
-#define default_ls_secs IF_ROUTER(ONE_DAY, 5 * 60)
-#define default_min_wake_secs 10
-#define default_screen_on_secs IF_ROUTER(1, 60 * 10)
-#define default_node_info_broadcast_secs 3 * 60 * 60
-#define min_node_info_broadcast_secs 60 * 60 // No regular broadcasts of more than once an hour
-
-#define default_mqtt_address "mqtt.meshtastic.org"
-#define default_mqtt_username "meshdev"
-#define default_mqtt_password "large4cats"
-#define default_mqtt_root "msh"
-
-inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval)
-{
-    if (configuredInterval > 0)
-        return configuredInterval * 1000;
-    return default_broadcast_interval_secs * 1000;
-}
-
-inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t defaultInterval)
-{
-    if (configuredInterval > 0)
-        return configuredInterval * 1000;
-    return defaultInterval * 1000;
-}
-
-inline uint32_t getConfiguredOrDefault(uint32_t configured, uint32_t defaultValue)
-{
-    if (configured > 0)
-        return configured;
-
-    return defaultValue;
-}
-
 /// Sometimes we will have Position objects that only have a time, so check for
 /// valid lat/lon
 static inline bool hasValidPosition(const meshtastic_NodeInfoLite *n)

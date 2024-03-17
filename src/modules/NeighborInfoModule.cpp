@@ -1,4 +1,5 @@
 #include "NeighborInfoModule.h"
+#include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
@@ -194,7 +195,7 @@ int32_t NeighborInfoModule::runOnce()
 {
     bool requestReplies = false;
     sendNeighborInfo(NODENUM_BROADCAST, requestReplies);
-    return getConfiguredOrDefaultMs(moduleConfig.neighbor_info.update_interval, default_broadcast_interval_secs);
+    return Default::getConfiguredOrDefaultMs(moduleConfig.neighbor_info.update_interval, default_broadcast_interval_secs);
 }
 
 /*
