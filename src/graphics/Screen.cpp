@@ -1513,8 +1513,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     char channelStr[20];
     {
         concurrency::LockGuard guard(&lock);
-        auto chName = channels.getPrimaryName();
-        snprintf(channelStr, sizeof(channelStr), "%s", chName);
+        snprintf(channelStr, sizeof(channelStr), "#%s", channels.getName(channels.getPrimaryIndex()));
     }
 
     // Display power status
