@@ -4,6 +4,10 @@
 #include "configuration.h"
 #include <Adafruit_INA219.h>
 
+#ifndef INA219_MULTIPLIER
+#define INA219_MULTIPLIER 1.0f
+#endif
+
 INA219Sensor::INA219Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_INA219, "INA219") {}
 
 int32_t INA219Sensor::runOnce()
@@ -26,7 +30,7 @@ void INA219Sensor::setup() {}
 bool INA219Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     measurement->variant.environment_metrics.voltage = ina219.getBusVoltage_V();
-    measurement->variant.environment_metrics.current = ina219.getCurrent_mA();
+    measurement->variant.environment_metrics.current = ina219.getCurrent_mA() * INA219_MULTIPLIER;
     return true;
 }
 
