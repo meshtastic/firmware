@@ -16,6 +16,7 @@
 #ifdef ARCH_PORTDUINO
 #include "unistd.h"
 #endif
+#include "Default.h"
 
 #include "mqtt/MQTT.h"
 

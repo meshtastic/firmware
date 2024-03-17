@@ -1,4 +1,5 @@
 #include "NodeInfoModule.h"
+#include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
@@ -91,5 +92,5 @@ int32_t NodeInfoModule::runOnce()
         LOG_INFO("Sending our nodeinfo to mesh (wantReplies=%d)\n", requestReplies);
         sendOurNodeInfo(NODENUM_BROADCAST, requestReplies); // Send our info (don't request replies)
     }
-    return getConfiguredOrDefaultMs(config.device.node_info_broadcast_secs, default_node_info_broadcast_secs);
+    return Default::getConfiguredOrDefaultMs(config.device.node_info_broadcast_secs, default_node_info_broadcast_secs);
 }

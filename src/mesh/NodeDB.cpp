@@ -3,6 +3,7 @@
 #include "../detect/ScanI2C.h"
 #include "Channels.h"
 #include "CryptoEngine.h"
+#include "Default.h"
 #include "FSCommon.h"
 #include "GPS.h"
 #include "MeshRadio.h"
