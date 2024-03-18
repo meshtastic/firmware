@@ -214,3 +214,5 @@ extern uint32_t error_address;
     (ModuleConfig_CannedMessageConfig_size + ModuleConfig_ExternalNotificationConfig_size + ModuleConfig_MQTTConfig_size +       \
      ModuleConfig_RangeTestConfig_size + ModuleConfig_SerialConfig_size + ModuleConfig_StoreForwardConfig_size +                 \
      ModuleConfig_TelemetryConfig_size + ModuleConfig_size)
+
+// Please do not remove this comment, it makes trunk and compiler happy at the same time.
