@@ -8,6 +8,7 @@
  * actions to be taken upon entering or exiting each state.
  */
 #include "PowerFSM.h"
+#include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "configuration.h"
@@ -45,7 +46,7 @@ static void sdsEnter()
 {
     LOG_DEBUG("Enter state: SDS\n");
     // FIXME - make sure GPS and LORA radio are off first - because we want close to zero current draw
-    doDeepSleep(getConfiguredOrDefaultMs(config.power.sds_secs), false);
+    doDeepSleep(Default::getConfiguredOrDefaultMs(config.power.sds_secs), false);
 }
 
 extern Power *power;
@@ -343,13 +344,13 @@ void PowerFSM_setup()
     powerFSM.add_transition(&stateDARK, &stateDARK, EVENT_CONTACT_FROM_PHONE, NULL, "Contact from phone");
 
     powerFSM.add_timed_transition(&stateON, &stateDARK,
-                                  getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL,
+                                  Default::getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL,
                                   "Screen-on timeout");
     powerFSM.add_timed_transition(&statePOWER, &stateDARK,
-                                  getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL,
+                                  Default::getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL,
                                   "Screen-on timeout");
     powerFSM.add_timed_transition(&stateDARK, &stateDARK,
-                                  getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL,
+                                  Default::getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL,
                                   "Screen-on timeout");
 
 // We never enter light-sleep or NB states on NRF52 (because the CPU uses so little power normally)
@@ -359,11 +360,12 @@ void PowerFSM_setup()
     // modules
     if ((isRouter || config.power.is_power_saving) && !isTrackerOrSensor) {
         powerFSM.add_timed_transition(&stateNB, &stateLS,
-                                      getConfiguredOrDefaultMs(config.power.min_wake_secs, default_min_wake_secs), NULL,
+                                      Default::getConfiguredOrDefaultMs(config.power.min_wake_secs, default_min_wake_secs), NULL,
                                       "Min wake timeout");
-        powerFSM.add_timed_transition(&stateDARK, &stateLS,
-                                      getConfiguredOrDefaultMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs),
-                                      NULL, "Bluetooth timeout");
+        powerFSM.add_timed_transition(
+            &stateDARK, &stateLS,
+            Default::getConfiguredOrDefaultMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs), NULL,
+            "Bluetooth timeout");
     }
 #endif
 
