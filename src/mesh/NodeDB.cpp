@@ -3,6 +3,7 @@
 #include "../detect/ScanI2C.h"
 #include "Channels.h"
 #include "CryptoEngine.h"
+#include "Default.h"
 #include "FSCommon.h"
 #include "GPS.h"
 #include "MeshRadio.h"
@@ -97,22 +98,6 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
 
     channels.onConfigChanged();
 
-    // temp hack for quicker testing
-    // devicestate.no_save = true;
-    if (devicestate.no_save) {
-        LOG_DEBUG("***** DEVELOPMENT MODE - DO NOT RELEASE *****\n");
-
-        // Sleep quite frequently to stress test the BLE comms, broadcast position every 6 mins
-        config.display.screen_on_secs = 10;
-        config.power.wait_bluetooth_secs = 10;
-        config.position.position_broadcast_secs = 6 * 60;
-        config.power.ls_secs = 60;
-        config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_TW;
-
-        // Enter super deep sleep soon and stay there not very long
-        // radioConfig.preferences.sds_secs = 60;
-    }
-
     // Update the global myRegion
     initRegion();
 
@@ -130,6 +115,9 @@ bool NodeDB::factoryReset()
     LOG_INFO("Performing factory reset!\n");
     // first, remove the "/prefs" (this removes most prefs)
     rmDir("/prefs");
+    if (FSCom.exists("/static/rangetest.csv") && !FSCom.remove("/static/rangetest.csv")) {
+        LOG_WARN("Could not remove rangetest.csv file\n");
+    }
     // second, install default state (this will deal with the duplicate mac address issue)
     installDefaultDeviceState();
     installDefaultConfig();
@@ -196,7 +184,7 @@ void NodeDB::installDefaultConfig()
     config.position.broadcast_smart_minimum_distance = 100;
     config.position.broadcast_smart_minimum_interval_secs = 30;
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER)
-        config.device.node_info_broadcast_secs = 3 * 60 * 60;
+        config.device.node_info_broadcast_secs = default_node_info_broadcast_secs;
     config.device.serial_enabled = true;
     resetRadioConfig();
     strncpy(config.network.ntp_server, "0.pool.ntp.org", 32);
@@ -650,61 +638,52 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
 
 void NodeDB::saveChannelsToDisk()
 {
-    if (!devicestate.no_save) {
 #ifdef FSCom
-        FSCom.mkdir("/prefs");
+    FSCom.mkdir("/prefs");
 #endif
-        saveProto(channelFileName, meshtastic_ChannelFile_size, &meshtastic_ChannelFile_msg, &channelFile);
-    }
+    saveProto(channelFileName, meshtastic_ChannelFile_size, &meshtastic_ChannelFile_msg, &channelFile);
 }
 
 void NodeDB::saveDeviceStateToDisk()
 {
-    if (!devicestate.no_save) {
 #ifdef FSCom
-        FSCom.mkdir("/prefs");
+    FSCom.mkdir("/prefs");
 #endif
-        saveProto(prefFileName, meshtastic_DeviceState_size, &meshtastic_DeviceState_msg, &devicestate);
-    }
 }
 
 void NodeDB::saveToDisk(int saveWhat)
 {
-    if (!devicestate.no_save) {
 #ifdef FSCom
-        FSCom.mkdir("/prefs");
+    FSCom.mkdir("/prefs");
 #endif
-        if (saveWhat & SEGMENT_DEVICESTATE) {
-            saveDeviceStateToDisk();
-        }
+    if (saveWhat & SEGMENT_DEVICESTATE) {
+        saveDeviceStateToDisk();
+    }
 
-        if (saveWhat & SEGMENT_CONFIG) {
-            config.has_device = true;
-            config.has_display = true;
-            config.has_lora = true;
-            config.has_position = true;
-            config.has_power = true;
-            config.has_network = true;
-            config.has_bluetooth = true;
-            saveProto(configFileName, meshtastic_LocalConfig_size, &meshtastic_LocalConfig_msg, &config);
-        }
+    if (saveWhat & SEGMENT_CONFIG) {
+        config.has_device = true;
+        config.has_display = true;
+        config.has_lora = true;
+        config.has_position = true;
+        config.has_power = true;
+        config.has_network = true;
+        config.has_bluetooth = true;
+        saveProto(configFileName, meshtastic_LocalConfig_size, &meshtastic_LocalConfig_msg, &config);
+    }
 
-        if (saveWhat & SEGMENT_MODULECONFIG) {
-            moduleConfig.has_canned_message = true;
-            moduleConfig.has_external_notification = true;
-            moduleConfig.has_mqtt = true;
-            moduleConfig.has_range_test = true;
-            moduleConfig.has_serial = true;
-            moduleConfig.has_store_forward = true;
-            moduleConfig.has_telemetry = true;
-            saveProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, &meshtastic_LocalModuleConfig_msg, &moduleConfig);
-        }
+    if (saveWhat & SEGMENT_MODULECONFIG) {
+        moduleConfig.has_canned_message = true;
+        moduleConfig.has_external_notification = true;
+        moduleConfig.has_mqtt = true;
+        moduleConfig.has_range_test = true;
+        moduleConfig.has_serial = true;
+        moduleConfig.has_store_forward = true;
+        moduleConfig.has_telemetry = true;
+        saveProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, &meshtastic_LocalModuleConfig_msg, &moduleConfig);
+    }
 
-        if (saveWhat & SEGMENT_CHANNELS) {
-            saveChannelsToDisk();
-        }
-    } else {
-        LOG_DEBUG("***** DEVELOPMENT MODE - DO NOT RELEASE - not saving to flash *****\n");
+    if (saveWhat & SEGMENT_CHANNELS) {
+        saveChannelsToDisk();
     }
 }
 
@@ -741,14 +720,17 @@ uint32_t sinceReceived(const meshtastic_MeshPacket *p)
 
 #define NUM_ONLINE_SECS (60 * 60 * 2) // 2 hrs to consider someone offline
 
-size_t NodeDB::getNumOnlineMeshNodes()
+size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
 {
     size_t numseen = 0;
 
     // FIXME this implementation is kinda expensive
-    for (int i = 0; i < *numMeshNodes; i++)
+    for (int i = 0; i < *numMeshNodes; i++) {
+        if (localOnly && meshNodes[i].via_mqtt)
+            continue;
         if (sinceLastSeen(&meshNodes[i]) < NUM_ONLINE_SECS)
             numseen++;
+    }
 
     return numseen;
 }
@@ -872,6 +854,12 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
 
         if (mp.rx_snr)
             info->snr = mp.rx_snr; // keep the most recent SNR we received for this node.
+
+        info->via_mqtt = mp.via_mqtt; // Store if we received this packet via MQTT
+
+        // If hopStart was set and there wasn't someone messing with the limit in the middle, add hopsAway
+        if (mp.hop_start != 0 && mp.hop_limit <= mp.hop_start)
+            info->hops_away = mp.hop_start - mp.hop_limit;
     }
 }
 
@@ -903,8 +891,8 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
     if (!lite) {
         if ((*numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < meshtastic_NodeInfoLite_size * 3)) {
             if (screen)
-                screen->print("warning: node_db_lite full! erasing oldest entry\n");
-            LOG_INFO("warning: node_db_lite full! erasing oldest entry\n");
+                screen->print("Warn: node database full!\nErasing oldest entry\n");
+            LOG_INFO("Warn: node database full!\nErasing oldest entry\n");
             // look for oldest node and erase it
             uint32_t oldest = UINT32_MAX;
             int oldestIndex = -1;

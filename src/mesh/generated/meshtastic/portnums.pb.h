@@ -38,19 +38,19 @@ typedef enum _meshtastic_PortNum {
  ENCODING: Protobuf */
     meshtastic_PortNum_REMOTE_HARDWARE_APP = 2,
     /* The built-in position messaging app.
- Payload is a [Position](/docs/developers/protobufs/api#position) message
+ Payload is a Position message.
  ENCODING: Protobuf */
     meshtastic_PortNum_POSITION_APP = 3,
     /* The built-in user info app.
- Payload is a [User](/docs/developers/protobufs/api#user) message
+ Payload is a User message.
  ENCODING: Protobuf */
     meshtastic_PortNum_NODEINFO_APP = 4,
     /* Protocol control packets for mesh protocol use.
- Payload is a [Routing](/docs/developers/protobufs/api#routing) message
+ Payload is a Routing message.
  ENCODING: Protobuf */
     meshtastic_PortNum_ROUTING_APP = 5,
     /* Admin control packets.
- Payload is a [AdminMessage](/docs/developers/protobufs/api#adminmessage) message
+ Payload is a AdminMessage message.
  ENCODING: Protobuf */
     meshtastic_PortNum_ADMIN_APP = 6,
     /* Compressed TEXT_MESSAGE payloads.
@@ -60,7 +60,7 @@ typedef enum _meshtastic_PortNum {
  any incoming TEXT_MESSAGE_COMPRESSED_APP payload and convert to TEXT_MESSAGE_APP. */
     meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP = 7,
     /* Waypoint payloads.
- Payload is a [Waypoint](/docs/developers/protobufs/api#waypoint) message
+ Payload is a Waypoint message.
  ENCODING: Protobuf */
     meshtastic_PortNum_WAYPOINT_APP = 8,
     /* Audio Payloads.
@@ -122,6 +122,8 @@ typedef enum _meshtastic_PortNum {
     /* ATAK Plugin
  Portnum for payloads from the official Meshtastic ATAK plugin */
     meshtastic_PortNum_ATAK_PLUGIN = 72,
+    /* Provides unencrypted information about a node for consumption by a map via MQTT */
+    meshtastic_PortNum_MAP_REPORT_APP = 73,
     /* Private applications should use portnums >= 256.
  To simplify initial development and testing you can use "PRIVATE_APP"
  in your code without needing to rebuild protobuf files (via [regen-protos.sh](https://github.com/meshtastic/firmware/blob/master/bin/regen-protos.sh)) */

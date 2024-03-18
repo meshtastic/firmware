@@ -44,7 +44,7 @@ class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<
     StoreForwardModule();
 
     unsigned long lastHeartbeat = 0;
-    uint32_t heartbeatInterval = default_broadcast_interval_secs;
+    uint32_t heartbeatInterval = 900;
 
     /**
      Update our local reference of when we last saw that node.

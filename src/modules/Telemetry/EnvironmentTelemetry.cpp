@@ -1,5 +1,6 @@
 #include "EnvironmentTelemetry.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
@@ -16,12 +17,14 @@
 // Sensors
 #include "Sensor/BME280Sensor.h"
 #include "Sensor/BME680Sensor.h"
+#include "Sensor/BMP085Sensor.h"
 #include "Sensor/BMP280Sensor.h"
 #include "Sensor/LPS22HBSensor.h"
 #include "Sensor/MCP9808Sensor.h"
 #include "Sensor/SHT31Sensor.h"
 #include "Sensor/SHTC3Sensor.h"
 
+BMP085Sensor bmp085Sensor;
 BMP280Sensor bmp280Sensor;
 BME280Sensor bme280Sensor;
 BME680Sensor bme680Sensor;
@@ -33,29 +36,13 @@ SHT31Sensor sht31Sensor;
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)) &&                                \
-    !defined(DISPLAY_FORCE_SMALL_FONTS)
-
-// The screen is bigger so use bigger fonts
-#define FONT_SMALL ArialMT_Plain_16
-#define FONT_MEDIUM ArialMT_Plain_24
-#define FONT_LARGE ArialMT_Plain_24
-#else
-#define FONT_SMALL ArialMT_Plain_10
-#define FONT_MEDIUM ArialMT_Plain_16
-#define FONT_LARGE ArialMT_Plain_24
-#endif
-
-#define fontHeight(font) ((font)[1] + 1) // height is position 1
-
-#define FONT_HEIGHT_SMALL fontHeight(FONT_SMALL)
-#define FONT_HEIGHT_MEDIUM fontHeight(FONT_MEDIUM)
+#include "graphics/ScreenFonts.h"
 
 int32_t EnvironmentTelemetryModule::runOnce()
 {
     if (sleepOnNextExecution == true) {
         sleepOnNextExecution = false;
-        uint32_t nightyNightMs = getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval);
+        uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval);
         LOG_DEBUG("Sleeping for %ims, then awaking to send metrics again.\n", nightyNightMs);
         doDeepSleep(nightyNightMs, true);
     }
@@ -83,6 +70,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
             LOG_INFO("Environment Telemetry: Initializing\n");
             // it's possible to have this module enabled, only for displaying values on the screen.
             // therefore, we should only enable the sensor loop if measurement is also enabled
+            if (bmp085Sensor.hasSensor())
+                result = bmp085Sensor.runOnce();
             if (bmp280Sensor.hasSensor())
                 result = bmp280Sensor.runOnce();
             if (bme280Sensor.hasSensor())
@@ -114,7 +103,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
 
         uint32_t now = millis();
         if (((lastSentToMesh == 0) ||
-             ((now - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval))) &&
+             ((now - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval))) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
             lastSentToMesh = now;
@@ -235,6 +224,8 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         valid = lps22hbSensor.getMetrics(&m);
     if (shtc3Sensor.hasSensor())
         valid = shtc3Sensor.getMetrics(&m);
+    if (bmp085Sensor.hasSensor())
+        valid = bmp085Sensor.getMetrics(&m);
     if (bmp280Sensor.hasSensor())
         valid = bmp280Sensor.getMetrics(&m);
     if (bme280Sensor.hasSensor())
@@ -263,7 +254,7 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
             p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
         else
-            p->priority = meshtastic_MeshPacket_Priority_MIN;
+            p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
         // release previous packet before occupying a new spot
         if (lastMeasurementPacket != nullptr)
             packetPool.release(lastMeasurementPacket);

@@ -68,6 +68,7 @@ NRF52Bluetooth *nrf52Bluetooth;
 
 #ifdef ARCH_PORTDUINO
 #include "linux/LinuxHardwareI2C.h"
+#include "mesh/raspihttp/PiWebServer.h"
 #include "platform/portduino/PortduinoGlue.h"
 #include <fstream>
 #include <iostream>
@@ -218,10 +219,16 @@ void setup()
 
     initDeepSleep();
 
-    // Testing this fix für erratic T-Echo boot behaviour
-#if defined(TTGO_T_ECHO) && defined(PIN_EINK_PWR_ON)
-    pinMode(PIN_EINK_PWR_ON, OUTPUT);
-    digitalWrite(PIN_EINK_PWR_ON, HIGH);
+    // power on peripherals
+#if defined(TTGO_T_ECHO) && defined(PIN_POWER_EN)
+    pinMode(PIN_POWER_EN, OUTPUT);
+    digitalWrite(PIN_POWER_EN, HIGH);
+    // digitalWrite(PIN_POWER_EN1, INPUT);
+#endif
+
+#if defined(LORA_TCXO_GPIO)
+    pinMode(LORA_TCXO_GPIO, OUTPUT);
+    digitalWrite(LORA_TCXO_GPIO, HIGH);
 #endif
 
 #if defined(VEXT_ENABLE_V03)
@@ -340,7 +347,7 @@ void setup()
     pinMode(PIN_3V3_EN, OUTPUT);
     digitalWrite(PIN_3V3_EN, HIGH);
 #endif
-#ifndef USE_EINK
+#ifdef AQ_SET_PIN
     // RAK-12039 set pin for Air quality sensor
     pinMode(AQ_SET_PIN, OUTPUT);
     digitalWrite(AQ_SET_PIN, HIGH);
@@ -499,6 +506,7 @@ void setup()
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::BME_680, meshtastic_TelemetrySensorType_BME680)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::BME_280, meshtastic_TelemetrySensorType_BME280)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::BMP_280, meshtastic_TelemetrySensorType_BMP280)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::BMP_085, meshtastic_TelemetrySensorType_BMP085)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::INA260, meshtastic_TelemetrySensorType_INA260)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::INA219, meshtastic_TelemetrySensorType_INA219)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::INA3221, meshtastic_TelemetrySensorType_INA3221)
@@ -679,6 +687,11 @@ void setup()
     digitalWrite(SX126X_ANT_SW, 1);
 #endif
 
+#ifdef PIN_PWR_DELAY_MS
+    // This may be required to give the peripherals time to power up.
+    delay(PIN_PWR_DELAY_MS);
+#endif
+
 #ifdef ARCH_PORTDUINO
     if (settingsMap[use_sx1262]) {
         if (!rIf) {
@@ -857,6 +870,11 @@ void setup()
 #endif
 
 #ifdef ARCH_PORTDUINO
+#if __has_include(<ulfius.h>)
+    if (settingsMap[webserverport] != -1) {
+        piwebServerThread = new PiWebServerThread();
+    }
+#endif
     initApiServer(TCPPort);
 #endif
 

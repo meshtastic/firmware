@@ -44,3 +44,7 @@ extern Observable<void *> notifyDeepSleep;
 /// Called to tell GPS thread to enter deep sleep independently of LoRa/MCU sleep, prior to full poweroff. Must return 0
 extern Observable<void *> notifyGPSSleep;
 void enableModemSleep();
+#ifdef ARCH_ESP32
+void enableLoraInterrupt();
+bool shouldLoraWake(uint32_t msecToWake);
+#endif

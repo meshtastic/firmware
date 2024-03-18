@@ -183,8 +183,13 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
             case ATECC608B_ADDR:
-                type = ATECC608B;
-                if (atecc.begin(addr.address) == true) {
+#ifdef RP2040_SLOW_CLOCK
+                if (atecc.begin(addr.address, Wire, Serial2) == true)
+#else
+                if (atecc.begin(addr.address) == true)
+#endif
+
+                {
                     LOG_INFO("ATECC608B initialized\n");
                 } else {
                     LOG_WARN("ATECC608B initialization failed\n");
@@ -242,6 +247,10 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                     LOG_INFO("BME-280 sensor found at address 0x%x\n", (uint8_t)addr.address);
                     type = BME_280;
                     break;
+                case 0x55:
+                    LOG_INFO("BMP-085 or BMP-180 sensor found at address 0x%x\n", (uint8_t)addr.address);
+                    type = BMP_085;
+                    break;
                 default:
                     LOG_INFO("BMP-280 sensor found at address 0x%x\n", (uint8_t)addr.address);
                     type = BMP_280;
@@ -250,6 +259,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
 
             case INA_ADDR:
             case INA_ADDR_ALTERNATE:
+            case INA_ADDR_WAVESHARE_UPS:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
                 LOG_DEBUG("Register MFG_UID: 0x%x\n", registerValue);
                 if (registerValue == 0x5449) {

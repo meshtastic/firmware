@@ -1,4 +1,5 @@
 #include "PositionModule.h"
+#include "Default.h"
 #include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -59,9 +60,15 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     // to set fixed location, EUD-GPS location or just the time (see also issue #900)
     bool isLocal = false;
     if (nodeDB.getNodeNum() == getFrom(&mp)) {
-        LOG_DEBUG("Incoming update from MYSELF\n");
         isLocal = true;
-        nodeDB.setLocalPosition(p);
+        if (config.position.fixed_position) {
+            LOG_DEBUG("Ignore incoming position update from myself except for time, because position.fixed_position is true\n");
+            nodeDB.setLocalPosition(p, true);
+            return false;
+        } else {
+            LOG_DEBUG("Incoming update from MYSELF\n");
+            nodeDB.setLocalPosition(p);
+        }
     }
 
     // Log packet size and data fields
@@ -83,6 +90,13 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     }
 
     nodeDB.updatePosition(getFrom(&mp), p);
+    if (channels.getByIndex(mp.channel).settings.has_module_settings) {
+        precision = channels.getByIndex(mp.channel).settings.module_settings.position_precision;
+    } else if (channels.getByIndex(mp.channel).role == meshtastic_Channel_Role_PRIMARY) {
+        precision = 32;
+    } else {
+        precision = 0;
+    }
 
     return false; // Let others look at this message also if they want
 }
@@ -109,10 +123,24 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     }
     localPosition.seq_number++;
 
+    if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0) {
+        LOG_WARN("Skipping position send because lat/lon are zero!\n");
+        return nullptr;
+    }
+
     // lat/lon are unconditionally included - IF AVAILABLE!
     LOG_DEBUG("Sending location with precision %i\n", precision);
-    p.latitude_i = localPosition.latitude_i & (INT32_MAX << (32 - precision));
-    p.longitude_i = localPosition.longitude_i & (INT32_MAX << (32 - precision));
+    if (precision < 32 && precision > 0) {
+        p.latitude_i = localPosition.latitude_i & (UINT32_MAX << (32 - precision));
+        p.longitude_i = localPosition.longitude_i & (UINT32_MAX << (32 - precision));
+
+        // We want the imprecise position to be the middle of the possible location, not
+        p.latitude_i += (1 << (31 - precision));
+        p.longitude_i += (1 << (31 - precision));
+    } else {
+        p.latitude_i = localPosition.latitude_i;
+        p.longitude_i = localPosition.longitude_i;
+    }
     p.precision_bits = precision;
     p.time = localPosition.time;
 
@@ -210,7 +238,13 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
         service.cancelSending(prevPacketId);
 
     // Set's the class precision value for this particular packet
-    precision = channels.getByIndex(channel).settings.module_settings.position_precision;
+    if (channels.getByIndex(channel).settings.has_module_settings) {
+        precision = channels.getByIndex(channel).settings.module_settings.position_precision;
+    } else if (channels.getByIndex(channel).role == meshtastic_Channel_Role_PRIMARY) {
+        precision = 32;
+    } else {
+        precision = 0;
+    }
 
     meshtastic_MeshPacket *p = allocReply();
     if (p == nullptr) {
@@ -247,7 +281,7 @@ int32_t PositionModule::runOnce()
 {
     if (sleepOnNextExecution == true) {
         sleepOnNextExecution = false;
-        uint32_t nightyNightMs = getConfiguredOrDefaultMs(config.position.position_broadcast_secs);
+        uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(config.position.position_broadcast_secs);
         LOG_DEBUG("Sleeping for %ims, then awaking to send position again.\n", nightyNightMs);
         doDeepSleep(nightyNightMs, false);
     }
@@ -258,7 +292,8 @@ int32_t PositionModule::runOnce()
 
     // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();
-    uint32_t intervalMs = getConfiguredOrDefaultMs(config.position.position_broadcast_secs, default_broadcast_interval_secs);
+    uint32_t intervalMs =
+        Default::getConfiguredOrDefaultMs(config.position.position_broadcast_secs, default_broadcast_interval_secs);
     uint32_t msSinceLastSend = now - lastGpsSend;
     // Only send packets if the channel util. is less than 25% utilized or we're a tracker with less than 40% utilized.
     if (!airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER &&
@@ -289,7 +324,7 @@ int32_t PositionModule::runOnce()
         if (hasValidPosition(node2)) {
             // The minimum time (in seconds) that would pass before we are able to send a new position packet.
             const uint32_t minimumTimeThreshold =
-                getConfiguredOrDefaultMs(config.position.broadcast_smart_minimum_interval_secs, 30);
+                Default::getConfiguredOrDefaultMs(config.position.broadcast_smart_minimum_interval_secs, 30);
 
             auto smartPosition = getDistanceTraveledSinceLastSend(node->position);
 
@@ -336,7 +371,8 @@ void PositionModule::sendLostAndFoundText()
 struct SmartPosition PositionModule::getDistanceTraveledSinceLastSend(meshtastic_PositionLite currentPosition)
 {
     // The minimum distance to travel before we are able to send a new position packet.
-    const uint32_t distanceTravelThreshold = getConfiguredOrDefault(config.position.broadcast_smart_minimum_distance, 100);
+    const uint32_t distanceTravelThreshold =
+        Default::getConfiguredOrDefault(config.position.broadcast_smart_minimum_distance, 100);
 
     // Determine the distance in meters between two points on the globe
     float distanceTraveledSinceLastSend = GeoCoord::latLongToMeter(
@@ -350,7 +386,7 @@ struct SmartPosition PositionModule::getDistanceTraveledSinceLastSend(meshtastic
     LOG_DEBUG("currentPosition.latitude_i=%i, currentPosition.longitude_i=%i\n", lastGpsLatitude, lastGpsLongitude);
 
     LOG_DEBUG("--------SMART POSITION-----------------------------------\n");
-    LOG_DEBUG("hasTraveledOverThreshold=%i, distanceTraveled=%d, distanceThreshold=% u\n",
+    LOG_DEBUG("hasTraveledOverThreshold=%i, distanceTraveled=%f, distanceThreshold=%f\n",
               abs(distanceTraveledSinceLastSend) >= distanceTravelThreshold, abs(distanceTraveledSinceLastSend),
               distanceTravelThreshold);
 

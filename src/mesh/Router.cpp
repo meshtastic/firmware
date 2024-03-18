@@ -132,9 +132,10 @@ meshtastic_MeshPacket *Router::allocForSending()
 /**
  * Send an ack or a nak packet back towards whoever sent idFrom
  */
-void Router::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex)
+void Router::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopStart,
+                        uint8_t hopLimit)
 {
-    routingModule->sendAckNak(err, to, idFrom, chIndex);
+    routingModule->sendAckNak(err, to, idFrom, chIndex, hopStart, hopLimit);
 }
 
 void Router::abortSendAndNak(meshtastic_Routing_Error err, meshtastic_MeshPacket *p)
@@ -240,6 +241,10 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     // the lora we need to make sure we have replaced it with our local address
     p->from = getFrom(p);
 
+    // If we are the original transmitter, set the hop limit with which we start
+    if (p->from == getNodeNum())
+        p->hop_start = p->hop_limit;
+
     // If the packet hasn't yet been encrypted, do so now (it might already be encrypted if we are just forwarding it)
 
     assert(p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag ||
@@ -292,7 +297,7 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
         return false;
 
     if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY &&
-        !nodeDB.getMeshNode(p->from)->has_user) {
+        (nodeDB.getMeshNode(p->from) == NULL || !nodeDB.getMeshNode(p->from)->has_user)) {
         LOG_DEBUG("Node 0x%x not in NodeDB. Rebroadcast mode KNOWN_ONLY will ignore packet\n", p->from);
         return false;
     }
@@ -435,6 +440,7 @@ NodeNum Router::getNodeNum()
  */
 void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 {
+    bool skipHandle = false;
     // Also, we should set the time from the ISR and it should have msec level resolution
     p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
     // Store a copy of encrypted packet for MQTT
@@ -451,8 +457,17 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
         else
             printPacket("handleReceived(REMOTE)", p);
 
+        // Neighbor info module is disabled, ignore expensive neighbor info packets
+        if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+            p->decoded.portnum == meshtastic_PortNum_NEIGHBORINFO_APP &&
+            (!moduleConfig.has_neighbor_info || !moduleConfig.neighbor_info.enabled)) {
+            LOG_DEBUG("Neighbor info module is disabled, ignoring neighbor packet\n");
+            cancelSending(p->from, p->id);
+            skipHandle = true;
+        }
+
         // Publish received message to MQTT if we're not the original transmitter of the packet
-        if (moduleConfig.mqtt.enabled && getFrom(p) != nodeDB.getNodeNum() && mqtt)
+        if (!skipHandle && moduleConfig.mqtt.enabled && getFrom(p) != nodeDB.getNodeNum() && mqtt)
             mqtt->onSend(*p_encrypted, *p, p->channel);
     } else {
         printPacket("packet decoding failed or skipped (no PSK?)", p);
@@ -461,7 +476,8 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
     packetPool.release(p_encrypted); // Release the encrypted packet
 
     // call modules here
-    MeshModule::callPlugins(*p, src);
+    if (!skipHandle)
+        MeshModule::callPlugins(*p, src);
 }
 
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)

@@ -1,4 +1,5 @@
 #include "GPS.h"
+#include "Default.h"
 #include "NodeDB.h"
 #include "RTC.h"
 #include "configuration.h"
@@ -255,19 +256,6 @@ bool GPS::setup()
     if (!didSerialInit) {
 #if !defined(GPS_UC6580)
 
-#if defined(RAK4630) && defined(PIN_3V3_EN)
-        // If we are using the RAK4630 and we have no other peripherals on the I2C bus or module interest in 3V3_S,
-        // then we can safely set en_gpio turn off power to 3V3 (IO2) to hard sleep the GPS
-        if (rtc_found.port == ScanI2C::DeviceType::NONE && rgb_found.type == ScanI2C::DeviceType::NONE &&
-            accelerometer_found.port == ScanI2C::DeviceType::NONE && !moduleConfig.detection_sensor.enabled &&
-            !moduleConfig.telemetry.air_quality_enabled && !moduleConfig.telemetry.environment_measurement_enabled &&
-            config.power.device_battery_ina_address == 0 && en_gpio == 0) {
-            LOG_DEBUG("Since no problematic peripherals or interested modules were found, setting power save GPS_EN to pin %i\n",
-                      PIN_3V3_EN);
-            en_gpio = PIN_3V3_EN;
-        }
-#endif
-
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
             LOG_DEBUG("Probing for GPS at %d \n", serialSpeeds[speedSelect]);
             gnssModel = probe(serialSpeeds[speedSelect]);
@@ -303,6 +291,26 @@ bool GPS::setup()
             // Switch to Vehicle Mode, since SoftRF enables Aviation < 2g
             _serial_gps->write("$PCAS11,3*1E\r\n");
             delay(250);
+        } else if (gnssModel == GNSS_MODEL_MTK_L76B) {
+            // Waveshare Pico-GPS hat uses the L76B with 9600 baud
+            // Initialize the L76B Chip, use GPS + GLONASS
+            // See note in L76_Series_GNSS_Protocol_Specification, chapter 3.29
+            _serial_gps->write("$PMTK353,1,1,0,0,0*2B\r\n");
+            // Above command will reset the GPS and takes longer before it will accept new commands
+            delay(1000);
+            // only ask for RMC and GGA (GNRMC and GNGGA)
+            // See note in L76_Series_GNSS_Protocol_Specification, chapter 2.1
+            _serial_gps->write("$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*28\r\n");
+            delay(250);
+            // Enable SBAS
+            _serial_gps->write("$PMTK301,2*2E\r\n");
+            delay(250);
+            // Enable PPS for 2D/3D fix only
+            _serial_gps->write("$PMTK285,3,100*3F\r\n");
+            delay(250);
+            // Switch to Fitness Mode, for running and walking purpose with low speed (<5 m/s)
+            _serial_gps->write("$PMTK886,1*29\r\n");
+            delay(250);
         } else if (gnssModel == GNSS_MODEL_UC6580) {
             // The Unicore UC6580 can use a lot of sat systems, enable it to
             // use GPS L1 & L5 + BDS B1I & B2a + GLONASS L1 + GALILEO E1 & E5a + SBAS
@@ -319,7 +327,6 @@ bool GPS::setup()
             delay(250);
             _serial_gps->write("$CFGMSG,6,1,0\r\n");
             delay(250);
-
         } else if (gnssModel == GNSS_MODEL_UBLOX) {
             // Configure GNSS system to GPS+SBAS+GLONASS (Module may restart after this command)
             // We need set it because by default it is GPS only, and we want to use GLONASS too
@@ -458,7 +465,6 @@ bool GPS::setup()
                             LOG_WARN("Unable to enable NMEA 4.10.\n");
                         }
                     }
-
                 } else {
                     if (strncmp(info.hwVersion, "00040007", 8) == 0) { // This PSM mode is only for Neo-6
                         msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_ECO);
@@ -489,14 +495,6 @@ bool GPS::setup()
                             LOG_WARN("Unable to enable powersaving details for GPS.\n");
                         }
                     }
-                }
-
-                msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
-                _serial_gps->write(UBXscratch, msglen);
-                if (getACK(0x06, 0x09, 2000) != GNSS_RESPONSE_OK) {
-                    LOG_WARN("Unable to save GNSS module configuration.\n");
-                } else {
-                    LOG_INFO("GNSS module configuration saved!\n");
                 }
             } else {
                 // LOG_INFO("u-blox M10 hardware found.\n");
@@ -590,6 +588,13 @@ bool GPS::setup()
                 // BBR will survive a restart, and power off for a while, but modules with small backup
                 // batteries or super caps will not retain the config for a long power off time.
             }
+            msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
+            _serial_gps->write(UBXscratch, msglen);
+            if (getACK(0x06, 0x09, 2000) != GNSS_RESPONSE_OK) {
+                LOG_WARN("Unable to save GNSS module configuration.\n");
+            } else {
+                LOG_INFO("GNSS module configuration saved!\n");
+            }
         }
         didSerialInit = true;
     }
@@ -640,17 +645,27 @@ void GPS::setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime)
         return;
     }
 #endif
-#ifdef PIN_GPS_STANDBY // Specifically the standby pin for L76K and clones
+#ifdef PIN_GPS_STANDBY // Specifically the standby pin for L76B, L76K and clones
     if (on) {
-        LOG_INFO("Waking GPS");
+        LOG_INFO("Waking GPS\n");
         pinMode(PIN_GPS_STANDBY, OUTPUT);
+        // Some PCB's use an inverse logic due to a transistor driver
+        // Example for this is the Pico-Waveshare Lora+GPS HAT
+#ifdef PIN_GPS_STANDBY_INVERTED
+        digitalWrite(PIN_GPS_STANDBY, 0);
+#else
         digitalWrite(PIN_GPS_STANDBY, 1);
+#endif
         return;
     } else {
-        LOG_INFO("GPS entering sleep");
+        LOG_INFO("GPS entering sleep\n");
         // notifyGPSSleep.notifyObservers(NULL);
         pinMode(PIN_GPS_STANDBY, OUTPUT);
+#ifdef PIN_GPS_STANDBY_INVERTED
+        digitalWrite(PIN_GPS_STANDBY, 1);
+#else
         digitalWrite(PIN_GPS_STANDBY, 0);
+#endif
         return;
     }
 #endif
@@ -744,7 +759,7 @@ uint32_t GPS::getWakeTime() const
     if (t == UINT32_MAX)
         return t; // already maxint
 
-    return getConfiguredOrDefaultMs(t, default_broadcast_interval_secs);
+    return Default::Default::getConfiguredOrDefaultMs(t, default_broadcast_interval_secs);
 }
 
 /** Get how long we should sleep between aqusition attempts in msecs
@@ -931,7 +946,7 @@ GnssModel_t GPS::probe(int serialSpeed)
     uint8_t buffer[768] = {0};
     delay(100);
 
-    // Close all NMEA sentences , Only valid for MTK platform
+    // Close all NMEA sentences , Only valid for L76K MTK platform
     _serial_gps->write("$PCAS03,0,0,0,0,0,0,0,0,0,0,,,0,0*02\r\n");
     delay(20);
 
@@ -941,6 +956,18 @@ GnssModel_t GPS::probe(int serialSpeed)
     if (getACK("$GPTXT,01,01,02,SW=", 500) == GNSS_RESPONSE_OK) {
         LOG_INFO("L76K GNSS init succeeded, using L76K GNSS Module\n");
         return GNSS_MODEL_MTK;
+    }
+
+    // Close all NMEA sentences, valid for L76B MTK platform (Waveshare Pico GPS)
+    _serial_gps->write("$PMTK514,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*2E\r\n");
+    delay(20);
+
+    // Get version information
+    clearBuffer();
+    _serial_gps->write("$PMTK605*31\r\n");
+    if (getACK("Quectel-L76B", 500) == GNSS_RESPONSE_OK) {
+        LOG_INFO("L76B GNSS init succeeded, using L76B GNSS Module\n");
+        return GNSS_MODEL_MTK_L76B;
     }
 
     uint8_t cfg_rate[] = {0xB5, 0x62, 0x06, 0x08, 0x00, 0x00, 0x00, 0x00};
@@ -1124,7 +1151,6 @@ GPS *GPS::createGps()
         LOG_DEBUG("Using GPIO%d for GPS RX\n", new_gps->rx_gpio);
         LOG_DEBUG("Using GPIO%d for GPS TX\n", new_gps->tx_gpio);
         _serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, new_gps->rx_gpio, new_gps->tx_gpio);
-
 #else
         _serial_gps->begin(GPS_BAUDRATE);
 #endif
@@ -1183,7 +1209,16 @@ bool GPS::factoryReset()
         // byte _message_CFG_RST_COLDSTART[] = {0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0xFF, 0xB9, 0x00, 0x00, 0xC6, 0x8B};
         // _serial_gps->write(_message_CFG_RST_COLDSTART, sizeof(_message_CFG_RST_COLDSTART));
         // delay(1000);
+    } else if (gnssModel == GNSS_MODEL_MTK) {
+        // send the CAS10 to perform a factory restart of the device (and other device that support PCAS statements)
+        LOG_INFO("GNSS Factory Reset via PCAS10,3\n");
+        _serial_gps->write("$PCAS10,3*1F\r\n");
+        delay(100);
     } else {
+        // fire this for good measure, if we have an L76B - won't harm other devices.
+        _serial_gps->write("$PMTK104*37\r\n");
+        // No PMTK_ACK for this command.
+        delay(100);
         // send the UBLOX Factory Reset Command regardless of detect state, something is very wrong, just assume it's UBLOX.
         // Factory Reset
         byte _message_reset[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF, 0xFB, 0x00, 0x00, 0x00,

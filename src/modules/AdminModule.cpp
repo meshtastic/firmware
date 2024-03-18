@@ -16,6 +16,7 @@
 #ifdef ARCH_PORTDUINO
 #include "unistd.h"
 #endif
+#include "Default.h"
 
 #include "mqtt/MQTT.h"
 
@@ -302,6 +303,10 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         // If we're setting router role for the first time, install its intervals
         if (existingRole != c.payload_variant.device.role)
             nodeDB.installRoleDefaults(c.payload_variant.device.role);
+        if (config.device.node_info_broadcast_secs < min_node_info_broadcast_secs) {
+            LOG_DEBUG("Tried to set node_info_broadcast_secs too low, setting to %d\n", min_node_info_broadcast_secs);
+            config.device.node_info_broadcast_secs = min_node_info_broadcast_secs;
+        }
         break;
     case meshtastic_Config_position_tag:
         LOG_INFO("Setting config: Position\n");
@@ -332,6 +337,9 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         if (isRegionUnset && config.lora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
             config.lora.tx_enabled = true;
             initRegion();
+            if (myRegion->dutyCycle < 100) {
+                config.lora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
+            }
             if (strcmp(moduleConfig.mqtt.root, default_mqtt_root) == 0) {
                 sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
                 changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
