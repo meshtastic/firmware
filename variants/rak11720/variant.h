@@ -162,6 +162,10 @@ static const uint8_t AREF = PIN_AREF;
 #define PIN_SPI_MOSI WB_SPI_MOSI
 #define PIN_SPI_SCK WB_SPI_CLK
 
+#define VARIANT_SPI_SDI PIN_SPI_MISO
+#define VARIANT_SPI_SDO PIN_SPI_MOSI
+#define VARIANT_SPI_CLK PIN_SPI_SCK
+
 static const uint8_t SS = PIN_SPI_CS;
 static const uint8_t MOSI = PIN_SPI_MOSI;
 static const uint8_t MISO = PIN_SPI_MISO;

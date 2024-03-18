@@ -1,0 +1,1 @@
+-DMBED_BOOT_STACK_SIZE=1024 -DXIP_ENABLE=0 -Wl,--gc-sections -Wl,--wrap,_calloc_r -Wl,--wrap,_memalign_r -Wl,--wrap,atexit -Wl,--wrap,exit -Wl,--wrap,fprintf -Wl,--wrap,main -Wl,--wrap,printf -Wl,--wrap,snprintf -Wl,--wrap,sprintf -Wl,--wrap,vfprintf -Wl,--wrap,vprintf -Wl,--wrap,vsnprintf -Wl,--wrap,vsprintf -Wl,-n -mcpu=cortex-m4 -mfloat-abi=hard -mfpu=fpv4-sp-d16 -mthumb 

@@ -25,30 +25,18 @@ using namespace LittleFS_Namespace;
 #include <EEPROM.h>
 #include <OSFS.h>
 
-uint16_t OSFS::startOfEEPROM = 1;
-uint16_t OSFS::endOfEEPROM = 2048;
+extern uint16_t OSFS::startOfEEPROM;
+extern uint16_t OSFS::endOfEEPROM;
 
 // Useful consts
-const OSFS::result noerr = OSFS::result::NO_ERROR;
-const OSFS::result notfound = OSFS::result::FILE_NOT_FOUND;
+extern const OSFS::result noerr;
+extern const OSFS::result notfound;
 
 // 3) How do I read from the medium?
-void OSFS::readNBytes(uint16_t address, unsigned int num, byte *output)
-{
-    for (uint16_t i = address; i < address + num; i++) {
-        *output = EEPROM.read(i);
-        output++;
-    }
-}
+void OSFS::readNBytes(uint16_t address, unsigned int num, byte *output);
 
 // 4) How to I write to the medium?
-void OSFS::writeNBytes(uint16_t address, unsigned int num, const byte *input)
-{
-    for (uint16_t i = address; i < address + num; i++) {
-        EEPROM.update(i, *input);
-        input++;
-    }
-}
+void OSFS::writeNBytes(uint16_t address, unsigned int num, const byte *input);
 #endif
 
 #if defined(ARCH_RP2040)

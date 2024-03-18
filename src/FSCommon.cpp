@@ -24,6 +24,35 @@ SPIClass SPI1(HSPI);
 
 #endif // HAS_SDCARD
 
+#if defined(ARCH_APOLLO3)
+// Apollo series 2 Kbytes (8 rows of 256 bytes)
+
+uint16_t OSFS::startOfEEPROM = 1;
+uint16_t OSFS::endOfEEPROM = 2048;
+
+// Useful consts
+const OSFS::result noerr = OSFS::result::NO_ERROR;
+const OSFS::result notfound = OSFS::result::FILE_NOT_FOUND;
+
+// 3) How do I read from the medium?
+void OSFS::readNBytes(uint16_t address, unsigned int num, byte *output)
+{
+    for (uint16_t i = address; i < address + num; i++) {
+        *output = EEPROM.read(i);
+        output++;
+    }
+}
+
+// 4) How to I write to the medium?
+void OSFS::writeNBytes(uint16_t address, unsigned int num, const byte *input)
+{
+    for (uint16_t i = address; i < address + num; i++) {
+        EEPROM.update(i, *input);
+        input++;
+    }
+}
+#endif
+
 /**
  * @brief Copies a file from one location to another.
  *
