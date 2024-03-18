@@ -44,7 +44,7 @@ bool DeviceTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
                  t->variant.device_metrics.air_util_tx, t->variant.device_metrics.channel_utilization,
                  t->variant.device_metrics.battery_level, t->variant.device_metrics.voltage);
 #endif
-        nodeDB.updateTelemetry(getFrom(&mp), *t, RX_SRC_RADIO);
+        nodeDB->updateTelemetry(getFrom(&mp), *t, RX_SRC_RADIO);
     }
     return false; // Let others look at this message also if they want
 }
@@ -93,7 +93,7 @@ bool DeviceTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     p->decoded.want_response = false;
     p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
 
-    nodeDB.updateTelemetry(nodeDB.getNodeNum(), telemetry, RX_SRC_LOCAL);
+    nodeDB->updateTelemetry(nodeDB->getNodeNum(), telemetry, RX_SRC_LOCAL);
     if (phoneOnly) {
         LOG_INFO("Sending packet to phone\n");
         service.sendToPhone(p);

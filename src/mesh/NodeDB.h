@@ -59,7 +59,7 @@ class NodeDB
     NodeDB();
 
     /// Called from service after app start, to do init which can only be done after OS load
-    void init();
+    static NodeDB *init();
 
     /// write to flash
     void saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS),
@@ -168,7 +168,7 @@ class NodeDB
     void installDefaultDeviceState(), installDefaultChannels(), installDefaultConfig(), installDefaultModuleConfig();
 };
 
-extern NodeDB nodeDB;
+extern NodeDB *nodeDB;
 
 /*
   If is_router is set, we use a number of different default values

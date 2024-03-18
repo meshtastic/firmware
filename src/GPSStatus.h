@@ -4,7 +4,7 @@
 #include "configuration.h"
 #include <Arduino.h>
 
-extern NodeDB nodeDB;
+// extern NodeDB *nodeDB;
 
 namespace meshtastic
 {
@@ -55,7 +55,7 @@ class GPSStatus : public Status
 #ifdef GPS_EXTRAVERBOSE
             LOG_WARN("Using fixed latitude\n");
 #endif
-            meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
+            meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
             return node->position.latitude_i;
         } else {
             return p.latitude_i;
@@ -68,7 +68,7 @@ class GPSStatus : public Status
 #ifdef GPS_EXTRAVERBOSE
             LOG_WARN("Using fixed longitude\n");
 #endif
-            meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
+            meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
             return node->position.longitude_i;
         } else {
             return p.longitude_i;
@@ -81,27 +81,18 @@ class GPSStatus : public Status
 #ifdef GPS_EXTRAVERBOSE
             LOG_WARN("Using fixed altitude\n");
 #endif
-            meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
+            meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
             return node->position.altitude;
         } else {
             return p.altitude;
         }
     }
 
-    uint32_t getDOP() const
-    {
-        return p.PDOP;
-    }
+    uint32_t getDOP() const { return p.PDOP; }
 
-    uint32_t getHeading() const
-    {
-        return p.ground_track;
-    }
+    uint32_t getHeading() const { return p.ground_track; }
 
-    uint32_t getNumSatellites() const
-    {
-        return p.sats_in_view;
-    }
+    uint32_t getNumSatellites() const { return p.sats_in_view; }
 
     bool matches(const GPSStatus *newStatus) const
     {

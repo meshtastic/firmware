@@ -39,7 +39,7 @@
 #include <utility/bonding.h>
 #endif
 
-NodeDB nodeDB;
+NodeDB *nodeDB = nullptr;
 
 // we have plenty of ram so statically alloc this tempbuf (for now)
 EXT_RAM_ATTR meshtastic_DeviceState devicestate;
@@ -86,6 +86,7 @@ NodeDB::NodeDB() : meshNodes(devicestate.node_db_lite), numMeshNodes(devicestate
     std::cout << "test" << std::endl;
     std::cout << MAX_NUM_NODES << std::endl;
     meshNodes.reserve(MAX_NUM_NODES);
+    std::cout << "vector size" << meshNodes.size() << std::endl;
 }
 
 /**
@@ -94,7 +95,7 @@ NodeDB::NodeDB() : meshNodes(devicestate.node_db_lite), numMeshNodes(devicestate
  */
 NodeNum getFrom(const meshtastic_MeshPacket *p)
 {
-    return (p->from == 0) ? nodeDB.getNodeNum() : p->from;
+    return (p->from == 0) ? nodeDB->getNodeNum() : p->from;
 }
 
 bool NodeDB::resetRadioConfig(bool factory_reset)
@@ -435,11 +436,12 @@ void NodeDB::installDefaultDeviceState()
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
 }
 
-void NodeDB::init()
+NodeDB *NodeDB::init()
 {
     LOG_INFO("Initializing NodeDB\n");
-    loadFromDisk();
-    cleanupMeshDB();
+    NodeDB *nodeDB = new NodeDB;
+    nodeDB->loadFromDisk();
+    nodeDB->cleanupMeshDB();
 
     uint32_t devicestateCRC = crc32Buffer(&devicestate, sizeof(devicestate));
     uint32_t configCRC = crc32Buffer(&config, sizeof(config));
@@ -451,7 +453,7 @@ void NodeDB::init()
     myNodeInfo.min_app_version = 30200; // format is Mmmss (where M is 1+the numeric major number. i.e. 30200 means 2.2.00
     // Note! We do this after loading saved settings, so that if somehow an invalid nodenum was stored in preferences we won't
     // keep using that nodenum forever. Crummy guess at our nodenum (but we will check against the nodedb to avoid conflicts)
-    pickNewNodeNum();
+    nodeDB->pickNewNodeNum();
 
     // Set our board type so we can share it with others
     owner.hw_model = HW_VENDOR;
@@ -459,7 +461,7 @@ void NodeDB::init()
     owner.role = config.device.role;
 
     // Include our owner in the node db under our nodenum
-    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
+    meshtastic_NodeInfoLite *info = nodeDB->getOrCreateMeshNode(nodeDB->getNodeNum());
     info->user = owner;
     info->has_user = true;
 
@@ -471,8 +473,8 @@ void NodeDB::init()
     LOG_DEBUG("Number of Device Reboots: %d\n", myNodeInfo.reboot_count);
 #endif
 
-    resetRadioConfig(); // If bogus settings got saved, then fix them
-    LOG_DEBUG("region=%d, NODENUM=0x%x, dbsize=%d\n", config.lora.region, myNodeInfo.my_node_num, numMeshNodes);
+    nodeDB->resetRadioConfig(); // If bogus settings got saved, then fix them
+    // nodeDB->LOG_DEBUG("region=%d, NODENUM=0x%x, dbsize=%d\n", config.lora.region, myNodeInfo.my_node_num, numMeshNodes);
 
     if (devicestateCRC != crc32Buffer(&devicestate, sizeof(devicestate)))
         saveWhat |= SEGMENT_DEVICESTATE;
@@ -491,7 +493,7 @@ void NodeDB::init()
         config.position.gps_enabled = 0;
     }
 
-    saveToDisk(saveWhat);
+    nodeDB->saveToDisk(saveWhat);
 }
 
 // We reserve a few nodenums for future use
@@ -650,7 +652,7 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
         if (failedCounter >= 2) {
             FSCom.format();
             // After formatting, the device needs to be restarted
-            nodeDB.resetRadioConfig(true);
+            nodeDB->resetRadioConfig(true);
         }
 #endif
     }
@@ -676,7 +678,8 @@ void NodeDB::saveDeviceStateToDisk()
 #ifdef FSCom
         FSCom.mkdir("/prefs");
 #endif
-        saveProto(prefFileName, sizeof(meshtastic_DeviceState), &meshtastic_DeviceState_msg, &devicestate);
+        saveProto(prefFileName, sizeof(meshtastic_DeviceState) + meshNodes.size() * meshtastic_NodeInfoLite_size,
+                  &meshtastic_DeviceState_msg, &devicestate);
     }
 }
 
