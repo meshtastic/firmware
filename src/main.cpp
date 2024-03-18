@@ -236,7 +236,7 @@ void setup()
 #if defined(TTGO_T_ECHO) && defined(PIN_POWER_EN)
     pinMode(PIN_POWER_EN, OUTPUT);
     digitalWrite(PIN_POWER_EN, HIGH);
-    digitalWrite(PIN_POWER_EN1, INPUT);
+    // digitalWrite(PIN_POWER_EN1, INPUT);
 #endif
 
 #if defined(LORA_TCXO_GPIO)
@@ -1005,7 +1005,7 @@ void tft_task_handler(void *param = nullptr)
         if (deviceScreen)
             deviceScreen->task_handler();
 #ifdef HAS_FREE_RTOS
-        vTaskDelay((TickType_t)10);
+        vTaskDelay((TickType_t)5);
 #else
         delay(10);
 #endif

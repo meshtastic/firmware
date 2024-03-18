@@ -682,32 +682,6 @@ typedef struct _meshtastic_QueueStatus {
     uint32_t mesh_packet_id;
 } meshtastic_QueueStatus;
 
-/* Packets/commands to the radio will be written (reliably) to the toRadio characteristic.
- Once the write completes the phone can assume it is handled. */
-typedef struct _meshtastic_ToRadio {
-    pb_size_t which_payload_variant;
-    union {
-        /* Send this packet on the mesh */
-        meshtastic_MeshPacket packet;
-        /* Phone wants radio to send full node db to the phone, This is
-     typically the first packet sent to the radio when the phone gets a
-     bluetooth connection. The radio will respond by sending back a
-     MyNodeInfo, a owner, a radio config and a series of
-     FromRadio.node_infos, and config_complete
-     the integer you write into this field will be reported back in the
-     config_complete_id response this allows clients to never be confused by
-     a stale old partially sent config. */
-        uint32_t want_config_id;
-        /* Tell API server we are disconnecting now.
-     This is useful for serial links where there is no hardware/protocol based notification that the client has dropped the link.
-     (Sending this message is optional for clients) */
-        bool disconnect;
-        meshtastic_XModem xmodemPacket;
-        /* MQTT Client Proxy Message (for client / phone subscribed to MQTT sending to device) */
-        meshtastic_MqttClientProxyMessage mqttClientProxyMessage;
-    };
-} meshtastic_ToRadio;
-
 typedef PB_BYTES_ARRAY_T(237) meshtastic_Compressed_data_t;
 /* Compressed message payload */
 typedef struct _meshtastic_Compressed {
@@ -815,6 +789,40 @@ typedef struct _meshtastic_FromRadio {
     };
 } meshtastic_FromRadio;
 
+/* A heartbeat message is sent to the node from the client to keep the connection alive.
+ This is currently only needed to keep serial connections alive, but can be used by any PhoneAPI. */
+typedef struct _meshtastic_Heartbeat {
+    char dummy_field;
+} meshtastic_Heartbeat;
+
+/* Packets/commands to the radio will be written (reliably) to the toRadio characteristic.
+ Once the write completes the phone can assume it is handled. */
+typedef struct _meshtastic_ToRadio {
+    pb_size_t which_payload_variant;
+    union {
+        /* Send this packet on the mesh */
+        meshtastic_MeshPacket packet;
+        /* Phone wants radio to send full node db to the phone, This is
+     typically the first packet sent to the radio when the phone gets a
+     bluetooth connection. The radio will respond by sending back a
+     MyNodeInfo, a owner, a radio config and a series of
+     FromRadio.node_infos, and config_complete
+     the integer you write into this field will be reported back in the
+     config_complete_id response this allows clients to never be confused by
+     a stale old partially sent config. */
+        uint32_t want_config_id;
+        /* Tell API server we are disconnecting now.
+     This is useful for serial links where there is no hardware/protocol based notification that the client has dropped the link.
+     (Sending this message is optional for clients) */
+        bool disconnect;
+        meshtastic_XModem xmodemPacket;
+        /* MQTT Client Proxy Message (for client / phone subscribed to MQTT sending to device) */
+        meshtastic_MqttClientProxyMessage mqttClientProxyMessage;
+        /* Heartbeat message (used to keep the device connection awake on serial) */
+        meshtastic_Heartbeat heartbeat;
+    };
+} meshtastic_ToRadio;
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -888,6 +896,7 @@ extern "C" {
 #define meshtastic_DeviceMetadata_hw_model_ENUMTYPE meshtastic_HardwareModel
 
 
+
 /* Initializer values for message structs */
 #define meshtastic_Position_init_default         {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_User_init_default             {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN}
@@ -907,6 +916,7 @@ extern "C" {
 #define meshtastic_NeighborInfo_init_default     {0, 0, 0, 0, {meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default}}
 #define meshtastic_Neighbor_init_default         {0, 0, 0, 0}
 #define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0}
+#define meshtastic_Heartbeat_init_default        {0}
 #define meshtastic_Position_init_zero            {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_User_init_zero                {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN}
 #define meshtastic_RouteDiscovery_init_zero      {0, {0, 0, 0, 0, 0, 0, 0, 0}}
@@ -925,6 +935,7 @@ extern "C" {
 #define meshtastic_NeighborInfo_init_zero        {0, 0, 0, 0, {meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero}}
 #define meshtastic_Neighbor_init_zero            {0, 0, 0, 0}
 #define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0}
+#define meshtastic_Heartbeat_init_zero           {0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_Position_latitude_i_tag       1
@@ -1016,11 +1027,6 @@ extern "C" {
 #define meshtastic_QueueStatus_free_tag          2
 #define meshtastic_QueueStatus_maxlen_tag        3
 #define meshtastic_QueueStatus_mesh_packet_id_tag 4
-#define meshtastic_ToRadio_packet_tag            1
-#define meshtastic_ToRadio_want_config_id_tag    3
-#define meshtastic_ToRadio_disconnect_tag        4
-#define meshtastic_ToRadio_xmodemPacket_tag      5
-#define meshtastic_ToRadio_mqttClientProxyMessage_tag 6
 #define meshtastic_Compressed_portnum_tag        1
 #define meshtastic_Compressed_data_tag           2
 #define meshtastic_Neighbor_node_id_tag          1
@@ -1055,6 +1061,12 @@ extern "C" {
 #define meshtastic_FromRadio_xmodemPacket_tag    12
 #define meshtastic_FromRadio_metadata_tag        13
 #define meshtastic_FromRadio_mqttClientProxyMessage_tag 14
+#define meshtastic_ToRadio_packet_tag            1
+#define meshtastic_ToRadio_want_config_id_tag    3
+#define meshtastic_ToRadio_disconnect_tag        4
+#define meshtastic_ToRadio_xmodemPacket_tag      5
+#define meshtastic_ToRadio_mqttClientProxyMessage_tag 6
+#define meshtastic_ToRadio_heartbeat_tag         7
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_Position_FIELDLIST(X, a) \
@@ -1234,12 +1246,14 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,packet,packet),   1) \
 X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,want_config_id,want_config_id),   3) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,disconnect,disconnect),   4) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,xmodemPacket,xmodemPacket),   5) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,mqttClientProxyMessage,mqttClientProxyMessage),   6)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,mqttClientProxyMessage,mqttClientProxyMessage),   6) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,heartbeat,heartbeat),   7)
 #define meshtastic_ToRadio_CALLBACK NULL
 #define meshtastic_ToRadio_DEFAULT NULL
 #define meshtastic_ToRadio_payload_variant_packet_MSGTYPE meshtastic_MeshPacket
 #define meshtastic_ToRadio_payload_variant_xmodemPacket_MSGTYPE meshtastic_XModem
 #define meshtastic_ToRadio_payload_variant_mqttClientProxyMessage_MSGTYPE meshtastic_MqttClientProxyMessage
+#define meshtastic_ToRadio_payload_variant_heartbeat_MSGTYPE meshtastic_Heartbeat
 
 #define meshtastic_Compressed_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    portnum,           1) \
@@ -1278,6 +1292,11 @@ X(a, STATIC,   SINGULAR, BOOL,     hasRemoteHardware,  10)
 #define meshtastic_DeviceMetadata_CALLBACK NULL
 #define meshtastic_DeviceMetadata_DEFAULT NULL
 
+#define meshtastic_Heartbeat_FIELDLIST(X, a) \
+
+#define meshtastic_Heartbeat_CALLBACK NULL
+#define meshtastic_Heartbeat_DEFAULT NULL
+
 extern const pb_msgdesc_t meshtastic_Position_msg;
 extern const pb_msgdesc_t meshtastic_User_msg;
 extern const pb_msgdesc_t meshtastic_RouteDiscovery_msg;
@@ -1296,6 +1315,7 @@ extern const pb_msgdesc_t meshtastic_Compressed_msg;
 extern const pb_msgdesc_t meshtastic_NeighborInfo_msg;
 extern const pb_msgdesc_t meshtastic_Neighbor_msg;
 extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
+extern const pb_msgdesc_t meshtastic_Heartbeat_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_Position_fields &meshtastic_Position_msg
@@ -1316,12 +1336,14 @@ extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
 #define meshtastic_NeighborInfo_fields &meshtastic_NeighborInfo_msg
 #define meshtastic_Neighbor_fields &meshtastic_Neighbor_msg
 #define meshtastic_DeviceMetadata_fields &meshtastic_DeviceMetadata_msg
+#define meshtastic_Heartbeat_fields &meshtastic_Heartbeat_msg
 
 /* Maximum encoded size of messages (where known) */
 #define meshtastic_Compressed_size               243
 #define meshtastic_Data_size                     270
 #define meshtastic_DeviceMetadata_size           46
 #define meshtastic_FromRadio_size                510
+#define meshtastic_Heartbeat_size                0
 #define meshtastic_LogRecord_size                81
 #define meshtastic_MeshPacket_size               326
 #define meshtastic_MqttClientProxyMessage_size   501
