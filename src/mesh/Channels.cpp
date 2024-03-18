@@ -290,40 +290,6 @@ bool Channels::hasDefaultChannel()
     return false;
 }
 
-/**
-* Generate a short suffix used to disambiguate channels that might have the same "name" entered by the human but different PSKs.
-* The ideas is that the PSK changing should be visible to the user so that they see they probably messed up and that's why they
-their nodes
-* aren't talking to each other.
-*
-* This string is of the form "#name-X".
-*
-* Where X is either:
-* (for custom PSKS) a letter from A to Z (base26), and formed by xoring all the bytes of the PSK together,
-*
-* This function will also need to be implemented in GUI apps that talk to the radio.
-*
-* https://github.com/meshtastic/firmware/issues/269
-*/
-const char *Channels::getPrimaryName()
-{
-    static char buf[32];
-
-    char suffix;
-    // auto channelSettings = getPrimary();
-    // if (channelSettings.psk.size != 1) {
-    // We have a standard PSK, so generate a letter based hash.
-    uint8_t code = getHash(primaryIndex);
-
-    suffix = 'A' + (code % 26);
-    /* } else {
-        suffix = '0' + channelSettings.psk.bytes[0];
-    } */
-
-    snprintf(buf, sizeof(buf), "#%s-%c", getName(primaryIndex), suffix);
-    return buf;
-}
-
 /** Given a channel hash setup crypto for decoding that channel (or the primary channel if that channel is unsecured)
  *
  * This method is called before decoding inbound packets
