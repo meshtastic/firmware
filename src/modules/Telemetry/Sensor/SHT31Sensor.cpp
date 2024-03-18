@@ -12,7 +12,8 @@ int32_t SHT31Sensor::runOnce()
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    status = sht31.begin();
+    sht31 = Adafruit_SHT31(nodeTelemetrySensorsMap[sensorType].second);
+    status = sht31.begin(nodeTelemetrySensorsMap[sensorType].first);
     return initI2CSensor();
 }
 

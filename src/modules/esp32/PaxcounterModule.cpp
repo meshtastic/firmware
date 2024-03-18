@@ -1,15 +1,25 @@
 #include "configuration.h"
 #if defined(ARCH_ESP32)
+#include "Default.h"
 #include "MeshService.h"
 #include "PaxcounterModule.h"
-
 #include <assert.h>
 
 PaxcounterModule *paxcounterModule;
 
-void NullFunc(){};
-
-// paxcounterModule->sendInfo(NODENUM_BROADCAST);
+/**
+ * Callback function for libpax.
+ * We only clear our sent flag here, since this function is called from another thread, so we
+ * cannot send to the mesh directly.
+ */
+void PaxcounterModule::handlePaxCounterReportRequest()
+{
+    // The libpax library already updated our data structure, just before invoking this callback.
+    LOG_INFO("PaxcounterModule: libpax reported new data: wifi=%d; ble=%d; uptime=%lu\n",
+             paxcounterModule->count_from_libpax.wifi_count, paxcounterModule->count_from_libpax.ble_count, millis() / 1000);
+    paxcounterModule->reportedDataSent = false;
+    paxcounterModule->setIntervalFromNow(0);
+}
 
 PaxcounterModule::PaxcounterModule()
     : concurrency::OSThread("PaxcounterModule"),
@@ -17,11 +27,20 @@ PaxcounterModule::PaxcounterModule()
 {
 }
 
+/**
+ * Send the Pax information to the mesh if we got new data from libpax.
+ * This is called periodically from our runOnce() method and will actually send the data to the mesh
+ * if libpax updated it since the last transmission through the callback.
+ * @param dest - destination node (usually NODENUM_BROADCAST)
+ * @return false if sending is unnecessary, true if information was sent
+ */
 bool PaxcounterModule::sendInfo(NodeNum dest)
 {
-    libpax_counter_count(&count_from_libpax);
-    LOG_INFO("(Sending): pax: wifi=%d; ble=%d; uptime=%d\n", count_from_libpax.wifi_count, count_from_libpax.ble_count,
-             millis() / 1000);
+    if (paxcounterModule->reportedDataSent)
+        return false;
+
+    LOG_INFO("PaxcounterModule: sending pax info wifi=%d; ble=%d; uptime=%lu\n", count_from_libpax.wifi_count,
+             count_from_libpax.ble_count, millis() / 1000);
 
     meshtastic_Paxcount pl = meshtastic_Paxcount_init_default;
     pl.wifi = count_from_libpax.wifi_count;
@@ -31,9 +50,12 @@ bool PaxcounterModule::sendInfo(NodeNum dest)
     meshtastic_MeshPacket *p = allocDataProtobuf(pl);
     p->to = dest;
     p->decoded.want_response = false;
-    p->priority = meshtastic_MeshPacket_Priority_MIN;
+    p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
 
     service.sendToMesh(p, RX_SRC_LOCAL, true);
+
+    paxcounterModule->reportedDataSent = true;
+
     return true;
 }
 
@@ -60,14 +82,14 @@ int32_t PaxcounterModule::runOnce()
     if (isActive()) {
         if (firstTime) {
             firstTime = false;
-            LOG_DEBUG(
-                "Paxcounter starting up with interval of %d seconds\n",
-                getConfiguredOrDefault(moduleConfig.paxcounter.paxcounter_update_interval, default_broadcast_interval_secs));
+            LOG_DEBUG("Paxcounter starting up with interval of %d seconds\n",
+                      Default::getConfiguredOrDefault(moduleConfig.paxcounter.paxcounter_update_interval,
+                                                      default_broadcast_interval_secs));
             struct libpax_config_t configuration;
             libpax_default_config(&configuration);
 
             configuration.blecounter = 1;
-            configuration.blescantime = 0; // infinit
+            configuration.blescantime = 0; // infinite
             configuration.wificounter = 1;
             configuration.wifi_channel_map = WIFI_CHANNEL_ALL;
             configuration.wifi_channel_switch_interval = 50;
@@ -76,12 +98,14 @@ int32_t PaxcounterModule::runOnce()
             libpax_update_config(&configuration);
 
             // internal processing initialization
-            libpax_counter_init(NullFunc, &count_from_libpax, UINT16_MAX, 1);
+            libpax_counter_init(handlePaxCounterReportRequest, &count_from_libpax,
+                                moduleConfig.paxcounter.paxcounter_update_interval, 0);
             libpax_counter_start();
         } else {
             sendInfo(NODENUM_BROADCAST);
         }
-        return getConfiguredOrDefaultMs(moduleConfig.paxcounter.paxcounter_update_interval, default_broadcast_interval_secs);
+        return Default::getConfiguredOrDefaultMs(moduleConfig.paxcounter.paxcounter_update_interval,
+                                                 default_broadcast_interval_secs);
     } else {
         return disable();
     }

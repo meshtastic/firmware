@@ -71,26 +71,22 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
         }
     }
 
+    // Trigger the refresh in GxEPD2
     LOG_DEBUG("Updating E-Paper... ");
-
-#if false
-    // Currently unused; rescued from commented-out line during a refactor
-    // Use a meaningful macro here if variant doesn't want fast refresh
-
-    // Full update mode (slow)
-    adafruitDisplay->display(false)
-#else
-    // Fast update mode
     adafruitDisplay->nextPage();
-#endif
 
-#ifndef EINK_NO_HIBERNATE // Only hibernate if controller IC will preserve image memory
-    // Put screen to sleep to save power (possibly not necessary because we already did poweroff inside of display)
-    adafruitDisplay->hibernate();
-#endif
+    // End the update process
+    endUpdate();
 
     LOG_DEBUG("done\n");
     return true;
+}
+
+// End the update process - virtual method, overriden in derived class
+void EInkDisplay::endUpdate()
+{
+    // Power off display hardware, then deep-sleep (Except Wireless Paper V1.1, no deep-sleep)
+    adafruitDisplay->hibernate();
 }
 
 // Write the buffer to the display memory
@@ -121,11 +117,6 @@ void EInkDisplay::setDetected(uint8_t detected)
 bool EInkDisplay::connect()
 {
     LOG_INFO("Doing EInk init\n");
-
-#ifdef PIN_EINK_PWR_ON
-    pinMode(PIN_EINK_PWR_ON, OUTPUT);
-    digitalWrite(PIN_EINK_PWR_ON, HIGH); // If we need to assert a pin to power external peripherals
-#endif
 
 #ifdef PIN_EINK_EN
     // backlight power, HIGH is backlight on, LOW is off
@@ -193,6 +184,7 @@ bool EInkDisplay::connect()
         // Init GxEPD2
         adafruitDisplay->init();
         adafruitDisplay->setRotation(3);
+        adafruitDisplay->clearScreen(); // Clearing now, so the boot logo will draw nice and smoothe (fast refresh)
     }
 #elif defined(PCA10059)
     {
