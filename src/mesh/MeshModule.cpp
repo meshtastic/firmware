@@ -32,7 +32,8 @@ MeshModule::~MeshModule()
     assert(0); // FIXME - remove from list of modules once someone needs this feature
 }
 
-meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex)
+meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex,
+                                               uint8_t hopStart, uint8_t hopLimit)
 {
     meshtastic_Routing c = meshtastic_Routing_init_default;
 
@@ -49,7 +50,7 @@ meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, Nod
 
     p->priority = meshtastic_MeshPacket_Priority_ACK;
 
-    p->hop_limit = config.lora.hop_limit; // Flood ACK back to original sender
+    p->hop_limit = routingModule->getHopLimitForResponse(hopStart, hopLimit); // Flood ACK back to original sender
     p->to = to;
     p->decoded.request_id = idFrom;
     p->channel = chIndex;
@@ -67,7 +68,7 @@ meshtastic_MeshPacket *MeshModule::allocErrorResponse(meshtastic_Routing_Error e
     return r;
 }
 
-void MeshModule::callPlugins(const meshtastic_MeshPacket &mp, RxSource src)
+void MeshModule::callPlugins(meshtastic_MeshPacket &mp, RxSource src)
 {
     // LOG_DEBUG("In call modules\n");
     bool moduleFound = false;
@@ -124,8 +125,9 @@ void MeshModule::callPlugins(const meshtastic_MeshPacket &mp, RxSource src)
                 } else
                     printPacket("packet on wrong channel, but can't respond", &mp);
             } else {
-
                 ProcessMessage handled = pi.handleReceived(mp);
+
+                pi.alterReceived(mp);
 
                 // Possibly send replies (but only if the message was directed to us specifically, i.e. not for promiscious
                 // sniffing) also: we only let the one module send a reply, once that happens, remaining modules are not
@@ -175,7 +177,8 @@ void MeshModule::callPlugins(const meshtastic_MeshPacket &mp, RxSource src)
             // SECURITY NOTE! I considered sending back a different error code if we didn't find the psk (i.e. !isDecoded)
             // but opted NOT TO.  Because it is not a good idea to let remote nodes 'probe' to find out which PSKs were "good" vs
             // bad.
-            routingModule->sendAckNak(meshtastic_Routing_Error_NO_RESPONSE, getFrom(&mp), mp.id, mp.channel);
+            routingModule->sendAckNak(meshtastic_Routing_Error_NO_RESPONSE, getFrom(&mp), mp.id, mp.channel, mp.hop_start,
+                                      mp.hop_limit);
         }
     }
 
@@ -216,6 +219,7 @@ void setReplyTo(meshtastic_MeshPacket *p, const meshtastic_MeshPacket &to)
     assert(p->which_payload_variant == meshtastic_MeshPacket_decoded_tag); // Should already be set by now
     p->to = getFrom(&to);    // Make sure that if we are sending to the local node, we use our local node addr, not 0
     p->channel = to.channel; // Use the same channel that the request came in on
+    p->hop_limit = routingModule->getHopLimitForResponse(to.hop_start, to.hop_limit);
 
     // No need for an ack if we are just delivering locally (it just generates an ignored ack)
     p->want_ack = (to.from != 0) ? to.want_ack : false;

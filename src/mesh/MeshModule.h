@@ -64,7 +64,7 @@ class MeshModule
 
     /** For use only by MeshService
      */
-    static void callPlugins(const meshtastic_MeshPacket &mp, RxSource src = RX_SRC_RADIO);
+    static void callPlugins(meshtastic_MeshPacket &mp, RxSource src = RX_SRC_RADIO);
 
     static std::vector<MeshModule *> GetMeshModulesWithUIFrames();
     static void observeUIEvents(Observer<const UIFrameEvent *> *observer);
@@ -72,10 +72,7 @@ class MeshModule
                                                                     meshtastic_AdminMessage *request,
                                                                     meshtastic_AdminMessage *response);
 #if HAS_SCREEN
-    virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-    {
-        return;
-    }
+    virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) { return; }
 #endif
   protected:
     const char *name;
@@ -135,10 +132,12 @@ class MeshModule
     @return ProcessMessage::STOP if you've guaranteed you've handled this message and no other handlers should be considered for
     it
     */
-    virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp)
-    {
-        return ProcessMessage::CONTINUE;
-    }
+    virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) { return ProcessMessage::CONTINUE; }
+
+    /** Called to change a particular incoming message
+        This allows the module to change the message before it is passed through the rest of the call-chain.
+    */
+    virtual void alterReceived(meshtastic_MeshPacket &mp) {}
 
     /** Messages can be received that have the want_response bit set.  If set, this callback will be invoked
      * so that subclasses can (optionally) send a response back to the original sender.
@@ -151,16 +150,11 @@ class MeshModule
     /***
      * @return true if you want to be alloced a UI screen frame
      */
-    virtual bool wantUIFrame()
-    {
-        return false;
-    }
-    virtual Observable<const UIFrameEvent *> *getUIFrameObservable()
-    {
-        return NULL;
-    }
+    virtual bool wantUIFrame() { return false; }
+    virtual Observable<const UIFrameEvent *> *getUIFrameObservable() { return NULL; }
 
-    meshtastic_MeshPacket *allocAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex);
+    meshtastic_MeshPacket *allocAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex,
+                                       uint8_t hopStart = 0, uint8_t hopLimit = 0);
 
     /// Send an error response for the specified packet.
     meshtastic_MeshPacket *allocErrorResponse(meshtastic_Routing_Error err, const meshtastic_MeshPacket *p);

@@ -133,10 +133,6 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_EINK_SCLK (0 + 3)
 #define PIN_EINK_MOSI (0 + 30) // also called SDI
 
-// Controls power for the eink display - Board power is enabled either by VBUS from USB or the CPU asserting PWR_ON
-// FIXME - I think this is actually just the board power enable - it enables power to the CPU also
-// #define PIN_EINK_PWR_ON (-1)
-
 // #define USE_EINK
 
 // RAKRGB
@@ -202,13 +198,13 @@ static const uint8_t WB_SPI_MOSI = 30; // IO_SLOT
 
 /* Setup of the SX1262 LoRa module ( https://docs.rakwireless.com/Product-Categories/WisBlock/RAK4631/Datasheet/ )
 
-P1.10 	NSS 	SPI NSS (Arduino GPIO number 42)
-P1.11 	SCK 	SPI CLK (Arduino GPIO number 43)
-P1.12 	MOSI 	SPI MOSI (Arduino GPIO number 44)
-P1.13 	MISO 	SPI MISO (Arduino GPIO number 45)
-P1.14 	BUSY 	BUSY signal (Arduino GPIO number 46)
-P1.15 	DIO1 	DIO1 event interrupt (Arduino GPIO number 47)
-P1.06 	NRESET 	NRESET manual reset of the SX1262 (Arduino GPIO number 38)
+P1.10   NSS     SPI NSS (Arduino GPIO number 42)
+P1.11   SCK     SPI CLK (Arduino GPIO number 43)
+P1.12   MOSI    SPI MOSI (Arduino GPIO number 44)
+P1.13   MISO    SPI MISO (Arduino GPIO number 45)
+P1.14   BUSY    BUSY signal (Arduino GPIO number 46)
+P1.15   DIO1    DIO1 event interrupt (Arduino GPIO number 47)
+P1.06   NRESET  NRESET manual reset of the SX1262 (Arduino GPIO number 38)
 
 Important for successful SX1262 initialization:
 

@@ -133,10 +133,6 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_EINK_SCLK (0 + 3)
 #define PIN_EINK_MOSI (0 + 30) // also called SDI
 
-// Controls power for the eink display - Board power is enabled either by VBUS from USB or the CPU asserting PWR_ON
-// FIXME - I think this is actually just the board power enable - it enables power to the CPU also
-// #define PIN_EINK_PWR_ON (-1)
-
 #define USE_EINK
 
 // RAKRGB
@@ -223,7 +219,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // Voltage divider value => 1.5M + 1M voltage divider on VBAT = (1.5M / (1M + 1.5M))
 #define VBAT_DIVIDER (0.4F)
 // Compensation factor for the VBAT divider
-#define VBAT_DIVIDER_COMP (1.73)
+#define VBAT_DIVIDER_COMP (1.73F)
 // Fixed calculation of milliVolt from compensation value
 #define REAL_VBAT_MV_PER_LSB (VBAT_DIVIDER_COMP * VBAT_MV_PER_LSB)
 #undef AREF_VOLTAGE

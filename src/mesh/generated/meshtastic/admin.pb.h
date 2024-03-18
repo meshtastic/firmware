@@ -131,6 +131,11 @@ typedef struct _meshtastic_AdminMessage {
         bool get_node_remote_hardware_pins_request;
         /* Respond with the mesh's nodes with their available gpio pins for RemoteHardware module use */
         meshtastic_NodeRemoteHardwarePinsResponse get_node_remote_hardware_pins_response;
+        /* Enter (UF2) DFU mode
+     Only implemented on NRF52 currently */
+        bool enter_dfu_mode_request;
+        /* Delete the file by the specified path from the device */
+        char delete_file_request[201];
         /* Set the owner for this node */
         meshtastic_User set_owner;
         /* Set channels (using the new API).
@@ -224,6 +229,8 @@ extern "C" {
 #define meshtastic_AdminMessage_set_ham_mode_tag 18
 #define meshtastic_AdminMessage_get_node_remote_hardware_pins_request_tag 19
 #define meshtastic_AdminMessage_get_node_remote_hardware_pins_response_tag 20
+#define meshtastic_AdminMessage_enter_dfu_mode_request_tag 21
+#define meshtastic_AdminMessage_delete_file_request_tag 22
 #define meshtastic_AdminMessage_set_owner_tag    32
 #define meshtastic_AdminMessage_set_channel_tag  33
 #define meshtastic_AdminMessage_set_config_tag   34
@@ -261,6 +268,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,get_device_connection_status
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_ham_mode,set_ham_mode),  18) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,get_node_remote_hardware_pins_request,get_node_remote_hardware_pins_request),  19) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,get_node_remote_hardware_pins_response,get_node_remote_hardware_pins_response),  20) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,enter_dfu_mode_request,enter_dfu_mode_request),  21) \
+X(a, STATIC,   ONEOF,    STRING,   (payload_variant,delete_file_request,delete_file_request),  22) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_owner,set_owner),  32) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_channel,set_channel),  33) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_config,set_config),  34) \

@@ -58,7 +58,7 @@
 SerialModule *serialModule;
 SerialModuleRadio *serialModuleRadio;
 
-#ifdef TTGO_T_ECHO
+#if defined(TTGO_T_ECHO) || defined(CANARYONE)
 SerialModule::SerialModule() : StreamAPI(&Serial), concurrency::OSThread("SerialModule") {}
 static Print *serialPrint = &Serial;
 #else
@@ -126,8 +126,13 @@ int32_t SerialModule::runOnce()
             uint32_t baud = getBaudRate();
 
             if (moduleConfig.serial.override_console_serial_port) {
+#ifdef RP2040_SLOW_CLOCK
+                Serial2.flush();
+                serialPrint = &Serial2;
+#else
                 Serial.flush();
                 serialPrint = &Serial;
+#endif
                 // Give it a chance to flush out 💩
                 delay(10);
             }
@@ -140,7 +145,7 @@ int32_t SerialModule::runOnce()
                 Serial.begin(baud);
                 Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             }
-#elif !defined(TTGO_T_ECHO)
+#elif !defined(TTGO_T_ECHO) && !defined(CANARYONE)
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
 #ifdef ARCH_RP2040
                 Serial2.setFIFOSize(RX_BUFFER);
@@ -151,8 +156,13 @@ int32_t SerialModule::runOnce()
                 Serial2.begin(baud, SERIAL_8N1);
                 Serial2.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
             } else {
+#ifdef RP2040_SLOW_CLOCK
+                Serial2.begin(baud, SERIAL_8N1);
+                Serial2.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
+#else
                 Serial.begin(baud, SERIAL_8N1);
                 Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
+#endif
             }
 #else
             Serial.begin(baud, SERIAL_8N1);
@@ -188,7 +198,7 @@ int32_t SerialModule::runOnce()
                     }
                 }
             }
-#if !defined(TTGO_T_ECHO)
+#if !defined(TTGO_T_ECHO) && !defined(CANARYONE)
             else {
                 while (Serial2.available()) {
                     serialPayloadSize = Serial2.readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);

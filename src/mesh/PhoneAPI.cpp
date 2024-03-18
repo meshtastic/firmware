@@ -1,5 +1,6 @@
 #include "PhoneAPI.h"
 #include "Channels.h"
+#include "Default.h"
 #include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -66,15 +67,17 @@ void PhoneAPI::close()
     }
 }
 
-void PhoneAPI::checkConnectionTimeout()
+bool PhoneAPI::checkConnectionTimeout()
 {
     if (isConnected()) {
         bool newContact = checkIsConnected();
         if (!newContact) {
             LOG_INFO("Lost phone connection\n");
             close();
+            return true;
         }
     }
+    return false;
 }
 
 /**
@@ -109,9 +112,16 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
             break;
         case meshtastic_ToRadio_mqttClientProxyMessage_tag:
             LOG_INFO("Got MqttClientProxy message\n");
-            if (mqtt && moduleConfig.mqtt.proxy_to_client_enabled) {
+            if (mqtt && moduleConfig.mqtt.proxy_to_client_enabled && moduleConfig.mqtt.enabled &&
+                (channels.anyMqttEnabled() || moduleConfig.mqtt.map_reporting_enabled)) {
                 mqtt->onClientProxyReceive(toRadioScratch.mqttClientProxyMessage);
+            } else {
+                LOG_WARN("MqttClientProxy received but proxy is not enabled, no channels have up/downlink, or map reporting "
+                         "not enabled\n");
             }
+            break;
+        case meshtastic_ToRadio_heartbeat_tag:
+            LOG_DEBUG("Got client heartbeat\n");
             break;
         default:
             // Ignore nop messages
@@ -469,8 +479,8 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
 /// If the mesh service tells us fromNum has changed, tell the phone
 int PhoneAPI::onNotify(uint32_t newValue)
 {
-    checkConnectionTimeout(); // a handy place to check if we've heard from the phone (since the BLE version doesn't call this
-                              // from idle)
+    bool timeout = checkConnectionTimeout(); // a handy place to check if we've heard from the phone (since the BLE version
+                                             // doesn't call this from idle)
 
     if (state == STATE_SEND_PACKETS) {
         LOG_INFO("Telling client we have new packets %u\n", newValue);
@@ -479,5 +489,5 @@ int PhoneAPI::onNotify(uint32_t newValue)
         LOG_DEBUG("(Client not yet interested in packets)\n");
     }
 
-    return 0;
+    return timeout ? -1 : 0; // If we timed out, MeshService should stop iterating through observers as we just removed one
 }

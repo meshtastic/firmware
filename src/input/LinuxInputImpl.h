@@ -1,4 +1,4 @@
-#ifdef ARCH_RASPBERRY_PI
+#ifdef ARCH_PORTDUINO
 #pragma once
 #include "LinuxInput.h"
 #include "main.h"

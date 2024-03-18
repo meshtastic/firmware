@@ -37,10 +37,8 @@
 #define ADC_CHANNEL ADC1_GPIO35_CHANNEL
 #define BATTERY_SENSE_SAMPLES 30 // Set the number of samples, It has an effect of increasing sensitivity.
 #define ADC_MULTIPLIER 6.45
-#define BAT_FULLVOLT 12600
-#define BAT_EMPTYVOLT 8200
-#define BAT_CHARGINGVOLT 12600
-#define BAT_NOBATVOLT 6690
+#define CELL_TYPE_LION // same curve for liion/lipo
+#define NUM_CELLS 3
 
 // different screen
 #define USE_SH1106

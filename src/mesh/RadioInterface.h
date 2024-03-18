@@ -10,8 +10,11 @@
 
 #define MAX_RHPACKETLEN 256
 
-#define PACKET_FLAGS_HOP_MASK 0x07
+#define PACKET_FLAGS_HOP_LIMIT_MASK 0x07
 #define PACKET_FLAGS_WANT_ACK_MASK 0x08
+#define PACKET_FLAGS_VIA_MQTT_MASK 0x10
+#define PACKET_FLAGS_HOP_START_MASK 0xE0
+#define PACKET_FLAGS_HOP_START_SHIFT 5
 
 /**
  * This structure has to exactly match the wire layout when sent over the radio link.  Used to keep compatibility
@@ -171,6 +174,9 @@ class RadioInterface
 
     /// Some boards (1st gen Pinetab Lora module) have broken IRQ wires, so we need to poll via i2c registers
     virtual bool isIRQPending() { return false; }
+
+    // Whether we use the default frequency slot given our LoRa config (region and modem preset)
+    static bool uses_default_frequency_slot;
 
   protected:
     int8_t power = 17; // Set by applyModemConfig()

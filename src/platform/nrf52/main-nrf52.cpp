@@ -1,4 +1,5 @@
 #include "configuration.h"
+#include <Adafruit_TinyUSB.h>
 #include <Adafruit_nRFCrypto.h>
 #include <SPI.h>
 #include <Wire.h>
@@ -62,28 +63,29 @@ static void initBrownout()
     // We don't bother with setting up brownout if soft device is disabled - because during production we always use softdevice
 }
 
-static bool bleOn = false;
 static const bool useSoftDevice = true; // Set to false for easier debugging
 
-void setBluetoothEnable(bool on)
+void setBluetoothEnable(bool enable)
 {
-    if (on != bleOn && config.bluetooth.enabled == true) {
-        if (on) {
+    if (enable && config.bluetooth.enabled) {
+        if (!useSoftDevice) {
+            LOG_INFO("DISABLING NRF52 BLUETOOTH WHILE DEBUGGING\n");
+        } else {
             if (!nrf52Bluetooth) {
-                if (!useSoftDevice)
-                    LOG_INFO("DISABLING NRF52 BLUETOOTH WHILE DEBUGGING\n");
-                else {
-                    nrf52Bluetooth = new NRF52Bluetooth();
-                    nrf52Bluetooth->setup();
+                LOG_DEBUG("Initializing NRF52 Bluetooth\n");
+                nrf52Bluetooth = new NRF52Bluetooth();
+                nrf52Bluetooth->setup();
 
-                    // We delay brownout init until after BLE because BLE starts soft device
-                    initBrownout();
-                }
+                // We delay brownout init until after BLE because BLE starts soft device
+                initBrownout();
+            } else {
+                nrf52Bluetooth->resumeAdverising();
             }
-        } else if (nrf52Bluetooth) {
+        }
+    } else {
+        if (nrf52Bluetooth) {
             nrf52Bluetooth->shutdown();
         }
-        bleOn = on;
     }
 }
 
@@ -175,7 +177,7 @@ void cpuDeepSleep(uint32_t msecToWake)
 #ifdef PIN_3V3_EN
     digitalWrite(PIN_3V3_EN, LOW);
 #endif
-#ifndef USE_EINK
+#ifdef AQ_SET_PIN
     // RAK-12039 set pin for Air quality sensor
     digitalWrite(AQ_SET_PIN, LOW);
 #endif
@@ -184,6 +186,7 @@ void cpuDeepSleep(uint32_t msecToWake)
     // Don't enter this if we're sleeping portMAX_DELAY, since that's a shutdown event
     if (msecToWake != portMAX_DELAY &&
         (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
+         config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER ||
          config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR) &&
         config.power.is_power_saving == true) {
         sd_power_mode_set(NRF_POWER_MODE_LOWPWR);
@@ -214,4 +217,9 @@ void clearBonds()
         nrf52Bluetooth->setup();
     }
     nrf52Bluetooth->clearBonds();
+}
+
+void enterDfuMode()
+{
+    enterUf2Dfu();
 }

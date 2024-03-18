@@ -60,6 +60,9 @@ PB_BIND(meshtastic_Neighbor, meshtastic_Neighbor, AUTO)
 PB_BIND(meshtastic_DeviceMetadata, meshtastic_DeviceMetadata, AUTO)
 
 
+PB_BIND(meshtastic_Heartbeat, meshtastic_Heartbeat, AUTO)
+
+
 
 
 

@@ -111,6 +111,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MCP9808_ADDR 0x18
 #define INA_ADDR 0x40
 #define INA_ADDR_ALTERNATE 0x41
+#define INA_ADDR_WAVESHARE_UPS 0x43
 #define INA3221_ADDR 0x42
 #define QMC6310_ADDR 0x1C
 #define QMI8658_ADDR 0x6B
@@ -142,8 +143,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // GPS
 // -----------------------------------------------------------------------------
-
+#ifndef GPS_BAUDRATE
 #define GPS_BAUDRATE 9600
+#endif
 
 #ifndef GPS_THREAD_INTERVAL
 #define GPS_THREAD_INTERVAL 200
@@ -160,6 +162,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "architecture.h"
 
 /* Step #3: mop up with disabled values for HAS_ options not handled by the above two */
+
+// -----------------------------------------------------------------------------
+// GPS
+// -----------------------------------------------------------------------------
+
+#ifndef GPS_BAUDRATE
+#define GPS_BAUDRATE 9600
+#endif
+#ifndef GPS_THREAD_INTERVAL
+#define GPS_THREAD_INTERVAL 100
+#endif
 
 #ifndef HAS_WIFI
 #define HAS_WIFI 0
@@ -209,4 +222,24 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #ifndef HW_VENDOR
 #error HW_VENDOR must be defined
+#endif
+
+// global switch to turn off all optional modules for a minimzed build
+#ifdef MESHTASTIC_EXCLUDE_MODULES
+#define MESHTASTIC_EXCLUDE_AUDIO 1
+#define MESHTASTIC_EXCLUDE_DETECTIONSENSOR 1
+#define MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR 1
+#define MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION 1
+#define MESHTASTIC_EXCLUDE_PAXCOUNTER 1
+#define MESHTASTIC_EXCLUDE_POWER_TELEMETRY 1
+#define MESHTASTIC_EXCLUDE_RANGETEST 1
+#define MESHTASTIC_EXCLUDE_REMOTEHARDWARE 1
+#define MESHTASTIC_EXCLUDE_STOREFORWARD 1
+#define MESHTASTIC_EXCLUDE_ATAK 1
+#define MESHTASTIC_EXCLUDE_CANNEDMESSAGES 1
+#define MESHTASTIC_EXCLUDE_NEIGHBORINFO 1
+#define MESHTASTIC_EXCLUDE_TRACEROUTE 1
+#define MESHTASTIC_EXCLUDE_WAYPOINT 1
+#define MESHTASTIC_EXCLUDE_INPUTBROKER 1
+#define MESHTASTIC_EXCLUDE_SERIAL 1
 #endif

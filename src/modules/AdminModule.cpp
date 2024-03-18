@@ -3,6 +3,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include <FSCommon.h>
 #ifdef ARCH_ESP32
 #include "BleOta.h"
 #endif
@@ -15,6 +16,7 @@
 #ifdef ARCH_PORTDUINO
 #include "unistd.h"
 #endif
+#include "Default.h"
 
 #include "mqtt/MQTT.h"
 
@@ -185,7 +187,22 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     case meshtastic_AdminMessage_remove_by_nodenum_tag: {
         LOG_INFO("Client is receiving a remove_nodenum command.\n");
         nodeDB.removeNodeByNum(r->remove_by_nodenum);
-        reboot(DEFAULT_REBOOT_SECONDS);
+        break;
+    }
+    case meshtastic_AdminMessage_enter_dfu_mode_request_tag: {
+        LOG_INFO("Client is requesting to enter DFU mode.\n");
+#if defined(ARCH_NRF52) || defined(ARCH_RP2040)
+        enterDfuMode();
+#endif
+        break;
+    }
+    case meshtastic_AdminMessage_delete_file_request_tag: {
+        LOG_DEBUG("Client is requesting to delete file: %s\n", r->delete_file_request);
+        if (FSCom.remove(r->delete_file_request)) {
+            LOG_DEBUG("Successfully deleted file\n");
+        } else {
+            LOG_DEBUG("Failed to delete file\n");
+        }
         break;
     }
 #ifdef ARCH_PORTDUINO
@@ -274,6 +291,7 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
 
 void AdminModule::handleSetConfig(const meshtastic_Config &c)
 {
+    auto changes = SEGMENT_CONFIG;
     auto existingRole = config.device.role;
     bool isRegionUnset = (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);
 
@@ -285,6 +303,10 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         // If we're setting router role for the first time, install its intervals
         if (existingRole != c.payload_variant.device.role)
             nodeDB.installRoleDefaults(c.payload_variant.device.role);
+        if (config.device.node_info_broadcast_secs < min_node_info_broadcast_secs) {
+            LOG_DEBUG("Tried to set node_info_broadcast_secs too low, setting to %d\n", min_node_info_broadcast_secs);
+            config.device.node_info_broadcast_secs = min_node_info_broadcast_secs;
+        }
         break;
     case meshtastic_Config_position_tag:
         LOG_INFO("Setting config: Position\n");
@@ -314,6 +336,14 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         config.lora = c.payload_variant.lora;
         if (isRegionUnset && config.lora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
             config.lora.tx_enabled = true;
+            initRegion();
+            if (myRegion->dutyCycle < 100) {
+                config.lora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
+            }
+            if (strcmp(moduleConfig.mqtt.root, default_mqtt_root) == 0) {
+                sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
+                changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
+            }
         }
         break;
     case meshtastic_Config_bluetooth_tag:
@@ -323,7 +353,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         break;
     }
 
-    saveChanges(SEGMENT_CONFIG);
+    saveChanges(changes);
 }
 
 void AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)

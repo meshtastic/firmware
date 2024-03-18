@@ -41,5 +41,5 @@ jobs:
         with:
           name: firmware-raspbian-${{ steps.version.outputs.version }}.zip
           path: |
-            release/meshtasticd_linux_arm64
+            release/meshtasticd_linux_aarch64
             bin/config-dist.yaml
