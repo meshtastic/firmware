@@ -183,6 +183,19 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
         mqtt = this;
 
         if (*moduleConfig.mqtt.root) {
+            // hack to allow for custom mqtt topic versioning (2/c or 2/d or 2/e or whatever) triggered by
+            // having a trailing +X (eg. +c, +d, +e whatever)
+            size_t length = strlen(moduleConfig.mqtt.root); // Find the length of the string
+
+            // Check if the length is greater than 0 and if the second to last character is '+'
+            if (length > 0 && moduleConfig.mqtt.root[length - 2] == '+') {
+                
+                char custom_char = moduleConfig.mqtt.root[length - 1];
+
+                moduleConfig.mqtt.root[length-2] = '\0'; // remove +X for the rest
+                // replace the sub-version leter with the custom char
+                cryptTopic[3] = custom_char;
+            }
             statusTopic = moduleConfig.mqtt.root + statusTopic;
             cryptTopic = moduleConfig.mqtt.root + cryptTopic;
             jsonTopic = moduleConfig.mqtt.root + jsonTopic;
