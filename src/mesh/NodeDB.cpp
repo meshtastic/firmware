@@ -649,6 +649,7 @@ void NodeDB::saveDeviceStateToDisk()
 #ifdef FSCom
     FSCom.mkdir("/prefs");
 #endif
+    saveProto(prefFileName, meshtastic_DeviceState_size, &meshtastic_DeviceState_msg, &devicestate);
 }
 
 void NodeDB::saveToDisk(int saveWhat)
