@@ -39,11 +39,11 @@
 #if HAS_TELEMETRY
 #include "modules/Telemetry/DeviceTelemetry.h"
 #endif
-#if HAS_SENSOR && !EXCLUDE_ENVIRONMENTAL_SENSOR
+#if HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #include "modules/Telemetry/AirQualityTelemetry.h"
 #include "modules/Telemetry/EnvironmentTelemetry.h"
 #endif
-#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO) && !EXCLUDE_POWER_TELEMETRY
+#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_POWER_TELEMETRY
 #include "modules/Telemetry/PowerTelemetry.h"
 #endif
 #ifdef ARCH_ESP32
@@ -138,13 +138,13 @@ void setupModules()
 #if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
         new DeviceTelemetryModule();
 #endif
-#if HAS_SENSOR && !EXCLUDE_ENVIRONMENTAL_SENSOR
+#if HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
         new EnvironmentTelemetryModule();
         if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_PMSA003I].first > 0) {
             new AirQualityTelemetryModule();
         }
 #endif
-#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO) && !EXCLUDE_POWER_TELEMETRY
+#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_POWER_TELEMETRY
         new PowerTelemetryModule();
 #endif
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)) && !defined(CONFIG_IDF_TARGET_ESP32S2) &&               \

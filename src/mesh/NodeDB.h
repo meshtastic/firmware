@@ -108,8 +108,10 @@ class NodeDB
     // get channel channel index we heard a nodeNum on, defaults to 0 if not found
     uint8_t getMeshNodeChannel(NodeNum n);
 
-    /// Return the number of nodes we've heard from recently (within the last 2 hrs?)
-    size_t getNumOnlineMeshNodes();
+    /* Return the number of nodes we've heard from recently (within the last 2 hrs?)
+     * @param localOnly if true, ignore nodes heard via MQTT
+     */
+    size_t getNumOnlineMeshNodes(bool localOnly = false);
 
     void initConfigIntervals(), initModuleConfigIntervals(), resetNodes(), removeNodeByNum(uint nodeNum);
 
@@ -131,8 +133,13 @@ class NodeDB
     meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
     size_t getNumMeshNodes() { return *numMeshNodes; }
 
-    void setLocalPosition(meshtastic_Position position)
+    void setLocalPosition(meshtastic_Position position, bool timeOnly = false)
     {
+        if (timeOnly) {
+            LOG_DEBUG("Setting local position time only: time=%i\n", position.time);
+            localPosition.time = position.time;
+            return;
+        }
         LOG_DEBUG("Setting local position: latitude=%i, longitude=%i, time=%i\n", position.latitude_i, position.longitude_i,
                   position.time);
         localPosition = position;
@@ -184,46 +191,6 @@ extern NodeDB nodeDB;
 // Our delay functions check for this for times that should never expire
 #define NODE_DELAY_FOREVER 0xffffffff
 
-#define IF_ROUTER(routerVal, normalVal)                                                                                          \
-    ((config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER) ? (routerVal) : (normalVal))
-
-#define ONE_DAY 24 * 60 * 60
-
-#define default_gps_update_interval IF_ROUTER(ONE_DAY, 2 * 60)
-#define default_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 15 * 60)
-#define default_wait_bluetooth_secs IF_ROUTER(1, 60)
-#define default_sds_secs IF_ROUTER(ONE_DAY, UINT32_MAX) // Default to forever super deep sleep
-#define default_ls_secs IF_ROUTER(ONE_DAY, 5 * 60)
-#define default_min_wake_secs 10
-#define default_screen_on_secs IF_ROUTER(1, 60 * 10)
-
-#define default_mqtt_address "mqtt.meshtastic.org"
-#define default_mqtt_username "meshdev"
-#define default_mqtt_password "large4cats"
-#define default_mqtt_root "msh"
-
-inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval)
-{
-    if (configuredInterval > 0)
-        return configuredInterval * 1000;
-    return default_broadcast_interval_secs * 1000;
-}
-
-inline uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t defaultInterval)
-{
-    if (configuredInterval > 0)
-        return configuredInterval * 1000;
-    return defaultInterval * 1000;
-}
-
-inline uint32_t getConfiguredOrDefault(uint32_t configured, uint32_t defaultValue)
-{
-    if (configured > 0)
-        return configured;
-
-    return defaultValue;
-}
-
 /// Sometimes we will have Position objects that only have a time, so check for
 /// valid lat/lon
 static inline bool hasValidPosition(const meshtastic_NodeInfoLite *n)
@@ -247,3 +214,5 @@ extern uint32_t error_address;
     (ModuleConfig_CannedMessageConfig_size + ModuleConfig_ExternalNotificationConfig_size + ModuleConfig_MQTTConfig_size +       \
      ModuleConfig_RangeTestConfig_size + ModuleConfig_SerialConfig_size + ModuleConfig_StoreForwardConfig_size +                 \
      ModuleConfig_TelemetryConfig_size + ModuleConfig_size)
+
+// Please do not remove this comment, it makes trunk and compiler happy at the same time.
