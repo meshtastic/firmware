@@ -16,6 +16,7 @@
 #ifdef ARCH_PORTDUINO
 #include "unistd.h"
 #endif
+#include "Default.h"
 
 #include "mqtt/MQTT.h"
 
@@ -302,6 +303,10 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         // If we're setting router role for the first time, install its intervals
         if (existingRole != c.payload_variant.device.role)
             nodeDB.installRoleDefaults(c.payload_variant.device.role);
+        if (config.device.node_info_broadcast_secs < min_node_info_broadcast_secs) {
+            LOG_DEBUG("Tried to set node_info_broadcast_secs too low, setting to %d\n", min_node_info_broadcast_secs);
+            config.device.node_info_broadcast_secs = min_node_info_broadcast_secs;
+        }
         break;
     case meshtastic_Config_position_tag:
         LOG_INFO("Setting config: Position\n");

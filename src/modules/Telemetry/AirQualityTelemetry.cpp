@@ -1,5 +1,6 @@
 #include "AirQualityTelemetry.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
@@ -43,7 +44,7 @@ int32_t AirQualityTelemetryModule::runOnce()
 
         uint32_t now = millis();
         if (((lastSentToMesh == 0) ||
-             ((now - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.telemetry.air_quality_interval))) &&
+             ((now - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.air_quality_interval))) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
             lastSentToMesh = now;

@@ -141,7 +141,8 @@ typedef struct _meshtastic_DeviceState {
  NodeDB.cpp in the device code. */
     uint32_t version;
     /* Used only during development.
- Indicates developer is testing and changes should never be saved to flash. */
+ Indicates developer is testing and changes should never be saved to flash.
+ Deprecated in 2.3.1 */
     bool no_save;
     /* Some GPS receivers seem to have bogus settings from the factory, so we always do one factory reset. */
     bool did_gps_reset;
@@ -324,7 +325,7 @@ extern const pb_msgdesc_t meshtastic_NodeRemoteHardwarePin_msg;
 #define meshtastic_DeviceState_size              17571
 #define meshtastic_NodeInfoLite_size             158
 #define meshtastic_NodeRemoteHardwarePin_size    29
-#define meshtastic_OEMStore_size                 3262
+#define meshtastic_OEMStore_size                 3278
 #define meshtastic_PositionLite_size             28
 
 #ifdef __cplusplus

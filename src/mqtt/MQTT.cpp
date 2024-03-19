@@ -17,6 +17,7 @@
 #include "mesh/wifi/WiFiAPClient.h"
 #include <WiFi.h>
 #endif
+#include "Default.h"
 #include <assert.h>
 
 const int reconnectMax = 5;
@@ -371,22 +372,9 @@ void MQTT::sendSubscriptions()
 
 bool MQTT::wantsLink() const
 {
-    bool hasChannelorMapReport = false;
+    bool hasChannelorMapReport =
+        moduleConfig.mqtt.enabled && (moduleConfig.mqtt.map_reporting_enabled || channels.anyMqttEnabled());
 
-    if (moduleConfig.mqtt.enabled) {
-        hasChannelorMapReport = moduleConfig.mqtt.map_reporting_enabled;
-        if (!hasChannelorMapReport) {
-            // No need for link if no channel needed it
-            size_t numChan = channels.getNumChannels();
-            for (size_t i = 0; i < numChan; i++) {
-                const auto &ch = channels.getByIndex(i);
-                if (ch.settings.uplink_enabled || ch.settings.downlink_enabled) {
-                    hasChannelorMapReport = true;
-                    break;
-                }
-            }
-        }
-    }
     if (hasChannelorMapReport && moduleConfig.mqtt.proxy_to_client_enabled)
         return true;
 
@@ -401,7 +389,7 @@ bool MQTT::wantsLink() const
 
 int32_t MQTT::runOnce()
 {
-    if (!moduleConfig.mqtt.enabled)
+    if (!moduleConfig.mqtt.enabled || !(moduleConfig.mqtt.map_reporting_enabled || channels.anyMqttEnabled()))
         return disable();
 
     bool wantConnection = wantsLink();
@@ -486,9 +474,9 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
 
     auto &ch = channels.getByIndex(chIndex);
 
-    if (&mp.decoded && strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0 &&
-        (mp.decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
-         mp.decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP)) {
+    if (&mp_decoded.decoded && strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0 &&
+        (mp_decoded.decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
+         mp_decoded.decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP)) {
         LOG_DEBUG("MQTT onSend - Ignoring range test or detection sensor message on public mqtt\n");
         return;
     }
