@@ -189,10 +189,10 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
 
             // Check if the length is greater than 0 and if the second to last character is '+'
             if (length > 0 && moduleConfig.mqtt.root[length - 2] == '+') {
-                
+
                 char custom_char = moduleConfig.mqtt.root[length - 1];
 
-                moduleConfig.mqtt.root[length-2] = '\0'; // remove +X for the rest
+                moduleConfig.mqtt.root[length - 2] = '\0'; // remove +X for the rest
                 // replace the sub-version leter with the custom char
                 cryptTopic[3] = custom_char;
             }
