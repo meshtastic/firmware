@@ -81,12 +81,13 @@ uint32_t error_address = 0;
 
 static uint8_t ourMacAddr[6];
 
-NodeDB::NodeDB() : meshNodes(devicestate.node_db_lite), numMeshNodes(devicestate.node_db_lite.size())
+NodeDB::NodeDB() : meshNodes(devicestate.node_db_lite)
 {
-    std::cout << "test" << std::endl;
+    std::cout << "test " << numMeshNodes << std::endl;
     std::cout << MAX_NUM_NODES << std::endl;
     meshNodes.reserve(MAX_NUM_NODES);
-    std::cout << "vector size" << meshNodes.size() << std::endl;
+    std::cout << "vector size " << meshNodes.size() << std::endl;
+    numMeshNodes = devicestate.node_db_lite_count;
 }
 
 /**
@@ -378,8 +379,8 @@ void NodeDB::installDefaultChannels()
 
 void NodeDB::resetNodes()
 {
-    // devicestate.node_db_lite_count = 1;
-    std::fill(devicestate.node_db_lite.begin(), devicestate.node_db_lite.end(), meshtastic_NodeInfoLite());
+    numMeshNodes = 1;
+    std::fill(devicestate.node_db_lite.begin() + 1, devicestate.node_db_lite.end(), meshtastic_NodeInfoLite());
     saveDeviceStateToDisk();
     if (neighborInfoModule && moduleConfig.neighbor_info.enabled)
         neighborInfoModule->resetNeighbors();
@@ -415,7 +416,7 @@ void NodeDB::cleanupMeshDB()
 void NodeDB::installDefaultDeviceState()
 {
     LOG_INFO("Installing default DeviceState\n");
-    memset(&devicestate, 0, sizeof(meshtastic_DeviceState));
+    // memset(&devicestate, 0, sizeof(meshtastic_DeviceState));
 
     numMeshNodes = 0;
 
@@ -439,9 +440,9 @@ void NodeDB::installDefaultDeviceState()
 NodeDB *NodeDB::init()
 {
     LOG_INFO("Initializing NodeDB\n");
-    NodeDB *nodeDB = new NodeDB;
-    nodeDB->loadFromDisk();
-    nodeDB->cleanupMeshDB();
+    NodeDB *newnodeDB = new NodeDB;
+    newnodeDB->loadFromDisk();
+    newnodeDB->cleanupMeshDB();
 
     uint32_t devicestateCRC = crc32Buffer(&devicestate, sizeof(devicestate));
     uint32_t configCRC = crc32Buffer(&config, sizeof(config));
@@ -453,7 +454,7 @@ NodeDB *NodeDB::init()
     myNodeInfo.min_app_version = 30200; // format is Mmmss (where M is 1+the numeric major number. i.e. 30200 means 2.2.00
     // Note! We do this after loading saved settings, so that if somehow an invalid nodenum was stored in preferences we won't
     // keep using that nodenum forever. Crummy guess at our nodenum (but we will check against the nodedb to avoid conflicts)
-    nodeDB->pickNewNodeNum();
+    newnodeDB->pickNewNodeNum();
 
     // Set our board type so we can share it with others
     owner.hw_model = HW_VENDOR;
@@ -461,7 +462,7 @@ NodeDB *NodeDB::init()
     owner.role = config.device.role;
 
     // Include our owner in the node db under our nodenum
-    meshtastic_NodeInfoLite *info = nodeDB->getOrCreateMeshNode(nodeDB->getNodeNum());
+    meshtastic_NodeInfoLite *info = newnodeDB->getOrCreateMeshNode(newnodeDB->getNodeNum());
     info->user = owner;
     info->has_user = true;
 
@@ -473,7 +474,7 @@ NodeDB *NodeDB::init()
     LOG_DEBUG("Number of Device Reboots: %d\n", myNodeInfo.reboot_count);
 #endif
 
-    nodeDB->resetRadioConfig(); // If bogus settings got saved, then fix them
+    newnodeDB->resetRadioConfig(); // If bogus settings got saved, then fix them
     // nodeDB->LOG_DEBUG("region=%d, NODENUM=0x%x, dbsize=%d\n", config.lora.region, myNodeInfo.my_node_num, numMeshNodes);
 
     if (devicestateCRC != crc32Buffer(&devicestate, sizeof(devicestate)))
@@ -492,6 +493,7 @@ NodeDB *NodeDB::init()
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
         config.position.gps_enabled = 0;
     }
+    return newnodeDB;
 
     nodeDB->saveToDisk(saveWhat);
 }
@@ -678,8 +680,8 @@ void NodeDB::saveDeviceStateToDisk()
 #ifdef FSCom
         FSCom.mkdir("/prefs");
 #endif
-        saveProto(prefFileName, sizeof(meshtastic_DeviceState) + meshNodes.size() * meshtastic_NodeInfoLite_size,
-                  &meshtastic_DeviceState_msg, &devicestate);
+        saveProto(prefFileName, sizeof(devicestate) + numMeshNodes * meshtastic_NodeInfoLite_size, &meshtastic_DeviceState_msg,
+                  &devicestate);
     }
 }
 
