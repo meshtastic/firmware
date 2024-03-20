@@ -6,11 +6,4 @@
         "platformio.platformio-ide",
         "trunk.io"
     ],
-<<<<<<< HEAD
-    "unwantedRecommendations": [
-        "ms-vscode.cpptools-extension-pack"
-    ]
 }
-=======
-}
->>>>>>> parent of 436e6317 (Format changes from trunk)
