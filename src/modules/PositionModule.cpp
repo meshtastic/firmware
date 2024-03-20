@@ -1,4 +1,5 @@
 #include "PositionModule.h"
+#include "Default.h"
 #include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -280,7 +281,7 @@ int32_t PositionModule::runOnce()
 {
     if (sleepOnNextExecution == true) {
         sleepOnNextExecution = false;
-        uint32_t nightyNightMs = getConfiguredOrDefaultMs(config.position.position_broadcast_secs);
+        uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(config.position.position_broadcast_secs);
         LOG_DEBUG("Sleeping for %ims, then awaking to send position again.\n", nightyNightMs);
         doDeepSleep(nightyNightMs, false);
     }
@@ -291,7 +292,8 @@ int32_t PositionModule::runOnce()
 
     // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();
-    uint32_t intervalMs = getConfiguredOrDefaultMs(config.position.position_broadcast_secs, default_broadcast_interval_secs);
+    uint32_t intervalMs =
+        Default::getConfiguredOrDefaultMs(config.position.position_broadcast_secs, default_broadcast_interval_secs);
     uint32_t msSinceLastSend = now - lastGpsSend;
     // Only send packets if the channel util. is less than 25% utilized or we're a tracker with less than 40% utilized.
     if (!airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER &&
@@ -322,7 +324,7 @@ int32_t PositionModule::runOnce()
         if (hasValidPosition(node2)) {
             // The minimum time (in seconds) that would pass before we are able to send a new position packet.
             const uint32_t minimumTimeThreshold =
-                getConfiguredOrDefaultMs(config.position.broadcast_smart_minimum_interval_secs, 30);
+                Default::getConfiguredOrDefaultMs(config.position.broadcast_smart_minimum_interval_secs, 30);
 
             auto smartPosition = getDistanceTraveledSinceLastSend(node->position);
 
@@ -369,7 +371,8 @@ void PositionModule::sendLostAndFoundText()
 struct SmartPosition PositionModule::getDistanceTraveledSinceLastSend(meshtastic_PositionLite currentPosition)
 {
     // The minimum distance to travel before we are able to send a new position packet.
-    const uint32_t distanceTravelThreshold = getConfiguredOrDefault(config.position.broadcast_smart_minimum_distance, 100);
+    const uint32_t distanceTravelThreshold =
+        Default::getConfiguredOrDefault(config.position.broadcast_smart_minimum_distance, 100);
 
     // Determine the distance in meters between two points on the globe
     float distanceTraveledSinceLastSend = GeoCoord::latLongToMeter(

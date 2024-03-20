@@ -1,5 +1,6 @@
 #include "EnvironmentTelemetry.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
@@ -41,7 +42,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
 {
     if (sleepOnNextExecution == true) {
         sleepOnNextExecution = false;
-        uint32_t nightyNightMs = getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval);
+        uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval);
         LOG_DEBUG("Sleeping for %ims, then awaking to send metrics again.\n", nightyNightMs);
         doDeepSleep(nightyNightMs, true);
     }
@@ -102,7 +103,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
 
         uint32_t now = millis();
         if (((lastSentToMesh == 0) ||
-             ((now - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval))) &&
+             ((now - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval))) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
             lastSentToMesh = now;

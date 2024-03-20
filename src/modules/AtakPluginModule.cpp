@@ -1,4 +1,5 @@
 #include "AtakPluginModule.h"
+#include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"

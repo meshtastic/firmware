@@ -1,4 +1,5 @@
 #include "NodeInfoModule.h"
+#include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
@@ -58,8 +59,8 @@ void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
 meshtastic_MeshPacket *NodeInfoModule::allocReply()
 {
     uint32_t now = millis();
-    // If we sent our NodeInfo less than 1 min. ago, don't send it again as it may be still underway.
-    if (lastSentToMesh && (now - lastSentToMesh) < 60 * 1000) {
+    // If we sent our NodeInfo less than 5 min. ago, don't send it again as it may be still underway.
+    if (lastSentToMesh && (now - lastSentToMesh) < (5 * 60 * 1000)) {
         LOG_DEBUG("Sending NodeInfo will be ignored since we just sent it.\n");
         ignoreRequest = true; // Mark it as ignored for MeshModule
         return NULL;
@@ -91,5 +92,5 @@ int32_t NodeInfoModule::runOnce()
         LOG_INFO("Sending our nodeinfo to mesh (wantReplies=%d)\n", requestReplies);
         sendOurNodeInfo(NODENUM_BROADCAST, requestReplies); // Send our info (don't request replies)
     }
-    return getConfiguredOrDefaultMs(config.device.node_info_broadcast_secs, default_node_info_broadcast_secs);
+    return Default::getConfiguredOrDefaultMs(config.device.node_info_broadcast_secs, default_node_info_broadcast_secs);
 }
