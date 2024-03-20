@@ -17,6 +17,7 @@
 #include "mesh/wifi/WiFiAPClient.h"
 #include <WiFi.h>
 #endif
+#include "Default.h"
 #include <assert.h>
 
 const int reconnectMax = 5;

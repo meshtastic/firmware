@@ -1,4 +1,5 @@
 #include "GPS.h"
+#include "Default.h"
 #include "NodeDB.h"
 #include "RTC.h"
 #include "configuration.h"
@@ -495,7 +496,6 @@ bool GPS::setup()
                         }
                     }
                 }
-
             } else {
                 // LOG_INFO("u-blox M10 hardware found.\n");
                 delay(1000);
@@ -759,7 +759,7 @@ uint32_t GPS::getWakeTime() const
     if (t == UINT32_MAX)
         return t; // already maxint
 
-    return getConfiguredOrDefaultMs(t, default_broadcast_interval_secs);
+    return Default::Default::getConfiguredOrDefaultMs(t, default_broadcast_interval_secs);
 }
 
 /** Get how long we should sleep between aqusition attempts in msecs
@@ -1209,6 +1209,11 @@ bool GPS::factoryReset()
         // byte _message_CFG_RST_COLDSTART[] = {0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0xFF, 0xB9, 0x00, 0x00, 0xC6, 0x8B};
         // _serial_gps->write(_message_CFG_RST_COLDSTART, sizeof(_message_CFG_RST_COLDSTART));
         // delay(1000);
+    } else if (gnssModel == GNSS_MODEL_MTK) {
+        // send the CAS10 to perform a factory restart of the device (and other device that support PCAS statements)
+        LOG_INFO("GNSS Factory Reset via PCAS10,3\n");
+        _serial_gps->write("$PCAS10,3*1F\r\n");
+        delay(100);
     } else {
         // fire this for good measure, if we have an L76B - won't harm other devices.
         _serial_gps->write("$PMTK104*37\r\n");

@@ -1,5 +1,6 @@
 #include "PhoneAPI.h"
 #include "Channels.h"
+#include "Default.h"
 #include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -112,6 +113,9 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
                 LOG_WARN("MqttClientProxy received but proxy is not enabled, no channels have up/downlink, or map reporting "
                          "not enabled\n");
             }
+            break;
+        case meshtastic_ToRadio_heartbeat_tag:
+            LOG_DEBUG("Got client heartbeat\n");
             break;
         default:
             // Ignore nop messages

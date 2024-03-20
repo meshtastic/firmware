@@ -3,6 +3,7 @@
 #include "../detect/ScanI2C.h"
 #include "Channels.h"
 #include "CryptoEngine.h"
+#include "Default.h"
 #include "FSCommon.h"
 #include "GPS.h"
 #include "MeshRadio.h"
@@ -96,13 +97,6 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
     }
 
     channels.onConfigChanged();
-
-    // temp hack for quicker testing
-    // devicestate.no_save = true;
-    if (devicestate.no_save) {
-        LOG_DEBUG("***** DEVELOPMENT MODE - DO NOT RELEASE *****\n");
-        // Put your development config changes here
-    }
 
     // Update the global myRegion
     initRegion();
@@ -644,61 +638,53 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
 
 void NodeDB::saveChannelsToDisk()
 {
-    if (!devicestate.no_save) {
 #ifdef FSCom
-        FSCom.mkdir("/prefs");
+    FSCom.mkdir("/prefs");
 #endif
-        saveProto(channelFileName, meshtastic_ChannelFile_size, &meshtastic_ChannelFile_msg, &channelFile);
-    }
+    saveProto(channelFileName, meshtastic_ChannelFile_size, &meshtastic_ChannelFile_msg, &channelFile);
 }
 
 void NodeDB::saveDeviceStateToDisk()
 {
-    if (!devicestate.no_save) {
 #ifdef FSCom
-        FSCom.mkdir("/prefs");
+    FSCom.mkdir("/prefs");
 #endif
-        saveProto(prefFileName, meshtastic_DeviceState_size, &meshtastic_DeviceState_msg, &devicestate);
-    }
+    saveProto(prefFileName, meshtastic_DeviceState_size, &meshtastic_DeviceState_msg, &devicestate);
 }
 
 void NodeDB::saveToDisk(int saveWhat)
 {
-    if (!devicestate.no_save) {
 #ifdef FSCom
-        FSCom.mkdir("/prefs");
+    FSCom.mkdir("/prefs");
 #endif
-        if (saveWhat & SEGMENT_DEVICESTATE) {
-            saveDeviceStateToDisk();
-        }
+    if (saveWhat & SEGMENT_DEVICESTATE) {
+        saveDeviceStateToDisk();
+    }
 
-        if (saveWhat & SEGMENT_CONFIG) {
-            config.has_device = true;
-            config.has_display = true;
-            config.has_lora = true;
-            config.has_position = true;
-            config.has_power = true;
-            config.has_network = true;
-            config.has_bluetooth = true;
-            saveProto(configFileName, meshtastic_LocalConfig_size, &meshtastic_LocalConfig_msg, &config);
-        }
+    if (saveWhat & SEGMENT_CONFIG) {
+        config.has_device = true;
+        config.has_display = true;
+        config.has_lora = true;
+        config.has_position = true;
+        config.has_power = true;
+        config.has_network = true;
+        config.has_bluetooth = true;
+        saveProto(configFileName, meshtastic_LocalConfig_size, &meshtastic_LocalConfig_msg, &config);
+    }
 
-        if (saveWhat & SEGMENT_MODULECONFIG) {
-            moduleConfig.has_canned_message = true;
-            moduleConfig.has_external_notification = true;
-            moduleConfig.has_mqtt = true;
-            moduleConfig.has_range_test = true;
-            moduleConfig.has_serial = true;
-            moduleConfig.has_store_forward = true;
-            moduleConfig.has_telemetry = true;
-            saveProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, &meshtastic_LocalModuleConfig_msg, &moduleConfig);
-        }
+    if (saveWhat & SEGMENT_MODULECONFIG) {
+        moduleConfig.has_canned_message = true;
+        moduleConfig.has_external_notification = true;
+        moduleConfig.has_mqtt = true;
+        moduleConfig.has_range_test = true;
+        moduleConfig.has_serial = true;
+        moduleConfig.has_store_forward = true;
+        moduleConfig.has_telemetry = true;
+        saveProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, &meshtastic_LocalModuleConfig_msg, &moduleConfig);
+    }
 
-        if (saveWhat & SEGMENT_CHANNELS) {
-            saveChannelsToDisk();
-        }
-    } else {
-        LOG_DEBUG("***** DEVELOPMENT MODE - DO NOT RELEASE - not saving to flash *****\n");
+    if (saveWhat & SEGMENT_CHANNELS) {
+        saveChannelsToDisk();
     }
 }
 
