@@ -4,8 +4,6 @@
 #include "configuration.h"
 #include <Arduino.h>
 
-// extern NodeDB *nodeDB;
-
 namespace meshtastic
 {
 
