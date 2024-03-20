@@ -10,9 +10,7 @@
 
 start = 0x9000
 nvssys = 0x3000
-nvsuser = (
-    0x2000  # NOTE: ti seems total size of nvssys MUST be 0x5000 or device will bootloop
-)
+nvsuser = 0x2000 # NOTE: ti seems total size of nvssys MUST be 0x5000 or device will bootloop
 nvs = nvssys + nvsuser
 ota = 0x2000
 # app = 0x1c0000
@@ -20,7 +18,7 @@ spi = 128 * 1024
 
 # treat sys part sizes + spiffs size as reserved, then calculate what appsize can be
 reserved = start + nvs + ota + spi
-maxsize = 0x400000  # 4MB
+maxsize = 0x400000 # 4MB
 
 app = (maxsize - reserved) / 2
 
@@ -38,8 +36,6 @@ nvs,      data, nvs,     0x{start:x},  0x{nvs:x},
 otadata,  data, ota,     , 0x{ota:x},
 app0,     app,  ota_0,   , 0x{app:x},
 app1,     app,  ota_1,   , 0x{app:x},
-spiffs,   data, spiffs,  , 0x{spi:x} """.format(
-    **locals()
-)
+spiffs,   data, spiffs,  , 0x{spi:x} """.format(**locals())
 
 print(table)

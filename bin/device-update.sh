@@ -1,10 +1,10 @@
 #!/bin/sh
 
-PYTHON=${PYTHON:-$(which python3 python | head -n 1)}
+PYTHON=${PYTHON:-$(which python3 python|head -n 1)}
 
 # Usage info
 show_help() {
-	cat <<EOF
+cat << EOF
 Usage: $(basename $0) [-h] [-p ESPTOOL_PORT] [-P PYTHON] [-f FILENAME|FILENAME]
 Flash image file to device, leave existing system intact."
 
@@ -16,33 +16,31 @@ Flash image file to device, leave existing system intact."
 EOF
 }
 
+
 while getopts ":hp:P:f:" opt; do
-	case "${opt}" in
-	h)
-		show_help
-		exit 0
-		;;
-	p)
-		export ESPTOOL_PORT=${OPTARG}
-		;;
-	P)
-		PYTHON=${OPTARG}
-		;;
-	f)
-		FILENAME=${OPTARG}
-		;;
-	*)
-		echo "Invalid flag."
-		show_help >&2
-		exit 1
-		;;
-	esac
+    case "${opt}" in
+        h)
+            show_help
+            exit 0
+            ;;
+        p)  export ESPTOOL_PORT=${OPTARG}
+	    ;;
+        P)  PYTHON=${OPTARG}
+            ;;
+        f)  FILENAME=${OPTARG}
+            ;;
+        *)
+ 	    echo "Invalid flag."
+            show_help >&2
+            exit 1
+            ;;
+    esac
 done
-shift "$((OPTIND - 1))"
+shift "$((OPTIND-1))"
 
 [ -z "$FILENAME" -a -n "$1" ] && {
-	FILENAME=$1
-	shift
+    FILENAME=$1
+    shift
 }
 
 if [ -f "${FILENAME}" ] && [ -z "${FILENAME##*"update"*}" ]; then

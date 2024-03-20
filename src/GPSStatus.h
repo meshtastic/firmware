@@ -88,11 +88,20 @@ class GPSStatus : public Status
         }
     }
 
-    uint32_t getDOP() const { return p.PDOP; }
+    uint32_t getDOP() const
+    {
+        return p.PDOP;
+    }
 
-    uint32_t getHeading() const { return p.ground_track; }
+    uint32_t getHeading() const
+    {
+        return p.ground_track;
+    }
 
-    uint32_t getNumSatellites() const { return p.sats_in_view; }
+    uint32_t getNumSatellites() const
+    {
+        return p.sats_in_view;
+    }
 
     bool matches(const GPSStatus *newStatus) const
     {
