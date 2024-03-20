@@ -10,7 +10,9 @@ echo "prebuilt binaries for your computer into nanopb-0.4.7"
 cd protobufs
 ../nanopb-0.4.7/generator-bin/protoc --nanopb_out=-v:../src/mesh/generated/ -I=../protobufs meshtastic/*.proto --experimental_allow_proto3_optional
 
-# cd ../src/mesh/generated/meshtastic
+cd ../src/mesh/generated/meshtastic
+rename .c .cpp *.c
+cd ../../../..
 # sed -i 's/#include "meshtastic/#include "./g' -- *
 
 # sed -i 's/meshtastic_//g' -- *

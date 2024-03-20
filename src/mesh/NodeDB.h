@@ -46,13 +46,13 @@ class NodeDB
     // Eventually use a smarter datastructure
     // HashMap<NodeNum, NodeInfo> nodes;
     // Note: these two references just point into our static array we serialize to/from disk
-    std::vector<meshtastic_NodeInfoLite> meshNodes;
-    pb_size_t numMeshNodes;
 
   public:
+    std::vector<meshtastic_NodeInfoLite> *meshNodes;
     bool updateGUI = false; // we think the gui should definitely be redrawn, screen will clear this once handled
     meshtastic_NodeInfoLite *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
     Observable<const meshtastic::NodeStatus *> newStatus;
+    pb_size_t numMeshNodes;
 
     /// don't do mesh based algorithm for node id assignment (initially)
     /// instead just store in flash - possibly even in the initial alpha release do this hack
@@ -128,7 +128,7 @@ class NodeDB
     meshtastic_NodeInfoLite *getMeshNodeByIndex(size_t x)
     {
         assert(x < numMeshNodes);
-        return &meshNodes[x];
+        return &meshNodes->at(x);
     }
 
     meshtastic_NodeInfoLite *getMeshNode(NodeNum n);

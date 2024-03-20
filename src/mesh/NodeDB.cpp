@@ -51,12 +51,22 @@ meshtastic_OEMStore oemStore;
 
 bool meshtastic_DeviceState_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_iter_t *field)
 {
-    std::vector<meshtastic_NodeInfoLite> *vec = (std::vector<meshtastic_NodeInfoLite> *)field->pData;
-
-    for (auto item : *vec) {
-        pb_encode_tag_for_field(ostream, field);
-        pb_encode_submessage(ostream, meshtastic_NodeInfoLite_fields, &item);
+    if (ostream) {
+        std::vector<meshtastic_NodeInfoLite> *vec = (std::vector<meshtastic_NodeInfoLite> *)field->pData;
+        for (auto item : *vec) {
+            if (!pb_encode_tag_for_field(ostream, field))
+                return false;
+            pb_encode_submessage(ostream, meshtastic_NodeInfoLite_fields, &item);
+        }
     }
+    if (istream) {
+        meshtastic_NodeInfoLite node; // this gets good data
+        std::vector<meshtastic_NodeInfoLite> *vec = (std::vector<meshtastic_NodeInfoLite> *)field->pData;
+
+        if (istream->bytes_left && pb_decode(istream, meshtastic_NodeInfoLite_fields, &node))
+            vec->push_back(node);
+    }
+    return true;
 }
 
 /** The current change # for radio settings.  Starts at 0 on boot and any time the radio settings
@@ -81,14 +91,7 @@ uint32_t error_address = 0;
 
 static uint8_t ourMacAddr[6];
 
-NodeDB::NodeDB() : meshNodes(devicestate.node_db_lite)
-{
-    std::cout << "test " << numMeshNodes << std::endl;
-    std::cout << MAX_NUM_NODES << std::endl;
-    meshNodes.reserve(MAX_NUM_NODES);
-    std::cout << "vector size " << meshNodes.size() << std::endl;
-    numMeshNodes = devicestate.node_db_lite_count;
-}
+NodeDB::NodeDB() {}
 
 /**
  * Most (but not always) of the time we want to treat packets 'from' the local phone (where from == 0), as if they originated on
@@ -390,12 +393,14 @@ void NodeDB::removeNodeByNum(uint nodeNum)
 {
     int newPos = 0, removed = 0;
     for (int i = 0; i < numMeshNodes; i++) {
-        if (meshNodes[i].num != nodeNum)
-            meshNodes[newPos++] = meshNodes[i];
+        if (meshNodes->at(i).num != nodeNum)
+            meshNodes->at(newPos++) = meshNodes->at(i);
         else
             removed++;
     }
     numMeshNodes -= removed;
+    std::fill(devicestate.node_db_lite.begin() + numMeshNodes, devicestate.node_db_lite.begin() + numMeshNodes + 1,
+              meshtastic_NodeInfoLite());
     LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Saving changes...\n", removed);
     saveDeviceStateToDisk();
 }
@@ -404,12 +409,14 @@ void NodeDB::cleanupMeshDB()
 {
     int newPos = 0, removed = 0;
     for (int i = 0; i < numMeshNodes; i++) {
-        if (meshNodes[i].has_user)
-            meshNodes[newPos++] = meshNodes[i];
+        if (meshNodes->at(i).has_user)
+            meshNodes->at(newPos++) = meshNodes->at(i);
         else
             removed++;
     }
     numMeshNodes -= removed;
+    std::fill(devicestate.node_db_lite.begin() + numMeshNodes, devicestate.node_db_lite.begin() + numMeshNodes + removed,
+              meshtastic_NodeInfoLite());
     LOG_DEBUG("cleanupMeshDB purged %d entries\n", removed);
 }
 
@@ -419,6 +426,7 @@ void NodeDB::installDefaultDeviceState()
     // memset(&devicestate, 0, sizeof(meshtastic_DeviceState));
 
     numMeshNodes = 0;
+    meshNodes = &devicestate.node_db_lite;
 
     // init our devicestate with valid flags so protobuf writing/reading will work
     devicestate.has_my_node = true;
@@ -565,17 +573,21 @@ bool NodeDB::loadProto(const char *filename, size_t protoSize, size_t objSize, c
 void NodeDB::loadFromDisk()
 {
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
-    if (!loadProto(prefFileName, sizeof(meshtastic_DeviceState), sizeof(meshtastic_DeviceState), &meshtastic_DeviceState_msg,
-                   &devicestate)) {
+    if (!loadProto(prefFileName, sizeof(meshtastic_DeviceState) + MAX_NUM_NODES * sizeof(meshtastic_NodeInfo),
+                   sizeof(meshtastic_DeviceState), &meshtastic_DeviceState_msg, &devicestate)) {
         installDefaultDeviceState(); // Our in RAM copy might now be corrupt
     } else {
         if (devicestate.version < DEVICESTATE_MIN_VER) {
             LOG_WARN("Devicestate %d is old, discarding\n", devicestate.version);
             factoryReset();
         } else {
-            LOG_INFO("Loaded saved devicestate version %d\n", devicestate.version);
+            LOG_INFO("Loaded saved devicestate version %d, with nodecount: %d\n", devicestate.version,
+                     devicestate.node_db_lite.size());
+            meshNodes = &devicestate.node_db_lite;
+            numMeshNodes = devicestate.node_db_lite.size();
         }
     }
+    meshNodes->resize(MAX_NUM_NODES);
 
     if (!loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig), &meshtastic_LocalConfig_msg,
                    &config)) {
@@ -728,7 +740,7 @@ void NodeDB::saveToDisk(int saveWhat)
 const meshtastic_NodeInfoLite *NodeDB::readNextMeshNode(uint32_t &readIndex)
 {
     if (readIndex < numMeshNodes)
-        return &meshNodes[readIndex++];
+        return &meshNodes->at(readIndex++);
     else
         return NULL;
 }
@@ -764,9 +776,9 @@ size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
 
     // FIXME this implementation is kinda expensive
     for (int i = 0; i < numMeshNodes; i++) {
-        if (localOnly && meshNodes[i].via_mqtt)
+        if (localOnly && meshNodes->at(i).via_mqtt)
             continue;
-        if (sinceLastSeen(&meshNodes[i]) < NUM_ONLINE_SECS)
+        if (sinceLastSeen(&meshNodes->at(i)) < NUM_ONLINE_SECS)
             numseen++;
     }
 
@@ -915,8 +927,8 @@ uint8_t NodeDB::getMeshNodeChannel(NodeNum n)
 meshtastic_NodeInfoLite *NodeDB::getMeshNode(NodeNum n)
 {
     for (int i = 0; i < numMeshNodes; i++)
-        if (meshNodes[i].num == n)
-            return &meshNodes[i];
+        if (meshNodes->at(i).num == n)
+            return &meshNodes->at(i);
 
     return NULL;
 }
@@ -935,19 +947,19 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             uint32_t oldest = UINT32_MAX;
             int oldestIndex = -1;
             for (int i = 1; i < numMeshNodes; i++) {
-                if (meshNodes[i].last_heard < oldest) {
-                    oldest = meshNodes[i].last_heard;
+                if (meshNodes->at(i).last_heard < oldest) {
+                    oldest = meshNodes->at(i).last_heard;
                     oldestIndex = i;
                 }
             }
             // Shove the remaining nodes down the chain
             for (int i = oldestIndex; i < numMeshNodes - 1; i++) {
-                meshNodes[i] = meshNodes[i + 1];
+                meshNodes->at(i) = meshNodes->at(i + 1);
             }
             (numMeshNodes)--;
         }
         // add the node at the end
-        lite = &meshNodes[(numMeshNodes)++];
+        lite = &meshNodes->at((numMeshNodes)++);
 
         // everything is missing except the nodenum
         memset(lite, 0, sizeof(*lite));
