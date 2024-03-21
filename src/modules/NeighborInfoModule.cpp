@@ -17,7 +17,7 @@ NOTE: For debugging only
 void NeighborInfoModule::printNeighborInfo(const char *header, const meshtastic_NeighborInfo *np)
 {
     LOG_DEBUG("%s NEIGHBORINFO PACKET from Node 0x%x to Node 0x%x (last sent by 0x%x)\n", header, np->node_id,
-              nodeDB.getNodeNum(), np->last_sent_by_id);
+              nodeDB->getNodeNum(), np->last_sent_by_id);
     LOG_DEBUG("----------------\n");
     LOG_DEBUG("Packet contains %d neighbors\n", np->neighbors_count);
     for (int i = 0; i < np->neighbors_count; i++) {
@@ -31,12 +31,12 @@ NOTE: for debugging only
 */
 void NeighborInfoModule::printNodeDBNodes(const char *header)
 {
-    int num_nodes = nodeDB.getNumMeshNodes();
-    LOG_DEBUG("%s NODEDB SELECTION from Node 0x%x:\n", header, nodeDB.getNodeNum());
+    int num_nodes = nodeDB->getNumMeshNodes();
+    LOG_DEBUG("%s NODEDB SELECTION from Node 0x%x:\n", header, nodeDB->getNodeNum());
     LOG_DEBUG("----------------\n");
     LOG_DEBUG("DB contains %d nodes\n", num_nodes);
     for (int i = 0; i < num_nodes; i++) {
-        const meshtastic_NodeInfoLite *dbEntry = nodeDB.getMeshNodeByIndex(i);
+        const meshtastic_NodeInfoLite *dbEntry = nodeDB->getMeshNodeByIndex(i);
         LOG_DEBUG("     Node %d: node_id=0x%x, snr=%.2f\n", i, dbEntry->num, dbEntry->snr);
     }
     LOG_DEBUG("----------------\n");
@@ -49,7 +49,7 @@ NOTE: for debugging only
 void NeighborInfoModule::printNodeDBNeighbors(const char *header)
 {
     int num_neighbors = getNumNeighbors();
-    LOG_DEBUG("%s NODEDB SELECTION from Node 0x%x:\n", header, nodeDB.getNodeNum());
+    LOG_DEBUG("%s NODEDB SELECTION from Node 0x%x:\n", header, nodeDB->getNodeNum());
     LOG_DEBUG("----------------\n");
     LOG_DEBUG("DB contains %d neighbors\n", num_neighbors);
     for (int i = 0; i < num_neighbors; i++) {
@@ -67,7 +67,7 @@ NOTE: For debugging only
 void NeighborInfoModule::printNodeDBSelection(const char *header, const meshtastic_NeighborInfo *np)
 {
     int num_neighbors = getNumNeighbors();
-    LOG_DEBUG("%s NODEDB SELECTION from Node 0x%x:\n", header, nodeDB.getNodeNum());
+    LOG_DEBUG("%s NODEDB SELECTION from Node 0x%x:\n", header, nodeDB->getNodeNum());
     LOG_DEBUG("----------------\n");
     LOG_DEBUG("Selected %d neighbors of %d DB neighbors\n", np->neighbors_count, num_neighbors);
     for (int i = 0; i < num_neighbors; i++) {
@@ -112,7 +112,7 @@ Assumes that the neighborInfo packet has been allocated
 */
 uint32_t NeighborInfoModule::collectNeighborInfo(meshtastic_NeighborInfo *neighborInfo)
 {
-    uint my_node_id = nodeDB.getNodeNum();
+    uint my_node_id = nodeDB->getNodeNum();
     neighborInfo->node_id = my_node_id;
     neighborInfo->last_sent_by_id = my_node_id;
     neighborInfo->node_broadcast_interval_secs = moduleConfig.neighbor_info.update_interval;
@@ -143,7 +143,7 @@ size_t NeighborInfoModule::cleanUpNeighbors()
 {
     uint32_t now = getTime();
     int num_neighbors = getNumNeighbors();
-    NodeNum my_node_id = nodeDB.getNodeNum();
+    NodeNum my_node_id = nodeDB->getNodeNum();
 
     // Find neighbors to remove
     std::vector<int> indices_to_remove;
@@ -227,7 +227,7 @@ void NeighborInfoModule::updateLastSentById(meshtastic_MeshPacket *p)
     pb_decode_from_bytes(incoming.payload.bytes, incoming.payload.size, &meshtastic_NeighborInfo_msg, &scratch);
     updated = &scratch;
 
-    updated->last_sent_by_id = nodeDB.getNodeNum();
+    updated->last_sent_by_id = nodeDB->getNodeNum();
 
     // Set updated last_sent_by_id to the payload of the to be flooded packet
     p->decoded.payload.size =
@@ -256,7 +256,7 @@ meshtastic_Neighbor *NeighborInfoModule::getOrCreateNeighbor(NodeNum originalSen
 {
     // our node and the phone are the same node (not neighbors)
     if (n == 0) {
-        n = nodeDB.getNodeNum();
+        n = nodeDB->getNodeNum();
     }
     // look for one in the existing list
     for (int i = 0; i < (*numNeighbors); i++) {
@@ -292,8 +292,8 @@ meshtastic_Neighbor *NeighborInfoModule::getOrCreateNeighbor(NodeNum originalSen
 
 void NeighborInfoModule::loadProtoForModule()
 {
-    if (!nodeDB.loadProto(neighborInfoConfigFile, meshtastic_NeighborInfo_size, sizeof(meshtastic_NeighborInfo),
-                          &meshtastic_NeighborInfo_msg, &neighborState)) {
+    if (!nodeDB->loadProto(neighborInfoConfigFile, meshtastic_NeighborInfo_size, sizeof(meshtastic_NeighborInfo),
+                           &meshtastic_NeighborInfo_msg, &neighborState)) {
         neighborState = meshtastic_NeighborInfo_init_zero;
     }
 }
@@ -312,7 +312,7 @@ bool NeighborInfoModule::saveProtoForModule()
     FS.mkdir("/prefs");
 #endif
 
-    okay &= nodeDB.saveProto(neighborInfoConfigFile, meshtastic_NeighborInfo_size, &meshtastic_NeighborInfo_msg, &neighborState);
+    okay &= nodeDB->saveProto(neighborInfoConfigFile, meshtastic_NeighborInfo_size, &meshtastic_NeighborInfo_msg, &neighborState);
 
     return okay;
 }
