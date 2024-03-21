@@ -92,7 +92,63 @@ uint32_t error_address = 0;
 
 static uint8_t ourMacAddr[6];
 
-NodeDB::NodeDB() {}
+NodeDB::NodeDB()
+{
+    LOG_INFO("Initializing NodeDB\n");
+    loadFromDisk();
+    cleanupMeshDB();
+
+    uint32_t devicestateCRC = crc32Buffer(&devicestate, sizeof(devicestate));
+    uint32_t configCRC = crc32Buffer(&config, sizeof(config));
+    uint32_t channelFileCRC = crc32Buffer(&channelFile, sizeof(channelFile));
+
+    int saveWhat = 0;
+
+    // likewise - we always want the app requirements to come from the running appload
+    myNodeInfo.min_app_version = 30200; // format is Mmmss (where M is 1+the numeric major number. i.e. 30200 means 2.2.00
+    // Note! We do this after loading saved settings, so that if somehow an invalid nodenum was stored in preferences we won't
+    // keep using that nodenum forever. Crummy guess at our nodenum (but we will check against the nodedb to avoid conflicts)
+    pickNewNodeNum();
+
+    // Set our board type so we can share it with others
+    owner.hw_model = HW_VENDOR;
+    // Ensure user (nodeinfo) role is set to whatever we're configured to
+    owner.role = config.device.role;
+
+    // Include our owner in the node db under our nodenum
+    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
+    info->user = owner;
+    info->has_user = true;
+
+#ifdef ARCH_ESP32
+    Preferences preferences;
+    preferences.begin("meshtastic", false);
+    myNodeInfo.reboot_count = preferences.getUInt("rebootCounter", 0);
+    preferences.end();
+    LOG_DEBUG("Number of Device Reboots: %d\n", myNodeInfo.reboot_count);
+#endif
+
+    resetRadioConfig(); // If bogus settings got saved, then fix them
+    // nodeDB->LOG_DEBUG("region=%d, NODENUM=0x%x, dbsize=%d\n", config.lora.region, myNodeInfo.my_node_num, numMeshNodes);
+
+    if (devicestateCRC != crc32Buffer(&devicestate, sizeof(devicestate)))
+        saveWhat |= SEGMENT_DEVICESTATE;
+    if (configCRC != crc32Buffer(&config, sizeof(config)))
+        saveWhat |= SEGMENT_CONFIG;
+    if (channelFileCRC != crc32Buffer(&channelFile, sizeof(channelFile)))
+        saveWhat |= SEGMENT_CHANNELS;
+
+    if (!devicestate.node_remote_hardware_pins) {
+        meshtastic_NodeRemoteHardwarePin empty[12] = {meshtastic_RemoteHardwarePin_init_default};
+        memcpy(devicestate.node_remote_hardware_pins, empty, sizeof(empty));
+    }
+
+    if (config.position.gps_enabled) {
+        config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+        config.position.gps_enabled = 0;
+    }
+    saveToDisk(saveWhat);
+}
 
 /**
  * Most (but not always) of the time we want to treat packets 'from' the local phone (where from == 0), as if they originated on
@@ -437,67 +493,6 @@ void NodeDB::installDefaultDeviceState()
     snprintf(owner.short_name, sizeof(owner.short_name), "%02x%02x", ourMacAddr[4], ourMacAddr[5]);
     snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum()); // Default node ID now based on nodenum
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
-}
-
-NodeDB *NodeDB::init()
-{
-    LOG_INFO("Initializing NodeDB\n");
-    NodeDB *newnodeDB = new NodeDB;
-    newnodeDB->loadFromDisk();
-    newnodeDB->cleanupMeshDB();
-
-    uint32_t devicestateCRC = crc32Buffer(&devicestate, sizeof(devicestate));
-    uint32_t configCRC = crc32Buffer(&config, sizeof(config));
-    uint32_t channelFileCRC = crc32Buffer(&channelFile, sizeof(channelFile));
-
-    int saveWhat = 0;
-
-    // likewise - we always want the app requirements to come from the running appload
-    myNodeInfo.min_app_version = 30200; // format is Mmmss (where M is 1+the numeric major number. i.e. 30200 means 2.2.00
-    // Note! We do this after loading saved settings, so that if somehow an invalid nodenum was stored in preferences we won't
-    // keep using that nodenum forever. Crummy guess at our nodenum (but we will check against the nodedb to avoid conflicts)
-    newnodeDB->pickNewNodeNum();
-
-    // Set our board type so we can share it with others
-    owner.hw_model = HW_VENDOR;
-    // Ensure user (nodeinfo) role is set to whatever we're configured to
-    owner.role = config.device.role;
-
-    // Include our owner in the node db under our nodenum
-    meshtastic_NodeInfoLite *info = newnodeDB->getOrCreateMeshNode(newnodeDB->getNodeNum());
-    info->user = owner;
-    info->has_user = true;
-
-#ifdef ARCH_ESP32
-    Preferences preferences;
-    preferences.begin("meshtastic", false);
-    myNodeInfo.reboot_count = preferences.getUInt("rebootCounter", 0);
-    preferences.end();
-    LOG_DEBUG("Number of Device Reboots: %d\n", myNodeInfo.reboot_count);
-#endif
-
-    newnodeDB->resetRadioConfig(); // If bogus settings got saved, then fix them
-    // nodeDB->LOG_DEBUG("region=%d, NODENUM=0x%x, dbsize=%d\n", config.lora.region, myNodeInfo.my_node_num, numMeshNodes);
-
-    if (devicestateCRC != crc32Buffer(&devicestate, sizeof(devicestate)))
-        saveWhat |= SEGMENT_DEVICESTATE;
-    if (configCRC != crc32Buffer(&config, sizeof(config)))
-        saveWhat |= SEGMENT_CONFIG;
-    if (channelFileCRC != crc32Buffer(&channelFile, sizeof(channelFile)))
-        saveWhat |= SEGMENT_CHANNELS;
-
-    if (!devicestate.node_remote_hardware_pins) {
-        meshtastic_NodeRemoteHardwarePin empty[12] = {meshtastic_RemoteHardwarePin_init_default};
-        memcpy(devicestate.node_remote_hardware_pins, empty, sizeof(empty));
-    }
-
-    if (config.position.gps_enabled) {
-        config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
-        config.position.gps_enabled = 0;
-    }
-    return newnodeDB;
-
-    nodeDB->saveToDisk(saveWhat);
 }
 
 // We reserve a few nodenums for future use
