@@ -1,3 +1,4 @@
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "mesh/http/WebServer.h"
 #include "NodeDB.h"
 #include "graphics/Screen.h"
@@ -92,7 +93,6 @@ static void taskCreateCert(void *parameter)
 
         LOG_DEBUG("Retrieved Private Key: %d Bytes\n", cert->getPKLength());
         LOG_DEBUG("Retrieved Certificate: %d Bytes\n", cert->getCertLength());
-
     } else {
 
         LOG_INFO("Creating the certificate. This may take a while. Please wait...\n");
@@ -105,7 +105,6 @@ static void taskCreateCert(void *parameter)
 
         if (createCertResult != 0) {
             LOG_ERROR("Creating the certificate failed\n");
-
         } else {
             LOG_INFO("Creating the certificate was successful\n");
 
@@ -211,3 +210,4 @@ void initWebServer()
         LOG_ERROR("Web Servers Failed! ;-( \n");
     }
 }
+#endif
