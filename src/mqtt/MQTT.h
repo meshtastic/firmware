@@ -90,8 +90,8 @@ class MQTT : private concurrency::OSThread
 
     // For map reporting (only applies when enabled)
     uint32_t last_report_to_map = 0;
-    uint32_t map_position_precision = 32;         // default to full precision
-    uint32_t map_publish_interval_secs = 60 * 15; // default to 15 minutes
+    uint32_t map_position_precision = 14;         // defaults to max. offset of ~1459m
+    uint32_t map_publish_interval_secs = 60 * 15; // defaults to 15 minutes
 
     /** return true if we have a channel that wants uplink/downlink or map reporting is enabled
      */
