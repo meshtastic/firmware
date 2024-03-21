@@ -198,7 +198,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
 
     screen->doDeepSleep(); // datasheet says this will draw only 10ua
 
-    nodeDB.saveToDisk();
+    nodeDB->saveToDisk();
 
 #ifdef TTGO_T_ECHO
 #ifdef PIN_POWER_EN
