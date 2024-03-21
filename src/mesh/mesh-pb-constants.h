@@ -17,9 +17,7 @@
 #define MAX_RX_TOPHONE 32
 
 /// max number of nodes allowed in the mesh
-#if ARCH_PORTDUINO
-#define MAX_NUM_NODES settingsMap[maxnodes]
-#else
+#ifndef MAX_NUM_NODES
 #define MAX_NUM_NODES 100
 #endif
 
