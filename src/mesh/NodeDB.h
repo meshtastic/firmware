@@ -58,9 +58,6 @@ class NodeDB
     /// instead just store in flash - possibly even in the initial alpha release do this hack
     NodeDB();
 
-    /// Called from service after app start, to do init which can only be done after OS load
-    static NodeDB *init();
-
     /// write to flash
     void saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS),
         saveChannelsToDisk(), saveDeviceStateToDisk();
