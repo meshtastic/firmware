@@ -34,19 +34,9 @@ PositionModule::PositionModule()
     if ((config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
          config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) &&
         config.power.is_power_saving) {
-        clearPosition();
+        LOG_DEBUG("Clearing position on startup for sleepy tracker (ー。ー) zzz\n");
+        nodeDB.clearLocalPosition();
     }
-}
-
-void PositionModule::clearPosition()
-{
-    LOG_DEBUG("Clearing position on startup for sleepy tracker (ー。ー) zzz\n");
-    meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
-    node->position.latitude_i = 0;
-    node->position.longitude_i = 0;
-    node->position.altitude = 0;
-    node->position.time = 0;
-    nodeDB.setLocalPosition(meshtastic_Position_init_default);
 }
 
 bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Position *pptr)

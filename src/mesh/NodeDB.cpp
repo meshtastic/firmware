@@ -370,8 +370,19 @@ void NodeDB::removeNodeByNum(uint nodeNum)
             removed++;
     }
     *numMeshNodes -= removed;
+    clearLocalPosition();
     LOG_DEBUG("NodeDB::removeNodeByNum purged %d entries. Saving changes...\n", removed);
     saveDeviceStateToDisk();
+}
+
+void NodeDB::clearLocalPosition()
+{
+    meshtastic_NodeInfoLite *node = getMeshNode(nodeDB.getNodeNum());
+    node->position.latitude_i = 0;
+    node->position.longitude_i = 0;
+    node->position.altitude = 0;
+    node->position.time = 0;
+    setLocalPosition(meshtastic_Position_init_default);
 }
 
 void NodeDB::cleanupMeshDB()

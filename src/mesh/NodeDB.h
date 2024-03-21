@@ -133,6 +133,8 @@ class NodeDB
     meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
     size_t getNumMeshNodes() { return *numMeshNodes; }
 
+    void clearLocalPosition();
+
     void setLocalPosition(meshtastic_Position position, bool timeOnly = false)
     {
         if (timeOnly) {
