@@ -34,7 +34,9 @@
 
 #ifdef ARCH_ESP32
 #include "freertosinc.h"
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "mesh/http/WebServer.h"
+#endif
 #include "nimble/NimbleBluetooth.h"
 NimbleBluetooth *nimbleBluetooth;
 #endif
@@ -567,7 +569,7 @@ void setup()
 
     // We do this as early as possible because this loads preferences from flash
     // but we need to do this after main cpu init (esp32setup), because we need the random seed set
-    nodeDB.init();
+    nodeDB = new NodeDB;
 
     // If we're taking on the repeater role, use flood router and turn off 3V3_S rail because peripherals are not needed
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
@@ -667,7 +669,7 @@ void setup()
     } else {
         LOG_DEBUG("Running without GPS.\n");
     }
-    nodeStatus->observe(&nodeDB.newStatus);
+    nodeStatus->observe(&nodeDB->newStatus);
 
 #ifdef HAS_I2S
     LOG_DEBUG("Starting audio thread\n");
@@ -861,7 +863,7 @@ void setup()
     if ((config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && (!rIf->wideLora())) {
         LOG_WARN("Radio chip does not support 2.4GHz LoRa. Reverting to unset.\n");
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
-        nodeDB.saveToDisk(SEGMENT_CONFIG);
+        nodeDB->saveToDisk(SEGMENT_CONFIG);
         if (!rIf->reconfigure()) {
             LOG_WARN("Reconfigure failed, rebooting\n");
             screen->startRebootScreen();
@@ -883,7 +885,7 @@ void setup()
 #endif
 #endif
 
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WEBSERVER
     // Start web server thread.
     webServerThread = new WebServerThread();
 #endif
