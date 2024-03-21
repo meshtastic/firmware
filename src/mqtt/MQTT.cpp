@@ -195,10 +195,10 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
         }
 
         if (moduleConfig.mqtt.map_reporting_enabled && moduleConfig.mqtt.has_map_report_settings) {
-            if (moduleConfig.mqtt.map_report_settings.position_precision > 0)
-                map_position_precision = moduleConfig.mqtt.map_report_settings.position_precision;
-            if (moduleConfig.mqtt.map_report_settings.publish_interval_secs > 0)
-                map_publish_interval_secs = moduleConfig.mqtt.map_report_settings.publish_interval_secs;
+            map_position_precision = Default::getConfiguredOrDefault(moduleConfig.mqtt.map_report_settings.position_precision,
+                                                                     default_map_position_precision);
+            map_publish_interval_msecs = Default::getConfiguredOrDefaultMs(
+                moduleConfig.mqtt.map_report_settings.publish_interval_secs, default_map_publish_interval_secs);
         }
 
 #ifdef HAS_NETWORKING
@@ -542,7 +542,7 @@ void MQTT::perhapsReportToMap()
     if (!moduleConfig.mqtt.map_reporting_enabled || !(moduleConfig.mqtt.proxy_to_client_enabled || isConnectedDirectly()))
         return;
 
-    if (millis() - last_report_to_map < map_publish_interval_secs * 1000) {
+    if (millis() - last_report_to_map < map_publish_interval_msecs) {
         return;
     } else {
         if (map_position_precision == 0 || (localPosition.latitude_i == 0 && localPosition.longitude_i == 0)) {
