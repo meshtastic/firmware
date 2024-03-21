@@ -939,7 +939,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             uint32_t oldest = UINT32_MAX;
             int oldestIndex = -1;
             for (int i = 1; i < numMeshNodes; i++) {
-                if (meshNodes->at(i).last_heard < oldest) {
+                if (!meshNodes->at(i).is_favorite && meshNodes->at(i).last_heard < oldest) {
                     oldest = meshNodes->at(i).last_heard;
                     oldestIndex = i;
                 }
