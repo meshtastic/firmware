@@ -402,7 +402,7 @@ void NodeDB::removeNodeByNum(uint nodeNum)
 
 void NodeDB::clearLocalPosition()
 {
-    meshtastic_NodeInfoLite *node = getMeshNode(nodeDB.getNodeNum());
+    meshtastic_NodeInfoLite *node = getMeshNode(nodeDB->getNodeNum());
     node->position.latitude_i = 0;
     node->position.longitude_i = 0;
     node->position.altitude = 0;
