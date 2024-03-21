@@ -925,8 +925,6 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
     meshtastic_NodeInfoLite *lite = getMeshNode(n);
 
     if (!lite) {
-        if ((numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < meshtastic_NodeInfoLite_size * 3))
-            cleanupMeshDB();
         if ((numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < meshtastic_NodeInfoLite_size * 3)) {
             if (screen)
                 screen->print("Warn: node database full!\nErasing oldest entry\n");
