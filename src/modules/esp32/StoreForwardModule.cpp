@@ -320,11 +320,11 @@ ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &m
     if (moduleConfig.store_forward.enabled) {
 
         // The router node should not be sending messages as a client. Unless he is a ROUTER_CLIENT
-        if ((getFrom(&mp) != nodeDB.getNodeNum()) || (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT)) {
+        if ((getFrom(&mp) != nodeDB->getNodeNum()) || (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT)) {
 
             if ((mp.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) && is_server) {
                 auto &p = mp.decoded;
-                if (mp.to == nodeDB.getNodeNum() && (p.payload.bytes[0] == 'S') && (p.payload.bytes[1] == 'F') &&
+                if (mp.to == nodeDB->getNodeNum() && (p.payload.bytes[0] == 'S') && (p.payload.bytes[1] == 'F') &&
                     (p.payload.bytes[2] == 0x00)) {
                     LOG_DEBUG("*** Legacy Request to send\n");
 

@@ -815,7 +815,7 @@ int32_t GPS::runOnce()
             LOG_WARN("GPS FactoryReset requested\n");
             if (gps->factoryReset()) { // If we don't succeed try again next time
                 devicestate.did_gps_reset = true;
-                nodeDB.saveToDisk(SEGMENT_DEVICESTATE);
+                nodeDB->saveToDisk(SEGMENT_DEVICESTATE);
             }
         }
         GPSInitFinished = true;
@@ -835,7 +835,7 @@ int32_t GPS::runOnce()
             if (devicestate.did_gps_reset && (millis() - lastWakeStartMsec > 60000) && !hasFlow()) {
                 LOG_DEBUG("GPS is not communicating, trying factory reset on next bootup.\n");
                 devicestate.did_gps_reset = false;
-                nodeDB.saveDeviceStateToDisk();
+                nodeDB->saveDeviceStateToDisk();
                 return disable(); // Stop the GPS thread as it can do nothing useful until next reboot.
             }
         }

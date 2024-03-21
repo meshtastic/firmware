@@ -200,6 +200,8 @@ void portduinoSetup()
             settingsStrings[webserverrootpath] = (yamlConfig["Webserver"]["RootPath"]).as<std::string>("");
         }
 
+        settingsMap[maxnodes] = (yamlConfig["General"]["MaxNodes"]).as<int>(200);
+
     } catch (YAML::Exception e) {
         std::cout << "*** Exception " << e.what() << std::endl;
         exit(EXIT_FAILURE);

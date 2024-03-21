@@ -421,7 +421,7 @@ bool PhoneAPI::available()
 
     case STATE_SEND_NODEINFO:
         if (nodeInfoForPhone.num == 0) {
-            auto nextNode = nodeDB.readNextMeshNode(readIndex);
+            auto nextNode = nodeDB->readNextMeshNode(readIndex);
             if (nextNode) {
                 nodeInfoForPhone = TypeConversions::ConvertToNodeInfo(nextNode);
             }
