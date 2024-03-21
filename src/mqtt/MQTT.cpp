@@ -195,8 +195,10 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
         }
 
         if (moduleConfig.mqtt.map_reporting_enabled && moduleConfig.mqtt.has_map_report_settings) {
-            map_position_precision = moduleConfig.mqtt.map_report_settings.position_precision;
-            map_publish_interval_secs = moduleConfig.mqtt.map_report_settings.publish_interval_secs;
+            if (moduleConfig.mqtt.map_report_settings.position_precision > 0)
+                map_position_precision = moduleConfig.mqtt.map_report_settings.position_precision;
+            if (moduleConfig.mqtt.map_report_settings.publish_interval_secs > 0)
+                map_publish_interval_secs = moduleConfig.mqtt.map_report_settings.publish_interval_secs;
         }
 
 #ifdef HAS_NETWORKING
