@@ -125,6 +125,8 @@ class Screen : public concurrency::OSThread
   public:
     explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
 
+    ~Screen();
+
     Screen(const Screen &) = delete;
     Screen &operator=(const Screen &) = delete;
 

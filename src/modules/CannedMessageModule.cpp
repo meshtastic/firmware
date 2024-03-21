@@ -311,18 +311,18 @@ int32_t CannedMessageModule::runOnce()
         switch (this->payload) {
         case 0xb4: // left
             if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
-                size_t numMeshNodes = nodeDB.getNumMeshNodes();
+                size_t numMeshNodes = nodeDB->getNumMeshNodes();
                 if (this->dest == NODENUM_BROADCAST) {
-                    this->dest = nodeDB.getNodeNum();
+                    this->dest = nodeDB->getNodeNum();
                 }
                 for (unsigned int i = 0; i < numMeshNodes; i++) {
-                    if (nodeDB.getMeshNodeByIndex(i)->num == this->dest) {
+                    if (nodeDB->getMeshNodeByIndex(i)->num == this->dest) {
                         this->dest =
-                            (i > 0) ? nodeDB.getMeshNodeByIndex(i - 1)->num : nodeDB.getMeshNodeByIndex(numMeshNodes - 1)->num;
+                            (i > 0) ? nodeDB->getMeshNodeByIndex(i - 1)->num : nodeDB->getMeshNodeByIndex(numMeshNodes - 1)->num;
                         break;
                     }
                 }
-                if (this->dest == nodeDB.getNodeNum()) {
+                if (this->dest == nodeDB->getNodeNum()) {
                     this->dest = NODENUM_BROADCAST;
                 }
             } else if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL) {
@@ -346,18 +346,18 @@ int32_t CannedMessageModule::runOnce()
             break;
         case 0xb7: // right
             if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
-                size_t numMeshNodes = nodeDB.getNumMeshNodes();
+                size_t numMeshNodes = nodeDB->getNumMeshNodes();
                 if (this->dest == NODENUM_BROADCAST) {
-                    this->dest = nodeDB.getNodeNum();
+                    this->dest = nodeDB->getNodeNum();
                 }
                 for (unsigned int i = 0; i < numMeshNodes; i++) {
-                    if (nodeDB.getMeshNodeByIndex(i)->num == this->dest) {
+                    if (nodeDB->getMeshNodeByIndex(i)->num == this->dest) {
                         this->dest =
-                            (i < numMeshNodes - 1) ? nodeDB.getMeshNodeByIndex(i + 1)->num : nodeDB.getMeshNodeByIndex(0)->num;
+                            (i < numMeshNodes - 1) ? nodeDB->getMeshNodeByIndex(i + 1)->num : nodeDB->getMeshNodeByIndex(0)->num;
                         break;
                     }
                 }
-                if (this->dest == nodeDB.getNodeNum()) {
+                if (this->dest == nodeDB->getNodeNum()) {
                     this->dest = NODENUM_BROADCAST;
                 }
             } else if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL) {
@@ -462,7 +462,7 @@ const char *CannedMessageModule::getNodeName(NodeNum node)
     if (node == NODENUM_BROADCAST) {
         return "Broadcast";
     } else {
-        meshtastic_NodeInfoLite *info = nodeDB.getMeshNode(node);
+        meshtastic_NodeInfoLite *info = nodeDB->getMeshNode(node);
         if (info != NULL) {
             return info->user.long_name;
         } else {
@@ -618,9 +618,9 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
 
 void CannedMessageModule::loadProtoForModule()
 {
-    if (!nodeDB.loadProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,
-                          sizeof(meshtastic_CannedMessageModuleConfig), &meshtastic_CannedMessageModuleConfig_msg,
-                          &cannedMessageModuleConfig)) {
+    if (!nodeDB->loadProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,
+                           sizeof(meshtastic_CannedMessageModuleConfig), &meshtastic_CannedMessageModuleConfig_msg,
+                           &cannedMessageModuleConfig)) {
         installDefaultCannedMessageModuleConfig();
     }
 }
@@ -639,8 +639,8 @@ bool CannedMessageModule::saveProtoForModule()
     FS.mkdir("/prefs");
 #endif
 
-    okay &= nodeDB.saveProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,
-                             &meshtastic_CannedMessageModuleConfig_msg, &cannedMessageModuleConfig);
+    okay &= nodeDB->saveProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,
+                              &meshtastic_CannedMessageModuleConfig_msg, &cannedMessageModuleConfig);
 
     return okay;
 }
