@@ -258,12 +258,13 @@ static void drawWelcomeScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
 #ifdef USE_EINK
 /// Used on eink displays while in deep sleep
-static void drawSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+static void drawDeepSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     // Next frame should use full-refresh, and block while running, else device will sleep before async callback
     EINK_ADD_FRAMEFLAG(display, COSMETIC);
     EINK_ADD_FRAMEFLAG(display, BLOCKING);
 
+    LOG_DEBUG("Drawing deep sleep screen\n");
     drawIconScreen("Sleeping...", display, state, x, y);
 }
 #endif
