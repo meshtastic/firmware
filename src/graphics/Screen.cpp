@@ -71,7 +71,7 @@ namespace graphics
 // #define SHOW_REDRAWS
 
 // A text message frame + debug frame + all the node infos
-static FrameCallback normalFrames[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
+FrameCallback *normalFrames;
 static uint32_t targetFramerate = IDLE_FRAMERATE;
 static char btPIN[16] = "888888";
 
@@ -354,7 +354,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     static char tempBuf[237];
 
     const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
-    meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(getFrom(&mp));
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
     // LOG_DEBUG("drawing text message from 0x%x: %s\n", mp.from,
     // mp.decoded.variant.data.decoded.bytes);
 
@@ -392,7 +392,7 @@ static void drawWaypointFrame(OLEDDisplay *display, OLEDDisplayUiState *state, i
     static char tempBuf[237];
 
     meshtastic_MeshPacket &mp = devicestate.rx_waypoint;
-    meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(getFrom(&mp));
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
@@ -780,16 +780,16 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     if (state->currentFrame != prevFrame) {
         prevFrame = state->currentFrame;
 
-        nodeIndex = (nodeIndex + 1) % nodeDB.getNumMeshNodes();
-        meshtastic_NodeInfoLite *n = nodeDB.getMeshNodeByIndex(nodeIndex);
-        if (n->num == nodeDB.getNodeNum()) {
+        nodeIndex = (nodeIndex + 1) % nodeDB->getNumMeshNodes();
+        meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(nodeIndex);
+        if (n->num == nodeDB->getNodeNum()) {
             // Don't show our node, just skip to next
-            nodeIndex = (nodeIndex + 1) % nodeDB.getNumMeshNodes();
-            n = nodeDB.getMeshNodeByIndex(nodeIndex);
+            nodeIndex = (nodeIndex + 1) % nodeDB->getNumMeshNodes();
+            n = nodeDB->getMeshNodeByIndex(nodeIndex);
         }
     }
 
-    meshtastic_NodeInfoLite *node = nodeDB.getMeshNodeByIndex(nodeIndex);
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(nodeIndex);
 
     display->setFont(FONT_SMALL);
 
@@ -827,7 +827,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     } else {
         strncpy(distStr, "? km", sizeof(distStr));
     }
-    meshtastic_NodeInfoLite *ourNode = nodeDB.getMeshNode(nodeDB.getNodeNum());
+    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     const char *fields[] = {username, distStr, signalStr, lastStr, NULL};
     int16_t compassX = 0, compassY = 0;
 
@@ -893,6 +893,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_OledType screenType, OLEDDISPLAY_GEOMETRY geometry)
     : concurrency::OSThread("Screen"), address_found(address), model(screenType), geometry(geometry), cmdQueue(32)
 {
+    graphics::normalFrames = new FrameCallback[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
 #if defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SH1107_128_64)
     dispdev = new SH1106Wire(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
@@ -929,6 +930,11 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 
     ui = new OLEDDisplayUi(dispdev);
     cmdQueue.setReader(this);
+}
+
+Screen::~Screen()
+{
+    delete[] graphics::normalFrames;
 }
 
 /**
@@ -1287,7 +1293,7 @@ void Screen::setFrames()
 #endif
 
     // We don't show the node info our our node (if we have it yet - we should)
-    size_t numMeshNodes = nodeDB.getNumMeshNodes();
+    size_t numMeshNodes = nodeDB->getNumMeshNodes();
     if (numMeshNodes > 0)
         numMeshNodes--;
 
@@ -1792,7 +1798,7 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
         if (showingNormalScreen && nodeStatus->getLastNumTotal() != nodeStatus->getNumTotal()) {
             setFrames(); // Regen the list of screens
         }
-        nodeDB.updateGUI = false;
+        nodeDB->updateGUI = false;
         break;
     }
 

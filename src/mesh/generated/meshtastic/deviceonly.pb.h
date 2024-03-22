@@ -4,6 +4,7 @@
 #ifndef PB_MESHTASTIC_MESHTASTIC_DEVICEONLY_PB_H_INCLUDED
 #define PB_MESHTASTIC_MESHTASTIC_DEVICEONLY_PB_H_INCLUDED
 #include <pb.h>
+#include <vector>
 #include "meshtastic/channel.pb.h"
 #include "meshtastic/localonly.pb.h"
 #include "meshtastic/mesh.pb.h"
@@ -69,6 +70,9 @@ typedef struct _meshtastic_NodeInfoLite {
     bool via_mqtt;
     /* Number of hops away from us this node is (0 if adjacent) */
     uint8_t hops_away;
+    /* True if node is in our favorites list
+ Persists between NodeDB internal clean ups */
+    bool is_favorite;
 } meshtastic_NodeInfoLite;
 
 /* The on-disk saved channels */
@@ -155,8 +159,7 @@ typedef struct _meshtastic_DeviceState {
     pb_size_t node_remote_hardware_pins_count;
     meshtastic_NodeRemoteHardwarePin node_remote_hardware_pins[12];
     /* New lite version of NodeDB to decrease memory footprint */
-    pb_size_t node_db_lite_count;
-    meshtastic_NodeInfoLite node_db_lite[100];
+    std::vector<meshtastic_NodeInfoLite> node_db_lite;
 } meshtastic_DeviceState;
 
 
@@ -179,14 +182,14 @@ extern "C" {
 
 
 /* Initializer values for message structs */
-#define meshtastic_DeviceState_init_default      {false, meshtastic_MyNodeInfo_init_default, false, meshtastic_User_init_default, 0, {meshtastic_MeshPacket_init_default}, false, meshtastic_MeshPacket_init_default, 0, 0, 0, false, meshtastic_MeshPacket_init_default, 0, {meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default}, 0, {meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default, meshtastic_NodeInfoLite_init_default}}
-#define meshtastic_NodeInfoLite_init_default     {0, false, meshtastic_User_init_default, false, meshtastic_PositionLite_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, 0}
+#define meshtastic_DeviceState_init_default      {false, meshtastic_MyNodeInfo_init_default, false, meshtastic_User_init_default, 0, {meshtastic_MeshPacket_init_default}, false, meshtastic_MeshPacket_init_default, 0, 0, 0, false, meshtastic_MeshPacket_init_default, 0, {meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default}, {{NULL}, NULL}}
+#define meshtastic_NodeInfoLite_init_default     {0, false, meshtastic_User_init_default, false, meshtastic_PositionLite_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, 0, 0}
 #define meshtastic_PositionLite_init_default     {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN}
 #define meshtastic_ChannelFile_init_default      {0, {meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default}, 0}
 #define meshtastic_OEMStore_init_default         {0, 0, {0, {0}}, _meshtastic_ScreenFonts_MIN, "", {0, {0}}, false, meshtastic_LocalConfig_init_default, false, meshtastic_LocalModuleConfig_init_default}
 #define meshtastic_NodeRemoteHardwarePin_init_default {0, false, meshtastic_RemoteHardwarePin_init_default}
-#define meshtastic_DeviceState_init_zero         {false, meshtastic_MyNodeInfo_init_zero, false, meshtastic_User_init_zero, 0, {meshtastic_MeshPacket_init_zero}, false, meshtastic_MeshPacket_init_zero, 0, 0, 0, false, meshtastic_MeshPacket_init_zero, 0, {meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero}, 0, {meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero, meshtastic_NodeInfoLite_init_zero}}
-#define meshtastic_NodeInfoLite_init_zero        {0, false, meshtastic_User_init_zero, false, meshtastic_PositionLite_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, 0}
+#define meshtastic_DeviceState_init_zero         {false, meshtastic_MyNodeInfo_init_zero, false, meshtastic_User_init_zero, 0, {meshtastic_MeshPacket_init_zero}, false, meshtastic_MeshPacket_init_zero, 0, 0, 0, false, meshtastic_MeshPacket_init_zero, 0, {meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero}, {{NULL}, NULL}}
+#define meshtastic_NodeInfoLite_init_zero        {0, false, meshtastic_User_init_zero, false, meshtastic_PositionLite_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, 0, 0}
 #define meshtastic_PositionLite_init_zero        {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN}
 #define meshtastic_ChannelFile_init_zero         {0, {meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero}, 0}
 #define meshtastic_OEMStore_init_zero            {0, 0, {0, {0}}, _meshtastic_ScreenFonts_MIN, "", {0, {0}}, false, meshtastic_LocalConfig_init_zero, false, meshtastic_LocalModuleConfig_init_zero}
@@ -207,6 +210,7 @@ extern "C" {
 #define meshtastic_NodeInfoLite_channel_tag      7
 #define meshtastic_NodeInfoLite_via_mqtt_tag     8
 #define meshtastic_NodeInfoLite_hops_away_tag    9
+#define meshtastic_NodeInfoLite_is_favorite_tag  10
 #define meshtastic_ChannelFile_channels_tag      1
 #define meshtastic_ChannelFile_version_tag       2
 #define meshtastic_OEMStore_oem_icon_width_tag   1
@@ -241,8 +245,9 @@ X(a, STATIC,   SINGULAR, BOOL,     no_save,           9) \
 X(a, STATIC,   SINGULAR, BOOL,     did_gps_reset,    11) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  rx_waypoint,      12) \
 X(a, STATIC,   REPEATED, MESSAGE,  node_remote_hardware_pins,  13) \
-X(a, STATIC,   REPEATED, MESSAGE,  node_db_lite,     14)
-#define meshtastic_DeviceState_CALLBACK NULL
+X(a, CALLBACK, REPEATED, MESSAGE,  node_db_lite,     14)
+extern bool meshtastic_DeviceState_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_t *field);
+#define meshtastic_DeviceState_CALLBACK meshtastic_DeviceState_callback
 #define meshtastic_DeviceState_DEFAULT NULL
 #define meshtastic_DeviceState_my_node_MSGTYPE meshtastic_MyNodeInfo
 #define meshtastic_DeviceState_owner_MSGTYPE meshtastic_User
@@ -261,7 +266,8 @@ X(a, STATIC,   SINGULAR, FIXED32,  last_heard,        5) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  device_metrics,    6) \
 X(a, STATIC,   SINGULAR, UINT32,   channel,           7) \
 X(a, STATIC,   SINGULAR, BOOL,     via_mqtt,          8) \
-X(a, STATIC,   SINGULAR, UINT32,   hops_away,         9)
+X(a, STATIC,   SINGULAR, UINT32,   hops_away,         9) \
+X(a, STATIC,   SINGULAR, BOOL,     is_favorite,      10)
 #define meshtastic_NodeInfoLite_CALLBACK NULL
 #define meshtastic_NodeInfoLite_DEFAULT NULL
 #define meshtastic_NodeInfoLite_user_MSGTYPE meshtastic_User
@@ -321,9 +327,9 @@ extern const pb_msgdesc_t meshtastic_NodeRemoteHardwarePin_msg;
 #define meshtastic_NodeRemoteHardwarePin_fields &meshtastic_NodeRemoteHardwarePin_msg
 
 /* Maximum encoded size of messages (where known) */
+/* meshtastic_DeviceState_size depends on runtime parameters */
 #define meshtastic_ChannelFile_size              702
-#define meshtastic_DeviceState_size              17571
-#define meshtastic_NodeInfoLite_size             158
+#define meshtastic_NodeInfoLite_size             160
 #define meshtastic_NodeRemoteHardwarePin_size    29
 #define meshtastic_OEMStore_size                 3278
 #define meshtastic_PositionLite_size             28

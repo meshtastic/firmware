@@ -34,19 +34,9 @@ PositionModule::PositionModule()
     if ((config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
          config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) &&
         config.power.is_power_saving) {
-        clearPosition();
+        LOG_DEBUG("Clearing position on startup for sleepy tracker (ー。ー) zzz\n");
+        nodeDB->clearLocalPosition();
     }
-}
-
-void PositionModule::clearPosition()
-{
-    LOG_DEBUG("Clearing position on startup for sleepy tracker (ー。ー) zzz\n");
-    meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
-    node->position.latitude_i = 0;
-    node->position.longitude_i = 0;
-    node->position.altitude = 0;
-    node->position.time = 0;
-    nodeDB.setLocalPosition(meshtastic_Position_init_default);
 }
 
 bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Position *pptr)
@@ -59,15 +49,15 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     // FIXME this can in fact happen with packets sent from EUD (src=RX_SRC_USER)
     // to set fixed location, EUD-GPS location or just the time (see also issue #900)
     bool isLocal = false;
-    if (nodeDB.getNodeNum() == getFrom(&mp)) {
+    if (nodeDB->getNodeNum() == getFrom(&mp)) {
         isLocal = true;
         if (config.position.fixed_position) {
             LOG_DEBUG("Ignore incoming position update from myself except for time, because position.fixed_position is true\n");
-            nodeDB.setLocalPosition(p, true);
+            nodeDB->setLocalPosition(p, true);
             return false;
         } else {
             LOG_DEBUG("Incoming update from MYSELF\n");
-            nodeDB.setLocalPosition(p);
+            nodeDB->setLocalPosition(p);
         }
     }
 
@@ -89,7 +79,7 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
         perhapsSetRTC(isLocal ? RTCQualityNTP : RTCQualityFromNet, &tv);
     }
 
-    nodeDB.updatePosition(getFrom(&mp), p);
+    nodeDB->updatePosition(getFrom(&mp), p);
     if (channels.getByIndex(mp.channel).settings.has_module_settings) {
         precision = channels.getByIndex(mp.channel).settings.module_settings.position_precision;
     } else if (channels.getByIndex(mp.channel).role == meshtastic_Channel_Role_PRIMARY) {
@@ -119,7 +109,7 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     meshtastic_Position p = meshtastic_Position_init_default; //   Start with an empty structure
     // if localPosition is totally empty, put our last saved position (lite) in there
     if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0) {
-        nodeDB.setLocalPosition(TypeConversions::ConvertToPosition(node->position));
+        nodeDB->setLocalPosition(TypeConversions::ConvertToPosition(node->position));
     }
     localPosition.seq_number++;
 
@@ -286,7 +276,7 @@ int32_t PositionModule::runOnce()
         doDeepSleep(nightyNightMs, false);
     }
 
-    meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (node == nullptr)
         return RUNONCE_INTERVAL;
 
@@ -402,7 +392,7 @@ struct SmartPosition PositionModule::getDistanceTraveledSinceLastSend(meshtastic
 
 void PositionModule::handleNewPosition()
 {
-    meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
     const meshtastic_NodeInfoLite *node2 = service.refreshLocalMeshNode(); // should guarantee there is now a position
     // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();

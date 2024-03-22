@@ -81,7 +81,7 @@ void MeshModule::callPlugins(meshtastic_MeshPacket &mp, RxSource src)
     bool ignoreRequest = false; // No module asked to ignore the request yet
 
     // Was this message directed to us specifically?  Will be false if we are sniffing someone elses packets
-    auto ourNodeNum = nodeDB.getNodeNum();
+    auto ourNodeNum = nodeDB->getNodeNum();
     bool toUs = mp.to == NODENUM_BROADCAST || mp.to == ourNodeNum;
 
     for (auto i = modules->begin(); i != modules->end(); ++i) {
