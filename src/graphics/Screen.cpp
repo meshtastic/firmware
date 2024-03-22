@@ -1024,6 +1024,7 @@ void Screen::setup()
         logo_timeout *= 2;
 
     // Add frames.
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST);
     static FrameCallback bootFrames[] = {drawBootScreen};
     static const int bootFrameCount = sizeof(bootFrames) / sizeof(bootFrames[0]);
     ui->setFrames(bootFrames, bootFrameCount);
