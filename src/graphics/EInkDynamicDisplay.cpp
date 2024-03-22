@@ -252,6 +252,7 @@ void EInkDynamicDisplay::checkRateLimiting()
         if (now - previousRunMs < EINK_LIMIT_RATE_RESPONSIVE_SEC * 1000) {
             refresh = SKIPPED;
             reason = EXCEEDED_RATELIMIT_FAST;
+            LOG_DEBUG("refresh=SKIPPED, reason=EXCEEDED_RATELIMIT_FAST, frameFlags=0x%x\n", frameFlags);
             return;
         }
     }
