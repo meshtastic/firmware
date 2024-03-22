@@ -75,8 +75,9 @@ class NeighborInfoModule : public ProtobufModule<meshtastic_NeighborInfo>, priva
     /* Does our periodic broadcast */
     int32_t runOnce() override;
 
-    // Override wantPacket to say we want to see all packets when enabled, not just those for our port number
-    virtual bool wantPacket(const meshtastic_MeshPacket *p) override { return enabled; }
+    /* Override wantPacket to say we want to see all packets when enabled, not just those for our port number.
+      Exception is when the packet came via MQTT */
+    virtual bool wantPacket(const meshtastic_MeshPacket *p) override { return enabled && !p->via_mqtt; }
 
     /* These are for debugging only */
     void printNeighborInfo(const char *header, const meshtastic_NeighborInfo *np);

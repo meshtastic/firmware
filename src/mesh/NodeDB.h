@@ -58,9 +58,6 @@ class NodeDB
     /// instead just store in flash - possibly even in the initial alpha release do this hack
     NodeDB();
 
-    /// Called from service after app start, to do init which can only be done after OS load
-    static NodeDB *init();
-
     /// write to flash
     void saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS),
         saveChannelsToDisk(), saveDeviceStateToDisk();
@@ -133,6 +130,8 @@ class NodeDB
 
     meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
     size_t getNumMeshNodes() { return numMeshNodes; }
+
+    void clearLocalPosition();
 
     void setLocalPosition(meshtastic_Position position, bool timeOnly = false)
     {
