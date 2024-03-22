@@ -189,6 +189,22 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         nodeDB->removeNodeByNum(r->remove_by_nodenum);
         break;
     }
+    case meshtastic_AdminMessage_set_favorite_node_tag: {
+        LOG_INFO("Client is receiving a set_favorite_node command.\n");
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->set_favorite_node);
+        if (node != NULL) {
+            node->is_favorite = true;
+        }
+        break;
+    }
+    case meshtastic_AdminMessage_remove_favorite_node_tag: {
+        LOG_INFO("Client is receiving a remove_favorite_node command.\n");
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->remove_favorite_node);
+        if (node != NULL) {
+            node->is_favorite = false;
+        }
+        break;
+    }
     case meshtastic_AdminMessage_enter_dfu_mode_request_tag: {
         LOG_INFO("Client is requesting to enter DFU mode.\n");
 #if defined(ARCH_NRF52) || defined(ARCH_RP2040)
