@@ -1,3 +1,4 @@
+#if !MESHTASTIC_EXCLUDE_GPS
 #include "PositionModule.h"
 #include "Default.h"
 #include "GPS.h"
@@ -419,3 +420,5 @@ void PositionModule::handleNewPosition()
         }
     }
 }
+
+#endif
