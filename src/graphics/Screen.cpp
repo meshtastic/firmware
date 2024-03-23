@@ -267,6 +267,18 @@ static void drawDeepSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state,
     LOG_DEBUG("Drawing deep sleep screen\n");
     drawIconScreen("Sleeping...", display, state, x, y);
 }
+
+/// Used on eink displays when screen turns off for powersaving
+static void drawScreensaver(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    LOG_DEBUG("Drawing screensaver\n");
+
+    // Next frame should use full-refresh, and block while running, else device will sleep before async callback
+    EINK_ADD_FRAMEFLAG(display, COSMETIC);
+    EINK_ADD_FRAMEFLAG(display, BLOCKING);
+
+    drawIconScreen("Screen Paused", display, state, x, y);
+}
 #endif
 
 static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -945,18 +957,17 @@ Screen::~Screen()
 void Screen::doDeepSleep()
 {
 #ifdef USE_EINK
-    static FrameCallback sleepFrames[] = {drawSleepScreen};
-    static const int sleepFrameCount = sizeof(sleepFrames) / sizeof(sleepFrames[0]);
-    ui->setFrames(sleepFrames, sleepFrameCount);
-    ui->update();
+    setOn(false, drawDeepSleepScreen);
 #ifdef PIN_EINK_EN
     digitalWrite(PIN_EINK_EN, LOW); // power off backlight
 #endif
-#endif
+#else
+    // Without E-Ink display:
     setOn(false);
+#endif
 }
 
-void Screen::handleSetOn(bool on)
+void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 {
     if (!useDisplay)
         return;
@@ -975,6 +986,10 @@ void Screen::handleSetOn(bool on)
             setInterval(0); // Draw ASAP
             runASAP = true;
         } else {
+#ifdef USE_EINK
+            // eInkScreensaver parameter is usually NULL (default argument), default frame used instead
+            setScreensaverFrames(einkScreensaver);
+#endif
             LOG_INFO("Turning off screen\n");
             dispdev->displayOff();
 #ifdef T_WATCH_S3
@@ -1280,6 +1295,27 @@ void Screen::setWelcomeFrames()
         setFrameImmediateDraw(frames);
     }
 }
+
+#ifdef USE_EINK
+/// Determine which screensaver frame to use, then set the FrameCallback
+void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
+{
+    static FrameCallback screensaverFrame;
+
+    // Custom screensaver frame passed as argument, or default screensaver
+    if (einkScreensaver != NULL)
+        screensaverFrame = einkScreensaver;
+    else
+        screensaverFrame = drawScreensaver;
+
+    ui->setFrames(&screensaverFrame, 1);
+    ui->update();
+
+    // Prepare now for next frame, shown when display wakes
+    EINK_ADD_FRAMEFLAG(dispdev, COSMETIC); // Will use full-refresh
+    setFrames();                           // Return to normal display updates
+}
+#endif
 
 // restore our regular frame list
 void Screen::setFrames()
