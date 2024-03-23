@@ -78,8 +78,6 @@ class NeighborInfoModule : public ProtobufModule<meshtastic_NeighborInfo>, priva
 
     /* These are for debugging only */
     void printNeighborInfo(const char *header, const meshtastic_NeighborInfo *np);
-    void printNodeDBNodes(const char *header);
-    void printNodeDBNeighbors(const char *header);
-    void printNodeDBSelection(const char *header, const meshtastic_NeighborInfo *np);
+    void printNodeDBNeighbors();
 };
 extern NeighborInfoModule *neighborInfoModule;
