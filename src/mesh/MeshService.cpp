@@ -71,7 +71,7 @@ MeshService::MeshService()
 void MeshService::init()
 {
     // moved much earlier in boot (called from setup())
-    // nodeDB.init();
+    // nodeDB->init();
 
     if (gps)
         gpsObserver.observe(&gps->newStatus);
@@ -81,13 +81,13 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
 {
     powerFSM.trigger(EVENT_PACKET_FOR_PHONE); // Possibly keep the node from sleeping
 
-    nodeDB.updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
+    nodeDB->updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
     if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
         mp->decoded.portnum == meshtastic_PortNum_TELEMETRY_APP && mp->decoded.request_id > 0) {
         LOG_DEBUG(
             "Received telemetry response. Skip sending our NodeInfo because this potentially a Repeater which will ignore our "
             "request for its NodeInfo.\n");
-    } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB.getMeshNode(mp->from)->has_user &&
+    } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB->getMeshNode(mp->from)->has_user &&
                nodeInfoModule) {
         LOG_INFO("Heard a node on channel %d we don't know, sending NodeInfo and asking for a response.\n", mp->channel);
         nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
@@ -120,10 +120,10 @@ bool MeshService::reloadConfig(int saveWhat)
     // If we can successfully set this radio to these settings, save them to disk
 
     // This will also update the region as needed
-    bool didReset = nodeDB.resetRadioConfig(); // Don't let the phone send us fatally bad settings
+    bool didReset = nodeDB->resetRadioConfig(); // Don't let the phone send us fatally bad settings
 
     configChanged.notifyObservers(NULL); // This will cause radio hardware to change freqs etc
-    nodeDB.saveToDisk(saveWhat);
+    nodeDB->saveToDisk(saveWhat);
 
     return didReset;
 }
@@ -133,7 +133,7 @@ void MeshService::reloadOwner(bool shouldSave)
 {
     // LOG_DEBUG("reloadOwner()\n");
     // update our local data directly
-    nodeDB.updateUser(nodeDB.getNodeNum(), owner);
+    nodeDB->updateUser(nodeDB->getNodeNum(), owner);
     assert(nodeInfoModule);
     // update everyone else and save to disk
     if (nodeInfoModule && shouldSave) {
@@ -192,7 +192,7 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
         LOG_WARN("phone tried to pick a nodenum, we don't allow that.\n");
         p.from = 0;
     } else {
-        // p.from = nodeDB.getNodeNum();
+        // p.from = nodeDB->getNodeNum();
     }
 
     if (p.id == 0)
@@ -217,7 +217,7 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
 /** Attempt to cancel a previously sent packet from this _local_ node.  Returns true if a packet was found we could cancel */
 bool MeshService::cancelSending(PacketId id)
 {
-    return router->cancelSending(nodeDB.getNodeNum(), id);
+    return router->cancelSending(nodeDB->getNodeNum(), id);
 }
 
 ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, ErrorCode res, uint32_t mesh_packet_id)
@@ -245,7 +245,7 @@ ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, 
 void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPhone)
 {
     uint32_t mesh_packet_id = p->id;
-    nodeDB.updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
+    nodeDB->updateFrom(*p); // update our local DB for this packet (because phone might have sent position packets etc...)
 
     // Note: We might return !OK if our fifo was full, at that point the only option we have is to drop it
     ErrorCode res = router->sendLocal(p, src);
@@ -265,7 +265,7 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
 
 void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
 {
-    meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
 
     assert(node);
 
@@ -320,7 +320,7 @@ void MeshService::sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage
 
 meshtastic_NodeInfoLite *MeshService::refreshLocalMeshNode()
 {
-    meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
     assert(node);
 
     // We might not have a position yet for our local node, in that case, at least try to send the time
@@ -359,7 +359,7 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
         LOG_DEBUG("onGPSchanged() - lost validLocation\n");
 #endif
     }
-    // Used fixed position if configured regalrdless of GPS lock
+    // Used fixed position if configured regardless of GPS lock
     if (config.position.fixed_position) {
         LOG_WARN("Using fixed position\n");
         pos = TypeConversions::ConvertToPosition(node->position);
@@ -373,7 +373,7 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
               pos.longitude_i, pos.altitude);
 
     // Update our current position in the local DB
-    nodeDB.updatePosition(nodeDB.getNodeNum(), pos, RX_SRC_LOCAL);
+    nodeDB->updatePosition(nodeDB->getNodeNum(), pos, RX_SRC_LOCAL);
 
     return 0;
 }

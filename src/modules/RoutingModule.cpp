@@ -14,7 +14,7 @@ bool RoutingModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mesh
 
     // FIXME - move this to a non promsicious PhoneAPI module?
     // Note: we are careful not to send back packets that started with the phone back to the phone
-    if ((mp.to == NODENUM_BROADCAST || mp.to == nodeDB.getNodeNum()) && (mp.from != 0)) {
+    if ((mp.to == NODENUM_BROADCAST || mp.to == nodeDB->getNodeNum()) && (mp.from != 0)) {
         printPacket("Delivering rx packet", &mp);
         service.handleFromRadio(&mp);
     }
@@ -36,11 +36,26 @@ meshtastic_MeshPacket *RoutingModule::allocReply()
     return NULL;
 }
 
-void RoutingModule::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex)
+void RoutingModule::sendAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex, uint8_t hopStart,
+                               uint8_t hopLimit)
 {
-    auto p = allocAckNak(err, to, idFrom, chIndex);
+    auto p = allocAckNak(err, to, idFrom, chIndex, hopStart, hopLimit);
 
     router->sendLocal(p); // we sometimes send directly to the local node
+}
+
+uint8_t RoutingModule::getHopLimitForResponse(uint8_t hopStart, uint8_t hopLimit)
+{
+    if (hopStart != 0) {
+        // Hops used by the request. If somebody in between running modified firmware modified it, ignore it
+        uint8_t hopsUsed = hopStart < hopLimit ? config.lora.hop_limit : hopStart - hopLimit;
+        if (hopsUsed > config.lora.hop_limit) {
+            return hopsUsed; // If the request used more hops than the limit, use the same amount of hops
+        } else if (hopsUsed + 2 < config.lora.hop_limit) {
+            return hopsUsed + 2; // Use only the amount of hops needed with some margin as the way back may be different
+        }
+    }
+    return config.lora.hop_limit; // Use the default hop limit
 }
 
 RoutingModule::RoutingModule() : ProtobufModule("routing", meshtastic_PortNum_ROUTING_APP, &meshtastic_Routing_msg)

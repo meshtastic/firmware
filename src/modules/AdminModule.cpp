@@ -16,6 +16,7 @@
 #ifdef ARCH_PORTDUINO
 #include "unistd.h"
 #endif
+#include "Default.h"
 
 #include "mqtt/MQTT.h"
 
@@ -49,7 +50,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     // if handled == false, then let others look at this message also if they want
     bool handled = false;
     assert(r);
-    bool fromOthers = mp.from != 0 && mp.from != nodeDB.getNodeNum();
+    bool fromOthers = mp.from != 0 && mp.from != nodeDB->getNodeNum();
 
     switch (r->which_payload_variant) {
 
@@ -149,13 +150,13 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_factory_reset_tag: {
         LOG_INFO("Initiating factory reset\n");
-        nodeDB.factoryReset();
+        nodeDB->factoryReset();
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
     case meshtastic_AdminMessage_nodedb_reset_tag: {
         LOG_INFO("Initiating node-db reset\n");
-        nodeDB.resetNodes();
+        nodeDB->resetNodes();
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
@@ -185,7 +186,23 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_remove_by_nodenum_tag: {
         LOG_INFO("Client is receiving a remove_nodenum command.\n");
-        nodeDB.removeNodeByNum(r->remove_by_nodenum);
+        nodeDB->removeNodeByNum(r->remove_by_nodenum);
+        break;
+    }
+    case meshtastic_AdminMessage_set_favorite_node_tag: {
+        LOG_INFO("Client is receiving a set_favorite_node command.\n");
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->set_favorite_node);
+        if (node != NULL) {
+            node->is_favorite = true;
+        }
+        break;
+    }
+    case meshtastic_AdminMessage_remove_favorite_node_tag: {
+        LOG_INFO("Client is receiving a remove_favorite_node command.\n");
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->remove_favorite_node);
+        if (node != NULL) {
+            node->is_favorite = false;
+        }
         break;
     }
     case meshtastic_AdminMessage_enter_dfu_mode_request_tag: {
@@ -301,7 +318,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         config.device = c.payload_variant.device;
         // If we're setting router role for the first time, install its intervals
         if (existingRole != c.payload_variant.device.role)
-            nodeDB.installRoleDefaults(c.payload_variant.device.role);
+            nodeDB->installRoleDefaults(c.payload_variant.device.role);
+        if (config.device.node_info_broadcast_secs < min_node_info_broadcast_secs) {
+            LOG_DEBUG("Tried to set node_info_broadcast_secs too low, setting to %d\n", min_node_info_broadcast_secs);
+            config.device.node_info_broadcast_secs = min_node_info_broadcast_secs;
+        }
         break;
     case meshtastic_Config_position_tag:
         LOG_INFO("Setting config: Position\n");
@@ -332,6 +353,9 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         if (isRegionUnset && config.lora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
             config.lora.tx_enabled = true;
             initRegion();
+            if (myRegion->dutyCycle < 100) {
+                config.lora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
+            }
             if (strcmp(moduleConfig.mqtt.root, default_mqtt_root) == 0) {
                 sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
                 changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
@@ -600,7 +624,7 @@ void AdminModule::handleGetNodeRemoteHardwarePins(const meshtastic_MeshPacket &r
             continue;
         }
         meshtastic_NodeRemoteHardwarePin nodePin = meshtastic_NodeRemoteHardwarePin_init_default;
-        nodePin.node_num = nodeDB.getNodeNum();
+        nodePin.node_num = nodeDB->getNodeNum();
         nodePin.pin = moduleConfig.remote_hardware.available_pins[i];
         r.get_node_remote_hardware_pins_response.node_remote_hardware_pins[i + 12] = nodePin;
     }

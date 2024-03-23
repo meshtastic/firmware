@@ -18,40 +18,7 @@
 #define INPUTBROKER_MATRIX_TYPE 0
 #endif
 
-#ifdef OLED_RU
-#include "graphics/fonts/OLEDDisplayFontsRU.h"
-#endif
-
-#ifdef OLED_UA
-#include "graphics/fonts/OLEDDisplayFontsUA.h"
-#endif
-
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)) &&                                \
-    !defined(DISPLAY_FORCE_SMALL_FONTS)
-
-// The screen is bigger so use bigger fonts
-#define FONT_SMALL ArialMT_Plain_16
-#define FONT_MEDIUM ArialMT_Plain_24
-#define FONT_LARGE ArialMT_Plain_24
-#else
-#ifdef OLED_RU
-#define FONT_SMALL ArialMT_Plain_10_RU
-#else
-#ifdef OLED_UA
-#define FONT_SMALL ArialMT_Plain_10_UA
-#else
-#define FONT_SMALL ArialMT_Plain_10
-#endif
-#endif
-#define FONT_MEDIUM ArialMT_Plain_16
-#define FONT_LARGE ArialMT_Plain_24
-#endif
-
-#define fontHeight(font) ((font)[1] + 1) // height is position 1
-
-#define FONT_HEIGHT_SMALL fontHeight(FONT_SMALL)
-#define FONT_HEIGHT_MEDIUM fontHeight(FONT_MEDIUM)
-#define FONT_HEIGHT_LARGE fontHeight(FONT_LARGE)
+#include "graphics/ScreenFonts.h"
 
 // Remove Canned message screen if no action is taken for some milliseconds
 #define INACTIVATE_AFTER_MS 20000
@@ -344,18 +311,18 @@ int32_t CannedMessageModule::runOnce()
         switch (this->payload) {
         case 0xb4: // left
             if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
-                size_t numMeshNodes = nodeDB.getNumMeshNodes();
+                size_t numMeshNodes = nodeDB->getNumMeshNodes();
                 if (this->dest == NODENUM_BROADCAST) {
-                    this->dest = nodeDB.getNodeNum();
+                    this->dest = nodeDB->getNodeNum();
                 }
                 for (unsigned int i = 0; i < numMeshNodes; i++) {
-                    if (nodeDB.getMeshNodeByIndex(i)->num == this->dest) {
+                    if (nodeDB->getMeshNodeByIndex(i)->num == this->dest) {
                         this->dest =
-                            (i > 0) ? nodeDB.getMeshNodeByIndex(i - 1)->num : nodeDB.getMeshNodeByIndex(numMeshNodes - 1)->num;
+                            (i > 0) ? nodeDB->getMeshNodeByIndex(i - 1)->num : nodeDB->getMeshNodeByIndex(numMeshNodes - 1)->num;
                         break;
                     }
                 }
-                if (this->dest == nodeDB.getNodeNum()) {
+                if (this->dest == nodeDB->getNodeNum()) {
                     this->dest = NODENUM_BROADCAST;
                 }
             } else if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL) {
@@ -379,18 +346,18 @@ int32_t CannedMessageModule::runOnce()
             break;
         case 0xb7: // right
             if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
-                size_t numMeshNodes = nodeDB.getNumMeshNodes();
+                size_t numMeshNodes = nodeDB->getNumMeshNodes();
                 if (this->dest == NODENUM_BROADCAST) {
-                    this->dest = nodeDB.getNodeNum();
+                    this->dest = nodeDB->getNodeNum();
                 }
                 for (unsigned int i = 0; i < numMeshNodes; i++) {
-                    if (nodeDB.getMeshNodeByIndex(i)->num == this->dest) {
+                    if (nodeDB->getMeshNodeByIndex(i)->num == this->dest) {
                         this->dest =
-                            (i < numMeshNodes - 1) ? nodeDB.getMeshNodeByIndex(i + 1)->num : nodeDB.getMeshNodeByIndex(0)->num;
+                            (i < numMeshNodes - 1) ? nodeDB->getMeshNodeByIndex(i + 1)->num : nodeDB->getMeshNodeByIndex(0)->num;
                         break;
                     }
                 }
-                if (this->dest == nodeDB.getNodeNum()) {
+                if (this->dest == nodeDB->getNodeNum()) {
                     this->dest = NODENUM_BROADCAST;
                 }
             } else if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL) {
@@ -495,7 +462,7 @@ const char *CannedMessageModule::getNodeName(NodeNum node)
     if (node == NODENUM_BROADCAST) {
         return "Broadcast";
     } else {
-        meshtastic_NodeInfoLite *info = nodeDB.getMeshNode(node);
+        meshtastic_NodeInfoLite *info = nodeDB->getMeshNode(node);
         if (info != NULL) {
             return info->user.long_name;
         } else {
@@ -651,9 +618,9 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
 
 void CannedMessageModule::loadProtoForModule()
 {
-    if (!nodeDB.loadProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,
-                          sizeof(meshtastic_CannedMessageModuleConfig), &meshtastic_CannedMessageModuleConfig_msg,
-                          &cannedMessageModuleConfig)) {
+    if (!nodeDB->loadProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,
+                           sizeof(meshtastic_CannedMessageModuleConfig), &meshtastic_CannedMessageModuleConfig_msg,
+                           &cannedMessageModuleConfig)) {
         installDefaultCannedMessageModuleConfig();
     }
 }
@@ -672,8 +639,8 @@ bool CannedMessageModule::saveProtoForModule()
     FS.mkdir("/prefs");
 #endif
 
-    okay &= nodeDB.saveProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,
-                             &meshtastic_CannedMessageModuleConfig_msg, &cannedMessageModuleConfig);
+    okay &= nodeDB->saveProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,
+                              &meshtastic_CannedMessageModuleConfig_msg, &cannedMessageModuleConfig);
 
     return okay;
 }

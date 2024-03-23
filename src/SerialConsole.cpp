@@ -3,7 +3,11 @@
 #include "PowerFSM.h"
 #include "configuration.h"
 
+#ifdef RP2040_SLOW_CLOCK
+#define Port Serial2
+#else
 #define Port Serial
+#endif
 // Defaulting to the formerly removed phone_timeout_secs value of 15 minutes
 #define SERIAL_CONNECTION_TIMEOUT (15 * 60) * 1000UL
 
@@ -31,6 +35,10 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), con
     canWrite = false; // We don't send packets to our port until it has talked to us first
                       // setDestination(&noopPrint); for testing, try turning off 'all' debug output and see what leaks
 
+#ifdef RP2040_SLOW_CLOCK
+    Port.setTX(SERIAL2_TX);
+    Port.setRX(SERIAL2_RX);
+#endif
     Port.begin(SERIAL_BAUD);
 #if defined(ARCH_NRF52) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3) || defined(ARCH_RP2040)
     time_t timeout = millis();
@@ -64,7 +72,7 @@ bool SerialConsole::checkIsConnected()
 
 /**
  * we override this to notice when we've received a protobuf over the serial
- * stream.  Then we shunt off debug serial output.
+ * stream.  Then we shut off debug serial output.
  */
 bool SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
 {

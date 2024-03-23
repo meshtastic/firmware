@@ -20,7 +20,7 @@ std::map<configNames, std::string> settingsStrings;
 char *configPath = nullptr;
 
 // FIXME - move setBluetoothEnable into a HALPlatform class
-void setBluetoothEnable(bool on)
+void setBluetoothEnable(bool enable)
 {
     // not needed
 }
@@ -194,6 +194,13 @@ void portduinoSetup()
         if (yamlConfig["Input"]) {
             settingsStrings[keyboardDevice] = (yamlConfig["Input"]["KeyboardDevice"]).as<std::string>("");
         }
+
+        if (yamlConfig["Webserver"]) {
+            settingsMap[webserverport] = (yamlConfig["Webserver"]["Port"]).as<int>(-1);
+            settingsStrings[webserverrootpath] = (yamlConfig["Webserver"]["RootPath"]).as<std::string>("");
+        }
+
+        settingsMap[maxnodes] = (yamlConfig["General"]["MaxNodes"]).as<int>(200);
 
     } catch (YAML::Exception e) {
         std::cout << "*** Exception " << e.what() << std::endl;

@@ -137,6 +137,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_HT62
 #elif defined(CHATTER_2)
 #define HW_VENDOR meshtastic_HardwareModel_CHATTER_2
+#elif defined(STATION_G2)
+#define HW_VENDOR meshtastic_HardwareModel_STATION_G2
 #endif
 
 // -----------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 #include "DeviceTelemetry.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
@@ -16,9 +17,9 @@ int32_t DeviceTelemetryModule::runOnce()
 {
     uint32_t now = millis();
     if (((lastSentToMesh == 0) ||
-         ((now - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.telemetry.device_update_interval))) &&
-        airTime->isTxAllowedChannelUtil() && airTime->isTxAllowedAirUtil() &&
-        config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER &&
+         ((now - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.device_update_interval))) &&
+        airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
+        airTime->isTxAllowedAirUtil() && config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
         sendTelemetry();
         lastSentToMesh = now;
@@ -44,7 +45,7 @@ bool DeviceTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
                  t->variant.device_metrics.air_util_tx, t->variant.device_metrics.channel_utilization,
                  t->variant.device_metrics.battery_level, t->variant.device_metrics.voltage);
 #endif
-        nodeDB.updateTelemetry(getFrom(&mp), *t, RX_SRC_RADIO);
+        nodeDB->updateTelemetry(getFrom(&mp), *t, RX_SRC_RADIO);
     }
     return false; // Let others look at this message also if they want
 }
@@ -91,9 +92,9 @@ bool DeviceTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     meshtastic_MeshPacket *p = allocDataProtobuf(telemetry);
     p->to = dest;
     p->decoded.want_response = false;
-    p->priority = meshtastic_MeshPacket_Priority_MIN;
+    p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
 
-    nodeDB.updateTelemetry(nodeDB.getNodeNum(), telemetry, RX_SRC_LOCAL);
+    nodeDB->updateTelemetry(nodeDB->getNodeNum(), telemetry, RX_SRC_LOCAL);
     if (phoneOnly) {
         LOG_INFO("Sending packet to phone\n");
         service.sendToPhone(p);

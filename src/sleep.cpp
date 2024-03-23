@@ -186,11 +186,26 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     // not using wifi yet, but once we are this is needed to shutoff the radio hw
     // esp_wifi_stop();
     waitEnterSleep(skipPreflight);
+#ifdef ARCH_ESP32
+    if (shouldLoraWake(msecToWake)) {
+        notifySleep.notifyObservers(NULL);
+    } else {
+        notifyDeepSleep.notifyObservers(NULL);
+    }
+#else
     notifyDeepSleep.notifyObservers(NULL);
+#endif
 
     screen->doDeepSleep(); // datasheet says this will draw only 10ua
 
-    nodeDB.saveToDisk();
+    nodeDB->saveToDisk();
+
+#ifdef TTGO_T_ECHO
+#ifdef PIN_POWER_EN
+    pinMode(PIN_POWER_EN, INPUT); // power off peripherals
+    // pinMode(PIN_POWER_EN1, INPUT_PULLDOWN);
+#endif
+#endif
 
     // Kill GPS power completely (even if previously we just had it in sleep mode)
     if (gps)
@@ -240,6 +255,11 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     }
 #endif
 
+#ifdef ARCH_ESP32
+    if (shouldLoraWake(msecToWake)) {
+        enableLoraInterrupt();
+    }
+#endif
     cpuDeepSleep(msecToWake);
 }
 
@@ -294,12 +314,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     gpio_wakeup_enable((gpio_num_t)BUTTON_PIN, GPIO_INTR_LOW_LEVEL);
 #endif
 #endif
-#if defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
-    gpio_wakeup_enable((gpio_num_t)LORA_DIO1, GPIO_INTR_HIGH_LEVEL); // SX126x/SX128x interrupt, active high
-#endif
-#ifdef RF95_IRQ
-    gpio_wakeup_enable((gpio_num_t)RF95_IRQ, GPIO_INTR_HIGH_LEVEL); // RF95 interrupt, active high
-#endif
+    enableLoraInterrupt();
 #ifdef PMU_IRQ
     // wake due to PMU can happen repeatedly if there is no battery installed or the battery fills
     if (pmu_found)
@@ -358,5 +373,31 @@ void enableModemSleep()
     esp32_config.light_sleep_enable = false;
     int rv = esp_pm_configure(&esp32_config);
     LOG_DEBUG("Sleep request result %x\n", rv);
+}
+
+bool shouldLoraWake(uint32_t msecToWake)
+{
+    return msecToWake < portMAX_DELAY && (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+                                          config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER);
+}
+
+void enableLoraInterrupt()
+{
+#if SOC_PM_SUPPORT_EXT_WAKEUP && defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
+    rtc_gpio_pulldown_en((gpio_num_t)LORA_DIO1);
+#if defined(LORA_RESET) && (LORA_RESET != RADIOLIB_NC)
+    rtc_gpio_pullup_en((gpio_num_t)LORA_RESET);
+#endif
+#if defined(LORA_CS) && (LORA_CS != RADIOLIB_NC)
+    rtc_gpio_pullup_en((gpio_num_t)LORA_CS);
+#endif
+    // Setup deep sleep with wakeup by external source
+    esp_sleep_enable_ext0_wakeup((gpio_num_t)LORA_DIO1, RISING);
+#elif defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
+    gpio_wakeup_enable((gpio_num_t)LORA_DIO1, GPIO_INTR_HIGH_LEVEL); // SX126x/SX128x interrupt, active high
+#endif
+#ifdef RF95_IRQ
+    gpio_wakeup_enable((gpio_num_t)RF95_IRQ, GPIO_INTR_HIGH_LEVEL); // RF95 interrupt, active high
+#endif
 }
 #endif

@@ -5,6 +5,7 @@
 #define I2C_SCL SCL
 
 #define USE_EINK
+
 /*
  * eink display pins
  */

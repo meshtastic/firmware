@@ -20,9 +20,6 @@ class NeighborInfoModule : public ProtobufModule<meshtastic_NeighborInfo>, priva
 
     bool saveProtoForModule();
 
-    // Let FloodingRouter call updateLastSentById upon rebroadcasting a NeighborInfo packet
-    friend class FloodingRouter;
-
   protected:
     // Note: this holds our local info.
     meshtastic_NeighborInfo neighborState;
@@ -68,17 +65,19 @@ class NeighborInfoModule : public ProtobufModule<meshtastic_NeighborInfo>, priva
     void updateNeighbors(const meshtastic_MeshPacket &mp, const meshtastic_NeighborInfo *np);
 
     /* update a NeighborInfo packet with our NodeNum as last_sent_by_id */
-    void updateLastSentById(meshtastic_MeshPacket *p);
+    void alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtastic_NeighborInfo *n) override;
 
     void loadProtoForModule();
 
     /* Does our periodic broadcast */
     int32_t runOnce() override;
 
+    /* Override wantPacket to say we want to see all packets when enabled, not just those for our port number.
+      Exception is when the packet came via MQTT */
+    virtual bool wantPacket(const meshtastic_MeshPacket *p) override { return enabled && !p->via_mqtt; }
+
     /* These are for debugging only */
     void printNeighborInfo(const char *header, const meshtastic_NeighborInfo *np);
-    void printNodeDBNodes(const char *header);
-    void printNodeDBNeighbors(const char *header);
-    void printNodeDBSelection(const char *header, const meshtastic_NeighborInfo *np);
+    void printNodeDBNeighbors();
 };
 extern NeighborInfoModule *neighborInfoModule;
