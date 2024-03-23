@@ -218,20 +218,13 @@ bool NeighborInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
 /*
 Copy the content of a current NeighborInfo packet into a new one and update the last_sent_by_id to our NodeNum
 */
-void NeighborInfoModule::updateLastSentById(meshtastic_MeshPacket *p)
+void NeighborInfoModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtastic_NeighborInfo *n)
 {
-    auto &incoming = p->decoded;
-    meshtastic_NeighborInfo scratch;
-    meshtastic_NeighborInfo *updated = NULL;
-    memset(&scratch, 0, sizeof(scratch));
-    pb_decode_from_bytes(incoming.payload.bytes, incoming.payload.size, &meshtastic_NeighborInfo_msg, &scratch);
-    updated = &scratch;
-
-    updated->last_sent_by_id = nodeDB->getNodeNum();
+    n->last_sent_by_id = nodeDB->getNodeNum();
 
     // Set updated last_sent_by_id to the payload of the to be flooded packet
-    p->decoded.payload.size =
-        pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_NeighborInfo_msg, updated);
+    p.decoded.payload.size =
+        pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_NeighborInfo_msg, n);
 }
 
 void NeighborInfoModule::resetNeighbors()
