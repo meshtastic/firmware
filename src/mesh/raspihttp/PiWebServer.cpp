@@ -244,7 +244,7 @@ int handleAPIv1ToRadio(const struct _u_request *req, struct _u_response *res, vo
 
     // FIXME* Problem with portdunio loosing mountpoint maybe because of running in a real sep. thread
 
-    portduinoVFS->mountpoint("/home/marc/.portduino/default");
+    portduinoVFS->mountpoint(configWeb.rootPath);
 
     LOG_DEBUG("Received %d bytes from PUT request\n", s);
     webAPI.handleToRadio(buffer, s);
@@ -508,7 +508,7 @@ PiWebServerThread::PiWebServerThread()
             LOG_INFO("Web Server framework started on port: %i \n", webservport);
             LOG_INFO("Web Server root %s\n", (char *)webrootpath.c_str());
         } else {
-            LOG_ERROR("Error starting Web Server framework\n");
+            LOG_ERROR("Error starting Web Server framework, error number: %d\n", retssl);
         }
     }
 }
