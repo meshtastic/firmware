@@ -546,6 +546,7 @@ void MQTT::perhapsReportToMap()
         return;
     } else {
         if (map_position_precision == 0 || (localPosition.latitude_i == 0 && localPosition.longitude_i == 0)) {
+            last_report_to_map = millis();
             LOG_WARN("MQTT Map reporting is enabled, but precision is 0 or no position available.\n");
             return;
         }
