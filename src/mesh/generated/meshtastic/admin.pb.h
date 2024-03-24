@@ -158,6 +158,10 @@ typedef struct _meshtastic_AdminMessage {
         uint32_t set_favorite_node;
         /* Set specified node-num to be un-favorited on the NodeDB on the device */
         uint32_t remove_favorite_node;
+        /* Set fixed position data on the node and then set the position.fixed_position = true */
+        meshtastic_Position set_fixed_position;
+        /* Clear fixed position coordinates and then set position.fixed_position = false */
+        bool remove_fixed_position;
         /* Begins an edit transaction for config, module config, owner, and channel settings changes
      This will delay the standard *implicit* save to the file system and subsequent reboot behavior until committed (commit_edit_settings) */
         bool begin_edit_settings;
@@ -244,6 +248,8 @@ extern "C" {
 #define meshtastic_AdminMessage_remove_by_nodenum_tag 38
 #define meshtastic_AdminMessage_set_favorite_node_tag 39
 #define meshtastic_AdminMessage_remove_favorite_node_tag 40
+#define meshtastic_AdminMessage_set_fixed_position_tag 41
+#define meshtastic_AdminMessage_remove_fixed_position_tag 42
 #define meshtastic_AdminMessage_begin_edit_settings_tag 64
 #define meshtastic_AdminMessage_commit_edit_settings_tag 65
 #define meshtastic_AdminMessage_reboot_ota_seconds_tag 95
@@ -285,6 +291,8 @@ X(a, STATIC,   ONEOF,    STRING,   (payload_variant,set_ringtone_message,set_rin
 X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,remove_by_nodenum,remove_by_nodenum),  38) \
 X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,set_favorite_node,set_favorite_node),  39) \
 X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,remove_favorite_node,remove_favorite_node),  40) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_fixed_position,set_fixed_position),  41) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,remove_fixed_position,remove_fixed_position),  42) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,begin_edit_settings,begin_edit_settings),  64) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,commit_edit_settings,commit_edit_settings),  65) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,reboot_ota_seconds,reboot_ota_seconds),  95) \
@@ -307,6 +315,7 @@ X(a, STATIC,   ONEOF,    INT32,    (payload_variant,nodedb_reset,nodedb_reset), 
 #define meshtastic_AdminMessage_payload_variant_set_channel_MSGTYPE meshtastic_Channel
 #define meshtastic_AdminMessage_payload_variant_set_config_MSGTYPE meshtastic_Config
 #define meshtastic_AdminMessage_payload_variant_set_module_config_MSGTYPE meshtastic_ModuleConfig
+#define meshtastic_AdminMessage_payload_variant_set_fixed_position_MSGTYPE meshtastic_Position
 
 #define meshtastic_HamParameters_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   call_sign,         1) \
