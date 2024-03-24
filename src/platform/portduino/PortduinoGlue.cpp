@@ -106,6 +106,8 @@ void portduinoSetup()
         }
     } else {
         std::cout << "No 'config.yaml' found, running simulated." << std::endl;
+        settingsMap[maxnodes] = 200;               // Default to 200 nodes
+        settingsMap[logoutputlevel] = level_debug; // Default to debug
         // Set the random seed equal to TCPPort to have a different seed per instance
         randomSeed(TCPPort);
         return;

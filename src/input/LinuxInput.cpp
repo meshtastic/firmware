@@ -24,7 +24,8 @@ LinuxInput::LinuxInput(const char *name) : concurrency::OSThread(name)
 
 void LinuxInput::deInit()
 {
-    close(fd);
+    if (fd >= 0)
+        close(fd);
 }
 
 int32_t LinuxInput::runOnce()
