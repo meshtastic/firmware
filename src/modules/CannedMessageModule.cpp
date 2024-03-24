@@ -412,16 +412,12 @@ int32_t CannedMessageModule::runOnce()
             // handle fn+s for shutdown
             case 0x9b:
                 screen->startShutdownScreen();
-                int s = 2;
-                LOG_INFO("Shutdown in %d seconds\n", s);
-                shutdownAtMsec = millis() + s * 1000;
+                shutdownAtMsec = millis() + DEFAULT_SHUTDOWN_SECONDS * 1000;
                 break;
             // and fn+r for reboot
             case 0x90:
                 screen->startRebootScreen();
-                int s = 2;
-                LOG_INFO("Reboot in %d seconds\n", s);
-                rebootAtMsec = millis() + s * 1000;
+                rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
                 break;
             default:
                 if (this->cursor == this->freetext.length()) {

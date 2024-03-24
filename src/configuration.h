@@ -161,6 +161,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
    also enable HAS_ option not specifically disabled by variant.h */
 #include "architecture.h"
 
+#ifndef DEFAULT_REBOOT_SECONDS
+#define DEFAULT_REBOOT_SECONDS 7
+#endif
+
+#ifndef DEFAULT_SHUTDOWN_SECONDS
+#define DEFAULT_SHUTDOWN_SECONDS 2
+#endif
+
 /* Step #3: mop up with disabled values for HAS_ options not handled by the above two */
 
 // -----------------------------------------------------------------------------
