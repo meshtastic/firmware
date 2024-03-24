@@ -409,6 +409,20 @@ int32_t CannedMessageModule::runOnce()
             case 0xb7: // right
                 // already handled above
                 break;
+            // handle fn+s for shutdown
+            case 0x9b:
+                screen->startShutdownScreen();
+                int s = 2;
+                LOG_INFO("Shutdown in %d seconds\n", s);
+                shutdownAtMsec = millis() + s * 1000;
+                break;
+            // and fn+r for reboot
+            case 0x90:
+                screen->startRebootScreen();
+                int s = 2;
+                LOG_INFO("Reboot in %d seconds\n", s);
+                rebootAtMsec = millis() + s * 1000;
+                break;
             default:
                 if (this->cursor == this->freetext.length()) {
                     this->freetext += this->payload;
