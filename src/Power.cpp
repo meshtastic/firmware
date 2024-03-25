@@ -24,10 +24,12 @@
 #include "nrfx_power.h"
 #endif
 
-#ifdef DEBUG_HEAP_MQTT
+#if defined(DEBUG_HEAP_MQTT) && !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #include "target_specific.h"
+#if !MESTASTIC_EXCLUDE_WIFI
 #include <WiFi.h>
+#endif
 #endif
 
 #ifndef DELAY_FOREVER

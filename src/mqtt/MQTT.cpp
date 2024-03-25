@@ -2,6 +2,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "configuration.h"
 #include "main.h"
 #include "mesh/Channels.h"
 #include "mesh/Router.h"
@@ -13,7 +14,7 @@
 #endif
 #include "mesh/generated/meshtastic/remote_hardware.pb.h"
 #include "sleep.h"
-#if HAS_WIFI
+#if HAS_WIFI && !MESHTASTIC_EXCLUDE_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #include <WiFi.h>
 #endif
@@ -546,6 +547,7 @@ void MQTT::perhapsReportToMap()
         return;
     } else {
         if (map_position_precision == 0 || (localPosition.latitude_i == 0 && localPosition.longitude_i == 0)) {
+            last_report_to_map = millis();
             LOG_WARN("MQTT Map reporting is enabled, but precision is 0 or no position available.\n");
             return;
         }

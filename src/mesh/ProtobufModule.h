@@ -108,8 +108,8 @@ template <class T> class ProtobufModule : protected SinglePortModule
                 // if we can't decode it, nobody can process it!
                 return;
             }
-        }
 
-        return alterReceivedProtobuf(mp, decoded);
+            return alterReceivedProtobuf(mp, decoded);
+        }
     }
 };

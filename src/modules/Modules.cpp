@@ -21,7 +21,9 @@
 #include "modules/NeighborInfoModule.h"
 #endif
 #include "modules/NodeInfoModule.h"
+#if !MESHTASTIC_EXCLUDE_GPS
 #include "modules/PositionModule.h"
+#endif
 #if !MESHTASTIC_EXCLUDE_REMOTEHARDWARE
 #include "modules/RemoteHardwareModule.h"
 #endif
@@ -61,13 +63,11 @@
 #if !MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION
 #include "modules/ExternalNotificationModule.h"
 #endif
-#if !MESHTASTIC_EXCLUDE_RANGETEST
+#if !MESHTASTIC_EXCLUDE_RANGETEST && !MESHTASTIC_EXCLUDE_GPS
 #include "modules/RangeTestModule.h"
 #endif
-#if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)) && !defined(CONFIG_IDF_TARGET_ESP32S2)
-#if !MESHTASTIC_EXCLUDE_SERIAL
+#if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_SERIAL
 #include "modules/SerialModule.h"
-#endif
 #endif
 #endif
 /**
@@ -81,7 +81,9 @@ void setupModules()
 #endif
         adminModule = new AdminModule();
         nodeInfoModule = new NodeInfoModule();
+#if !MESHTASTIC_EXCLUDE_GPS
         positionModule = new PositionModule();
+#endif
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
         waypointModule = new WaypointModule();
 #endif
@@ -169,7 +171,7 @@ void setupModules()
 #if !MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION
         externalNotificationModule = new ExternalNotificationModule();
 #endif
-#if !MESHTASTIC_EXCLUDE_RANGETEST
+#if !MESHTASTIC_EXCLUDE_RANGETEST && !MESHTASTIC_EXCLUDE_GPS
         new RangeTestModule();
 #endif
 #endif

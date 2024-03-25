@@ -1,8 +1,10 @@
-#include "GPS.h"
+#include "configuration.h"
+#if !MESHTASTIC_EXCLUDE_GPS
 #include "Default.h"
+#include "GPS.h"
 #include "NodeDB.h"
 #include "RTC.h"
-#include "configuration.h"
+
 #include "main.h" // pmu_found
 #include "sleep.h"
 #include "ubx.h"
@@ -1278,7 +1280,7 @@ bool GPS::lookForLocation()
 
 #ifndef TINYGPS_OPTION_NO_STATISTICS
     if (reader.failedChecksum() > lastChecksumFailCount) {
-        LOG_WARN("Warning, %u new GPS checksum failures, for a total of %u.\n", reader.failedChecksum() - lastChecksumFailCount,
+        LOG_WARN("%u new GPS checksum failures, for a total of %u.\n", reader.failedChecksum() - lastChecksumFailCount,
                  reader.failedChecksum());
         lastChecksumFailCount = reader.failedChecksum();
     }
@@ -1482,3 +1484,4 @@ void GPS::toggleGpsMode()
         enable();
     }
 }
+#endif // Exclude GPS

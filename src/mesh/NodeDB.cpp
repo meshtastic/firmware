@@ -1,11 +1,12 @@
 #include "configuration.h"
-
+#if !MESHTASTIC_EXCLUDE_GPS
+#include "GPS.h"
+#endif
 #include "../detect/ScanI2C.h"
 #include "Channels.h"
 #include "CryptoEngine.h"
 #include "Default.h"
 #include "FSCommon.h"
-#include "GPS.h"
 #include "MeshRadio.h"
 #include "NodeDB.h"
 #include "PacketHistory.h"
@@ -25,7 +26,9 @@
 #include <vector>
 
 #ifdef ARCH_ESP32
+#if !MESHTASTIC_EXCLUDE_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
+#endif
 #include "modules/esp32/StoreForwardModule.h"
 #include <Preferences.h>
 #include <nvs_flash.h>
@@ -195,7 +198,7 @@ bool NodeDB::factoryReset()
     // first, remove the "/prefs" (this removes most prefs)
     rmDir("/prefs");
     if (FSCom.exists("/static/rangetest.csv") && !FSCom.remove("/static/rangetest.csv")) {
-        LOG_WARN("Could not remove rangetest.csv file\n");
+        LOG_ERROR("Could not remove rangetest.csv file\n");
     }
     // second, install default state (this will deal with the duplicate mac address issue)
     installDefaultDeviceState();
@@ -230,7 +233,7 @@ void NodeDB::installDefaultConfig()
     config.has_position = true;
     config.has_power = true;
     config.has_network = true;
-    config.has_bluetooth = true;
+    config.has_bluetooth = (HAS_BLUETOOTH ? true : false);
     config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
 
     config.lora.sx126x_rx_boosted_gain = true;
@@ -527,7 +530,7 @@ void NodeDB::pickNewNodeNum()
         LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, so trying for 0x%x\n", nodeNum, candidate);
         nodeNum = candidate;
     }
-    LOG_WARN("Using nodenum 0x%x \n", nodeNum);
+    LOG_DEBUG("Using nodenum 0x%x \n", nodeNum);
 
     myNodeInfo.my_node_num = nodeNum;
 }
@@ -934,7 +937,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         if ((numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < meshtastic_NodeInfoLite_size * 3)) {
             if (screen)
                 screen->print("Warn: node database full!\nErasing oldest entry\n");
-            LOG_INFO("Warn: node database full!\nErasing oldest entry\n");
+            LOG_WARN("Node database full! Erasing oldest entry\n");
             // look for oldest node and erase it
             uint32_t oldest = UINT32_MAX;
             int oldestIndex = -1;

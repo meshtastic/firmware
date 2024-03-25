@@ -11,9 +11,9 @@
 extern "C" {
 #include "mesh/compression/unishox2.h"
 }
-
+#if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
-
+#endif
 /**
  * Router todo
  *
@@ -261,11 +261,12 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             abortSendAndNak(encodeResult, p);
             return encodeResult; // FIXME - this isn't a valid ErrorCode
         }
-
+#if !MESHTASTIC_EXCLUDE_MQTT
         // Only publish to MQTT if we're the original transmitter of the packet
         if (moduleConfig.mqtt.enabled && p->from == nodeDB->getNodeNum() && mqtt) {
             mqtt->onSend(*p, *p_decoded, chIndex);
         }
+#endif
         packetPool.release(p_decoded);
     }
 
@@ -465,10 +466,12 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             cancelSending(p->from, p->id);
             skipHandle = true;
         }
-
+#if !MESHTASTIC_EXCLUDE_MQTT
         // Publish received message to MQTT if we're not the original transmitter of the packet
         if (!skipHandle && moduleConfig.mqtt.enabled && getFrom(p) != nodeDB->getNodeNum() && mqtt)
             mqtt->onSend(*p_encrypted, *p, p->channel);
+#endif
+
     } else {
         printPacket("packet decoding failed or skipped (no PSK?)", p);
     }

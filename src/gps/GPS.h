@@ -1,4 +1,6 @@
 #pragma once
+#include "configuration.h"
+#if !MESHTASTIC_EXCLUDE_GPS
 
 #include "GPSStatus.h"
 #include "Observer.h"
@@ -269,3 +271,4 @@ class GPS : private concurrency::OSThread
 };
 
 extern GPS *gps;
+#endif // Exclude GPS
