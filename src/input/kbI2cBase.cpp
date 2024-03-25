@@ -216,6 +216,12 @@ int32_t KbI2cBase::runOnce()
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
                 e.kbchar = 0xb7;
                 break;
+            case 0x90: // fn+r
+            case 0x9b: // fn+s
+                // just pass those unmodified
+                e.inputEvent = ANYKEY;
+                e.kbchar = c;
+                break;
             case 0x0d: // Enter
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
                 break;
