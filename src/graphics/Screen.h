@@ -73,6 +73,10 @@ class Screen
 #define MILES_TO_FEET 5280
 #endif
 
+// Intuitive colors. E-Ink display is inverted from OLED(?)
+#define EINK_BLACK OLEDDISPLAY_COLOR::WHITE
+#define EINK_WHITE OLEDDISPLAY_COLOR::BLACK
+
 namespace graphics
 {
 
