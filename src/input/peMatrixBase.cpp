@@ -80,5 +80,5 @@ int32_t PeMatrixBase::runOnce()
             }
         }
     }
-    return 50; // Keyscan every 50msec to avoid key bounce
+    return 100; // Keyscan every 100msec to avoid key bounce
 }
