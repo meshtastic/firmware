@@ -17,6 +17,7 @@
 #include "unistd.h"
 #endif
 #include "Default.h"
+#include "TypeConversions.h"
 
 #include "mqtt/MQTT.h"
 
@@ -201,6 +202,23 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         if (node != NULL) {
             node->is_favorite = false;
         }
+        break;
+    }
+    case meshtastic_AdminMessage_set_fixed_position_tag: {
+        LOG_INFO("Client is receiving a set_fixed_position_tag command.\n");
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
+        node->has_position = true;
+        node->position = TypeConversions::ConvertToPositionLite(r->set_fixed_position);
+        nodeDB->setLocalPosition(r->set_fixed_position);
+        config.position.fixed_position = true;
+        saveChanges(SEGMENT_DEVICESTATE | SEGMENT_CONFIG, false);
+        break;
+    }
+    case meshtastic_AdminMessage_remove_fixed_position_tag: {
+        LOG_INFO("Client is receiving a remove_fixed_position command.\n");
+        nodeDB->clearLocalPosition();
+        config.position.fixed_position = false;
+        saveChanges(SEGMENT_DEVICESTATE | SEGMENT_CONFIG, false);
         break;
     }
     case meshtastic_AdminMessage_enter_dfu_mode_request_tag: {
