@@ -1,10 +1,11 @@
 #include "configuration.h"
-#include <assert.h>
-#include <string>
+
+#if !MESHTASTIC_EXCLUDE_GPS
+#include "GPS.h"
+#endif
 
 #include "../concurrency/Periodic.h"
 #include "BluetoothCommon.h" // needed for updateBatteryLevel, FIXME, eventually when we pull mesh out into a lib we shouldn't be whacking bluetooth from here
-#include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
@@ -15,8 +16,10 @@
 #include "modules/NodeInfoModule.h"
 #include "modules/PositionModule.h"
 #include "power.h"
+#include <assert.h>
+#include <string>
 
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "nimble/NimbleBluetooth.h"
 #endif
 
@@ -71,10 +74,11 @@ MeshService::MeshService()
 void MeshService::init()
 {
     // moved much earlier in boot (called from setup())
-    // nodeDB->init();
-
+    // nodeDB.init();
+#if HAS_GPS
     if (gps)
         gpsObserver.observe(&gps->newStatus);
+#endif
 }
 
 int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
@@ -270,11 +274,13 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
     assert(node);
 
     if (hasValidPosition(node)) {
+#if HAS_GPS
         if (positionModule) {
             LOG_INFO("Sending position ping to 0x%x, wantReplies=%d, channel=%d\n", dest, wantReplies, node->channel);
             positionModule->sendOurPosition(dest, wantReplies, node->channel);
         }
     } else {
+#endif
         if (nodeInfoModule) {
             LOG_INFO("Sending nodeinfo ping to 0x%x, wantReplies=%d, channel=%d\n", dest, wantReplies, node->channel);
             nodeInfoModule->sendOurNodeInfo(dest, wantReplies, node->channel);
@@ -344,6 +350,7 @@ meshtastic_NodeInfoLite *MeshService::refreshLocalMeshNode()
     return node;
 }
 
+#if HAS_GPS
 int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
 {
     // Update our local node info with our position (even if we don't decide to update anyone else)
@@ -377,7 +384,7 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
 
     return 0;
 }
-
+#endif
 bool MeshService::isToPhoneQueueEmpty()
 {
     return toPhoneQueue.isEmpty();

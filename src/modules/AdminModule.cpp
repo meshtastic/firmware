@@ -4,7 +4,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include <FSCommon.h>
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "BleOta.h"
 #endif
 #include "Router.h"
@@ -19,7 +19,9 @@
 #include "Default.h"
 #include "TypeConversions.h"
 
+#if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
+#endif
 
 AdminModule *adminModule;
 bool hasOpenEditTransaction;
@@ -120,7 +122,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_reboot_ota_seconds_tag: {
         int32_t s = r->reboot_ota_seconds;
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
         if (BleOta::getOtaAppVersion().isEmpty()) {
             LOG_INFO("No OTA firmware available, scheduling regular reboot in %d seconds\n", s);
             screen->startRebootScreen();
@@ -692,7 +694,9 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     if (Ethernet.linkStatus() == LinkON) {
         conn.ethernet.status.is_connected = true;
         conn.ethernet.status.ip_address = Ethernet.localIP();
+#if !MESHTASTIC_EXCLUDE_MQTT
         conn.ethernet.status.is_mqtt_connected = mqtt && mqtt->isConnectedDirectly();
+#endif
         conn.ethernet.status.is_syslog_connected = false; // FIXME wire this up
     } else {
         conn.ethernet.status.is_connected = false;

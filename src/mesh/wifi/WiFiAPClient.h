@@ -5,7 +5,7 @@
 #include <Arduino.h>
 #include <functional>
 
-#if defined(HAS_WIFI) && !defined(ARCH_PORTDUINO)
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
 #include <WiFi.h>
 #endif
 
