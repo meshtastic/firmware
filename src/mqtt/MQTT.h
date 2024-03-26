@@ -84,7 +84,7 @@ class MQTT : private concurrency::OSThread
 
   private:
     std::string statusTopic = "/2/stat/"; // For "online"/"offline" message
-    std::string cryptTopic = "/2/c/";     // msh/2/e/CHANNELID/NODEID
+    std::string cryptTopic = "/2/e/";     // msh/2/e/CHANNELID/NODEID
     std::string jsonTopic = "/2/json/";   // msh/2/json/CHANNELID/NODEID
     std::string mapTopic = "/2/map/";     // For protobuf-encoded MapReport messages
 
