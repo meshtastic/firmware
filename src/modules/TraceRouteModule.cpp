@@ -1,5 +1,4 @@
 #include "TraceRouteModule.h"
-#include "FloodingRouter.h"
 #include "MeshService.h"
 
 TraceRouteModule *traceRouteModule;
@@ -14,23 +13,17 @@ bool TraceRouteModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, m
     return false; // let it be handled by RoutingModule
 }
 
-void TraceRouteModule::updateRoute(meshtastic_MeshPacket *p)
+void TraceRouteModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r)
 {
-    auto &incoming = p->decoded;
-    // Only append an ID for the request (one way)
-    if (!incoming.request_id) {
-        meshtastic_RouteDiscovery scratch;
-        meshtastic_RouteDiscovery *updated = NULL;
-        memset(&scratch, 0, sizeof(scratch));
-        pb_decode_from_bytes(incoming.payload.bytes, incoming.payload.size, &meshtastic_RouteDiscovery_msg, &scratch);
-        updated = &scratch;
-
-        appendMyID(updated);
-        printRoute(updated, p->from, NODENUM_BROADCAST);
+    auto &incoming = p.decoded;
+    // Only append an ID for the request (one way) and if we are not the destination (the reply will have our NodeNum already)
+    if (!incoming.request_id && p.to != nodeDB->getNodeNum()) {
+        appendMyID(r);
+        printRoute(r, p.from, NODENUM_BROADCAST);
 
         // Set updated route to the payload of the to be flooded packet
-        p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes),
-                                                     &meshtastic_RouteDiscovery_msg, updated);
+        p.decoded.payload.size =
+            pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_RouteDiscovery_msg, r);
     }
 }
 
@@ -85,4 +78,5 @@ TraceRouteModule::TraceRouteModule()
     : ProtobufModule("traceroute", meshtastic_PortNum_TRACEROUTE_APP, &meshtastic_RouteDiscovery_msg)
 {
     ourPortNum = meshtastic_PortNum_TRACEROUTE_APP;
+    isPromiscuous = true; // We need to update the route even if it is not destined to us
 }

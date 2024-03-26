@@ -1,4 +1,3 @@
-
 #include "configuration.h"
 #if defined(ARCH_ESP32) && defined(USE_SX1280)
 #include "AudioModule.h"
@@ -274,7 +273,7 @@ ProcessMessage AudioModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
     if ((moduleConfig.audio.codec2_enabled) && (myRegion->audioPermitted)) {
         auto &p = mp.decoded;
-        if (getFrom(&mp) != nodeDB.getNodeNum()) {
+        if (getFrom(&mp) != nodeDB->getNodeNum()) {
             memcpy(rx_encode_frame, p.payload.bytes, p.payload.size);
             radio_state = RadioState::rx;
             rx_encode_frame_index = p.payload.size;

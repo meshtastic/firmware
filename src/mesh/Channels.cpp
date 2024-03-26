@@ -7,7 +7,9 @@
 
 #include <assert.h>
 
+#if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
+#endif
 
 /// 16 bytes of random PSK for our _public_ default channel that all devices power up on (AES128)
 static const uint8_t defaultpsk[] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,
@@ -18,7 +20,9 @@ Channels channels;
 const char *Channels::adminChannel = "admin";
 const char *Channels::gpioChannel = "gpio";
 const char *Channels::serialChannel = "serial";
+#if !MESHTASTIC_EXCLUDE_MQTT
 const char *Channels::mqttChannel = "mqtt";
+#endif
 
 uint8_t xorHash(const uint8_t *p, size_t len)
 {
@@ -195,10 +199,12 @@ void Channels::onConfigChanged()
         if (ch.role == meshtastic_Channel_Role_PRIMARY)
             primaryIndex = i;
     }
+#if !MESHTASTIC_EXCLUDE_MQTT
     if (channels.anyMqttEnabled() && mqtt && !mqtt->isEnabled()) {
         LOG_DEBUG("MQTT is enabled on at least one channel, so set MQTT thread to run immediately\n");
         mqtt->start();
     }
+#endif
 }
 
 meshtastic_Channel &Channels::getByIndex(ChannelIndex chIndex)

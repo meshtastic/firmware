@@ -638,6 +638,9 @@ typedef struct _meshtastic_NodeInfo {
     bool via_mqtt;
     /* Number of hops away from us this node is (0 if adjacent) */
     uint8_t hops_away;
+    /* True if node is in our favorites list
+ Persists between NodeDB internal clean ups */
+    bool is_favorite;
 } meshtastic_NodeInfo;
 
 /* Unique local debugging info for this node
@@ -906,7 +909,7 @@ extern "C" {
 #define meshtastic_Waypoint_init_default         {0, 0, 0, 0, 0, "", "", 0}
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0}
-#define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, 0}
+#define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, 0, 0}
 #define meshtastic_MyNodeInfo_init_default       {0, 0, 0}
 #define meshtastic_LogRecord_init_default        {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_default      {0, 0, 0, 0}
@@ -925,7 +928,7 @@ extern "C" {
 #define meshtastic_Waypoint_init_zero            {0, 0, 0, 0, 0, "", "", 0}
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0}
-#define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, 0}
+#define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, 0, 0}
 #define meshtastic_MyNodeInfo_init_zero          {0, 0, 0}
 #define meshtastic_LogRecord_init_zero           {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_zero         {0, 0, 0, 0}
@@ -1016,6 +1019,7 @@ extern "C" {
 #define meshtastic_NodeInfo_channel_tag          7
 #define meshtastic_NodeInfo_via_mqtt_tag         8
 #define meshtastic_NodeInfo_hops_away_tag        9
+#define meshtastic_NodeInfo_is_favorite_tag      10
 #define meshtastic_MyNodeInfo_my_node_num_tag    1
 #define meshtastic_MyNodeInfo_reboot_count_tag   8
 #define meshtastic_MyNodeInfo_min_app_version_tag 11
@@ -1182,7 +1186,8 @@ X(a, STATIC,   SINGULAR, FIXED32,  last_heard,        5) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  device_metrics,    6) \
 X(a, STATIC,   SINGULAR, UINT32,   channel,           7) \
 X(a, STATIC,   SINGULAR, BOOL,     via_mqtt,          8) \
-X(a, STATIC,   SINGULAR, UINT32,   hops_away,         9)
+X(a, STATIC,   SINGULAR, UINT32,   hops_away,         9) \
+X(a, STATIC,   SINGULAR, BOOL,     is_favorite,      10)
 #define meshtastic_NodeInfo_CALLBACK NULL
 #define meshtastic_NodeInfo_DEFAULT NULL
 #define meshtastic_NodeInfo_user_MSGTYPE meshtastic_User
@@ -1350,7 +1355,7 @@ extern const pb_msgdesc_t meshtastic_Heartbeat_msg;
 #define meshtastic_MyNodeInfo_size               18
 #define meshtastic_NeighborInfo_size             258
 #define meshtastic_Neighbor_size                 22
-#define meshtastic_NodeInfo_size                 275
+#define meshtastic_NodeInfo_size                 277
 #define meshtastic_Position_size                 144
 #define meshtastic_QueueStatus_size              23
 #define meshtastic_RouteDiscovery_size           40

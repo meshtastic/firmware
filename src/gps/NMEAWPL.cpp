@@ -1,3 +1,4 @@
+#if !MESHTASTIC_EXCLUDE_GPS
 #include "NMEAWPL.h"
 #include "GeoCoord.h"
 #include "RTC.h"
@@ -94,3 +95,5 @@ uint32_t printGGA(char *buf, size_t bufsz, const meshtastic_Position &pos)
     len += snprintf(buf + len, bufsz - len, "*%02X\r\n", chk);
     return len;
 }
+
+#endif
