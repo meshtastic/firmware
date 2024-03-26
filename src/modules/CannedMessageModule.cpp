@@ -220,6 +220,8 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
 
     LOG_INFO("Sending message id=%d, dest=%x, msg=%.*s\n", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
 
+    nodeDB.saveMessageToDisk(*p, true);
+    
     service.sendToMesh(
         p, RX_SRC_LOCAL,
         true); // send to mesh, cc to phone. Even if there's no phone connected, this stores the message to match ACKs

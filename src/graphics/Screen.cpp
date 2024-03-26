@@ -23,6 +23,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "configuration.h"
 #if HAS_SCREEN
 #include <OLEDDisplay.h>
+#include <string>
+#include <list>
+#include <unistd.h>
+#include <cstring>
+#include <vector>
+#include <iostream>
+
 
 #include "DisplayFormatters.h"
 #if !MESHTASTIC_EXCLUDE_GPS
@@ -68,7 +75,7 @@ namespace graphics
 #define IDLE_FRAMERATE 1 // in fps
 
 // DEBUG
-#define NUM_EXTRA_FRAMES 3 // text message and debug frame
+#define NUM_EXTRA_FRAMES 4 // text message and debug frame
 // if defined a pixel will blink to show redraws
 // #define SHOW_REDRAWS
 
@@ -352,7 +359,7 @@ static bool shouldDrawMessage(const meshtastic_MeshPacket *packet)
 }
 
 /// Draw the last text message we received
-static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+/*static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     // the max length of this buffer is much longer than we can possibly print
     static char tempBuf[237];
@@ -388,7 +395,172 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     display->setColor(WHITE);
     snprintf(tempBuf, sizeof(tempBuf), "%s", mp.decoded.payload.bytes);
     display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), tempBuf);
+}*/
+
+
+short category = 8;
+bool inChannelFrame = false;
+
+// Assuming OLEDDisplay is a class you've defined elsewhere,
+// and it has methods like getStringWidth and others as needed.
+
+std::string drawTextButGood(OLEDDisplay* display, uint16_t maxLineWidth, const std::string& text) {
+    std::string result;
+
+    // Using a copy to preserve the original text
+    char* textCopy = new char[text.length() + 1];
+    std::strcpy(textCopy, text.c_str());
+
+    char* line = std::strtok(textCopy, "\n");
+    while (line != nullptr) {
+        uint16_t preferredBreakpoint = 0;
+        uint16_t strWidth = 0;
+        std::string currentLine;
+
+        size_t lineLength = std::strlen(line);
+        for (uint16_t i = 0; i < lineLength; ++i) {
+            char character[2] = { line[i], '\0' };
+            strWidth += display->getStringWidth(character, 1, true);
+
+            if (line[i] == ' ' || line[i] == '-' || line[i] == '/') {
+                preferredBreakpoint = i + 1;
+            }
+
+            if (strWidth >= maxLineWidth && preferredBreakpoint > 0) {
+                result += currentLine.substr(0, preferredBreakpoint) + '\n';
+                line += preferredBreakpoint;
+                i = -1; // Reset the index for the next line
+                lineLength = std::strlen(line); // Update length for the remaining string
+                currentLine.clear();
+                strWidth = 0; // Reset width for the new line
+                preferredBreakpoint = 0; // Reset breakpoint
+                continue;
+            }
+
+            currentLine += line[i];
+        }
+
+        result += currentLine; // Add the last line or the whole line if never exceeded maxLineWidth
+        if (*(line + currentLine.length()) != '\0') { // If not at the end of the text, add a newline
+            result += '\n';
+        }
+
+        line = std::strtok(nullptr, "\n"); // Get next line if any
+    }
+
+    delete[] textCopy; // Clean up the copied text
+
+    return result;
 }
+
+std::string clampLines(const std::string& text, short maxLineCount = -1) {
+    if (maxLineCount == 0) return "";
+
+    if (maxLineCount < 0) return text;
+
+    uint16_t newlineCount = 0;
+    for (char character : text) {
+        if (character == '\n') {
+            newlineCount++;
+        }
+    }
+
+    if (newlineCount < maxLineCount) return text;
+
+    uint16_t truncatedLineCount = (newlineCount + 1) - maxLineCount;
+    uint16_t truncateIndex = 0;
+    uint16_t newlinesFound = 0;
+
+    for (char character : text) {
+        truncateIndex++;
+        if (character == '\n') {
+            newlinesFound++;
+            if (newlinesFound == truncatedLineCount) break;
+        }
+    }
+
+    return text.substr(truncateIndex);
+}
+
+std::string createTextLogString(OLEDDisplay* display, const meshtastic_MeshPacket mp)
+{
+    LOG_INFO("CHECKPOINT 0\n");
+
+    uint32_t seconds = sinceReceived(&mp);
+    uint32_t minutes = seconds / 60;
+    uint32_t hours = minutes / 60;
+    uint32_t days = hours / 24;
+    std::string timestamp = screen->drawTimeDelta(days, hours, minutes, seconds);
+    meshtastic_NodeInfoLite* node = nodeDB.getMeshNode(getFrom(&mp));
+    std::string senderName = (node && node->has_user) ? node->user.short_name : "???";
+
+    LOG_INFO("CHECKPOINT 1\n");
+
+    char message[300];
+    snprintf(
+        message,
+        sizeof(message),
+        "%s %s: %s",
+        timestamp.c_str(),
+        senderName.c_str(),
+        mp.decoded.payload.bytes
+    );
+
+    LOG_INFO("CHECKPOINT 2\n");
+
+    return drawTextButGood(display, display->getWidth(), message) + '\n';
+}
+
+void drawTextLogFrame(OLEDDisplay* display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
+    inChannelFrame = true;
+    
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+
+    const uint16_t maxMessages = 15; // TODO: Make configurable
+    
+
+    int endMessageIndex = std::max(nodeDB.newestMessageIndices[category] - maxMessages + 1, nodeDB.oldestMessageIndices[category]);
+
+    LOG_INFO(("Start message index: " + std::to_string(endMessageIndex) + "\n").c_str());
+    LOG_INFO(("Newest message index: " + std::to_string(nodeDB.newestMessageIndices[category]) + "\n").c_str());
+
+    std::string messageStr;
+    for (int i = nodeDB.newestMessageIndices[category]; i >= endMessageIndex; i--) {
+        // TODO: Deallocate mp
+        const meshtastic_MeshPacket mp = nodeDB.loadMessage(category, i);
+
+        messageStr += createTextLogString(display, mp);
+
+        if (ESP.getFreeHeap() < 10000) break;
+    }
+    
+
+    uint16_t maxLineCount = static_cast<uint16_t>(floor(display->getHeight() / FONT_HEIGHT_SMALL));
+    messageStr = clampLines(messageStr, maxLineCount);
+
+    LOG_INFO("CHECKPOINT 4\n");
+
+    // Now messageStr contains all formatted messages ready to be displayed.
+    // You can now display messageStr on the OLED display as needed.
+    // Note: Displaying long strings may require additional handling not shown here.
+
+    //char tempBuf[1500];
+    char* tempBuf = new char[1500];
+    display->drawStringf(x, y, tempBuf, "%s", messageStr.c_str());
+
+    LOG_INFO("CHECKPOINT 5\n");
+
+    if (category == nodeDB.CATEGORY_COUNT - 1)
+        display->drawStringf(0, display->getHeight() - FONT_HEIGHT_SMALL, tempBuf, "%s", "DMs");
+    else
+        display->drawStringf(0, display->getHeight() - FONT_HEIGHT_SMALL, tempBuf, "CH %s", std::to_string(category).c_str());
+    
+    delete[] tempBuf;
+
+    LOG_INFO("CHECKPOINT 6\n");
+}
+
 
 /// Draw the last waypoint we received
 static void drawWaypointFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -1320,9 +1492,11 @@ void Screen::setFrames()
         normalFrames[numframes++] = drawCriticalFaultFrame;
 
     // If we have a text message - show it next, unless it's a phone message and we aren't using any special modules
-    if (devicestate.has_rx_text_message && shouldDrawMessage(&devicestate.rx_text_message)) {
+    /*if (devicestate.has_rx_text_message && shouldDrawMessage(&devicestate.rx_text_message)) {
         normalFrames[numframes++] = drawTextMessageFrame;
-    }
+    }*/
+    // OUR LOG FUNCTION
+    normalFrames[numframes++] = drawTextLogFrame;
     // If we have a waypoint - show it next, unless it's a phone message and we aren't using any special modules
     if (devicestate.has_rx_waypoint && shouldDrawMessage(&devicestate.rx_waypoint)) {
         normalFrames[numframes++] = drawWaypointFrame;
@@ -1842,10 +2016,27 @@ int Screen::handleInputEvent(const InputEvent *event)
     if (showingNormalScreen && moduleFrames.size() == 0) {
         // LOG_DEBUG("Screen::handleInputEvent from %s\n", event->source);
         if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
+            inChannelFrame = false;
             showPrevFrame();
         } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
+            inChannelFrame = false;
             showNextFrame();
         }
+
+        if (inChannelFrame) {
+            if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP)) {
+                category++;
+                if (category > 8) {
+                    category = 0;
+                }
+            } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN)) {
+                category--;
+                if (category < 0) {
+                    category = 8;
+                }
+            }
+        }
+        
     }
 
     return 0;

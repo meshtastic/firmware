@@ -3,6 +3,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "configuration.h"
+#include "NodeDB.h"
 
 TextMessageModule *textMessageModule;
 
@@ -15,8 +16,9 @@ ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp
 
     // We only store/display messages destined for us.
     // Keep a copy of the most recent text message.
-    devicestate.rx_text_message = mp;
-    devicestate.has_rx_text_message = true;
+    //devicestate.rx_text_message = mp;
+
+    nodeDB.saveMessageToDisk(mp, false);
 
     powerFSM.trigger(EVENT_RECEIVED_MSG);
     notifyObservers(&mp);

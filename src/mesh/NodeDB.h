@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <assert.h>
 #include <vector>
+#include <set>
 
 #include "MeshTypes.h"
 #include "NodeStatus.h"
@@ -57,10 +58,37 @@ class NodeDB
     /// don't do mesh based algorithm for node id assignment (initially)
     /// instead just store in flash - possibly even in the initial alpha release do this hack
     NodeDB();
+    
+    /// Called from service after app start, to do init which can only be done after OS load
+    void init();
 
-    /// write to flash
+    /// Write to flash
     void saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS),
-        saveChannelsToDisk(), saveDeviceStateToDisk();
+        clearSavedMessages(), saveChannelsToDisk(), saveDeviceStateToDisk();
+    
+    void saveMessageToDisk(const meshtastic_MeshPacket& mp, bool fromSelf);
+    void saveMessageToDisk(const meshtastic_MeshPacket& mp, bool fromSelf, uint8_t category);
+    
+    bool messageIsDirectMessage(const meshtastic_MeshPacket& mp);
+    void initSavedMessages();
+    const int minInt = std::numeric_limits<int>::min();
+    const int maxInt = std::numeric_limits<int>::max();
+    static const uint8_t CATEGORY_COUNT = 9;
+    struct MessageCompare {
+        bool operator()(const meshtastic_MeshPacket& messageA, const meshtastic_MeshPacket& messageB) const {
+            return messageA.rx_time > messageB.rx_time;
+        }
+    };
+    std::set<meshtastic_MeshPacket, MessageCompare> messageCache[CATEGORY_COUNT];
+    // TODO: Make less dumb
+    int newestMessageIndices[9] = {minInt, minInt, minInt, minInt, minInt, minInt, minInt, minInt, minInt};
+    int oldestMessageIndices[9] = {maxInt, maxInt, maxInt, maxInt, maxInt, maxInt, maxInt, maxInt, maxInt};
+    void updateMessageBounds();
+    const meshtastic_MeshPacket loadMessage(uint16_t category, uint16_t index);
+    void updateMessageFileList();
+    // TODO: Use variable for size
+    std::vector<std::string> messageFileList[9];
+
 
     /** Reinit radio config if needed, because either:
      * a) sometimes a buggy android app might send us bogus settings or

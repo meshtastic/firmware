@@ -24,6 +24,12 @@
 #include <pb_decode.h>
 #include <pb_encode.h>
 #include <vector>
+#include <string>
+#include <map>
+#include <limits>
+#include <regex>
+#include <set>
+#include <stdexcept>
 
 #ifdef ARCH_ESP32
 #if !MESHTASTIC_EXCLUDE_WIFI
@@ -509,6 +515,70 @@ void NodeDB::installDefaultDeviceState()
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
 }
 
+void NodeDB::init()
+{
+    LOG_INFO("Initializing NodeDB\n");
+    loadFromDisk();
+    cleanupMeshDB();
+
+    uint32_t devicestateCRC = crc32Buffer(&devicestate, sizeof(devicestate));
+    uint32_t configCRC = crc32Buffer(&config, sizeof(config));
+    uint32_t channelFileCRC = crc32Buffer(&channelFile, sizeof(channelFile));
+
+    int saveWhat = 0;
+
+    // likewise - we always want the app requirements to come from the running appload
+    myNodeInfo.min_app_version = 30200; // format is Mmmss (where M is 1+the numeric major number. i.e. 30200 means 2.2.00
+    // Note! We do this after loading saved settings, so that if somehow an invalid nodenum was stored in preferences we won't
+    // keep using that nodenum forever. Crummy guess at our nodenum (but we will check against the nodedb to avoid conflicts)
+    pickNewNodeNum();
+
+    // Set our board type so we can share it with others
+    owner.hw_model = HW_VENDOR;
+    // Ensure user (nodeinfo) role is set to whatever we're configured to
+    owner.role = config.device.role;
+
+    // Include our owner in the node db under our nodenum
+    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
+    info->user = owner;
+    info->has_user = true;
+
+#ifdef ARCH_ESP32
+    Preferences preferences;
+    preferences.begin("meshtastic", false);
+    myNodeInfo.reboot_count = preferences.getUInt("rebootCounter", 0);
+    preferences.end();
+    LOG_DEBUG("Number of Device Reboots: %d\n", myNodeInfo.reboot_count);
+#endif
+
+    resetRadioConfig(); // If bogus settings got saved, then fix them
+    LOG_DEBUG("region=%d, NODENUM=0x%x, dbsize=%d\n", config.lora.region, myNodeInfo.my_node_num, *numMeshNodes);
+
+    if (devicestateCRC != crc32Buffer(&devicestate, sizeof(devicestate)))
+        saveWhat |= SEGMENT_DEVICESTATE;
+    if (configCRC != crc32Buffer(&config, sizeof(config)))
+        saveWhat |= SEGMENT_CONFIG;
+    if (channelFileCRC != crc32Buffer(&channelFile, sizeof(channelFile)))
+        saveWhat |= SEGMENT_CHANNELS;
+
+    if (!devicestate.node_remote_hardware_pins) {
+        meshtastic_NodeRemoteHardwarePin empty[12] = {meshtastic_RemoteHardwarePin_init_default};
+        memcpy(devicestate.node_remote_hardware_pins, empty, sizeof(empty));
+    }
+
+    if (config.position.gps_enabled) {
+        config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+        config.position.gps_enabled = 0;
+    }
+
+    saveToDisk(saveWhat);
+
+    initSavedMessages();
+
+    // TODO: Don't clear at the start
+    clearSavedMessages();
+}
+
 // We reserve a few nodenums for future use
 #define NUM_RESERVED 4
 
@@ -692,9 +762,219 @@ void NodeDB::saveDeviceStateToDisk()
 #ifdef FSCom
     FSCom.mkdir("/prefs");
 #endif
-    saveProto(prefFileName, sizeof(devicestate) + numMeshNodes * meshtastic_NodeInfoLite_size, &meshtastic_DeviceState_msg,
-              &devicestate);
+    saveProto(prefFileName, meshtastic_DeviceState_size, &meshtastic_DeviceState_msg, &devicestate);
 }
+
+
+void NodeDB::initSavedMessages()
+{
+    FSCom.mkdir("/msgs");
+    for (int category = 0; category < CATEGORY_COUNT; category++) {
+        FSCom.mkdir(("/msgs/" + std::to_string(category)).c_str());
+    }
+
+    updateMessageFileList();
+
+    updateMessageBounds();
+}
+
+bool removeDirectoryRecursively(const char* dirPath) {
+    File dir = FSCom.open(dirPath, FILE_O_WRITE);
+    if (!dir || !dir.isDirectory()) {
+        LOG_CRIT("Failed to open directory for removal\n");
+        return false;
+    }
+
+    File file = dir.openNextFile(FILE_O_WRITE);
+    while(file) {
+        String filePath = String(dirPath) + "/" + file.name();
+        if(file.isDirectory()) {
+            file.close();
+            if (!removeDirectoryRecursively(filePath.c_str())) {
+                LOG_CRIT(("Failed to remove directory: " + filePath + "\n").c_str());
+                return false;
+            }
+        } else {
+            file.close();
+            if (!FSCom.remove(filePath.c_str())) {
+                LOG_CRIT(("Failed to remove file: " + filePath + "\n").c_str());
+                return false;
+            }
+        }
+        file = dir.openNextFile(FILE_O_WRITE);
+    }
+
+    // Now that the directory is empty, it can be removed.
+    if (!FSCom.rmdir(dirPath)) {
+        LOG_CRIT(("Failed to remove directory: " + String(dirPath) + "\n").c_str());
+        return false;
+    }
+
+    return true;
+}
+
+
+void NodeDB::clearSavedMessages()
+{
+    LOG_INFO("Cleaning messages\n");
+
+    removeDirectoryRecursively("/msgs");
+
+    initSavedMessages();
+}
+
+bool NodeDB::messageIsDirectMessage(const meshtastic_MeshPacket& mp) {
+    LOG_INFO((
+        "numMeshNodes: "
+        + std::to_string(*numMeshNodes)
+        + "\n"
+    ).c_str());
+
+    if (mp.to == nodeDB.getNodeNum()) return true;
+
+    for (size_t i = 0; i < *numMeshNodes; i++)
+        if (mp.to == nodeDB.getMeshNodeByIndex(i)->num) return true;
+    
+    return false;
+}
+
+void NodeDB::saveMessageToDisk(const meshtastic_MeshPacket& mp, bool fromSelf)
+{
+    LOG_INFO("Called saveMessageToDisk\n");
+
+    if (messageIsDirectMessage(mp))
+        saveMessageToDisk(mp, fromSelf, CATEGORY_COUNT - 1);
+    else
+        saveMessageToDisk(mp, fromSelf, mp.channel);
+}
+
+void NodeDB::saveMessageToDisk(const meshtastic_MeshPacket& mp, bool fromSelf, uint8_t category)
+{
+    LOG_INFO((
+        "Saving message to disk with category "
+        + std::to_string(category)
+        + "\n"
+    ).c_str());
+
+    if (oldestMessageIndices[category] == std::numeric_limits<int>::max()) {
+        oldestMessageIndices[category] = 0;
+        newestMessageIndices[category] = -1;
+    }
+
+    LOG_INFO((
+        "CATEGORY: "
+            + std::to_string(category)
+            + "\n"
+    ).c_str());
+
+    newestMessageIndices[category]++;
+    std::string path = "/msgs/" + std::to_string(category) + "/" + std::to_string(newestMessageIndices[category]);
+    if (fromSelf) path += "s";
+
+    saveProto(
+        path.c_str(),
+        meshtastic_MeshPacket_size,
+        &meshtastic_MeshPacket_msg,
+        &mp
+    );
+
+
+    messageFileList[category].push_back(path.substr(path.rfind("/") + 1));
+}
+
+void NodeDB::updateMessageBounds()
+{
+    LOG_DEBUG("Called updateMessageBounds\n");
+
+    for (int category = 0; category < CATEGORY_COUNT; ++category) {
+        newestMessageIndices[category] = minInt;
+        oldestMessageIndices[category] = maxInt;
+    }
+
+    for (int category = 0; category < CATEGORY_COUNT; category++) {
+        std::string oldestFileName;
+        std::string newestFileName;
+
+        std::regex pattern("^([0-9]+)");
+
+        if (messageFileList[category].size() == 0) continue;
+
+        for (const std::string& fileName : messageFileList[category]) {
+            LOG_INFO(("updateMessageBounds fileName: " + std::to_string(category) + " " + fileName + "\n").c_str());
+
+            std::cmatch match;
+            if (std::regex_search(fileName.c_str(), match, pattern) && match.size() > 1) {
+                uint16_t messageIndex = std::stoi(match.str(1));
+                if (messageIndex < oldestMessageIndices[category]) {
+                    oldestMessageIndices[category] = messageIndex;
+                    oldestFileName = fileName;
+                }
+                if (messageIndex > newestMessageIndices[category]) {
+                    newestMessageIndices[category] = messageIndex;
+                    newestFileName = fileName;
+                }
+            }
+        }
+    }
+}
+
+void NodeDB::updateMessageFileList()
+{
+    for (int category = 0; category < CATEGORY_COUNT; category++) {
+        messageFileList[category].clear();
+
+        File directory = LittleFS.open(("/msgs/" + std::to_string(category)).c_str());
+        
+        File file = directory.openNextFile();
+        while (file) {
+            messageFileList[category].push_back(file.name());
+
+            file = directory.openNextFile();
+        }
+    }
+}
+
+const meshtastic_MeshPacket NodeDB::loadMessage(uint16_t category, uint16_t index)
+{
+    LOG_INFO("Called loadMessage with category\n");
+
+    // Try to load from cache
+    auto& categoryCache = messageCache[category];
+
+    if (index < categoryCache.size()) {
+        auto it = categoryCache.begin();
+        std::advance(it, index);
+        return *it;
+    }
+
+    // Load from disk if messsage not found in cache
+    std::string path = "/msgs/" + std::to_string(category) +  "/" + std::to_string(index) + "s";
+
+    bool fromSelf = LittleFS.exists(path.c_str());
+
+    if (!fromSelf)
+        path = "/msgs/" + std::to_string(category) + "/" + std::to_string(index);
+
+    meshtastic_MeshPacket mp;
+    loadProto(
+        path.c_str(),
+        meshtastic_MeshPacket_size,
+        sizeof(meshtastic_MeshPacket),
+        &meshtastic_MeshPacket_msg,
+        &mp
+    );
+
+    if (fromSelf) mp.id = nodeDB.getNodeNum();
+
+    // Put message in cache
+    // TODO: Insert pointers?
+    categoryCache.insert(mp);
+
+    LOG_INFO("Inserted MP into category cache\n");
+
+    return mp;
+}
+
 
 void NodeDB::saveToDisk(int saveWhat)
 {
@@ -705,16 +985,17 @@ void NodeDB::saveToDisk(int saveWhat)
         saveDeviceStateToDisk();
     }
 
-    if (saveWhat & SEGMENT_CONFIG) {
-        config.has_device = true;
-        config.has_display = true;
-        config.has_lora = true;
-        config.has_position = true;
-        config.has_power = true;
-        config.has_network = true;
-        config.has_bluetooth = true;
-        saveProto(configFileName, meshtastic_LocalConfig_size, &meshtastic_LocalConfig_msg, &config);
-    }
+        if (saveWhat & SEGMENT_CONFIG) {
+            config.has_device = true;
+            config.has_display = true;
+            config.has_lora = true;
+            config.has_position = true;
+            config.has_power = true;
+            config.has_network = true;
+            config.has_bluetooth = true;
+            saveProto(configFileName, meshtastic_LocalConfig_size, &meshtastic_LocalConfig_msg, &config);
+            LOG_DEBUG(std::to_string(sizeof(config)).c_str());
+        }
 
     if (saveWhat & SEGMENT_MODULECONFIG) {
         moduleConfig.has_canned_message = true;
