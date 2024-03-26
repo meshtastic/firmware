@@ -1,8 +1,10 @@
-#include "GPS.h"
+#include "configuration.h"
+#if !MESHTASTIC_EXCLUDE_GPS
 #include "Default.h"
+#include "GPS.h"
 #include "NodeDB.h"
 #include "RTC.h"
-#include "configuration.h"
+
 #include "main.h" // pmu_found
 #include "sleep.h"
 #include "ubx.h"
@@ -1482,3 +1484,4 @@ void GPS::toggleGpsMode()
         enable();
     }
 }
+#endif // Exclude GPS
