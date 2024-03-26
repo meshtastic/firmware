@@ -270,19 +270,39 @@ static void drawDeepSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state,
 
     LOG_DEBUG("Drawing deep sleep screen\n");
     drawIconScreen("Sleeping...", display, state, x, y);
-    screen->forceDisplay();
 }
 
-/// Used on eink displays when screen turns off for powersaving
-static void drawScreensaver(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+/// Used on eink displays when screen updates are paused
+static void drawScreensaverOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
-    LOG_DEBUG("Drawing screensaver\n");
+    LOG_DEBUG("Drawing screensaver overlay\n");
+    EINK_ADD_FRAMEFLAG(display, COSMETIC); // Take the time to run a full-refresh
 
-    // Next frame should use full-refresh, and block while running, else device will sleep before async callback
-    EINK_ADD_FRAMEFLAG(display, COSMETIC);
-    EINK_ADD_FRAMEFLAG(display, BLOCKING);
+    // Config: text
+    display->setTextAlignment(TEXT_ALIGN_CENTER_BOTH);
+    display->setFont(FONT_SMALL);
+    const char *text = "Screen Paused";
 
-    drawIconScreen("Screen Paused", display, state, x, y);
+    // Dimensions: text
+    const uint16_t textWidth = display->getStringWidth(text, strlen(text));
+    const int16_t textX = display->width() / 2;
+    const int16_t textY = display->height() / 2;
+
+    // Dimensions: box
+    const uint16_t padding = 5;
+    const uint16_t boxWidth = textWidth + (2 * padding);
+    const uint16_t boxHeight = FONT_HEIGHT_SMALL + (2 * padding);
+    const int16_t boxLeft = textX - (boxWidth / 2);
+    const int16_t boxTop = textY - (boxHeight / 2);
+
+    // Draw: box
+    display->setColor(EINK_WHITE);
+    display->fillRect(boxLeft, boxTop, boxWidth, boxHeight);
+    display->setColor(EINK_BLACK);
+    display->drawRect(boxLeft, boxTop, boxWidth, boxHeight);
+
+    // Draw: text
+    display->drawString(textX, textY, text);
 }
 #endif
 
@@ -1305,20 +1325,43 @@ void Screen::setWelcomeFrames()
 /// Determine which screensaver frame to use, then set the FrameCallback
 void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
 {
+    // Remember current frame, restore position at power-on
+    uint8_t frameNumber = ui->getUiState()->currentFrame;
+
+    // Retain specified frame / overlay callback beyond scope of this method
     static FrameCallback screensaverFrame;
+    static OverlayCallback screensaverOverlay;
 
-    // Custom screensaver frame passed as argument, or default screensaver
-    if (einkScreensaver != NULL)
+    // If: one-off screensaver frame passed as argument. Handles doDeepSleep()
+    if (einkScreensaver != NULL) {
         screensaverFrame = einkScreensaver;
-    else
-        screensaverFrame = drawScreensaver;
+        ui->setFrames(&screensaverFrame, 1);
+    }
 
-    ui->setFrames(&screensaverFrame, 1);
+    // Else, display the usual "overlay" screensaver
+    else {
+        screensaverOverlay = drawScreensaverOverlay;
+        ui->setOverlays(&screensaverOverlay, 1);
+    }
+
+    // Request new frame, ASAP
+    ui->setTargetFPS(100);
+    delay(50); // Long enough that a new frame should be due..
     ui->update();
+    ui->setTargetFPS(targetFramerate); // Restore framerate
 
     // Prepare now for next frame, shown when display wakes
-    EINK_ADD_FRAMEFLAG(dispdev, COSMETIC); // Will use full-refresh
-    setFrames();                           // Return to normal display updates
+    ui->setOverlays(NULL, 0);       // Clear overlay
+    setFrames();                    // Return to normal display updates
+    ui->switchToFrame(frameNumber); // Attempt to return to same frame after power-on
+
+    // It's really nice if screens wakes with a fast refresh,
+    // but super ugly if the display has ghosting issues.
+#ifdef EINK_HASPROBLEM_GHOSTING
+    EINK_ADD_FRAMEFLAG(dispdev, COSMETIC);
+#else
+    EINK_ADD_FRAMEFLAG(dispdev, RESPONSIVE);
+#endif
 }
 #endif
 
