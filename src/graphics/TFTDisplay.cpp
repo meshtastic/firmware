@@ -402,9 +402,16 @@ class LGFX : public lgfx::LGFX_Device
 };
 
 static LGFX *tft = nullptr;
+
+#elif defined(HX8357_CS)
+#include <TFT_eSPI.h> // Graphics and font library for HX8357 driver chip
+
+static TFT_eSPI *tft = nullptr; // Invoke library, pins defined in User_Setup.h
+
 #endif
 
-#if defined(ST7735_CS) || defined(ST7789_CS) || defined(ILI9341_DRIVER) || defined(RAK14014) || ARCH_PORTDUINO
+#if defined(ST7735_CS) || defined(ST7789_CS) || defined(ILI9341_DRIVER) || defined(RAK14014) || defined(HX8357_CS) ||            \
+    ARCH_PORTDUINO
 #include "SPILock.h"
 #include "TFTDisplay.h"
 #include <SPI.h>
@@ -489,7 +496,7 @@ void TFTDisplay::sendCommand(uint8_t com)
 
 #ifdef RAK14014
 #elif !defined(M5STACK)
-        tft->setBrightness(172);
+        //tft->setBrightness(172);
 #endif
         break;
     }
@@ -515,7 +522,7 @@ void TFTDisplay::sendCommand(uint8_t com)
 #endif
 #ifdef RAK14014
 #elif !defined(M5STACK)
-        tft->setBrightness(0);
+        //tft->setBrightness(0);
 #endif
         break;
     }
@@ -538,7 +545,7 @@ bool TFTDisplay::hasTouch(void)
 {
 #ifdef RAK14014
 #elif !defined(M5STACK)
-    return tft->touch() != nullptr;
+    //return tft->touch() != nullptr;
 #else
     return false;
 #endif
@@ -548,7 +555,7 @@ bool TFTDisplay::getTouch(int16_t *x, int16_t *y)
 {
 #ifdef RAK14014
 #elif !defined(M5STACK)
-    return tft->getTouch(x, y);
+    //return tft->getTouch(x, y);
 #else
     return false;
 #endif
@@ -564,7 +571,7 @@ bool TFTDisplay::connect()
 {
     concurrency::LockGuard g(spiLock);
     LOG_INFO("Doing TFT init\n");
-#ifdef RAK14014
+#if defined(RAK14014) || defined(UNPHONE)
     tft = new TFT_eSPI;
 #else
     tft = new LGFX;

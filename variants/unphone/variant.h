@@ -1,0 +1,55 @@
+// We use the RFM95W LoRa module
+#define USE_RF95
+#define LORA_SCK 39
+#define LORA_MOSI 40
+#define LORA_MISO 41
+#define LORA_CS 44
+#define LORA_DIO0 10 // AKA LORA_IRQ
+#define LORA_RESET 42
+#define LORA_DIO1 11
+#define LORA_DIO2 RADIOLIB_NC // Not really used
+
+// HX8357 TFT LCD
+#define HX8357_CS 48
+#define HX8357_RS 47 // AKA DC
+#define HX8357_RESET 46
+#define HX8357_SCK LORA_SCK
+#define HX8357_MOSI LORA_MOSI
+#define HX8357_MISO LORA_MISO
+#define HX8357_BUSY -1
+#define HX8357_SPI_HOST SPI2_HOST
+#define HX8357_BACKLIGHT_EN 42 // need to fix to use expander output1
+#define SPI_FREQUENCY 40000000
+#define SPI_READ_FREQUENCY 16000000
+#define TFT_HEIGHT 480
+#define TFT_WIDTH 320
+#define TFT_OFFSET_X 0
+#define TFT_OFFSET_Y 0
+#define TFT_OFFSET_ROTATION 0
+#define SCREEN_ROTATE 90
+#define SCREEN_TRANSITION_FRAMERATE 5
+
+#define HAS_TOUCHSCREEN 0 // TODO touchscreen via spi
+
+// the unphone doesn't have a gps module
+#define HAS_GPS 0
+#undef GPS_RX_PIN
+#undef GPS_TX_PIN
+
+// #define HAS_SDCARD 1 // TODO
+
+#define LED_PIN 13 // If defined we will blink this LED
+#define LED_INVERTED 1
+
+#define BUTTON_PIN 21      // Button 3 - square - top button in landscape mode
+#define BUTTON_NEED_PULLUP // we do need a helping hand up
+
+#define I2C_SDA 3 // I2C pins for this board
+#define I2C_SCL 4
+
+// ratio of voltage divider = 3.20 (R1=100k, R2=220k)
+// #define ADC_MULTIPLIER 3.2
+
+// #define BATTERY_PIN 13 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+// #define ADC_CHANNEL ADC2_GPIO13_CHANNEL
+// #define BAT_MEASURE_ADC_UNIT 2
