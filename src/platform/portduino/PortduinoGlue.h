@@ -36,7 +36,8 @@ enum configNames {
     logoutputlevel,
     webserver,
     webserverport,
-    webserverrootpath
+    webserverrootpath,
+    maxnodes
 };
 enum { no_screen, st7789, st7735, st7735s, ili9341 };
 enum { no_touchscreen, xpt2046, stmpe610 };
