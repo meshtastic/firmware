@@ -7,7 +7,6 @@
 #include "meshtastic/channel.pb.h"
 #include "meshtastic/config.pb.h"
 #include "meshtastic/connection_status.pb.h"
-#include "meshtastic/deviceonly.pb.h"
 #include "meshtastic/mesh.pb.h"
 #include "meshtastic/module_config.pb.h"
 
