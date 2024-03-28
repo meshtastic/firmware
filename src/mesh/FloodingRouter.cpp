@@ -49,15 +49,6 @@ void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
 
                 tosend->hop_limit--; // bump down the hop count
 
-                if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
-                    // If it is a traceRoute request, update the route that it went via me
-                    if (traceRouteModule && traceRouteModule->wantPacket(p))
-                        traceRouteModule->updateRoute(tosend);
-                    // If it is a neighborInfo packet, update last_sent_by_id
-                    if (neighborInfoModule && neighborInfoModule->wantPacket(p))
-                        neighborInfoModule->updateLastSentById(tosend);
-                }
-
                 LOG_INFO("Rebroadcasting received floodmsg to neighbors\n");
                 // Note: we are careful to resend using the original senders node id
                 // We are careful not to call our hooked version of send() - because we don't want to check this again

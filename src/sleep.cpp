@@ -1,17 +1,23 @@
-#include "sleep.h"
+#include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
+#endif
+
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "configuration.h"
 #include "error.h"
 #include "main.h"
+#include "sleep.h"
 #include "target_specific.h"
 
 #ifdef ARCH_ESP32
 #include "esp32/pm.h"
 #include "esp_pm.h"
+#if !MESHTASTIC_EXCLUDE_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
+#endif
 #include "rom/rtc.h"
 #include <driver/rtc_io.h>
 #include <driver/uart.h>
@@ -48,7 +54,7 @@ RTC_DATA_ATTR int bootCount = 0;
  */
 void setCPUFast(bool on)
 {
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
 
     if (isWifiAvailable()) {
         /*
@@ -198,7 +204,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
 
     screen->doDeepSleep(); // datasheet says this will draw only 10ua
 
-    nodeDB.saveToDisk();
+    nodeDB->saveToDisk();
 
 #ifdef TTGO_T_ECHO
 #ifdef PIN_POWER_EN
@@ -206,11 +212,11 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     // pinMode(PIN_POWER_EN1, INPUT_PULLDOWN);
 #endif
 #endif
-
+#if HAS_GPS
     // Kill GPS power completely (even if previously we just had it in sleep mode)
     if (gps)
         gps->setGPSPower(false, false, 0);
-
+#endif
     setLed(false);
 
 #ifdef RESET_OLED

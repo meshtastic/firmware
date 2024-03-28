@@ -2,6 +2,10 @@
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 
+#ifdef ARCH_PORTDUINO
+#include "platform/portduino/PortduinoGlue.h"
+#endif
+
 PacketHistory::PacketHistory()
 {
     recentPackets.reserve(MAX_NUM_NODES); // Prealloc the worst case # of records - to prevent heap fragmentation
