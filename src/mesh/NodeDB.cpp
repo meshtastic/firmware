@@ -197,9 +197,11 @@ bool NodeDB::factoryReset()
     LOG_INFO("Performing factory reset!\n");
     // first, remove the "/prefs" (this removes most prefs)
     rmDir("/prefs");
+#ifdef FSCom
     if (FSCom.exists("/static/rangetest.csv") && !FSCom.remove("/static/rangetest.csv")) {
         LOG_ERROR("Could not remove rangetest.csv file\n");
     }
+#endif
     // second, install default state (this will deal with the duplicate mac address issue)
     installDefaultDeviceState();
     installDefaultConfig();
@@ -443,7 +445,7 @@ void NodeDB::resetNodes()
         neighborInfoModule->resetNeighbors();
 }
 
-void NodeDB::removeNodeByNum(uint nodeNum)
+void NodeDB::removeNodeByNum(NodeNum nodeNum)
 {
     int newPos = 0, removed = 0;
     for (int i = 0; i < numMeshNodes; i++) {

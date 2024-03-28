@@ -50,6 +50,8 @@
 
 #include "xmodem.h"
 
+#ifdef FSCom
+
 XModemAdapter xModem;
 
 XModemAdapter::XModemAdapter() {}
@@ -249,3 +251,4 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
         break;
     }
 }
+#endif
