@@ -5,7 +5,7 @@
 
 // Constructor
 EInkDynamicDisplay::EInkDynamicDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY geometry, HW_I2C i2cBus)
-    : EInkDisplay(address, sda, scl, geometry, i2cBus)
+    : EInkDisplay(address, sda, scl, geometry, i2cBus), NotifiedWorkerThread("EInkDynamicDisplay")
 {
     // If tracking ghost pixels, grab memory
 #ifdef EINK_LIMIT_GHOSTING_PX
@@ -112,12 +112,15 @@ void EInkDynamicDisplay::endOrDetach()
     // If the GxEPD2 version reports that it has the async modifications
 #ifdef HAS_EINK_ASYNCFULL
     if (previousRefresh == FULL) {
-        asyncRefreshRunning = true; // Set the flag - picked up at start of determineMode(), next loop.
+        asyncRefreshRunning = true; // Set the flag - checked in determineMode(); cleared by onNotify()
 
         if (previousFrameFlags & BLOCKING)
             awaitRefresh();
-        else
-            LOG_DEBUG("Async full-refresh begins\n");
+        else {
+            // Async begins
+            LOG_DEBUG("Async full-refresh begins (dropping frames)\n");
+            notifyLater(intervalPollAsyncRefresh, DUE_POLL_ASYNCREFRESH, true); // Hand-off to NotifiedWorkerThread
+        }
     }
 
     // Fast Refresh
@@ -141,7 +144,7 @@ bool EInkDynamicDisplay::determineMode()
     checkInitialized();
     checkForPromotion();
 #if defined(HAS_EINK_ASYNCFULL)
-    checkAsyncFullRefresh();
+    checkBusyAsyncRefresh();
 #endif
     checkRateLimiting();
 
@@ -252,6 +255,7 @@ void EInkDynamicDisplay::checkRateLimiting()
         if (now - previousRunMs < EINK_LIMIT_RATE_RESPONSIVE_SEC * 1000) {
             refresh = SKIPPED;
             reason = EXCEEDED_RATELIMIT_FAST;
+            LOG_DEBUG("refresh=SKIPPED, reason=EXCEEDED_RATELIMIT_FAST, frameFlags=0x%x\n", frameFlags);
             return;
         }
     }
@@ -447,9 +451,44 @@ void EInkDynamicDisplay::resetGhostPixelTracking()
 }
 #endif // EINK_LIMIT_GHOSTING_PX
 
+// Handle any asyc tasks
+void EInkDynamicDisplay::onNotify(uint32_t notification)
+{
+    // Which task
+    switch (notification) {
+    case DUE_POLL_ASYNCREFRESH:
+        pollAsyncRefresh();
+        break;
+    }
+}
+
 #ifdef HAS_EINK_ASYNCFULL
-// Check the status of an "async full-refresh", and run the finish-up code if the hardware is ready
-void EInkDynamicDisplay::checkAsyncFullRefresh()
+// Run the post-update code if the hardware is ready
+void EInkDynamicDisplay::pollAsyncRefresh()
+{
+    // We shouldn't be here..
+    if (!asyncRefreshRunning)
+        return;
+
+    // Still running, check back later
+    if (adafruitDisplay->epd2.isBusy()) {
+        // Schedule next call of pollAsyncRefresh()
+        NotifiedWorkerThread::notifyLater(intervalPollAsyncRefresh, DUE_POLL_ASYNCREFRESH, true);
+        return;
+    }
+
+    // If asyncRefreshRunning flag is still set, but display's BUSY pin reports the refresh is done
+    adafruitDisplay->endAsyncFull(); // Run the end of nextPage() code
+    EInkDisplay::endUpdate();        // Run base-class code to finish off update (NOT our derived class override)
+    asyncRefreshRunning = false;     // Unset the flag
+    LOG_DEBUG("Async full-refresh complete\n");
+
+    // Note: this code only works because of a modification to meshtastic/GxEPD2.
+    // It is only equipped to intercept calls to nextPage()
+}
+
+// Check the status of "async full-refresh"; skip if running
+void EInkDynamicDisplay::checkBusyAsyncRefresh()
 {
     // No refresh taking place, continue with determineMode()
     if (!asyncRefreshRunning)
@@ -472,15 +511,6 @@ void EInkDynamicDisplay::checkAsyncFullRefresh()
 
         return;
     }
-
-    // If we asyncRefreshRunning flag is still set, but display's BUSY pin reports the refresh is done
-    adafruitDisplay->endAsyncFull(); // Run the end of nextPage() code
-    EInkDisplay::endUpdate();        // Run base-class code to finish off update (NOT our derived class override)
-    asyncRefreshRunning = false;     // Unset the flag
-    LOG_DEBUG("Async full-refresh complete\n");
-
-    // Note: this code only works because of a modification to meshtastic/GxEPD2.
-    // It is only equipped to intercept calls to nextPage()
 }
 
 // Hold control while an async refresh runs

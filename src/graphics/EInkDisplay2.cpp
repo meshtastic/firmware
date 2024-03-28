@@ -184,7 +184,6 @@ bool EInkDisplay::connect()
         // Init GxEPD2
         adafruitDisplay->init();
         adafruitDisplay->setRotation(3);
-        adafruitDisplay->clearScreen(); // Clearing now, so the boot logo will draw nice and smoothe (fast refresh)
     }
 #elif defined(PCA10059)
     {
