@@ -15,6 +15,54 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
+/* Position with static location information only for NodeDBLite */
+typedef struct _meshtastic_PositionLite {
+    /* The new preferred location encoding, multiply by 1e-7 to get degrees
+ in floating point */
+    int32_t latitude_i;
+    /* TODO: REPLACE */
+    int32_t longitude_i;
+    /* In meters above MSL (but see issue #359) */
+    int32_t altitude;
+    /* This is usually not sent over the mesh (to save space), but it is sent
+ from the phone so that the local device can set its RTC If it is sent over
+ the mesh (because there are devices on the mesh without GPS), it will only
+ be sent by devices which has a hardware GPS clock.
+ seconds since 1970 */
+    uint32_t time;
+    /* TODO: REPLACE */
+    meshtastic_Position_LocSource location_source;
+} meshtastic_PositionLite;
+
+typedef struct _meshtastic_NodeInfoLite {
+    /* The node number */
+    uint32_t num;
+    /* The user info for this node */
+    bool has_user;
+    meshtastic_User user;
+    /* This position data. Note: before 1.2.14 we would also store the last time we've heard from this node in position.time, that is no longer true.
+ Position.time now indicates the last time we received a POSITION from that node. */
+    bool has_position;
+    meshtastic_PositionLite position;
+    /* Returns the Signal-to-noise ratio (SNR) of the last received message,
+ as measured by the receiver. Return SNR of the last received message in dB */
+    float snr;
+    /* Set to indicate the last time we received a packet from this node */
+    uint32_t last_heard;
+    /* The latest device metrics for the node. */
+    bool has_device_metrics;
+    meshtastic_DeviceMetrics device_metrics;
+    /* local channel index we heard that node on. Only populated if its not the default channel. */
+    uint8_t channel;
+    /* True if we witnessed the node over MQTT instead of LoRA transport */
+    bool via_mqtt;
+    /* Number of hops away from us this node is (0 if adjacent) */
+    uint8_t hops_away;
+    /* True if node is in our favorites list
+ Persists between NodeDB internal clean ups */
+    bool is_favorite;
+} meshtastic_NodeInfoLite;
+
 /* Enum definitions */
 /* TODO: REPLACE */
 typedef enum _meshtastic_ScreenFonts {
@@ -69,53 +117,6 @@ typedef struct _meshtastic_DeviceState {
     std::vector<meshtastic_NodeInfoLite> node_db_lite;
 } meshtastic_DeviceState;
 
-/* Position with static location information only for NodeDBLite */
-typedef struct _meshtastic_PositionLite {
-    /* The new preferred location encoding, multiply by 1e-7 to get degrees
- in floating point */
-    int32_t latitude_i;
-    /* TODO: REPLACE */
-    int32_t longitude_i;
-    /* In meters above MSL (but see issue #359) */
-    int32_t altitude;
-    /* This is usually not sent over the mesh (to save space), but it is sent
- from the phone so that the local device can set its RTC If it is sent over
- the mesh (because there are devices on the mesh without GPS), it will only
- be sent by devices which has a hardware GPS clock.
- seconds since 1970 */
-    uint32_t time;
-    /* TODO: REPLACE */
-    meshtastic_Position_LocSource location_source;
-} meshtastic_PositionLite;
-
-typedef struct _meshtastic_NodeInfoLite {
-    /* The node number */
-    uint32_t num;
-    /* The user info for this node */
-    bool has_user;
-    meshtastic_User user;
-    /* This position data. Note: before 1.2.14 we would also store the last time we've heard from this node in position.time, that is no longer true.
- Position.time now indicates the last time we received a POSITION from that node. */
-    bool has_position;
-    meshtastic_PositionLite position;
-    /* Returns the Signal-to-noise ratio (SNR) of the last received message,
- as measured by the receiver. Return SNR of the last received message in dB */
-    float snr;
-    /* Set to indicate the last time we received a packet from this node */
-    uint32_t last_heard;
-    /* The latest device metrics for the node. */
-    bool has_device_metrics;
-    meshtastic_DeviceMetrics device_metrics;
-    /* local channel index we heard that node on. Only populated if its not the default channel. */
-    uint8_t channel;
-    /* True if we witnessed the node over MQTT instead of LoRA transport */
-    bool via_mqtt;
-    /* Number of hops away from us this node is (0 if adjacent) */
-    uint8_t hops_away;
-    /* True if node is in our favorites list
- Persists between NodeDB internal clean ups */
-    bool is_favorite;
-} meshtastic_NodeInfoLite;
 
 /* The on-disk saved channels */
 typedef struct _meshtastic_ChannelFile {
