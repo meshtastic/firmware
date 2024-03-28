@@ -1363,9 +1363,12 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
 
     // Request new frame, ASAP
     setFastFramerate();
-    uint64_t now = millis();
-    while (ui->getUiState()->lastUpdate < now)
+    uint64_t startUpdate;
+    do {
+        startUpdate = millis(); // Handle impossibly unlikely corner case of a millis() overflow..
+        delay(1);
         ui->update();
+    } while (ui->getUiState()->lastUpdate < startUpdate);
 
 #ifndef USE_EINK_DYNAMICDISPLAY
     // Retrofit to EInkDisplay class
