@@ -1,4 +1,4 @@
-FROM debian:bullseye-slim AS builder
+FROM debian:bookworm-slim AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Etc/UTC
@@ -27,15 +27,23 @@ RUN wget https://raw.githubusercontent.com/platformio/platformio-core-installer/
 	source ~/.platformio/penv/bin/activate && \
 	./bin/build-native.sh
 
-FROM frolvlad/alpine-glibc:glibc-2.31
+RUN cp /tmp/firmware/release/meshtasticd_linux_$(uname -m) /tmp/firmware/release/meshtasticd
 
-RUN apk --update add --no-cache g++ shadow && \
-	groupadd -g 1000 mesh && useradd -ml -u 1000 -g 1000 mesh
+##### PRODUCTION BUILD #############
 
-COPY --from=builder /tmp/firmware/release/meshtasticd_linux_x86_64 /home/mesh/
+FROM debian:bookworm-slim
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Etc/UTC
+
+RUN apt-get update && \
+    apt-get -y install libc-bin libc6 libgpiod2 libyaml-cpp0.7
+RUN groupadd -g 1000 mesh && useradd -ml -u 1000 -g 1000 mesh
 
 USER mesh
 WORKDIR /home/mesh
-CMD sh -cx "./meshtasticd_linux_x86_64 --hwid '${HWID:-$RANDOM}'"
+COPY --from=builder /tmp/firmware/release/meshtasticd /home/mesh/
+
+CMD sh -cx "./meshtasticd -d /home/mesh/data --hwid '${HWID:-$RANDOM}'"
+
 
 HEALTHCHECK NONE
