@@ -1,4 +1,7 @@
+#include "configuration.h"
+#if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
+#endif
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -6,7 +9,7 @@
 #include "ReliableRouter.h"
 #include "airtime.h"
 #include "buzz.h"
-#include "configuration.h"
+
 #include "error.h"
 #include "power.h"
 // #include "debug.h"
@@ -33,9 +36,13 @@
 // #include <driver/rtc_io.h>
 
 #ifdef ARCH_ESP32
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "mesh/http/WebServer.h"
+#endif
+#if !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "nimble/NimbleBluetooth.h"
 NimbleBluetooth *nimbleBluetooth;
+#endif
 #endif
 
 #ifdef ARCH_NRF52
@@ -52,22 +59,28 @@ NRF52Bluetooth *nrf52Bluetooth;
 #include "mesh/api/ethServerAPI.h"
 #include "mesh/eth/ethClient.h"
 #endif
+
+#if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
+#endif
 
 #include "LLCC68Interface.h"
 #include "RF95Interface.h"
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
 #include "SX1280Interface.h"
+
 #ifdef ARCH_STM32WL
 #include "STM32WLE5JCInterface.h"
 #endif
+
 #if !HAS_RADIO && defined(ARCH_PORTDUINO)
 #include "platform/portduino/SimRadio.h"
 #endif
 
 #ifdef ARCH_PORTDUINO
 #include "linux/LinuxHardwareI2C.h"
+#include "mesh/raspihttp/PiWebServer.h"
 #include "platform/portduino/PortduinoGlue.h"
 #include <fstream>
 #include <iostream>
@@ -77,6 +90,7 @@ NRF52Bluetooth *nrf52Bluetooth;
 #if HAS_BUTTON || defined(ARCH_PORTDUINO)
 #include "ButtonThread.h"
 #endif
+
 #include "PowerFSMThread.h"
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
@@ -232,10 +246,16 @@ void setup()
 
     initDeepSleep();
 
-    // Testing this fix für erratic T-Echo boot behaviour
-#if defined(TTGO_T_ECHO) && defined(PIN_EINK_PWR_ON)
-    pinMode(PIN_EINK_PWR_ON, OUTPUT);
-    digitalWrite(PIN_EINK_PWR_ON, HIGH);
+    // power on peripherals
+#if defined(TTGO_T_ECHO) && defined(PIN_POWER_EN)
+    pinMode(PIN_POWER_EN, OUTPUT);
+    digitalWrite(PIN_POWER_EN, HIGH);
+    // digitalWrite(PIN_POWER_EN1, INPUT);
+#endif
+
+#if defined(LORA_TCXO_GPIO)
+    pinMode(LORA_TCXO_GPIO, OUTPUT);
+    digitalWrite(LORA_TCXO_GPIO, HIGH);
 #endif
 
 #if defined(VEXT_ENABLE_V03)
@@ -354,7 +374,7 @@ void setup()
     pinMode(PIN_3V3_EN, OUTPUT);
     digitalWrite(PIN_3V3_EN, HIGH);
 #endif
-#ifndef USE_EINK
+#ifdef AQ_SET_PIN
     // RAK-12039 set pin for Air quality sensor
     pinMode(AQ_SET_PIN, OUTPUT);
     digitalWrite(AQ_SET_PIN, HIGH);
@@ -432,7 +452,7 @@ void setup()
 
     auto screenInfo = i2cScanner->firstScreen();
     screen_found = screenInfo.type != ScanI2C::DeviceType::NONE ? screenInfo.address : ScanI2C::ADDRESS_NONE;
-    LOG_INFO(" !!! screen found !!!\n");
+
     if (screen_found.port != ScanI2C::I2CPort::NO_I2C) {
         switch (screenInfo.type) {
         case ScanI2C::DeviceType::SCREEN_SH1106:
@@ -513,6 +533,7 @@ void setup()
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::BME_680, meshtastic_TelemetrySensorType_BME680)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::BME_280, meshtastic_TelemetrySensorType_BME280)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::BMP_280, meshtastic_TelemetrySensorType_BMP280)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::BMP_085, meshtastic_TelemetrySensorType_BMP085)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::INA260, meshtastic_TelemetrySensorType_INA260)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::INA219, meshtastic_TelemetrySensorType_INA219)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::INA3221, meshtastic_TelemetrySensorType_INA3221)
@@ -560,7 +581,7 @@ void setup()
 
     // We do this as early as possible because this loads preferences from flash
     // but we need to do this after main cpu init (esp32setup), because we need the random seed set
-    nodeDB.init();
+    nodeDB = new NodeDB;
 
     // If we're taking on the repeater role, use flood router and turn off 3V3_S rail because peripherals are not needed
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
@@ -599,7 +620,6 @@ void setup()
     Wire.beginTransmission(0x26);
     Wire.write(0x02);
     Wire.write(0x04); // Backlight on
-    // Wire.write(0x00); // Backlight off
     Wire.write(0x22); // G&B LEDs off
     Wire.endTransmission();
 #endif
@@ -656,7 +676,7 @@ void setup()
 #else
     // ESP32
     SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
-    LOG_WARN("SPI.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)\n", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
+    LOG_DEBUG("SPI.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)\n", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     SPI.setFrequency(4000000);
 #endif
 
@@ -665,17 +685,22 @@ void setup()
 
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 
+#if !MESHTASTIC_EXCLUDE_GPS
     // If we're taking on the repeater role, ignore GPS
-    if (config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER &&
-        config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
-        gps = GPS::createGps();
+    if (HAS_GPS) {
+        if (config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER &&
+            config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
+            gps = GPS::createGps();
+            if (gps) {
+                gpsStatus->observe(&gps->newStatus);
+            } else {
+                LOG_DEBUG("Running without GPS.\n");
+            }
+        }
     }
-    if (gps) {
-        gpsStatus->observe(&gps->newStatus);
-    } else {
-        LOG_DEBUG("Running without GPS.\n");
-    }
-    nodeStatus->observe(&nodeDB.newStatus);
+#endif
+
+    nodeStatus->observe(&nodeDB->newStatus);
 
 #ifdef HAS_I2S
     LOG_DEBUG("Starting audio thread\n");
@@ -695,7 +720,7 @@ void setup()
 
 // Don't call screen setup until after nodedb is setup (because we need
 // the current region name)
-#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(HX8357_CS)
+#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS)
     screen->setup();
 #elif defined(ARCH_PORTDUINO)
     if (screen_found.port != ScanI2C::I2CPort::NO_I2C || settingsMap[displayPanel]) {
@@ -712,6 +737,11 @@ void setup()
     // make analog PA vs not PA switch on SX126x eval board work properly
     pinMode(SX126X_ANT_SW, OUTPUT);
     digitalWrite(SX126X_ANT_SW, 1);
+#endif
+
+#ifdef PIN_PWR_DELAY_MS
+    // This may be required to give the peripherals time to power up.
+    delay(PIN_PWR_DELAY_MS);
 #endif
 
 #ifdef ARCH_PORTDUINO
@@ -864,7 +894,7 @@ void setup()
     if ((config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && (!rIf->wideLora())) {
         LOG_WARN("Radio chip does not support 2.4GHz LoRa. Reverting to unset.\n");
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
-        nodeDB.saveToDisk(SEGMENT_CONFIG);
+        nodeDB->saveToDisk(SEGMENT_CONFIG);
         if (!rIf->reconfigure()) {
             LOG_WARN("Reconfigure failed, rebooting\n");
             screen->startRebootScreen();
@@ -872,9 +902,12 @@ void setup()
         }
     }
 
+#if !MESHTASTIC_EXCLUDE_MQTT
     mqttInit();
+#endif
 
 #ifndef ARCH_PORTDUINO
+
     // Initialize Wifi
 #if HAS_WIFI
     initWifi();
@@ -886,12 +919,17 @@ void setup()
 #endif
 #endif
 
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WEBSERVER
     // Start web server thread.
     webServerThread = new WebServerThread();
 #endif
 
 #ifdef ARCH_PORTDUINO
+#if __has_include(<ulfius.h>)
+    if (settingsMap[webserverport] != -1) {
+        piwebServerThread = new PiWebServerThread();
+    }
+#endif
     initApiServer(TCPPort);
 #endif
 

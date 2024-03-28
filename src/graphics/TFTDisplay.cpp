@@ -496,7 +496,7 @@ void TFTDisplay::sendCommand(uint8_t com)
 
 #ifdef RAK14014
 #elif !defined(M5STACK)
-        //tft->setBrightness(172);
+        // tft->setBrightness(172);  // TODO
 #endif
         break;
     }
@@ -522,7 +522,7 @@ void TFTDisplay::sendCommand(uint8_t com)
 #endif
 #ifdef RAK14014
 #elif !defined(M5STACK)
-        //tft->setBrightness(0);
+        // tft->setBrightness(0); // TODO
 #endif
         break;
     }
@@ -545,7 +545,7 @@ bool TFTDisplay::hasTouch(void)
 {
 #ifdef RAK14014
 #elif !defined(M5STACK)
-    //return tft->touch() != nullptr;
+    // return tft->touch() != nullptr; // TODO
 #else
     return false;
 #endif
@@ -555,7 +555,7 @@ bool TFTDisplay::getTouch(int16_t *x, int16_t *y)
 {
 #ifdef RAK14014
 #elif !defined(M5STACK)
-    //return tft->getTouch(x, y);
+    // return tft->getTouch(x, y); // TODO
 #else
     return false;
 #endif
