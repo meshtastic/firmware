@@ -1370,6 +1370,12 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
     while (ui->getUiState()->lastUpdate < now)
         ui->update();
 
+#ifndef USE_EINK_DYNAMICDISPLAY
+    // Retrofit to EInkDisplay class
+    delay(10);
+    screen->forceDisplay();
+#endif
+
     // Prepare now for next frame, shown when display wakes
     ui->setOverlays(NULL, 0);       // Clear overlay
     setFrames();                    // Return to normal display updates
@@ -1493,6 +1499,7 @@ void Screen::handleShutdownScreen()
     static FrameCallback frames[] = {frame};
 
     setFrameImmediateDraw(frames);
+    forceDisplay();
 }
 
 void Screen::handleRebootScreen()
