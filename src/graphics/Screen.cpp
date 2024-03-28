@@ -277,11 +277,7 @@ static void drawScreensaverOverlay(OLEDDisplay *display, OLEDDisplayUiState *sta
 {
     LOG_DEBUG("Drawing screensaver overlay\n");
 
-#ifdef EINK_HASQUIRK_VICIOUSFASTREFRESH
-    EINK_ADD_FRAMEFLAG(display, DEMAND_FAST); // Prefer fast-refresh, easier to clear
-#else
-    EINK_ADD_FRAMEFLAG(display, COSMETIC);   // Take the opportunity for a full-refresh
-#endif
+    EINK_ADD_FRAMEFLAG(display, COSMETIC); // Take the opportunity for a full-refresh
 
     // Config
     display->setFont(FONT_SMALL);
