@@ -63,6 +63,9 @@ PB_BIND(meshtastic_DeviceMetadata, meshtastic_DeviceMetadata, AUTO)
 PB_BIND(meshtastic_Heartbeat, meshtastic_Heartbeat, AUTO)
 
 
+PB_BIND(meshtastic_NodeRemoteHardwarePin, meshtastic_NodeRemoteHardwarePin, AUTO)
+
+
 
 
 
