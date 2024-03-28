@@ -134,7 +134,7 @@ void setupModules()
         trackballInterruptImpl1 = new TrackballInterruptImpl1();
         trackballInterruptImpl1->init();
 #endif
-#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_CANNEDMESSAGES
+#if (HAS_SCREEN || HAS_TFT) && !MESHTASTIC_EXCLUDE_CANNEDMESSAGES
         cannedMessageModule = new CannedMessageModule();
 #endif
 #if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)

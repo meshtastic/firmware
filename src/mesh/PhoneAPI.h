@@ -124,15 +124,15 @@ class PhoneAPI
      */
     virtual void handleDisconnect();
 
+    /// begin a new connection
+    void handleStartConfig();
+
   private:
     void releasePhonePacket();
 
     void releaseQueueStatusPhonePacket();
 
     void releaseMqttClientProxyPhonePacket();
-
-    /// begin a new connection
-    void handleStartConfig();
 
     /**
      * Handle a packet that the phone wants us to send.  We can write to it but can not keep a reference to it

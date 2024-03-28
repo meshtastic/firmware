@@ -36,6 +36,7 @@
 // #include <driver/rtc_io.h>
 
 #ifdef ARCH_ESP32
+#include "freertosinc.h"
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "mesh/http/WebServer.h"
 #endif
@@ -103,6 +104,16 @@ NRF52Bluetooth *nrf52Bluetooth;
 AudioThread *audioThread;
 #endif
 
+#if HAS_TFT
+#include "DeviceScreen.h"
+#include "sharedMem/MeshPacketClient.h"
+#include "sharedMem/MeshPacketServer.h"
+
+void tft_task_handler(void *);
+
+DeviceScreen *deviceScreen = nullptr;
+#endif
+
 using namespace concurrency;
 
 // We always create a screen object, but we only init it if we find the hardware
@@ -154,6 +165,8 @@ bool pmu_found;
 std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1] = {};
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
+
+const char *firmware_version = optstr(APP_VERSION_SHORT);
 
 const char *getDeviceName()
 {
@@ -367,13 +380,13 @@ void setup()
 #endif
 #endif
 
-#ifdef T_DECK
+#if defined(T_DECK)
     // enable keyboard
     pinMode(KB_POWERON, OUTPUT);
     digitalWrite(KB_POWERON, HIGH);
     // There needs to be a delay after power on, give LILYGO-KEYBOARD some startup time
     // otherwise keyboard and touch screen will not work
-    delay(800);
+    delay(200);
 #endif
 
     // Currently only the tbeam has a PMU
@@ -646,6 +659,12 @@ void setup()
     SPI.setFrequency(4000000);
 #endif
 
+#if HAS_TFT
+    MeshPacketServer::init();
+    deviceScreen = &DeviceScreen::create();
+    deviceScreen->init(new MeshPacketClient);
+#endif
+
     // Initialize the screen first so we can show the logo while we start up everything else.
     screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
 
@@ -916,7 +935,19 @@ void setup()
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
     powerFSMthread = new PowerFSMThread();
+
+#if HAS_TFT
+#ifdef HAS_FREE_RTOS
+    xTaskCreatePinnedToCore(tft_task_handler, "tft", 8192, NULL, 9, NULL, 0);
+#endif
+#else
     setCPUFast(false); // 80MHz is fine for our slow peripherals
+#endif
+
+#ifdef ARDUINO_ARCH_ESP32
+    LOG_DEBUG("Free heap  : %7d bytes\n", ESP.getFreeHeap());
+    LOG_DEBUG("Free PSRAM : %7d bytes\n", ESP.getFreePsram());
+#endif
 }
 
 uint32_t rebootAtMsec;   // If not zero we will reboot at this time (used to reboot shortly after the update completes)
@@ -987,3 +1018,18 @@ void loop()
     }
     // if (didWake) LOG_DEBUG("wake!\n");
 }
+
+#if HAS_TFT
+void tft_task_handler(void *param = nullptr)
+{
+    while (true) {
+        if (deviceScreen)
+            deviceScreen->task_handler();
+#ifdef HAS_FREE_RTOS
+        vTaskDelay((TickType_t)5);
+#else
+        delay(10);
+#endif
+    }
+}
+#endif
