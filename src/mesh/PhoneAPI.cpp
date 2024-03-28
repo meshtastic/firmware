@@ -1,13 +1,16 @@
-#include "PhoneAPI.h"
+#include "configuration.h"
+#if !MESHTASTIC_EXCLUDE_GPS
+#include "GPS.h"
+#endif
+
 #include "Channels.h"
 #include "Default.h"
-#include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PhoneAPI.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
 #include "TypeConversions.h"
-#include "configuration.h"
 #include "main.h"
 #include "xmodem.h"
 
@@ -18,8 +21,9 @@
 #if ToRadio_size > MAX_TO_FROM_RADIO_SIZE
 #error ToRadio is too big
 #endif
-
+#if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
+#endif
 
 PhoneAPI::PhoneAPI()
 {
@@ -104,6 +108,7 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
             LOG_INFO("Got xmodem packet\n");
             xModem.handlePacket(toRadioScratch.xmodemPacket);
             break;
+#if !MESHTASTIC_EXCLUDE_MQTT
         case meshtastic_ToRadio_mqttClientProxyMessage_tag:
             LOG_INFO("Got MqttClientProxy message\n");
             if (mqtt && moduleConfig.mqtt.proxy_to_client_enabled && moduleConfig.mqtt.enabled &&
@@ -114,6 +119,7 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
                          "not enabled\n");
             }
             break;
+#endif
         case meshtastic_ToRadio_heartbeat_tag:
             LOG_DEBUG("Got client heartbeat\n");
             break;

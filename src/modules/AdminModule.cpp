@@ -4,7 +4,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include <FSCommon.h>
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "BleOta.h"
 #endif
 #include "Router.h"
@@ -17,10 +17,11 @@
 #include "unistd.h"
 #endif
 #include "Default.h"
+#include "TypeConversions.h"
 
+#if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
-
-#define DEFAULT_REBOOT_SECONDS 7
+#endif
 
 AdminModule *adminModule;
 bool hasOpenEditTransaction;
@@ -121,7 +122,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_reboot_ota_seconds_tag: {
         int32_t s = r->reboot_ota_seconds;
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
         if (BleOta::getOtaAppVersion().isEmpty()) {
             LOG_INFO("No OTA firmware available, scheduling regular reboot in %d seconds\n", s);
             screen->startRebootScreen();
@@ -202,6 +203,31 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->remove_favorite_node);
         if (node != NULL) {
             node->is_favorite = false;
+        }
+        break;
+    }
+    case meshtastic_AdminMessage_set_fixed_position_tag: {
+        if (fromOthers) {
+            LOG_INFO("Ignoring set_fixed_position command from another node.\n");
+        } else {
+            LOG_INFO("Client is receiving a set_fixed_position command.\n");
+            meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
+            node->has_position = true;
+            node->position = TypeConversions::ConvertToPositionLite(r->set_fixed_position);
+            nodeDB->setLocalPosition(r->set_fixed_position);
+            config.position.fixed_position = true;
+            saveChanges(SEGMENT_DEVICESTATE | SEGMENT_CONFIG, false);
+        }
+        break;
+    }
+    case meshtastic_AdminMessage_remove_fixed_position_tag: {
+        if (fromOthers) {
+            LOG_INFO("Ignoring remove_fixed_position command from another node.\n");
+        } else {
+            LOG_INFO("Client is receiving a remove_fixed_position command.\n");
+            nodeDB->clearLocalPosition();
+            config.position.fixed_position = false;
+            saveChanges(SEGMENT_DEVICESTATE | SEGMENT_CONFIG, false);
         }
         break;
     }
@@ -668,7 +694,9 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     if (Ethernet.linkStatus() == LinkON) {
         conn.ethernet.status.is_connected = true;
         conn.ethernet.status.ip_address = Ethernet.localIP();
+#if !MESHTASTIC_EXCLUDE_MQTT
         conn.ethernet.status.is_mqtt_connected = mqtt && mqtt->isConnectedDirectly();
+#endif
         conn.ethernet.status.is_syslog_connected = false; // FIXME wire this up
     } else {
         conn.ethernet.status.is_connected = false;

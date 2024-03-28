@@ -1,7 +1,9 @@
-#include "NimbleBluetooth.h"
-#include "BluetoothCommon.h"
-#include "PowerFSM.h"
 #include "configuration.h"
+#if !MESHTASTIC_EXCLUDE_BLUETOOTH
+#include "BluetoothCommon.h"
+#include "NimbleBluetooth.h"
+#include "PowerFSM.h"
+
 #include "main.h"
 #include "mesh/PhoneAPI.h"
 #include "mesh/mesh-pb-constants.h"
@@ -227,3 +229,4 @@ void clearNVS()
     ESP.restart();
 #endif
 }
+#endif

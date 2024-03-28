@@ -38,7 +38,7 @@ class LinuxInput : public Observable<const InputEvent *>, public concurrency::OS
     int queue_progress = 0;
 
     struct epoll_event events[MAX_EVENTS];
-    int fd;
+    int fd = -1;
     int ret;
     uint8_t report[8];
     int epollfd;

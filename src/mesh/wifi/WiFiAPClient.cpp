@@ -1,17 +1,23 @@
-#include "mesh/wifi/WiFiAPClient.h"
+#include "configuration.h"
+#if !MESHTASTIC_EXCLUDE_WIFI
 #include "NodeDB.h"
 #include "RTC.h"
 #include "concurrency/Periodic.h"
-#include "configuration.h"
+#include "mesh/wifi/WiFiAPClient.h"
+
 #include "main.h"
 #include "mesh/api/WiFiServerAPI.h"
+#if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
+#endif
 #include "target_specific.h"
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #ifdef ARCH_ESP32
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "mesh/http/WebServer.h"
+#endif
 #endif
 #include <ESPmDNS.h>
 #include <esp_wifi.h>
@@ -408,3 +414,4 @@ uint8_t getWifiDisconnectReason()
 {
     return wifiDisconnectReason;
 }
+#endif
