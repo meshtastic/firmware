@@ -14,7 +14,6 @@
 #include "power.h"
 // #include "debug.h"
 #include "FSCommon.h"
-#include "RTC.h"
 #include "SPILock.h"
 #include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
@@ -22,6 +21,7 @@
 #include "detect/ScanI2CTwoWire.h"
 #include "detect/axpDebug.h"
 #include "detect/einkScan.h"
+#include "gps/RTC.h"
 #include "graphics/RAKled.h"
 #include "graphics/Screen.h"
 #include "main.h"
@@ -93,7 +93,7 @@ NRF52Bluetooth *nrf52Bluetooth;
 
 #include "PowerFSMThread.h"
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(ARCH_APOLLO3)
 #include "AccelerometerThread.h"
 #include "AmbientLightingThread.h"
 #endif
@@ -134,7 +134,7 @@ ScanI2C::DeviceAddress accelerometer_found = ScanI2C::ADDRESS_NONE;
 // The I2C address of the RGB LED (if found)
 ScanI2C::FoundDevice rgb_found = ScanI2C::FoundDevice(ScanI2C::DeviceType::NONE, ScanI2C::ADDRESS_NONE);
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(ARCH_APOLLO3)
 ATECCX08A atecc;
 #endif
 
@@ -598,7 +598,7 @@ void setup()
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
 #endif
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(ARCH_APOLLO3)
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
         config.display.wake_on_tap_or_motion = true;
         moduleConfig.external_notification.enabled = true;
@@ -606,7 +606,7 @@ void setup()
     }
 #endif
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(ARCH_APOLLO3)
     if (rgb_found.type != ScanI2C::DeviceType::NONE) {
         ambientLightingThread = new AmbientLightingThread(rgb_found.type);
     }
@@ -637,7 +637,7 @@ void setup()
 #endif // HW_SPI1_DEVICE
 #elif ARCH_PORTDUINO
     SPI.begin(settingsStrings[spidev].c_str());
-#elif !defined(ARCH_ESP32) // ARCH_RP2040
+#elif !defined(ARCH_ESP32) // ARCH_RP2040 + Apollo3
     SPI.begin();
 #else
     // ESP32
