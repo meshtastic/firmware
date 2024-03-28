@@ -278,31 +278,46 @@ static void drawScreensaverOverlay(OLEDDisplay *display, OLEDDisplayUiState *sta
     LOG_DEBUG("Drawing screensaver overlay\n");
     EINK_ADD_FRAMEFLAG(display, COSMETIC); // Take the time to run a full-refresh
 
-    // Config: text
-    display->setTextAlignment(TEXT_ALIGN_CENTER_BOTH);
+    // Config
     display->setFont(FONT_SMALL);
-    const char *text = "Screen Paused";
+    const char *pauseText = "Screen Paused";
+    const char *idText = owner.short_name;
+    constexpr uint16_t padding = 5;
+    constexpr uint8_t dividerGap = 1;
+    constexpr uint8_t imprecision = 5; // How far the box origins can drift from center. Combat burn-in.
 
-    // Dimensions: text
-    const uint16_t textWidth = display->getStringWidth(text, strlen(text));
-    const int16_t textX = display->width() / 2;
-    const int16_t textY = display->height() / 2;
+    // Dimensions
+    const uint16_t idTextWidth = display->getStringWidth(idText, strlen(idText));
+    const uint16_t pauseTextWidth = display->getStringWidth(pauseText, strlen(pauseText));
+    const uint16_t boxWidth = padding + idTextWidth + padding + padding + pauseTextWidth + padding;
+    const uint16_t boxHeight = padding + FONT_HEIGHT_SMALL + padding;
 
-    // Dimensions: box
-    const uint16_t padding = 5;
-    const uint16_t boxWidth = textWidth + (2 * padding);
-    const uint16_t boxHeight = FONT_HEIGHT_SMALL + (2 * padding);
-    const int16_t boxLeft = textX - (boxWidth / 2);
-    const int16_t boxTop = textY - (boxHeight / 2);
+    // Position
+    const int16_t boxLeft = (display->width() / 2) - (boxWidth / 2) + random(-imprecision, imprecision + 1);
+    // const int16_t boxRight = boxLeft + boxWidth - 1;
+    const int16_t boxTop = (display->height() / 2) - (boxHeight / 2 + random(-imprecision, imprecision + 1));
+    const int16_t boxBottom = boxTop + boxHeight - 1;
+    const int16_t idTextLeft = boxLeft + padding;
+    const int16_t idTextTop = boxTop + padding;
+    const int16_t pauseTextLeft = boxLeft + padding + idTextWidth + padding + padding;
+    const int16_t pauseTextTop = boxTop + padding;
+    const int16_t dividerX = boxLeft + padding + idTextWidth + padding;
+    const int16_t dividerTop = boxTop + 1 + dividerGap;
+    const int16_t dividerBottom = boxBottom - 1 - dividerGap;
 
     // Draw: box
     display->setColor(EINK_WHITE);
-    display->fillRect(boxLeft, boxTop, boxWidth, boxHeight);
+    display->fillRect(boxLeft - 1, boxTop - 1, boxWidth + 2, boxHeight + 2); // Clear a slightly oversized area for the box
     display->setColor(EINK_BLACK);
     display->drawRect(boxLeft, boxTop, boxWidth, boxHeight);
 
-    // Draw: text
-    display->drawString(textX, textY, text);
+    // Draw: Text
+    display->drawString(idTextLeft, idTextTop, idText);
+    display->drawString(pauseTextLeft, pauseTextTop, pauseText);
+    display->drawString(pauseTextLeft + 1, pauseTextTop, pauseText); // Faux bold
+
+    // Draw: divider
+    display->drawLine(dividerX, dividerTop, dividerX, dividerBottom);
 }
 #endif
 
