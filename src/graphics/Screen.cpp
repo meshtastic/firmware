@@ -276,7 +276,12 @@ static void drawDeepSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state,
 static void drawScreensaverOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
     LOG_DEBUG("Drawing screensaver overlay\n");
-    EINK_ADD_FRAMEFLAG(display, COSMETIC); // Take the time to run a full-refresh
+
+#ifdef EINK_HASQUIRK_VICIOUSFASTREFRESH
+    EINK_ADD_FRAMEFLAG(display, DEMAND_FAST); // Prefer fast-refresh, easier to clear
+#else
+    EINK_ADD_FRAMEFLAG(display, COSMETIC);   // Take the opportunity for a full-refresh
+#endif
 
     // Config
     display->setFont(FONT_SMALL);
@@ -1370,12 +1375,11 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
     setFrames();                    // Return to normal display updates
     ui->switchToFrame(frameNumber); // Attempt to return to same frame after power-on
 
-    // It's really nice if screens wakes with a fast refresh,
-    // but super ugly if the display has ghosting issues.
-#ifdef EINK_HASPROBLEM_GHOSTING
-    EINK_ADD_FRAMEFLAG(dispdev, COSMETIC);
+    // Pick a refresh method, for when display wakes
+#ifdef EINK_HASQUIRK_GHOSTING
+    EINK_ADD_FRAMEFLAG(dispdev, COSMETIC); // Really ugly to see ghosting from "screen paused"
 #else
-    EINK_ADD_FRAMEFLAG(dispdev, RESPONSIVE);
+    EINK_ADD_FRAMEFLAG(dispdev, RESPONSIVE); // Really nice to wake screen with a fast-refresh
 #endif
 }
 #endif
