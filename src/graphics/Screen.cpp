@@ -25,7 +25,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <OLEDDisplay.h>
 
 #include "DisplayFormatters.h"
+#if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
+#endif
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "error.h"
@@ -71,7 +73,7 @@ namespace graphics
 // #define SHOW_REDRAWS
 
 // A text message frame + debug frame + all the node infos
-static FrameCallback normalFrames[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
+FrameCallback *normalFrames;
 static uint32_t targetFramerate = IDLE_FRAMERATE;
 static char btPIN[16] = "888888";
 
@@ -92,8 +94,10 @@ std::vector<MeshModule *> moduleFrames;
 // Stores the last 4 of our hardware ID, to make finding the device for pairing easier
 static char ourId[5];
 
+#if HAS_GPS
 // GeoCoord object for the screen
 GeoCoord geoCoord;
+#endif
 
 #ifdef SHOW_REDRAWS
 static bool heartbeat = false;
@@ -354,7 +358,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     static char tempBuf[237];
 
     const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
-    meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(getFrom(&mp));
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
     // LOG_DEBUG("drawing text message from 0x%x: %s\n", mp.from,
     // mp.decoded.variant.data.decoded.bytes);
 
@@ -392,7 +396,7 @@ static void drawWaypointFrame(OLEDDisplay *display, OLEDDisplayUiState *state, i
     static char tempBuf[237];
 
     meshtastic_MeshPacket &mp = devicestate.rx_waypoint;
-    meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(getFrom(&mp));
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
@@ -483,7 +487,7 @@ static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const NodeStat
     if (config.display.heading_bold)
         display->drawString(x + 11, y - 2, usersString);
 }
-
+#if HAS_GPS
 // Draw GPS status summary
 static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
@@ -625,7 +629,7 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
         }
     }
 }
-
+#endif
 namespace
 {
 
@@ -780,16 +784,16 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     if (state->currentFrame != prevFrame) {
         prevFrame = state->currentFrame;
 
-        nodeIndex = (nodeIndex + 1) % nodeDB.getNumMeshNodes();
-        meshtastic_NodeInfoLite *n = nodeDB.getMeshNodeByIndex(nodeIndex);
-        if (n->num == nodeDB.getNodeNum()) {
+        nodeIndex = (nodeIndex + 1) % nodeDB->getNumMeshNodes();
+        meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(nodeIndex);
+        if (n->num == nodeDB->getNodeNum()) {
             // Don't show our node, just skip to next
-            nodeIndex = (nodeIndex + 1) % nodeDB.getNumMeshNodes();
-            n = nodeDB.getMeshNodeByIndex(nodeIndex);
+            nodeIndex = (nodeIndex + 1) % nodeDB->getNumMeshNodes();
+            n = nodeDB->getMeshNodeByIndex(nodeIndex);
         }
     }
 
-    meshtastic_NodeInfoLite *node = nodeDB.getMeshNodeByIndex(nodeIndex);
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(nodeIndex);
 
     display->setFont(FONT_SMALL);
 
@@ -827,7 +831,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     } else {
         strncpy(distStr, "? km", sizeof(distStr));
     }
-    meshtastic_NodeInfoLite *ourNode = nodeDB.getMeshNode(nodeDB.getNodeNum());
+    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     const char *fields[] = {username, distStr, signalStr, lastStr, NULL};
     int16_t compassX = 0, compassY = 0;
 
@@ -893,6 +897,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_OledType screenType, OLEDDISPLAY_GEOMETRY geometry)
     : concurrency::OSThread("Screen"), address_found(address), model(screenType), geometry(geometry), cmdQueue(32)
 {
+    graphics::normalFrames = new FrameCallback[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
 #if defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SH1107_128_64)
     dispdev = new SH1106Wire(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
@@ -929,6 +934,11 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 
     ui = new OLEDDisplayUi(dispdev);
     cmdQueue.setReader(this);
+}
+
+Screen::~Screen()
+{
+    delete[] graphics::normalFrames;
 }
 
 /**
@@ -1287,7 +1297,7 @@ void Screen::setFrames()
 #endif
 
     // We don't show the node info our our node (if we have it yet - we should)
-    size_t numMeshNodes = nodeDB.getNumMeshNodes();
+    size_t numMeshNodes = nodeDB->getNumMeshNodes();
     if (numMeshNodes > 0)
         numMeshNodes--;
 
@@ -1536,6 +1546,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     } else {
         drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 3, nodeStatus);
     }
+#if HAS_GPS
     // Display GPS status
     if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         drawGPSpowerstat(display, x, y + 2, gpsStatus);
@@ -1546,7 +1557,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             drawGPS(display, x + (SCREEN_WIDTH * 0.63), y + 3, gpsStatus);
         }
     }
-
+#endif
     display->setColor(WHITE);
     // Draw the channel name
     display->drawString(x, y + FONT_HEIGHT_SMALL, channelStr);
@@ -1765,6 +1776,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     char chUtil[13];
     snprintf(chUtil, sizeof(chUtil), "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), y + FONT_HEIGHT_SMALL * 1, chUtil);
+#if HAS_GPS
     if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         // Line 3
         if (config.display.gps_format !=
@@ -1776,6 +1788,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     } else {
         drawGPSpowerstat(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
     }
+#endif
     /* Display a heartbeat pixel that blinks every time the frame is redrawn */
 #ifdef SHOW_REDRAWS
     if (heartbeat)
@@ -1792,7 +1805,7 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
         if (showingNormalScreen && nodeStatus->getLastNumTotal() != nodeStatus->getNumTotal()) {
             setFrames(); // Regen the list of screens
         }
-        nodeDB.updateGUI = false;
+        nodeDB->updateGUI = false;
         break;
     }
 

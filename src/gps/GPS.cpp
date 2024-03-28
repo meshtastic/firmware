@@ -1,8 +1,10 @@
-#include "GPS.h"
+#include "configuration.h"
+#if !MESHTASTIC_EXCLUDE_GPS
 #include "Default.h"
+#include "GPS.h"
 #include "NodeDB.h"
 #include "RTC.h"
-#include "configuration.h"
+
 #include "main.h" // pmu_found
 #include "sleep.h"
 #include "ubx.h"
@@ -759,7 +761,7 @@ uint32_t GPS::getWakeTime() const
     if (t == UINT32_MAX)
         return t; // already maxint
 
-    return Default::Default::getConfiguredOrDefaultMs(t, default_broadcast_interval_secs);
+    return Default::getConfiguredOrDefaultMs(t, default_broadcast_interval_secs);
 }
 
 /** Get how long we should sleep between aqusition attempts in msecs
@@ -775,7 +777,7 @@ uint32_t GPS::getSleepTime() const
     if (t == UINT32_MAX)
         return t; // already maxint
 
-    return t * 1000;
+    return Default::getConfiguredOrDefaultMs(t, default_gps_update_interval);
 }
 
 void GPS::publishUpdate()
@@ -815,7 +817,7 @@ int32_t GPS::runOnce()
             LOG_WARN("GPS FactoryReset requested\n");
             if (gps->factoryReset()) { // If we don't succeed try again next time
                 devicestate.did_gps_reset = true;
-                nodeDB.saveToDisk(SEGMENT_DEVICESTATE);
+                nodeDB->saveToDisk(SEGMENT_DEVICESTATE);
             }
         }
         GPSInitFinished = true;
@@ -835,7 +837,7 @@ int32_t GPS::runOnce()
             if (devicestate.did_gps_reset && (millis() - lastWakeStartMsec > 60000) && !hasFlow()) {
                 LOG_DEBUG("GPS is not communicating, trying factory reset on next bootup.\n");
                 devicestate.did_gps_reset = false;
-                nodeDB.saveDeviceStateToDisk();
+                nodeDB->saveDeviceStateToDisk();
                 return disable(); // Stop the GPS thread as it can do nothing useful until next reboot.
             }
         }
@@ -1278,7 +1280,7 @@ bool GPS::lookForLocation()
 
 #ifndef TINYGPS_OPTION_NO_STATISTICS
     if (reader.failedChecksum() > lastChecksumFailCount) {
-        LOG_WARN("Warning, %u new GPS checksum failures, for a total of %u.\n", reader.failedChecksum() - lastChecksumFailCount,
+        LOG_WARN("%u new GPS checksum failures, for a total of %u.\n", reader.failedChecksum() - lastChecksumFailCount,
                  reader.failedChecksum());
         lastChecksumFailCount = reader.failedChecksum();
     }
@@ -1482,3 +1484,4 @@ void GPS::toggleGpsMode()
         enable();
     }
 }
+#endif // Exclude GPS

@@ -56,7 +56,7 @@ template <class T> class ProtobufModule : protected SinglePortModule
      */
     const char *getSenderShortName(const meshtastic_MeshPacket &mp)
     {
-        auto node = nodeDB.getMeshNode(getFrom(&mp));
+        auto node = nodeDB->getMeshNode(getFrom(&mp));
         const char *sender = (node) ? node->user.short_name : "???";
         return sender;
     }
@@ -108,8 +108,8 @@ template <class T> class ProtobufModule : protected SinglePortModule
                 // if we can't decode it, nobody can process it!
                 return;
             }
-        }
 
-        return alterReceivedProtobuf(mp, decoded);
+            return alterReceivedProtobuf(mp, decoded);
+        }
     }
 };

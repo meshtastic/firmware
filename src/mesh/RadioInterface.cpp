@@ -334,8 +334,8 @@ bool RadioInterface::init()
     notifyDeepSleepObserver.observe(&notifyDeepSleep);
 
     // we now expect interfaces to operate in promiscuous mode
-    // radioIf.setThisAddress(nodeDB.getNodeNum()); // Note: we must do this here, because the nodenum isn't inited at constructor
-    // time.
+    // radioIf.setThisAddress(nodeDB->getNodeNum()); // Note: we must do this here, because the nodenum isn't inited at
+    // constructor time.
 
     applyModemConfig();
 
@@ -564,6 +564,8 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
     h->to = p->to;
     h->id = p->id;
     h->channel = p->channel;
+    h->next_hop = 0;   // *** For future use ***
+    h->relay_node = 0; // *** For future use ***
     if (p->hop_limit > HOP_MAX) {
         LOG_WARN("hop limit %d is too high, setting to %d\n", p->hop_limit, HOP_RELIABLE);
         p->hop_limit = HOP_RELIABLE;

@@ -1,4 +1,7 @@
+#include "configuration.h"
+#if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
+#endif
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -6,7 +9,7 @@
 #include "ReliableRouter.h"
 #include "airtime.h"
 #include "buzz.h"
-#include "configuration.h"
+
 #include "error.h"
 #include "power.h"
 // #include "debug.h"
@@ -33,9 +36,13 @@
 // #include <driver/rtc_io.h>
 
 #ifdef ARCH_ESP32
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "mesh/http/WebServer.h"
+#endif
+#if !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "nimble/NimbleBluetooth.h"
 NimbleBluetooth *nimbleBluetooth;
+#endif
 #endif
 
 #ifdef ARCH_NRF52
@@ -52,16 +59,21 @@ NRF52Bluetooth *nrf52Bluetooth;
 #include "mesh/api/ethServerAPI.h"
 #include "mesh/eth/ethClient.h"
 #endif
+
+#if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
+#endif
 
 #include "LLCC68Interface.h"
 #include "RF95Interface.h"
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
 #include "SX1280Interface.h"
+
 #ifdef ARCH_STM32WL
 #include "STM32WLE5JCInterface.h"
 #endif
+
 #if !HAS_RADIO && defined(ARCH_PORTDUINO)
 #include "platform/portduino/SimRadio.h"
 #endif
@@ -78,6 +90,7 @@ NRF52Bluetooth *nrf52Bluetooth;
 #if HAS_BUTTON || defined(ARCH_PORTDUINO)
 #include "ButtonThread.h"
 #endif
+
 #include "PowerFSMThread.h"
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(ARCH_APOLLO3)
@@ -554,7 +567,7 @@ void setup()
 
     // We do this as early as possible because this loads preferences from flash
     // but we need to do this after main cpu init (esp32setup), because we need the random seed set
-    nodeDB.init();
+    nodeDB = new NodeDB;
 
     // If we're taking on the repeater role, use flood router and turn off 3V3_S rail because peripherals are not needed
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
@@ -629,7 +642,7 @@ void setup()
 #else
     // ESP32
     SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
-    LOG_WARN("SPI.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)\n", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
+    LOG_DEBUG("SPI.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)\n", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     SPI.setFrequency(4000000);
 #endif
 
@@ -638,17 +651,22 @@ void setup()
 
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 
+#if !MESHTASTIC_EXCLUDE_GPS
     // If we're taking on the repeater role, ignore GPS
-    if (config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER &&
-        config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
-        gps = GPS::createGps();
+    if (HAS_GPS) {
+        if (config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER &&
+            config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
+            gps = GPS::createGps();
+            if (gps) {
+                gpsStatus->observe(&gps->newStatus);
+            } else {
+                LOG_DEBUG("Running without GPS.\n");
+            }
+        }
     }
-    if (gps) {
-        gpsStatus->observe(&gps->newStatus);
-    } else {
-        LOG_DEBUG("Running without GPS.\n");
-    }
-    nodeStatus->observe(&nodeDB.newStatus);
+#endif
+
+    nodeStatus->observe(&nodeDB->newStatus);
 
 #ifdef HAS_I2S
     LOG_DEBUG("Starting audio thread\n");
@@ -842,7 +860,7 @@ void setup()
     if ((config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && (!rIf->wideLora())) {
         LOG_WARN("Radio chip does not support 2.4GHz LoRa. Reverting to unset.\n");
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
-        nodeDB.saveToDisk(SEGMENT_CONFIG);
+        nodeDB->saveToDisk(SEGMENT_CONFIG);
         if (!rIf->reconfigure()) {
             LOG_WARN("Reconfigure failed, rebooting\n");
             screen->startRebootScreen();
@@ -850,9 +868,12 @@ void setup()
         }
     }
 
+#if !MESHTASTIC_EXCLUDE_MQTT
     mqttInit();
+#endif
 
 #ifndef ARCH_PORTDUINO
+
     // Initialize Wifi
 #if HAS_WIFI
     initWifi();
@@ -864,7 +885,7 @@ void setup()
 #endif
 #endif
 
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WEBSERVER
     // Start web server thread.
     webServerThread = new WebServerThread();
 #endif

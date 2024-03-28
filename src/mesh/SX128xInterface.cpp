@@ -17,7 +17,7 @@ SX128xInterface<T>::SX128xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs
                                     RADIOLIB_PIN_TYPE busy)
     : RadioLibInterface(hal, cs, irq, rst, busy, &lora), lora(&module)
 {
-    LOG_WARN("SX128xInterface(cs=%d, irq=%d, rst=%d, busy=%d)\n", cs, irq, rst, busy);
+    LOG_DEBUG("SX128xInterface(cs=%d, irq=%d, rst=%d, busy=%d)\n", cs, irq, rst, busy);
 }
 
 /// Initialise the Driver transport hardware and software.
@@ -71,7 +71,7 @@ template <typename T> bool SX128xInterface<T>::init()
     if ((config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && (res == RADIOLIB_ERR_INVALID_FREQUENCY)) {
         LOG_WARN("Radio chip only supports 2.4GHz LoRa. Adjusting Region and rebooting.\n");
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_LORA_24;
-        nodeDB.saveToDisk(SEGMENT_CONFIG);
+        nodeDB->saveToDisk(SEGMENT_CONFIG);
         delay(2000);
 #if defined(ARCH_ESP32)
         ESP.restart();
@@ -251,9 +251,9 @@ template <typename T> void SX128xInterface<T>::startReceive()
 #endif
 
     // We use the PREAMBLE_DETECTED and HEADER_VALID IRQ flag to detect whether we are actively receiving
-    int err = lora.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF, RADIOLIB_SX128X_IRQ_RX_DEFAULT |
-                                                                    RADIOLIB_SX128X_IRQ_PREAMBLE_DETECTED |
-                                                                    RADIOLIB_SX128X_IRQ_HEADER_VALID);
+    int err =
+        lora.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF, RADIOLIB_SX128X_IRQ_RX_DEFAULT | RADIOLIB_SX128X_IRQ_PREAMBLE_DETECTED |
+                                                              RADIOLIB_SX128X_IRQ_HEADER_VALID);
 
     assert(err == RADIOLIB_ERR_NONE);
 

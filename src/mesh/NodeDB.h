@@ -3,6 +3,7 @@
 #include "Observer.h"
 #include <Arduino.h>
 #include <assert.h>
+#include <vector>
 
 #include "MeshTypes.h"
 #include "NodeStatus.h"
@@ -45,20 +46,17 @@ class NodeDB
     // Eventually use a smarter datastructure
     // HashMap<NodeNum, NodeInfo> nodes;
     // Note: these two references just point into our static array we serialize to/from disk
-    meshtastic_NodeInfoLite *meshNodes;
-    pb_size_t *numMeshNodes;
 
   public:
+    std::vector<meshtastic_NodeInfoLite> *meshNodes;
     bool updateGUI = false; // we think the gui should definitely be redrawn, screen will clear this once handled
     meshtastic_NodeInfoLite *updateGUIforNode = NULL; // if currently showing this node, we think you should update the GUI
     Observable<const meshtastic::NodeStatus *> newStatus;
+    pb_size_t numMeshNodes;
 
     /// don't do mesh based algorithm for node id assignment (initially)
     /// instead just store in flash - possibly even in the initial alpha release do this hack
     NodeDB();
-
-    /// Called from service after app start, to do init which can only be done after OS load
-    void init();
 
     /// write to flash
     void saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS),
@@ -126,12 +124,14 @@ class NodeDB
 
     meshtastic_NodeInfoLite *getMeshNodeByIndex(size_t x)
     {
-        assert(x < *numMeshNodes);
-        return &meshNodes[x];
+        assert(x < numMeshNodes);
+        return &meshNodes->at(x);
     }
 
     meshtastic_NodeInfoLite *getMeshNode(NodeNum n);
-    size_t getNumMeshNodes() { return *numMeshNodes; }
+    size_t getNumMeshNodes() { return numMeshNodes; }
+
+    void clearLocalPosition();
 
     void setLocalPosition(meshtastic_Position position, bool timeOnly = false)
     {
@@ -167,7 +167,7 @@ class NodeDB
     void installDefaultDeviceState(), installDefaultChannels(), installDefaultConfig(), installDefaultModuleConfig();
 };
 
-extern NodeDB nodeDB;
+extern NodeDB *nodeDB;
 
 /*
   If is_router is set, we use a number of different default values

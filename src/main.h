@@ -54,6 +54,7 @@ extern int TCPPort; // set by Portduino
 
 // Global Screen singleton.
 extern graphics::Screen *screen;
+
 // extern Observable<meshtastic::PowerStatus> newPowerStatus; //TODO: move this to main-esp32.cpp somehow or a helper class
 
 // extern meshtastic::PowerStatus *powerStatus;
