@@ -285,6 +285,7 @@ static void drawScreensaverOverlay(OLEDDisplay *display, OLEDDisplayUiState *sta
 
     // Config
     display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
     const char *pauseText = "Screen Paused";
     const char *idText = owner.short_name;
     constexpr uint16_t padding = 5;
