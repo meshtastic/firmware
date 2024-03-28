@@ -1345,10 +1345,10 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
     }
 
     // Request new frame, ASAP
-    ui->setTargetFPS(100);
-    delay(50); // Long enough that a new frame should be due..
-    ui->update();
-    ui->setTargetFPS(targetFramerate); // Restore framerate
+    setFastFramerate();
+    uint64_t now = millis();
+    while (ui->getUiState()->lastUpdate < now)
+        ui->update();
 
     // Prepare now for next frame, shown when display wakes
     ui->setOverlays(NULL, 0);       // Clear overlay
@@ -1465,8 +1465,8 @@ void Screen::handleShutdownScreen()
 {
     LOG_DEBUG("showing shutdown screen\n");
     showingNormalScreen = false;
-    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // E-Ink: Explicitly use fast-refresh for next frame
-    EINK_ADD_FRAMEFLAG(dispdev, BLOCKING);    // Edge case: if this frame is also flagged cosmetic, wait for update
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // E-Ink: Use fast-refresh for next frame, no skip please
+    EINK_ADD_FRAMEFLAG(dispdev, BLOCKING);    // Edge case: if this frame is promoted to COSMETIC, wait for update
 
     auto frame = [](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
         drawFrameText(display, state, x, y, "Shutting down...");
