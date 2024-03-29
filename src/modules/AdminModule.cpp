@@ -336,6 +336,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
     auto changes = SEGMENT_CONFIG;
     auto existingRole = config.device.role;
     bool isRegionUnset = (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);
+    bool requiresReboot = true;
 
     switch (c.which_payload_variant) {
     case meshtastic_Config_device_tag:
@@ -375,7 +376,21 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
     case meshtastic_Config_lora_tag:
         LOG_INFO("Setting config: LoRa\n");
         config.has_lora = true;
+        // If no lora radio parameters change, don't need to reboot
+        if (config.lora.use_preset == c.payload_variant.lora.use_preset && config.lora.region == c.payload_variant.lora.region &&
+            config.lora.modem_preset == c.payload_variant.lora.modem_preset &&
+            config.lora.bandwidth == c.payload_variant.lora.bandwidth &&
+            config.lora.spread_factor == c.payload_variant.lora.spread_factor &&
+            config.lora.coding_rate == c.payload_variant.lora.coding_rate &&
+            config.lora.tx_power == c.payload_variant.lora.tx_power &&
+            config.lora.frequency_offset == c.payload_variant.lora.frequency_offset &&
+            config.lora.override_frequency == c.payload_variant.lora.override_frequency &&
+            config.lora.channel_num == c.payload_variant.lora.channel_num &&
+            config.lora.sx126x_rx_boosted_gain == c.payload_variant.lora.sx126x_rx_boosted_gain) {
+            requiresReboot = false;
+        }
         config.lora = c.payload_variant.lora;
+        // If we're setting region for the first time, init the region
         if (isRegionUnset && config.lora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
             config.lora.tx_enabled = true;
             initRegion();
@@ -395,7 +410,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         break;
     }
 
-    saveChanges(changes);
+    saveChanges(changes, requiresReboot);
 }
 
 void AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
