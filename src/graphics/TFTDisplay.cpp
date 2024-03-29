@@ -404,7 +404,8 @@ class LGFX : public lgfx::LGFX_Device
 static LGFX *tft = nullptr;
 #endif
 
-#if defined(ST7735_CS) || defined(ST7789_CS) || defined(ILI9341_DRIVER) || defined(RAK14014) || (ARCH_PORTDUINO && HAS_SCREEN != 0)
+#if defined(ST7735_CS) || defined(ST7789_CS) || defined(ILI9341_DRIVER) || defined(RAK14014) ||                                  \
+    (ARCH_PORTDUINO && HAS_SCREEN != 0)
 #include "SPILock.h"
 #include "TFTDisplay.h"
 #include <SPI.h>
