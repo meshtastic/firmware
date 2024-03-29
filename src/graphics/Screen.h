@@ -73,6 +73,10 @@ class Screen
 #define MILES_TO_FEET 5280
 #endif
 
+// Intuitive colors. E-Ink display is inverted from OLED(?)
+#define EINK_BLACK OLEDDISPLAY_COLOR::WHITE
+#define EINK_WHITE OLEDDISPLAY_COLOR::BLACK
+
 namespace graphics
 {
 
@@ -139,12 +143,12 @@ class Screen : public concurrency::OSThread
     // Not thread safe - must be called before any other methods are called.
     void setup();
 
-    /// Turns the screen on/off.
-    void setOn(bool on)
+    /// Turns the screen on/off. Optionally, pass a custom screensaver frame for E-Ink
+    void setOn(bool on, FrameCallback einkScreensaver = NULL)
     {
         if (!on)
-            handleSetOn(
-                false); // We handle off commands immediately, because they might be called because the CPU is shutting down
+            // We handle off commands immediately, because they might be called because the CPU is shutting down
+            handleSetOn(false, einkScreensaver);
         else
             enqueueCmd(ScreenCmd{.cmd = on ? Cmd::SET_ON : Cmd::SET_OFF});
     }
@@ -321,6 +325,11 @@ class Screen : public concurrency::OSThread
 
     void setWelcomeFrames();
 
+#ifdef USE_EINK
+    /// Draw an image to remain on E-Ink display after screen off
+    void setScreensaverFrames(FrameCallback einkScreensaver = NULL);
+#endif
+
   protected:
     /// Updates the UI.
     //
@@ -351,7 +360,7 @@ class Screen : public concurrency::OSThread
     }
 
     // Implementations of various commands, called from doTask().
-    void handleSetOn(bool on);
+    void handleSetOn(bool on, FrameCallback einkScreensaver = NULL);
     void handleOnPress();
     void handleShowNextFrame();
     void handleShowPrevFrame();
