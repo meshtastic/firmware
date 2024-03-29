@@ -13,7 +13,7 @@ mkdir -p $OUTDIR/
 rm -r $OUTDIR/* || true
 
 # Important to pull latest version of libs into all device flavors, otherwise some devices might be stale
-platformio pkg update
+platformio pkg update --environment native
 pio run --environment native
 cp .pio/build/native/program "$OUTDIR/meshtasticd_linux_$(arch)"
 cp bin/device-install.* $OUTDIR
