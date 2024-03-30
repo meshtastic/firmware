@@ -1489,12 +1489,10 @@ void Screen::handleShutdownScreen()
 {
     LOG_DEBUG("showing shutdown screen\n");
     showingNormalScreen = false;
-    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // E-Ink: Use fast-refresh for next frame, no skip please
+#ifdef USE_EINK
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Use fast-refresh for next frame, no skip please
     EINK_ADD_FRAMEFLAG(dispdev, BLOCKING);    // Edge case: if this frame is promoted to COSMETIC, wait for update
-
-    // Older EInkDisplay class
-#if defined(USE_EINK) && !defined(USE_EINK_DYNAMICDISPLAY)
-    screen->setOn(true); // Make sure display is powered on
+    handleSetOn(true);                        // Ensure power-on to receive deep-sleep screensaver (PowerFSM should handle?)
 #endif
 
     auto frame = [](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
@@ -1509,11 +1507,10 @@ void Screen::handleRebootScreen()
 {
     LOG_DEBUG("showing reboot screen\n");
     showingNormalScreen = false;
-    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // E-Ink: Explicitly use fast-refresh for next frame
-
-    // Older EInkDisplay class
-#if defined(USE_EINK) && !defined(USE_EINK_DYNAMICDISPLAY)
-    screen->setOn(true); // Make sure display is powered on
+#ifdef USE_EINK
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Use fast-refresh for next frame, no skip please
+    EINK_ADD_FRAMEFLAG(dispdev, BLOCKING);    // Edge case: if this frame is promoted to COSMETIC, wait for update
+    handleSetOn(true);                        // Power-on to show rebooting screen (PowerFSM should handle?)
 #endif
 
     auto frame = [](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
