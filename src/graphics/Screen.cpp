@@ -1349,6 +1349,12 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
     static FrameCallback screensaverFrame;
     static OverlayCallback screensaverOverlay;
 
+#if defined(HAS_EINK_ASYNCFULL) && defined(USE_EINK_DYNAMICDISPLAY)
+    // Join (await) a currently running async refresh, then run the post-update code.
+    // Avoid skipping of screensaver frame. Would otherwise be handled by NotifiedWorkerThread.
+    EINK_JOIN_ASYNCREFRESH(dispdev);
+#endif
+
     // If: one-off screensaver frame passed as argument. Handles doDeepSleep()
     if (einkScreensaver != NULL) {
         screensaverFrame = einkScreensaver;
