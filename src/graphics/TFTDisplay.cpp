@@ -493,10 +493,16 @@ void TFTDisplay::sendCommand(uint8_t com)
 #ifdef VTFT_CTRL
         digitalWrite(VTFT_CTRL, LOW);
 #endif
-
+#ifdef UNPHONE
+        Wire.beginTransmission(0x26);
+        Wire.write(0x02);
+        Wire.write(0x04); // Backlight on
+        Wire.write(0x22); // G&B LEDs off
+        Wire.endTransmission();
+#endif
 #ifdef RAK14014
-#elif !defined(M5STACK)
-        // tft->setBrightness(172);  // TODO
+#elif !defined(M5STACK) && !defined(UNPHONE)
+        tft->setBrightness(172);
 #endif
         break;
     }
@@ -520,9 +526,16 @@ void TFTDisplay::sendCommand(uint8_t com)
 #ifdef VTFT_CTRL
         digitalWrite(VTFT_CTRL, HIGH);
 #endif
+#ifdef UNPHONE
+        Wire.beginTransmission(0x26);
+        Wire.write(0x02);
+        Wire.write(0x00); // Backlight off
+        Wire.write(0x22); // G&B LEDs off
+        Wire.endTransmission();
+#endif
 #ifdef RAK14014
-#elif !defined(M5STACK)
-        // tft->setBrightness(0); // TODO
+#elif !defined(M5STACK) && !defined(UNPHONE)
+        tft->setBrightness(0);
 #endif
         break;
     }
@@ -544,8 +557,8 @@ void TFTDisplay::flipScreenVertically()
 bool TFTDisplay::hasTouch(void)
 {
 #ifdef RAK14014
-#elif !defined(M5STACK)
-    // return tft->touch() != nullptr; // TODO
+#elif !defined(M5STACK) && !defined(UNPHONE)
+    return tft->touch() != nullptr;
 #else
     return false;
 #endif
@@ -554,8 +567,8 @@ bool TFTDisplay::hasTouch(void)
 bool TFTDisplay::getTouch(int16_t *x, int16_t *y)
 {
 #ifdef RAK14014
-#elif !defined(M5STACK)
-    // return tft->getTouch(x, y); // TODO
+#elif !defined(M5STACK) && !defined(UNPHONE)
+    return tft->getTouch(x, y);
 #else
     return false;
 #endif
@@ -590,6 +603,14 @@ bool TFTDisplay::connect()
 #elif defined(ST7735_BL_V05)
     pinMode(ST7735_BL_V05, OUTPUT);
     digitalWrite(ST7735_BL_V05, TFT_BACKLIGHT_ON);
+#endif
+#ifdef UNPHONE
+    Wire.beginTransmission(0x26);
+    Wire.write(0x02);
+    Wire.write(0x04); // Backlight on
+    Wire.write(0x22); // G&B LEDs off
+    Wire.endTransmission();
+    LOG_INFO("Power to TFT Backlight\n");
 #endif
 
     tft->init();

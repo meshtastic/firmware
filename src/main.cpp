@@ -222,14 +222,7 @@ void setup()
     SEGGER_RTT_ConfigUpBuffer(SEGGER_STDOUT_CH, NULL, NULL, buflen, mode);
 #endif
 #ifdef UNPHONE
-    // initialise IO expander with pinmodes
     Wire.begin(I2C_SDA, I2C_SCL);
-    Wire.beginTransmission(0x26);
-    Wire.write(0x06);
-    Wire.write(0x7A);
-    Wire.write(0xDD);
-    Wire.endTransmission();
-    // turn backlight off, G&B LEDs off
     Wire.beginTransmission(0x26);
     Wire.write(0x02);
     Wire.write(0x00); // Backlight off
@@ -609,14 +602,6 @@ void setup()
     Wire.write(0x7A);
     Wire.write(0xDD);
     Wire.endTransmission();
-    // quick buzz to say hi
-    Wire.beginTransmission(0x26);
-    Wire.write(0x02);
-    Wire.write(0x80);
-    Wire.write(0x00);
-    Wire.endTransmission();
-    delay(200);
-    // turn backlight on, G&B LEDs off
     Wire.beginTransmission(0x26);
     Wire.write(0x02);
     Wire.write(0x04); // Backlight on

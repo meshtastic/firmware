@@ -1,8 +1,12 @@
+#define SPI_SCK 39
+#define SPI_MOSI 40
+#define SPI_MISO 41
+
 // We use the RFM95W LoRa module
 #define USE_RF95
-#define LORA_SCK 39
-#define LORA_MOSI 40
-#define LORA_MISO 41
+#define LORA_SCK SPI_SCK
+#define LORA_MOSI SPI_MOSI
+#define LORA_MISO SPI_MISO
 #define LORA_CS 44
 #define LORA_DIO0 10 // AKA LORA_IRQ
 #define LORA_RESET 42
@@ -13,9 +17,9 @@
 #define HX8357_CS 48
 #define HX8357_RS 47 // AKA DC
 #define HX8357_RESET 46
-#define HX8357_SCK LORA_SCK
-#define HX8357_MOSI LORA_MOSI
-#define HX8357_MISO LORA_MISO
+#define HX8357_SCK SPI_SCK
+#define HX8357_MOSI SPI_MOSI
+#define HX8357_MISO SPI_MISO
 #define HX8357_BUSY -1
 #define HX8357_SPI_HOST SPI2_HOST
 #define HX8357_BACKLIGHT_EN 42 // need to fix to use expander output1
@@ -26,17 +30,19 @@
 #define TFT_OFFSET_X 0
 #define TFT_OFFSET_Y 0
 #define TFT_OFFSET_ROTATION 0
-#define SCREEN_ROTATE 90
+#define SCREEN_ROTATE 0
 #define SCREEN_TRANSITION_FRAMERATE 5
 
-#define HAS_TOUCHSCREEN 0 // TODO touchscreen via spi
+#define HAS_TOUCHSCREEN 1 // TODO touchscreen via spi
+#define TOUCH_CS 38
 
 // the unphone doesn't have a gps module
 #define HAS_GPS 0
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 
-// #define HAS_SDCARD 1 // TODO
+#define HAS_SDCARD 1 // TODO check it works
+#define SDCARD_CS 43
 
 #define LED_PIN 13 // If defined we will blink this LED
 #define LED_INVERTED 1
