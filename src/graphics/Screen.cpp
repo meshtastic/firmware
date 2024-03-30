@@ -1370,10 +1370,9 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
         ui->update();
     } while (ui->getUiState()->lastUpdate < startUpdate);
 
-#ifndef USE_EINK_DYNAMICDISPLAY
-    // Retrofit to EInkDisplay class
-    delay(10);
-    screen->forceDisplay();
+    // Old EInkDisplay class
+#if !defined(USE_EINK_DYNAMICDISPLAY)
+    static_cast<EInkDisplay *>(dispdev)->forceDisplay(0); // Screen::forceDisplay(), but override rate-limit
 #endif
 
     // Prepare now for next frame, shown when display wakes
@@ -1493,13 +1492,17 @@ void Screen::handleShutdownScreen()
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // E-Ink: Use fast-refresh for next frame, no skip please
     EINK_ADD_FRAMEFLAG(dispdev, BLOCKING);    // Edge case: if this frame is promoted to COSMETIC, wait for update
 
+    // Older EInkDisplay class
+#if defined(USE_EINK) && !defined(USE_EINK_DYNAMICDISPLAY)
+    screen->setOn(true); // Make sure display is powered on
+#endif
+
     auto frame = [](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
         drawFrameText(display, state, x, y, "Shutting down...");
     };
     static FrameCallback frames[] = {frame};
 
     setFrameImmediateDraw(frames);
-    forceDisplay();
 }
 
 void Screen::handleRebootScreen()
@@ -1507,6 +1510,11 @@ void Screen::handleRebootScreen()
     LOG_DEBUG("showing reboot screen\n");
     showingNormalScreen = false;
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // E-Ink: Explicitly use fast-refresh for next frame
+
+    // Older EInkDisplay class
+#if defined(USE_EINK) && !defined(USE_EINK_DYNAMICDISPLAY)
+    screen->setOn(true); // Make sure display is powered on
+#endif
 
     auto frame = [](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
         drawFrameText(display, state, x, y, "Rebooting...");
