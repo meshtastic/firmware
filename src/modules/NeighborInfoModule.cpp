@@ -114,8 +114,8 @@ size_t NeighborInfoModule::cleanUpNeighbors()
         (*numNeighbors)--;
     }
 
-    // Save the neighbor list if we removed any neighbors
-    if (indices_to_remove.size() > 0) {
+    // Save the neighbor list if we removed any neighbors or neighbors were already updated upon receiving a packet
+    if (indices_to_remove.size() > 0 || shouldSave) {
         saveProtoForModule();
     }
 
@@ -210,7 +210,6 @@ meshtastic_Neighbor *NeighborInfoModule::getOrCreateNeighbor(NodeNum originalSen
             // Only if this is the original sender, the broadcast interval corresponds to it
             if (originalSender == n && node_broadcast_interval_secs != 0)
                 nbr->node_broadcast_interval_secs = node_broadcast_interval_secs;
-            saveProtoForModule(); // Save the updated neighbor
             return nbr;
         }
     }
@@ -228,7 +227,7 @@ meshtastic_Neighbor *NeighborInfoModule::getOrCreateNeighbor(NodeNum originalSen
         new_nbr->node_broadcast_interval_secs = node_broadcast_interval_secs;
     else // Assume the same broadcast interval as us for the neighbor if we don't know it
         new_nbr->node_broadcast_interval_secs = moduleConfig.neighbor_info.update_interval;
-    saveProtoForModule(); // Save the new neighbor
+    shouldSave = true; // Save the new neighbor upon next cleanup
     return new_nbr;
 }
 
@@ -255,6 +254,8 @@ bool NeighborInfoModule::saveProtoForModule()
 #endif
 
     okay &= nodeDB->saveProto(neighborInfoConfigFile, meshtastic_NeighborInfo_size, &meshtastic_NeighborInfo_msg, &neighborState);
+    if (okay)
+        shouldSave = false;
 
     return okay;
 }
