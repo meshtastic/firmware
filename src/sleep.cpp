@@ -312,13 +312,10 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // assert(esp_sleep_enable_uart_wakeup(0) == ESP_OK);
 #endif
 #ifdef BUTTON_PIN
-#if SOC_PM_SUPPORT_EXT_WAKEUP
-    esp_sleep_enable_ext0_wakeup((gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN),
-                                 LOW); // when user presses, this button goes low
-#else
+    // The enableLoraInterrupt() method is using ext0_wakeup, so we are forced to use GPIO wakeup
+    gpio_num_t pin = (gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
+    gpio_wakeup_enable(pin, GPIO_INTR_LOW_LEVEL);
     esp_sleep_enable_gpio_wakeup();
-    gpio_wakeup_enable((gpio_num_t)BUTTON_PIN, GPIO_INTR_LOW_LEVEL);
-#endif
 #endif
     enableLoraInterrupt();
 #ifdef PMU_IRQ
