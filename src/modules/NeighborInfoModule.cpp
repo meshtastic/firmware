@@ -117,7 +117,6 @@ size_t NeighborInfoModule::cleanUpNeighbors()
     // Save the neighbor list if we removed any neighbors or neighbors were already updated upon receiving a packet
     if (indices_to_remove.size() > 0 || shouldSave) {
         saveProtoForModule();
-        shouldSave = false;
     }
 
     return *numNeighbors;
@@ -255,6 +254,8 @@ bool NeighborInfoModule::saveProtoForModule()
 #endif
 
     okay &= nodeDB->saveProto(neighborInfoConfigFile, meshtastic_NeighborInfo_size, &meshtastic_NeighborInfo_msg, &neighborState);
+    if (okay)
+        shouldSave = false;
 
     return okay;
 }
