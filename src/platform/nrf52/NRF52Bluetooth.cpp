@@ -1,5 +1,5 @@
-#include "BluetoothCommon.h"
 #include "NRF52Bluetooth.h"
+#include "BluetoothCommon.h"
 #include "PowerFSM.h"
 #include "configuration.h"
 #include "main.h"
