@@ -221,7 +221,7 @@ void setup()
 #endif
     SEGGER_RTT_ConfigUpBuffer(SEGGER_STDOUT_CH, NULL, NULL, buflen, mode);
 #endif
-#ifdef UNPHONE
+#ifdef UNPHONE // TODO move down to after regular Wire.begin once console needed issue is fixed
     Wire.begin(I2C_SDA, I2C_SCL);
     Wire.beginTransmission(0x26);
     Wire.write(0x02);

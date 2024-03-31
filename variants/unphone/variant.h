@@ -22,7 +22,6 @@
 #define HX8357_MISO SPI_MISO
 #define HX8357_BUSY -1
 #define HX8357_SPI_HOST SPI2_HOST
-#define HX8357_BACKLIGHT_EN 42 // need to fix to use expander output1
 #define SPI_FREQUENCY 40000000
 #define SPI_READ_FREQUENCY 16000000
 #define TFT_HEIGHT 480
@@ -31,18 +30,19 @@
 #define TFT_OFFSET_Y 0
 #define TFT_OFFSET_ROTATION 6
 #define TFT_INVERT false
-#define SCREEN_ROTATE 0
+#define SCREEN_ROTATE true
 #define SCREEN_TRANSITION_FRAMERATE 5
 
-#define HAS_TOUCHSCREEN 1 // TODO touchscreen via spi
+#define HAS_TOUCHSCREEN 1
 #define TOUCH_CS 38
 
 // the unphone doesn't have a gps module
-#define HAS_GPS 0
+#define MESHTASTIC_EXCLUDE_GPS
+// #define HAS_GPS 0
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 
-#define HAS_SDCARD 1 // TODO check it works
+#define HAS_SDCARD 1
 #define SDCARD_CS 43
 
 #define LED_PIN 13 // If defined we will blink this LED
