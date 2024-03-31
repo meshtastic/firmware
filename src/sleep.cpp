@@ -340,9 +340,11 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     }
     assert(res == ESP_OK);
 
+#ifdef BUTTON_PIN
     gpio_wakeup_disable(pin);
     // Would have thought that need gpio_intr_enable() here, but nope..
     // Works fine without it; crashes with it.
+#endif
 
     esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
 #ifdef BUTTON_PIN
