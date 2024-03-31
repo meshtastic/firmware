@@ -463,10 +463,33 @@ void EInkDynamicDisplay::onNotify(uint32_t notification)
 }
 
 #ifdef HAS_EINK_ASYNCFULL
-// Run the post-update code if the hardware is ready
+// Public: wait for an refresh already in progress, then run the post-update code. See Screen::setScreensaverFrames()
+void EInkDynamicDisplay::joinAsyncRefresh()
+{
+    // If no async refresh running, nothing to do
+    if (!asyncRefreshRunning)
+        return;
+
+    LOG_DEBUG("Joining an async refresh in progress\n");
+
+    // Continually poll the BUSY pin
+    while (adafruitDisplay->epd2.isBusy())
+        yield();
+
+    // If asyncRefreshRunning flag is still set, but display's BUSY pin reports the refresh is done
+    adafruitDisplay->endAsyncFull(); // Run the end of nextPage() code
+    EInkDisplay::endUpdate();        // Run base-class code to finish off update (NOT our derived class override)
+    asyncRefreshRunning = false;     // Unset the flag
+    LOG_DEBUG("Refresh complete\n");
+
+    // Note: this code only works because of a modification to meshtastic/GxEPD2.
+    // It is only equipped to intercept calls to nextPage()
+}
+
+// Called from NotifiedWorkerThread. Run the post-update code if the hardware is ready
 void EInkDynamicDisplay::pollAsyncRefresh()
 {
-    // We shouldn't be here..
+    // In theory, this condition should never be met
     if (!asyncRefreshRunning)
         return;
 
