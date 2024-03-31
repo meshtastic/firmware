@@ -669,7 +669,7 @@ bool TFTDisplay::connect()
 {
     concurrency::LockGuard g(spiLock);
     LOG_INFO("Doing TFT init\n");
-#if defined(RAK14014)
+#ifdef RAK14014
     tft = new TFT_eSPI;
 #else
     tft = new LGFX;
