@@ -539,14 +539,6 @@ void setup()
     setupSDCard();
 #endif
 
-#ifdef UNPHONE
-    Wire.beginTransmission(0x26);
-    Wire.write(0x02);
-    Wire.write(0x00); // Backlight off
-    Wire.write(0x22); // G&B LEDs off
-    Wire.endTransmission();
-#endif
-
 #ifdef RAK4630
     // scanEInkDevice();
 #endif
