@@ -23,7 +23,7 @@ void LockingArduinoHal::spiEndTransaction()
     ArduinoHal::spiEndTransaction();
 }
 #if ARCH_PORTDUINO
-void LockingArduinoHal::spiTransfer(uint8_t* out, size_t len, uint8_t* in)
+void LockingArduinoHal::spiTransfer(uint8_t *out, size_t len, uint8_t *in)
 {
     spi->transfer(out, in, len);
 }
