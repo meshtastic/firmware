@@ -221,14 +221,7 @@ void setup()
 #endif
     SEGGER_RTT_ConfigUpBuffer(SEGGER_STDOUT_CH, NULL, NULL, buflen, mode);
 #endif
-#ifdef UNPHONE // TODO move down to after regular Wire.begin once console needed issue is fixed
-    Wire.begin(I2C_SDA, I2C_SCL);
-    Wire.beginTransmission(0x26);
-    Wire.write(0x02);
-    Wire.write(0x00); // Backlight off
-    Wire.write(0x22); // G&B LEDs off
-    Wire.endTransmission();
-#endif
+
 #ifdef DEBUG_PORT
     consoleInit(); // Set serial baud rate and init our mesh console
 #endif
@@ -544,6 +537,14 @@ void setup()
 
 #ifdef HAS_SDCARD
     setupSDCard();
+#endif
+
+#ifdef UNPHONE
+    Wire.beginTransmission(0x26);
+    Wire.write(0x02);
+    Wire.write(0x00); // Backlight off
+    Wire.write(0x22); // G&B LEDs off
+    Wire.endTransmission();
 #endif
 
 #ifdef RAK4630
