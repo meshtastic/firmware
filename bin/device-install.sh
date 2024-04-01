@@ -52,7 +52,7 @@ if [ -f "${FILENAME}" ] && [ -n "${FILENAME##*"update"*}" ]; then
 	"$PYTHON" -m esptool erase_flash
 	"$PYTHON" -m esptool write_flash 0x00 ${FILENAME}
 	# Account for S3 board's different OTA partition
-	if [ -n "${FILENAME##*"s3"*}" ] && [ -n "${FILENAME##*"-v3"*}" ] && [ -n "${FILENAME##*"t-deck"*}" ] && [ -n "${FILENAME##*"wireless-paper"*}" ] && [ -n "${FILENAME##*"wireless-tracker"*}" ]; then
+	if [ -n "${FILENAME##*"s3"*}" ] && [ -n "${FILENAME##*"-v3"*}" ] && [ -n "${FILENAME##*"t-deck"*}" ] && [ -n "${FILENAME##*"wireless-paper"*}" ] && [ -n "${FILENAME##*"wireless-tracker"*}" ] && [ -n "${FILENAME##*"station-g2"*}" ]; then
 		if [ -n "${FILENAME##*"esp32c3"*}" ]; then
 			"$PYTHON" -m esptool write_flash 0x260000 bleota.bin
 		else
