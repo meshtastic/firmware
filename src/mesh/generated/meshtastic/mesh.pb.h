@@ -826,6 +826,15 @@ typedef struct _meshtastic_ToRadio {
     };
 } meshtastic_ToRadio;
 
+/* RemoteHardwarePins associated with a node */
+typedef struct _meshtastic_NodeRemoteHardwarePin {
+    /* The node_num exposing the available gpio pin */
+    uint32_t node_num;
+    /* The the available gpio pin for usage with RemoteHardware module */
+    bool has_pin;
+    meshtastic_RemoteHardwarePin pin;
+} meshtastic_NodeRemoteHardwarePin;
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -900,6 +909,7 @@ extern "C" {
 
 
 
+
 /* Initializer values for message structs */
 #define meshtastic_Position_init_default         {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_User_init_default             {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN}
@@ -920,6 +930,7 @@ extern "C" {
 #define meshtastic_Neighbor_init_default         {0, 0, 0, 0}
 #define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0}
 #define meshtastic_Heartbeat_init_default        {0}
+#define meshtastic_NodeRemoteHardwarePin_init_default {0, false, meshtastic_RemoteHardwarePin_init_default}
 #define meshtastic_Position_init_zero            {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_User_init_zero                {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN}
 #define meshtastic_RouteDiscovery_init_zero      {0, {0, 0, 0, 0, 0, 0, 0, 0}}
@@ -939,6 +950,7 @@ extern "C" {
 #define meshtastic_Neighbor_init_zero            {0, 0, 0, 0}
 #define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0}
 #define meshtastic_Heartbeat_init_zero           {0}
+#define meshtastic_NodeRemoteHardwarePin_init_zero {0, false, meshtastic_RemoteHardwarePin_init_zero}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_Position_latitude_i_tag       1
@@ -1071,6 +1083,8 @@ extern "C" {
 #define meshtastic_ToRadio_xmodemPacket_tag      5
 #define meshtastic_ToRadio_mqttClientProxyMessage_tag 6
 #define meshtastic_ToRadio_heartbeat_tag         7
+#define meshtastic_NodeRemoteHardwarePin_node_num_tag 1
+#define meshtastic_NodeRemoteHardwarePin_pin_tag 2
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_Position_FIELDLIST(X, a) \
@@ -1302,6 +1316,13 @@ X(a, STATIC,   SINGULAR, BOOL,     hasRemoteHardware,  10)
 #define meshtastic_Heartbeat_CALLBACK NULL
 #define meshtastic_Heartbeat_DEFAULT NULL
 
+#define meshtastic_NodeRemoteHardwarePin_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   node_num,          1) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  pin,               2)
+#define meshtastic_NodeRemoteHardwarePin_CALLBACK NULL
+#define meshtastic_NodeRemoteHardwarePin_DEFAULT NULL
+#define meshtastic_NodeRemoteHardwarePin_pin_MSGTYPE meshtastic_RemoteHardwarePin
+
 extern const pb_msgdesc_t meshtastic_Position_msg;
 extern const pb_msgdesc_t meshtastic_User_msg;
 extern const pb_msgdesc_t meshtastic_RouteDiscovery_msg;
@@ -1321,6 +1342,7 @@ extern const pb_msgdesc_t meshtastic_NeighborInfo_msg;
 extern const pb_msgdesc_t meshtastic_Neighbor_msg;
 extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
 extern const pb_msgdesc_t meshtastic_Heartbeat_msg;
+extern const pb_msgdesc_t meshtastic_NodeRemoteHardwarePin_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_Position_fields &meshtastic_Position_msg
@@ -1342,6 +1364,7 @@ extern const pb_msgdesc_t meshtastic_Heartbeat_msg;
 #define meshtastic_Neighbor_fields &meshtastic_Neighbor_msg
 #define meshtastic_DeviceMetadata_fields &meshtastic_DeviceMetadata_msg
 #define meshtastic_Heartbeat_fields &meshtastic_Heartbeat_msg
+#define meshtastic_NodeRemoteHardwarePin_fields &meshtastic_NodeRemoteHardwarePin_msg
 
 /* Maximum encoded size of messages (where known) */
 #define meshtastic_Compressed_size               243
@@ -1356,6 +1379,7 @@ extern const pb_msgdesc_t meshtastic_Heartbeat_msg;
 #define meshtastic_NeighborInfo_size             258
 #define meshtastic_Neighbor_size                 22
 #define meshtastic_NodeInfo_size                 277
+#define meshtastic_NodeRemoteHardwarePin_size    29
 #define meshtastic_Position_size                 144
 #define meshtastic_QueueStatus_size              23
 #define meshtastic_RouteDiscovery_size           40
