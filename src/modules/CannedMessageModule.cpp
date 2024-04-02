@@ -12,7 +12,8 @@
 #include "detect/ScanI2C.h"
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
 
-#include "main.h" // for cardkb_found
+#include "main.h"                               // for cardkb_found
+#include "modules/ExternalNotificationModule.h" // for buzzer control
 
 #ifndef INPUTBROKER_MATRIX_TYPE
 #define INPUTBROKER_MATRIX_TYPE 0
@@ -397,6 +398,7 @@ int32_t CannedMessageModule::runOnce()
                 }
                 break;
             case 0x09: // tab
+            case 0x91: // fn+t for T-Deck that doesn't have a tab key
                 if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL) {
                     this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
                 } else if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
@@ -418,6 +420,17 @@ int32_t CannedMessageModule::runOnce()
             case 0x90:
                 screen->startRebootScreen();
                 rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+                break;
+            // mute (switch off/toggle) external notifications on fn+m
+            case 0xac:
+                if (moduleConfig.external_notification.enabled) {
+                    if (externalNotificationModule->getMute()) {
+                        externalNotificationModule->setMute(false);
+                    } else {
+                        externalNotificationModule->stopNow(); // this will turn off all GPIO and sounds and idle the loop
+                        externalNotificationModule->setMute(true);
+                    }
+                }
                 break;
             default:
                 if (this->cursor == this->freetext.length()) {
