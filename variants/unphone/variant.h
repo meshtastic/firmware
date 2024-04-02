@@ -37,7 +37,8 @@
 #define TOUCH_CS 38
 
 // the unphone doesn't have a gps module
-#define MESHTASTIC_EXCLUDE_GPS
+// #define MESHTASTIC_EXCLUDE_GPS  // doesn't work 2/4/24
+#define HAS_GPS 0
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 
