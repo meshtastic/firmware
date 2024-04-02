@@ -102,23 +102,18 @@ static void lsIdle()
                 powerFSM.trigger(EVENT_SERIAL_CONNECTED);
                 break;
 
+            case ESP_SLEEP_WAKEUP_GPIO:
+                // GPIO wakeup is now used for all ESP32 devices during light sleep
+                powerFSM.trigger(EVENT_PRESS);
+                break;
+
             default:
-                // We woke for some other reason (button press, device interrupt)
-                // uint64_t status = esp_sleep_get_ext1_wakeup_status();
+                // We woke for some other reason (device interrupt?)
                 LOG_INFO("wakeCause2 %d\n", wakeCause2);
 
-#ifdef BUTTON_PIN
-                bool pressed = !digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
-#else
-                bool pressed = false;
-#endif
-                if (pressed) { // If we woke because of press, instead generate a PRESS event.
-                    powerFSM.trigger(EVENT_PRESS);
-                } else {
-                    // Otherwise let the NB state handle the IRQ (and that state will handle stuff like IRQs etc)
-                    // we lie and say "wake timer" because the interrupt will be handled by the regular IRQ code
-                    powerFSM.trigger(EVENT_WAKE_TIMER);
-                }
+                // Let the NB state handle the IRQ (and that state will handle stuff like IRQs etc)
+                // we lie and say "wake timer" because the interrupt will be handled by the regular IRQ code
+                powerFSM.trigger(EVENT_WAKE_TIMER);
                 break;
             }
         } else {
@@ -348,9 +343,6 @@ void PowerFSM_setup()
     powerFSM.add_timed_transition(&statePOWER, &stateDARK,
                                   Default::getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL,
                                   "Screen-on timeout");
-    powerFSM.add_timed_transition(&stateDARK, &stateDARK,
-                                  Default::getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL,
-                                  "Screen-on timeout");
 
 // We never enter light-sleep or NB states on NRF52 (because the CPU uses so little power normally)
 #ifdef ARCH_ESP32
@@ -361,11 +353,24 @@ void PowerFSM_setup()
         powerFSM.add_timed_transition(&stateNB, &stateLS,
                                       Default::getConfiguredOrDefaultMs(config.power.min_wake_secs, default_min_wake_secs), NULL,
                                       "Min wake timeout");
+
+        // If ESP32 and using power-saving, timer mover from DARK to light-sleep
+        // Also serves purpose of the old DARK to DARK transition(?) See https://github.com/meshtastic/firmware/issues/3517
         powerFSM.add_timed_transition(
             &stateDARK, &stateLS,
             Default::getConfiguredOrDefaultMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs), NULL,
             "Bluetooth timeout");
+    } else {
+        // If ESP32, but not using power-saving, check periodically if config has drifted out of stateDark
+        powerFSM.add_timed_transition(&stateDARK, &stateDARK,
+                                      Default::getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs),
+                                      NULL, "Screen-on timeout");
     }
+#else
+    // If not ESP32, light-sleep not used. Check periodically if config has drifted out of stateDark
+    powerFSM.add_timed_transition(&stateDARK, &stateDARK,
+                                  Default::getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL,
+                                  "Screen-on timeout");
 #endif
 
     powerFSM.run_machine(); // run one iteration of the state machine, so we run our on enter tasks for the initial DARK state
