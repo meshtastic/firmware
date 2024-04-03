@@ -13,24 +13,24 @@ GeoCoord::GeoCoord(int32_t lat, int32_t lon, int32_t alt) : _latitude(lat), _lon
 GeoCoord::GeoCoord(float lat, float lon, int32_t alt) : _altitude(alt)
 {
     // Change decimial representation to int32_t. I.e., 12.345 becomes 123450000
-    _latitude = int32_t(lat * 1e+7);
-    _longitude = int32_t(lon * 1e+7);
+    _latitude = int32_t(lat * 1e+9);
+    _longitude = int32_t(lon * 1e+9);
     GeoCoord::setCoords();
 }
 
 GeoCoord::GeoCoord(double lat, double lon, int32_t alt) : _altitude(alt)
 {
     // Change decimial representation to int32_t. I.e., 12.345 becomes 123450000
-    _latitude = int32_t(lat * 1e+7);
-    _longitude = int32_t(lon * 1e+7);
+    _latitude = int32_t(lat * 1e+9);
+    _longitude = int32_t(lon * 1e+9);
     GeoCoord::setCoords();
 }
 
 // Initialize all the coordinate systems
 void GeoCoord::setCoords()
 {
-    double lat = _latitude * 1e-7;
-    double lon = _longitude * 1e-7;
+    double lat = _latitude * 1e-9;
+    double lon = _longitude * 1e-9;
     GeoCoord::latLongToDMS(lat, lon, _dms);
     GeoCoord::latLongToUTM(lat, lon, _utm);
     GeoCoord::latLongToMGRS(lat, lon, _mgrs);
@@ -53,8 +53,8 @@ void GeoCoord::updateCoords(int32_t lat, int32_t lon, int32_t alt)
 
 void GeoCoord::updateCoords(const double lat, const double lon, const int32_t alt)
 {
-    int32_t iLat = lat * 1e+7;
-    int32_t iLon = lon * 1e+7;
+    int32_t iLat = lat * 1e+9;
+    int32_t iLon = lon * 1e+9;
     // If marked dirty or new coordinates
     if (_dirty || _latitude != iLat || _longitude != iLon || _altitude != alt) {
         _dirty = true;
@@ -67,8 +67,8 @@ void GeoCoord::updateCoords(const double lat, const double lon, const int32_t al
 
 void GeoCoord::updateCoords(const float lat, const float lon, const int32_t alt)
 {
-    int32_t iLat = lat * 1e+7;
-    int32_t iLon = lon * 1e+7;
+    int32_t iLat = lat * 1e+9;
+    int32_t iLon = lon * 1e+9;
     // If marked dirty or new coordinates
     if (_dirty || _latitude != iLat || _longitude != iLon || _altitude != alt) {
         _dirty = true;
@@ -478,8 +478,8 @@ int32_t GeoCoord::bearingTo(const GeoCoord &pointB)
 std::shared_ptr<GeoCoord> GeoCoord::pointAtDistance(double bearing, double range_meters)
 {
     double range_radians = rangeMetersToRadians(range_meters);
-    double lat1 = this->getLatitude() * 1e-7;
-    double lon1 = this->getLongitude() * 1e-7;
+    double lat1 = this->getLatitude() * 1e-9;
+    double lon1 = this->getLongitude() * 1e-9;
     double lat = asin(sin(lat1) * cos(range_radians) + cos(lat1) * sin(range_radians) * cos(bearing));
     double dlon = atan2(sin(bearing) * sin(range_radians) * cos(lat1), cos(range_radians) - sin(lat1) * sin(lat));
     double lon = fmod(lon1 - dlon + PI, 2 * PI) - PI;
