@@ -217,14 +217,12 @@ int32_t KbI2cBase::runOnce()
                 e.kbchar = 0xb7;
                 break;
             case 0x90: // fn+r
+            case 0x91: // fn+t (alt+t for t-deck)
             case 0x9b: // fn+s
+            case 0xac: // fn+m
                 // just pass those unmodified
                 e.inputEvent = ANYKEY;
                 e.kbchar = c;
-                break;
-            case 0xac: // fn+t
-                e.inputEvent = ANYKEY;
-                e.kbchar = 0x09; // TAB Scancode
                 break;
             case 0x0d: // Enter
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
