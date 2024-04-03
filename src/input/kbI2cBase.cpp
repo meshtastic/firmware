@@ -218,6 +218,7 @@ int32_t KbI2cBase::runOnce()
                 break;
             case 0x90: // fn+r
             case 0x9b: // fn+s
+            case 0xac: // fn+t
                 // just pass those unmodified
                 e.inputEvent = ANYKEY;
                 e.kbchar = c;

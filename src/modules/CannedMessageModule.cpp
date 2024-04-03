@@ -423,7 +423,7 @@ int32_t CannedMessageModule::runOnce()
                 break;
             // mute (switch off/toggle) external notifications on fn+m
             case 0xac:
-                if (moduleConfig.external_notification.enabled) {
+                if (moduleConfig.external_notification.enabled == true) {
                     if (externalNotificationModule->getMute()) {
                         externalNotificationModule->setMute(false);
                     } else {
