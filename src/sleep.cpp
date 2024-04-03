@@ -147,6 +147,16 @@ void initDeepSleep()
 
     LOG_INFO("Booted, wake cause %d (boot count %d), reset_reason=%s\n", wakeCause, bootCount, reason);
 #endif
+
+    // If waking from sleep, release any and all RTC GPIOs
+    if (wakeCause != ESP_SLEEP_WAKEUP_UNDEFINED) {
+        LOG_DEBUG("Disabling any holds on RTC IO pads\n");
+        for (uint8_t i = 0; i <= 45; i++) {
+            if (rtc_gpio_is_valid_gpio((gpio_num_t)i))
+                rtc_gpio_hold_dis((gpio_num_t)i);
+        }
+    }
+
 #endif
 }
 
