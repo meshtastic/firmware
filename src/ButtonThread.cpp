@@ -1,10 +1,12 @@
 #include "ButtonThread.h"
+#include "configuration.h"
+#if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
+#endif
 #include "MeshService.h"
 #include "PowerFSM.h"
 #include "RadioLibInterface.h"
 #include "buzz.h"
-#include "graphics/Screen.h"
 #include "main.h"
 #include "modules/ExternalNotificationModule.h"
 #include "power.h"
@@ -145,7 +147,7 @@ int32_t ButtonThread::runOnce()
                 screen->print("Sent ad-hoc ping\n");
             break;
         }
-
+#if HAS_GPS
         case BUTTON_EVENT_MULTI_PRESSED: {
             LOG_BUTTON("Multi press!\n");
             if (!config.device.disable_triple_click && (gps != nullptr)) {
@@ -155,7 +157,7 @@ int32_t ButtonThread::runOnce()
             }
             break;
         }
-
+#endif
         case BUTTON_EVENT_LONG_PRESSED: {
             LOG_BUTTON("Long press!\n");
             powerFSM.trigger(EVENT_PRESS);

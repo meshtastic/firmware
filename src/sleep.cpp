@@ -1,17 +1,23 @@
-#include "sleep.h"
+#include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
+#endif
+
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "configuration.h"
 #include "error.h"
 #include "main.h"
+#include "sleep.h"
 #include "target_specific.h"
 
 #ifdef ARCH_ESP32
 #include "esp32/pm.h"
 #include "esp_pm.h"
+#if !MESHTASTIC_EXCLUDE_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
+#endif
 #include "rom/rtc.h"
 #include <driver/rtc_io.h>
 #include <driver/uart.h>
@@ -48,7 +54,7 @@ RTC_DATA_ATTR int bootCount = 0;
  */
 void setCPUFast(bool on)
 {
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
 
     if (isWifiAvailable()) {
         /*
@@ -206,11 +212,11 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     // pinMode(PIN_POWER_EN1, INPUT_PULLDOWN);
 #endif
 #endif
-
+#if HAS_GPS
     // Kill GPS power completely (even if previously we just had it in sleep mode)
     if (gps)
         gps->setGPSPower(false, false, 0);
-
+#endif
     setLed(false);
 
 #ifdef RESET_OLED
@@ -306,13 +312,11 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // assert(esp_sleep_enable_uart_wakeup(0) == ESP_OK);
 #endif
 #ifdef BUTTON_PIN
-#if SOC_PM_SUPPORT_EXT_WAKEUP
-    esp_sleep_enable_ext0_wakeup((gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN),
-                                 LOW); // when user presses, this button goes low
-#else
+    // The enableLoraInterrupt() method is using ext0_wakeup, so we are forced to use GPIO wakeup
+    gpio_num_t pin = (gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
+    gpio_intr_disable(pin);
+    gpio_wakeup_enable(pin, GPIO_INTR_LOW_LEVEL);
     esp_sleep_enable_gpio_wakeup();
-    gpio_wakeup_enable((gpio_num_t)BUTTON_PIN, GPIO_INTR_LOW_LEVEL);
-#endif
 #endif
     enableLoraInterrupt();
 #ifdef PMU_IRQ
@@ -335,6 +339,12 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
         LOG_DEBUG("esp_light_sleep_start result %d\n", res);
     }
     assert(res == ESP_OK);
+
+#ifdef BUTTON_PIN
+    gpio_wakeup_disable(pin);
+    // Would have thought that need gpio_intr_enable() here, but nope..
+    // Works fine without it; crashes with it.
+#endif
 
     esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
 #ifdef BUTTON_PIN

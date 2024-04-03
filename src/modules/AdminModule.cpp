@@ -4,7 +4,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include <FSCommon.h>
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "BleOta.h"
 #endif
 #include "Router.h"
@@ -17,10 +17,11 @@
 #include "unistd.h"
 #endif
 #include "Default.h"
+#include "TypeConversions.h"
 
+#if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
-
-#define DEFAULT_REBOOT_SECONDS 7
+#endif
 
 AdminModule *adminModule;
 bool hasOpenEditTransaction;
@@ -121,7 +122,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_reboot_ota_seconds_tag: {
         int32_t s = r->reboot_ota_seconds;
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
         if (BleOta::getOtaAppVersion().isEmpty()) {
             LOG_INFO("No OTA firmware available, scheduling regular reboot in %d seconds\n", s);
             screen->startRebootScreen();
@@ -202,6 +203,31 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->remove_favorite_node);
         if (node != NULL) {
             node->is_favorite = false;
+        }
+        break;
+    }
+    case meshtastic_AdminMessage_set_fixed_position_tag: {
+        if (fromOthers) {
+            LOG_INFO("Ignoring set_fixed_position command from another node.\n");
+        } else {
+            LOG_INFO("Client is receiving a set_fixed_position command.\n");
+            meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
+            node->has_position = true;
+            node->position = TypeConversions::ConvertToPositionLite(r->set_fixed_position);
+            nodeDB->setLocalPosition(r->set_fixed_position);
+            config.position.fixed_position = true;
+            saveChanges(SEGMENT_DEVICESTATE | SEGMENT_CONFIG, false);
+        }
+        break;
+    }
+    case meshtastic_AdminMessage_remove_fixed_position_tag: {
+        if (fromOthers) {
+            LOG_INFO("Ignoring remove_fixed_position command from another node.\n");
+        } else {
+            LOG_INFO("Client is receiving a remove_fixed_position command.\n");
+            nodeDB->clearLocalPosition();
+            config.position.fixed_position = false;
+            saveChanges(SEGMENT_DEVICESTATE | SEGMENT_CONFIG, false);
         }
         break;
     }
@@ -310,6 +336,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
     auto changes = SEGMENT_CONFIG;
     auto existingRole = config.device.role;
     bool isRegionUnset = (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET);
+    bool requiresReboot = true;
 
     switch (c.which_payload_variant) {
     case meshtastic_Config_device_tag:
@@ -349,7 +376,21 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
     case meshtastic_Config_lora_tag:
         LOG_INFO("Setting config: LoRa\n");
         config.has_lora = true;
+        // If no lora radio parameters change, don't need to reboot
+        if (config.lora.use_preset == c.payload_variant.lora.use_preset && config.lora.region == c.payload_variant.lora.region &&
+            config.lora.modem_preset == c.payload_variant.lora.modem_preset &&
+            config.lora.bandwidth == c.payload_variant.lora.bandwidth &&
+            config.lora.spread_factor == c.payload_variant.lora.spread_factor &&
+            config.lora.coding_rate == c.payload_variant.lora.coding_rate &&
+            config.lora.tx_power == c.payload_variant.lora.tx_power &&
+            config.lora.frequency_offset == c.payload_variant.lora.frequency_offset &&
+            config.lora.override_frequency == c.payload_variant.lora.override_frequency &&
+            config.lora.channel_num == c.payload_variant.lora.channel_num &&
+            config.lora.sx126x_rx_boosted_gain == c.payload_variant.lora.sx126x_rx_boosted_gain) {
+            requiresReboot = false;
+        }
         config.lora = c.payload_variant.lora;
+        // If we're setting region for the first time, init the region
         if (isRegionUnset && config.lora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
             config.lora.tx_enabled = true;
             initRegion();
@@ -369,7 +410,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         break;
     }
 
-    saveChanges(changes);
+    saveChanges(changes, requiresReboot);
 }
 
 void AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
@@ -668,7 +709,9 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     if (Ethernet.linkStatus() == LinkON) {
         conn.ethernet.status.is_connected = true;
         conn.ethernet.status.ip_address = Ethernet.localIP();
+#if !MESHTASTIC_EXCLUDE_MQTT
         conn.ethernet.status.is_mqtt_connected = mqtt && mqtt->isConnectedDirectly();
+#endif
         conn.ethernet.status.is_syslog_connected = false; // FIXME wire this up
     } else {
         conn.ethernet.status.is_connected = false;

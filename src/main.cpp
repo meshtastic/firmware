@@ -1,4 +1,7 @@
+#include "configuration.h"
+#if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
+#endif
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -6,7 +9,7 @@
 #include "ReliableRouter.h"
 #include "airtime.h"
 #include "buzz.h"
-#include "configuration.h"
+
 #include "error.h"
 #include "power.h"
 // #include "debug.h"
@@ -36,8 +39,10 @@
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "mesh/http/WebServer.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "nimble/NimbleBluetooth.h"
 NimbleBluetooth *nimbleBluetooth;
+#endif
 #endif
 
 #ifdef ARCH_NRF52
@@ -54,16 +59,21 @@ NRF52Bluetooth *nrf52Bluetooth;
 #include "mesh/api/ethServerAPI.h"
 #include "mesh/eth/ethClient.h"
 #endif
+
+#if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
+#endif
 
 #include "LLCC68Interface.h"
 #include "RF95Interface.h"
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
 #include "SX1280Interface.h"
+
 #ifdef ARCH_STM32WL
 #include "STM32WLE5JCInterface.h"
 #endif
+
 #if !HAS_RADIO && defined(ARCH_PORTDUINO)
 #include "platform/portduino/SimRadio.h"
 #endif
@@ -80,6 +90,7 @@ NRF52Bluetooth *nrf52Bluetooth;
 #if HAS_BUTTON || defined(ARCH_PORTDUINO)
 #include "ButtonThread.h"
 #endif
+
 #include "PowerFSMThread.h"
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
@@ -640,16 +651,21 @@ void setup()
 
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 
+#if !MESHTASTIC_EXCLUDE_GPS
     // If we're taking on the repeater role, ignore GPS
-    if (config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER &&
-        config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
-        gps = GPS::createGps();
+    if (HAS_GPS) {
+        if (config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER &&
+            config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
+            gps = GPS::createGps();
+            if (gps) {
+                gpsStatus->observe(&gps->newStatus);
+            } else {
+                LOG_DEBUG("Running without GPS.\n");
+            }
+        }
     }
-    if (gps) {
-        gpsStatus->observe(&gps->newStatus);
-    } else {
-        LOG_DEBUG("Running without GPS.\n");
-    }
+#endif
+
     nodeStatus->observe(&nodeDB->newStatus);
 
 #ifdef HAS_I2S
@@ -852,9 +868,12 @@ void setup()
         }
     }
 
+#if !MESHTASTIC_EXCLUDE_MQTT
     mqttInit();
+#endif
 
 #ifndef ARCH_PORTDUINO
+
     // Initialize Wifi
 #if HAS_WIFI
     initWifi();
