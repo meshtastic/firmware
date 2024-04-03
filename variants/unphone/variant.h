@@ -28,7 +28,7 @@
 #define TFT_WIDTH 320
 #define TFT_OFFSET_X 0
 #define TFT_OFFSET_Y 0
-#define TFT_OFFSET_ROTATION 6  // the unPhone's screen is wired unusually, 0 is typical value here
+#define TFT_OFFSET_ROTATION 6 // the unPhone's screen is wired unusually, 0 is typical value here
 #define TFT_INVERT false
 #define SCREEN_ROTATE true
 #define SCREEN_TRANSITION_FRAMERATE 5
@@ -37,20 +37,20 @@
 #define USE_XPT2046 1
 #define TOUCH_CS 38
 
-#define HAS_GPS 0  // the unphone doesn't have a gps module
+#define HAS_GPS 0 // the unphone doesn't have a gps module
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 
 #define HAS_SDCARD 1
 #define SDCARD_CS 43
 
-#define LED_PIN 13  // the red part of the RGB LED
+#define LED_PIN 13 // the red part of the RGB LED
 #define LED_INVERTED 1
 
-#define BUTTON_PIN 21  // Button 3 - square - top button in landscape mode
+#define BUTTON_PIN 21      // Button 3 - square - top button in landscape mode
 #define BUTTON_NEED_PULLUP // we do need a helping hand up
 
-#define I2C_SDA 3  // I2C pins for this board
+#define I2C_SDA 3 // I2C pins for this board
 #define I2C_SCL 4
 
 // ratio of voltage divider = 3.20 (R1=100k, R2=220k)

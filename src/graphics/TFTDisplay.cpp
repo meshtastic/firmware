@@ -410,10 +410,10 @@ class LGFX : public lgfx::LGFX_Device
 {
     lgfx::Panel_HX8357D _panel_instance;
     lgfx::Bus_SPI _bus_instance;
-    #if defined(USE_XPT2046)
+#if defined(USE_XPT2046)
     lgfx::ITouch *_touch_instance;
-    // lgfx::Touch_XPT2046 _touch_instance;
-    #endif
+// lgfx::Touch_XPT2046 _touch_instance;
+#endif
 
   public:
     LGFX(void)
@@ -463,7 +463,7 @@ class LGFX : public lgfx::LGFX_Device
 
             _panel_instance.config(cfg);
         }
-        #if defined(USE_XPT2046)
+#if defined(USE_XPT2046)
         {
             // Configure settings for touch control.
             _touch_instance = new lgfx::Touch_XPT2046;
@@ -481,7 +481,7 @@ class LGFX : public lgfx::LGFX_Device
             _touch_instance->config(touch_cfg);
             //_panel_instance->setTouch(_touch_instance);
         }
-        #endif
+#endif
         setPanel(&_panel_instance);
     }
 };
