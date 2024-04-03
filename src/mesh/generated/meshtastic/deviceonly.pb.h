@@ -8,13 +8,25 @@
 #include "meshtastic/channel.pb.h"
 #include "meshtastic/localonly.pb.h"
 #include "meshtastic/mesh.pb.h"
-#include "meshtastic/telemetry.pb.h"
 #include "meshtastic/module_config.pb.h"
+#include "meshtastic/telemetry.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
+/* Enum definitions */
+/* Font sizes for the device screen */
+typedef enum _meshtastic_ScreenFonts {
+    /* TODO: REPLACE */
+    meshtastic_ScreenFonts_FONT_SMALL = 0,
+    /* TODO: REPLACE */
+    meshtastic_ScreenFonts_FONT_MEDIUM = 1,
+    /* TODO: REPLACE */
+    meshtastic_ScreenFonts_FONT_LARGE = 2
+} meshtastic_ScreenFonts;
+
+/* Struct definitions */
 /* Position with static location information only for NodeDBLite */
 typedef struct _meshtastic_PositionLite {
     /* The new preferred location encoding, multiply by 1e-7 to get degrees
@@ -63,18 +75,6 @@ typedef struct _meshtastic_NodeInfoLite {
     bool is_favorite;
 } meshtastic_NodeInfoLite;
 
-/* Enum definitions */
-/* TODO: REPLACE */
-typedef enum _meshtastic_ScreenFonts {
-    /* TODO: REPLACE */
-    meshtastic_ScreenFonts_FONT_SMALL = 0,
-    /* TODO: REPLACE */
-    meshtastic_ScreenFonts_FONT_MEDIUM = 1,
-    /* TODO: REPLACE */
-    meshtastic_ScreenFonts_FONT_LARGE = 2
-} meshtastic_ScreenFonts;
-
-/* Struct definitions */
 /* This message is never sent over the wire, but it is used for serializing DB
  state to flash in the device code
  FIXME, since we write this each time we enter deep sleep (and have infinite
@@ -116,7 +116,6 @@ typedef struct _meshtastic_DeviceState {
     /* New lite version of NodeDB to decrease memory footprint */
     std::vector<meshtastic_NodeInfoLite> node_db_lite;
 } meshtastic_DeviceState;
-
 
 /* The on-disk saved channels */
 typedef struct _meshtastic_ChannelFile {
@@ -164,37 +163,27 @@ extern "C" {
 #define _meshtastic_ScreenFonts_MAX meshtastic_ScreenFonts_FONT_LARGE
 #define _meshtastic_ScreenFonts_ARRAYSIZE ((meshtastic_ScreenFonts)(meshtastic_ScreenFonts_FONT_LARGE+1))
 
-
-
 #define meshtastic_PositionLite_location_source_ENUMTYPE meshtastic_Position_LocSource
+
+
 
 
 #define meshtastic_OEMStore_oem_font_ENUMTYPE meshtastic_ScreenFonts
 
 
 /* Initializer values for message structs */
-#define meshtastic_DeviceState_init_default      {false, meshtastic_MyNodeInfo_init_default, false, meshtastic_User_init_default, 0, {meshtastic_MeshPacket_init_default}, false, meshtastic_MeshPacket_init_default, 0, 0, 0, false, meshtastic_MeshPacket_init_default, 0, {meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default}, {{NULL}, NULL}}
-#define meshtastic_NodeInfoLite_init_default     {0, false, meshtastic_User_init_default, false, meshtastic_PositionLite_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, 0, 0}
 #define meshtastic_PositionLite_init_default     {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN}
+#define meshtastic_NodeInfoLite_init_default     {0, false, meshtastic_User_init_default, false, meshtastic_PositionLite_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, 0, 0}
+#define meshtastic_DeviceState_init_default      {false, meshtastic_MyNodeInfo_init_default, false, meshtastic_User_init_default, 0, {meshtastic_MeshPacket_init_default}, false, meshtastic_MeshPacket_init_default, 0, 0, 0, false, meshtastic_MeshPacket_init_default, 0, {meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default}, {{NULL}, NULL}}
 #define meshtastic_ChannelFile_init_default      {0, {meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default}, 0}
 #define meshtastic_OEMStore_init_default         {0, 0, {0, {0}}, _meshtastic_ScreenFonts_MIN, "", {0, {0}}, false, meshtastic_LocalConfig_init_default, false, meshtastic_LocalModuleConfig_init_default}
-#define meshtastic_DeviceState_init_zero         {false, meshtastic_MyNodeInfo_init_zero, false, meshtastic_User_init_zero, 0, {meshtastic_MeshPacket_init_zero}, false, meshtastic_MeshPacket_init_zero, 0, 0, 0, false, meshtastic_MeshPacket_init_zero, 0, {meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero}, {{NULL}, NULL}}
-#define meshtastic_NodeInfoLite_init_zero        {0, false, meshtastic_User_init_zero, false, meshtastic_PositionLite_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, 0, 0}
 #define meshtastic_PositionLite_init_zero        {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN}
+#define meshtastic_NodeInfoLite_init_zero        {0, false, meshtastic_User_init_zero, false, meshtastic_PositionLite_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, 0, 0}
+#define meshtastic_DeviceState_init_zero         {false, meshtastic_MyNodeInfo_init_zero, false, meshtastic_User_init_zero, 0, {meshtastic_MeshPacket_init_zero}, false, meshtastic_MeshPacket_init_zero, 0, 0, 0, false, meshtastic_MeshPacket_init_zero, 0, {meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero}, {{NULL}, NULL}}
 #define meshtastic_ChannelFile_init_zero         {0, {meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero}, 0}
 #define meshtastic_OEMStore_init_zero            {0, 0, {0, {0}}, _meshtastic_ScreenFonts_MIN, "", {0, {0}}, false, meshtastic_LocalConfig_init_zero, false, meshtastic_LocalModuleConfig_init_zero}
 
 /* Field tags (for use in manual encoding/decoding) */
-#define meshtastic_DeviceState_my_node_tag       2
-#define meshtastic_DeviceState_owner_tag         3
-#define meshtastic_DeviceState_receive_queue_tag 5
-#define meshtastic_DeviceState_rx_text_message_tag 7
-#define meshtastic_DeviceState_version_tag       8
-#define meshtastic_DeviceState_no_save_tag       9
-#define meshtastic_DeviceState_did_gps_reset_tag 11
-#define meshtastic_DeviceState_rx_waypoint_tag   12
-#define meshtastic_DeviceState_node_remote_hardware_pins_tag 13
-#define meshtastic_DeviceState_node_db_lite_tag  14
 #define meshtastic_PositionLite_latitude_i_tag   1
 #define meshtastic_PositionLite_longitude_i_tag  2
 #define meshtastic_PositionLite_altitude_tag     3
@@ -210,6 +199,16 @@ extern "C" {
 #define meshtastic_NodeInfoLite_via_mqtt_tag     8
 #define meshtastic_NodeInfoLite_hops_away_tag    9
 #define meshtastic_NodeInfoLite_is_favorite_tag  10
+#define meshtastic_DeviceState_my_node_tag       2
+#define meshtastic_DeviceState_owner_tag         3
+#define meshtastic_DeviceState_receive_queue_tag 5
+#define meshtastic_DeviceState_rx_text_message_tag 7
+#define meshtastic_DeviceState_version_tag       8
+#define meshtastic_DeviceState_no_save_tag       9
+#define meshtastic_DeviceState_did_gps_reset_tag 11
+#define meshtastic_DeviceState_rx_waypoint_tag   12
+#define meshtastic_DeviceState_node_remote_hardware_pins_tag 13
+#define meshtastic_DeviceState_node_db_lite_tag  14
 #define meshtastic_ChannelFile_channels_tag      1
 #define meshtastic_ChannelFile_version_tag       2
 #define meshtastic_OEMStore_oem_icon_width_tag   1
@@ -222,6 +221,32 @@ extern "C" {
 #define meshtastic_OEMStore_oem_local_module_config_tag 8
 
 /* Struct field encoding specification for nanopb */
+#define meshtastic_PositionLite_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, SFIXED32, latitude_i,        1) \
+X(a, STATIC,   SINGULAR, SFIXED32, longitude_i,       2) \
+X(a, STATIC,   SINGULAR, INT32,    altitude,          3) \
+X(a, STATIC,   SINGULAR, FIXED32,  time,              4) \
+X(a, STATIC,   SINGULAR, UENUM,    location_source,   5)
+#define meshtastic_PositionLite_CALLBACK NULL
+#define meshtastic_PositionLite_DEFAULT NULL
+
+#define meshtastic_NodeInfoLite_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   num,               1) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  user,              2) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  position,          3) \
+X(a, STATIC,   SINGULAR, FLOAT,    snr,               4) \
+X(a, STATIC,   SINGULAR, FIXED32,  last_heard,        5) \
+X(a, STATIC,   OPTIONAL, MESSAGE,  device_metrics,    6) \
+X(a, STATIC,   SINGULAR, UINT32,   channel,           7) \
+X(a, STATIC,   SINGULAR, BOOL,     via_mqtt,          8) \
+X(a, STATIC,   SINGULAR, UINT32,   hops_away,         9) \
+X(a, STATIC,   SINGULAR, BOOL,     is_favorite,      10)
+#define meshtastic_NodeInfoLite_CALLBACK NULL
+#define meshtastic_NodeInfoLite_DEFAULT NULL
+#define meshtastic_NodeInfoLite_user_MSGTYPE meshtastic_User
+#define meshtastic_NodeInfoLite_position_MSGTYPE meshtastic_PositionLite
+#define meshtastic_NodeInfoLite_device_metrics_MSGTYPE meshtastic_DeviceMetrics
+
 #define meshtastic_DeviceState_FIELDLIST(X, a) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  my_node,           2) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  owner,             3) \
@@ -244,32 +269,6 @@ extern bool meshtastic_DeviceState_callback(pb_istream_t *istream, pb_ostream_t 
 #define meshtastic_DeviceState_node_remote_hardware_pins_MSGTYPE meshtastic_NodeRemoteHardwarePin
 #define meshtastic_DeviceState_node_db_lite_MSGTYPE meshtastic_NodeInfoLite
 
-#define meshtastic_NodeInfoLite_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, UINT32,   num,               1) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  user,              2) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  position,          3) \
-X(a, STATIC,   SINGULAR, FLOAT,    snr,               4) \
-X(a, STATIC,   SINGULAR, FIXED32,  last_heard,        5) \
-X(a, STATIC,   OPTIONAL, MESSAGE,  device_metrics,    6) \
-X(a, STATIC,   SINGULAR, UINT32,   channel,           7) \
-X(a, STATIC,   SINGULAR, BOOL,     via_mqtt,          8) \
-X(a, STATIC,   SINGULAR, UINT32,   hops_away,         9) \
-X(a, STATIC,   SINGULAR, BOOL,     is_favorite,      10)
-#define meshtastic_NodeInfoLite_CALLBACK NULL
-#define meshtastic_NodeInfoLite_DEFAULT NULL
-#define meshtastic_NodeInfoLite_user_MSGTYPE meshtastic_User
-#define meshtastic_NodeInfoLite_position_MSGTYPE meshtastic_PositionLite
-#define meshtastic_NodeInfoLite_device_metrics_MSGTYPE meshtastic_DeviceMetrics
-
-#define meshtastic_PositionLite_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, SFIXED32, latitude_i,        1) \
-X(a, STATIC,   SINGULAR, SFIXED32, longitude_i,       2) \
-X(a, STATIC,   SINGULAR, INT32,    altitude,          3) \
-X(a, STATIC,   SINGULAR, FIXED32,  time,              4) \
-X(a, STATIC,   SINGULAR, UENUM,    location_source,   5)
-#define meshtastic_PositionLite_CALLBACK NULL
-#define meshtastic_PositionLite_DEFAULT NULL
-
 #define meshtastic_ChannelFile_FIELDLIST(X, a) \
 X(a, STATIC,   REPEATED, MESSAGE,  channels,          1) \
 X(a, STATIC,   SINGULAR, UINT32,   version,           2)
@@ -291,16 +290,16 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  oem_local_module_config,   8)
 #define meshtastic_OEMStore_oem_local_config_MSGTYPE meshtastic_LocalConfig
 #define meshtastic_OEMStore_oem_local_module_config_MSGTYPE meshtastic_LocalModuleConfig
 
-extern const pb_msgdesc_t meshtastic_DeviceState_msg;
-extern const pb_msgdesc_t meshtastic_NodeInfoLite_msg;
 extern const pb_msgdesc_t meshtastic_PositionLite_msg;
+extern const pb_msgdesc_t meshtastic_NodeInfoLite_msg;
+extern const pb_msgdesc_t meshtastic_DeviceState_msg;
 extern const pb_msgdesc_t meshtastic_ChannelFile_msg;
 extern const pb_msgdesc_t meshtastic_OEMStore_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
-#define meshtastic_DeviceState_fields &meshtastic_DeviceState_msg
-#define meshtastic_NodeInfoLite_fields &meshtastic_NodeInfoLite_msg
 #define meshtastic_PositionLite_fields &meshtastic_PositionLite_msg
+#define meshtastic_NodeInfoLite_fields &meshtastic_NodeInfoLite_msg
+#define meshtastic_DeviceState_fields &meshtastic_DeviceState_msg
 #define meshtastic_ChannelFile_fields &meshtastic_ChannelFile_msg
 #define meshtastic_OEMStore_fields &meshtastic_OEMStore_msg
 
