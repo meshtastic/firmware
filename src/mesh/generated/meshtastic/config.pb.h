@@ -30,12 +30,12 @@ typedef enum _meshtastic_Config_DeviceConfig_Role {
     meshtastic_Config_DeviceConfig_Role_REPEATER = 4,
     /* Description: Broadcasts GPS position packets as priority.
  Technical Details: Position Mesh packets will be prioritized higher and sent more frequently by default.
-   When used in conjunction with power.is_power_saving = true, nodes will wake up, 
+   When used in conjunction with power.is_power_saving = true, nodes will wake up,
    send position, and then sleep for position.position_broadcast_secs seconds. */
     meshtastic_Config_DeviceConfig_Role_TRACKER = 5,
     /* Description: Broadcasts telemetry packets as priority.
  Technical Details: Telemetry Mesh packets will be prioritized higher and sent more frequently by default.
-   When used in conjunction with power.is_power_saving = true, nodes will wake up, 
+   When used in conjunction with power.is_power_saving = true, nodes will wake up,
    send environment telemetry, and then sleep for telemetry.environment_update_interval seconds. */
     meshtastic_Config_DeviceConfig_Role_SENSOR = 6,
     /* Description: Optimized for ATAK system communication and reduces routine broadcasts.
@@ -50,7 +50,7 @@ typedef enum _meshtastic_Config_DeviceConfig_Role {
     Can be used for clandestine operation or to dramatically reduce airtime / power consumption */
     meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN = 8,
     /* Description: Broadcasts location as message to default channel regularly for to assist with device recovery.
- Technical Details: Used to automatically send a text message to the mesh 
+ Technical Details: Used to automatically send a text message to the mesh
     with the current position of the device on a frequent interval:
     "I'm lost! Position: lat / long" */
     meshtastic_Config_DeviceConfig_Role_LOST_AND_FOUND = 9,

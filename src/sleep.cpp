@@ -147,6 +147,18 @@ void initDeepSleep()
 
     LOG_INFO("Booted, wake cause %d (boot count %d), reset_reason=%s\n", wakeCause, bootCount, reason);
 #endif
+
+#if SOC_RTCIO_HOLD_SUPPORTED
+    // If waking from sleep, release any and all RTC GPIOs
+    if (wakeCause != ESP_SLEEP_WAKEUP_UNDEFINED) {
+        LOG_DEBUG("Disabling any holds on RTC IO pads\n");
+        for (uint8_t i = 0; i <= 45; i++) {
+            if (rtc_gpio_is_valid_gpio((gpio_num_t)i))
+                rtc_gpio_hold_dis((gpio_num_t)i);
+        }
+    }
+#endif
+
 #endif
 }
 
@@ -265,6 +277,17 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     if (shouldLoraWake(msecToWake)) {
         enableLoraInterrupt();
     }
+
+#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0) // Applicable to most ESP32 boards?
+    // Avoid leakage through button pin
+    pinMode(BUTTON_PIN, INPUT);
+    rtc_gpio_hold_en((gpio_num_t)BUTTON_PIN);
+
+    // LoRa CS (RADIO_NSS) needs to stay HIGH, even during deep sleep
+    pinMode(LORA_CS, OUTPUT);
+    digitalWrite(LORA_CS, HIGH);
+    rtc_gpio_hold_en((gpio_num_t)LORA_CS);
+#endif
 #endif
     cpuDeepSleep(msecToWake);
 }

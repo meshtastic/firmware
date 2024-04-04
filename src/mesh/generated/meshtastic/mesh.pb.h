@@ -141,6 +141,11 @@ typedef enum _meshtastic_HardwareModel {
     /* Heltec Wireless Tracker with ESP32-S3 CPU, built-in GPS, and TFT
  Older "V1.0" Variant */
     meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER_V1_0 = 58,
+    /* unPhone with ESP32-S3, TFT touchscreen,  LSM6DS3TR-C accelerometer and gyroscope */
+    meshtastic_HardwareModel_UNPHONE = 59,
+    /* Teledatics TD-LORAC NRF52840 based M.2 LoRA module
+ Compatible with the TD-WRLS development board */
+    meshtastic_HardwareModel_TD_LORAC = 60,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -593,7 +598,7 @@ typedef struct _meshtastic_MeshPacket {
     meshtastic_MeshPacket_Delayed delayed;
     /* Describes whether this packet passed via MQTT somewhere along the path it currently took. */
     bool via_mqtt;
-    /* Hop limit with which the original packet started. Sent via LoRa using three bits in the unencrypted header. 
+    /* Hop limit with which the original packet started. Sent via LoRa using three bits in the unencrypted header.
  When receiving a packet, the difference between hop_start and hop_limit gives how many hops it traveled. */
     uint8_t hop_start;
 } meshtastic_MeshPacket;
