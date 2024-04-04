@@ -277,6 +277,17 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     if (shouldLoraWake(msecToWake)) {
         enableLoraInterrupt();
     }
+
+#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0) // Applicable to most ESP32 boards?
+    // Avoid leakage through button pin
+    pinMode(BUTTON_PIN, INPUT);
+    rtc_gpio_hold_en((gpio_num_t)BUTTON_PIN);
+
+    // LoRa CS (RADIO_NSS) needs to stay HIGH, even during deep sleep
+    pinMode(LORA_CS, OUTPUT);
+    digitalWrite(LORA_CS, HIGH);
+    rtc_gpio_hold_en((gpio_num_t)LORA_CS);
+#endif
 #endif
     cpuDeepSleep(msecToWake);
 }
