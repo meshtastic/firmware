@@ -602,6 +602,20 @@ void setup()
     if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)
         screen_model = config.display.oled;
 
+#ifdef UNPHONE
+    // initialise IO expander with pinmodes
+    Wire.beginTransmission(0x26);
+    Wire.write(0x06);
+    Wire.write(0x7A);
+    Wire.write(0xDD);
+    Wire.endTransmission();
+    Wire.beginTransmission(0x26);
+    Wire.write(0x02);
+    Wire.write(0x04); // Backlight on
+    Wire.write(0x22); // G&B LEDs off
+    Wire.endTransmission();
+#endif
+
 #if defined(USE_SH1107)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of 128x128
     display_geometry = GEOMETRY_128_128;
@@ -705,7 +719,7 @@ void setup()
 
 // Don't call screen setup until after nodedb is setup (because we need
 // the current region name)
-#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS)
+#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(HX8357_CS)
     screen->setup();
 #elif defined(ARCH_PORTDUINO)
     if (screen_found.port != ScanI2C::I2CPort::NO_I2C || settingsMap[displayPanel]) {
