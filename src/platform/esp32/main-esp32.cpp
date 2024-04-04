@@ -183,6 +183,8 @@ void cpuDeepSleep(uint32_t msecToWake)
 
     Note: we don't isolate pins that are used for the LORA, LED, i2c, or ST7735 Display for the Chatter2, spi or the wake
     button(s), maybe we should not include any other GPIOs...
+
+    2024-4-4: Still relevant? Afraid of what might break if removed..
     */
 #if SOC_RTCIO_HOLD_SUPPORTED
     static const uint8_t rtcGpios[] = {/* 0, */ 2,
@@ -202,24 +204,35 @@ void cpuDeepSleep(uint32_t msecToWake)
 
         // FIXME, disable internal rtc pullups/pulldowns on the non isolated pins. for inputs that we aren't using
         // to detect wake and in normal operation the external part drives them hard.
+
+// Minimize Button current
 #ifdef BUTTON_PIN
-        // Only GPIOs which are have RTC functionality can be used in this bit map: 0,2,4,12-15,25-27,32-39.
-#if SOC_RTCIO_HOLD_SUPPORTED
-    uint64_t gpioMask = (1ULL << (config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
-#endif
-
 #ifdef BUTTON_NEED_PULLUP
-    gpio_pullup_en((gpio_num_t)BUTTON_PIN);
+    pinMode(BUTTON_PIN, INPUT_PULLUP);
+#else
+    pinMode(BUTTON_PIN, INPUT);
 #endif
 
-    // Not needed because both of the current boards have external pullups
-    // FIXME change polarity in hw so we can wake on ANY_HIGH instead - that would allow us to use all three buttons (instead of
-    // just the first) gpio_pullup_en((gpio_num_t)BUTTON_PIN);
-
-#if SOC_PM_SUPPORT_EXT_WAKEUP
+#if SOC_RTCIO_HOLD_SUPPORTED
+    rtc_gpio_hold_en((gpio_num_t)BUTTON_PIN);
+    uint64_t gpioMask = (1ULL << (config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
     esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ALL_LOW);
+#else
+    gpio_deep_sleep_hold_en();
 #endif
+#endif // end button
+
+// Minimize LoRa current
+// ( Redundant in some cases. See enableLoraInterrupt() )
+#if defined(LORA_CS) && (LORA_CS != RADIOLIB_NC)
+    digitalWrite(LORA_CS, HIGH);
+    pinMode(LORA_CS, OUTPUT);
+#if SOC_RTCIO_HOLD_SUPPORTED
+    rtc_gpio_hold_en((gpio_num_t)LORA_CS);
+#else
+    gpio_deep_sleep_hold_en();
 #endif
+#endif // end lora
 
     // We want RTC peripherals to stay on
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
