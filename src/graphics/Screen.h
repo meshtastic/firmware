@@ -150,7 +150,7 @@ class Screen : public concurrency::OSThread
             // We handle off commands immediately, because they might be called because the CPU is shutting down
             handleSetOn(false, einkScreensaver);
         else
-            enqueueCmd(ScreenCmd{.cmd = on ? Cmd::SET_ON : Cmd::SET_OFF});
+            enqueueCmd(ScreenCmd{.cmd = Cmd::SET_ON});
     }
 
     /**
