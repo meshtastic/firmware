@@ -293,7 +293,18 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                 SCAN_SIMPLE_CASE(LPS22HB_ADDR, LPS22HB, "LPS22HB sensor found\n")
 
                 SCAN_SIMPLE_CASE(QMC6310_ADDR, QMC6310, "QMC6310 Highrate 3-Axis magnetic sensor found\n")
-                SCAN_SIMPLE_CASE(QMI8658_ADDR, QMI8658, "QMI8658 Highrate 6-Axis inertial measurement sensor found\n")
+
+            case QMI8658_ADDR:
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0A), 1); // get ID
+                if (registerValue == 0xC0) {
+                    type = BQ24295;
+                    LOG_INFO("BQ24295 PMU found\n");
+                } else {
+                    type = QMI8658;
+                    LOG_INFO("QMI8658 Highrate 6-Axis inertial measurement sensor found\n");
+                }
+                break;
+
                 SCAN_SIMPLE_CASE(QMC5883L_ADDR, QMC5883L, "QMC5883L Highrate 3-Axis magnetic sensor found\n")
 
                 SCAN_SIMPLE_CASE(PMSA0031_ADDR, PMSA0031, "PMSA0031 air quality sensor found\n")
