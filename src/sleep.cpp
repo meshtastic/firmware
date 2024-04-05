@@ -147,6 +147,18 @@ void initDeepSleep()
 
     LOG_INFO("Booted, wake cause %d (boot count %d), reset_reason=%s\n", wakeCause, bootCount, reason);
 #endif
+
+#if SOC_RTCIO_HOLD_SUPPORTED
+    // If waking from sleep, release any and all RTC GPIOs
+    if (wakeCause != ESP_SLEEP_WAKEUP_UNDEFINED) {
+        LOG_DEBUG("Disabling any holds on RTC IO pads\n");
+        for (uint8_t i = 0; i <= 45; i++) {
+            if (rtc_gpio_is_valid_gpio((gpio_num_t)i))
+                rtc_gpio_hold_dis((gpio_num_t)i);
+        }
+    }
+#endif
+
 #endif
 }
 
@@ -265,6 +277,17 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     if (shouldLoraWake(msecToWake)) {
         enableLoraInterrupt();
     }
+
+#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0) // Applicable to most ESP32 boards?
+    // Avoid leakage through button pin
+    pinMode(BUTTON_PIN, INPUT);
+    rtc_gpio_hold_en((gpio_num_t)BUTTON_PIN);
+
+    // LoRa CS (RADIO_NSS) needs to stay HIGH, even during deep sleep
+    pinMode(LORA_CS, OUTPUT);
+    digitalWrite(LORA_CS, HIGH);
+    rtc_gpio_hold_en((gpio_num_t)LORA_CS);
+#endif
 #endif
     cpuDeepSleep(msecToWake);
 }
@@ -312,13 +335,11 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // assert(esp_sleep_enable_uart_wakeup(0) == ESP_OK);
 #endif
 #ifdef BUTTON_PIN
-#if SOC_PM_SUPPORT_EXT_WAKEUP
-    esp_sleep_enable_ext0_wakeup((gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN),
-                                 LOW); // when user presses, this button goes low
-#else
+    // The enableLoraInterrupt() method is using ext0_wakeup, so we are forced to use GPIO wakeup
+    gpio_num_t pin = (gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
+    gpio_intr_disable(pin);
+    gpio_wakeup_enable(pin, GPIO_INTR_LOW_LEVEL);
     esp_sleep_enable_gpio_wakeup();
-    gpio_wakeup_enable((gpio_num_t)BUTTON_PIN, GPIO_INTR_LOW_LEVEL);
-#endif
 #endif
     enableLoraInterrupt();
 #ifdef PMU_IRQ
@@ -341,6 +362,12 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
         LOG_DEBUG("esp_light_sleep_start result %d\n", res);
     }
     assert(res == ESP_OK);
+
+#ifdef BUTTON_PIN
+    gpio_wakeup_disable(pin);
+    // Would have thought that need gpio_intr_enable() here, but nope..
+    // Works fine without it; crashes with it.
+#endif
 
     esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
 #ifdef BUTTON_PIN
