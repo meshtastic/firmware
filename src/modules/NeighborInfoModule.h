@@ -20,6 +20,9 @@ class NeighborInfoModule : public ProtobufModule<meshtastic_NeighborInfo>, priva
 
     bool saveProtoForModule();
 
+  private:
+    bool shouldSave = false; // Whether we should save the neighbor info to flash
+
   protected:
     // Note: this holds our local info.
     meshtastic_NeighborInfo neighborState;

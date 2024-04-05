@@ -402,9 +402,95 @@ class LGFX : public lgfx::LGFX_Device
 };
 
 static LGFX *tft = nullptr;
+
+#elif defined(HX8357_CS)
+#include <LovyanGFX.hpp> // Graphics and font library for HX8357 driver chip
+
+class LGFX : public lgfx::LGFX_Device
+{
+    lgfx::Panel_HX8357D _panel_instance;
+    lgfx::Bus_SPI _bus_instance;
+#if defined(USE_XPT2046)
+    lgfx::ITouch *_touch_instance;
+// lgfx::Touch_XPT2046 _touch_instance;
 #endif
 
-#if defined(ST7735_CS) || defined(ST7789_CS) || defined(ILI9341_DRIVER) || defined(RAK14014) ||                                  \
+  public:
+    LGFX(void)
+    {
+        // Panel_HX8357D
+        {
+            // configure SPI
+            auto cfg = _bus_instance.config();
+
+            cfg.spi_host = HX8357_SPI_HOST;
+            cfg.spi_mode = 0;
+            cfg.freq_write = SPI_FREQUENCY; // SPI clock for transmission (up to 80MHz, rounded to the value obtained by dividing
+                                            // 80MHz by an integer)
+            cfg.freq_read = SPI_READ_FREQUENCY; // SPI clock when receiving
+            cfg.spi_3wire = false;              // Set to true if reception is done on the MOSI pin
+            cfg.use_lock = true;                // Set to true to use transaction locking
+            cfg.dma_channel = SPI_DMA_CH_AUTO;  // SPI_DMA_CH_AUTO; // Set DMA channel to use (0=not use DMA / 1=1ch / 2=ch /
+                                                // SPI_DMA_CH_AUTO=auto setting)
+            cfg.pin_sclk = HX8357_SCK;          // Set SPI SCLK pin number
+            cfg.pin_mosi = HX8357_MOSI;         // Set SPI MOSI pin number
+            cfg.pin_miso = HX8357_MISO;         // Set SPI MISO pin number (-1 = disable)
+            cfg.pin_dc = HX8357_RS;             // Set SPI DC pin number (-1 = disable)
+
+            _bus_instance.config(cfg);              // applies the set value to the bus.
+            _panel_instance.setBus(&_bus_instance); // set the bus on the panel.
+        }
+        {
+            // Set the display panel control.
+            auto cfg = _panel_instance.config(); // Gets a structure for display panel settings.
+
+            cfg.pin_cs = HX8357_CS;     // Pin number where CS is connected (-1 = disable)
+            cfg.pin_rst = HX8357_RESET; // Pin number where RST is connected  (-1 = disable)
+            cfg.pin_busy = HX8357_BUSY; // Pin number where BUSY is connected (-1 = disable)
+
+            cfg.panel_width = TFT_WIDTH;               // actual displayable width
+            cfg.panel_height = TFT_HEIGHT;             // actual displayable height
+            cfg.offset_x = TFT_OFFSET_X;               // Panel offset amount in X direction
+            cfg.offset_y = TFT_OFFSET_Y;               // Panel offset amount in Y direction
+            cfg.offset_rotation = TFT_OFFSET_ROTATION; // Rotation direction value offset 0~7 (4~7 is upside down)
+            cfg.dummy_read_pixel = 8;                  // Number of bits for dummy read before pixel readout
+            cfg.dummy_read_bits = 1;                   // Number of bits for dummy read before non-pixel data read
+            cfg.readable = true;                       // Set to true if data can be read
+            cfg.invert = TFT_INVERT;                   // Set to true if the light/darkness of the panel is reversed
+            cfg.rgb_order = false;                     // Set to true if the panel's red and blue are swapped
+            cfg.dlen_16bit = false;
+            cfg.bus_shared = true; // If the bus is shared with the SD card, set to true (bus control with drawJpgFile etc.)
+
+            _panel_instance.config(cfg);
+        }
+#if defined(USE_XPT2046)
+        {
+            // Configure settings for touch control.
+            _touch_instance = new lgfx::Touch_XPT2046;
+            auto touch_cfg = _touch_instance->config();
+
+            touch_cfg.pin_cs = TOUCH_CS;
+            touch_cfg.x_min = 0;
+            touch_cfg.x_max = TFT_HEIGHT - 1;
+            touch_cfg.y_min = 0;
+            touch_cfg.y_max = TFT_WIDTH - 1;
+            touch_cfg.pin_int = -1;
+            touch_cfg.bus_shared = true;
+            touch_cfg.offset_rotation = 1;
+
+            _touch_instance->config(touch_cfg);
+            //_panel_instance->setTouch(_touch_instance);
+        }
+#endif
+        setPanel(&_panel_instance);
+    }
+};
+
+static LGFX *tft = nullptr;
+
+#endif
+
+#if defined(ST7735_CS) || defined(ST7789_CS) || defined(ILI9341_DRIVER) || defined(RAK14014) || defined(HX8357_CS) ||            \
     (ARCH_PORTDUINO && HAS_SCREEN != 0)
 #include "SPILock.h"
 #include "TFTDisplay.h"
@@ -487,7 +573,13 @@ void TFTDisplay::sendCommand(uint8_t com)
 #ifdef VTFT_CTRL
         digitalWrite(VTFT_CTRL, LOW);
 #endif
-
+#ifdef UNPHONE
+        Wire.beginTransmission(0x26);
+        Wire.write(0x02);
+        Wire.write(0x04); // Backlight on
+        Wire.write(0x22); // G&B LEDs off
+        Wire.endTransmission();
+#endif
 #ifdef RAK14014
 #elif !defined(M5STACK)
         tft->setBrightness(172);
@@ -513,6 +605,13 @@ void TFTDisplay::sendCommand(uint8_t com)
 #endif
 #ifdef VTFT_CTRL
         digitalWrite(VTFT_CTRL, HIGH);
+#endif
+#ifdef UNPHONE
+        Wire.beginTransmission(0x26);
+        Wire.write(0x02);
+        Wire.write(0x00); // Backlight off
+        Wire.write(0x22); // G&B LEDs off
+        Wire.endTransmission();
 #endif
 #ifdef RAK14014
 #elif !defined(M5STACK)
@@ -584,6 +683,14 @@ bool TFTDisplay::connect()
 #elif defined(ST7735_BL_V05)
     pinMode(ST7735_BL_V05, OUTPUT);
     digitalWrite(ST7735_BL_V05, TFT_BACKLIGHT_ON);
+#endif
+#ifdef UNPHONE
+    Wire.beginTransmission(0x26);
+    Wire.write(0x02);
+    Wire.write(0x04); // Backlight on
+    Wire.write(0x22); // G&B LEDs off
+    Wire.endTransmission();
+    LOG_INFO("Power to TFT Backlight\n");
 #endif
 
     tft->init();
