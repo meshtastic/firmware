@@ -1,5 +1,6 @@
 ### Define your devices here using Broadcom pin numbering
 ### Uncomment the block that corresponds to your hardware
+### Including the "Module:" line!
 ---
 Lora:
 #  Module: sx1262  # Waveshare SX126X XXXM
