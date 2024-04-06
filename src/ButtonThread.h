@@ -42,7 +42,7 @@ class ButtonThread : public concurrency::OSThread
     static volatile ButtonEventType btnEvent;
 
     // Store click count during callback, for later use
-    volatile int multipressClickCount;
+    volatile int multipressClickCount = 0;
 
     static void wakeOnIrq(int irq, int mode);
 
