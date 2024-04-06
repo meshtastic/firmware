@@ -86,7 +86,9 @@ ButtonThread::ButtonThread() : OSThread("Button")
 
 #ifdef BUTTON_PIN_TOUCH
     userButtonTouch = OneButton(BUTTON_PIN_TOUCH, true, true);
-    userButtonTouch.attachClick(touchPressed);
+    userButtonTouch.setPressMs(400);
+    userButtonTouch.attachLongPressStart(touchPressedLongStart);
+    userButtonTouch.attachLongPressStop(touchPressedLongStop);
     wakeOnIrq(BUTTON_PIN_TOUCH, FALLING);
 #endif
 }
@@ -138,8 +140,19 @@ int32_t ButtonThread::runOnce()
 
         case BUTTON_EVENT_DOUBLE_PRESSED: {
             LOG_BUTTON("Double press!\n");
+
 #if defined(USE_EINK) && defined(PIN_EINK_EN)
+#if defined(BUTTON_PIN_TOUCH)
+            // If touch button also held, toggle backlight instead of adhoc ping
+            if (touchModifier) {
+                LOG_DEBUG("Toggling Backlight\n");
+                digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
+                break;
+            }
+#else
+            // No touch button: double press does two things at once.. (legacy behavior)
             digitalWrite(PIN_EINK_EN, digitalRead(PIN_EINK_EN) == LOW);
+#endif
 #endif
             service.refreshLocalMeshNode();
             service.sendNetworkPing(NODENUM_BROADCAST, true);
@@ -178,8 +191,9 @@ int32_t ButtonThread::runOnce()
             power->shutdown();
             break;
         }
-        case BUTTON_EVENT_TOUCH_PRESSED: {
+        case BUTTON_EVENT_TOUCH_LONG_PRESSED: {
             LOG_BUTTON("Touch press!\n");
+            touchModifier = true;
             if (screen) {
                 // Wake if asleep
                 if (powerFSM.getState() == &stateDARK)
@@ -188,6 +202,11 @@ int32_t ButtonThread::runOnce()
                 // Update display (legacy behaviour)
                 screen->forceDisplay();
             }
+            break;
+        }
+        case BUTTON_EVENT_TOUCH_LONG_RELEASED: {
+            LOG_BUTTON("Touch release!\n");
+            touchModifier = false;
             break;
         }
         default:
