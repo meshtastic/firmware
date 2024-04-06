@@ -1,3 +1,7 @@
+// meshtastic/firmware/variants/unphone/variant.h
+
+#pragma once
+
 #define SPI_SCK 39
 #define SPI_MOSI 40
 #define SPI_MISO 41
