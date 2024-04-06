@@ -197,7 +197,7 @@ int32_t ButtonThread::runOnce()
 #ifdef BUTTON_PIN_TOUCH
         case BUTTON_EVENT_TOUCH_LONG_PRESSED: {
             LOG_BUTTON("Touch press!\n");
-
+            if (config.display.wake_on_tap_or_motion) {
                 if (screen) {
                     // Wake if asleep
                     if (powerFSM.getState() == &stateDARK)
@@ -206,6 +206,7 @@ int32_t ButtonThread::runOnce()
                     // Update display (legacy behaviour)
                     screen->forceDisplay();
                 }
+            }
             break;
         }
 #endif // BUTTON_PIN_TOUCH
