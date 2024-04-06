@@ -1,7 +1,6 @@
 #include "api/PacketAPI.h"
 #include "MeshService.h"
 #include "RadioInterface.h"
-#include "sharedMem/MeshPacketServer.h"
 
 PacketAPI *packetAPI = nullptr;
 
@@ -23,18 +22,11 @@ bool PacketAPI::receivePacket(void)
         isConnected = true;
         data_received = true;
 
-        // TODO: think about redesign or drop class MeshPacketServer
         meshtastic_ToRadio *mr;
-        // if (typeid(*server) == typeid(MeshPacketServer)) {
-        //     dynamic_cast<MeshPacketServer*>(server)->receivePacket(*mr);
-        // }
-        // else {
         auto p = server->receivePacket()->move();
         int id = p->getPacketId();
         LOG_DEBUG("Received packet id=%u\n", id);
-        // mr = (meshtastic_ToRadio*)&dynamic_cast<DataPacket<meshtastic_ToRadio>*>(p.get())->getData();
         mr = (meshtastic_ToRadio *)&static_cast<DataPacket<meshtastic_ToRadio> *>(p.get())->getData();
-        //}
 
         switch (mr->which_payload_variant) {
         case meshtastic_ToRadio_packet_tag: {

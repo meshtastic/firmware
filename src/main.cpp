@@ -106,8 +106,8 @@ AudioThread *audioThread;
 
 #if HAS_TFT
 #include "DeviceScreen.h"
-#include "sharedMem/MeshPacketClient.h"
-#include "sharedMem/MeshPacketServer.h"
+#include "sharedMem/PacketClient.h"
+#include "sharedMem/PacketServer.h"
 
 void tft_task_handler(void *);
 
@@ -674,9 +674,9 @@ void setup()
 #endif
 
 #if HAS_TFT
-    MeshPacketServer::init();
+    PacketServer::init();
     deviceScreen = &DeviceScreen::create();
-    deviceScreen->init(new MeshPacketClient);
+    deviceScreen->init(new PacketClient);
 #endif
 
     // Initialize the screen first so we can show the logo while we start up everything else.

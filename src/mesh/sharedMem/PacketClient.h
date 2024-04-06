@@ -6,7 +6,7 @@
 class SharedQueue;
 
 /**
- * @brief Generic client implementation to receive from and
+ * @brief Client implementation to receive packets from and
  *        send packets to the shared queue
  *
  */
@@ -14,13 +14,12 @@ class PacketClient : public IClientBase
 {
   public:
     PacketClient();
-    virtual void init(void);
-    virtual bool connect(void);
-    virtual bool disconnect(void);
-    virtual bool isConnected(void);
-
-    virtual bool sendPacket(Packet &&p);
-    virtual Packet::PacketPtr receivePacket();
+    void init(void) override;
+    bool connect(void) override;
+    bool disconnect(void) override;
+    bool isConnected(void) override;
+    bool send(meshtastic_ToRadio &&to) override;
+    meshtastic_FromRadio receive(void) override;
 
     virtual bool hasData() const;
     virtual bool available() const;

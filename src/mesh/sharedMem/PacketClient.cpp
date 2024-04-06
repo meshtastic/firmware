@@ -41,21 +41,25 @@ int PacketClient::connect(SharedQueue *_queue)
     return queue->serverQueueSize();
 }
 
-Packet::PacketPtr PacketClient::receivePacket()
+bool PacketClient::send(meshtastic_ToRadio &&to)
 {
-    assert(queue);
-    if (queue->serverQueueSize() == 0)
-        return {nullptr};
-    return queue->clientReceive();
+    if (available()) {
+        static uint32_t id = 0;
+        return queue->clientSend(DataPacket<meshtastic_ToRadio>(++id, to));
+    } else {
+        return false;
+    }
 }
 
-bool PacketClient::sendPacket(Packet &&p)
+meshtastic_FromRadio PacketClient::receive(void)
 {
-    assert(queue);
-    if (queue->clientQueueSize() >= max_packet_queue_size)
-        return false;
-    queue->clientSend(std::move(p));
-    return true;
+    if (hasData()) {
+        auto p = queue->clientReceive();
+        if (p) {
+            return static_cast<DataPacket<meshtastic_FromRadio> *>(p->move().get())->getData();
+        }
+    }
+    return meshtastic_FromRadio();
 }
 
 bool PacketClient::hasData() const
