@@ -18,7 +18,6 @@ class ButtonThread : public concurrency::OSThread
         BUTTON_EVENT_LONG_PRESSED,
         BUTTON_EVENT_LONG_RELEASED,
         BUTTON_EVENT_TOUCH_LONG_PRESSED,
-        BUTTON_EVENT_TOUCH_LONG_RELEASED,
     };
 
     ButtonThread();
@@ -33,7 +32,6 @@ class ButtonThread : public concurrency::OSThread
 #endif
 #ifdef BUTTON_PIN_TOUCH
     OneButton userButtonTouch;
-    bool touchModifier = false;
 #endif
 #if defined(ARCH_PORTDUINO)
     OneButton userButton;
@@ -45,11 +43,10 @@ class ButtonThread : public concurrency::OSThread
     static void wakeOnIrq(int irq, int mode);
 
     // IRQ callbacks
-    static void touchPressedLongStart() { btnEvent = BUTTON_EVENT_TOUCH_LONG_PRESSED; }
-    static void touchPressedLongStop() { btnEvent = BUTTON_EVENT_TOUCH_LONG_RELEASED; }
     static void userButtonPressed() { btnEvent = BUTTON_EVENT_PRESSED; }
     static void userButtonDoublePressed() { btnEvent = BUTTON_EVENT_DOUBLE_PRESSED; }
     static void userButtonMultiPressed() { btnEvent = BUTTON_EVENT_MULTI_PRESSED; }
     static void userButtonPressedLongStart();
     static void userButtonPressedLongStop();
+    static void touchPressedLongStart() { btnEvent = BUTTON_EVENT_TOUCH_LONG_PRESSED; }
 };
