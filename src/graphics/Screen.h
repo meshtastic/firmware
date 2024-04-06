@@ -20,7 +20,7 @@ class Screen
     void setOn(bool) {}
     void print(const char *) {}
     void doDeepSleep() {}
-    void forceDisplay() {}
+    void forceDisplay(bool forceUiUpdate = false) {}
     void startBluetoothPinScreen(uint32_t pin) {}
     void stopBluetoothPinScreen() {}
     void startRebootScreen() {}
@@ -318,7 +318,7 @@ class Screen : public concurrency::OSThread
     int handleInputEvent(const InputEvent *arg);
 
     /// Used to force (super slow) eink displays to draw critical frames
-    void forceDisplay();
+    void forceDisplay(bool forceUiUpdate = false);
 
     /// Draws our SSL cert screen during boot (called from WebServer)
     void setSSLFrames();

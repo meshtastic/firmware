@@ -143,8 +143,10 @@ int32_t ButtonThread::runOnce()
 #endif
             service.refreshLocalMeshNode();
             service.sendNetworkPing(NODENUM_BROADCAST, true);
-            if (screen)
+            if (screen) {
                 screen->print("Sent ad-hoc ping\n");
+                screen->forceDisplay(true); // Force a new UI frame, then force an EInk update
+            }
             break;
         }
 #if HAS_GPS
@@ -153,7 +155,7 @@ int32_t ButtonThread::runOnce()
             if (!config.device.disable_triple_click && (gps != nullptr)) {
                 gps->toggleGpsMode();
                 if (screen)
-                    screen->forceDisplay();
+                    screen->forceDisplay(true); // Force a new UI frame, then force an EInk update
             }
             break;
         }
