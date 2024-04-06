@@ -17,11 +17,12 @@ class ButtonThread : public concurrency::OSThread
         BUTTON_EVENT_MULTI_PRESSED,
         BUTTON_EVENT_LONG_PRESSED,
         BUTTON_EVENT_LONG_RELEASED,
-        BUTTON_EVENT_TOUCH_PRESSED
+        BUTTON_EVENT_TOUCH_LONG_PRESSED,
     };
 
     ButtonThread();
     int32_t runOnce() override;
+    void storeClickCount();
 
   private:
 #ifdef BUTTON_PIN
@@ -40,13 +41,16 @@ class ButtonThread : public concurrency::OSThread
     // set during IRQ
     static volatile ButtonEventType btnEvent;
 
+    // Store click count during callback, for later use
+    volatile int multipressClickCount = 0;
+
     static void wakeOnIrq(int irq, int mode);
 
     // IRQ callbacks
-    static void touchPressed() { btnEvent = BUTTON_EVENT_TOUCH_PRESSED; }
     static void userButtonPressed() { btnEvent = BUTTON_EVENT_PRESSED; }
     static void userButtonDoublePressed() { btnEvent = BUTTON_EVENT_DOUBLE_PRESSED; }
-    static void userButtonMultiPressed() { btnEvent = BUTTON_EVENT_MULTI_PRESSED; }
+    static void userButtonMultiPressed(void *callerThread); // Retrieve click count from non-static Onebutton while still valid
     static void userButtonPressedLongStart();
     static void userButtonPressedLongStop();
+    static void touchPressedLongStart() { btnEvent = BUTTON_EVENT_TOUCH_LONG_PRESSED; }
 };
