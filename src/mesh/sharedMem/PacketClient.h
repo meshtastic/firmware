@@ -1,7 +1,6 @@
 #pragma once
 
 #include "IClientBase.h"
-#include "Packet.h"
 
 class SharedQueue;
 

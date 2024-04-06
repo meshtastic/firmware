@@ -1,6 +1,7 @@
 #include "sharedMem/PacketClient.h"
+#include "Packet.h"
+#include "SharedQueue.h"
 #include "configuration.h"
-#include "sharedMem/SharedQueue.h"
 #include <assert.h>
 
 const uint32_t max_packet_queue_size = 10;

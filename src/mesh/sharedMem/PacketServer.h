@@ -1,7 +1,7 @@
 #pragma once
 
-#include "concurrency/PacketQueue.h"
-#include "sharedMem/Packet.h"
+#include "Packet.h"
+#include "PacketQueue.h"
 
 class SharedQueue;
 
