@@ -191,6 +191,8 @@ int32_t ButtonThread::runOnce()
             power->shutdown();
             break;
         }
+
+#ifdef BUTTON_PIN_TOUCH
         case BUTTON_EVENT_TOUCH_LONG_PRESSED: {
             LOG_BUTTON("Touch press!\n");
             touchModifier = true;
@@ -209,6 +211,8 @@ int32_t ButtonThread::runOnce()
             touchModifier = false;
             break;
         }
+#endif // BUTTON_PIN_TOUCH
+
         default:
             break;
         }
