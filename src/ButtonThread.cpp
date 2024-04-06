@@ -240,14 +240,14 @@ void ButtonThread::userButtonMultiPressed(void *callerThread)
 {
     // Grab click count from non-static button, while the info is still valid
     ButtonThread *thread = (ButtonThread *)callerThread;
-    thread->handleMultiPress();
+    thread->storeClickCount();
 
     // Then handle later, in the usual way
     btnEvent = BUTTON_EVENT_MULTI_PRESSED;
 }
 
 // Non-static method, runs during callback. Grabs info while still valid
-void ButtonThread::handleMultiPress()
+void ButtonThread::storeClickCount()
 {
 #ifdef BUTTON_PIN
     multipressClickCount = userButton.getNumberClicks();

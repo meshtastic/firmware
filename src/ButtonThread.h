@@ -22,7 +22,7 @@ class ButtonThread : public concurrency::OSThread
 
     ButtonThread();
     int32_t runOnce() override;
-    void handleMultiPress();
+    void storeClickCount();
 
   private:
 #ifdef BUTTON_PIN
