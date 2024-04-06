@@ -180,8 +180,14 @@ int32_t ButtonThread::runOnce()
         }
         case BUTTON_EVENT_TOUCH_PRESSED: {
             LOG_BUTTON("Touch press!\n");
-            if (screen)
+            if (screen) {
+                // Wake if asleep
+                if (powerFSM.getState() == &stateDARK)
+                    powerFSM.trigger(EVENT_PRESS);
+
+                // Update display (legacy behaviour)
                 screen->forceDisplay();
+            }
             break;
         }
         default:
