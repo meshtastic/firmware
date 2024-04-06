@@ -116,11 +116,6 @@ AudioThread *audioThread = nullptr;
 float tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE; // if TCXO is optional, put this here so it can be changed further down.
 #endif
 
-#ifdef USE_PACKET_API
-#include "sharedMem/MeshPacketServer.h"
-#include "sharedMem/PacketClient.h"
-#endif
-
 using namespace concurrency;
 
 volatile static const char slipstreamTZString[] = USERPREFS_TZ_STRING;

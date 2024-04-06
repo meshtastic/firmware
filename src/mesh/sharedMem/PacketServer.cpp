@@ -1,10 +1,23 @@
 #include "sharedMem/PacketServer.h"
+#include "api/PacketAPI.h"
 #include "sharedMem/SharedQueue.h"
 #include <assert.h>
 
 const uint32_t max_packet_queue_size = 50;
 
+SharedQueue *sharedQueue = nullptr;
+
+PacketServer *packetServer = nullptr;
+
 PacketServer::PacketServer() : queue(nullptr) {}
+
+void PacketServer::init(void)
+{
+    packetServer = new PacketServer;
+    packetAPI = new PacketAPI(packetServer);
+    sharedQueue = new SharedQueue;
+    packetServer->begin(sharedQueue);
+}
 
 void PacketServer::begin(SharedQueue *_queue)
 {

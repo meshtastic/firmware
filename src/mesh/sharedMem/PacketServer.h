@@ -7,12 +7,13 @@ class SharedQueue;
 
 /**
  * Generic server implementation (base class) for bidirectional task communication
- * Uses a queue that is shared with the
+ * Uses a queue that is shared with the client
  */
 class PacketServer
 {
   public:
     PacketServer();
+    static void init(void);
     virtual void begin(SharedQueue *_queue);
     virtual bool sendPacket(Packet &&p);
     virtual Packet::PacketPtr receivePacket(void);
