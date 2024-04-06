@@ -1153,10 +1153,33 @@ void Screen::setup()
     MeshModule::observeUIEvents(&uiFrameEventObserver);
 }
 
-void Screen::forceDisplay()
+void Screen::forceDisplay(bool forceUiUpdate)
 {
     // Nasty hack to force epaper updates for 'key' frames.  FIXME, cleanup.
 #ifdef USE_EINK
+    // If requested, make sure queued commands are run, and UI has rendered a new frame
+    if (forceUiUpdate) {
+        // No delay between UI frame rendering
+        setFastFramerate();
+
+        // Make sure all CMDs have run first
+        while (!cmdQueue.isEmpty())
+            runOnce();
+
+        // Ensure at least one frame has drawn
+        uint64_t startUpdate;
+        do {
+            startUpdate = millis(); // Handle impossibly unlikely corner case of a millis() overflow..
+            delay(10);
+            ui->update();
+        } while (ui->getUiState()->lastUpdate < startUpdate);
+
+        // Return to normal frame rate
+        targetFramerate = IDLE_FRAMERATE;
+        ui->setTargetFPS(targetFramerate);
+    }
+
+    // Tell EInk class to update the display
     static_cast<EInkDisplay *>(dispdev)->forceDisplay();
 #endif
 }
