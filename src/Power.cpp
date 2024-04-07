@@ -330,6 +330,20 @@ class AnalogBatteryLevel : public HasBatteryLevel
             return true;
         }
         // if it's not HIGH - check the battery
+#elif defined(EXT_POWER_DETECT_CP2102)
+        bool rxHeldHigh = false;
+
+        // Check (several times) to see if UART RX is held HIGH
+        // CP2102 is powered by VCC_5V. If unpowered, pin is LOW
+        for (uint8_t i; i < 3; i++) {
+            if (digitalRead(RX) == HIGH) {
+                rxHeldHigh = true;
+                break;
+            }
+            delay(10);
+        }
+
+        return rxHeldHigh;
 #endif
 
         return getBattVoltage() > chargingVolt;

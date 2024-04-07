@@ -1,5 +1,8 @@
 #define LED_PIN 18
 
+// Power Management
+#define EXT_POWER_DETECT_CP2102
+
 // Enable bus for external periherals
 #define I2C_SDA SDA
 #define I2C_SCL SCL

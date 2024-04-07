@@ -3,6 +3,9 @@
 
 #define LED_PIN LED
 
+// Power Management
+#define EXT_POWER_DETECT_CP2102
+
 #define HAS_SCREEN 0
 
 #define VEXT_ENABLE Vext // active low, powers the oled display and the lora antenna boost

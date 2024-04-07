@@ -1,5 +1,8 @@
 #define LED_PIN LED
 
+// Power Management
+#define EXT_POWER_DETECT_CP2102
+
 #define RESET_OLED RST_OLED
 #define I2C_SDA SDA_OLED // I2C pins for this board
 #define I2C_SCL SCL_OLED
