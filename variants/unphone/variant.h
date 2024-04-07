@@ -32,7 +32,7 @@
 #define TFT_WIDTH 320
 #define TFT_OFFSET_X 0
 #define TFT_OFFSET_Y 0
-#define TFT_OFFSET_ROTATION 6 // the unPhone's screen is wired unusually, 0 is typical value here
+#define TFT_OFFSET_ROTATION 6 // unPhone's screen wired unusually, 0 typical
 #define TFT_INVERT false
 #define SCREEN_ROTATE true
 #define SCREEN_TRANSITION_FRAMERATE 5
@@ -60,6 +60,6 @@
 // ratio of voltage divider = 3.20 (R1=100k, R2=220k)
 // #define ADC_MULTIPLIER 3.2
 
-// #define BATTERY_PIN 13 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+// #define BATTERY_PIN 13 // battery V measurement pin; vbat divider is here
 // #define ADC_CHANNEL ADC2_GPIO13_CHANNEL
 // #define BAT_MEASURE_ADC_UNIT 2
