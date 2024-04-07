@@ -12,7 +12,11 @@
 #include "detect/ScanI2C.h"
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
 
-#include "main.h" // for cardkb_found
+#include "main.h"                               // for cardkb_found
+#include "modules/ExternalNotificationModule.h" // for buzzer control
+#if !MESHTASTIC_EXCLUDE_GPS
+#include "GPS.h"
+#endif
 
 #ifndef INPUTBROKER_MATRIX_TYPE
 #define INPUTBROKER_MATRIX_TYPE 0
@@ -397,6 +401,7 @@ int32_t CannedMessageModule::runOnce()
                 }
                 break;
             case 0x09: // tab
+            case 0x91: // alt+t for T-Deck that doesn't have a tab key
                 if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL) {
                     this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
                 } else if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
@@ -411,13 +416,44 @@ int32_t CannedMessageModule::runOnce()
                 break;
             // handle fn+s for shutdown
             case 0x9b:
-                screen->startShutdownScreen();
+                if (screen)
+                    screen->startShutdownScreen();
                 shutdownAtMsec = millis() + DEFAULT_SHUTDOWN_SECONDS * 1000;
+                runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
                 break;
             // and fn+r for reboot
             case 0x90:
-                screen->startRebootScreen();
+                if (screen)
+                    screen->startRebootScreen();
                 rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+                runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+                break;
+            case 0x9e: // toggle GPS like triple press does
+                if (gps != nullptr) {
+                    gps->toggleGpsMode();
+                }
+                if (screen)
+                    screen->forceDisplay();
+                runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+                break;
+
+            // mute (switch off/toggle) external notifications on fn+m
+            case 0xac:
+                if (moduleConfig.external_notification.enabled == true) {
+                    if (externalNotificationModule->getMute()) {
+                        externalNotificationModule->setMute(false);
+                        runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+                    } else {
+                        externalNotificationModule->stopNow(); // this will turn off all GPIO and sounds and idle the loop
+                        externalNotificationModule->setMute(true);
+                        runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+                    }
+                }
+                break;
+            case 0xaf: // fn+space send network ping like double press does
+                service.refreshLocalMeshNode();
+                service.sendNetworkPing(NODENUM_BROADCAST, true);
+                runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
                 break;
             default:
                 if (this->cursor == this->freetext.length()) {
