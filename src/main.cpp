@@ -106,8 +106,8 @@ AudioThread *audioThread;
 
 #if HAS_TFT
 #include "DeviceScreen.h"
-#include "sharedMem/PacketClient.h"
-#include "sharedMem/PacketServer.h"
+#include "PacketClient.h"
+#include "PacketServer.h"
 
 void tft_task_handler(void *);
 

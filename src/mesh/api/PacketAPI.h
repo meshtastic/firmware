@@ -1,8 +1,8 @@
 #pragma once
 
+#include "PacketServer.h"
 #include "PhoneAPI.h"
 #include "concurrency/OSThread.h"
-#include "sharedMem/PacketServer.h"
 
 /**
  * A version of the phone API used for inter task communication based on protobuf packets, e.g.
