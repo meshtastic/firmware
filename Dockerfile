@@ -27,7 +27,7 @@ RUN python3 -m venv /tmp/firmware
 RUN source ./bin/activate && pip3 install --no-cache-dir -U platformio==6.1.14
 
 COPY . /tmp/firmware
-RUN source ./bin/activate && sudo chmod -t /tmp/firmware -R && chmod +x /tmp/firmware/bin/build-native.sh && ./bin/build-native.sh
+RUN source ./bin/activate && chmod -t /tmp/firmware -R && chmod +x /tmp/firmware/bin/build-native.sh && ./bin/build-native.sh
 RUN cp "/tmp/firmware/release/meshtasticd_linux_$(uname -m)" "/tmp/firmware/release/meshtasticd"
 
 
