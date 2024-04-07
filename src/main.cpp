@@ -663,6 +663,15 @@ void setup()
     // Initialize the screen first so we can show the logo while we start up everything else.
     screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
 
+    // setup TZ prior to time actions.
+    if (*config.device.tzdef) {
+        setenv("TZ", config.device.tzdef, 1);
+    } else {
+        setenv("TZ", "GMT0", 1);
+    }
+    tzset();
+    LOG_DEBUG("Set Timezone to %s\n", getenv("TZ"));
+
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 
 #if !MESHTASTIC_EXCLUDE_GPS
