@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y wget python3 py
                            libulfius-dev liborcania-dev libssl-dev pkg-config && \
     apt-get clean && rm -rf /var/lib/apt/lists/* && mkdir /tmp/firmware && chmod -t /tmp/firmware
 
-RUN groupadd -g 1000 mesh && useradd -ml -u 1000 -g 1000 mesh
+RUN groupadd -g 1000 mesh && useradd -ml -u 1000 -g 1000 mesh && chown mesh:mesh /tmp/firmware
 USER mesh
 
 WORKDIR /tmp/firmware
