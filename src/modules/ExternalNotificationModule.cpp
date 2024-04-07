@@ -336,7 +336,7 @@ ExternalNotificationModule::ExternalNotificationModule()
 
 ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
-    if (moduleConfig.external_notification.enabled) {
+    if (moduleConfig.external_notification.enabled && !isMuted) {
 #ifdef T_WATCH_S3
         drv.setWaveform(0, 75);
         drv.setWaveform(1, 56);
@@ -445,7 +445,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             setIntervalFromNow(0); // run once so we know if we should do something
         }
     } else {
-        LOG_INFO("External Notification Module Disabled\n");
+        LOG_INFO("External Notification Module Disabled or muted\n");
     }
 
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
