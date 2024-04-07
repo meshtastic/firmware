@@ -1,3 +1,5 @@
+#ifdef USE_PACKET_API
+
 #include "api/PacketAPI.h"
 #include "MeshService.h"
 #include "RadioInterface.h"
@@ -73,3 +75,5 @@ bool PacketAPI::checkIsConnected()
     isConnected |= server->hasData();
     return isConnected && server->available();
 }
+
+#endif
