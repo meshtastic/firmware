@@ -1379,7 +1379,7 @@ bool GPS::lookForLocation()
     t.tm_mon = reader.date.month() - 1;
     t.tm_year = reader.date.year() - 1900;
     t.tm_isdst = false;
-    p.timestamp = mktime(&t);
+    p.timestamp = gm_mktime(&t);
 
     // Nice to have, if available
     if (reader.satellites.isUpdated()) {
