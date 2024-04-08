@@ -17,16 +17,16 @@ USER root
 RUN apt-get update && apt-get install --no-install-recommends -y wget python3 python3-pip python3-wheel python3-venv g++ zip git \
                            ca-certificates libgpiod-dev libyaml-cpp-dev libbluetooth-dev \
                            libulfius-dev liborcania-dev libssl-dev pkg-config && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+    apt-get clean && rm -rf /var/lib/apt/lists/* && mkdir /tmp/firmware
 
-RUN groupadd -g 1000 mesh && useradd -ml -u 1000 -g 1000 mesh
+RUN groupadd -g 1000 mesh && useradd -ml -u 1000 -g 1000 mesh && chown mesh:mesh /tmp/firmware
 USER mesh
 
 WORKDIR /tmp/firmware
 RUN python3 -m venv /tmp/firmware 
 RUN source ./bin/activate && pip3 install --no-cache-dir -U platformio==6.1.14
-
-COPY . /tmp/firmware
+# trunk-ignore(terrascan/AC_DOCKER_00024): We would actually like these files to be owned by mesh tyvm
+COPY --chown=mesh:mesh . /tmp/firmware
 RUN source ./bin/activate && chmod +x /tmp/firmware/bin/build-native.sh && ./bin/build-native.sh
 RUN cp "/tmp/firmware/release/meshtasticd_linux_$(uname -m)" "/tmp/firmware/release/meshtasticd"
 
