@@ -1153,10 +1153,33 @@ void Screen::setup()
     MeshModule::observeUIEvents(&uiFrameEventObserver);
 }
 
-void Screen::forceDisplay()
+void Screen::forceDisplay(bool forceUiUpdate)
 {
     // Nasty hack to force epaper updates for 'key' frames.  FIXME, cleanup.
 #ifdef USE_EINK
+    // If requested, make sure queued commands are run, and UI has rendered a new frame
+    if (forceUiUpdate) {
+        // No delay between UI frame rendering
+        setFastFramerate();
+
+        // Make sure all CMDs have run first
+        while (!cmdQueue.isEmpty())
+            runOnce();
+
+        // Ensure at least one frame has drawn
+        uint64_t startUpdate;
+        do {
+            startUpdate = millis(); // Handle impossibly unlikely corner case of a millis() overflow..
+            delay(10);
+            ui->update();
+        } while (ui->getUiState()->lastUpdate < startUpdate);
+
+        // Return to normal frame rate
+        targetFramerate = IDLE_FRAMERATE;
+        ui->setTargetFPS(targetFramerate);
+    }
+
+    // Tell EInk class to update the display
     static_cast<EInkDisplay *>(dispdev)->forceDisplay();
 #endif
 }
@@ -1873,7 +1896,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     // Show uptime as days, hours, minutes OR seconds
     std::string uptime = screen->drawTimeDelta(days, hours, minutes, seconds);
 
-    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice);
+    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // Display local timezone
     if (rtc_sec > 0) {
         long hms = rtc_sec % SEC_PER_DAY;
         // hms += tz.tz_dsttime * SEC_PER_HOUR;
