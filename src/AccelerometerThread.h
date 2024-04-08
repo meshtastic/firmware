@@ -4,6 +4,8 @@
 #include "main.h"
 #include "power.h"
 
+#include <Adafruit_LSM6DS3TRC.h> // adafruit library - simpler to implement at first
+// #include <LSM6DS3Sensor.h> // library from ST promises tap functions
 #include <Adafruit_LIS3DH.h>
 #include <Adafruit_MPU6050.h>
 #include <Arduino.h>
