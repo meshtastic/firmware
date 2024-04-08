@@ -40,7 +40,7 @@ void readFromRTC()
         t.tm_hour = rtc.getHour();
         t.tm_min = rtc.getMinute();
         t.tm_sec = rtc.getSecond();
-        tv.tv_sec = mktime(&t);
+        tv.tv_sec = gm_mktime(&t);
         tv.tv_usec = 0;
         LOG_DEBUG("Read RTC time from RV3028 as %ld\n", tv.tv_sec);
         timeStartMsec = now;
@@ -68,7 +68,7 @@ void readFromRTC()
         t.tm_hour = tc.hour;
         t.tm_min = tc.minute;
         t.tm_sec = tc.second;
-        tv.tv_sec = mktime(&t);
+        tv.tv_sec = gm_mktime(&t);
         tv.tv_usec = 0;
         LOG_DEBUG("Read RTC time from PCF8563 as %ld\n", tv.tv_sec);
         timeStartMsec = now;
@@ -177,13 +177,7 @@ bool perhapsSetRTC(RTCQuality q, struct tm &t)
     */
     // horrible hack to make mktime TZ agnostic - best practise according to
     // https://www.gnu.org/software/libc/manual/html_node/Broken_002ddown-Time.html
-    setenv("TZ", "GMT0", 1);
-    time_t res = mktime(&t);
-    if (*config.device.tzdef) {
-        setenv("TZ", config.device.tzdef, 1);
-    } else {
-        setenv("TZ", "UTC0", 1);
-    }
+    time_t res = gm_mktime(&t);
     struct timeval tv;
     tv.tv_sec = res;
     tv.tv_usec = 0; // time.centisecond() * (10 / 1000);
@@ -235,4 +229,16 @@ uint32_t getTime(bool local)
 uint32_t getValidTime(RTCQuality minQuality, bool local)
 {
     return (currentQuality >= minQuality) ? getTime(local) : 0;
+}
+
+time_t gm_mktime(struct tm *tm)
+{
+    setenv("TZ", "GMT0", 1);
+    time_t res = mktime(tm);
+    if (*config.device.tzdef) {
+        setenv("TZ", config.device.tzdef, 1);
+    } else {
+        setenv("TZ", "UTC0", 1);
+    }
+    return res;
 }
