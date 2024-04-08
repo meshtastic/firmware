@@ -1,7 +1,3 @@
-// meshtastic/firmware/variants/unphone/variant.h
-
-#pragma once
-
 #define SPI_SCK 39
 #define SPI_MOSI 40
 #define SPI_MISO 41
@@ -32,7 +28,7 @@
 #define TFT_WIDTH 320
 #define TFT_OFFSET_X 0
 #define TFT_OFFSET_Y 0
-#define TFT_OFFSET_ROTATION 6 // unPhone's screen wired unusually, 0 typical
+#define TFT_OFFSET_ROTATION 6 // the unPhone's screen is wired unusually, 0 is typical value here
 #define TFT_INVERT false
 #define SCREEN_ROTATE true
 #define SCREEN_TRANSITION_FRAMERATE 5
@@ -41,9 +37,7 @@
 #define USE_XPT2046 1
 #define TOUCH_CS 38
 
-#define HAS_GPS 0 // the unphone doesn't have a gps module by default (though
-                  // GPS featherwing -- https://www.adafruit.com/product/3133
-                  // -- can be added)
+#define HAS_GPS 0 // the unphone doesn't have a gps module
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 
@@ -62,6 +56,6 @@
 // ratio of voltage divider = 3.20 (R1=100k, R2=220k)
 // #define ADC_MULTIPLIER 3.2
 
-// #define BATTERY_PIN 13 // battery V measurement pin; vbat divider is here
+// #define BATTERY_PIN 13 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 // #define ADC_CHANNEL ADC2_GPIO13_CHANNEL
 // #define BAT_MEASURE_ADC_UNIT 2
