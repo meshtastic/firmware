@@ -38,6 +38,9 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
     void setExternalOff(uint8_t index = 0);
     bool getExternal(uint8_t index = 0);
 
+    void setMute(bool mute) { isMuted = mute; }
+    bool getMute() { return isMuted; }
+
     void stopNow();
 
     void handleGetRingtone(const meshtastic_MeshPacket &req, meshtastic_AdminMessage *response);
@@ -55,6 +58,8 @@ class ExternalNotificationModule : public SinglePortModule, private concurrency:
     virtual bool wantPacket(const meshtastic_MeshPacket *p) override;
 
     bool isNagging = false;
+
+    bool isMuted = false;
 
     virtual AdminMessageHandleResult handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
                                                                  meshtastic_AdminMessage *request,
