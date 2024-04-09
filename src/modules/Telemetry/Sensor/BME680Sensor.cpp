@@ -86,17 +86,17 @@ void BME680Sensor::updateState()
     if (stateUpdateCounter == 0) {
         /* First state update when IAQ accuracy is >= 3 */
         accuracy = bme680.getData(BSEC_OUTPUT_IAQ).accuracy;
-        if (accuracy >= 3) {
-            LOG_DEBUG("%s state update IAQ accuracy %u >= 3\n", sensorName, accuracy);
+        if (accuracy >= 2) {
+            LOG_DEBUG("%s state update IAQ accuracy %u >= 2\n", sensorName, accuracy);
             update = true;
             stateUpdateCounter++;
         } else {
-            LOG_DEBUG("%s not updated, IAQ accuracy is %u >= 3\n", sensorName, accuracy);
+            LOG_DEBUG("%s not updated, IAQ accuracy is %u < 2\n", sensorName, accuracy);
         }
     } else {
         /* Update every STATE_SAVE_PERIOD minutes */
         if ((stateUpdateCounter * STATE_SAVE_PERIOD) < millis()) {
-            LOG_DEBUG("%s state update every %d minutes\n", sensorName, STATE_SAVE_PERIOD);
+            LOG_DEBUG("%s state update every %d minutes\n", sensorName, STATE_SAVE_PERIOD / 60000);
             update = true;
             stateUpdateCounter++;
         }
@@ -104,22 +104,15 @@ void BME680Sensor::updateState()
 
     if (update) {
         bme680.getState(bsecState);
-        std::string filenameTmp = bsecConfigFileName;
-        filenameTmp += ".tmp";
+        if (FSCom.exists(bsecConfigFileName) && !FSCom.remove(bsecConfigFileName)) {
+            LOG_WARN("Can't remove old state file\n");
+        }
         auto file = FSCom.open(bsecConfigFileName, FILE_O_WRITE);
         if (file) {
             LOG_INFO("%s state write to %s.\n", sensorName, bsecConfigFileName);
             file.write((uint8_t *)&bsecState, BSEC_MAX_STATE_BLOB_SIZE);
             file.flush();
             file.close();
-            // brief window of risk here ;-)
-            if (FSCom.exists(bsecConfigFileName) && !FSCom.remove(bsecConfigFileName)) {
-                LOG_WARN("Can't remove old state file\n");
-            }
-            if (!renameFile(filenameTmp.c_str(), bsecConfigFileName)) {
-                LOG_ERROR("Error: can't rename new state file\n");
-            }
-
         } else {
             LOG_INFO("Can't write %s state (File: %s).\n", sensorName, bsecConfigFileName);
         }
