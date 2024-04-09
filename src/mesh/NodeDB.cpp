@@ -521,7 +521,7 @@ void NodeDB::pickNewNodeNum()
     if (nodeNum == 0) {
         getMacAddr(ourMacAddr); // Make sure ourMacAddr is set
         // Pick an initial nodenum based on the macaddr
-        NodeNum nodeNum = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
+        nodeNum = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
     }
 
     meshtastic_NodeInfoLite *found;
