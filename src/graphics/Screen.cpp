@@ -1896,7 +1896,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     // Show uptime as days, hours, minutes OR seconds
     std::string uptime = screen->drawTimeDelta(days, hours, minutes, seconds);
 
-    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice);
+    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // Display local timezone
     if (rtc_sec > 0) {
         long hms = rtc_sec % SEC_PER_DAY;
         // hms += tz.tz_dsttime * SEC_PER_HOUR;

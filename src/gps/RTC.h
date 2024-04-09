@@ -29,12 +29,14 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv);
 bool perhapsSetRTC(RTCQuality q, struct tm &t);
 
 /// Return time since 1970 in secs.  While quality is RTCQualityNone we will be returning time based at zero
-uint32_t getTime();
+uint32_t getTime(bool local = false);
 
 /// Return time since 1970 in secs.  If quality is RTCQualityNone return zero
-uint32_t getValidTime(RTCQuality minQuality);
+uint32_t getValidTime(RTCQuality minQuality, bool local = false);
 
 void readFromRTC();
+
+time_t gm_mktime(struct tm *tm);
 
 #define SEC_PER_DAY 86400
 #define SEC_PER_HOUR 3600

@@ -75,10 +75,10 @@ uint32_t printWPL(char *buf, size_t bufsz, const meshtastic_Position &pos, const
 uint32_t printGGA(char *buf, size_t bufsz, const meshtastic_Position &pos)
 {
     GeoCoord geoCoord(pos.latitude_i, pos.longitude_i, pos.altitude);
-    tm *t = localtime((time_t *)&pos.timestamp);
+    tm *t = gmtime((time_t *)&pos.timestamp);
     if (getRTCQuality() > 0) { // use the device clock if we got time from somewhere. If not, use the GPS timestamp.
         uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice);
-        t = localtime((time_t *)&rtc_sec);
+        t = gmtime((time_t *)&rtc_sec);
     }
 
     uint32_t len = snprintf(
