@@ -22,11 +22,13 @@ class ButtonThread : public concurrency::OSThread
 
     ButtonThread();
     int32_t runOnce() override;
+    void attachButtonInterrupts();
+    void detachButtonInterrupts();
     void storeClickCount();
 
   private:
 #ifdef BUTTON_PIN
-    OneButton userButton;
+    static OneButton userButton; // Static - accessed from an interrupt
 #endif
 #ifdef BUTTON_PIN_ALT
     OneButton userButtonAlt;
