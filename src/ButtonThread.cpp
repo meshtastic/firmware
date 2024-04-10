@@ -23,9 +23,12 @@
 
 using namespace concurrency;
 
-ButtonThread *buttonThread;         // Declared extern in header
-OneButton ButtonThread::userButton; // Get reference to static member
+ButtonThread *buttonThread; // Declared extern in header
 volatile ButtonThread::ButtonEventType ButtonThread::btnEvent = ButtonThread::BUTTON_EVENT_NONE;
+
+#if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO)
+OneButton ButtonThread::userButton; // Get reference to static member
+#endif
 
 ButtonThread::ButtonThread() : OSThread("Button")
 {
@@ -44,6 +47,8 @@ ButtonThread::ButtonThread() : OSThread("Button")
     // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
     pinMode(pin, INPUT_PULLUP_SENSE);
 #endif
+
+#if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO)
     userButton.attachClick(userButtonPressed);
     userButton.setClickMs(250);
     userButton.setPressMs(c_longPressTime);
@@ -53,6 +58,7 @@ ButtonThread::ButtonThread() : OSThread("Button")
 #ifndef T_DECK // T-Deck immediately wakes up after shutdown, so disable this function
     userButton.attachLongPressStart(userButtonPressedLongStart);
     userButton.attachLongPressStop(userButtonPressedLongStop);
+#endif
 #endif
 
 #ifdef BUTTON_PIN_ALT
