@@ -43,7 +43,8 @@ void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
     }
     if ((p->to != getNodeNum()) && (p->hop_limit > 0) && (getFrom(p) != getNodeNum())) {
         if (p->id != 0) {
-            if (config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE) {
+            if (config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE &&
+                !(p->via_mqtt && config.lora.ignore_mqtt)) {
                 meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
 
                 tosend->hop_limit--; // bump down the hop count
@@ -53,7 +54,7 @@ void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                 // We are careful not to call our hooked version of send() - because we don't want to check this again
                 Router::send(tosend);
             } else {
-                LOG_DEBUG("Not rebroadcasting. Role = Role_ClientMute\n");
+                LOG_DEBUG("Not rebroadcasting. Role = Role_ClientMute or packet came via MQTT with ignore MQTT set\n");
             }
         } else {
             LOG_DEBUG("Ignoring a simple (0 id) broadcast\n");

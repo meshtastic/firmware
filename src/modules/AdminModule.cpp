@@ -452,9 +452,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         if (isRegionUnset && config.lora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
             config.lora.tx_enabled = true;
             initRegion();
-            if (myRegion->dutyCycle < 100) {
-                config.lora.ignore_mqtt = true; // Ignore MQTT by default if region has a duty cycle limit
-            }
+            config.lora.ignore_mqtt = true; // Ignore MQTT by default
             if (strcmp(moduleConfig.mqtt.root, default_mqtt_root) == 0) {
                 sprintf(moduleConfig.mqtt.root, "%s/%s", default_mqtt_root, myRegion->name);
                 changes = SEGMENT_CONFIG | SEGMENT_MODULECONFIG;
