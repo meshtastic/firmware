@@ -23,6 +23,7 @@
 
 using namespace concurrency;
 
+ButtonThread *buttonThread;         // Declared extern in header
 volatile ButtonThread::ButtonEventType ButtonThread::btnEvent = ButtonThread::BUTTON_EVENT_NONE;
 
 ButtonThread::ButtonThread() : OSThread("Button")

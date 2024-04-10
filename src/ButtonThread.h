@@ -54,3 +54,5 @@ class ButtonThread : public concurrency::OSThread
     static void userButtonPressedLongStop();
     static void touchPressedLongStart() { btnEvent = BUTTON_EVENT_TOUCH_LONG_PRESSED; }
 };
+
+extern ButtonThread *buttonThread;
