@@ -32,13 +32,15 @@ OneButton ButtonThread::userButton; // Get reference to static member
 
 ButtonThread::ButtonThread() : OSThread("Button")
 {
+#if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO)
+    int pin = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN; // Resolved button pin
+
 #if defined(ARCH_PORTDUINO)
     if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC) {
         this->userButton = OneButton(settingsMap[user], true, true);
         LOG_DEBUG("Using GPIO%02d for button\n", settingsMap[user]);
     }
 #elif defined(BUTTON_PIN)
-    int pin = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
     this->userButton = OneButton(pin, true, true);
     LOG_DEBUG("Using GPIO%02d for button\n", pin);
 #endif
@@ -83,6 +85,7 @@ ButtonThread::ButtonThread() : OSThread("Button")
 #endif
 
     attachButtonInterrupts();
+#endif
 }
 
 int32_t ButtonThread::runOnce()
