@@ -221,7 +221,6 @@ void ButtonThread::attachButtonInterrupts()
     attachInterrupt(
         config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN,
         []() {
-            LOG_DEBUG("Interrupt: user button\n");
             BaseType_t higherWake = 0;
             mainDelay.interruptFromISR(&higherWake);
             ButtonThread::userButton.tick();
