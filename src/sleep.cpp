@@ -4,6 +4,7 @@
 #include "GPS.h"
 #endif
 
+#include "ButtonThread.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -337,9 +338,15 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #ifdef BUTTON_PIN
     // The enableLoraInterrupt() method is using ext0_wakeup, so we are forced to use GPIO wakeup
     gpio_num_t pin = (gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
-    gpio_intr_disable(pin);
+
+    // Have to *fully* detach the normal button-interrupts first
+    buttonThread->detachButtonInterrupts();
+
     gpio_wakeup_enable(pin, GPIO_INTR_LOW_LEVEL);
     esp_sleep_enable_gpio_wakeup();
+#endif
+#ifdef T_WATCH_S3
+    gpio_wakeup_enable((gpio_num_t)SCREEN_TOUCH_INT, GPIO_INTR_LOW_LEVEL);
 #endif
     enableLoraInterrupt();
 #ifdef PMU_IRQ
@@ -349,26 +356,38 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #endif
     auto res = esp_sleep_enable_gpio_wakeup();
     if (res != ESP_OK) {
-        LOG_DEBUG("esp_sleep_enable_gpio_wakeup result %d\n", res);
+        LOG_ERROR("esp_sleep_enable_gpio_wakeup result %d\n", res);
     }
     assert(res == ESP_OK);
     res = esp_sleep_enable_timer_wakeup(sleepUsec);
     if (res != ESP_OK) {
-        LOG_DEBUG("esp_sleep_enable_timer_wakeup result %d\n", res);
+        LOG_ERROR("esp_sleep_enable_timer_wakeup result %d\n", res);
     }
     assert(res == ESP_OK);
     res = esp_light_sleep_start();
     if (res != ESP_OK) {
-        LOG_DEBUG("esp_light_sleep_start result %d\n", res);
+        LOG_ERROR("esp_light_sleep_start result %d\n", res);
     }
-    assert(res == ESP_OK);
+    //assert(res == ESP_OK);
 
 #ifdef BUTTON_PIN
+    // Disable wake-on-button interrupt. Re-attach normal button-interrupts
     gpio_wakeup_disable(pin);
-    // Would have thought that need gpio_intr_enable() here, but nope..
-    // Works fine without it; crashes with it.
+    buttonThread->attachButtonInterrupts();
 #endif
-
+#ifdef T_WATCH_S3
+    gpio_wakeup_disable((gpio_num_t)SCREEN_TOUCH_INT);
+#endif
+#if !defined(SOC_PM_SUPPORT_EXT_WAKEUP) && defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
+    if (radioType != RF95_RADIO) {
+        gpio_wakeup_disable((gpio_num_t)LORA_DIO1);
+    }
+#endif
+#if defined(RF95_IRQ) && (RF95_IRQ != RADIOLIB_NC)
+    if (radioType == RF95_RADIO) {
+        gpio_wakeup_disable((gpio_num_t)RF95_IRQ);
+    }
+#endif
     esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
 #ifdef BUTTON_PIN
     if (cause == ESP_SLEEP_WAKEUP_GPIO) {
@@ -417,19 +436,30 @@ bool shouldLoraWake(uint32_t msecToWake)
 void enableLoraInterrupt()
 {
 #if SOC_PM_SUPPORT_EXT_WAKEUP && defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
-    rtc_gpio_pulldown_en((gpio_num_t)LORA_DIO1);
+    gpio_pulldown_en((gpio_num_t)LORA_DIO1);
 #if defined(LORA_RESET) && (LORA_RESET != RADIOLIB_NC)
-    rtc_gpio_pullup_en((gpio_num_t)LORA_RESET);
+    gpio_pullup_en((gpio_num_t)LORA_RESET);
 #endif
 #if defined(LORA_CS) && (LORA_CS != RADIOLIB_NC)
-    rtc_gpio_pullup_en((gpio_num_t)LORA_CS);
+    gpio_pullup_en((gpio_num_t)LORA_CS);
 #endif
-    // Setup deep sleep with wakeup by external source
-    esp_sleep_enable_ext0_wakeup((gpio_num_t)LORA_DIO1, RISING);
+
+    if (rtc_gpio_is_valid_gpio((gpio_num_t)LORA_DIO1)) {
+        // Setup light/deep sleep with wakeup by external source
+        LOG_INFO("setup LORA_DIO1 (GPIO%02d) with wakeup by external source\n", LORA_DIO1);
+        esp_sleep_enable_ext0_wakeup((gpio_num_t)LORA_DIO1, HIGH);
+    }
+    else {
+        LOG_INFO("setup LORA_DIO1 (GPIO%02d) with wakeup by gpio interrupt\n", LORA_DIO1);
+        gpio_wakeup_enable((gpio_num_t)LORA_DIO1, GPIO_INTR_HIGH_LEVEL);
+    }
+
 #elif defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
+    LOG_INFO("setup LORA_DIO1 (GPIO%02d) with wakeup by gpio interrupt\n", LORA_DIO1);
     gpio_wakeup_enable((gpio_num_t)LORA_DIO1, GPIO_INTR_HIGH_LEVEL); // SX126x/SX128x interrupt, active high
 #endif
-#ifdef RF95_IRQ
+#if defined(RF95_IRQ) && (RF95_IRQ != RADIOLIB_NC)
+    LOG_INFO("setup RF95_IRQ (GPIO%02d) with wakeup by gpio interrupt\n", RF95_IRQ);
     gpio_wakeup_enable((gpio_num_t)RF95_IRQ, GPIO_INTR_HIGH_LEVEL); // RF95 interrupt, active high
 #endif
 }

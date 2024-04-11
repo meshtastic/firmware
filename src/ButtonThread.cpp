@@ -23,14 +23,18 @@
 
 using namespace concurrency;
 
+ButtonThread *buttonThread;         // Declared extern in header
+#if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO)
+OneButton ButtonThread::userButton; // Get reference to static member
+#endif
 volatile ButtonThread::ButtonEventType ButtonThread::btnEvent = ButtonThread::BUTTON_EVENT_NONE;
 
 ButtonThread::ButtonThread() : OSThread("Button")
 {
-#if defined(ARCH_PORTDUINO) || defined(BUTTON_PIN)
+#if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO)
 #if defined(ARCH_PORTDUINO)
     if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC) {
-        userButton = OneButton(settingsMap[user], true, true);
+        this->userButton = OneButton(settingsMap[user], true, true);
         LOG_DEBUG("Using GPIO%02d for button\n", settingsMap[user]);
     }
 #elif defined(BUTTON_PIN)
@@ -49,24 +53,10 @@ ButtonThread::ButtonThread() : OSThread("Button")
     userButton.setDebounceMs(1);
     userButton.attachDoubleClick(userButtonDoublePressed);
     userButton.attachMultiClick(userButtonMultiPressed, this); // Reference to instance: get click count from non-static OneButton
-#ifndef T_DECK // T-Deck immediately wakes up after shutdown, so disable this function
+//#ifndef T_DECK // T-Deck immediately wakes up after shutdown, so disable this function
     userButton.attachLongPressStart(userButtonPressedLongStart);
     userButton.attachLongPressStop(userButtonPressedLongStop);
-#endif
-#if defined(ARCH_PORTDUINO)
-    if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC)
-        wakeOnIrq(settingsMap[user], FALLING);
-#else
-    static OneButton *pBtn = &userButton; // only one instance of ButtonThread is created, so static is safe
-    attachInterrupt(
-        pin,
-        []() {
-            BaseType_t higherWake = 0;
-            mainDelay.interruptFromISR(&higherWake);
-            pBtn->tick();
-        },
-        CHANGE);
-#endif
+//#endif
 #endif
 #ifdef BUTTON_PIN_ALT
     userButtonAlt = OneButton(BUTTON_PIN_ALT, true, true);
@@ -81,15 +71,15 @@ ButtonThread::ButtonThread() : OSThread("Button")
     userButtonAlt.attachDoubleClick(userButtonDoublePressed);
     userButtonAlt.attachLongPressStart(userButtonPressedLongStart);
     userButtonAlt.attachLongPressStop(userButtonPressedLongStop);
-    wakeOnIrq(BUTTON_PIN_ALT, FALLING);
 #endif
 
 #ifdef BUTTON_PIN_TOUCH
     userButtonTouch = OneButton(BUTTON_PIN_TOUCH, true, true);
     userButtonTouch.setPressMs(400);
     userButtonTouch.attachLongPressStart(touchPressedLongStart); // Better handling with longpress than click?
-    wakeOnIrq(BUTTON_PIN_TOUCH, FALLING);
 #endif
+
+    attachButtonInterrupts();
 }
 
 int32_t ButtonThread::runOnce()
@@ -218,6 +208,58 @@ int32_t ButtonThread::runOnce()
     }
 
     return 50;
+}
+
+/*
+ * Attach (or re-attach) hardware interrupts for buttons
+ * Public method. Used outside class when waking from MCU sleep
+ */
+void ButtonThread::attachButtonInterrupts()
+{
+#if defined(ARCH_PORTDUINO)
+    if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC)
+        wakeOnIrq(settingsMap[user], FALLING);
+#elif defined(BUTTON_PIN)
+    // Interrupt for user button, during normal use. Improves responsiveness.
+    attachInterrupt(
+        config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN,
+        []() {
+            BaseType_t higherWake = 0;
+            mainDelay.interruptFromISR(&higherWake);
+            ButtonThread::userButton.tick();
+        },
+        CHANGE);
+#endif
+
+#ifdef BUTTON_PIN_ALT
+    wakeOnIrq(BUTTON_PIN_ALT, FALLING);
+#endif
+
+#ifdef BUTTON_PIN_TOUCH
+    wakeOnIrq(BUTTON_PIN_TOUCH, FALLING);
+#endif
+}
+
+/*
+ * Detach the "normal" button interrupts.
+ * Public method. Used before attaching a "wake-on-button" interrupt for MCU sleep
+ */
+void ButtonThread::detachButtonInterrupts()
+{
+#if defined(ARCH_PORTDUINO)
+    if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC)
+        detachInterrupt(settingsMap[user]);
+#elif defined(BUTTON_PIN)
+    detachInterrupt(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
+#endif
+
+#ifdef BUTTON_PIN_ALT
+    detachInterrupt(BUTTON_PIN_ALT);
+#endif
+
+#ifdef BUTTON_PIN_TOUCH
+    detachInterrupt(BUTTON_PIN_TOUCH);
+#endif
 }
 
 /**
