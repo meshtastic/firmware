@@ -364,12 +364,16 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
         LOG_ERROR("esp_sleep_enable_timer_wakeup result %d\n", res);
     }
     assert(res == ESP_OK);
+  
+    console->flush();
     res = esp_light_sleep_start();
     if (res != ESP_OK) {
         LOG_ERROR("esp_light_sleep_start result %d\n", res);
     }
+    // commented out because it's not that crucial;
+    // if it sporadically happens the node will go into light sleep during the next round
     // assert(res == ESP_OK);
-
+  
 #ifdef BUTTON_PIN
     // Disable wake-on-button interrupt. Re-attach normal button-interrupts
     gpio_wakeup_disable(pin);
@@ -379,22 +383,21 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     gpio_wakeup_disable((gpio_num_t)SCREEN_TOUCH_INT);
 #endif
 #if !defined(SOC_PM_SUPPORT_EXT_WAKEUP) && defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
-    if (radioType != RF95_RADIO) {
-        gpio_wakeup_disable((gpio_num_t)LORA_DIO1);
-    }
+    gpio_wakeup_disable((gpio_num_t)LORA_DIO1);
 #endif
 #if defined(RF95_IRQ) && (RF95_IRQ != RADIOLIB_NC)
-    if (radioType == RF95_RADIO) {
-        gpio_wakeup_disable((gpio_num_t)RF95_IRQ);
-    }
+    gpio_wakeup_disable((gpio_num_t)RF95_IRQ);
 #endif
     esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
 #ifdef BUTTON_PIN
     if (cause == ESP_SLEEP_WAKEUP_GPIO) {
         LOG_INFO("Exit light sleep gpio: btn=%d\n",
                  !digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
-    }
+    } else
 #endif
+    {
+        LOG_INFO("Exit light sleep cause: %d\n", cause);
+    }
 
     return cause;
 }

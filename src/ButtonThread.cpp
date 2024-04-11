@@ -24,21 +24,23 @@
 using namespace concurrency;
 
 ButtonThread *buttonThread; // Declared extern in header
+volatile ButtonThread::ButtonEventType ButtonThread::btnEvent = ButtonThread::BUTTON_EVENT_NONE;
+
 #if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO)
 OneButton ButtonThread::userButton; // Get reference to static member
 #endif
-volatile ButtonThread::ButtonEventType ButtonThread::btnEvent = ButtonThread::BUTTON_EVENT_NONE;
 
 ButtonThread::ButtonThread() : OSThread("Button")
 {
 #if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO)
+
 #if defined(ARCH_PORTDUINO)
     if (settingsMap.count(user) != 0 && settingsMap[user] != RADIOLIB_NC) {
         this->userButton = OneButton(settingsMap[user], true, true);
         LOG_DEBUG("Using GPIO%02d for button\n", settingsMap[user]);
     }
 #elif defined(BUTTON_PIN)
-    int pin = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN;
+    int pin = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN; // Resolved button pin
     this->userButton = OneButton(pin, true, true);
     LOG_DEBUG("Using GPIO%02d for button\n", pin);
 #endif
@@ -47,17 +49,20 @@ ButtonThread::ButtonThread() : OSThread("Button")
     // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
     pinMode(pin, INPUT_PULLUP_SENSE);
 #endif
+
+#if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO)
     userButton.attachClick(userButtonPressed);
     userButton.setClickMs(250);
     userButton.setPressMs(c_longPressTime);
     userButton.setDebounceMs(1);
     userButton.attachDoubleClick(userButtonDoublePressed);
     userButton.attachMultiClick(userButtonMultiPressed, this); // Reference to instance: get click count from non-static OneButton
-    // #ifndef T_DECK // T-Deck immediately wakes up after shutdown, so disable this function
+#ifndef T_DECK // T-Deck immediately wakes up after shutdown, so disable this function
     userButton.attachLongPressStart(userButtonPressedLongStart);
     userButton.attachLongPressStop(userButtonPressedLongStop);
-// #endif
 #endif
+#endif
+
 #ifdef BUTTON_PIN_ALT
     userButtonAlt = OneButton(BUTTON_PIN_ALT, true, true);
 #ifdef INPUT_PULLUP_SENSE
@@ -80,6 +85,7 @@ ButtonThread::ButtonThread() : OSThread("Button")
 #endif
 
     attachButtonInterrupts();
+#endif
 }
 
 int32_t ButtonThread::runOnce()
