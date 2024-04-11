@@ -116,7 +116,7 @@ class AccelerometerThread : public concurrency::OSThread
 #ifndef LSM6DS3_WAKE_THRESH
 #define LSM6DS3_WAKE_THRESH = 20
 #endif
-            lsm.enableWakeup(config.device.double_tap_as_button_press ? 2 : 1, 1, LSM6DS3_WAKE_THRESH);
+            lsm.enableWakeup(config.display.wake_on_tap_or_motion, 1, LSM6DS3_WAKE_THRESH);
             // Duration is number of occurances needed to trigger, higher threshold is less sensitive
         }
     }
