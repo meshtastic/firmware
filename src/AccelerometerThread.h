@@ -4,9 +4,8 @@
 #include "main.h"
 #include "power.h"
 
-#include <Adafruit_LSM6DS3TRC.h> // adafruit library - simpler to implement at first
-// #include <LSM6DS3Sensor.h> // library from ST promises tap functions
 #include <Adafruit_LIS3DH.h>
+#include <Adafruit_LSM6DS3TRC.h>
 #include <Adafruit_MPU6050.h>
 #include <Arduino.h>
 #include <SensorBMA423.hpp>
@@ -112,9 +111,12 @@ class AccelerometerThread : public concurrency::OSThread
             bmaSensor.enableWakeupIRQ();
         } else if (acceleremoter_type == ScanI2C::DeviceType::LSM6DS3 && lsm.begin_I2C(accelerometer_found.address)) {
             LOG_DEBUG("LSM6DS3 initializing\n");
-            lsm.setAccelRange(LSM6DS_ACCEL_RANGE_2_G);
             // Default threshold of 2G, less sensitive options are 4, 8 or 16G
-            lsm.enableWakeup(config.device.double_tap_as_button_press ? 2 : 1, 1, 5);
+            lsm.setAccelRange(LSM6DS_ACCEL_RANGE_2_G);
+#ifndef LSM6DS3_WAKE_THRESH
+#define LSM6DS3_WAKE_THRESH = 20
+#endif
+            lsm.enableWakeup(config.device.double_tap_as_button_press ? 2 : 1, 1, LSM6DS3_WAKE_THRESH);
             // Duration is number of occurances needed to trigger, higher threshold is less sensitive
         }
     }
