@@ -110,6 +110,12 @@ class AccelerometerThread : public concurrency::OSThread
             bmaSensor.enableTiltIRQ();
             // It corresponds to isDoubleClick interrupt
             bmaSensor.enableWakeupIRQ();
+        } else if (acceleremoter_type == ScanI2C::DeviceType::LSM6DS3 && lsm.begin_I2C(accelerometer_found.address)) {
+            LOG_DEBUG("LSM6DS3 initializing\n");
+            lsm.setAccelRange(LSM6DS_ACCEL_RANGE_2_G);
+            // Default threshold of 2G, less sensitive options are 4, 8 or 16G
+            lsm.enableWakeup(config.device.double_tap_as_button_press ? 2 : 1, 1, 5);
+            // Duration is number of occurances needed to trigger, higher threshold is less sensitive
         }
     }
 
@@ -135,8 +141,10 @@ class AccelerometerThread : public concurrency::OSThread
                 wakeScreen();
                 return 500;
             }
+        } else if (acceleremoter_type == ScanI2C::DeviceType::LSM6DS3 && lsm.shake()) {
+            wakeScreen();
+            return 500;
         }
-
         return ACCELEROMETER_CHECK_INTERVAL_MS;
     }
 
@@ -158,6 +166,7 @@ class AccelerometerThread : public concurrency::OSThread
     ScanI2C::DeviceType acceleremoter_type;
     Adafruit_MPU6050 mpu;
     Adafruit_LIS3DH lis;
+    Adafruit_LSM6DS3TRC lsm;
 };
 
 } // namespace concurrency
