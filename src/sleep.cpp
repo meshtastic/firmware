@@ -244,6 +244,20 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     digitalWrite(VEXT_ENABLE, 1); // turn off the display power
 #endif
 
+#ifdef ARCH_ESP32
+    if (shouldLoraWake(msecToWake)) {
+        enableLoraInterrupt();
+    }
+    // Avoid leakage through button pin
+    pinMode(BUTTON_PIN, INPUT);
+    gpio_hold_en((gpio_num_t)BUTTON_PIN);
+
+    // LoRa CS (RADIO_NSS) needs to stay HIGH, even during deep sleep
+    pinMode(LORA_CS, OUTPUT);
+    digitalWrite(LORA_CS, HIGH);
+    gpio_hold_en((gpio_num_t)LORA_CS);
+#endif
+
 #ifdef HAS_PMU
     if (pmu_found && PMU) {
         // Obsolete comment: from back when we we used to receive lora packets while CPU was in deep sleep.
@@ -256,6 +270,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
         // If we want to leave the radio receiving in would be 11.5mA current draw, but most of the time it is just waiting
         // in its sequencer (true?) so the average power draw should be much lower even if we were listinging for packets
         // all the time.
+        PMU->setChargingLedMode(XPOWERS_CHG_LED_OFF);
 
         uint8_t model = PMU->getChipModel();
         if (model == XPOWERS_AXP2101) {
@@ -270,25 +285,15 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
             // t-beam v1.1 radio power channel
             PMU->disablePowerOutput(XPOWERS_LDO2); // lora radio power channel
         }
+        if (msecToWake == portMAX_DELAY) {
+            LOG_INFO("PMU shutdown.\n");
+            console->flush();
+            PMU->shutdown();
+        }
     }
 #endif
 
-#ifdef ARCH_ESP32
-    if (shouldLoraWake(msecToWake)) {
-        enableLoraInterrupt();
-    }
-
-#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0) // Applicable to most ESP32 boards?
-    // Avoid leakage through button pin
-    pinMode(BUTTON_PIN, INPUT);
-    rtc_gpio_hold_en((gpio_num_t)BUTTON_PIN);
-
-    // LoRa CS (RADIO_NSS) needs to stay HIGH, even during deep sleep
-    pinMode(LORA_CS, OUTPUT);
-    digitalWrite(LORA_CS, HIGH);
-    rtc_gpio_hold_en((gpio_num_t)LORA_CS);
-#endif
-#endif
+    console->flush();
     cpuDeepSleep(msecToWake);
 }
 
