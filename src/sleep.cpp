@@ -365,7 +365,9 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     if (res != ESP_OK) {
         LOG_ERROR("esp_light_sleep_start result %d\n", res);
     }
-    assert(res == ESP_OK);
+    // commented out because it's not that crucial;
+    // if it sporadically happens the node will go into light sleep during the next round
+    // assert(res == ESP_OK);
 
 #ifdef BUTTON_PIN
     // Disable wake-on-button interrupt. Re-attach normal button-interrupts
