@@ -4,6 +4,7 @@
 #include "GPS.h"
 #endif
 
+#include "ButtonThread.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -342,7 +343,10 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
 #ifdef BUTTON_PIN
     // The enableLoraInterrupt() method is using ext0_wakeup, so we are forced to use GPIO wakeup
     gpio_num_t pin = (gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
-    gpio_intr_disable(pin);
+
+    // Have to *fully* detach the normal button-interrupts first
+    buttonThread->detachButtonInterrupts();
+
     gpio_wakeup_enable(pin, GPIO_INTR_LOW_LEVEL);
     esp_sleep_enable_gpio_wakeup();
 #endif
@@ -369,9 +373,9 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     assert(res == ESP_OK);
 
 #ifdef BUTTON_PIN
+    // Disable wake-on-button interrupt. Re-attach normal button-interrupts
     gpio_wakeup_disable(pin);
-    // Would have thought that need gpio_intr_enable() here, but nope..
-    // Works fine without it; crashes with it.
+    buttonThread->attachButtonInterrupts();
 #endif
 
     esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
