@@ -57,6 +57,8 @@ typedef struct _meshtastic_DeviceMetrics {
     float channel_utilization;
     /* Percent of airtime for transmission used within the last hour. */
     float air_util_tx;
+    /* How long the device has been running since the last reboot (in seconds) */
+    uint32_t uptime_seconds;
 } meshtastic_DeviceMetrics;
 
 /* Weather station or other environmental metrics */
@@ -156,12 +158,12 @@ extern "C" {
 
 
 /* Initializer values for message structs */
-#define meshtastic_DeviceMetrics_init_default    {0, 0, 0, 0}
+#define meshtastic_DeviceMetrics_init_default    {0, 0, 0, 0, 0}
 #define meshtastic_EnvironmentMetrics_init_default {0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_PowerMetrics_init_default     {0, 0, 0, 0, 0, 0}
 #define meshtastic_AirQualityMetrics_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Telemetry_init_default        {0, 0, {meshtastic_DeviceMetrics_init_default}}
-#define meshtastic_DeviceMetrics_init_zero       {0, 0, 0, 0}
+#define meshtastic_DeviceMetrics_init_zero       {0, 0, 0, 0, 0}
 #define meshtastic_EnvironmentMetrics_init_zero  {0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_PowerMetrics_init_zero        {0, 0, 0, 0, 0, 0}
 #define meshtastic_AirQualityMetrics_init_zero   {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -172,6 +174,7 @@ extern "C" {
 #define meshtastic_DeviceMetrics_voltage_tag     2
 #define meshtastic_DeviceMetrics_channel_utilization_tag 3
 #define meshtastic_DeviceMetrics_air_util_tx_tag 4
+#define meshtastic_DeviceMetrics_uptime_seconds_tag 5
 #define meshtastic_EnvironmentMetrics_temperature_tag 1
 #define meshtastic_EnvironmentMetrics_relative_humidity_tag 2
 #define meshtastic_EnvironmentMetrics_barometric_pressure_tag 3
@@ -208,7 +211,8 @@ extern "C" {
 X(a, STATIC,   SINGULAR, UINT32,   battery_level,     1) \
 X(a, STATIC,   SINGULAR, FLOAT,    voltage,           2) \
 X(a, STATIC,   SINGULAR, FLOAT,    channel_utilization,   3) \
-X(a, STATIC,   SINGULAR, FLOAT,    air_util_tx,       4)
+X(a, STATIC,   SINGULAR, FLOAT,    air_util_tx,       4) \
+X(a, STATIC,   SINGULAR, UINT32,   uptime_seconds,    5)
 #define meshtastic_DeviceMetrics_CALLBACK NULL
 #define meshtastic_DeviceMetrics_DEFAULT NULL
 
@@ -278,7 +282,7 @@ extern const pb_msgdesc_t meshtastic_Telemetry_msg;
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_TELEMETRY_PB_H_MAX_SIZE meshtastic_Telemetry_size
 #define meshtastic_AirQualityMetrics_size        72
-#define meshtastic_DeviceMetrics_size            21
+#define meshtastic_DeviceMetrics_size            27
 #define meshtastic_EnvironmentMetrics_size       34
 #define meshtastic_PowerMetrics_size             30
 #define meshtastic_Telemetry_size                79
