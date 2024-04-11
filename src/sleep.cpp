@@ -8,6 +8,7 @@
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "detect/LoRaRadioType.h"
 #include "error.h"
 #include "main.h"
 #include "sleep.h"
@@ -361,6 +362,8 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
         LOG_ERROR("esp_sleep_enable_timer_wakeup result %d\n", res);
     }
     assert(res == ESP_OK);
+
+    console->flush();
     res = esp_light_sleep_start();
     if (res != ESP_OK) {
         LOG_ERROR("esp_light_sleep_start result %d\n", res);
@@ -373,6 +376,17 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // Disable wake-on-button interrupt. Re-attach normal button-interrupts
     gpio_wakeup_disable(pin);
     buttonThread->attachButtonInterrupts();
+#endif
+
+#if !defined(SOC_PM_SUPPORT_EXT_WAKEUP) && defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
+    if (radioType != RF95_RADIO) {
+        gpio_wakeup_disable((gpio_num_t)LORA_DIO1);
+    }
+#endif
+#if defined(RF95_IRQ) && (RF95_IRQ != RADIOLIB_NC)
+    if (radioType == RF95_RADIO) {
+        gpio_wakeup_disable((gpio_num_t)RF95_IRQ);
+    }
 #endif
 
     esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
@@ -444,12 +458,16 @@ void enableLoraInterrupt()
     }
 
 #elif defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
-    LOG_INFO("setup LORA_DIO1 (GPIO%02d) with wakeup by gpio interrupt\n", LORA_DIO1);
-    gpio_wakeup_enable((gpio_num_t)LORA_DIO1, GPIO_INTR_HIGH_LEVEL); // SX126x/SX128x interrupt, active high
+    if (radioType != RF95_RADIO) {
+        LOG_INFO("setup LORA_DIO1 (GPIO%02d) with wakeup by gpio interrupt\n", LORA_DIO1);
+        gpio_wakeup_enable((gpio_num_t)LORA_DIO1, GPIO_INTR_HIGH_LEVEL); // SX126x/SX128x interrupt, active high
+    }
 #endif
 #if defined(RF95_IRQ) && (RF95_IRQ != RADIOLIB_NC)
-    LOG_INFO("setup RF95_IRQ (GPIO%02d) with wakeup by gpio interrupt\n", RF95_IRQ);
-    gpio_wakeup_enable((gpio_num_t)RF95_IRQ, GPIO_INTR_HIGH_LEVEL); // RF95 interrupt, active high
+    if (radioType == RF95_RADIO) {
+        LOG_INFO("setup RF95_IRQ (GPIO%02d) with wakeup by gpio interrupt\n", RF95_IRQ);
+        gpio_wakeup_enable((gpio_num_t)RF95_IRQ, GPIO_INTR_HIGH_LEVEL); // RF95 interrupt, active high
+    }
 #endif
 }
 #endif
