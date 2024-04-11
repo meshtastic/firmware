@@ -368,7 +368,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     if (res != ESP_OK) {
         LOG_ERROR("esp_light_sleep_start result %d\n", res);
     }
-    //assert(res == ESP_OK);
+    // assert(res == ESP_OK);
 
 #ifdef BUTTON_PIN
     // Disable wake-on-button interrupt. Re-attach normal button-interrupts
@@ -448,8 +448,7 @@ void enableLoraInterrupt()
         // Setup light/deep sleep with wakeup by external source
         LOG_INFO("setup LORA_DIO1 (GPIO%02d) with wakeup by external source\n", LORA_DIO1);
         esp_sleep_enable_ext0_wakeup((gpio_num_t)LORA_DIO1, HIGH);
-    }
-    else {
+    } else {
         LOG_INFO("setup LORA_DIO1 (GPIO%02d) with wakeup by gpio interrupt\n", LORA_DIO1);
         gpio_wakeup_enable((gpio_num_t)LORA_DIO1, GPIO_INTR_HIGH_LEVEL);
     }

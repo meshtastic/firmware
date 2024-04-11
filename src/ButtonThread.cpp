@@ -23,7 +23,7 @@
 
 using namespace concurrency;
 
-ButtonThread *buttonThread;         // Declared extern in header
+ButtonThread *buttonThread; // Declared extern in header
 #if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO)
 OneButton ButtonThread::userButton; // Get reference to static member
 #endif
@@ -53,10 +53,10 @@ ButtonThread::ButtonThread() : OSThread("Button")
     userButton.setDebounceMs(1);
     userButton.attachDoubleClick(userButtonDoublePressed);
     userButton.attachMultiClick(userButtonMultiPressed, this); // Reference to instance: get click count from non-static OneButton
-//#ifndef T_DECK // T-Deck immediately wakes up after shutdown, so disable this function
+    // #ifndef T_DECK // T-Deck immediately wakes up after shutdown, so disable this function
     userButton.attachLongPressStart(userButtonPressedLongStart);
     userButton.attachLongPressStop(userButtonPressedLongStop);
-//#endif
+// #endif
 #endif
 #ifdef BUTTON_PIN_ALT
     userButtonAlt = OneButton(BUTTON_PIN_ALT, true, true);
