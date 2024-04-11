@@ -147,6 +147,7 @@ class AccelerometerThread : public concurrency::OSThread
             wakeScreen();
             return 500;
         }
+
         return ACCELEROMETER_CHECK_INTERVAL_MS;
     }
 
