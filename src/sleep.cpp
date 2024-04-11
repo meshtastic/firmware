@@ -374,8 +374,7 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     if (cause == ESP_SLEEP_WAKEUP_GPIO) {
         LOG_INFO("Exit light sleep gpio: btn=%d\n",
                  !digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
-    }
-    else
+    } else
 #endif
     {
         LOG_INFO("Exit light sleep cause: %d\n", cause);
