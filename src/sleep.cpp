@@ -249,9 +249,11 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     if (shouldLoraWake(msecToWake)) {
         enableLoraInterrupt();
     }
+#ifdef BUTTON_PIN
     // Avoid leakage through button pin
     pinMode(BUTTON_PIN, INPUT);
     gpio_hold_en((gpio_num_t)BUTTON_PIN);
+#endif
 
     // LoRa CS (RADIO_NSS) needs to stay HIGH, even during deep sleep
     pinMode(LORA_CS, OUTPUT);
