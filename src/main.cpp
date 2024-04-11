@@ -188,9 +188,6 @@ uint32_t timeLastPowered = 0;
 
 static Periodic *ledPeriodic;
 static OSThread *powerFSMthread;
-#if HAS_BUTTON || defined(ARCH_PORTDUINO)
-static OSThread *buttonThread;
-#endif
 static OSThread *accelerometerThread;
 static OSThread *ambientLightingThread;
 SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
