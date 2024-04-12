@@ -53,6 +53,8 @@
 #define I2C_SDA 3 // I2C pins for this board
 #define I2C_SCL 4
 
+#define LSM6DS3_WAKE_THRESH 5 // higher values reduce the sensitivity of the wake threshold
+
 // ratio of voltage divider = 3.20 (R1=100k, R2=220k)
 // #define ADC_MULTIPLIER 3.2
 
