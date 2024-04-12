@@ -5,6 +5,7 @@
 #include "power.h"
 
 #include <Adafruit_LIS3DH.h>
+#include <Adafruit_LSM6DS3TRC.h>
 #include <Adafruit_MPU6050.h>
 #include <Arduino.h>
 #include <SensorBMA423.hpp>
@@ -108,6 +109,15 @@ class AccelerometerThread : public concurrency::OSThread
             bmaSensor.enableTiltIRQ();
             // It corresponds to isDoubleClick interrupt
             bmaSensor.enableWakeupIRQ();
+        } else if (acceleremoter_type == ScanI2C::DeviceType::LSM6DS3 && lsm.begin_I2C(accelerometer_found.address)) {
+            LOG_DEBUG("LSM6DS3 initializing\n");
+            // Default threshold of 2G, less sensitive options are 4, 8 or 16G
+            lsm.setAccelRange(LSM6DS_ACCEL_RANGE_2_G);
+#ifndef LSM6DS3_WAKE_THRESH
+#define LSM6DS3_WAKE_THRESH 20
+#endif
+            lsm.enableWakeup(config.display.wake_on_tap_or_motion, 1, LSM6DS3_WAKE_THRESH);
+            // Duration is number of occurances needed to trigger, higher threshold is less sensitive
         }
     }
 
@@ -133,6 +143,9 @@ class AccelerometerThread : public concurrency::OSThread
                 wakeScreen();
                 return 500;
             }
+        } else if (acceleremoter_type == ScanI2C::DeviceType::LSM6DS3 && lsm.shake()) {
+            wakeScreen();
+            return 500;
         }
 
         return ACCELEROMETER_CHECK_INTERVAL_MS;
@@ -156,6 +169,7 @@ class AccelerometerThread : public concurrency::OSThread
     ScanI2C::DeviceType acceleremoter_type;
     Adafruit_MPU6050 mpu;
     Adafruit_LIS3DH lis;
+    Adafruit_LSM6DS3TRC lsm;
 };
 
 } // namespace concurrency
