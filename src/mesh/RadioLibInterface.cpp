@@ -319,7 +319,7 @@ void RadioLibInterface::handleReceiveInterrupt()
     // when this is called, we should be in receive mode - if we are not, just jump out instead of bombing. Possible Race
     // Condition?
     if (!isReceiving) {
-        LOG_DEBUG("*** WAS_ASSERT *** handleReceiveInterrupt called when not in receive mode\n");
+        LOG_ERROR("handleReceiveInterrupt called when not in receive mode, which shouldn't happen.\n");
         return;
     }
 
