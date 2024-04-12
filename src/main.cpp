@@ -69,6 +69,7 @@ NRF52Bluetooth *nrf52Bluetooth;
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
 #include "SX1280Interface.h"
+#include "detect/LoRaRadioType.h"
 
 #ifdef ARCH_STM32WL
 #include "STM32WLE5JCInterface.h"
@@ -141,6 +142,9 @@ ATECCX08A atecc;
 #ifdef T_WATCH_S3
 Adafruit_DRV2605 drv;
 #endif
+
+// Global LoRa radio type
+LoRaRadioType radioType = NO_RADIO;
 
 bool isVibrating = false;
 
@@ -793,6 +797,7 @@ void setup()
             rIf = NULL;
         } else {
             LOG_INFO("STM32WL Radio init succeeded, using STM32WL radio\n");
+            radioType = STM32WLx_RADIO;
         }
     }
 #endif
@@ -806,6 +811,7 @@ void setup()
             rIf = NULL;
         } else {
             LOG_INFO("Using SIMULATED radio!\n");
+            radioType = SIM_RADIO;
         }
     }
 #endif
@@ -819,6 +825,7 @@ void setup()
             rIf = NULL;
         } else {
             LOG_INFO("RF95 Radio init succeeded, using RF95 radio\n");
+            radioType = RF95_RADIO;
         }
     }
 #endif
@@ -832,6 +839,7 @@ void setup()
             rIf = NULL;
         } else {
             LOG_INFO("SX1262 Radio init succeeded, using SX1262 radio\n");
+            radioType = SX1262_RADIO;
         }
     }
 #endif
@@ -845,6 +853,7 @@ void setup()
             rIf = NULL;
         } else {
             LOG_INFO("SX1268 Radio init succeeded, using SX1268 radio\n");
+            radioType = SX1268_RADIO;
         }
     }
 #endif
@@ -858,6 +867,7 @@ void setup()
             rIf = NULL;
         } else {
             LOG_INFO("LLCC68 Radio init succeeded, using LLCC68 radio\n");
+            radioType = LLCC68_RADIO;
         }
     }
 #endif
@@ -871,6 +881,7 @@ void setup()
             rIf = NULL;
         } else {
             LOG_INFO("SX1280 Radio init succeeded, using SX1280 radio\n");
+            radioType = SX1280_RADIO;
         }
     }
 #endif
