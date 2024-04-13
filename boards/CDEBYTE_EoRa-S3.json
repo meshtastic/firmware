@@ -24,7 +24,7 @@
     "openocd_target": "esp32s3.cfg"
   },
   "frameworks": ["arduino", "espidf"],
-  "name": "CDEBYTE EoRa-S3 PI",
+  "name": "CDEBYTE EoRa-S3",
   "upload": {
     "flash_size": "4MB",
     "maximum_ram_size": 327680,
