@@ -113,8 +113,8 @@ void NimbleBluetooth::shutdown()
     pAdvertising->reset();
     pAdvertising->stop();
 
-#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0)
-    // Saving of ~1mA
+#if defined(ARCH_ESP32)
+    // Saving of ~1mA for esp32-s3 and 0.1mA for esp32
     // Probably applicable to other ESP32 boards - unverified
     NimBLEDevice::deinit();
 #endif

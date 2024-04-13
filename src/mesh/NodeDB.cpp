@@ -347,6 +347,9 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 100;
     moduleConfig.external_notification.active = true;
 #endif
+#ifdef TTGO_T_ECHO
+    config.display.wake_on_tap_or_motion = true; // Enable touch button for screen-on / refresh
+#endif
     moduleConfig.has_canned_message = true;
 
     strncpy(moduleConfig.mqtt.address, default_mqtt_address, sizeof(moduleConfig.mqtt.address));
@@ -517,11 +520,12 @@ void NodeDB::installDefaultDeviceState()
  */
 void NodeDB::pickNewNodeNum()
 {
-
-    getMacAddr(ourMacAddr); // Make sure ourMacAddr is set
-
-    // Pick an initial nodenum based on the macaddr
-    NodeNum nodeNum = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
+    NodeNum nodeNum = myNodeInfo.my_node_num;
+    if (nodeNum == 0) {
+        getMacAddr(ourMacAddr); // Make sure ourMacAddr is set
+        // Pick an initial nodenum based on the macaddr
+        nodeNum = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
+    }
 
     meshtastic_NodeInfoLite *found;
     while ((nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED) ||
