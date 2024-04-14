@@ -7,6 +7,14 @@
 // SD card - TODO: test, currently untested, copied from T3S3 variant
 #define HAS_SDCARD
 #define SDCARD_USE_SPI1
+// TODO: rename this to make this SD-card specific
+#define SPI_CS   13
+#define SPI_SCK  14
+#define SPI_MOSI 11
+#define SPI_MISO  2
+// FIXME: there are two other SPI pins that are not defined here
+// Compatibility
+#define SDCARD_CS SPI_CS
 
 // Battery voltage monitoring - TODO: test, currently untested, copied from T3S3 variant
 #define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
