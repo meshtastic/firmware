@@ -22,20 +22,19 @@ class ButtonThread : public concurrency::OSThread
 
     ButtonThread();
     int32_t runOnce() override;
+    void attachButtonInterrupts();
+    void detachButtonInterrupts();
     void storeClickCount();
 
   private:
-#ifdef BUTTON_PIN
-    OneButton userButton;
+#if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO)
+    static OneButton userButton; // Static - accessed from an interrupt
 #endif
 #ifdef BUTTON_PIN_ALT
     OneButton userButtonAlt;
 #endif
 #ifdef BUTTON_PIN_TOUCH
     OneButton userButtonTouch;
-#endif
-#if defined(ARCH_PORTDUINO)
-    OneButton userButton;
 #endif
 
     // set during IRQ
@@ -54,3 +53,5 @@ class ButtonThread : public concurrency::OSThread
     static void userButtonPressedLongStop();
     static void touchPressedLongStart() { btnEvent = BUTTON_EVENT_TOUCH_LONG_PRESSED; }
 };
+
+extern ButtonThread *buttonThread;
