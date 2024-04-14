@@ -191,7 +191,7 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setPreambleLength(preambleLength);
-    if (err != RADIOLIB_ERR_NONE) 
+    if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("Radiolib error %d when attempting SX126X setPreambleLength!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
@@ -267,7 +267,7 @@ template <typename T> void SX126xInterface<T>::startReceive()
                                              RADIOLIB_SX126X_IRQ_RX_DEFAULT | RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED |
                                                  RADIOLIB_SX126X_IRQ_HEADER_VALID);
     if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("Radiolib error %d when attempting SX126X startReceiveDutyCycleAuto!\n", err);                                                
+        LOG_ERROR("Radiolib error %d when attempting SX126X startReceiveDutyCycleAuto!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = true;
