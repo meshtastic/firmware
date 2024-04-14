@@ -20,13 +20,10 @@ int32_t DeviceTelemetryModule::runOnce()
          ((uptimeLastMs - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.device_update_interval))) &&
         airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
         airTime->isTxAllowedAirUtil() && config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER &&
-        config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN)
-    {
+        config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
         sendTelemetry();
         lastSentToMesh = uptimeLastMs;
-    }
-    else if (service.isToPhoneQueueEmpty())
-    {
+    } else if (service.isToPhoneQueueEmpty()) {
         // Just send to phone when it's not our time to send to mesh yet
         // Only send while queue is empty (phone assumed connected)
         sendTelemetry(NODENUM_BROADCAST, true);
@@ -40,8 +37,7 @@ bool DeviceTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER)
         return false;
 
-    if (t->which_variant == meshtastic_Telemetry_device_metrics_tag)
-    {
+    if (t->which_variant == meshtastic_Telemetry_device_metrics_tag) {
 #ifdef DEBUG_PORT
         const char *sender = getSenderShortName(mp);
 
@@ -56,8 +52,7 @@ bool DeviceTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
 
 meshtastic_MeshPacket *DeviceTelemetryModule::allocReply()
 {
-    if (ignoreRequest)
-    {
+    if (ignoreRequest) {
         return NULL;
     }
 
@@ -97,13 +92,10 @@ bool DeviceTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
 
     nodeDB->updateTelemetry(nodeDB->getNodeNum(), telemetry, RX_SRC_LOCAL);
-    if (phoneOnly)
-    {
+    if (phoneOnly) {
         LOG_INFO("Sending packet to phone\n");
         service.sendToPhone(p);
-    }
-    else
-    {
+    } else {
         LOG_INFO("Sending packet to mesh\n");
         service.sendToMesh(p, RX_SRC_LOCAL, true);
     }
