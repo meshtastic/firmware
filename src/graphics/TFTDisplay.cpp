@@ -556,12 +556,18 @@ void TFTDisplay::sendCommand(uint8_t com)
         display(true);
         if (settingsMap[displayBacklight] > 0)
             digitalWrite(settingsMap[displayBacklight], TFT_BACKLIGHT_ON);
-#endif
-
-#if !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE)
+#elif defined(ST7735_BL_V03)
+        digitalWrite(ST7735_BL_V03, TFT_BACKLIGHT_ON);
+#elif defined(ST7735_BL_V05)
+        pinMode(ST7735_BL_V05, OUTPUT);
+        digitalWrite(ST7735_BL_V05, TFT_BACKLIGHT_ON);
+#elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE)
         tft->wakeup();
         tft->powerSaveOff();
+#elif defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
+        digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
 #endif
+
 #ifdef VTFT_CTRL_V03
         digitalWrite(VTFT_CTRL_V03, LOW);
 #endif
@@ -587,11 +593,18 @@ void TFTDisplay::sendCommand(uint8_t com)
         tft->clear();
         if (settingsMap[displayBacklight] > 0)
             digitalWrite(settingsMap[displayBacklight], !TFT_BACKLIGHT_ON);
-#endif
-#if !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE)
+#elif defined(ST7735_BL_V03)
+        digitalWrite(ST7735_BL_V03, !TFT_BACKLIGHT_ON);
+#elif defined(ST7735_BL_V05)
+        pinMode(ST7735_BL_V05, OUTPUT);
+        digitalWrite(ST7735_BL_V05, !TFT_BACKLIGHT_ON);
+#elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE)
         tft->sleep();
         tft->powerSaveOn();
+#elif defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
+        digitalWrite(TFT_BL, !TFT_BACKLIGHT_ON);
 #endif
+
 #ifdef VTFT_CTRL_V03
         digitalWrite(VTFT_CTRL_V03, HIGH);
 #endif
