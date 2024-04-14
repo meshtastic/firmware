@@ -15,15 +15,18 @@
 
 int32_t DeviceTelemetryModule::runOnce()
 {
-    uint32_t now = millis();
+    refreshUptime();
     if (((lastSentToMesh == 0) ||
-         ((now - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.device_update_interval))) &&
+         ((uptimeLastMs - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.device_update_interval))) &&
         airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
         airTime->isTxAllowedAirUtil() && config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER &&
-        config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
+        config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN)
+    {
         sendTelemetry();
-        lastSentToMesh = now;
-    } else if (service.isToPhoneQueueEmpty()) {
+        lastSentToMesh = uptimeLastMs;
+    }
+    else if (service.isToPhoneQueueEmpty())
+    {
         // Just send to phone when it's not our time to send to mesh yet
         // Only send while queue is empty (phone assumed connected)
         sendTelemetry(NODENUM_BROADCAST, true);
@@ -37,7 +40,8 @@ bool DeviceTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER)
         return false;
 
-    if (t->which_variant == meshtastic_Telemetry_device_metrics_tag) {
+    if (t->which_variant == meshtastic_Telemetry_device_metrics_tag)
+    {
 #ifdef DEBUG_PORT
         const char *sender = getSenderShortName(mp);
 
@@ -52,7 +56,8 @@ bool DeviceTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
 
 meshtastic_MeshPacket *DeviceTelemetryModule::allocReply()
 {
-    if (ignoreRequest) {
+    if (ignoreRequest)
+    {
         return NULL;
     }
 
@@ -68,16 +73,12 @@ meshtastic_Telemetry DeviceTelemetryModule::getDeviceTelemetry()
 
     t.time = getTime();
     t.which_variant = meshtastic_Telemetry_device_metrics_tag;
-
     t.variant.device_metrics.air_util_tx = airTime->utilizationTXPercent();
-    if (powerStatus->getIsCharging()) {
-        t.variant.device_metrics.battery_level = MAGIC_USB_BATTERY_LEVEL;
-    } else {
-        t.variant.device_metrics.battery_level = powerStatus->getBatteryChargePercent();
-    }
-
+    t.variant.device_metrics.battery_level =
+        powerStatus->getIsCharging() ? MAGIC_USB_BATTERY_LEVEL : powerStatus->getBatteryChargePercent();
     t.variant.device_metrics.channel_utilization = airTime->channelUtilizationPercent();
     t.variant.device_metrics.voltage = powerStatus->getBatteryVoltageMv() / 1000.0;
+    t.variant.device_metrics.uptime_seconds = getUptimeSeconds();
 
     return t;
 }
@@ -85,9 +86,10 @@ meshtastic_Telemetry DeviceTelemetryModule::getDeviceTelemetry()
 bool DeviceTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 {
     meshtastic_Telemetry telemetry = getDeviceTelemetry();
-    LOG_INFO("(Sending): air_util_tx=%f, channel_utilization=%f, battery_level=%i, voltage=%f\n",
+    LOG_INFO("(Sending): air_util_tx=%f, channel_utilization=%f, battery_level=%i, voltage=%f, uptime=%i\n",
              telemetry.variant.device_metrics.air_util_tx, telemetry.variant.device_metrics.channel_utilization,
-             telemetry.variant.device_metrics.battery_level, telemetry.variant.device_metrics.voltage);
+             telemetry.variant.device_metrics.battery_level, telemetry.variant.device_metrics.voltage,
+             telemetry.variant.device_metrics.uptime_seconds);
 
     meshtastic_MeshPacket *p = allocDataProtobuf(telemetry);
     p->to = dest;
@@ -95,10 +97,13 @@ bool DeviceTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
 
     nodeDB->updateTelemetry(nodeDB->getNodeNum(), telemetry, RX_SRC_LOCAL);
-    if (phoneOnly) {
+    if (phoneOnly)
+    {
         LOG_INFO("Sending packet to phone\n");
         service.sendToPhone(p);
-    } else {
+    }
+    else
+    {
         LOG_INFO("Sending packet to mesh\n");
         service.sendToMesh(p, RX_SRC_LOCAL, true);
     }
