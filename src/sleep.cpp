@@ -353,6 +353,9 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     gpio_wakeup_enable(pin, GPIO_INTR_LOW_LEVEL);
     esp_sleep_enable_gpio_wakeup();
 #endif
+#ifdef T_WATCH_S3
+    gpio_wakeup_enable((gpio_num_t)SCREEN_TOUCH_INT, GPIO_INTR_LOW_LEVEL);
+#endif
     enableLoraInterrupt();
 #ifdef PMU_IRQ
     // wake due to PMU can happen repeatedly if there is no battery installed or the battery fills
@@ -383,6 +386,10 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // Disable wake-on-button interrupt. Re-attach normal button-interrupts
     gpio_wakeup_disable(pin);
     buttonThread->attachButtonInterrupts();
+#endif
+
+#ifdef T_WATCH_S3
+    gpio_wakeup_disable((gpio_num_t)SCREEN_TOUCH_INT);
 #endif
 
 #if !defined(SOC_PM_SUPPORT_EXT_WAKEUP) && defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)
