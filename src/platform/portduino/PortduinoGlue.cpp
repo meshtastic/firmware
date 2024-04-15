@@ -77,6 +77,10 @@ void portduinoSetup()
     gpioInit();
 
     std::string gpioChipName = "gpiochip";
+    settingsStrings[i2cdev] = "";
+    settingsStrings[keyboardDevice] = "";
+    settingsStrings[webserverrootpath] = "";
+    settingsStrings[spidev] = "";
 
     YAML::Node yamlConfig;
 

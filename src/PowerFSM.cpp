@@ -17,6 +17,10 @@
 #include "sleep.h"
 #include "target_specific.h"
 
+#ifndef SLEEP_TIME
+#define SLEEP_TIME 30
+#endif
+
 /// Should we behave as if we have AC power now?
 static bool isPowered()
 {
@@ -81,7 +85,7 @@ static void lsIdle()
         // If some other service would stall sleep, don't let sleep happen yet
         if (doPreflightSleep()) {
             // Briefly come out of sleep long enough to blink the led once every few seconds
-            uint32_t sleepTime = 30;
+            uint32_t sleepTime = SLEEP_TIME;
 
             setLed(false); // Never leave led on while in light sleep
             esp_sleep_source_t wakeCause2 = doLightSleep(sleepTime * 1000LL);
