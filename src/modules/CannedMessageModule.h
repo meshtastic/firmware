@@ -51,6 +51,8 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     void handleGetCannedMessageModuleMessages(const meshtastic_MeshPacket &req, meshtastic_AdminMessage *response);
     void handleSetCannedMessageModuleMessages(const char *from_msg);
 
+    void showTemporaryMessage(const String& message);
+
     String drawWithCursor(String text, int cursor);
 
     /*
@@ -112,6 +114,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     char *messages[CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT];
     int messagesCount = 0;
     unsigned long lastTouchMillis = 0;
+    String temporaryMessage;
 };
 
 extern CannedMessageModule *cannedMessageModule;
