@@ -233,8 +233,8 @@ meshtastic_Neighbor *NeighborInfoModule::getOrCreateNeighbor(NodeNum originalSen
 
 void NeighborInfoModule::loadProtoForModule()
 {
-    if (!nodeDB->loadProto(neighborInfoConfigFile, meshtastic_NeighborInfo_size, sizeof(meshtastic_NeighborInfo),
-                           &meshtastic_NeighborInfo_msg, &neighborState)) {
+    if (nodeDB->loadProto(neighborInfoConfigFile, meshtastic_NeighborInfo_size, sizeof(meshtastic_NeighborInfo),
+                          &meshtastic_NeighborInfo_msg, &neighborState) != LoadFileResult::SUCCESS) {
         neighborState = meshtastic_NeighborInfo_init_zero;
     }
 }

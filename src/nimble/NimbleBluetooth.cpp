@@ -112,12 +112,12 @@ void NimbleBluetooth::shutdown()
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->reset();
     pAdvertising->stop();
+}
 
-#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0)
-    // Saving of ~1mA
-    // Probably applicable to other ESP32 boards - unverified
+// Extra power-saving on some devices
+void NimbleBluetooth::deinit()
+{
     NimBLEDevice::deinit();
-#endif
 }
 
 bool NimbleBluetooth::isActive()
