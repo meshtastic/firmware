@@ -755,9 +755,13 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
         failedCounter++;
         if (failedCounter >= 2)
         {
-            FSCom.format();
-            // After formatting, the device needs to be restarted
-            nodeDB->resetRadioConfig(true);
+            LOG_ERROR("Failed to save file twice. Rebooting...\n");
+            delay(100);
+            NVIC_SystemReset();
+            // We used to blow away the filesystem here, but that's a bit extreme
+            // FSCom.format();
+            // // After formatting, the device needs to be restarted
+            // nodeDB->resetRadioConfig(true);
         }
 #endif
     }
