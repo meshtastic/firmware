@@ -299,6 +299,12 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                 if (registerValue == 0xC0) {
                     type = BQ24295;
                     LOG_INFO("BQ24295 PMU found\n");
+                    break;
+                }
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0F), 1); // get ID
+                if (registerValue == 0x6A) {
+                    type = LSM6DS3;
+                    LOG_INFO("LSM6DS3 accelerometer found at address 0x%x\n", (uint8_t)addr.address);
                 } else {
                     type = QMI8658;
                     LOG_INFO("QMI8658 Highrate 6-Axis inertial measurement sensor found\n");
@@ -310,7 +316,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                 SCAN_SIMPLE_CASE(PMSA0031_ADDR, PMSA0031, "PMSA0031 air quality sensor found\n")
                 SCAN_SIMPLE_CASE(MPU6050_ADDR, MPU6050, "MPU6050 accelerometer found\n");
                 SCAN_SIMPLE_CASE(BMA423_ADDR, BMA423, "BMA423 accelerometer found\n");
-                SCAN_SIMPLE_CASE(LSM6DS3_ADDR, LSM6DS3, "LSM6DS3 accelerometer found\n");
+                SCAN_SIMPLE_CASE(LSM6DS3_ADDR, LSM6DS3, "LSM6DS3 accelerometer found at address 0x%x\n", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(TCA9555_ADDR, TCA9555, "TCA9555 I2C expander found\n");
 
             default:
