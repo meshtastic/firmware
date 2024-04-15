@@ -45,7 +45,7 @@
 #define SX126X_CS 7
 #define LORA_SCK 5
 #define LORA_MOSI 6
-#define LORA_MISO 6
+#define LORA_MISO 3
 #define SX126X_RESET 8
 #define SX126X_BUSY 34
 #define SX126X_DIO1 33
