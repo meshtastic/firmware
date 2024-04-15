@@ -434,7 +434,7 @@ int32_t CannedMessageModule::runOnce()
                 }
                 if (screen)
                     screen->forceDisplay();
-                runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+                showTemporaryMessage("GPS Toggled"); 
                 break;
 
             // mute (switch off/toggle) external notifications on fn+m
@@ -442,18 +442,18 @@ int32_t CannedMessageModule::runOnce()
                 if (moduleConfig.external_notification.enabled == true) {
                     if (externalNotificationModule->getMute()) {
                         externalNotificationModule->setMute(false);
-                        runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+                        showTemporaryMessage("Notifications \nEnabled"); 
                     } else {
                         externalNotificationModule->stopNow(); // this will turn off all GPIO and sounds and idle the loop
                         externalNotificationModule->setMute(true);
-                        runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+                        showTemporaryMessage("Notifications \nDisabled");
                     }
                 }
                 break;
             case 0xaf: // fn+space send network ping like double press does
                 service.refreshLocalMeshNode();
                 service.sendNetworkPing(NODENUM_BROADCAST, true);
-                runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+                showTemporaryMessage("Ping \nBroadcasted"); 
                 break;
             default:
                 if (this->cursor == this->freetext.length()) {
@@ -542,11 +542,28 @@ int CannedMessageModule::getPrevIndex()
         return this->currentMessageIndex - 1;
     }
 }
+void CannedMessageModule::showTemporaryMessage(const String& message) {
+    temporaryMessage = message;
+    //temporaryMessageTimestamp = millis(); // Set the timestamp when the message is shown
+    // Trigger an update to the UI
+    UIFrameEvent e = {false, true};
+    e.frameChanged = true;
+    notifyObservers(&e);
+}
 
 void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     char buffer[50];
 
+    if (!temporaryMessage.isEmpty()) {
+        LOG_DEBUG("Drawing temporary message: %s", temporaryMessage.c_str());
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->setFont(FONT_MEDIUM);
+        display->drawString(display->getWidth() / 2 + x, 0 + y + 12, temporaryMessage);
+        return; // Skip drawing anything else if we're showing the temporary message
+    } else {
+        LOG_DEBUG("Drawing frame without temporary message");}
+    
     if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) {
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->setFont(FONT_MEDIUM);
