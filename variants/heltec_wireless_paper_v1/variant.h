@@ -58,4 +58,3 @@
 
 // Power management
 #define NIMBLE_DEINIT_FOR_DEEPSLEEP // Required to reach manufacturers claim of 18uA
-#define LS_NO_BLINK                 // Prevent LED blink during light-sleep. BLE hardware has slow current ramp-down; too wasteful

@@ -17,7 +17,6 @@
 #include "sleep.h"
 #include "target_specific.h"
 
-// How long between LED blinks during light-sleep
 #ifndef SLEEP_TIME
 #define SLEEP_TIME 30
 #endif
@@ -85,27 +84,19 @@ static void lsIdle()
     if (secsSlept < config.power.ls_secs) {
         // If some other service would stall sleep, don't let sleep happen yet
         if (doPreflightSleep()) {
-
-#ifdef LS_NO_BLINK
-            // Sleep now for the full duration
-            uint32_t sleepTime = config.power.ls_secs;
-#else
             // Briefly come out of sleep long enough to blink the led once every few seconds
             uint32_t sleepTime = SLEEP_TIME;
-#endif
+
             setLed(false); // Never leave led on while in light sleep
             esp_sleep_source_t wakeCause2 = doLightSleep(sleepTime * 1000LL);
 
             switch (wakeCause2) {
             case ESP_SLEEP_WAKEUP_TIMER:
-
-#ifndef LS_NO_BLINK
                 // Normal case: timer expired, we should just go back to sleep ASAP
+
                 setLed(true);                   // briefly turn on led
                 wakeCause2 = doLightSleep(100); // leave led on for 1ms
-#else
-                // If LS_NO_BLINK, no action here. Mark complete (secsSlept), and handle next time lsIdle() is called
-#endif
+
                 secsSlept += sleepTime;
                 // LOG_INFO("sleeping, flash led!\n");
                 break;
