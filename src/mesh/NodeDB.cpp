@@ -551,7 +551,7 @@ static const char *moduleConfigFileName = "/prefs/module.proto";
 static const char *channelFileName = "/prefs/channels.proto";
 static const char *oemConfigFile = "/oem/oem.proto";
 
-/** Load a protobuf from a file, return true for success */
+/** Load a protobuf from a file, return LoadFileResult */
 LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields,
                                  void *dest_struct)
 {
