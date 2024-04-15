@@ -206,6 +206,12 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     // not using wifi yet, but once we are this is needed to shutoff the radio hw
     // esp_wifi_stop();
     waitEnterSleep(skipPreflight);
+
+#ifdef NIMBLE_DEINIT_FOR_DEEPSLEEP
+    // Extra power saving on some devices
+    nimbleBluetooth->deinit();
+#endif
+
 #ifdef ARCH_ESP32
     if (shouldLoraWake(msecToWake)) {
         notifySleep.notifyObservers(NULL);
