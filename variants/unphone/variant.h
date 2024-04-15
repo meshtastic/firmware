@@ -1,7 +1,3 @@
-// meshtastic/firmware/variants/unphone/variant.h
-
-#pragma once
-
 #define SPI_SCK 39
 #define SPI_MOSI 40
 #define SPI_MISO 41
@@ -32,19 +28,16 @@
 #define TFT_WIDTH 320
 #define TFT_OFFSET_X 0
 #define TFT_OFFSET_Y 0
-#define TFT_OFFSET_ROTATION 6 // unPhone's screen wired unusually, 0 typical
+#define TFT_OFFSET_ROTATION 6 // the unPhone's screen is wired unusually, 0 is typical value here
 #define TFT_INVERT false
 #define SCREEN_ROTATE true
 #define SCREEN_TRANSITION_FRAMERATE 5
 
 #define HAS_TOUCHSCREEN 1
-#define USE_XPT2046
+#define USE_XPT2046 1
 #define TOUCH_CS 38
 
-#define HAS_GPS 0
-// the unphone doesn't have a gps module by default (though
-// GPS featherwing -- https://www.adafruit.com/product/3133
-// -- can be added)
+#define HAS_GPS 0 // the unphone doesn't have a gps module
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 
@@ -56,16 +49,13 @@
 
 #define BUTTON_PIN 21      // Button 3 - square - top button in landscape mode
 #define BUTTON_NEED_PULLUP // we do need a helping hand up
-#define BUTTON_PIN_ALT 45  // Button 1 - triangle - bottom button in landscape mode
 
 #define I2C_SDA 3 // I2C pins for this board
 #define I2C_SCL 4
 
-#define LSM6DS3_WAKE_THRESH 5 // higher values reduce the sensitivity of the wake threshold
-
 // ratio of voltage divider = 3.20 (R1=100k, R2=220k)
 // #define ADC_MULTIPLIER 3.2
 
-// #define BATTERY_PIN 13 // battery V measurement pin; vbat divider is here
+// #define BATTERY_PIN 13 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 // #define ADC_CHANNEL ADC2_GPIO13_CHANNEL
 // #define BAT_MEASURE_ADC_UNIT 2
