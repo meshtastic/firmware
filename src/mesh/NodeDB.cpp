@@ -688,9 +688,13 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
         static uint8_t failedCounter = 0;
         failedCounter++;
         if (failedCounter >= 2) {
-            FSCom.format();
-            // After formatting, the device needs to be restarted
-            nodeDB->resetRadioConfig(true);
+            LOG_ERROR("Failed to save file twice. Rebooting...\n");
+            delay(100);
+            NVIC_SystemReset();
+            // We used to blow away the filesystem here, but that's a bit extreme
+            // FSCom.format();
+            // // After formatting, the device needs to be restarted
+            // nodeDB->resetRadioConfig(true);
         }
 #endif
     }
@@ -734,6 +738,7 @@ void NodeDB::saveToDisk(int saveWhat)
         config.has_power = true;
         config.has_network = true;
         config.has_bluetooth = true;
+
         saveProto(configFileName, meshtastic_LocalConfig_size, &meshtastic_LocalConfig_msg, &config);
     }
 
@@ -745,6 +750,12 @@ void NodeDB::saveToDisk(int saveWhat)
         moduleConfig.has_serial = true;
         moduleConfig.has_store_forward = true;
         moduleConfig.has_telemetry = true;
+        moduleConfig.has_neighbor_info = true;
+        moduleConfig.has_detection_sensor = true;
+        moduleConfig.has_ambient_lighting = true;
+        moduleConfig.has_audio = true;
+        moduleConfig.has_paxcounter = true;
+
         saveProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, &meshtastic_LocalModuleConfig_msg, &moduleConfig);
     }
 
