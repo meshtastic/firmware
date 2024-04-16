@@ -12,7 +12,7 @@ const meshtastic_MeshPacket *MeshModule::currentRequest;
 
 /**
  * If any of the current chain of modules has already sent a reply, it will be here.  This is useful to allow
- * the RoutingPlugin to avoid sending redundant acks
+ * the RoutingModule to avoid sending redundant acks
  */
 meshtastic_MeshPacket *MeshModule::currentReply;
 
@@ -40,7 +40,7 @@ meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, Nod
     c.error_reason = err;
     c.which_variant = meshtastic_Routing_error_reason_tag;
 
-    // Now that we have moded sendAckNak up one level into the class hierarchy we can no longer assume we are a RoutingPlugin
+    // Now that we have moded sendAckNak up one level into the class hierarchy we can no longer assume we are a RoutingModule
     // So we manually call pb_encode_to_bytes and specify routing port number
     // auto p = allocDataProtobuf(c);
     meshtastic_MeshPacket *p = router->allocForSending();
@@ -54,7 +54,8 @@ meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, Nod
     p->to = to;
     p->decoded.request_id = idFrom;
     p->channel = chIndex;
-    LOG_ERROR("Alloc an err=%d,to=0x%x,idFrom=0x%x,id=0x%x\n", err, to, idFrom, p->id);
+    if (err != meshtastic_Routing_Error_NONE)
+        LOG_ERROR("Alloc an err=%d,to=0x%x,idFrom=0x%x,id=0x%x\n", err, to, idFrom, p->id);
 
     return p;
 }
@@ -68,7 +69,7 @@ meshtastic_MeshPacket *MeshModule::allocErrorResponse(meshtastic_Routing_Error e
     return r;
 }
 
-void MeshModule::callPlugins(meshtastic_MeshPacket &mp, RxSource src)
+void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
 {
     // LOG_DEBUG("In call modules\n");
     bool moduleFound = false;
@@ -258,7 +259,7 @@ void MeshModule::observeUIEvents(Observer<const UIFrameEvent *> *observer)
     }
 }
 
-AdminMessageHandleResult MeshModule::handleAdminMessageForAllPlugins(const meshtastic_MeshPacket &mp,
+AdminMessageHandleResult MeshModule::handleAdminMessageForAllModules(const meshtastic_MeshPacket &mp,
                                                                      meshtastic_AdminMessage *request,
                                                                      meshtastic_AdminMessage *response)
 {
