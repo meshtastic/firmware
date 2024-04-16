@@ -1,3 +1,4 @@
+#if ARCH_PORTDUINO
 /*----------------------------------------------------------------------------/
   Lovyan GFX - Graphics library for embedded devices.
 
@@ -96,3 +97,4 @@ class Mesh_Bus_SPI : public IBus
 //----------------------------------------------------------------------------
 } // namespace v1
 } // namespace lgfx
+#endif

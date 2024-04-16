@@ -1,3 +1,4 @@
+#if ARCH_PORTDUINO
 #include "bus_spi.h"
 #include "lgfx/v1/misc/pixelcopy.hpp"
 #include "main.h"
@@ -179,3 +180,4 @@ void Mesh_Bus_SPI::readPixels(void *dst, pixelcopy_t *param, uint32_t length)
 
 } // namespace v1
 } // namespace lgfx
+#endif
