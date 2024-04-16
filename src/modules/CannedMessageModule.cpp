@@ -555,7 +555,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 {
     char buffer[50];
 
-    if (!temporaryMessage.isEmpty()) {
+    if (!temporaryMessage.length() == 0) {
         LOG_DEBUG("Drawing temporary message: %s", temporaryMessage.c_str());
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->setFont(FONT_MEDIUM);
