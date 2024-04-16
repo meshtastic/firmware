@@ -55,3 +55,6 @@
 
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
+
+// Power management
+#define NIMBLE_DEINIT_FOR_DEEPSLEEP // Required to reach manufacturers claim of 18uA
