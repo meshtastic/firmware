@@ -256,7 +256,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 
     default:
         meshtastic_AdminMessage res = meshtastic_AdminMessage_init_default;
-        AdminMessageHandleResult handleResult = MeshModule::handleAdminMessageForAllPlugins(mp, r, &res);
+        AdminMessageHandleResult handleResult = MeshModule::handleAdminMessageForAllModules(mp, r, &res);
 
         if (handleResult == AdminMessageHandleResult::HANDLED_WITH_RESPONSE) {
             myReply = allocDataProtobuf(res);
