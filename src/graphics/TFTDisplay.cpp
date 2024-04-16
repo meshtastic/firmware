@@ -1,8 +1,8 @@
 #include "configuration.h"
 #include "main.h"
 #if ARCH_PORTDUINO
-#include "platform/portduino/PortduinoGlue.h"
 #include "bus_spi.h"
+#include "platform/portduino/PortduinoGlue.h"
 #endif
 
 #ifndef TFT_BACKLIGHT_ON

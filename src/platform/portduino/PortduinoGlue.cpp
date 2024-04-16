@@ -82,7 +82,6 @@ void portduinoSetup()
     settingsStrings[webserverrootpath] = "";
     settingsStrings[spidev] = "";
     settingsStrings[displayspidev] = "";
-    
 
     YAML::Node yamlConfig;
 
