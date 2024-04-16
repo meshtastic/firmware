@@ -656,7 +656,7 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
                     msgPayload["voltage"] = new JSONValue(decoded->variant.device_metrics.voltage);
                     msgPayload["channel_utilization"] = new JSONValue(decoded->variant.device_metrics.channel_utilization);
                     msgPayload["air_util_tx"] = new JSONValue(decoded->variant.device_metrics.air_util_tx);
-                    msgPayload["uptime_seconds"] = new JSONValue(decoded->variant.device_metrics.uptime_seconds);
+                    msgPayload["uptime_seconds"] = new JSONValue((uint)decoded->variant.device_metrics.uptime_seconds);
                 } else if (decoded->which_variant == meshtastic_Telemetry_environment_metrics_tag) {
                     msgPayload["temperature"] = new JSONValue(decoded->variant.environment_metrics.temperature);
                     msgPayload["relative_humidity"] = new JSONValue(decoded->variant.environment_metrics.relative_humidity);
