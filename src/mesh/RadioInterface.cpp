@@ -151,10 +151,16 @@ static uint8_t bytes[MAX_RHPACKETLEN];
 void initRegion()
 {
     const RegionInfo *r = regions;
+#ifdef LORA_REGIONCODE
+    for (; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET && r->code != LORA_REGIONCODE; r++)
+        ;
+    LOG_INFO("Wanted region %d, regulatory override to %s\n", config.lora.region, r->name);
+#else
     for (; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET && r->code != config.lora.region; r++)
         ;
-    myRegion = r;
     LOG_INFO("Wanted region %d, using %s\n", config.lora.region, r->name);
+#endif
+    myRegion = r;
 }
 
 /**
