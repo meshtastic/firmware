@@ -146,6 +146,8 @@ typedef enum _meshtastic_HardwareModel {
     /* Teledatics TD-LORAC NRF52840 based M.2 LoRA module
  Compatible with the TD-WRLS development board */
     meshtastic_HardwareModel_TD_LORAC = 60,
+    /* CDEBYTE EoRa-S3 board using their own MM modules, clone of LILYGO T3S3 */
+    meshtastic_HardwareModel_CDEBYTE_EORA_S3 = 61,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
