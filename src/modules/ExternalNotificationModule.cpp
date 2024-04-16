@@ -84,10 +84,7 @@ int32_t ExternalNotificationModule::runOnce()
     if (!moduleConfig.external_notification.enabled) {
         return INT32_MAX; // we don't need this thread here...
     } else {
-
-        bool isPlaying = rtttl::isPlaying();This PR just tidies up support for the unPhone by using its [library](https://gitlab.com/hamishcunningham/unphonelibrary)
-
-Also fixes incomplete syntax for the touchscreen driver invocation for XPT2046 when attached to a HX8357.
+        bool isPlaying = rtttl::isPlaying();
 #ifdef HAS_I2S
         isPlaying = rtttl::isPlaying() || audioThread->isPlaying();
 #endif
