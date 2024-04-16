@@ -284,8 +284,8 @@ ExternalNotificationModule::ExternalNotificationModule()
     // moduleConfig.external_notification.alert_message_buzzer = true;
 
     if (moduleConfig.external_notification.enabled) {
-        if (!nodeDB->loadProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, sizeof(meshtastic_RTTTLConfig),
-                               &meshtastic_RTTTLConfig_msg, &rtttlConfig)) {
+        if (nodeDB->loadProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, sizeof(meshtastic_RTTTLConfig),
+                              &meshtastic_RTTTLConfig_msg, &rtttlConfig) != LoadFileResult::SUCCESS) {
             memset(rtttlConfig.ringtone, 0, sizeof(rtttlConfig.ringtone));
             strncpy(rtttlConfig.ringtone,
                     "24:d=32,o=5,b=565:f6,p,f6,4p,p,f6,p,f6,2p,p,b6,p,b6,p,b6,p,b6,p,b,p,b,p,b,p,b,p,b,p,b,p,b,p,b,1p.,2p.,p",
@@ -336,7 +336,7 @@ ExternalNotificationModule::ExternalNotificationModule()
 
 ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
-    if (moduleConfig.external_notification.enabled) {
+    if (moduleConfig.external_notification.enabled && !isMuted) {
 #ifdef T_WATCH_S3
         drv.setWaveform(0, 75);
         drv.setWaveform(1, 56);
@@ -445,7 +445,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             setIntervalFromNow(0); // run once so we know if we should do something
         }
     } else {
-        LOG_INFO("External Notification Module Disabled\n");
+        LOG_INFO("External Notification Module Disabled or muted\n");
     }
 
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want

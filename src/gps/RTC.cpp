@@ -40,7 +40,7 @@ void readFromRTC()
         t.tm_hour = rtc.getHour();
         t.tm_min = rtc.getMinute();
         t.tm_sec = rtc.getSecond();
-        tv.tv_sec = mktime(&t);
+        tv.tv_sec = gm_mktime(&t);
         tv.tv_usec = 0;
         LOG_DEBUG("Read RTC time from RV3028 as %ld\n", tv.tv_sec);
         timeStartMsec = now;
@@ -68,7 +68,7 @@ void readFromRTC()
         t.tm_hour = tc.hour;
         t.tm_min = tc.minute;
         t.tm_sec = tc.second;
-        tv.tv_sec = mktime(&t);
+        tv.tv_sec = gm_mktime(&t);
         tv.tv_usec = 0;
         LOG_DEBUG("Read RTC time from PCF8563 as %ld\n", tv.tv_sec);
         timeStartMsec = now;
@@ -128,7 +128,7 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
 #else
             rtc.initI2C();
 #endif
-            tm *t = localtime(&tv->tv_sec);
+            tm *t = gmtime(&tv->tv_sec);
             rtc.setTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_wday, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
             LOG_DEBUG("RV3028_RTC setTime %02d-%02d-%02d %02d:%02d:%02d %ld\n", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
                       t->tm_hour, t->tm_min, t->tm_sec, tv->tv_sec);
@@ -142,7 +142,7 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
 #else
             rtc.begin();
 #endif
-            tm *t = localtime(&tv->tv_sec);
+            tm *t = gmtime(&tv->tv_sec);
             rtc.setDateTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
             LOG_DEBUG("PCF8563_RTC setDateTime %02d-%02d-%02d %02d:%02d:%02d %ld\n", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
                       t->tm_hour, t->tm_min, t->tm_sec, tv->tv_sec);
@@ -175,7 +175,9 @@ bool perhapsSetRTC(RTCQuality q, struct tm &t)
     The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of seconds that have elapsed since January 1, 1970
     (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
     */
-    time_t res = mktime(&t);
+    // horrible hack to make mktime TZ agnostic - best practise according to
+    // https://www.gnu.org/software/libc/manual/html_node/Broken_002ddown-Time.html
+    time_t res = gm_mktime(&t);
     struct timeval tv;
     tv.tv_sec = res;
     tv.tv_usec = 0; // time.centisecond() * (10 / 1000);
@@ -190,13 +192,32 @@ bool perhapsSetRTC(RTCQuality q, struct tm &t)
 }
 
 /**
+ * Returns the timezone offset in seconds.
+ *
+ * @return The timezone offset in seconds.
+ */
+int32_t getTZOffset()
+{
+    time_t now;
+    struct tm *gmt;
+    now = time(NULL);
+    gmt = gmtime(&now);
+    gmt->tm_isdst = -1;
+    return (int16_t)difftime(now, mktime(gmt));
+}
+
+/**
  * Returns the current time in seconds since the Unix epoch (January 1, 1970).
  *
  * @return The current time in seconds since the Unix epoch.
  */
-uint32_t getTime()
+uint32_t getTime(bool local)
 {
-    return (((uint32_t)millis() - timeStartMsec) / 1000) + zeroOffsetSecs;
+    if (local) {
+        return (((uint32_t)millis() - timeStartMsec) / 1000) + zeroOffsetSecs + getTZOffset();
+    } else {
+        return (((uint32_t)millis() - timeStartMsec) / 1000) + zeroOffsetSecs;
+    }
 }
 
 /**
@@ -205,7 +226,19 @@ uint32_t getTime()
  * @param minQuality The minimum quality of the RTC time required for it to be considered valid.
  * @return The current time from the RTC if it meets the minimum quality requirement, or 0 if the time is not valid.
  */
-uint32_t getValidTime(RTCQuality minQuality)
+uint32_t getValidTime(RTCQuality minQuality, bool local)
 {
-    return (currentQuality >= minQuality) ? getTime() : 0;
+    return (currentQuality >= minQuality) ? getTime(local) : 0;
+}
+
+time_t gm_mktime(struct tm *tm)
+{
+    setenv("TZ", "GMT0", 1);
+    time_t res = mktime(tm);
+    if (*config.device.tzdef) {
+        setenv("TZ", config.device.tzdef, 1);
+    } else {
+        setenv("TZ", "UTC0", 1);
+    }
+    return res;
 }
