@@ -112,7 +112,7 @@ Touchscreen:
 ### Configure device for direct keyboard input
 
 Input:
-#  KeyboardDevice: /dev/input/event0
+#  KeyboardDevice: /dev/input/by-id/usb-_Raspberry_Pi_Internal_Keyboard-event-kbd
 
 ###
 
