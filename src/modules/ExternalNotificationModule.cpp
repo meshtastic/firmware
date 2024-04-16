@@ -36,6 +36,18 @@ uint8_t brightnessValues[] = {0, 10, 20, 30, 50, 90, 160, 170}; // blue gets mul
 bool ascending = true;
 #endif
 
+#ifdef UNPHONE
+#include "unPhone.h"
+extern unPhone unphone;
+
+uint8_t red = 0;
+uint8_t green = 0;
+uint8_t blue = 0;
+uint8_t colorState = 1;
+const uint8_t duration = 15;
+uint8_t counter = 0;
+#endif
+
 #ifndef PIN_BUZZER
 #define PIN_BUZZER false
 #endif
@@ -72,7 +84,6 @@ int32_t ExternalNotificationModule::runOnce()
     if (!moduleConfig.external_notification.enabled) {
         return INT32_MAX; // we don't need this thread here...
     } else {
-
         bool isPlaying = rtttl::isPlaying();
 #ifdef HAS_I2S
         isPlaying = rtttl::isPlaying() || audioThread->isPlaying();
@@ -125,6 +136,25 @@ int32_t ExternalNotificationModule::runOnce()
                 }
                 if (brightnessIndex == 0) {
                     ascending = true;
+                    colorState++; // next color
+                    if (colorState > 7) {
+                        colorState = 1;
+                    }
+                }
+            }
+#endif
+
+#ifdef UNPHONE
+            if (rgb_found.type == ScanI2C::RGBLED_CA) {
+                red = colorState & 4;   // Red enabled on colorState = 4,5,6,7
+                green = colorState & 2; // Green enabled on colorState = 2,3,6,7
+                blue = colorState & 1;  // Blue enabled on colorState = 1,3,5,7
+                unphone.rgb(red, green, blue);
+                LOG_DEBUG("RGB runOnce: %i, %i, %i\n", red, green, blue);
+
+                counter++; // tick on
+                if (counter > duration) {
+                    counter = 0;
                     colorState++; // next color
                     if (colorState > 7) {
                         colorState = 1;
@@ -197,6 +227,11 @@ void ExternalNotificationModule::setExternalOn(uint8_t index)
         rgb.setColor(red, green, blue);
     }
 #endif
+#ifdef UNPHONE
+    if (rgb_found.type == ScanI2C::RGBLED_CA) {
+        unphone.rgb(red, green, blue);
+    }
+#endif
 #ifdef T_WATCH_S3
     drv.go();
 #endif
@@ -228,6 +263,14 @@ void ExternalNotificationModule::setExternalOff(uint8_t index)
         green = 0;
         blue = 0;
         rgb.setColor(red, green, blue);
+    }
+#endif
+#ifdef UNPHONE
+    if (rgb_found.type == ScanI2C::RGBLED_CA) {
+        red = 0;
+        green = 0;
+        blue = 0;
+        unphone.rgb(red, green, blue);
     }
 #endif
 #ifdef T_WATCH_S3
