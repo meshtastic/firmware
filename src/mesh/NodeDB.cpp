@@ -551,12 +551,17 @@ static const char *moduleConfigFileName = "/prefs/module.proto";
 static const char *channelFileName = "/prefs/channels.proto";
 static const char *oemConfigFile = "/oem/oem.proto";
 
-/** Load a protobuf from a file, return true for success */
-bool NodeDB::loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, void *dest_struct)
+/** Load a protobuf from a file, return LoadFileResult */
+LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields,
+                                 void *dest_struct)
 {
-    bool okay = false;
+    LoadFileResult state = LoadFileResult::OTHER_FAILURE;
 #ifdef FSCom
-    // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
+
+    if (!FSCom.exists(filename)) {
+        LOG_INFO("File %s not found\n", filename);
+        return LoadFileResult::NOT_FOUND;
+    }
 
     auto f = FSCom.open(filename, FILE_O_READ);
 
@@ -564,30 +569,32 @@ bool NodeDB::loadProto(const char *filename, size_t protoSize, size_t objSize, c
         LOG_INFO("Loading %s\n", filename);
         pb_istream_t stream = {&readcb, &f, protoSize};
 
-        // LOG_DEBUG("Preload channel name=%s\n", channelSettings.name);
-
         memset(dest_struct, 0, objSize);
         if (!pb_decode(&stream, fields, dest_struct)) {
             LOG_ERROR("Error: can't decode protobuf %s\n", PB_GET_ERROR(&stream));
+            state = LoadFileResult::DECODE_FAILED;
         } else {
-            okay = true;
+            LOG_INFO("Loaded %s successfully\n", filename);
+            state = LoadFileResult::SUCCESS;
         }
-
         f.close();
     } else {
-        LOG_INFO("No %s preferences found\n", filename);
+        LOG_ERROR("Could not open / read %s\n", filename);
     }
 #else
     LOG_ERROR("ERROR: Filesystem not implemented\n");
+    state = LoadFileState::NO_FILESYSTEM;
 #endif
-    return okay;
+    return state;
 }
 
 void NodeDB::loadFromDisk()
 {
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
-    if (!loadProto(prefFileName, sizeof(meshtastic_DeviceState) + MAX_NUM_NODES * sizeof(meshtastic_NodeInfo),
-                   sizeof(meshtastic_DeviceState), &meshtastic_DeviceState_msg, &devicestate)) {
+    auto state = loadProto(prefFileName, sizeof(meshtastic_DeviceState) + MAX_NUM_NODES * sizeof(meshtastic_NodeInfo),
+                           sizeof(meshtastic_DeviceState), &meshtastic_DeviceState_msg, &devicestate);
+
+    if (state != LoadFileResult::SUCCESS) {
         installDefaultDeviceState(); // Our in RAM copy might now be corrupt
     } else {
         if (devicestate.version < DEVICESTATE_MIN_VER) {
@@ -602,8 +609,9 @@ void NodeDB::loadFromDisk()
     }
     meshNodes->resize(MAX_NUM_NODES);
 
-    if (!loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig), &meshtastic_LocalConfig_msg,
-                   &config)) {
+    state = loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig), &meshtastic_LocalConfig_msg,
+                      &config);
+    if (state != LoadFileResult::SUCCESS) {
         installDefaultConfig(); // Our in RAM copy might now be corrupt
     } else {
         if (config.version < DEVICESTATE_MIN_VER) {
@@ -614,8 +622,9 @@ void NodeDB::loadFromDisk()
         }
     }
 
-    if (!loadProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, sizeof(meshtastic_LocalModuleConfig),
-                   &meshtastic_LocalModuleConfig_msg, &moduleConfig)) {
+    state = loadProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, sizeof(meshtastic_LocalModuleConfig),
+                      &meshtastic_LocalModuleConfig_msg, &moduleConfig);
+    if (state != LoadFileResult::SUCCESS) {
         installDefaultModuleConfig(); // Our in RAM copy might now be corrupt
     } else {
         if (moduleConfig.version < DEVICESTATE_MIN_VER) {
@@ -626,8 +635,9 @@ void NodeDB::loadFromDisk()
         }
     }
 
-    if (!loadProto(channelFileName, meshtastic_ChannelFile_size, sizeof(meshtastic_ChannelFile), &meshtastic_ChannelFile_msg,
-                   &channelFile)) {
+    state = loadProto(channelFileName, meshtastic_ChannelFile_size, sizeof(meshtastic_ChannelFile), &meshtastic_ChannelFile_msg,
+                      &channelFile);
+    if (state != LoadFileResult::SUCCESS) {
         installDefaultChannels(); // Our in RAM copy might now be corrupt
     } else {
         if (channelFile.version < DEVICESTATE_MIN_VER) {
@@ -638,7 +648,8 @@ void NodeDB::loadFromDisk()
         }
     }
 
-    if (loadProto(oemConfigFile, meshtastic_OEMStore_size, sizeof(meshtastic_OEMStore), &meshtastic_OEMStore_msg, &oemStore)) {
+    state = loadProto(oemConfigFile, meshtastic_OEMStore_size, sizeof(meshtastic_OEMStore), &meshtastic_OEMStore_msg, &oemStore);
+    if (state == LoadFileResult::SUCCESS) {
         LOG_INFO("Loaded OEMStore\n");
     }
 }
@@ -677,9 +688,13 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
         static uint8_t failedCounter = 0;
         failedCounter++;
         if (failedCounter >= 2) {
-            FSCom.format();
-            // After formatting, the device needs to be restarted
-            nodeDB->resetRadioConfig(true);
+            LOG_ERROR("Failed to save file twice. Rebooting...\n");
+            delay(100);
+            NVIC_SystemReset();
+            // We used to blow away the filesystem here, but that's a bit extreme
+            // FSCom.format();
+            // // After formatting, the device needs to be restarted
+            // nodeDB->resetRadioConfig(true);
         }
 #endif
     }
@@ -723,6 +738,7 @@ void NodeDB::saveToDisk(int saveWhat)
         config.has_power = true;
         config.has_network = true;
         config.has_bluetooth = true;
+
         saveProto(configFileName, meshtastic_LocalConfig_size, &meshtastic_LocalConfig_msg, &config);
     }
 
@@ -734,6 +750,12 @@ void NodeDB::saveToDisk(int saveWhat)
         moduleConfig.has_serial = true;
         moduleConfig.has_store_forward = true;
         moduleConfig.has_telemetry = true;
+        moduleConfig.has_neighbor_info = true;
+        moduleConfig.has_detection_sensor = true;
+        moduleConfig.has_ambient_lighting = true;
+        moduleConfig.has_audio = true;
+        moduleConfig.has_paxcounter = true;
+
         saveProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, &meshtastic_LocalModuleConfig_msg, &moduleConfig);
     }
 
