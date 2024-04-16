@@ -453,7 +453,7 @@ int32_t CannedMessageModule::runOnce()
             case 0xaf: // fn+space send network ping like double press does
                 service.refreshLocalMeshNode();
                 service.sendNetworkPing(NODENUM_BROADCAST, true);
-                showTemporaryMessage("Ping \nBroadcasted"); 
+                showTemporaryMessage("Telemetry \nUpdate Sent"); 
                 break;
             default:
                 if (this->cursor == this->freetext.length()) {
