@@ -81,6 +81,8 @@ void portduinoSetup()
     settingsStrings[keyboardDevice] = "";
     settingsStrings[webserverrootpath] = "";
     settingsStrings[spidev] = "";
+    settingsStrings[displayspidev] = "";
+    
 
     YAML::Node yamlConfig;
 
@@ -187,6 +189,9 @@ void portduinoSetup()
             settingsMap[displayOffsetY] = yamlConfig["Display"]["OffsetY"].as<int>(0);
             settingsMap[displayRotate] = yamlConfig["Display"]["Rotate"].as<bool>(false);
             settingsMap[displayInvert] = yamlConfig["Display"]["Invert"].as<bool>(false);
+            if (yamlConfig["Display"]["spidev"]) {
+                settingsStrings[displayspidev] = "/dev/" + yamlConfig["Display"]["spidev"].as<std::string>("spidev0.1");
+            }
         }
         settingsMap[touchscreenModule] = no_touchscreen;
         if (yamlConfig["Touchscreen"]) {
@@ -196,6 +201,9 @@ void portduinoSetup()
                 settingsMap[touchscreenModule] = stmpe610;
             settingsMap[touchscreenCS] = yamlConfig["Touchscreen"]["CS"].as<int>(-1);
             settingsMap[touchscreenIRQ] = yamlConfig["Touchscreen"]["IRQ"].as<int>(-1);
+            if (yamlConfig["Touchscreen"]["spidev"]) {
+                settingsStrings[touchscreenspidev] = "/dev/" + yamlConfig["Touchscreen"]["spidev"].as<std::string>("");
+            }
         }
         if (yamlConfig["Input"]) {
             settingsStrings[keyboardDevice] = (yamlConfig["Input"]["KeyboardDevice"]).as<std::string>("");

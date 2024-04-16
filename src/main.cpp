@@ -135,6 +135,10 @@ ScanI2C::DeviceAddress accelerometer_found = ScanI2C::ADDRESS_NONE;
 // The I2C address of the RGB LED (if found)
 ScanI2C::FoundDevice rgb_found = ScanI2C::FoundDevice(ScanI2C::DeviceType::NONE, ScanI2C::ADDRESS_NONE);
 
+#if ARCH_PORTDUINO
+HardwareSPI *DisplaySPI;
+HardwareSPI *LoraSPI;
+#endif
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 ATECCX08A atecc;
 #endif
@@ -651,7 +655,25 @@ void setup()
     SPI.begin(false);
 #endif // HW_SPI1_DEVICE
 #elif ARCH_PORTDUINO
-    SPI.begin(settingsStrings[spidev].c_str());
+    // if we specify a touchscreen dev, that is SPI.
+    // else if we specify a screen dev, that is SPI
+    // else if we specify a LoRa dev, that is SPI.
+    if (settingsStrings[touchscreenspidev] != "") {
+        SPI.begin(settingsStrings[touchscreenspidev].c_str());
+        DisplaySPI = new HardwareSPI;
+        DisplaySPI->begin(settingsStrings[displayspidev].c_str());
+        LoraSPI = new HardwareSPI;
+        LoraSPI->begin(settingsStrings[spidev].c_str());
+    } else if (settingsStrings[displayspidev] != "") {
+        SPI.begin(settingsStrings[displayspidev].c_str());
+        DisplaySPI = &SPI;
+        LoraSPI = new HardwareSPI;
+        LoraSPI->begin(settingsStrings[spidev].c_str());
+    } else {
+        SPI.begin(settingsStrings[spidev].c_str());
+        LoraSPI = &SPI;
+        DisplaySPI = &SPI;
+    }
 #elif !defined(ARCH_ESP32) // ARCH_RP2040
     SPI.begin();
 #else
@@ -738,7 +760,7 @@ void setup()
     if (settingsMap[use_sx1262]) {
         if (!rIf) {
             LOG_DEBUG("Attempting to activate sx1262 radio on SPI port %s\n", settingsStrings[spidev].c_str());
-            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(*LoraSPI, spiSettings);
             rIf = new SX1262Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
                                       settingsMap[busy]);
             if (!rIf->init()) {
@@ -752,7 +774,7 @@ void setup()
     } else if (settingsMap[use_rf95]) {
         if (!rIf) {
             LOG_DEBUG("Attempting to activate rf95 radio on SPI port %s\n", settingsStrings[spidev].c_str());
-            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(*LoraSPI, spiSettings);
             rIf = new RF95Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
                                     settingsMap[busy]);
             if (!rIf->init()) {
@@ -767,7 +789,7 @@ void setup()
     } else if (settingsMap[use_sx1280]) {
         if (!rIf) {
             LOG_DEBUG("Attempting to activate sx1280 radio on SPI port %s\n", settingsStrings[spidev].c_str());
-            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(*LoraSPI, spiSettings);
             rIf = new SX1280Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
                                       settingsMap[busy]);
             if (!rIf->init()) {

@@ -21,6 +21,8 @@ enum configNames {
     touchscreenModule,
     touchscreenCS,
     touchscreenIRQ,
+    touchscreenspidev,
+    displayspidev,
     displayPanel,
     displayWidth,
     displayHeight,
