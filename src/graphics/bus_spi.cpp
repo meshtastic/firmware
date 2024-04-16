@@ -1,3 +1,4 @@
+#include "configuration.h"
 #if ARCH_PORTDUINO
 #include "bus_spi.h"
 #include "lgfx/v1/misc/pixelcopy.hpp"
