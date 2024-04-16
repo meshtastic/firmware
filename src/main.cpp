@@ -494,9 +494,13 @@ void setup()
  * "found".
  */
 
-// Only one supported RGB LED currently
+// Only one supported I2C RGB LED currently (plus common anode RGB LED used by the unPhone)
 #ifdef HAS_NCP5623
     rgb_found = i2cScanner->find(ScanI2C::DeviceType::NCP5623);
+#endif
+
+#ifdef UNPHONE
+    rgb_found.type = ScanI2C::DeviceType::RGBLED_CA;
 #endif
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
@@ -589,6 +593,20 @@ void setup()
     // fixed screen override?
     if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)
         screen_model = config.display.oled;
+
+#ifdef UNPHONE
+    // initialise IO expander with pinmodes
+    Wire.beginTransmission(0x26);
+    Wire.write(0x06);
+    Wire.write(0x7A);
+    Wire.write(0xDD);
+    Wire.endTransmission();
+    Wire.beginTransmission(0x26);
+    Wire.write(0x02);
+    Wire.write(0x04); // Backlight on
+    Wire.write(0x22); // G&B LEDs off
+    Wire.endTransmission();
+#endif
 
 #if defined(USE_SH1107)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of 128x128
