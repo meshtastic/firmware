@@ -1,3 +1,7 @@
+// This code has been copied from LovyanGFX to make the SPI device selectable for touchscreens.
+// Ideally this could eventually be an inherited class from BUS_SPI,
+// but currently too many internal objects are set private.
+
 #include "configuration.h"
 #if ARCH_PORTDUINO
 #include "lgfx/v1/misc/pixelcopy.hpp"
