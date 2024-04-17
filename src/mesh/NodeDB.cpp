@@ -527,8 +527,8 @@ void NodeDB::installDefaultDeviceState()
 void NodeDB::pickNewNodeNum()
 {
     NodeNum nodeNum = myNodeInfo.my_node_num;
+    getMacAddr(ourMacAddr); // Make sure ourMacAddr is set
     if (nodeNum == 0) {
-        getMacAddr(ourMacAddr); // Make sure ourMacAddr is set
         // Pick an initial nodenum based on the macaddr
         nodeNum = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
     }
