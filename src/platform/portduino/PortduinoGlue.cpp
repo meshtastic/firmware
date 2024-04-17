@@ -15,6 +15,8 @@
 #include <map>
 #include <unistd.h>
 
+HardwareSPI *DisplaySPI;
+HardwareSPI *LoraSPI;
 std::map<configNames, int> settingsMap;
 std::map<configNames, std::string> settingsStrings;
 char *configPath = nullptr;
@@ -272,6 +274,26 @@ void portduinoSetup()
             initGPIOPin(settingsMap[touchscreenCS], gpioChipName);
         if (settingsMap[touchscreenIRQ] > 0)
             initGPIOPin(settingsMap[touchscreenIRQ], gpioChipName);
+    }
+
+    // if we specify a touchscreen dev, that is SPI.
+    // else if we specify a screen dev, that is SPI
+    // else if we specify a LoRa dev, that is SPI.
+    if (settingsStrings[touchscreenspidev] != "") {
+        SPI.begin(settingsStrings[touchscreenspidev].c_str());
+        DisplaySPI = new HardwareSPI;
+        DisplaySPI->begin(settingsStrings[displayspidev].c_str());
+        LoraSPI = new HardwareSPI;
+        LoraSPI->begin(settingsStrings[spidev].c_str());
+    } else if (settingsStrings[displayspidev] != "") {
+        SPI.begin(settingsStrings[displayspidev].c_str());
+        DisplaySPI = &SPI;
+        LoraSPI = new HardwareSPI;
+        LoraSPI->begin(settingsStrings[spidev].c_str());
+    } else {
+        SPI.begin(settingsStrings[spidev].c_str());
+        LoraSPI = &SPI;
+        DisplaySPI = &SPI;
     }
 
     return;
