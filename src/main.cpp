@@ -107,6 +107,7 @@ AudioThread *audioThread;
 
 #if HAS_TFT
 #include "DeviceScreen.h"
+#include "DisplayDriverConfig.h"
 #include "PacketClient.h"
 #include "PacketServer.h"
 
@@ -675,14 +676,69 @@ void setup()
 #endif
 
 #if HAS_TFT
-    PacketServer::init();
+#ifdef PORTDUINO
+    if (settingsMap[displayPanel] != no_screen) {
+        DisplayDriverConfig displayConfig;
+        char *panels[] = {"NOSCREEN", "ST7789", "ST7735", "ST7735S", "ILI9341", "HX8357D"};
+        char *touch[] = {"NOTOUCH", "XPT2046", "STMPE610", "GT911", "FT5x06"};
+        if (settingsMap[displayPanel] == no_screen /* x11 */) { // TODO: add x11 enum
+            displayConfig.device(DisplayDriverConfig::device_t::X11);
+        } else {
+            displayConfig.device(DisplayDriverConfig::device_t::CUSTOM_TFT)
+                .panel(DisplayDriverConfig::panel_config_t{
+                    .type = panels[settingsMap[displayPanel]],
+                    .panel_width = (uint16_t)settingsMap[displayWidth],
+                    .panel_height = (uint16_t)settingsMap[displayHeight],
+                    .rotation = (bool)settingsMap[displayRotate],
+                    .pin_cs = (int16_t)settingsMap[displayCS],
+                    .pin_rst = (int16_t)settingsMap[displayReset],
+                    .offset_x = (uint16_t)settingsMap[displayOffsetX],
+                    .offset_y = (uint16_t)settingsMap[displayOffsetY],
+                    .offset_rotation = 1, // TODO:
+                    .invert = settingsMap[displayInvert] ? true : false,
+                    .rgb_order = false // TODO:
+                })
+                .bus(DisplayDriverConfig::bus_config_t{.freq_write = 40000000,
+                                                       .freq_read = 16000000,
+                                                       .spi{
+                                                           // .pin_sclk = 11,
+                                                           // .pin_miso = 9,
+                                                           // .pin_mosi = 10,
+                                                           .pin_dc = (int8_t)settingsMap[displayDC],
+                                                           .use_lock = true,
+                                                           // .spi_host = 0 // TODO:
+                                                       }})
+                .touch(DisplayDriverConfig::touch_config_t{.type = touch[settingsMap[touchscreenModule]],
+                                                           //.freq = 2500000,
+                                                           .pin_int = (int16_t)settingsMap[touchscreenIRQ],
+                                                           .spi{
+                                                               .spi_host = 0, // TODO:
+                                                                              // .pin_sclk = 11,
+                                                                              // .pin_mosi = 10,
+                                                                              // .pin_miso = 9,
+                                                           },
+                                                           .pin_cs = (int16_t)settingsMap[touchscreenCS]})
+                .light(DisplayDriverConfig::light_config_t{
+                    .pin_bl = (int16_t)settingsMap[displayBacklight],
+                    .pwm_channel = -1, // TODO:
+                    .invert = false    // TODO:
+                });
+        }
+        deviceScreen = &DeviceScreen::create(&displayConfig);
+        PacketServer::init();
+        deviceScreen->init(new PacketClient);
+    }
+#else
     deviceScreen = &DeviceScreen::create();
+    PacketServer::init();
     deviceScreen->init(new PacketClient);
+#endif
 #endif
 
     // Initialize the screen first so we can show the logo while we start up everything else.
+#if HAS_SCREEN
     screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
-
+#endif
     // setup TZ prior to time actions.
     if (*config.device.tzdef) {
         setenv("TZ", config.device.tzdef, 1);
@@ -1059,7 +1115,7 @@ void tft_task_handler(void *param = nullptr)
 #ifdef HAS_FREE_RTOS
         vTaskDelay((TickType_t)5);
 #else
-        delay(10);
+        delay(5);
 #endif
     }
 }
