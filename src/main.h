@@ -22,6 +22,11 @@ extern NimbleBluetooth *nimbleBluetooth;
 extern NRF52Bluetooth *nrf52Bluetooth;
 #endif
 
+#if ARCH_PORTDUINO
+extern HardwareSPI *DisplaySPI;
+extern HardwareSPI *LoraSPI;
+
+#endif
 extern ScanI2C::DeviceAddress screen_found;
 extern ScanI2C::DeviceAddress cardkb_found;
 extern uint8_t kb_model;
