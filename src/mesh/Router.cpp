@@ -479,7 +479,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 
     // call modules here
     if (!skipHandle)
-        MeshModule::callPlugins(*p, src);
+        MeshModule::callModules(*p, src);
 }
 
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
