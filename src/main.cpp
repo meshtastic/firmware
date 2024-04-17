@@ -110,6 +110,7 @@ AudioThread *audioThread;
 #include "DisplayDriverConfig.h"
 #include "PacketClient.h"
 #include "PacketServer.h"
+#include "api/PacketAPI.h"
 
 void tft_task_handler(void *);
 
@@ -725,12 +726,14 @@ void setup()
                 });
         }
         deviceScreen = &DeviceScreen::create(&displayConfig);
-        PacketServer::init();
+        PacketAPI::create(PacketServer::init());
         deviceScreen->init(new PacketClient);
+    } else {
+        LOG_INFO("Running without TFT display!\n");
     }
 #else
     deviceScreen = &DeviceScreen::create();
-    PacketServer::init();
+    PacketAPI::create(PacketServer::init());
     deviceScreen->init(new PacketClient);
 #endif
 #endif

@@ -6,7 +6,13 @@
 
 PacketAPI *packetAPI = nullptr;
 
-void PacketAPI::init(void) {}
+PacketAPI *PacketAPI::create(PacketServer *_server)
+{
+    if (!packetAPI) {
+        packetAPI = new PacketAPI(_server);
+    }
+    return packetAPI;
+}
 
 PacketAPI::PacketAPI(PacketServer *_server) : concurrency::OSThread("PacketAPI"), isConnected(false), server(_server) {}
 
