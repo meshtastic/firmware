@@ -9,7 +9,7 @@
 /// @return true if the function was executed, false if it was deferred
 bool Throttle::execute(uint32_t *lastExecutionMs, uint32_t minumumIntervalMs, void (*throttleFunc)(void), void (*onDefer)(void))
 {
-    if (lastExecutionMs == 0) {
+    if (*lastExecutionMs == 0) {
         *lastExecutionMs = millis();
         throttleFunc();
         return true;
