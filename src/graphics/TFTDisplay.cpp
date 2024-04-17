@@ -1,7 +1,7 @@
 #include "configuration.h"
 #include "main.h"
 #if ARCH_PORTDUINO
-#include "bus_spi.h"
+#include "mesh_bus_spi.h"
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 

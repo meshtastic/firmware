@@ -1,6 +1,6 @@
 #include "configuration.h"
 #if ARCH_PORTDUINO
-#include "bus_spi.h"
+#include "mesh_bus_spi.h"
 #include "lgfx/v1/misc/pixelcopy.hpp"
 #include "main.h"
 #include <Arduino.h>
