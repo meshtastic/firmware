@@ -1,5 +1,6 @@
 ### Define your devices here using Broadcom pin numbering
 ### Uncomment the block that corresponds to your hardware
+### Including the "Module:" line!
 ---
 Lora:
 #  Module: sx1262  # Waveshare SX126X XXXM
@@ -111,7 +112,7 @@ Touchscreen:
 ### Configure device for direct keyboard input
 
 Input:
-#  KeyboardDevice: /dev/input/event0
+#  KeyboardDevice: /dev/input/by-id/usb-_Raspberry_Pi_Internal_Keyboard-event-kbd
 
 ###
 

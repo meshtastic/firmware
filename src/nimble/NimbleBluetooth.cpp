@@ -114,6 +114,12 @@ void NimbleBluetooth::shutdown()
     pAdvertising->stop();
 }
 
+// Extra power-saving on some devices
+void NimbleBluetooth::deinit()
+{
+    NimBLEDevice::deinit();
+}
+
 bool NimbleBluetooth::isActive()
 {
     return bleServer;
