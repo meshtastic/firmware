@@ -630,14 +630,12 @@ void setup()
     pinMode(LORA_CS, OUTPUT);
     digitalWrite(LORA_CS, HIGH);
     SPI1.begin(false);
-#else  // HW_SPI1_DEVICE
+#else                      // HW_SPI1_DEVICE
     SPI.setSCK(LORA_SCK);
     SPI.setTX(LORA_MOSI);
     SPI.setRX(LORA_MISO);
     SPI.begin(false);
-#endif // HW_SPI1_DEVICE
-#elif ARCH_PORTDUINO
-    SPI.begin(settingsStrings[spidev].c_str());
+#endif                     // HW_SPI1_DEVICE
 #elif !defined(ARCH_ESP32) // ARCH_RP2040
     SPI.begin();
 #else
@@ -724,7 +722,7 @@ void setup()
     if (settingsMap[use_sx1262]) {
         if (!rIf) {
             LOG_DEBUG("Attempting to activate sx1262 radio on SPI port %s\n", settingsStrings[spidev].c_str());
-            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(*LoraSPI, spiSettings);
             rIf = new SX1262Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
                                       settingsMap[busy]);
             if (!rIf->init()) {
@@ -738,7 +736,7 @@ void setup()
     } else if (settingsMap[use_rf95]) {
         if (!rIf) {
             LOG_DEBUG("Attempting to activate rf95 radio on SPI port %s\n", settingsStrings[spidev].c_str());
-            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(*LoraSPI, spiSettings);
             rIf = new RF95Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
                                     settingsMap[busy]);
             if (!rIf->init()) {
@@ -753,7 +751,7 @@ void setup()
     } else if (settingsMap[use_sx1280]) {
         if (!rIf) {
             LOG_DEBUG("Attempting to activate sx1280 radio on SPI port %s\n", settingsStrings[spidev].c_str());
-            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(*LoraSPI, spiSettings);
             rIf = new SX1280Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
                                       settingsMap[busy]);
             if (!rIf->init()) {
