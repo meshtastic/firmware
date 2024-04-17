@@ -112,12 +112,12 @@ void NimbleBluetooth::shutdown()
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->reset();
     pAdvertising->stop();
+}
 
-#if defined(ARCH_ESP32)
-    // Saving of ~1mA for esp32-s3 and 0.1mA for esp32
-    // Probably applicable to other ESP32 boards - unverified
+// Extra power-saving on some devices
+void NimbleBluetooth::deinit()
+{
     NimBLEDevice::deinit();
-#endif
 }
 
 bool NimbleBluetooth::isActive()

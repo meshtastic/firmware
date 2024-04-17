@@ -181,12 +181,18 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
     err = lora.setSyncWord(syncWord);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting SX126X setSyncWord!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setCurrentLimit(currentLimit);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting SX126X setCurrentLimit!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setPreambleLength(preambleLength);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting SX126X setPreambleLength!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setFrequency(getFreq());
@@ -197,6 +203,8 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
         power = SX126X_MAX_POWER;
 
     err = lora.setOutputPower(power);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting SX126X setOutputPower!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     startReceive(); // restart receiving
@@ -215,10 +223,8 @@ template <typename T> void SX126xInterface<T>::setStandby()
 
     int err = lora.standby();
 
-    if (err != RADIOLIB_ERR_NONE) {
+    if (err != RADIOLIB_ERR_NONE)
         LOG_DEBUG("SX126x standby failed with error %d\n", err);
-    }
-
     assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = false; // If we were receiving, not any more
@@ -260,6 +266,8 @@ template <typename T> void SX126xInterface<T>::startReceive()
     int err = lora.startReceiveDutyCycleAuto(preambleLength, 8,
                                              RADIOLIB_SX126X_IRQ_RX_DEFAULT | RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED |
                                                  RADIOLIB_SX126X_IRQ_HEADER_VALID);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting SX126X startReceiveDutyCycleAuto!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = true;
@@ -279,7 +287,8 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
     result = lora.scanChannel();
     if (result == RADIOLIB_LORA_DETECTED)
         return true;
-
+    if (result != RADIOLIB_CHANNEL_FREE)
+        LOG_ERROR("Radiolib error %d when attempting SX126X scanChannel!\n", result);
     assert(result != RADIOLIB_ERR_WRONG_MODEM);
 
     return false;

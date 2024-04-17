@@ -24,6 +24,8 @@
 #define TOUCH_I2C_PORT 0
 #define TOUCH_SLAVE_ADDRESS 0x5D // GT911
 
+#define SLEEP_TIME 120
+
 #define BUTTON_PIN 0
 // #define BUTTON_NEED_PULLUP
 
