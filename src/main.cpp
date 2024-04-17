@@ -401,7 +401,7 @@ void setup()
     // We need to scan here to decide if we have a screen for nodeDB.init() and because power has been applied to
     // accessories
     auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
-#ifdef HAS_WIRE
+#if HAS_WIRE
     LOG_INFO("Scanning for i2c devices...\n");
 #endif
 
@@ -603,20 +603,6 @@ void setup()
     // fixed screen override?
     if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)
         screen_model = config.display.oled;
-
-#ifdef UNPHONE
-    // initialise IO expander with pinmodes
-    Wire.beginTransmission(0x26);
-    Wire.write(0x06);
-    Wire.write(0x7A);
-    Wire.write(0xDD);
-    Wire.endTransmission();
-    Wire.beginTransmission(0x26);
-    Wire.write(0x02);
-    Wire.write(0x04); // Backlight on
-    Wire.write(0x22); // G&B LEDs off
-    Wire.endTransmission();
-#endif
 
 #if defined(USE_SH1107)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of 128x128

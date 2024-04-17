@@ -666,9 +666,9 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
 
 void CannedMessageModule::loadProtoForModule()
 {
-    if (!nodeDB->loadProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,
-                           sizeof(meshtastic_CannedMessageModuleConfig), &meshtastic_CannedMessageModuleConfig_msg,
-                           &cannedMessageModuleConfig)) {
+    if (nodeDB->loadProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,
+                          sizeof(meshtastic_CannedMessageModuleConfig), &meshtastic_CannedMessageModuleConfig_msg,
+                          &cannedMessageModuleConfig) != LoadFileResult::SUCCESS) {
         installDefaultCannedMessageModuleConfig();
     }
 }
