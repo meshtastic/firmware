@@ -494,13 +494,9 @@ void setup()
  * "found".
  */
 
-// Only one supported I2C RGB LED currently (plus common anode RGB LED used by the unPhone)
+// Only one supported RGB LED currently
 #ifdef HAS_NCP5623
     rgb_found = i2cScanner->find(ScanI2C::DeviceType::NCP5623);
-#endif
-
-#ifdef UNPHONE
-    rgb_found.type = ScanI2C::DeviceType::RGBLED_CA;
 #endif
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
