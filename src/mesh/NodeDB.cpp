@@ -813,6 +813,7 @@ size_t NodeDB::getNumOnlineMeshNodes(bool localOnly)
 }
 
 #include "MeshModule.h"
+#include "Throttle.h"
 
 /** Update position info for this node based on received position data
  */
@@ -907,8 +908,10 @@ bool NodeDB::updateUser(uint32_t nodeId, const meshtastic_User &p, uint8_t chann
         powerFSM.trigger(EVENT_NODEDB_UPDATED);
         notifyObservers(true); // Force an update whether or not our node counts have changed
 
-        // We just changed something important about the user, store our DB
-        saveToDisk(SEGMENT_DEVICESTATE);
+        // We just changed something about the user, store our DB
+        Throttle::execute(
+            &lastNodeDbSave, ONE_MINUTE_MS, []() { nodeDB->saveToDisk(SEGMENT_DEVICESTATE); },
+            []() { LOG_DEBUG("Deferring NodeDB saveToDisk for now, since we saved less than a minute ago\n"); });
     }
 
     return changed;
