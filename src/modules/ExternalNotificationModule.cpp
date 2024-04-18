@@ -145,20 +145,16 @@ int32_t ExternalNotificationModule::runOnce()
 #endif
 
 #ifdef UNPHONE
-            if (rgb_found.type == ScanI2C::RGBLED_CA) {
-                red = colorState & 4;   // Red enabled on colorState = 4,5,6,7
-                green = colorState & 2; // Green enabled on colorState = 2,3,6,7
-                blue = colorState & 1;  // Blue enabled on colorState = 1,3,5,7
-                unphone.rgb(red, green, blue);
-                LOG_DEBUG("RGB runOnce: %i, %i, %i\n", red, green, blue);
-
-                counter++; // tick on
-                if (counter > duration) {
-                    counter = 0;
-                    colorState++; // next color
-                    if (colorState > 7) {
-                        colorState = 1;
-                    }
+            red = colorState & 4;   // Red enabled on colorState = 4,5,6,7
+            green = colorState & 2; // Green enabled on colorState = 2,3,6,7
+            blue = colorState & 1;  // Blue enabled on colorState = 1,3,5,7
+            unphone.rgb(red, green, blue);
+            counter++; // tick on
+            if (counter > duration) {
+                counter = 0;
+                colorState++; // next color
+                if (colorState > 7) {
+                    colorState = 1;
                 }
             }
 #endif
@@ -209,6 +205,9 @@ void ExternalNotificationModule::setExternalOn(uint8_t index)
 
     switch (index) {
     case 1:
+#ifdef UNPHONE
+        unphone.vibe(true); // the unPhone's vibration motor is on a i2c GPIO expander
+#endif
         if (moduleConfig.external_notification.output_vibra)
             digitalWrite(moduleConfig.external_notification.output_vibra, true);
         break;
@@ -228,9 +227,7 @@ void ExternalNotificationModule::setExternalOn(uint8_t index)
     }
 #endif
 #ifdef UNPHONE
-    if (rgb_found.type == ScanI2C::RGBLED_CA) {
-        unphone.rgb(red, green, blue);
-    }
+    unphone.rgb(red, green, blue);
 #endif
 #ifdef T_WATCH_S3
     drv.go();
@@ -244,6 +241,9 @@ void ExternalNotificationModule::setExternalOff(uint8_t index)
 
     switch (index) {
     case 1:
+#ifdef UNPHONE
+        unphone.vibe(false); // the unPhone's vibration motor is on a i2c GPIO expander
+#endif
         if (moduleConfig.external_notification.output_vibra)
             digitalWrite(moduleConfig.external_notification.output_vibra, false);
         break;
@@ -266,12 +266,10 @@ void ExternalNotificationModule::setExternalOff(uint8_t index)
     }
 #endif
 #ifdef UNPHONE
-    if (rgb_found.type == ScanI2C::RGBLED_CA) {
-        red = 0;
-        green = 0;
-        blue = 0;
-        unphone.rgb(red, green, blue);
-    }
+    red = 0;
+    green = 0;
+    blue = 0;
+    unphone.rgb(red, green, blue);
 #endif
 #ifdef T_WATCH_S3
     drv.stop();
