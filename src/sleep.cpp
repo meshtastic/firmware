@@ -207,8 +207,8 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     // esp_wifi_stop();
     waitEnterSleep(skipPreflight);
 
-#ifdef NIMBLE_DEINIT_FOR_DEEPSLEEP
-    // Extra power saving on some devices
+#ifdef ARCH_ESP32
+    // Full shutdown of bluetooth hardware
     nimbleBluetooth->deinit();
 #endif
 

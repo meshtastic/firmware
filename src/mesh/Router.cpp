@@ -471,7 +471,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 
     // call modules here
     if (!skipHandle) {
-        MeshModule::callPlugins(*p, src);
+        MeshModule::callModules(*p, src);
 
 #if !MESHTASTIC_EXCLUDE_MQTT
         // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the packet

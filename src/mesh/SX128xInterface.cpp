@@ -280,7 +280,7 @@ template <typename T> bool SX128xInterface<T>::isChannelActive()
     result = lora.scanChannel();
     if (result == RADIOLIB_LORA_DETECTED)
         return true;
-    if (result != RADIOLIB_ERR_WRONG_MODEM)
+    if (result != RADIOLIB_CHANNEL_FREE)
         LOG_ERROR("Radiolib error %d when attempting SX128X scanChannel!\n", result);
     assert(result != RADIOLIB_ERR_WRONG_MODEM);
 

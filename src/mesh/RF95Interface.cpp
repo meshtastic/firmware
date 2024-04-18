@@ -215,7 +215,7 @@ bool RF95Interface::isChannelActive()
         // LOG_DEBUG("Channel is busy!\n");
         return true;
     }
-    if (result != RADIOLIB_ERR_WRONG_MODEM)
+    if (result != RADIOLIB_CHANNEL_FREE)
         LOG_ERROR("Radiolib error %d when attempting RF95 isChannelActive!\n", result);
     assert(result != RADIOLIB_ERR_WRONG_MODEM);
 
