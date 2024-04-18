@@ -666,9 +666,12 @@ void setup()
         DisplayDriverConfig displayConfig;
         char *panels[] = {"NOSCREEN", "ST7789", "ST7735", "ST7735S", "ILI9341", "HX8357D"};
         char *touch[] = {"NOTOUCH", "XPT2046", "STMPE610", "GT911", "FT5x06"};
+#ifdef USE_X11
         if (settingsMap[displayPanel] == no_screen /* x11 */) { // TODO: add x11 enum
             displayConfig.device(DisplayDriverConfig::device_t::X11);
-        } else {
+        } else
+#endif
+        {
             displayConfig.device(DisplayDriverConfig::device_t::CUSTOM_TFT)
                 .panel(DisplayDriverConfig::panel_config_t{
                     .type = panels[settingsMap[displayPanel]],
@@ -686,21 +689,15 @@ void setup()
                 .bus(DisplayDriverConfig::bus_config_t{.freq_write = 40000000,
                                                        .freq_read = 16000000,
                                                        .spi{
-                                                           // .pin_sclk = 11,
-                                                           // .pin_miso = 9,
-                                                           // .pin_mosi = 10,
-                                                           .pin_dc = (int8_t)settingsMap[displayDC],
-                                                           .use_lock = true,
+                                                           .pin_dc = (int8_t)settingsMap[displayDC], .use_lock = true,
                                                            // .spi_host = 0 // TODO:
                                                        }})
                 .touch(DisplayDriverConfig::touch_config_t{.type = touch[settingsMap[touchscreenModule]],
                                                            //.freq = 2500000,
                                                            .pin_int = (int16_t)settingsMap[touchscreenIRQ],
+                                                           .offset_rotation = 0, // TODO:
                                                            .spi{
                                                                .spi_host = 0, // TODO:
-                                                                              // .pin_sclk = 11,
-                                                                              // .pin_mosi = 10,
-                                                                              // .pin_miso = 9,
                                                            },
                                                            .pin_cs = (int16_t)settingsMap[touchscreenCS]})
                 .light(DisplayDriverConfig::light_config_t{
