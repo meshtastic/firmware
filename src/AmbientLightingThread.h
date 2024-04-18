@@ -25,8 +25,8 @@ class AmbientLightingThread : public concurrency::OSThread
         // moduleConfig.ambient_lighting.green = (myNodeInfo.my_node_num & 0x00FF00) >> 8;
         // moduleConfig.ambient_lighting.blue = myNodeInfo.my_node_num & 0x0000FF;
 
-        _type = type;
 #ifdef HAS_NCP5623
+        _type = type;
         if (_type == ScanI2C::DeviceType::NONE) {
             LOG_DEBUG("AmbientLightingThread disabling due to no RGB leds found on I2C bus\n");
             disable();
@@ -52,21 +52,38 @@ class AmbientLightingThread : public concurrency::OSThread
         LOG_DEBUG("AmbientLightingThread initializing\n");
         setLighting();
 #endif
+#ifdef RGBLED_RED
+        if (!moduleConfig.ambient_lighting.led_state) {
+            LOG_DEBUG("AmbientLightingThread disabling due to moduleConfig.ambient_lighting.led_state OFF\n");
+            disable();
+            return;
+        }
+        LOG_DEBUG("AmbientLightingThread initializing\n");
+        pinMode(RGBLED_RED, output);
+        pinMode(RGBLED_GREEN, output);
+        pinMode(RGBLED_BLUE, output);
+        setLighting();
+#endif
     }
 
   protected:
     int32_t runOnce() override
     {
-#if defined(HAS_NCP5623) || defined(UNPHONE)
-        if ((_type == ScanI2C::NCP5623 || _type == ScanI2C::RGBLED_CA) && moduleConfig.ambient_lighting.led_state) {
+#ifdef HAS_NCP5623
+        if (_type == ScanI2C::NCP5623 && moduleConfig.ambient_lighting.led_state) {
             setLighting();
             return 30000; // 30 seconds to reset from any animations that may have been running from Ext. Notification
-        } else {
-            return disable();
         }
-#else
-        return disable();
 #endif
+#ifdef UNPHONE
+        setLighting();
+        return 30000; // 30 seconds to reset from any animations that may have been running from Ext. Notification
+#endif
+#ifdef RGBLED_RED
+        setLighting();
+        return 30000; // 30 seconds to reset from any animations that may have been running from Ext. Notification
+#endif
+        return disable();
     }
 
   private:
@@ -79,14 +96,27 @@ class AmbientLightingThread : public concurrency::OSThread
         rgb.setRed(moduleConfig.ambient_lighting.red);
         rgb.setGreen(moduleConfig.ambient_lighting.green);
         rgb.setBlue(moduleConfig.ambient_lighting.blue);
-        LOG_DEBUG("Initializing Ambient lighting w/ current=%d, red=%d, green=%d, blue=%d\n",
+        LOG_DEBUG("Initializing NCP5623 Ambient lighting w/ current=%d, red=%d, green=%d, blue=%d\n",
                   moduleConfig.ambient_lighting.current, moduleConfig.ambient_lighting.red, moduleConfig.ambient_lighting.green,
                   moduleConfig.ambient_lighting.blue);
 #endif
 #ifdef UNPHONE
         unphone.rgb(moduleConfig.ambient_lighting.red, moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
-        LOG_DEBUG("Initializing Ambient lighting w/ red=%d, green=%d, blue=%d\n", moduleConfig.ambient_lighting.red,
+        LOG_DEBUG("Initializing unPhone Ambient lighting w/ red=%d, green=%d, blue=%d\n", moduleConfig.ambient_lighting.red,
                   moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
+#endif
+#ifdef RGBLED_CA
+        analogWrite(RGBLED_RED, 255 - moduleConfig.ambient_lighting.red);
+        analogWrite(RGBLED_GREEN, 255 - moduleConfig.ambient_lighting.green);
+        analogWrite(RGBLED_BLUE, 255 - moduleConfig.ambient_lighting.blue);
+        LOG_DEBUG("Initializing Ambient lighting RGB Common Anode w/ red=%d, green=%d, blue=%d\n",
+                  moduleConfig.ambient_lighting.red, moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
+#elifdef RGBLED_RED
+        analogWrite(RGBLED_RED, moduleConfig.ambient_lighting.red);
+        analogWrite(RGBLED_GREEN, moduleConfig.ambient_lighting.green);
+        analogWrite(RGBLED_BLUE, moduleConfig.ambient_lighting.blue);
+        LOG_DEBUG("Initializing Ambient lighting RGB Common Cathode w/ red=%d, green=%d, blue=%d\n",
+                  moduleConfig.ambient_lighting.red, moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
 #endif
     }
 };
