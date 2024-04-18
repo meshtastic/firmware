@@ -1,6 +1,7 @@
 #include "configuration.h"
 #include "main.h"
 #if ARCH_PORTDUINO
+#include "mesh_bus_spi.h"
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
@@ -339,7 +340,7 @@ static TFT_eSPI *tft = nullptr; // Invoke library, pins defined in User_Setup.h
 class LGFX : public lgfx::LGFX_Device
 {
     lgfx::Panel_LCD *_panel_instance;
-    lgfx::Bus_SPI _bus_instance;
+    lgfx::Mesh_Bus_SPI _bus_instance;
 
     lgfx::ITouch *_touch_instance;
 
@@ -356,6 +357,7 @@ class LGFX : public lgfx::LGFX_Device
             _panel_instance = new lgfx::Panel_ILI9341;
         auto buscfg = _bus_instance.config();
         buscfg.spi_mode = 0;
+        _bus_instance.spi_device(DisplaySPI, settingsStrings[displayspidev]);
 
         buscfg.pin_dc = settingsMap[displayDC]; // Set SPI DC pin number (-1 = disable)
 
@@ -411,8 +413,7 @@ class LGFX : public lgfx::LGFX_Device
     lgfx::Panel_HX8357D _panel_instance;
     lgfx::Bus_SPI _bus_instance;
 #if defined(USE_XPT2046)
-    lgfx::ITouch *_touch_instance;
-// lgfx::Touch_XPT2046 _touch_instance;
+    lgfx::Touch_XPT2046 _touch_instance;
 #endif
 
   public:
@@ -466,8 +467,7 @@ class LGFX : public lgfx::LGFX_Device
 #if defined(USE_XPT2046)
         {
             // Configure settings for touch control.
-            _touch_instance = new lgfx::Touch_XPT2046;
-            auto touch_cfg = _touch_instance->config();
+            auto touch_cfg = _touch_instance.config();
 
             touch_cfg.pin_cs = TOUCH_CS;
             touch_cfg.x_min = 0;
@@ -478,8 +478,8 @@ class LGFX : public lgfx::LGFX_Device
             touch_cfg.bus_shared = true;
             touch_cfg.offset_rotation = 1;
 
-            _touch_instance->config(touch_cfg);
-            //_panel_instance->setTouch(_touch_instance);
+            _touch_instance.config(touch_cfg);
+            _panel_instance.setTouch(&_touch_instance);
         }
 #endif
         setPanel(&_panel_instance);
@@ -495,6 +495,11 @@ static LGFX *tft = nullptr;
 #include "SPILock.h"
 #include "TFTDisplay.h"
 #include <SPI.h>
+
+#ifdef UNPHONE
+#include "unPhone.h"
+extern unPhone unphone;
+#endif
 
 TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY geometry, HW_I2C i2cBus)
 {
@@ -576,11 +581,7 @@ void TFTDisplay::sendCommand(uint8_t com)
         digitalWrite(VTFT_CTRL, LOW);
 #endif
 #ifdef UNPHONE
-        Wire.beginTransmission(0x26);
-        Wire.write(0x02);
-        Wire.write(0x04); // Backlight on
-        Wire.write(0x22); // G&B LEDs off
-        Wire.endTransmission();
+        unphone.backlight(true); // using unPhone library
 #endif
 #ifdef RAK14014
 #elif !defined(M5STACK)
@@ -612,11 +613,7 @@ void TFTDisplay::sendCommand(uint8_t com)
         digitalWrite(VTFT_CTRL, HIGH);
 #endif
 #ifdef UNPHONE
-        Wire.beginTransmission(0x26);
-        Wire.write(0x02);
-        Wire.write(0x00); // Backlight off
-        Wire.write(0x22); // G&B LEDs off
-        Wire.endTransmission();
+        unphone.backlight(false); // using unPhone library
 #endif
 #ifdef RAK14014
 #elif !defined(M5STACK)
@@ -690,11 +687,7 @@ bool TFTDisplay::connect()
     digitalWrite(ST7735_BL_V05, TFT_BACKLIGHT_ON);
 #endif
 #ifdef UNPHONE
-    Wire.beginTransmission(0x26);
-    Wire.write(0x02);
-    Wire.write(0x04); // Backlight on
-    Wire.write(0x22); // G&B LEDs off
-    Wire.endTransmission();
+    unphone.backlight(true); // using unPhone library
     LOG_INFO("Power to TFT Backlight\n");
 #endif
 

@@ -75,6 +75,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 
 // -----------------------------------------------------------------------------
+// Regulatory overrides for producing regional builds
+// -----------------------------------------------------------------------------
+
+// Define if region should override user saved region
+// #define LORA_REGIONCODE meshtastic_Config_LoRaConfig_RegionCode_SG_923
+
+// -----------------------------------------------------------------------------
 // Feature toggles
 // -----------------------------------------------------------------------------
 

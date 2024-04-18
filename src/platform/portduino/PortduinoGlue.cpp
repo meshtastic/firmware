@@ -15,6 +15,8 @@
 #include <map>
 #include <unistd.h>
 
+HardwareSPI *DisplaySPI;
+HardwareSPI *LoraSPI;
 std::map<configNames, int> settingsMap;
 std::map<configNames, std::string> settingsStrings;
 char *configPath = nullptr;
@@ -81,6 +83,7 @@ void portduinoSetup()
     settingsStrings[keyboardDevice] = "";
     settingsStrings[webserverrootpath] = "";
     settingsStrings[spidev] = "";
+    settingsStrings[displayspidev] = "";
 
     YAML::Node yamlConfig;
 
@@ -187,6 +190,9 @@ void portduinoSetup()
             settingsMap[displayOffsetY] = yamlConfig["Display"]["OffsetY"].as<int>(0);
             settingsMap[displayRotate] = yamlConfig["Display"]["Rotate"].as<bool>(false);
             settingsMap[displayInvert] = yamlConfig["Display"]["Invert"].as<bool>(false);
+            if (yamlConfig["Display"]["spidev"]) {
+                settingsStrings[displayspidev] = "/dev/" + yamlConfig["Display"]["spidev"].as<std::string>("spidev0.1");
+            }
         }
         settingsMap[touchscreenModule] = no_touchscreen;
         if (yamlConfig["Touchscreen"]) {
@@ -196,6 +202,9 @@ void portduinoSetup()
                 settingsMap[touchscreenModule] = stmpe610;
             settingsMap[touchscreenCS] = yamlConfig["Touchscreen"]["CS"].as<int>(-1);
             settingsMap[touchscreenIRQ] = yamlConfig["Touchscreen"]["IRQ"].as<int>(-1);
+            if (yamlConfig["Touchscreen"]["spidev"]) {
+                settingsStrings[touchscreenspidev] = "/dev/" + yamlConfig["Touchscreen"]["spidev"].as<std::string>("");
+            }
         }
         if (yamlConfig["Input"]) {
             settingsStrings[keyboardDevice] = (yamlConfig["Input"]["KeyboardDevice"]).as<std::string>("");
@@ -265,6 +274,26 @@ void portduinoSetup()
             initGPIOPin(settingsMap[touchscreenCS], gpioChipName);
         if (settingsMap[touchscreenIRQ] > 0)
             initGPIOPin(settingsMap[touchscreenIRQ], gpioChipName);
+    }
+
+    // if we specify a touchscreen dev, that is SPI.
+    // else if we specify a screen dev, that is SPI
+    // else if we specify a LoRa dev, that is SPI.
+    if (settingsStrings[touchscreenspidev] != "") {
+        SPI.begin(settingsStrings[touchscreenspidev].c_str());
+        DisplaySPI = new HardwareSPI;
+        DisplaySPI->begin(settingsStrings[displayspidev].c_str());
+        LoraSPI = new HardwareSPI;
+        LoraSPI->begin(settingsStrings[spidev].c_str());
+    } else if (settingsStrings[displayspidev] != "") {
+        SPI.begin(settingsStrings[displayspidev].c_str());
+        DisplaySPI = &SPI;
+        LoraSPI = new HardwareSPI;
+        LoraSPI->begin(settingsStrings[spidev].c_str());
+    } else {
+        SPI.begin(settingsStrings[spidev].c_str());
+        LoraSPI = &SPI;
+        DisplaySPI = &SPI;
     }
 
     return;
