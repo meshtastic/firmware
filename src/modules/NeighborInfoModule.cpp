@@ -42,7 +42,8 @@ NeighborInfoModule::NeighborInfoModule()
 
     if (moduleConfig.neighbor_info.enabled) {
         isPromiscuous = true; // Update neighbors from all packets
-        setIntervalFromNow(35 * 1000);
+        setIntervalFromNow(
+            Default::getConfiguredOrDefaultMs(moduleConfig.neighbor_info.update_interval, default_broadcast_interval_secs));
     } else {
         LOG_DEBUG("NeighborInfoModule is disabled\n");
         disable();
