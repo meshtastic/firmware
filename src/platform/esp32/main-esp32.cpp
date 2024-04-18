@@ -30,9 +30,10 @@ void setBluetoothEnable(bool enable)
         }
         if (enable && !nimbleBluetooth->isActive()) {
             nimbleBluetooth->setup();
-        } else if (!enable) {
-            nimbleBluetooth->shutdown();
         }
+        // For ESP32, no way to recover from bluetooth shutdown without reboot
+        // BLE advertising automatically stops when MCU enters light-sleep(?)
+        // For deep-sleep, shutdown hardware with nimbleBluetooth->deinit(). Requires reboot to reverse
     }
 }
 #else
