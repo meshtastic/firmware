@@ -268,7 +268,7 @@ void ExternalNotificationModule::setExternalOn(uint8_t index)
     analogWrite(RGBLED_RED, 255 - red);
     analogWrite(RGBLED_GREEN, 255 - green);
     analogWrite(RGBLED_BLUE, 255 - blue);
-#elifdef RGBLED_RED
+#elif defined(RGBLED_RED)
     analogWrite(RGBLED_RED, red);
     analogWrite(RGBLED_GREEN, green);
     analogWrite(RGBLED_BLUE, blue);
@@ -322,7 +322,7 @@ void ExternalNotificationModule::setExternalOff(uint8_t index)
     analogWrite(RGBLED_RED, 255 - red);
     analogWrite(RGBLED_GREEN, 255 - green);
     analogWrite(RGBLED_BLUE, 255 - blue);
-#elifdef RGBLED_RED
+#elif defined(RGBLED_RED)
     red = 0;
     green = 0;
     blue = 0;
