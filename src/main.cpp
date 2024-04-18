@@ -611,10 +611,12 @@ void setup()
     if (rgb_found.type != ScanI2C::DeviceType::NONE) {
         ambientLightingThread = new AmbientLightingThread(rgb_found.type);
     }
-#endif
-
 #ifdef UNPHONE
     ambientLightingThread = new AmbientLightingThread(rgb_found.type);
+#endif
+#ifdef RGBLED_RED
+    ambientLightingThread = new AmbientLightingThread(rgb_found.type);
+#endif
 #endif
 
 #ifdef T_WATCH_S3

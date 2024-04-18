@@ -59,9 +59,9 @@ class AmbientLightingThread : public concurrency::OSThread
             return;
         }
         LOG_DEBUG("AmbientLightingThread initializing\n");
-        pinMode(RGBLED_RED, output);
-        pinMode(RGBLED_GREEN, output);
-        pinMode(RGBLED_BLUE, output);
+        pinMode(RGBLED_RED, OUTPUT);
+        pinMode(RGBLED_GREEN, OUTPUT);
+        pinMode(RGBLED_BLUE, OUTPUT);
         setLighting();
 #endif
     }
@@ -111,7 +111,7 @@ class AmbientLightingThread : public concurrency::OSThread
         analogWrite(RGBLED_BLUE, 255 - moduleConfig.ambient_lighting.blue);
         LOG_DEBUG("Initializing Ambient lighting RGB Common Anode w/ red=%d, green=%d, blue=%d\n",
                   moduleConfig.ambient_lighting.red, moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
-#elifdef RGBLED_RED
+#elif defined(RGBLED_RED)
         analogWrite(RGBLED_RED, moduleConfig.ambient_lighting.red);
         analogWrite(RGBLED_GREEN, moduleConfig.ambient_lighting.green);
         analogWrite(RGBLED_BLUE, moduleConfig.ambient_lighting.blue);
