@@ -48,6 +48,16 @@ const uint8_t duration = 15;
 uint8_t counter = 0;
 #endif
 
+#ifdef RGBLED_RED
+uint8_t red = 0;
+uint8_t green = 0;
+uint8_t blue = 0;
+uint8_t colorState = 1;
+uint8_t brightnessIndex = 0;
+uint8_t brightnessValues[] = {0, 10, 20, 30, 50, 90, 160, 170}; // blue gets multiplied by 1.5
+bool ascending = true;
+#endif
+
 #ifndef PIN_BUZZER
 #define PIN_BUZZER false
 #endif
@@ -84,6 +94,7 @@ int32_t ExternalNotificationModule::runOnce()
     if (!moduleConfig.external_notification.enabled) {
         return INT32_MAX; // we don't need this thread here...
     } else {
+
         bool isPlaying = rtttl::isPlaying();
 #ifdef HAS_I2S
         isPlaying = rtttl::isPlaying() || audioThread->isPlaying();
@@ -152,6 +163,30 @@ int32_t ExternalNotificationModule::runOnce()
             counter++; // tick on
             if (counter > duration) {
                 counter = 0;
+                colorState++; // next color
+                if (colorState > 7) {
+                    colorState = 1;
+                }
+            }
+#endif
+
+#ifdef RGBLED_RED
+            red = (colorState & 4) ? brightnessValues[brightnessIndex] : 0;          // Red enabled on colorState = 4,5,6,7
+            green = (colorState & 2) ? brightnessValues[brightnessIndex] : 0;        // Green enabled on colorState = 2,3,6,7
+            blue = (colorState & 1) ? (brightnessValues[brightnessIndex] * 1.5) : 0; // Blue enabled on colorState = 1,3,5,7
+            analogWrite(RGBLED_RED, red);
+            analogWrite(RGBLED_GREEN, green);
+            analogWrite(RGBLED_BLUE, blue);
+            if (ascending) { // fade in
+                brightnessIndex++;
+                if (brightnessIndex == (sizeof(brightnessValues) - 1)) {
+                    ascending = false;
+                }
+            } else {
+                brightnessIndex--; // fade out
+            }
+            if (brightnessIndex == 0) {
+                ascending = true;
                 colorState++; // next color
                 if (colorState > 7) {
                     colorState = 1;
@@ -229,6 +264,15 @@ void ExternalNotificationModule::setExternalOn(uint8_t index)
 #ifdef UNPHONE
     unphone.rgb(red, green, blue);
 #endif
+#ifdef RGBLED_CA
+    analogWrite(RGBLED_RED, 255 - red);
+    analogWrite(RGBLED_GREEN, 255 - green);
+    analogWrite(RGBLED_BLUE, 255 - blue);
+#elifdef RGBLED_RED
+    analogWrite(RGBLED_RED, red);
+    analogWrite(RGBLED_GREEN, green);
+    analogWrite(RGBLED_BLUE, blue);
+#endif
 #ifdef T_WATCH_S3
     drv.go();
 #endif
@@ -270,6 +314,21 @@ void ExternalNotificationModule::setExternalOff(uint8_t index)
     green = 0;
     blue = 0;
     unphone.rgb(red, green, blue);
+#endif
+#ifdef RGBLED_CA
+    red = 0;
+    green = 0;
+    blue = 0;
+    analogWrite(RGBLED_RED, 255 - red);
+    analogWrite(RGBLED_GREEN, 255 - green);
+    analogWrite(RGBLED_BLUE, 255 - blue);
+#elifdef RGBLED_RED
+    red = 0;
+    green = 0;
+    blue = 0;
+    analogWrite(RGBLED_RED, red);
+    analogWrite(RGBLED_GREEN, green);
+    analogWrite(RGBLED_BLUE, blue);
 #endif
 #ifdef T_WATCH_S3
     drv.stop();

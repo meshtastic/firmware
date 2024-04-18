@@ -608,7 +608,7 @@ void setup()
 #endif
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
-    if (rgb_found.type != ScanI2C::DeviceType::NONE) {
+    if (rgb_found.type != ScanI2C::DeviceType::NONE || UNPHONE) {
         ambientLightingThread = new AmbientLightingThread(rgb_found.type);
     }
 #endif
