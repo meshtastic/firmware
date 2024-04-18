@@ -160,6 +160,7 @@ class NodeDB
     }
 
   private:
+    uint32_t lastNodeDbSave = 0; // when we last saved our db to flash
     /// Find a node in our DB, create an empty NodeInfoLite if missing
     meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
 
