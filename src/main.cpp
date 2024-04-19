@@ -245,6 +245,17 @@ void setup()
     // digitalWrite(PIN_POWER_EN1, INPUT);
 #endif
 
+#if defined(M5_PAPER)
+    pinMode(M5EPD_MAIN_PWR_PIN, OUTPUT);
+    pinMode(M5EPD_EXT_PWR_EN_PIN, OUTPUT);
+    pinMode(M5EPD_EPD_PWR_EN_PIN, OUTPUT);
+
+    digitalWrite(M5EPD_MAIN_PWR_PIN, HIGH);
+    delay(100);
+    digitalWrite(M5EPD_EXT_PWR_EN_PIN, 1);
+    digitalWrite(M5EPD_EPD_PWR_EN_PIN, 1);
+#endif
+
 #if defined(LORA_TCXO_GPIO)
     pinMode(LORA_TCXO_GPIO, OUTPUT);
     digitalWrite(LORA_TCXO_GPIO, HIGH);
