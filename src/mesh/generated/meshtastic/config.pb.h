@@ -324,35 +324,30 @@ typedef struct _meshtastic_Config_PositionConfig {
 /* Power Config\
  See [Power Config](/docs/settings/config/power) for additional power config details. */
 typedef struct _meshtastic_Config_PowerConfig {
-    /* If set, we are powered from a low-current source (i.e. solar), so even if it looks like we have power flowing in
- we should try to minimize power consumption as much as possible.
- YOU DO NOT NEED TO SET THIS IF YOU'VE set is_router (it is implied in that case).
- Advanced Option */
+    /* Description: Will sleep everything as much as possible, for the tracker and sensor role this will also include the lora radio. 
+ Don't use this setting if you want to use your device with the phone apps or are using a device without a user button.
+ Technical Details: Works for ESP32 devices and NRF52 devices in the Sensor or Tracker roles */
     bool is_power_saving;
-    /* If non-zero, the device will fully power off this many seconds after external power is removed. */
+    /* Description: If non-zero, the device will fully power off this many seconds after external power is removed. */
     uint32_t on_battery_shutdown_after_secs;
     /* Ratio of voltage divider for battery pin eg. 3.20 (R1=100k, R2=220k)
  Overrides the ADC_MULTIPLIER defined in variant for battery voltage calculation.
- Should be set to floating point value between 2 and 4
- Fixes issues on Heltec v2 */
+ https://meshtastic.org/docs/configuration/radio/power/#adc-multiplier-override
+ Should be set to floating point value between 2 and 6 */
     float adc_multiplier_override;
-    /* Wait Bluetooth Seconds
- The number of seconds for to wait before turning off BLE in No Bluetooth states
- 0 for default of 1 minute */
+    /* Description: The number of seconds for to wait before turning off BLE in No Bluetooth states
+  Technical Details: ESP32 Only 0 for default of 1 minute */
     uint32_t wait_bluetooth_secs;
     /* Super Deep Sleep Seconds
  While in Light Sleep if mesh_sds_timeout_secs is exceeded we will lower into super deep sleep
  for this value (default 1 year) or a button press
  0 for default of one year */
     uint32_t sds_secs;
-    /* Light Sleep Seconds
- In light sleep the CPU is suspended, LoRa radio is on, BLE is off an GPS is on
- ESP32 Only
- 0 for default of 300 */
+    /* Description: In light sleep the CPU is suspended, LoRa radio is on, BLE is off an GPS is on
+ Technical Details: ESP32 Only 0 for default of 300 */
     uint32_t ls_secs;
-    /* Minimum Wake Seconds
- While in light sleep when we receive packets on the LoRa radio we will wake and handle them and stay awake in no BLE mode for this value
- 0 for default of 10 seconds */
+    /* Description: While in light sleep when we receive packets on the LoRa radio we will wake and handle them and stay awake in no BLE mode for this value
+ Technical Details: ESP32 Only 0 for default of 10 seconds */
     uint32_t min_wake_secs;
     /* I2C address of INA_2XX to use for reading device battery voltage */
     uint8_t device_battery_ina_address;
