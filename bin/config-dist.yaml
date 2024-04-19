@@ -101,11 +101,13 @@ Display:
 #  Height: 240
 
 Touchscreen:
+### Note, at least for now, the touchscreen must have a CS pin defined, even if you let Linux manage the CS switching.
+
 #  Module: STMPE610
 #  CS: 7
 #  IRQ: 24
 
-#  Module: XPT2046
+#  Module: XPT2046 # Waveshare 2.8inch
 #  CS: 7
 #  IRQ: 17
 
