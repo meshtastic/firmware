@@ -184,8 +184,14 @@ static int32_t ledBlinker()
 
     setLed(ledOn);
 
-    // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
-    return powerStatus->getIsCharging() ? 1000 : (ledOn ? 1 : 1000);
+    // Blink steadily to indicate charging, otherwise blink sparsely
+    if (powerStatus->getIsCharging()) {
+        return LED_BLINK_INTERVAL_CHARGING;
+    } else if (ledOn) {
+        return LED_BLINK_TIME;
+    } else {
+        return (config.power.is_power_saving ? LED_BLINK_INTERVAL_POWERSAVE : LED_BLINK_INTERVAL) - LED_BLINK_TIME;
+    }
 }
 
 uint32_t timeLastPowered = 0;

@@ -140,6 +140,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // LED
 // -----------------------------------------------------------------------------
+#define LED_BLINK_TIME 1
+#define LED_BLINK_INTERVAL 1000
+#define LED_BLINK_INTERVAL_POWERSAVE 30000
+#define LED_BLINK_INTERVAL_CHARGING 1000
 #define NCP5623_ADDR 0x38
 
 // -----------------------------------------------------------------------------
