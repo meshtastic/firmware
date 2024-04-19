@@ -272,6 +272,7 @@ int32_t KbI2cBase::runOnce()
                 }
                 e.inputEvent = ANYKEY;
                 e.kbchar = c;
+                is_sym = false;
                 break;
             }
 
