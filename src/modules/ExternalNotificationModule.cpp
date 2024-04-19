@@ -57,8 +57,10 @@ bool ascending = true;
 */
 
 // Default configurations
-#ifdef EXT_NOTIFY_OUT
+#if defined(EXT_NOTIFY_OUT)
 #define EXT_NOTIFICATION_MODULE_OUTPUT EXT_NOTIFY_OUT
+#elif defined(LED_PIN)
+#define EXT_NOTIFICATION_MODULE_OUTPUT LED_PIN
 #else
 #define EXT_NOTIFICATION_MODULE_OUTPUT 0
 #endif

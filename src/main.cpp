@@ -693,6 +693,22 @@ void setup()
     // Now that the mesh service is created, create any modules
     setupModules();
 
+#if defined(LED_PIN) && !defined(EXT_NOTIFY_OUT)
+    // If blink LED was repurposed for external notifications module
+    if (moduleConfig.external_notification.enabled &&
+        (moduleConfig.external_notification.alert_message || moduleConfig.external_notification.alert_bell) &&
+        (moduleConfig.external_notification.output == LED_PIN || moduleConfig.external_notification.output == 0)) {
+
+        LOG_INFO("LED Blink disabled - Repurposed for external notifications module\n");
+        digitalWrite(LED_PIN, 0 ^ LED_INVERTED); // Turn off
+        delete ledPeriodic;                      // End the blink thread
+
+        // If user has default pin set, also set whether active high or active low
+        if (moduleConfig.external_notification.output == 0)
+            moduleConfig.external_notification.active = !LED_INVERTED;
+    }
+#endif
+
 // Do this after service.init (because that clears error_code)
 #ifdef HAS_PMU
     if (!pmu_found)
