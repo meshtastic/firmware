@@ -77,6 +77,7 @@ jobs:
           - board: station-g1
           - board: m5stack-core
           - board: m5stack-coreink
+          - board: m5stack-m5paper
           - board: nano-g1-explorer
           - board: chatter2
     uses: ./.github/workflows/build_esp32.yml
