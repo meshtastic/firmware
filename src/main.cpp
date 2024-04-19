@@ -613,7 +613,7 @@ void setup()
     }
 #ifdef UNPHONE
     ambientLightingThread = new AmbientLightingThread(rgb_found.type);
-#elifdef RGBLED_RED
+#elif defined(RGBLED_RED)
     ambientLightingThread = new AmbientLightingThread(rgb_found.type);
 #endif
 #endif
