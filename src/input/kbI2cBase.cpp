@@ -1,5 +1,4 @@
 #include "kbI2cBase.h"
-
 #include "configuration.h"
 #include "detect/ScanI2C.h"
 
@@ -212,11 +211,11 @@ int32_t KbI2cBase::runOnce()
                     e.kbchar = c;
                 }
                 break;
-            case 0x6d: //letter m. Modifier makes it mute notifications
+            case 0x6d: // letter m. Modifier makes it mute notifications
                 if (is_sym) {
                     is_sym = false;
                     e.inputEvent = ANYKEY;
-                    e.kbchar = 0xac; // mute notifications 
+                    e.kbchar = 0xac; // mute notifications
                 } else {
                     e.inputEvent = ANYKEY;
                     e.kbchar = c;
@@ -246,7 +245,7 @@ int32_t KbI2cBase::runOnce()
                 e.kbchar = 0xb7;
                 break;
             case 0xe0: // shift + mic button (This can be my modifier key)
-                //toggle moddifiers button.
+                // toggle moddifiers button.
                 is_sym = !is_sym;
                 break;
             case 0x90: // fn+r
