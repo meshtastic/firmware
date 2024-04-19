@@ -193,6 +193,35 @@ int32_t KbI2cBase::runOnce()
             e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
             e.source = this->_originName;
             switch (c) {
+            case 0x71: // This is the button q. If modifier and q pressed, it cancels the input
+                if (is_sym) {
+                    is_sym = false;
+                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL;
+                } else {
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = c;
+                }
+                break;
+            case 0x74: // letter t. if modifier and t pressed call 'tab'
+                if (is_sym) {
+                    is_sym = false;
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = 0x09; // TAB Scancode
+                } else {
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = c;
+                }
+                break;
+            case 0x6d: //letter m. Modifier makes it mute notifications
+                if (is_sym) {
+                    is_sym = false;
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = 0xac; // mute notifications 
+                } else {
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = c;
+                }
+                break;
             case 0x1b: // ESC
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL;
                 break;
@@ -215,6 +244,10 @@ int32_t KbI2cBase::runOnce()
             case 0xb7: // Right
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
                 e.kbchar = 0xb7;
+                break;
+            case 0xe0: // shift + mic button (This can be my modifier key)
+                //toggle moddifiers button.
+                is_sym = !is_sym;
                 break;
             case 0x90: // fn+r
             case 0x91: // fn+t
