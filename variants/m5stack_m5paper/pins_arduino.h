@@ -25,7 +25,6 @@ static const uint8_t MOSI = 12;
 static const uint8_t MISO = 13;
 static const uint8_t SCK = 14;
 
-
 static const uint8_t G0 = 0;
 static const uint8_t G1 = 1;
 static const uint8_t G2 = 2;
@@ -52,7 +51,6 @@ static const uint8_t G36 = 36;
 static const uint8_t G37 = 37;
 static const uint8_t G38 = 38;
 static const uint8_t G39 = 39;
-
 
 static const uint8_t DAC1 = 25;
 static const uint8_t DAC2 = 26;
