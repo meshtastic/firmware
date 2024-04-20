@@ -2,6 +2,7 @@
 
 #include "api/PacketAPI.h"
 #include "MeshService.h"
+#include "PowerFSM.h"
 #include "RadioInterface.h"
 
 PacketAPI *packetAPI = nullptr;
@@ -30,6 +31,9 @@ bool PacketAPI::receivePacket(void)
         isConnected = true;
         data_received = true;
 
+        powerFSM.trigger(EVENT_CONTACT_FROM_PHONE);
+        lastContactMsec = millis();
+
         meshtastic_ToRadio *mr;
         auto p = server->receivePacket()->move();
         int id = p->getPacketId();
@@ -49,6 +53,9 @@ bool PacketAPI::receivePacket(void)
             handleStartConfig();
             break;
         }
+        case meshtastic_ToRadio_heartbeat_tag:
+            LOG_DEBUG("Got client heartbeat\n");
+            break;
         default:
             LOG_ERROR("Error: unhandled meshtastic_ToRadio variant: %d\n", mr->which_payload_variant);
             break;
