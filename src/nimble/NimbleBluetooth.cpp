@@ -106,20 +106,26 @@ static NimbleBluetoothFromRadioCallback *fromRadioCallbacks;
 
 void NimbleBluetooth::shutdown()
 {
+    // No measurable power saving for ESP32 during light-sleep(?)
+#ifndef ARCH_ESP32
     // Shutdown bluetooth for minimum power draw
     LOG_INFO("Disable bluetooth\n");
-    // Bluefruit.Advertising.stop();
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->reset();
     pAdvertising->stop();
+#endif
+}
 
-#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0)
-    // Saving of ~1mA
-    // Probably applicable to other ESP32 boards - unverified
+// Proper shutdown for ESP32. Needs reboot to reverse.
+void NimbleBluetooth::deinit()
+{
+#ifdef ARCH_ESP32
+    LOG_INFO("Disable bluetooth until reboot\n");
     NimBLEDevice::deinit();
 #endif
 }
 
+// Has initial setup been completed
 bool NimbleBluetooth::isActive()
 {
     return bleServer;

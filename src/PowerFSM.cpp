@@ -17,6 +17,10 @@
 #include "sleep.h"
 #include "target_specific.h"
 
+#ifndef SLEEP_TIME
+#define SLEEP_TIME 30
+#endif
+
 /// Should we behave as if we have AC power now?
 static bool isPowered()
 {
@@ -81,7 +85,7 @@ static void lsIdle()
         // If some other service would stall sleep, don't let sleep happen yet
         if (doPreflightSleep()) {
             // Briefly come out of sleep long enough to blink the led once every few seconds
-            uint32_t sleepTime = 30;
+            uint32_t sleepTime = SLEEP_TIME;
 
             setLed(false); // Never leave led on while in light sleep
             esp_sleep_source_t wakeCause2 = doLightSleep(sleepTime * 1000LL);
@@ -102,18 +106,21 @@ static void lsIdle()
                 powerFSM.trigger(EVENT_SERIAL_CONNECTED);
                 break;
 
-            case ESP_SLEEP_WAKEUP_GPIO:
-                // GPIO wakeup is now used for all ESP32 devices during light sleep
-                powerFSM.trigger(EVENT_PRESS);
-                break;
-
             default:
-                // We woke for some other reason (device interrupt?)
-                LOG_INFO("wakeCause2 %d\n", wakeCause2);
+                // We woke for some other reason (button press, device IRQ interrupt)
 
-                // Let the NB state handle the IRQ (and that state will handle stuff like IRQs etc)
-                // we lie and say "wake timer" because the interrupt will be handled by the regular IRQ code
-                powerFSM.trigger(EVENT_WAKE_TIMER);
+#ifdef BUTTON_PIN
+                bool pressed = !digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
+#else
+                bool pressed = false;
+#endif
+                if (pressed) { // If we woke because of press, instead generate a PRESS event.
+                    powerFSM.trigger(EVENT_PRESS);
+                } else {
+                    // Otherwise let the NB state handle the IRQ (and that state will handle stuff like IRQs etc)
+                    // we lie and say "wake timer" because the interrupt will be handled by the regular IRQ code
+                    powerFSM.trigger(EVENT_WAKE_TIMER);
+                }
                 break;
             }
         } else {
@@ -178,10 +185,12 @@ static void powerEnter()
         screen->setOn(true);
         setBluetoothEnable(true);
         // within enter() the function getState() returns the state we came from
-        if (strcmp(powerFSM.getState()->name, "BOOT") != 0 && strcmp(powerFSM.getState()->name, "POWER") != 0 &&
+
+        // Mothballed: print change of power-state to device screen
+        /* if (strcmp(powerFSM.getState()->name, "BOOT") != 0 && strcmp(powerFSM.getState()->name, "POWER") != 0 &&
             strcmp(powerFSM.getState()->name, "DARK") != 0) {
             screen->print("Powered...\n");
-        }
+        }*/
     }
 }
 
@@ -198,8 +207,10 @@ static void powerExit()
 {
     screen->setOn(true);
     setBluetoothEnable(true);
-    if (!isPowered())
-        screen->print("Unpowered...\n");
+
+    // Mothballed: print change of power-state to device screen
+    /*if (!isPowered())
+        screen->print("Unpowered...\n");*/
 }
 
 static void onEnter()
