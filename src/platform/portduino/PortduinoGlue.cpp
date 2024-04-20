@@ -178,18 +178,31 @@ void portduinoSetup()
                 settingsMap[displayPanel] = st7735;
             else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ST7735S")
                 settingsMap[displayPanel] = st7735s;
+            else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ST7796")
+                settingsMap[displayPanel] = st7796;
             else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ILI9341")
                 settingsMap[displayPanel] = ili9341;
+            else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ILI9488")
+                settingsMap[displayPanel] = ili9488;
+            else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "HX8357D")
+                settingsMap[displayPanel] = hx8357d;
+            else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "X11")
+                settingsMap[displayPanel] = x11;
             settingsMap[displayHeight] = yamlConfig["Display"]["Height"].as<int>(0);
             settingsMap[displayWidth] = yamlConfig["Display"]["Width"].as<int>(0);
             settingsMap[displayDC] = yamlConfig["Display"]["DC"].as<int>(-1);
             settingsMap[displayCS] = yamlConfig["Display"]["CS"].as<int>(-1);
+            settingsMap[displayRGBOrder] = yamlConfig["Display"]["RGBOrder"].as<bool>(false);
             settingsMap[displayBacklight] = yamlConfig["Display"]["Backlight"].as<int>(-1);
+            settingsMap[displayBacklightInvert] = yamlConfig["Display"]["BacklightInvert"].as<bool>(false);
+            settingsMap[displayBacklightPWMChannel] = yamlConfig["Display"]["BacklightPWMChannel"].as<int>(-1);
             settingsMap[displayReset] = yamlConfig["Display"]["Reset"].as<int>(-1);
             settingsMap[displayOffsetX] = yamlConfig["Display"]["OffsetX"].as<int>(0);
             settingsMap[displayOffsetY] = yamlConfig["Display"]["OffsetY"].as<int>(0);
             settingsMap[displayRotate] = yamlConfig["Display"]["Rotate"].as<bool>(false);
+            settingsMap[displayOffsetRotate] = yamlConfig["Display"]["OffsetRotate"].as<int>(1);
             settingsMap[displayInvert] = yamlConfig["Display"]["Invert"].as<bool>(false);
+            settingsMap[displayBusFrequency] = yamlConfig["Display"]["BusFrequency"].as<int>(40000000);
             if (yamlConfig["Display"]["spidev"]) {
                 settingsStrings[displayspidev] = "/dev/" + yamlConfig["Display"]["spidev"].as<std::string>("spidev0.1");
             }
@@ -200,8 +213,14 @@ void portduinoSetup()
                 settingsMap[touchscreenModule] = xpt2046;
             else if (yamlConfig["Touchscreen"]["Module"].as<std::string>("") == "STMPE610")
                 settingsMap[touchscreenModule] = stmpe610;
+            else if (yamlConfig["Touchscreen"]["Module"].as<std::string>("") == "GT911")
+                settingsMap[touchscreenModule] = gt911;
+            else if (yamlConfig["Touchscreen"]["Module"].as<std::string>("") == "FT5x06")
+                settingsMap[touchscreenModule] = ft5x06;
             settingsMap[touchscreenCS] = yamlConfig["Touchscreen"]["CS"].as<int>(-1);
             settingsMap[touchscreenIRQ] = yamlConfig["Touchscreen"]["IRQ"].as<int>(-1);
+            settingsMap[touchscreenBusFrequency] = yamlConfig["Touchscreen"]["BusFrequency"].as<int>(1000000);
+            settingsMap[touchscreenRotate] = yamlConfig["Touchscreen"]["Rotate"].as<int>(-1);
             if (yamlConfig["Touchscreen"]["spidev"]) {
                 settingsStrings[touchscreenspidev] = "/dev/" + yamlConfig["Touchscreen"]["spidev"].as<std::string>("");
             }
