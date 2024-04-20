@@ -465,21 +465,22 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             cancelSending(p->from, p->id);
             skipHandle = true;
         }
-#if !MESHTASTIC_EXCLUDE_MQTT
-        // Publish received message to MQTT if we're not the original transmitter of the packet
-        if (!skipHandle && moduleConfig.mqtt.enabled && getFrom(p) != nodeDB->getNodeNum() && mqtt)
-            mqtt->onSend(*p_encrypted, *p, p->channel);
-#endif
-
     } else {
         printPacket("packet decoding failed or skipped (no PSK?)", p);
     }
 
-    packetPool.release(p_encrypted); // Release the encrypted packet
-
     // call modules here
-    if (!skipHandle)
-        MeshModule::callPlugins(*p, src);
+    if (!skipHandle) {
+        MeshModule::callModules(*p, src);
+
+#if !MESHTASTIC_EXCLUDE_MQTT
+        // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the packet
+        if (decoded && moduleConfig.mqtt.enabled && getFrom(p) != nodeDB->getNodeNum() && mqtt)
+            mqtt->onSend(*p_encrypted, *p, p->channel);
+#endif
+    }
+
+    packetPool.release(p_encrypted); // Release the encrypted packet
 }
 
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
