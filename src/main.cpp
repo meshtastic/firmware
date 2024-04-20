@@ -664,47 +664,43 @@ void setup()
 #ifdef PORTDUINO
     if (settingsMap[displayPanel] != no_screen) {
         DisplayDriverConfig displayConfig;
-        char *panels[] = {"NOSCREEN", "ST7789", "ST7735", "ST7735S", "ILI9341", "ILI9488", "ST7796", "HX8357D"};
+        char *panels[] = {"NOSCREEN", "X11", "ST7789", "ST7735", "ST7735S", "ST7796", "ILI9341", "ILI9488", "HX8357D"};
         char *touch[] = {"NOTOUCH", "XPT2046", "STMPE610", "GT911", "FT5x06"};
 #ifdef USE_X11
-        if (settingsMap[displayPanel] == no_screen /* x11 */) { // TODO: add x11 enum
+        if (settingsMap[displayPanel] == x11) {
             displayConfig.device(DisplayDriverConfig::device_t::X11);
         } else
 #endif
         {
             displayConfig.device(DisplayDriverConfig::device_t::CUSTOM_TFT)
-                .panel(DisplayDriverConfig::panel_config_t{
-                    .type = panels[settingsMap[displayPanel]],
-                    .panel_width = (uint16_t)settingsMap[displayWidth],
-                    .panel_height = (uint16_t)settingsMap[displayHeight],
-                    .rotation = (bool)settingsMap[displayRotate],
-                    .pin_cs = (int16_t)settingsMap[displayCS],
-                    .pin_rst = (int16_t)settingsMap[displayReset],
-                    .offset_x = (uint16_t)settingsMap[displayOffsetX],
-                    .offset_y = (uint16_t)settingsMap[displayOffsetY],
-                    .offset_rotation = 1, // TODO:
-                    .invert = settingsMap[displayInvert] ? true : false,
-                    .rgb_order = false // TODO:
-                })
-                .bus(DisplayDriverConfig::bus_config_t{.freq_write = 40000000,
+                .panel(DisplayDriverConfig::panel_config_t{.type = panels[settingsMap[displayPanel]],
+                                                           .panel_width = (uint16_t)settingsMap[displayWidth],
+                                                           .panel_height = (uint16_t)settingsMap[displayHeight],
+                                                           .rotation = (bool)settingsMap[displayRotate],
+                                                           .pin_cs = (int16_t)settingsMap[displayCS],
+                                                           .pin_rst = (int16_t)settingsMap[displayReset],
+                                                           .offset_x = (uint16_t)settingsMap[displayOffsetX],
+                                                           .offset_y = (uint16_t)settingsMap[displayOffsetY],
+                                                           .offset_rotation = (uint8_t)settingsMap[displayOffsetRotate],
+                                                           .invert = settingsMap[displayInvert] ? true : false,
+                                                           .rgb_order = (bool)settingsMap[displayRGBOrder]})
+                .bus(DisplayDriverConfig::bus_config_t{.freq_write = (uint32_t)settingsMap[displayBusFrequency],
                                                        .freq_read = 16000000,
                                                        .spi{
                                                            .pin_dc = (int8_t)settingsMap[displayDC], .use_lock = true,
                                                            // .spi_host = 0 // TODO:
                                                        }})
                 .touch(DisplayDriverConfig::touch_config_t{.type = touch[settingsMap[touchscreenModule]],
-                                                           //.freq = 2500000,
+                                                           .freq = (uint32_t)settingsMap[touchscreenBusFrequency],
                                                            .pin_int = (int16_t)settingsMap[touchscreenIRQ],
-                                                           .offset_rotation = 0, // TODO:
+                                                           .offset_rotation = (uint8_t)settingsMap[touchscreenRotate],
                                                            .spi{
                                                                .spi_host = 0, // TODO:
                                                            },
                                                            .pin_cs = (int16_t)settingsMap[touchscreenCS]})
-                .light(DisplayDriverConfig::light_config_t{
-                    .pin_bl = (int16_t)settingsMap[displayBacklight],
-                    .pwm_channel = -1, // TODO:
-                    .invert = false    // TODO:
-                });
+                .light(DisplayDriverConfig::light_config_t{.pin_bl = (int16_t)settingsMap[displayBacklight],
+                                                           .pwm_channel = (int8_t)settingsMap[displayBacklightPWMChannel],
+                                                           .invert = (bool)settingsMap[displayBacklightInvert]});
         }
         deviceScreen = &DeviceScreen::create(&displayConfig);
         PacketAPI::create(PacketServer::init());
