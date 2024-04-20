@@ -56,6 +56,8 @@ static const uint8_t SCK = 33;
 #define LED_PIN LED_BLUE
 
 #define PIN_VBAT WB_A0
+#define BATTERY_PIN PIN_VBAT
+#define ADC_CHANNEL ADC1_GPIO36_CHANNEL
 
 // https://docs.rakwireless.com/Product-Categories/WisBlock/RAK13300/
 
@@ -66,14 +68,14 @@ static const uint8_t SCK = 33;
 #define LORA_DIO3                                                                                                                \
     RADIOLIB_NC // Not connected on PCB, but internally on the TTGO SX1262/SX1268, if DIO3 is high the TXCO is enabled
 
-#undef RF95_SCK
-#define RF95_SCK SCK
-#undef RF95_MISO
-#define RF95_MISO MISO
-#undef RF95_MOSI
-#define RF95_MOSI MOSI
-#undef RF95_NSS
-#define RF95_NSS SS
+#undef LORA_SCK
+#define LORA_SCK SCK
+#undef LORA_MISO
+#define LORA_MISO MISO
+#undef LORA_MOSI
+#define LORA_MOSI MOSI
+#undef LORA_CS
+#define LORA_CS SS
 
 #define USE_SX1262
 #define SX126X_CS SS // NSS for SX126X

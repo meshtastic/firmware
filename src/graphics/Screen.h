@@ -20,7 +20,7 @@ class Screen
     void setOn(bool) {}
     void print(const char *) {}
     void doDeepSleep() {}
-    void forceDisplay() {}
+    void forceDisplay(bool forceUiUpdate = false) {}
     void startBluetoothPinScreen(uint32_t pin) {}
     void stopBluetoothPinScreen() {}
     void startRebootScreen() {}
@@ -47,6 +47,7 @@ class Screen
 #endif
 
 #include "EInkDisplay2.h"
+#include "EInkDynamicDisplay.h"
 #include "TFTDisplay.h"
 #include "TypedQueue.h"
 #include "commands.h"
@@ -71,6 +72,10 @@ class Screen
 #ifndef MILES_TO_FEET
 #define MILES_TO_FEET 5280
 #endif
+
+// Intuitive colors. E-Ink display is inverted from OLED(?)
+#define EINK_BLACK OLEDDISPLAY_COLOR::WHITE
+#define EINK_WHITE OLEDDISPLAY_COLOR::BLACK
 
 namespace graphics
 {
@@ -124,6 +129,8 @@ class Screen : public concurrency::OSThread
   public:
     explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
 
+    ~Screen();
+
     Screen(const Screen &) = delete;
     Screen &operator=(const Screen &) = delete;
 
@@ -136,14 +143,14 @@ class Screen : public concurrency::OSThread
     // Not thread safe - must be called before any other methods are called.
     void setup();
 
-    /// Turns the screen on/off.
-    void setOn(bool on)
+    /// Turns the screen on/off. Optionally, pass a custom screensaver frame for E-Ink
+    void setOn(bool on, FrameCallback einkScreensaver = NULL)
     {
         if (!on)
-            handleSetOn(
-                false); // We handle off commands immediately, because they might be called because the CPU is shutting down
+            // We handle off commands immediately, because they might be called because the CPU is shutting down
+            handleSetOn(false, einkScreensaver);
         else
-            enqueueCmd(ScreenCmd{.cmd = on ? Cmd::SET_ON : Cmd::SET_OFF});
+            enqueueCmd(ScreenCmd{.cmd = Cmd::SET_ON});
     }
 
     /**
@@ -311,18 +318,25 @@ class Screen : public concurrency::OSThread
     int handleInputEvent(const InputEvent *arg);
 
     /// Used to force (super slow) eink displays to draw critical frames
-    void forceDisplay();
+    void forceDisplay(bool forceUiUpdate = false);
 
     /// Draws our SSL cert screen during boot (called from WebServer)
     void setSSLFrames();
 
     void setWelcomeFrames();
 
+#ifdef USE_EINK
+    /// Draw an image to remain on E-Ink display after screen off
+    void setScreensaverFrames(FrameCallback einkScreensaver = NULL);
+#endif
+
   protected:
     /// Updates the UI.
     //
     // Called periodically from the main loop.
     int32_t runOnce() final;
+
+    bool isAUTOOled = false;
 
   private:
     struct ScreenCmd {
@@ -346,7 +360,7 @@ class Screen : public concurrency::OSThread
     }
 
     // Implementations of various commands, called from doTask().
-    void handleSetOn(bool on);
+    void handleSetOn(bool on, FrameCallback einkScreensaver = NULL);
     void handleOnPress();
     void handleShowNextFrame();
     void handleShowPrevFrame();
@@ -385,22 +399,10 @@ class Screen : public concurrency::OSThread
     DebugInfo debugInfo;
 
     /// Display device
+    OLEDDisplay *dispdev;
 
-#if defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SH1107_128_64)
-    SH1106Wire dispdev;
-#elif defined(USE_SSD1306)
-    SSD1306Wire dispdev;
-#elif defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(RAK14014)
-    TFTDisplay dispdev;
-#elif defined(USE_EINK)
-    EInkDisplay dispdev;
-#elif defined(USE_ST7567)
-    ST7567Wire dispdev;
-#else
-    AutoOLEDWire dispdev;
-#endif
     /// UI helper for rendering to frames and switching between them
-    OLEDDisplayUi ui;
+    OLEDDisplayUi *ui;
 };
 
 } // namespace graphics

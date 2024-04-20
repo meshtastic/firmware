@@ -71,12 +71,12 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
         i->second.nextTxMsec += iface->getPacketTime(p);
     }
 
-    /* Resend implicit ACKs for repeated packets (hop limit is the original setting) this way if an implicit ACK is dropped and a
-     * packet is resent we'll rebroadcast again. Resending real ACKs is omitted, as you might receive a packet multiple times due
-     * to flooding and flooding this ACK back to the original sender already adds redundancy. */
-    if (wasSeenRecently(p, false) && (p->original_hop_limit == p->hop_limit) && !MeshModule::currentReply &&
-        p->to != nodeDB.getNodeNum()) {
-        // retransmission on broadcast has hop_limit still equal to HOP_RELIABLE
+    /* Resend implicit ACKs for repeated packets (hopStart equals hopLimit);
+     * this way if an implicit ACK is dropped and a packet is resent we'll rebroadcast again.
+     * Resending real ACKs is omitted, as you might receive a packet multiple times due to flooding and
+     * flooding this ACK back to the original sender already adds redundancy. */
+    bool isRepeated = p->hop_start == 0 ? (p->hop_limit == HOP_RELIABLE) : (p->hop_start == p->hop_limit);
+    if (wasSeenRecently(p, false) && isRepeated && !MeshModule::currentReply && p->to != nodeDB->getNodeNum()) {
         LOG_DEBUG("Resending implicit ack for a repeated floodmsg\n");
         meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p);
         tosend->hop_limit--; // bump down the hop count
@@ -107,10 +107,11 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
             if (MeshModule::currentReply) {
                 LOG_DEBUG("Some other module has replied to this message, no need for a 2nd ack\n");
             } else if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
-                sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel);
+                sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, p->hop_start, p->hop_limit);
             } else {
                 // Send a 'NO_CHANNEL' error on the primary channel if want_ack packet destined for us cannot be decoded
-                sendAckNak(meshtastic_Routing_Error_NO_CHANNEL, getFrom(p), p->id, channels.getPrimaryIndex());
+                sendAckNak(meshtastic_Routing_Error_NO_CHANNEL, getFrom(p), p->id, channels.getPrimaryIndex(), p->hop_start,
+                           p->hop_limit);
             }
         }
 
@@ -167,12 +168,16 @@ bool ReliableRouter::stopRetransmission(GlobalPacketId key)
     auto old = findPendingPacket(key);
     if (old) {
         auto p = old->packet;
+        /* Only when we already transmitted a packet via LoRa, we will cancel the packet in the Tx queue
+          to avoid canceling a transmission if it was ACKed super fast via MQTT */
+        if (old->numRetransmissions < NUM_RETRANSMISSIONS - 1) {
+            // remove the 'original' (identified by originator and packet->id) from the txqueue and free it
+            cancelSending(getFrom(p), p->id);
+            // now free the pooled copy for retransmission too
+            packetPool.release(p);
+        }
         auto numErased = pending.erase(key);
         assert(numErased == 1);
-        // remove the 'original' (identified by originator and packet->id) from the txqueue and free it
-        cancelSending(getFrom(p), p->id);
-        // now free the pooled copy for retransmission too
-        packetPool.release(p);
         return true;
     } else
         return false;
@@ -228,7 +233,7 @@ int32_t ReliableRouter::doRetransmissions()
                         // Last retransmission, reset next_hop (fallback to FloodingRouter)
                         p.packet->next_hop = NO_NEXT_HOP_PREFERENCE;
                         // Also reset it in the nodeDB
-                        meshtastic_NodeInfoLite *sentTo = nodeDB.getMeshNode(p.packet->to);
+                        meshtastic_NodeInfoLite *sentTo = nodeDB->getMeshNode(p.packet->to);
                         if (sentTo) {
                             LOG_DEBUG("Resetting next hop for packet with dest 0x%x\n", p.packet->to);
                             sentTo->next_hop = NO_NEXT_HOP_PREFERENCE;

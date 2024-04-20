@@ -19,7 +19,7 @@ ErrorCode NextHopRouter::send(meshtastic_MeshPacket *p)
 bool NextHopRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 {
     if (wasSeenRecently(p)) { // Note: this will also add a recent packet record
-        if (p->next_hop == nodeDB.getLastByteOfNodeNum(getNodeNum())) {
+        if (p->next_hop == nodeDB->getLastByteOfNodeNum(getNodeNum())) {
             LOG_DEBUG("Ignoring incoming msg, because we've already seen it.\n");
         } else {
             LOG_DEBUG("Ignoring incoming msg, because we've already seen it and cancel any outgoing packets.\n");
@@ -41,7 +41,7 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
         // not 0 or ourselves (means implicit ACK or someone is relaying our ACK)
         if (p->from != 0 && p->from != ourNodeNum) {
             if (p->relay_node) {
-                meshtastic_NodeInfoLite *origTx = nodeDB.getMeshNode(p->from);
+                meshtastic_NodeInfoLite *origTx = nodeDB->getMeshNode(p->from);
                 if (origTx) {
                     LOG_DEBUG("Update next hop of 0x%x to 0x%x based on received DM or ACK.\n", p->from, p->relay_node);
                     origTx->next_hop = p->relay_node;
@@ -52,18 +52,9 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
 
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE) {
         if ((p->to != ourNodeNum) && (getFrom(p) != ourNodeNum)) {
-            if (p->next_hop == nodeDB.getLastByteOfNodeNum(ourNodeNum)) {
+            if (p->next_hop == nodeDB->getLastByteOfNodeNum(ourNodeNum)) {
                 meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
                 LOG_INFO("Relaying received next-hop message coming from %x\n", p->relay_node);
-
-                if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
-                    // If it is a traceRoute request, update the route that it went via me
-                    if (traceRouteModule && traceRouteModule->wantPacket(tosend))
-                        traceRouteModule->updateRoute(tosend);
-                    // If it is a neighborInfo packet, update last_sent_by_id
-                    if (neighborInfoModule && neighborInfoModule->wantPacket(tosend))
-                        neighborInfoModule->updateLastSentById(tosend);
-                }
 
                 tosend->hop_limit--; // bump down the hop count
                 NextHopRouter::send(tosend);
@@ -86,7 +77,7 @@ void NextHopRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtast
  */
 uint8_t NextHopRouter::getNextHop(NodeNum to, uint8_t relay_node)
 {
-    meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(to);
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(to);
     if (node) {
         // We are careful not to return the relay node as the next hop
         if (node->next_hop != relay_node) {

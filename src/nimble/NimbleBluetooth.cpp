@@ -1,7 +1,9 @@
-#include "NimbleBluetooth.h"
-#include "BluetoothCommon.h"
-#include "PowerFSM.h"
 #include "configuration.h"
+#if !MESHTASTIC_EXCLUDE_BLUETOOTH
+#include "BluetoothCommon.h"
+#include "NimbleBluetooth.h"
+#include "PowerFSM.h"
+
 #include "main.h"
 #include "mesh/PhoneAPI.h"
 #include "mesh/mesh-pb-constants.h"
@@ -104,14 +106,26 @@ static NimbleBluetoothFromRadioCallback *fromRadioCallbacks;
 
 void NimbleBluetooth::shutdown()
 {
+    // No measurable power saving for ESP32 during light-sleep(?)
+#ifndef ARCH_ESP32
     // Shutdown bluetooth for minimum power draw
     LOG_INFO("Disable bluetooth\n");
-    // Bluefruit.Advertising.stop();
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->reset();
     pAdvertising->stop();
+#endif
 }
 
+// Proper shutdown for ESP32. Needs reboot to reverse.
+void NimbleBluetooth::deinit()
+{
+#ifdef ARCH_ESP32
+    LOG_INFO("Disable bluetooth until reboot\n");
+    NimBLEDevice::deinit();
+#endif
+}
+
+// Has initial setup been completed
 bool NimbleBluetooth::isActive()
 {
     return bleServer;
@@ -186,7 +200,7 @@ void NimbleBluetooth::setupService()
     // Setup the battery service
     NimBLEService *batteryService = bleServer->createService(NimBLEUUID((uint16_t)0x180f)); // 0x180F is the Battery Service
     BatteryCharacteristic = batteryService->createCharacteristic( // 0x2A19 is the Battery Level characteristic)
-        (uint16_t)0x2a19, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+        (uint16_t)0x2a19, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY, 1);
 
     NimBLE2904 *batteryLevelDescriptor = (NimBLE2904 *)BatteryCharacteristic->createDescriptor((uint16_t)0x2904);
     batteryLevelDescriptor->setFormat(NimBLE2904::FORMAT_UINT8);
@@ -208,8 +222,10 @@ void NimbleBluetooth::startAdvertising()
 /// Given a level between 0-100, update the BLE attribute
 void updateBatteryLevel(uint8_t level)
 {
-    BatteryCharacteristic->setValue(&level, 1);
-    BatteryCharacteristic->notify();
+    if ((config.bluetooth.enabled == true) && bleServer && nimbleBluetooth->isConnected()) {
+        BatteryCharacteristic->setValue(&level, 1);
+        BatteryCharacteristic->notify();
+    }
 }
 
 void NimbleBluetooth::clearBonds()
@@ -225,3 +241,4 @@ void clearNVS()
     ESP.restart();
 #endif
 }
+#endif

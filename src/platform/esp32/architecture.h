@@ -106,11 +106,19 @@
 #elif defined(HELTEC_WSL_V3)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_WSL_V3
 #elif defined(HELTEC_WIRELESS_TRACKER)
+#ifdef HELTEC_TRACKER_V1_0
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER_V1_0
+#else
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_TRACKER
+#endif
+#elif defined(HELTEC_WIRELESS_PAPER_V1_0)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_PAPER_V1_0
 #elif defined(HELTEC_WIRELESS_PAPER)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_PAPER
 #elif defined(TLORA_T3S3_V1)
 #define HW_VENDOR meshtastic_HardwareModel_TLORA_T3_S3
+#elif defined(CDEBYTE_ELORA_S3)
+#define HW_VENDOR meshtastic_HardwareModel_CDEBYTE_ELORA_S3
 #elif defined(BETAFPV_2400_TX)
 #define HW_VENDOR meshtastic_HardwareModel_BETAFPV_2400_TX
 #elif defined(NANO_G1_EXPLORER)
@@ -119,20 +127,38 @@
 #define HW_VENDOR meshtastic_HardwareModel_BETAFPV_900_NANO_TX
 #elif defined(PICOMPUTER_S3)
 #define HW_VENDOR meshtastic_HardwareModel_PICOMPUTER_S3
+#elif defined(ESP32_S3_PICO)
+#define HW_VENDOR meshtastic_HardwareModel_ESP32_S3_PICO
+#elif defined(SENSELORA_S3)
+#define HW_VENDOR meshtastic_HardwareModel_SENSELORA_S3
 #elif defined(HELTEC_HT62)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_HT62
+#elif defined(CHATTER_2)
+#define HW_VENDOR meshtastic_HardwareModel_CHATTER_2
+#elif defined(STATION_G2)
+#define HW_VENDOR meshtastic_HardwareModel_STATION_G2
+#elif defined(UNPHONE)
+#define HW_VENDOR meshtastic_HardwareModel_UNPHONE
 #endif
 
 // -----------------------------------------------------------------------------
 // LoRa SPI
 // -----------------------------------------------------------------------------
 
-// NRF52 boards will define this in variant.h
-#ifndef RF95_SCK
-#define RF95_SCK 5
-#define RF95_MISO 19
-#define RF95_MOSI 27
-#define RF95_NSS 18
+// If an SPI-related pin used by the LoRa module isn't defined, use the conventional pin number for it.
+// FIXME: these pins should really be defined in each variant.h file to prevent breakages if the defaults change, currently many
+// ESP32 variants don't define these pins in their variant.h file.
+#ifndef LORA_SCK
+#define LORA_SCK 5
+#endif
+#ifndef LORA_MISO
+#define LORA_MISO 19
+#endif
+#ifndef LORA_MOSI
+#define LORA_MOSI 27
+#endif
+#ifndef LORA_CS
+#define LORA_CS 18
 #endif
 
-#define SERIAL0_RX_GPIO 3 // Always GPIO3 on ESP32
+#define SERIAL0_RX_GPIO 3 // Always GPIO3 on ESP32 // FIXME: may be different on ESP32-S3, etc.

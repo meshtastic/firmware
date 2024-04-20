@@ -3,6 +3,10 @@
 #include "error.h"
 #include "mesh/NodeDB.h"
 
+#if ARCH_PORTDUINO
+#include "PortduinoGlue.h"
+#endif
+
 // Particular boards might define a different max power based on what their hardware can do
 #ifndef SX128X_MAX_POWER
 #define SX128X_MAX_POWER 13
@@ -13,7 +17,7 @@ SX128xInterface<T>::SX128xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs
                                     RADIOLIB_PIN_TYPE busy)
     : RadioLibInterface(hal, cs, irq, rst, busy, &lora), lora(&module)
 {
-    LOG_WARN("SX128xInterface(cs=%d, irq=%d, rst=%d, busy=%d)\n", cs, irq, rst, busy);
+    LOG_DEBUG("SX128xInterface(cs=%d, irq=%d, rst=%d, busy=%d)\n", cs, irq, rst, busy);
 }
 
 /// Initialise the Driver transport hardware and software.
@@ -22,8 +26,8 @@ SX128xInterface<T>::SX128xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs
 template <typename T> bool SX128xInterface<T>::init()
 {
 #ifdef SX128X_POWER_EN
-    digitalWrite(SX128X_POWER_EN, HIGH);
     pinMode(SX128X_POWER_EN, OUTPUT);
+    digitalWrite(SX128X_POWER_EN, HIGH);
 #endif
 
 #ifdef RF95_FAN_EN
@@ -31,13 +35,24 @@ template <typename T> bool SX128xInterface<T>::init()
     digitalWrite(RF95_FAN_EN, 1);
 #endif
 
+#if ARCH_PORTDUINO
+    if (settingsMap[rxen] != RADIOLIB_NC) {
+        pinMode(settingsMap[rxen], OUTPUT);
+        digitalWrite(settingsMap[rxen], LOW); // Set low before becoming an output
+    }
+    if (settingsMap[txen] != RADIOLIB_NC) {
+        pinMode(settingsMap[txen], OUTPUT);
+        digitalWrite(settingsMap[txen], LOW); // Set low before becoming an output
+    }
+#else
 #if defined(SX128X_RXEN) && (SX128X_RXEN != RADIOLIB_NC) // set not rx or tx mode
-    digitalWrite(SX128X_RXEN, LOW);                      // Set low before becoming an output
     pinMode(SX128X_RXEN, OUTPUT);
+    digitalWrite(SX128X_RXEN, LOW); // Set low before becoming an output
 #endif
 #if defined(SX128X_TXEN) && (SX128X_TXEN != RADIOLIB_NC)
-    digitalWrite(SX128X_TXEN, LOW);
     pinMode(SX128X_TXEN, OUTPUT);
+    digitalWrite(SX128X_TXEN, LOW);
+#endif
 #endif
 
     RadioLibInterface::init();
@@ -56,7 +71,7 @@ template <typename T> bool SX128xInterface<T>::init()
     if ((config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && (res == RADIOLIB_ERR_INVALID_FREQUENCY)) {
         LOG_WARN("Radio chip only supports 2.4GHz LoRa. Adjusting Region and rebooting.\n");
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_LORA_24;
-        nodeDB.saveToDisk(SEGMENT_CONFIG);
+        nodeDB->saveToDisk(SEGMENT_CONFIG);
         delay(2000);
 #if defined(ARCH_ESP32)
         ESP.restart();
@@ -74,6 +89,10 @@ template <typename T> bool SX128xInterface<T>::init()
 #if defined(SX128X_TXEN) && (SX128X_TXEN != RADIOLIB_NC) && defined(SX128X_RXEN) && (SX128X_RXEN != RADIOLIB_NC)
     if (res == RADIOLIB_ERR_NONE) {
         lora.setRfSwitchPins(SX128X_RXEN, SX128X_TXEN);
+    }
+#elif ARCH_PORTDUINO
+    if (res == RADIOLIB_ERR_NONE && settingsMap[rxen] != RADIOLIB_NC && settingsMap[txen] != RADIOLIB_NC) {
+        lora.setRfSwitchPins(settingsMap[rxen], settingsMap[txen]);
     }
 #endif
 
@@ -106,15 +125,14 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
-    // Hmm - seems to lower SNR when the signal levels are high.  Leaving off for now...
-    // TODO: Confirm gain registers are okay now
-    // err = lora.setRxGain(true);
-    // assert(err == RADIOLIB_ERR_NONE);
-
     err = lora.setSyncWord(syncWord);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting SX128X setSyncWord!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setPreambleLength(preambleLength);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting SX128X setPreambleLength!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setFrequency(getFreq());
@@ -125,6 +143,8 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
         power = SX128X_MAX_POWER;
 
     err = lora.setOutputPower(power);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting SX128X setOutputPower!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     startReceive(); // restart receiving
@@ -148,19 +168,24 @@ template <typename T> void SX128xInterface<T>::setStandby()
 
     int err = lora.standby();
 
-    if (err != RADIOLIB_ERR_NONE) {
+    if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("SX128x standby failed with error %d\n", err);
-    }
-
     assert(err == RADIOLIB_ERR_NONE);
-
+#if ARCH_PORTDUINO
+    if (settingsMap[rxen] != RADIOLIB_NC) {
+        digitalWrite(settingsMap[rxen], LOW);
+    }
+    if (settingsMap[txen] != RADIOLIB_NC) {
+        digitalWrite(settingsMap[txen], LOW);
+    }
+#else
 #if defined(SX128X_RXEN) && (SX128X_RXEN != RADIOLIB_NC) // we have RXEN/TXEN control - turn off RX and TX power
     digitalWrite(SX128X_RXEN, LOW);
 #endif
 #if defined(SX128X_TXEN) && (SX128X_TXEN != RADIOLIB_NC)
     digitalWrite(SX128X_TXEN, LOW);
 #endif
-
+#endif
     isReceiving = false; // If we were receiving, not any more
     activeReceiveStart = 0;
     disableInterrupt();
@@ -181,11 +206,21 @@ template <typename T> void SX128xInterface<T>::addReceiveMetadata(meshtastic_Mes
  */
 template <typename T> void SX128xInterface<T>::configHardwareForSend()
 {
+#if ARCH_PORTDUINO
+    if (settingsMap[txen] != RADIOLIB_NC) {
+        digitalWrite(settingsMap[txen], HIGH);
+    }
+    if (settingsMap[rxen] != RADIOLIB_NC) {
+        digitalWrite(settingsMap[rxen], LOW);
+    }
+
+#else
 #if defined(SX128X_TXEN) && (SX128X_TXEN != RADIOLIB_NC) // we have RXEN/TXEN control - turn on TX power / off RX power
     digitalWrite(SX128X_TXEN, HIGH);
 #endif
 #if defined(SX128X_RXEN) && (SX128X_RXEN != RADIOLIB_NC)
     digitalWrite(SX128X_RXEN, LOW);
+#endif
 #endif
 
     RadioLibInterface::configHardwareForSend();
@@ -202,18 +237,30 @@ template <typename T> void SX128xInterface<T>::startReceive()
 
     setStandby();
 
+#if ARCH_PORTDUINO
+    if (settingsMap[rxen] != RADIOLIB_NC) {
+        digitalWrite(settingsMap[rxen], HIGH);
+    }
+    if (settingsMap[txen] != RADIOLIB_NC) {
+        digitalWrite(settingsMap[txen], LOW);
+    }
+
+#else
 #if defined(SX128X_RXEN) && (SX128X_RXEN != RADIOLIB_NC) // we have RXEN/TXEN control - turn on RX power / off TX power
     digitalWrite(SX128X_RXEN, HIGH);
 #endif
 #if defined(SX128X_TXEN) && (SX128X_TXEN != RADIOLIB_NC)
     digitalWrite(SX128X_TXEN, LOW);
 #endif
+#endif
 
     // We use the PREAMBLE_DETECTED and HEADER_VALID IRQ flag to detect whether we are actively receiving
-    int err = lora.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF, RADIOLIB_SX128X_IRQ_RX_DEFAULT |
-                                                                    RADIOLIB_SX128X_IRQ_RADIOLIB_PREAMBLE_DETECTED |
-                                                                    RADIOLIB_SX128X_IRQ_HEADER_VALID);
+    int err =
+        lora.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF, RADIOLIB_SX128X_IRQ_RX_DEFAULT | RADIOLIB_SX128X_IRQ_PREAMBLE_DETECTED |
+                                                              RADIOLIB_SX128X_IRQ_HEADER_VALID);
 
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting SX128X startReceive!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = true;
@@ -233,7 +280,8 @@ template <typename T> bool SX128xInterface<T>::isChannelActive()
     result = lora.scanChannel();
     if (result == RADIOLIB_LORA_DETECTED)
         return true;
-
+    if (result != RADIOLIB_CHANNEL_FREE)
+        LOG_ERROR("Radiolib error %d when attempting SX128X scanChannel!\n", result);
     assert(result != RADIOLIB_ERR_WRONG_MODEM);
 
     return false;
@@ -243,7 +291,7 @@ template <typename T> bool SX128xInterface<T>::isChannelActive()
 template <typename T> bool SX128xInterface<T>::isActivelyReceiving()
 {
     uint16_t irq = lora.getIrqStatus();
-    bool detected = (irq & (RADIOLIB_SX128X_IRQ_HEADER_VALID | RADIOLIB_SX128X_IRQ_RADIOLIB_PREAMBLE_DETECTED));
+    bool detected = (irq & (RADIOLIB_SX128X_IRQ_HEADER_VALID | RADIOLIB_SX128X_IRQ_PREAMBLE_DETECTED));
 
     // Handle false detections
     if (detected) {

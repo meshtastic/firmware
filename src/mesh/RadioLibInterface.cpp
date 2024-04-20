@@ -22,6 +22,12 @@ void LockingArduinoHal::spiEndTransaction()
 
     ArduinoHal::spiEndTransaction();
 }
+#if ARCH_PORTDUINO
+void LockingArduinoHal::spiTransfer(uint8_t *out, size_t len, uint8_t *in)
+{
+    spi->transfer(out, in, len);
+}
+#endif
 
 RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                                      RADIOLIB_PIN_TYPE busy, PhysicalLayer *_iface)
@@ -313,7 +319,7 @@ void RadioLibInterface::handleReceiveInterrupt()
     // when this is called, we should be in receive mode - if we are not, just jump out instead of bombing. Possible Race
     // Condition?
     if (!isReceiving) {
-        LOG_DEBUG("*** WAS_ASSERT *** handleReceiveInterrupt called when not in receive mode\n");
+        LOG_ERROR("handleReceiveInterrupt called when not in receive mode, which shouldn't happen.\n");
         return;
     }
 
@@ -359,10 +365,11 @@ void RadioLibInterface::handleReceiveInterrupt()
             mp->to = h->to;
             mp->id = h->id;
             mp->channel = h->channel;
-            assert(HOP_MAX <= PACKET_FLAGS_HOP_MASK); // If hopmax changes, carefully check this code
-            mp->hop_limit = h->flags & PACKET_FLAGS_HOP_MASK;
-            mp->original_hop_limit = (h->flags & PACKET_FLAGS_ORIG_HOP_MASK) >> PACKET_FLAGS_ORIG_HOP_SHIFT;
+            assert(HOP_MAX <= PACKET_FLAGS_HOP_LIMIT_MASK); // If hopmax changes, carefully check this code
+            mp->hop_limit = h->flags & PACKET_FLAGS_HOP_LIMIT_MASK;
+            mp->hop_start = (h->flags & PACKET_FLAGS_HOP_START_MASK) >> PACKET_FLAGS_HOP_START_SHIFT;
             mp->want_ack = !!(h->flags & PACKET_FLAGS_WANT_ACK_MASK);
+            mp->via_mqtt = !!(h->flags & PACKET_FLAGS_VIA_MQTT_MASK);
             mp->next_hop = h->next_hop;
             mp->relay_node = h->relay_node;
 

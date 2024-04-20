@@ -1,4 +1,5 @@
 #pragma once
+#include <vector>
 
 #include "mesh/generated/meshtastic/admin.pb.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
@@ -16,7 +17,9 @@
 #define MAX_RX_TOPHONE 32
 
 /// max number of nodes allowed in the mesh
-#define MAX_NUM_NODES (member_size(meshtastic_DeviceState, node_db_lite) / member_size(meshtastic_DeviceState, node_db_lite[0]))
+#ifndef MAX_NUM_NODES
+#define MAX_NUM_NODES 100
+#endif
 
 /// Max number of channels allowed
 #define MAX_NUM_CHANNELS (member_size(meshtastic_ChannelFile, channels) / member_size(meshtastic_ChannelFile, channels[0]))

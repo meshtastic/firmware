@@ -1,4 +1,6 @@
 #pragma once
+#include "configuration.h"
+#if !MESHTASTIC_EXCLUDE_GPS
 
 #include "GPSStatus.h"
 #include "Observer.h"
@@ -21,10 +23,12 @@ struct uBloxGnssModelInfo {
 };
 
 typedef enum {
+    GNSS_MODEL_ATGM336H,
     GNSS_MODEL_MTK,
     GNSS_MODEL_UBLOX,
-    GNSS_MODEL_UC6850,
+    GNSS_MODEL_UC6580,
     GNSS_MODEL_UNKNOWN,
+    GNSS_MODEL_MTK_L76B
 } GnssModel_t;
 
 typedef enum {
@@ -70,7 +74,7 @@ class GPS : private concurrency::OSThread
 
     /**
      * hasValidLocation - indicates that the position variables contain a complete
-     *   GPS location, valid and fresh (< gps_update_interval + gps_attempt_time)
+     *   GPS location, valid and fresh (< gps_update_interval + position_broadcast_secs)
      */
     bool hasValidLocation = false; // default to false, until we complete our first read
 
@@ -92,25 +96,54 @@ class GPS : private concurrency::OSThread
 
   public:
     /** If !NULL we will use this serial port to construct our GPS */
+#if defined(RPI_PICO_WAVESHARE)
+    static SerialUART *_serial_gps;
+#else
     static HardwareSerial *_serial_gps;
-
+#endif
     static uint8_t _message_PMREQ[];
+    static uint8_t _message_PMREQ_10[];
     static const uint8_t _message_CFG_RXM_PSM[];
     static const uint8_t _message_CFG_RXM_ECO[];
     static const uint8_t _message_CFG_PM2[];
     static const uint8_t _message_GNSS_7[];
-    static const uint8_t _message_GNSS[];
-    static const uint8_t _message_JAM[];
+    static const uint8_t _message_GNSS_8[];
+    static const uint8_t _message_JAM_6_7[];
+    static const uint8_t _message_JAM_8[];
     static const uint8_t _message_NAVX5[];
+    static const uint8_t _message_NAVX5_8[];
+    static const uint8_t _message_NMEA[];
+    static const uint8_t _message_DISABLE_TXT_INFO[];
     static const uint8_t _message_1HZ[];
-    static const uint8_t _message_GGL[];
+    static const uint8_t _message_GLL[];
     static const uint8_t _message_GSA[];
     static const uint8_t _message_GSV[];
     static const uint8_t _message_VTG[];
     static const uint8_t _message_RMC[];
+    static const uint8_t _message_AID[];
     static const uint8_t _message_GGA[];
     static const uint8_t _message_PMS[];
     static const uint8_t _message_SAVE[];
+
+    // VALSET Commands for M10
+    static const uint8_t _message_VALSET_PM[];
+    static const uint8_t _message_VALSET_PM_RAM[];
+    static const uint8_t _message_VALSET_PM_BBR[];
+    static const uint8_t _message_VALSET_ITFM_RAM[];
+    static const uint8_t _message_VALSET_ITFM_BBR[];
+    static const uint8_t _message_VALSET_DISABLE_NMEA_RAM[];
+    static const uint8_t _message_VALSET_DISABLE_NMEA_BBR[];
+    static const uint8_t _message_VALSET_DISABLE_TXT_INFO_RAM[];
+    static const uint8_t _message_VALSET_DISABLE_TXT_INFO_BBR[];
+    static const uint8_t _message_VALSET_ENABLE_NMEA_RAM[];
+    static const uint8_t _message_VALSET_ENABLE_NMEA_BBR[];
+    static const uint8_t _message_VALSET_DISABLE_SBAS_RAM[];
+    static const uint8_t _message_VALSET_DISABLE_SBAS_BBR[];
+
+    // CASIC commands for ATGM336H
+    static const uint8_t _message_CAS_CFG_RST_FACTORY[];
+    static const uint8_t _message_CAS_CFG_NAVX_CONF[];
+    static const uint8_t _message_CAS_CFG_RATE_1HZ[];
 
     meshtastic_Position p = meshtastic_Position_init_default;
 
@@ -132,6 +165,9 @@ class GPS : private concurrency::OSThread
     // Disable the thread
     int32_t disable() override;
 
+    // toggle between enabled/disabled
+    void toggleGpsMode();
+
     void setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime);
 
     /// Returns true if we have acquired GPS lock.
@@ -143,13 +179,14 @@ class GPS : private concurrency::OSThread
     /// Return true if we are connected to a GPS
     bool isConnected() const { return hasGPS; }
 
-    bool isPowerSaving() const { return !config.position.gps_enabled; }
+    bool isPowerSaving() const { return config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED; }
 
     // Empty the input buffer as quickly as possible
     void clearBuffer();
 
     // Create a ublox packet for editing in memory
     uint8_t makeUBXPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_size, const uint8_t *msg);
+    uint8_t makeCASPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_size, const uint8_t *msg);
 
     // scratch space for creating ublox packets
     uint8_t UBXscratch[250] = {0};
@@ -159,6 +196,8 @@ class GPS : private concurrency::OSThread
     int getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t requestedID, uint32_t waitMillis);
     GPS_RESPONSE getACK(uint8_t c, uint8_t i, uint32_t waitMillis);
     GPS_RESPONSE getACK(const char *message, uint32_t waitMillis);
+
+    GPS_RESPONSE getACKCas(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis);
 
     /**
      * Switch the GPS into a mode where we are actively looking for a lock, or alternatively switch GPS into a low power mode
@@ -219,6 +258,7 @@ class GPS : private concurrency::OSThread
 
     // Calculate checksum
     void UBXChecksum(uint8_t *message, size_t length);
+    void CASChecksum(uint8_t *message, size_t length);
 
     /** Get how long we should stay looking for each aquisition
      */
@@ -247,3 +287,4 @@ class GPS : private concurrency::OSThread
 };
 
 extern GPS *gps;
+#endif // Exclude GPS

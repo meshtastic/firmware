@@ -29,7 +29,8 @@
   "debug": {
     "jlink_device": "nRF52840_xxAA",
     "onboard_tools": ["jlink"],
-    "svd_path": "nrf52840.svd"
+    "svd_path": "nrf52840.svd",
+    "openocd_target": "nrf52840-mdk-rs"
   },
   "frameworks": ["arduino"],
   "name": "TTGO eink (Adafruit BSP)",

@@ -5,6 +5,7 @@
 #include "concurrency/OSThread.h"
 #include "mesh/Channels.h"
 #include "mesh/generated/meshtastic/mqtt.pb.h"
+#include "mqtt/JSON.h"
 #if HAS_WIFI
 #include <WiFiClient.h>
 #define HAS_NETWORKING 1
@@ -48,14 +49,15 @@ class MQTT : private concurrency::OSThread
     MQTT();
 
     /**
-     * Publish a packet on the glboal MQTT server.
-     * This hook must be called **after** the packet is encrypted (including the channel being changed to a hash).
+     * Publish a packet on the global MQTT server.
+     * @param mp the encrypted packet to publish
+     * @param mp_decoded the decrypted packet to publish
      * @param chIndex the index of the channel for this message
      *
      * Note: for messages we are forwarding on the mesh that we can't find the channel for (because we don't have the keys), we
      * can not forward those messages to the cloud - because no way to find a global channel ID.
      */
-    void onSend(const meshtastic_MeshPacket &mp, ChannelIndex chIndex);
+    void onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &mp_decoded, ChannelIndex chIndex);
 
     /** Attempt to connect to server if necessary
      */
@@ -69,6 +71,10 @@ class MQTT : private concurrency::OSThread
 
     void onClientProxyReceive(meshtastic_MqttClientProxyMessage msg);
 
+    bool isEnabled() { return this->enabled; };
+
+    void start() { setIntervalFromNow(0); };
+
   protected:
     PointerQueue<meshtastic_ServiceEnvelope> mqttQueue;
 
@@ -77,10 +83,19 @@ class MQTT : private concurrency::OSThread
     virtual int32_t runOnce() override;
 
   private:
-    std::string statusTopic = "/2/stat/";
-    std::string cryptTopic = "/2/c/";   // msh/2/c/CHANNELID/NODEID
-    std::string jsonTopic = "/2/json/"; // msh/2/json/CHANNELID/NODEID
-    /** return true if we have a channel that wants uplink/downlink
+    std::string statusTopic = "/2/stat/"; // For "online"/"offline" message
+    std::string cryptTopic = "/2/e/";     // msh/2/e/CHANNELID/NODEID
+    std::string jsonTopic = "/2/json/";   // msh/2/json/CHANNELID/NODEID
+    std::string mapTopic = "/2/map/";     // For protobuf-encoded MapReport messages
+
+    // For map reporting (only applies when enabled)
+    const uint32_t default_map_position_precision = 14;         // defaults to max. offset of ~1459m
+    const uint32_t default_map_publish_interval_secs = 60 * 15; // defaults to 15 minutes
+    uint32_t last_report_to_map = 0;
+    uint32_t map_position_precision = default_map_position_precision;
+    uint32_t map_publish_interval_msecs = default_map_publish_interval_secs * 1000;
+
+    /** return true if we have a channel that wants uplink/downlink or map reporting is enabled
      */
     bool wantsLink() const;
 
@@ -99,6 +114,12 @@ class MQTT : private concurrency::OSThread
 
     void publishStatus();
     void publishQueuedMessages();
+
+    // Check if we should report unencrypted information about our node for consumption by a map
+    void perhapsReportToMap();
+
+    // returns true if this is a valid JSON envelope which we accept on downlink
+    bool isValidJsonEnvelope(JSONObject &json);
 
     /// Return 0 if sleep is okay, veto sleep if we are connected to pubsub server
     // int preflightSleepCb(void *unused = NULL) { return pubSub.connected() ? 1 : 0; }

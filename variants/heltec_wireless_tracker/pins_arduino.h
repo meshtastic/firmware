@@ -5,8 +5,8 @@
 #include <stdint.h>
 
 #define WIFI_LoRa_32_V3 true
-#define DISPLAY_HEIGHT 64
-#define DISPLAY_WIDTH 128
+#define DISPLAY_HEIGHT 80
+#define DISPLAY_WIDTH 160
 
 #define USB_VID 0x303a
 #define USB_PID 0x1001
@@ -26,8 +26,8 @@ static const uint8_t LED_BUILTIN = 18;
 static const uint8_t TX = 43;
 static const uint8_t RX = 44;
 
-static const uint8_t SDA = 41;
-static const uint8_t SCL = 42;
+static const uint8_t SDA = 45;
+static const uint8_t SCL = 46;
 
 static const uint8_t SS = 8;
 static const uint8_t MOSI = 10;

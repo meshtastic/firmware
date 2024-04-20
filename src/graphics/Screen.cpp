@@ -25,12 +25,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <OLEDDisplay.h>
 
 #include "DisplayFormatters.h"
+#if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
+#endif
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "error.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
+#include "graphics/ScreenFonts.h"
 #include "graphics/images.h"
 #include "input/TouchScreenImpl1.h"
 #include "main.h"
@@ -43,18 +46,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "sleep.h"
 #include "target_specific.h"
 
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
+#include "mesh/wifi/WiFiAPClient.h"
+#endif
+
 #ifdef ARCH_ESP32
 #include "esp_task_wdt.h"
-#include "mesh/http/WiFiAPClient.h"
 #include "modules/esp32/StoreForwardModule.h"
 #endif
 
-#ifdef OLED_RU
-#include "fonts/OLEDDisplayFontsRU.h"
-#endif
-
-#ifdef OLED_UA
-#include "fonts/OLEDDisplayFontsUA.h"
+#if ARCH_PORTDUINO
+#include "platform/portduino/PortduinoGlue.h"
 #endif
 
 using namespace meshtastic; /** @todo remove */
@@ -71,7 +73,7 @@ namespace graphics
 // #define SHOW_REDRAWS
 
 // A text message frame + debug frame + all the node infos
-static FrameCallback normalFrames[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
+FrameCallback *normalFrames;
 static uint32_t targetFramerate = IDLE_FRAMERATE;
 static char btPIN[16] = "888888";
 
@@ -92,8 +94,10 @@ std::vector<MeshModule *> moduleFrames;
 // Stores the last 4 of our hardware ID, to make finding the device for pairing easier
 static char ourId[5];
 
+#if HAS_GPS
 // GeoCoord object for the screen
 GeoCoord geoCoord;
+#endif
 
 #ifdef SHOW_REDRAWS
 static bool heartbeat = false;
@@ -104,31 +108,7 @@ static uint16_t displayWidth, displayHeight;
 #define SCREEN_WIDTH displayWidth
 #define SCREEN_HEIGHT displayHeight
 
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)) &&                                \
-    !defined(DISPLAY_FORCE_SMALL_FONTS)
-// The screen is bigger so use bigger fonts
-#define FONT_SMALL ArialMT_Plain_16  // Height: 19
-#define FONT_MEDIUM ArialMT_Plain_24 // Height: 28
-#define FONT_LARGE ArialMT_Plain_24  // Height: 28
-#else
-#ifdef OLED_RU
-#define FONT_SMALL ArialMT_Plain_10_RU
-#else
-#ifdef OLED_UA
-#define FONT_SMALL ArialMT_Plain_10_UA
-#else
-#define FONT_SMALL ArialMT_Plain_10 // Height: 13
-#endif
-#endif
-#define FONT_MEDIUM ArialMT_Plain_16 // Height: 19
-#define FONT_LARGE ArialMT_Plain_24  // Height: 28
-#endif
-
-#define fontHeight(font) ((font)[1] + 1) // height is position 1
-
-#define FONT_HEIGHT_SMALL fontHeight(FONT_SMALL)
-#define FONT_HEIGHT_MEDIUM fontHeight(FONT_MEDIUM)
-#define FONT_HEIGHT_LARGE fontHeight(FONT_LARGE)
+#include "graphics/ScreenFonts.h"
 
 #define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
 
@@ -143,7 +123,7 @@ static void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDispl
 
     // draw centered icon left to right and centered above the one line of app text
     display->drawXbm(x + (SCREEN_WIDTH - icon_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - icon_height) / 2 + 2,
-                     icon_width, icon_height, (const uint8_t *)icon_bits);
+                     icon_width, icon_height, icon_bits);
 
     display->setFont(FONT_MEDIUM);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -267,7 +247,7 @@ static void drawWelcomeScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
     if ((millis() / 10000) % 2) {
         display->drawString(x, y + FONT_HEIGHT_SMALL * 2 - 3, "Set the region using the");
         display->drawString(x, y + FONT_HEIGHT_SMALL * 3 - 3, "Meshtastic Android, iOS,");
-        display->drawString(x, y + FONT_HEIGHT_SMALL * 4 - 3, "Flasher or CLI client.");
+        display->drawString(x, y + FONT_HEIGHT_SMALL * 4 - 3, "Web or CLI clients.");
     } else {
         display->drawString(x, y + FONT_HEIGHT_SMALL * 2 - 3, "Visit meshtastic.org");
         display->drawString(x, y + FONT_HEIGHT_SMALL * 3 - 3, "for more information.");
@@ -282,9 +262,64 @@ static void drawWelcomeScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
 #ifdef USE_EINK
 /// Used on eink displays while in deep sleep
-static void drawSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+static void drawDeepSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    // Next frame should use full-refresh, and block while running, else device will sleep before async callback
+    EINK_ADD_FRAMEFLAG(display, COSMETIC);
+    EINK_ADD_FRAMEFLAG(display, BLOCKING);
+
+    LOG_DEBUG("Drawing deep sleep screen\n");
     drawIconScreen("Sleeping...", display, state, x, y);
+}
+
+/// Used on eink displays when screen updates are paused
+static void drawScreensaverOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
+{
+    LOG_DEBUG("Drawing screensaver overlay\n");
+
+    EINK_ADD_FRAMEFLAG(display, COSMETIC); // Take the opportunity for a full-refresh
+
+    // Config
+    display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    const char *pauseText = "Screen Paused";
+    const char *idText = owner.short_name;
+    constexpr uint16_t padding = 5;
+    constexpr uint8_t dividerGap = 1;
+    constexpr uint8_t imprecision = 5; // How far the box origins can drift from center. Combat burn-in.
+
+    // Dimensions
+    const uint16_t idTextWidth = display->getStringWidth(idText, strlen(idText));
+    const uint16_t pauseTextWidth = display->getStringWidth(pauseText, strlen(pauseText));
+    const uint16_t boxWidth = padding + idTextWidth + padding + padding + pauseTextWidth + padding;
+    const uint16_t boxHeight = padding + FONT_HEIGHT_SMALL + padding;
+
+    // Position
+    const int16_t boxLeft = (display->width() / 2) - (boxWidth / 2) + random(-imprecision, imprecision + 1);
+    // const int16_t boxRight = boxLeft + boxWidth - 1;
+    const int16_t boxTop = (display->height() / 2) - (boxHeight / 2 + random(-imprecision, imprecision + 1));
+    const int16_t boxBottom = boxTop + boxHeight - 1;
+    const int16_t idTextLeft = boxLeft + padding;
+    const int16_t idTextTop = boxTop + padding;
+    const int16_t pauseTextLeft = boxLeft + padding + idTextWidth + padding + padding;
+    const int16_t pauseTextTop = boxTop + padding;
+    const int16_t dividerX = boxLeft + padding + idTextWidth + padding;
+    const int16_t dividerTop = boxTop + 1 + dividerGap;
+    const int16_t dividerBottom = boxBottom - 1 - dividerGap;
+
+    // Draw: box
+    display->setColor(EINK_WHITE);
+    display->fillRect(boxLeft - 1, boxTop - 1, boxWidth + 2, boxHeight + 2); // Clear a slightly oversized area for the box
+    display->setColor(EINK_BLACK);
+    display->drawRect(boxLeft, boxTop, boxWidth, boxHeight);
+
+    // Draw: Text
+    display->drawString(idTextLeft, idTextTop, idText);
+    display->drawString(pauseTextLeft, pauseTextTop, pauseText);
+    display->drawString(pauseTextLeft + 1, pauseTextTop, pauseText); // Faux bold
+
+    // Draw: divider
+    display->drawLine(dividerX, dividerTop, dividerX, dividerBottom);
 }
 #endif
 
@@ -374,7 +409,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     static char tempBuf[237];
 
     const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
-    meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(getFrom(&mp));
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
     // LOG_DEBUG("drawing text message from 0x%x: %s\n", mp.from,
     // mp.decoded.variant.data.decoded.bytes);
 
@@ -412,7 +447,7 @@ static void drawWaypointFrame(OLEDDisplay *display, OLEDDisplayUiState *state, i
     static char tempBuf[237];
 
     meshtastic_MeshPacket &mp = devicestate.rx_waypoint;
-    meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(getFrom(&mp));
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
@@ -493,7 +528,7 @@ static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const NodeStat
 {
     char usersString[20];
     snprintf(usersString, sizeof(usersString), "%d/%d", nodeStatus->getNumOnline(), nodeStatus->getNumTotal());
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)) &&                                \
+#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS) || defined(HX8357_CS)) &&          \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
     display->drawFastImage(x, y + 3, 8, 8, imgUser);
 #else
@@ -503,7 +538,7 @@ static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const NodeStat
     if (config.display.heading_bold)
         display->drawString(x + 11, y - 2, usersString);
 }
-
+#if HAS_GPS
 // Draw GPS status summary
 static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
@@ -551,15 +586,20 @@ static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus 
     }
 }
 
-// Draw status when gps is disabled by PMU
+// Draw status when GPS is disabled or not present
 static void drawGPSpowerstat(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
-    String displayLine = "GPS disabled";
-    int16_t xPos = display->getStringWidth(displayLine);
-
-    if (!config.position.gps_enabled) {
-        display->drawString(x + xPos, y, displayLine);
+    String displayLine;
+    int pos;
+    if (y < FONT_HEIGHT_SMALL) { // Line 1: use short string
+        displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "No GPS" : "GPS off";
+        pos = SCREEN_WIDTH - display->getStringWidth(displayLine);
+    } else {
+        displayLine = config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT ? "GPS not present"
+                                                                                                       : "GPS is disabled";
+        pos = (SCREEN_WIDTH - display->getStringWidth(displayLine)) / 2;
     }
+    display->drawString(x + pos, y, displayLine);
 }
 
 static void drawGPSAltitude(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
@@ -587,7 +627,7 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
     String displayLine = "";
 
     if (!gps->getIsConnected() && !config.position.fixed_position) {
-        displayLine = "No GPS Module";
+        displayLine = "No GPS present";
         display->drawString(x + (SCREEN_WIDTH - (display->getStringWidth(displayLine))) / 2, y, displayLine);
     } else if (!gps->getHasLock() && !config.position.fixed_position) {
         displayLine = "No GPS Lock";
@@ -640,7 +680,7 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
         }
     }
 }
-
+#endif
 namespace
 {
 
@@ -795,16 +835,16 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     if (state->currentFrame != prevFrame) {
         prevFrame = state->currentFrame;
 
-        nodeIndex = (nodeIndex + 1) % nodeDB.getNumMeshNodes();
-        meshtastic_NodeInfoLite *n = nodeDB.getMeshNodeByIndex(nodeIndex);
-        if (n->num == nodeDB.getNodeNum()) {
+        nodeIndex = (nodeIndex + 1) % nodeDB->getNumMeshNodes();
+        meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(nodeIndex);
+        if (n->num == nodeDB->getNodeNum()) {
             // Don't show our node, just skip to next
-            nodeIndex = (nodeIndex + 1) % nodeDB.getNumMeshNodes();
-            n = nodeDB.getMeshNodeByIndex(nodeIndex);
+            nodeIndex = (nodeIndex + 1) % nodeDB->getNumMeshNodes();
+            n = nodeDB->getMeshNodeByIndex(nodeIndex);
         }
     }
 
-    meshtastic_NodeInfoLite *node = nodeDB.getMeshNodeByIndex(nodeIndex);
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(nodeIndex);
 
     display->setFont(FONT_SMALL);
 
@@ -842,7 +882,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     } else {
         strncpy(distStr, "? km", sizeof(distStr));
     }
-    meshtastic_NodeInfoLite *ourNode = nodeDB.getMeshNode(nodeDB.getNodeNum());
+    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     const char *fields[] = {username, distStr, signalStr, lastStr, NULL};
     int16_t compassX = 0, compassY = 0;
 
@@ -906,11 +946,50 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 }
 
 Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_OledType screenType, OLEDDISPLAY_GEOMETRY geometry)
-    : concurrency::OSThread("Screen"), address_found(address), model(screenType), geometry(geometry), cmdQueue(32),
-      dispdev(address.address, -1, -1, geometry, (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE),
-      ui(&dispdev)
+    : concurrency::OSThread("Screen"), address_found(address), model(screenType), geometry(geometry), cmdQueue(32)
 {
+    graphics::normalFrames = new FrameCallback[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
+#if defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SH1107_128_64)
+    dispdev = new SH1106Wire(address.address, -1, -1, geometry,
+                             (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+#elif defined(USE_SSD1306)
+    dispdev = new SSD1306Wire(address.address, -1, -1, geometry,
+                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+#elif defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(RAK14014) || defined(HX8357_CS)
+    dispdev = new TFTDisplay(address.address, -1, -1, geometry,
+                             (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+#elif defined(USE_EINK) && !defined(USE_EINK_DYNAMICDISPLAY)
+    dispdev = new EInkDisplay(address.address, -1, -1, geometry,
+                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+#elif defined(USE_EINK) && defined(USE_EINK_DYNAMICDISPLAY)
+    dispdev = new EInkDynamicDisplay(address.address, -1, -1, geometry,
+                                     (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+#elif defined(USE_ST7567)
+    dispdev = new ST7567Wire(address.address, -1, -1, geometry,
+                             (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+#elif ARCH_PORTDUINO
+    if (settingsMap[displayPanel] != no_screen) {
+        LOG_DEBUG("Making TFTDisplay!\n");
+        dispdev = new TFTDisplay(address.address, -1, -1, geometry,
+                                 (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+    } else {
+        dispdev = new AutoOLEDWire(address.address, -1, -1, geometry,
+                                   (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+        isAUTOOled = true;
+    }
+#else
+    dispdev = new AutoOLEDWire(address.address, -1, -1, geometry,
+                               (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+    isAUTOOled = true;
+#endif
+
+    ui = new OLEDDisplayUi(dispdev);
     cmdQueue.setReader(this);
+}
+
+Screen::~Screen()
+{
+    delete[] graphics::normalFrames;
 }
 
 /**
@@ -920,15 +999,17 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 void Screen::doDeepSleep()
 {
 #ifdef USE_EINK
-    static FrameCallback sleepFrames[] = {drawSleepScreen};
-    static const int sleepFrameCount = sizeof(sleepFrames) / sizeof(sleepFrames[0]);
-    ui.setFrames(sleepFrames, sleepFrameCount);
-    ui.update();
+    setOn(false, drawDeepSleepScreen);
+#ifdef PIN_EINK_EN
+    digitalWrite(PIN_EINK_EN, LOW); // power off backlight
 #endif
+#else
+    // Without E-Ink display:
     setOn(false);
+#endif
 }
 
-void Screen::handleSetOn(bool on)
+void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 {
     if (!useDisplay)
         return;
@@ -939,14 +1020,20 @@ void Screen::handleSetOn(bool on)
 #ifdef T_WATCH_S3
             PMU->enablePowerOutput(XPOWERS_ALDO2);
 #endif
-            dispdev.displayOn();
-            dispdev.displayOn();
+#if !ARCH_PORTDUINO
+            dispdev->displayOn();
+#endif
+            dispdev->displayOn();
             enabled = true;
             setInterval(0); // Draw ASAP
             runASAP = true;
         } else {
+#ifdef USE_EINK
+            // eInkScreensaver parameter is usually NULL (default argument), default frame used instead
+            setScreensaverFrames(einkScreensaver);
+#endif
             LOG_INFO("Turning off screen\n");
-            dispdev.displayOff();
+            dispdev->displayOff();
 #ifdef T_WATCH_S3
             PMU->disablePowerOutput(XPOWERS_ALDO2);
 #endif
@@ -963,56 +1050,62 @@ void Screen::setup()
     useDisplay = true;
 
 #ifdef AutoOLEDWire_h
-    dispdev.setDetected(model);
+    if (isAUTOOled)
+        static_cast<AutoOLEDWire *>(dispdev)->setDetected(model);
 #endif
 
 #ifdef USE_SH1107_128_64
-    dispdev.setSubtype(7);
+    static_cast<SH1106Wire *>(dispdev)->setSubtype(7);
 #endif
 
     // Initialising the UI will init the display too.
-    ui.init();
+    ui->init();
 
-    displayWidth = dispdev.width();
-    displayHeight = dispdev.height();
+    displayWidth = dispdev->width();
+    displayHeight = dispdev->height();
 
-    ui.setTimePerTransition(0);
+    ui->setTimePerTransition(0);
 
-    ui.setIndicatorPosition(BOTTOM);
+    ui->setIndicatorPosition(BOTTOM);
     // Defines where the first frame is located in the bar.
-    ui.setIndicatorDirection(LEFT_RIGHT);
-    ui.setFrameAnimation(SLIDE_LEFT);
+    ui->setIndicatorDirection(LEFT_RIGHT);
+    ui->setFrameAnimation(SLIDE_LEFT);
     // Don't show the page swipe dots while in boot screen.
-    ui.disableAllIndicators();
+    ui->disableAllIndicators();
     // Store a pointer to Screen so we can get to it from static functions.
-    ui.getUiState()->userData = this;
+    ui->getUiState()->userData = this;
 
     // Set the utf8 conversion function
-    dispdev.setFontTableLookupFunction(customFontTableLookup);
+    dispdev->setFontTableLookupFunction(customFontTableLookup);
 
     if (strlen(oemStore.oem_text) > 0)
         logo_timeout *= 2;
 
     // Add frames.
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST);
     static FrameCallback bootFrames[] = {drawBootScreen};
     static const int bootFrameCount = sizeof(bootFrames) / sizeof(bootFrames[0]);
-    ui.setFrames(bootFrames, bootFrameCount);
+    ui->setFrames(bootFrames, bootFrameCount);
     // No overlays.
-    ui.setOverlays(nullptr, 0);
+    ui->setOverlays(nullptr, 0);
 
     // Require presses to switch between frames.
-    ui.disableAutoTransition();
+    ui->disableAutoTransition();
 
     // Set up a log buffer with 3 lines, 32 chars each.
-    dispdev.setLogBuffer(3, 32);
+    dispdev->setLogBuffer(3, 32);
 
 #ifdef SCREEN_MIRROR
-    dispdev.mirrorScreen();
+    dispdev->mirrorScreen();
 #else
     // Standard behaviour is to FLIP the screen (needed on T-Beam). If this config item is set, unflip it, and thereby logically
     // flip it. If you have a headache now, you're welcome.
     if (!config.display.flip_screen) {
-        dispdev.flipScreenVertically();
+#if defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(RAK14014) || defined(HX8357_CS)
+        static_cast<TFTDisplay *>(dispdev)->flipScreenVertically();
+#else
+        dispdev->flipScreenVertically();
+#endif
     }
 #endif
 
@@ -1020,20 +1113,30 @@ void Screen::setup()
     uint8_t dmac[6];
     getMacAddr(dmac);
     snprintf(ourId, sizeof(ourId), "%02x%02x", dmac[4], dmac[5]);
+#if ARCH_PORTDUINO
+    handleSetOn(false); // force clean init
+#endif
 
     // Turn on the display.
     handleSetOn(true);
 
     // On some ssd1306 clones, the first draw command is discarded, so draw it
     // twice initially. Skip this for EINK Displays to save a few seconds during boot
-    ui.update();
+    ui->update();
 #ifndef USE_EINK
-    ui.update();
+    ui->update();
 #endif
     serialSinceMsec = millis();
 
-#if HAS_TOUCHSCREEN
-    touchScreenImpl1 = new TouchScreenImpl1(dispdev.getWidth(), dispdev.getHeight(), dispdev.getTouch);
+#if ARCH_PORTDUINO
+    if (settingsMap[touchscreenModule]) {
+        touchScreenImpl1 =
+            new TouchScreenImpl1(dispdev->getWidth(), dispdev->getHeight(), static_cast<TFTDisplay *>(dispdev)->getTouch);
+        touchScreenImpl1->init();
+    }
+#elif HAS_TOUCHSCREEN
+    touchScreenImpl1 =
+        new TouchScreenImpl1(dispdev->getWidth(), dispdev->getHeight(), static_cast<TFTDisplay *>(dispdev)->getTouch);
     touchScreenImpl1->init();
 #endif
 
@@ -1050,11 +1153,34 @@ void Screen::setup()
     MeshModule::observeUIEvents(&uiFrameEventObserver);
 }
 
-void Screen::forceDisplay()
+void Screen::forceDisplay(bool forceUiUpdate)
 {
     // Nasty hack to force epaper updates for 'key' frames.  FIXME, cleanup.
 #ifdef USE_EINK
-    dispdev.forceDisplay();
+    // If requested, make sure queued commands are run, and UI has rendered a new frame
+    if (forceUiUpdate) {
+        // No delay between UI frame rendering
+        setFastFramerate();
+
+        // Make sure all CMDs have run first
+        while (!cmdQueue.isEmpty())
+            runOnce();
+
+        // Ensure at least one frame has drawn
+        uint64_t startUpdate;
+        do {
+            startUpdate = millis(); // Handle impossibly unlikely corner case of a millis() overflow..
+            delay(10);
+            ui->update();
+        } while (ui->getUiState()->lastUpdate < startUpdate);
+
+        // Return to normal frame rate
+        targetFramerate = IDLE_FRAMERATE;
+        ui->setTargetFPS(targetFramerate);
+    }
+
+    // Tell EInk class to update the display
+    static_cast<EInkDisplay *>(dispdev)->forceDisplay();
 #endif
 }
 
@@ -1085,10 +1211,10 @@ int32_t Screen::runOnce()
             // Change frames.
             static FrameCallback bootOEMFrames[] = {drawOEMBootScreen};
             static const int bootOEMFrameCount = sizeof(bootOEMFrames) / sizeof(bootOEMFrames[0]);
-            ui.setFrames(bootOEMFrames, bootOEMFrameCount);
-            ui.update();
+            ui->setFrames(bootOEMFrames, bootOEMFrameCount);
+            ui->update();
 #ifndef USE_EINK
-            ui.update();
+            ui->update();
 #endif
             showingOEMBootScreen = false;
         }
@@ -1136,6 +1262,7 @@ int32_t Screen::runOnce()
             break;
         case Cmd::STOP_BLUETOOTH_PIN_SCREEN:
         case Cmd::STOP_BOOT_SCREEN:
+            EINK_ADD_FRAMEFLAG(dispdev, COSMETIC); // E-Ink: Explicitly use full-refresh for next frame
             setFrames();
             break;
         case Cmd::PRINT:
@@ -1161,16 +1288,16 @@ int32_t Screen::runOnce()
 
     // this must be before the frameState == FIXED check, because we always
     // want to draw at least one FIXED frame before doing forceDisplay
-    ui.update();
+    ui->update();
 
     // Switch to a low framerate (to save CPU) when we are not in transition
     // but we should only call setTargetFPS when framestate changes, because
     // otherwise that breaks animations.
-    if (targetFramerate != IDLE_FRAMERATE && ui.getUiState()->frameState == FIXED) {
-        // oldFrameState = ui.getUiState()->frameState;
+    if (targetFramerate != IDLE_FRAMERATE && ui->getUiState()->frameState == FIXED) {
+        // oldFrameState = ui->getUiState()->frameState;
         targetFramerate = IDLE_FRAMERATE;
 
-        ui.setTargetFPS(targetFramerate);
+        ui->setTargetFPS(targetFramerate);
         forceDisplay();
     }
 
@@ -1186,7 +1313,7 @@ int32_t Screen::runOnce()
     }
 
     // LOG_DEBUG("want fps %d, fixed=%d\n", targetFramerate,
-    // ui.getUiState()->frameState); If we are scrolling we need to be called
+    // ui->getUiState()->frameState); If we are scrolling we need to be called
     // soon, otherwise just 1 fps (to save CPU) We also ask to be called twice
     // as fast as we really need so that any rounding errors still result with
     // the correct framerate
@@ -1218,8 +1345,8 @@ void Screen::setSSLFrames()
     if (address_found.address) {
         // LOG_DEBUG("showing SSL frames\n");
         static FrameCallback sslFrames[] = {drawSSLScreen};
-        ui.setFrames(sslFrames, 1);
-        ui.update();
+        ui->setFrames(sslFrames, 1);
+        ui->update();
     }
 }
 
@@ -1233,6 +1360,63 @@ void Screen::setWelcomeFrames()
         setFrameImmediateDraw(frames);
     }
 }
+
+#ifdef USE_EINK
+/// Determine which screensaver frame to use, then set the FrameCallback
+void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
+{
+    // Remember current frame, restore position at power-on
+    uint8_t frameNumber = ui->getUiState()->currentFrame;
+
+    // Retain specified frame / overlay callback beyond scope of this method
+    static FrameCallback screensaverFrame;
+    static OverlayCallback screensaverOverlay;
+
+#if defined(HAS_EINK_ASYNCFULL) && defined(USE_EINK_DYNAMICDISPLAY)
+    // Join (await) a currently running async refresh, then run the post-update code.
+    // Avoid skipping of screensaver frame. Would otherwise be handled by NotifiedWorkerThread.
+    EINK_JOIN_ASYNCREFRESH(dispdev);
+#endif
+
+    // If: one-off screensaver frame passed as argument. Handles doDeepSleep()
+    if (einkScreensaver != NULL) {
+        screensaverFrame = einkScreensaver;
+        ui->setFrames(&screensaverFrame, 1);
+    }
+
+    // Else, display the usual "overlay" screensaver
+    else {
+        screensaverOverlay = drawScreensaverOverlay;
+        ui->setOverlays(&screensaverOverlay, 1);
+    }
+
+    // Request new frame, ASAP
+    setFastFramerate();
+    uint64_t startUpdate;
+    do {
+        startUpdate = millis(); // Handle impossibly unlikely corner case of a millis() overflow..
+        delay(1);
+        ui->update();
+    } while (ui->getUiState()->lastUpdate < startUpdate);
+
+    // Old EInkDisplay class
+#if !defined(USE_EINK_DYNAMICDISPLAY)
+    static_cast<EInkDisplay *>(dispdev)->forceDisplay(0); // Screen::forceDisplay(), but override rate-limit
+#endif
+
+    // Prepare now for next frame, shown when display wakes
+    ui->setOverlays(NULL, 0);       // Clear overlay
+    setFrames();                    // Return to normal display updates
+    ui->switchToFrame(frameNumber); // Attempt to return to same frame after power-on
+
+    // Pick a refresh method, for when display wakes
+#ifdef EINK_HASQUIRK_GHOSTING
+    EINK_ADD_FRAMEFLAG(dispdev, COSMETIC); // Really ugly to see ghosting from "screen paused"
+#else
+    EINK_ADD_FRAMEFLAG(dispdev, RESPONSIVE); // Really nice to wake screen with a fast-refresh
+#endif
+}
+#endif
 
 // restore our regular frame list
 void Screen::setFrames()
@@ -1248,7 +1432,7 @@ void Screen::setFrames()
 #endif
 
     // We don't show the node info our our node (if we have it yet - we should)
-    size_t numMeshNodes = nodeDB.getNumMeshNodes();
+    size_t numMeshNodes = nodeDB->getNumMeshNodes();
     if (numMeshNodes > 0)
         numMeshNodes--;
 
@@ -1294,7 +1478,7 @@ void Screen::setFrames()
     // call a method on debugInfoScreen object (for more details)
     normalFrames[numframes++] = &Screen::drawDebugInfoSettingsTrampoline;
 
-#ifdef ARCH_ESP32
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
     if (isWifiAvailable()) {
         // call a method on debugInfoScreen object (for more details)
         normalFrames[numframes++] = &Screen::drawDebugInfoWiFiTrampoline;
@@ -1303,8 +1487,8 @@ void Screen::setFrames()
 
     LOG_DEBUG("Finished building frames. numframes: %d\n", numframes);
 
-    ui.setFrames(normalFrames, numframes);
-    ui.enableAllIndicators();
+    ui->setFrames(normalFrames, numframes);
+    ui->enableAllIndicators();
 
     prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list
                     // just changed)
@@ -1316,6 +1500,7 @@ void Screen::handleStartBluetoothPinScreen(uint32_t pin)
 {
     LOG_DEBUG("showing bluetooth screen\n");
     showingNormalScreen = false;
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // E-Ink: Explicitly use fast-refresh for next frame
 
     static FrameCallback frames[] = {drawFrameBluetooth};
     snprintf(btPIN, sizeof(btPIN), "%06u", pin);
@@ -1324,8 +1509,8 @@ void Screen::handleStartBluetoothPinScreen(uint32_t pin)
 
 void Screen::setFrameImmediateDraw(FrameCallback *drawFrames)
 {
-    ui.disableAllIndicators();
-    ui.setFrames(drawFrames, 1);
+    ui->disableAllIndicators();
+    ui->setFrames(drawFrames, 1);
     setFastFramerate();
 }
 
@@ -1333,6 +1518,11 @@ void Screen::handleShutdownScreen()
 {
     LOG_DEBUG("showing shutdown screen\n");
     showingNormalScreen = false;
+#ifdef USE_EINK
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Use fast-refresh for next frame, no skip please
+    EINK_ADD_FRAMEFLAG(dispdev, BLOCKING);    // Edge case: if this frame is promoted to COSMETIC, wait for update
+    handleSetOn(true);                        // Ensure power-on to receive deep-sleep screensaver (PowerFSM should handle?)
+#endif
 
     auto frame = [](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
         drawFrameText(display, state, x, y, "Shutting down...");
@@ -1346,6 +1536,11 @@ void Screen::handleRebootScreen()
 {
     LOG_DEBUG("showing reboot screen\n");
     showingNormalScreen = false;
+#ifdef USE_EINK
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Use fast-refresh for next frame, no skip please
+    EINK_ADD_FRAMEFLAG(dispdev, BLOCKING);    // Edge case: if this frame is promoted to COSMETIC, wait for update
+    handleSetOn(true);                        // Power-on to show rebooting screen (PowerFSM should handle?)
+#endif
 
     auto frame = [](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
         drawFrameText(display, state, x, y, "Rebooting...");
@@ -1358,6 +1553,7 @@ void Screen::handleStartFirmwareUpdateScreen()
 {
     LOG_DEBUG("showing firmware screen\n");
     showingNormalScreen = false;
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // E-Ink: Explicitly use fast-refresh for next frame
 
     static FrameCallback frames[] = {drawFrameFirmware};
     setFrameImmediateDraw(frames);
@@ -1367,17 +1563,17 @@ void Screen::blink()
 {
     setFastFramerate();
     uint8_t count = 10;
-    dispdev.setBrightness(254);
+    dispdev->setBrightness(254);
     while (count > 0) {
-        dispdev.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-        dispdev.display();
+        dispdev->fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+        dispdev->display();
         delay(50);
-        dispdev.clear();
-        dispdev.display();
+        dispdev->clear();
+        dispdev->display();
         delay(50);
         count = count - 1;
     }
-    dispdev.setBrightness(brightness);
+    dispdev->setBrightness(brightness);
 }
 
 std::string Screen::drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint32_t seconds)
@@ -1405,15 +1601,15 @@ void Screen::handlePrint(const char *text)
     if (!useDisplay || !showingNormalScreen)
         return;
 
-    dispdev.print(text);
+    dispdev->print(text);
 }
 
 void Screen::handleOnPress()
 {
     // If screen was off, just wake it, otherwise advance to next frame
     // If we are in a transition, the press must have bounced, drop it.
-    if (ui.getUiState()->frameState == FIXED) {
-        ui.nextFrame();
+    if (ui->getUiState()->frameState == FIXED) {
+        ui->nextFrame();
         lastScreenTransition = millis();
         setFastFramerate();
     }
@@ -1423,8 +1619,8 @@ void Screen::handleShowPrevFrame()
 {
     // If screen was off, just wake it, otherwise go back to previous frame
     // If we are in a transition, the press must have bounced, drop it.
-    if (ui.getUiState()->frameState == FIXED) {
-        ui.previousFrame();
+    if (ui->getUiState()->frameState == FIXED) {
+        ui->previousFrame();
         lastScreenTransition = millis();
         setFastFramerate();
     }
@@ -1434,8 +1630,8 @@ void Screen::handleShowNextFrame()
 {
     // If screen was off, just wake it, otherwise advance to next frame
     // If we are in a transition, the press must have bounced, drop it.
-    if (ui.getUiState()->frameState == FIXED) {
-        ui.nextFrame();
+    if (ui->getUiState()->frameState == FIXED) {
+        ui->nextFrame();
         lastScreenTransition = millis();
         setFastFramerate();
     }
@@ -1450,7 +1646,7 @@ void Screen::setFastFramerate()
     // We are about to start a transition so speed up fps
     targetFramerate = SCREEN_TRANSITION_FRAMERATE;
 
-    ui.setTargetFPS(targetFramerate);
+    ui->setTargetFPS(targetFramerate);
     setInterval(0); // redraw ASAP
     runASAP = true;
 }
@@ -1470,8 +1666,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     char channelStr[20];
     {
         concurrency::LockGuard guard(&lock);
-        auto chName = channels.getPrimaryName();
-        snprintf(channelStr, sizeof(channelStr), "%s", chName);
+        snprintf(channelStr, sizeof(channelStr), "#%s", channels.getName(channels.getPrimaryIndex()));
     }
 
     // Display power status
@@ -1494,8 +1689,9 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     } else {
         drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 3, nodeStatus);
     }
+#if HAS_GPS
     // Display GPS status
-    if (!config.position.gps_enabled) {
+    if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         drawGPSpowerstat(display, x, y + 2, gpsStatus);
     } else {
         if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
@@ -1504,7 +1700,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             drawGPS(display, x + (SCREEN_WIDTH * 0.63), y + 3, gpsStatus);
         }
     }
-
+#endif
     display->setColor(WHITE);
     // Draw the channel name
     display->drawString(x, y + FONT_HEIGHT_SMALL, channelStr);
@@ -1513,7 +1709,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 #ifdef ARCH_ESP32
         if (millis() - storeForwardModule->lastHeartbeat >
             (storeForwardModule->heartbeatInterval * 1200)) { // no heartbeat, overlap a bit
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)) &&                                \
+#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS) || defined(HX8357_CS)) &&          \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
             display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8,
                                    imgQuestionL1);
@@ -1524,7 +1720,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                                    imgQuestion);
 #endif
         } else {
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)) &&                                \
+#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS) || defined(HX8357_CS)) &&          \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
             display->drawFastImage(x + SCREEN_WIDTH - 18 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 16, 8,
                                    imgSFL1);
@@ -1537,7 +1733,9 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         }
 #endif
     } else {
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)) &&                                \
+        // TODO: Raspberry Pi supports more than just the one screen size
+#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS) || defined(HX8357_CS) ||           \
+     ARCH_PORTDUINO) &&                                                                                                          \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
         display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8,
                                imgInfoL1);
@@ -1564,7 +1762,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 // Jm
 void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-#if HAS_WIFI
+#if HAS_WIFI && !defined(ARCH_PORTDUINO)
     const char *wifiName = config.network.wifi_ssid;
 
     display->setFont(FONT_SMALL);
@@ -1618,12 +1816,19 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Connection Failed");
     } else if (WiFi.status() == WL_IDLE_STATUS) {
         display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Idle ... Reconnecting");
-    } else {
+    }
+#ifdef ARCH_ESP32
+    else {
         // Codes:
         // https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/wifi.html#wi-fi-reason-code
         display->drawString(x, y + FONT_HEIGHT_SMALL * 1,
                             WiFi.disconnectReasonName(static_cast<wifi_err_reason_t>(getWifiDisconnectReason())));
     }
+#else
+    else {
+        display->drawString(x, y + FONT_HEIGHT_SMALL * 1, "Unkown status: " + String(WiFi.status()));
+    }
+#endif
 
     display->drawString(x, y + FONT_HEIGHT_SMALL * 2, "SSID: " + String(wifiName));
 
@@ -1691,7 +1896,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     // Show uptime as days, hours, minutes OR seconds
     std::string uptime = screen->drawTimeDelta(days, hours, minutes, seconds);
 
-    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice);
+    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // Display local timezone
     if (rtc_sec > 0) {
         long hms = rtc_sec % SEC_PER_DAY;
         // hms += tz.tz_dsttime * SEC_PER_HOUR;
@@ -1715,7 +1920,8 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     char chUtil[13];
     snprintf(chUtil, sizeof(chUtil), "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), y + FONT_HEIGHT_SMALL * 1, chUtil);
-    if (config.position.gps_enabled) {
+#if HAS_GPS
+    if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         // Line 3
         if (config.display.gps_format !=
             meshtastic_Config_DisplayConfig_GpsCoordinateFormat_DMS) // if DMS then don't draw altitude
@@ -1724,11 +1930,9 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
         // Line 4
         drawGPScoordinates(display, x, y + FONT_HEIGHT_SMALL * 3, gpsStatus);
     } else {
-        drawGPSpowerstat(display, x - (SCREEN_WIDTH / 4), y + FONT_HEIGHT_SMALL * 2, gpsStatus);
-#ifdef GPS_POWER_TOGGLE
-        display->drawString(x + 30, (y + FONT_HEIGHT_SMALL * 3), " by button");
-#endif
+        drawGPSpowerstat(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
     }
+#endif
     /* Display a heartbeat pixel that blinks every time the frame is redrawn */
 #ifdef SHOW_REDRAWS
     if (heartbeat)
@@ -1745,7 +1949,7 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
         if (showingNormalScreen && nodeStatus->getLastNumTotal() != nodeStatus->getNumTotal()) {
             setFrames(); // Regen the list of screens
         }
-        nodeDB.updateGUI = false;
+        nodeDB->updateGUI = false;
         break;
     }
 
@@ -1770,7 +1974,7 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
             setFastFramerate();
             // TODO: We might also want switch to corresponding frame,
             //       but we don't know the exact frame number.
-            // ui.switchToFrame(0);
+            // ui->switchToFrame(0);
         }
     }
 

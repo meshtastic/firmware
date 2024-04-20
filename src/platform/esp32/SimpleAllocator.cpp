@@ -58,7 +58,7 @@ void *operator new(size_t sz) throw(std::bad_alloc)
 void operator delete(void *ptr) throw()
 {
     if (activeAllocator)
-        LOG_DEBUG("Warning: leaking an active allocator object\n"); // We don't properly handle this yet
+        LOG_WARN("Leaking an active allocator object\n"); // We don't properly handle this yet
     else
         free(ptr);
 }
