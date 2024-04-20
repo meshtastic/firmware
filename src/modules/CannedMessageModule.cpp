@@ -401,7 +401,6 @@ int32_t CannedMessageModule::runOnce()
                 }
                 break;
             case 0x09: // tab
-            case 0x91: // alt+t for T-Deck that doesn't have a tab key
                 if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL) {
                     this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
                 } else if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
