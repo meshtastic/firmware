@@ -283,6 +283,8 @@ typedef struct _meshtastic_Config_DeviceConfig {
     bool disable_triple_click;
     /* POSIX Timezone definition string from https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv. */
     char tzdef[65];
+    /* If true, inhibit blinking LED at LED_PIN regularly */
+    bool status_led_off;
 } meshtastic_Config_DeviceConfig;
 
 /* Position Config */
@@ -580,7 +582,7 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_Config_init_default           {0, {meshtastic_Config_DeviceConfig_init_default}}
-#define meshtastic_Config_DeviceConfig_init_default {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, ""}
+#define meshtastic_Config_DeviceConfig_init_default {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0}
 #define meshtastic_Config_PositionConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _meshtastic_Config_PositionConfig_GpsMode_MIN}
 #define meshtastic_Config_PowerConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_default {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_default, ""}
@@ -589,7 +591,7 @@ extern "C" {
 #define meshtastic_Config_LoRaConfig_init_default {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0}
 #define meshtastic_Config_BluetoothConfig_init_default {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0}
 #define meshtastic_Config_init_zero              {0, {meshtastic_Config_DeviceConfig_init_zero}}
-#define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, ""}
+#define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0}
 #define meshtastic_Config_PositionConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _meshtastic_Config_PositionConfig_GpsMode_MIN}
 #define meshtastic_Config_PowerConfig_init_zero  {0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_zero {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_zero, ""}
@@ -610,6 +612,7 @@ extern "C" {
 #define meshtastic_Config_DeviceConfig_is_managed_tag 9
 #define meshtastic_Config_DeviceConfig_disable_triple_click_tag 10
 #define meshtastic_Config_DeviceConfig_tzdef_tag 11
+#define meshtastic_Config_DeviceConfig_status_led_off_tag 12
 #define meshtastic_Config_PositionConfig_position_broadcast_secs_tag 1
 #define meshtastic_Config_PositionConfig_position_broadcast_smart_enabled_tag 2
 #define meshtastic_Config_PositionConfig_fixed_position_tag 3
@@ -710,7 +713,8 @@ X(a, STATIC,   SINGULAR, UINT32,   node_info_broadcast_secs,   7) \
 X(a, STATIC,   SINGULAR, BOOL,     double_tap_as_button_press,   8) \
 X(a, STATIC,   SINGULAR, BOOL,     is_managed,        9) \
 X(a, STATIC,   SINGULAR, BOOL,     disable_triple_click,  10) \
-X(a, STATIC,   SINGULAR, STRING,   tzdef,            11)
+X(a, STATIC,   SINGULAR, STRING,   tzdef,            11) \
+X(a, STATIC,   SINGULAR, BOOL,     status_led_off,   12)
 #define meshtastic_Config_DeviceConfig_CALLBACK NULL
 #define meshtastic_Config_DeviceConfig_DEFAULT NULL
 
@@ -829,7 +833,7 @@ extern const pb_msgdesc_t meshtastic_Config_BluetoothConfig_msg;
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_CONFIG_PB_H_MAX_SIZE meshtastic_Config_size
 #define meshtastic_Config_BluetoothConfig_size   10
-#define meshtastic_Config_DeviceConfig_size      98
+#define meshtastic_Config_DeviceConfig_size      100
 #define meshtastic_Config_DisplayConfig_size     28
 #define meshtastic_Config_LoRaConfig_size        80
 #define meshtastic_Config_NetworkConfig_IpV4Config_size 20
