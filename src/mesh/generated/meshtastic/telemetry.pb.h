@@ -81,7 +81,7 @@ typedef struct _meshtastic_EnvironmentMetrics {
  Belongs to Air Quality but is not particle but VOC measurement. Other VOC values can also be put in here. */
     uint16_t iaq;
     /* RCWL9620 Doppler Radar Distance Sensor, used for water level detection. Float value in mm. */
-    float water_level;
+    float distance;
 } meshtastic_EnvironmentMetrics;
 
 /* Power Metrics (voltage / current / etc) */
@@ -186,7 +186,7 @@ extern "C" {
 #define meshtastic_EnvironmentMetrics_voltage_tag 5
 #define meshtastic_EnvironmentMetrics_current_tag 6
 #define meshtastic_EnvironmentMetrics_iaq_tag    7
-#define meshtastic_EnvironmentMetrics_water_level_tag 8
+#define meshtastic_EnvironmentMetrics_distance_tag 8
 #define meshtastic_PowerMetrics_ch1_voltage_tag  1
 #define meshtastic_PowerMetrics_ch1_current_tag  2
 #define meshtastic_PowerMetrics_ch2_voltage_tag  3
@@ -229,7 +229,7 @@ X(a, STATIC,   SINGULAR, FLOAT,    gas_resistance,    4) \
 X(a, STATIC,   SINGULAR, FLOAT,    voltage,           5) \
 X(a, STATIC,   SINGULAR, FLOAT,    current,           6) \
 X(a, STATIC,   SINGULAR, UINT32,   iaq,               7) \
-X(a, STATIC,   SINGULAR, FLOAT,    water_level,       8)
+X(a, STATIC,   SINGULAR, FLOAT,    distance,          8)
 #define meshtastic_EnvironmentMetrics_CALLBACK NULL
 #define meshtastic_EnvironmentMetrics_DEFAULT NULL
 
