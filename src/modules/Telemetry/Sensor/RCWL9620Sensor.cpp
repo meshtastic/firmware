@@ -21,6 +21,6 @@ void RCWL9620Sensor::setup() {}
 bool RCWL9620Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     LOG_DEBUG("RCWL9620Sensor::getMetrics\n");
-    measurement->variant.environment_metrics.water_level = rcwl9620.getDistance();
+    measurement->variant.environment_metrics.distance = rcwl9620.getDistance();
     return true;
 }
