@@ -21,6 +21,7 @@
 #include "Sensor/BMP280Sensor.h"
 #include "Sensor/LPS22HBSensor.h"
 #include "Sensor/MCP9808Sensor.h"
+#include "Sensor/RCWL9620Sensor.h"
 #include "Sensor/SHT31Sensor.h"
 #include "Sensor/SHTC3Sensor.h"
 
@@ -32,6 +33,7 @@ MCP9808Sensor mcp9808Sensor;
 SHTC3Sensor shtc3Sensor;
 LPS22HBSensor lps22hbSensor;
 SHT31Sensor sht31Sensor;
+RCWL9620Sensor rcwl9620Sensor;
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
@@ -90,6 +92,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = ina219Sensor.runOnce();
             if (ina260Sensor.hasSensor())
                 result = ina260Sensor.runOnce();
+            if (rcwl9620Sensor.hasSensor())
+                result = rcwl9620Sensor.runOnce();
         }
         return result;
     } else {
@@ -183,6 +187,9 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
                                 String(lastMeasurement.variant.environment_metrics.current, 0) + "mA");
     if (lastMeasurement.variant.environment_metrics.iaq != 0)
         display->drawString(x, y += fontHeight(FONT_SMALL), "IAQ: " + String(lastMeasurement.variant.environment_metrics.iaq));
+    if (lastMeasurement.variant.environment_metrics.water_level != 0)
+        display->drawString(x, y += fontHeight(FONT_SMALL),
+                            "Water Level: " + String(lastMeasurement.variant.environment_metrics.water_level, 0) + "mm");
 }
 
 bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
@@ -192,10 +199,13 @@ bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPac
         const char *sender = getSenderShortName(mp);
 
         LOG_INFO("(Received from %s): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, "
-                 "temperature=%f, voltage=%f\n",
+                 "temperature=%f\n",
                  sender, t->variant.environment_metrics.barometric_pressure, t->variant.environment_metrics.current,
                  t->variant.environment_metrics.gas_resistance, t->variant.environment_metrics.relative_humidity,
-                 t->variant.environment_metrics.temperature, t->variant.environment_metrics.voltage);
+                 t->variant.environment_metrics.temperature);
+        LOG_INFO("(Received from %s): voltage=%f, IAQ=%d, water_level=%f\n", sender, t->variant.environment_metrics.voltage,
+                 t->variant.environment_metrics.iaq, t->variant.environment_metrics.water_level);
+
 #endif
         // release previous packet before occupying a new spot
         if (lastMeasurementPacket != nullptr)
@@ -220,6 +230,8 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.variant.environment_metrics.relative_humidity = 0;
     m.variant.environment_metrics.temperature = 0;
     m.variant.environment_metrics.voltage = 0;
+    m.variant.environment_metrics.iaq = 0;
+    m.variant.environment_metrics.water_level = 0;
 
     if (sht31Sensor.hasSensor())
         valid = sht31Sensor.getMetrics(&m);
@@ -241,13 +253,16 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         valid = ina219Sensor.getMetrics(&m);
     if (ina260Sensor.hasSensor())
         valid = ina260Sensor.getMetrics(&m);
+    if (rcwl9620Sensor.hasSensor())
+        valid = rcwl9620Sensor.getMetrics(&m);
 
     if (valid) {
-        LOG_INFO("(Sending): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f, "
-                 "voltage=%f\n",
+        LOG_INFO("(Sending): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f\n",
                  m.variant.environment_metrics.barometric_pressure, m.variant.environment_metrics.current,
                  m.variant.environment_metrics.gas_resistance, m.variant.environment_metrics.relative_humidity,
-                 m.variant.environment_metrics.temperature, m.variant.environment_metrics.voltage);
+                 m.variant.environment_metrics.temperature);
+        LOG_INFO("(Sending): voltage=%f, IAQ=%d, water_level=%f\n", m.variant.environment_metrics.voltage,
+                 m.variant.environment_metrics.iaq, m.variant.environment_metrics.water_level);
 
         sensor_read_error_count = 0;
 
