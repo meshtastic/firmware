@@ -209,7 +209,8 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
 
 #ifdef ARCH_ESP32
     // Full shutdown of bluetooth hardware
-    nimbleBluetooth->deinit();
+    if (nimbleBluetooth)
+        nimbleBluetooth->deinit();
 #endif
 
 #ifdef ARCH_ESP32
