@@ -303,7 +303,8 @@ void ExternalNotificationModule::stopNow()
 {
     rtttl::stop();
 #ifdef HAS_I2S
-    audioThread->stop();
+    if (audioThread->isPlaying())
+        audioThread->stop();
 #endif
     nagCycleCutoff = 1; // small value
     isNagging = false;
