@@ -28,6 +28,9 @@ RTCQuality getRTCQuality();
 bool perhapsSetRTC(RTCQuality q, const struct timeval *tv);
 bool perhapsSetRTC(RTCQuality q, struct tm &t);
 
+/// Return a string name for the quality
+const char *RtcName(RTCQuality quality);
+
 /// Return time since 1970 in secs.  While quality is RTCQualityNone we will be returning time based at zero
 uint32_t getTime(bool local = false);
 
