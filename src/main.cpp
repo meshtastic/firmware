@@ -607,15 +607,14 @@ void setup()
     }
 #endif
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#ifdef UNPHONE
+    ambientLightingThread = new AmbientLightingThread(ScanI2C::DeviceType::NONE);
+#elif defined(RGBLED_RED)
+    ambientLightingThread = new AmbientLightingThread(ScanI2C::DeviceType::NONE);
+#elif !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
     if (rgb_found.type != ScanI2C::DeviceType::NONE) {
         ambientLightingThread = new AmbientLightingThread(rgb_found.type);
     }
-#ifdef UNPHONE
-    ambientLightingThread = new AmbientLightingThread(rgb_found.type);
-#elif defined(RGBLED_RED)
-    ambientLightingThread = new AmbientLightingThread(rgb_found.type);
-#endif
 #endif
 
 #ifdef T_WATCH_S3

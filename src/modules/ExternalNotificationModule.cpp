@@ -26,29 +26,14 @@
 
 #ifdef HAS_NCP5623
 #include <graphics/RAKled.h>
-
-uint8_t red = 0;
-uint8_t green = 0;
-uint8_t blue = 0;
-uint8_t colorState = 1;
-uint8_t brightnessIndex = 0;
-uint8_t brightnessValues[] = {0, 10, 20, 30, 50, 90, 160, 170}; // blue gets multiplied by 1.5
-bool ascending = true;
 #endif
 
 #ifdef UNPHONE
 #include "unPhone.h"
 extern unPhone unphone;
-
-uint8_t red = 0;
-uint8_t green = 0;
-uint8_t blue = 0;
-uint8_t colorState = 1;
-const uint8_t duration = 15;
-uint8_t counter = 0;
 #endif
 
-#ifdef RGBLED_RED
+#if defined(HAS_NCP5623) || defined(UNPHONE) || defined(RGBLED_RED)
 uint8_t red = 0;
 uint8_t green = 0;
 uint8_t blue = 0;
@@ -130,53 +115,27 @@ int32_t ExternalNotificationModule::runOnce()
                 millis()) {
                 getExternal(2) ? setExternalOff(2) : setExternalOn(2);
             }
-#ifdef HAS_NCP5623
-            if (rgb_found.type == ScanI2C::NCP5623) {
-                red = (colorState & 4) ? brightnessValues[brightnessIndex] : 0;          // Red enabled on colorState = 4,5,6,7
-                green = (colorState & 2) ? brightnessValues[brightnessIndex] : 0;        // Green enabled on colorState = 2,3,6,7
-                blue = (colorState & 1) ? (brightnessValues[brightnessIndex] * 1.5) : 0; // Blue enabled on colorState = 1,3,5,7
-                rgb.setColor(red, green, blue);
-
-                if (ascending) { // fade in
-                    brightnessIndex++;
-                    if (brightnessIndex == (sizeof(brightnessValues) - 1)) {
-                        ascending = false;
-                    }
-                } else {
-                    brightnessIndex--; // fade out
-                }
-                if (brightnessIndex == 0) {
-                    ascending = true;
-                    colorState++; // next color
-                    if (colorState > 7) {
-                        colorState = 1;
-                    }
-                }
-            }
-#endif
-
-#ifdef UNPHONE
-            red = colorState & 4;   // Red enabled on colorState = 4,5,6,7
-            green = colorState & 2; // Green enabled on colorState = 2,3,6,7
-            blue = colorState & 1;  // Blue enabled on colorState = 1,3,5,7
-            unphone.rgb(red, green, blue);
-            counter++; // tick on
-            if (counter > duration) {
-                counter = 0;
-                colorState++; // next color
-                if (colorState > 7) {
-                    colorState = 1;
-                }
-            }
-#endif
-
-#ifdef RGBLED_RED
+#if defined(HAS_NCP5623) || defined(UNPHONE) || defined(RGBLED_RED)
             red = (colorState & 4) ? brightnessValues[brightnessIndex] : 0;          // Red enabled on colorState = 4,5,6,7
             green = (colorState & 2) ? brightnessValues[brightnessIndex] : 0;        // Green enabled on colorState = 2,3,6,7
             blue = (colorState & 1) ? (brightnessValues[brightnessIndex] * 1.5) : 0; // Blue enabled on colorState = 1,3,5,7
+#ifdef HAS_NCP5623
+            if (rgb_found.type == ScanI2C::NCP5623) {
+                rgb.setColor(red, green, blue);
+            }
+#endif
+#ifdef UNPHONE
+            unphone.rgb(red, green, blue);
+#endif
+#ifdef RGBLED_CA
+            analogWrite(RGBLED_RED, 255 - red); // CA type needs reverse logic
+            analogWrite(RGBLED_GREEN, 255 - green);
+            analogWrite(RGBLED_BLUE, 255 - blue);
+#elif defined(RGBLED_RED)
             analogWrite(RGBLED_RED, red);
             analogWrite(RGBLED_GREEN, green);
             analogWrite(RGBLED_BLUE, blue);
+#endif
             if (ascending) { // fade in
                 brightnessIndex++;
                 if (brightnessIndex == (sizeof(brightnessValues) - 1)) {
@@ -192,35 +151,35 @@ int32_t ExternalNotificationModule::runOnce()
                     colorState = 1;
                 }
             }
+        }
 #endif
 
 #ifdef T_WATCH_S3
-            drv.go();
+        drv.go();
 #endif
-        }
-
-        // Play RTTTL over i2s audio interface if enabled as buzzer
-#ifdef HAS_I2S
-        if (moduleConfig.external_notification.use_i2s_as_buzzer) {
-            if (audioThread->isPlaying()) {
-                // Continue playing
-            } else if (isNagging && (nagCycleCutoff >= millis())) {
-                audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
-            }
-        }
-#endif
-        // now let the PWM buzzer play
-        if (moduleConfig.external_notification.use_pwm) {
-            if (rtttl::isPlaying()) {
-                rtttl::play();
-            } else if (isNagging && (nagCycleCutoff >= millis())) {
-                // start the song again if we have time left
-                rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
-            }
-        }
-
-        return EXT_NOTIFICATION_DEFAULT_THREAD_MS;
     }
+
+    // Play RTTTL over i2s audio interface if enabled as buzzer
+#ifdef HAS_I2S
+    if (moduleConfig.external_notification.use_i2s_as_buzzer) {
+        if (audioThread->isPlaying()) {
+            // Continue playing
+        } else if (isNagging && (nagCycleCutoff >= millis())) {
+            audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
+        }
+    }
+#endif
+    // now let the PWM buzzer play
+    if (moduleConfig.external_notification.use_pwm) {
+        if (rtttl::isPlaying()) {
+            rtttl::play();
+        } else if (isNagging && (nagCycleCutoff >= millis())) {
+            // start the song again if we have time left
+            rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
+        }
+    }
+
+    return EXT_NOTIFICATION_DEFAULT_THREAD_MS;
 }
 
 bool ExternalNotificationModule::wantPacket(const meshtastic_MeshPacket *p)
@@ -265,13 +224,13 @@ void ExternalNotificationModule::setExternalOn(uint8_t index)
     unphone.rgb(red, green, blue);
 #endif
 #ifdef RGBLED_CA
-    analogWrite(RGBLED_RED, 255 - red);
+    analogWrite(RGBLED_RED, 255 - red); // CA type needs reverse logic
     analogWrite(RGBLED_GREEN, 255 - green);
     analogWrite(RGBLED_BLUE, 255 - blue);
 #elif defined(RGBLED_RED)
-    analogWrite(RGBLED_RED, red);
-    analogWrite(RGBLED_GREEN, green);
-    analogWrite(RGBLED_BLUE, blue);
+        analogWrite(RGBLED_RED, red);
+        analogWrite(RGBLED_GREEN, green);
+        analogWrite(RGBLED_BLUE, blue);
 #endif
 #ifdef T_WATCH_S3
     drv.go();
@@ -315,21 +274,21 @@ void ExternalNotificationModule::setExternalOff(uint8_t index)
     blue = 0;
     unphone.rgb(red, green, blue);
 #endif
-#ifdef RGBLED_CA
+#ifdef RGBLED_RED
     red = 0;
     green = 0;
     blue = 0;
-    analogWrite(RGBLED_RED, 255 - red);
+#ifdef RGBLED_CA
+    analogWrite(RGBLED_RED, 255 - red); // CA type needs reverse logic
     analogWrite(RGBLED_GREEN, 255 - green);
     analogWrite(RGBLED_BLUE, 255 - blue);
-#elif defined(RGBLED_RED)
-    red = 0;
-    green = 0;
-    blue = 0;
+#else
     analogWrite(RGBLED_RED, red);
     analogWrite(RGBLED_GREEN, green);
     analogWrite(RGBLED_BLUE, blue);
 #endif
+#endif
+
 #ifdef T_WATCH_S3
     drv.stop();
 #endif
@@ -428,6 +387,16 @@ ExternalNotificationModule::ExternalNotificationModule()
             rgb.setCurrent(10);
         }
 #endif
+#ifdef RGBLED_RED
+        pinMode(RGBLED_RED, OUTPUT); // set up the RGB led pins
+        pinMode(RGBLED_GREEN, OUTPUT);
+        pinMode(RGBLED_BLUE, OUTPUT);
+#endif
+#ifdef RGBLED_CA
+        analogWrite(RGBLED_RED, 255);   // with a common anode type, logic is reversed
+        analogWrite(RGBLED_GREEN, 255); // so we want to initialise with lights off
+        analogWrite(RGBLED_BLUE, 255);
+#endif
     } else {
         LOG_INFO("External Notification Module Disabled\n");
         disable();
@@ -489,7 +458,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
 #ifdef HAS_I2S
                         audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
 #else
-                        rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
+                            rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
 #endif
                     }
                     if (moduleConfig.external_notification.nag_timeout) {
@@ -533,7 +502,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                         audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
                     }
 #else
-                    rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
+                        rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
 #endif
                 }
                 if (moduleConfig.external_notification.nag_timeout) {
