@@ -71,14 +71,8 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
               p.time);
 
     if (p.time && channels.getByIndex(mp.channel).role == meshtastic_Channel_Role_PRIMARY) {
-        struct timeval tv;
-        uint32_t secs = p.time;
-
-        tv.tv_sec = secs;
-        tv.tv_usec = 0;
-
         // Set from phone RTC Quality to RTCQualityNTP since it should be approximately so
-        perhapsSetRTC(isLocal ? RTCQualityNTP : RTCQualityFromNet, &tv);
+        trySetRtc(p, isLocal);
     }
 
     nodeDB->updatePosition(getFrom(&mp), p);
@@ -91,6 +85,16 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     }
 
     return false; // Let others look at this message also if they want
+}
+
+void PositionModule::trySetRtc(meshtastic_Position p, bool isLocal)
+{
+    struct timeval tv;
+    uint32_t secs = p.time;
+
+    tv.tv_sec = secs;
+    tv.tv_usec = 0;
+    perhapsSetRTC(isLocal ? RTCQualityNTP : RTCQualityFromNet, &tv);
 }
 
 meshtastic_MeshPacket *PositionModule::allocReply()
