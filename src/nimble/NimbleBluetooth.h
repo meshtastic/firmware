@@ -6,6 +6,7 @@ class NimbleBluetooth : BluetoothApi
   public:
     void setup();
     void shutdown();
+    void deinit();
     void clearBonds();
     bool isActive();
     bool isConnected();
@@ -16,5 +17,5 @@ class NimbleBluetooth : BluetoothApi
     void startAdvertising();
 };
 
-void setBluetoothEnable(bool on);
+void setBluetoothEnable(bool enable);
 void clearNVS();

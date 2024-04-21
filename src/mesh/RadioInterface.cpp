@@ -1,5 +1,6 @@
 #include "RadioInterface.h"
 #include "Channels.h"
+#include "DisplayFormatters.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -108,9 +109,31 @@ const RegionInfo regions[] = {
     RDEF(UA_868, 868.0f, 868.6f, 1, 0, 14, true, false, false),
 
     /*
+        Malaysia
+        433 - 435 MHz at 100mW, no restrictions.
+        https://www.mcmc.gov.my/skmmgovmy/media/General/pdf/Short-Range-Devices-Specification.pdf
+    */
+    RDEF(MY_433, 433.0f, 435.0f, 100, 0, 20, true, false, false),
+
+    /*
+        Malaysia
+        919 - 923 Mhz at 500mW, no restrictions.
+        923 - 924 MHz at 500mW with 1% duty cycle OR frequency hopping.
+        Frequency hopping is used for 919 - 923 MHz.
+        https://www.mcmc.gov.my/skmmgovmy/media/General/pdf/Short-Range-Devices-Specification.pdf
+    */
+    RDEF(MY_919, 919.0f, 924.0f, 100, 0, 27, true, true, false),
+
+    /*
+        Singapore
+        SG_923 Band 30d: 917 - 925 MHz at 100mW, no restrictions.
+        https://www.imda.gov.sg/-/media/imda/files/regulation-licensing-and-consultations/ict-standards/telecommunication-standards/radio-comms/imdatssrd.pdf
+    */
+    RDEF(SG_923, 917.0f, 925.0f, 100, 0, 20, true, false, false),
+
+    /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
     */
-
     RDEF(LORA_24, 2400.0f, 2483.5f, 100, 0, 10, true, false, true),
 
     /*
@@ -121,16 +144,23 @@ const RegionInfo regions[] = {
 };
 
 const RegionInfo *myRegion;
+bool RadioInterface::uses_default_frequency_slot = true;
 
 static uint8_t bytes[MAX_RHPACKETLEN];
 
 void initRegion()
 {
     const RegionInfo *r = regions;
+#ifdef LORA_REGIONCODE
+    for (; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET && r->code != LORA_REGIONCODE; r++)
+        ;
+    LOG_INFO("Wanted region %d, regulatory override to %s\n", config.lora.region, r->name);
+#else
     for (; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET && r->code != config.lora.region; r++)
         ;
-    myRegion = r;
     LOG_INFO("Wanted region %d, using %s\n", config.lora.region, r->name);
+#endif
+    myRegion = r;
 }
 
 /**
@@ -272,15 +302,16 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
         out += " encrypted";
     }
 
-    if (p->rx_time != 0) {
+    if (p->rx_time != 0)
         out += DEBUG_PORT.mt_sprintf(" rxtime=%u", p->rx_time);
-    }
-    if (p->rx_snr != 0.0) {
+    if (p->rx_snr != 0.0)
         out += DEBUG_PORT.mt_sprintf(" rxSNR=%g", p->rx_snr);
-    }
-    if (p->rx_rssi != 0) {
+    if (p->rx_rssi != 0)
         out += DEBUG_PORT.mt_sprintf(" rxRSSI=%i", p->rx_rssi);
-    }
+    if (p->via_mqtt != 0)
+        out += DEBUG_PORT.mt_sprintf(" via MQTT");
+    if (p->hop_start != 0)
+        out += DEBUG_PORT.mt_sprintf(" hopStart=%d", p->hop_start);
     if (p->priority != 0)
         out += DEBUG_PORT.mt_sprintf(" priority=%d", p->priority);
 
@@ -309,8 +340,8 @@ bool RadioInterface::init()
     notifyDeepSleepObserver.observe(&notifyDeepSleep);
 
     // we now expect interfaces to operate in promiscuous mode
-    // radioIf.setThisAddress(nodeDB.getNodeNum()); // Note: we must do this here, because the nodenum isn't inited at constructor
-    // time.
+    // radioIf.setThisAddress(nodeDB->getNodeNum()); // Note: we must do this here, because the nodenum isn't inited at
+    // constructor time.
 
     applyModemConfig();
 
@@ -328,9 +359,9 @@ int RadioInterface::notifyDeepSleepCb(void *unused)
  * djb2 by Dan Bernstein.
  * http://www.cse.yorku.ca/~oz/hash.html
  */
-unsigned long hash(const char *str)
+uint32_t hash(const char *str)
 {
-    unsigned long hash = 5381;
+    uint32_t hash = 5381;
     int c;
 
     while ((c = *str++) != 0)
@@ -463,6 +494,10 @@ void RadioInterface::applyModemConfig()
     // channel_num is actually (channel_num - 1), since modulus (%) returns values from 0 to (numChannels - 1)
     int channel_num = (loraConfig.channel_num ? loraConfig.channel_num - 1 : hash(channelName)) % numChannels;
 
+    // Check if we use the default frequency slot
+    RadioInterface::uses_default_frequency_slot =
+        channel_num == hash(DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false)) % numChannels;
+
     // Old frequency selection formula
     // float freq = myRegion->freqStart + ((((myRegion->freqEnd - myRegion->freqStart) / numChannels) / 2) * channel_num);
 
@@ -535,11 +570,14 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
     h->to = p->to;
     h->id = p->id;
     h->channel = p->channel;
+    h->next_hop = 0;   // *** For future use ***
+    h->relay_node = 0; // *** For future use ***
     if (p->hop_limit > HOP_MAX) {
         LOG_WARN("hop limit %d is too high, setting to %d\n", p->hop_limit, HOP_RELIABLE);
         p->hop_limit = HOP_RELIABLE;
     }
-    h->flags = p->hop_limit | (p->want_ack ? PACKET_FLAGS_WANT_ACK_MASK : 0);
+    h->flags = p->hop_limit | (p->want_ack ? PACKET_FLAGS_WANT_ACK_MASK : 0) | (p->via_mqtt ? PACKET_FLAGS_VIA_MQTT_MASK : 0);
+    h->flags |= (p->hop_start << PACKET_FLAGS_HOP_START_SHIFT) & PACKET_FLAGS_HOP_START_MASK;
 
     // if the sender nodenum is zero, that means uninitialized
     assert(h->from);

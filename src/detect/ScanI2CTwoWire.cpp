@@ -2,7 +2,7 @@
 
 #include "concurrency/LockGuard.h"
 #include "configuration.h"
-#if defined(ARCH_RASPBERRY_PI)
+#if defined(ARCH_PORTDUINO)
 #include "linux/LinuxHardwareI2C.h"
 #endif
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
@@ -183,8 +183,13 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
             case ATECC608B_ADDR:
-                type = ATECC608B;
-                if (atecc.begin(addr.address) == true) {
+#ifdef RP2040_SLOW_CLOCK
+                if (atecc.begin(addr.address, Wire, Serial2) == true)
+#else
+                if (atecc.begin(addr.address) == true)
+#endif
+
+                {
                     LOG_INFO("ATECC608B initialized\n");
                 } else {
                     LOG_WARN("ATECC608B initialization failed\n");
@@ -242,6 +247,10 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                     LOG_INFO("BME-280 sensor found at address 0x%x\n", (uint8_t)addr.address);
                     type = BME_280;
                     break;
+                case 0x55:
+                    LOG_INFO("BMP-085 or BMP-180 sensor found at address 0x%x\n", (uint8_t)addr.address);
+                    type = BMP_085;
+                    break;
                 default:
                     LOG_INFO("BMP-280 sensor found at address 0x%x\n", (uint8_t)addr.address);
                     type = BMP_280;
@@ -250,6 +259,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
 
             case INA_ADDR:
             case INA_ADDR_ALTERNATE:
+            case INA_ADDR_WAVESHARE_UPS:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
                 LOG_DEBUG("Register MFG_UID: 0x%x\n", registerValue);
                 if (registerValue == 0x5449) {
@@ -261,8 +271,14 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                 }
                 break;
             case INA3221_ADDR:
-                LOG_INFO("INA3221 sensor found at address 0x%x\n", (uint8_t)addr.address);
-                type = INA3221;
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
+                LOG_DEBUG("Register MFG_UID: 0x%x\n", registerValue);
+                if (registerValue == 0x5449) {
+                    LOG_INFO("INA3221 sensor found at address 0x%x\n", (uint8_t)addr.address);
+                    type = INA3221;
+                } else { // Unknown device
+                    LOG_INFO("No INA3221 found at address 0x%x\n", (uint8_t)addr.address);
+                }
                 break;
             case MCP9808_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x07), 2);
@@ -283,12 +299,31 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                 SCAN_SIMPLE_CASE(LPS22HB_ADDR, LPS22HB, "LPS22HB sensor found\n")
 
                 SCAN_SIMPLE_CASE(QMC6310_ADDR, QMC6310, "QMC6310 Highrate 3-Axis magnetic sensor found\n")
-                SCAN_SIMPLE_CASE(QMI8658_ADDR, QMI8658, "QMI8658 Highrate 6-Axis inertial measurement sensor found\n")
+
+            case QMI8658_ADDR:
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0A), 1); // get ID
+                if (registerValue == 0xC0) {
+                    type = BQ24295;
+                    LOG_INFO("BQ24295 PMU found\n");
+                    break;
+                }
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0F), 1); // get ID
+                if (registerValue == 0x6A) {
+                    type = LSM6DS3;
+                    LOG_INFO("LSM6DS3 accelerometer found at address 0x%x\n", (uint8_t)addr.address);
+                } else {
+                    type = QMI8658;
+                    LOG_INFO("QMI8658 Highrate 6-Axis inertial measurement sensor found\n");
+                }
+                break;
+
                 SCAN_SIMPLE_CASE(QMC5883L_ADDR, QMC5883L, "QMC5883L Highrate 3-Axis magnetic sensor found\n")
 
                 SCAN_SIMPLE_CASE(PMSA0031_ADDR, PMSA0031, "PMSA0031 air quality sensor found\n")
                 SCAN_SIMPLE_CASE(MPU6050_ADDR, MPU6050, "MPU6050 accelerometer found\n");
                 SCAN_SIMPLE_CASE(BMA423_ADDR, BMA423, "BMA423 accelerometer found\n");
+                SCAN_SIMPLE_CASE(LSM6DS3_ADDR, LSM6DS3, "LSM6DS3 accelerometer found at address 0x%x\n", (uint8_t)addr.address);
+                SCAN_SIMPLE_CASE(TCA9555_ADDR, TCA9555, "TCA9555 I2C expander found\n");
 
             default:
                 LOG_INFO("Device found at address 0x%x was not able to be enumerated\n", addr.address);

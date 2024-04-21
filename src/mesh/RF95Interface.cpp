@@ -4,6 +4,10 @@
 #include "configuration.h"
 #include "error.h"
 
+#if ARCH_PORTDUINO
+#include "PortduinoGlue.h"
+#endif
+
 #define MAX_POWER 20
 // if we use 20 we are limited to 1% duty cycle or hw might overheat.  For continuous operation set a limit of 17
 // In theory up to 27 dBm is possible, but the modules installed in most radios can cope with a max of 20.  So BIG WARNING
@@ -15,7 +19,7 @@ RF95Interface::RF95Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIO
                              RADIOLIB_PIN_TYPE busy)
     : RadioLibInterface(hal, cs, irq, rst, busy)
 {
-    LOG_WARN("RF95Interface(cs=%d, irq=%d, rst=%d, busy=%d)\n", cs, irq, rst, busy);
+    LOG_DEBUG("RF95Interface(cs=%d, irq=%d, rst=%d, busy=%d)\n", cs, irq, rst, busy);
 }
 
 /** Some boards require GPIO control of tx vs rx paths */
@@ -23,10 +27,18 @@ void RF95Interface::setTransmitEnable(bool txon)
 {
 #ifdef RF95_TXEN
     digitalWrite(RF95_TXEN, txon ? 1 : 0);
+#elif ARCH_PORTDUINO
+    if (settingsMap[txen] != RADIOLIB_NC) {
+        digitalWrite(settingsMap[txen], txon ? 1 : 0);
+    }
 #endif
 
 #ifdef RF95_RXEN
     digitalWrite(RF95_RXEN, txon ? 0 : 1);
+#elif ARCH_PORTDUINO
+    if (settingsMap[rxen] != RADIOLIB_NC) {
+        digitalWrite(settingsMap[rxen], txon ? 0 : 1);
+    }
 #endif
 }
 
@@ -62,6 +74,16 @@ bool RF95Interface::init()
 #ifdef RF95_RXEN
     pinMode(RF95_RXEN, OUTPUT);
     digitalWrite(RF95_RXEN, 1);
+#endif
+#if ARCH_PORTDUINO
+    if (settingsMap[txen] != RADIOLIB_NC) {
+        pinMode(settingsMap[txen], OUTPUT);
+        digitalWrite(settingsMap[txen], 0);
+    }
+    if (settingsMap[rxen] != RADIOLIB_NC) {
+        pinMode(settingsMap[rxen], OUTPUT);
+        digitalWrite(settingsMap[rxen], 0);
+    }
 #endif
     setTransmitEnable(false);
 
@@ -106,12 +128,18 @@ bool RF95Interface::reconfigure()
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
     err = lora->setSyncWord(syncWord);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting RF95 setSyncWord!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora->setCurrentLimit(currentLimit);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting RF95 setCurrentLimit!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora->setPreambleLength(preambleLength);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting RF95 setPreambleLength!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora->setFrequency(getFreq());
@@ -142,6 +170,8 @@ void RF95Interface::addReceiveMetadata(meshtastic_MeshPacket *mp)
 void RF95Interface::setStandby()
 {
     int err = lora->standby();
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting RF95 standby!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = false; // If we were receiving, not any more
@@ -163,6 +193,8 @@ void RF95Interface::startReceive()
     setTransmitEnable(false);
     setStandby();
     int err = lora->startReceive();
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting RF95 startReceive!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = true;
@@ -183,6 +215,8 @@ bool RF95Interface::isChannelActive()
         // LOG_DEBUG("Channel is busy!\n");
         return true;
     }
+    if (result != RADIOLIB_CHANNEL_FREE)
+        LOG_ERROR("Radiolib error %d when attempting RF95 isChannelActive!\n", result);
     assert(result != RADIOLIB_ERR_WRONG_MODEM);
 
     // LOG_DEBUG("Channel is free!\n");

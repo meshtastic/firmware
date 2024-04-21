@@ -1,16 +1,24 @@
-#include "mesh/wifi/WiFiAPClient.h"
+#include "configuration.h"
+#if !MESHTASTIC_EXCLUDE_WIFI
 #include "NodeDB.h"
 #include "RTC.h"
 #include "concurrency/Periodic.h"
-#include "configuration.h"
+#include "mesh/wifi/WiFiAPClient.h"
+
 #include "main.h"
 #include "mesh/api/WiFiServerAPI.h"
+#if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
+#endif
 #include "target_specific.h"
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #ifdef ARCH_ESP32
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "mesh/http/WebServer.h"
+#endif
+#endif
 #include <ESPmDNS.h>
 #include <esp_wifi.h>
 static void WiFiEvent(WiFiEvent_t event);
@@ -38,7 +46,8 @@ bool APStartupComplete = 0;
 
 unsigned long lastrun_ntp = 0;
 
-bool needReconnect = true; // If we create our reconnector, run it once at the beginning
+bool needReconnect = true;   // If we create our reconnector, run it once at the beginning
+bool isReconnecting = false; // If we are currently reconnecting
 
 WiFiUDP syslogClient;
 Syslog syslog(syslogClient);
@@ -91,11 +100,10 @@ static void onNetworkConnected()
             syslog.enable();
         }
 
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WEBSERVER
         initWebServer();
 #endif
         initApiServer();
-
         APStartupComplete = true;
     }
 
@@ -115,6 +123,7 @@ static int32_t reconnectWiFi()
             wifiPsw = NULL;
 
         needReconnect = false;
+        isReconnecting = true;
 
         // Make sure we clear old connection credentials
 #ifdef ARCH_ESP32
@@ -129,6 +138,7 @@ static int32_t reconnectWiFi()
         if (!WiFi.isConnected()) {
             WiFi.begin(wifiName, wifiPsw);
         }
+        isReconnecting = false;
     }
 
 #ifndef DISABLE_NTP
@@ -143,7 +153,6 @@ static int32_t reconnectWiFi()
 
             perhapsSetRTC(RTCQualityNTP, &tv);
             lastrun_ntp = millis();
-
         } else {
             LOG_DEBUG("NTP Update failed\n");
         }
@@ -201,7 +210,9 @@ bool initWifi()
         const char *wifiPsw = config.network.wifi_psk;
 
 #ifndef ARCH_RP2040
-        createSSLCert();                        // For WebServer
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
+        createSSLCert(); // For WebServer
+#endif
         esp_wifi_set_storage(WIFI_STORAGE_RAM); // Disable flash storage for WiFi credentials
 #endif
         if (!*wifiPsw) // Treat empty password as no password
@@ -277,10 +288,12 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
         LOG_INFO("Disconnected from WiFi access point\n");
-        WiFi.disconnect(false, true);
-        syslog.disable();
-        needReconnect = true;
-        wifiReconnect->setIntervalFromNow(1000);
+        if (!isReconnecting) {
+            WiFi.disconnect(false, true);
+            syslog.disable();
+            needReconnect = true;
+            wifiReconnect->setIntervalFromNow(1000);
+        }
         break;
     case ARDUINO_EVENT_WIFI_STA_AUTHMODE_CHANGE:
         LOG_INFO("Authentication mode of access point has changed\n");
@@ -294,10 +307,12 @@ static void WiFiEvent(WiFiEvent_t event)
         break;
     case ARDUINO_EVENT_WIFI_STA_LOST_IP:
         LOG_INFO("Lost IP address and IP address is reset to 0\n");
-        WiFi.disconnect(false, true);
-        syslog.disable();
-        needReconnect = true;
-        wifiReconnect->setIntervalFromNow(1000);
+        if (!isReconnecting) {
+            WiFi.disconnect(false, true);
+            syslog.disable();
+            needReconnect = true;
+            wifiReconnect->setIntervalFromNow(1000);
+        }
         break;
     case ARDUINO_EVENT_WPS_ER_SUCCESS:
         LOG_INFO("WiFi Protected Setup (WPS): succeeded in enrollee mode\n");
@@ -399,3 +414,4 @@ uint8_t getWifiDisconnectReason()
 {
     return wifiDisconnectReason;
 }
+#endif

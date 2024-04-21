@@ -2,7 +2,7 @@
 #include "configuration.h"
 #include "error.h"
 #include "mesh/NodeDB.h"
-#ifdef ARCH_RASPBERRY_PI
+#ifdef ARCH_PORTDUINO
 #include "PortduinoGlue.h"
 #endif
 
@@ -17,7 +17,7 @@ SX126xInterface<T>::SX126xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs
                                     RADIOLIB_PIN_TYPE busy)
     : RadioLibInterface(hal, cs, irq, rst, busy, &lora), lora(&module)
 {
-    LOG_WARN("SX126xInterface(cs=%d, irq=%d, rst=%d, busy=%d)\n", cs, irq, rst, busy);
+    LOG_DEBUG("SX126xInterface(cs=%d, irq=%d, rst=%d, busy=%d)\n", cs, irq, rst, busy);
 }
 
 /// Initialise the Driver transport hardware and software.
@@ -30,18 +30,25 @@ template <typename T> bool SX126xInterface<T>::init()
     digitalWrite(SX126X_POWER_EN, HIGH);
 #endif
 
+#if ARCH_PORTDUINO
+    float tcxoVoltage = 0;
+    if (settingsMap[dio3_tcxo_voltage])
+        tcxoVoltage = 1.8;
 // FIXME: correct logic to default to not using TCXO if no voltage is specified for SX126X_DIO3_TCXO_VOLTAGE
-#if !defined(SX126X_DIO3_TCXO_VOLTAGE)
+#elif !defined(SX126X_DIO3_TCXO_VOLTAGE)
     float tcxoVoltage =
         0; // "TCXO reference voltage to be set on DIO3. Defaults to 1.6 V, set to 0 to skip." per
            // https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/SX126x/SX126x.h#L471C26-L471C104
     // (DIO3 is free to be used as an IRQ)
-    LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE not defined, not using DIO3 as TCXO reference voltage\n");
 #else
     float tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE;
-    LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE defined, using DIO3 as TCXO reference voltage at %f V\n", SX126X_DIO3_TCXO_VOLTAGE);
     // (DIO3 is not free to be used as an IRQ)
 #endif
+    if (tcxoVoltage == 0)
+        LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE not defined, not using DIO3 as TCXO reference voltage\n");
+    else
+        LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE defined, using DIO3 as TCXO reference voltage at %f V\n", tcxoVoltage);
+
     // FIXME: May want to set depending on a definition, currently all SX126x variant files use the DC-DC regulator option
     bool useRegulatorLDO = false; // Seems to depend on the connection to pin 9/DCC_SW - if an inductor DCDC?
 
@@ -77,7 +84,7 @@ template <typename T> bool SX126xInterface<T>::init()
 #ifdef SX126X_DIO2_AS_RF_SWITCH
     LOG_DEBUG("Setting DIO2 as RF switch\n");
     bool dio2AsRfSwitch = true;
-#elif defined(ARCH_RASPBERRY_PI)
+#elif defined(ARCH_PORTDUINO)
     bool dio2AsRfSwitch = false;
     if (settingsMap[dio2_as_rf_switch]) {
         LOG_DEBUG("Setting DIO2 as RF switch\n");
@@ -93,6 +100,12 @@ template <typename T> bool SX126xInterface<T>::init()
 
     // If a pin isn't defined, we set it to RADIOLIB_NC, it is safe to always do external RF switching with RADIOLIB_NC as it has
     // no effect
+#if ARCH_PORTDUINO
+    if (res == RADIOLIB_ERR_NONE) {
+        LOG_DEBUG("Using MCU pin %i as RXEN and pin %i as TXEN to control RF switching\n", settingsMap[rxen], settingsMap[txen]);
+        lora.setRfSwitchPins(settingsMap[rxen], settingsMap[txen]);
+    }
+#else
 #ifndef SX126X_RXEN
 #define SX126X_RXEN RADIOLIB_NC
     LOG_DEBUG("SX126X_RXEN not defined, defaulting to RADIOLIB_NC\n");
@@ -105,7 +118,7 @@ template <typename T> bool SX126xInterface<T>::init()
         LOG_DEBUG("Using MCU pin %i as RXEN and pin %i as TXEN to control RF switching\n", SX126X_RXEN, SX126X_TXEN);
         lora.setRfSwitchPins(SX126X_RXEN, SX126X_TXEN);
     }
-
+#endif
     if (config.lora.sx126x_rx_boosted_gain) {
         uint16_t result = lora.setRxBoostedGainMode(true);
         LOG_INFO("Set RX gain to boosted mode; result: %d\n", result);
@@ -167,18 +180,19 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
-    // Hmm - seems to lower SNR when the signal levels are high.  Leaving off for now...
-    // TODO: Confirm gain registers are okay now
-    // err = lora.setRxGain(true);
-    // assert(err == RADIOLIB_ERR_NONE);
-
     err = lora.setSyncWord(syncWord);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting SX126X setSyncWord!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setCurrentLimit(currentLimit);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting SX126X setCurrentLimit!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setPreambleLength(preambleLength);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting SX126X setPreambleLength!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setFrequency(getFreq());
@@ -189,6 +203,8 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
         power = SX126X_MAX_POWER;
 
     err = lora.setOutputPower(power);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting SX126X setOutputPower!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     startReceive(); // restart receiving
@@ -207,10 +223,8 @@ template <typename T> void SX126xInterface<T>::setStandby()
 
     int err = lora.standby();
 
-    if (err != RADIOLIB_ERR_NONE) {
+    if (err != RADIOLIB_ERR_NONE)
         LOG_DEBUG("SX126x standby failed with error %d\n", err);
-    }
-
     assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = false; // If we were receiving, not any more
@@ -252,6 +266,8 @@ template <typename T> void SX126xInterface<T>::startReceive()
     int err = lora.startReceiveDutyCycleAuto(preambleLength, 8,
                                              RADIOLIB_SX126X_IRQ_RX_DEFAULT | RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED |
                                                  RADIOLIB_SX126X_IRQ_HEADER_VALID);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting SX126X startReceiveDutyCycleAuto!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = true;
@@ -271,7 +287,8 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
     result = lora.scanChannel();
     if (result == RADIOLIB_LORA_DETECTED)
         return true;
-
+    if (result != RADIOLIB_CHANNEL_FREE)
+        LOG_ERROR("Radiolib error %d when attempting SX126X scanChannel!\n", result);
     assert(result != RADIOLIB_ERR_WRONG_MODEM);
 
     return false;

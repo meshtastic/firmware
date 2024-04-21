@@ -81,7 +81,7 @@ int32_t ExternalNotificationModule::runOnce()
             // let the song finish if we reach timeout
             nagCycleCutoff = UINT32_MAX;
             LOG_INFO("Turning off external notification: ");
-            for (int i = 0; i < 2; i++) {
+            for (int i = 0; i < 3; i++) {
                 setExternalOff(i);
                 externalTurnedOn[i] = 0;
                 LOG_INFO("%d ", i);
@@ -244,7 +244,8 @@ void ExternalNotificationModule::stopNow()
 {
     rtttl::stop();
 #ifdef HAS_I2S
-    audioThread->stop();
+    if (audioThread->isPlaying())
+        audioThread->stop();
 #endif
     nagCycleCutoff = 1; // small value
     isNagging = false;
@@ -284,11 +285,11 @@ ExternalNotificationModule::ExternalNotificationModule()
     // moduleConfig.external_notification.alert_message_buzzer = true;
 
     if (moduleConfig.external_notification.enabled) {
-        if (!nodeDB.loadProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, sizeof(meshtastic_RTTTLConfig),
-                              &meshtastic_RTTTLConfig_msg, &rtttlConfig)) {
+        if (nodeDB->loadProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, sizeof(meshtastic_RTTTLConfig),
+                              &meshtastic_RTTTLConfig_msg, &rtttlConfig) != LoadFileResult::SUCCESS) {
             memset(rtttlConfig.ringtone, 0, sizeof(rtttlConfig.ringtone));
             strncpy(rtttlConfig.ringtone,
-                    "a:d=8,o=5,b=125:4d#6,a#,2d#6,16p,g#,4a#,4d#.,p,16g,16a#,d#6,a#,f6,2d#6,16p,c#.6,16c6,16a#,g#.,2a#",
+                    "24:d=32,o=5,b=565:f6,p,f6,4p,p,f6,p,f6,2p,p,b6,p,b6,p,b6,p,b6,p,b,p,b,p,b,p,b,p,b,p,b,p,b,p,b,1p.,2p.,p",
                     sizeof(rtttlConfig.ringtone));
         }
 
@@ -336,14 +337,14 @@ ExternalNotificationModule::ExternalNotificationModule()
 
 ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
-    if (moduleConfig.external_notification.enabled) {
+    if (moduleConfig.external_notification.enabled && !isMuted) {
 #ifdef T_WATCH_S3
         drv.setWaveform(0, 75);
         drv.setWaveform(1, 56);
         drv.setWaveform(2, 0);
         drv.go();
 #endif
-        if (getFrom(&mp) != nodeDB.getNodeNum()) {
+        if (getFrom(&mp) != nodeDB->getNodeNum()) {
             // Check if the message contains a bell character. Don't do this loop for every pin, just once.
             auto &p = mp.decoded;
             bool containsBell = false;
@@ -445,7 +446,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
             setIntervalFromNow(0); // run once so we know if we should do something
         }
     } else {
-        LOG_INFO("External Notification Module Disabled\n");
+        LOG_INFO("External Notification Module Disabled or muted\n");
     }
 
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
@@ -506,6 +507,6 @@ void ExternalNotificationModule::handleSetRingtone(const char *from_msg)
     }
 
     if (changed) {
-        nodeDB.saveProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, &meshtastic_RTTTLConfig_msg, &rtttlConfig);
+        nodeDB->saveProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, &meshtastic_RTTTLConfig_msg, &rtttlConfig);
     }
 }

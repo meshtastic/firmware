@@ -136,7 +136,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define USE_SX1262
 #define SX126X_CS (0 + 31)     // LORA_CS     P0.31
 #define SX126X_DIO1 (0 + 29)   // DIO1        P0.29
-#define SX126X_BUSY (0 + 2)    // LORA_BUSY	  P0.02
+#define SX126X_BUSY (0 + 2)    // LORA_BUSY   P0.02
 #define SX126X_RESET (32 + 15) // LORA_RESET  P1.15
 #define SX126X_TXEN (32 + 13)  // TXEN        P1.13 NiceRF 868 dont use
 #define SX126X_RXEN (32 + 10)  // RXEN        P1.10 NiceRF 868 dont use
@@ -155,19 +155,10 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // and has 12 bit resolution
 #define BATTERY_SENSE_RESOLUTION_BITS 12
 #define BATTERY_SENSE_RESOLUTION 4096.0
-// Definition of milliVolt per LSB => 3.0V ADC range and 12-bit ADC resolution = 3000mV/4096
-#define VBAT_MV_PER_LSB (0.73242188F)
-// Voltage divider value => 1.5M + 1M voltage divider on VBAT = (1.5M / (1M + 1.5M))
-#define VBAT_DIVIDER (0.4F)
-// Compensation factor for the VBAT divider
-#define VBAT_DIVIDER_COMP (1.73)
-// Fixed calculation of milliVolt from compensation value
-#define REAL_VBAT_MV_PER_LSB (VBAT_DIVIDER_COMP * VBAT_MV_PER_LSB)
 #undef AREF_VOLTAGE
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
-#define ADC_MULTIPLIER VBAT_DIVIDER_COMP // REAL_VBAT_MV_PER_LSB
-#define VBAT_RAW_TO_SCALED(x) (REAL_VBAT_MV_PER_LSB * x)
+#define ADC_MULTIPLIER (1.73F)
 
 #ifdef __cplusplus
 }

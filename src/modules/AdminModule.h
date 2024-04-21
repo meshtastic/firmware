@@ -1,6 +1,6 @@
 #pragma once
 #include "ProtobufModule.h"
-#if HAS_WIFI
+#if HAS_WIFI && !MESHTASTIC_EXCLUDE_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 

@@ -1,9 +1,14 @@
+#include "configuration.h"
+#if !MESHTASTIC_EXCLUDE_GPS
+#include "Default.h"
 #include "GPS.h"
 #include "NodeDB.h"
 #include "RTC.h"
-#include "configuration.h"
+
 #include "main.h" // pmu_found
 #include "sleep.h"
+
+#include "cas.h"
 #include "ubx.h"
 
 #ifdef ARCH_PORTDUINO
@@ -16,7 +21,7 @@
 #define GPS_RESET_MODE HIGH
 #endif
 
-#if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32) || defined(ARCH_RASPBERRY_PI)
+#if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
 HardwareSerial *GPS::_serial_gps = &Serial1;
 #else
 HardwareSerial *GPS::_serial_gps = NULL;
@@ -48,6 +53,28 @@ void GPS::UBXChecksum(uint8_t *message, size_t length)
     message[length - 1] = CK_B;
 }
 
+// Calculate the checksum for a CAS packet
+void GPS::CASChecksum(uint8_t *message, size_t length)
+{
+    uint32_t cksum = ((uint32_t)message[5] << 24); // Message ID
+    cksum += ((uint32_t)message[4]) << 16;         // Class
+    cksum += message[2];                           // Payload Len
+
+    // Iterate over the payload as a series of uint32_t's and
+    // accumulate the cksum
+    uint32_t *payload = (uint32_t *)(message + 6);
+    for (size_t i = 0; i < (length - 10) / 4; i++) {
+        uint32_t p = payload[i];
+        cksum += p;
+    }
+
+    // Place the checksum values in the message
+    message[length - 4] = (cksum & 0xFF);
+    message[length - 3] = (cksum & (0xFF << 8)) >> 8;
+    message[length - 2] = (cksum & (0xFF << 16)) >> 16;
+    message[length - 1] = (cksum & (0xFF << 24)) >> 24;
+}
+
 // Function to create a ublox packet for editing in memory
 uint8_t GPS::makeUBXPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_size, const uint8_t *msg)
 {
@@ -69,6 +96,41 @@ uint8_t GPS::makeUBXPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_siz
     return (payload_size + 8);
 }
 
+// Function to create a CAS packet for editing in memory
+uint8_t GPS::makeCASPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_size, const uint8_t *msg)
+{
+    // General CAS structure
+    //        | H1   | H2   | payload_len | cls  | msg  | Payload       ...   | Checksum                  |
+    // Size:  | 1    | 1    | 2           | 1    | 1    | payload_len         | 4                         |
+    // Pos:   | 0    | 1    | 2    | 3    | 4    | 5    | 6    | 7      ...   | 6 + payload_len ...       |
+    //        |------|------|-------------|------|------|------|--------------|---------------------------|
+    //        | 0xBA | 0xCE | 0xXX | 0xXX | 0xXX | 0xXX | 0xXX | 0xXX   ...   | 0xXX | 0xXX | 0xXX | 0xXX |
+
+    // Construct the CAS packet
+    UBXscratch[0] = 0xBA;         // header 1 (0xBA)
+    UBXscratch[1] = 0xCE;         // header 2 (0xCE)
+    UBXscratch[2] = payload_size; // length 1
+    UBXscratch[3] = 0;            // length 2
+    UBXscratch[4] = class_id;     // class
+    UBXscratch[5] = msg_id;       // id
+
+    UBXscratch[6 + payload_size] = 0x00; // Checksum
+    UBXscratch[7 + payload_size] = 0x00;
+    UBXscratch[8 + payload_size] = 0x00;
+    UBXscratch[9 + payload_size] = 0x00;
+
+    for (int i = 0; i < payload_size; i++) {
+        UBXscratch[6 + i] = pgm_read_byte(&msg[i]);
+    }
+    CASChecksum(UBXscratch, (payload_size + 10));
+
+#if defined(GPS_DEBUG) && defined(DEBUG_PORT)
+    LOG_DEBUG("Constructed CAS packet: \n");
+    DEBUG_PORT.hexDump(MESHTASTIC_LOG_LEVEL_DEBUG, UBXscratch, payload_size + 10);
+#endif
+    return (payload_size + 10);
+}
+
 GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
 {
     uint8_t buffer[768] = {0};
@@ -78,6 +140,7 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
     while (millis() < startTimeout) {
         if (_serial_gps->available()) {
             b = _serial_gps->read();
+
 #ifdef GPS_DEBUG
             LOG_DEBUG("%02X", (char *)buffer);
 #endif
@@ -98,6 +161,67 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
 #ifdef GPS_DEBUG
     LOG_DEBUG("\n");
 #endif
+    return GNSS_RESPONSE_NONE;
+}
+
+GPS_RESPONSE GPS::getACKCas(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
+{
+    uint32_t startTime = millis();
+    uint8_t buffer[CAS_ACK_NACK_MSG_SIZE] = {0};
+    uint8_t bufferPos = 0;
+
+    // CAS-ACK-(N)ACK structure
+    //         | H1   | H2   | Payload Len | cls  | msg  | Payload                   | Checksum (4)              |
+    //         |      |      |             |      |      | Cls  | Msg  | Reserved    |                           |
+    //         |------|------|-------------|------|------|------|------|-------------|---------------------------|
+    // ACK-NACK| 0xBA | 0xCE | 0x04 | 0x00 | 0x05 | 0x00 | 0xXX | 0xXX | 0x00 | 0x00 | 0xXX | 0xXX | 0xXX | 0xXX |
+    // ACK-ACK | 0xBA | 0xCE | 0x04 | 0x00 | 0x05 | 0x01 | 0xXX | 0xXX | 0x00 | 0x00 | 0xXX | 0xXX | 0xXX | 0xXX |
+
+    while (millis() - startTime < waitMillis) {
+        if (_serial_gps->available()) {
+            buffer[bufferPos++] = _serial_gps->read();
+
+            // keep looking at the first two bytes of buffer until
+            // we have found the CAS frame header (0xBA, 0xCE), if not
+            // keep reading bytes until we find a frame header or we run
+            // out of time.
+            if ((bufferPos == 2) && !(buffer[0] == 0xBA && buffer[1] == 0xCE)) {
+                buffer[0] = buffer[1];
+                buffer[1] = 0;
+                bufferPos = 1;
+            }
+        }
+
+        // we have read all the bytes required for the Ack/Nack (14-bytes)
+        // and we must have found a frame to get this far
+        if (bufferPos == sizeof(buffer) - 1) {
+            uint8_t msg_cls = buffer[4];     // message class should be 0x05
+            uint8_t msg_msg_id = buffer[5];  // message id should be 0x00 or 0x01
+            uint8_t payload_cls = buffer[6]; // payload class id
+            uint8_t payload_msg = buffer[7]; // payload message id
+
+            // Check for an ACK-ACK for the specified class and message id
+            if ((msg_cls == 0x05) && (msg_msg_id == 0x01) && payload_cls == class_id && payload_msg == msg_id) {
+#ifdef GPS_DEBUG
+                LOG_INFO("Got ACK for class %02X message %02X in %d millis.\n", class_id, msg_id, millis() - startTime);
+#endif
+                return GNSS_RESPONSE_OK;
+            }
+
+            // Check for an ACK-NACK for the specified class and message id
+            if ((msg_cls == 0x05) && (msg_msg_id == 0x00) && payload_cls == class_id && payload_msg == msg_id) {
+#ifdef GPS_DEBUG
+                LOG_WARN("Got NACK for class %02X message %02X in %d millis.\n", class_id, msg_id, millis() - startTime);
+#endif
+                return GNSS_RESPONSE_NAK;
+            }
+
+            // This isn't the frame we are looking for, clear the buffer
+            // and try again until we run out of time.
+            memset(buffer, 0x0, sizeof(buffer));
+            bufferPos = 0;
+        }
+    }
     return GNSS_RESPONSE_NONE;
 }
 
@@ -251,30 +375,9 @@ int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
 bool GPS::setup()
 {
     int msglen = 0;
-    bool isProblematicGPS = false;
 
     if (!didSerialInit) {
 #if !defined(GPS_UC6580)
-#ifdef HAS_PMU
-        // The T-Beam 1.2 has issues with the GPS
-        if (HW_VENDOR == meshtastic_HardwareModel_TBEAM && PMU->getChipModel() == XPOWERS_AXP2101) {
-            gnssModel = GNSS_MODEL_UBLOX;
-            isProblematicGPS = true;
-        }
-#endif
-
-#if defined(RAK4630) && defined(PIN_3V3_EN)
-        // If we are using the RAK4630 and we have no other peripherals on the I2C bus or module interest in 3V3_S,
-        // then we can safely set en_gpio turn off power to 3V3 (IO2) to hard sleep the GPS
-        if (rtc_found.port == ScanI2C::DeviceType::NONE && rgb_found.type == ScanI2C::DeviceType::NONE &&
-            accelerometer_found.port == ScanI2C::DeviceType::NONE && !moduleConfig.detection_sensor.enabled &&
-            !moduleConfig.telemetry.air_quality_enabled && !moduleConfig.telemetry.environment_measurement_enabled &&
-            config.power.device_battery_ina_address == 0 && en_gpio == 0) {
-            LOG_DEBUG("Since no problematic peripherals or interested modules were found, setting power save GPS_EN to pin %i\n",
-                      PIN_3V3_EN);
-            en_gpio = PIN_3V3_EN;
-        }
-#endif
 
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
             LOG_DEBUG("Probing for GPS at %d \n", serialSpeeds[speedSelect]);
@@ -311,6 +414,53 @@ bool GPS::setup()
             // Switch to Vehicle Mode, since SoftRF enables Aviation < 2g
             _serial_gps->write("$PCAS11,3*1E\r\n");
             delay(250);
+        } else if (gnssModel == GNSS_MODEL_MTK_L76B) {
+            // Waveshare Pico-GPS hat uses the L76B with 9600 baud
+            // Initialize the L76B Chip, use GPS + GLONASS
+            // See note in L76_Series_GNSS_Protocol_Specification, chapter 3.29
+            _serial_gps->write("$PMTK353,1,1,0,0,0*2B\r\n");
+            // Above command will reset the GPS and takes longer before it will accept new commands
+            delay(1000);
+            // only ask for RMC and GGA (GNRMC and GNGGA)
+            // See note in L76_Series_GNSS_Protocol_Specification, chapter 2.1
+            _serial_gps->write("$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*28\r\n");
+            delay(250);
+            // Enable SBAS
+            _serial_gps->write("$PMTK301,2*2E\r\n");
+            delay(250);
+            // Enable PPS for 2D/3D fix only
+            _serial_gps->write("$PMTK285,3,100*3F\r\n");
+            delay(250);
+            // Switch to Fitness Mode, for running and walking purpose with low speed (<5 m/s)
+            _serial_gps->write("$PMTK886,1*29\r\n");
+            delay(250);
+        } else if (gnssModel == GNSS_MODEL_ATGM336H) {
+            // Set the intial configuration of the device - these _should_ work for most AT6558 devices
+            msglen = makeCASPacket(0x06, 0x07, sizeof(_message_CAS_CFG_NAVX_CONF), _message_CAS_CFG_NAVX_CONF);
+            _serial_gps->write(UBXscratch, msglen);
+            if (getACKCas(0x06, 0x07, 250) != GNSS_RESPONSE_OK) {
+                LOG_WARN("ATGM336H - Could not set Configuration");
+            }
+
+            // Set the update frequence to 1Hz
+            msglen = makeCASPacket(0x06, 0x04, sizeof(_message_CAS_CFG_RATE_1HZ), _message_CAS_CFG_RATE_1HZ);
+            _serial_gps->write(UBXscratch, msglen);
+            if (getACKCas(0x06, 0x04, 250) != GNSS_RESPONSE_OK) {
+                LOG_WARN("ATGM336H - Could not set Update Frequency");
+            }
+
+            // Set the NEMA output messages
+            // Ask for only RMC and GGA
+            uint8_t fields[] = {CAS_NEMA_RMC, CAS_NEMA_GGA};
+            for (int i = 0; i < sizeof(fields); i++) {
+                // Construct a CAS-CFG-MSG packet
+                uint8_t cas_cfg_msg_packet[] = {0x4e, fields[i], 0x01, 0x00};
+                msglen = makeCASPacket(0x06, 0x01, sizeof(cas_cfg_msg_packet), cas_cfg_msg_packet);
+                _serial_gps->write(UBXscratch, msglen);
+                if (getACKCas(0x06, 0x01, 250) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("ATGM336H - Could not enable NMEA MSG: %d\n", fields[i]);
+                }
+            }
         } else if (gnssModel == GNSS_MODEL_UC6580) {
             // The Unicore UC6580 can use a lot of sat systems, enable it to
             // use GPS L1 & L5 + BDS B1I & B2a + GLONASS L1 + GALILEO E1 & E5a + SBAS
@@ -327,132 +477,273 @@ bool GPS::setup()
             delay(250);
             _serial_gps->write("$CFGMSG,6,1,0\r\n");
             delay(250);
-
         } else if (gnssModel == GNSS_MODEL_UBLOX) {
             // Configure GNSS system to GPS+SBAS+GLONASS (Module may restart after this command)
             // We need set it because by default it is GPS only, and we want to use GLONASS too
             // Also we need SBAS for better accuracy and extra features
             // ToDo: Dynamic configure GNSS systems depending of LoRa region
 
-            if (strncmp(info.hwVersion, "00040007", 8) !=
-                0) { // The original ublox 6 is GPS only and doesn't support the UBX-CFG-GNSS message
-                if (strncmp(info.hwVersion, "00070000", 8) == 0) { // Max7 seems to only support GPS *or* GLONASS
-                    LOG_DEBUG("Setting GPS+SBAS\n");
-                    msglen = makeUBXPacket(0x06, 0x3e, sizeof(_message_GNSS_7), _message_GNSS_7);
-                    _serial_gps->write(UBXscratch, msglen);
-                } else {
-                    msglen = makeUBXPacket(0x06, 0x3e, sizeof(_message_GNSS), _message_GNSS);
-                    _serial_gps->write(UBXscratch, msglen);
-                }
+            if (strncmp(info.hwVersion, "000A0000", 8) != 0) {
+                if (strncmp(info.hwVersion, "00040007", 8) != 0) {
+                    // The original ublox Neo-6 is GPS only and doesn't support the UBX-CFG-GNSS message
+                    // Max7 seems to only support GPS *or* GLONASS
+                    // Neo-7 is supposed to support GPS *and* GLONASS but NAKs the CFG-GNSS command to do it
+                    // So treat all the u-blox 7 series as GPS only
+                    // M8 can support 3 constallations at once so turn on GPS, GLONASS and Galileo (or BeiDou)
 
-                if (getACK(0x06, 0x3e, 800) == GNSS_RESPONSE_NAK) {
-                    // It's not critical if the module doesn't acknowledge this configuration.
-                    LOG_INFO("Unable to reconfigure GNSS - defaults maintained. Is this module GPS-only?\n");
-                } else {
                     if (strncmp(info.hwVersion, "00070000", 8) == 0) {
-                        LOG_INFO("GNSS configured for GPS+SBAS. Pause for 0.75s before sending next command.\n");
+                        LOG_DEBUG("Setting GPS+SBAS\n");
+                        msglen = makeUBXPacket(0x06, 0x3e, sizeof(_message_GNSS_7), _message_GNSS_7);
+                        _serial_gps->write(UBXscratch, msglen);
                     } else {
-                        LOG_INFO("GNSS configured for GPS+SBAS+GLONASS. Pause for 0.75s before sending next command.\n");
+                        msglen = makeUBXPacket(0x06, 0x3e, sizeof(_message_GNSS_8), _message_GNSS_8);
+                        _serial_gps->write(UBXscratch, msglen);
                     }
-                    // Documentation say, we need wait atleast 0.5s after reconfiguration of GNSS module, before sending next
-                    // commands
-                    delay(750);
-                }
-            }
 
-            msglen = makeUBXPacket(0x06, 0x39, sizeof(_message_JAM), _message_JAM);
-            _serial_gps->write(UBXscratch, msglen);
-            if (getACK(0x06, 0x39, 300) != GNSS_RESPONSE_OK) {
-                LOG_WARN("Unable to enable interference resistance.\n");
-            }
-
-            msglen = makeUBXPacket(0x06, 0x23, sizeof(_message_NAVX5), _message_NAVX5);
-            _serial_gps->write(UBXscratch, msglen);
-            if (getACK(0x06, 0x23, 300) != GNSS_RESPONSE_OK) {
-                LOG_WARN("Unable to configure extra settings.\n");
-            }
-
-            // ublox-M10S can be compatible with UBLOX traditional protocol, so the following sentence settings are also valid
-
-            msglen = makeUBXPacket(0x06, 0x08, sizeof(_message_1HZ), _message_1HZ);
-            _serial_gps->write(UBXscratch, msglen);
-            if (getACK(0x06, 0x08, 300) != GNSS_RESPONSE_OK) {
-                LOG_WARN("Unable to set GPS update rate.\n");
-            }
-
-            msglen = makeUBXPacket(0x06, 0x01, sizeof(_message_GGL), _message_GGL);
-            _serial_gps->write(UBXscratch, msglen);
-            if (getACK(0x06, 0x01, 300) != GNSS_RESPONSE_OK) {
-                LOG_WARN("Unable to disable NMEA GGL.\n");
-            }
-
-            msglen = makeUBXPacket(0x06, 0x01, sizeof(_message_GSA), _message_GSA);
-            _serial_gps->write(UBXscratch, msglen);
-            if (getACK(0x06, 0x01, 300) != GNSS_RESPONSE_OK) {
-                LOG_WARN("Unable to Enable NMEA GSA.\n");
-            }
-
-            msglen = makeUBXPacket(0x06, 0x01, sizeof(_message_GSV), _message_GSV);
-            _serial_gps->write(UBXscratch, msglen);
-            if (getACK(0x06, 0x01, 300) != GNSS_RESPONSE_OK) {
-                LOG_WARN("Unable to disable NMEA GSV.\n");
-            }
-
-            msglen = makeUBXPacket(0x06, 0x01, sizeof(_message_VTG), _message_VTG);
-            _serial_gps->write(UBXscratch, msglen);
-            if (getACK(0x06, 0x01, 300) != GNSS_RESPONSE_OK) {
-                LOG_WARN("Unable to disable NMEA VTG.\n");
-            }
-
-            msglen = makeUBXPacket(0x06, 0x01, sizeof(_message_RMC), _message_RMC);
-            _serial_gps->write(UBXscratch, msglen);
-            if (getACK(0x06, 0x01, 300) != GNSS_RESPONSE_OK) {
-                LOG_WARN("Unable to enable NMEA RMC.\n");
-            }
-
-            msglen = makeUBXPacket(0x06, 0x01, sizeof(_message_GGA), _message_GGA);
-            _serial_gps->write(UBXscratch, msglen);
-            if (getACK(0x06, 0x01, 300) != GNSS_RESPONSE_OK) {
-                LOG_WARN("Unable to enable NMEA GGA.\n");
-            }
-
-            if (uBloxProtocolVersion >= 18) {
-                msglen = makeUBXPacket(0x06, 0x86, sizeof(_message_PMS), _message_PMS);
-                _serial_gps->write(UBXscratch, msglen);
-                if (getACK(0x06, 0x86, 300) != GNSS_RESPONSE_OK) {
-                    LOG_WARN("Unable to enable powersaving for GPS.\n");
-                }
-            } else {
-                if (!(isProblematicGPS)) {
-                    if (strncmp(info.hwVersion, "00040007", 8) == 0) { // This PSM mode has only been tested on this hardware
-                        msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_PSM);
-                        _serial_gps->write(UBXscratch, msglen);
-                        if (getACK(0x06, 0x11, 300) != GNSS_RESPONSE_OK) {
-                            LOG_WARN("Unable to enable powersaving mode for GPS.\n");
-                        }
-                        msglen = makeUBXPacket(0x06, 0x3B, 44, _message_CFG_PM2);
-                        _serial_gps->write(UBXscratch, msglen);
-                        if (getACK(0x06, 0x3B, 300) != GNSS_RESPONSE_OK) {
-                            LOG_WARN("Unable to enable powersaving details for GPS.\n");
-                        }
+                    if (getACK(0x06, 0x3e, 800) == GNSS_RESPONSE_NAK) {
+                        // It's not critical if the module doesn't acknowledge this configuration.
+                        LOG_INFO("Unable to reconfigure GNSS - defaults maintained. Is this module GPS-only?\n");
                     } else {
+                        if (strncmp(info.hwVersion, "00070000", 8) == 0) {
+                            LOG_INFO("GNSS configured for GPS+SBAS. Pause for 0.75s before sending next command.\n");
+                        } else {
+                            LOG_INFO(
+                                "GNSS configured for GPS+SBAS+GLONASS+Galileo. Pause for 0.75s before sending next command.\n");
+                        }
+                        // Documentation say, we need wait atleast 0.5s after reconfiguration of GNSS module, before sending next
+                        // commands for the M8 it tends to be more... 1 sec should be enough ;>)
+                        delay(1000);
+                    }
+                }
+                // Disable Text Info messages
+                msglen = makeUBXPacket(0x06, 0x02, sizeof(_message_DISABLE_TXT_INFO), _message_DISABLE_TXT_INFO);
+                clearBuffer();
+                _serial_gps->write(UBXscratch, msglen);
+                if (getACK(0x06, 0x02, 500) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("Unable to disable text info messages.\n");
+                }
+                // ToDo add M10 tests for below
+                if (strncmp(info.hwVersion, "00080000", 8) == 0) {
+                    msglen = makeUBXPacket(0x06, 0x39, sizeof(_message_JAM_8), _message_JAM_8);
+                    clearBuffer();
+                    _serial_gps->write(UBXscratch, msglen);
+                    if (getACK(0x06, 0x39, 500) != GNSS_RESPONSE_OK) {
+                        LOG_WARN("Unable to enable interference resistance.\n");
+                    }
+
+                    msglen = makeUBXPacket(0x06, 0x23, sizeof(_message_NAVX5_8), _message_NAVX5_8);
+                    clearBuffer();
+                    _serial_gps->write(UBXscratch, msglen);
+                    if (getACK(0x06, 0x23, 500) != GNSS_RESPONSE_OK) {
+                        LOG_WARN("Unable to configure NAVX5_8 settings.\n");
+                    }
+                } else {
+                    msglen = makeUBXPacket(0x06, 0x39, sizeof(_message_JAM_6_7), _message_JAM_6_7);
+                    _serial_gps->write(UBXscratch, msglen);
+                    if (getACK(0x06, 0x39, 500) != GNSS_RESPONSE_OK) {
+                        LOG_WARN("Unable to enable interference resistance.\n");
+                    }
+
+                    msglen = makeUBXPacket(0x06, 0x23, sizeof(_message_NAVX5), _message_NAVX5);
+                    _serial_gps->write(UBXscratch, msglen);
+                    if (getACK(0x06, 0x23, 500) != GNSS_RESPONSE_OK) {
+                        LOG_WARN("Unable to configure NAVX5 settings.\n");
+                    }
+                }
+                // Turn off unwanted NMEA messages, set update rate
+
+                msglen = makeUBXPacket(0x06, 0x08, sizeof(_message_1HZ), _message_1HZ);
+                _serial_gps->write(UBXscratch, msglen);
+                if (getACK(0x06, 0x08, 500) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("Unable to set GPS update rate.\n");
+                }
+
+                msglen = makeUBXPacket(0x06, 0x01, sizeof(_message_GLL), _message_GLL);
+                _serial_gps->write(UBXscratch, msglen);
+                if (getACK(0x06, 0x01, 500) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("Unable to disable NMEA GLL.\n");
+                }
+
+                msglen = makeUBXPacket(0x06, 0x01, sizeof(_message_GSA), _message_GSA);
+                _serial_gps->write(UBXscratch, msglen);
+                if (getACK(0x06, 0x01, 500) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("Unable to Enable NMEA GSA.\n");
+                }
+
+                msglen = makeUBXPacket(0x06, 0x01, sizeof(_message_GSV), _message_GSV);
+                _serial_gps->write(UBXscratch, msglen);
+                if (getACK(0x06, 0x01, 500) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("Unable to disable NMEA GSV.\n");
+                }
+
+                msglen = makeUBXPacket(0x06, 0x01, sizeof(_message_VTG), _message_VTG);
+                _serial_gps->write(UBXscratch, msglen);
+                if (getACK(0x06, 0x01, 500) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("Unable to disable NMEA VTG.\n");
+                }
+
+                msglen = makeUBXPacket(0x06, 0x01, sizeof(_message_RMC), _message_RMC);
+                _serial_gps->write(UBXscratch, msglen);
+                if (getACK(0x06, 0x01, 500) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("Unable to enable NMEA RMC.\n");
+                }
+
+                msglen = makeUBXPacket(0x06, 0x01, sizeof(_message_GGA), _message_GGA);
+                _serial_gps->write(UBXscratch, msglen);
+                if (getACK(0x06, 0x01, 500) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("Unable to enable NMEA GGA.\n");
+                }
+
+                if (uBloxProtocolVersion >= 18) {
+                    msglen = makeUBXPacket(0x06, 0x86, sizeof(_message_PMS), _message_PMS);
+                    clearBuffer();
+                    _serial_gps->write(UBXscratch, msglen);
+                    if (getACK(0x06, 0x86, 500) != GNSS_RESPONSE_OK) {
+                        LOG_WARN("Unable to enable powersaving for GPS.\n");
+                    }
+                    msglen = makeUBXPacket(0x06, 0x3B, sizeof(_message_CFG_PM2), _message_CFG_PM2);
+                    _serial_gps->write(UBXscratch, msglen);
+                    if (getACK(0x06, 0x3B, 500) != GNSS_RESPONSE_OK) {
+                        LOG_WARN("Unable to enable powersaving details for GPS.\n");
+                    }
+                    // For M8 we want to enable NMEA vserion 4.10 so we can see the additional sats.
+                    if (strncmp(info.hwVersion, "00080000", 8) == 0) {
+                        msglen = makeUBXPacket(0x06, 0x17, sizeof(_message_NMEA), _message_NMEA);
+                        clearBuffer();
+                        _serial_gps->write(UBXscratch, msglen);
+                        if (getACK(0x06, 0x17, 500) != GNSS_RESPONSE_OK) {
+                            LOG_WARN("Unable to enable NMEA 4.10.\n");
+                        }
+                    }
+                } else {
+                    if (strncmp(info.hwVersion, "00040007", 8) == 0) { // This PSM mode is only for Neo-6
                         msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_ECO);
                         _serial_gps->write(UBXscratch, msglen);
-                        if (getACK(0x06, 0x11, 300) != GNSS_RESPONSE_OK) {
-                            LOG_WARN("Unable to enable powersaving ECO mode for GPS.\n");
+                        if (getACK(0x06, 0x11, 500) != GNSS_RESPONSE_OK) {
+                            LOG_WARN("Unable to enable powersaving ECO mode for Neo-6.\n");
+                        }
+                        msglen = makeUBXPacket(0x06, 0x3B, sizeof(_message_CFG_PM2), _message_CFG_PM2);
+                        _serial_gps->write(UBXscratch, msglen);
+                        if (getACK(0x06, 0x3B, 500) != GNSS_RESPONSE_OK) {
+                            LOG_WARN("Unable to enable powersaving details for GPS.\n");
+                        }
+                        msglen = makeUBXPacket(0x06, 0x01, sizeof(_message_AID), _message_AID);
+                        _serial_gps->write(UBXscratch, msglen);
+                        if (getACK(0x06, 0x01, 500) != GNSS_RESPONSE_OK) {
+                            LOG_WARN("Unable to disable UBX-AID.\n");
+                        }
+                    } else {
+                        msglen = makeUBXPacket(0x06, 0x11, 0x2, _message_CFG_RXM_PSM);
+                        _serial_gps->write(UBXscratch, msglen);
+                        if (getACK(0x06, 0x11, 500) != GNSS_RESPONSE_OK) {
+                            LOG_WARN("Unable to enable powersaving mode for GPS.\n");
+                        }
+
+                        msglen = makeUBXPacket(0x06, 0x3B, sizeof(_message_CFG_PM2), _message_CFG_PM2);
+                        _serial_gps->write(UBXscratch, msglen);
+                        if (getACK(0x06, 0x3B, 500) != GNSS_RESPONSE_OK) {
+                            LOG_WARN("Unable to enable powersaving details for GPS.\n");
                         }
                     }
                 }
-            }
-            // The T-beam 1.2 has issues.
-            if (!(isProblematicGPS)) {
-                msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
+            } else {
+                // LOG_INFO("u-blox M10 hardware found.\n");
+                delay(1000);
+                // First disable all NMEA messages in RAM layer
+                msglen = makeUBXPacket(0x06, 0x8A, sizeof(_message_VALSET_DISABLE_NMEA_RAM), _message_VALSET_DISABLE_NMEA_RAM);
+                clearBuffer();
                 _serial_gps->write(UBXscratch, msglen);
-                if (getACK(0x06, 0x09, 300) != GNSS_RESPONSE_OK) {
-                    LOG_WARN("Unable to save GNSS module configuration.\n");
-                } else {
-                    LOG_INFO("GNSS module configuration saved!\n");
+                if (getACK(0x06, 0x8A, 300) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("Unable to disable NMEA messages for M10 GPS RAM.\n");
                 }
+                delay(250);
+                // Next disable unwanted NMEA messages in BBR layer
+                msglen = makeUBXPacket(0x06, 0x8A, sizeof(_message_VALSET_DISABLE_NMEA_BBR), _message_VALSET_DISABLE_NMEA_BBR);
+                clearBuffer();
+                _serial_gps->write(UBXscratch, msglen);
+                if (getACK(0x06, 0x8A, 300) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("Unable to disable NMEA messages for M10 GPS BBR.\n");
+                }
+                delay(250);
+                // Disable Info txt messages in RAM layer
+                msglen =
+                    makeUBXPacket(0x06, 0x8A, sizeof(_message_VALSET_DISABLE_TXT_INFO_RAM), _message_VALSET_DISABLE_TXT_INFO_RAM);
+                clearBuffer();
+                _serial_gps->write(UBXscratch, msglen);
+                if (getACK(0x06, 0x8A, 300) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("Unable to disable Info messages for M10 GPS RAM.\n");
+                }
+                delay(250);
+                // Next disable Info txt messages in BBR layer
+                msglen =
+                    makeUBXPacket(0x06, 0x8A, sizeof(_message_VALSET_DISABLE_TXT_INFO_BBR), _message_VALSET_DISABLE_TXT_INFO_BBR);
+                clearBuffer();
+                _serial_gps->write(UBXscratch, msglen);
+                if (getACK(0x06, 0x8A, 300) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("Unable to disable Info messages for M10 GPS BBR.\n");
+                }
+                // Do M10 configuration for Power Management.
+
+                msglen = makeUBXPacket(0x06, 0x8A, sizeof(_message_VALSET_PM_RAM), _message_VALSET_PM_RAM);
+                _serial_gps->write(UBXscratch, msglen);
+                if (getACK(0x06, 0x8A, 300) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("Unable to enable powersaving for M10 GPS RAM.\n");
+                }
+                msglen = makeUBXPacket(0x06, 0x8A, sizeof(_message_VALSET_PM_BBR), _message_VALSET_PM_BBR);
+                _serial_gps->write(UBXscratch, msglen);
+                if (getACK(0x06, 0x8A, 300) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("Unable to enable powersaving for M10 GPS BBR.\n");
+                }
+
+                delay(250);
+                msglen = makeUBXPacket(0x06, 0x8A, sizeof(_message_VALSET_ITFM_RAM), _message_VALSET_ITFM_RAM);
+                _serial_gps->write(UBXscratch, msglen);
+                if (getACK(0x06, 0x8A, 300) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("Unable to enable Jamming detection M10 GPS RAM.\n");
+                }
+                msglen = makeUBXPacket(0x06, 0x8A, sizeof(_message_VALSET_ITFM_BBR), _message_VALSET_ITFM_BBR);
+                _serial_gps->write(UBXscratch, msglen);
+                if (getACK(0x06, 0x8A, 300) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("Unable to enable Jamming detection M10 GPS BBR.\n");
+                }
+
+                // Here is where the init commands should go to do further M10 initialization.
+                delay(250);
+                msglen = makeUBXPacket(0x06, 0x8A, sizeof(_message_VALSET_DISABLE_SBAS_RAM), _message_VALSET_DISABLE_SBAS_RAM);
+                _serial_gps->write(UBXscratch, msglen);
+                if (getACK(0x06, 0x8A, 300) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("Unable to disable SBAS M10 GPS RAM.\n");
+                }
+                delay(750); // will cause a receiver restart so wait a bit
+                msglen = makeUBXPacket(0x06, 0x8A, sizeof(_message_VALSET_DISABLE_SBAS_BBR), _message_VALSET_DISABLE_SBAS_BBR);
+                _serial_gps->write(UBXscratch, msglen);
+                if (getACK(0x06, 0x8A, 300) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("Unable to disable SBAS M10 GPS BBR.\n");
+                }
+                delay(750); // will cause a receiver restart so wait a bit
+                // Done with initialization, Now enable wanted NMEA messages in BBR layer so they will survive a periodic sleep.
+                msglen = makeUBXPacket(0x06, 0x8A, sizeof(_message_VALSET_ENABLE_NMEA_BBR), _message_VALSET_ENABLE_NMEA_BBR);
+                _serial_gps->write(UBXscratch, msglen);
+                if (getACK(0x06, 0x8A, 300) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("Unable to enable messages for M10 GPS BBR.\n");
+                }
+                delay(250);
+                // Next enable wanted NMEA messages in RAM layer
+                msglen = makeUBXPacket(0x06, 0x8A, sizeof(_message_VALSET_ENABLE_NMEA_RAM), _message_VALSET_ENABLE_NMEA_RAM);
+                _serial_gps->write(UBXscratch, msglen);
+                if (getACK(0x06, 0x8A, 300) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("Unable to enable messages for M10 GPS RAM.\n");
+                }
+                // As the M10 has no flash, the best we can do to preserve the config is to set it in RAM and BBR.
+                // BBR will survive a restart, and power off for a while, but modules with small backup
+                // batteries or super caps will not retain the config for a long power off time.
+            }
+            msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
+            _serial_gps->write(UBXscratch, msglen);
+            if (getACK(0x06, 0x09, 2000) != GNSS_RESPONSE_OK) {
+                LOG_WARN("Unable to save GNSS module configuration.\n");
+            } else {
+                LOG_INFO("GNSS module configuration saved!\n");
             }
         }
         didSerialInit = true;
@@ -504,17 +795,27 @@ void GPS::setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime)
         return;
     }
 #endif
-#ifdef PIN_GPS_STANDBY // Specifically the standby pin for L76K and clones
+#ifdef PIN_GPS_STANDBY // Specifically the standby pin for L76B, L76K and clones
     if (on) {
-        LOG_INFO("Waking GPS");
+        LOG_INFO("Waking GPS\n");
         pinMode(PIN_GPS_STANDBY, OUTPUT);
+        // Some PCB's use an inverse logic due to a transistor driver
+        // Example for this is the Pico-Waveshare Lora+GPS HAT
+#ifdef PIN_GPS_STANDBY_INVERTED
+        digitalWrite(PIN_GPS_STANDBY, 0);
+#else
         digitalWrite(PIN_GPS_STANDBY, 1);
+#endif
         return;
     } else {
-        LOG_INFO("GPS entering sleep");
+        LOG_INFO("GPS entering sleep\n");
         // notifyGPSSleep.notifyObservers(NULL);
         pinMode(PIN_GPS_STANDBY, OUTPUT);
+#ifdef PIN_GPS_STANDBY_INVERTED
+        digitalWrite(PIN_GPS_STANDBY, 1);
+#else
         digitalWrite(PIN_GPS_STANDBY, 0);
+#endif
         return;
     }
 #endif
@@ -522,10 +823,17 @@ void GPS::setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime)
         if (gnssModel == GNSS_MODEL_UBLOX) {
             uint8_t msglen;
             LOG_DEBUG("Sleep Time: %i\n", sleepTime);
-            for (int i = 0; i < 4; i++) {
-                gps->_message_PMREQ[0 + i] = sleepTime >> (i * 8); // Encode the sleep time in millis into the packet
+            if (strncmp(info.hwVersion, "000A0000", 8) != 0) {
+                for (int i = 0; i < 4; i++) {
+                    gps->_message_PMREQ[0 + i] = sleepTime >> (i * 8); // Encode the sleep time in millis into the packet
+                }
+                msglen = gps->makeUBXPacket(0x02, 0x41, sizeof(_message_PMREQ), gps->_message_PMREQ);
+            } else {
+                for (int i = 0; i < 4; i++) {
+                    gps->_message_PMREQ_10[4 + i] = sleepTime >> (i * 8); // Encode the sleep time in millis into the packet
+                }
+                msglen = gps->makeUBXPacket(0x02, 0x41, sizeof(_message_PMREQ_10), gps->_message_PMREQ_10);
             }
-            msglen = gps->makeUBXPacket(0x02, 0x41, 0x08, gps->_message_PMREQ);
             gps->_serial_gps->write(gps->UBXscratch, msglen);
         }
     } else {
@@ -575,15 +883,20 @@ void GPS::setAwake(bool on)
         if ((int32_t)getSleepTime() - averageLockTime >
             15 * 60 * 1000) { // 15 minutes is probably long enough to make a complete poweroff worth it.
             setGPSPower(on, false, getSleepTime() - averageLockTime);
+            return;
         } else if ((int32_t)getSleepTime() - averageLockTime > 10000) { // 10 seconds is enough for standby
 #ifdef GPS_UC6580
             setGPSPower(on, false, getSleepTime() - averageLockTime);
 #else
             setGPSPower(on, true, getSleepTime() - averageLockTime);
 #endif
-        } else if (averageLockTime > 20000) {
+            return;
+        }
+        if (averageLockTime > 20000) {
             averageLockTime -= 1000; // eventually want to sleep again.
         }
+        if (on)
+            setGPSPower(true, true, 0); // make sure we don't have a fallthrough where GPS is stuck off
     }
 }
 
@@ -591,11 +904,12 @@ void GPS::setAwake(bool on)
  */
 uint32_t GPS::getWakeTime() const
 {
-    uint32_t t = config.position.gps_attempt_time;
+    uint32_t t = config.position.position_broadcast_secs;
 
     if (t == UINT32_MAX)
         return t; // already maxint
-    return t * 1000;
+
+    return Default::getConfiguredOrDefaultMs(t, default_broadcast_interval_secs);
 }
 
 /** Get how long we should sleep between aqusition attempts in msecs
@@ -605,13 +919,13 @@ uint32_t GPS::getSleepTime() const
     uint32_t t = config.position.gps_update_interval;
 
     // We'll not need the GPS thread to wake up again after first acq. with fixed position.
-    if (!config.position.gps_enabled || config.position.fixed_position)
+    if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED || config.position.fixed_position)
         t = UINT32_MAX; // Sleep forever now
 
     if (t == UINT32_MAX)
         return t; // already maxint
 
-    return t * 1000;
+    return Default::getConfiguredOrDefaultMs(t, default_gps_update_interval);
 }
 
 void GPS::publishUpdate()
@@ -626,21 +940,24 @@ void GPS::publishUpdate()
         // Notify any status instances that are observing us
         const meshtastic::GPSStatus status = meshtastic::GPSStatus(hasValidLocation, isConnected(), isPowerSaving(), p);
         newStatus.notifyObservers(&status);
-        if (config.position.gps_enabled)
+        if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
             positionModule->handleNewPosition();
+        }
     }
 }
 
 int32_t GPS::runOnce()
 {
     if (!GPSInitFinished) {
-        if (!_serial_gps)
+        if (!_serial_gps || config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
+            LOG_INFO("GPS set to not-present. Skipping probe.\n");
             return disable();
+        }
         if (!setup())
             return 2000; // Setup failed, re-run in two seconds
 
         // We have now loaded our saved preferences from flash
-        if (config.position.gps_enabled == false) {
+        if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
             return disable();
         }
         // ONCE we will factory reset the GPS for bug #327
@@ -648,7 +965,7 @@ int32_t GPS::runOnce()
             LOG_WARN("GPS FactoryReset requested\n");
             if (gps->factoryReset()) { // If we don't succeed try again next time
                 devicestate.did_gps_reset = true;
-                nodeDB.saveToDisk(SEGMENT_DEVICESTATE);
+                nodeDB->saveToDisk(SEGMENT_DEVICESTATE);
             }
         }
         GPSInitFinished = true;
@@ -663,12 +980,12 @@ int32_t GPS::runOnce()
         // if we have received valid NMEA claim we are connected
         setConnected();
     } else {
-        if ((config.position.gps_enabled == 1) && (gnssModel == GNSS_MODEL_UBLOX)) {
+        if ((config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) && (gnssModel == GNSS_MODEL_UBLOX)) {
             // reset the GPS on next bootup
             if (devicestate.did_gps_reset && (millis() - lastWakeStartMsec > 60000) && !hasFlow()) {
                 LOG_DEBUG("GPS is not communicating, trying factory reset on next bootup.\n");
                 devicestate.did_gps_reset = false;
-                nodeDB.saveDeviceStateToDisk();
+                nodeDB->saveDeviceStateToDisk();
                 return disable(); // Stop the GPS thread as it can do nothing useful until next reboot.
             }
         }
@@ -676,7 +993,8 @@ int32_t GPS::runOnce()
     // At least one GPS has a bad habit of losing its mind from time to time
     if (rebootsSeen > 2) {
         rebootsSeen = 0;
-        gps->factoryReset();
+        LOG_DEBUG("Would normally factoryReset()\n");
+        // gps->factoryReset();
     }
 
     // If we are overdue for an update, turn on the GPS and at least publish the current status
@@ -778,9 +1096,17 @@ GnssModel_t GPS::probe(int serialSpeed)
     uint8_t buffer[768] = {0};
     delay(100);
 
-    // Close all NMEA sentences , Only valid for MTK platform
+    // Close all NMEA sentences, valid for L76K, ATGM336H (and likely other AT6558 devices)
     _serial_gps->write("$PCAS03,0,0,0,0,0,0,0,0,0,0,,,0,0*02\r\n");
     delay(20);
+
+    // Get version information
+    clearBuffer();
+    _serial_gps->write("$PCAS06,1*1A\r\n");
+    if (getACK("$GPTXT,01,01,02,HW=ATGM336H", 500) == GNSS_RESPONSE_OK) {
+        LOG_INFO("ATGM336H GNSS init succeeded, using ATGM336H Module\n");
+        return GNSS_MODEL_ATGM336H;
+    }
 
     // Get version information
     clearBuffer();
@@ -788,6 +1114,18 @@ GnssModel_t GPS::probe(int serialSpeed)
     if (getACK("$GPTXT,01,01,02,SW=", 500) == GNSS_RESPONSE_OK) {
         LOG_INFO("L76K GNSS init succeeded, using L76K GNSS Module\n");
         return GNSS_MODEL_MTK;
+    }
+
+    // Close all NMEA sentences, valid for L76B MTK platform (Waveshare Pico GPS)
+    _serial_gps->write("$PMTK514,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*2E\r\n");
+    delay(20);
+
+    // Get version information
+    clearBuffer();
+    _serial_gps->write("$PMTK605*31\r\n");
+    if (getACK("Quectel-L76B", 500) == GNSS_RESPONSE_OK) {
+        LOG_INFO("L76B GNSS init succeeded, using L76B GNSS Module\n");
+        return GNSS_MODEL_MTK_L76B;
     }
 
     uint8_t cfg_rate[] = {0xB5, 0x62, 0x06, 0x08, 0x00, 0x00, 0x00, 0x00};
@@ -875,9 +1213,9 @@ GnssModel_t GPS::probe(int serialSpeed)
                 strncpy((char *)buffer, &(info.extension[i][4]), sizeof(buffer));
                 // LOG_DEBUG("GetModel:%s\n", (char *)buffer);
                 if (strlen((char *)buffer)) {
-                    LOG_INFO("UBlox GNSS init succeeded, using UBlox %s GNSS Module\n", (char *)buffer);
+                    LOG_INFO("UBlox GNSS probe succeeded, using UBlox %s GNSS Module\n", (char *)buffer);
                 } else {
-                    LOG_INFO("UBlox GNSS init succeeded, using UBlox GNSS Module\n");
+                    LOG_INFO("UBlox GNSS probe succeeded, using UBlox GNSS Module\n");
                 }
             } else if (!strncmp(info.extension[i], "PROTVER", 7)) {
                 char *ptr = nullptr;
@@ -902,7 +1240,7 @@ GPS *GPS::createGps()
     int8_t _rx_gpio = config.position.rx_gpio;
     int8_t _tx_gpio = config.position.tx_gpio;
     int8_t _en_gpio = config.position.gps_en_gpio;
-#if defined(HAS_GPS) && !defined(ARCH_ESP32)
+#if HAS_GPS && !defined(ARCH_ESP32)
     _rx_gpio = 1; // We only specify GPS serial ports on ESP32. Otherwise, these are just flags.
     _tx_gpio = 1;
 #endif
@@ -918,7 +1256,7 @@ GPS *GPS::createGps()
     if (!_en_gpio)
         _en_gpio = PIN_GPS_EN;
 #endif
-#ifdef ARCH_RASPBERRY_PI
+#ifdef ARCH_PORTDUINO
     if (!settingsMap[has_gps])
         return nullptr;
 #endif
@@ -971,7 +1309,6 @@ GPS *GPS::createGps()
         LOG_DEBUG("Using GPIO%d for GPS RX\n", new_gps->rx_gpio);
         LOG_DEBUG("Using GPIO%d for GPS TX\n", new_gps->tx_gpio);
         _serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, new_gps->rx_gpio, new_gps->tx_gpio);
-
 #else
         _serial_gps->begin(GPS_BAUDRATE);
 #endif
@@ -1030,7 +1367,21 @@ bool GPS::factoryReset()
         // byte _message_CFG_RST_COLDSTART[] = {0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0xFF, 0xB9, 0x00, 0x00, 0xC6, 0x8B};
         // _serial_gps->write(_message_CFG_RST_COLDSTART, sizeof(_message_CFG_RST_COLDSTART));
         // delay(1000);
+    } else if (gnssModel == GNSS_MODEL_MTK) {
+        // send the CAS10 to perform a factory restart of the device (and other device that support PCAS statements)
+        LOG_INFO("GNSS Factory Reset via PCAS10,3\n");
+        _serial_gps->write("$PCAS10,3*1F\r\n");
+        delay(100);
+    } else if (gnssModel == GNSS_MODEL_ATGM336H) {
+        LOG_INFO("Factory Reset via CAS-CFG-RST\n");
+        uint8_t msglen = makeCASPacket(0x06, 0x02, sizeof(_message_CAS_CFG_RST_FACTORY), _message_CAS_CFG_RST_FACTORY);
+        _serial_gps->write(UBXscratch, msglen);
+        delay(100);
     } else {
+        // fire this for good measure, if we have an L76B - won't harm other devices.
+        _serial_gps->write("$PMTK104*37\r\n");
+        // No PMTK_ACK for this command.
+        delay(100);
         // send the UBLOX Factory Reset Command regardless of detect state, something is very wrong, just assume it's UBLOX.
         // Factory Reset
         byte _message_reset[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF, 0xFB, 0x00, 0x00, 0x00,
@@ -1090,7 +1441,7 @@ bool GPS::lookForLocation()
 
 #ifndef TINYGPS_OPTION_NO_STATISTICS
     if (reader.failedChecksum() > lastChecksumFailCount) {
-        LOG_WARN("Warning, %u new GPS checksum failures, for a total of %u.\n", reader.failedChecksum() - lastChecksumFailCount,
+        LOG_WARN("%u new GPS checksum failures, for a total of %u.\n", reader.failedChecksum() - lastChecksumFailCount,
                  reader.failedChecksum());
         lastChecksumFailCount = reader.failedChecksum();
     }
@@ -1098,7 +1449,7 @@ bool GPS::lookForLocation()
 
 #ifndef TINYGPS_OPTION_NO_CUSTOM_FIELDS
     fixType = atoi(gsafixtype.value()); // will set to zero if no data
-    // LOG_DEBUG("FIX QUAL=%d, TYPE=%d\n", fixQual, fixType);
+                                        // LOG_DEBUG("FIX QUAL=%d, TYPE=%d\n", fixQual, fixType);
 #endif
 
     // check if GPS has an acceptable lock
@@ -1115,6 +1466,10 @@ bool GPS::lookForLocation()
               reader.date.age(), reader.time.age());
 #endif // GPS_EXTRAVERBOSE
 
+    // Is this a new point or are we re-reading the previous one?
+    if (!reader.location.isUpdated())
+        return false;
+
     // check if a complete GPS solution set is available for reading
     //   tinyGPSDatum::age() also includes isValid() test
     // FIXME
@@ -1126,10 +1481,6 @@ bool GPS::lookForLocation()
         LOG_WARN("SOME data is TOO OLD: LOC %u, TIME %u, DATE %u\n", reader.location.age(), reader.time.age(), reader.date.age());
         return false;
     }
-
-    // Is this a new point or are we re-reading the previous one?
-    if (!reader.location.isUpdated())
-        return false;
 
     // We know the solution is fresh and valid, so just read the data
     auto loc = reader.location.value();
@@ -1189,7 +1540,7 @@ bool GPS::lookForLocation()
     t.tm_mon = reader.date.month() - 1;
     t.tm_year = reader.date.year() - 1900;
     t.tm_isdst = false;
-    p.timestamp = mktime(&t);
+    p.timestamp = gm_mktime(&t);
 
     // Nice to have, if available
     if (reader.satellites.isUpdated()) {
@@ -1281,3 +1632,17 @@ int32_t GPS::disable()
 
     return INT32_MAX;
 }
+
+void GPS::toggleGpsMode()
+{
+    if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
+        config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
+        LOG_DEBUG("Flag set to false for gps power. GpsMode: DISABLED\n");
+        disable();
+    } else if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED) {
+        config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
+        LOG_DEBUG("Flag set to true to restore power. GpsMode: ENABLED\n");
+        enable();
+    }
+}
+#endif // Exclude GPS

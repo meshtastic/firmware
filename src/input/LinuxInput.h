@@ -1,5 +1,5 @@
 #pragma once
-#if ARCH_RASPBERRY_PI
+#if ARCH_PORTDUINO
 #include "InputBroker.h"
 #include "concurrency/OSThread.h"
 #include <assert.h>
@@ -21,6 +21,7 @@ class LinuxInput : public Observable<const InputEvent *>, public concurrency::OS
 {
   public:
     explicit LinuxInput(const char *name);
+    void deInit(); // Strictly for cleanly "rebooting" the binary on native
 
   protected:
     virtual int32_t runOnce() override;
@@ -37,7 +38,7 @@ class LinuxInput : public Observable<const InputEvent *>, public concurrency::OS
     int queue_progress = 0;
 
     struct epoll_event events[MAX_EVENTS];
-    int fd;
+    int fd = -1;
     int ret;
     uint8_t report[8];
     int epollfd;

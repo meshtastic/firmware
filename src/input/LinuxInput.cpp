@@ -1,7 +1,6 @@
-#if ARCH_RASPBERRY_PI
-#include "LinuxInput.h"
 #include "configuration.h"
-
+#if ARCH_PORTDUINO
+#include "LinuxInput.h"
 #include "platform/portduino/PortduinoGlue.h"
 #include <assert.h>
 #include <ctype.h>
@@ -21,6 +20,12 @@
 LinuxInput::LinuxInput(const char *name) : concurrency::OSThread(name)
 {
     this->_originName = name;
+}
+
+void LinuxInput::deInit()
+{
+    if (fd >= 0)
+        close(fd);
 }
 
 int32_t LinuxInput::runOnce()
