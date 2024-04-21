@@ -151,35 +151,35 @@ int32_t ExternalNotificationModule::runOnce()
                     colorState = 1;
                 }
             }
-        }
 #endif
 
 #ifdef T_WATCH_S3
-        drv.go();
+            drv.go();
 #endif
-    }
+        }
 
-    // Play RTTTL over i2s audio interface if enabled as buzzer
+        // Play RTTTL over i2s audio interface if enabled as buzzer
 #ifdef HAS_I2S
-    if (moduleConfig.external_notification.use_i2s_as_buzzer) {
-        if (audioThread->isPlaying()) {
-            // Continue playing
-        } else if (isNagging && (nagCycleCutoff >= millis())) {
-            audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
+        if (moduleConfig.external_notification.use_i2s_as_buzzer) {
+            if (audioThread->isPlaying()) {
+                // Continue playing
+            } else if (isNagging && (nagCycleCutoff >= millis())) {
+                audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
+            }
         }
-    }
 #endif
-    // now let the PWM buzzer play
-    if (moduleConfig.external_notification.use_pwm) {
-        if (rtttl::isPlaying()) {
-            rtttl::play();
-        } else if (isNagging && (nagCycleCutoff >= millis())) {
-            // start the song again if we have time left
-            rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
+        // now let the PWM buzzer play
+        if (moduleConfig.external_notification.use_pwm) {
+            if (rtttl::isPlaying()) {
+                rtttl::play();
+            } else if (isNagging && (nagCycleCutoff >= millis())) {
+                // start the song again if we have time left
+                rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
+            }
         }
-    }
 
-    return EXT_NOTIFICATION_DEFAULT_THREAD_MS;
+        return EXT_NOTIFICATION_DEFAULT_THREAD_MS;
+    }
 }
 
 bool ExternalNotificationModule::wantPacket(const meshtastic_MeshPacket *p)
@@ -228,9 +228,9 @@ void ExternalNotificationModule::setExternalOn(uint8_t index)
     analogWrite(RGBLED_GREEN, 255 - green);
     analogWrite(RGBLED_BLUE, 255 - blue);
 #elif defined(RGBLED_RED)
-        analogWrite(RGBLED_RED, red);
-        analogWrite(RGBLED_GREEN, green);
-        analogWrite(RGBLED_BLUE, blue);
+    analogWrite(RGBLED_RED, red);
+    analogWrite(RGBLED_GREEN, green);
+    analogWrite(RGBLED_BLUE, blue);
 #endif
 #ifdef T_WATCH_S3
     drv.go();
@@ -458,7 +458,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
 #ifdef HAS_I2S
                         audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
 #else
-                            rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
+                        rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
 #endif
                     }
                     if (moduleConfig.external_notification.nag_timeout) {
@@ -502,7 +502,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
                         audioThread->beginRttl(rtttlConfig.ringtone, strlen_P(rtttlConfig.ringtone));
                     }
 #else
-                        rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
+                    rtttl::begin(config.device.buzzer_gpio, rtttlConfig.ringtone);
 #endif
                 }
                 if (moduleConfig.external_notification.nag_timeout) {
