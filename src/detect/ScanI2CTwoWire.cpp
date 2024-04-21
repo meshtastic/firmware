@@ -279,6 +279,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                 } else { // Unknown device
                     LOG_INFO("No INA3221 found at address 0x%x\n", (uint8_t)addr.address);
                 }
+                break;
             case MCP9808_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x07), 2);
                 if (registerValue == 0x0400) {
