@@ -283,8 +283,8 @@ typedef struct _meshtastic_Config_DeviceConfig {
     bool disable_triple_click;
     /* POSIX Timezone definition string from https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv. */
     char tzdef[65];
-    /* If true, inhibit blinking LED at LED_PIN regularly */
-    bool status_led_off;
+    /* If true, disable the default blinking LED (LED_PIN) behavior on the device */
+    bool led_heartbeat_disabled;
 } meshtastic_Config_DeviceConfig;
 
 /* Position Config */
@@ -612,7 +612,7 @@ extern "C" {
 #define meshtastic_Config_DeviceConfig_is_managed_tag 9
 #define meshtastic_Config_DeviceConfig_disable_triple_click_tag 10
 #define meshtastic_Config_DeviceConfig_tzdef_tag 11
-#define meshtastic_Config_DeviceConfig_status_led_off_tag 12
+#define meshtastic_Config_DeviceConfig_led_heartbeat_disabled_tag 12
 #define meshtastic_Config_PositionConfig_position_broadcast_secs_tag 1
 #define meshtastic_Config_PositionConfig_position_broadcast_smart_enabled_tag 2
 #define meshtastic_Config_PositionConfig_fixed_position_tag 3
@@ -714,7 +714,7 @@ X(a, STATIC,   SINGULAR, BOOL,     double_tap_as_button_press,   8) \
 X(a, STATIC,   SINGULAR, BOOL,     is_managed,        9) \
 X(a, STATIC,   SINGULAR, BOOL,     disable_triple_click,  10) \
 X(a, STATIC,   SINGULAR, STRING,   tzdef,            11) \
-X(a, STATIC,   SINGULAR, BOOL,     status_led_off,   12)
+X(a, STATIC,   SINGULAR, BOOL,     led_heartbeat_disabled,  12)
 #define meshtastic_Config_DeviceConfig_CALLBACK NULL
 #define meshtastic_Config_DeviceConfig_DEFAULT NULL
 
