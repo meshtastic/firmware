@@ -32,56 +32,42 @@ class AmbientLightingThread : public concurrency::OSThread
             disable();
             return;
         }
+#endif
+#if defined(HAS_NCP5623) || defined(UNPHONE) || defined(RGBLED_RED)
         if (!moduleConfig.ambient_lighting.led_state) {
             LOG_DEBUG("AmbientLightingThread disabling due to moduleConfig.ambient_lighting.led_state OFF\n");
             disable();
             return;
         }
         LOG_DEBUG("AmbientLightingThread initializing\n");
+#ifdef HAS_NCP5623
         if (_type == ScanI2C::NCP5623) {
             rgb.begin();
-            setLighting();
-        }
-#endif
-#ifdef UNPHONE
-        if (!moduleConfig.ambient_lighting.led_state) {
-            LOG_DEBUG("AmbientLightingThread disabling due to moduleConfig.ambient_lighting.led_state OFF\n");
-            disable();
-            return;
-        }
-        LOG_DEBUG("AmbientLightingThread initializing\n");
-        setLighting();
 #endif
 #ifdef RGBLED_RED
-        if (!moduleConfig.ambient_lighting.led_state) {
-            LOG_DEBUG("AmbientLightingThread disabling due to moduleConfig.ambient_lighting.led_state OFF\n");
-            disable();
-            return;
+            pinMode(RGBLED_RED, OUTPUT);
+            pinMode(RGBLED_GREEN, OUTPUT);
+            pinMode(RGBLED_BLUE, OUTPUT);
+#endif
+            setLighting();
+#endif
+#ifdef HAS_NCP5623
         }
-        LOG_DEBUG("AmbientLightingThread initializing\n");
-        pinMode(RGBLED_RED, OUTPUT);
-        pinMode(RGBLED_GREEN, OUTPUT);
-        pinMode(RGBLED_BLUE, OUTPUT);
-        setLighting();
 #endif
     }
 
   protected:
     int32_t runOnce() override
     {
+#if defined(HAS_NCP5623) || defined(UNPHONE) || defined(RGBLED_RED)
 #ifdef HAS_NCP5623
         if (_type == ScanI2C::NCP5623 && moduleConfig.ambient_lighting.led_state) {
+#endif
             setLighting();
             return 30000; // 30 seconds to reset from any animations that may have been running from Ext. Notification
+#ifdef HAS_NCP5623
         }
 #endif
-#ifdef UNPHONE
-        setLighting();
-        return 30000; // 30 seconds to reset from any animations that may have been running from Ext. Notification
-#endif
-#ifdef RGBLED_RED
-        setLighting();
-        return 30000; // 30 seconds to reset from any animations that may have been running from Ext. Notification
 #endif
         return disable();
     }
