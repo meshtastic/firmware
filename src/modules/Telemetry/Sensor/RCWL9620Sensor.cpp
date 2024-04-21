@@ -11,7 +11,8 @@ int32_t RCWL9620Sensor::runOnce()
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    status = begin(nodeTelemetrySensorsMap[sensorType].first, nodeTelemetrySensorsMap[sensorType].second);
+    status = 1;
+    begin(nodeTelemetrySensorsMap[sensorType].second, nodeTelemetrySensorsMap[sensorType].first);
     return initI2CSensor();
 }
 
@@ -24,16 +25,14 @@ bool RCWL9620Sensor::getMetrics(meshtastic_Telemetry *measurement)
     return true;
 }
 
-bool RCWL9620Sensor::begin(uint8_t addr, TwoWire *wire)
+void RCWL9620Sensor::begin(TwoWire *wire, uint8_t addr, uint8_t sda, uint8_t scl, uint32_t speed)
 {
     _wire = wire;
     _addr = addr;
-    if (i2c_dev)
-        delete i2c_dev;
-    i2c_dev = new Adafruit_I2CDevice(_addr, _wire);
-    if (!i2c_dev->begin())
-        return false;
-    return true;
+    _sda = sda;
+    _scl = scl;
+    _speed = speed;
+    _wire->begin();
 }
 
 float RCWL9620Sensor::getDistance()
