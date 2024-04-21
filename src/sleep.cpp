@@ -157,6 +157,10 @@ void initDeepSleep()
         for (uint8_t i = 0; i <= GPIO_NUM_MAX; i++) {
             if (rtc_gpio_is_valid_gpio((gpio_num_t)i))
                 rtc_gpio_hold_dis((gpio_num_t)i);
+
+            // ESP32 (original)
+            else if (GPIO_IS_VALID_OUTPUT_GPIO((gpio_num_t)i))
+                gpio_hold_dis((gpio_num_t)i);
         }
     }
 #endif
@@ -209,7 +213,8 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
 
 #ifdef ARCH_ESP32
     // Full shutdown of bluetooth hardware
-    nimbleBluetooth->deinit();
+    if (nimbleBluetooth)
+        nimbleBluetooth->deinit();
 #endif
 
 #ifdef ARCH_ESP32
@@ -258,14 +263,17 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     }
 #ifdef BUTTON_PIN
     // Avoid leakage through button pin
-    pinMode(BUTTON_PIN, INPUT);
-    gpio_hold_en((gpio_num_t)BUTTON_PIN);
+    if (GPIO_IS_VALID_OUTPUT_GPIO(BUTTON_PIN)) {
+        pinMode(BUTTON_PIN, INPUT);
+        gpio_hold_en((gpio_num_t)BUTTON_PIN);
+    }
 #endif
-
-    // LoRa CS (RADIO_NSS) needs to stay HIGH, even during deep sleep
-    pinMode(LORA_CS, OUTPUT);
-    digitalWrite(LORA_CS, HIGH);
-    gpio_hold_en((gpio_num_t)LORA_CS);
+    if (GPIO_IS_VALID_OUTPUT_GPIO(LORA_CS)) {
+        // LoRa CS (RADIO_NSS) needs to stay HIGH, even during deep sleep
+        pinMode(LORA_CS, OUTPUT);
+        digitalWrite(LORA_CS, HIGH);
+        gpio_hold_en((gpio_num_t)LORA_CS);
+    }
 #endif
 
 #ifdef HAS_PMU
