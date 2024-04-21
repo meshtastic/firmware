@@ -1,17 +1,19 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
-#include <Adafruit_I2CDevice.h>
+#include <Wire.h>
 
 class RCWL9620Sensor : public TelemetrySensor
 {
   private:
     uint8_t _addr;
     TwoWire *_wire;
+    uint8_t _scl;
+    uint8_t _sda;
+    uint8_t _speed;
 
   protected:
     virtual void setup() override;
-    bool begin(uint8_t addr = 0x57, TwoWire *wire = &Wire);
-    Adafruit_I2CDevice *i2c_dev = NULL;
+    void begin(TwoWire *wire = &Wire, uint8_t addr = 0x57, uint8_t sda = -1, uint8_t scl = -1, uint32_t speed = 200000L);
     float getDistance();
 
   public:
