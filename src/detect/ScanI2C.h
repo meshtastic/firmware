@@ -41,7 +41,7 @@ class ScanI2C
         BQ24295,
         LSM6DS3,
         TCA9555,
-#ifdef HAS_NCP5623
+#if defined(HAS_NCP5623) || defined(UNPHONE) || defined(RGBLED_RED)
         NCP5623,
 #endif
     } DeviceType;
