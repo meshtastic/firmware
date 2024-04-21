@@ -150,12 +150,12 @@ class NodeDB
     void setLocalPosition(meshtastic_Position position, bool timeOnly = false)
     {
         if (timeOnly) {
-            LOG_DEBUG("Setting local position time only: time=%i timestamp=%i\n", position.time, position.timestamp);
+            LOG_DEBUG("Setting local position time only: time=%u timestamp=%u\n", position.time, position.timestamp);
             localPosition.time = position.time;
             localPosition.timestamp = position.timestamp > 0 ? position.timestamp : position.time;
             return;
         }
-        LOG_DEBUG("Setting local position: latitude=%i, longitude=%i, time=%i, timeestamp=%i\n", position.latitude_i,
+        LOG_DEBUG("Setting local position: latitude=%i, longitude=%i, time=%u, timestamp=%u\n", position.latitude_i,
                   position.longitude_i, position.time, position.timestamp);
         localPosition = position;
     }
