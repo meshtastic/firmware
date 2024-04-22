@@ -239,9 +239,10 @@ int32_t CannedMessageModule::runOnce()
     // LOG_DEBUG("Check status\n");
     UIFrameEvent e = {false, true};
     if ((this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) ||
-        (this->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED)) {
+        (this->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) || (this->runState == CANNED_MESSAGE_RUN_STATE_MESSAGE)) {
         // TODO: might have some feedback of sendig state
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+        temporaryMessage = "";
         e.frameChanged = true;
         this->currentMessageIndex = -1;
         this->freetext = ""; // clear freetext
@@ -549,8 +550,8 @@ void CannedMessageModule::showTemporaryMessage(const String &message)
     UIFrameEvent e = {false, true};
     e.frameChanged = true;
     notifyObservers(&e);
-    runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-    // run this loop again in 2 seconds, INACTIVE will clear the display
+    runState = CANNED_MESSAGE_RUN_STATE_MESSAGE;
+    // run this loop again in 2 seconds, next iteration will clear the display
     setIntervalFromNow(2000);
 }
 
@@ -558,7 +559,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 {
     char buffer[50];
 
-    if (!temporaryMessage.length() == 0) {
+    if (temporaryMessage.length() != 0) {
         LOG_DEBUG("Drawing temporary message: %s", temporaryMessage.c_str());
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->setFont(FONT_MEDIUM);

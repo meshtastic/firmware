@@ -10,6 +10,7 @@ enum cannedMessageModuleRunState {
     CANNED_MESSAGE_RUN_STATE_FREETEXT,
     CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE,
     CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED,
+    CANNED_MESSAGE_RUN_STATE_MESSAGE,
     CANNED_MESSAGE_RUN_STATE_ACTION_SELECT,
     CANNED_MESSAGE_RUN_STATE_ACTION_UP,
     CANNED_MESSAGE_RUN_STATE_ACTION_DOWN,
@@ -51,7 +52,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     void handleGetCannedMessageModuleMessages(const meshtastic_MeshPacket &req, meshtastic_AdminMessage *response);
     void handleSetCannedMessageModuleMessages(const char *from_msg);
 
-    void showTemporaryMessage(const String& message);
+    void showTemporaryMessage(const String &message);
 
     String drawWithCursor(String text, int cursor);
 
