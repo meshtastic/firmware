@@ -271,8 +271,14 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                 }
                 break;
             case INA3221_ADDR:
-                LOG_INFO("INA3221 sensor found at address 0x%x\n", (uint8_t)addr.address);
-                type = INA3221;
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFE), 2);
+                LOG_DEBUG("Register MFG_UID: 0x%x\n", registerValue);
+                if (registerValue == 0x5449) {
+                    LOG_INFO("INA3221 sensor found at address 0x%x\n", (uint8_t)addr.address);
+                    type = INA3221;
+                } else { // Unknown device
+                    LOG_INFO("No INA3221 found at address 0x%x\n", (uint8_t)addr.address);
+                }
                 break;
             case MCP9808_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x07), 2);
