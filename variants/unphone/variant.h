@@ -1,7 +1,16 @@
 // meshtastic/firmware/variants/unphone/variant.h
 
 #pragma once
-
+// RGB LED configuration
+#define HAS_NEOPIXEL                         // Enable the use of neopixels
+#define NEOPIXEL_COUNT 1                     // How many neopixels are connected
+#define NEOPIXEL_DATA A0                     // gpio pin used to send data to the neopixels
+#define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800) // type of neopixels in use
+//   NEO_KHZ800  800 KHz bitstream (most NeoPixel products w/WS2812 LEDs)
+//   NEO_KHZ400  400 KHz (classic 'v1' (not v2) FLORA pixels, WS2811 drivers)
+//   NEO_GRB     Pixels are wired for GRB bitstream (most NeoPixel products)
+//   NEO_RGB     Pixels are wired for RGB bitstream (v1 FLORA pixels, not v2)
+//   NEO_RGBW    Pixels are wired for RGBW bitstream (NeoPixel RGBW products)
 #define SPI_SCK 39
 #define SPI_MOSI 40
 #define SPI_MISO 41
@@ -38,7 +47,7 @@
 #define SCREEN_TRANSITION_FRAMERATE 5
 
 #define HAS_TOUCHSCREEN 1
-#define USE_XPT2046 1
+#define USE_XPT2046
 #define TOUCH_CS 38
 
 #define HAS_GPS                                                                                                                  \
