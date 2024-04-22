@@ -28,12 +28,16 @@
 #include <graphics/RAKled.h>
 #endif
 
+#ifdef HAS_NEOPIXEL
+#include <graphics/NeoPixel.h>
+#endif
+
 #ifdef UNPHONE
 #include "unPhone.h"
 extern unPhone unphone;
 #endif
 
-#if defined(HAS_NCP5623) || defined(UNPHONE) || defined(RGBLED_RED)
+#if defined(HAS_NCP5623) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
 uint8_t red = 0;
 uint8_t green = 0;
 uint8_t blue = 0;
@@ -115,7 +119,7 @@ int32_t ExternalNotificationModule::runOnce()
                 millis()) {
                 getExternal(2) ? setExternalOff(2) : setExternalOn(2);
             }
-#if defined(HAS_NCP5623) || defined(UNPHONE) || defined(RGBLED_RED)
+#if defined(HAS_NCP5623) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
             red = (colorState & 4) ? brightnessValues[brightnessIndex] : 0;          // Red enabled on colorState = 4,5,6,7
             green = (colorState & 2) ? brightnessValues[brightnessIndex] : 0;        // Green enabled on colorState = 2,3,6,7
             blue = (colorState & 1) ? (brightnessValues[brightnessIndex] * 1.5) : 0; // Blue enabled on colorState = 1,3,5,7
@@ -123,9 +127,6 @@ int32_t ExternalNotificationModule::runOnce()
             if (rgb_found.type == ScanI2C::NCP5623) {
                 rgb.setColor(red, green, blue);
             }
-#endif
-#ifdef UNPHONE
-            unphone.rgb(red, green, blue);
 #endif
 #ifdef RGBLED_CA
             analogWrite(RGBLED_RED, 255 - red); // CA type needs reverse logic
@@ -135,6 +136,13 @@ int32_t ExternalNotificationModule::runOnce()
             analogWrite(RGBLED_RED, red);
             analogWrite(RGBLED_GREEN, green);
             analogWrite(RGBLED_BLUE, blue);
+#endif
+#ifdef HAS_NEOPIXEL
+            pixels.fill(pixels.Color(red, green, blue), 0, NEOPIXEL_COUNT);
+            pixels.show();
+#endif
+#ifdef UNPHONE
+            unphone.rgb(red, green, blue);
 #endif
             if (ascending) { // fade in
                 brightnessIndex++;
@@ -220,9 +228,6 @@ void ExternalNotificationModule::setExternalOn(uint8_t index)
         rgb.setColor(red, green, blue);
     }
 #endif
-#ifdef UNPHONE
-    unphone.rgb(red, green, blue);
-#endif
 #ifdef RGBLED_CA
     analogWrite(RGBLED_RED, 255 - red); // CA type needs reverse logic
     analogWrite(RGBLED_GREEN, 255 - green);
@@ -231,6 +236,13 @@ void ExternalNotificationModule::setExternalOn(uint8_t index)
     analogWrite(RGBLED_RED, red);
     analogWrite(RGBLED_GREEN, green);
     analogWrite(RGBLED_BLUE, blue);
+#endif
+#ifdef HAS_NEOPIXEL
+    pixels.fill(pixels.Color(red, green, blue), 0, NEOPIXEL_COUNT);
+    pixels.show();
+#endif
+#ifdef UNPHONE
+    unphone.rgb(red, green, blue);
 #endif
 #ifdef T_WATCH_S3
     drv.go();
@@ -260,32 +272,30 @@ void ExternalNotificationModule::setExternalOff(uint8_t index)
         break;
     }
 
+#if defined(HAS_NCP5623) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
+    red = 0;
+    green = 0;
+    blue = 0;
 #ifdef HAS_NCP5623
     if (rgb_found.type == ScanI2C::NCP5623) {
-        red = 0;
-        green = 0;
-        blue = 0;
         rgb.setColor(red, green, blue);
     }
 #endif
-#ifdef UNPHONE
-    red = 0;
-    green = 0;
-    blue = 0;
-    unphone.rgb(red, green, blue);
-#endif
-#ifdef RGBLED_RED
-    red = 0;
-    green = 0;
-    blue = 0;
 #ifdef RGBLED_CA
     analogWrite(RGBLED_RED, 255 - red); // CA type needs reverse logic
     analogWrite(RGBLED_GREEN, 255 - green);
     analogWrite(RGBLED_BLUE, 255 - blue);
-#else
+#elif defined(RGBLED_RED)
     analogWrite(RGBLED_RED, red);
     analogWrite(RGBLED_GREEN, green);
     analogWrite(RGBLED_BLUE, blue);
+#endif
+#ifdef HAS_NEOPIXEL
+    pixels.fill(pixels.Color(red, green, blue), 0, NEOPIXEL_COUNT);
+    pixels.show();
+#endif
+#ifdef UNPHONE
+    unphone.rgb(red, green, blue);
 #endif
 #endif
 
@@ -397,6 +407,11 @@ ExternalNotificationModule::ExternalNotificationModule()
         analogWrite(RGBLED_RED, 255);   // with a common anode type, logic is reversed
         analogWrite(RGBLED_GREEN, 255); // so we want to initialise with lights off
         analogWrite(RGBLED_BLUE, 255);
+#endif
+#ifdef HAS_NEOPIXEL
+        pixels.begin(); // Initialise the pixel(s)
+        pixels.clear(); // Set all pixel colors to 'off'
+        pixels.setBrightness(moduleConfig.ambient_lighting.current);
 #endif
     } else {
         LOG_INFO("External Notification Module Disabled\n");
