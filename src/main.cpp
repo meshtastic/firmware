@@ -607,9 +607,7 @@ void setup()
     }
 #endif
 
-#ifdef UNPHONE
-    ambientLightingThread = new AmbientLightingThread(ScanI2C::DeviceType::NONE);
-#elif defined(RGBLED_RED)
+#if defined(HAS_NEOPIXEL) || defined(UNPHONE) || defined(RGBLED_RED)
     ambientLightingThread = new AmbientLightingThread(ScanI2C::DeviceType::NONE);
 #elif !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
     if (rgb_found.type != ScanI2C::DeviceType::NONE) {

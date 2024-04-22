@@ -5,6 +5,11 @@
 NCP5623 rgb;
 #endif
 
+#ifdef HAS_NEOPIXEL
+#include <graphics/NeoPixel.h>
+Adafruit_NeoPixel pixels(NEOPIXEL_COUNT, NEOPIXEL_DATA, NEOPIXEL_TYPE);
+#endif
+
 #ifdef UNPHONE
 #include "unPhone.h"
 extern unPhone unphone;
@@ -33,7 +38,7 @@ class AmbientLightingThread : public concurrency::OSThread
             return;
         }
 #endif
-#if defined(HAS_NCP5623) || defined(UNPHONE) || defined(RGBLED_RED)
+#if defined(HAS_NCP5623) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
         if (!moduleConfig.ambient_lighting.led_state) {
             LOG_DEBUG("AmbientLightingThread disabling due to moduleConfig.ambient_lighting.led_state OFF\n");
             disable();
@@ -49,6 +54,11 @@ class AmbientLightingThread : public concurrency::OSThread
             pinMode(RGBLED_GREEN, OUTPUT);
             pinMode(RGBLED_BLUE, OUTPUT);
 #endif
+#ifdef HAS_NEOPIXEL
+            pixels.begin(); // Initialise the pixel(s)
+            pixels.clear(); // Set all pixel colors to 'off'
+            pixels.setBrightness(moduleConfig.ambient_lighting.current);
+#endif
             setLighting();
 #endif
 #ifdef HAS_NCP5623
@@ -59,7 +69,7 @@ class AmbientLightingThread : public concurrency::OSThread
   protected:
     int32_t runOnce() override
     {
-#if defined(HAS_NCP5623) || defined(UNPHONE) || defined(RGBLED_RED)
+#if defined(HAS_NCP5623) || defined(RGBLED_RED) || defined(HAS_NEOPIXEL) || defined(UNPHONE)
 #ifdef HAS_NCP5623
         if (_type == ScanI2C::NCP5623 && moduleConfig.ambient_lighting.led_state) {
 #endif
@@ -86,10 +96,14 @@ class AmbientLightingThread : public concurrency::OSThread
                   moduleConfig.ambient_lighting.current, moduleConfig.ambient_lighting.red, moduleConfig.ambient_lighting.green,
                   moduleConfig.ambient_lighting.blue);
 #endif
-#ifdef UNPHONE
-        unphone.rgb(moduleConfig.ambient_lighting.red, moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
-        LOG_DEBUG("Initializing unPhone Ambient lighting w/ red=%d, green=%d, blue=%d\n", moduleConfig.ambient_lighting.red,
-                  moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
+#ifdef HAS_NEOPIXEL
+        pixels.fill(pixels.Color(moduleConfig.ambient_lighting.red, moduleConfig.ambient_lighting.green,
+                                 moduleConfig.ambient_lighting.blue),
+                    0, NEOPIXEL_COUNT);
+        pixels.show();
+        LOG_DEBUG("Initializing NeoPixel Ambient lighting w/ brightness(current)=%d, red=%d, green=%d, blue=%d\n",
+                  moduleConfig.ambient_lighting.current, moduleConfig.ambient_lighting.red, moduleConfig.ambient_lighting.green,
+                  moduleConfig.ambient_lighting.blue);
 #endif
 #ifdef RGBLED_CA
         analogWrite(RGBLED_RED, 255 - moduleConfig.ambient_lighting.red);
@@ -103,6 +117,11 @@ class AmbientLightingThread : public concurrency::OSThread
         analogWrite(RGBLED_BLUE, moduleConfig.ambient_lighting.blue);
         LOG_DEBUG("Initializing Ambient lighting RGB Common Cathode w/ red=%d, green=%d, blue=%d\n",
                   moduleConfig.ambient_lighting.red, moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
+#endif
+#ifdef UNPHONE
+        unphone.rgb(moduleConfig.ambient_lighting.red, moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
+        LOG_DEBUG("Initializing unPhone Ambient lighting w/ red=%d, green=%d, blue=%d\n", moduleConfig.ambient_lighting.red,
+                  moduleConfig.ambient_lighting.green, moduleConfig.ambient_lighting.blue);
 #endif
     }
 };
