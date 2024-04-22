@@ -70,12 +70,12 @@ extern "C" {
 #define PIN_BUZZER (40)
 
 #define LED_BUILTIN PIN_LED1
-#define PIN_LED2
+#define LED_CONN PIN_LED2
 
 #define LED_RED PIN_LED1
 #define LED_BLUE PIN_LED2
 
-#define 1 // State when LED is litted
+#define LED_STATE_ON 1 // State when LED is litted
 
 /*
  * Buttons
