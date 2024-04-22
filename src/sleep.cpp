@@ -157,6 +157,10 @@ void initDeepSleep()
         for (uint8_t i = 0; i <= GPIO_NUM_MAX; i++) {
             if (rtc_gpio_is_valid_gpio((gpio_num_t)i))
                 rtc_gpio_hold_dis((gpio_num_t)i);
+
+            // ESP32 (original)
+            else if (GPIO_IS_VALID_OUTPUT_GPIO((gpio_num_t)i))
+                gpio_hold_dis((gpio_num_t)i);
         }
     }
 #endif
@@ -206,6 +210,13 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     // not using wifi yet, but once we are this is needed to shutoff the radio hw
     // esp_wifi_stop();
     waitEnterSleep(skipPreflight);
+
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
+    // Full shutdown of bluetooth hardware
+    if (nimbleBluetooth)
+        nimbleBluetooth->deinit();
+#endif
+
 #ifdef ARCH_ESP32
     if (shouldLoraWake(msecToWake)) {
         notifySleep.notifyObservers(NULL);
@@ -252,14 +263,17 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     }
 #ifdef BUTTON_PIN
     // Avoid leakage through button pin
-    pinMode(BUTTON_PIN, INPUT);
-    gpio_hold_en((gpio_num_t)BUTTON_PIN);
+    if (GPIO_IS_VALID_OUTPUT_GPIO(BUTTON_PIN)) {
+        pinMode(BUTTON_PIN, INPUT);
+        gpio_hold_en((gpio_num_t)BUTTON_PIN);
+    }
 #endif
-
-    // LoRa CS (RADIO_NSS) needs to stay HIGH, even during deep sleep
-    pinMode(LORA_CS, OUTPUT);
-    digitalWrite(LORA_CS, HIGH);
-    gpio_hold_en((gpio_num_t)LORA_CS);
+    if (GPIO_IS_VALID_OUTPUT_GPIO(LORA_CS)) {
+        // LoRa CS (RADIO_NSS) needs to stay HIGH, even during deep sleep
+        pinMode(LORA_CS, OUTPUT);
+        digitalWrite(LORA_CS, HIGH);
+        gpio_hold_en((gpio_num_t)LORA_CS);
+    }
 #endif
 
 #ifdef HAS_PMU
@@ -353,6 +367,9 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     gpio_wakeup_enable(pin, GPIO_INTR_LOW_LEVEL);
     esp_sleep_enable_gpio_wakeup();
 #endif
+#ifdef T_WATCH_S3
+    gpio_wakeup_enable((gpio_num_t)SCREEN_TOUCH_INT, GPIO_INTR_LOW_LEVEL);
+#endif
     enableLoraInterrupt();
 #ifdef PMU_IRQ
     // wake due to PMU can happen repeatedly if there is no battery installed or the battery fills
@@ -383,6 +400,10 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
     // Disable wake-on-button interrupt. Re-attach normal button-interrupts
     gpio_wakeup_disable(pin);
     buttonThread->attachButtonInterrupts();
+#endif
+
+#ifdef T_WATCH_S3
+    gpio_wakeup_disable((gpio_num_t)SCREEN_TOUCH_INT);
 #endif
 
 #if !defined(SOC_PM_SUPPORT_EXT_WAKEUP) && defined(LORA_DIO1) && (LORA_DIO1 != RADIOLIB_NC)

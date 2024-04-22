@@ -151,10 +151,16 @@ static uint8_t bytes[MAX_RHPACKETLEN];
 void initRegion()
 {
     const RegionInfo *r = regions;
+#ifdef LORA_REGIONCODE
+    for (; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET && r->code != LORA_REGIONCODE; r++)
+        ;
+    LOG_INFO("Wanted region %d, regulatory override to %s\n", config.lora.region, r->name);
+#else
     for (; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET && r->code != config.lora.region; r++)
         ;
-    myRegion = r;
     LOG_INFO("Wanted region %d, using %s\n", config.lora.region, r->name);
+#endif
+    myRegion = r;
 }
 
 /**
@@ -486,7 +492,7 @@ void RadioInterface::applyModemConfig()
     // If user has manually specified a channel num, then use that, otherwise generate one by hashing the name
     const char *channelName = channels.getName(channels.getPrimaryIndex());
     // channel_num is actually (channel_num - 1), since modulus (%) returns values from 0 to (numChannels - 1)
-    int channel_num = (loraConfig.channel_num ? loraConfig.channel_num - 1 : hash(channelName)) % numChannels;
+    uint channel_num = (loraConfig.channel_num ? loraConfig.channel_num - 1 : hash(channelName)) % numChannels;
 
     // Check if we use the default frequency slot
     RadioInterface::uses_default_frequency_slot =

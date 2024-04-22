@@ -43,7 +43,9 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* INA3221 3 Channel Voltage / Current Sensor */
     meshtastic_TelemetrySensorType_INA3221 = 14,
     /* BMP085/BMP180 High accuracy temperature and pressure (older Version of BMP280) */
-    meshtastic_TelemetrySensorType_BMP085 = 15
+    meshtastic_TelemetrySensorType_BMP085 = 15,
+    /* RCWL-9620 Doppler Radar Distance Sensor, used for water level detection */
+    meshtastic_TelemetrySensorType_RCWL9620 = 16
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -78,6 +80,8 @@ typedef struct _meshtastic_EnvironmentMetrics {
     /* relative scale IAQ value as measured by Bosch BME680 . value 0-500.
  Belongs to Air Quality but is not particle but VOC measurement. Other VOC values can also be put in here. */
     uint16_t iaq;
+    /* RCWL9620 Doppler Radar Distance Sensor, used for water level detection. Float value in mm. */
+    float distance;
 } meshtastic_EnvironmentMetrics;
 
 /* Power Metrics (voltage / current / etc) */
@@ -148,8 +152,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_BMP085
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_BMP085+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_RCWL9620
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_RCWL9620+1))
 
 
 
@@ -159,12 +163,12 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_DeviceMetrics_init_default    {0, 0, 0, 0, 0}
-#define meshtastic_EnvironmentMetrics_init_default {0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_EnvironmentMetrics_init_default {0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_PowerMetrics_init_default     {0, 0, 0, 0, 0, 0}
 #define meshtastic_AirQualityMetrics_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Telemetry_init_default        {0, 0, {meshtastic_DeviceMetrics_init_default}}
 #define meshtastic_DeviceMetrics_init_zero       {0, 0, 0, 0, 0}
-#define meshtastic_EnvironmentMetrics_init_zero  {0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_EnvironmentMetrics_init_zero  {0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_PowerMetrics_init_zero        {0, 0, 0, 0, 0, 0}
 #define meshtastic_AirQualityMetrics_init_zero   {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Telemetry_init_zero           {0, 0, {meshtastic_DeviceMetrics_init_zero}}
@@ -182,6 +186,7 @@ extern "C" {
 #define meshtastic_EnvironmentMetrics_voltage_tag 5
 #define meshtastic_EnvironmentMetrics_current_tag 6
 #define meshtastic_EnvironmentMetrics_iaq_tag    7
+#define meshtastic_EnvironmentMetrics_distance_tag 8
 #define meshtastic_PowerMetrics_ch1_voltage_tag  1
 #define meshtastic_PowerMetrics_ch1_current_tag  2
 #define meshtastic_PowerMetrics_ch2_voltage_tag  3
@@ -223,7 +228,8 @@ X(a, STATIC,   SINGULAR, FLOAT,    barometric_pressure,   3) \
 X(a, STATIC,   SINGULAR, FLOAT,    gas_resistance,    4) \
 X(a, STATIC,   SINGULAR, FLOAT,    voltage,           5) \
 X(a, STATIC,   SINGULAR, FLOAT,    current,           6) \
-X(a, STATIC,   SINGULAR, UINT32,   iaq,               7)
+X(a, STATIC,   SINGULAR, UINT32,   iaq,               7) \
+X(a, STATIC,   SINGULAR, FLOAT,    distance,          8)
 #define meshtastic_EnvironmentMetrics_CALLBACK NULL
 #define meshtastic_EnvironmentMetrics_DEFAULT NULL
 
@@ -283,7 +289,7 @@ extern const pb_msgdesc_t meshtastic_Telemetry_msg;
 #define MESHTASTIC_MESHTASTIC_TELEMETRY_PB_H_MAX_SIZE meshtastic_Telemetry_size
 #define meshtastic_AirQualityMetrics_size        72
 #define meshtastic_DeviceMetrics_size            27
-#define meshtastic_EnvironmentMetrics_size       34
+#define meshtastic_EnvironmentMetrics_size       39
 #define meshtastic_PowerMetrics_size             30
 #define meshtastic_Telemetry_size                79
 

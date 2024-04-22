@@ -7,6 +7,8 @@
 
 #include "main.h" // pmu_found
 #include "sleep.h"
+
+#include "cas.h"
 #include "ubx.h"
 
 #ifdef ARCH_PORTDUINO
@@ -51,6 +53,28 @@ void GPS::UBXChecksum(uint8_t *message, size_t length)
     message[length - 1] = CK_B;
 }
 
+// Calculate the checksum for a CAS packet
+void GPS::CASChecksum(uint8_t *message, size_t length)
+{
+    uint32_t cksum = ((uint32_t)message[5] << 24); // Message ID
+    cksum += ((uint32_t)message[4]) << 16;         // Class
+    cksum += message[2];                           // Payload Len
+
+    // Iterate over the payload as a series of uint32_t's and
+    // accumulate the cksum
+    uint32_t *payload = (uint32_t *)(message + 6);
+    for (size_t i = 0; i < (length - 10) / 4; i++) {
+        uint32_t p = payload[i];
+        cksum += p;
+    }
+
+    // Place the checksum values in the message
+    message[length - 4] = (cksum & 0xFF);
+    message[length - 3] = (cksum & (0xFF << 8)) >> 8;
+    message[length - 2] = (cksum & (0xFF << 16)) >> 16;
+    message[length - 1] = (cksum & (0xFF << 24)) >> 24;
+}
+
 // Function to create a ublox packet for editing in memory
 uint8_t GPS::makeUBXPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_size, const uint8_t *msg)
 {
@@ -72,6 +96,41 @@ uint8_t GPS::makeUBXPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_siz
     return (payload_size + 8);
 }
 
+// Function to create a CAS packet for editing in memory
+uint8_t GPS::makeCASPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_size, const uint8_t *msg)
+{
+    // General CAS structure
+    //        | H1   | H2   | payload_len | cls  | msg  | Payload       ...   | Checksum                  |
+    // Size:  | 1    | 1    | 2           | 1    | 1    | payload_len         | 4                         |
+    // Pos:   | 0    | 1    | 2    | 3    | 4    | 5    | 6    | 7      ...   | 6 + payload_len ...       |
+    //        |------|------|-------------|------|------|------|--------------|---------------------------|
+    //        | 0xBA | 0xCE | 0xXX | 0xXX | 0xXX | 0xXX | 0xXX | 0xXX   ...   | 0xXX | 0xXX | 0xXX | 0xXX |
+
+    // Construct the CAS packet
+    UBXscratch[0] = 0xBA;         // header 1 (0xBA)
+    UBXscratch[1] = 0xCE;         // header 2 (0xCE)
+    UBXscratch[2] = payload_size; // length 1
+    UBXscratch[3] = 0;            // length 2
+    UBXscratch[4] = class_id;     // class
+    UBXscratch[5] = msg_id;       // id
+
+    UBXscratch[6 + payload_size] = 0x00; // Checksum
+    UBXscratch[7 + payload_size] = 0x00;
+    UBXscratch[8 + payload_size] = 0x00;
+    UBXscratch[9 + payload_size] = 0x00;
+
+    for (int i = 0; i < payload_size; i++) {
+        UBXscratch[6 + i] = pgm_read_byte(&msg[i]);
+    }
+    CASChecksum(UBXscratch, (payload_size + 10));
+
+#if defined(GPS_DEBUG) && defined(DEBUG_PORT)
+    LOG_DEBUG("Constructed CAS packet: \n");
+    DEBUG_PORT.hexDump(MESHTASTIC_LOG_LEVEL_DEBUG, UBXscratch, payload_size + 10);
+#endif
+    return (payload_size + 10);
+}
+
 GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
 {
     uint8_t buffer[768] = {0};
@@ -81,6 +140,7 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
     while (millis() < startTimeout) {
         if (_serial_gps->available()) {
             b = _serial_gps->read();
+
 #ifdef GPS_DEBUG
             LOG_DEBUG("%02X", (char *)buffer);
 #endif
@@ -101,6 +161,67 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
 #ifdef GPS_DEBUG
     LOG_DEBUG("\n");
 #endif
+    return GNSS_RESPONSE_NONE;
+}
+
+GPS_RESPONSE GPS::getACKCas(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
+{
+    uint32_t startTime = millis();
+    uint8_t buffer[CAS_ACK_NACK_MSG_SIZE] = {0};
+    uint8_t bufferPos = 0;
+
+    // CAS-ACK-(N)ACK structure
+    //         | H1   | H2   | Payload Len | cls  | msg  | Payload                   | Checksum (4)              |
+    //         |      |      |             |      |      | Cls  | Msg  | Reserved    |                           |
+    //         |------|------|-------------|------|------|------|------|-------------|---------------------------|
+    // ACK-NACK| 0xBA | 0xCE | 0x04 | 0x00 | 0x05 | 0x00 | 0xXX | 0xXX | 0x00 | 0x00 | 0xXX | 0xXX | 0xXX | 0xXX |
+    // ACK-ACK | 0xBA | 0xCE | 0x04 | 0x00 | 0x05 | 0x01 | 0xXX | 0xXX | 0x00 | 0x00 | 0xXX | 0xXX | 0xXX | 0xXX |
+
+    while (millis() - startTime < waitMillis) {
+        if (_serial_gps->available()) {
+            buffer[bufferPos++] = _serial_gps->read();
+
+            // keep looking at the first two bytes of buffer until
+            // we have found the CAS frame header (0xBA, 0xCE), if not
+            // keep reading bytes until we find a frame header or we run
+            // out of time.
+            if ((bufferPos == 2) && !(buffer[0] == 0xBA && buffer[1] == 0xCE)) {
+                buffer[0] = buffer[1];
+                buffer[1] = 0;
+                bufferPos = 1;
+            }
+        }
+
+        // we have read all the bytes required for the Ack/Nack (14-bytes)
+        // and we must have found a frame to get this far
+        if (bufferPos == sizeof(buffer) - 1) {
+            uint8_t msg_cls = buffer[4];     // message class should be 0x05
+            uint8_t msg_msg_id = buffer[5];  // message id should be 0x00 or 0x01
+            uint8_t payload_cls = buffer[6]; // payload class id
+            uint8_t payload_msg = buffer[7]; // payload message id
+
+            // Check for an ACK-ACK for the specified class and message id
+            if ((msg_cls == 0x05) && (msg_msg_id == 0x01) && payload_cls == class_id && payload_msg == msg_id) {
+#ifdef GPS_DEBUG
+                LOG_INFO("Got ACK for class %02X message %02X in %d millis.\n", class_id, msg_id, millis() - startTime);
+#endif
+                return GNSS_RESPONSE_OK;
+            }
+
+            // Check for an ACK-NACK for the specified class and message id
+            if ((msg_cls == 0x05) && (msg_msg_id == 0x00) && payload_cls == class_id && payload_msg == msg_id) {
+#ifdef GPS_DEBUG
+                LOG_WARN("Got NACK for class %02X message %02X in %d millis.\n", class_id, msg_id, millis() - startTime);
+#endif
+                return GNSS_RESPONSE_NAK;
+            }
+
+            // This isn't the frame we are looking for, clear the buffer
+            // and try again until we run out of time.
+            memset(buffer, 0x0, sizeof(buffer));
+            bufferPos = 0;
+        }
+    }
     return GNSS_RESPONSE_NONE;
 }
 
@@ -313,6 +434,33 @@ bool GPS::setup()
             // Switch to Fitness Mode, for running and walking purpose with low speed (<5 m/s)
             _serial_gps->write("$PMTK886,1*29\r\n");
             delay(250);
+        } else if (gnssModel == GNSS_MODEL_ATGM336H) {
+            // Set the intial configuration of the device - these _should_ work for most AT6558 devices
+            msglen = makeCASPacket(0x06, 0x07, sizeof(_message_CAS_CFG_NAVX_CONF), _message_CAS_CFG_NAVX_CONF);
+            _serial_gps->write(UBXscratch, msglen);
+            if (getACKCas(0x06, 0x07, 250) != GNSS_RESPONSE_OK) {
+                LOG_WARN("ATGM336H - Could not set Configuration");
+            }
+
+            // Set the update frequence to 1Hz
+            msglen = makeCASPacket(0x06, 0x04, sizeof(_message_CAS_CFG_RATE_1HZ), _message_CAS_CFG_RATE_1HZ);
+            _serial_gps->write(UBXscratch, msglen);
+            if (getACKCas(0x06, 0x04, 250) != GNSS_RESPONSE_OK) {
+                LOG_WARN("ATGM336H - Could not set Update Frequency");
+            }
+
+            // Set the NEMA output messages
+            // Ask for only RMC and GGA
+            uint8_t fields[] = {CAS_NEMA_RMC, CAS_NEMA_GGA};
+            for (uint i = 0; i < sizeof(fields); i++) {
+                // Construct a CAS-CFG-MSG packet
+                uint8_t cas_cfg_msg_packet[] = {0x4e, fields[i], 0x01, 0x00};
+                msglen = makeCASPacket(0x06, 0x01, sizeof(cas_cfg_msg_packet), cas_cfg_msg_packet);
+                _serial_gps->write(UBXscratch, msglen);
+                if (getACKCas(0x06, 0x01, 250) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("ATGM336H - Could not enable NMEA MSG: %d\n", fields[i]);
+                }
+            }
         } else if (gnssModel == GNSS_MODEL_UC6580) {
             // The Unicore UC6580 can use a lot of sat systems, enable it to
             // use GPS L1 & L5 + BDS B1I & B2a + GLONASS L1 + GALILEO E1 & E5a + SBAS
@@ -948,9 +1096,17 @@ GnssModel_t GPS::probe(int serialSpeed)
     uint8_t buffer[768] = {0};
     delay(100);
 
-    // Close all NMEA sentences , Only valid for L76K MTK platform
+    // Close all NMEA sentences, valid for L76K, ATGM336H (and likely other AT6558 devices)
     _serial_gps->write("$PCAS03,0,0,0,0,0,0,0,0,0,0,,,0,0*02\r\n");
     delay(20);
+
+    // Get version information
+    clearBuffer();
+    _serial_gps->write("$PCAS06,1*1A\r\n");
+    if (getACK("$GPTXT,01,01,02,HW=ATGM336H", 500) == GNSS_RESPONSE_OK) {
+        LOG_INFO("ATGM336H GNSS init succeeded, using ATGM336H Module\n");
+        return GNSS_MODEL_ATGM336H;
+    }
 
     // Get version information
     clearBuffer();
@@ -1216,6 +1372,11 @@ bool GPS::factoryReset()
         LOG_INFO("GNSS Factory Reset via PCAS10,3\n");
         _serial_gps->write("$PCAS10,3*1F\r\n");
         delay(100);
+    } else if (gnssModel == GNSS_MODEL_ATGM336H) {
+        LOG_INFO("Factory Reset via CAS-CFG-RST\n");
+        uint8_t msglen = makeCASPacket(0x06, 0x02, sizeof(_message_CAS_CFG_RST_FACTORY), _message_CAS_CFG_RST_FACTORY);
+        _serial_gps->write(UBXscratch, msglen);
+        delay(100);
     } else {
         // fire this for good measure, if we have an L76B - won't harm other devices.
         _serial_gps->write("$PMTK104*37\r\n");
@@ -1423,7 +1584,7 @@ bool GPS::hasFlow()
 
 bool GPS::whileIdle()
 {
-    int charsInBuf = 0;
+    uint charsInBuf = 0;
     bool isValid = false;
     if (!isAwake) {
         clearBuffer();

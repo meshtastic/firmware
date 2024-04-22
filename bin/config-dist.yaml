@@ -111,18 +111,20 @@ Display:
 #  Height: 240
 
 Touchscreen:
+### Note, at least for now, the touchscreen must have a CS pin defined, even if you let Linux manage the CS switching.
+
 #  Module: STMPE610
 #  CS: 7
 #  IRQ: 24
 
-#  Module: XPT2046
+#  Module: XPT2046 # Waveshare 2.8inch
 #  CS: 7
 #  IRQ: 17
 
 ### Configure device for direct keyboard input
 
 Input:
-#  KeyboardDevice: /dev/input/event0
+#  KeyboardDevice: /dev/input/by-id/usb-_Raspberry_Pi_Internal_Keyboard-event-kbd
 
 ###
 
