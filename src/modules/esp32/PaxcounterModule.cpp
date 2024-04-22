@@ -1,5 +1,5 @@
 #include "configuration.h"
-#if defined(ARCH_ESP32)
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_PAXCOUNTER
 #include "Default.h"
 #include "MeshService.h"
 #include "PaxcounterModule.h"
