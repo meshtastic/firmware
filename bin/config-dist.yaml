@@ -38,7 +38,7 @@ Lora:
 #  Busy: 20
 #  Reset: 18
 
-#  Module: sx1268  # Ebyte E22 XXXM30S/XXXM33S module
+#  Module: sx1268  # SX1268-based modules, tested with Ebyte E22 400M33S
 #  CS: 21
 #  IRQ: 16
 #  Busy: 20
