@@ -21,6 +21,7 @@ enum configNames {
     touchscreenModule,
     touchscreenCS,
     touchscreenIRQ,
+    touchscreenI2CAddr,
     touchscreenBusFrequency,
     touchscreenRotate,
     touchscreenspidev,
