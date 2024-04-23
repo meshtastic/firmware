@@ -52,6 +52,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_CANARYONE
 #elif defined(NORDIC_PCA10059)
 #define HW_VENDOR meshtastic_HardwareModel_NRF52840_PCA10059
+#elif defined(TWC_MESH_V4)
+#define HW_VENDOR meshtastic_HardwareModel_TWC_MESH_V4
 #elif defined(PRIVATE_HW) || defined(FEATHER_DIY)
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #else
