@@ -10,6 +10,10 @@
 
 // #define LED_PIN PIN_LED
 // Board has RGB LED 21
+#define HAS_NEOPIXEL                         // Enable the use of neopixels
+#define NEOPIXEL_COUNT 1                     // How many neopixels are connected
+#define NEOPIXEL_DATA 21                     // gpio pin used to send data to the neopixels
+#define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800) // type of neopixels in use
 
 // The usbPower state is revered ?
 // DEBUG | ??:??:?? 365 [Power] Battery: usbPower=0, isCharging=0, batMv=4116, batPct=90
