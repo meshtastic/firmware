@@ -8,9 +8,6 @@
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "modules/RoutingModule.h"
-extern "C" {
-#include "mesh/compression/unishox2.h"
-}
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
@@ -332,6 +329,7 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
                 p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
                 p->channel = chIndex;                                         // change to store the index instead of the hash
 
+                /* Not actually ever used.
                 // Decompress if needed. jm
                 if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP) {
                     // Decompress the payload
@@ -349,7 +347,7 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
 
                     // Switch the port from PortNum_TEXT_MESSAGE_COMPRESSED_APP to PortNum_TEXT_MESSAGE_APP
                     p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
-                }
+                } */
 
                 printPacket("decoded message", p);
                 return true;
@@ -371,6 +369,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded);
 
+        /* Not actually used, so save the cycles
         // Only allow encryption on the text message app.
         //  TODO: Allow modules to opt into compression.
         if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) {
@@ -404,7 +403,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 
                 p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP;
             }
-        }
+        } */
 
         if (numbytes > MAX_RHPACKETLEN)
             return meshtastic_Routing_Error_TOO_LARGE;
@@ -466,21 +465,22 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             cancelSending(p->from, p->id);
             skipHandle = true;
         }
-#if !MESHTASTIC_EXCLUDE_MQTT
-        // Publish received message to MQTT if we're not the original transmitter of the packet
-        if (!skipHandle && moduleConfig.mqtt.enabled && getFrom(p) != nodeDB->getNodeNum() && mqtt)
-            mqtt->onSend(*p_encrypted, *p, p->channel);
-#endif
-
     } else {
         printPacket("packet decoding failed or skipped (no PSK?)", p);
     }
 
-    packetPool.release(p_encrypted); // Release the encrypted packet
-
     // call modules here
-    if (!skipHandle)
-        MeshModule::callPlugins(*p, src);
+    if (!skipHandle) {
+        MeshModule::callModules(*p, src);
+
+#if !MESHTASTIC_EXCLUDE_MQTT
+        // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the packet
+        if (decoded && moduleConfig.mqtt.enabled && getFrom(p) != nodeDB->getNodeNum() && mqtt)
+            mqtt->onSend(*p_encrypted, *p, p->channel);
+#endif
+    }
+
+    packetPool.release(p_encrypted); // Release the encrypted packet
 }
 
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)

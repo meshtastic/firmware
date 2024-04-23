@@ -38,6 +38,9 @@ class ScanI2C
         MPU6050,
         LIS3DH,
         BMA423,
+        BQ24295,
+        LSM6DS3,
+        TCA9555,
 #ifdef HAS_NCP5623
         NCP5623,
 #endif
