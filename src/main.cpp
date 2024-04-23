@@ -179,6 +179,11 @@ const char *getDeviceName()
 
 static int32_t ledBlinker()
 {
+    // Still set up the blinking (heartbeat) interval but skip code path below, so LED will blink if
+    // config.device.led_heartbeat_disabled is changed
+    if (config.device.led_heartbeat_disabled)
+        return 1000;
+
     static bool ledOn;
     ledOn ^= 1;
 
