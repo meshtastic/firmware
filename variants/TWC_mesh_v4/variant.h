@@ -1,5 +1,5 @@
-#ifndef _VARIANT_NORDIC_PCA10059_
-#define _VARIANT_NORDIC_PCA10059_
+#ifndef _VARIANT_TWC_MESH_V4_
+#define _VARIANT_TWC_MESH_V4_
 
 #define PCA10059
 
@@ -120,7 +120,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #undef AREF_VOLTAGE
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
-#define ADC_MULTIPLIER (1.73F)
+#define ADC_MULTIPLIER (2.0F)
 
 #ifdef __cplusplus
 }
