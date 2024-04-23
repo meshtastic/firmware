@@ -161,10 +161,10 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         if (!event->kbchar) {
             if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
                 this->payload = 0xb4;
-                this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
+                // this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
             } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
                 this->payload = 0xb7;
-                this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
+                // this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
             }
         } else {
             // pass the pressed key
