@@ -75,6 +75,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 
 // -----------------------------------------------------------------------------
+// Regulatory overrides for producing regional builds
+// -----------------------------------------------------------------------------
+
+// Define if region should override user saved region
+// #define LORA_REGIONCODE meshtastic_Config_LoRaConfig_RegionCode_SG_923
+
+// -----------------------------------------------------------------------------
 // Feature toggles
 // -----------------------------------------------------------------------------
 
@@ -128,6 +135,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MPU6050_ADDR 0x68
 #define LIS3DH_ADR 0x18
 #define BMA423_ADDR 0x19
+#define LSM6DS3_ADDR 0x6A
 
 // -----------------------------------------------------------------------------
 // LED
@@ -137,8 +145,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // Security
 // -----------------------------------------------------------------------------
-
 #define ATECC608B_ADDR 0x35
+
+// -----------------------------------------------------------------------------
+// IO Expander
+// -----------------------------------------------------------------------------
+#define TCA9555_ADDR 0x26
 
 // -----------------------------------------------------------------------------
 // GPS

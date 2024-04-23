@@ -51,7 +51,7 @@ uint8_t RoutingModule::getHopLimitForResponse(uint8_t hopStart, uint8_t hopLimit
         uint8_t hopsUsed = hopStart < hopLimit ? config.lora.hop_limit : hopStart - hopLimit;
         if (hopsUsed > config.lora.hop_limit) {
             return hopsUsed; // If the request used more hops than the limit, use the same amount of hops
-        } else if (hopsUsed + 2 < config.lora.hop_limit) {
+        } else if ((uint8_t)(hopsUsed + 2) < config.lora.hop_limit) {
             return hopsUsed + 2; // Use only the amount of hops needed with some margin as the way back may be different
         }
     }

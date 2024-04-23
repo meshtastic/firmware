@@ -500,12 +500,7 @@ void Power::shutdown()
 {
     LOG_INFO("Shutting down\n");
 
-#ifdef HAS_PMU
-    if (pmu_found == true) {
-        PMU->setChargingLedMode(XPOWERS_CHG_LED_OFF);
-        PMU->shutdown();
-    }
-#elif defined(ARCH_NRF52) || defined(ARCH_ESP32)
+#if defined(ARCH_NRF52) || defined(ARCH_ESP32)
 #ifdef PIN_LED1
     ledOff(PIN_LED1);
 #endif

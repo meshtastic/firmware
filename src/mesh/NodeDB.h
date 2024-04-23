@@ -38,6 +38,19 @@ uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
 /// Given a packet, return how many seconds in the past (vs now) it was received
 uint32_t sinceReceived(const meshtastic_MeshPacket *p);
 
+enum LoadFileResult {
+    // Successfully opened the file
+    SUCCESS = 1,
+    // File does not exist
+    NOT_FOUND = 2,
+    // Device does not have a filesystem
+    NO_FILESYSTEM = 3,
+    // File exists, but could not decode protobufs
+    DECODE_FAILED = 4,
+    // File exists, but open failed for some reason
+    OTHER_FAILURE = 5
+};
+
 class NodeDB
 {
     // NodeNum provisionalNodeNum; // if we are trying to find a node num this is our current attempt
@@ -115,7 +128,8 @@ class NodeDB
 
     bool factoryReset();
 
-    bool loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields, void *dest_struct);
+    LoadFileResult loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields,
+                             void *dest_struct);
     bool saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct);
 
     void installRoleDefaults(meshtastic_Config_DeviceConfig_Role role);
@@ -136,16 +150,18 @@ class NodeDB
     void setLocalPosition(meshtastic_Position position, bool timeOnly = false)
     {
         if (timeOnly) {
-            LOG_DEBUG("Setting local position time only: time=%i\n", position.time);
+            LOG_DEBUG("Setting local position time only: time=%u timestamp=%u\n", position.time, position.timestamp);
             localPosition.time = position.time;
+            localPosition.timestamp = position.timestamp > 0 ? position.timestamp : position.time;
             return;
         }
-        LOG_DEBUG("Setting local position: latitude=%i, longitude=%i, time=%i\n", position.latitude_i, position.longitude_i,
-                  position.time);
+        LOG_DEBUG("Setting local position: latitude=%i, longitude=%i, time=%u, timestamp=%u\n", position.latitude_i,
+                  position.longitude_i, position.time, position.timestamp);
         localPosition = position;
     }
 
   private:
+    uint32_t lastNodeDbSave = 0; // when we last saved our db to flash
     /// Find a node in our DB, create an empty NodeInfoLite if missing
     meshtastic_NodeInfoLite *getOrCreateMeshNode(NodeNum n);
 
