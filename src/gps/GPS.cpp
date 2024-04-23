@@ -452,7 +452,7 @@ bool GPS::setup()
             // Set the NEMA output messages
             // Ask for only RMC and GGA
             uint8_t fields[] = {CAS_NEMA_RMC, CAS_NEMA_GGA};
-            for (int i = 0; i < sizeof(fields); i++) {
+            for (uint i = 0; i < sizeof(fields); i++) {
                 // Construct a CAS-CFG-MSG packet
                 uint8_t cas_cfg_msg_packet[] = {0x4e, fields[i], 0x01, 0x00};
                 msglen = makeCASPacket(0x06, 0x01, sizeof(cas_cfg_msg_packet), cas_cfg_msg_packet);
@@ -1584,7 +1584,7 @@ bool GPS::hasFlow()
 
 bool GPS::whileIdle()
 {
-    int charsInBuf = 0;
+    uint charsInBuf = 0;
     bool isValid = false;
     if (!isAwake) {
         clearBuffer();
