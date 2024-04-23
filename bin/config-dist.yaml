@@ -96,16 +96,20 @@ Display:
 #  Panel: ILI9341
 #  CS: 8
 #  DC: 25
-#  Backlight: 2
-#  Width: 320
-#  Height: 240
+#  Width: 240
+#  Height: 320
+#  Rotate: true
 
 Touchscreen:
 ### Note, at least for now, the touchscreen must have a CS pin defined, even if you let Linux manage the CS switching.
 
-#  Module: STMPE610
+#  Module: STMPE610 # Option 1 for Adafruit PiTFT 2.8
 #  CS: 7
 #  IRQ: 24
+
+#  Module: FT5x06 # Option 2 for Adafruit PiTFT 2.8
+#  IRQ: 24
+#  I2CAddr: 0x38
 
 #  Module: XPT2046 # Waveshare 2.8inch
 #  CS: 7
