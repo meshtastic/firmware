@@ -47,7 +47,6 @@ Lora:
 #  RXen: 12
 #  DIO3_TCXO_VOLTAGE: true
 
-
 #  DIO3_TCXO_VOLTAGE: true  # the Waveshare Core1262 and others are known to need this setting
 
 #  TXen: x  # TX and RX enable pins
