@@ -75,6 +75,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 
 // -----------------------------------------------------------------------------
+// Regulatory overrides for producing regional builds
+// -----------------------------------------------------------------------------
+
+// Define if region should override user saved region
+// #define LORA_REGIONCODE meshtastic_Config_LoRaConfig_RegionCode_SG_923
+
+// -----------------------------------------------------------------------------
 // Feature toggles
 // -----------------------------------------------------------------------------
 
@@ -111,6 +118,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MCP9808_ADDR 0x18
 #define INA_ADDR 0x40
 #define INA_ADDR_ALTERNATE 0x41
+#define INA_ADDR_WAVESHARE_UPS 0x43
 #define INA3221_ADDR 0x42
 #define QMC6310_ADDR 0x1C
 #define QMI8658_ADDR 0x6B
@@ -127,6 +135,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MPU6050_ADDR 0x68
 #define LIS3DH_ADR 0x18
 #define BMA423_ADDR 0x19
+#define LSM6DS3_ADDR 0x6A
 
 // -----------------------------------------------------------------------------
 // LED
@@ -136,8 +145,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // Security
 // -----------------------------------------------------------------------------
-
 #define ATECC608B_ADDR 0x35
+
+// -----------------------------------------------------------------------------
+// IO Expander
+// -----------------------------------------------------------------------------
+#define TCA9555_ADDR 0x26
 
 // -----------------------------------------------------------------------------
 // GPS
@@ -160,18 +173,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
    also enable HAS_ option not specifically disabled by variant.h */
 #include "architecture.h"
 
+#ifndef DEFAULT_REBOOT_SECONDS
+#define DEFAULT_REBOOT_SECONDS 7
+#endif
+
+#ifndef DEFAULT_SHUTDOWN_SECONDS
+#define DEFAULT_SHUTDOWN_SECONDS 2
+#endif
+
 /* Step #3: mop up with disabled values for HAS_ options not handled by the above two */
-
-// -----------------------------------------------------------------------------
-// GPS
-// -----------------------------------------------------------------------------
-
-#ifndef GPS_BAUDRATE
-#define GPS_BAUDRATE 9600
-#endif
-#ifndef GPS_THREAD_INTERVAL
-#define GPS_THREAD_INTERVAL 100
-#endif
 
 #ifndef HAS_WIFI
 #define HAS_WIFI 0
@@ -221,4 +231,65 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #ifndef HW_VENDOR
 #error HW_VENDOR must be defined
+#endif
+
+// -----------------------------------------------------------------------------
+// Global switches to turn off features for a minimized build
+// -----------------------------------------------------------------------------
+
+// #define MESHTASTIC_MINIMIZE_BUILD 1
+#ifdef MESHTASTIC_MINIMIZE_BUILD
+#define MESHTASTIC_EXCLUDE_MODULES 1
+#define MESHTASTIC_EXCLUDE_WIFI 1
+#define MESHTASTIC_EXCLUDE_BLUETOOTH 1
+#define MESHTASTIC_EXCLUDE_GPS 1
+#define MESHTASTIC_EXCLUDE_SCREEN 1
+#define MESHTASTIC_EXCLUDE_MQTT 1
+#endif
+
+// Turn off all optional modules
+#ifdef MESHTASTIC_EXCLUDE_MODULES
+#define MESHTASTIC_EXCLUDE_AUDIO 1
+#define MESHTASTIC_EXCLUDE_DETECTIONSENSOR 1
+#define MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR 1
+#define MESHTASTIC_EXCLUDE_EXTERNALNOTIFICATION 1
+#define MESHTASTIC_EXCLUDE_PAXCOUNTER 1
+#define MESHTASTIC_EXCLUDE_POWER_TELEMETRY 1
+#define MESHTASTIC_EXCLUDE_RANGETEST 1
+#define MESHTASTIC_EXCLUDE_REMOTEHARDWARE 1
+#define MESHTASTIC_EXCLUDE_STOREFORWARD 1
+#define MESHTASTIC_EXCLUDE_ATAK 1
+#define MESHTASTIC_EXCLUDE_CANNEDMESSAGES 1
+#define MESHTASTIC_EXCLUDE_NEIGHBORINFO 1
+#define MESHTASTIC_EXCLUDE_TRACEROUTE 1
+#define MESHTASTIC_EXCLUDE_WAYPOINT 1
+#define MESHTASTIC_EXCLUDE_INPUTBROKER 1
+#define MESHTASTIC_EXCLUDE_SERIAL 1
+#endif
+
+// // Turn off wifi even if HW supports wifi (webserver relies on wifi and is also disabled)
+#ifdef MESHTASTIC_EXCLUDE_WIFI
+#define MESHTASTIC_EXCLUDE_WEBSERVER 1
+#undef HAS_WIFI
+#define HAS_WIFI 0
+#endif
+
+// // Turn off Bluetooth
+#ifdef MESHTASTIC_EXCLUDE_BLUETOOTH
+#undef HAS_BLUETOOTH
+#define HAS_BLUETOOTH 0
+#endif
+
+// // Turn off GPS
+#ifdef MESHTASTIC_EXCLUDE_GPS
+#undef HAS_GPS
+#define HAS_GPS 0
+#undef MESHTASTIC_EXCLUDE_RANGETEST
+#define MESHTASTIC_EXCLUDE_RANGETEST 1
+#endif
+
+// Turn off Screen
+#ifdef MESHTASTIC_EXCLUDE_SCREEN
+#undef HAS_SCREEN
+#define HAS_SCREEN 0
 #endif

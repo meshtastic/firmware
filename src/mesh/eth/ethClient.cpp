@@ -2,9 +2,12 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include "concurrency/Periodic.h"
+#include "configuration.h"
 #include "main.h"
 #include "mesh/api/ethServerAPI.h"
+#if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
+#endif
 #include "target_specific.h"
 #include <RAK13800_W5100S.h>
 #include <SPI.h>
@@ -66,11 +69,12 @@ static int32_t reconnectETH()
 
             ethStartupComplete = true;
         }
-
+#if !MESHTASTIC_EXCLUDE_MQTT
         // FIXME this is kinda yucky, instead we should just have an observable for 'wifireconnected'
         if (mqtt && !moduleConfig.mqtt.proxy_to_client_enabled && !mqtt->isConnectedDirectly()) {
             mqtt->reconnect();
         }
+#endif
     }
 
 #ifndef DISABLE_NTP

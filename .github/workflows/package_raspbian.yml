@@ -23,6 +23,14 @@ jobs:
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
 
+      - name: Pull web ui
+        uses: dsaltares/fetch-gh-release-asset@a40c8b4a0471f9ab81bdf73a010f74cc51476ad4
+        with:
+          repo: meshtastic/web
+          file: build.tar
+          target: build.tar
+          token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Get release version string
         run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
@@ -37,9 +45,12 @@ jobs:
 
       - name: build .debpkg
         run: |
+          mkdir -p .debpkg/usr/share/doc/meshtasticd/web
           mkdir -p .debpkg/usr/sbin
           mkdir -p .debpkg/etc/meshtasticd
           mkdir -p .debpkg/usr/lib/systemd/system/
+          tar -xf build.tar -C .debpkg/usr/share/doc/meshtasticd/web
+          gunzip .debpkg/usr/share/doc/meshtasticd/web/*.gz
           cp release/meshtasticd_linux_aarch64 .debpkg/usr/sbin/meshtasticd
           cp bin/config-dist.yaml .debpkg/etc/meshtasticd/config.yaml
           chmod +x .debpkg/usr/sbin/meshtasticd
@@ -52,7 +63,7 @@ jobs:
           maintainer: Jonathan Bennett
           version: ${{ steps.version.outputs.version }} # refs/tags/v*.*.*
           arch: arm64
-          depends: libyaml-cpp0.7
+          depends: libyaml-cpp0.7, openssl, libulfius2.7
           desc: Native Linux Meshtastic binary.
 
       - uses: actions/upload-artifact@v3

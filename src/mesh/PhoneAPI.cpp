@@ -1,12 +1,16 @@
-#include "PhoneAPI.h"
-#include "Channels.h"
+#include "configuration.h"
+#if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
+#endif
+
+#include "Channels.h"
+#include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PhoneAPI.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
 #include "TypeConversions.h"
-#include "configuration.h"
 #include "main.h"
 #include "xmodem.h"
 
@@ -17,8 +21,9 @@
 #if ToRadio_size > MAX_TO_FROM_RADIO_SIZE
 #error ToRadio is too big
 #endif
-
+#if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
+#endif
 
 PhoneAPI::PhoneAPI()
 {
@@ -103,11 +108,20 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
             LOG_INFO("Got xmodem packet\n");
             xModem.handlePacket(toRadioScratch.xmodemPacket);
             break;
+#if !MESHTASTIC_EXCLUDE_MQTT
         case meshtastic_ToRadio_mqttClientProxyMessage_tag:
             LOG_INFO("Got MqttClientProxy message\n");
-            if (mqtt && moduleConfig.mqtt.proxy_to_client_enabled) {
+            if (mqtt && moduleConfig.mqtt.proxy_to_client_enabled && moduleConfig.mqtt.enabled &&
+                (channels.anyMqttEnabled() || moduleConfig.mqtt.map_reporting_enabled)) {
                 mqtt->onClientProxyReceive(toRadioScratch.mqttClientProxyMessage);
+            } else {
+                LOG_WARN("MqttClientProxy received but proxy is not enabled, no channels have up/downlink, or map reporting "
+                         "not enabled\n");
             }
+            break;
+#endif
+        case meshtastic_ToRadio_heartbeat_tag:
+            LOG_DEBUG("Got client heartbeat\n");
             break;
         default:
             // Ignore nop messages
@@ -413,9 +427,12 @@ bool PhoneAPI::available()
 
     case STATE_SEND_NODEINFO:
         if (nodeInfoForPhone.num == 0) {
-            auto nextNode = nodeDB.readNextMeshNode(readIndex);
+            auto nextNode = nodeDB->readNextMeshNode(readIndex);
             if (nextNode) {
                 nodeInfoForPhone = TypeConversions::ConvertToNodeInfo(nextNode);
+                nodeInfoForPhone.hops_away = nodeInfoForPhone.num == nodeDB->getNodeNum() ? 0 : nodeInfoForPhone.hops_away;
+                nodeInfoForPhone.is_favorite =
+                    nodeInfoForPhone.is_favorite || nodeInfoForPhone.num == nodeDB->getNodeNum(); // Our node is always a favorite
             }
         }
         return true; // Always say we have something, because we might need to advance our state machine

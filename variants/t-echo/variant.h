@@ -43,9 +43,10 @@ extern "C" {
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LEDs
-#define PIN_LED1 (0 + 14) // blue (confirmed on boards marked v1.0, date 2021-6-28)
-#define PIN_LED2 (32 + 1) // green
-#define PIN_LED3 (32 + 3) // red
+#define PIN_LED1 (0 + 14) // 13 red (confirmed on 1.0 board)
+// Unused(by firmware) LEDs:
+#define PIN_LED2 (0 + 15) // 14 blue
+#define PIN_LED3 (0 + 13) // 15 green
 
 #define LED_RED PIN_LED3
 #define LED_BLUE PIN_LED1
@@ -155,9 +156,9 @@ External serial flash WP25R1635FZUIL0
 #define PIN_EINK_SCLK (0 + 31)
 #define PIN_EINK_MOSI (0 + 29) // also called SDI
 
-// Controls power for the eink display - Board power is enabled either by VBUS from USB or the CPU asserting PWR_ON
-// FIXME - I think this is actually just the board power enable - it enables power to the CPU also
-#define PIN_EINK_PWR_ON (0 + 12)
+// Controls power for all peripherals (eink + GPS + LoRa + Sensor)
+#define PIN_POWER_EN (0 + 12)
+// #define PIN_POWER_EN1 (0 + 13)
 
 #define USE_EINK
 
@@ -208,19 +209,10 @@ External serial flash WP25R1635FZUIL0
 // and has 12 bit resolution
 #define BATTERY_SENSE_RESOLUTION_BITS 12
 #define BATTERY_SENSE_RESOLUTION 4096.0
-// Definition of milliVolt per LSB => 3.0V ADC range and 12-bit ADC resolution = 3000mV/4096
-#define VBAT_MV_PER_LSB (0.73242188F)
-// Voltage divider value => 100K + 100K voltage divider on VBAT = (100K / (100K + 100K))
-#define VBAT_DIVIDER (0.5F)
-// Compensation factor for the VBAT divider
-#define VBAT_DIVIDER_COMP (2.0F)
-// Fixed calculation of milliVolt from compensation value
-#define REAL_VBAT_MV_PER_LSB (VBAT_DIVIDER_COMP * VBAT_MV_PER_LSB)
 #undef AREF_VOLTAGE
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
-#define ADC_MULTIPLIER VBAT_DIVIDER_COMP
-#define VBAT_RAW_TO_SCALED(x) (REAL_VBAT_MV_PER_LSB * x)
+#define ADC_MULTIPLIER (2.0F)
 
 #define HAS_RTC 1
 

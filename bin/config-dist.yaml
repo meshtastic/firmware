@@ -1,5 +1,6 @@
 ### Define your devices here using Broadcom pin numbering
 ### Uncomment the block that corresponds to your hardware
+### Including the "Module:" line!
 ---
 Lora:
 #  Module: sx1262  # Waveshare SX126X XXXM
@@ -100,20 +101,29 @@ Display:
 #  Height: 240
 
 Touchscreen:
+### Note, at least for now, the touchscreen must have a CS pin defined, even if you let Linux manage the CS switching.
+
 #  Module: STMPE610
 #  CS: 7
 #  IRQ: 24
 
-#  Module: XPT2046
+#  Module: XPT2046 # Waveshare 2.8inch
 #  CS: 7
 #  IRQ: 17
 
 ### Configure device for direct keyboard input
 
 Input:
-#  KeyboardDevice: /dev/input/event0
+#  KeyboardDevice: /dev/input/by-id/usb-_Raspberry_Pi_Internal_Keyboard-event-kbd
 
 ###
 
 Logging:
   LogLevel: info # debug, info, warn, error
+
+Webserver:
+#  Port: 443 # Port for Webserver & Webservices
+#  RootPath: /usr/share/doc/meshtasticd/web # Root Dir of WebServer
+
+General:
+  MaxNodes: 200

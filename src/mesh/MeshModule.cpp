@@ -12,7 +12,7 @@ const meshtastic_MeshPacket *MeshModule::currentRequest;
 
 /**
  * If any of the current chain of modules has already sent a reply, it will be here.  This is useful to allow
- * the RoutingPlugin to avoid sending redundant acks
+ * the RoutingModule to avoid sending redundant acks
  */
 meshtastic_MeshPacket *MeshModule::currentReply;
 
@@ -32,14 +32,15 @@ MeshModule::~MeshModule()
     assert(0); // FIXME - remove from list of modules once someone needs this feature
 }
 
-meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex)
+meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex,
+                                               uint8_t hopStart, uint8_t hopLimit)
 {
     meshtastic_Routing c = meshtastic_Routing_init_default;
 
     c.error_reason = err;
     c.which_variant = meshtastic_Routing_error_reason_tag;
 
-    // Now that we have moded sendAckNak up one level into the class hierarchy we can no longer assume we are a RoutingPlugin
+    // Now that we have moded sendAckNak up one level into the class hierarchy we can no longer assume we are a RoutingModule
     // So we manually call pb_encode_to_bytes and specify routing port number
     // auto p = allocDataProtobuf(c);
     meshtastic_MeshPacket *p = router->allocForSending();
@@ -49,11 +50,12 @@ meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, Nod
 
     p->priority = meshtastic_MeshPacket_Priority_ACK;
 
-    p->hop_limit = config.lora.hop_limit; // Flood ACK back to original sender
+    p->hop_limit = routingModule->getHopLimitForResponse(hopStart, hopLimit); // Flood ACK back to original sender
     p->to = to;
     p->decoded.request_id = idFrom;
     p->channel = chIndex;
-    LOG_ERROR("Alloc an err=%d,to=0x%x,idFrom=0x%x,id=0x%x\n", err, to, idFrom, p->id);
+    if (err != meshtastic_Routing_Error_NONE)
+        LOG_ERROR("Alloc an err=%d,to=0x%x,idFrom=0x%x,id=0x%x\n", err, to, idFrom, p->id);
 
     return p;
 }
@@ -67,7 +69,7 @@ meshtastic_MeshPacket *MeshModule::allocErrorResponse(meshtastic_Routing_Error e
     return r;
 }
 
-void MeshModule::callPlugins(meshtastic_MeshPacket &mp, RxSource src)
+void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
 {
     // LOG_DEBUG("In call modules\n");
     bool moduleFound = false;
@@ -80,7 +82,7 @@ void MeshModule::callPlugins(meshtastic_MeshPacket &mp, RxSource src)
     bool ignoreRequest = false; // No module asked to ignore the request yet
 
     // Was this message directed to us specifically?  Will be false if we are sniffing someone elses packets
-    auto ourNodeNum = nodeDB.getNodeNum();
+    auto ourNodeNum = nodeDB->getNodeNum();
     bool toUs = mp.to == NODENUM_BROADCAST || mp.to == ourNodeNum;
 
     for (auto i = modules->begin(); i != modules->end(); ++i) {
@@ -176,7 +178,8 @@ void MeshModule::callPlugins(meshtastic_MeshPacket &mp, RxSource src)
             // SECURITY NOTE! I considered sending back a different error code if we didn't find the psk (i.e. !isDecoded)
             // but opted NOT TO.  Because it is not a good idea to let remote nodes 'probe' to find out which PSKs were "good" vs
             // bad.
-            routingModule->sendAckNak(meshtastic_Routing_Error_NO_RESPONSE, getFrom(&mp), mp.id, mp.channel);
+            routingModule->sendAckNak(meshtastic_Routing_Error_NO_RESPONSE, getFrom(&mp), mp.id, mp.channel, mp.hop_start,
+                                      mp.hop_limit);
         }
     }
 
@@ -217,6 +220,7 @@ void setReplyTo(meshtastic_MeshPacket *p, const meshtastic_MeshPacket &to)
     assert(p->which_payload_variant == meshtastic_MeshPacket_decoded_tag); // Should already be set by now
     p->to = getFrom(&to);    // Make sure that if we are sending to the local node, we use our local node addr, not 0
     p->channel = to.channel; // Use the same channel that the request came in on
+    p->hop_limit = routingModule->getHopLimitForResponse(to.hop_start, to.hop_limit);
 
     // No need for an ack if we are just delivering locally (it just generates an ignored ack)
     p->want_ack = (to.from != 0) ? to.want_ack : false;
@@ -255,7 +259,7 @@ void MeshModule::observeUIEvents(Observer<const UIFrameEvent *> *observer)
     }
 }
 
-AdminMessageHandleResult MeshModule::handleAdminMessageForAllPlugins(const meshtastic_MeshPacket &mp,
+AdminMessageHandleResult MeshModule::handleAdminMessageForAllModules(const meshtastic_MeshPacket &mp,
                                                                      meshtastic_AdminMessage *request,
                                                                      meshtastic_AdminMessage *response)
 {

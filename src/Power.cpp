@@ -24,10 +24,12 @@
 #include "nrfx_power.h"
 #endif
 
-#ifdef DEBUG_HEAP_MQTT
+#if defined(DEBUG_HEAP_MQTT) && !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #include "target_specific.h"
+#if !MESTASTIC_EXCLUDE_WIFI
 #include <WiFi.h>
+#endif
 #endif
 
 #ifndef DELAY_FOREVER
@@ -53,6 +55,19 @@ static const adc_atten_t atten = ADC_ATTEN_DB_11;
 static const adc_atten_t atten = ADC_ATTENUATION;
 #endif
 #endif // BATTERY_PIN && ARCH_ESP32
+
+#ifdef EXT_CHRG_DETECT
+#ifndef EXT_CHRG_DETECT_MODE
+static const uint8_t ext_chrg_detect_mode = INPUT;
+#else
+static const uint8_t ext_chrg_detect_mode = EXT_CHRG_DETECT_MODE;
+#endif
+#ifndef EXT_CHRG_DETECT_VALUE
+static const uint8_t ext_chrg_detect_value = HIGH;
+#else
+static const uint8_t ext_chrg_detect_value = EXT_CHRG_DETECT_VALUE;
+#endif
+#endif
 
 #if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
 INA260Sensor ina260Sensor;
@@ -322,7 +337,14 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
     /// Assume charging if we have a battery and external power is connected.
     /// we can't be smart enough to say 'full'?
-    virtual bool isCharging() override { return isBatteryConnect() && isVbusIn(); }
+    virtual bool isCharging() override
+    {
+#ifdef EXT_CHRG_DETECT
+        return digitalRead(EXT_CHRG_DETECT) == ext_chrg_detect_value;
+#else
+        return isBatteryConnect() && isVbusIn();
+#endif
+    }
 
   private:
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
@@ -388,6 +410,9 @@ bool Power::analogInit()
 {
 #ifdef EXT_PWR_DETECT
     pinMode(EXT_PWR_DETECT, INPUT);
+#endif
+#ifdef EXT_CHRG_DETECT
+    pinMode(EXT_CHRG_DETECT, ext_chrg_detect_mode);
 #endif
 
 #ifdef BATTERY_PIN
@@ -473,19 +498,9 @@ bool Power::setup()
 
 void Power::shutdown()
 {
-    screen->setOn(false);
-#if defined(USE_EINK) && defined(PIN_EINK_EN)
-    digitalWrite(PIN_EINK_EN, LOW); // power off backlight first
-#endif
-
     LOG_INFO("Shutting down\n");
 
-#ifdef HAS_PMU
-    if (pmu_found == true) {
-        PMU->setChargingLedMode(XPOWERS_CHG_LED_OFF);
-        PMU->shutdown();
-    }
-#elif defined(ARCH_NRF52) || defined(ARCH_ESP32)
+#if defined(ARCH_NRF52) || defined(ARCH_ESP32)
 #ifdef PIN_LED1
     ledOff(PIN_LED1);
 #endif

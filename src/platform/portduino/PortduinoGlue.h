@@ -21,24 +21,39 @@ enum configNames {
     touchscreenModule,
     touchscreenCS,
     touchscreenIRQ,
+    touchscreenBusFrequency,
+    touchscreenRotate,
+    touchscreenspidev,
+    displayspidev,
+    displayBusFrequency,
     displayPanel,
     displayWidth,
     displayHeight,
     displayCS,
     displayDC,
+    displayRGBOrder,
     displayBacklight,
+    displayBacklightPWMChannel,
+    displayBacklightInvert,
     displayReset,
     displayRotate,
+    displayOffsetRotate,
     displayOffsetX,
     displayOffsetY,
     displayInvert,
     keyboardDevice,
-    logoutputlevel
+    logoutputlevel,
+    webserver,
+    webserverport,
+    webserverrootpath,
+    maxnodes
 };
-enum { no_screen, st7789, st7735, st7735s, ili9341 };
-enum { no_touchscreen, xpt2046, stmpe610 };
+enum { no_screen, x11, st7789, st7735, st7735s, st7796, ili9341, ili9488, hx8357d };
+enum { no_touchscreen, xpt2046, stmpe610, gt911, ft5x06 };
 enum { level_error, level_warn, level_info, level_debug };
 
 extern std::map<configNames, int> settingsMap;
 extern std::map<configNames, std::string> settingsStrings;
 int initGPIOPin(int pinNum, std::string gpioChipname);
+extern HardwareSPI *DisplaySPI;
+extern HardwareSPI *LoraSPI;

@@ -2,6 +2,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "configuration.h"
 #include "main.h"
 #include "mesh/Channels.h"
 #include "mesh/Router.h"
@@ -13,10 +14,11 @@
 #endif
 #include "mesh/generated/meshtastic/remote_hardware.pb.h"
 #include "sleep.h"
-#if HAS_WIFI
+#if HAS_WIFI && !MESHTASTIC_EXCLUDE_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #include <WiFi.h>
 #endif
+#include "Default.h"
 #include <assert.h>
 
 const int reconnectMax = 5;
@@ -77,8 +79,7 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                         if (jsonPayloadStr.length() <= sizeof(p->decoded.payload.bytes)) {
                             memcpy(p->decoded.payload.bytes, jsonPayloadStr.c_str(), jsonPayloadStr.length());
                             p->decoded.payload.size = jsonPayloadStr.length();
-                            meshtastic_MeshPacket *packet = packetPool.allocCopy(*p);
-                            service.sendToMesh(packet, RX_SRC_LOCAL);
+                            service.sendToMesh(p, RX_SRC_LOCAL);
                         } else {
                             LOG_WARN("Received MQTT json payload too long, dropping\n");
                         }
@@ -135,7 +136,7 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                 // Generate an implicit ACK towards ourselves (handled and processed only locally!) for this message.
                 // We do this because packets are not rebroadcasted back into MQTT anymore and we assume that at least one node
                 // receives it when we get our own packet back. Then we'll stop our retransmissions.
-                if (e.packet && getFrom(e.packet) == nodeDB.getNodeNum())
+                if (e.packet && getFrom(e.packet) == nodeDB->getNodeNum())
                     routingModule->sendAckNak(meshtastic_Routing_Error_NONE, getFrom(e.packet), e.packet->id, ch.index);
                 else
                     LOG_INFO("Ignoring downlink message we originally sent.\n");
@@ -186,10 +187,19 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
             statusTopic = moduleConfig.mqtt.root + statusTopic;
             cryptTopic = moduleConfig.mqtt.root + cryptTopic;
             jsonTopic = moduleConfig.mqtt.root + jsonTopic;
+            mapTopic = moduleConfig.mqtt.root + mapTopic;
         } else {
             statusTopic = "msh" + statusTopic;
             cryptTopic = "msh" + cryptTopic;
             jsonTopic = "msh" + jsonTopic;
+            mapTopic = "msh" + mapTopic;
+        }
+
+        if (moduleConfig.mqtt.map_reporting_enabled && moduleConfig.mqtt.has_map_report_settings) {
+            map_position_precision = Default::getConfiguredOrDefault(moduleConfig.mqtt.map_report_settings.position_precision,
+                                                                     default_map_position_precision);
+            map_publish_interval_msecs = Default::getConfiguredOrDefaultMs(
+                moduleConfig.mqtt.map_report_settings.publish_interval_secs, default_map_publish_interval_secs);
         }
 
 #ifdef HAS_NETWORKING
@@ -351,11 +361,13 @@ void MQTT::sendSubscriptions()
             std::string topic = cryptTopic + channels.getGlobalId(i) + "/#";
             LOG_INFO("Subscribing to %s\n", topic.c_str());
             pubSub.subscribe(topic.c_str(), 1); // FIXME, is QOS 1 right?
+#ifndef ARCH_NRF52                              // JSON is not supported on nRF52, see issue #2804
             if (moduleConfig.mqtt.json_enabled == true) {
                 std::string topicDecoded = jsonTopic + channels.getGlobalId(i) + "/#";
                 LOG_INFO("Subscribing to %s\n", topicDecoded.c_str());
                 pubSub.subscribe(topicDecoded.c_str(), 1); // FIXME, is QOS 1 right?
             }
+#endif // ARCH_NRF52
         }
     }
 #endif
@@ -363,37 +375,29 @@ void MQTT::sendSubscriptions()
 
 bool MQTT::wantsLink() const
 {
-    bool hasChannel = false;
+    bool hasChannelorMapReport =
+        moduleConfig.mqtt.enabled && (moduleConfig.mqtt.map_reporting_enabled || channels.anyMqttEnabled());
 
-    if (moduleConfig.mqtt.enabled) {
-        // No need for link if no channel needed it
-        size_t numChan = channels.getNumChannels();
-        for (size_t i = 0; i < numChan; i++) {
-            const auto &ch = channels.getByIndex(i);
-            if (ch.settings.uplink_enabled || ch.settings.downlink_enabled) {
-                hasChannel = true;
-                break;
-            }
-        }
-    }
-    if (hasChannel && moduleConfig.mqtt.proxy_to_client_enabled)
+    if (hasChannelorMapReport && moduleConfig.mqtt.proxy_to_client_enabled)
         return true;
 
 #if HAS_WIFI
-    return hasChannel && WiFi.isConnected();
+    return hasChannelorMapReport && WiFi.isConnected();
 #endif
 #if HAS_ETHERNET
-    return hasChannel && Ethernet.linkStatus() == LinkON;
+    return hasChannelorMapReport && Ethernet.linkStatus() == LinkON;
 #endif
     return false;
 }
 
 int32_t MQTT::runOnce()
 {
-    if (!moduleConfig.mqtt.enabled)
+    if (!moduleConfig.mqtt.enabled || !(moduleConfig.mqtt.map_reporting_enabled || channels.anyMqttEnabled()))
         return disable();
 
     bool wantConnection = wantsLink();
+
+    perhapsReportToMap();
 
     // If connected poll rapidly, otherwise only occasionally check for a wifi connection change and ability to contact server
     if (moduleConfig.mqtt.proxy_to_client_enabled) {
@@ -450,6 +454,7 @@ void MQTT::publishQueuedMessages()
 
         publish(topic.c_str(), bytes, numBytes, false);
 
+#ifndef ARCH_NRF52 // JSON is not supported on nRF52, see issue #2804
         if (moduleConfig.mqtt.json_enabled) {
             // handle json topic
             auto jsonString = this->meshPacketToJson(env->packet);
@@ -460,6 +465,7 @@ void MQTT::publishQueuedMessages()
                 publish(topicJson.c_str(), jsonString.c_str(), false);
             }
         }
+#endif // ARCH_NRF52
         mqttPool.release(env);
     }
 }
@@ -471,9 +477,9 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
 
     auto &ch = channels.getByIndex(chIndex);
 
-    if (&mp.decoded && strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0 &&
-        (mp.decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
-         mp.decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP)) {
+    if (&mp_decoded.decoded && strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0 &&
+        (mp_decoded.decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
+         mp_decoded.decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP)) {
         LOG_DEBUG("MQTT onSend - Ignoring range test or detection sensor message on public mqtt\n");
         return;
     }
@@ -504,6 +510,7 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
 
             publish(topic.c_str(), bytes, numBytes, false);
 
+#ifndef ARCH_NRF52 // JSON is not supported on nRF52, see issue #2804
             if (moduleConfig.mqtt.json_enabled) {
                 // handle json topic
                 auto jsonString = this->meshPacketToJson((meshtastic_MeshPacket *)&mp_decoded);
@@ -514,7 +521,7 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
                     publish(topicJson.c_str(), jsonString.c_str(), false);
                 }
             }
-
+#endif // ARCH_NRF52
         } else {
             LOG_INFO("MQTT not connected, queueing packet\n");
             if (mqttQueue.numFree() == 0) {
@@ -528,6 +535,79 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
             assert(mqttQueue.enqueue(copied, 0));
         }
         mqttPool.release(env);
+    }
+}
+
+void MQTT::perhapsReportToMap()
+{
+    if (!moduleConfig.mqtt.map_reporting_enabled || !(moduleConfig.mqtt.proxy_to_client_enabled || isConnectedDirectly()))
+        return;
+
+    if (millis() - last_report_to_map < map_publish_interval_msecs) {
+        return;
+    } else {
+        if (map_position_precision == 0 || (localPosition.latitude_i == 0 && localPosition.longitude_i == 0)) {
+            last_report_to_map = millis();
+            LOG_WARN("MQTT Map reporting is enabled, but precision is 0 or no position available.\n");
+            return;
+        }
+
+        // Allocate ServiceEnvelope and fill it
+        meshtastic_ServiceEnvelope *se = mqttPool.allocZeroed();
+        se->channel_id = (char *)channels.getGlobalId(channels.getPrimaryIndex()); // Use primary channel as the channel_id
+        se->gateway_id = owner.id;
+
+        // Allocate MeshPacket and fill it
+        meshtastic_MeshPacket *mp = packetPool.allocZeroed();
+        mp->which_payload_variant = meshtastic_MeshPacket_decoded_tag;
+        mp->from = nodeDB->getNodeNum();
+        mp->to = NODENUM_BROADCAST;
+        mp->decoded.portnum = meshtastic_PortNum_MAP_REPORT_APP;
+
+        // Fill MapReport message
+        meshtastic_MapReport mapReport = meshtastic_MapReport_init_default;
+        memcpy(mapReport.long_name, owner.long_name, sizeof(owner.long_name));
+        memcpy(mapReport.short_name, owner.short_name, sizeof(owner.short_name));
+        mapReport.role = config.device.role;
+        mapReport.hw_model = owner.hw_model;
+        strncpy(mapReport.firmware_version, optstr(APP_VERSION), sizeof(mapReport.firmware_version));
+        mapReport.region = config.lora.region;
+        mapReport.modem_preset = config.lora.modem_preset;
+        mapReport.has_default_channel = channels.hasDefaultChannel();
+
+        // Set position with precision (same as in PositionModule)
+        if (map_position_precision < 32 && map_position_precision > 0) {
+            mapReport.latitude_i = localPosition.latitude_i & (UINT32_MAX << (32 - map_position_precision));
+            mapReport.longitude_i = localPosition.longitude_i & (UINT32_MAX << (32 - map_position_precision));
+            mapReport.latitude_i += (1 << (31 - map_position_precision));
+            mapReport.longitude_i += (1 << (31 - map_position_precision));
+        } else {
+            mapReport.latitude_i = localPosition.latitude_i;
+            mapReport.longitude_i = localPosition.longitude_i;
+        }
+        mapReport.altitude = localPosition.altitude;
+        mapReport.position_precision = map_position_precision;
+
+        mapReport.num_online_local_nodes = nodeDB->getNumOnlineMeshNodes(true);
+
+        // Encode MapReport message and set it to MeshPacket in ServiceEnvelope
+        mp->decoded.payload.size = pb_encode_to_bytes(mp->decoded.payload.bytes, sizeof(mp->decoded.payload.bytes),
+                                                      &meshtastic_MapReport_msg, &mapReport);
+        se->packet = mp;
+
+        // FIXME - this size calculation is super sloppy, but it will go away once we dynamically alloc meshpackets
+        static uint8_t bytes[meshtastic_MeshPacket_size + 64];
+        size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, se);
+
+        LOG_INFO("MQTT Publish map report to %s\n", mapTopic.c_str());
+        publish(mapTopic.c_str(), bytes, numBytes, false);
+
+        // Release the allocated memory for ServiceEnvelope and MeshPacket
+        mqttPool.release(se);
+        packetPool.release(mp);
+
+        // Update the last report time
+        last_report_to_map = millis();
     }
 }
 
@@ -576,6 +656,7 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
                     msgPayload["voltage"] = new JSONValue(decoded->variant.device_metrics.voltage);
                     msgPayload["channel_utilization"] = new JSONValue(decoded->variant.device_metrics.channel_utilization);
                     msgPayload["air_util_tx"] = new JSONValue(decoded->variant.device_metrics.air_util_tx);
+                    msgPayload["uptime_seconds"] = new JSONValue((uint)decoded->variant.device_metrics.uptime_seconds);
                 } else if (decoded->which_variant == meshtastic_Telemetry_environment_metrics_tag) {
                     msgPayload["temperature"] = new JSONValue(decoded->variant.environment_metrics.temperature);
                     msgPayload["relative_humidity"] = new JSONValue(decoded->variant.environment_metrics.relative_humidity);
@@ -650,6 +731,9 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
                 if ((int)decoded->VDOP) {
                     msgPayload["VDOP"] = new JSONValue((int)decoded->VDOP);
                 }
+                if ((int)decoded->precision_bits) {
+                    msgPayload["precision_bits"] = new JSONValue((int)decoded->precision_bits);
+                }
                 jsonObj["payload"] = new JSONValue(msgPayload);
             } else {
                 LOG_ERROR("Error decoding protobuf for position message!\n");
@@ -715,7 +799,7 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
                     // Lambda function for adding a long name to the route
                     auto addToRoute = [](JSONArray *route, NodeNum num) {
                         char long_name[40] = "Unknown";
-                        meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(num);
+                        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(num);
                         bool name_known = node ? node->has_user : false;
                         if (name_known)
                             memcpy(long_name, node->user.long_name, sizeof(long_name));
@@ -803,6 +887,8 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
         jsonObj["rssi"] = new JSONValue((int)mp->rx_rssi);
     if (mp->rx_snr != 0)
         jsonObj["snr"] = new JSONValue((float)mp->rx_snr);
+    if (mp->hop_start != 0 && mp->hop_limit <= mp->hop_start)
+        jsonObj["hops_away"] = new JSONValue((uint)(mp->hop_start - mp->hop_limit));
 
     // serialize and write it to the stream
     JSONValue *value = new JSONValue(jsonObj);
@@ -819,7 +905,7 @@ bool MQTT::isValidJsonEnvelope(JSONObject &json)
     // if "sender" is provided, avoid processing packets we uplinked
     return (json.find("sender") != json.end() ? (json["sender"]->AsString().compare(owner.id) != 0) : true) &&
            (json.find("from") != json.end()) && json["from"]->IsNumber() &&
-           (json["from"]->AsNumber() == nodeDB.getNodeNum()) &&             // only accept message if the "from" is us
+           (json["from"]->AsNumber() == nodeDB->getNodeNum()) &&            // only accept message if the "from" is us
            (json.find("type") != json.end()) && json["type"]->IsString() && // should specify a type
            (json.find("payload") != json.end());                            // should have a payload
 }

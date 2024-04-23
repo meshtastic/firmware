@@ -64,11 +64,11 @@ class MeshModule
 
     /** For use only by MeshService
      */
-    static void callPlugins(meshtastic_MeshPacket &mp, RxSource src = RX_SRC_RADIO);
+    static void callModules(meshtastic_MeshPacket &mp, RxSource src = RX_SRC_RADIO);
 
     static std::vector<MeshModule *> GetMeshModulesWithUIFrames();
     static void observeUIEvents(Observer<const UIFrameEvent *> *observer);
-    static AdminMessageHandleResult handleAdminMessageForAllPlugins(const meshtastic_MeshPacket &mp,
+    static AdminMessageHandleResult handleAdminMessageForAllModules(const meshtastic_MeshPacket &mp,
                                                                     meshtastic_AdminMessage *request,
                                                                     meshtastic_AdminMessage *response);
 #if HAS_SCREEN
@@ -153,7 +153,8 @@ class MeshModule
     virtual bool wantUIFrame() { return false; }
     virtual Observable<const UIFrameEvent *> *getUIFrameObservable() { return NULL; }
 
-    meshtastic_MeshPacket *allocAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex);
+    meshtastic_MeshPacket *allocAckNak(meshtastic_Routing_Error err, NodeNum to, PacketId idFrom, ChannelIndex chIndex,
+                                       uint8_t hopStart = 0, uint8_t hopLimit = 0);
 
     /// Send an error response for the specified packet.
     meshtastic_MeshPacket *allocErrorResponse(meshtastic_Routing_Error err, const meshtastic_MeshPacket *p);
