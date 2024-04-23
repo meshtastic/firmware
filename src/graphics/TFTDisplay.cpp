@@ -396,8 +396,8 @@ class LGFX : public lgfx::LGFX_Device
             touch_cfg.pin_int = settingsMap[touchscreenIRQ];
             touch_cfg.bus_shared = true;
             touch_cfg.offset_rotation = 1;
-            if (settingsMap[touchscreenModule] == ft5x06) {
-                touch_cfg.i2c_addr = 0x38;
+            if (settingsMap[touchscreenI2CAddr] != -1) {
+                touch_cfg.i2c_addr = settingsMap[touchscreenI2CAddr];
             }
 
             _touch_instance->config(touch_cfg);

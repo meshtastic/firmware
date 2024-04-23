@@ -109,6 +109,7 @@ Touchscreen:
 
 #  Module: FT5x06 # Option 2 for Adafruit PiTFT 2.8
 #  IRQ: 24
+#  I2CAddr: 0x38
 
 #  Module: XPT2046 # Waveshare 2.8inch
 #  CS: 7
