@@ -136,6 +136,7 @@ void portduinoSetup()
             settingsMap[use_sx1262] = false;
             settingsMap[use_rf95] = false;
             settingsMap[use_sx1280] = false;
+            settingsMap[use_sx1268] = false;
 
             if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "sx1262") {
                 settingsMap[use_sx1262] = true;
@@ -143,6 +144,8 @@ void portduinoSetup()
                 settingsMap[use_rf95] = true;
             } else if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "sx1280") {
                 settingsMap[use_sx1280] = true;
+            } else if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "sx1268") {
+                settingsMap[use_sx1268] = true;
             }
             settingsMap[dio2_as_rf_switch] = yamlConfig["Lora"]["DIO2_AS_RF_SWITCH"].as<bool>(false);
             settingsMap[dio3_tcxo_voltage] = yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"].as<bool>(false);

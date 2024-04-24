@@ -38,6 +38,15 @@ Lora:
 #  Busy: 20
 #  Reset: 18
 
+#  Module: sx1268  # SX1268-based modules, tested with Ebyte E22 400M33S
+#  CS: 21
+#  IRQ: 16
+#  Busy: 20
+#  Reset: 18
+#  TXen: 6
+#  RXen: 12
+#  DIO3_TCXO_VOLTAGE: true
+
 #  DIO3_TCXO_VOLTAGE: true  # the Waveshare Core1262 and others are known to need this setting
 
 #  TXen: x  # TX and RX enable pins

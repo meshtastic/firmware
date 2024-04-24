@@ -770,6 +770,21 @@ void setup()
                 LOG_INFO("SX1280 Radio init succeeded, using SX1280 radio\n");
             }
         }
+    } else if (settingsMap[use_sx1268]) {
+        if (!rIf) {
+            LOG_DEBUG("Attempting to activate sx1268 radio on SPI port %s\n", settingsStrings[spidev].c_str());
+            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(*LoraSPI, spiSettings);
+            rIf = new SX1268Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
+                                      settingsMap[busy]);
+            if (!rIf->init()) {
+                LOG_ERROR("Failed to find SX1268 radio\n");
+                delete rIf;
+                rIf = NULL;
+                exit(EXIT_FAILURE);
+            } else {
+                LOG_INFO("SX1268 Radio init succeeded, using SX1268 radio\n");
+            }
+        }
     }
 
 #elif defined(HW_SPI1_DEVICE)
