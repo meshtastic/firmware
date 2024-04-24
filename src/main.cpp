@@ -701,7 +701,7 @@ void setup()
 // Only if notification LED not explicitly set for variant
 #ifndef EXT_NOTIFY_OUT
     // If blink LED was repurposed for external notifications module
-    if (moduleConfig.external_notification.enabled &&
+    if (config.device.led_heartbeat_disabled && moduleConfig.external_notification.enabled &&
         (moduleConfig.external_notification.alert_message || moduleConfig.external_notification.alert_bell) &&
         (moduleConfig.external_notification.output == LED_PIN || moduleConfig.external_notification.output == 0)) {
 

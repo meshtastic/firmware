@@ -85,9 +85,9 @@ void setCPUFast(bool on)
 
 void setLed(bool ledOn)
 {
-#ifdef LED_PIN
+#if defined(LED_PIN) && !defined(EXT_NOTIFY_OUT)
     // If LED has been repurposed for use with External Notification module, no blink
-    if (moduleConfig.external_notification.enabled &&
+    if (config.device.led_heartbeat_disabled && moduleConfig.external_notification.enabled &&
         (moduleConfig.external_notification.alert_message || moduleConfig.external_notification.alert_bell) &&
         (moduleConfig.external_notification.output == LED_PIN || moduleConfig.external_notification.output == 0))
         return;
