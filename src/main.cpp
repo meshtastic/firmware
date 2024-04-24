@@ -706,12 +706,14 @@ void setup()
         (moduleConfig.external_notification.output == LED_PIN || moduleConfig.external_notification.output == 0)) {
 
         LOG_INFO("LED Blink disabled - Repurposed for external notifications module\n");
-        digitalWrite(LED_PIN, 0 ^ LED_INVERTED); // Turn off
-        delete ledPeriodic;                      // End the blink thread
+        delete ledPeriodic; // End the blink thread
 
         // If user has default pin set, also set whether active high or active low
         if (moduleConfig.external_notification.output == 0)
             moduleConfig.external_notification.active = !LED_INVERTED;
+
+        // Set LED to off-state (Only needed here for GPIO0. Note possible ACTIVE LOW, from module config)
+        digitalWrite(LED_PIN, !moduleConfig.external_notification.active ^ LED_INVERTED); // Turn off
     }
 #endif // EXT_NOTIFY_OUT
 #endif // LED_PIN
