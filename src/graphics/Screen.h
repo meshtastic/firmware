@@ -60,7 +60,7 @@ class Screen
 
 // 0 to 255, though particular variants might define different defaults
 #ifndef BRIGHTNESS_DEFAULT
-#define BRIGHTNESS_DEFAULT 150
+#define BRIGHTNESS_DEFAULT 130 // Medium Low Brightness
 #endif
 
 // Meters to feet conversion
@@ -167,8 +167,7 @@ class Screen : public concurrency::OSThread
     void showNextFrame() { enqueueCmd(ScreenCmd{.cmd = Cmd::SHOW_NEXT_FRAME}); }
 
     // Implementation to Adjust Brightness
-    uint8_t brightness = BRIGHTNESS_DEFAULT;
-
+    uint8_t brightness = BRIGHTNESS_DEFAULT; // H = 254, MH = 192, ML = 130 L = 103
     /// Starts showing the Bluetooth PIN screen.
     //
     // Switches over to a static frame showing the Bluetooth pairing screen
@@ -201,6 +200,10 @@ class Screen : public concurrency::OSThread
         cmd.cmd = Cmd::START_REBOOT_SCREEN;
         enqueueCmd(cmd);
     }
+
+    // functions for display brightness
+    void increaseBrightness();
+    void decreaseBrightness();
 
     /// Stops showing the bluetooth PIN screen.
     void stopBluetoothPinScreen() { enqueueCmd(ScreenCmd{.cmd = Cmd::STOP_BLUETOOTH_PIN_SCREEN}); }

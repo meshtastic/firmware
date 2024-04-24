@@ -221,6 +221,26 @@ int32_t KbI2cBase::runOnce()
                     e.kbchar = c;
                 }
                 break;
+            case 0x6f: // letter o(+). Modifier makes screen increase in brightness
+                if (is_sym) {
+                    is_sym = false;
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = 0x11; // Increase Brightness code
+                } else {
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = c;
+                }
+                break;
+            case 0x69: // letter i(-).  Modifier makes screen decrease in brightness
+                if (is_sym) {
+                    is_sym = false;
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = 0x12; // Decrease Brightness code
+                } else {
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = c;
+                }
+                break;
             case 0x1b: // ESC
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL;
                 break;

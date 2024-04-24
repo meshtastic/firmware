@@ -1023,7 +1023,9 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #if !ARCH_PORTDUINO
             dispdev->displayOn();
 #endif
+            static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
             dispdev->displayOn();
+
             enabled = true;
             setInterval(0); // Draw ASAP
             runASAP = true;
@@ -1573,7 +1575,27 @@ void Screen::blink()
         delay(50);
         count = count - 1;
     }
+    // The dispdev->setBrightness does not work for t-deck display, it seems to run the setBrightness function in OLEDDisplay.
     dispdev->setBrightness(brightness);
+}
+
+void Screen::increaseBrightness()
+{
+    brightness = ((brightness + 62) > 254) ? brightness : brightness += 62;
+
+    // run the setDisplayBrightness function. This works on t-decks
+    static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
+
+    /* TO DO: add little popup in center of screen saying what brightness level it is set to*/
+}
+
+void Screen::decreaseBrightness()
+{
+    brightness = (brightness < 70) ? brightness : brightness -= 62;
+
+    static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
+
+    /* TO DO: add little popup in center of screen saying what brightness level it is set to*/
 }
 
 std::string Screen::drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint32_t seconds)

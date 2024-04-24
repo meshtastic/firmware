@@ -409,6 +409,16 @@ int32_t CannedMessageModule::runOnce()
                     this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
                 }
                 break;
+            case 0x11: // make screen brighter
+                screen->increaseBrightness();
+                runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+                LOG_DEBUG("increasing Screen Brightness\n");
+                break;
+            case 0x12: // make screen dimmer
+                screen->decreaseBrightness();
+                runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+                LOG_DEBUG("Decreasing Screen Brightness\n");
+                break;
             case 0xb4: // left
             case 0xb7: // right
                 // already handled above

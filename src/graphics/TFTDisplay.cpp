@@ -585,7 +585,7 @@ void TFTDisplay::sendCommand(uint8_t com)
 #endif
 #ifdef RAK14014
 #elif !defined(M5STACK)
-        tft->setBrightness(172);
+        // tft->setBrightness(172); //This now gets set in Screen.cpp in the handleSetOn function
 #endif
         break;
     }
@@ -626,6 +626,12 @@ void TFTDisplay::sendCommand(uint8_t com)
     }
 
     // Drop all other commands to device (we just update the buffer)
+}
+
+void TFTDisplay::setDisplayBrightness(uint8_t _brightness)
+{
+    tft->setBrightness(_brightness);
+    LOG_DEBUG("Brightness is set to value: %i \n", _brightness);
 }
 
 void TFTDisplay::flipScreenVertically()
