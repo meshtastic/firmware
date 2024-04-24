@@ -693,7 +693,13 @@ void setup()
     // Now that the mesh service is created, create any modules
     setupModules();
 
-#if defined(LED_PIN) && !defined(EXT_NOTIFY_OUT)
+#ifdef LED_PIN
+    // Turn LED off after boot, if disabled by config
+    if (config.device.led_heartbeat_disabled)
+        digitalWrite(LED_PIN, LOW ^ LED_INVERTED);
+
+// Only if notification LED not explicitly set for variant
+#ifndef EXT_NOTIFY_OUT
     // If blink LED was repurposed for external notifications module
     if (moduleConfig.external_notification.enabled &&
         (moduleConfig.external_notification.alert_message || moduleConfig.external_notification.alert_bell) &&
@@ -707,7 +713,8 @@ void setup()
         if (moduleConfig.external_notification.output == 0)
             moduleConfig.external_notification.active = !LED_INVERTED;
     }
-#endif
+#endif // EXT_NOTIFY_OUT
+#endif // LED_PIN
 
 // Do this after service.init (because that clears error_code)
 #ifdef HAS_PMU
