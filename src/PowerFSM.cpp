@@ -84,7 +84,7 @@ static void lsIdle()
     if (secsSlept < config.power.ls_secs) {
         // If some other service would stall sleep, don't let sleep happen yet
         if (doPreflightSleep()) {
-            // Briefly come out of sleep long enough to blink the led once every few seconds
+            // Briefly come out of sleep long enough to blink the heartbeat led once every few seconds
             uint32_t sleepTime = SLEEP_TIME;
 
             setLed(false); // Never leave led on while in light sleep

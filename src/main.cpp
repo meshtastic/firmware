@@ -177,7 +177,7 @@ const char *getDeviceName()
     return name;
 }
 
-static int32_t ledBlinker()
+static int32_t ledHeartbeat()
 {
     // Still set up the blinking (heartbeat) interval but skip code path below, so LED will blink if
     // config.device.led_heartbeat_disabled is changed
@@ -309,7 +309,7 @@ void setup()
 
     OSThread::setup();
 
-    ledPeriodic = new Periodic("Blink", ledBlinker);
+    ledPeriodic = new Periodic("Heartbeat", ledHeartbeat);
 
     fsInit();
 
@@ -700,13 +700,13 @@ void setup()
 
 // Only if notification LED not explicitly set for variant
 #ifndef EXT_NOTIFY_OUT
-    // If blink LED was repurposed for external notifications module
+    // If heartbeat LED was repurposed for external notifications module
     if (config.device.led_heartbeat_disabled && moduleConfig.external_notification.enabled &&
         (moduleConfig.external_notification.alert_message || moduleConfig.external_notification.alert_bell) &&
         (moduleConfig.external_notification.output == LED_PIN || moduleConfig.external_notification.output == 0)) {
 
-        LOG_INFO("LED Blink disabled - Repurposed for external notifications module\n");
-        // delete ledPeriodic; // Unused, blink already disabled in ledBlinker()
+        LOG_INFO("Heartbeat LED repurposed for external notifications module\n");
+        // delete ledPeriodic; // Unused, heatbeat already disabled in ledHeartbeat()
 
         // If user has default pin set, also set whether active high or active low
         if (moduleConfig.external_notification.output == 0)
