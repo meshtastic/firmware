@@ -1,7 +1,6 @@
 #include "configuration.h"
 #include "main.h"
 #if ARCH_PORTDUINO
-#include "mesh_bus_spi.h"
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
@@ -340,7 +339,7 @@ static TFT_eSPI *tft = nullptr; // Invoke library, pins defined in User_Setup.h
 class LGFX : public lgfx::LGFX_Device
 {
     lgfx::Panel_LCD *_panel_instance;
-    lgfx::Mesh_Bus_SPI _bus_instance;
+    lgfx::Bus_SPI _bus_instance;
 
     lgfx::ITouch *_touch_instance;
 
@@ -357,7 +356,7 @@ class LGFX : public lgfx::LGFX_Device
             _panel_instance = new lgfx::Panel_ILI9341;
         auto buscfg = _bus_instance.config();
         buscfg.spi_mode = 0;
-        _bus_instance.spi_device(DisplaySPI, settingsStrings[displayspidev]);
+        _bus_instance.spi_device(DisplaySPI);
 
         buscfg.pin_dc = settingsMap[displayDC]; // Set SPI DC pin number (-1 = disable)
 
