@@ -705,17 +705,20 @@ void setup()
         (moduleConfig.external_notification.alert_message || moduleConfig.external_notification.alert_bell) &&
         (moduleConfig.external_notification.output == LED_PIN || moduleConfig.external_notification.output == 0)) {
 
-        LOG_INFO("Heartbeat LED repurposed for external notifications module\n");
+        LOG_INFO("Heartbeat LED repurposed for External Notification module\n");
         // delete ledPeriodic; // Unused, heatbeat already disabled in ledHeartbeat()
 
         // If user has default pin set, also set whether active high or active low
         if (moduleConfig.external_notification.output == 0)
             moduleConfig.external_notification.active = !LED_INVERTED;
-
-        // Set LED to off-state (Only needed here for GPIO0. Note possible ACTIVE LOW, from module config)
-        digitalWrite(LED_PIN, !moduleConfig.external_notification.active ^ LED_INVERTED); // Turn off
     }
-#endif // EXT_NOTIFY_OUT
+#endif // !defined EXT_NOTIFY_OUT
+
+    // If using external notification module, LED off by default
+    if (moduleConfig.external_notification.enabled &&
+        (moduleConfig.external_notification.alert_message || moduleConfig.external_notification.alert_bell))
+        digitalWrite(LED_PIN, !moduleConfig.external_notification.active);
+
 #endif // LED_PIN
 
 // Do this after service.init (because that clears error_code)
