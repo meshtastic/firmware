@@ -706,7 +706,7 @@ void setup()
         (moduleConfig.external_notification.output == LED_PIN || moduleConfig.external_notification.output == 0)) {
 
         LOG_INFO("LED Blink disabled - Repurposed for external notifications module\n");
-        delete ledPeriodic; // End the blink thread
+        // delete ledPeriodic; // Unused, blink already disabled in ledBlinker()
 
         // If user has default pin set, also set whether active high or active low
         if (moduleConfig.external_notification.output == 0)
