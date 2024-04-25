@@ -1023,7 +1023,11 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #if !ARCH_PORTDUINO
             dispdev->displayOn();
 #endif
+
+#if !defined(M5STACK) // set display brightness when turning on screens. Just moved function from TFTDisplay to here.
             static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
+#endif
+
             dispdev->displayOn();
 
             enabled = true;
@@ -1583,8 +1587,10 @@ void Screen::increaseBrightness()
 {
     brightness = ((brightness + 62) > 254) ? brightness : brightness += 62;
 
+#if !defined(M5STACK)
     // run the setDisplayBrightness function. This works on t-decks
     static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
+#endif
 
     /* TO DO: add little popup in center of screen saying what brightness level it is set to*/
 }
@@ -1593,7 +1599,9 @@ void Screen::decreaseBrightness()
 {
     brightness = (brightness < 70) ? brightness : brightness -= 62;
 
+#if !defined(M5STACK)
     static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
+#endif
 
     /* TO DO: add little popup in center of screen saying what brightness level it is set to*/
 }
