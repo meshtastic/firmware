@@ -693,6 +693,7 @@ void setup()
     // Now that the mesh service is created, create any modules
     setupModules();
 
+    // Modify LED behavior, if heartbeat disabled, or using external notification module
 #ifdef LED_PIN
     // Turn LED off after boot, if disabled by config
     if (config.device.led_heartbeat_disabled)
@@ -713,13 +714,12 @@ void setup()
             moduleConfig.external_notification.active = !LED_INVERTED;
     }
 #endif // !defined EXT_NOTIFY_OUT
+#endif // LED_PIN
 
-    // If using external notification module, LED off by default
+    // If using external notification module, make sure output is off by default
     if (moduleConfig.external_notification.enabled &&
         (moduleConfig.external_notification.alert_message || moduleConfig.external_notification.alert_bell))
-        digitalWrite(LED_PIN, !moduleConfig.external_notification.active);
-
-#endif // LED_PIN
+        digitalWrite(moduleConfig.external_notification.output, !moduleConfig.external_notification.active);
 
 // Do this after service.init (because that clears error_code)
 #ifdef HAS_PMU
