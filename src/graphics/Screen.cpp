@@ -1024,7 +1024,8 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             dispdev->displayOn();
 #endif
 
-#if !defined(M5STACK) // set display brightness when turning on screens. Just moved function from TFTDisplay to here.
+#if defined(ST7789_CS) &&                                                                                                        \
+    !defined(M5STACK) // set display brightness when turning on screens. Just moved function from TFTDisplay to here.
             static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
 #endif
 
@@ -1587,7 +1588,7 @@ void Screen::increaseBrightness()
 {
     brightness = ((brightness + 62) > 254) ? brightness : brightness += 62;
 
-#if !defined(M5STACK)
+#if defined(ST7789_CS)
     // run the setDisplayBrightness function. This works on t-decks
     static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
 #endif
@@ -1599,7 +1600,7 @@ void Screen::decreaseBrightness()
 {
     brightness = (brightness < 70) ? brightness : brightness -= 62;
 
-#if !defined(M5STACK)
+#if defined(ST7789_CS)
     static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
 #endif
 
