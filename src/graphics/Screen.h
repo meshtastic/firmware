@@ -166,8 +166,6 @@ class Screen : public concurrency::OSThread
     void showPrevFrame() { enqueueCmd(ScreenCmd{.cmd = Cmd::SHOW_PREV_FRAME}); }
     void showNextFrame() { enqueueCmd(ScreenCmd{.cmd = Cmd::SHOW_NEXT_FRAME}); }
 
-    // Implementation to Adjust Brightness
-    uint8_t brightness = BRIGHTNESS_DEFAULT; // H = 254, MH = 192, ML = 130 L = 103
     /// Starts showing the Bluetooth PIN screen.
     //
     // Switches over to a static frame showing the Bluetooth pairing screen
@@ -204,6 +202,9 @@ class Screen : public concurrency::OSThread
     // functions for display brightness
     void increaseBrightness();
     void decreaseBrightness();
+
+    void setFunctionSymbal(std::string sym);
+    void removeFunctionSymbal(std::string sym);
 
     /// Stops showing the bluetooth PIN screen.
     void stopBluetoothPinScreen() { enqueueCmd(ScreenCmd{.cmd = Cmd::STOP_BLUETOOTH_PIN_SCREEN}); }
@@ -397,6 +398,9 @@ class Screen : public concurrency::OSThread
     // Whether we are showing the regular screen (as opposed to booth screen or
     // Bluetooth PIN screen)
     bool showingNormalScreen = false;
+
+    // Implementation to Adjust Brightness
+    uint8_t brightness = BRIGHTNESS_DEFAULT; // H = 254, MH = 192, ML = 130 L = 103
 
     /// Holds state for debug information
     DebugInfo debugInfo;

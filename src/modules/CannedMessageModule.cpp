@@ -185,7 +185,45 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         this->payload = event->kbchar;
         this->lastTouchMillis = millis();
         validEvent = true;
+    } else if (event->inputEvent == static_cast<char>(MODKEY)) {
+        LOG_DEBUG("Canned message event mod key pressed\n");
+
+        // Run modifier key code below, (doesnt inturrupt typing or reset to start screen page)
+        switch (event->kbchar) {
+
+        case 0x11: // make screen brighter
+            screen->increaseBrightness();
+            LOG_DEBUG("increasing Screen Brightness\n");
+            break;
+        case 0x12: // make screen dimmer
+            screen->decreaseBrightness();
+            LOG_DEBUG("Decreasing Screen Brightness\n");
+            break;
+        case 0xf1: // draw modifier (function) symbal
+            screen->setFunctionSymbal("Fn");
+            break;
+        case 0xf2: // remove modifier (function) symbal
+            screen->removeFunctionSymbal("Fn");
+            break;
+        // mute (switch off/toggle) external notifications on fn+m
+        case 0xac:
+            if (moduleConfig.external_notification.enabled == true) {
+                if (externalNotificationModule->getMute()) {
+                    externalNotificationModule->setMute(false);
+                    screen->removeFunctionSymbal("M");
+                } else {
+                    externalNotificationModule->stopNow(); // this will turn off all GPIO and sounds and idle the loop
+                    externalNotificationModule->setMute(true);
+                    screen->setFunctionSymbal("M");
+                }
+            }
+            break;
+        }
+        if (event->kbchar != 0xf1) {
+            screen->removeFunctionSymbal("Fn"); // remove modifier (function) symbal
+        }
     }
+
     if (event->inputEvent == static_cast<char>(MATRIXKEY)) {
         LOG_DEBUG("Canned message event Matrix key pressed\n");
         // this will send the text immediately on matrix press
@@ -409,16 +447,6 @@ int32_t CannedMessageModule::runOnce()
                     this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
                 }
                 break;
-            case 0x11: // make screen brighter
-                screen->increaseBrightness();
-                runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-                LOG_DEBUG("increasing Screen Brightness\n");
-                break;
-            case 0x12: // make screen dimmer
-                screen->decreaseBrightness();
-                runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-                LOG_DEBUG("Decreasing Screen Brightness\n");
-                break;
             case 0xb4: // left
             case 0xb7: // right
                 // already handled above
@@ -445,20 +473,6 @@ int32_t CannedMessageModule::runOnce()
                     screen->forceDisplay();
                 runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
                 break;
-
-            // mute (switch off/toggle) external notifications on fn+m
-            case 0xac:
-                if (moduleConfig.external_notification.enabled == true) {
-                    if (externalNotificationModule->getMute()) {
-                        externalNotificationModule->setMute(false);
-                        runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-                    } else {
-                        externalNotificationModule->stopNow(); // this will turn off all GPIO and sounds and idle the loop
-                        externalNotificationModule->setMute(true);
-                        runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-                    }
-                }
-                break;
             case 0xaf: // fn+space send network ping like double press does
                 service.refreshLocalMeshNode();
                 service.sendNetworkPing(NODENUM_BROADCAST, true);
@@ -479,6 +493,7 @@ int32_t CannedMessageModule::runOnce()
                 }
                 break;
             }
+            screen->removeFunctionSymbal("Fn");
         }
 
         this->lastTouchMillis = millis();

@@ -94,6 +94,11 @@ std::vector<MeshModule *> moduleFrames;
 // Stores the last 4 of our hardware ID, to make finding the device for pairing easier
 static char ourId[5];
 
+// vector where symbols (string) are displayed in bottom corner of display.
+std::vector<std::string> functionSymbals;
+// string displayed in bottom right corner of display. Created from elements in functionSymbals vector
+std::string functionSymbalString = "";
+
 #if HAS_GPS
 // GeoCoord object for the screen
 GeoCoord geoCoord;
@@ -258,6 +263,18 @@ static void drawWelcomeScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
     yield();
     esp_task_wdt_reset();
 #endif
+}
+
+// draw overlay in bottom right corner of screen to show when notifications are muted or modifier key is active
+static void drawFunctionOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
+{
+    LOG_DEBUG("Drawing function overlay\n");
+    if (functionSymbals.begin() != functionSymbals.end()) {
+        char buf[64];
+        display->setFont(FONT_SMALL);
+        snprintf(buf, sizeof(buf), "%s", functionSymbalString.c_str());
+        display->drawString(SCREEN_WIDTH - display->getStringWidth(buf), SCREEN_HEIGHT - FONT_HEIGHT_SMALL, buf);
+    }
 }
 
 #ifdef USE_EINK
@@ -1497,6 +1514,11 @@ void Screen::setFrames()
     ui->setFrames(normalFrames, numframes);
     ui->enableAllIndicators();
 
+    // Add function overlay here. This can show when notifications muted, modifier key is active etc
+    static OverlayCallback functionOverlay[] = {drawFunctionOverlay};
+    static const int functionOverlayCount = sizeof(functionOverlay) / sizeof(functionOverlay[0]);
+    ui->setOverlays(functionOverlay, functionOverlayCount);
+
     prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list
                     // just changed)
 
@@ -1586,7 +1608,7 @@ void Screen::blink()
 
 void Screen::increaseBrightness()
 {
-    brightness = ((brightness + 62) > 254) ? brightness : brightness += 62;
+    brightness = ((brightness + 62) > 254) ? brightness : (brightness + 62);
 
 #if defined(ST7789_CS)
     // run the setDisplayBrightness function. This works on t-decks
@@ -1598,13 +1620,35 @@ void Screen::increaseBrightness()
 
 void Screen::decreaseBrightness()
 {
-    brightness = (brightness < 70) ? brightness : brightness -= 62;
+    brightness = (brightness < 70) ? brightness : (brightness - 62);
 
 #if defined(ST7789_CS)
     static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
 #endif
 
     /* TO DO: add little popup in center of screen saying what brightness level it is set to*/
+}
+
+void Screen::setFunctionSymbal(std::string sym)
+{
+    if (std::find(functionSymbals.begin(), functionSymbals.end(), sym) == functionSymbals.end()) {
+        functionSymbals.push_back(sym);
+        functionSymbalString = "";
+        for (auto symbol : functionSymbals) {
+            functionSymbalString = symbol + " " + functionSymbalString;
+        }
+        setFastFramerate();
+    }
+}
+
+void Screen::removeFunctionSymbal(std::string sym)
+{
+    functionSymbals.erase(std::remove(functionSymbals.begin(), functionSymbals.end(), sym), functionSymbals.end());
+    functionSymbalString = "";
+    for (auto symbol : functionSymbals) {
+        functionSymbalString = symbol + " " + functionSymbalString;
+    }
+    setFastFramerate();
 }
 
 std::string Screen::drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint32_t seconds)
