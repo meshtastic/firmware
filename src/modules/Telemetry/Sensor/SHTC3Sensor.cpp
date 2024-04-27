@@ -1,3 +1,5 @@
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
 #include "SHTC3Sensor.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
@@ -31,3 +33,5 @@ bool SHTC3Sensor::getMetrics(meshtastic_Telemetry *measurement)
 
     return true;
 }
+
+#endif

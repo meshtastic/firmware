@@ -1,3 +1,5 @@
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
 #include "BME680Sensor.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "FSCommon.h"
@@ -134,3 +136,5 @@ void BME680Sensor::checkStatus(String functionName)
     else if (bme680.sensor.status > BME68X_OK)
         LOG_WARN("%s BME68X code: %s\n", functionName.c_str(), String(bme680.sensor.status).c_str());
 }
+
+#endif

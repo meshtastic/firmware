@@ -1,3 +1,5 @@
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
 #include "PowerFSM.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
@@ -173,3 +175,5 @@ class AccelerometerThread : public concurrency::OSThread
 };
 
 } // namespace concurrency
+
+#endif

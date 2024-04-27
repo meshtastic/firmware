@@ -1,3 +1,5 @@
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
 #pragma once
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "NodeDB.h"
@@ -42,3 +44,5 @@ class EnvironmentTelemetryModule : private concurrency::OSThread, public Protobu
     uint32_t lastSentToPhone = 0;
     uint32_t sensor_read_error_count = 0;
 };
+
+#endif
