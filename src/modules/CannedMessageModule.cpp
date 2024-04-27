@@ -277,7 +277,7 @@ int32_t CannedMessageModule::runOnce()
     UIFrameEvent e = {false, true};
     if ((this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) ||
         (this->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED)) {
-        // TODO: might have some feedback of sendig state
+        // TODO: might have some feedback of sending state
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         e.frameChanged = true;
         this->currentMessageIndex = -1;
@@ -475,7 +475,7 @@ int32_t CannedMessageModule::runOnce()
                 break;
             case 0xaf: // fn+space send network ping like double press does
                 service.refreshLocalMeshNode();
-                service.sendNetworkPing(NODENUM_BROADCAST, true);
+                service.trySendPosition(NODENUM_BROADCAST, true);
                 runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
                 break;
             default:
