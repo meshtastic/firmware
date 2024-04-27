@@ -1,3 +1,5 @@
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
 #include "MCP9808Sensor.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
@@ -27,3 +29,5 @@ bool MCP9808Sensor::getMetrics(meshtastic_Telemetry *measurement)
     measurement->variant.environment_metrics.temperature = mcp9808.readTempC();
     return true;
 }
+
+#endif

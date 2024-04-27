@@ -1,3 +1,5 @@
+#if HAS_TELEMETRY
+
 #include "INA260Sensor.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
@@ -33,3 +35,5 @@ uint16_t INA260Sensor::getBusVoltageMv()
 {
     return lround(ina260.readBusVoltage());
 }
+
+#endif

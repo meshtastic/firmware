@@ -1,3 +1,5 @@
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
 #include "LPS22HBSensor.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
@@ -33,3 +35,5 @@ bool LPS22HBSensor::getMetrics(meshtastic_Telemetry *measurement)
 
     return true;
 }
+
+#endif

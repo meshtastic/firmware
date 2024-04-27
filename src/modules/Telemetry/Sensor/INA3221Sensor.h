@@ -1,3 +1,5 @@
+#if HAS_TELEMETRY
+
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
 #include "VoltageSensor.h"
@@ -17,3 +19,5 @@ class INA3221Sensor : public TelemetrySensor, VoltageSensor
     bool getMetrics(meshtastic_Telemetry *measurement) override;
     virtual uint16_t getBusVoltageMv() override;
 };
+
+#endif

@@ -1,3 +1,5 @@
+#if HAS_TELEMETRY
+
 #include "INA219Sensor.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
@@ -38,3 +40,5 @@ uint16_t INA219Sensor::getBusVoltageMv()
 {
     return lround(ina219.getBusVoltage_V() * 1000);
 }
+
+#endif
