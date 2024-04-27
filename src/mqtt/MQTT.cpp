@@ -76,6 +76,8 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                             p->channel = json["channel"]->AsNumber();
                         if (json.find("to") != json.end() && json["to"]->IsNumber())
                             p->to = json["to"]->AsNumber();
+                        if (json.find("hopLimit") != json.end() && json["hopLimit"]->IsNumber())
+                            p->hop_limit = json["hopLimit"]->AsNumber();
                         if (jsonPayloadStr.length() <= sizeof(p->decoded.payload.bytes)) {
                             memcpy(p->decoded.payload.bytes, jsonPayloadStr.c_str(), jsonPayloadStr.length());
                             p->decoded.payload.size = jsonPayloadStr.length();
@@ -105,6 +107,8 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                             p->channel = json["channel"]->AsNumber();
                         if (json.find("to") != json.end() && json["to"]->IsNumber())
                             p->to = json["to"]->AsNumber();
+                        if (json.find("hopLimit") != json.end() && json["hopLimit"]->IsNumber())
+                            p->hop_limit = json["hopLimit"]->AsNumber();
                         p->decoded.payload.size =
                             pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes),
                                                &meshtastic_Position_msg, &pos); // make the Data protobuf from position
@@ -907,6 +911,7 @@ bool MQTT::isValidJsonEnvelope(JSONObject &json)
 {
     // if "sender" is provided, avoid processing packets we uplinked
     return (json.find("sender") != json.end() ? (json["sender"]->AsString().compare(owner.id) != 0) : true) &&
+           (json.find("hopLimit") != json.end() ? json["hopLimit"]->IsNumber() : true) && // hop limit should be a number
            (json.find("from") != json.end()) && json["from"]->IsNumber() &&
            (json["from"]->AsNumber() == nodeDB->getNodeNum()) &&            // only accept message if the "from" is us
            (json.find("type") != json.end()) && json["type"]->IsString() && // should specify a type
