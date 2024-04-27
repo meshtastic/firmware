@@ -240,7 +240,7 @@ int32_t CannedMessageModule::runOnce()
     UIFrameEvent e = {false, true};
     if ((this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) ||
         (this->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) || (this->runState == CANNED_MESSAGE_RUN_STATE_MESSAGE)) {
-        // TODO: might have some feedback of sendig state
+        // TODO: might have some feedback of sending state
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         temporaryMessage = "";
         e.frameChanged = true;
