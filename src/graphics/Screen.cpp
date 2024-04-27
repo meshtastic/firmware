@@ -268,7 +268,7 @@ static void drawWelcomeScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
 // draw overlay in bottom right corner of screen to show when notifications are muted or modifier key is active
 static void drawFunctionOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
 {
-    LOG_DEBUG("Drawing function overlay\n");
+    // LOG_DEBUG("Drawing function overlay\n");
     if (functionSymbals.begin() != functionSymbals.end()) {
         char buf[64];
         display->setFont(FONT_SMALL);
