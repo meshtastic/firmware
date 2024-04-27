@@ -137,6 +137,9 @@ int32_t KbI2cBase::runOnce()
                     break;
                 case 0x13: // Code scanner says the SYM key is 0x13
                     is_sym = !is_sym;
+                    e.inputEvent = ANYKEY;
+                    e.kbchar =
+                        is_sym ? 0xf1 : 0xf2; // send 0xf1 to tell CannedMessages to display that the modifier key is active
                     break;
                 case 0x0a: // apparently Enter on Q10 is a line feed instead of carriage return
                     e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
@@ -204,8 +207,8 @@ int32_t KbI2cBase::runOnce()
             case 0x74: // letter t. if modifier and t pressed call 'tab'
                 if (is_sym) {
                     is_sym = false;
-                    e.inputEvent = ANYKEY; // This is left ANYKEY to trigger the typing (FREETEXT) interface
-                    e.kbchar = 0x09;       // TAB Scancode
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = 0x09; // TAB Scancode
                 } else {
                     e.inputEvent = ANYKEY;
                     e.kbchar = c;
@@ -214,8 +217,8 @@ int32_t KbI2cBase::runOnce()
             case 0x6d: // letter m. Modifier makes it mute notifications
                 if (is_sym) {
                     is_sym = false;
-                    e.inputEvent = MODKEY; // Set as MODKEY so as to NOT trigger typing (FREETEXT) interface
-                    e.kbchar = 0xac;       // mute notifications
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = 0xac; // mute notifications
                 } else {
                     e.inputEvent = ANYKEY;
                     e.kbchar = c;
@@ -224,8 +227,8 @@ int32_t KbI2cBase::runOnce()
             case 0x6f: // letter o(+). Modifier makes screen increase in brightness
                 if (is_sym) {
                     is_sym = false;
-                    e.inputEvent = MODKEY; // Set as MODKEY so as to NOT trigger typing (FREETEXT) interface
-                    e.kbchar = 0x11;       // Increase Brightness code
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = 0x11; // Increase Brightness code
                 } else {
                     e.inputEvent = ANYKEY;
                     e.kbchar = c;
@@ -234,8 +237,8 @@ int32_t KbI2cBase::runOnce()
             case 0x69: // letter i(-).  Modifier makes screen decrease in brightness
                 if (is_sym) {
                     is_sym = false;
-                    e.inputEvent = MODKEY; // Set as MODKEY so as to NOT trigger typing (FREETEXT) interface
-                    e.kbchar = 0x12;       // Decrease Brightness code
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = 0x12; // Decrease Brightness code
                 } else {
                     e.inputEvent = ANYKEY;
                     e.kbchar = c;
@@ -246,6 +249,16 @@ int32_t KbI2cBase::runOnce()
                     is_sym = false;
                     e.inputEvent = ANYKEY;
                     e.kbchar = 0xaf; // (fn + space)
+                } else {
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = c;
+                }
+                break;
+            case 0x67: // letter g. toggle gps
+                if (is_sym) {
+                    is_sym = false;
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = 0x9e;
                 } else {
                     e.inputEvent = ANYKEY;
                     e.kbchar = c;
@@ -277,7 +290,7 @@ int32_t KbI2cBase::runOnce()
             case 0xc: // Modifier key: 0xc is alt+c (Other options could be: 0xea = shift+mic button or 0x4 shift+$(speaker))
                 // toggle moddifiers button.
                 is_sym = !is_sym;
-                e.inputEvent = MODKEY;
+                e.inputEvent = ANYKEY;
                 e.kbchar = is_sym ? 0xf1 : 0xf2; // send 0xf1 to tell CannedMessages to display that the modifier key is active
                 break;
             case 0x90: // fn+r

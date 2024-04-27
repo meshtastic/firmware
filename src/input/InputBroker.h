@@ -2,7 +2,6 @@
 #include "Observer.h"
 
 #define ANYKEY 0xFF
-#define MODKEY 0xFD
 #define MATRIXKEY 0xFE
 
 typedef struct _InputEvent {
