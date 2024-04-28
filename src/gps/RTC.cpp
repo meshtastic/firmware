@@ -104,13 +104,15 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
     bool shouldSet;
     if (q > currentQuality) {
         shouldSet = true;
-        LOG_DEBUG("Upgrading time to quality %d\n", q);
-    } else if (q == RTCQualityGPS && (now - lastSetMsec) > (12 * 60 * 60 * 1000UL)) {
-        // Every 12 hrs we will slam in a new GPS time, to correct for local RTC clock drift
+        LOG_DEBUG("Upgrading time to quality %s\n", RtcName(q));
+    } else if (q >= RTCQualityNTP && (now - lastSetMsec) > (12 * 60 * 60 * 1000UL)) {
+        // Every 12 hrs we will slam in a new GPS or Phone GPS / NTP time, to correct for local RTC clock drift
         shouldSet = true;
         LOG_DEBUG("Reapplying external time to correct clock drift %ld secs\n", tv->tv_sec);
-    } else
+    } else {
         shouldSet = false;
+        LOG_DEBUG("Current RTC quality: %s. Ignoring time of RTC quality of %s\n", RtcName(currentQuality), RtcName(q));
+    }
 
     if (shouldSet) {
         currentQuality = q;
@@ -162,6 +164,24 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv)
     }
 }
 
+const char *RtcName(RTCQuality quality)
+{
+    switch (quality) {
+    case RTCQualityNone:
+        return "None";
+    case RTCQualityDevice:
+        return "Device";
+    case RTCQualityFromNet:
+        return "Net";
+    case RTCQualityNTP:
+        return "NTP";
+    case RTCQualityGPS:
+        return "GPS";
+    default:
+        return "Unknown";
+    }
+}
+
 /**
  * Sets the RTC time if the provided time is of higher quality than the current RTC time.
  *
@@ -203,7 +223,7 @@ int32_t getTZOffset()
     now = time(NULL);
     gmt = gmtime(&now);
     gmt->tm_isdst = -1;
-    return (int16_t)difftime(now, mktime(gmt));
+    return (int32_t)difftime(now, mktime(gmt));
 }
 
 /**
