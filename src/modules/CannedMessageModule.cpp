@@ -233,14 +233,16 @@ int32_t CannedMessageModule::runOnce()
 {
     if (((!moduleConfig.canned_message.enabled) && !CANNED_MESSAGE_MODULE_ENABLE) ||
         (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) || (this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE)) {
+        temporaryMessage = "";
         return INT32_MAX;
     }
     // LOG_DEBUG("Check status\n");
     UIFrameEvent e = {false, true};
     if ((this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) ||
-        (this->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED)) {
-        // TODO: might have some feedback of sendig state
+        (this->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) || (this->runState == CANNED_MESSAGE_RUN_STATE_MESSAGE)) {
+        // TODO: might have some feedback of sending state
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+        temporaryMessage = "";
         e.frameChanged = true;
         this->currentMessageIndex = -1;
         this->freetext = ""; // clear freetext
@@ -434,7 +436,7 @@ int32_t CannedMessageModule::runOnce()
                 }
                 if (screen)
                     screen->forceDisplay();
-                runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+                showTemporaryMessage("GPS Toggled");
                 break;
 
             // mute (switch off/toggle) external notifications on fn+m
@@ -442,18 +444,21 @@ int32_t CannedMessageModule::runOnce()
                 if (moduleConfig.external_notification.enabled == true) {
                     if (externalNotificationModule->getMute()) {
                         externalNotificationModule->setMute(false);
-                        runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+                        showTemporaryMessage("Notifications \nEnabled");
                     } else {
                         externalNotificationModule->stopNow(); // this will turn off all GPIO and sounds and idle the loop
                         externalNotificationModule->setMute(true);
-                        runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+                        showTemporaryMessage("Notifications \nDisabled");
                     }
                 }
                 break;
             case 0xaf: // fn+space send network ping like double press does
                 service.refreshLocalMeshNode();
-                service.sendNetworkPing(NODENUM_BROADCAST, true);
-                runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+                if (service.trySendPosition(NODENUM_BROADCAST, true)) {
+                    showTemporaryMessage("Position \nUpdate Sent");
+                } else {
+                    showTemporaryMessage("Node Info \nUpdate Sent");
+                }
                 break;
             default:
                 if (this->cursor == this->freetext.length()) {
@@ -542,12 +547,27 @@ int CannedMessageModule::getPrevIndex()
         return this->currentMessageIndex - 1;
     }
 }
+void CannedMessageModule::showTemporaryMessage(const String &message)
+{
+    temporaryMessage = message;
+    UIFrameEvent e = {false, true};
+    e.frameChanged = true;
+    notifyObservers(&e);
+    runState = CANNED_MESSAGE_RUN_STATE_MESSAGE;
+    // run this loop again in 2 seconds, next iteration will clear the display
+    setIntervalFromNow(2000);
+}
 
 void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     char buffer[50];
 
-    if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) {
+    if (temporaryMessage.length() != 0) {
+        LOG_DEBUG("Drawing temporary message: %s", temporaryMessage.c_str());
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->setFont(FONT_MEDIUM);
+        display->drawString(display->getWidth() / 2 + x, 0 + y + 12, temporaryMessage);
+    } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) {
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->setFont(FONT_MEDIUM);
         String displayString;
