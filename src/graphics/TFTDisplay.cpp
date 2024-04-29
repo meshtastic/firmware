@@ -1,7 +1,6 @@
 #include "configuration.h"
 #include "main.h"
 #if ARCH_PORTDUINO
-#include "mesh_bus_spi.h"
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
@@ -340,7 +339,7 @@ static TFT_eSPI *tft = nullptr; // Invoke library, pins defined in User_Setup.h
 class LGFX : public lgfx::LGFX_Device
 {
     lgfx::Panel_LCD *_panel_instance;
-    lgfx::Mesh_Bus_SPI _bus_instance;
+    lgfx::Bus_SPI _bus_instance;
 
     lgfx::ITouch *_touch_instance;
 
@@ -357,7 +356,7 @@ class LGFX : public lgfx::LGFX_Device
             _panel_instance = new lgfx::Panel_ILI9341;
         auto buscfg = _bus_instance.config();
         buscfg.spi_mode = 0;
-        _bus_instance.spi_device(DisplaySPI, settingsStrings[displayspidev]);
+        _bus_instance.spi_device(DisplaySPI);
 
         buscfg.pin_dc = settingsMap[displayDC]; // Set SPI DC pin number (-1 = disable)
 
@@ -383,6 +382,8 @@ class LGFX : public lgfx::LGFX_Device
                 _touch_instance = new lgfx::Touch_XPT2046;
             } else if (settingsMap[touchscreenModule] == stmpe610) {
                 _touch_instance = new lgfx::Touch_STMPE610;
+            } else if (settingsMap[touchscreenModule] == ft5x06) {
+                _touch_instance = new lgfx::Touch_FT5x06;
             }
             auto touch_cfg = _touch_instance->config();
 
@@ -394,6 +395,9 @@ class LGFX : public lgfx::LGFX_Device
             touch_cfg.pin_int = settingsMap[touchscreenIRQ];
             touch_cfg.bus_shared = true;
             touch_cfg.offset_rotation = 1;
+            if (settingsMap[touchscreenI2CAddr] != -1) {
+                touch_cfg.i2c_addr = settingsMap[touchscreenI2CAddr];
+            }
 
             _touch_instance->config(touch_cfg);
             _panel_instance->setTouch(_touch_instance);
