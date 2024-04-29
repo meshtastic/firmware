@@ -353,9 +353,6 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 100;
     moduleConfig.external_notification.active = true;
 #endif
-#ifdef TTGO_T_ECHO
-    config.display.wake_on_tap_or_motion = true; // Enable touch button for screen-on / refresh
-#endif
     moduleConfig.has_canned_message = true;
 
     strncpy(moduleConfig.mqtt.address, default_mqtt_address, sizeof(moduleConfig.mqtt.address));
