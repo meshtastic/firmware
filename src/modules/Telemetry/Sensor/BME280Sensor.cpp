@@ -1,9 +1,10 @@
+#include "configuration.h"
+
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
 #include "BME280Sensor.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
-#include "configuration.h"
 #include <Adafruit_BME280.h>
 #include <typeinfo>
 
@@ -37,5 +38,5 @@ bool BME280Sensor::getMetrics(meshtastic_Telemetry *measurement)
     measurement->variant.environment_metrics.barometric_pressure = bme280.readPressure() / 100.0F;
 
     return true;
-
+}
 #endif

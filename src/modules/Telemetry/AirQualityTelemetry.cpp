@@ -1,3 +1,5 @@
+#include "configuration.h"
+
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
 #include "AirQualityTelemetry.h"
@@ -8,7 +10,6 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
-#include "configuration.h"
 #include "main.h"
 
 int32_t AirQualityTelemetryModule::runOnce()

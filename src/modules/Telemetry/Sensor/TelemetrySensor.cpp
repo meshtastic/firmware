@@ -1,3 +1,5 @@
+#include "configuration.h"
+
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
 #include "TelemetrySensor.h"
