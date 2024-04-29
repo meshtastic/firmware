@@ -1,9 +1,10 @@
-#if HAS_TELEMETRY
+#include "configuration.h"
+
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
 #include "INA219Sensor.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
-#include "configuration.h"
 #include <Adafruit_INA219.h>
 
 #ifndef INA219_MULTIPLIER

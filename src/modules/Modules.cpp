@@ -146,7 +146,7 @@ void setupModules()
             new AirQualityTelemetryModule();
         }
 #endif
-#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_POWER_TELEMETRY
+#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_POWER_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
         new PowerTelemetryModule();
 #endif
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)) && !defined(CONFIG_IDF_TARGET_ESP32S2) &&               \
