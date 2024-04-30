@@ -393,7 +393,7 @@ void setup()
 
     // We need to scan here to decide if we have a screen for nodeDB.init() and because power has been applied to
     // accessories
-    delay(300);  // Introduce a delay before scanning for I2C devices
+    delay(500);  // Introduce a delay before scanning for I2C devices
     auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
 #if HAS_WIRE
     LOG_INFO("Scanning for i2c devices...\n");
