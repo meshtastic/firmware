@@ -884,6 +884,7 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
     jsonObj["to"] = new JSONValue((uint)mp->to);
     jsonObj["from"] = new JSONValue((uint)mp->from);
     jsonObj["channel"] = new JSONValue((uint)mp->channel);
+    jsonObj["hop_limit"] = new JSONValue((uint)mp->hop_limit);
     jsonObj["type"] = new JSONValue(msgType.c_str());
     jsonObj["sender"] = new JSONValue(owner.id);
     if (mp->rx_rssi != 0)
