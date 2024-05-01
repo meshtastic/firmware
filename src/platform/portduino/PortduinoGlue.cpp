@@ -76,7 +76,21 @@ void portduinoCustomInit()
 void portduinoSetup()
 {
     printf("Setting up Meshtastic on Portduino...\n");
-    gpioInit();
+    int max_GPIO = 0;
+    int GPIO_lines[] = {cs,
+                        irq,
+                        busy,
+                        reset,
+                        txen,
+                        rxen,
+                        displayDC,
+                        displayCS,
+                        displayBacklight,
+                        displayBacklightPWMChannel,
+                        displayReset,
+                        touchscreenCS,
+                        touchscreenIRQ,
+                        user};
 
     std::string gpioChipName = "gpiochip";
     settingsStrings[i2cdev] = "";
@@ -244,6 +258,13 @@ void portduinoSetup()
         std::cout << "*** Exception " << e.what() << std::endl;
         exit(EXIT_FAILURE);
     }
+
+    for (int i : GPIO_lines) {
+        if (i > max_GPIO)
+            max_GPIO = i;
+    }
+
+    gpioInit(max_GPIO + 1); // Done here so we can inform Portduino how many GPIOs we need.
 
     // Need to bind all the configured GPIO pins so they're not simulated
     if (settingsMap.count(cs) > 0 && settingsMap[cs] != RADIOLIB_NC) {
