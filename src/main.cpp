@@ -679,9 +679,6 @@ void setup()
         } else
 #endif
         {
-            auto spiHost = [](const std::string &spidev) {
-                return spidev.empty() ? 0 : (spidev[11] - '0') | (spidev[13] - '0') << 4;
-            };
             displayConfig.device(DisplayDriverConfig::device_t::CUSTOM_TFT)
                 .panel(DisplayDriverConfig::panel_config_t{.type = panels[settingsMap[displayPanel]],
                                                            .panel_width = (uint16_t)settingsMap[displayWidth],
@@ -698,13 +695,13 @@ void setup()
                                                        .freq_read = 16000000,
                                                        .spi{.pin_dc = (int8_t)settingsMap[displayDC],
                                                             .use_lock = true,
-                                                            .spi_host = (uint16_t)spiHost(settingsStrings[displayspidev])}})
+                                                            .spi_host = (uint16_t)settingsMap[displayspidev]}})
                 .touch(DisplayDriverConfig::touch_config_t{.type = touch[settingsMap[touchscreenModule]],
                                                            .freq = (uint32_t)settingsMap[touchscreenBusFrequency],
                                                            .pin_int = (int16_t)settingsMap[touchscreenIRQ],
                                                            .offset_rotation = (uint8_t)settingsMap[touchscreenRotate],
                                                            .spi{
-                                                               .spi_host = (int8_t)spiHost(settingsStrings[touchscreenspidev]),
+                                                               .spi_host = (int8_t)settingsMap[touchscreenspidev],
                                                            },
                                                            .pin_cs = (int16_t)settingsMap[touchscreenCS]})
                 .light(DisplayDriverConfig::light_config_t{.pin_bl = (int16_t)settingsMap[displayBacklight],
