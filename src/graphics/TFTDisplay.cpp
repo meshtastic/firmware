@@ -356,7 +356,7 @@ class LGFX : public lgfx::LGFX_Device
             _panel_instance = new lgfx::Panel_ILI9341;
         auto buscfg = _bus_instance.config();
         buscfg.spi_mode = 0;
-        _bus_instance.spi_device(DisplaySPI);
+        buscfg.spi_host = settingsMap[displayspidev];
 
         buscfg.pin_dc = settingsMap[displayDC]; // Set SPI DC pin number (-1 = disable)
 
@@ -397,6 +397,8 @@ class LGFX : public lgfx::LGFX_Device
             touch_cfg.offset_rotation = 1;
             if (settingsMap[touchscreenI2CAddr] != -1) {
                 touch_cfg.i2c_addr = settingsMap[touchscreenI2CAddr];
+            } else {
+                touch_cfg.spi_host = settingsMap[touchscreenspidev];
             }
 
             _touch_instance->config(touch_cfg);

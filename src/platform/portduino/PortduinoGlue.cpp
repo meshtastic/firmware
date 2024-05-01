@@ -15,8 +15,6 @@
 #include <map>
 #include <unistd.h>
 
-HardwareSPI *DisplaySPI;
-HardwareSPI *LoraSPI;
 std::map<configNames, int> settingsMap;
 std::map<configNames, std::string> settingsStrings;
 char *configPath = nullptr;
@@ -76,7 +74,21 @@ void portduinoCustomInit()
 void portduinoSetup()
 {
     printf("Setting up Meshtastic on Portduino...\n");
-    gpioInit();
+    int max_GPIO = 0;
+    int GPIO_lines[] = {cs,
+                        irq,
+                        busy,
+                        reset,
+                        txen,
+                        rxen,
+                        displayDC,
+                        displayCS,
+                        displayBacklight,
+                        displayBacklightPWMChannel,
+                        displayReset,
+                        touchscreenCS,
+                        touchscreenIRQ,
+                        user};
 
     std::string gpioChipName = "gpiochip";
     settingsStrings[i2cdev] = "";
@@ -159,6 +171,15 @@ void portduinoSetup()
             gpioChipName += std::to_string(settingsMap[gpiochip]);
 
             settingsStrings[spidev] = "/dev/" + yamlConfig["Lora"]["spidev"].as<std::string>("spidev0.0");
+            if (settingsStrings[spidev].length() == 14) {
+                int x = settingsStrings[spidev].at(11) - '0';
+                int y = settingsStrings[spidev].at(13) - '0';
+                if (x >= 0 && x < 10 && y >= 0 && y < 10) {
+                    settingsMap[spidev] = x + y << 4;
+                    settingsMap[displayspidev] = settingsMap[spidev];
+                    settingsMap[touchscreenspidev] = settingsMap[spidev];
+                }
+            }
         }
         if (yamlConfig["GPIO"]) {
             settingsMap[user] = yamlConfig["GPIO"]["User"].as<int>(RADIOLIB_NC);
@@ -208,6 +229,14 @@ void portduinoSetup()
             settingsMap[displayBusFrequency] = yamlConfig["Display"]["BusFrequency"].as<int>(40000000);
             if (yamlConfig["Display"]["spidev"]) {
                 settingsStrings[displayspidev] = "/dev/" + yamlConfig["Display"]["spidev"].as<std::string>("spidev0.1");
+                if (settingsStrings[displayspidev].length() == 14) {
+                    int x = settingsStrings[displayspidev].at(11) - '0';
+                    int y = settingsStrings[displayspidev].at(13) - '0';
+                    if (x >= 0 && x < 10 && y >= 0 && y < 10) {
+                        settingsMap[displayspidev] = x + y << 4;
+                        settingsMap[touchscreenspidev] = settingsMap[displayspidev];
+                    }
+                }
             }
         }
         settingsMap[touchscreenModule] = no_touchscreen;
@@ -227,6 +256,13 @@ void portduinoSetup()
             settingsMap[touchscreenI2CAddr] = yamlConfig["Touchscreen"]["I2CAddr"].as<int>(-1);
             if (yamlConfig["Touchscreen"]["spidev"]) {
                 settingsStrings[touchscreenspidev] = "/dev/" + yamlConfig["Touchscreen"]["spidev"].as<std::string>("");
+                if (settingsStrings[touchscreenspidev].length() == 14) {
+                    int x = settingsStrings[touchscreenspidev].at(11) - '0';
+                    int y = settingsStrings[touchscreenspidev].at(13) - '0';
+                    if (x >= 0 && x < 10 && y >= 0 && y < 10) {
+                        settingsMap[touchscreenspidev] = x + y << 4;
+                    }
+                }
             }
         }
         if (yamlConfig["Input"]) {
@@ -244,6 +280,13 @@ void portduinoSetup()
         std::cout << "*** Exception " << e.what() << std::endl;
         exit(EXIT_FAILURE);
     }
+
+    for (int i : GPIO_lines) {
+        if (i > max_GPIO)
+            max_GPIO = i;
+    }
+
+    gpioInit(max_GPIO + 1); // Done here so we can inform Portduino how many GPIOs we need.
 
     // Need to bind all the configured GPIO pins so they're not simulated
     if (settingsMap.count(cs) > 0 && settingsMap[cs] != RADIOLIB_NC) {
@@ -298,27 +341,9 @@ void portduinoSetup()
         if (settingsMap[touchscreenIRQ] > 0)
             initGPIOPin(settingsMap[touchscreenIRQ], gpioChipName);
     }
-
-    // if we specify a touchscreen dev, that is SPI.
-    // else if we specify a screen dev, that is SPI
-    // else if we specify a LoRa dev, that is SPI.
-    if (settingsStrings[touchscreenspidev] != "") {
-        SPI.begin(settingsStrings[touchscreenspidev].c_str());
-        DisplaySPI = new HardwareSPI;
-        DisplaySPI->begin(settingsStrings[displayspidev].c_str());
-        LoraSPI = new HardwareSPI;
-        LoraSPI->begin(settingsStrings[spidev].c_str());
-    } else if (settingsStrings[displayspidev] != "") {
-        SPI.begin(settingsStrings[displayspidev].c_str());
-        DisplaySPI = &SPI;
-        LoraSPI = new HardwareSPI;
-        LoraSPI->begin(settingsStrings[spidev].c_str());
-    } else {
+    if (settingsStrings[spidev] != "") {
         SPI.begin(settingsStrings[spidev].c_str());
-        LoraSPI = &SPI;
-        DisplaySPI = &SPI;
     }
-
     return;
 }
 
