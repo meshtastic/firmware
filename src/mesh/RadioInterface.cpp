@@ -76,9 +76,12 @@ const RegionInfo regions[] = {
     RDEF(KR, 920.0f, 923.0f, 100, 0, 0, true, false, false),
 
     /*
-        ???
+        Taiwan, 920-925Mhz, limited to 0.5W indoor or coastal, 1.0W outdoor.
+        5.8.1 in the Low-power Radio-frequency Devices Technical Regulations
+        https://www.ncc.gov.tw/english/files/23070/102_5190_230703_1_doc_C.PDF
+        https://gazette.nat.gov.tw/egFront/e_detail.do?metaid=147283
      */
-    RDEF(TW, 920.0f, 925.0f, 100, 0, 0, true, false, false),
+    RDEF(TW, 920.0f, 925.0f, 100, 0, 27, true, false, false),
 
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
@@ -492,7 +495,7 @@ void RadioInterface::applyModemConfig()
     // If user has manually specified a channel num, then use that, otherwise generate one by hashing the name
     const char *channelName = channels.getName(channels.getPrimaryIndex());
     // channel_num is actually (channel_num - 1), since modulus (%) returns values from 0 to (numChannels - 1)
-    int channel_num = (loraConfig.channel_num ? loraConfig.channel_num - 1 : hash(channelName)) % numChannels;
+    uint channel_num = (loraConfig.channel_num ? loraConfig.channel_num - 1 : hash(channelName)) % numChannels;
 
     // Check if we use the default frequency slot
     RadioInterface::uses_default_frequency_slot =

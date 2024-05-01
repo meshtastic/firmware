@@ -148,6 +148,9 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_TD_LORAC = 60,
     /* CDEBYTE EoRa-S3 board using their own MM modules, clone of LILYGO T3S3 */
     meshtastic_HardwareModel_CDEBYTE_EORA_S3 = 61,
+    /* TWC_MESH_V4 
+ Adafruit NRF52840 feather express with SX1262, SSD1306 OLED and NEO6M GPS */
+    meshtastic_HardwareModel_TWC_MESH_V4 = 62,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */

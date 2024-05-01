@@ -136,9 +136,12 @@ int32_t ButtonThread::runOnce()
         case BUTTON_EVENT_DOUBLE_PRESSED: {
             LOG_BUTTON("Double press!\n");
             service.refreshLocalMeshNode();
-            service.sendNetworkPing(NODENUM_BROADCAST, true);
+            auto sentPosition = service.trySendPosition(NODENUM_BROADCAST, true);
             if (screen) {
-                screen->print("Sent ad-hoc ping\n");
+                if (sentPosition)
+                    screen->print("Sent ad-hoc position\n");
+                else
+                    screen->print("Sent ad-hoc nodeinfo\n");
                 screen->forceDisplay(true); // Force a new UI frame, then force an EInk update
             }
             break;
@@ -193,15 +196,13 @@ int32_t ButtonThread::runOnce()
 #ifdef BUTTON_PIN_TOUCH
         case BUTTON_EVENT_TOUCH_LONG_PRESSED: {
             LOG_BUTTON("Touch press!\n");
-            if (config.display.wake_on_tap_or_motion) {
-                if (screen) {
-                    // Wake if asleep
-                    if (powerFSM.getState() == &stateDARK)
-                        powerFSM.trigger(EVENT_PRESS);
+            if (screen) {
+                // Wake if asleep
+                if (powerFSM.getState() == &stateDARK)
+                    powerFSM.trigger(EVENT_PRESS);
 
-                    // Update display (legacy behaviour)
-                    screen->forceDisplay();
-                }
+                // Update display (legacy behaviour)
+                screen->forceDisplay();
             }
             break;
         }
