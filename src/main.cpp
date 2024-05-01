@@ -696,17 +696,35 @@ void setup()
                                                        .spi{.pin_dc = (int8_t)settingsMap[displayDC],
                                                             .use_lock = true,
                                                             .spi_host = (uint16_t)settingsMap[displayspidev]}})
-                .touch(DisplayDriverConfig::touch_config_t{.type = touch[settingsMap[touchscreenModule]],
-                                                           .freq = (uint32_t)settingsMap[touchscreenBusFrequency],
-                                                           .pin_int = (int16_t)settingsMap[touchscreenIRQ],
-                                                           .offset_rotation = (uint8_t)settingsMap[touchscreenRotate],
-                                                           .spi{
-                                                               .spi_host = (int8_t)settingsMap[touchscreenspidev],
-                                                           },
-                                                           .pin_cs = (int16_t)settingsMap[touchscreenCS]})
                 .light(DisplayDriverConfig::light_config_t{.pin_bl = (int16_t)settingsMap[displayBacklight],
                                                            .pwm_channel = (int8_t)settingsMap[displayBacklightPWMChannel],
                                                            .invert = (bool)settingsMap[displayBacklightInvert]});
+            if (settingsMap[touchscreenI2CAddr] == -1) {
+                displayConfig.touch(
+                    DisplayDriverConfig::touch_config_t{.type = touch[settingsMap[touchscreenModule]],
+                                                        .freq = (uint32_t)settingsMap[touchscreenBusFrequency],
+                                                        .pin_int = (int16_t)settingsMap[touchscreenIRQ],
+                                                        .offset_rotation = (uint8_t)settingsMap[touchscreenRotate],
+                                                        .spi{
+                                                            .spi_host = (int8_t)settingsMap[touchscreenspidev],
+                                                        },
+                                                        .pin_cs = (int16_t)settingsMap[touchscreenCS]});
+            } else {
+                displayConfig.touch(DisplayDriverConfig::touch_config_t{
+                    .type = touch[settingsMap[touchscreenModule]],
+                    .freq = (uint32_t)settingsMap[touchscreenBusFrequency],
+                    .x_min = 0,
+                    .x_max =
+                        (uint16_t)((settingsMap[touchscreenRotate] & 1 ? settingsMap[displayWidth] : settingsMap[displayHeight]) -
+                                   1),
+                    .y_min = 0,
+                    .y_max =
+                        (uint16_t)((settingsMap[touchscreenRotate] & 1 ? settingsMap[displayHeight] : settingsMap[displayWidth]) -
+                                   1),
+                    .pin_int = (int16_t)settingsMap[touchscreenIRQ],
+                    .offset_rotation = (uint8_t)settingsMap[touchscreenRotate],
+                    .i2c{.i2c_addr = (uint8_t)settingsMap[touchscreenI2CAddr]}});
+            }
         }
         deviceScreen = &DeviceScreen::create(&displayConfig);
         PacketAPI::create(PacketServer::init());
