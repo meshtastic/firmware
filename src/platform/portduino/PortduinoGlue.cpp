@@ -76,19 +76,19 @@ void portduinoSetup()
     printf("Setting up Meshtastic on Portduino...\n");
     int max_GPIO = 0;
     configNames GPIO_lines[] = {cs,
-                        irq,
-                        busy,
-                        reset,
-                        txen,
-                        rxen,
-                        displayDC,
-                        displayCS,
-                        displayBacklight,
-                        displayBacklightPWMChannel,
-                        displayReset,
-                        touchscreenCS,
-                        touchscreenIRQ,
-                        user};
+                                irq,
+                                busy,
+                                reset,
+                                txen,
+                                rxen,
+                                displayDC,
+                                displayCS,
+                                displayBacklight,
+                                displayBacklightPWMChannel,
+                                displayReset,
+                                touchscreenCS,
+                                touchscreenIRQ,
+                                user};
 
     std::string gpioChipName = "gpiochip";
     settingsStrings[i2cdev] = "";
