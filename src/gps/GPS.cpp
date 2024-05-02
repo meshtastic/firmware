@@ -1467,7 +1467,7 @@ bool GPS::lookForLocation()
 #endif // GPS_EXTRAVERBOSE
 
     // Is this a new point or are we re-reading the previous one?
-    if (!reader.location.isUpdated())
+    if (!reader.location.isUpdated() && !reader.altitude.isUpdated())
         return false;
 
     // check if a complete GPS solution set is available for reading
