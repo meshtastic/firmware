@@ -715,12 +715,12 @@ void setup()
                     .freq = (uint32_t)settingsMap[touchscreenBusFrequency],
                     .x_min = 0,
                     .x_max =
-                        (uint16_t)((settingsMap[touchscreenRotate] & 1 ? settingsMap[displayWidth] : settingsMap[displayHeight]) -
-                                   1),
+                        (int16_t)((settingsMap[touchscreenRotate] & 1 ? settingsMap[displayWidth] : settingsMap[displayHeight]) -
+                                  1),
                     .y_min = 0,
                     .y_max =
-                        (uint16_t)((settingsMap[touchscreenRotate] & 1 ? settingsMap[displayHeight] : settingsMap[displayWidth]) -
-                                   1),
+                        (int16_t)((settingsMap[touchscreenRotate] & 1 ? settingsMap[displayHeight] : settingsMap[displayWidth]) -
+                                  1),
                     .pin_int = (int16_t)settingsMap[touchscreenIRQ],
                     .offset_rotation = (uint8_t)settingsMap[touchscreenRotate],
                     .i2c{.i2c_addr = (uint8_t)settingsMap[touchscreenI2CAddr]}});
