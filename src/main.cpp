@@ -246,6 +246,9 @@ void setup()
 #ifdef DEBUG_PORT
     consoleInit(); // Set serial baud rate and init our mesh console
 #endif
+#ifdef UNPHONE
+    unphone.printStore();
+#endif
 
     serialSinceMsec = millis();
 
