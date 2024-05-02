@@ -23,6 +23,10 @@
 #include "mqtt/MQTT.h"
 #endif
 
+#if !MESHTASTIC_EXCLUDE_GPS
+#include "GPS.h"
+#endif
+
 AdminModule *adminModule;
 bool hasOpenEditTransaction;
 
@@ -217,6 +221,10 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             nodeDB->setLocalPosition(r->set_fixed_position);
             config.position.fixed_position = true;
             saveChanges(SEGMENT_DEVICESTATE | SEGMENT_CONFIG, false);
+#if !MESHTASTIC_EXCLUDE_GPS
+            if (gps != nullptr)
+                gps->enable();
+#endif
         }
         break;
     }
