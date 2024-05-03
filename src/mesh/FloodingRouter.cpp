@@ -35,11 +35,10 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 
 void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c)
 {
-    bool isAck =
-        ((c && c->error_reason == meshtastic_Routing_Error_NONE)); // consider only ROUTING_APP message without error as ACK
-    if (isAck && p->to != getNodeNum()) {
-        // do not flood direct message that is ACKed
-        LOG_DEBUG("Receiving an ACK not for me, but don't need to rebroadcast this direct message anymore.\n");
+    bool isAckorReply = (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) && (p->decoded.request_id != 0);
+    if (isAckorReply && p->to != getNodeNum() && p->to != NODENUM_BROADCAST) {
+        // do not flood direct message that is ACKed or replied to
+        LOG_DEBUG("Receiving an ACK or reply not for me, but don't need to rebroadcast this direct message anymore.\n");
         Router::cancelSending(p->to, p->decoded.request_id); // cancel rebroadcast for this DM
     }
     if ((p->to != getNodeNum()) && (p->hop_limit > 0) && (getFrom(p) != getNodeNum())) {

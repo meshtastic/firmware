@@ -45,6 +45,7 @@ jobs:
 
       - name: build .debpkg
         run: |
+          mkdir -p .debpkg/debian
           mkdir -p .debpkg/usr/share/doc/meshtasticd/web
           mkdir -p .debpkg/usr/sbin
           mkdir -p .debpkg/etc/meshtasticd
@@ -55,6 +56,7 @@ jobs:
           cp bin/config-dist.yaml .debpkg/etc/meshtasticd/config.yaml
           chmod +x .debpkg/usr/sbin/meshtasticd
           cp bin/meshtasticd.service .debpkg/usr/lib/systemd/system/meshtasticd.service
+          echo "etc/meshtasticd/config.yaml" > .debpkg/debian/conffiles
 
       - uses: jiro4989/build-deb-action@v3
         with:

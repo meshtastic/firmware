@@ -193,10 +193,7 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
     }
 #endif
     if (p.from != 0) { // We don't let phones assign nodenums to their sent messages
-        LOG_WARN("phone tried to pick a nodenum, we don't allow that.\n");
         p.from = 0;
-    } else {
-        // p.from = nodeDB->getNodeNum();
     }
 
     if (p.id == 0)
@@ -267,7 +264,7 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
     }
 }
 
-void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
+bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
 {
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
 
@@ -278,6 +275,7 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
         if (positionModule) {
             LOG_INFO("Sending position ping to 0x%x, wantReplies=%d, channel=%d\n", dest, wantReplies, node->channel);
             positionModule->sendOurPosition(dest, wantReplies, node->channel);
+            return true;
         }
     } else {
 #endif
@@ -286,6 +284,7 @@ void MeshService::sendNetworkPing(NodeNum dest, bool wantReplies)
             nodeInfoModule->sendOurNodeInfo(dest, wantReplies, node->channel);
         }
     }
+    return false;
 }
 
 void MeshService::sendToPhone(meshtastic_MeshPacket *p)
