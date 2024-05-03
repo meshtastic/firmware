@@ -347,7 +347,7 @@ void portduinoSetup()
     return;
 }
 
-int initGPIOPin(int pinNum, const std::string &gpioChipName)
+int initGPIOPin(int pinNum, const std::string gpioChipName)
 {
     std::string gpio_name = "GPIO" + std::to_string(pinNum);
     try {
