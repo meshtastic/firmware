@@ -2,12 +2,12 @@
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
-#include "PowerTelemetry.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "PowerTelemetry.h"
 #include "RTC.h"
 #include "Router.h"
 #include "main.h"

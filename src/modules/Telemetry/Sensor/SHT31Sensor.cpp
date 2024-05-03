@@ -2,8 +2,8 @@
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
-#include "SHT31Sensor.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "SHT31Sensor.h"
 #include "TelemetrySensor.h"
 #include <Adafruit_SHT31.h>
 

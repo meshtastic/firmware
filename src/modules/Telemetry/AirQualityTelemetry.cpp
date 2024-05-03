@@ -2,8 +2,8 @@
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
-#include "AirQualityTelemetry.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "AirQualityTelemetry.h"
 #include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"

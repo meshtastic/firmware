@@ -2,8 +2,8 @@
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
-#include "BME280Sensor.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "BME280Sensor.h"
 #include "TelemetrySensor.h"
 #include <Adafruit_BME280.h>
 #include <typeinfo>
