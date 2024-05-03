@@ -449,7 +449,7 @@ void NodeDB::resetNodes()
         neighborInfoModule->resetNeighbors();
 }
 
-void NodeDB::removeNodeByNum(uint nodeNum)
+void NodeDB::removeNodeByNum(NodeNum nodeNum)
 {
     int newPos = 0, removed = 0;
     for (int i = 0; i < numMeshNodes; i++) {
