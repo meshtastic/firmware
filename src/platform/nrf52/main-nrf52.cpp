@@ -80,7 +80,7 @@ void setBluetoothEnable(bool enable)
                 // We delay brownout init until after BLE because BLE starts soft device
                 initBrownout();
             } else {
-                nrf52Bluetooth->resumeAdverising();
+                nrf52Bluetooth->resumeAdvertising();
             }
         }
     } else {
