@@ -1,3 +1,6 @@
+#include <algorithm>
+#include <iterator>
+
 #include "configuration.h"
 #if ARCH_PORTDUINO
 #include "PortduinoGlue.h"
@@ -220,7 +223,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
 
     LOG_INFO("Sending message id=%d, dest=%x, msg=%.*s\n", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
 
-    nodeDB.saveMessageToDisk(*p, true);
+    nodeDB->saveMessageToDisk(*p);
     
     service.sendToMesh(
         p, RX_SRC_LOCAL,

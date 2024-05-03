@@ -67,7 +67,7 @@ void TouchScreenImpl1::onEvent(const TouchEvent &event)
         break;
     }
     case TOUCH_ACTION_DOUBLE_TAP: {
-        e.inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT);
+        e.inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK);
         break;
     }
     case TOUCH_ACTION_LONG_PRESS: {
@@ -75,11 +75,7 @@ void TouchScreenImpl1::onEvent(const TouchEvent &event)
         break;
     }
     case TOUCH_ACTION_TAP: {
-        if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) {
-            externalNotificationModule->stopNow();
-        } else {
-            powerFSM.trigger(EVENT_INPUT);
-        }
+        e.inputEvent = static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT);
         break;
     }
     default:

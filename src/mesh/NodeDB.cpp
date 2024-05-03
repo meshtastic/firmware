@@ -157,6 +157,11 @@ NodeDB::NodeDB()
         config.position.gps_enabled = 0;
     }
     saveToDisk(saveWhat);
+
+    initSavedMessages();
+
+    // TODO: Don't clear at the start
+    //clearSavedMessages();
 }
 
 /**
@@ -515,70 +520,6 @@ void NodeDB::installDefaultDeviceState()
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
 }
 
-void NodeDB::init()
-{
-    LOG_INFO("Initializing NodeDB\n");
-    loadFromDisk();
-    cleanupMeshDB();
-
-    uint32_t devicestateCRC = crc32Buffer(&devicestate, sizeof(devicestate));
-    uint32_t configCRC = crc32Buffer(&config, sizeof(config));
-    uint32_t channelFileCRC = crc32Buffer(&channelFile, sizeof(channelFile));
-
-    int saveWhat = 0;
-
-    // likewise - we always want the app requirements to come from the running appload
-    myNodeInfo.min_app_version = 30200; // format is Mmmss (where M is 1+the numeric major number. i.e. 30200 means 2.2.00
-    // Note! We do this after loading saved settings, so that if somehow an invalid nodenum was stored in preferences we won't
-    // keep using that nodenum forever. Crummy guess at our nodenum (but we will check against the nodedb to avoid conflicts)
-    pickNewNodeNum();
-
-    // Set our board type so we can share it with others
-    owner.hw_model = HW_VENDOR;
-    // Ensure user (nodeinfo) role is set to whatever we're configured to
-    owner.role = config.device.role;
-
-    // Include our owner in the node db under our nodenum
-    meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
-    info->user = owner;
-    info->has_user = true;
-
-#ifdef ARCH_ESP32
-    Preferences preferences;
-    preferences.begin("meshtastic", false);
-    myNodeInfo.reboot_count = preferences.getUInt("rebootCounter", 0);
-    preferences.end();
-    LOG_DEBUG("Number of Device Reboots: %d\n", myNodeInfo.reboot_count);
-#endif
-
-    resetRadioConfig(); // If bogus settings got saved, then fix them
-    LOG_DEBUG("region=%d, NODENUM=0x%x, dbsize=%d\n", config.lora.region, myNodeInfo.my_node_num, *numMeshNodes);
-
-    if (devicestateCRC != crc32Buffer(&devicestate, sizeof(devicestate)))
-        saveWhat |= SEGMENT_DEVICESTATE;
-    if (configCRC != crc32Buffer(&config, sizeof(config)))
-        saveWhat |= SEGMENT_CONFIG;
-    if (channelFileCRC != crc32Buffer(&channelFile, sizeof(channelFile)))
-        saveWhat |= SEGMENT_CHANNELS;
-
-    if (!devicestate.node_remote_hardware_pins) {
-        meshtastic_NodeRemoteHardwarePin empty[12] = {meshtastic_RemoteHardwarePin_init_default};
-        memcpy(devicestate.node_remote_hardware_pins, empty, sizeof(empty));
-    }
-
-    if (config.position.gps_enabled) {
-        config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
-        config.position.gps_enabled = 0;
-    }
-
-    saveToDisk(saveWhat);
-
-    initSavedMessages();
-
-    // TODO: Don't clear at the start
-    clearSavedMessages();
-}
-
 // We reserve a few nodenums for future use
 #define NUM_RESERVED 4
 
@@ -762,7 +703,7 @@ void NodeDB::saveDeviceStateToDisk()
 #ifdef FSCom
     FSCom.mkdir("/prefs");
 #endif
-    saveProto(prefFileName, meshtastic_DeviceState_size, &meshtastic_DeviceState_msg, &devicestate);
+    saveProto(prefFileName, sizeof(devicestate) + numMeshNodes * meshtastic_NodeInfoLite_size, &meshtastic_DeviceState_msg, &devicestate);
 }
 
 
@@ -826,67 +767,121 @@ void NodeDB::clearSavedMessages()
 bool NodeDB::messageIsDirectMessage(const meshtastic_MeshPacket& mp) {
     LOG_INFO((
         "numMeshNodes: "
-        + std::to_string(*numMeshNodes)
+        + std::to_string(numMeshNodes)
         + "\n"
     ).c_str());
 
-    if (mp.to == nodeDB.getNodeNum()) return true;
+    if (mp.to == nodeDB->getNodeNum()) return true;
 
-    for (size_t i = 0; i < *numMeshNodes; i++)
-        if (mp.to == nodeDB.getMeshNodeByIndex(i)->num) return true;
+    for (size_t i = 0; i < numMeshNodes; i++)
+        if (mp.to == nodeDB->getMeshNodeByIndex(i)->num) return true;
     
     return false;
 }
 
-void NodeDB::saveMessageToDisk(const meshtastic_MeshPacket& mp, bool fromSelf)
+void NodeDB::saveMessageToDisk(const meshtastic_MeshPacket& mp)
 {
-    LOG_INFO("Called saveMessageToDisk\n");
-
-    if (messageIsDirectMessage(mp))
-        saveMessageToDisk(mp, fromSelf, CATEGORY_COUNT - 1);
+    auto *msg = new meshtastic_Message();
+    auto senderNode = nodeDB->getMeshNode(mp.from);
+    if (senderNode == nullptr)
+        strcpy(msg->sender_short_name, "UNK");
     else
-        saveMessageToDisk(mp, fromSelf, mp.channel);
+        strcpy(msg->sender_short_name, senderNode->user.short_name);
+    msg->from_self = mp.from == getNodeNum();
+    snprintf(msg->content, sizeof(msg->content), "%s", mp.decoded.payload.bytes);
+    msg->rx_time = mp.rx_time;
+    if (nodeDB->messageIsDirectMessage(mp))
+        msg->category = nodeDB->CATEGORY_COUNT - 1;
+    else
+        msg->category = mp.channel;
+    
+    saveMessageToDisk(*msg);
+    delete msg;
 }
 
-void NodeDB::saveMessageToDisk(const meshtastic_MeshPacket& mp, bool fromSelf, uint8_t category)
+void NodeDB::saveMessageToDisk(const meshtastic_Message& msg)
 {
     LOG_INFO((
         "Saving message to disk with category "
-        + std::to_string(category)
+        + std::to_string(msg.category)
         + "\n"
     ).c_str());
 
-    if (oldestMessageIndices[category] == std::numeric_limits<int>::max()) {
-        oldestMessageIndices[category] = 0;
-        newestMessageIndices[category] = -1;
+    LOG_INFO("Free space: %d\n", FSCom.totalBytes() - FSCom.usedBytes());
+
+    // TODO: Fix
+    //while (FSCom.totalBytes() - FSCom.usedBytes() < 8192 * 2 + 1) {
+    while (FSCom.totalBytes() - FSCom.usedBytes() < 434176) {
+        meshtastic_Message* oldestMessage = nullptr;
+        int oldestMessageIndex = -1;
+        for (uint8_t i = 0; i < CATEGORY_COUNT; i++) {
+            if (oldestMessageIndices[i] == std::numeric_limits<int>::max())
+                continue;
+            
+            meshtastic_Message currentMessage = loadMessage(i, oldestMessageIndices[i]);
+            if (oldestMessage == nullptr || currentMessage.rx_time < oldestMessage->rx_time) {
+                oldestMessage = &currentMessage;
+                oldestMessageIndex = oldestMessageIndices[i];
+            }
+        }
+
+        if (oldestMessage == nullptr) {
+            LOG_WARN("Not enough free storage to save any messages to disk\n");
+            throw std::runtime_error("Storage insufficient and no messages can be removed.");
+        }
+
+        LOG_INFO("Removing file from category %d with index %d\n", oldestMessage->category, oldestMessageIndex);
+
+        bool deleted = FSCom.remove((
+            "/msgs/"
+            + std::to_string(oldestMessage->category)
+            + "/"
+            + std::to_string(oldestMessageIndex)
+        ).c_str());
+        
+        LOG_INFO("Deleted: %s\n", std::to_string(deleted).c_str());
+
+        messageCache[oldestMessage->category].erase(*oldestMessage);
+
+        if (oldestMessageIndices[oldestMessage->category] == newestMessageIndices[oldestMessage->category]) {
+            oldestMessageIndices[oldestMessage->category] = std::numeric_limits<int>::max();
+            newestMessageIndices[oldestMessage->category] = std::numeric_limits<int>::min();
+        } else {
+            oldestMessageIndices[oldestMessage->category]++;
+        }
+    }
+
+    if (oldestMessageIndices[msg.category] == std::numeric_limits<int>::max()) {
+        oldestMessageIndices[msg.category] = 0;
+        newestMessageIndices[msg.category] = -1;
     }
 
     LOG_INFO((
         "CATEGORY: "
-            + std::to_string(category)
+            + std::to_string(msg.category)
             + "\n"
     ).c_str());
 
-    newestMessageIndices[category]++;
-    std::string path = "/msgs/" + std::to_string(category) + "/" + std::to_string(newestMessageIndices[category]);
-    if (fromSelf) path += "s";
+    newestMessageIndices[msg.category]++;
+    std::string path = "/msgs/" + std::to_string(msg.category) + "/" + std::to_string(newestMessageIndices[msg.category]);
 
     saveProto(
         path.c_str(),
-        meshtastic_MeshPacket_size,
-        &meshtastic_MeshPacket_msg,
-        &mp
+        meshtastic_Message_size,
+        &meshtastic_Message_msg,
+        &msg
     );
 
+    messageFileList[msg.category].push_back(path.substr(path.rfind("/") + 1));
 
-    messageFileList[category].push_back(path.substr(path.rfind("/") + 1));
+    lastCategorySaved = msg.category;
 }
 
 void NodeDB::updateMessageBounds()
 {
     LOG_DEBUG("Called updateMessageBounds\n");
 
-    for (int category = 0; category < CATEGORY_COUNT; ++category) {
+    for (int category = 0; category < CATEGORY_COUNT; category++) {
         newestMessageIndices[category] = minInt;
         oldestMessageIndices[category] = maxInt;
     }
@@ -931,50 +926,65 @@ void NodeDB::updateMessageFileList()
 
             file = directory.openNextFile();
         }
+
+        file.close();
+        directory.close();
     }
 }
 
-const meshtastic_MeshPacket NodeDB::loadMessage(uint16_t category, uint16_t index)
+const meshtastic_Message NodeDB::loadMessage(uint16_t category, uint16_t index)
 {
     LOG_INFO("Called loadMessage with category\n");
 
     // Try to load from cache
     auto& categoryCache = messageCache[category];
 
-    if (index < categoryCache.size()) {
+    if (index - oldestMessageIndices[category] < categoryCache.size()) {
         auto it = categoryCache.begin();
-        std::advance(it, index);
+        std::advance(it, index - oldestMessageIndices[category]);
         return *it;
     }
 
+    // Remove message from cache if there is not enough free heap space
+    while (memGet.getFreeHeap() / 2 < meshtastic_NodeInfoLite_size * 3) {
+        LOG_WARN("Message cache full! Erasing oldest entry\n");
+
+        const meshtastic_Message* oldestMessage = nullptr;
+        for (auto& categoryCache : messageCache) {
+            if (!categoryCache.empty()) {
+                const meshtastic_Message& currentMessage = *categoryCache.rbegin();
+                if (oldestMessage == nullptr || currentMessage.rx_time < oldestMessage->rx_time)
+                    oldestMessage = &currentMessage;
+            }
+        }
+
+        if (oldestMessage == nullptr) {
+            LOG_WARN("Not enough free heap to load any messages to cache\n");
+            throw std::runtime_error("Heap memory insufficient and no messages can be removed.");
+        }
+
+        messageCache[oldestMessage->category].erase(*oldestMessage);
+    }
+
     // Load from disk if messsage not found in cache
-    std::string path = "/msgs/" + std::to_string(category) +  "/" + std::to_string(index) + "s";
+    std::string path = "/msgs/" + std::to_string(category) +  "/" + std::to_string(index);
 
-    bool fromSelf = LittleFS.exists(path.c_str());
-
-    if (!fromSelf)
-        path = "/msgs/" + std::to_string(category) + "/" + std::to_string(index);
-
-    meshtastic_MeshPacket mp;
+    meshtastic_Message msg;
     loadProto(
         path.c_str(),
-        meshtastic_MeshPacket_size,
-        sizeof(meshtastic_MeshPacket),
-        &meshtastic_MeshPacket_msg,
-        &mp
+        meshtastic_Message_size,
+        sizeof(meshtastic_Message),
+        &meshtastic_Message_msg,
+        &msg
     );
 
-    if (fromSelf) mp.id = nodeDB.getNodeNum();
-
     // Put message in cache
-    // TODO: Insert pointers?
-    categoryCache.insert(mp);
+    categoryCache.insert(msg);
 
-    LOG_INFO("Inserted MP into category cache\n");
+    LOG_INFO("Inserted message into category cache\n");
 
-    return mp;
+    return msg;
 }
-
 
 void NodeDB::saveToDisk(int saveWhat)
 {
@@ -1038,6 +1048,17 @@ uint32_t sinceReceived(const meshtastic_MeshPacket *p)
     uint32_t now = getTime();
 
     int delta = (int)(now - p->rx_time);
+    if (delta < 0) // our clock must be slightly off still - not set from GPS yet
+        delta = 0;
+
+    return delta;
+}
+
+uint32_t sinceReceived(const meshtastic_Message *msg)
+{
+    uint32_t now = getTime();
+
+    int delta = (int)(now - msg->rx_time);
     if (delta < 0) // our clock must be slightly off still - not set from GPS yet
         delta = 0;
 

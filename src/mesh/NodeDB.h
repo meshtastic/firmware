@@ -10,6 +10,7 @@
 #include "NodeStatus.h"
 #include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/mesh.pb.h" // For CriticalErrorCode
+#include "mesh/generated/meshtastic/message.pb.h"
 
 /*
 DeviceState versions used to be defined in the .proto file but really only this function cares.  So changed to a
@@ -38,6 +39,7 @@ uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
 
 /// Given a packet, return how many seconds in the past (vs now) it was received
 uint32_t sinceReceived(const meshtastic_MeshPacket *p);
+uint32_t sinceReceived(const meshtastic_Message *msg);
 
 class NodeDB
 {
@@ -66,25 +68,26 @@ class NodeDB
     void saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS),
         clearSavedMessages(), saveChannelsToDisk(), saveDeviceStateToDisk();
     
-    void saveMessageToDisk(const meshtastic_MeshPacket& mp, bool fromSelf);
-    void saveMessageToDisk(const meshtastic_MeshPacket& mp, bool fromSelf, uint8_t category);
-    
+    void saveMessageToDisk(const meshtastic_MeshPacket& mp);
+    void saveMessageToDisk(const meshtastic_Message& msg);
+    uint8_t lastCategorySaved = 0;
+
     bool messageIsDirectMessage(const meshtastic_MeshPacket& mp);
     void initSavedMessages();
     const int minInt = std::numeric_limits<int>::min();
     const int maxInt = std::numeric_limits<int>::max();
     static const uint8_t CATEGORY_COUNT = 9;
     struct MessageCompare {
-        bool operator()(const meshtastic_MeshPacket& messageA, const meshtastic_MeshPacket& messageB) const {
-            return messageA.rx_time > messageB.rx_time;
+        bool operator()(const meshtastic_Message& messageA, const meshtastic_Message& messageB) const {
+            return messageA.rx_time < messageB.rx_time;
         }
     };
-    std::set<meshtastic_MeshPacket, MessageCompare> messageCache[CATEGORY_COUNT];
+    std::set<meshtastic_Message, MessageCompare> messageCache[CATEGORY_COUNT];
     // TODO: Make less dumb
     int newestMessageIndices[9] = {minInt, minInt, minInt, minInt, minInt, minInt, minInt, minInt, minInt};
     int oldestMessageIndices[9] = {maxInt, maxInt, maxInt, maxInt, maxInt, maxInt, maxInt, maxInt, maxInt};
     void updateMessageBounds();
-    const meshtastic_MeshPacket loadMessage(uint16_t category, uint16_t index);
+    const meshtastic_Message loadMessage(uint16_t category, uint16_t index);
     void updateMessageFileList();
     // TODO: Use variable for size
     std::vector<std::string> messageFileList[9];

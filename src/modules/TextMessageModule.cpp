@@ -1,3 +1,6 @@
+#include <algorithm>
+#include <iterator>
+
 #include "TextMessageModule.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -18,7 +21,7 @@ ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp
     // Keep a copy of the most recent text message.
     //devicestate.rx_text_message = mp;
 
-    nodeDB.saveMessageToDisk(mp, false);
+    nodeDB->saveMessageToDisk(mp);
 
     powerFSM.trigger(EVENT_RECEIVED_MSG);
     notifyObservers(&mp);

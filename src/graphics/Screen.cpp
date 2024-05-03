@@ -29,6 +29,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <cstring>
 #include <vector>
 #include <iostream>
+#include <algorithm>
 
 
 #include "DisplayFormatters.h"
@@ -358,47 +359,6 @@ static bool shouldDrawMessage(const meshtastic_MeshPacket *packet)
     return packet->from != 0 && !moduleConfig.store_forward.enabled;
 }
 
-/// Draw the last text message we received
-/*static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    // the max length of this buffer is much longer than we can possibly print
-    static char tempBuf[237];
-
-    const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
-    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
-    // LOG_DEBUG("drawing text message from 0x%x: %s\n", mp.from,
-    // mp.decoded.variant.data.decoded.bytes);
-
-    // Demo for drawStringMaxWidth:
-    // with the third parameter you can define the width after which words will
-    // be wrapped. Currently only spaces and "-" are allowed for wrapping
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->setFont(FONT_SMALL);
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
-        display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-        display->setColor(BLACK);
-    }
-
-    uint32_t seconds = sinceReceived(&mp);
-    uint32_t minutes = seconds / 60;
-    uint32_t hours = minutes / 60;
-    uint32_t days = hours / 24;
-
-    if (config.display.heading_bold) {
-        display->drawStringf(1 + x, 0 + y, tempBuf, "%s ago from %s",
-                             screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
-                             (node && node->has_user) ? node->user.short_name : "???");
-    }
-    display->drawStringf(0 + x, 0 + y, tempBuf, "%s ago from %s", screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
-                         (node && node->has_user) ? node->user.short_name : "???");
-
-    display->setColor(WHITE);
-    snprintf(tempBuf, sizeof(tempBuf), "%s", mp.decoded.payload.bytes);
-    display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), tempBuf);
-}*/
-
-
-short category = 8;
 bool inChannelFrame = false;
 
 // Assuming OLEDDisplay is a class you've defined elsewhere,
@@ -482,17 +442,20 @@ std::string clampLines(const std::string& text, short maxLineCount = -1) {
     return text.substr(truncateIndex);
 }
 
-std::string createTextLogString(OLEDDisplay* display, const meshtastic_MeshPacket mp)
+std::string createTextLogString(OLEDDisplay* display, const meshtastic_Message msg)
 {
     LOG_INFO("CHECKPOINT 0\n");
 
-    uint32_t seconds = sinceReceived(&mp);
+    uint32_t seconds = sinceReceived(&msg);
     uint32_t minutes = seconds / 60;
     uint32_t hours = minutes / 60;
     uint32_t days = hours / 24;
     std::string timestamp = screen->drawTimeDelta(days, hours, minutes, seconds);
-    meshtastic_NodeInfoLite* node = nodeDB.getMeshNode(getFrom(&mp));
-    std::string senderName = (node && node->has_user) ? node->user.short_name : "???";
+    std::string separator;
+    if (msg.from_self)
+        separator = "::";
+    else
+        separator = ":";
 
     LOG_INFO("CHECKPOINT 1\n");
 
@@ -500,10 +463,11 @@ std::string createTextLogString(OLEDDisplay* display, const meshtastic_MeshPacke
     snprintf(
         message,
         sizeof(message),
-        "%s %s: %s",
+        "%s %s%s %s",
         timestamp.c_str(),
-        senderName.c_str(),
-        mp.decoded.payload.bytes
+        msg.sender_short_name,
+        separator.c_str(),
+        msg.content
     );
 
     LOG_INFO("CHECKPOINT 2\n");
@@ -511,50 +475,103 @@ std::string createTextLogString(OLEDDisplay* display, const meshtastic_MeshPacke
     return drawTextButGood(display, display->getWidth(), message) + '\n';
 }
 
-void drawTextLogFrame(OLEDDisplay* display, OLEDDisplayUiState* state, int16_t x, int16_t y) {
+void removeLastNLines(std::string& str, int n) {
+    size_t pos = str.size();
+    // Step backwards through the string
+    while (pos > 0 && n >= 0) {
+        // Move the position back one character
+        pos--;
+        // Check if the current character is a newline
+        if (str[pos] == '\n') {
+            n--;
+        }
+    }
+
+    if (n < 0) {
+        // We found the nth newline; pos + 1 to not remove the newline itself
+        str.resize(pos + 1);
+    } else {
+        // Not enough lines in the string, clear it
+        str.clear();
+    }
+}
+
+short category = 0;
+short lastCategoryDisplayed = -1;
+bool scrollEnabled = false;
+int8_t scrollDelta = 0;
+bool autoFocus = true;
+
+void drawTextLogFrame(OLEDDisplay* display, OLEDDisplayUiState* state, int16_t x, int16_t y) {    
     inChannelFrame = true;
     
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
 
-    const uint16_t maxMessages = 15; // TODO: Make configurable
+    char* tempBuf = new char[strlen("PRIMARY") + 1];
+    std::string categoryLabel;
+    if (category == 0)
+        categoryLabel = "PRIMARY";
+    else if (category == nodeDB->CATEGORY_COUNT - 1)
+        categoryLabel = "DMs";
+    else
+        categoryLabel = "CH " + std::to_string(category);
+    
+    categoryLabel +=  "|";
+    
+    if (autoFocus)
+        categoryLabel += "A";
+    if (scrollEnabled)
+        categoryLabel += "S";
     
 
-    int endMessageIndex = std::max(nodeDB.newestMessageIndices[category] - maxMessages + 1, nodeDB.oldestMessageIndices[category]);
+    display->drawStringf(x, display->getHeight() - FONT_HEIGHT_SMALL, tempBuf, "%s", categoryLabel.c_str());
 
-    LOG_INFO(("Start message index: " + std::to_string(endMessageIndex) + "\n").c_str());
-    LOG_INFO(("Newest message index: " + std::to_string(nodeDB.newestMessageIndices[category]) + "\n").c_str());
+    if (autoFocus && lastCategoryDisplayed != nodeDB->lastCategorySaved) {
+        category = nodeDB->lastCategorySaved;
+        lastCategoryDisplayed = category;
+    }
 
     std::string messageStr;
-    for (int i = nodeDB.newestMessageIndices[category]; i >= endMessageIndex; i--) {
-        // TODO: Deallocate mp
-        const meshtastic_MeshPacket mp = nodeDB.loadMessage(category, i);
-
-        messageStr += createTextLogString(display, mp);
-
-        if (ESP.getFreeHeap() < 10000) break;
-    }
     
+    for (int i = nodeDB->oldestMessageIndices[category]; i <= nodeDB->newestMessageIndices[category]; i++) {
+        const meshtastic_Message msg = nodeDB->loadMessage(category, i);
 
-    uint16_t maxLineCount = static_cast<uint16_t>(floor(display->getHeight() / FONT_HEIGHT_SMALL));
-    messageStr = clampLines(messageStr, maxLineCount);
+        messageStr += createTextLogString(display, msg);
+
+        if (memGet.getFreeHeap() < 10000) break;
+    }
+
+    uint8_t messageLineCount = std::count(messageStr.begin(), messageStr.end(), '\n');
+    uint8_t maxLineCount = static_cast<uint8_t>(floor(display->getHeight() / FONT_HEIGHT_SMALL)) - 1;
 
     LOG_INFO("CHECKPOINT 4\n");
 
-    // Now messageStr contains all formatted messages ready to be displayed.
-    // You can now display messageStr on the OLED display as needed.
-    // Note: Displaying long strings may require additional handling not shown here.
+    int offset = -(messageLineCount - (maxLineCount + scrollDelta)) * (FONT_HEIGHT_SMALL - 1);
 
-    //char tempBuf[1500];
-    char* tempBuf = new char[1500];
-    display->drawStringf(x, y, tempBuf, "%s", messageStr.c_str());
+    if (offset > 0) {
+        offset = 0;
+        scrollDelta = std::max(scrollDelta - 1, 0);
+    }
+
+    LOG_INFO(("messageLineCount: " + std::to_string(messageLineCount) + "\n").c_str());
+    LOG_INFO(("maxLineCount: " + std::to_string(maxLineCount) + "\n").c_str());
+    LOG_INFO(("scrollDelta: " + std::to_string(scrollDelta) + "\n").c_str());
+    LOG_INFO(("offset: " + std::to_string(offset) + "\n").c_str());
+    LOG_INFO(("messageStr: " + messageStr + "\n").c_str());
+
+    removeLastNLines(messageStr, scrollDelta);
+
+    tempBuf = new char[messageStr.length() + 1];
+    display->drawStringf(
+        x,
+        y + offset,
+        tempBuf,
+        "%s",
+        messageStr.c_str()
+    );
 
     LOG_INFO("CHECKPOINT 5\n");
-
-    if (category == nodeDB.CATEGORY_COUNT - 1)
-        display->drawStringf(0, display->getHeight() - FONT_HEIGHT_SMALL, tempBuf, "%s", "DMs");
-    else
-        display->drawStringf(0, display->getHeight() - FONT_HEIGHT_SMALL, tempBuf, "CH %s", std::to_string(category).c_str());
     
     delete[] tempBuf;
 
@@ -1640,7 +1657,8 @@ void Screen::handleOnPress()
     // If screen was off, just wake it, otherwise advance to next frame
     // If we are in a transition, the press must have bounced, drop it.
     if (ui->getUiState()->frameState == FIXED) {
-        ui->nextFrame();
+        // TODO: Figure out if the rest of this is needed for waking up
+        //ui->nextFrame();
         lastScreenTransition = millis();
         setFastFramerate();
     }
@@ -2025,16 +2043,29 @@ int Screen::handleInputEvent(const InputEvent *event)
 
         if (inChannelFrame) {
             if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP)) {
-                category++;
-                if (category > 8) {
-                    category = 0;
+                if (scrollEnabled) {
+                    scrollDelta--;
+                    if (scrollDelta < 0)
+                        scrollDelta = 0;
+                } else {
+                    category++;
+                    if (category > 8)
+                        category = 0;
                 }
             } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN)) {
-                category--;
-                if (category < 0) {
-                    category = 8;
+                if (scrollEnabled) {
+                    scrollDelta++;
+                } else {
+                    category--;
+                    if (category < 0)
+                        category = 8;
                 }
+            } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT)) {
+                scrollEnabled = !scrollEnabled;
+            } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK)) {
+                autoFocus = !autoFocus;
             }
+            setFastFramerate();
         }
         
     }
