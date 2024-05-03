@@ -1,7 +1,7 @@
 #pragma once
-#include "configuration.h"
 #include "PowerStatus.h"
 #include "concurrency/OSThread.h"
+#include "configuration.h"
 #ifdef ARCH_ESP32
 #include <esp_adc_cal.h>
 #include <soc/adc_channel.h>

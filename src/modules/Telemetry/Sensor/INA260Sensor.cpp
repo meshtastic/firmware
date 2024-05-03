@@ -2,8 +2,8 @@
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
-#include "INA260Sensor.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "INA260Sensor.h"
 #include "TelemetrySensor.h"
 #include <Adafruit_INA260.h>
 

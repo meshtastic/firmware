@@ -2,8 +2,8 @@
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
-#include "BME680Sensor.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "BME680Sensor.h"
 #include "FSCommon.h"
 #include "TelemetrySensor.h"
 

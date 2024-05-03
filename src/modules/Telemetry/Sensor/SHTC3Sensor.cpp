@@ -2,8 +2,8 @@
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
-#include "SHTC3Sensor.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "SHTC3Sensor.h"
 #include "TelemetrySensor.h"
 #include <Adafruit_SHTC3.h>
 

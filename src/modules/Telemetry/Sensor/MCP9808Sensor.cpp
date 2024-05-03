@@ -2,8 +2,8 @@
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
-#include "MCP9808Sensor.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "MCP9808Sensor.h"
 #include "TelemetrySensor.h"
 #include <Adafruit_MCP9808.h>
 

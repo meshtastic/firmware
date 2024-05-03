@@ -431,7 +431,7 @@ int32_t CannedMessageModule::runOnce()
                 runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
                 break;
             case 0x9e: // toggle GPS like triple press does
-#if !MESHTASTIC_EXCLUDE_GPS            
+#if !MESHTASTIC_EXCLUDE_GPS
                 if (gps != nullptr) {
                     gps->toggleGpsMode();
                 }

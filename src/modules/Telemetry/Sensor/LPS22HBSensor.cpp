@@ -2,8 +2,8 @@
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
-#include "LPS22HBSensor.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "LPS22HBSensor.h"
 #include "TelemetrySensor.h"
 #include <Adafruit_LPS2X.h>
 #include <Adafruit_Sensor.h>
