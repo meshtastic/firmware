@@ -75,7 +75,7 @@ void portduinoSetup()
 {
     printf("Setting up Meshtastic on Portduino...\n");
     int max_GPIO = 0;
-    configNames GPIO_lines[] = {cs,
+    const configNames GPIO_lines[] = {cs,
                                 irq,
                                 busy,
                                 reset,
@@ -103,7 +103,7 @@ void portduinoSetup()
         std::cout << "Using " << configPath << " as config file" << std::endl;
         try {
             yamlConfig = YAML::LoadFile(configPath);
-        } catch (YAML::Exception e) {
+        } catch (YAML::Exception &e) {
             std::cout << "Could not open " << configPath << " because of error: " << e.what() << std::endl;
             exit(EXIT_FAILURE);
         }
@@ -111,7 +111,7 @@ void portduinoSetup()
         std::cout << "Using local config.yaml as config file" << std::endl;
         try {
             yamlConfig = YAML::LoadFile("config.yaml");
-        } catch (YAML::Exception e) {
+        } catch (YAML::Exception &e) {
             std::cout << "*** Exception " << e.what() << std::endl;
             exit(EXIT_FAILURE);
         }
@@ -119,7 +119,7 @@ void portduinoSetup()
         std::cout << "Using /etc/meshtasticd/config.yaml as config file" << std::endl;
         try {
             yamlConfig = YAML::LoadFile("/etc/meshtasticd/config.yaml");
-        } catch (YAML::Exception e) {
+        } catch (YAML::Exception &e) {
             std::cout << "*** Exception " << e.what() << std::endl;
             exit(EXIT_FAILURE);
         }
@@ -276,7 +276,7 @@ void portduinoSetup()
 
         settingsMap[maxnodes] = (yamlConfig["General"]["MaxNodes"]).as<int>(200);
 
-    } catch (YAML::Exception e) {
+    } catch (YAML::Exception &e) {
         std::cout << "*** Exception " << e.what() << std::endl;
         exit(EXIT_FAILURE);
     }
@@ -347,7 +347,7 @@ void portduinoSetup()
     return;
 }
 
-int initGPIOPin(int pinNum, std::string gpioChipName)
+int initGPIOPin(int pinNum, const std::string& gpioChipName)
 {
     std::string gpio_name = "GPIO" + std::to_string(pinNum);
     try {

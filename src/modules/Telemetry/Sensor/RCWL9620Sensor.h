@@ -5,15 +5,15 @@
 class RCWL9620Sensor : public TelemetrySensor
 {
   private:
-    uint8_t _addr;
-    TwoWire *_wire;
-    uint8_t _scl;
-    uint8_t _sda;
-    uint8_t _speed;
+    uint8_t _addr = 0x57;
+    TwoWire *_wire = &Wire;
+    uint8_t _scl = -1;
+    uint8_t _sda = -1;
+    uint32_t _speed = 200000UL;
 
   protected:
     virtual void setup() override;
-    void begin(TwoWire *wire = &Wire, uint8_t addr = 0x57, uint8_t sda = -1, uint8_t scl = -1, uint32_t speed = 200000L);
+    void begin(TwoWire *wire = &Wire, uint8_t addr = 0x57, uint8_t sda = -1, uint8_t scl = -1, uint32_t speed = 200000UL);
     float getDistance();
 
   public:
