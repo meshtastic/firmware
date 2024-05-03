@@ -239,7 +239,7 @@ void setup()
     LOG_INFO("\n\n//\\ E S H T /\\ S T / C\n\n");
 
     initDeepSleep();
-
+    scanI2CDevices();
     // power on peripherals
 #if defined(TTGO_T_ECHO) && defined(PIN_POWER_EN)
     pinMode(PIN_POWER_EN, OUTPUT);
@@ -393,7 +393,6 @@ void setup()
 
     // We need to scan here to decide if we have a screen for nodeDB.init() and because power has been applied to
     // accessories
-    delay(500);  // Introduce a delay before scanning for I2C devices
     auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
 #if HAS_WIRE
     LOG_INFO("Scanning for i2c devices...\n");
@@ -493,7 +492,10 @@ void setup()
             kb_model = 0x00;
         }
     }
-
+    void handleSomeEvent() {
+    // Re-scan I2C devices
+    scanI2CDevices();
+    }
     pmu_found = i2cScanner->exists(ScanI2C::DeviceType::PMU_AXP192_AXP2101);
 
 /*
@@ -696,12 +698,6 @@ void setup()
 
     // Now that the mesh service is created, create any modules
     setupModules();
-
-#ifdef LED_PIN
-    // Turn LED off after boot, if heartbeat by config
-    if (config.device.led_heartbeat_disabled)
-        digitalWrite(LED_PIN, LOW ^ LED_INVERTED);
-#endif
 
 // Do this after service.init (because that clears error_code)
 #ifdef HAS_PMU
@@ -1033,4 +1029,3 @@ void loop()
         mainDelay.delay(delayMsec);
     }
     // if (didWake) LOG_DEBUG("wake!\n");
-}
