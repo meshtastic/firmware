@@ -1,12 +1,15 @@
-#include "PowerTelemetry.h"
+#include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "PowerTelemetry.h"
 #include "RTC.h"
 #include "Router.h"
-#include "configuration.h"
 #include "main.h"
 #include "power.h"
 #include "sleep.h"
@@ -218,3 +221,5 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     }
     return valid;
 }
+
+#endif
