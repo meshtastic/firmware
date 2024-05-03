@@ -693,6 +693,12 @@ void setup()
     // Now that the mesh service is created, create any modules
     setupModules();
 
+#ifdef LED_PIN
+    // Turn LED off after boot, if heartbeat by config
+    if (config.device.led_heartbeat_disabled)
+        digitalWrite(LED_PIN, LOW ^ LED_INVERTED);
+#endif
+
 // Do this after service.init (because that clears error_code)
 #ifdef HAS_PMU
     if (!pmu_found)
