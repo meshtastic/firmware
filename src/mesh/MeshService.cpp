@@ -192,9 +192,7 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
         return;
     }
 #endif
-    if (p.from != 0) { // We don't let phones assign nodenums to their sent messages
-        p.from = 0;
-    }
+    p.from = 0; // We don't let phones assign nodenums to their sent messages
 
     if (p.id == 0)
         p.id = generatePacketId(); // If the phone didn't supply one, then pick one
