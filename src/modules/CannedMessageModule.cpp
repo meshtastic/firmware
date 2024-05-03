@@ -431,14 +431,15 @@ int32_t CannedMessageModule::runOnce()
                 runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
                 break;
             case 0x9e: // toggle GPS like triple press does
+#if !MESHTASTIC_EXCLUDE_GPS
                 if (gps != nullptr) {
                     gps->toggleGpsMode();
                 }
                 if (screen)
                     screen->forceDisplay();
                 showTemporaryMessage("GPS Toggled");
+#endif
                 break;
-
             // mute (switch off/toggle) external notifications on fn+m
             case 0xac:
                 if (moduleConfig.external_notification.enabled == true) {
