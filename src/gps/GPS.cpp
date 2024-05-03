@@ -62,10 +62,10 @@ void GPS::CASChecksum(uint8_t *message, size_t length)
 
     // Iterate over the payload as a series of uint32_t's and
     // accumulate the cksum
-    uint32_t *payload = (uint32_t *)(message + 6);
+    uint32_t const *payload = (uint32_t *)(message + 6);
     for (size_t i = 0; i < (length - 10) / 4; i++) {
-        uint32_t p = payload[i];
-        cksum += p;
+        uint32_t pl = payload[i];
+        cksum += pl;
     }
 
     // Place the checksum values in the message
