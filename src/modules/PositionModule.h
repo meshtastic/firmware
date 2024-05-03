@@ -42,6 +42,8 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     */
     virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Position *p) override;
 
+    virtual void alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic_Position *p) override;
+
     /** Messages can be received that have the want_response bit set.  If set, this callback will be invoked
      * so that subclasses can (optionally) send a response back to the original sender.  */
     virtual meshtastic_MeshPacket *allocReply() override;

@@ -193,10 +193,7 @@ void MeshService::handleToRadio(meshtastic_MeshPacket &p)
     }
 #endif
     if (p.from != 0) { // We don't let phones assign nodenums to their sent messages
-        LOG_WARN("phone tried to pick a nodenum, we don't allow that.\n");
         p.from = 0;
-    } else {
-        // p.from = nodeDB->getNodeNum();
     }
 
     if (p.id == 0)
