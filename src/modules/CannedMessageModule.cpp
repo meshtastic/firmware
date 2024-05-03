@@ -438,8 +438,8 @@ int32_t CannedMessageModule::runOnce()
                 if (screen)
                     screen->forceDisplay();
                 showTemporaryMessage("GPS Toggled");
-                break;
 #endif
+                break;
             // mute (switch off/toggle) external notifications on fn+m
             case 0xac:
                 if (moduleConfig.external_notification.enabled == true) {
