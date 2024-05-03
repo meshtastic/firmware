@@ -15,7 +15,11 @@
 #include "detect/ScanI2C.h"
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
 
-#include "main.h" // for cardkb_found
+#include "main.h"                               // for cardkb_found
+#include "modules/ExternalNotificationModule.h" // for buzzer control
+#if !MESHTASTIC_EXCLUDE_GPS
+#include "GPS.h"
+#endif
 
 #ifndef INPUTBROKER_MATRIX_TYPE
 #define INPUTBROKER_MATRIX_TYPE 0
@@ -160,10 +164,10 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         if (!event->kbchar) {
             if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
                 this->payload = 0xb4;
-                this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
+                // this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
             } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
                 this->payload = 0xb7;
-                this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
+                // this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
             }
         } else {
             // pass the pressed key
@@ -234,14 +238,16 @@ int32_t CannedMessageModule::runOnce()
 {
     if (((!moduleConfig.canned_message.enabled) && !CANNED_MESSAGE_MODULE_ENABLE) ||
         (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) || (this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE)) {
+        temporaryMessage = "";
         return INT32_MAX;
     }
     // LOG_DEBUG("Check status\n");
     UIFrameEvent e = {false, true};
     if ((this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) ||
-        (this->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED)) {
-        // TODO: might have some feedback of sendig state
+        (this->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) || (this->runState == CANNED_MESSAGE_RUN_STATE_MESSAGE)) {
+        // TODO: might have some feedback of sending state
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+        temporaryMessage = "";
         e.frameChanged = true;
         this->currentMessageIndex = -1;
         this->freetext = ""; // clear freetext
@@ -402,6 +408,7 @@ int32_t CannedMessageModule::runOnce()
                 }
                 break;
             case 0x09: // tab
+            case 0x91: // alt+t for T-Deck that doesn't have a tab key
                 if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL) {
                     this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
                 } else if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
@@ -416,13 +423,47 @@ int32_t CannedMessageModule::runOnce()
                 break;
             // handle fn+s for shutdown
             case 0x9b:
-                screen->startShutdownScreen();
+                if (screen)
+                    screen->startShutdownScreen();
                 shutdownAtMsec = millis() + DEFAULT_SHUTDOWN_SECONDS * 1000;
+                runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
                 break;
             // and fn+r for reboot
             case 0x90:
-                screen->startRebootScreen();
+                if (screen)
+                    screen->startRebootScreen();
                 rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+                runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+                break;
+            case 0x9e: // toggle GPS like triple press does
+                if (gps != nullptr) {
+                    gps->toggleGpsMode();
+                }
+                if (screen)
+                    screen->forceDisplay();
+                showTemporaryMessage("GPS Toggled");
+                break;
+
+            // mute (switch off/toggle) external notifications on fn+m
+            case 0xac:
+                if (moduleConfig.external_notification.enabled == true) {
+                    if (externalNotificationModule->getMute()) {
+                        externalNotificationModule->setMute(false);
+                        showTemporaryMessage("Notifications \nEnabled");
+                    } else {
+                        externalNotificationModule->stopNow(); // this will turn off all GPIO and sounds and idle the loop
+                        externalNotificationModule->setMute(true);
+                        showTemporaryMessage("Notifications \nDisabled");
+                    }
+                }
+                break;
+            case 0xaf: // fn+space send network ping like double press does
+                service.refreshLocalMeshNode();
+                if (service.trySendPosition(NODENUM_BROADCAST, true)) {
+                    showTemporaryMessage("Position \nUpdate Sent");
+                } else {
+                    showTemporaryMessage("Node Info \nUpdate Sent");
+                }
                 break;
             default:
                 if (this->cursor == this->freetext.length()) {
@@ -511,12 +552,27 @@ int CannedMessageModule::getPrevIndex()
         return this->currentMessageIndex - 1;
     }
 }
+void CannedMessageModule::showTemporaryMessage(const String &message)
+{
+    temporaryMessage = message;
+    UIFrameEvent e = {false, true};
+    e.frameChanged = true;
+    notifyObservers(&e);
+    runState = CANNED_MESSAGE_RUN_STATE_MESSAGE;
+    // run this loop again in 2 seconds, next iteration will clear the display
+    setIntervalFromNow(2000);
+}
 
 void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     char buffer[50];
 
-    if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) {
+    if (temporaryMessage.length() != 0) {
+        LOG_DEBUG("Drawing temporary message: %s", temporaryMessage.c_str());
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->setFont(FONT_MEDIUM);
+        display->drawString(display->getWidth() / 2 + x, 0 + y + 12, temporaryMessage);
+    } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) {
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->setFont(FONT_MEDIUM);
         String displayString;
@@ -633,9 +689,9 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
 
 void CannedMessageModule::loadProtoForModule()
 {
-    if (!nodeDB->loadProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,
-                           sizeof(meshtastic_CannedMessageModuleConfig), &meshtastic_CannedMessageModuleConfig_msg,
-                           &cannedMessageModuleConfig)) {
+    if (nodeDB->loadProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,
+                          sizeof(meshtastic_CannedMessageModuleConfig), &meshtastic_CannedMessageModuleConfig_msg,
+                          &cannedMessageModuleConfig) != LoadFileResult::SUCCESS) {
         installDefaultCannedMessageModuleConfig();
     }
 }

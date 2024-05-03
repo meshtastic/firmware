@@ -4,7 +4,7 @@
 #include "configuration.h"
 #include "modules/ExternalNotificationModule.h"
 
-#ifdef ARCH_PORTDUINO
+#if ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 

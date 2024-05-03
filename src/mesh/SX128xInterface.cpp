@@ -126,9 +126,13 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
     err = lora.setSyncWord(syncWord);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting SX128X setSyncWord!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setPreambleLength(preambleLength);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting SX128X setPreambleLength!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setFrequency(getFreq());
@@ -139,6 +143,8 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
         power = SX128X_MAX_POWER;
 
     err = lora.setOutputPower(power);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting SX128X setOutputPower!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     startReceive(); // restart receiving
@@ -162,10 +168,8 @@ template <typename T> void SX128xInterface<T>::setStandby()
 
     int err = lora.standby();
 
-    if (err != RADIOLIB_ERR_NONE) {
+    if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("SX128x standby failed with error %d\n", err);
-    }
-
     assert(err == RADIOLIB_ERR_NONE);
 #if ARCH_PORTDUINO
     if (settingsMap[rxen] != RADIOLIB_NC) {
@@ -255,6 +259,8 @@ template <typename T> void SX128xInterface<T>::startReceive()
         lora.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF, RADIOLIB_SX128X_IRQ_RX_DEFAULT | RADIOLIB_SX128X_IRQ_PREAMBLE_DETECTED |
                                                               RADIOLIB_SX128X_IRQ_HEADER_VALID);
 
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting SX128X startReceive!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = true;
@@ -274,7 +280,8 @@ template <typename T> bool SX128xInterface<T>::isChannelActive()
     result = lora.scanChannel();
     if (result == RADIOLIB_LORA_DETECTED)
         return true;
-
+    if (result != RADIOLIB_CHANNEL_FREE)
+        LOG_ERROR("Radiolib error %d when attempting SX128X scanChannel!\n", result);
     assert(result != RADIOLIB_ERR_WRONG_MODEM);
 
     return false;

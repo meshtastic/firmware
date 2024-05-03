@@ -6,6 +6,7 @@
 
 #include "EInkDisplay2.h"
 #include "GxEPD2_BW.h"
+#include "concurrency/NotifiedWorkerThread.h"
 
 /*
     Derives from the EInkDisplay adapter class.
@@ -14,7 +15,7 @@
     (Full, Fast, Skip)
 */
 
-class EInkDynamicDisplay : public EInkDisplay
+class EInkDynamicDisplay : public EInkDisplay, protected concurrency::NotifiedWorkerThread
 {
   public:
     // Constructor
@@ -61,13 +62,20 @@ class EInkDynamicDisplay : public EInkDisplay
         REDRAW_WITH_FULL,
     };
 
-    void configForFastRefresh();  // GxEPD2 code to set fast-refresh
-    void configForFullRefresh();  // GxEPD2 code to set full-refresh
-    bool determineMode();         // Assess situation, pick a refresh type
-    void applyRefreshMode();      // Run any relevant GxEPD2 code, so next update will use correct refresh type
-    void adjustRefreshCounters(); // Update fastRefreshCount
-    bool update();                // Trigger the display update - determine mode, then call base class
-    void endOrDetach();           // Run the post-update code, or delegate it off to checkAsyncFullRefresh()
+    enum notificationTypes : uint8_t { // What was onNotify() called for
+        NONE = 0,                      // This behavior (NONE=0) is fixed by NotifiedWorkerThread class
+        DUE_POLL_ASYNCREFRESH = 1,
+    };
+    const uint32_t intervalPollAsyncRefresh = 100;
+
+    void onNotify(uint32_t notification) override; // Handle any async tasks - overrides NotifiedWorkerThread
+    void configForFastRefresh();                   // GxEPD2 code to set fast-refresh
+    void configForFullRefresh();                   // GxEPD2 code to set full-refresh
+    bool determineMode();                          // Assess situation, pick a refresh type
+    void applyRefreshMode();                       // Run any relevant GxEPD2 code, so next update will use correct refresh type
+    void adjustRefreshCounters();                  // Update fastRefreshCount
+    bool update();                                 // Trigger the display update - determine mode, then call base class
+    void endOrDetach();                            // Run the post-update code, or delegate it off to checkBusyAsyncRefresh()
 
     // Checks as part of determineMode()
     void checkInitialized();              // Is this the very first frame?
@@ -111,17 +119,30 @@ class EInkDynamicDisplay : public EInkDisplay
 
     // Conditional - async full refresh - only with modified meshtastic/GxEPD2
 #if defined(HAS_EINK_ASYNCFULL)
-    void checkAsyncFullRefresh(); // Check the status of "async full-refresh"; run the post-update code if the hardware is ready
-    void awaitRefresh();          // Hold control while an async refresh runs
-    void endUpdate() override {}  // Disable base-class behavior of running post-update immediately after forceDisplay()
-    bool asyncRefreshRunning = false; // Flag, checked by checkAsyncFullRefresh()
+  public:
+    void joinAsyncRefresh(); // Main thread joins an async refresh already in progress. Blocks, then runs post-update code
+
+  protected:
+    void pollAsyncRefresh();          // Run the post-update code if the hardware is ready
+    void checkBusyAsyncRefresh();     // Check if display is busy running an async full-refresh (rejecting new frames)
+    void awaitRefresh();              // Hold control while an async refresh runs
+    void endUpdate() override {}      // Disable base-class behavior of running post-update immediately after forceDisplay()
+    bool asyncRefreshRunning = false; // Flag, checked by checkBusyAsyncRefresh()
+#else
+  public:
+    void joinAsyncRefresh() {} // Dummy method
+
+  protected:
+    void pollAsyncRefresh() {} // Dummy method. In theory, not reachable
 #endif
 };
 
-// Tidier calls to addFrameFlag() from outside class
+// Hide the ugly casts used in Screen.cpp
 #define EINK_ADD_FRAMEFLAG(display, flag) static_cast<EInkDynamicDisplay *>(display)->addFrameFlag(EInkDynamicDisplay::flag)
+#define EINK_JOIN_ASYNCREFRESH(display) static_cast<EInkDynamicDisplay *>(display)->joinAsyncRefresh()
 
 #else // !USE_EINK_DYNAMICDISPLAY
 // Dummy-macro, removes the need for include guards
 #define EINK_ADD_FRAMEFLAG(display, flag)
+#define EINK_JOIN_ASYNCREFRESH(display)
 #endif
