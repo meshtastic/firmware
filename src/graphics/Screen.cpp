@@ -23,14 +23,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "configuration.h"
 #if HAS_SCREEN
 #include <OLEDDisplay.h>
-#include <string>
-#include <list>
-#include <unistd.h>
-#include <cstring>
-#include <vector>
-#include <iostream>
 #include <algorithm>
-
+#include <cstring>
+#include <iostream>
+#include <list>
+#include <string>
+#include <unistd.h>
+#include <vector>
 
 #include "DisplayFormatters.h"
 #if !MESHTASTIC_EXCLUDE_GPS
@@ -411,14 +410,15 @@ static bool shouldDrawMessage(const meshtastic_MeshPacket *packet)
 }
 
 // Wraps string using modified logic from OLEDDisplay::drawStringMaxWidth
-std::string wrapString(OLEDDisplay* display, uint16_t maxLineWidth, const std::string& text) {
+std::string wrapString(OLEDDisplay *display, uint16_t maxLineWidth, const std::string &text)
+{
     std::string result;
 
     // Using a copy to preserve the original text
-    char* textCopy = new char[text.length() + 1];
+    char *textCopy = new char[text.length() + 1];
     std::strcpy(textCopy, text.c_str());
 
-    char* line = std::strtok(textCopy, "\n");
+    char *line = std::strtok(textCopy, "\n");
     while (line != nullptr) {
         uint16_t preferredBreakpoint = 0;
         uint16_t strWidth = 0;
@@ -426,7 +426,7 @@ std::string wrapString(OLEDDisplay* display, uint16_t maxLineWidth, const std::s
 
         size_t lineLength = std::strlen(line);
         for (uint16_t i = 0; i < lineLength; ++i) {
-            char character[2] = { line[i], '\0' };
+            char character[2] = {line[i], '\0'};
             strWidth += display->getStringWidth(character, 1, true);
 
             if (line[i] == ' ' || line[i] == '-' || line[i] == '/') {
@@ -436,10 +436,10 @@ std::string wrapString(OLEDDisplay* display, uint16_t maxLineWidth, const std::s
             if (strWidth >= maxLineWidth && preferredBreakpoint > 0) {
                 result += currentLine.substr(0, preferredBreakpoint) + '\n';
                 line += preferredBreakpoint;
-                i = -1; // Reset the index for the next line
+                i = -1;                         // Reset the index for the next line
                 lineLength = std::strlen(line); // Update length for the remaining string
                 currentLine.clear();
-                strWidth = 0; // Reset width for the new line
+                strWidth = 0;            // Reset width for the new line
                 preferredBreakpoint = 0; // Reset breakpoint
                 continue;
             }
@@ -447,7 +447,7 @@ std::string wrapString(OLEDDisplay* display, uint16_t maxLineWidth, const std::s
             currentLine += line[i];
         }
 
-        result += currentLine; // Add the last line or the whole line if never exceeded maxLineWidth
+        result += currentLine;                        // Add the last line or the whole line if never exceeded maxLineWidth
         if (*(line + currentLine.length()) != '\0') { // If not at the end of the text, add a newline
             result += '\n';
         }
@@ -461,7 +461,7 @@ std::string wrapString(OLEDDisplay* display, uint16_t maxLineWidth, const std::s
 }
 
 // Format message for displaying as text
-std::string createMessageString(OLEDDisplay* display, const meshtastic_Message msg)
+std::string createMessageString(OLEDDisplay *display, const meshtastic_Message msg)
 {
     uint32_t seconds = sinceReceived(&msg);
     uint32_t minutes = seconds / 60;
@@ -470,13 +470,12 @@ std::string createMessageString(OLEDDisplay* display, const meshtastic_Message m
     std::string timestamp = screen->drawTimeDelta(days, hours, minutes, seconds);
     std::string separator = (msg.from_self) ? "::" : ":";
 
-    std::string messageString =
-        timestamp + " " + msg.sender_short_name + separator + " " + msg.content;
+    std::string messageString = timestamp + " " + msg.sender_short_name + separator + " " + msg.content;
 
     return wrapString(display, display->getWidth(), messageString.c_str()) + '\n';
 }
 
-void removeLastLines(std::string& str, int n)
+void removeLastLines(std::string &str, int n)
 {
     size_t pos = str.size();
     // Step backwards through the string
@@ -506,10 +505,10 @@ int8_t scrollDelta = 0;
 bool autoFocus = true;
 
 // Draw the frame that shows received and sent messages
-void drawMessageLogFrame(OLEDDisplay* display, OLEDDisplayUiState* state, int16_t x, int16_t y)
-{    
+void drawMessageLogFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
     inChannelFrame = true;
-    
+
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
 
@@ -527,7 +526,7 @@ void drawMessageLogFrame(OLEDDisplay* display, OLEDDisplayUiState* state, int16_
         info = "DMs";
     else
         info = "CH " + std::to_string(category);
-    
+
     bool hasModifier = false;
     if (autoFocus) {
         if (!hasModifier) {
@@ -545,20 +544,13 @@ void drawMessageLogFrame(OLEDDisplay* display, OLEDDisplayUiState* state, int16_
     }
     if (hasModifier)
         info += "]";
-    
 
-    char* stringBuffer = new char[info.length() + 1];
-    display->drawStringf(
-        x,
-        display->getHeight() - FONT_HEIGHT_SMALL,
-        stringBuffer,
-        "%s",
-        info.c_str()
-    );
+    char *stringBuffer = new char[info.length() + 1];
+    display->drawStringf(x, display->getHeight() - FONT_HEIGHT_SMALL, stringBuffer, "%s", info.c_str());
 
     // Draw the messages
     std::string message;
-    
+
     for (int i = nodeDB->oldestMessageIndices[category]; i <= nodeDB->newestMessageIndices[category]; i++) {
         const meshtastic_Message msg = nodeDB->loadMessage(category, i);
 
@@ -578,17 +570,10 @@ void drawMessageLogFrame(OLEDDisplay* display, OLEDDisplayUiState* state, int16_
     removeLastLines(message, scrollDelta);
 
     stringBuffer = new char[message.length() + 1];
-    display->drawStringf(
-        x,
-        y + offset,
-        stringBuffer,
-        "%s",
-        message.c_str()
-    );
-    
+    display->drawStringf(x, y + offset, stringBuffer, "%s", message.c_str());
+
     delete[] stringBuffer;
 }
-
 
 /// Draw the last waypoint we received
 static void drawWaypointFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -1761,7 +1746,7 @@ void Screen::handleOnPress()
     // If we are in a transition, the press must have bounced, drop it.
     if (ui->getUiState()->frameState == FIXED) {
         // TODO: Figure out if the rest of this is needed for waking up
-        //ui->nextFrame();
+        // ui->nextFrame();
         lastScreenTransition = millis();
         setFastFramerate();
     }
@@ -2164,14 +2149,14 @@ int Screen::handleInputEvent(const InputEvent *event)
                     if (category < 0)
                         category = 8;
                 }
-            } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT)) {
+            } else if (event->inputEvent ==
+                       static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT)) {
                 scrollEnabled = !scrollEnabled;
             } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK)) {
                 autoFocus = !autoFocus;
             }
             setFastFramerate();
         }
-        
     }
 
     return 0;

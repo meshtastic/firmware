@@ -3,8 +3,8 @@
 #include "Observer.h"
 #include <Arduino.h>
 #include <assert.h>
-#include <vector>
 #include <set>
+#include <vector>
 
 #include "MeshTypes.h"
 #include "NodeStatus.h"
@@ -77,30 +77,30 @@ class NodeDB
     /// Write to flash
     void saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS),
         saveChannelsToDisk(), saveDeviceStateToDisk();
-    
+
     void initSavedMessages();
-    void saveMessageToDisk(const meshtastic_MeshPacket& mp);
-    void saveMessageToDisk(const meshtastic_Message& msg);
+    void saveMessageToDisk(const meshtastic_MeshPacket &mp);
+    void saveMessageToDisk(const meshtastic_Message &msg);
     uint8_t lastCategorySaved = 0;
     void clearSavedMessages();
     const meshtastic_Message loadMessage(uint16_t category, uint16_t index);
 
-    bool messageIsDirectMessage(const meshtastic_MeshPacket& mp);
+    bool messageIsDirectMessage(const meshtastic_MeshPacket &mp);
     struct MessageCompare {
-        bool operator()(const meshtastic_Message& messageA, const meshtastic_Message& messageB) const {
+        bool operator()(const meshtastic_Message &messageA, const meshtastic_Message &messageB) const
+        {
             return messageA.rx_time < messageB.rx_time;
         }
     };
-    
+
     static const uint8_t CATEGORY_COUNT = 9;
     std::set<meshtastic_Message, MessageCompare> messageCache[CATEGORY_COUNT];
-    int* newestMessageIndices = new int[CATEGORY_COUNT];
-    int* oldestMessageIndices = new int[CATEGORY_COUNT];
+    int *newestMessageIndices = new int[CATEGORY_COUNT];
+    int *oldestMessageIndices = new int[CATEGORY_COUNT];
     void updateMessageBounds();
-    
-    std::vector<std::string>* messageFileList = new std::vector<std::string>[CATEGORY_COUNT];
-    void updateMessageFileList();
 
+    std::vector<std::string> *messageFileList = new std::vector<std::string>[CATEGORY_COUNT];
+    void updateMessageFileList();
 
     /** Reinit radio config if needed, because either:
      * a) sometimes a buggy android app might send us bogus settings or
