@@ -23,6 +23,7 @@ PositionModule::PositionModule()
     : ProtobufModule("position", meshtastic_PortNum_POSITION_APP, &meshtastic_Position_msg),
       concurrency::OSThread("PositionModule")
 {
+    precision = 0;        // safe starting value
     isPromiscuous = true; // We always want to update our nodedb, even if we are sniffing on others
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)
@@ -82,12 +83,12 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     }
 
     nodeDB.updatePosition(getFrom(&mp), p);
-
-    // Only respond to location requests on the channel where we broadcast location.
-    if (channels.getByIndex(mp.channel).role == meshtastic_Channel_Role_PRIMARY) {
-        ignoreRequest = false;
+    if (channels.getByIndex(mp.channel).settings.has_module_settings) {
+        precision = channels.getByIndex(mp.channel).settings.module_settings.position_precision;
+    } else if (channels.getByIndex(mp.channel).role == meshtastic_Channel_Role_PRIMARY) {
+        precision = 32;
     } else {
-        ignoreRequest = true;
+        precision = 0;
     }
 
     return false; // Let others look at this message also if they want
@@ -95,8 +96,8 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 
 meshtastic_MeshPacket *PositionModule::allocReply()
 {
-    if (ignoreRequest) {
-        ignoreRequest = false; // Reset for next request
+    if (precision == 0) {
+        LOG_DEBUG("Skipping location send because precision is set to 0!\n");
         return nullptr;
     }
 
@@ -116,8 +117,16 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     localPosition.seq_number++;
 
     // lat/lon are unconditionally included - IF AVAILABLE!
-    p.latitude_i = localPosition.latitude_i;
-    p.longitude_i = localPosition.longitude_i;
+    LOG_DEBUG("Sending location with precision %i\n", precision);
+    p.latitude_i = localPosition.latitude_i & (INT32_MAX << (32 - precision));
+    p.longitude_i = localPosition.longitude_i & (INT32_MAX << (32 - precision));
+
+    // We want the imprecise position to be the middle of the possible location, not
+    if (precision < 31 && precision > 1) {
+        p.latitude_i += (1 << (31 - precision));
+        p.longitude_i += (1 << (31 - precision));
+    }
+    p.precision_bits = precision;
     p.time = localPosition.time;
 
     if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE) {
@@ -164,7 +173,7 @@ meshtastic_MeshPacket *PositionModule::allocReply()
         LOG_INFO("Providing time to mesh %u\n", p.time);
     }
 
-    LOG_INFO("Position reply: time=%i, latI=%i, lonI=-%i\n", p.time, p.latitude_i, p.longitude_i);
+    LOG_INFO("Position reply: time=%i, latI=%i, lonI=%i\n", p.time, p.latitude_i, p.longitude_i);
 
     // TAK Tracker devices should send their position in a TAK packet over the ATAK port
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)
@@ -193,7 +202,7 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
                                       {.pli = {
                                            .latitude_i = localPosition.latitude_i,
                                            .longitude_i = localPosition.longitude_i,
-                                           .altitude = localPosition.altitude_hae > 0 ? localPosition.altitude_hae : 0,
+                                           .altitude = localPosition.altitude_hae,
                                            .speed = localPosition.ground_speed,
                                            .course = static_cast<uint16_t>(localPosition.ground_track),
                                        }}};
@@ -213,9 +222,18 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
     if (prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
         service.cancelSending(prevPacketId);
 
+    // Set's the class precision value for this particular packet
+    if (channels.getByIndex(channel).settings.has_module_settings) {
+        precision = channels.getByIndex(channel).settings.module_settings.position_precision;
+    } else if (channels.getByIndex(channel).role == meshtastic_Channel_Role_PRIMARY) {
+        precision = 32;
+    } else {
+        precision = 0;
+    }
+
     meshtastic_MeshPacket *p = allocReply();
     if (p == nullptr) {
-        LOG_WARN("allocReply returned a nullptr\n");
+        LOG_DEBUG("allocReply returned a nullptr\n");
         return;
     }
 
