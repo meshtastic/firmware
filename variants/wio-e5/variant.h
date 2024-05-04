@@ -13,5 +13,6 @@ Do not expect a working Meshtastic device with this target.
 #define _VARIANT_WIOE5_
 
 #define USE_STM32WLx
+#define MAX_NUM_NODES 10
 
 #endif
