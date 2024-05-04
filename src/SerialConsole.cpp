@@ -2,6 +2,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "configuration.h"
+#include "time.h"
 
 #ifdef RP2040_SLOW_CLOCK
 #define Port Serial2
