@@ -8,7 +8,7 @@ class NRF52Bluetooth : BluetoothApi
   public:
     void setup();
     void shutdown();
-    void resumeAdverising();
+    void resumeAdvertising();
     void clearBonds();
     bool isConnected();
     int getRssi();

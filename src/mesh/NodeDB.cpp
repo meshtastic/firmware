@@ -56,7 +56,7 @@ meshtastic_OEMStore oemStore;
 bool meshtastic_DeviceState_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_iter_t *field)
 {
     if (ostream) {
-        std::vector<meshtastic_NodeInfoLite> *vec = (std::vector<meshtastic_NodeInfoLite> *)field->pData;
+        std::vector<meshtastic_NodeInfoLite> const *vec = (std::vector<meshtastic_NodeInfoLite> *)field->pData;
         for (auto item : *vec) {
             if (!pb_encode_tag_for_field(ostream, field))
                 return false;
@@ -449,7 +449,7 @@ void NodeDB::resetNodes()
         neighborInfoModule->resetNeighbors();
 }
 
-void NodeDB::removeNodeByNum(uint nodeNum)
+void NodeDB::removeNodeByNum(NodeNum nodeNum)
 {
     int newPos = 0, removed = 0;
     for (int i = 0; i < numMeshNodes; i++) {

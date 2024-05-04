@@ -1,7 +1,10 @@
-#include "BME280Sensor.h"
-#include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "TelemetrySensor.h"
 #include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
+#include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "BME280Sensor.h"
+#include "TelemetrySensor.h"
 #include <Adafruit_BME280.h>
 #include <typeinfo>
 
@@ -36,3 +39,4 @@ bool BME280Sensor::getMetrics(meshtastic_Telemetry *measurement)
 
     return true;
 }
+#endif
