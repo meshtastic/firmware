@@ -522,18 +522,29 @@ void drawMessageLogFrame(OLEDDisplay* display, OLEDDisplayUiState* state, int16_
     // Draw the category label
     std::string info;
     if (category == 0)
-        info = "PRIMARY";
+        info = "PRIME";
     else if (category == nodeDB->CATEGORY_COUNT - 1)
         info = "DMs";
     else
         info = "CH " + std::to_string(category);
     
-    info +=  "|";
-    
-    if (autoFocus)
+    bool hasModifier = false;
+    if (autoFocus) {
+        if (!hasModifier) {
+            hasModifier = true;
+            info += " [";
+        }
         info += "A";
-    if (scrollEnabled)
+    }
+    if (scrollEnabled) {
+        if (!hasModifier) {
+            hasModifier = true;
+            info += " [";
+        }
         info += "S";
+    }
+    if (hasModifier)
+        info += "]";
     
 
     char* stringBuffer = new char[info.length() + 1];
