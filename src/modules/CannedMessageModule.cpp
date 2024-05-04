@@ -12,46 +12,17 @@
 #include "detect/ScanI2C.h"
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
 
-#include "main.h" // for cardkb_found
+#include "main.h"                               // for cardkb_found
+#include "modules/ExternalNotificationModule.h" // for buzzer control
+#if !MESHTASTIC_EXCLUDE_GPS
+#include "GPS.h"
+#endif
 
 #ifndef INPUTBROKER_MATRIX_TYPE
 #define INPUTBROKER_MATRIX_TYPE 0
 #endif
 
-#ifdef OLED_RU
-#include "graphics/fonts/OLEDDisplayFontsRU.h"
-#endif
-
-#ifdef OLED_UA
-#include "graphics/fonts/OLEDDisplayFontsUA.h"
-#endif
-
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)) &&                                \
-    !defined(DISPLAY_FORCE_SMALL_FONTS)
-
-// The screen is bigger so use bigger fonts
-#define FONT_SMALL ArialMT_Plain_16
-#define FONT_MEDIUM ArialMT_Plain_24
-#define FONT_LARGE ArialMT_Plain_24
-#else
-#ifdef OLED_RU
-#define FONT_SMALL ArialMT_Plain_10_RU
-#else
-#ifdef OLED_UA
-#define FONT_SMALL ArialMT_Plain_10_UA
-#else
-#define FONT_SMALL ArialMT_Plain_10
-#endif
-#endif
-#define FONT_MEDIUM ArialMT_Plain_16
-#define FONT_LARGE ArialMT_Plain_24
-#endif
-
-#define fontHeight(font) ((font)[1] + 1) // height is position 1
-
-#define FONT_HEIGHT_SMALL fontHeight(FONT_SMALL)
-#define FONT_HEIGHT_MEDIUM fontHeight(FONT_MEDIUM)
-#define FONT_HEIGHT_LARGE fontHeight(FONT_LARGE)
+#include "graphics/ScreenFonts.h"
 
 // Remove Canned message screen if no action is taken for some milliseconds
 #define INACTIVATE_AFTER_MS 20000
@@ -190,10 +161,10 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         if (!event->kbchar) {
             if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
                 this->payload = 0xb4;
-                this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
+                // this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
             } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
                 this->payload = 0xb7;
-                this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
+                // this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
             }
         } else {
             // pass the pressed key
@@ -262,14 +233,16 @@ int32_t CannedMessageModule::runOnce()
 {
     if (((!moduleConfig.canned_message.enabled) && !CANNED_MESSAGE_MODULE_ENABLE) ||
         (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) || (this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE)) {
+        temporaryMessage = "";
         return INT32_MAX;
     }
     // LOG_DEBUG("Check status\n");
     UIFrameEvent e = {false, true};
     if ((this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) ||
-        (this->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED)) {
-        // TODO: might have some feedback of sendig state
+        (this->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) || (this->runState == CANNED_MESSAGE_RUN_STATE_MESSAGE)) {
+        // TODO: might have some feedback of sending state
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+        temporaryMessage = "";
         e.frameChanged = true;
         this->currentMessageIndex = -1;
         this->freetext = ""; // clear freetext
@@ -344,18 +317,18 @@ int32_t CannedMessageModule::runOnce()
         switch (this->payload) {
         case 0xb4: // left
             if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
-                size_t numMeshNodes = nodeDB.getNumMeshNodes();
+                size_t numMeshNodes = nodeDB->getNumMeshNodes();
                 if (this->dest == NODENUM_BROADCAST) {
-                    this->dest = nodeDB.getNodeNum();
+                    this->dest = nodeDB->getNodeNum();
                 }
                 for (unsigned int i = 0; i < numMeshNodes; i++) {
-                    if (nodeDB.getMeshNodeByIndex(i)->num == this->dest) {
+                    if (nodeDB->getMeshNodeByIndex(i)->num == this->dest) {
                         this->dest =
-                            (i > 0) ? nodeDB.getMeshNodeByIndex(i - 1)->num : nodeDB.getMeshNodeByIndex(numMeshNodes - 1)->num;
+                            (i > 0) ? nodeDB->getMeshNodeByIndex(i - 1)->num : nodeDB->getMeshNodeByIndex(numMeshNodes - 1)->num;
                         break;
                     }
                 }
-                if (this->dest == nodeDB.getNodeNum()) {
+                if (this->dest == nodeDB->getNodeNum()) {
                     this->dest = NODENUM_BROADCAST;
                 }
             } else if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL) {
@@ -379,18 +352,18 @@ int32_t CannedMessageModule::runOnce()
             break;
         case 0xb7: // right
             if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
-                size_t numMeshNodes = nodeDB.getNumMeshNodes();
+                size_t numMeshNodes = nodeDB->getNumMeshNodes();
                 if (this->dest == NODENUM_BROADCAST) {
-                    this->dest = nodeDB.getNodeNum();
+                    this->dest = nodeDB->getNodeNum();
                 }
                 for (unsigned int i = 0; i < numMeshNodes; i++) {
-                    if (nodeDB.getMeshNodeByIndex(i)->num == this->dest) {
+                    if (nodeDB->getMeshNodeByIndex(i)->num == this->dest) {
                         this->dest =
-                            (i < numMeshNodes - 1) ? nodeDB.getMeshNodeByIndex(i + 1)->num : nodeDB.getMeshNodeByIndex(0)->num;
+                            (i < numMeshNodes - 1) ? nodeDB->getMeshNodeByIndex(i + 1)->num : nodeDB->getMeshNodeByIndex(0)->num;
                         break;
                     }
                 }
-                if (this->dest == nodeDB.getNodeNum()) {
+                if (this->dest == nodeDB->getNodeNum()) {
                     this->dest = NODENUM_BROADCAST;
                 }
             } else if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL) {
@@ -430,6 +403,7 @@ int32_t CannedMessageModule::runOnce()
                 }
                 break;
             case 0x09: // tab
+            case 0x91: // alt+t for T-Deck that doesn't have a tab key
                 if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL) {
                     this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
                 } else if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
@@ -441,6 +415,51 @@ int32_t CannedMessageModule::runOnce()
             case 0xb4: // left
             case 0xb7: // right
                 // already handled above
+                break;
+            // handle fn+s for shutdown
+            case 0x9b:
+                if (screen)
+                    screen->startShutdownScreen();
+                shutdownAtMsec = millis() + DEFAULT_SHUTDOWN_SECONDS * 1000;
+                runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+                break;
+            // and fn+r for reboot
+            case 0x90:
+                if (screen)
+                    screen->startRebootScreen();
+                rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+                runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+                break;
+            case 0x9e: // toggle GPS like triple press does
+#if !MESHTASTIC_EXCLUDE_GPS
+                if (gps != nullptr) {
+                    gps->toggleGpsMode();
+                }
+                if (screen)
+                    screen->forceDisplay();
+                showTemporaryMessage("GPS Toggled");
+#endif
+                break;
+            // mute (switch off/toggle) external notifications on fn+m
+            case 0xac:
+                if (moduleConfig.external_notification.enabled == true) {
+                    if (externalNotificationModule->getMute()) {
+                        externalNotificationModule->setMute(false);
+                        showTemporaryMessage("Notifications \nEnabled");
+                    } else {
+                        externalNotificationModule->stopNow(); // this will turn off all GPIO and sounds and idle the loop
+                        externalNotificationModule->setMute(true);
+                        showTemporaryMessage("Notifications \nDisabled");
+                    }
+                }
+                break;
+            case 0xaf: // fn+space send network ping like double press does
+                service.refreshLocalMeshNode();
+                if (service.trySendPosition(NODENUM_BROADCAST, true)) {
+                    showTemporaryMessage("Position \nUpdate Sent");
+                } else {
+                    showTemporaryMessage("Node Info \nUpdate Sent");
+                }
                 break;
             default:
                 if (this->cursor == this->freetext.length()) {
@@ -495,7 +514,7 @@ const char *CannedMessageModule::getNodeName(NodeNum node)
     if (node == NODENUM_BROADCAST) {
         return "Broadcast";
     } else {
-        meshtastic_NodeInfoLite *info = nodeDB.getMeshNode(node);
+        meshtastic_NodeInfoLite *info = nodeDB->getMeshNode(node);
         if (info != NULL) {
             return info->user.long_name;
         } else {
@@ -529,12 +548,27 @@ int CannedMessageModule::getPrevIndex()
         return this->currentMessageIndex - 1;
     }
 }
+void CannedMessageModule::showTemporaryMessage(const String &message)
+{
+    temporaryMessage = message;
+    UIFrameEvent e = {false, true};
+    e.frameChanged = true;
+    notifyObservers(&e);
+    runState = CANNED_MESSAGE_RUN_STATE_MESSAGE;
+    // run this loop again in 2 seconds, next iteration will clear the display
+    setIntervalFromNow(2000);
+}
 
 void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     char buffer[50];
 
-    if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) {
+    if (temporaryMessage.length() != 0) {
+        LOG_DEBUG("Drawing temporary message: %s", temporaryMessage.c_str());
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->setFont(FONT_MEDIUM);
+        display->drawString(display->getWidth() / 2 + x, 0 + y + 12, temporaryMessage);
+    } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) {
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->setFont(FONT_MEDIUM);
         String displayString;
@@ -651,9 +685,9 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
 
 void CannedMessageModule::loadProtoForModule()
 {
-    if (!nodeDB.loadProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,
+    if (nodeDB->loadProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,
                           sizeof(meshtastic_CannedMessageModuleConfig), &meshtastic_CannedMessageModuleConfig_msg,
-                          &cannedMessageModuleConfig)) {
+                          &cannedMessageModuleConfig) != LoadFileResult::SUCCESS) {
         installDefaultCannedMessageModuleConfig();
     }
 }
@@ -672,8 +706,8 @@ bool CannedMessageModule::saveProtoForModule()
     FS.mkdir("/prefs");
 #endif
 
-    okay &= nodeDB.saveProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,
-                             &meshtastic_CannedMessageModuleConfig_msg, &cannedMessageModuleConfig);
+    okay &= nodeDB->saveProto(cannedMessagesConfigFile, meshtastic_CannedMessageModuleConfig_size,
+                              &meshtastic_CannedMessageModuleConfig_msg, &cannedMessageModuleConfig);
 
     return okay;
 }

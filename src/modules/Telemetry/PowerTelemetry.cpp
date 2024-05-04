@@ -1,11 +1,15 @@
-#include "PowerTelemetry.h"
+#include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "PowerTelemetry.h"
 #include "RTC.h"
 #include "Router.h"
-#include "configuration.h"
 #include "main.h"
 #include "power.h"
 #include "sleep.h"
@@ -14,29 +18,13 @@
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)) &&                                \
-    !defined(DISPLAY_FORCE_SMALL_FONTS)
-
-// The screen is bigger so use bigger fonts
-#define FONT_SMALL ArialMT_Plain_16
-#define FONT_MEDIUM ArialMT_Plain_24
-#define FONT_LARGE ArialMT_Plain_24
-#else
-#define FONT_SMALL ArialMT_Plain_10
-#define FONT_MEDIUM ArialMT_Plain_16
-#define FONT_LARGE ArialMT_Plain_24
-#endif
-
-#define fontHeight(font) ((font)[1] + 1) // height is position 1
-
-#define FONT_HEIGHT_SMALL fontHeight(FONT_SMALL)
-#define FONT_HEIGHT_MEDIUM fontHeight(FONT_MEDIUM)
+#include "graphics/ScreenFonts.h"
 
 int32_t PowerTelemetryModule::runOnce()
 {
     if (sleepOnNextExecution == true) {
         sleepOnNextExecution = false;
-        uint32_t nightyNightMs = getConfiguredOrDefaultMs(moduleConfig.telemetry.power_update_interval);
+        uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.power_update_interval);
         LOG_DEBUG("Sleeping for %ims, then awaking to send metrics again.\n", nightyNightMs);
         doDeepSleep(nightyNightMs, true);
     }
@@ -82,7 +70,7 @@ int32_t PowerTelemetryModule::runOnce()
 
         uint32_t now = millis();
         if (((lastSentToMesh == 0) ||
-             ((now - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.telemetry.power_update_interval))) &&
+             ((now - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.power_update_interval))) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
             lastSentToMesh = now;
@@ -211,7 +199,7 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
             p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
         else
-            p->priority = meshtastic_MeshPacket_Priority_MIN;
+            p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
         // release previous packet before occupying a new spot
         if (lastMeasurementPacket != nullptr)
             packetPool.release(lastMeasurementPacket);
@@ -233,3 +221,5 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     }
     return valid;
 }
+
+#endif

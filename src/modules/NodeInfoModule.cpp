@@ -1,4 +1,5 @@
 #include "NodeInfoModule.h"
+#include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
@@ -12,7 +13,7 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 {
     auto p = *pptr;
 
-    bool hasChanged = nodeDB.updateUser(getFrom(&mp), p, mp.channel);
+    bool hasChanged = nodeDB->updateUser(getFrom(&mp), p, mp.channel);
 
     bool wasBroadcast = mp.to == NODENUM_BROADCAST;
 
@@ -24,7 +25,7 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     }
 
     // if user has changed while packet was not for us, inform phone
-    if (hasChanged && !wasBroadcast && mp.to != nodeDB.getNodeNum())
+    if (hasChanged && !wasBroadcast && mp.to != nodeDB->getNodeNum())
         service.sendToPhone(packetPool.allocCopy(mp));
 
     // LOG_DEBUG("did handleReceived\n");
@@ -58,8 +59,8 @@ void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
 meshtastic_MeshPacket *NodeInfoModule::allocReply()
 {
     uint32_t now = millis();
-    // If we sent our NodeInfo less than 1 min. ago, don't send it again as it may be still underway.
-    if (lastSentToMesh && (now - lastSentToMesh) < 60 * 1000) {
+    // If we sent our NodeInfo less than 5 min. ago, don't send it again as it may be still underway.
+    if (lastSentToMesh && (now - lastSentToMesh) < (5 * 60 * 1000)) {
         LOG_DEBUG("Sending NodeInfo will be ignored since we just sent it.\n");
         ignoreRequest = true; // Mark it as ignored for MeshModule
         return NULL;
@@ -91,6 +92,5 @@ int32_t NodeInfoModule::runOnce()
         LOG_INFO("Sending our nodeinfo to mesh (wantReplies=%d)\n", requestReplies);
         sendOurNodeInfo(NODENUM_BROADCAST, requestReplies); // Send our info (don't request replies)
     }
-
-    return getConfiguredOrDefaultMs(config.device.node_info_broadcast_secs, default_broadcast_interval_secs);
+    return Default::getConfiguredOrDefaultMs(config.device.node_info_broadcast_secs, default_node_info_broadcast_secs);
 }

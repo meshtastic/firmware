@@ -24,10 +24,12 @@
 #include "nrfx_power.h"
 #endif
 
-#ifdef DEBUG_HEAP_MQTT
+#if defined(DEBUG_HEAP_MQTT) && !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #include "target_specific.h"
+#if !MESTASTIC_EXCLUDE_WIFI
 #include <WiFi.h>
+#endif
 #endif
 
 #ifndef DELAY_FOREVER
@@ -54,7 +56,20 @@ static const adc_atten_t atten = ADC_ATTENUATION;
 #endif
 #endif // BATTERY_PIN && ARCH_ESP32
 
-#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
+#ifdef EXT_CHRG_DETECT
+#ifndef EXT_CHRG_DETECT_MODE
+static const uint8_t ext_chrg_detect_mode = INPUT;
+#else
+static const uint8_t ext_chrg_detect_mode = EXT_CHRG_DETECT_MODE;
+#endif
+#ifndef EXT_CHRG_DETECT_VALUE
+static const uint8_t ext_chrg_detect_value = HIGH;
+#else
+static const uint8_t ext_chrg_detect_value = EXT_CHRG_DETECT_VALUE;
+#endif
+#endif
+
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO)
 INA260Sensor ina260Sensor;
 INA219Sensor ina219Sensor;
 INA3221Sensor ina3221Sensor;
@@ -169,7 +184,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
     virtual uint16_t getBattVoltage() override
     {
 
-#if defined(HAS_TELEMETRY) && !defined(ARCH_PORTDUINO) && !defined(HAS_PMU)
+#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO) && !defined(HAS_PMU) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
         if (hasINA()) {
             LOG_DEBUG("Using INA on I2C addr 0x%x for device battery voltage\n", config.power.device_battery_ina_address);
             return getINAVoltage();
@@ -208,7 +223,17 @@ class AnalogBatteryLevel : public HasBatteryLevel
             raw = raw / BATTERY_SENSE_SAMPLES;
             scaled = operativeAdcMultiplier * ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * raw;
 #endif
-            last_read_value += (scaled - last_read_value) * 0.5; // Virtual LPF
+
+            if (!initial_read_done) {
+                // Flush the smoothing filter with an ADC reading, if the reading is plausibly correct
+                if (scaled > last_read_value)
+                    last_read_value = scaled;
+                initial_read_done = true;
+            } else {
+                // Already initialized - filter this reading
+                last_read_value += (scaled - last_read_value) * 0.5; // Virtual LPF
+            }
+
             // LOG_DEBUG("battery gpio %d raw val=%u scaled=%u filtered=%u\n", BATTERY_PIN, raw, (uint32_t)(scaled), (uint32_t)
             // (last_read_value));
         }
@@ -322,7 +347,14 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
     /// Assume charging if we have a battery and external power is connected.
     /// we can't be smart enough to say 'full'?
-    virtual bool isCharging() override { return isBatteryConnect() && isVbusIn(); }
+    virtual bool isCharging() override
+    {
+#ifdef EXT_CHRG_DETECT
+        return digitalRead(EXT_CHRG_DETECT) == ext_chrg_detect_value;
+#else
+        return isBatteryConnect() && isVbusIn();
+#endif
+    }
 
   private:
     /// If we see a battery voltage higher than physics allows - assume charger is pumping
@@ -335,10 +367,12 @@ class AnalogBatteryLevel : public HasBatteryLevel
     const float noBatVolt = (OCV[NUM_OCV_POINTS - 1] - 500) * NUM_CELLS;
     // Start value from minimum voltage for the filter to not start from 0
     // that could trigger some events.
+    // This value is over-written by the first ADC reading, it the voltage seems reasonable.
+    bool initial_read_done = false;
     float last_read_value = (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS);
     uint32_t last_read_time_ms = 0;
 
-#if defined(HAS_TELEMETRY) && !defined(ARCH_PORTDUINO)
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO)
     uint16_t getINAVoltage()
     {
         if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first == config.power.device_battery_ina_address) {
@@ -388,6 +422,9 @@ bool Power::analogInit()
 {
 #ifdef EXT_PWR_DETECT
     pinMode(EXT_PWR_DETECT, INPUT);
+#endif
+#ifdef EXT_CHRG_DETECT
+    pinMode(EXT_CHRG_DETECT, ext_chrg_detect_mode);
 #endif
 
 #ifdef BATTERY_PIN
@@ -473,19 +510,9 @@ bool Power::setup()
 
 void Power::shutdown()
 {
-    screen->setOn(false);
-#if defined(USE_EINK) && defined(PIN_EINK_EN)
-    digitalWrite(PIN_EINK_EN, LOW); // power off backlight first
-#endif
-
     LOG_INFO("Shutting down\n");
 
-#ifdef HAS_PMU
-    if (pmu_found == true) {
-        PMU->setChargingLedMode(XPOWERS_CHG_LED_OFF);
-        PMU->shutdown();
-    }
-#elif defined(ARCH_NRF52) || defined(ARCH_ESP32)
+#if defined(ARCH_NRF52) || defined(ARCH_ESP32)
 #ifdef PIN_LED1
     ledOff(PIN_LED1);
 #endif

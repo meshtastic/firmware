@@ -1,11 +1,15 @@
-#include "AirQualityTelemetry.h"
+#include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "AirQualityTelemetry.h"
+#include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
-#include "configuration.h"
 #include "main.h"
 
 int32_t AirQualityTelemetryModule::runOnce()
@@ -43,7 +47,8 @@ int32_t AirQualityTelemetryModule::runOnce()
 
         uint32_t now = millis();
         if (((lastSentToMesh == 0) ||
-             ((now - lastSentToMesh) >= getConfiguredOrDefaultMs(moduleConfig.telemetry.air_quality_interval))) &&
+             ((now - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.air_quality_interval))) &&
+            airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
             lastSentToMesh = now;
@@ -112,7 +117,7 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR)
         p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
     else
-        p->priority = meshtastic_MeshPacket_Priority_MIN;
+        p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
 
     // release previous packet before occupying a new spot
     if (lastMeasurementPacket != nullptr)
@@ -128,3 +133,5 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     }
     return true;
 }
+
+#endif

@@ -56,7 +56,7 @@ template <class T> class ProtobufModule : protected SinglePortModule
      */
     const char *getSenderShortName(const meshtastic_MeshPacket &mp)
     {
-        auto node = nodeDB.getMeshNode(getFrom(&mp));
+        auto node = nodeDB->getMeshNode(getFrom(&mp));
         const char *sender = (node) ? node->user.short_name : "???";
         return sender;
     }
@@ -95,12 +95,11 @@ template <class T> class ProtobufModule : protected SinglePortModule
      */
     virtual void alterReceived(meshtastic_MeshPacket &mp) override
     {
-        auto &p = mp.decoded;
-
         T scratch;
         T *decoded = NULL;
         if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.decoded.portnum == ourPortNum) {
             memset(&scratch, 0, sizeof(scratch));
+            auto &p = mp.decoded;
             if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, fields, &scratch)) {
                 decoded = &scratch;
             } else {
@@ -108,8 +107,8 @@ template <class T> class ProtobufModule : protected SinglePortModule
                 // if we can't decode it, nobody can process it!
                 return;
             }
-        }
 
-        return alterReceivedProtobuf(mp, decoded);
+            return alterReceivedProtobuf(mp, decoded);
+        }
     }
 };

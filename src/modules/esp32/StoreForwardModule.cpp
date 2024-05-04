@@ -45,7 +45,8 @@ int32_t StoreForwardModule::runOnce()
                     this->busy = false;
                 }
             }
-        } else if ((millis() - lastHeartbeat > (heartbeatInterval * 1000)) && airTime->isTxAllowedChannelUtil(true)) {
+        } else if (this->heartbeat && (millis() - lastHeartbeat > (heartbeatInterval * 1000)) &&
+                   airTime->isTxAllowedChannelUtil(true)) {
             lastHeartbeat = millis();
             LOG_INFO("*** Sending heartbeat\n");
             meshtastic_StoreAndForward sf = meshtastic_StoreAndForward_init_zero;
@@ -141,25 +142,31 @@ uint32_t StoreForwardModule::historyQueueCreate(uint32_t msAgo, uint32_t to, uin
             LOG_DEBUG("SF historyQueueCreate - millis %d\n", millis());
             LOG_DEBUG("SF historyQueueCreate - math %d\n", (millis() - msAgo));
         */
-        if (this->packetHistory[i].time && (this->packetHistory[i].time < (millis() - msAgo))) {
-            /*  Copy the messages that were received by the router in the last msAgo
-                to the packetHistoryTXQueue structure.
-                Client not interested in packets from itself and only in broadcast packets or packets towards it. */
-            if (this->packetHistory[i].from != to &&
-                (this->packetHistory[i].to == NODENUM_BROADCAST || this->packetHistory[i].to == to)) {
-                this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].time = this->packetHistory[i].time;
-                this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].to = this->packetHistory[i].to;
-                this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].from = this->packetHistory[i].from;
-                this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].channel = this->packetHistory[i].channel;
-                this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].payload_size = this->packetHistory[i].payload_size;
-                memcpy(this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].payload, this->packetHistory[i].payload,
-                       meshtastic_Constants_DATA_PAYLOAD_LEN);
-                this->packetHistoryTXQueue_size++;
-                *last_request_index = i + 1; // Set to one higher such that we don't send the same message again
+        if (this->packetHistoryTXQueue_size < this->historyReturnMax) {
+            if (this->packetHistory[i].time && (this->packetHistory[i].time < (millis() - msAgo))) {
+                /*  Copy the messages that were received by the router in the last msAgo
+                    to the packetHistoryTXQueue structure.
+                    Client not interested in packets from itself and only in broadcast packets or packets towards it. */
+                if (this->packetHistory[i].from != to &&
+                    (this->packetHistory[i].to == NODENUM_BROADCAST || this->packetHistory[i].to == to)) {
+                    this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].time = this->packetHistory[i].time;
+                    this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].to = this->packetHistory[i].to;
+                    this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].from = this->packetHistory[i].from;
+                    this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].channel = this->packetHistory[i].channel;
+                    this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].payload_size =
+                        this->packetHistory[i].payload_size;
+                    memcpy(this->packetHistoryTXQueue[this->packetHistoryTXQueue_size].payload, this->packetHistory[i].payload,
+                           meshtastic_Constants_DATA_PAYLOAD_LEN);
+                    this->packetHistoryTXQueue_size++;
+                    *last_request_index = i + 1; // Set to one higher such that we don't send the same message again
 
-                LOG_DEBUG("*** PacketHistoryStruct time=%d, msg=%s\n", this->packetHistory[i].time,
-                          this->packetHistory[i].payload);
+                    LOG_DEBUG("*** PacketHistoryStruct time=%d, msg=%s\n", this->packetHistory[i].time,
+                              this->packetHistory[i].payload);
+                }
             }
+        } else {
+            LOG_WARN("*** S&F - Maximum history return reached.\n");
+            return this->packetHistoryTXQueue_size;
         }
     }
     return this->packetHistoryTXQueue_size;
@@ -174,20 +181,24 @@ void StoreForwardModule::historyAdd(const meshtastic_MeshPacket &mp)
 {
     const auto &p = mp.decoded;
 
-    if (this->packetHistoryCurrent < this->records) {
-        this->packetHistory[this->packetHistoryCurrent].time = millis();
-        this->packetHistory[this->packetHistoryCurrent].to = mp.to;
-        this->packetHistory[this->packetHistoryCurrent].channel = mp.channel;
-        this->packetHistory[this->packetHistoryCurrent].from = mp.from;
-        this->packetHistory[this->packetHistoryCurrent].payload_size = p.payload.size;
-        memcpy(this->packetHistory[this->packetHistoryCurrent].payload, p.payload.bytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
-
-        this->packetHistoryCurrent++;
-        this->packetHistoryMax++;
-    } else {
-        // TODO: Overwrite the oldest message in the history buffer when it is full.
-        LOG_WARN("*** S&F - PSRAM Full. Packet is not added to the history.\n");
+    if (this->packetHistoryCurrent == this->records) {
+        LOG_WARN("*** S&F - PSRAM Full. Starting overwrite now.\n");
+        this->packetHistoryCurrent = 0;
+        this->packetHistoryMax = 0;
+        for (auto &i : lastRequest) {
+            i.second = 0; // Clear the last request index for each client device
+        }
     }
+
+    this->packetHistory[this->packetHistoryCurrent].time = millis();
+    this->packetHistory[this->packetHistoryCurrent].to = mp.to;
+    this->packetHistory[this->packetHistoryCurrent].channel = mp.channel;
+    this->packetHistory[this->packetHistoryCurrent].from = mp.from;
+    this->packetHistory[this->packetHistoryCurrent].payload_size = p.payload.size;
+    memcpy(this->packetHistory[this->packetHistoryCurrent].payload, p.payload.bytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
+
+    this->packetHistoryCurrent++;
+    this->packetHistoryMax++;
 }
 
 meshtastic_MeshPacket *StoreForwardModule::allocReply()
@@ -244,7 +255,7 @@ void StoreForwardModule::sendMessage(NodeNum dest, const meshtastic_StoreAndForw
 
     p->to = dest;
 
-    p->priority = meshtastic_MeshPacket_Priority_MIN;
+    p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
 
     // FIXME - Determine if the delayed packet is broadcast or delayed. For now, assume
     //  everything is broadcast.
@@ -309,11 +320,12 @@ ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &m
     if (moduleConfig.store_forward.enabled) {
 
         // The router node should not be sending messages as a client. Unless he is a ROUTER_CLIENT
-        if ((getFrom(&mp) != nodeDB.getNodeNum()) || (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT)) {
+        if ((getFrom(&mp) != nodeDB->getNodeNum()) || (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT)) {
 
             if ((mp.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) && is_server) {
                 auto &p = mp.decoded;
-                if ((p.payload.bytes[0] == 'S') && (p.payload.bytes[1] == 'F') && (p.payload.bytes[2] == 0x00)) {
+                if (mp.to == nodeDB->getNodeNum() && (p.payload.bytes[0] == 'S') && (p.payload.bytes[1] == 'F') &&
+                    (p.payload.bytes[2] == 0x00)) {
                     LOG_DEBUG("*** Legacy Request to send\n");
 
                     // Send the last 60 minutes of messages.
@@ -322,7 +334,7 @@ ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &m
                         LOG_INFO("*** S&F - Busy. Try again shortly.\n");
                         meshtastic_MeshPacket *pr = allocReply();
                         pr->to = getFrom(&mp);
-                        pr->priority = meshtastic_MeshPacket_Priority_MIN;
+                        pr->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
                         pr->want_ack = false;
                         pr->decoded.want_response = false;
                         pr->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
@@ -494,7 +506,7 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
         break;
 
     default:
-        assert(0); // unexpected state
+        break; // no need to do anything
     }
     return true; // There's no need for others to look at this message.
 }
@@ -543,6 +555,8 @@ StoreForwardModule::StoreForwardModule()
                     // send heartbeat advertising?
                     if (moduleConfig.store_forward.heartbeat)
                         this->heartbeat = moduleConfig.store_forward.heartbeat;
+                    else
+                        this->heartbeat = false;
 
                     // Popupate PSRAM with our data structures.
                     this->populatePSRAM();

@@ -3,11 +3,14 @@
 #include "esp_task_wdt.h"
 #include "main.h"
 
-#if !defined(CONFIG_IDF_TARGET_ESP32S2)
+#if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
+#include "BleOta.h"
 #include "nimble/NimbleBluetooth.h"
 #endif
-#include "BleOta.h"
+
+#if !MESHTASTIC_EXCLUDE_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
+#endif
 
 #include "meshUtils.h"
 #include "sleep.h"
@@ -18,23 +21,23 @@
 #include <nvs.h>
 #include <nvs_flash.h>
 
-#if !defined(CONFIG_IDF_TARGET_ESP32S2)
-
-void setBluetoothEnable(bool on)
+#if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
+void setBluetoothEnable(bool enable)
 {
     if (!isWifiAvailable() && config.bluetooth.enabled == true) {
         if (!nimbleBluetooth) {
             nimbleBluetooth = new NimbleBluetooth();
         }
-        if (on && !nimbleBluetooth->isActive()) {
+        if (enable && !nimbleBluetooth->isActive()) {
             nimbleBluetooth->setup();
-        } else if (!on) {
-            nimbleBluetooth->shutdown();
         }
+        // For ESP32, no way to recover from bluetooth shutdown without reboot
+        // BLE advertising automatically stops when MCU enters light-sleep(?)
+        // For deep-sleep, shutdown hardware with nimbleBluetooth->deinit(). Requires reboot to reverse
     }
 }
 #else
-void setBluetoothEnable(bool on) {}
+void setBluetoothEnable(bool enable) {}
 void updateBatteryLevel(uint8_t level) {}
 #endif
 
@@ -108,12 +111,16 @@ void esp32Setup()
     preferences.putUInt("rebootCounter", rebootCounter);
     preferences.end();
     LOG_DEBUG("Number of Device Reboots: %d\n", rebootCounter);
+#if !MESHTASTIC_EXCLUDE_BLUETOOTH
     String BLEOTA = BleOta::getOtaAppVersion();
     if (BLEOTA.isEmpty()) {
         LOG_DEBUG("No OTA firmware available\n");
     } else {
         LOG_DEBUG("OTA firmware version %s\n", BLEOTA.c_str());
     }
+#else
+    LOG_DEBUG("No OTA firmware available\n");
+#endif
 
     // enableModemSleep();
 

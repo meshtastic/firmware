@@ -23,6 +23,7 @@ class ScanI2C
         BME_680,
         BME_280,
         BMP_280,
+        BMP_085,
         INA260,
         INA219,
         INA3221,
@@ -37,9 +38,11 @@ class ScanI2C
         MPU6050,
         LIS3DH,
         BMA423,
-#ifdef HAS_NCP5623
+        BQ24295,
+        LSM6DS3,
+        TCA9555,
+        RCWL9620,
         NCP5623,
-#endif
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;

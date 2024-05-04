@@ -1,5 +1,6 @@
 #include "NRF52Bluetooth.h"
 #include "BluetoothCommon.h"
+#include "PowerFSM.h"
 #include "configuration.h"
 #include "main.h"
 #include "mesh/PhoneAPI.h"
@@ -202,16 +203,16 @@ void setupMeshService(void)
     toRadio.begin();
 }
 
-// FIXME, turn off soft device access for debugging
-static bool isSoftDeviceAllowed = true;
 static uint32_t configuredPasskey;
 
 void NRF52Bluetooth::shutdown()
 {
     // Shutdown bluetooth for minimum power draw
     LOG_INFO("Disable NRF52 bluetooth\n");
+    if (connectionHandle != 0) {
+        Bluefruit.disconnect(connectionHandle);
+    }
     Bluefruit.Advertising.stop();
-    Bluefruit.setTxPower(0); // Minimum power
 }
 
 bool NRF52Bluetooth::isConnected()
@@ -279,14 +280,19 @@ void NRF52Bluetooth::setup()
     LOG_INFO("Configuring the Mesh bluetooth service\n");
     setupMeshService();
 
-    // Supposedly debugging works with soft device if you disable advertising
-    if (isSoftDeviceAllowed) {
-        // Setup the advertising packet(s)
-        LOG_INFO("Setting up the advertising payload(s)\n");
-        startAdv();
+    // Setup the advertising packet(s)
+    LOG_INFO("Setting up the advertising payload(s)\n");
+    startAdv();
 
-        LOG_INFO("Advertising\n");
-    }
+    LOG_INFO("Advertising\n");
+}
+
+void NRF52Bluetooth::resumeAdvertising()
+{
+    Bluefruit.Advertising.restartOnDisconnect(true);
+    Bluefruit.Advertising.setInterval(32, 244); // in unit of 0.625 ms
+    Bluefruit.Advertising.setFastTimeout(30);   // number of seconds in fast mode
+    Bluefruit.Advertising.start(0);
 }
 
 /// Given a level between 0-100, update the BLE attribute
@@ -313,6 +319,7 @@ void NRF52Bluetooth::onConnectionSecured(uint16_t conn_handle)
 bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passkey[6], bool match_request)
 {
     LOG_INFO("BLE pairing process started with passkey %.3s %.3s\n", passkey, passkey + 3);
+    powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
     screen->startBluetoothPinScreen(configuredPasskey);
 
     if (match_request) {
