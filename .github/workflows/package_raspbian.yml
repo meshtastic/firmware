@@ -63,7 +63,7 @@ jobs:
           maintainer: Jonathan Bennett
           version: ${{ steps.version.outputs.version }} # refs/tags/v*.*.*
           arch: arm64
-          depends: libyaml-cpp0.7, openssl
+          depends: libyaml-cpp0.7, openssl, libulfius2.7
           desc: Native Linux Meshtastic binary.
 
       - uses: actions/upload-artifact@v3
