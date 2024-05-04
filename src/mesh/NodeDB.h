@@ -73,37 +73,33 @@ class NodeDB
     /// don't do mesh based algorithm for node id assignment (initially)
     /// instead just store in flash - possibly even in the initial alpha release do this hack
     NodeDB();
-    
-    /// Called from service after app start, to do init which can only be done after OS load
-    void init();
 
     /// Write to flash
     void saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS),
-        clearSavedMessages(), saveChannelsToDisk(), saveDeviceStateToDisk();
+        saveChannelsToDisk(), saveDeviceStateToDisk();
     
+    void initSavedMessages();
     void saveMessageToDisk(const meshtastic_MeshPacket& mp);
     void saveMessageToDisk(const meshtastic_Message& msg);
     uint8_t lastCategorySaved = 0;
+    void clearSavedMessages();
+    const meshtastic_Message loadMessage(uint16_t category, uint16_t index);
 
     bool messageIsDirectMessage(const meshtastic_MeshPacket& mp);
-    void initSavedMessages();
-    const int minInt = std::numeric_limits<int>::min();
-    const int maxInt = std::numeric_limits<int>::max();
-    static const uint8_t CATEGORY_COUNT = 9;
     struct MessageCompare {
         bool operator()(const meshtastic_Message& messageA, const meshtastic_Message& messageB) const {
             return messageA.rx_time < messageB.rx_time;
         }
     };
+    
+    static const uint8_t CATEGORY_COUNT = 9;
     std::set<meshtastic_Message, MessageCompare> messageCache[CATEGORY_COUNT];
-    // TODO: Make less dumb
-    int newestMessageIndices[9] = {minInt, minInt, minInt, minInt, minInt, minInt, minInt, minInt, minInt};
-    int oldestMessageIndices[9] = {maxInt, maxInt, maxInt, maxInt, maxInt, maxInt, maxInt, maxInt, maxInt};
+    int* newestMessageIndices = new int[CATEGORY_COUNT];
+    int* oldestMessageIndices = new int[CATEGORY_COUNT];
     void updateMessageBounds();
-    const meshtastic_Message loadMessage(uint16_t category, uint16_t index);
+    
+    std::vector<std::string>* messageFileList = new std::vector<std::string>[CATEGORY_COUNT];
     void updateMessageFileList();
-    // TODO: Use variable for size
-    std::vector<std::string> messageFileList[9];
 
 
     /** Reinit radio config if needed, because either:

@@ -410,12 +410,8 @@ static bool shouldDrawMessage(const meshtastic_MeshPacket *packet)
     return packet->from != 0 && !moduleConfig.store_forward.enabled;
 }
 
-bool inChannelFrame = false;
-
-// Assuming OLEDDisplay is a class you've defined elsewhere,
-// and it has methods like getStringWidth and others as needed.
-
-std::string drawTextButGood(OLEDDisplay* display, uint16_t maxLineWidth, const std::string& text) {
+// Wraps string using modified logic from OLEDDisplay::drawStringMaxWidth
+std::string wrapString(OLEDDisplay* display, uint16_t maxLineWidth, const std::string& text) {
     std::string result;
 
     // Using a copy to preserve the original text
@@ -464,69 +460,24 @@ std::string drawTextButGood(OLEDDisplay* display, uint16_t maxLineWidth, const s
     return result;
 }
 
-std::string clampLines(const std::string& text, short maxLineCount = -1) {
-    if (maxLineCount == 0) return "";
-
-    if (maxLineCount < 0) return text;
-
-    uint16_t newlineCount = 0;
-    for (char character : text) {
-        if (character == '\n') {
-            newlineCount++;
-        }
-    }
-
-    if (newlineCount < maxLineCount) return text;
-
-    uint16_t truncatedLineCount = (newlineCount + 1) - maxLineCount;
-    uint16_t truncateIndex = 0;
-    uint16_t newlinesFound = 0;
-
-    for (char character : text) {
-        truncateIndex++;
-        if (character == '\n') {
-            newlinesFound++;
-            if (newlinesFound == truncatedLineCount) break;
-        }
-    }
-
-    return text.substr(truncateIndex);
-}
-
-std::string createTextLogString(OLEDDisplay* display, const meshtastic_Message msg)
+// Format message for displaying as text
+std::string createMessageString(OLEDDisplay* display, const meshtastic_Message msg)
 {
-    LOG_INFO("CHECKPOINT 0\n");
-
     uint32_t seconds = sinceReceived(&msg);
     uint32_t minutes = seconds / 60;
     uint32_t hours = minutes / 60;
     uint32_t days = hours / 24;
     std::string timestamp = screen->drawTimeDelta(days, hours, minutes, seconds);
-    std::string separator;
-    if (msg.from_self)
-        separator = "::";
-    else
-        separator = ":";
+    std::string separator = (msg.from_self) ? "::" : ":";
 
-    LOG_INFO("CHECKPOINT 1\n");
+    std::string messageString =
+        timestamp + " " + msg.sender_short_name + separator + " " + msg.content;
 
-    char message[300];
-    snprintf(
-        message,
-        sizeof(message),
-        "%s %s%s %s",
-        timestamp.c_str(),
-        msg.sender_short_name,
-        separator.c_str(),
-        msg.content
-    );
-
-    LOG_INFO("CHECKPOINT 2\n");
-
-    return drawTextButGood(display, display->getWidth(), message) + '\n';
+    return wrapString(display, display->getWidth(), messageString.c_str()) + '\n';
 }
 
-void removeLastNLines(std::string& str, int n) {
+void removeLastLines(std::string& str, int n)
+{
     size_t pos = str.size();
     // Step backwards through the string
     while (pos > 0 && n >= 0) {
@@ -547,56 +498,64 @@ void removeLastNLines(std::string& str, int n) {
     }
 }
 
+bool inChannelFrame = false;
 short category = 0;
 short lastCategoryDisplayed = -1;
 bool scrollEnabled = false;
 int8_t scrollDelta = 0;
 bool autoFocus = true;
 
-void drawTextLogFrame(OLEDDisplay* display, OLEDDisplayUiState* state, int16_t x, int16_t y) {    
+// Draw the frame that shows received and sent messages
+void drawMessageLogFrame(OLEDDisplay* display, OLEDDisplayUiState* state, int16_t x, int16_t y)
+{    
     inChannelFrame = true;
     
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
 
-    char* tempBuf = new char[strlen("PRIMARY") + 1];
-    std::string categoryLabel;
-    if (category == 0)
-        categoryLabel = "PRIMARY";
-    else if (category == nodeDB->CATEGORY_COUNT - 1)
-        categoryLabel = "DMs";
-    else
-        categoryLabel = "CH " + std::to_string(category);
-    
-    categoryLabel +=  "|";
-    
-    if (autoFocus)
-        categoryLabel += "A";
-    if (scrollEnabled)
-        categoryLabel += "S";
-    
-
-    display->drawStringf(x, display->getHeight() - FONT_HEIGHT_SMALL, tempBuf, "%s", categoryLabel.c_str());
-
+    // Auto focus to new channel if enabled and channel switched
     if (autoFocus && lastCategoryDisplayed != nodeDB->lastCategorySaved) {
         category = nodeDB->lastCategorySaved;
         lastCategoryDisplayed = category;
     }
 
-    std::string messageStr;
+    // Draw the category label
+    std::string info;
+    if (category == 0)
+        info = "PRIMARY";
+    else if (category == nodeDB->CATEGORY_COUNT - 1)
+        info = "DMs";
+    else
+        info = "CH " + std::to_string(category);
+    
+    info +=  "|";
+    
+    if (autoFocus)
+        info += "A";
+    if (scrollEnabled)
+        info += "S";
+    
+
+    char* stringBuffer = new char[info.length() + 1];
+    display->drawStringf(
+        x,
+        display->getHeight() - FONT_HEIGHT_SMALL,
+        stringBuffer,
+        "%s",
+        info.c_str()
+    );
+
+    // Draw the messages
+    std::string message;
     
     for (int i = nodeDB->oldestMessageIndices[category]; i <= nodeDB->newestMessageIndices[category]; i++) {
         const meshtastic_Message msg = nodeDB->loadMessage(category, i);
 
-        messageStr += createTextLogString(display, msg);
-
-        if (memGet.getFreeHeap() < 10000) break;
+        message += createMessageString(display, msg);
     }
 
-    uint8_t messageLineCount = std::count(messageStr.begin(), messageStr.end(), '\n');
+    uint8_t messageLineCount = std::count(message.begin(), message.end(), '\n');
     uint8_t maxLineCount = static_cast<uint8_t>(floor(display->getHeight() / FONT_HEIGHT_SMALL)) - 1;
-
-    LOG_INFO("CHECKPOINT 4\n");
 
     int offset = -(messageLineCount - (maxLineCount + scrollDelta)) * (FONT_HEIGHT_SMALL - 1);
 
@@ -605,28 +564,18 @@ void drawTextLogFrame(OLEDDisplay* display, OLEDDisplayUiState* state, int16_t x
         scrollDelta = std::max(scrollDelta - 1, 0);
     }
 
-    LOG_INFO(("messageLineCount: " + std::to_string(messageLineCount) + "\n").c_str());
-    LOG_INFO(("maxLineCount: " + std::to_string(maxLineCount) + "\n").c_str());
-    LOG_INFO(("scrollDelta: " + std::to_string(scrollDelta) + "\n").c_str());
-    LOG_INFO(("offset: " + std::to_string(offset) + "\n").c_str());
-    LOG_INFO(("messageStr: " + messageStr + "\n").c_str());
+    removeLastLines(message, scrollDelta);
 
-    removeLastNLines(messageStr, scrollDelta);
-
-    tempBuf = new char[messageStr.length() + 1];
+    stringBuffer = new char[message.length() + 1];
     display->drawStringf(
         x,
         y + offset,
-        tempBuf,
+        stringBuffer,
         "%s",
-        messageStr.c_str()
+        message.c_str()
     );
-
-    LOG_INFO("CHECKPOINT 5\n");
     
-    delete[] tempBuf;
-
-    LOG_INFO("CHECKPOINT 6\n");
+    delete[] stringBuffer;
 }
 
 
@@ -1648,7 +1597,7 @@ void Screen::setFrames()
         normalFrames[numframes++] = drawTextMessageFrame;
     }*/
     // OUR LOG FUNCTION
-    normalFrames[numframes++] = drawTextLogFrame;
+    normalFrames[numframes++] = drawMessageLogFrame;
     // If we have a waypoint - show it next, unless it's a phone message and we aren't using any special modules
     if (devicestate.has_rx_waypoint && shouldDrawMessage(&devicestate.rx_waypoint)) {
         normalFrames[numframes++] = drawWaypointFrame;

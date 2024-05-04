@@ -732,44 +732,44 @@ void NodeDB::saveDeviceStateToDisk()
 void NodeDB::initSavedMessages()
 {
     FSCom.mkdir("/msgs");
-    for (int category = 0; category < CATEGORY_COUNT; category++) {
+    for (int category = 0; category < CATEGORY_COUNT; category++)
         FSCom.mkdir(("/msgs/" + std::to_string(category)).c_str());
-    }
 
     updateMessageFileList();
 
     updateMessageBounds();
 }
 
-bool removeDirectoryRecursively(const char* dirPath) {
-    File dir = FSCom.open(dirPath, FILE_O_WRITE);
-    if (!dir || !dir.isDirectory()) {
-        LOG_CRIT("Failed to open directory for removal\n");
+bool removeDirectoryRecursively(const char* dirPath)
+{
+    File directory = FSCom.open(dirPath, FILE_O_WRITE);
+    if (!directory || !directory.isDirectory()) {
+        LOG_ERROR("Failed to open directory for removal\n");
         return false;
     }
 
-    File file = dir.openNextFile(FILE_O_WRITE);
+    File file = directory.openNextFile(FILE_O_WRITE);
     while(file) {
         String filePath = String(dirPath) + "/" + file.name();
         if(file.isDirectory()) {
             file.close();
             if (!removeDirectoryRecursively(filePath.c_str())) {
-                LOG_CRIT(("Failed to remove directory: " + filePath + "\n").c_str());
+                LOG_ERROR("Failed to remove directory: %s\n", filePath);
                 return false;
             }
         } else {
             file.close();
             if (!FSCom.remove(filePath.c_str())) {
-                LOG_CRIT(("Failed to remove file: " + filePath + "\n").c_str());
+                LOG_ERROR("Failed to remove file: %s\n", filePath);
                 return false;
             }
         }
-        file = dir.openNextFile(FILE_O_WRITE);
+        file = directory.openNextFile(FILE_O_WRITE);
     }
 
     // Now that the directory is empty, it can be removed.
     if (!FSCom.rmdir(dirPath)) {
-        LOG_CRIT(("Failed to remove directory: " + String(dirPath) + "\n").c_str());
+        LOG_ERROR("Failed to remove directory: %s\n", dirPath);
         return false;
     }
 
@@ -779,20 +779,15 @@ bool removeDirectoryRecursively(const char* dirPath) {
 
 void NodeDB::clearSavedMessages()
 {
-    LOG_INFO("Cleaning messages\n");
+    LOG_DEBUG("Clearing saved messages\n");
 
     removeDirectoryRecursively("/msgs");
 
     initSavedMessages();
 }
 
-bool NodeDB::messageIsDirectMessage(const meshtastic_MeshPacket& mp) {
-    LOG_INFO((
-        "numMeshNodes: "
-        + std::to_string(numMeshNodes)
-        + "\n"
-    ).c_str());
-
+bool NodeDB::messageIsDirectMessage(const meshtastic_MeshPacket& mp)
+{
     if (mp.to == nodeDB->getNodeNum()) return true;
 
     for (size_t i = 0; i < numMeshNodes; i++)
@@ -805,7 +800,7 @@ void NodeDB::saveMessageToDisk(const meshtastic_MeshPacket& mp)
 {
     auto *msg = new meshtastic_Message();
     auto senderNode = nodeDB->getMeshNode(mp.from);
-    if (senderNode == nullptr)
+    if (senderNode == nullptr || strlen(senderNode->user.short_name) == 0)
         strcpy(msg->sender_short_name, "UNK");
     else
         strcpy(msg->sender_short_name, senderNode->user.short_name);
@@ -823,17 +818,11 @@ void NodeDB::saveMessageToDisk(const meshtastic_MeshPacket& mp)
 
 void NodeDB::saveMessageToDisk(const meshtastic_Message& msg)
 {
-    LOG_INFO((
-        "Saving message to disk with category "
-        + std::to_string(msg.category)
-        + "\n"
-    ).c_str());
+    LOG_DEBUG("Saving message to disk with category %d\n", msg.category);
 
-    LOG_INFO("Free space: %d\n", FSCom.totalBytes() - FSCom.usedBytes());
-
-    // TODO: Fix
-    //while (FSCom.totalBytes() - FSCom.usedBytes() < 8192 * 2 + 1) {
-    while (FSCom.totalBytes() - FSCom.usedBytes() < 434176) {
+    // Delete oldest messages if storage below a threshold
+    const uint16_t STORAGE_THRESHOLD = 8192 * 2 + 1;
+    while (FSCom.totalBytes() - FSCom.usedBytes() < STORAGE_THRESHOLD) {
         meshtastic_Message* oldestMessage = nullptr;
         int oldestMessageIndex = -1;
         for (uint8_t i = 0; i < CATEGORY_COUNT; i++) {
@@ -848,11 +837,15 @@ void NodeDB::saveMessageToDisk(const meshtastic_Message& msg)
         }
 
         if (oldestMessage == nullptr) {
-            LOG_WARN("Not enough free storage to save any messages to disk\n");
+            LOG_CRIT("Not enough free storage to save any messages to disk\n");
             throw std::runtime_error("Storage insufficient and no messages can be removed.");
         }
 
-        LOG_INFO("Removing file from category %d with index %d\n", oldestMessage->category, oldestMessageIndex);
+        LOG_WARN(
+            "Storage full! Erasing oldest message with category %d and index %d\n",
+            oldestMessage->category,
+            oldestMessageIndex
+        );
 
         bool deleted = FSCom.remove((
             "/msgs/"
@@ -860,29 +853,26 @@ void NodeDB::saveMessageToDisk(const meshtastic_Message& msg)
             + "/"
             + std::to_string(oldestMessageIndex)
         ).c_str());
-        
-        LOG_INFO("Deleted: %s\n", std::to_string(deleted).c_str());
 
+        if (!deleted)
+            LOG_ERROR("Message deletion failed\n");
+        
         messageCache[oldestMessage->category].erase(*oldestMessage);
 
+        // Reset indicies of there are no messages left in storage
         if (oldestMessageIndices[oldestMessage->category] == newestMessageIndices[oldestMessage->category]) {
-            oldestMessageIndices[oldestMessage->category] = std::numeric_limits<int>::max();
             newestMessageIndices[oldestMessage->category] = std::numeric_limits<int>::min();
+            oldestMessageIndices[oldestMessage->category] = std::numeric_limits<int>::max();
         } else {
             oldestMessageIndices[oldestMessage->category]++;
         }
     }
 
+    // Initialize indices if first message stored in category
     if (oldestMessageIndices[msg.category] == std::numeric_limits<int>::max()) {
         oldestMessageIndices[msg.category] = 0;
         newestMessageIndices[msg.category] = -1;
     }
-
-    LOG_INFO((
-        "CATEGORY: "
-            + std::to_string(msg.category)
-            + "\n"
-    ).c_str());
 
     newestMessageIndices[msg.category]++;
     std::string path = "/msgs/" + std::to_string(msg.category) + "/" + std::to_string(newestMessageIndices[msg.category]);
@@ -901,24 +891,21 @@ void NodeDB::saveMessageToDisk(const meshtastic_Message& msg)
 
 void NodeDB::updateMessageBounds()
 {
-    LOG_DEBUG("Called updateMessageBounds\n");
-
+    // Set initial index array values for sorting
     for (int category = 0; category < CATEGORY_COUNT; category++) {
-        newestMessageIndices[category] = minInt;
-        oldestMessageIndices[category] = maxInt;
+        newestMessageIndices[category] = std::numeric_limits<int>::min();
+        oldestMessageIndices[category] = std::numeric_limits<int>::max();
     }
 
     for (int category = 0; category < CATEGORY_COUNT; category++) {
         std::string oldestFileName;
         std::string newestFileName;
 
-        std::regex pattern("^([0-9]+)");
+        std::regex pattern("^([0-9]+)$");
 
         if (messageFileList[category].size() == 0) continue;
 
         for (const std::string& fileName : messageFileList[category]) {
-            LOG_INFO(("updateMessageBounds fileName: " + std::to_string(category) + " " + fileName + "\n").c_str());
-
             std::cmatch match;
             if (std::regex_search(fileName.c_str(), match, pattern) && match.size() > 1) {
                 uint16_t messageIndex = std::stoi(match.str(1));
@@ -932,6 +919,13 @@ void NodeDB::updateMessageBounds()
                 }
             }
         }
+
+        LOG_DEBUG(
+            "Message bounds for category %d set to %d and %d",
+            category,
+            oldestMessageIndices[category],
+            newestMessageIndices[category]
+        );
     }
 }
 
@@ -940,7 +934,7 @@ void NodeDB::updateMessageFileList()
     for (int category = 0; category < CATEGORY_COUNT; category++) {
         messageFileList[category].clear();
 
-        File directory = LittleFS.open(("/msgs/" + std::to_string(category)).c_str());
+        File directory = FSCom.open(("/msgs/" + std::to_string(category)).c_str());
         
         File file = directory.openNextFile();
         while (file) {
@@ -968,7 +962,8 @@ const meshtastic_Message NodeDB::loadMessage(uint16_t category, uint16_t index)
     }
 
     // Remove message from cache if there is not enough free heap space
-    while (memGet.getFreeHeap() / 2 < meshtastic_NodeInfoLite_size * 3) {
+    const int MEMORY_THRESHOLD =  meshtastic_NodeInfoLite_size * 3;
+    while (memGet.getFreeHeap() / 2 < MEMORY_THRESHOLD) {
         LOG_WARN("Message cache full! Erasing oldest entry\n");
 
         const meshtastic_Message* oldestMessage = nullptr;
@@ -981,7 +976,7 @@ const meshtastic_Message NodeDB::loadMessage(uint16_t category, uint16_t index)
         }
 
         if (oldestMessage == nullptr) {
-            LOG_WARN("Not enough free heap to load any messages to cache\n");
+            LOG_CRIT("Not enough free heap to load any messages to cache\n");
             throw std::runtime_error("Heap memory insufficient and no messages can be removed.");
         }
 
@@ -1002,8 +997,6 @@ const meshtastic_Message NodeDB::loadMessage(uint16_t category, uint16_t index)
 
     // Put message in cache
     categoryCache.insert(msg);
-
-    LOG_INFO("Inserted message into category cache\n");
 
     return msg;
 }
