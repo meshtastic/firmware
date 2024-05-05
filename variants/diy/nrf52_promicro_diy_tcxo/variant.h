@@ -4,8 +4,8 @@
 /** Master clock frequency */
 #define VARIANT_MCK (64000000ul)
 
-//#define USE_LFXO // Board uses 32khz crystal for LF
-#define USE_LFRC    // Board uses RC for LF
+// #define USE_LFXO // Board uses 32khz crystal for LF
+#define USE_LFRC // Board uses RC for LF
 
 #define PROMICRO_DIY_TCXO
 
@@ -44,7 +44,6 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 | P1.07 | Free pin   |   |         |             |
 */
 
-
 // Number of pins defined in PinDescription array
 #define PINS_COUNT (48)
 #define NUM_DIGITAL_PINS (48)
@@ -52,7 +51,7 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 #define NUM_ANALOG_OUTPUTS (0)
 
 // Pin 13 enables 3.3V periphery. If the Lora module is on this pin, then it should stay enabled at all times.
-#define PIN_3V3_EN (0 + 13) //P0.13
+#define PIN_3V3_EN (0 + 13) // P0.13
 
 // Analog pins
 #define BATTERY_PIN (0 + 31) // P0.31 Battery ADC
@@ -81,7 +80,7 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 #define PIN_WIRE_SCL (0 + 11) // P0.11
 
 // LED
-#define PIN_LED1 (0 +15) // P0.15
+#define PIN_LED1 (0 + 15) // P0.15
 #define LED_BUILTIN PIN_LED1
 // Actually red
 #define LED_BLUE PIN_LED1
@@ -91,13 +90,13 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 #define BUTTON_PIN (32 + 0) // P1.00
 
 // GPS
-#define PIN_GPS_TX (0 + 22)  //P0.22
-#define PIN_GPS_RX (0 + 20)  //P0.20
+#define PIN_GPS_TX (0 + 22) // P0.22
+#define PIN_GPS_RX (0 + 20) // P0.20
 
-#define PIN_GPS_EN (0 + 24)  //P0.24
+#define PIN_GPS_EN (0 + 24) // P0.24
 #define GPS_POWER_TOGGLE
 #define GPS_UBLOX
-//define GPS_DEBUG
+// define GPS_DEBUG
 
 // UART interfaces
 #define PIN_SERIAL1_RX PIN_GPS_TX
@@ -109,7 +108,7 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 // Serial interfaces
 #define SPI_INTERFACES_COUNT 1
 
-#define PIN_SPI_MISO (0 + 2) // P0.02
+#define PIN_SPI_MISO (0 + 2)   // P0.02
 #define PIN_SPI_MOSI (32 + 15) // P1.15
 #define PIN_SPI_SCK (32 + 11)  // P1.11
 
@@ -118,14 +117,14 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 #define USE_SX1262
 
 // LORA CONFIG
-#define SX126X_CS (32 + 13) // P1.13 FIXME - we really should define LORA_CS instead
-#define SX126X_DIO1 (0 + 10) // P0.10 IRQ
-#define SX126X_DIO2_AS_RF_SWITCH // Note for E22 modules: DIO2 is not attached internally to TXEN for automatic TX/RX switching, so it needs connecting externally if it is used in this way
-#define SX126X_BUSY (0 + 29) //P0.29
-#define SX126X_RESET (0 + 9) //P0.09
-#define SX126X_RXEN (0 + 17) // P0.17
-#define SX126X_TXEN RADIOLIB_NC // Assuming that DIO2 is connected to TXEN pin. If not, TXEN must be connected.
-
+#define SX126X_CS (32 + 13)      // P1.13 FIXME - we really should define LORA_CS instead
+#define SX126X_DIO1 (0 + 10)     // P0.10 IRQ
+#define SX126X_DIO2_AS_RF_SWITCH // Note for E22 modules: DIO2 is not attached internally to TXEN for automatic TX/RX switching,
+                                 // so it needs connecting externally if it is used in this way
+#define SX126X_BUSY (0 + 29)     // P0.29
+#define SX126X_RESET (0 + 9)     // P0.09
+#define SX126X_RXEN (0 + 17)     // P0.17
+#define SX126X_TXEN RADIOLIB_NC  // Assuming that DIO2 is connected to TXEN pin. If not, TXEN must be connected.
 
 /*
 On the SX1262, DIO3 sets the voltage for an external TCXO, if one is present. If one is not present, then this should not be used.
@@ -143,8 +142,6 @@ Core1262 has TCXO
 
 */
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
-
-
 
 #ifdef __cplusplus
 }
