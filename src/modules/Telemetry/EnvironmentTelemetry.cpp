@@ -172,8 +172,8 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
         return;
     }
 
-    // Display "From: ..." on its own
-    display->drawString(x, y, "From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
+    // Display "Env. From: ..." on its own
+    display->drawString(x, y, "Env. From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
 
     String last_temp = String(lastMeasurement.variant.environment_metrics.temperature, 0) + "°C";
     if (moduleConfig.telemetry.environment_display_fahrenheit) {
@@ -181,19 +181,27 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     }
 
     // Continue with the remaining details
-    display->drawString(x, y += fontHeight(FONT_SMALL), "Temp/Hum: " + last_temp + " / " + String(lastMeasurement.variant.environment_metrics.relative_humidity, 0) + "%");
+    display->drawString(x, y += fontHeight(FONT_SMALL),    
+                "Temp/Hum: " + last_temp + " / " + 
+                    String(lastMeasurement.variant.environment_metrics.relative_humidity, 0) + "%");
 
     if (lastMeasurement.variant.environment_metrics.barometric_pressure != 0) {
-        display->drawString(x, y += fontHeight(FONT_SMALL), "Press: " + String(lastMeasurement.variant.environment_metrics.barometric_pressure, 0) + "hPA");
+        display->drawString(x, y += fontHeight(FONT_SMALL), 
+                "Press: " + String(lastMeasurement.variant.environment_metrics.barometric_pressure, 0) + "hPA");
     }
 
     if (lastMeasurement.variant.environment_metrics.voltage != 0) {
-        display->drawString(x, y += fontHeight(FONT_SMALL), "Volt/Cur: " + String(lastMeasurement.variant.environment_metrics.voltage, 0) + "V / " + String(lastMeasurement.variant.environment_metrics.current, 0) + "mA");
+        display->drawString(x, y += fontHeight(FONT_SMALL), 
+                "Volt/Cur: " + String(lastMeasurement.variant.environment_metrics.voltage, 0) + "V / " + 
+                    String(lastMeasurement.variant.environment_metrics.current, 0) + "mA");
     }
-
     if (lastMeasurement.variant.environment_metrics.iaq != 0) {
-        display->drawString(x, y += fontHeight(FONT_SMALL), "IAQ: " + String(lastMeasurement.variant.environment_metrics.iaq));
+        display->drawString(x, y += fontHeight(FONT_SMALL), 
+                "IAQ: " + String(lastMeasurement.variant.environment_metrics.iaq));
     }
+    if (lastMeasurement.variant.environment_metrics.distance != 0)
+        display->drawString(x, y += fontHeight(FONT_SMALL),
+                "Water Level: " + String(lastMeasurement.variant.environment_metrics.distance, 0) + "mm");    
 }
 
 bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
