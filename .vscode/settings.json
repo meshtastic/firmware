@@ -2,23 +2,6 @@
   "editor.formatOnSave": true,
   "editor.defaultFormatter": "trunk.io",
   "trunk.enableWindows": true,
-  "files.associations": {
-    "array": "cpp",
-    "*.tcc": "cpp",
-    "deque": "cpp",
-    "list": "cpp",
-    "string": "cpp",
-    "unordered_map": "cpp",
-    "unordered_set": "cpp",
-    "vector": "cpp",
-    "string_view": "cpp",
-    "memory": "cpp",
-    "random": "cpp",
-    "initializer_list": "cpp",
-    "*.tpp": "cpp",
-    "fstream": "cpp",
-    "istream": "cpp",
-    "ostream": "cpp",
-    "sstream": "cpp"
-  }
+  "files.insertFinalNewline": false,
+  "files.trimFinalNewlines": false
 }
