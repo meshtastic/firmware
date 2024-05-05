@@ -7,7 +7,7 @@
 //#define USE_LFXO // Board uses 32khz crystal for LF
 #define USE_LFRC    // Board uses RC for LF
 
-#define PROMICRO_MM
+#define PROMICRO_DIY_XTAL
 /*----------------------------------------------------------------------------
  *        Headers
  *----------------------------------------------------------------------------*/
