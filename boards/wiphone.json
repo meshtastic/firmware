@@ -1,6 +1,6 @@
 {
   "build": {
-    "arduino":{
+    "arduino": {
       "ldscript": "esp32_out.ld",
       "partitions": "default_16MB.csv"
     },
@@ -18,14 +18,8 @@
     "variant": "wiphone",
     "board": "WiPhone"
   },
-  "connectivity": [
-    "wifi",
-    "bluetooth"
-  ],
-  "frameworks": [
-    "arduino",
-    "espidf"
-  ],
+  "connectivity": ["wifi", "bluetooth"],
+  "frameworks": ["arduino", "espidf"],
   "name": "WIPhone Integrated 1.4",
   "upload": {
     "flash_size": "16MB",

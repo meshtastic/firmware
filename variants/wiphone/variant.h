@@ -1,9 +1,9 @@
 #define I2C_SDA 15
 #define I2C_SCL 25
 
-#define GPIO_EXTENDER                   1509
-#define EXTENDER_FLAG                   0x40
-#define EXTENDER_PIN(x)                 (x+EXTENDER_FLAG)
+#define GPIO_EXTENDER 1509
+#define EXTENDER_FLAG 0x40
+#define EXTENDER_PIN(x) (x + EXTENDER_FLAG)
 
 #undef RF95_SCK
 #undef RF95_MISO
@@ -34,13 +34,13 @@
 #define ST7789_SCK 18
 #define ST7789_CS 5
 #define ST7789_RS 26
-#define ST7789_BL -1 //EXTENDER_PIN(9)
+#define ST7789_BL -1 // EXTENDER_PIN(9)
 
 #define ST7789_RESET -1
 #define ST7789_MISO 19
 #define ST7789_BUSY -1
 #define ST7789_SPI_HOST SPI3_HOST
-#define ST7789_BACKLIGHT_EN -1 //EXTENDER_PIN(9)
+#define ST7789_BACKLIGHT_EN -1 // EXTENDER_PIN(9)
 #define SPI_FREQUENCY 40000000
 #define SPI_READ_FREQUENCY 16000000
 #define TFT_HEIGHT 240
@@ -52,7 +52,7 @@
 #define SCREEN_TRANSITION_FRAMERATE 5
 
 #define I2S_MCLK_GPIO0
-#define I2S_BCK_PIN                     4                    // rev1.3 - 4 (wp05)
-#define I2S_WS_PIN                      33
-#define I2S_MOSI_PIN                    21
-#define I2S_MISO_PIN                    34
+#define I2S_BCK_PIN 4 // rev1.3 - 4 (wp05)
+#define I2S_WS_PIN 33
+#define I2S_MOSI_PIN 21
+#define I2S_MISO_PIN 34

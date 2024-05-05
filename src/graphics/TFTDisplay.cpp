@@ -9,8 +9,8 @@
 #endif
 
 #ifdef GPIO_EXTENDER
-#include <Wire.h>
 #include <SparkFunSX1509.h>
+#include <Wire.h>
 extern SX1509 gpioExtender;
 #endif
 
