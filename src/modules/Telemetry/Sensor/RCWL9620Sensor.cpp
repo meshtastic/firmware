@@ -2,8 +2,8 @@
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
-#include "RCWL9620Sensor.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "RCWL9620Sensor.h"
 #include "TelemetrySensor.h"
 
 RCWL9620Sensor::RCWL9620Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_RCWL9620, "RCWL9620") {}
