@@ -124,8 +124,7 @@ static const uint8_t A0 = PIN_A0;
  */
 #define HAS_GPS 1
 #define GPS_UBLOX
-#define GPS_BAUDRATE 38400
-
+#define GPS_DEBUG 1
 // #define PIN_GPS_WAKE (GPIO_PORT1 + 2) // An output to wake GPS, low means allow sleep, high means force wake
 // Seems to be missing on this new board
 #define PIN_GPS_PPS (GPIO_PORT1 + 4) // Pulse per second input from the GPS
