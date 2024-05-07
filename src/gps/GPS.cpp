@@ -664,6 +664,8 @@ bool GPS::setup()
                 // _serial_gps->write(UBXscratch, msglen);
                 
                 // Turn off unwanted NMEA messages, set update rate
+                // --> THIS IS FAILING CURRENTLY
+                // --> NEEDS TRANSLATION TO 32.01
                 msglen = makeUBXPacket(0xb5, 0x62, sizeof(_message_1HZ), _message_1HZ);
                 _serial_gps->write(UBXscratch, msglen);
 
