@@ -211,7 +211,6 @@ bool fsCheck()
     size_t  write_size = 0;
     size_t  read_size = 0;
     char buf[32] = {0};
-    while (!Serial);
 
     Adafruit_LittleFS_Namespace::File file(FSCom);
     const char *text = "meshtastic fs test";
