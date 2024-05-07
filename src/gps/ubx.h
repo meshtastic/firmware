@@ -316,6 +316,15 @@ const uint8_t GPS::_message_SAVE[] = {
     0x17                    // deviceMask: BBR, Flash, EEPROM, and SPI Flash
 };
 
+// M9 Commands
+const uint8_t GPS::_message_CFG_RST[] = {
+    0x06, 0x04,             // class, id
+    0x00, 0x00, 0x00, 0x00, // length 4 bytes
+    0xFF, 0xFF, 0x00, 0x00  // payload: restart type - 0xFFFF Cold start , reset mode - 0x00 hardware reset, reserved
+    
+    };
+
+
 // As the M10 has no flash, the best we can do to preserve the config is to set it in RAM and BBR.
 // BBR will survive a restart, and power off for a while, but modules with small backup
 // batteries or super caps will not retain the config for a long power off time.
@@ -451,3 +460,4 @@ b5 62 06 8a 0e 00 00 01 00 00 20 00 31 10 00 05 00 31 10 00 46 87
 BBR layer config message:
 b5 62 06 8a 0e 00 00 02 00 00 20 00 31 10 00 05 00 31 10 00 47 94
 */
+

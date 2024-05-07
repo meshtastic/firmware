@@ -396,7 +396,7 @@ bool GPS::setup()
             gnssModel = GNSS_MODEL_UNKNOWN;
         }
 #else
-        gnssModel = GNSS_MODEL_UC6580;
+        gnssModel = GNSS_MODEL_UC6580;∏
 #endif
 
         if (gnssModel == GNSS_MODEL_MTK) {
@@ -483,7 +483,14 @@ bool GPS::setup()
             // Also we need SBAS for better accuracy and extra features
             // ToDo: Dynamic configure GNSS systems depending of LoRa region
 
-            if (strncmp(info.hwVersion, "000A0000", 8) != 0) {
+            // M10: "000A0000"
+            //  M9: "00190000"
+            //  M8: "00080000"
+            //  M7: "00070000"
+            //  M6: "00040007"
+            
+            // Not M9 or M10
+            if (strncmp(info.hwVersion, "000A0000", 8) != 0 && strncmp(info.hwVersion, "00190000", 8) != 0) {
                 if (strncmp(info.hwVersion, "00040007", 8) != 0) {
                     // The original ublox Neo-6 is GPS only and doesn't support the UBX-CFG-GNSS message
                     // Max7 seems to only support GPS *or* GLONASS
@@ -522,7 +529,7 @@ bool GPS::setup()
                 if (getACK(0x06, 0x02, 500) != GNSS_RESPONSE_OK) {
                     LOG_WARN("Unable to disable text info messages.\n");
                 }
-                // ToDo add M10 tests for below
+                
                 if (strncmp(info.hwVersion, "00080000", 8) == 0) {
                     msglen = makeUBXPacket(0x06, 0x39, sizeof(_message_JAM_8), _message_JAM_8);
                     clearBuffer();
@@ -551,7 +558,6 @@ bool GPS::setup()
                     }
                 }
                 // Turn off unwanted NMEA messages, set update rate
-
                 msglen = makeUBXPacket(0x06, 0x08, sizeof(_message_1HZ), _message_1HZ);
                 _serial_gps->write(UBXscratch, msglen);
                 if (getACK(0x06, 0x08, 500) != GNSS_RESPONSE_OK) {
@@ -646,7 +652,31 @@ bool GPS::setup()
                         }
                     }
                 }
-            } else {
+            } 
+
+            // M9
+            if (strncmp(info.hwVersion, "00190000", 8) == 0) {
+                LOG_INFO("Using defaults for config for UBLOX M9\n");
+                // reset, 0x00, 0x00, 0x00, // byte length
+                // manually reset in development
+                // TODO: add to python CLI
+                // msglen = makeUBXPacket(0xb5, 0x62, sizeof(_message_CFG_RST), _message_CFG_RST);
+                // _serial_gps->write(UBXscratch, msglen);
+                
+                // Turn off unwanted NMEA messages, set update rate
+                msglen = makeUBXPacket(0xb5, 0x62, sizeof(_message_1HZ), _message_1HZ);
+                _serial_gps->write(UBXscratch, msglen);
+
+                if (getACK(0x06, 0x08, 500) != GNSS_RESPONSE_OK) {
+                    LOG_WARN("Unable to set GPS update rate.\n");
+                } else {
+                    LOG_INFO("Successfully set GPS update rate.!\n");
+                }
+                delay(1000);
+            }
+
+            // M10
+            if(strncmp(info.hwVersion, "000A0000", 8) == 0) {
                 // LOG_INFO("u-blox M10 hardware found.\n");
                 delay(1000);
                 // First disable all NMEA messages in RAM layer
@@ -738,11 +768,11 @@ bool GPS::setup()
                 // BBR will survive a restart, and power off for a while, but modules with small backup
                 // batteries or super caps will not retain the config for a long power off time.
             }
-            msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
-            _serial_gps->write(UBXscratch, msglen);
-            if (getACK(0x06, 0x09, 2000) != GNSS_RESPONSE_OK) {
+                msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
+                _serial_gps->write(UBXscratch, msglen);
+                if (getACK(0x06, 0x09, 2000) != GNSS_RESPONSE_OK) {
                 LOG_WARN("Unable to save GNSS module configuration.\n");
-            } else {
+                } else {
                 LOG_INFO("GNSS module configuration saved!\n");
             }
         }
@@ -1153,6 +1183,7 @@ GnssModel_t GPS::probe(int serialSpeed)
         _serial_gps->write(_message_prt, sizeof(_message_prt));
         delay(500);
         serialSpeed = 9600;
+
 #if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_RP2040)
         _serial_gps->end();
         _serial_gps->begin(serialSpeed);
@@ -1384,9 +1415,20 @@ bool GPS::factoryReset()
         delay(100);
         // send the UBLOX Factory Reset Command regardless of detect state, something is very wrong, just assume it's UBLOX.
         // Factory Reset
-        byte _message_reset[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF, 0xFB, 0x00, 0x00, 0x00,
-                                 0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x17, 0x2B, 0x7E};
+        // byte _message_reset[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF, 0xFB, 0x00, 0x00, 0x00,
+        //                          0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x17, 0x2B, 0x7E};
+        byte _message_reset[] = {
+            0xB5, 0x62, // header
+            0x06, 0x04, // class, id
+            0x0D, 0x00, 0xFF, 0xFB, // length
+            0x00, 0x00, // hotstart M8
+            0x00,       // hardware reset
+            0x00,       // reserved
+            0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x17, 
+            0x2B, 0x7E // checksum
+            };
         _serial_gps->write(_message_reset, sizeof(_message_reset));
+        LOG_DEBUG("Sent Factory Reset\n");
     }
     delay(1000);
     return true;

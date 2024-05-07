@@ -125,6 +125,11 @@ class GPS : private concurrency::OSThread
     static const uint8_t _message_PMS[];
     static const uint8_t _message_SAVE[];
 
+    // RST Commands for M9
+    static const uint8_t _message_CFG_RST[];
+    // VALSET Commands for M9
+    // static const uint8_t _message_VALSET_SIGNAL[];
+
     // VALSET Commands for M10
     static const uint8_t _message_VALSET_PM[];
     static const uint8_t _message_VALSET_PM_RAM[];

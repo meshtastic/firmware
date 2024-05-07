@@ -3,5 +3,11 @@
   "editor.defaultFormatter": "trunk.io",
   "trunk.enableWindows": true,
   "files.insertFinalNewline": false,
-  "files.trimFinalNewlines": false
+  "files.trimFinalNewlines": false,
+  "files.associations": {
+    "*.erd": "json",
+    "*.vuerd": "json",
+    "*.tpp": "cpp"
+  },
+  "nrf-connect.toolchain.path": "${nrf-connect.toolchain:2.5.2}"
 }
