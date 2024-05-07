@@ -212,8 +212,23 @@ void fsInit()
         LOG_ERROR("Filesystem mount Failed.\n");
         // assert(0); This auto-formats the partition, so no need to fail here.
     }
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32)
     LOG_DEBUG("Filesystem files (%d/%d Bytes):\n", FSCom.usedBytes(), FSCom.totalBytes());
+#elif defined(ARCH_NRF52)
+    /*
+     * nRF52840 has a certain chance of automatic formatting failure.
+     * Try to create a file after initializing the file system. If the creation fails,
+     * it means that the file system is not working properly. Please format it manually again.
+     * */
+    Adafruit_LittleFS_Namespace::File file(FSCom);
+    const char *filename = "/meshtastic.txt";
+    if (!file.open(filename, FILE_O_WRITE)) {
+        LOG_DEBUG("Format ....");
+        FSCom.format();
+        FSCom.begin();
+    } else {
+        file.close();
+    }
 #else
     LOG_DEBUG("Filesystem files:\n");
 #endif

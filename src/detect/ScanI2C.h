@@ -41,6 +41,7 @@ class ScanI2C
         BQ24295,
         LSM6DS3,
         TCA9555,
+        RCWL9620,
         NCP5623,
     } DeviceType;
 
