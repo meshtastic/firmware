@@ -208,26 +208,35 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             if (moduleConfig.external_notification.enabled == true) {
                 if (externalNotificationModule->getMute()) {
                     externalNotificationModule->setMute(false);
+                    showTemporaryMessage("Notifications \nEnabled");
                     if (screen)
                         screen->removeFunctionSymbal("M"); // remove the mute symbol from the bottom right corner
                 } else {
                     externalNotificationModule->stopNow(); // this will turn off all GPIO and sounds and idle the loop
                     externalNotificationModule->setMute(true);
+                    showTemporaryMessage("Notifications \nDisabled");
                     if (screen)
                         screen->setFunctionSymbal("M"); // add the mute symbol to the bottom right corner
                 }
             }
             break;
         case 0x9e: // toggle GPS like triple press does
+#if !MESHTASTIC_EXCLUDE_GPS
             if (gps != nullptr) {
                 gps->toggleGpsMode();
             }
             if (screen)
                 screen->forceDisplay();
+            showTemporaryMessage("GPS Toggled");
+#endif
             break;
         case 0xaf: // fn+space send network ping like double press does
             service.refreshLocalMeshNode();
-            service.trySendPosition(NODENUM_BROADCAST, true);
+            if (service.trySendPosition(NODENUM_BROADCAST, true)) {
+                showTemporaryMessage("Position \nUpdate Sent");
+            } else {
+                showTemporaryMessage("Node Info \nUpdate Sent");
+            }
             break;
         default:
             // pass the pressed key
@@ -484,37 +493,6 @@ int32_t CannedMessageModule::runOnce()
                     screen->startRebootScreen();
                 rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
                 runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-                break;
-            case 0x9e: // toggle GPS like triple press does
-#if !MESHTASTIC_EXCLUDE_GPS
-                if (gps != nullptr) {
-                    gps->toggleGpsMode();
-                }
-                if (screen)
-                    screen->forceDisplay();
-                showTemporaryMessage("GPS Toggled");
-#endif
-                break;
-            // mute (switch off/toggle) external notifications on fn+m
-            case 0xac:
-                if (moduleConfig.external_notification.enabled == true) {
-                    if (externalNotificationModule->getMute()) {
-                        externalNotificationModule->setMute(false);
-                        showTemporaryMessage("Notifications \nEnabled");
-                    } else {
-                        externalNotificationModule->stopNow(); // this will turn off all GPIO and sounds and idle the loop
-                        externalNotificationModule->setMute(true);
-                        showTemporaryMessage("Notifications \nDisabled");
-                    }
-                }
-                break;
-            case 0xaf: // fn+space send network ping like double press does
-                service.refreshLocalMeshNode();
-                if (service.trySendPosition(NODENUM_BROADCAST, true)) {
-                    showTemporaryMessage("Position \nUpdate Sent");
-                } else {
-                    showTemporaryMessage("Node Info \nUpdate Sent");
-                }
                 break;
             default:
                 if (this->cursor == this->freetext.length()) {
