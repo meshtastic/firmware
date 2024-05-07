@@ -344,7 +344,7 @@ void setup()
     Wire.begin(I2C_SDA, I2C_SCL);
 #elif defined(ARCH_PORTDUINO)
     if (settingsStrings[i2cdev] != "") {
-        LOG_INFO("Using %s as I2C device.\n", settingsStrings[i2cdev]);
+        LOG_INFO("Using %s as I2C device.\n", settingsStrings[i2cdev].c_str());
         Wire.begin(settingsStrings[i2cdev].c_str());
     } else {
         LOG_INFO("No I2C device configured, skipping.\n");
