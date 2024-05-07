@@ -208,8 +208,8 @@ void rmDir(const char *dirname)
 bool fsCheck()
 {
 #if defined(ARCH_NRF52)
-    size_t  write_size = 0;
-    size_t  read_size = 0;
+    size_t write_size = 0;
+    size_t read_size = 0;
     char buf[32] = {0};
 
     Adafruit_LittleFS_Namespace::File file(FSCom);
@@ -221,7 +221,7 @@ bool fsCheck()
     if (file.open(filename, FILE_O_WRITE)) {
         write_size = file.write(text);
     } else {
-        LOG_DEBUG("Open file failed .\n");;
+        LOG_DEBUG("Open file failed .\n");
         goto FORMAT_FS;
     }
 
@@ -295,7 +295,8 @@ void fsInit()
     // Can add a screen to display error status later.
     if (!ret) {
         while (1) {
-            Serial.println("The file system is damaged and cannot proceed to the next step.\n"); delay(1000);
+            Serial.println("The file system is damaged and cannot proceed to the next step.\n");
+            delay(1000);
         }
     }
 #else
