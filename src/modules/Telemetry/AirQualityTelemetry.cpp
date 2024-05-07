@@ -1,12 +1,15 @@
-#include "AirQualityTelemetry.h"
+#include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "AirQualityTelemetry.h"
 #include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
-#include "configuration.h"
 #include "main.h"
 
 int32_t AirQualityTelemetryModule::runOnce()
@@ -130,3 +133,5 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     }
     return true;
 }
+
+#endif

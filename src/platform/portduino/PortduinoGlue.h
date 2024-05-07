@@ -57,5 +57,3 @@ enum { level_error, level_warn, level_info, level_debug };
 extern std::map<configNames, int> settingsMap;
 extern std::map<configNames, std::string> settingsStrings;
 int initGPIOPin(int pinNum, std::string gpioChipname);
-extern HardwareSPI *DisplaySPI;
-extern HardwareSPI *LoraSPI;
