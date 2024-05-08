@@ -214,6 +214,7 @@ int32_t ButtonThread::runOnce()
         btnEvent = BUTTON_EVENT_NONE;
     }
 
+    runASAP = false;
     return 50;
 }
 
@@ -234,6 +235,7 @@ void ButtonThread::attachButtonInterrupts()
             BaseType_t higherWake = 0;
             mainDelay.interruptFromISR(&higherWake);
             ButtonThread::userButton.tick();
+            runASAP = true;
         },
         CHANGE);
 #endif
@@ -280,6 +282,7 @@ void ButtonThread::wakeOnIrq(int irq, int mode)
         [] {
             BaseType_t higherWake = 0;
             mainDelay.interruptFromISR(&higherWake);
+            runASAP = true;
         },
         FALLING);
 }
