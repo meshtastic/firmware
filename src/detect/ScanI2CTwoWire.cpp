@@ -299,7 +299,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                     LOG_INFO("SHT4X sensor found\n");
                 } else {
                     type = SHT31;
-                    LOG_INFO("SHT31 accelerometer found\n");
+                    LOG_INFO("SHT31 sensor found\n");
                 }
 
                 break;
