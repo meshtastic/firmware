@@ -295,7 +295,7 @@ void fsInit()
     // Can add a screen to display error status later.
     if (!ret) {
         while (1) {
-            Serial.println("The file system is damaged and cannot proceed to the next step.\n");
+            LOG_ERROR("The file system is damaged and cannot proceed to the next step.\n");
             delay(1000);
         }
     }
