@@ -445,6 +445,14 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
         display->drawXbm(x + (SCREEN_WIDTH - thumbs_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - thumbs_height) / 2 + 2 + 5,
                      thumbs_width, thumbs_height, thumbdown);
     }
+    else if (strcmp(reinterpret_cast<const char*>(mp.decoded.payload.bytes), u8"❓") ==0){
+        display->drawXbm(x + (SCREEN_WIDTH - question_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - question_height) / 2 + 2 + 5,
+		    question_width, question_height, question);
+    }
+    else if (strcmp(reinterpret_cast<const char*>(mp.decoded.payload.bytes), u8"‼️") ==0){
+       display->drawXbm(x + (SCREEN_WIDTH - bang_width) /2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - bang_height) / 2 + 2 + 5,
+		      bang_width, bang_height, bang);
+    }
     else if (strcmp(reinterpret_cast<const char*>(mp.decoded.payload.bytes), u8"\U0001F4A9") == 0){
         display->drawXbm(x + (SCREEN_WIDTH - poo_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - poo_height) / 2 + 2 + 5,
                      poo_width, poo_height, poo);
@@ -476,6 +484,10 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     else if (strcmp(reinterpret_cast<const char*>(mp.decoded.payload.bytes), u8"☁️") ==0){
        display->drawXbm(x + (SCREEN_WIDTH - cloud_width) /2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - cloud_height) /2 + 2 + 5,
 		      cloud_width, cloud_height, cloud);
+    }
+    else if (strcmp(reinterpret_cast<const char*>(mp.decoded.payload.bytes), u8"🌫️") ==0){
+       display->drawXbm(x + (SCREEN_WIDTH - fog_width) /2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - fog_height) /2 + 2 + 5,
+		      fog_width, fog_height, fog);
     }
     else if (strcmp(reinterpret_cast<const char*>(mp.decoded.payload.bytes), u8"\xf0\x9f\x98\x88") ==0){
        display->drawXbm(x + (SCREEN_WIDTH - devil_width) /2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - devil_height) /2 + 2 + 5,
@@ -1509,9 +1521,9 @@ void Screen::setFrames()
         normalFrames[numframes++] = drawTextMessageFrame;
     }
     // If we have a waypoint - show it next, unless it's a phone message and we aren't using any special modules
-    if (devicestate.has_rx_waypoint && shouldDrawMessage(&devicestate.rx_waypoint)) {
-        normalFrames[numframes++] = drawWaypointFrame;
-    }
+    //if (devicestate.has_rx_waypoint && shouldDrawMessage(&devicestate.rx_waypoint)) {
+    //    normalFrames[numframes++] = drawWaypointFrame;
+    //}
 
     // then all the nodes
     // We only show a few nodes in our scrolling list - because meshes with many nodes would have too many screens
