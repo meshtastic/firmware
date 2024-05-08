@@ -221,6 +221,8 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             nodeDB->setLocalPosition(r->set_fixed_position);
             config.position.fixed_position = true;
             saveChanges(SEGMENT_DEVICESTATE | SEGMENT_CONFIG, false);
+            // Send our new fixed position to the mesh for good measure
+            positionModule->sendOurPosition();
 #if !MESHTASTIC_EXCLUDE_GPS
             if (gps != nullptr)
                 gps->enable();
