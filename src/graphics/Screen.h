@@ -20,7 +20,7 @@ class Screen
     void setOn(bool) {}
     void print(const char *) {}
     void doDeepSleep() {}
-    void forceDisplay() {}
+    void forceDisplay(bool forceUiUpdate = false) {}
     void startBluetoothPinScreen(uint32_t pin) {}
     void stopBluetoothPinScreen() {}
     void startRebootScreen() {}
@@ -72,6 +72,10 @@ class Screen
 #ifndef MILES_TO_FEET
 #define MILES_TO_FEET 5280
 #endif
+
+// Intuitive colors. E-Ink display is inverted from OLED(?)
+#define EINK_BLACK OLEDDISPLAY_COLOR::WHITE
+#define EINK_WHITE OLEDDISPLAY_COLOR::BLACK
 
 namespace graphics
 {
@@ -139,14 +143,14 @@ class Screen : public concurrency::OSThread
     // Not thread safe - must be called before any other methods are called.
     void setup();
 
-    /// Turns the screen on/off.
-    void setOn(bool on)
+    /// Turns the screen on/off. Optionally, pass a custom screensaver frame for E-Ink
+    void setOn(bool on, FrameCallback einkScreensaver = NULL)
     {
         if (!on)
-            handleSetOn(
-                false); // We handle off commands immediately, because they might be called because the CPU is shutting down
+            // We handle off commands immediately, because they might be called because the CPU is shutting down
+            handleSetOn(false, einkScreensaver);
         else
-            enqueueCmd(ScreenCmd{.cmd = on ? Cmd::SET_ON : Cmd::SET_OFF});
+            enqueueCmd(ScreenCmd{.cmd = Cmd::SET_ON});
     }
 
     /**
@@ -161,9 +165,6 @@ class Screen : public concurrency::OSThread
     void onPress() { enqueueCmd(ScreenCmd{.cmd = Cmd::ON_PRESS}); }
     void showPrevFrame() { enqueueCmd(ScreenCmd{.cmd = Cmd::SHOW_PREV_FRAME}); }
     void showNextFrame() { enqueueCmd(ScreenCmd{.cmd = Cmd::SHOW_NEXT_FRAME}); }
-
-    // Implementation to Adjust Brightness
-    uint8_t brightness = BRIGHTNESS_DEFAULT;
 
     /// Starts showing the Bluetooth PIN screen.
     //
@@ -197,6 +198,13 @@ class Screen : public concurrency::OSThread
         cmd.cmd = Cmd::START_REBOOT_SCREEN;
         enqueueCmd(cmd);
     }
+
+    // functions for display brightness
+    void increaseBrightness();
+    void decreaseBrightness();
+
+    void setFunctionSymbal(std::string sym);
+    void removeFunctionSymbal(std::string sym);
 
     /// Stops showing the bluetooth PIN screen.
     void stopBluetoothPinScreen() { enqueueCmd(ScreenCmd{.cmd = Cmd::STOP_BLUETOOTH_PIN_SCREEN}); }
@@ -314,12 +322,17 @@ class Screen : public concurrency::OSThread
     int handleInputEvent(const InputEvent *arg);
 
     /// Used to force (super slow) eink displays to draw critical frames
-    void forceDisplay();
+    void forceDisplay(bool forceUiUpdate = false);
 
     /// Draws our SSL cert screen during boot (called from WebServer)
     void setSSLFrames();
 
     void setWelcomeFrames();
+
+#ifdef USE_EINK
+    /// Draw an image to remain on E-Ink display after screen off
+    void setScreensaverFrames(FrameCallback einkScreensaver = NULL);
+#endif
 
   protected:
     /// Updates the UI.
@@ -351,7 +364,7 @@ class Screen : public concurrency::OSThread
     }
 
     // Implementations of various commands, called from doTask().
-    void handleSetOn(bool on);
+    void handleSetOn(bool on, FrameCallback einkScreensaver = NULL);
     void handleOnPress();
     void handleShowNextFrame();
     void handleShowPrevFrame();
@@ -385,6 +398,9 @@ class Screen : public concurrency::OSThread
     // Whether we are showing the regular screen (as opposed to booth screen or
     // Bluetooth PIN screen)
     bool showingNormalScreen = false;
+
+    // Implementation to Adjust Brightness
+    uint8_t brightness = BRIGHTNESS_DEFAULT; // H = 254, MH = 192, ML = 130 L = 103
 
     /// Holds state for debug information
     DebugInfo debugInfo;

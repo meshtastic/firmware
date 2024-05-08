@@ -506,7 +506,7 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
         break;
 
     default:
-        assert(0); // unexpected state
+        break; // no need to do anything
     }
     return true; // There's no need for others to look at this message.
 }

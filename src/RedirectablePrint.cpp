@@ -99,7 +99,7 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
 
         // If we are the first message on a report, include the header
         if (!isContinuationMessage) {
-            uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice);
+            uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // display local time on logfile
             if (rtc_sec > 0) {
                 long hms = rtc_sec % SEC_PER_DAY;
                 // hms += tz.tz_dsttime * SEC_PER_HOUR;
@@ -182,11 +182,11 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
 void RedirectablePrint::hexDump(const char *logLevel, unsigned char *buf, uint16_t len)
 {
     const char alphabet[17] = "0123456789abcdef";
-    log(logLevel, "   +------------------------------------------------+ +----------------+\n");
-    log(logLevel, "   |.0 .1 .2 .3 .4 .5 .6 .7 .8 .9 .a .b .c .d .e .f | |      ASCII     |\n");
+    log(logLevel, "    +------------------------------------------------+ +----------------+\n");
+    log(logLevel, "    |.0 .1 .2 .3 .4 .5 .6 .7 .8 .9 .a .b .c .d .e .f | |      ASCII     |\n");
     for (uint16_t i = 0; i < len; i += 16) {
         if (i % 128 == 0)
-            log(logLevel, "   +------------------------------------------------+ +----------------+\n");
+            log(logLevel, "    +------------------------------------------------+ +----------------+\n");
         char s[] = "|                                                | |                |\n";
         uint8_t ix = 1, iy = 52;
         for (uint8_t j = 0; j < 16; j++) {
@@ -208,7 +208,7 @@ void RedirectablePrint::hexDump(const char *logLevel, unsigned char *buf, uint16
         log(logLevel, ".");
         log(logLevel, s);
     }
-    log(logLevel, "   +------------------------------------------------+ +----------------+\n");
+    log(logLevel, "    +------------------------------------------------+ +----------------+\n");
 }
 
 std::string RedirectablePrint::mt_sprintf(const std::string fmt_str, ...)

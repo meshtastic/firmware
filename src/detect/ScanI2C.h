@@ -29,6 +29,7 @@ class ScanI2C
         INA3221,
         MCP9808,
         SHT31,
+        SHT4X,
         SHTC3,
         LPS22HB,
         QMC6310,
@@ -38,9 +39,11 @@ class ScanI2C
         MPU6050,
         LIS3DH,
         BMA423,
-#ifdef HAS_NCP5623
+        BQ24295,
+        LSM6DS3,
+        TCA9555,
+        RCWL9620,
         NCP5623,
-#endif
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;

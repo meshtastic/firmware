@@ -128,12 +128,18 @@ bool RF95Interface::reconfigure()
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
     err = lora->setSyncWord(syncWord);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting RF95 setSyncWord!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora->setCurrentLimit(currentLimit);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting RF95 setCurrentLimit!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora->setPreambleLength(preambleLength);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting RF95 setPreambleLength!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora->setFrequency(getFreq());
@@ -164,6 +170,8 @@ void RF95Interface::addReceiveMetadata(meshtastic_MeshPacket *mp)
 void RF95Interface::setStandby()
 {
     int err = lora->standby();
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting RF95 standby!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = false; // If we were receiving, not any more
@@ -185,6 +193,8 @@ void RF95Interface::startReceive()
     setTransmitEnable(false);
     setStandby();
     int err = lora->startReceive();
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("Radiolib error %d when attempting RF95 startReceive!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = true;
@@ -205,6 +215,8 @@ bool RF95Interface::isChannelActive()
         // LOG_DEBUG("Channel is busy!\n");
         return true;
     }
+    if (result != RADIOLIB_CHANNEL_FREE)
+        LOG_ERROR("Radiolib error %d when attempting RF95 isChannelActive!\n", result);
     assert(result != RADIOLIB_ERR_WRONG_MODEM);
 
     // LOG_DEBUG("Channel is free!\n");
