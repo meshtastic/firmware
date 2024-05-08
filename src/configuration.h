@@ -81,6 +81,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Override user saved region, for producing region-locked builds
 // #define REGULATORY_LORA_REGIONCODE meshtastic_Config_LoRaConfig_RegionCode_SG_923
 
+// Total system gain in dBm to subtract from Tx power to remain within regulatory ERP limit for non-licensed operators
+// This value should be set in variant.h and is PA gain + antenna gain (if system ships with an antenna)
+#ifndef REGULATORY_GAIN
+#define REGULATORY_GAIN 0
+#endif
+
 // -----------------------------------------------------------------------------
 // Feature toggles
 // -----------------------------------------------------------------------------
