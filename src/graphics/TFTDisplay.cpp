@@ -8,6 +8,12 @@
 #define TFT_BACKLIGHT_ON HIGH
 #endif
 
+#ifdef GPIO_EXTENDER
+#include <SparkFunSX1509.h>
+#include <Wire.h>
+extern SX1509 gpioExtender;
+#endif
+
 #ifndef TFT_MESH
 #define TFT_MESH COLOR565(0x67, 0xEA, 0x94)
 #endif

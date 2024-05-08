@@ -51,7 +51,9 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), con
         }
     }
 #endif
+#if !ARCH_PORTDUINO
     emitRebooted();
+#endif
 }
 
 int32_t SerialConsole::runOnce()

@@ -257,7 +257,7 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
         LOG_DEBUG("Can't send status to phone");
     }
 
-    if (ccToPhone) {
+    if (res == ERRNO_OK && ccToPhone) { // Check if p is not released in case it couldn't be sent
         sendToPhone(packetPool.allocCopy(*p));
     }
 }
