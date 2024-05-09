@@ -52,8 +52,8 @@ ButtonThread::ButtonThread() : OSThread("Button")
 
 #if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO)
     userButton.attachClick(userButtonPressed);
-    userButton.setClickMs(250);
-    userButton.setPressMs(c_longPressTime);
+    userButton.setClickMs(BUTTON_CLICK_MS);
+    userButton.setPressMs(BUTTON_LONGPRESS_MS);
     userButton.setDebounceMs(1);
     userButton.attachDoubleClick(userButtonDoublePressed);
     userButton.attachMultiClick(userButtonMultiPressed, this); // Reference to instance: get click count from non-static OneButton
@@ -70,8 +70,8 @@ ButtonThread::ButtonThread() : OSThread("Button")
     pinMode(BUTTON_PIN_ALT, INPUT_PULLUP_SENSE);
 #endif
     userButtonAlt.attachClick(userButtonPressed);
-    userButtonAlt.setClickMs(250);
-    userButtonAlt.setPressMs(c_longPressTime);
+    userButtonAlt.setClickMs(BUTTON_CLICK_MS);
+    userButtonAlt.setPressMs(BUTTON_LONGPRESS_MS);
     userButtonAlt.setDebounceMs(1);
     userButtonAlt.attachDoubleClick(userButtonDoublePressed);
     userButtonAlt.attachLongPressStart(userButtonPressedLongStart);
@@ -80,7 +80,7 @@ ButtonThread::ButtonThread() : OSThread("Button")
 
 #ifdef BUTTON_PIN_TOUCH
     userButtonTouch = OneButton(BUTTON_PIN_TOUCH, true, true);
-    userButtonTouch.setPressMs(400);
+    userButtonTouch.setPressMs(BUTTON_TOUCH_MS);
     userButtonTouch.attachLongPressStart(touchPressedLongStart); // Better handling with longpress than click?
 #endif
 
