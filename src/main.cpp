@@ -362,7 +362,7 @@ void setup()
     Wire.begin(I2C_SDA, I2C_SCL);
 #elif defined(ARCH_PORTDUINO)
     if (settingsStrings[i2cdev] != "") {
-        LOG_INFO("Using %s as I2C device.\n", settingsStrings[i2cdev].c_str());
+        LOG_INFO("Using %s as I2C device.\n", settingsStrings[i2cdev]);
         Wire.begin(settingsStrings[i2cdev].c_str());
     } else {
         LOG_INFO("No I2C device configured, skipping.\n");
@@ -681,7 +681,11 @@ void setup()
         char *touch[] = {"NOTOUCH", "XPT2046", "STMPE610", "GT911", "FT5x06"};
 #ifdef USE_X11
         if (settingsMap[displayPanel] == x11) {
-            displayConfig.device(DisplayDriverConfig::device_t::X11);
+            if (settingsMap[displayWidth] && settingsMap[displayHeight])
+                displayConfig = DisplayDriverConfig(DisplayDriverConfig::device_t::X11, (uint16_t)settingsMap[displayWidth],
+                                                    (uint16_t)settingsMap[displayHeight]);
+            else
+                displayConfig.device(DisplayDriverConfig::device_t::X11);
         } else
 #endif
         {
