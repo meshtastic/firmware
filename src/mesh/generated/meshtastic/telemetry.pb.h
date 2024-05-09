@@ -45,7 +45,9 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* BMP085/BMP180 High accuracy temperature and pressure (older Version of BMP280) */
     meshtastic_TelemetrySensorType_BMP085 = 15,
     /* RCWL-9620 Doppler Radar Distance Sensor, used for water level detection */
-    meshtastic_TelemetrySensorType_RCWL9620 = 16
+    meshtastic_TelemetrySensorType_RCWL9620 = 16,
+    /* Sensirion High accuracy temperature and humidity */
+    meshtastic_TelemetrySensorType_SHT4X = 17
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -152,8 +154,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_RCWL9620
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_RCWL9620+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_SHT4X
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_SHT4X+1))
 
 
 

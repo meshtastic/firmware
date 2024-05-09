@@ -63,6 +63,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_NANO_G2_ULTRA = 18,
     /* LoRAType device: https://loratype.org/ */
     meshtastic_HardwareModel_LORA_TYPE = 19,
+    /* wiphone https://www.wiphone.io/ */
+    meshtastic_HardwareModel_WIPHONE = 20,
     /* B&Q Consulting Station Edition G1: https://uniteng.com/wiki/doku.php?id=meshtastic:station */
     meshtastic_HardwareModel_STATION_G1 = 25,
     /* RAK11310 (RP2040 + SX1262) */
@@ -148,6 +150,12 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_TD_LORAC = 60,
     /* CDEBYTE EoRa-S3 board using their own MM modules, clone of LILYGO T3S3 */
     meshtastic_HardwareModel_CDEBYTE_EORA_S3 = 61,
+    /* TWC_MESH_V4 
+ Adafruit NRF52840 feather express with SX1262, SSD1306 OLED and NEO6M GPS */
+    meshtastic_HardwareModel_TWC_MESH_V4 = 62,
+    /* NRF52_PROMICRO_DIY
+ Promicro NRF52840 with SX1262/LLCC68, SSD1306 OLED and NEO6M GPS */
+    meshtastic_HardwareModel_NRF52_PROMICRO_DIY = 63,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */

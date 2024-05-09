@@ -1,12 +1,15 @@
-#include "EnvironmentTelemetry.h"
+#include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "Default.h"
+#include "EnvironmentTelemetry.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
-#include "configuration.h"
 #include "main.h"
 #include "power.h"
 #include "sleep.h"
@@ -21,7 +24,9 @@
 #include "Sensor/BMP280Sensor.h"
 #include "Sensor/LPS22HBSensor.h"
 #include "Sensor/MCP9808Sensor.h"
+#include "Sensor/RCWL9620Sensor.h"
 #include "Sensor/SHT31Sensor.h"
+#include "Sensor/SHT4XSensor.h"
 #include "Sensor/SHTC3Sensor.h"
 
 BMP085Sensor bmp085Sensor;
@@ -32,6 +37,8 @@ MCP9808Sensor mcp9808Sensor;
 SHTC3Sensor shtc3Sensor;
 LPS22HBSensor lps22hbSensor;
 SHT31Sensor sht31Sensor;
+SHT4XSensor sht4xSensor;
+RCWL9620Sensor rcwl9620Sensor;
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
@@ -86,10 +93,14 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = lps22hbSensor.runOnce();
             if (sht31Sensor.hasSensor())
                 result = sht31Sensor.runOnce();
+            if (sht4xSensor.hasSensor())
+                result = sht4xSensor.runOnce();
             if (ina219Sensor.hasSensor())
                 result = ina219Sensor.runOnce();
             if (ina260Sensor.hasSensor())
                 result = ina260Sensor.runOnce();
+            if (rcwl9620Sensor.hasSensor())
+                result = rcwl9620Sensor.runOnce();
         }
         return result;
     } else {
@@ -144,45 +155,56 @@ uint32_t GetTimeSinceMeshPacket(const meshtastic_MeshPacket *mp)
 void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->setFont(FONT_MEDIUM);
-    display->drawString(x, y, "Environment");
+    display->setFont(FONT_SMALL);
+
     if (lastMeasurementPacket == nullptr) {
-        display->setFont(FONT_SMALL);
-        display->drawString(x, y += fontHeight(FONT_MEDIUM), "No measurement");
+        // If there's no valid packet, display "Environment"
+        display->drawString(x, y, "Environment");
+        display->drawString(x, y += fontHeight(FONT_SMALL), "No measurement");
         return;
     }
 
+    // Decode the last measurement packet
     meshtastic_Telemetry lastMeasurement;
-
     uint32_t agoSecs = GetTimeSinceMeshPacket(lastMeasurementPacket);
     const char *lastSender = getSenderShortName(*lastMeasurementPacket);
 
     auto &p = lastMeasurementPacket->decoded;
     if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &lastMeasurement)) {
-        display->setFont(FONT_SMALL);
-        display->drawString(x, y += fontHeight(FONT_MEDIUM), "Measurement Error");
+        display->drawString(x, y, "Measurement Error");
         LOG_ERROR("Unable to decode last packet");
         return;
     }
 
-    display->setFont(FONT_SMALL);
+    // Display "Env. From: ..." on its own
+    display->drawString(x, y, "Env. From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
+
     String last_temp = String(lastMeasurement.variant.environment_metrics.temperature, 0) + "°C";
     if (moduleConfig.telemetry.environment_display_fahrenheit) {
         last_temp = String(CelsiusToFahrenheit(lastMeasurement.variant.environment_metrics.temperature), 0) + "°F";
     }
-    display->drawString(x, y += fontHeight(FONT_MEDIUM) - 2, "From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
-    display->drawString(x, y += fontHeight(FONT_SMALL) - 2,
+
+    // Continue with the remaining details
+    display->drawString(x, y += fontHeight(FONT_SMALL),
                         "Temp/Hum: " + last_temp + " / " +
                             String(lastMeasurement.variant.environment_metrics.relative_humidity, 0) + "%");
-    if (lastMeasurement.variant.environment_metrics.barometric_pressure != 0)
+
+    if (lastMeasurement.variant.environment_metrics.barometric_pressure != 0) {
         display->drawString(x, y += fontHeight(FONT_SMALL),
                             "Press: " + String(lastMeasurement.variant.environment_metrics.barometric_pressure, 0) + "hPA");
-    if (lastMeasurement.variant.environment_metrics.voltage != 0)
+    }
+
+    if (lastMeasurement.variant.environment_metrics.voltage != 0) {
         display->drawString(x, y += fontHeight(FONT_SMALL),
                             "Volt/Cur: " + String(lastMeasurement.variant.environment_metrics.voltage, 0) + "V / " +
                                 String(lastMeasurement.variant.environment_metrics.current, 0) + "mA");
-    if (lastMeasurement.variant.environment_metrics.iaq != 0)
+    }
+    if (lastMeasurement.variant.environment_metrics.iaq != 0) {
         display->drawString(x, y += fontHeight(FONT_SMALL), "IAQ: " + String(lastMeasurement.variant.environment_metrics.iaq));
+    }
+    if (lastMeasurement.variant.environment_metrics.distance != 0)
+        display->drawString(x, y += fontHeight(FONT_SMALL),
+                            "Water Level: " + String(lastMeasurement.variant.environment_metrics.distance, 0) + "mm");
 }
 
 bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
@@ -192,10 +214,13 @@ bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPac
         const char *sender = getSenderShortName(mp);
 
         LOG_INFO("(Received from %s): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, "
-                 "temperature=%f, voltage=%f\n",
+                 "temperature=%f\n",
                  sender, t->variant.environment_metrics.barometric_pressure, t->variant.environment_metrics.current,
                  t->variant.environment_metrics.gas_resistance, t->variant.environment_metrics.relative_humidity,
-                 t->variant.environment_metrics.temperature, t->variant.environment_metrics.voltage);
+                 t->variant.environment_metrics.temperature);
+        LOG_INFO("(Received from %s): voltage=%f, IAQ=%d, distance=%f\n", sender, t->variant.environment_metrics.voltage,
+                 t->variant.environment_metrics.iaq, t->variant.environment_metrics.distance);
+
 #endif
         // release previous packet before occupying a new spot
         if (lastMeasurementPacket != nullptr)
@@ -220,9 +245,13 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.variant.environment_metrics.relative_humidity = 0;
     m.variant.environment_metrics.temperature = 0;
     m.variant.environment_metrics.voltage = 0;
+    m.variant.environment_metrics.iaq = 0;
+    m.variant.environment_metrics.distance = 0;
 
     if (sht31Sensor.hasSensor())
         valid = sht31Sensor.getMetrics(&m);
+    if (sht4xSensor.hasSensor())
+        valid = sht4xSensor.getMetrics(&m);
     if (lps22hbSensor.hasSensor())
         valid = lps22hbSensor.getMetrics(&m);
     if (shtc3Sensor.hasSensor())
@@ -241,13 +270,16 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         valid = ina219Sensor.getMetrics(&m);
     if (ina260Sensor.hasSensor())
         valid = ina260Sensor.getMetrics(&m);
+    if (rcwl9620Sensor.hasSensor())
+        valid = rcwl9620Sensor.getMetrics(&m);
 
     if (valid) {
-        LOG_INFO("(Sending): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f, "
-                 "voltage=%f\n",
+        LOG_INFO("(Sending): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f\n",
                  m.variant.environment_metrics.barometric_pressure, m.variant.environment_metrics.current,
                  m.variant.environment_metrics.gas_resistance, m.variant.environment_metrics.relative_humidity,
-                 m.variant.environment_metrics.temperature, m.variant.environment_metrics.voltage);
+                 m.variant.environment_metrics.temperature);
+        LOG_INFO("(Sending): voltage=%f, IAQ=%d, distance=%f\n", m.variant.environment_metrics.voltage,
+                 m.variant.environment_metrics.iaq, m.variant.environment_metrics.distance);
 
         sensor_read_error_count = 0;
 
@@ -279,3 +311,5 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     }
     return valid;
 }
+
+#endif
