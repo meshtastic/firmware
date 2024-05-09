@@ -26,9 +26,10 @@ void VEML7700Sensor::setup() {}
 
 bool VEML7700Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    LOG_DEBUG("VEML7700Sensor::getMetrics\n");
-
     measurement->variant.environment_metrics.lux = veml7700.readLux(VEML_LUX_AUTO);
+    measurement->variant.environment_metrics.white = veml7700.readWhite();
+    measurement->variant.environment_metrics.ALS = veml7700.readALS();
+
 
     return true;
 }
