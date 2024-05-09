@@ -168,8 +168,9 @@ template <typename T> void LR11x0Interface<T>::startReceive()
 
     // We use a 16 bit preamble so this should save some power by letting radio sit in standby mostly.
     // Furthermore, we need the PREAMBLE_DETECTED and HEADER_VALID IRQ flag to detect whether we are actively receiving
-    int err = lora.startReceive(RADIOLIB_LR11X0_RX_TIMEOUT_INF, RADIOLIB_LR11X0_IRQ_RX_DONE | RADIOLIB_LR11X0_IRQ_PREAMBLE_DETECTED |
-                                                 RADIOLIB_LR11X0_IRQ_SYNC_WORD_HEADER_VALID, 0);
+    int err = lora.startReceive(
+        RADIOLIB_LR11X0_RX_TIMEOUT_INF,
+        RADIOLIB_LR11X0_IRQ_RX_DONE | RADIOLIB_LR11X0_IRQ_PREAMBLE_DETECTED | RADIOLIB_LR11X0_IRQ_SYNC_WORD_HEADER_VALID, 0);
     assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = true;

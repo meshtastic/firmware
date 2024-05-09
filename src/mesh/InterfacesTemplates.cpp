@@ -1,9 +1,9 @@
+#include "LR11x0Interface.cpp"
+#include "LR11x0Interface.h"
 #include "SX126xInterface.cpp"
 #include "SX126xInterface.h"
 #include "SX128xInterface.cpp"
 #include "SX128xInterface.h"
-#include "LR11x0Interface.cpp"
-#include "LR11x0Interface.h"
 #include "api/ServerAPI.cpp"
 #include "api/ServerAPI.h"
 

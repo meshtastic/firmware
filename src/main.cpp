@@ -65,12 +65,12 @@ NRF52Bluetooth *nrf52Bluetooth;
 #endif
 
 #include "LLCC68Interface.h"
+#include "LR1110Interface.h"
+#include "LR1120Interface.h"
 #include "RF95Interface.h"
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
 #include "SX1280Interface.h"
-#include "LR1110Interface.h"
-#include "LR1120Interface.h"
 #include "detect/LoRaRadioType.h"
 
 #ifdef ARCH_STM32WL
