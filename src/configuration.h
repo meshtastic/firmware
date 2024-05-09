@@ -126,8 +126,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define SHTC3_ADDR 0x70
 #define LPS22HB_ADDR 0x5C
 #define LPS22HB_ADDR_ALT 0x5D
-#define SHT31_ADDR 0x44
+#define SHT31_4x_ADDR 0x44
 #define PMSA0031_ADDR 0x12
+#define RCWL9620_ADDR 0x57
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER

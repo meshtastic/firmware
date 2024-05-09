@@ -12,6 +12,10 @@
 #define I2C_SCL 17 // 2
 
 // #define LED_PIN 38     // This is a RGB LED not a standard LED
+#define HAS_NEOPIXEL                         // Enable the use of neopixels
+#define NEOPIXEL_COUNT 1                     // How many neopixels are connected
+#define NEOPIXEL_DATA 38                     // gpio pin used to send data to the neopixels
+#define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800) // type of neopixels in use
 
 #define BUTTON_PIN 0 // This is the BOOT button
 #define BUTTON_NEED_PULLUP

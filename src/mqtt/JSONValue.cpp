@@ -368,7 +368,7 @@ JSONValue::JSONValue(int m_integer_value)
  *
  * @access public
  *
- * @param uint m_integer_value The number to use as the value
+ * @param unsigned int m_integer_value The number to use as the value
  */
 JSONValue::JSONValue(unsigned int m_integer_value)
 {

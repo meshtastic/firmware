@@ -54,9 +54,9 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
             JSONObject json;
             json = json_value->AsObject();
 
-            // parse the channel name from the topic string by looking for "json/"
-            const char *jsonSlash = "json/";
-            char *ptr = strstr(topic, jsonSlash) + sizeof(jsonSlash) + 1; // set pointer to after "json/"
+            // parse the channel name from the topic string
+            // the topic has been checked above for having jsonTopic prefix, so just move past it
+            char *ptr = topic + jsonTopic.length();
             ptr = strtok(ptr, "/") ? strtok(ptr, "/") : ptr; // if another "/" was added, parse string up to that character
             meshtastic_Channel sendChannel = channels.getByName(ptr);
             // We allow downlink JSON packets only on a channel named "mqtt"
@@ -76,6 +76,8 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                             p->channel = json["channel"]->AsNumber();
                         if (json.find("to") != json.end() && json["to"]->IsNumber())
                             p->to = json["to"]->AsNumber();
+                        if (json.find("hopLimit") != json.end() && json["hopLimit"]->IsNumber())
+                            p->hop_limit = json["hopLimit"]->AsNumber();
                         if (jsonPayloadStr.length() <= sizeof(p->decoded.payload.bytes)) {
                             memcpy(p->decoded.payload.bytes, jsonPayloadStr.c_str(), jsonPayloadStr.length());
                             p->decoded.payload.size = jsonPayloadStr.length();
@@ -105,6 +107,8 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                             p->channel = json["channel"]->AsNumber();
                         if (json.find("to") != json.end() && json["to"]->IsNumber())
                             p->to = json["to"]->AsNumber();
+                        if (json.find("hopLimit") != json.end() && json["hopLimit"]->IsNumber())
+                            p->hop_limit = json["hopLimit"]->AsNumber();
                         p->decoded.payload.size =
                             pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes),
                                                &meshtastic_Position_msg, &pos); // make the Data protobuf from position
@@ -548,7 +552,10 @@ void MQTT::perhapsReportToMap()
     } else {
         if (map_position_precision == 0 || (localPosition.latitude_i == 0 && localPosition.longitude_i == 0)) {
             last_report_to_map = millis();
-            LOG_WARN("MQTT Map reporting is enabled, but precision is 0 or no position available.\n");
+            if (map_position_precision == 0)
+                LOG_WARN("MQTT Map reporting is enabled, but precision is 0\n");
+            if (localPosition.latitude_i == 0 && localPosition.longitude_i == 0)
+                LOG_WARN("MQTT Map reporting is enabled, but no position available.\n");
             return;
         }
 
@@ -656,7 +663,7 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
                     msgPayload["voltage"] = new JSONValue(decoded->variant.device_metrics.voltage);
                     msgPayload["channel_utilization"] = new JSONValue(decoded->variant.device_metrics.channel_utilization);
                     msgPayload["air_util_tx"] = new JSONValue(decoded->variant.device_metrics.air_util_tx);
-                    msgPayload["uptime_seconds"] = new JSONValue((uint)decoded->variant.device_metrics.uptime_seconds);
+                    msgPayload["uptime_seconds"] = new JSONValue((unsigned int)decoded->variant.device_metrics.uptime_seconds);
                 } else if (decoded->which_variant == meshtastic_Telemetry_environment_metrics_tag) {
                     msgPayload["temperature"] = new JSONValue(decoded->variant.environment_metrics.temperature);
                     msgPayload["relative_humidity"] = new JSONValue(decoded->variant.environment_metrics.relative_humidity);
@@ -836,9 +843,9 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
             memset(&scratch, 0, sizeof(scratch));
             if (pb_decode_from_bytes(mp->decoded.payload.bytes, mp->decoded.payload.size, &meshtastic_Paxcount_msg, &scratch)) {
                 decoded = &scratch;
-                msgPayload["wifi_count"] = new JSONValue((uint)decoded->wifi);
-                msgPayload["ble_count"] = new JSONValue((uint)decoded->ble);
-                msgPayload["uptime"] = new JSONValue((uint)decoded->uptime);
+                msgPayload["wifi_count"] = new JSONValue((unsigned int)decoded->wifi);
+                msgPayload["ble_count"] = new JSONValue((unsigned int)decoded->ble);
+                msgPayload["uptime"] = new JSONValue((unsigned int)decoded->uptime);
                 jsonObj["payload"] = new JSONValue(msgPayload);
             } else {
                 LOG_ERROR("Error decoding protobuf for Paxcount message!\n");
@@ -855,12 +862,12 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
                 decoded = &scratch;
                 if (decoded->type == meshtastic_HardwareMessage_Type_GPIOS_CHANGED) {
                     msgType = "gpios_changed";
-                    msgPayload["gpio_value"] = new JSONValue((uint)decoded->gpio_value);
+                    msgPayload["gpio_value"] = new JSONValue((unsigned int)decoded->gpio_value);
                     jsonObj["payload"] = new JSONValue(msgPayload);
                 } else if (decoded->type == meshtastic_HardwareMessage_Type_READ_GPIOS_REPLY) {
                     msgType = "gpios_read_reply";
-                    msgPayload["gpio_value"] = new JSONValue((uint)decoded->gpio_value);
-                    msgPayload["gpio_mask"] = new JSONValue((uint)decoded->gpio_mask);
+                    msgPayload["gpio_value"] = new JSONValue((unsigned int)decoded->gpio_value);
+                    msgPayload["gpio_mask"] = new JSONValue((unsigned int)decoded->gpio_mask);
                     jsonObj["payload"] = new JSONValue(msgPayload);
                 }
             } else {
@@ -888,7 +895,7 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
     if (mp->rx_snr != 0)
         jsonObj["snr"] = new JSONValue((float)mp->rx_snr);
     if (mp->hop_start != 0 && mp->hop_limit <= mp->hop_start)
-        jsonObj["hops_away"] = new JSONValue((uint)(mp->hop_start - mp->hop_limit));
+        jsonObj["hops_away"] = new JSONValue((unsigned int)(mp->hop_start - mp->hop_limit));
 
     // serialize and write it to the stream
     JSONValue *value = new JSONValue(jsonObj);
@@ -904,6 +911,7 @@ bool MQTT::isValidJsonEnvelope(JSONObject &json)
 {
     // if "sender" is provided, avoid processing packets we uplinked
     return (json.find("sender") != json.end() ? (json["sender"]->AsString().compare(owner.id) != 0) : true) &&
+           (json.find("hopLimit") != json.end() ? json["hopLimit"]->IsNumber() : true) && // hop limit should be a number
            (json.find("from") != json.end()) && json["from"]->IsNumber() &&
            (json["from"]->AsNumber() == nodeDB->getNodeNum()) &&            // only accept message if the "from" is us
            (json.find("type") != json.end()) && json["type"]->IsString() && // should specify a type
