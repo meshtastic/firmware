@@ -11,6 +11,7 @@ enum configNames {
     rxen,
     dio2_as_rf_switch,
     dio3_tcxo_voltage,
+    ch341Quirk,
     use_rf95,
     use_sx1280,
     use_sx1268,
