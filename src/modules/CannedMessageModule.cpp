@@ -1,6 +1,3 @@
-#include <algorithm>
-#include <iterator>
-
 #include "configuration.h"
 #if ARCH_PORTDUINO
 #include "PortduinoGlue.h"

@@ -1,10 +1,7 @@
-#include <algorithm>
-#include <iterator>
-
+#include "TextMessageModule.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
-#include "TextMessageModule.h"
 #include "configuration.h"
 
 TextMessageModule *textMessageModule;
