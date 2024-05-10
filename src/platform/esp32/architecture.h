@@ -143,6 +143,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_STATION_G2
 #elif defined(UNPHONE)
 #define HW_VENDOR meshtastic_HardwareModel_UNPHONE
+#elif defined(WIPHONE)
+#define HW_VENDOR meshtastic_HardwareModel_WIPHONE
 #endif
 
 // -----------------------------------------------------------------------------
