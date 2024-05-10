@@ -26,6 +26,7 @@
 #include "Sensor/MCP9808Sensor.h"
 #include "Sensor/RCWL9620Sensor.h"
 #include "Sensor/SHT31Sensor.h"
+#include "Sensor/SHT4XSensor.h"
 #include "Sensor/SHTC3Sensor.h"
 
 BMP085Sensor bmp085Sensor;
@@ -36,6 +37,7 @@ MCP9808Sensor mcp9808Sensor;
 SHTC3Sensor shtc3Sensor;
 LPS22HBSensor lps22hbSensor;
 SHT31Sensor sht31Sensor;
+SHT4XSensor sht4xSensor;
 RCWL9620Sensor rcwl9620Sensor;
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
@@ -91,6 +93,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = lps22hbSensor.runOnce();
             if (sht31Sensor.hasSensor())
                 result = sht31Sensor.runOnce();
+            if (sht4xSensor.hasSensor())
+                result = sht4xSensor.runOnce();
             if (ina219Sensor.hasSensor())
                 result = ina219Sensor.runOnce();
             if (ina260Sensor.hasSensor())
@@ -246,6 +250,8 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 
     if (sht31Sensor.hasSensor())
         valid = sht31Sensor.getMetrics(&m);
+    if (sht4xSensor.hasSensor())
+        valid = sht4xSensor.getMetrics(&m);
     if (lps22hbSensor.hasSensor())
         valid = lps22hbSensor.getMetrics(&m);
     if (shtc3Sensor.hasSensor())
