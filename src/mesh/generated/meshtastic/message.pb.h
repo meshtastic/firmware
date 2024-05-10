@@ -10,6 +10,8 @@
 #endif
 
 /* Struct definitions */
+/* Representation of a received or sent message to be stored long-term to create a
+ message history */
 typedef struct _meshtastic_Message {
     /* The sending node's short name. */
     char sender_short_name[5];
