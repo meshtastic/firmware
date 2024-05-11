@@ -206,6 +206,9 @@ External serial flash WP25R1635FZUIL0
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
 // #define USE_SEGGER
 
+// T-Echo does not have a free serial port for this module
+#define MESHTASTIC_EXCLUDE_SERIAL 1
+
 // Battery
 // The battery sense is hooked to pin A0 (4)
 // it is defined in the anlaolgue pin section of this file
