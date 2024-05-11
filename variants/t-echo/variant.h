@@ -65,6 +65,9 @@ extern "C" {
 #define PIN_BUTTON2 (0 + 18)      // 0.18 is labeled on the board as RESET but we configure it in the bootloader as a regular GPIO
 #define PIN_BUTTON_TOUCH (0 + 11) // 0.11 is the soft touch button on T-Echo
 
+#define BUTTON_CLICK_MS 400
+#define BUTTON_TOUCH_MS 200
+
 /*
  * Analog pins
  */
@@ -202,6 +205,9 @@ External serial flash WP25R1635FZUIL0
 
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
 // #define USE_SEGGER
+
+// T-Echo does not have a free serial port for this module
+#define MESHTASTIC_EXCLUDE_SERIAL 1
 
 // Battery
 // The battery sense is hooked to pin A0 (4)
