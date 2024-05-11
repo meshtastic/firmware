@@ -321,9 +321,6 @@ typedef struct _meshtastic_Config_PositionConfig {
     uint32_t gps_en_gpio;
     /* Set where GPS is enabled, disabled, or not present */
     meshtastic_Config_PositionConfig_GpsMode gps_mode;
-    /* Set GPS precision in bits per channel, or 0 for disabled */
-    pb_size_t channel_precision_count;
-    uint32_t channel_precision[8];
 } meshtastic_Config_PositionConfig;
 
 /* Power Config\
@@ -629,7 +626,6 @@ extern "C" {
 #define meshtastic_Config_PositionConfig_broadcast_smart_minimum_interval_secs_tag 11
 #define meshtastic_Config_PositionConfig_gps_en_gpio_tag 12
 #define meshtastic_Config_PositionConfig_gps_mode_tag 13
-#define meshtastic_Config_PositionConfig_channel_precision_tag 14
 #define meshtastic_Config_PowerConfig_is_power_saving_tag 1
 #define meshtastic_Config_PowerConfig_on_battery_shutdown_after_secs_tag 2
 #define meshtastic_Config_PowerConfig_adc_multiplier_override_tag 3
@@ -735,8 +731,7 @@ X(a, STATIC,   SINGULAR, UINT32,   tx_gpio,           9) \
 X(a, STATIC,   SINGULAR, UINT32,   broadcast_smart_minimum_distance,  10) \
 X(a, STATIC,   SINGULAR, UINT32,   broadcast_smart_minimum_interval_secs,  11) \
 X(a, STATIC,   SINGULAR, UINT32,   gps_en_gpio,      12) \
-X(a, STATIC,   SINGULAR, UENUM,    gps_mode,         13) \
-X(a, STATIC,   REPEATED, UINT32,   channel_precision,  14)
+X(a, STATIC,   SINGULAR, UENUM,    gps_mode,         13)
 #define meshtastic_Config_PositionConfig_CALLBACK NULL
 #define meshtastic_Config_PositionConfig_DEFAULT NULL
 
@@ -843,7 +838,7 @@ extern const pb_msgdesc_t meshtastic_Config_BluetoothConfig_msg;
 #define meshtastic_Config_LoRaConfig_size        80
 #define meshtastic_Config_NetworkConfig_IpV4Config_size 20
 #define meshtastic_Config_NetworkConfig_size     196
-#define meshtastic_Config_PositionConfig_size    110
+#define meshtastic_Config_PositionConfig_size    62
 #define meshtastic_Config_PowerConfig_size       40
 #define meshtastic_Config_size                   199
 
