@@ -161,10 +161,10 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         if (!event->kbchar) {
             if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
                 this->payload = 0xb4;
-                this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
+                // this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
             } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
                 this->payload = 0xb7;
-                this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
+                // this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
             }
         } else {
             // pass the pressed key
@@ -180,11 +180,75 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED)) {
             this->runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
         }
-        // pass the pressed key
-        // LOG_DEBUG("Canned message ANYKEY (%x)\n", event->kbchar);
-        this->payload = event->kbchar;
-        this->lastTouchMillis = millis();
-        validEvent = true;
+
+        validEvent = false; // If key is normal than it will be set to true.
+
+        // Run modifier key code below, (doesnt inturrupt typing or reset to start screen page)
+        switch (event->kbchar) {
+        case 0x11: // make screen brighter
+            if (screen)
+                screen->increaseBrightness();
+            LOG_DEBUG("increasing Screen Brightness\n");
+            break;
+        case 0x12: // make screen dimmer
+            if (screen)
+                screen->decreaseBrightness();
+            LOG_DEBUG("Decreasing Screen Brightness\n");
+            break;
+        case 0xf1: // draw modifier (function) symbal
+            if (screen)
+                screen->setFunctionSymbal("Fn");
+            break;
+        case 0xf2: // remove modifier (function) symbal
+            if (screen)
+                screen->removeFunctionSymbal("Fn");
+            break;
+        // mute (switch off/toggle) external notifications on fn+m
+        case 0xac:
+            if (moduleConfig.external_notification.enabled == true) {
+                if (externalNotificationModule->getMute()) {
+                    externalNotificationModule->setMute(false);
+                    showTemporaryMessage("Notifications \nEnabled");
+                    if (screen)
+                        screen->removeFunctionSymbal("M"); // remove the mute symbol from the bottom right corner
+                } else {
+                    externalNotificationModule->stopNow(); // this will turn off all GPIO and sounds and idle the loop
+                    externalNotificationModule->setMute(true);
+                    showTemporaryMessage("Notifications \nDisabled");
+                    if (screen)
+                        screen->setFunctionSymbal("M"); // add the mute symbol to the bottom right corner
+                }
+            }
+            break;
+        case 0x9e: // toggle GPS like triple press does
+#if !MESHTASTIC_EXCLUDE_GPS
+            if (gps != nullptr) {
+                gps->toggleGpsMode();
+            }
+            if (screen)
+                screen->forceDisplay();
+            showTemporaryMessage("GPS Toggled");
+#endif
+            break;
+        case 0xaf: // fn+space send network ping like double press does
+            service.refreshLocalMeshNode();
+            if (service.trySendPosition(NODENUM_BROADCAST, true)) {
+                showTemporaryMessage("Position \nUpdate Sent");
+            } else {
+                showTemporaryMessage("Node Info \nUpdate Sent");
+            }
+            break;
+        default:
+            // pass the pressed key
+            // LOG_DEBUG("Canned message ANYKEY (%x)\n", event->kbchar);
+            this->payload = event->kbchar;
+            this->lastTouchMillis = millis();
+            validEvent = true;
+            break;
+        }
+        if (screen && (event->kbchar != 0xf1)) {
+            screen->removeFunctionSymbal("Fn"); // remove modifier (function) symbal
+        }
     }
     if (event->inputEvent == static_cast<char>(MATRIXKEY)) {
         LOG_DEBUG("Canned message event Matrix key pressed\n");
@@ -233,14 +297,16 @@ int32_t CannedMessageModule::runOnce()
 {
     if (((!moduleConfig.canned_message.enabled) && !CANNED_MESSAGE_MODULE_ENABLE) ||
         (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) || (this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE)) {
+        temporaryMessage = "";
         return INT32_MAX;
     }
     // LOG_DEBUG("Check status\n");
     UIFrameEvent e = {false, true};
     if ((this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) ||
-        (this->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED)) {
-        // TODO: might have some feedback of sendig state
+        (this->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) || (this->runState == CANNED_MESSAGE_RUN_STATE_MESSAGE)) {
+        // TODO: might have some feedback of sending state
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+        temporaryMessage = "";
         e.frameChanged = true;
         this->currentMessageIndex = -1;
         this->freetext = ""; // clear freetext
@@ -388,8 +454,9 @@ int32_t CannedMessageModule::runOnce()
         }
         if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
             e.frameChanged = true;
-            switch (this->payload) {
-            case 0x08: // backspace
+            switch (this->payload) { // code below all trigger the freetext window (where you type to send a message) or reset the
+                                     // display back to the default window
+            case 0x08:               // backspace
                 if (this->freetext.length() > 0) {
                     if (this->cursor == this->freetext.length()) {
                         this->freetext = this->freetext.substring(0, this->freetext.length() - 1);
@@ -401,7 +468,6 @@ int32_t CannedMessageModule::runOnce()
                 }
                 break;
             case 0x09: // tab
-            case 0x91: // alt+t for T-Deck that doesn't have a tab key
                 if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_CHANNEL) {
                     this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
                 } else if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
@@ -414,7 +480,7 @@ int32_t CannedMessageModule::runOnce()
             case 0xb7: // right
                 // already handled above
                 break;
-            // handle fn+s for shutdown
+                // handle fn+s for shutdown
             case 0x9b:
                 if (screen)
                     screen->startShutdownScreen();
@@ -426,33 +492,6 @@ int32_t CannedMessageModule::runOnce()
                 if (screen)
                     screen->startRebootScreen();
                 rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
-                runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-                break;
-            case 0x9e: // toggle GPS like triple press does
-                if (gps != nullptr) {
-                    gps->toggleGpsMode();
-                }
-                if (screen)
-                    screen->forceDisplay();
-                runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-                break;
-
-            // mute (switch off/toggle) external notifications on fn+m
-            case 0xac:
-                if (moduleConfig.external_notification.enabled == true) {
-                    if (externalNotificationModule->getMute()) {
-                        externalNotificationModule->setMute(false);
-                        runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-                    } else {
-                        externalNotificationModule->stopNow(); // this will turn off all GPIO and sounds and idle the loop
-                        externalNotificationModule->setMute(true);
-                        runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
-                    }
-                }
-                break;
-            case 0xaf: // fn+space send network ping like double press does
-                service.refreshLocalMeshNode();
-                service.sendNetworkPing(NODENUM_BROADCAST, true);
                 runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
                 break;
             default:
@@ -470,6 +509,8 @@ int32_t CannedMessageModule::runOnce()
                 }
                 break;
             }
+            if (screen)
+                screen->removeFunctionSymbal("Fn");
         }
 
         this->lastTouchMillis = millis();
@@ -542,12 +583,27 @@ int CannedMessageModule::getPrevIndex()
         return this->currentMessageIndex - 1;
     }
 }
+void CannedMessageModule::showTemporaryMessage(const String &message)
+{
+    temporaryMessage = message;
+    UIFrameEvent e = {false, true};
+    e.frameChanged = true;
+    notifyObservers(&e);
+    runState = CANNED_MESSAGE_RUN_STATE_MESSAGE;
+    // run this loop again in 2 seconds, next iteration will clear the display
+    setIntervalFromNow(2000);
+}
 
 void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     char buffer[50];
 
-    if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) {
+    if (temporaryMessage.length() != 0) {
+        LOG_DEBUG("Drawing temporary message: %s", temporaryMessage.c_str());
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->setFont(FONT_MEDIUM);
+        display->drawString(display->getWidth() / 2 + x, 0 + y + 12, temporaryMessage);
+    } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) {
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->setFont(FONT_MEDIUM);
         String displayString;

@@ -30,6 +30,9 @@ class TFTDisplay : public OLEDDisplay
     static bool hasTouch(void);
     static bool getTouch(int16_t *x, int16_t *y);
 
+    // Functions for changing display brightness
+    void setDisplayBrightness(uint8_t);
+
     /**
      * shim to make the abstraction happy
      *

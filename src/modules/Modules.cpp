@@ -47,7 +47,7 @@
 #include "modules/Telemetry/AirQualityTelemetry.h"
 #include "modules/Telemetry/EnvironmentTelemetry.h"
 #endif
-#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_POWER_TELEMETRY
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_POWER_TELEMETRY
 #include "modules/Telemetry/PowerTelemetry.h"
 #endif
 #ifdef ARCH_ESP32
@@ -143,7 +143,7 @@ void setupModules()
 #if HAS_SCREEN && !MESHTASTIC_EXCLUDE_CANNEDMESSAGES
         cannedMessageModule = new CannedMessageModule();
 #endif
-#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
+#if HAS_TELEMETRY
         new DeviceTelemetryModule();
 #endif
 #if HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
@@ -152,7 +152,7 @@ void setupModules()
             new AirQualityTelemetryModule();
         }
 #endif
-#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_POWER_TELEMETRY
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_POWER_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
         new PowerTelemetryModule();
 #endif
 #if (defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)) && !defined(CONFIG_IDF_TARGET_ESP32S2) &&               \
