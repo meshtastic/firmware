@@ -739,47 +739,11 @@ void NodeDB::initSavedMessages()
     updateMessageBounds();
 }
 
-bool removeDirectoryRecursively(const char *dirPath)
-{
-    File directory = FSCom.open(dirPath, FILE_O_WRITE);
-    if (!directory || !directory.isDirectory()) {
-        LOG_ERROR("Failed to open directory for removal\n");
-        return false;
-    }
-
-    File file = directory.openNextFile(FILE_O_WRITE);
-    while (file) {
-        String filePath = String(dirPath) + "/" + file.name();
-        if (file.isDirectory()) {
-            file.close();
-            if (!removeDirectoryRecursively(filePath.c_str())) {
-                LOG_ERROR("Failed to remove directory: %s\n", filePath);
-                return false;
-            }
-        } else {
-            file.close();
-            if (!FSCom.remove(filePath.c_str())) {
-                LOG_ERROR("Failed to remove file: %s\n", filePath);
-                return false;
-            }
-        }
-        file = directory.openNextFile(FILE_O_WRITE);
-    }
-
-    // Now that the directory is empty, it can be removed.
-    if (!rmdir(dirPath)) {
-        LOG_ERROR("Failed to remove directory: %s\n", dirPath);
-        return false;
-    }
-
-    return true;
-}
-
 void NodeDB::clearSavedMessages()
 {
     LOG_DEBUG("Clearing saved messages\n");
 
-    removeDirectoryRecursively("/msgs");
+    rmDir("/msgs");
 
     initSavedMessages();
 }
