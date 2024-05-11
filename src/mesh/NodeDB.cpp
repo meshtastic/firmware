@@ -158,7 +158,11 @@ NodeDB::NodeDB()
     }
     saveToDisk(saveWhat);
 
+#ifdef USE_PERSISTENT_MSG
     initSavedMessages();
+#else
+    clearSavedMessages();
+#endif
 }
 
 /**
@@ -780,50 +784,66 @@ void NodeDB::saveMessageToDisk(const meshtastic_MeshPacket &mp)
     delete msg;
 }
 
+bool NodeDB::deleteOldestMessage()
+{
+    meshtastic_Message *oldestMessage = nullptr;
+    int oldestMessageIndex = -1;
+    for (uint8_t i = 0; i < CATEGORY_COUNT; i++) {
+        if (oldestMessageIndices[i] == std::numeric_limits<int>::max())
+            continue;
+
+        meshtastic_Message currentMessage = loadMessage(i, oldestMessageIndices[i]);
+        if (oldestMessage == nullptr || currentMessage.rx_time < oldestMessage->rx_time) {
+            oldestMessage = &currentMessage;
+            oldestMessageIndex = oldestMessageIndices[i];
+        }
+    }
+
+    if (oldestMessage == nullptr) {
+        return false;
+    }
+
+    LOG_WARN("Storage full! Erasing oldest message with category %d and index %d\n", oldestMessage->category, oldestMessageIndex);
+
+    bool deleted =
+        FSCom.remove(("/msgs/" + std::to_string(oldestMessage->category) + "/" + std::to_string(oldestMessageIndex)).c_str());
+
+    if (!deleted) {
+        LOG_ERROR("Message deletion failed\n");
+        return false;
+    }
+
+    messageCache[oldestMessage->category].erase(*oldestMessage);
+
+    // Reset indicies of there are no messages left in storage
+    if (oldestMessageIndices[oldestMessage->category] == newestMessageIndices[oldestMessage->category]) {
+        newestMessageIndices[oldestMessage->category] = std::numeric_limits<int>::min();
+        oldestMessageIndices[oldestMessage->category] = std::numeric_limits<int>::max();
+    } else {
+        oldestMessageIndices[oldestMessage->category]++;
+    }
+
+    return true;
+}
+
 void NodeDB::saveMessageToDisk(const meshtastic_Message &msg)
 {
     LOG_DEBUG("Saving message to disk with category %d\n", msg.category);
 
+#ifdef USE_PERSISTENT_MSG
     // Delete oldest messages if storage below a threshold
     const uint16_t STORAGE_THRESHOLD = 8192 * 2 + 1;
     while (FSCom.totalBytes() - FSCom.usedBytes() < STORAGE_THRESHOLD) {
-        meshtastic_Message *oldestMessage = nullptr;
-        int oldestMessageIndex = -1;
-        for (uint8_t i = 0; i < CATEGORY_COUNT; i++) {
-            if (oldestMessageIndices[i] == std::numeric_limits<int>::max())
-                continue;
-
-            meshtastic_Message currentMessage = loadMessage(i, oldestMessageIndices[i]);
-            if (oldestMessage == nullptr || currentMessage.rx_time < oldestMessage->rx_time) {
-                oldestMessage = &currentMessage;
-                oldestMessageIndex = oldestMessageIndices[i];
-            }
-        }
-
-        if (oldestMessage == nullptr) {
+        if (!deleteOldestMessage()) {
             LOG_CRIT("Not enough free storage to save any messages to disk\n");
-            throw std::runtime_error("Storage insufficient and no messages can be removed.");
-        }
-
-        LOG_WARN("Storage full! Erasing oldest message with category %d and index %d\n", oldestMessage->category,
-                 oldestMessageIndex);
-
-        bool deleted =
-            FSCom.remove(("/msgs/" + std::to_string(oldestMessage->category) + "/" + std::to_string(oldestMessageIndex)).c_str());
-
-        if (!deleted)
-            LOG_ERROR("Message deletion failed\n");
-
-        messageCache[oldestMessage->category].erase(*oldestMessage);
-
-        // Reset indicies of there are no messages left in storage
-        if (oldestMessageIndices[oldestMessage->category] == newestMessageIndices[oldestMessage->category]) {
-            newestMessageIndices[oldestMessage->category] = std::numeric_limits<int>::min();
-            oldestMessageIndices[oldestMessage->category] = std::numeric_limits<int>::max();
-        } else {
-            oldestMessageIndices[oldestMessage->category]++;
+            // TODO: Warn the user on the screen
+            return;
         }
     }
+#else
+    // Maintain only one latest message saved only
+    deleteOldestMessage();
+#endif
 
     // Initialize indices if first message stored in category
     if (oldestMessageIndices[msg.category] == std::numeric_limits<int>::max()) {

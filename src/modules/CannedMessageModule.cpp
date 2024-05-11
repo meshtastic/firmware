@@ -288,7 +288,11 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
 
     LOG_INFO("Sending message id=%d, dest=%x, msg=%.*s\n", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
 
+    // Don't waste the one message you can see on your own message if not using
+    // persistent message feature
+#ifdef USE_PERSISTENT_MSG
     nodeDB->saveMessageToDisk(*p);
+#endif
 
     service.sendToMesh(
         p, RX_SRC_LOCAL,

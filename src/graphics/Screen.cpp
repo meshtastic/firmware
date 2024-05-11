@@ -426,6 +426,7 @@ static bool shouldDrawMessage(const meshtastic_MeshPacket *packet)
     return packet->from != 0 && !moduleConfig.store_forward.enabled;
 }
 
+#ifdef USE_PERSISTENT_MSG
 // Wraps string using modified logic from OLEDDisplay::drawStringMaxWidth
 std::string wrapString(OLEDDisplay *display, uint16_t maxLineWidth, const std::string &text)
 {
@@ -591,6 +592,44 @@ void drawMessageLogFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 
     delete[] stringBuffer;
 }
+#else
+// Draw the last text message we received
+static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    // the max length of this buffer is much longer than we can possibly print
+    static char tempBuf[237];
+
+    const meshtastic_Message msg = nodeDB->loadMessage(nodeDB->lastCategorySaved, 0);
+    // const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
+    // meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
+
+    // Demo for drawStringMaxWidth:
+    // with the third parameter you can define the width after which words will
+    // be wrapped. Currently only spaces and "-" are allowed for wrapping
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
+        display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+        display->setColor(BLACK);
+    }
+
+    uint32_t seconds = sinceReceived(&msg);
+    uint32_t minutes = seconds / 60;
+    uint32_t hours = minutes / 60;
+    uint32_t days = hours / 24;
+
+    if (config.display.heading_bold) {
+        display->drawStringf(1 + x, 0 + y, tempBuf, "%s ago from %s",
+                             screen->drawTimeDelta(days, hours, minutes, seconds).c_str(), msg.sender_short_name);
+    }
+    display->drawStringf(0 + x, 0 + y, tempBuf, "%s ago from %s", screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
+                         msg.sender_short_name);
+
+    display->setColor(WHITE);
+    snprintf(tempBuf, sizeof(tempBuf), "%s", msg.content);
+    display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), tempBuf);
+}
+#endif
 
 /// Draw the last waypoint we received
 static void drawWaypointFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -1612,12 +1651,15 @@ void Screen::setFrames()
     if (error_code)
         normalFrames[numframes++] = drawCriticalFaultFrame;
 
-    // If we have a text message - show it next, unless it's a phone message and we aren't using any special modules
-    /*if (devicestate.has_rx_text_message && shouldDrawMessage(&devicestate.rx_text_message)) {
-        normalFrames[numframes++] = drawTextMessageFrame;
-    }*/
-    // OUR LOG FUNCTION
+#ifdef USE_PERSISTENT_MSG
     normalFrames[numframes++] = drawMessageLogFrame;
+#else
+    // If we have a text message - show it next
+    if (nodeDB->messageFileList->size() > 0) {
+        normalFrames[numframes++] = drawTextMessageFrame;
+    }
+#endif
+
     // If we have a waypoint - show it next, unless it's a phone message and we aren't using any special modules
     if (devicestate.has_rx_waypoint && shouldDrawMessage(&devicestate.rx_waypoint)) {
         normalFrames[numframes++] = drawWaypointFrame;
@@ -2198,13 +2240,18 @@ int Screen::handleInputEvent(const InputEvent *event)
     if (showingNormalScreen && moduleFrames.size() == 0) {
         // LOG_DEBUG("Screen::handleInputEvent from %s\n", event->source);
         if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
+#ifdef USE_PERSISTENT_MSG
             inChannelFrame = false;
+#endif
             showPrevFrame();
         } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
+#ifdef USE_PERSISTENT_MSG
             inChannelFrame = false;
+#endif
             showNextFrame();
         }
 
+#ifdef USE_PERSISTENT_MSG
         if (inChannelFrame) {
             if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP)) {
                 if (scrollEnabled) {
@@ -2232,6 +2279,7 @@ int Screen::handleInputEvent(const InputEvent *event)
             }
             setFastFramerate();
         }
+#endif
     }
 
     return 0;

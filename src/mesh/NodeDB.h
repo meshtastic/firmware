@@ -79,6 +79,7 @@ class NodeDB
         saveChannelsToDisk(), saveDeviceStateToDisk();
 
     void initSavedMessages();
+    bool deleteOldestMessage();
     void saveMessageToDisk(const meshtastic_MeshPacket &mp);
     void saveMessageToDisk(const meshtastic_Message &msg);
     uint8_t lastCategorySaved = 0;
