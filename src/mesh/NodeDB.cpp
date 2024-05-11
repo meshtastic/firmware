@@ -574,7 +574,7 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
             state = LoadFileResult::DECODE_FAILED;
         } else {
             LOG_INFO("Loaded %s successfully\n", filename);
-            state = LoadFileResult::SUCCESS;
+            state = LoadFileResult::LOAD_SUCCESS;
         }
         f.close();
     } else {
