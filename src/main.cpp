@@ -559,6 +559,7 @@ void setup()
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::QMC5883L, meshtastic_TelemetrySensorType_QMC5883L)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::PMSA0031, meshtastic_TelemetrySensorType_PMSA003I)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::RCWL9620, meshtastic_TelemetrySensorType_RCWL9620)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::SHT4X, meshtastic_TelemetrySensorType_SHT4X)
 
     i2cScanner.reset();
 
@@ -833,7 +834,8 @@ void setup()
     if (settingsMap[use_sx1262]) {
         if (!rIf) {
             LOG_DEBUG("Attempting to activate sx1262 radio on SPI port %s\n", settingsStrings[spidev].c_str());
-            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+            LockingArduinoHal *RadioLibHAL =
+                new LockingArduinoHal(SPI, spiSettings, (settingsMap[ch341Quirk] ? settingsMap[busy] : RADIOLIB_NC));
             rIf = new SX1262Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
                                       settingsMap[busy]);
             if (!rIf->init()) {
@@ -847,7 +849,8 @@ void setup()
     } else if (settingsMap[use_rf95]) {
         if (!rIf) {
             LOG_DEBUG("Attempting to activate rf95 radio on SPI port %s\n", settingsStrings[spidev].c_str());
-            LockingArduinoHal *RadioLibHAL = new LockingArduinoHal(SPI, spiSettings);
+            LockingArduinoHal *RadioLibHAL =
+                new LockingArduinoHal(SPI, spiSettings, (settingsMap[ch341Quirk] ? settingsMap[busy] : RADIOLIB_NC));
             rIf = new RF95Interface((LockingArduinoHal *)RadioLibHAL, settingsMap[cs], settingsMap[irq], settingsMap[reset],
                                     settingsMap[busy]);
             if (!rIf->init()) {
