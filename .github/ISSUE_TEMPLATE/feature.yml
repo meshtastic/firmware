@@ -16,6 +16,8 @@ body:
       options:
         - NRF52
         - ESP32
+        - Linux Native
+        - other
     validations:
       required: true
   - type: textarea
