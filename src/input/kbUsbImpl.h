@@ -2,6 +2,8 @@
 #include "kbUsbBase.h"
 #include "main.h"
 
+#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32C3
+
 /**
  * @brief The idea behind this class to have static methods for the event handlers.
  *      Check attachInterrupt() at RotaryEncoderInteruptBase.cpp
@@ -17,3 +19,5 @@ class KbUsbImpl : public KbUsbBase
 };
 
 extern KbUsbImpl *kbUsbImpl;
+
+#endif
