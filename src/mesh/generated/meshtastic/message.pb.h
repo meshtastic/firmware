@@ -17,18 +17,19 @@ typedef struct _meshtastic_Message {
     char sender_short_name[5];
     /* Whether the message is from this device. */
     bool from_self;
-    /* TODO: Comment */
+    /* The text of the message. */
     char content[237];
     /* Values 1 through 7 indicate what secondary channel index this message was sent on.
  Value 0 indicates that this message was sent on the primary channel. Value 8
  indicates that this message was sent as a direct message. */
-    uint32_t category;
+    uint8_t category;
     /* The time this message was received by the esp32 (secs since 1970).
  Note: this field is _never_ sent on the radio link itself (to save space) Times
  are typically not sent over the mesh, but they will be added to any Packet
  (chain of SubPacket) sent to the phone (so the phone can know exact time of reception) */
     uint32_t rx_time;
-    /* TODO: Write comment */
+    /* Whether we have received an ack for this message.
+ NOTE: Not yet implemented. */
     bool rx_ack;
 } meshtastic_Message;
 
@@ -67,7 +68,7 @@ extern const pb_msgdesc_t meshtastic_Message_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_MESSAGE_PB_H_MAX_SIZE meshtastic_Message_size
-#define meshtastic_Message_size                  260
+#define meshtastic_Message_size                  257
 
 #ifdef __cplusplus
 } /* extern "C" */
