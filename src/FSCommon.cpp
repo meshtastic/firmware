@@ -205,6 +205,62 @@ void rmDir(const char *dirname)
 #endif
 }
 
+bool fsCheck()
+{
+#if defined(ARCH_NRF52)
+    size_t write_size = 0;
+    size_t read_size = 0;
+    char buf[32] = {0};
+
+    Adafruit_LittleFS_Namespace::File file(FSCom);
+    const char *text = "meshtastic fs test";
+    size_t text_length = strlen(text);
+    const char *filename = "/meshtastic.txt";
+
+    LOG_DEBUG("Try create file .\n");
+    if (file.open(filename, FILE_O_WRITE)) {
+        write_size = file.write(text);
+    } else {
+        LOG_DEBUG("Open file failed .\n");
+        goto FORMAT_FS;
+    }
+
+    if (write_size != text_length) {
+        LOG_DEBUG("Text bytes do not match .\n");
+        file.close();
+        goto FORMAT_FS;
+    }
+
+    file.close();
+
+    if (!file.open(filename, FILE_O_READ)) {
+        LOG_DEBUG("Open file failed .\n");
+        goto FORMAT_FS;
+    }
+
+    read_size = file.readBytes(buf, text_length);
+    if (read_size != text_length) {
+        LOG_DEBUG("Text bytes do not match .\n");
+        file.close();
+        goto FORMAT_FS;
+    }
+
+    if (memcmp(buf, text, text_length) != 0) {
+        LOG_DEBUG("The written bytes do not match the read bytes .\n");
+        file.close();
+        goto FORMAT_FS;
+    }
+    return true;
+FORMAT_FS:
+    LOG_DEBUG("Format FS ....\n");
+    FSCom.format();
+    FSCom.begin();
+    return false;
+#else
+    return true;
+#endif
+}
+
 void fsInit()
 {
 #ifdef FSCom
@@ -212,8 +268,37 @@ void fsInit()
         LOG_ERROR("Filesystem mount Failed.\n");
         // assert(0); This auto-formats the partition, so no need to fail here.
     }
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32)
     LOG_DEBUG("Filesystem files (%d/%d Bytes):\n", FSCom.usedBytes(), FSCom.totalBytes());
+#elif defined(ARCH_NRF52)
+    /*
+     * nRF52840 has a certain chance of automatic formatting failure.
+     * Try to create a file after initializing the file system. If the creation fails,
+     * it means that the file system is not working properly. Please format it manually again.
+     * To check the normality of the file system, you need to disable the LFS_NO_ASSERT assertion.
+     * Otherwise, the assertion will be entered at the moment of reading or opening, and the FS will not be formatted.
+     * */
+    bool ret = false;
+    uint8_t retry = 3;
+
+    while (retry--) {
+        ret = fsCheck();
+        if (ret) {
+            LOG_DEBUG("File system check is OK.\n");
+            break;
+        }
+        delay(10);
+    }
+
+    // It may not be possible to reach this step.
+    // Add a loop here to prevent unpredictable situations from happening.
+    // Can add a screen to display error status later.
+    if (!ret) {
+        while (1) {
+            LOG_ERROR("The file system is damaged and cannot proceed to the next step.\n");
+            delay(1000);
+        }
+    }
 #else
     LOG_DEBUG("Filesystem files:\n");
 #endif

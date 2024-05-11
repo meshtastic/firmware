@@ -29,6 +29,7 @@ class ScanI2C
         INA3221,
         MCP9808,
         SHT31,
+        SHT4X,
         SHTC3,
         LPS22HB,
         QMC6310,
@@ -41,6 +42,7 @@ class ScanI2C
         BQ24295,
         LSM6DS3,
         TCA9555,
+        RCWL9620,
         NCP5623,
     } DeviceType;
 
