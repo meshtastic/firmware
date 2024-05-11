@@ -203,17 +203,19 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
 bool NodeDB::factoryReset()
 {
     LOG_INFO("Performing factory reset!\n");
-    // first, remove the "/prefs" (this removes most prefs)
+    // Remove the "/msgs"
+    rmDir("/msgs");
+    // Remove the "/prefs" (this removes most prefs)
     rmDir("/prefs");
     if (FSCom.exists("/static/rangetest.csv") && !FSCom.remove("/static/rangetest.csv")) {
         LOG_ERROR("Could not remove rangetest.csv file\n");
     }
-    // second, install default state (this will deal with the duplicate mac address issue)
+    // Install default state (this will deal with the duplicate mac address issue)
     installDefaultDeviceState();
     installDefaultConfig();
     installDefaultModuleConfig();
     installDefaultChannels();
-    // third, write everything to disk
+    // Write everything to disk
     saveToDisk();
 #ifdef ARCH_ESP32
     // This will erase what's in NVS including ssl keys, persistent variables and ble pairing
@@ -765,7 +767,7 @@ bool removeDirectoryRecursively(const char *dirPath)
     }
 
     // Now that the directory is empty, it can be removed.
-    if (!FSCom.rmdir(dirPath)) {
+    if (!rmdir(dirPath)) {
         LOG_ERROR("Failed to remove directory: %s\n", dirPath);
         return false;
     }
@@ -797,7 +799,7 @@ bool NodeDB::messageIsDirectMessage(const meshtastic_MeshPacket &mp)
 void NodeDB::saveMessageToDisk(const meshtastic_MeshPacket &mp)
 {
     auto *msg = new meshtastic_Message();
-    auto senderNode = nodeDB->getMeshNode(mp.from);
+    auto senderNode = nodeDB->getMeshNode(getFrom(&mp));
     if (senderNode == nullptr || strlen(senderNode->user.short_name) == 0)
         strcpy(msg->sender_short_name, "UNK");
     else
