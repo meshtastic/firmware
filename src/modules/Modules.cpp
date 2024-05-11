@@ -127,7 +127,7 @@ void setupModules()
         kbMatrixImpl = new KbMatrixImpl();
         kbMatrixImpl->init();
 #endif // INPUTBROKER_MATRIX_TYPE
-#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32C3
+#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32S2
         kbUsbImpl = new KbUsbImpl();
         kbUsbImpl->init();
 #endif // INPUTBROKER_MATRIX_TYPE

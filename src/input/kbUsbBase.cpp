@@ -1,7 +1,7 @@
 #include "kbUsbBase.h"
 #include "configuration.h"
 
-#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32C3
+#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32S2
 
 KbUsbBase::KbUsbBase(const char *name) : concurrency::OSThread(name)
 {

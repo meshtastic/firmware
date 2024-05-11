@@ -2,7 +2,7 @@
 #include "kbUsbBase.h"
 #include "main.h"
 
-#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32C3
+#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32S2
 
 /**
  * @brief The idea behind this class to have static methods for the event handlers.

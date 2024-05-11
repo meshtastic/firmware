@@ -2,7 +2,7 @@
 
 #include "InputBroker.h"
 #include "concurrency/OSThread.h"
-#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32C3
+#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32S2
 #include "EspUsbHost.h"
 
 class KbUsbBase : public Observable<const InputEvent *>, public concurrency::OSThread, public EspUsbHost
