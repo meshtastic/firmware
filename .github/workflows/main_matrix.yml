@@ -20,6 +20,19 @@ on:
   workflow_dispatch:
 
 jobs:
+  setup:
+    strategy:
+      fail-fast: false
+        matrix:
+          arch: [esp32, esp32s3, esp32c3, nrf52840, rpi2040, raspbian, native]
+    runs-on: ubuntu-latest
+    outputs:
+      mymatrix: ${{ steps.dataStep.outputs.${{matrix.arch}}-targets }}
+    steps:
+      - id: jsonStep
+        run: |
+          TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}})
+          echo "${{matrix.arch}}-targets=$(jq -cn --argjson environments "$TARGETS" '{board: $environments}')" >> $GITHUB_OUTPUT      
   check:
     strategy:
       fail-fast: false
@@ -55,30 +68,10 @@ jobs:
         run: bin/check-all.sh ${{ matrix.board }}
 
   build-esp32:
+    needs: setup
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - board: rak11200
-          - board: tlora-v2
-          - board: tlora-v1
-          - board: tlora_v1_3
-          - board: tlora-v2-1-1_6
-          - board: tlora-v2-1-1_6-tcxo
-          - board: tlora-v2-1-1_8
-          - board: tbeam
-          - board: heltec-v2_0
-          - board: heltec-v2_1
-          - board: tbeam0_7
-          - board: meshtastic-diy-v1
-          - board: hydra
-          - board: meshtastic-dr-dev
-          - board: nano-g1
-          - board: station-g1
-          - board: m5stack-core
-          - board: m5stack-coreink
-          - board: nano-g1-explorer
-          - board: chatter2
+      matrix: ${{ fromJson(needs.setup.outputs.esp32-targets) }}
     uses: ./.github/workflows/build_esp32.yml
     with:
       board: ${{ matrix.board }}
@@ -86,21 +79,7 @@ jobs:
   build-esp32-s3:
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - board: heltec-v3
-          - board: heltec-wsl-v3
-          - board: heltec-wireless-tracker
-          - board: heltec-wireless-tracker-V1-0
-          - board: heltec-wireless-paper-v1_0
-          - board: heltec-wireless-paper #v1.1
-          - board: tbeam-s3-core
-          - board: tlora-t3s3-v1
-          - board: t-watch-s3
-          - board: t-deck
-          - board: picomputer-s3
-          - board: station-g2
-          - board: unphone
+      matrix: ${{ fromJson(needs.setup.outputs.esp32s3-targets) }}
     uses: ./.github/workflows/build_esp32_s3.yml
     with:
       board: ${{ matrix.board }}
@@ -108,9 +87,7 @@ jobs:
   build-esp32-c3:
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - board: heltec-ht62-esp32c3-sx1262
+      matrix: ${{ fromJson(needs.setup.outputs.esp32c3-targets) }}
     uses: ./.github/workflows/build_esp32_c3.yml
     with:
       board: ${{ matrix.board }}
@@ -118,16 +95,7 @@ jobs:
   build-nrf52:
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - board: rak4631
-          - board: rak4631_eink
-          - board: monteops_hw1
-          - board: t-echo
-          - board: canaryone
-          - board: pca10059_diy_eink
-          - board: feather_diy
-          - board: nano-g2-ultra
+      matrix: ${{ fromJson(needs.setup.outputs.nrf52840-targets) }}
     uses: ./.github/workflows/build_nrf52.yml
     with:
       board: ${{ matrix.board }}
@@ -135,13 +103,7 @@ jobs:
   build-rpi2040:
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - board: pico
-          - board: picow
-          - board: rak11310
-          - board: senselora_rp2040
-          - board: rp2040-lora
+      matrix: ${{ fromJson(needs.setup.outputs.rp2040-targets) }}
     uses: ./.github/workflows/build_rpi2040.yml
     with:
       board: ${{ matrix.board }}

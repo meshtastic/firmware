@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-"""Generate the CI matrix"""
+"""Generate the CI matrix."""
 
 import configparser
 import json
