@@ -26,13 +26,16 @@ jobs:
       matrix:
         arch: [esp32, esp32s3, esp32c3, nrf52840, rpi2040, raspbian, native]
     runs-on: ubuntu-latest
-    outputs:
-      ${{matrix.arch}}: ${{ steps.jsonStep.outputs.matrix }}
     steps:
+      - id: checkout
+        uses: actions/checkout@v3
+        name: Checkout base
       - id: jsonStep
         run: |
           TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}})
-          echo "${{matrix.arch}}=$(jq -cn --argjson environments "$TARGETS" '{board: $environments}')" >> $GITHUB_OUTPUT      
+          echo "${{matrix.arch}}=$(jq -cn --argjson environments "$TARGETS" '{board: $environments}')" >> $GITHUB_OUTPUT
+    outputs:
+      thematrix: ${{ steps.jsonStep.outputs.stdout }}
   check:
     strategy:
       fail-fast: false
