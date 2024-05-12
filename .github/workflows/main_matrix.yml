@@ -24,7 +24,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [esp32, esp32s3, esp32c3, nrf52840, rp2040, raspbian, native]
+        arch:
+          [esp32, esp32s3, esp32c3, nrf52840, rp2040, raspbian, native, check]
     runs-on: ubuntu-latest
     steps:
       - id: checkout
@@ -43,26 +44,13 @@ jobs:
       rp2040: ${{ steps.jsonStep.outputs.rp2040 }}
       raspbian: ${{ steps.jsonStep.outputs.raspbian }}
       native: ${{ steps.jsonStep.outputs.native }}
+      check: ${{ steps.jsonStep.outputs.check }}
 
   check:
+    needs: setup
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - board: rak11200
-          - board: tlora-v2-1-1_6
-          - board: tbeam
-          - board: heltec-v2_1
-          - board: meshtastic-diy-v1
-          - board: rak4631
-          - board: t-echo
-          - board: station-g2
-          - board: m5stack-coreink
-          - board: tbeam-s3-core
-          - board: tlora-t3s3-v1
-          - board: t-watch-s3
-          - board: t-deck
-          #- board: rak11310
+      matrix: ${{ fromJson(needs.setup.outputs.check) }}
 
     runs-on: ubuntu-latest
     steps:
