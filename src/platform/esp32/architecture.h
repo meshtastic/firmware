@@ -87,7 +87,6 @@
 #define HW_VENDOR meshtastic_HardwareModel_TLORA_V2_1_1P8
 #elif defined(T_DECK)
 #define HW_VENDOR meshtastic_HardwareModel_T_DECK
-#define USE_PERSISTENT_MSG
 #elif defined(T_WATCH_S3)
 #define HW_VENDOR meshtastic_HardwareModel_T_WATCH_S3
 #elif defined(GENIEBLOCKS)
