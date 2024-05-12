@@ -201,7 +201,7 @@ jobs:
         build-esp32-c3,
         build-nrf52,
         # build-raspbian,
-        build-native,
+        # build-native,
         build-rpi2040,
         # package-raspbian,
       ]
