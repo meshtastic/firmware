@@ -33,6 +33,7 @@ jobs:
       - id: jsonStep
         run: |
           TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}})
+          echo "$TARGETS"
           echo "${{matrix.arch}}=$(jq -cn --argjson environments "$TARGETS" '{board: $environments}')" >> $GITHUB_OUTPUT
     outputs:
       esp32: ${{ steps.jsonStep.outputs.esp32 }}
