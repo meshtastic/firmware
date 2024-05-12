@@ -54,9 +54,10 @@ jobs:
         id: version
 
       - name: Store binaries as an artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: firmware-${{ inputs.board }}-${{ steps.version.outputs.version }}.zip
+          overwrite: true
           path: |
             release/*.bin
             release/*.elf

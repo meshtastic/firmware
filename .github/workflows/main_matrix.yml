@@ -58,7 +58,7 @@ jobs:
 
       - name: Trunk Check
         if: ${{ github.event_name != 'workflow_dispatch' }}
-        uses: trunk-io/trunk-action@782e83f803ca6e369f035d64c6ba2768174ba61b
+        uses: trunk-io/trunk-action@v1
 
       - name: Check ${{ matrix.board }}
         run: bin/check-all.sh ${{ matrix.board }}
@@ -143,16 +143,17 @@ jobs:
         id: version
 
       - name: Store binaries as an artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: firmware-native-${{ steps.version.outputs.version }}.zip
+          overwrite: true
           path: |
             release/device-*.sh
             release/device-*.bat
 
       - name: Docker login
         if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           username: meshtastic
           password: ${{ secrets.DOCKER_TOKEN }}
@@ -212,9 +213,10 @@ jobs:
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           path: ./
+          merge-multiple: true
 
       - name: Display structure of downloaded files
         run: ls -R
@@ -227,9 +229,10 @@ jobs:
         run: mv -b -t ./ ./*tbeam-2*/littlefs*.bin ./*tbeam-2*/bleota.bin ./*tbeam-s3*/bleota-s3.bin ./*esp32c3*/bleota-c3.bin ./**/firmware*.bin ./*t-echo*/Meshtastic_nRF52_factory_erase_v2.uf2 ./**/firmware-*.uf2 ./**/firmware-*-ota.zip ./**/*.elf ./*native*/*device-*.sh ./*native*/*device-*.bat ./firmware-raspbian-*/release/meshtasticd_linux_aarch64 ./firmware-raspbian-*/bin/config-dist.yaml
 
       - name: Repackage in single firmware zip
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: firmware-${{ steps.version.outputs.version }}
+          overwrite: true
           path: |
             ./*.bin
             ./*.uf2
@@ -240,9 +243,10 @@ jobs:
             ./config-dist.yaml
           retention-days: 90
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: firmware-${{ steps.version.outputs.version }}
+          merge-multiple: true
           path: ./output
 
       # For diagnostics
@@ -258,9 +262,10 @@ jobs:
         run: zip -j -9 -r ./firmware-${{ steps.version.outputs.version }}.zip ./output
 
       - name: Repackage in single elfs zip
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: debug-elfs-${{ steps.version.outputs.version }}.zip
+          overwrite: true
           path: ./*.elf
           retention-days: 30
 
@@ -293,13 +298,15 @@ jobs:
         run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: firmware-${{ steps.version.outputs.version }}
+          merge-multiple: true
           path: ./output
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
+          merge-multiple: true
           name: artifact-deb
 
       - name: Display structure of downloaded files
@@ -313,9 +320,10 @@ jobs:
       - name: Zip firmware
         run: zip -j -9 -r ./firmware-${{ steps.version.outputs.version }}.zip ./output
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: debug-elfs-${{ steps.version.outputs.version }}.zip
+          merge-multiple: true
           path: ./elfs
 
       - name: Zip Elfs

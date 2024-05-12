@@ -36,9 +36,10 @@ jobs:
         id: version
 
       - name: Download artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: firmware-raspbian-${{ steps.version.outputs.version }}.zip
+          merge-multiple: true
 
       - name: Display structure of downloaded files
         run: ls -R
@@ -68,8 +69,9 @@ jobs:
           depends: libyaml-cpp0.7, openssl, libulfius2.7
           desc: Native Linux Meshtastic binary.
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: artifact-deb
+          overwrite: true
           path: |
             ./*.deb
