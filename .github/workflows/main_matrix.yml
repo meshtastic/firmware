@@ -25,7 +25,7 @@ jobs:
       fail-fast: false
       matrix:
         arch:
-          [esp32, esp32s3, esp32c3, nrf52840, rp2040, raspbian, native, check]
+          [esp32, esp32s3, esp32c3, nrf52840, rp2040, check]
     runs-on: ubuntu-latest
     steps:
       - id: checkout
@@ -42,8 +42,6 @@ jobs:
       esp32c3: ${{ steps.jsonStep.outputs.esp32c3 }}
       nrf52840: ${{ steps.jsonStep.outputs.nrf52840 }}
       rp2040: ${{ steps.jsonStep.outputs.rp2040 }}
-      raspbian: ${{ steps.jsonStep.outputs.raspbian }}
-      native: ${{ steps.jsonStep.outputs.native }}
       check: ${{ steps.jsonStep.outputs.check }}
 
   check:
