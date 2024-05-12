@@ -538,7 +538,7 @@ void drawMessageLogFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 
     // Draw the category label
     std::string info;
-    if (category == 0)
+    if (category == channels.getPrimaryIndex())
         info = "PRIME";
     else if (category == nodeDB->CATEGORY_COUNT - 1)
         info = "DMs";
