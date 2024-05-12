@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - id: checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         name: Checkout base
       - id: jsonStep
         run: |
@@ -51,7 +51,7 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Build base
         id: base
         uses: ./.github/actions/setup-base
@@ -120,7 +120,7 @@ jobs:
   build-native:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Build base
         id: base
         uses: ./.github/actions/setup-base
@@ -184,7 +184,7 @@ jobs:
     needs: [check]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
@@ -207,7 +207,7 @@ jobs:
       ]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
@@ -282,7 +282,7 @@ jobs:
     needs: [gather-artifacts, after-checks]
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Python
         uses: actions/setup-python@v4
