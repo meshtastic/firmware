@@ -31,16 +31,13 @@ for subdir, dirs, files in os.walk(rootdir):
                                 if (
                                     config[config[c].name]["board_level"] == "extra"
                                 ) & ("extra" in options):
-                                    outlist.clear()
                                     outlist.append(section)
                             else:
-                                outlist.clear()
                                 outlist.append(section)
                     if "board_check" in config[config[c].name]:
                         if (config[config[c].name]["board_check"] == "true") & (
                             "check" in options
                         ):
-                            outlist.clear()
                             outlist.append(section)
 
 print(json.dumps(outlist))
