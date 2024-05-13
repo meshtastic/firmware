@@ -224,6 +224,9 @@ jobs:
         run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
+      - name: Move files up
+        run: mv -b -t ./ ./release/meshtasticd_linux_aarch64 ./bin/config-dist.yaml
+
       - name: Repackage in single firmware zip
         uses: actions/upload-artifact@v4
         with:
@@ -235,8 +238,11 @@ jobs:
             ./firmware-*-ota.zip
             ./device-*.sh
             ./device-*.bat
-            ./meshtasticd_linux_arm64
+            ./meshtasticd_linux_*64
             ./config-dist.yaml
+            ./littlefs-*.bin
+            ./bleota*bin
+            ./Meshtastic_nRF52_factory_erase*.uf2
           retention-days: 90
 
       - uses: actions/download-artifact@v4
@@ -377,7 +383,7 @@ jobs:
           bin/bump_version.py
 
       - name: Create version.properties pull request
-        uses: peter-evans/create-pull-request@v3
+        uses: peter-evans/create-pull-request@v6
         with:
           add-paths: |
             version.properties
