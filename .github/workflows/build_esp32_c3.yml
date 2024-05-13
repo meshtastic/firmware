@@ -13,13 +13,13 @@ jobs:
   build-esp32-c3:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Build base
         id: base
         uses: ./.github/actions/setup-base
 
       - name: Pull web ui
-        uses: dsaltares/fetch-gh-release-asset@a40c8b4a0471f9ab81bdf73a010f74cc51476ad4
+        uses: dsaltares/fetch-gh-release-asset@master
         with:
           repo: meshtastic/web
           file: build.tar
@@ -41,7 +41,7 @@ jobs:
         run: bin/build-esp32.sh ${{ inputs.board }}
 
       - name: Pull OTA Firmware
-        uses: dsaltares/fetch-gh-release-asset@a40c8b4a0471f9ab81bdf73a010f74cc51476ad4
+        uses: dsaltares/fetch-gh-release-asset@master
         with:
           repo: meshtastic/firmware-ota
           file: firmware-c3.bin
@@ -54,9 +54,10 @@ jobs:
         id: version
 
       - name: Store binaries as an artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: firmware-${{ inputs.board }}-${{ steps.version.outputs.version }}.zip
+          overwrite: true
           path: |
             release/*.bin
             release/*.elf
