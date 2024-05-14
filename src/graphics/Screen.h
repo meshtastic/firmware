@@ -26,6 +26,10 @@ class Screen
     void startRebootScreen() {}
     void startShutdownScreen() {}
     void startFirmwareUpdateScreen() {}
+    void increaseBrightness() {}
+    void decreaseBrightness() {}
+    void setFunctionSymbal(std::string) {}
+    void removeFunctionSymbal(std::string) {}
 };
 } // namespace graphics
 #else
