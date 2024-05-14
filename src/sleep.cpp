@@ -264,7 +264,11 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
 #ifdef BUTTON_PIN
     // Avoid leakage through button pin
     if (GPIO_IS_VALID_OUTPUT_GPIO(BUTTON_PIN)) {
+#ifdef BUTTON_NEED_PULLUP
+        pinMode(BUTTON_PIN, INPUT_PULLUP);
+#else
         pinMode(BUTTON_PIN, INPUT);
+#endif
         gpio_hold_en((gpio_num_t)BUTTON_PIN);
     }
 #endif
