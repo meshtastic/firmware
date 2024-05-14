@@ -1,3 +1,7 @@
+#include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
 #pragma once
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "NodeDB.h"
@@ -46,3 +50,5 @@ class TelemetrySensor
 
     virtual bool getMetrics(meshtastic_Telemetry *measurement) = 0;
 };
+
+#endif

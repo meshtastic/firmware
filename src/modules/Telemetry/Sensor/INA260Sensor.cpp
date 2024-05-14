@@ -1,7 +1,10 @@
-#include "INA260Sensor.h"
-#include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "TelemetrySensor.h"
 #include "configuration.h"
+
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
+#include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "INA260Sensor.h"
+#include "TelemetrySensor.h"
 #include <Adafruit_INA260.h>
 
 INA260Sensor::INA260Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_INA260, "INA260") {}
@@ -33,3 +36,5 @@ uint16_t INA260Sensor::getBusVoltageMv()
 {
     return lround(ina260.readBusVoltage());
 }
+
+#endif
