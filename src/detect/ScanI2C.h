@@ -29,6 +29,7 @@ class ScanI2C
         INA3221,
         MCP9808,
         SHT31,
+        SHT4X,
         SHTC3,
         LPS22HB,
         QMC6310,
