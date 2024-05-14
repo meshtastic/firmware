@@ -94,9 +94,10 @@ NRF52Bluetooth *nrf52Bluetooth;
 
 #include "PowerFSMThread.h"
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #include "AccelerometerThread.h"
 #include "AmbientLightingThread.h"
+AccelerometerThread *accelerometerThread;
 #endif
 
 #ifdef HAS_I2S
@@ -197,9 +198,6 @@ uint32_t timeLastPowered = 0;
 
 static Periodic *ledPeriodic;
 static OSThread *powerFSMthread;
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-static OSThread *accelerometerThread;
-#endif
 static OSThread *ambientLightingThread;
 SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 
