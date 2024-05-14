@@ -220,8 +220,6 @@ bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPac
                  t->variant.environment_metrics.temperature, t->variant.environment_metrics.lux);
         LOG_INFO("(Received from %s): voltage=%f, IAQ=%d, distance=%f\n", sender, t->variant.environment_metrics.voltage,
                  t->variant.environment_metrics.iaq, t->variant.environment_metrics.distance);
-
-#endif
 #endif
         // release previous packet before occupying a new spot
         if (lastMeasurementPacket != nullptr)
