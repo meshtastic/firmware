@@ -5,17 +5,7 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "SHT4XSensor.h"
 #include "TelemetrySensor.h"
-#include <SensirionI2cSht4x.h>
-
-// macro definitions
-// make sure that we use the proper definition of NO_ERROR
-#ifdef NO_ERROR
-#undef NO_ERROR
-#endif
-#define NO_ERROR 0
-
-static char errorMessage[64];
-static int16_t error;
+#include <Adafruit_SHT4x.h>
 
 SHT4XSensor::SHT4XSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SHT4X, "SHT4X") {}
 
@@ -28,17 +18,15 @@ int32_t SHT4XSensor::runOnce()
 
     uint32_t serialNumber = 0;
 
-    sht4x.begin(*nodeTelemetrySensorsMap[sensorType].second, 0x44);
+    sht4x.begin(nodeTelemetrySensorsMap[sensorType].second);
 
-    error = sht4x.serialNumber(serialNumber);
-    LOG_DEBUG("serialNumber : %x\n", serialNumber);
-    if (error != NO_ERROR) {
-        LOG_DEBUG("Error trying to execute serialNumber(): ");
-        errorToString(error, errorMessage, sizeof errorMessage);
-        LOG_DEBUG(errorMessage);
-        status = 0;
-    } else {
+    serialNumber = sht4x.readSerial();
+    if (serialNumber != 0) {
+        LOG_DEBUG("serialNumber : %x\n", serialNumber);
         status = 1;
+    } else {
+        LOG_DEBUG("Error trying to execute readSerial(): ");
+        status = 0;
     }
 
     return initI2CSensor();
@@ -51,12 +39,10 @@ void SHT4XSensor::setup()
 
 bool SHT4XSensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    float aTemperature = 0.0;
-    float aHumidity = 0.0;
-    sht4x.measureLowestPrecision(aTemperature, aHumidity);
-    measurement->variant.environment_metrics.temperature = aTemperature;
-    measurement->variant.environment_metrics.relative_humidity = aHumidity;
-
+    sensors_event_t humidity, temp;
+    sht4x.getEvent(&humidity, &temp);
+    measurement->variant.environment_metrics.temperature = temp.temperature;
+    measurement->variant.environment_metrics.relative_humidity = humidity.relative_humidity;
     return true;
 }
 
