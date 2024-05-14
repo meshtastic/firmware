@@ -56,7 +56,7 @@ meshtastic_OEMStore oemStore;
 bool meshtastic_DeviceState_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_iter_t *field)
 {
     if (ostream) {
-        std::vector<meshtastic_NodeInfoLite> *vec = (std::vector<meshtastic_NodeInfoLite> *)field->pData;
+        std::vector<meshtastic_NodeInfoLite> const *vec = (std::vector<meshtastic_NodeInfoLite> *)field->pData;
         for (auto item : *vec) {
             if (!pb_encode_tag_for_field(ostream, field))
                 return false;
@@ -269,7 +269,7 @@ void NodeDB::installDefaultConfig()
         config.device.node_info_broadcast_secs = default_node_info_broadcast_secs;
     config.device.serial_enabled = true;
     resetRadioConfig();
-    strncpy(config.network.ntp_server, "0.pool.ntp.org", 32);
+    strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
     // FIXME: Default to bluetooth capability of platform as default
     config.bluetooth.enabled = true;
     config.bluetooth.fixed_pin = defaultBLEPin;
@@ -352,9 +352,6 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.alert_message = true;
     moduleConfig.external_notification.output_ms = 100;
     moduleConfig.external_notification.active = true;
-#endif
-#ifdef TTGO_T_ECHO
-    config.display.wake_on_tap_or_motion = true; // Enable touch button for screen-on / refresh
 #endif
     moduleConfig.has_canned_message = true;
 
@@ -452,7 +449,7 @@ void NodeDB::resetNodes()
         neighborInfoModule->resetNeighbors();
 }
 
-void NodeDB::removeNodeByNum(uint nodeNum)
+void NodeDB::removeNodeByNum(NodeNum nodeNum)
 {
     int newPos = 0, removed = 0;
     for (int i = 0; i < numMeshNodes; i++) {

@@ -87,6 +87,23 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     return false; // Let others look at this message also if they want
 }
 
+void PositionModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic_Position *p)
+{
+    // Phone position packets need to be truncated to the channel precision
+    if (nodeDB->getNodeNum() == getFrom(&mp) && (precision < 32 && precision > 0)) {
+        LOG_DEBUG("Truncating phone position to channel precision %i\n", precision);
+        p->latitude_i = p->latitude_i & (UINT32_MAX << (32 - precision));
+        p->longitude_i = p->longitude_i & (UINT32_MAX << (32 - precision));
+
+        // We want the imprecise position to be the middle of the possible location, not
+        p->latitude_i += (1 << (31 - precision));
+        p->longitude_i += (1 << (31 - precision));
+
+        mp.decoded.payload.size =
+            pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes), &meshtastic_Position_msg, p);
+    }
+}
+
 void PositionModule::trySetRtc(meshtastic_Position p, bool isLocal)
 {
     struct timeval tv;
@@ -326,7 +343,7 @@ int32_t PositionModule::runOnce()
             // The minimum time (in seconds) that would pass before we are able to send a new position packet.
 
             auto smartPosition = getDistanceTraveledSinceLastSend(node->position);
-            uint32_t msSinceLastSend = now - lastGpsSend;
+            msSinceLastSend = now - lastGpsSend;
 
             if (smartPosition.hasTraveledOverThreshold &&
                 Throttle::execute(

@@ -223,7 +223,7 @@ int32_t getTZOffset()
     now = time(NULL);
     gmt = gmtime(&now);
     gmt->tm_isdst = -1;
-    return (int16_t)difftime(now, mktime(gmt));
+    return (int32_t)difftime(now, mktime(gmt));
 }
 
 /**

@@ -1,7 +1,10 @@
-#include "SHT31Sensor.h"
-#include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "TelemetrySensor.h"
 #include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
+#include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "SHT31Sensor.h"
+#include "TelemetrySensor.h"
 #include <Adafruit_SHT31.h>
 
 SHT31Sensor::SHT31Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SHT31, "SHT31") {}
@@ -29,3 +32,5 @@ bool SHT31Sensor::getMetrics(meshtastic_Telemetry *measurement)
 
     return true;
 }
+
+#endif

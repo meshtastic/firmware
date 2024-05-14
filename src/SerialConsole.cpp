@@ -2,6 +2,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "configuration.h"
+#include "time.h"
 
 #ifdef RP2040_SLOW_CLOCK
 #define Port Serial2
@@ -50,7 +51,9 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), con
         }
     }
 #endif
+#if !ARCH_PORTDUINO
     emitRebooted();
+#endif
 }
 
 int32_t SerialConsole::runOnce()

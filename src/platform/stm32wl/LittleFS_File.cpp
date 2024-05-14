@@ -186,9 +186,9 @@ int File::available(void)
     _fs->_lockFS();
 
     if (!this->_is_dir) {
-        uint32_t size = lfs_file_size(_fs->_getFS(), _file);
+        uint32_t fsize = lfs_file_size(_fs->_getFS(), _file);
         uint32_t pos = lfs_file_tell(_fs->_getFS(), _file);
-        ret = size - pos;
+        ret = fsize - pos;
     }
 
     _fs->_unlockFS();

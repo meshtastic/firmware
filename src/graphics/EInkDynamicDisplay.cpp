@@ -534,6 +534,10 @@ void EInkDynamicDisplay::checkBusyAsyncRefresh()
 
         return;
     }
+
+    // Async refresh appears to have stopped, but wasn't caught by onNotify()
+    else
+        pollAsyncRefresh(); // Check (and terminate) the async refresh manually
 }
 
 // Hold control while an async refresh runs

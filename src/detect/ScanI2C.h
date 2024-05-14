@@ -42,9 +42,8 @@ class ScanI2C
         LSM6DS3,
         TCA9555,
         VEML7700,
-#ifdef HAS_NCP5623
+        RCWL9620,
         NCP5623,
-#endif
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;
