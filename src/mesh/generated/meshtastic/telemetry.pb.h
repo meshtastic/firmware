@@ -88,10 +88,8 @@ typedef struct _meshtastic_EnvironmentMetrics {
     float distance;
     /* VEML7700 high accuracy ambient light(Lux) digital 16-bit resolution sensor. */
     float lux;
-    /* VEML7700 raw white light data digital 16-bit resolution sensor. */
-    uint32_t white;
-    /* VEML7700 raw ALS data digital 16-bit resolution sensor. */
-    uint32_t ALS;
+    /* VEML7700 high accuracy white light(irradiance) not calibrated digital 16-bit resolution sensor. */
+    float white_lux;
 } meshtastic_EnvironmentMetrics;
 
 /* Power Metrics (voltage / current / etc) */
@@ -173,12 +171,12 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_DeviceMetrics_init_default    {0, 0, 0, 0, 0}
-#define meshtastic_EnvironmentMetrics_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_EnvironmentMetrics_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_PowerMetrics_init_default     {0, 0, 0, 0, 0, 0}
 #define meshtastic_AirQualityMetrics_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Telemetry_init_default        {0, 0, {meshtastic_DeviceMetrics_init_default}}
 #define meshtastic_DeviceMetrics_init_zero       {0, 0, 0, 0, 0}
-#define meshtastic_EnvironmentMetrics_init_zero  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_EnvironmentMetrics_init_zero  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_PowerMetrics_init_zero        {0, 0, 0, 0, 0, 0}
 #define meshtastic_AirQualityMetrics_init_zero   {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Telemetry_init_zero           {0, 0, {meshtastic_DeviceMetrics_init_zero}}
@@ -198,8 +196,7 @@ extern "C" {
 #define meshtastic_EnvironmentMetrics_iaq_tag    7
 #define meshtastic_EnvironmentMetrics_distance_tag 8
 #define meshtastic_EnvironmentMetrics_lux_tag    9
-#define meshtastic_EnvironmentMetrics_white_tag  10
-#define meshtastic_EnvironmentMetrics_ALS_tag    11
+#define meshtastic_EnvironmentMetrics_white_lux_tag 10
 #define meshtastic_PowerMetrics_ch1_voltage_tag  1
 #define meshtastic_PowerMetrics_ch1_current_tag  2
 #define meshtastic_PowerMetrics_ch2_voltage_tag  3
@@ -244,8 +241,7 @@ X(a, STATIC,   SINGULAR, FLOAT,    current,           6) \
 X(a, STATIC,   SINGULAR, UINT32,   iaq,               7) \
 X(a, STATIC,   SINGULAR, FLOAT,    distance,          8) \
 X(a, STATIC,   SINGULAR, FLOAT,    lux,               9) \
-X(a, STATIC,   SINGULAR, UINT32,   white,            10) \
-X(a, STATIC,   SINGULAR, UINT32,   ALS,              11)
+X(a, STATIC,   SINGULAR, FLOAT,    white_lux,        10)
 #define meshtastic_EnvironmentMetrics_CALLBACK NULL
 #define meshtastic_EnvironmentMetrics_DEFAULT NULL
 
@@ -305,7 +301,7 @@ extern const pb_msgdesc_t meshtastic_Telemetry_msg;
 #define MESHTASTIC_MESHTASTIC_TELEMETRY_PB_H_MAX_SIZE meshtastic_Telemetry_size
 #define meshtastic_AirQualityMetrics_size        72
 #define meshtastic_DeviceMetrics_size            27
-#define meshtastic_EnvironmentMetrics_size       56
+#define meshtastic_EnvironmentMetrics_size       49
 #define meshtastic_PowerMetrics_size             30
 #define meshtastic_Telemetry_size                79
 
