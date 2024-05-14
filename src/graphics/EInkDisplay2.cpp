@@ -62,12 +62,19 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
         return false;
 
     // FIXME - only draw bits have changed (use backbuf similar to the other displays)
+    const bool flipped = config.display.flip_screen;
     for (uint32_t y = 0; y < displayHeight; y++) {
         for (uint32_t x = 0; x < displayWidth; x++) {
             // get src pixel in the page based ordering the OLED lib uses FIXME, super inefficient
             auto b = buffer[x + (y / 8) * displayWidth];
             auto isset = b & (1 << (y & 7));
-            adafruitDisplay->drawPixel(x, y, isset ? GxEPD_BLACK : GxEPD_WHITE);
+
+            // Handle flip here, rather than with setRotation(),
+            // Avoids issues when display width is not a multiple of 8
+            if (flipped)
+                adafruitDisplay->drawPixel((displayWidth - 1) - x, (displayHeight - 1) - y, isset ? GxEPD_BLACK : GxEPD_WHITE);
+            else
+                adafruitDisplay->drawPixel(x, y, isset ? GxEPD_BLACK : GxEPD_WHITE);
         }
     }
 

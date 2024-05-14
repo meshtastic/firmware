@@ -26,6 +26,7 @@
 #include "Sensor/MCP9808Sensor.h"
 #include "Sensor/RCWL9620Sensor.h"
 #include "Sensor/SHT31Sensor.h"
+#include "Sensor/SHT4XSensor.h"
 #include "Sensor/SHTC3Sensor.h"
 #include "Sensor/VEML7700Sensor.h"
 
@@ -38,6 +39,7 @@ SHTC3Sensor shtc3Sensor;
 LPS22HBSensor lps22hbSensor;
 SHT31Sensor sht31Sensor;
 VEML7700Sensor veml7700Sensor;
+SHT4XSensor sht4xSensor;
 RCWL9620Sensor rcwl9620Sensor;
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
@@ -93,6 +95,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = lps22hbSensor.runOnce();
             if (sht31Sensor.hasSensor())
                 result = sht31Sensor.runOnce();
+            if (sht4xSensor.hasSensor())
+                result = sht4xSensor.runOnce();
             if (ina219Sensor.hasSensor())
                 result = ina219Sensor.runOnce();
             if (ina260Sensor.hasSensor())
@@ -288,6 +292,7 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         hasSensor = true;
     }
     valid = valid && hasSensor;
+
 
     if (valid) {
         LOG_INFO("(Sending): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f, "
