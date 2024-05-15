@@ -33,6 +33,9 @@ class LGFX : public lgfx::LGFX_Device
     lgfx::Panel_ST7735S _panel_instance;
     lgfx::Bus_SPI _bus_instance;
     lgfx::Light_PWM _light_instance;
+#if defined(USE_XPT2046)
+    lgfx::Touch_XPT2046 _touch_instance;
+#endif
 
   public:
     LGFX(void)
@@ -89,6 +92,40 @@ class LGFX : public lgfx::LGFX_Device
             cfg.memory_height = TFT_HEIGHT; // Maximum height supported by the driver IC
             _panel_instance.config(cfg);
         }
+
+#if defined(USE_XPT2046)
+        {
+            // Configure settings for touch control.
+            auto touch_cfg = _touch_instance.config();
+
+            touch_cfg.pin_cs = TOUCH_CS;
+            touch_cfg.x_min = 0;
+            touch_cfg.x_max = TFT_HEIGHT - 1;
+            touch_cfg.y_min = 0;
+            touch_cfg.y_max = TFT_WIDTH - 1;
+            touch_cfg.bus_shared = true;
+            touch_cfg.offset_rotation = 0;
+#ifdef TOUCH_SPIHOST
+            touch_cfg.spi_host = TOUCH_SPIHOST;
+#endif
+#ifdef TOUCH_SCK
+            touch_cfg.pin_sclk = TOUCH_SCK;
+#endif
+#ifdef TOUCH_MOSI
+            touch_cfg.pin_mosi = TOUCH_MOSI;
+#endif
+#ifdef TOUCH_MISO
+            touch_cfg.pin_miso = TOUCH_MISO;
+#endif
+#ifdef TOUCH_IRQ
+            touch_cfg.pin_int = TOUCH_IRQ;
+#else
+            touch_cfg.pin_int = -1;
+#endif
+            _touch_instance.config(touch_cfg);
+            _panel_instance.setTouch(&_touch_instance);
+        }
+#endif
 
 #ifdef TFT_BL
         // Set the backlight control
@@ -1188,6 +1225,8 @@ bool TFTDisplay::connect()
     tft->setRotation(2); // T-Watch S3 left-handed orientation
 #elif ARCH_PORTDUINO
     tft->setRotation(0); // use config.yaml to set rotation
+#elif defined(PRIVATE_HW)
+    tft->setRotation(2); // Elecrow CRT01262M - testing
 #else
     tft->setRotation(3); // Orient horizontal and wide underneath the silkscreen name label
 #endif
