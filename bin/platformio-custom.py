@@ -59,6 +59,7 @@ if (platform.name == "espressif32"):
     sys.path.append(join(platform.get_package_dir("tool-esptoolpy")))
     import esptool
     env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", esp32_create_combined_bin)    
+    env.Append(LINKFLAGS=["--specs=nano.specs"])
 
 Import("projenv")
 
