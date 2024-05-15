@@ -129,6 +129,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define SHT31_4x_ADDR 0x44
 #define PMSA0031_ADDR 0x12
 #define RCWL9620_ADDR 0x57
+#define VEML7700_ADDR 0x10
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
