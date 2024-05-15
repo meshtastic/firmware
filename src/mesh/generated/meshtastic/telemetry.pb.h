@@ -168,10 +168,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-
 #define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_TSL25911FN
 #define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_TSL25911FN+1))
-
 
 
 
