@@ -95,6 +95,8 @@ extern "C" {
 #define LR1110_SPI_MOSI_PIN LORA_MOSI
 #define LR1110_SPI_MISO_PIN LORA_MISO
 
+#define LR11X0_DIO3_TCXO_VOLTAGE 1.6
+
 #define LR1110_GNSS_ANT_PIN (32 + 5) // P1.05 37
 
 #ifdef __cplusplus

@@ -64,7 +64,10 @@ template <typename T> bool LR11x0Interface<T>::init()
         res = lora.setCRC(1);
 
     if (res == RADIOLIB_ERR_NONE)
-        startReceive(); // start receiving
+        startReceive(RADIOLIB_LR11X0_RX_TIMEOUT_INF,
+                     RADIOLIB_LR11X0_IRQ_RX_DONE | RADIOLIB_LR11X0_IRQ_PREAMBLE_DETECTED |
+                         RADIOLIB_LR11X0_IRQ_SYNC_WORD_HEADER_VALID,
+                     RADIOLIB_LR11X0_IRQ_RX_DONE); // start receiving
 
     return res == RADIOLIB_ERR_NONE;
 }
