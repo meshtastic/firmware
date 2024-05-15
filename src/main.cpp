@@ -544,7 +544,6 @@ void setup()
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::VEML7700, meshtastic_TelemetrySensorType_VEML7700)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::SHT4X, meshtastic_TelemetrySensorType_SHT4X)
 
-
     i2cScanner.reset();
 
 #ifdef HAS_SDCARD
