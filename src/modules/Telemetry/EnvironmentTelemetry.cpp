@@ -218,12 +218,12 @@ bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPac
         const char *sender = getSenderShortName(mp);
 
         LOG_INFO("(Received from %s): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, "
-                 "temperature=%f, lux=%f\n",
+                 "temperature=%f\n",
                  sender, t->variant.environment_metrics.barometric_pressure, t->variant.environment_metrics.current,
                  t->variant.environment_metrics.gas_resistance, t->variant.environment_metrics.relative_humidity,
-                 t->variant.environment_metrics.temperature, t->variant.environment_metrics.lux);
-        LOG_INFO("(Received from %s): voltage=%f, IAQ=%d, distance=%f\n", sender, t->variant.environment_metrics.voltage,
-                 t->variant.environment_metrics.iaq, t->variant.environment_metrics.distance);
+                 t->variant.environment_metrics.temperature);
+        LOG_INFO("(Received from %s): voltage=%f, IAQ=%d, distance=%f, lux=%f\n", sender, t->variant.environment_metrics.voltage,
+                 t->variant.environment_metrics.iaq, t->variant.environment_metrics.distance, t->variant.environment_metrics.lux);
 #endif
         // release previous packet before occupying a new spot
         if (lastMeasurementPacket != nullptr)
@@ -294,13 +294,12 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     valid = valid && hasSensor;
 
     if (valid) {
-        LOG_INFO("(Sending): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f, "
-                 "lux=%f\n",
+        LOG_INFO("(Sending): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f\n",
                  m.variant.environment_metrics.barometric_pressure, m.variant.environment_metrics.current,
                  m.variant.environment_metrics.gas_resistance, m.variant.environment_metrics.relative_humidity,
-                 m.variant.environment_metrics.temperature, m.variant.environment_metrics.lux);
-        LOG_INFO("(Sending): voltage=%f, IAQ=%d, distance=%f\n", m.variant.environment_metrics.voltage,
-                 m.variant.environment_metrics.iaq, m.variant.environment_metrics.distance);
+                 m.variant.environment_metrics.temperature);
+        LOG_INFO("(Sending): voltage=%f, IAQ=%d, distance=%f, lux=%f\n", m.variant.environment_metrics.voltage,
+                 m.variant.environment_metrics.iaq, m.variant.environment_metrics.distance, m.variant.environment_metrics.lux);
 
         sensor_read_error_count = 0;
 
