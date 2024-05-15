@@ -47,7 +47,17 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* RCWL-9620 Doppler Radar Distance Sensor, used for water level detection */
     meshtastic_TelemetrySensorType_RCWL9620 = 16,
     /* Sensirion High accuracy temperature and humidity */
-    meshtastic_TelemetrySensorType_SHT4X = 17
+    meshtastic_TelemetrySensorType_SHT4X = 17,
+    /* VEML7700 high accuracy ambient light(Lux) digital 16-bit resolution sensor. */
+    meshtastic_TelemetrySensorType_VEML7700 = 18,
+    /* MLX90632 non-contact IR temperature sensor. */
+    meshtastic_TelemetrySensorType_MLX90632 = 19,
+    /* TI OPT3001 Ambient Light Sensor */
+    meshtastic_TelemetrySensorType_OPT3001 = 20,
+    /* Lite On LTR-390UV-01 UV Light Sensor */
+    meshtastic_TelemetrySensorType_LTR390UV = 21,
+    /* AMS TSL25911FN RGB Light Sensor */
+    meshtastic_TelemetrySensorType_TSL25911FN = 22
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -84,6 +94,10 @@ typedef struct _meshtastic_EnvironmentMetrics {
     uint16_t iaq;
     /* RCWL9620 Doppler Radar Distance Sensor, used for water level detection. Float value in mm. */
     float distance;
+    /* VEML7700 high accuracy ambient light(Lux) digital 16-bit resolution sensor. */
+    float lux;
+    /* VEML7700 high accuracy white light(irradiance) not calibrated digital 16-bit resolution sensor. */
+    float white_lux;
 } meshtastic_EnvironmentMetrics;
 
 /* Power Metrics (voltage / current / etc) */
@@ -154,8 +168,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_SHT4X
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_SHT4X+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_TSL25911FN
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_TSL25911FN+1))
 
 
 
@@ -165,12 +179,12 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_DeviceMetrics_init_default    {0, 0, 0, 0, 0}
-#define meshtastic_EnvironmentMetrics_init_default {0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_EnvironmentMetrics_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_PowerMetrics_init_default     {0, 0, 0, 0, 0, 0}
 #define meshtastic_AirQualityMetrics_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Telemetry_init_default        {0, 0, {meshtastic_DeviceMetrics_init_default}}
 #define meshtastic_DeviceMetrics_init_zero       {0, 0, 0, 0, 0}
-#define meshtastic_EnvironmentMetrics_init_zero  {0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_EnvironmentMetrics_init_zero  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_PowerMetrics_init_zero        {0, 0, 0, 0, 0, 0}
 #define meshtastic_AirQualityMetrics_init_zero   {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Telemetry_init_zero           {0, 0, {meshtastic_DeviceMetrics_init_zero}}
@@ -189,6 +203,8 @@ extern "C" {
 #define meshtastic_EnvironmentMetrics_current_tag 6
 #define meshtastic_EnvironmentMetrics_iaq_tag    7
 #define meshtastic_EnvironmentMetrics_distance_tag 8
+#define meshtastic_EnvironmentMetrics_lux_tag    9
+#define meshtastic_EnvironmentMetrics_white_lux_tag 10
 #define meshtastic_PowerMetrics_ch1_voltage_tag  1
 #define meshtastic_PowerMetrics_ch1_current_tag  2
 #define meshtastic_PowerMetrics_ch2_voltage_tag  3
@@ -231,7 +247,9 @@ X(a, STATIC,   SINGULAR, FLOAT,    gas_resistance,    4) \
 X(a, STATIC,   SINGULAR, FLOAT,    voltage,           5) \
 X(a, STATIC,   SINGULAR, FLOAT,    current,           6) \
 X(a, STATIC,   SINGULAR, UINT32,   iaq,               7) \
-X(a, STATIC,   SINGULAR, FLOAT,    distance,          8)
+X(a, STATIC,   SINGULAR, FLOAT,    distance,          8) \
+X(a, STATIC,   SINGULAR, FLOAT,    lux,               9) \
+X(a, STATIC,   SINGULAR, FLOAT,    white_lux,        10)
 #define meshtastic_EnvironmentMetrics_CALLBACK NULL
 #define meshtastic_EnvironmentMetrics_DEFAULT NULL
 
@@ -291,7 +309,7 @@ extern const pb_msgdesc_t meshtastic_Telemetry_msg;
 #define MESHTASTIC_MESHTASTIC_TELEMETRY_PB_H_MAX_SIZE meshtastic_Telemetry_size
 #define meshtastic_AirQualityMetrics_size        72
 #define meshtastic_DeviceMetrics_size            27
-#define meshtastic_EnvironmentMetrics_size       39
+#define meshtastic_EnvironmentMetrics_size       49
 #define meshtastic_PowerMetrics_size             30
 #define meshtastic_Telemetry_size                79
 
