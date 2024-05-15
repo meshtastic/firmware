@@ -49,7 +49,15 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* Sensirion High accuracy temperature and humidity */
     meshtastic_TelemetrySensorType_SHT4X = 17,
     /* VEML7700 high accuracy ambient light(Lux) digital 16-bit resolution sensor. */
-    meshtastic_TelemetrySensorType_VEML7700 = 18
+    meshtastic_TelemetrySensorType_VEML7700 = 18,
+    /* MLX90632 non-contact IR temperature sensor. */
+    meshtastic_TelemetrySensorType_MLX90632 = 19,
+    /* TI OPT3001 Ambient Light Sensor */
+    meshtastic_TelemetrySensorType_OPT3001 = 20,
+    /* Lite On LTR-390UV-01 UV Light Sensor */
+    meshtastic_TelemetrySensorType_LTR390UV = 21,
+    /* AMS TSL25911FN RGB Light Sensor */
+    meshtastic_TelemetrySensorType_TSL25911FN = 22
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
