@@ -3,14 +3,6 @@
 
 #include <stdint.h>
 
-#define EXTERNAL_NUM_INTERRUPTS 46
-#define NUM_DIGITAL_PINS 48
-#define NUM_ANALOG_INPUTS 20
-
-#define analogInputToDigitalPin(p) (((p) < NUM_ANALOG_INPUTS) ? (analogChannelToDigitalPin(p)) : -1)
-#define digitalPinToInterrupt(p) (((p) < NUM_DIGITAL_PINS) ? (p) : -1)
-#define digitalPinHasPWM(p) (p < EXTERNAL_NUM_INTERRUPTS)
-
 // static const uint8_t LED_BUILTIN = -1;
 
 // static const uint8_t TX = 43;
