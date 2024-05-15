@@ -246,53 +246,52 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     if (sht31Sensor.hasSensor()) {
         valid = valid && sht31Sensor.getMetrics(&m);
         hasSensor = true;
-        }
+    }
     if (lps22hbSensor.hasSensor()) {
         valid = valid && lps22hbSensor.getMetrics(&m);
         hasSensor = true;
-        }
+    }
     if (shtc3Sensor.hasSensor()) {
         valid = valid && shtc3Sensor.getMetrics(&m);
         hasSensor = true;
-        }
+    }
     if (bmp085Sensor.hasSensor()) {
         valid = valid && bmp085Sensor.getMetrics(&m);
         hasSensor = true;
-        }
+    }
     if (bmp280Sensor.hasSensor()) {
         valid = valid && bmp280Sensor.getMetrics(&m);
         hasSensor = true;
-        }
+    }
     if (bme280Sensor.hasSensor()) {
         valid = valid && bme280Sensor.getMetrics(&m);
         hasSensor = true;
-        }
+    }
     if (bme680Sensor.hasSensor()) {
         valid = valid && bme680Sensor.getMetrics(&m);
         hasSensor = true;
-        }
+    }
     if (mcp9808Sensor.hasSensor()) {
         valid = valid && mcp9808Sensor.getMetrics(&m);
         hasSensor = true;
-        }
+    }
     if (ina219Sensor.hasSensor()) {
         valid = valid && ina219Sensor.getMetrics(&m);
         hasSensor = true;
-        }
+    }
     if (ina260Sensor.hasSensor()) {
         valid = valid && ina260Sensor.getMetrics(&m);
         hasSensor = true;
-        }
+    }
     if (veml7700Sensor.hasSensor()) {
         valid = valid && veml7700Sensor.getMetrics(&m);
         hasSensor = true;
-        }
-    if (rcwl9620Sensor.hasSensor()){
+    }
+    if (rcwl9620Sensor.hasSensor()) {
         valid = valid && rcwl9620Sensor.getMetrics(&m);
         hasSensor = true;
     }
     valid = valid && hasSensor;
-
 
     if (valid) {
         LOG_INFO("(Sending): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f, "
