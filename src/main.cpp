@@ -559,7 +559,6 @@ void setup()
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::QMC5883L, meshtastic_TelemetrySensorType_QMC5883L)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::PMSA0031, meshtastic_TelemetrySensorType_PMSA003I)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::RCWL9620, meshtastic_TelemetrySensorType_RCWL9620)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::VEML7700, meshtastic_TelemetrySensorType_VEML7700)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::SHT4X, meshtastic_TelemetrySensorType_SHT4X)
 
     i2cScanner.reset();
@@ -679,7 +678,7 @@ void setup()
 #ifdef PORTDUINO
     if (settingsMap[displayPanel] != no_screen) {
         DisplayDriverConfig displayConfig;
-        char *panels[] = {"NOSCREEN", "X11", "ST7789", "ST7735", "ST7735S", "ST7796", "ILI9341", "ILI9488", "HX8357D"};
+        char *panels[] = {"NOSCREEN", "X11", "ST7789", "ST7735", "ST7735S", "ST7796", "ILI9341", "ILI9486", "ILI9488", "HX8357D"};
         char *touch[] = {"NOTOUCH", "XPT2046", "STMPE610", "GT911", "FT5x06"};
 #ifdef USE_X11
         if (settingsMap[displayPanel] == x11) {
@@ -703,7 +702,8 @@ void setup()
                                                            .offset_rotation = (uint8_t)settingsMap[displayOffsetRotate],
                                                            .invert = settingsMap[displayInvert] ? true : false,
                                                            .rgb_order = (bool)settingsMap[displayRGBOrder],
-                                                           .dlen_16bit = settingsMap[displayPanel] == ili9488})
+                                                           .dlen_16bit = settingsMap[displayPanel] == ili9486 ||
+                                                                         settingsMap[displayPanel] == ili9488})
                 .bus(DisplayDriverConfig::bus_config_t{.freq_write = (uint32_t)settingsMap[displayBusFrequency],
                                                        .freq_read = 16000000,
                                                        .spi{.pin_dc = (int8_t)settingsMap[displayDC],
