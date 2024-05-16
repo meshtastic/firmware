@@ -366,8 +366,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             digitalWrite(LED_PIN, LOW ^ LED_INVERTED);
         }
 #endif
-        if (config.device.tzdef == c.payload_variant.device.tzdef &&
-            config.device.button_gpio == c.payload_variant.device.button_gpio &&
+        if (config.device.button_gpio == c.payload_variant.device.button_gpio &&
             config.device.buzzer_gpio == c.payload_variant.device.buzzer_gpio &&
             config.device.debug_log_enabled == c.payload_variant.device.debug_log_enabled &&
             config.device.serial_enabled == c.payload_variant.device.serial_enabled &&
