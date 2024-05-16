@@ -702,7 +702,8 @@ void setup()
                                                            .offset_y = (uint16_t)settingsMap[displayOffsetY],
                                                            .offset_rotation = (uint8_t)settingsMap[displayOffsetRotate],
                                                            .invert = settingsMap[displayInvert] ? true : false,
-                                                           .rgb_order = (bool)settingsMap[displayRGBOrder]})
+                                                           .rgb_order = (bool)settingsMap[displayRGBOrder],
+                                                           .dlen_16bit = settingsMap[displayPanel] == ili9488})
                 .bus(DisplayDriverConfig::bus_config_t{.freq_write = (uint32_t)settingsMap[displayBusFrequency],
                                                        .freq_read = 16000000,
                                                        .spi{.pin_dc = (int8_t)settingsMap[displayDC],
