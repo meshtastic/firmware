@@ -360,6 +360,22 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             accelerometerThread->start();
         }
 #endif
+#ifdef LED_PIN
+        // Turn LED off if heartbeat by config
+        if (c.payload_variant.device.led_heartbeat_disabled) {
+            digitalWrite(LED_PIN, LOW ^ LED_INVERTED);
+        }
+#endif
+        if (config.device.tzdef == c.payload_variant.device.tzdef &&
+            config.device.button_gpio == c.payload_variant.device.button_gpio &&
+            config.device.buzzer_gpio == c.payload_variant.device.buzzer_gpio &&
+            config.device.debug_log_enabled == c.payload_variant.device.debug_log_enabled &&
+            config.device.serial_enabled == c.payload_variant.device.serial_enabled &&
+            config.device.role == c.payload_variant.device.role &&
+            config.device.disable_triple_click == c.payload_variant.device.disable_triple_click &&
+            config.device.rebroadcast_mode == c.payload_variant.device.rebroadcast_mode) {
+            requiresReboot = false;
+        }
         config.device = c.payload_variant.device;
         // If we're setting router role for the first time, install its intervals
         if (existingRole != c.payload_variant.device.role)
