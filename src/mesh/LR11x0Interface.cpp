@@ -60,14 +60,41 @@ template <typename T> bool LR11x0Interface<T>::init()
     LOG_INFO("Bandwidth set to %f\n", bw);
     LOG_INFO("Power output set to %d\n", power);
 
-    if (res == RADIOLIB_ERR_NONE)
-        res = lora.setCRC(1);
+#ifdef LR11X0_DIO_AS_RF_SWITCH
+    LOG_DEBUG("Setting DIO RF switch\n");
+    bool dioAsRfSwitch = true;
+#elif defined(ARCH_PORTDUINO)
+    bool dioAsRfSwitch = false;
+    if (settingsMap[dio2_as_rf_switch]) {
+        LOG_DEBUG("Setting DIO RF switch\n");
+        dioAsRfSwitch = true;
+    }
+#else
+    bool dioAsRfSwitch = false;
+#endif
 
     if (res == RADIOLIB_ERR_NONE)
-        startReceive(RADIOLIB_LR11X0_RX_TIMEOUT_INF,
-                     RADIOLIB_LR11X0_IRQ_RX_DONE | RADIOLIB_LR11X0_IRQ_PREAMBLE_DETECTED |
-                         RADIOLIB_LR11X0_IRQ_SYNC_WORD_HEADER_VALID,
-                     RADIOLIB_LR11X0_IRQ_RX_DONE); // start receiving
+        res = lora.setCRC(2);
+
+    if (res == RADIOLIB_ERR_NONE)
+        res = lora.setRegMode(RADIOLIB_LR11X0_REG_MODE_DC_DC);
+
+    if (res == RADIOLIB_ERR_NONE)
+        if (dioAsRfSwitch)
+            res = lora.setDioAsRfSwitch(0x03, 0x0, 0x01, 0x03, 0x02, 0x0, 0x0, 0x0);
+
+    if (res == RADIOLIB_ERR_NONE) {
+        if (config.lora.sx126x_rx_boosted_gain) { // the name is unfortunate but historically accurate
+            res = lora.setRxBoosted(true);
+            LOG_INFO("Set RX gain to boosted mode; result: %d\n", res);
+        } else {
+            res = lora.setRxBoosted(false);
+            LOG_INFO("Set RX gain to power saving mode (boosted mode off); result: %d\n", res);
+        }
+    }
+
+    if (res == RADIOLIB_ERR_NONE)
+        startReceive(); // start receiving
 
     return res == RADIOLIB_ERR_NONE;
 }
@@ -169,11 +196,13 @@ template <typename T> void LR11x0Interface<T>::startReceive()
 
     setStandby();
 
+    lora.setPreambleLength(preambleLength); // Solve RX ack fail after direct message sent.  Not sure why this is needed.
+
     // We use a 16 bit preamble so this should save some power by letting radio sit in standby mostly.
     // Furthermore, we need the PREAMBLE_DETECTED and HEADER_VALID IRQ flag to detect whether we are actively receiving
     int err = lora.startReceive(
-        RADIOLIB_LR11X0_RX_TIMEOUT_INF,
-        RADIOLIB_LR11X0_IRQ_RX_DONE | RADIOLIB_LR11X0_IRQ_PREAMBLE_DETECTED | RADIOLIB_LR11X0_IRQ_SYNC_WORD_HEADER_VALID, 0);
+        RADIOLIB_LR11X0_RX_TIMEOUT_INF, RADIOLIB_LR11X0_IRQ_RX_DONE,
+        0); // only RX_DONE IRQ is needed, we'll check for PREAMBLE_DETECTED and HEADER_VALID in isActivelyReceiving
     assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = true;
