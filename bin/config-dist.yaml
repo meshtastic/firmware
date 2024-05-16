@@ -111,6 +111,16 @@ Display:
 #  Height: 320
 #  Rotate: true
 
+### SHCHV 3.5 RPi TFT+Touchscreen
+#  Panel: ILI9486
+#  spidev: spidev0.0
+#  BusFrequency: 30000000
+#  DC: 24
+#  Reset: 25
+#  Width: 320
+#  Height: 480
+#  OffsetRotate: 2
+
 Touchscreen:
 ### Note, at least for now, the touchscreen must have a CS pin defined, even if you let Linux manage the CS switching.
 
