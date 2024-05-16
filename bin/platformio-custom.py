@@ -62,7 +62,7 @@ if platform.name == "espressif32":
     import esptool
 
     env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", esp32_create_combined_bin)
-    env.Append(LINKFLAGS=["--specs=nano.specs"])
+    env.Append(LINKFLAGS=["--specs=nano.specs", "-u", "_printf_float"])
 
 Import("projenv")
 
