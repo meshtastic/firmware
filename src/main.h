@@ -53,6 +53,11 @@ extern Adafruit_DRV2605 drv;
 extern AudioThread *audioThread;
 #endif
 
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#include "AccelerometerThread.h"
+extern AccelerometerThread *accelerometerThread;
+#endif
+
 extern bool isVibrating;
 
 extern int TCPPort; // set by Portduino
