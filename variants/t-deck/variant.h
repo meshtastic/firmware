@@ -18,7 +18,9 @@
 #define TFT_OFFSET_ROTATION 0
 #define SCREEN_ROTATE
 #define SCREEN_TRANSITION_FRAMERATE 5
-#define BRIGHTNESS_DEFAULT 130 // Medium Low Brightness
+#define BRIGHTNESS_DEFAULT 200 // Medium Brightness
+// Set a white on black display
+#define TFT_MESH COLOR565(0xFF, 0xFF, 0xFF)
 
 #define HAS_TOUCHSCREEN 1
 #define SCREEN_TOUCH_INT 16
