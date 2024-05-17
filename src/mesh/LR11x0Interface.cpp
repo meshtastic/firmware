@@ -2,7 +2,7 @@
 #include "configuration.h"
 #include "error.h"
 #include "mesh/NodeDB.h"
-#ifdef ARCH_RASPBERRY_PI
+#ifdef ARCH_PORTDUINO
 #include "PortduinoGlue.h"
 #endif
 
