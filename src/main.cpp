@@ -378,17 +378,10 @@ void setup()
     delay(1);
 #endif
 
-#ifdef RAK4630
-#ifdef PIN_3V3_EN
-    // We need to enable 3.3V periphery in order to scan it
-    pinMode(PIN_3V3_EN, OUTPUT);
-    digitalWrite(PIN_3V3_EN, HIGH);
-#endif
 #ifdef AQ_SET_PIN
     // RAK-12039 set pin for Air quality sensor
     pinMode(AQ_SET_PIN, OUTPUT);
     digitalWrite(AQ_SET_PIN, HIGH);
-#endif
 #endif
 
 #if defined(T_DECK)
@@ -563,10 +556,6 @@ void setup()
 
 #ifdef HAS_SDCARD
     setupSDCard();
-#endif
-
-#ifdef RAK4630
-    // scanEInkDevice();
 #endif
 
     // LED init
