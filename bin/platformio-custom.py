@@ -1,12 +1,11 @@
-import subprocess
-import configparser
-import traceback
 import sys
 from os.path import join
+
 from readprops import readProps
 
 Import("env")
 platform = env.PioPlatform()
+
 
 def esp32_create_combined_bin(source, target, env):
     # this sub is borrowed from ESPEasy build toolchain. It's licensed under GPL V3
@@ -20,8 +19,8 @@ def esp32_create_combined_bin(source, target, env):
     firmware_name = env.subst("$BUILD_DIR/${PROGNAME}.bin")
     chip = env.get("BOARD_MCU")
     flash_size = env.BoardConfig().get("upload.flash_size")
-    flash_freq = env.BoardConfig().get("build.f_flash", '40m')
-    flash_freq = flash_freq.replace('000000L', 'm')
+    flash_freq = env.BoardConfig().get("build.f_flash", "40m")
+    flash_freq = flash_freq.replace("000000L", "m")
     flash_mode = env.BoardConfig().get("build.flash_mode", "dio")
     memory_type = env.BoardConfig().get("build.arduino.memory_type", "qio_qspi")
     if flash_mode == "qio" or flash_mode == "qout":
@@ -51,23 +50,27 @@ def esp32_create_combined_bin(source, target, env):
     print(f" - {hex(app_offset)} | {firmware_name}")
     cmd += [hex(app_offset), firmware_name]
 
-    print('Using esptool.py arguments: %s' % ' '.join(cmd))
+    print("Using esptool.py arguments: %s" % " ".join(cmd))
 
     esptool.main(cmd)
 
-if (platform.name == "espressif32"):
+
+if platform.name == "espressif32":
     sys.path.append(join(platform.get_package_dir("tool-esptoolpy")))
     import esptool
-    env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", esp32_create_combined_bin)    
+
+    env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", esp32_create_combined_bin)
 
 Import("projenv")
 
 prefsLoc = projenv["PROJECT_DIR"] + "/version.properties"
 verObj = readProps(prefsLoc)
-print("Using meshtastic platformio-custom.py, firmware version " + verObj['long'])
+print("Using meshtastic platformio-custom.py, firmware version " + verObj["long"])
 
 # General options that are passed to the C and C++ compilers
-projenv.Append(CCFLAGS=[
-    "-DAPP_VERSION=" + verObj['long'],
-    "-DAPP_VERSION_SHORT=" + verObj['short']    
-])
+projenv.Append(
+    CCFLAGS=[
+        "-DAPP_VERSION=" + verObj["long"],
+        "-DAPP_VERSION_SHORT=" + verObj["short"],
+    ]
+)

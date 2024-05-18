@@ -62,10 +62,10 @@ void GPS::CASChecksum(uint8_t *message, size_t length)
 
     // Iterate over the payload as a series of uint32_t's and
     // accumulate the cksum
-    uint32_t *payload = (uint32_t *)(message + 6);
+    uint32_t const *payload = (uint32_t *)(message + 6);
     for (size_t i = 0; i < (length - 10) / 4; i++) {
-        uint32_t p = payload[i];
-        cksum += p;
+        uint32_t pl = payload[i];
+        cksum += pl;
     }
 
     // Place the checksum values in the message
@@ -452,7 +452,7 @@ bool GPS::setup()
             // Set the NEMA output messages
             // Ask for only RMC and GGA
             uint8_t fields[] = {CAS_NEMA_RMC, CAS_NEMA_GGA};
-            for (uint i = 0; i < sizeof(fields); i++) {
+            for (unsigned int i = 0; i < sizeof(fields); i++) {
                 // Construct a CAS-CFG-MSG packet
                 uint8_t cas_cfg_msg_packet[] = {0x4e, fields[i], 0x01, 0x00};
                 msglen = makeCASPacket(0x06, 0x01, sizeof(cas_cfg_msg_packet), cas_cfg_msg_packet);
@@ -471,6 +471,9 @@ bool GPS::setup()
             // Must be done after the CFGSYS command
             // Turn off GSV messages, we don't really care about which and where the sats are, maybe someday.
             _serial_gps->write("$CFGMSG,0,3,0\r\n");
+            delay(250);
+            // Turn off GSA messages, TinyGPS++ doesn't use this message.
+            _serial_gps->write("$CFGMSG,0,2,0\r\n");
             delay(250);
             // Turn off NOTICE __TXT messages, these may provide Unicore some info but we don't care.
             _serial_gps->write("$CFGMSG,6,0,0\r\n");
@@ -1584,7 +1587,7 @@ bool GPS::hasFlow()
 
 bool GPS::whileIdle()
 {
-    uint charsInBuf = 0;
+    unsigned int charsInBuf = 0;
     bool isValid = false;
     if (!isAwake) {
         clearBuffer();

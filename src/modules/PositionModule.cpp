@@ -343,7 +343,7 @@ int32_t PositionModule::runOnce()
             // The minimum time (in seconds) that would pass before we are able to send a new position packet.
 
             auto smartPosition = getDistanceTraveledSinceLastSend(node->position);
-            uint32_t msSinceLastSend = now - lastGpsSend;
+            msSinceLastSend = now - lastGpsSend;
 
             if (smartPosition.hasTraveledOverThreshold &&
                 Throttle::execute(

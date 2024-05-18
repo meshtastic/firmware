@@ -287,7 +287,7 @@ void NRF52Bluetooth::setup()
     LOG_INFO("Advertising\n");
 }
 
-void NRF52Bluetooth::resumeAdverising()
+void NRF52Bluetooth::resumeAdvertising()
 {
     Bluefruit.Advertising.restartOnDisconnect(true);
     Bluefruit.Advertising.setInterval(32, 244); // in unit of 0.625 ms

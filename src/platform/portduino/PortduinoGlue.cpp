@@ -75,20 +75,20 @@ void portduinoSetup()
 {
     printf("Setting up Meshtastic on Portduino...\n");
     int max_GPIO = 0;
-    configNames GPIO_lines[] = {cs,
-                                irq,
-                                busy,
-                                reset,
-                                txen,
-                                rxen,
-                                displayDC,
-                                displayCS,
-                                displayBacklight,
-                                displayBacklightPWMChannel,
-                                displayReset,
-                                touchscreenCS,
-                                touchscreenIRQ,
-                                user};
+    const configNames GPIO_lines[] = {cs,
+                                      irq,
+                                      busy,
+                                      reset,
+                                      txen,
+                                      rxen,
+                                      displayDC,
+                                      displayCS,
+                                      displayBacklight,
+                                      displayBacklightPWMChannel,
+                                      displayReset,
+                                      touchscreenCS,
+                                      touchscreenIRQ,
+                                      user};
 
     std::string gpioChipName = "gpiochip";
     settingsStrings[i2cdev] = "";
@@ -103,7 +103,7 @@ void portduinoSetup()
         std::cout << "Using " << configPath << " as config file" << std::endl;
         try {
             yamlConfig = YAML::LoadFile(configPath);
-        } catch (YAML::Exception e) {
+        } catch (YAML::Exception &e) {
             std::cout << "Could not open " << configPath << " because of error: " << e.what() << std::endl;
             exit(EXIT_FAILURE);
         }
@@ -111,7 +111,7 @@ void portduinoSetup()
         std::cout << "Using local config.yaml as config file" << std::endl;
         try {
             yamlConfig = YAML::LoadFile("config.yaml");
-        } catch (YAML::Exception e) {
+        } catch (YAML::Exception &e) {
             std::cout << "*** Exception " << e.what() << std::endl;
             exit(EXIT_FAILURE);
         }
@@ -119,7 +119,7 @@ void portduinoSetup()
         std::cout << "Using /etc/meshtasticd/config.yaml as config file" << std::endl;
         try {
             yamlConfig = YAML::LoadFile("/etc/meshtasticd/config.yaml");
-        } catch (YAML::Exception e) {
+        } catch (YAML::Exception &e) {
             std::cout << "*** Exception " << e.what() << std::endl;
             exit(EXIT_FAILURE);
         }
@@ -168,6 +168,7 @@ void portduinoSetup()
             settingsMap[txen] = yamlConfig["Lora"]["TXen"].as<int>(RADIOLIB_NC);
             settingsMap[rxen] = yamlConfig["Lora"]["RXen"].as<int>(RADIOLIB_NC);
             settingsMap[gpiochip] = yamlConfig["Lora"]["gpiochip"].as<int>(0);
+            settingsMap[ch341Quirk] = yamlConfig["Lora"]["ch341_quirk"].as<bool>(false);
             gpioChipName += std::to_string(settingsMap[gpiochip]);
 
             settingsStrings[spidev] = "/dev/" + yamlConfig["Lora"]["spidev"].as<std::string>("spidev0.0");
@@ -276,13 +277,13 @@ void portduinoSetup()
 
         settingsMap[maxnodes] = (yamlConfig["General"]["MaxNodes"]).as<int>(200);
 
-    } catch (YAML::Exception e) {
+    } catch (YAML::Exception &e) {
         std::cout << "*** Exception " << e.what() << std::endl;
         exit(EXIT_FAILURE);
     }
 
     for (configNames i : GPIO_lines) {
-        if (settingsMap[i] > max_GPIO)
+        if (settingsMap.count(i) && settingsMap[i] > max_GPIO)
             max_GPIO = settingsMap[i];
     }
 
@@ -341,14 +342,16 @@ void portduinoSetup()
         if (settingsMap[touchscreenIRQ] > 0)
             initGPIOPin(settingsMap[touchscreenIRQ], gpioChipName);
     }
+
     if (settingsStrings[spidev] != "") {
         SPI.begin(settingsStrings[spidev].c_str());
     }
     return;
 }
 
-int initGPIOPin(int pinNum, std::string gpioChipName)
+int initGPIOPin(int pinNum, const std::string gpioChipName)
 {
+#ifdef PORTDUINO_LINUX_HARDWARE
     std::string gpio_name = "GPIO" + std::to_string(pinNum);
     try {
         GPIOPin *csPin;
@@ -361,4 +364,7 @@ int initGPIOPin(int pinNum, std::string gpioChipName)
         std::cout << "Warning, cannot claim pin " << gpio_name << (p ? p.__cxa_exception_type()->name() : "null") << std::endl;
         return ERRNO_DISABLED;
     }
+#else
+    return ERRNO_OK;
+#endif
 }

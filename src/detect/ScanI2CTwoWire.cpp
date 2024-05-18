@@ -292,8 +292,20 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
 
                 break;
 
-                SCAN_SIMPLE_CASE(SHT31_ADDR, SHT31, "SHT31 sensor found\n")
+            case SHT31_4x_ADDR:
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x89), 2);
+                if (registerValue == 0x11a2) {
+                    type = SHT4X;
+                    LOG_INFO("SHT4X sensor found\n");
+                } else {
+                    type = SHT31;
+                    LOG_INFO("SHT31 sensor found\n");
+                }
+
+                break;
+
                 SCAN_SIMPLE_CASE(SHTC3_ADDR, SHTC3, "SHTC3 sensor found\n")
+                SCAN_SIMPLE_CASE(RCWL9620_ADDR, RCWL9620, "RCWL9620 sensor found\n")
 
             case LPS22HB_ADDR_ALT:
                 SCAN_SIMPLE_CASE(LPS22HB_ADDR, LPS22HB, "LPS22HB sensor found\n")
@@ -324,6 +336,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                 SCAN_SIMPLE_CASE(BMA423_ADDR, BMA423, "BMA423 accelerometer found\n");
                 SCAN_SIMPLE_CASE(LSM6DS3_ADDR, LSM6DS3, "LSM6DS3 accelerometer found at address 0x%x\n", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(TCA9555_ADDR, TCA9555, "TCA9555 I2C expander found\n");
+                SCAN_SIMPLE_CASE(VEML7700_ADDR, VEML7700, "VEML7700 light sensor found\n");
 
             default:
                 LOG_INFO("Device found at address 0x%x was not able to be enumerated\n", addr.address);
