@@ -875,6 +875,8 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     const char *username = node->has_user ? node->user.long_name : "Unknown Name";
 
     static char signalStr[20];
+    
+    //section here to choose whether to display hops away rather than signal strength if more than 0 hops away.
     if(node->hops_away>0)
     {
         snprintf(signalStr, sizeof(signalStr), "Hops Away: %d", node->hops_away);
