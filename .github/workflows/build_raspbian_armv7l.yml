@@ -10,6 +10,11 @@ jobs:
   build-raspbian-armv7l:
     runs-on: [self-hosted, linux, ARM]
     steps:
+      - name: Install libbluetooth
+        shell: bash
+        run: |
+          sudo apt-get install -y libbluetooth-dev libgpiod-dev libyaml-cpp-dev openssl libssl-dev libulfius-dev liborcania-dev
+
       - name: Checkout code
         uses: actions/checkout@v4
         with:
