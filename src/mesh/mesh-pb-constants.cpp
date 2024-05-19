@@ -1,7 +1,6 @@
-#include "configuration.h"
-
-#include "FSCommon.h"
 #include "mesh-pb-constants.h"
+#include "FSCommon.h"
+#include "configuration.h"
 #include <Arduino.h>
 #include <assert.h>
 #include <pb_decode.h>
