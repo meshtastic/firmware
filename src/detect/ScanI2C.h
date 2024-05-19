@@ -2,7 +2,6 @@
 
 #include <stddef.h>
 #include <stdint.h>
-bool performScanForCardKB();
 
 class ScanI2C
 {
