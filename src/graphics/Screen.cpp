@@ -440,8 +440,8 @@ bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int
         return validCached;
     }
 
-    // Abort: if time seems invalid.. (> 12 months ago, probably seen before RTC set)
-    if (secondsAgo > SEC_PER_DAY * 30UL * 12) {
+    // Abort: if time seems invalid.. (> 6 months ago, probably seen before RTC set)
+    if (secondsAgo > SEC_PER_DAY * 30UL * 6) {
         validCached = false;
         return validCached;
     }
@@ -977,7 +977,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         snprintf(lastStr, sizeof(lastStr), "Last seen: %02u:%02u", (unsigned int)timestampHours, (unsigned int)timestampMinutes);
     else if (useTimestamp && daysAgo == 1) // Yesterday
         snprintf(lastStr, sizeof(lastStr), "Seen yesterday");
-    else if (useTimestamp && daysAgo < 183) // Last six months
+    else if (useTimestamp && daysAgo > 1) // Last six months (capped by deltaToTimestamp method)
         snprintf(lastStr, sizeof(lastStr), "%li days ago", (long)daysAgo);
     // -- if using time delta instead --
     else if (agoSecs < 120 * 60) // last 2 hrs
