@@ -135,7 +135,7 @@ uint16_t ScanI2CTwoWire::getRegisterValue(const ScanI2CTwoWire::RegisterLocation
         type = T;                                                                                                                \
         break;
 
-void ScanI2CTwoWire::scanPort(I2CPort port)
+void ScanI2CTwoWire::scanPort(I2CPort port, int *address)
 {
     concurrency::LockGuard guard((concurrency::Lock *)&lock);
 
@@ -163,6 +163,10 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
 #endif
 
     for (addr.address = 1; addr.address < 127; addr.address++) {
+        // Skip the address if it is not requested oon a partial scan
+        if (sizeof(address) > 0 && addr.address != *address) {
+            continue;
+        }
         i2cBus->beginTransmission(addr.address);
 #ifdef ARCH_PORTDUINO
         if (i2cBus->read() != -1)
@@ -365,6 +369,11 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
             foundDevices[addr] = type;
         }
     }
+}
+
+void ScanI2CTwoWire::scanPort(I2CPort port)
+{
+    scanPort(port, nullptr);
 }
 
 TwoWire *ScanI2CTwoWire::fetchI2CBus(ScanI2C::DeviceAddress address) const
