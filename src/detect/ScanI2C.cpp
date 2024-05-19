@@ -1,6 +1,4 @@
 #include "ScanI2C.h"
-#include "main.h"
-#include <Wire.h>
 
 const ScanI2C::DeviceAddress ScanI2C::ADDRESS_NONE = ScanI2C::DeviceAddress();
 const ScanI2C::FoundDevice ScanI2C::DEVICE_NONE = ScanI2C::FoundDevice(ScanI2C::DeviceType::NONE, ADDRESS_NONE);
@@ -8,6 +6,7 @@ const ScanI2C::FoundDevice ScanI2C::DEVICE_NONE = ScanI2C::FoundDevice(ScanI2C::
 ScanI2C::ScanI2C() = default;
 
 void ScanI2C::scanPort(ScanI2C::I2CPort port) {}
+void ScanI2C::scanPort(ScanI2C::I2CPort port, int *address) {}
 
 void ScanI2C::setSuppressScreen()
 {
@@ -29,33 +28,7 @@ ScanI2C::FoundDevice ScanI2C::firstRTC() const
     ScanI2C::DeviceType types[] = {RTC_RV3028, RTC_PCF8563};
     return firstOfOrNONE(2, types);
 }
-bool performScanForCardKB() {
-    // Example I2C scan code for CardKB (adjust as needed)
-    Wire.beginTransmission(CARDKB_I2C_ADDRESS);
-    if (Wire.endTransmission() == 0) {
-        return true; // CardKB detected
-    }
-    return false; // CardKB not detected
-}
-void scanForCardKB() {
-    const int maxRetries = 10; // Maximum number of retries
-    const int retryDelay = 100; // Delay between retries in milliseconds
 
-    for (int i = 0; i < maxRetries; ++i) {
-        // Perform the scan (example scan code, adjust as needed)
-        cardKBDetected = performScanForCardKB();
-
-        if (cardKBDetected) {
-            Serial.println("CardKB Keyboard detected.");
-            break;
-        }
-
-        delay(retryDelay); // Wait before the next retry
-    }
-    if (!cardKBDetected) {
-        Serial.println("CardKB Keyboard not detected. Canned Message Module Disabled.");
-    }
-}
 ScanI2C::FoundDevice ScanI2C::firstKeyboard() const
 {
     ScanI2C::DeviceType types[] = {CARDKB, TDECKKB, BBQ10KB, RAK14004};
