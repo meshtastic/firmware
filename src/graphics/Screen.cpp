@@ -526,7 +526,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
 #endif
 
     // If bold, draw twice, shifting right by one pixel
-    for (uint8_t xOff = 0; xOff <= config.display.heading_bold ? 1 : 0; xOff++) {
+    for (uint8_t xOff = 0; xOff <= (config.display.heading_bold ? 1 : 0); xOff++) {
 #ifdef USE_EINK
         // Show an "absolute" timestamp if received today, but longer than 15 minutes ago
         if (useTimestamp && minutes >= 15 && (daysAgo == 0 || hours < 2)) {
