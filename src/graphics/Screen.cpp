@@ -419,7 +419,6 @@ static bool shouldDrawMessage(const meshtastic_MeshPacket *packet)
     return packet->from != 0 && !moduleConfig.store_forward.enabled;
 }
 
-#ifdef USE_EINK
 // Get an absolute time from "seconds ago" info. Returns false if no valid timestamp possible
 bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int32_t *daysAgo)
 {
@@ -489,7 +488,6 @@ bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int
     validCached = true;
     return validCached;
 }
-#endif
 
 /// Draw the last text message we received
 static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -518,23 +516,19 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     uint32_t hours = minutes / 60;
     uint32_t days = hours / 24;
 
-#ifdef USE_EINK
-    // Use an "absolute" timestamp. More static, fewer refreshes
+    // For timestamp
     uint8_t timestampHours, timestampMinutes;
     int32_t daysAgo;
     bool useTimestamp = deltaToTimestamp(seconds, &timestampHours, &timestampMinutes, &daysAgo);
-#endif
 
     // If bold, draw twice, shifting right by one pixel
     for (uint8_t xOff = 0; xOff <= (config.display.heading_bold ? 1 : 0); xOff++) {
-#ifdef USE_EINK
-        // Show an "absolute" timestamp if received today, but longer than 15 minutes ago
+        // Show a timestamp if received today, but longer than 15 minutes ago
         if (useTimestamp && minutes >= 15 && (daysAgo == 0 || hours < 2)) {
             display->drawStringf(xOff + x, 0 + y, tempBuf, "At %02hu:%02hu from %s", timestampHours, timestampMinutes,
                                  (node && node->has_user) ? node->user.short_name : "???");
             continue;
         }
-#endif
         // Otherwise, show a time delta
         display->drawStringf(xOff + x, 0 + y, tempBuf, "%s ago from %s",
                              screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
@@ -968,16 +962,15 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     uint32_t agoSecs = sinceLastSeen(node);
     static char lastStr[20];
 
-#ifdef USE_EINK
-    // Use an absolute timestamp with E-Ink displays. More static, fewer refreshes.
+    // Use an absolute timestamp in some cases.
+    // Particularly useful with E-Ink displays. Static UI, fewer refreshes.
     uint8_t timestampHours, timestampMinutes;
     int32_t daysAgo;
     bool useTimestamp = deltaToTimestamp(agoSecs, &timestampHours, &timestampMinutes, &daysAgo);
-#endif
 
     if (agoSecs < 120) // last 2 mins?
         snprintf(lastStr, sizeof(lastStr), "%u seconds ago", agoSecs);
-#ifdef USE_EINK
+    // -- if suitable for timestamp --
     else if (useTimestamp && agoSecs < 15 * SECONDS_IN_MINUTE) // Last 15 minutes
         snprintf(lastStr, sizeof(lastStr), "%u minutes ago", agoSecs / SECONDS_IN_MINUTE);
     else if (useTimestamp && daysAgo == 0) // Today
@@ -986,7 +979,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         snprintf(lastStr, sizeof(lastStr), "Seen yesterday");
     else if (useTimestamp && daysAgo < 183) // Last six months
         snprintf(lastStr, sizeof(lastStr), "%li days ago", (long)daysAgo);
-#endif
+    // -- if using time delta instead --
     else if (agoSecs < 120 * 60) // last 2 hrs
         snprintf(lastStr, sizeof(lastStr), "%u minutes ago", agoSecs / 60);
     // Only show hours ago if it's been less than 6 months. Otherwise, we may have bad data.
