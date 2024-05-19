@@ -981,11 +981,11 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     else if (useTimestamp && agoSecs < 15 * SECONDS_IN_MINUTE) // Last 15 minutes
         snprintf(lastStr, sizeof(lastStr), "%u minutes ago", agoSecs / SECONDS_IN_MINUTE);
     else if (useTimestamp && daysAgo == 0) // Today
-        snprintf(lastStr, sizeof(lastStr), "Last seen: %02hu:%02hu", timestampHours, timestampMinutes);
+        snprintf(lastStr, sizeof(lastStr), "Last seen: %02u:%02u", (unsigned int)timestampHours, (unsigned int)timestampMinutes);
     else if (useTimestamp && daysAgo == 1) // Yesterday
         snprintf(lastStr, sizeof(lastStr), "Seen yesterday");
     else if (useTimestamp && daysAgo < 183) // Last six months
-        snprintf(lastStr, sizeof(lastStr), "%li days ago", daysAgo);
+        snprintf(lastStr, sizeof(lastStr), "%li days ago", (long)daysAgo);
 #endif
     else if (agoSecs < 120 * 60) // last 2 hrs
         snprintf(lastStr, sizeof(lastStr), "%u minutes ago", agoSecs / 60);
