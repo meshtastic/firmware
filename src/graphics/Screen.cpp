@@ -419,6 +419,78 @@ static bool shouldDrawMessage(const meshtastic_MeshPacket *packet)
     return packet->from != 0 && !moduleConfig.store_forward.enabled;
 }
 
+#ifdef USE_EINK
+// Get an absolute time from "seconds ago" info. Returns false if no valid timestamp possible
+bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int32_t *daysAgo)
+{
+    // Cache the result - avoid frequent recalculation
+    static uint8_t hoursCached = 0, minutesCached = 0;
+    static uint32_t daysAgoCached = 0;
+    static uint32_t secondsAgoCached = 0;
+    static bool valid = false;
+
+    // Abort: if timezone not set
+    if (strlen(config.device.tzdef) == 0) {
+        valid = false;
+        return valid;
+    }
+
+    // Abort: if invalid pointers passed
+    if (hours == nullptr || minutes == nullptr || daysAgo == nullptr) {
+        valid = false;
+        return valid;
+    }
+
+    // Abort: if time seems invalid.. (> 12 months ago, probably seen before RTC set)
+    if (secondsAgo > SEC_PER_DAY * 30UL * 12) {
+        valid = false;
+        return valid;
+    }
+
+    // If repeated request, don't bother recalculating
+    if (secondsAgo - secondsAgoCached < 60 && secondsAgoCached != 0) {
+        if (valid) {
+            *hours = hoursCached;
+            *minutes = minutesCached;
+            *daysAgo = daysAgoCached;
+        }
+        return valid;
+    }
+
+    // Get local time
+    uint32_t secondsRTC = getValidTime(RTCQuality::RTCQualityDevice, true); // Get local time
+
+    // Abort: if RTC not set
+    if (!secondsRTC) {
+        valid = false;
+        return valid;
+    }
+
+    // Get absolute time when last seen
+    uint32_t secondsSeenAt = secondsRTC - secondsAgo;
+
+    // Calculate daysAgo
+    *daysAgo = (secondsRTC / SEC_PER_DAY) - (secondsSeenAt / SEC_PER_DAY); // How many "midnights" have passed
+
+    // Get seconds since midnight
+    uint32_t hms = (secondsRTC - secondsAgo) % SEC_PER_DAY;
+    hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
+
+    // Tear apart hms into hours and minutes
+    *hours = hms / SEC_PER_HOUR;
+    *minutes = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
+
+    // Cache the result
+    daysAgoCached = *daysAgo;
+    hoursCached = *hours;
+    minutesCached = *minutes;
+    secondsAgoCached = secondsAgo;
+
+    valid = true;
+    return valid;
+}
+#endif
+
 /// Draw the last text message we received
 static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -440,18 +512,34 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
         display->setColor(BLACK);
     }
 
+    // For time delta
     uint32_t seconds = sinceReceived(&mp);
     uint32_t minutes = seconds / 60;
     uint32_t hours = minutes / 60;
     uint32_t days = hours / 24;
 
-    if (config.display.heading_bold) {
-        display->drawStringf(1 + x, 0 + y, tempBuf, "%s ago from %s",
+#ifdef USE_EINK
+    // Use an "absolute" timestamp. More static, fewer refreshes
+    uint8_t timestampHours, timestampMinutes;
+    int32_t daysAgo;
+    bool useTimestamp = deltaToTimestamp(seconds, &timestampHours, &timestampMinutes, &daysAgo);
+#endif
+
+    // If bold, draw twice, shifting right by one pixel
+    for (uint8_t xOff = 0; xOff <= config.display.heading_bold ? 1 : 0; xOff++) {
+#ifdef USE_EINK
+        // Show an "absolute" timestamp if received today, but longer than 15 minutes ago
+        if (useTimestamp && minutes >= 15 && (daysAgo == 0 || hours < 2)) {
+            display->drawStringf(xOff + x, 0 + y, tempBuf, "At %02hu:%02hu from %s", timestampHours, timestampMinutes,
+                                 (node && node->has_user) ? node->user.short_name : "???");
+            continue;
+        }
+#endif
+        // Otherwise, show a time delta
+        display->drawStringf(xOff + x, 0 + y, tempBuf, "%s ago from %s",
                              screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
                              (node && node->has_user) ? node->user.short_name : "???");
     }
-    display->drawStringf(0 + x, 0 + y, tempBuf, "%s ago from %s", screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
-                         (node && node->has_user) ? node->user.short_name : "???");
 
     display->setColor(WHITE);
     snprintf(tempBuf, sizeof(tempBuf), "%s", mp.decoded.payload.bytes);
@@ -879,19 +967,33 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 
     uint32_t agoSecs = sinceLastSeen(node);
     static char lastStr[20];
+
+#ifdef USE_EINK
+    // Use an absolute timestamp with E-Ink displays. More static, fewer refreshes.
+    uint8_t timestampHours, timestampMinutes;
+    int32_t daysAgo;
+    bool useTimestamp = deltaToTimestamp(agoSecs, &timestampHours, &timestampMinutes, &daysAgo);
+#endif
+
     if (agoSecs < 120) // last 2 mins?
         snprintf(lastStr, sizeof(lastStr), "%u seconds ago", agoSecs);
+#ifdef USE_EINK
+    else if (useTimestamp && agoSecs < 15 * SECONDS_IN_MINUTE) // Last 15 minutes
+        snprintf(lastStr, sizeof(lastStr), "%u minutes ago", agoSecs / SECONDS_IN_MINUTE);
+    else if (useTimestamp && daysAgo == 0) // Today
+        snprintf(lastStr, sizeof(lastStr), "Last seen: %02hu:%02hu", timestampHours, timestampMinutes);
+    else if (useTimestamp && daysAgo == 1) // Yesterday
+        snprintf(lastStr, sizeof(lastStr), "Seen yesterday");
+    else if (useTimestamp && daysAgo < 183) // Last six months
+        snprintf(lastStr, sizeof(lastStr), "%li days ago", daysAgo);
+#endif
     else if (agoSecs < 120 * 60) // last 2 hrs
         snprintf(lastStr, sizeof(lastStr), "%u minutes ago", agoSecs / 60);
-    else {
-        // Only show hours ago if it's been less than 6 months. Otherwise, we may have bad
-        //   data.
-        if ((agoSecs / 60 / 60) < (hours_in_month * 6)) {
-            snprintf(lastStr, sizeof(lastStr), "%u hours ago", agoSecs / 60 / 60);
-        } else {
-            snprintf(lastStr, sizeof(lastStr), "unknown age");
-        }
-    }
+    // Only show hours ago if it's been less than 6 months. Otherwise, we may have bad data.
+    else if ((agoSecs / 60 / 60) < (hours_in_month * 6))
+        snprintf(lastStr, sizeof(lastStr), "%u hours ago", agoSecs / 60 / 60);
+    else
+        snprintf(lastStr, sizeof(lastStr), "unknown age");
 
     static char distStr[20];
     if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
@@ -900,7 +1002,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         strncpy(distStr, "? km", sizeof(distStr));
     }
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-    const char *fields[] = {username, distStr, signalStr, lastStr, NULL};
+    const char *fields[] = {username, lastStr, signalStr, distStr, NULL};
     int16_t compassX = 0, compassY = 0;
 
     // coordinates for the center of the compass/circle
