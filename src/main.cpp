@@ -35,6 +35,8 @@
 #include <utility>
 // #include <driver/rtc_io.h>
 
+bool cardKBDetected = false; 
+void scanForCardKB();
 #ifdef ARCH_ESP32
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "mesh/http/WebServer.h"
@@ -374,6 +376,7 @@ void setup()
     // otherwise keyboard and touch screen will not work
     delay(800);
 #endif
+scanForCardKB(); // Initial scan for CardKB
 
     // Currently only the tbeam has a PMU
     // PMU initialization needs to be placed before i2c scanning
