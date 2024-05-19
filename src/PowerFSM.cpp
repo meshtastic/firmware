@@ -348,12 +348,18 @@ void PowerFSM_setup()
 
     powerFSM.add_transition(&stateDARK, &stateDARK, EVENT_CONTACT_FROM_PHONE, NULL, "Contact from phone");
 
-    powerFSM.add_timed_transition(&stateON, &stateDARK,
-                                  Default::getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL,
-                                  "Screen-on timeout");
-    powerFSM.add_timed_transition(&statePOWER, &stateDARK,
-                                  Default::getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL,
-                                  "Screen-on timeout");
+#ifdef USE_EINK
+    // Allow E-Ink devices to suppress the screensaver, if screen timeout set to 0
+    if (config.display.screen_on_secs > 0)
+#endif
+    {
+        powerFSM.add_timed_transition(&stateON, &stateDARK,
+                                      Default::getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs),
+                                      NULL, "Screen-on timeout");
+        powerFSM.add_timed_transition(&statePOWER, &stateDARK,
+                                      Default::getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs),
+                                      NULL, "Screen-on timeout");
+    }
 
 // We never enter light-sleep or NB states on NRF52 (because the CPU uses so little power normally)
 #ifdef ARCH_ESP32

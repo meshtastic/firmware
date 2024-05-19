@@ -1550,6 +1550,15 @@ void Screen::setFrames()
     LOG_DEBUG("showing standard frames\n");
     showingNormalScreen = true;
 
+#ifdef USE_EINK
+    // If user has disabled the screensaver, warn them after boot
+    static bool warnedScreensaverDisabled = false;
+    if (config.display.screen_on_secs == 0 && !warnedScreensaverDisabled) {
+        screen->print("Screensaver disabled\n");
+        warnedScreensaverDisabled = true;
+    }
+#endif
+
     moduleFrames = MeshModule::GetMeshModulesWithUIFrames();
     LOG_DEBUG("Showing %d module frames\n", moduleFrames.size());
 #ifdef DEBUG_PORT
