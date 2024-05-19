@@ -427,34 +427,34 @@ bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int
     static uint8_t hoursCached = 0, minutesCached = 0;
     static uint32_t daysAgoCached = 0;
     static uint32_t secondsAgoCached = 0;
-    static bool valid = false;
+    static bool validCached = false;
 
     // Abort: if timezone not set
     if (strlen(config.device.tzdef) == 0) {
-        valid = false;
-        return valid;
+        validCached = false;
+        return validCached;
     }
 
     // Abort: if invalid pointers passed
     if (hours == nullptr || minutes == nullptr || daysAgo == nullptr) {
-        valid = false;
-        return valid;
+        validCached = false;
+        return validCached;
     }
 
     // Abort: if time seems invalid.. (> 12 months ago, probably seen before RTC set)
     if (secondsAgo > SEC_PER_DAY * 30UL * 12) {
-        valid = false;
-        return valid;
+        validCached = false;
+        return validCached;
     }
 
     // If repeated request, don't bother recalculating
     if (secondsAgo - secondsAgoCached < 60 && secondsAgoCached != 0) {
-        if (valid) {
+        if (validCached) {
             *hours = hoursCached;
             *minutes = minutesCached;
             *daysAgo = daysAgoCached;
         }
-        return valid;
+        return validCached;
     }
 
     // Get local time
@@ -462,8 +462,8 @@ bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int
 
     // Abort: if RTC not set
     if (!secondsRTC) {
-        valid = false;
-        return valid;
+        validCached = false;
+        return validCached;
     }
 
     // Get absolute time when last seen
@@ -486,8 +486,8 @@ bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int
     minutesCached = *minutes;
     secondsAgoCached = secondsAgo;
 
-    valid = true;
-    return valid;
+    validCached = true;
+    return validCached;
 }
 #endif
 
