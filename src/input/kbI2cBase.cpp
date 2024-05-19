@@ -1,6 +1,7 @@
 #include "kbI2cBase.h"
 #include "configuration.h"
 #include "detect/ScanI2C.h"
+#include "detect/ScanI2CTwoWire.h"
 
 extern ScanI2C::DeviceAddress cardkb_found;
 extern uint8_t kb_model;
@@ -30,8 +31,40 @@ uint8_t read_from_14004(TwoWire *i2cBus, uint8_t reg, uint8_t *data, uint8_t len
 int32_t KbI2cBase::runOnce()
 {
     if (cardkb_found.address == 0x00) {
-        // Input device is not detected.
-        return INT32_MAX;
+        // Input device is not detected. Rescan now.
+        auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
+        int i2caddr_scan[] = {CARDKB_ADDR, TDECK_KB_ADDR, BBQ10_KB_ADDR};
+#if defined(I2C_SDA1)
+        i2cScanner->scanPort(ScanI2C::I2CPort::WIRE1, i2caddr_scan);
+#endif
+        i2cScanner->scanPort(ScanI2C::I2CPort::WIRE, i2caddr_scan);
+        auto kb_info = i2cScanner->firstKeyboard();
+
+        if (kb_info.type != ScanI2C::DeviceType::NONE) {
+            cardkb_found = kb_info.address;
+            switch (kb_info.type) {
+            case ScanI2C::DeviceType::RAK14004:
+                kb_model = 0x02;
+                break;
+            case ScanI2C::DeviceType::CARDKB:
+                kb_model = 0x00;
+                break;
+            case ScanI2C::DeviceType::TDECKKB:
+                // assign an arbitrary value to distinguish from other models
+                kb_model = 0x10;
+                break;
+            case ScanI2C::DeviceType::BBQ10KB:
+                // assign an arbitrary value to distinguish from other models
+                kb_model = 0x11;
+                break;
+            default:
+                // use this as default since it's also just zero
+                LOG_WARN("kb_info.type is unknown(0x%02x), setting kb_model=0x00\n", kb_info.type);
+                kb_model = 0x00;
+            }
+        }
+        if (cardkb_found.address == 0x00)
+            return INT32_MAX;
     }
 
     if (!i2cBus) {

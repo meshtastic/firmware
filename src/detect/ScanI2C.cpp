@@ -8,6 +8,7 @@ const ScanI2C::FoundDevice ScanI2C::DEVICE_NONE = ScanI2C::FoundDevice(ScanI2C::
 ScanI2C::ScanI2C() = default;
 
 void ScanI2C::scanPort(ScanI2C::I2CPort port) {}
+void ScanI2C::scanPort(ScanI2C::I2CPort port, int *address) {}
 
 void ScanI2C::setSuppressScreen()
 {
