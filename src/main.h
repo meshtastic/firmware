@@ -21,7 +21,7 @@ extern NimbleBluetooth *nimbleBluetooth;
 #include "NRF52Bluetooth.h"
 extern NRF52Bluetooth *nrf52Bluetooth;
 #endif
-extern bool cardKBDetected;
+
 #if ARCH_PORTDUINO
 extern HardwareSPI *DisplaySPI;
 extern HardwareSPI *LoraSPI;
@@ -39,7 +39,6 @@ extern bool pmu_found;
 extern bool isCharging;
 extern bool isUSBPowered;
 
-#define CARDKB_I2C_ADDRESS 0x5F // Replace 0x5F with the actual address if different
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 extern ATECCX08A atecc;
 #endif
