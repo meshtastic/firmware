@@ -103,12 +103,6 @@ jobs:
     with:
       board: ${{ matrix.board }}
 
-  build-raspbian:
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-    uses: ./.github/workflows/build_raspbian.yml
-
   package-raspbian:
     uses: ./.github/workflows/package_raspbian.yml
 
@@ -198,7 +192,6 @@ jobs:
         build-esp32-s3,
         build-esp32-c3,
         build-nrf52,
-        build-raspbian,
         build-native,
         build-rpi2040,
         package-raspbian,
