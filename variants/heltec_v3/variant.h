@@ -18,6 +18,8 @@
 #define ADC_ATTENUATION ADC_ATTEN_DB_2_5 // lower dB for high resistance voltage divider
 #define ADC_MULTIPLIER 4.9
 
+#define PIN_GPS_EN 46 // GPS power enable pin
+
 #define USE_SX1262
 
 #define LORA_DIO0 -1 // a No connect on the SX1262 module
