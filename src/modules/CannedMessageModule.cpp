@@ -47,6 +47,12 @@ CannedMessageModule::CannedMessageModule()
             disable();
         } else {
             LOG_INFO("CannedMessageModule is enabled\n");
+
+            // T-Watch interface currently has no way to select destination type, so default to 'node'
+#ifdef T_WATCH_S3
+            this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
+#endif
+
             this->inputObserver.observe(inputBroker);
         }
     } else {
@@ -67,8 +73,14 @@ int CannedMessageModule::splitConfiguredMessages()
     int messageIndex = 0;
     int i = 0;
 
+    String messages = cannedMessageModuleConfig.messages;
+
+    String separator = messages.length() ? "|" : "";
+
+    messages = "[---- Free Text ----]" + separator + messages;
+
     // collect all the message parts
-    strncpy(this->messageStore, cannedMessageModuleConfig.messages, sizeof(this->messageStore));
+    strncpy(this->messageStore, messages.c_str(), sizeof(this->messageStore));
 
     // The first message points to the beginning of the store.
     this->messages[messageIndex++] = this->messageStore;
@@ -78,7 +90,6 @@ int CannedMessageModule::splitConfiguredMessages()
         if (this->messageStore[i] == '|') {
             // Message ending found, replace it with string-end character.
             this->messageStore[i] = '\0';
-            LOG_DEBUG("CannedMessage %d is: '%s'\n", messageIndex - 1, this->messages[messageIndex - 1]);
 
             // hit our max messages, bail
             if (messageIndex >= CANNED_MESSAGE_MODULE_MESSAGE_MAX_COUNT) {
@@ -119,20 +130,27 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     bool validEvent = false;
     if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP)) {
         if (this->messagesCount > 0) {
-            // LOG_DEBUG("Canned message event UP\n");
             this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_UP;
             validEvent = true;
         }
     }
     if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN)) {
         if (this->messagesCount > 0) {
-            // LOG_DEBUG("Canned message event DOWN\n");
             this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_DOWN;
             validEvent = true;
         }
     }
     if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT)) {
-        LOG_DEBUG("Canned message event Select\n");
+        if (this->currentMessageIndex == 0) {
+            this->runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+
+            UIFrameEvent e = {false, true};
+            e.frameChanged = true;
+            this->notifyObservers(&e);
+
+            return 0;
+        }
+
         // when inactive, call the onebutton shortpress instead. Activate Module only on up/down
         if ((this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED)) {
             powerFSM.trigger(EVENT_PRESS);
@@ -143,38 +161,47 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         }
     }
     if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL)) {
-        LOG_DEBUG("Canned message event Cancel\n");
         UIFrameEvent e = {false, true};
         e.frameChanged = true;
         this->currentMessageIndex = -1;
+
+#ifndef T_WATCH_S3
         this->freetext = ""; // clear freetext
         this->cursor = 0;
         this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
+#endif
+
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         this->notifyObservers(&e);
     }
     if ((event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK)) ||
         (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) ||
         (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT))) {
-        // LOG_DEBUG("Canned message event (%x)\n", event->kbchar);
+
+#ifdef T_WATCH_S3
+        if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
+            this->payload = 0xb4;
+        } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
+            this->payload = 0xb7;
+        }
+#else
         // tweak for left/right events generated via trackball/touch with empty kbchar
         if (!event->kbchar) {
             if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
                 this->payload = 0xb4;
-                // this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
             } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
                 this->payload = 0xb7;
-                // this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
             }
         } else {
             // pass the pressed key
             this->payload = event->kbchar;
         }
+#endif
+
         this->lastTouchMillis = millis();
         validEvent = true;
     }
     if (event->inputEvent == static_cast<char>(ANYKEY)) {
-        LOG_DEBUG("Canned message event any key pressed\n");
         // when inactive, this will switch to the freetext mode
         if ((this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) ||
             (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED)) {
@@ -250,8 +277,68 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             screen->removeFunctionSymbal("Fn"); // remove modifier (function) symbal
         }
     }
+
+#ifdef T_WATCH_S3
+    if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
+        String keyTapped = keyForCoordinates(event->touchX, event->touchY);
+
+        if (keyTapped == "⇧") {
+            this->highlight = -1;
+
+            this->payload = 0x00;
+
+            validEvent = true;
+
+            this->shift = !this->shift;
+        } else if (keyTapped == "⌫") {
+            this->highlight = keyTapped[0];
+
+            this->payload = 0x08;
+
+            validEvent = true;
+
+            this->shift = false;
+        } else if (keyTapped == "123" || keyTapped == "ABC") {
+            this->highlight = -1;
+
+            this->payload = 0x00;
+
+            this->charSet = this->charSet == 0 ? 1 : 0;
+
+            validEvent = true;
+        } else if (keyTapped == " ") {
+            this->highlight = keyTapped[0];
+
+            this->payload = keyTapped[0];
+
+            validEvent = true;
+
+            this->shift = false;
+        } else if (keyTapped == "↵") {
+            this->highlight = 0x00;
+
+            this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
+
+            this->payload = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+
+            this->currentMessageIndex = event->kbchar - 1;
+
+            validEvent = true;
+
+            this->shift = false;
+        } else if (keyTapped != "") {
+            this->highlight = keyTapped[0];
+
+            this->payload = this->shift ? keyTapped[0] : std::tolower(keyTapped[0]);
+
+            validEvent = true;
+
+            this->shift = false;
+        }
+    }
+#endif
+
     if (event->inputEvent == static_cast<char>(MATRIXKEY)) {
-        LOG_DEBUG("Canned message event Matrix key pressed\n");
         // this will send the text immediately on matrix press
         this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
         this->payload = MATRIXKEY;
@@ -311,17 +398,24 @@ int32_t CannedMessageModule::runOnce()
         this->currentMessageIndex = -1;
         this->freetext = ""; // clear freetext
         this->cursor = 0;
+
+#ifndef T_WATCH_S3
         this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
+#endif
+
         this->notifyObservers(&e);
     } else if (((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)) &&
                ((millis() - this->lastTouchMillis) > INACTIVATE_AFTER_MS)) {
         // Reset module
-        LOG_DEBUG("Reset due to lack of activity.\n");
         e.frameChanged = true;
         this->currentMessageIndex = -1;
         this->freetext = ""; // clear freetext
         this->cursor = 0;
+
+#ifndef T_WATCH_S3
         this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
+#endif
+
         this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
         this->notifyObservers(&e);
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_SELECT) {
@@ -330,7 +424,6 @@ int32_t CannedMessageModule::runOnce()
                 sendText(this->dest, indexChannels[this->channel], this->freetext.c_str(), true);
                 this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
             } else {
-                LOG_DEBUG("Reset message is empty.\n");
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
             }
         } else {
@@ -339,11 +432,15 @@ int32_t CannedMessageModule::runOnce()
                     powerFSM.trigger(EVENT_PRESS);
                     return INT32_MAX;
                 } else {
+#ifdef T_WATCH_S3
+                    sendText(this->dest, indexChannels[this->channel], this->messages[this->currentMessageIndex], true);
+#else
                     sendText(NODENUM_BROADCAST, channels.getPrimaryIndex(), this->messages[this->currentMessageIndex], true);
+#endif
                 }
                 this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
             } else {
-                LOG_DEBUG("Reset message is empty.\n");
+                // LOG_DEBUG("Reset message is empty.\n");
                 this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
             }
         }
@@ -351,7 +448,11 @@ int32_t CannedMessageModule::runOnce()
         this->currentMessageIndex = -1;
         this->freetext = ""; // clear freetext
         this->cursor = 0;
+
+#ifndef T_WATCH_S3
         this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
+#endif
+
         this->notifyObservers(&e);
         return 2000;
     } else if ((this->runState != CANNED_MESSAGE_RUN_STATE_FREETEXT) && (this->currentMessageIndex == -1)) {
@@ -364,7 +465,11 @@ int32_t CannedMessageModule::runOnce()
             this->currentMessageIndex = getPrevIndex();
             this->freetext = ""; // clear freetext
             this->cursor = 0;
+
+#ifndef T_WATCH_S3
             this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
+#endif
+
             this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
             LOG_DEBUG("MOVE UP (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
         }
@@ -373,7 +478,11 @@ int32_t CannedMessageModule::runOnce()
             this->currentMessageIndex = this->getNextIndex();
             this->freetext = ""; // clear freetext
             this->cursor = 0;
+
+#ifndef T_WATCH_S3
             this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
+#endif
+
             this->runState = CANNED_MESSAGE_RUN_STATE_ACTIVE;
             LOG_DEBUG("MOVE DOWN (%d):%s\n", this->currentMessageIndex, this->getCurrentMessage());
         }
@@ -457,7 +566,7 @@ int32_t CannedMessageModule::runOnce()
             switch (this->payload) { // code below all trigger the freetext window (where you type to send a message) or reset the
                                      // display back to the default window
             case 0x08:               // backspace
-                if (this->freetext.length() > 0) {
+                if (this->freetext.length() > 0 && this->highlight == 0x00) {
                     if (this->cursor == this->freetext.length()) {
                         this->freetext = this->freetext.substring(0, this->freetext.length() - 1);
                     } else {
@@ -495,13 +604,19 @@ int32_t CannedMessageModule::runOnce()
                 runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
                 break;
             default:
+                if (this->highlight != 0x00) {
+                    break;
+                }
+
                 if (this->cursor == this->freetext.length()) {
                     this->freetext += this->payload;
                 } else {
                     this->freetext =
                         this->freetext.substring(0, this->cursor) + this->payload + this->freetext.substring(this->cursor);
                 }
+
                 this->cursor += 1;
+
                 uint16_t maxChars = meshtastic_Constants_DATA_PAYLOAD_LEN - (moduleConfig.canned_message.send_bell ? 1 : 0);
                 if (this->freetext.length() > maxChars) {
                     this->cursor = maxChars;
@@ -594,6 +709,201 @@ void CannedMessageModule::showTemporaryMessage(const String &message)
     setIntervalFromNow(2000);
 }
 
+#ifdef T_WATCH_S3
+
+String CannedMessageModule::keyForCoordinates(uint x, uint y)
+{
+    int outerSize = *(&this->keyboard[this->charSet] + 1) - this->keyboard[this->charSet];
+
+    for (int8_t outerIndex = 0; outerIndex < outerSize; outerIndex++) {
+        int innerSize = *(&this->keyboard[this->charSet][outerIndex] + 1) - this->keyboard[this->charSet][outerIndex];
+
+        for (int8_t innerIndex = 0; innerIndex < innerSize; innerIndex++) {
+            Letter letter = this->keyboard[this->charSet][outerIndex][innerIndex];
+
+            if (x > letter.rectX && x < (letter.rectX + letter.rectWidth) && y > letter.rectY &&
+                y < (letter.rectY + letter.rectHeight)) {
+                return letter.character;
+            }
+        }
+    }
+
+    return "";
+}
+
+void CannedMessageModule::drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    int outerSize = *(&this->keyboard[this->charSet] + 1) - this->keyboard[this->charSet];
+
+    int xOffset = 0;
+
+    int yOffset = 56;
+
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    display->setFont(FONT_SMALL);
+
+    display->setColor(OLEDDISPLAY_COLOR::WHITE);
+
+    display->drawStringMaxWidth(0, 0, display->getWidth(),
+                                cannedMessageModule->drawWithCursor(cannedMessageModule->freetext, cannedMessageModule->cursor));
+
+    display->setFont(FONT_MEDIUM);
+
+    int cellHeight = round((display->height() - 64) / outerSize);
+
+    int yCorrection = 8;
+
+    for (int8_t outerIndex = 0; outerIndex < outerSize; outerIndex++) {
+        yOffset += outerIndex > 0 ? cellHeight : 0;
+
+        int innerSizeBound = *(&this->keyboard[this->charSet][outerIndex] + 1) - this->keyboard[this->charSet][outerIndex];
+
+        int innerSize = 0;
+
+        for (int8_t innerIndex = 0; innerIndex < innerSizeBound; innerIndex++) {
+            if (this->keyboard[this->charSet][outerIndex][innerIndex].character != "") {
+                innerSize++;
+            }
+        }
+
+        int cellWidth = display->width() / innerSize;
+
+        for (int8_t innerIndex = 0; innerIndex < innerSize; innerIndex++) {
+            xOffset += innerIndex > 0 ? cellWidth : 0;
+
+            Letter letter = this->keyboard[this->charSet][outerIndex][innerIndex];
+
+            Letter updatedLetter = {letter.character, letter.width, xOffset, yOffset, cellWidth, cellHeight};
+
+            this->keyboard[this->charSet][outerIndex][innerIndex] = updatedLetter;
+
+            float characterOffset = ((cellWidth / 2) - (letter.width / 2));
+
+            if (letter.character == "⇧") {
+                if (this->shift) {
+                    display->fillRect(xOffset, yOffset, cellWidth, cellHeight);
+
+                    display->setColor(OLEDDISPLAY_COLOR::BLACK);
+
+                    drawShiftIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, 1.2);
+
+                    display->setColor(OLEDDISPLAY_COLOR::WHITE);
+                } else {
+                    display->drawRect(xOffset, yOffset, cellWidth, cellHeight);
+
+                    drawShiftIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, 1.2);
+                }
+            } else if (letter.character == "⌫") {
+                if (this->highlight == letter.character[0]) {
+                    display->fillRect(xOffset, yOffset, cellWidth, cellHeight);
+
+                    display->setColor(OLEDDISPLAY_COLOR::BLACK);
+
+                    drawBackspaceIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, 1.2);
+
+                    display->setColor(OLEDDISPLAY_COLOR::WHITE);
+
+                    setIntervalFromNow(0);
+                } else {
+                    display->drawRect(xOffset, yOffset, cellWidth, cellHeight);
+
+                    drawBackspaceIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, 1.2);
+                }
+            } else if (letter.character == "↵") {
+                display->drawRect(xOffset, yOffset, cellWidth, cellHeight);
+
+                drawEnterIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, 1.7);
+            } else {
+                if (this->highlight == letter.character[0]) {
+                    display->fillRect(xOffset, yOffset, cellWidth, cellHeight);
+
+                    display->setColor(OLEDDISPLAY_COLOR::BLACK);
+
+                    display->drawString(xOffset + characterOffset, yOffset + yCorrection,
+                                        letter.character == " " ? "space" : letter.character);
+
+                    display->setColor(OLEDDISPLAY_COLOR::WHITE);
+
+                    setIntervalFromNow(0);
+                } else {
+                    display->drawRect(xOffset, yOffset, cellWidth, cellHeight);
+
+                    display->drawString(xOffset + characterOffset, yOffset + yCorrection,
+                                        letter.character == " " ? "space" : letter.character);
+                }
+            }
+        }
+
+        xOffset = 0;
+    }
+
+    this->highlight = 0x00;
+}
+
+void CannedMessageModule::drawShiftIcon(OLEDDisplay *display, int x, int y, float scale)
+{
+    PointStruct shiftIcon[10] = {{8, 0}, {15, 7}, {15, 8}, {12, 8}, {12, 12}, {4, 12}, {4, 8}, {1, 8}, {1, 7}, {8, 0}};
+
+    int size = 10;
+
+    for (int i = 0; i < size - 1; i++) {
+        int x0 = x + (shiftIcon[i].x * scale);
+        int y0 = y + (shiftIcon[i].y * scale);
+        int x1 = x + (shiftIcon[i + 1].x * scale);
+        int y1 = y + (shiftIcon[i + 1].y * scale);
+
+        display->drawLine(x0, y0, x1, y1);
+    }
+}
+
+void CannedMessageModule::drawBackspaceIcon(OLEDDisplay *display, int x, int y, float scale)
+{
+    PointStruct backspaceIcon[6] = {{0, 7}, {5, 2}, {15, 2}, {15, 12}, {5, 12}, {0, 7}};
+
+    int size = 6;
+
+    for (int i = 0; i < size - 1; i++) {
+        int x0 = x + (backspaceIcon[i].x * scale);
+        int y0 = y + (backspaceIcon[i].y * scale);
+        int x1 = x + (backspaceIcon[i + 1].x * scale);
+        int y1 = y + (backspaceIcon[i + 1].y * scale);
+
+        display->drawLine(x0, y0, x1, y1);
+    }
+
+    PointStruct backspaceIconX[4] = {{7, 4}, {13, 10}, {7, 10}, {13, 4}};
+
+    size = 4;
+
+    for (int i = 0; i < size - 1; i++) {
+        int x0 = x + (backspaceIconX[i].x * scale);
+        int y0 = y + (backspaceIconX[i].y * scale);
+        int x1 = x + (backspaceIconX[i + 1].x * scale);
+        int y1 = y + (backspaceIconX[i + 1].y * scale);
+
+        display->drawLine(x0, y0, x1, y1);
+    }
+}
+
+void CannedMessageModule::drawEnterIcon(OLEDDisplay *display, int x, int y, float scale)
+{
+    PointStruct enterIcon[6] = {{0, 7}, {4, 3}, {4, 11}, {0, 7}, {15, 7}, {15, 0}};
+
+    int size = 6;
+
+    for (int i = 0; i < size - 1; i++) {
+        int x0 = x + (enterIcon[i].x * scale);
+        int y0 = y + (enterIcon[i].y * scale);
+        int x1 = x + (enterIcon[i + 1].x * scale);
+        int y1 = y + (enterIcon[i + 1].y * scale);
+
+        display->drawLine(x0, y0, x1, y1);
+    }
+}
+
+#endif
+
 void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     char buffer[50];
@@ -614,6 +924,16 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         }
         display->drawStringf(display->getWidth() / 2 + x, 0 + y + 12, buffer, displayString,
                              cannedMessageModule->getNodeName(this->incoming));
+
+        display->setFont(FONT_SMALL);
+
+        String snrString = "Last Rx SNR: %f";
+        String rssiString = "Last Rx RSSI: %d";
+
+        if (this->ack) {
+            display->drawStringf(display->getWidth() / 2 + x, y + 100, buffer, snrString, this->lastRxSnr);
+            display->drawStringf(display->getWidth() / 2 + x, y + 130, buffer, rssiString, this->lastRxRssi);
+        }
     } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->setFont(FONT_MEDIUM);
@@ -623,6 +943,11 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         display->setFont(FONT_SMALL);
         display->drawString(10 + x, 0 + y + FONT_HEIGHT_SMALL, "Canned Message\nModule disabled.");
     } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
+
+#ifdef T_WATCH_S3
+        drawKeyboard(display, state, 0, 0);
+#else
+
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->setFont(FONT_SMALL);
         if (this->destSelect != CANNED_MESSAGE_DESTINATION_TYPE_NONE) {
@@ -663,6 +988,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         display->drawStringMaxWidth(
             0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(),
             cannedMessageModule->drawWithCursor(cannedMessageModule->freetext, cannedMessageModule->cursor));
+#endif
     } else {
         if (this->messagesCount > 0) {
             display->setTextAlignment(TEXT_ALIGN_LEFT);
