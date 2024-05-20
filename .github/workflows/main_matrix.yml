@@ -103,14 +103,11 @@ jobs:
     with:
       board: ${{ matrix.board }}
 
-  build-raspbian:
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-    uses: ./.github/workflows/build_raspbian.yml
-
   package-raspbian:
     uses: ./.github/workflows/package_raspbian.yml
+
+  package-raspbian-armv7l:
+    uses: ./.github/workflows/package_raspbian_armv7l.yml
 
   build-native:
     runs-on: ubuntu-latest
@@ -195,10 +192,10 @@ jobs:
         build-esp32-s3,
         build-esp32-c3,
         build-nrf52,
-        build-raspbian,
         build-native,
         build-rpi2040,
         package-raspbian,
+        package-raspbian-armv7l,
       ]
     steps:
       - name: Checkout code
@@ -363,7 +360,7 @@ jobs:
           asset_name: debug-elfs-${{ steps.version.outputs.version }}.zip
           asset_content_type: application/zip
 
-      - name: Add raspbian .deb
+      - name: Add raspbian aarch64 .deb
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -371,6 +368,16 @@ jobs:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./meshtasticd_${{ steps.version.outputs.version }}_arm64.deb
           asset_name: meshtasticd_${{ steps.version.outputs.version }}_arm64.deb
+          asset_content_type: application/vnd.debian.binary-package
+
+      - name: Add raspbian armv7l .deb
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./meshtasticd_${{ steps.version.outputs.version }}_armhf.deb
+          asset_name: meshtasticd_${{ steps.version.outputs.version }}_armhf.deb
           asset_content_type: application/vnd.debian.binary-package
 
       - name: Bump version.properties

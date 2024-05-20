@@ -7,8 +7,8 @@ permissions:
   packages: write
 
 jobs:
-  build-raspbian:
-    runs-on: [self-hosted, linux, ARM64]
+  build-raspbian-armv7l:
+    runs-on: [self-hosted, linux, ARM]
     steps:
       - name: Install libbluetooth
         shell: bash
@@ -44,8 +44,8 @@ jobs:
       - name: Store binaries as an artifact
         uses: actions/upload-artifact@v4
         with:
-          name: firmware-raspbian-${{ steps.version.outputs.version }}.zip
+          name: firmware-raspbian-armv7l-${{ steps.version.outputs.version }}.zip
           overwrite: true
           path: |
-            release/meshtasticd_linux_aarch64
+            release/meshtasticd_linux_armv7l
             bin/config-dist.yaml
