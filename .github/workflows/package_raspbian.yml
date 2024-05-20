@@ -72,7 +72,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: artifact-deb
+          name: meshtasticd_${{ steps.version.outputs.version }}_arm64.deb
           overwrite: true
           path: |
             ./*.deb
