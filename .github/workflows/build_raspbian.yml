@@ -42,5 +42,5 @@ jobs:
           name: firmware-raspbian-${{ steps.version.outputs.version }}.zip
           overwrite: true
           path: |
-            release/meshtasticd_linux_aarch64
+            release/meshtasticd_linux_armv7l
             bin/config-dist.yaml
