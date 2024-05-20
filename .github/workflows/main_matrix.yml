@@ -103,12 +103,6 @@ jobs:
     with:
       board: ${{ matrix.board }}
 
-  build-raspbian:
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-    uses: ./.github/workflows/build_raspbian.yml
-
   package-raspbian:
     uses: ./.github/workflows/package_raspbian.yml
 
