@@ -768,6 +768,15 @@ GPS::~GPS()
 void GPS::setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime)
 {
     LOG_INFO("Setting GPS power=%d\n", on);
+
+    // Record the current state
+    if (on)
+        powerState = AWAKE;
+    else if (!on && standbyOnly)
+        powerState = STANDBY;
+    else
+        powerState = OFF;
+
     if (on) {
         clearBuffer(); // drop any old data waiting in the buffer before re-enabling
         if (en_gpio)
@@ -861,17 +870,20 @@ void GPS::setConnected()
  *
  * calls sleep/wake
  */
-void GPS::setAwake(bool on)
+void GPS::setAwake(bool wantAwake)
 {
-    if (isAwake != on) {
-        LOG_DEBUG("WANT GPS=%d\n", on);
-        isAwake = on;
-        if (!enabled) { // short circuit if the user has disabled GPS
-            setGPSPower(false, false, 0);
-            return;
-        }
 
-        if (on) {
+    // If user has disabled GPS, make sure it is off
+    if (!wantAwake && !enabled && powerState != OFF) {
+        setGPSPower(false, false, 0);
+        return;
+    }
+
+    // If GPS power state needs to change
+    if ((wantAwake && powerState != AWAKE) || (!wantAwake && powerState == AWAKE)) {
+        LOG_DEBUG("WANT GPS=%d\n", wantAwake);
+
+        if (wantAwake) {
             lastWakeStartMsec = millis();
         } else {
             lastSleepStartMsec = millis();
@@ -885,20 +897,20 @@ void GPS::setAwake(bool on)
         }
         if ((int32_t)getSleepTime() - averageLockTime >
             15 * 60 * 1000) { // 15 minutes is probably long enough to make a complete poweroff worth it.
-            setGPSPower(on, false, getSleepTime() - averageLockTime);
+            setGPSPower(wantAwake, false, getSleepTime() - averageLockTime);
             return;
         } else if ((int32_t)getSleepTime() - averageLockTime > 10000) { // 10 seconds is enough for standby
 #ifdef GPS_UC6580
             setGPSPower(on, false, getSleepTime() - averageLockTime);
 #else
-            setGPSPower(on, true, getSleepTime() - averageLockTime);
+            setGPSPower(wantAwake, true, getSleepTime() - averageLockTime);
 #endif
             return;
         }
         if (averageLockTime > 20000) {
             averageLockTime -= 1000; // eventually want to sleep again.
         }
-        if (on)
+        if (wantAwake)
             setGPSPower(true, true, 0); // make sure we don't have a fallthrough where GPS is stuck off
     }
 }
@@ -1005,14 +1017,14 @@ int32_t GPS::runOnce()
     uint32_t timeAsleep = now - lastSleepStartMsec;
 
     auto sleepTime = getSleepTime();
-    if (!isAwake && (sleepTime != UINT32_MAX) &&
+    if (powerState != AWAKE && (sleepTime != UINT32_MAX) &&
         ((timeAsleep > sleepTime) || (isInPowersave && timeAsleep > (sleepTime - averageLockTime)))) {
         // We now want to be awake - so wake up the GPS
         setAwake(true);
     }
 
     // While we are awake
-    if (isAwake) {
+    if (powerState == AWAKE) {
         // LOG_DEBUG("looking for location\n");
         // If we've already set time from the GPS, no need to ask the GPS
         bool gotTime = (getRTCQuality() >= RTCQualityGPS);
@@ -1058,7 +1070,7 @@ int32_t GPS::runOnce()
 
     // 9600bps is approx 1 byte per msec, so considering our buffer size we never need to wake more often than 200ms
     // if not awake we can run super infrquently (once every 5 secs?) to see if we need to wake.
-    return isAwake ? GPS_THREAD_INTERVAL : 5000;
+    return (powerState == AWAKE) ? GPS_THREAD_INTERVAL : 5000;
 }
 
 // clear the GPS rx buffer as quickly as possible
@@ -1589,9 +1601,9 @@ bool GPS::whileIdle()
 {
     unsigned int charsInBuf = 0;
     bool isValid = false;
-    if (!isAwake) {
+    if (powerState != AWAKE) {
         clearBuffer();
-        return isAwake;
+        return (powerState == AWAKE);
     }
 #ifdef SERIAL_BUFFER_SIZE
     if (_serial_gps->available() >= SERIAL_BUFFER_SIZE - 1) {
