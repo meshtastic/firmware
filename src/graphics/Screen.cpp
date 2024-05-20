@@ -524,15 +524,21 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     // If bold, draw twice, shifting right by one pixel
     for (uint8_t xOff = 0; xOff <= (config.display.heading_bold ? 1 : 0); xOff++) {
         // Show a timestamp if received today, but longer than 15 minutes ago
-        if (useTimestamp && minutes >= 15 && (daysAgo == 0 || hours < 2)) {
+        if (useTimestamp && minutes >= 15 && daysAgo == 0) {
             display->drawStringf(xOff + x, 0 + y, tempBuf, "At %02hu:%02hu from %s", timestampHours, timestampMinutes,
                                  (node && node->has_user) ? node->user.short_name : "???");
-            continue;
+        }
+        // Timestamp yesterday (if display is wide enough)
+        else if (useTimestamp && daysAgo == 1 && display->width() >= 200) {
+            display->drawStringf(xOff + x, 0 + y, tempBuf, "Yesterday %02hu:%02hu from %s", timestampHours, timestampMinutes,
+                                 (node && node->has_user) ? node->user.short_name : "???");
         }
         // Otherwise, show a time delta
-        display->drawStringf(xOff + x, 0 + y, tempBuf, "%s ago from %s",
-                             screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
-                             (node && node->has_user) ? node->user.short_name : "???");
+        else {
+            display->drawStringf(xOff + x, 0 + y, tempBuf, "%s ago from %s",
+                                 screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
+                                 (node && node->has_user) ? node->user.short_name : "???");
+        }
     }
 
     display->setColor(WHITE);
