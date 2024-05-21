@@ -298,11 +298,6 @@ jobs:
           merge-multiple: true
           path: ./output
 
-      - uses: actions/download-artifact@v4
-        with:
-          merge-multiple: true
-          name: artifact-deb
-
       - name: Display structure of downloaded files
         run: ls -R
 
