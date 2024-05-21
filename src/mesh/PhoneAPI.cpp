@@ -322,7 +322,8 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         config_state++;
         // Advance when we have sent all of our ModuleConfig objects
         if (config_state > (_meshtastic_AdminMessage_ModuleConfigType_MAX + 1)) {
-            state = STATE_SEND_OTHER_NODEINFOS;
+            // Clients sending special nonce don't want to see other nodeinfos
+            state = config_nonce == SPECIAL_NONCE ? STATE_SEND_COMPLETE_ID : STATE_SEND_OTHER_NODEINFOS;
             config_state = 0;
         }
         break;
@@ -437,8 +438,8 @@ bool PhoneAPI::available()
     case STATE_SEND_CONFIG:
     case STATE_SEND_MODULECONFIG:
     case STATE_SEND_METADATA:
-    case STATE_SEND_COMPLETE_ID:
     case STATE_SEND_OWN_NODEINFO:
+    case STATE_SEND_COMPLETE_ID:
         return true;
 
     case STATE_SEND_OTHER_NODEINFOS:
