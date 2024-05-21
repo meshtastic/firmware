@@ -48,6 +48,10 @@
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_POWER_TELEMETRY
 #include "modules/Telemetry/PowerTelemetry.h"
 #endif
+#if !EXCLUDE_GENERIC_THREAD_MODULE
+#include "modules/GenericThreadModule.h"
+#endif
+
 #ifdef ARCH_ESP32
 #if defined(USE_SX1280) && !MESHTASTIC_EXCLUDE_AUDIO
 #include "modules/esp32/AudioModule.h"
