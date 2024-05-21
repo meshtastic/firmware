@@ -8,8 +8,6 @@
 #define HAS_WIFI 1
 #endif
 
-#define USE_SH1106 1
-
 // default I2C pins:
 // SDA = 4
 // SCL = 5

@@ -283,7 +283,7 @@ void portduinoSetup()
     }
 
     for (configNames i : GPIO_lines) {
-        if (settingsMap[i] > max_GPIO)
+        if (settingsMap.count(i) && settingsMap[i] > max_GPIO)
             max_GPIO = settingsMap[i];
     }
 
@@ -342,6 +342,7 @@ void portduinoSetup()
         if (settingsMap[touchscreenIRQ] > 0)
             initGPIOPin(settingsMap[touchscreenIRQ], gpioChipName);
     }
+
     if (settingsStrings[spidev] != "") {
         SPI.begin(settingsStrings[spidev].c_str());
     }
@@ -350,6 +351,7 @@ void portduinoSetup()
 
 int initGPIOPin(int pinNum, const std::string gpioChipName)
 {
+#ifdef PORTDUINO_LINUX_HARDWARE
     std::string gpio_name = "GPIO" + std::to_string(pinNum);
     try {
         GPIOPin *csPin;
@@ -362,4 +364,7 @@ int initGPIOPin(int pinNum, const std::string gpioChipName)
         std::cout << "Warning, cannot claim pin " << gpio_name << (p ? p.__cxa_exception_type()->name() : "null") << std::endl;
         return ERRNO_DISABLED;
     }
+#else
+    return ERRNO_OK;
+#endif
 }

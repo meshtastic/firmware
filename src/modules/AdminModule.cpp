@@ -26,6 +26,9 @@
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #endif
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#include "AccelerometerThread.h"
+#endif
 
 AdminModule *adminModule;
 bool hasOpenEditTransaction;
@@ -221,12 +224,12 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             nodeDB->setLocalPosition(r->set_fixed_position);
             config.position.fixed_position = true;
             saveChanges(SEGMENT_DEVICESTATE | SEGMENT_CONFIG, false);
-            // Send our new fixed position to the mesh for good measure
-            positionModule->sendOurPosition();
 #if !MESHTASTIC_EXCLUDE_GPS
             if (gps != nullptr)
                 gps->enable();
 #endif
+            // Send our new fixed position to the mesh for good measure
+            positionModule->sendOurPosition();
         }
         break;
     }
@@ -352,6 +355,26 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
     case meshtastic_Config_device_tag:
         LOG_INFO("Setting config: Device\n");
         config.has_device = true;
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+        if (config.device.double_tap_as_button_press == false && c.payload_variant.device.double_tap_as_button_press == true) {
+            accelerometerThread->start();
+        }
+#endif
+#ifdef LED_PIN
+        // Turn LED off if heartbeat by config
+        if (c.payload_variant.device.led_heartbeat_disabled) {
+            digitalWrite(LED_PIN, LOW ^ LED_INVERTED);
+        }
+#endif
+        if (config.device.button_gpio == c.payload_variant.device.button_gpio &&
+            config.device.buzzer_gpio == c.payload_variant.device.buzzer_gpio &&
+            config.device.debug_log_enabled == c.payload_variant.device.debug_log_enabled &&
+            config.device.serial_enabled == c.payload_variant.device.serial_enabled &&
+            config.device.role == c.payload_variant.device.role &&
+            config.device.disable_triple_click == c.payload_variant.device.disable_triple_click &&
+            config.device.rebroadcast_mode == c.payload_variant.device.rebroadcast_mode) {
+            requiresReboot = false;
+        }
         config.device = c.payload_variant.device;
         // If we're setting router role for the first time, install its intervals
         if (existingRole != c.payload_variant.device.role)
@@ -371,6 +394,16 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
     case meshtastic_Config_power_tag:
         LOG_INFO("Setting config: Power\n");
         config.has_power = true;
+        // Really just the adc override is the only thing that can change without a reboot
+        if (config.power.device_battery_ina_address == c.payload_variant.power.device_battery_ina_address &&
+            config.power.is_power_saving == c.payload_variant.power.is_power_saving &&
+            config.power.ls_secs == c.payload_variant.power.ls_secs &&
+            config.power.min_wake_secs == c.payload_variant.power.min_wake_secs &&
+            config.power.on_battery_shutdown_after_secs == c.payload_variant.power.on_battery_shutdown_after_secs &&
+            config.power.sds_secs == c.payload_variant.power.sds_secs &&
+            config.power.wait_bluetooth_secs == c.payload_variant.power.wait_bluetooth_secs) {
+            requiresReboot = false;
+        }
         config.power = c.payload_variant.power;
         break;
     case meshtastic_Config_network_tag:
@@ -381,6 +414,16 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
     case meshtastic_Config_display_tag:
         LOG_INFO("Setting config: Display\n");
         config.has_display = true;
+        if (config.display.screen_on_secs == c.payload_variant.display.screen_on_secs &&
+            config.display.flip_screen == c.payload_variant.display.flip_screen &&
+            config.display.oled == c.payload_variant.display.oled) {
+            requiresReboot = false;
+        }
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+        if (config.display.wake_on_tap_or_motion == false && c.payload_variant.display.wake_on_tap_or_motion == true) {
+            accelerometerThread->start();
+        }
+#endif
         config.display = c.payload_variant.display;
         break;
     case meshtastic_Config_lora_tag:
