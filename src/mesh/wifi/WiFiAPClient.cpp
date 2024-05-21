@@ -225,10 +225,16 @@ bool initWifi()
 
             WiFi.mode(WIFI_STA);
             WiFi.setHostname(ourHost);
+
             if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_STATIC &&
                 config.network.ipv4_config.ip != 0) {
+#ifndef ARCH_RP2040
                 WiFi.config(config.network.ipv4_config.ip, config.network.ipv4_config.gateway, config.network.ipv4_config.subnet,
                             config.network.ipv4_config.dns);
+#else
+                WiFi.config(config.network.ipv4_config.ip, config.network.ipv4_config.dns, config.network.ipv4_config.gateway,
+                            config.network.ipv4_config.subnet);
+#endif
             }
 #ifndef ARCH_RP2040
             WiFi.onEvent(WiFiEvent);

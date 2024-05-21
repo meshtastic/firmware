@@ -10,8 +10,13 @@ jobs:
   build-raspbian:
     runs-on: [self-hosted, linux, ARM64]
     steps:
+      - name: Install libbluetooth
+        shell: bash
+        run: |
+          apt-get install -y libbluetooth-dev libgpiod-dev libyaml-cpp-dev openssl libssl-dev libulfius-dev liborcania-dev
+
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: recursive
           ref: ${{github.event.pull_request.head.ref}}
@@ -37,9 +42,10 @@ jobs:
         id: version
 
       - name: Store binaries as an artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: firmware-raspbian-${{ steps.version.outputs.version }}.zip
+          overwrite: true
           path: |
             release/meshtasticd_linux_aarch64
             bin/config-dist.yaml

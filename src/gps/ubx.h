@@ -206,14 +206,14 @@ const uint8_t GPS::_message_GLL[] = {
     0x00        // Reserved
 };
 
-// Enable GSA. GSA - GPS DOP and active satellites, used for detailing the satellites used in the positioning and
+// Disable GSA. GSA - GPS DOP and active satellites, used for detailing the satellites used in the positioning and
 // the DOP (Dilution of Precision)
 const uint8_t GPS::_message_GSA[] = {
     0xF0, 0x02, // NMEA ID for GSA
     0x00,       // Rate for DDC
-    0x01,       // Rate for UART1
+    0x00,       // Rate for UART1
     0x00,       // Rate for UART2
-    0x01,       // Rate for USB usefull for native linux
+    0x00,       // Rate for USB usefull for native linux
     0x00,       // Rate for SPI
     0x00        // Reserved
 };
@@ -402,23 +402,28 @@ const uint8_t GPS::_message_VALSET_DISABLE_NMEA_BBR[] = {0x00, 0x02, 0x00, 0x00,
 // BBR layer config message:
 // b5 62 06 8a 09 00 00 02 00 00 07 00 92 20 06 5a 58
 
-// Turn NMEA GSA, GGA, RMC messages on:
-// Ram layer config message:
-// b5 62 06 8a 13 00 00 01 00 00 c0 00 91 20 01 bb 00 91 20 01 ac 00 91 20 01 e1 3b
-
-// BBR layer config message:
-// b5 62 06 8a 13 00 00 02 00 00 c0 00 91 20 01 bb 00 91 20 01 ac 00 91 20 01 e2 4d
+// Turn NMEA GGA, RMC messages on:
+// Layer config messages:
+// RAM:
+// b5 62 06 8a 0e 00 00 01 00 00 bb 00 91 20 01 ac 00 91 20 01 6a 8f
+// BBR:
+// b5 62 06 8a 0e 00 00 02 00 00 bb 00 91 20 01 ac 00 91 20 01 6b 9c
+// FLASH:
+// b5 62 06 8a 0e 00 00 04 00 00 bb 00 91 20 01 ac 00 91 20 01 6d b6
+// Doing this for the FLASH layer isn't really required since we save the config to flash later
 
 const uint8_t GPS::_message_VALSET_DISABLE_TXT_INFO_RAM[] = {0x00, 0x01, 0x00, 0x00, 0x07, 0x00, 0x92, 0x20, 0x03};
 const uint8_t GPS::_message_VALSET_DISABLE_TXT_INFO_BBR[] = {0x00, 0x02, 0x00, 0x00, 0x07, 0x00, 0x92, 0x20, 0x03};
-const uint8_t GPS::_message_VALSET_ENABLE_NMEA_RAM[] = {0x00, 0x01, 0x00, 0x00, 0xc0, 0x00, 0x91, 0x20, 0x01, 0xbb,
-                                                        0x00, 0x91, 0x20, 0x01, 0xac, 0x00, 0x91, 0x20, 0x01};
-const uint8_t GPS::_message_VALSET_ENABLE_NMEA_BBR[] = {0x00, 0x02, 0x00, 0x00, 0xc0, 0x00, 0x91, 0x20, 0x01, 0xbb,
-                                                        0x00, 0x91, 0x20, 0x01, 0xac, 0x00, 0x91, 0x20, 0x01};
+
+const uint8_t GPS::_message_VALSET_ENABLE_NMEA_RAM[] = {0x00, 0x01, 0x00, 0x00, 0xbb, 0x00, 0x91,
+                                                        0x20, 0x01, 0xac, 0x00, 0x91, 0x20, 0x01};
+const uint8_t GPS::_message_VALSET_ENABLE_NMEA_BBR[] = {0x00, 0x02, 0x00, 0x00, 0xbb, 0x00, 0x91,
+                                                        0x20, 0x01, 0xac, 0x00, 0x91, 0x20, 0x01};
 const uint8_t GPS::_message_VALSET_DISABLE_SBAS_RAM[] = {0x00, 0x01, 0x00, 0x00, 0x20, 0x00, 0x31,
                                                          0x10, 0x00, 0x05, 0x00, 0x31, 0x10, 0x00};
 const uint8_t GPS::_message_VALSET_DISABLE_SBAS_BBR[] = {0x00, 0x02, 0x00, 0x00, 0x20, 0x00, 0x31,
                                                          0x10, 0x00, 0x05, 0x00, 0x31, 0x10, 0x00};
+
 /*
 Operational issues with the M10:
 
