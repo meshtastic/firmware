@@ -230,7 +230,7 @@ jobs:
             ./firmware-*-ota.zip
             ./device-*.sh
             ./device-*.bat
-            ./meshtasticd_linux_*64
+            ./meshtasticd_linux_*
             ./config-dist.yaml
             ./littlefs-*.bin
             ./bleota*bin
