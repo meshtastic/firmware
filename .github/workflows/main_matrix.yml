@@ -367,7 +367,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./meshtasticd_${{ steps.version.outputs.version }}_arm64.deb
+          asset_path: ./output/meshtasticd_${{ steps.version.outputs.version }}_arm64.deb
           asset_name: meshtasticd_${{ steps.version.outputs.version }}_arm64.deb
           asset_content_type: application/vnd.debian.binary-package
 
@@ -377,7 +377,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./meshtasticd_${{ steps.version.outputs.version }}_armhf.deb
+          asset_path: ./output/meshtasticd_${{ steps.version.outputs.version }}_armhf.deb
           asset_name: meshtasticd_${{ steps.version.outputs.version }}_armhf.deb
           asset_content_type: application/vnd.debian.binary-package
 
