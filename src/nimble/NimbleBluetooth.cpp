@@ -157,8 +157,9 @@ void NimbleBluetooth::setup()
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
 
     if (config.bluetooth.mode != meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN) {
-        // TODO Enable BLE_SM_PAIR_AUTHREQ_SC when it becomes stable.
-        NimBLEDevice::setSecurityAuth(BLE_SM_PAIR_AUTHREQ_BOND | BLE_SM_PAIR_AUTHREQ_MITM /* | BLE_SM_PAIR_AUTHREQ_SC */);
+        NimBLEDevice::setSecurityAuth(BLE_SM_PAIR_AUTHREQ_BOND | BLE_SM_PAIR_AUTHREQ_MITM | BLE_SM_PAIR_AUTHREQ_SC);
+        NimBLEDevice::setSecurityInitKey(BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID);
+        NimBLEDevice::setSecurityRespKey(BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID);
         NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
     }
     bleServer = NimBLEDevice::createServer();
