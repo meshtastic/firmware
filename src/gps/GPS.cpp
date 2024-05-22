@@ -21,6 +21,13 @@
 #define GPS_RESET_MODE HIGH
 #endif
 
+// How many minutes of sleep make it worthwhile to power-off the GPS
+// Shorter than this, and GPS will only enter standby
+// Affected by lock-time, and config.position.gps_update_interval
+#ifndef GPS_STANDBY_THRESHOLD_MINUTES
+#define GPS_STANDBY_THRESHOLD_MINUTES 15
+#endif
+
 #if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
 HardwareSerial *GPS::_serial_gps = &Serial1;
 #else
@@ -767,15 +774,18 @@ GPS::~GPS()
 
 void GPS::setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime)
 {
-    LOG_INFO("Setting GPS power=%d\n", on);
-
     // Record the current state
-    if (on)
+    LOG_INFO("Setting GPS powerState=");
+    if (on) {
         powerState = AWAKE;
-    else if (!on && standbyOnly)
+        LOG_INFO("AWAKE\n");
+    } else if (!on && standbyOnly) {
         powerState = STANDBY;
-    else
+        LOG_INFO("STANDBY\n");
+    } else {
         powerState = OFF;
+        LOG_INFO("OFF\n");
+    }
 
     if (on) {
         clearBuffer(); // drop any old data waiting in the buffer before re-enabling
@@ -873,7 +883,7 @@ void GPS::setConnected()
 void GPS::setAwake(bool wantAwake)
 {
 
-    // If user has disabled GPS, make sure it is off
+    // If user has disabled GPS, make sure it is off, not just in standby
     if (!wantAwake && !enabled && powerState != OFF) {
         setGPSPower(false, false, 0);
         return;
@@ -883,6 +893,7 @@ void GPS::setAwake(bool wantAwake)
     if ((wantAwake && powerState != AWAKE) || (!wantAwake && powerState == AWAKE)) {
         LOG_DEBUG("WANT GPS=%d\n", wantAwake);
 
+        // Calculate how long it takes to get a GPS lock
         if (wantAwake) {
             lastWakeStartMsec = millis();
         } else {
@@ -895,23 +906,31 @@ void GPS::setAwake(bool wantAwake)
             GPSCycles++;
             LOG_DEBUG("GPS Lock took %d, average %d\n", (lastSleepStartMsec - lastWakeStartMsec) / 1000, averageLockTime / 1000);
         }
-        if ((int32_t)getSleepTime() - averageLockTime >
-            15 * 60 * 1000) { // 15 minutes is probably long enough to make a complete poweroff worth it.
+
+        // If long interval between updates: power off between updates
+        if ((int32_t)getSleepTime() - averageLockTime > GPS_STANDBY_THRESHOLD_MINUTES * MS_IN_MINUTE) {
             setGPSPower(wantAwake, false, getSleepTime() - averageLockTime);
             return;
-        } else if ((int32_t)getSleepTime() - averageLockTime > 10000) { // 10 seconds is enough for standby
+        }
+
+        // If waking frequently: standby only. Would use more power trying to reacquire lock each time
+        else if ((int32_t)getSleepTime() - averageLockTime > 10000) { // 10 seconds is enough for standby
 #ifdef GPS_UC6580
-            setGPSPower(on, false, getSleepTime() - averageLockTime);
+            setGPSPower(wantAwake, false, getSleepTime() - averageLockTime);
 #else
             setGPSPower(wantAwake, true, getSleepTime() - averageLockTime);
 #endif
             return;
         }
+
+        // Gradually recover from an abnormally long "time to get lock"
         if (averageLockTime > 20000) {
             averageLockTime -= 1000; // eventually want to sleep again.
         }
+
+        // Make sure we don't have a fallthrough where GPS is stuck off
         if (wantAwake)
-            setGPSPower(true, true, 0); // make sure we don't have a fallthrough where GPS is stuck off
+            setGPSPower(true, true, 0);
     }
 }
 
