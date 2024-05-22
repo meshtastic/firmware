@@ -39,9 +39,9 @@ typedef enum {
 } GPS_RESPONSE;
 
 enum GPSPowerState : uint8_t {
-    OFF,
-    STANDBY,
-    AWAKE,
+    GPS_OFF,
+    GPS_STANDBY,
+    GPS_AWAKE,
 };
 
 // Generate a string representation of DOP
@@ -93,7 +93,7 @@ class GPS : private concurrency::OSThread
     bool GPSInitFinished = false; // Init thread finished?
     bool GPSInitStarted = false;  // Init thread finished?
 
-    GPSPowerState powerState = OFF; // AWAKE if we want a location right now
+    GPSPowerState powerState = GPS_OFF; // GPS_AWAKE if we want a location right now
 
     uint8_t numSatellites = 0;
 
