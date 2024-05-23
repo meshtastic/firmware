@@ -542,6 +542,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     }
 
     display->setColor(WHITE);
+#ifndef EXCLUDE_EMOJI
     if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\U0001F44D") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - thumbs_width) / 2,
                          y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - thumbs_height) / 2 + 2 + 5, thumbs_width, thumbs_height,
@@ -597,6 +598,10 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
         snprintf(tempBuf, sizeof(tempBuf), "%s", mp.decoded.payload.bytes);
         display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), tempBuf);
     }
+#else
+    snprintf(tempBuf, sizeof(tempBuf), "%s", mp.decoded.payload.bytes);
+    display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), tempBuf);
+#endif
 }
 
 /// Draw the last waypoint we received
