@@ -83,8 +83,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 // Total system gain in dBm to subtract from Tx power to remain within regulatory ERP limit for non-licensed operators
 // This value should be set in variant.h and is PA gain + antenna gain (if system ships with an antenna)
-#ifndef REGULATORY_GAIN
-#define REGULATORY_GAIN 0
+#ifndef REGULATORY_GAIN_LORA
+#define REGULATORY_GAIN_LORA 0
 #endif
 
 // -----------------------------------------------------------------------------
