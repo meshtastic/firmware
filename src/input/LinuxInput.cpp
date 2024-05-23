@@ -155,6 +155,9 @@ int32_t LinuxInput::runOnce()
                     case KEY_ENTER: // Enter
                         e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
                         break;
+                    case KEY_POWER:
+                        system("poweroff");
+                        break;
                     default: // all other keys
                         if (keymap[code]) {
                             e.inputEvent = ANYKEY;
