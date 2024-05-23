@@ -478,8 +478,8 @@ void RadioInterface::applyModemConfig()
 
     power = loraConfig.tx_power;
 
-    if ((power == 0) || ((power + REGULATORY_GAIN > myRegion->powerLimit) && !devicestate.owner.is_licensed))
-        power = myRegion->powerLimit - REGULATORY_GAIN;
+    if ((power == 0) || ((power + REGULATORY_GAIN_LORA > myRegion->powerLimit) && !devicestate.owner.is_licensed))
+        power = myRegion->powerLimit - REGULATORY_GAIN_LORA;
 
     if (power == 0)
         power = 17; // Default to this power level if we don't have a valid regional power limit (powerLimit of myRegion defaults
