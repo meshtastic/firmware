@@ -879,6 +879,76 @@ void Screen::drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *stat
 
 #endif
 
+// Get an absolute time from "seconds ago" info. Returns false if no valid timestamp possible
+bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int32_t *daysAgo)
+{
+    // Cache the result - avoid frequent recalculation
+    static uint8_t hoursCached = 0, minutesCached = 0;
+    static uint32_t daysAgoCached = 0;
+    static uint32_t secondsAgoCached = 0;
+    static bool validCached = false;
+
+    // Abort: if timezone not set
+    if (strlen(config.device.tzdef) == 0) {
+        validCached = false;
+        return validCached;
+    }
+
+    // Abort: if invalid pointers passed
+    if (hours == nullptr || minutes == nullptr || daysAgo == nullptr) {
+        validCached = false;
+        return validCached;
+    }
+
+    // Abort: if time seems invalid.. (> 6 months ago, probably seen before RTC set)
+    if (secondsAgo > SEC_PER_DAY * 30UL * 6) {
+        validCached = false;
+        return validCached;
+    }
+
+    // If repeated request, don't bother recalculating
+    if (secondsAgo - secondsAgoCached < 60 && secondsAgoCached != 0) {
+        if (validCached) {
+            *hours = hoursCached;
+            *minutes = minutesCached;
+            *daysAgo = daysAgoCached;
+        }
+        return validCached;
+    }
+
+    // Get local time
+    uint32_t secondsRTC = getValidTime(RTCQuality::RTCQualityDevice, true); // Get local time
+
+    // Abort: if RTC not set
+    if (!secondsRTC) {
+        validCached = false;
+        return validCached;
+    }
+
+    // Get absolute time when last seen
+    uint32_t secondsSeenAt = secondsRTC - secondsAgo;
+
+    // Calculate daysAgo
+    *daysAgo = (secondsRTC / SEC_PER_DAY) - (secondsSeenAt / SEC_PER_DAY); // How many "midnights" have passed
+
+    // Get seconds since midnight
+    uint32_t hms = (secondsRTC - secondsAgo) % SEC_PER_DAY;
+    hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
+
+    // Tear apart hms into hours and minutes
+    *hours = hms / SEC_PER_HOUR;
+    *minutes = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
+
+    // Cache the result
+    daysAgoCached = *daysAgo;
+    hoursCached = *hours;
+    minutesCached = *minutes;
+    secondsAgoCached = secondsAgo;
+
+    validCached = true;
+    return validCached;
+}
+
 /// Draw the last text message we received
 static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -900,22 +970,98 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
         display->setColor(BLACK);
     }
 
+    // For time delta
     uint32_t seconds = sinceReceived(&mp);
     uint32_t minutes = seconds / 60;
     uint32_t hours = minutes / 60;
     uint32_t days = hours / 24;
 
-    if (config.display.heading_bold) {
-        display->drawStringf(1 + x, 0 + y, tempBuf, "%s ago from %s",
-                             screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
-                             (node && node->has_user) ? node->user.short_name : "???");
+    // For timestamp
+    uint8_t timestampHours, timestampMinutes;
+    int32_t daysAgo;
+    bool useTimestamp = deltaToTimestamp(seconds, &timestampHours, &timestampMinutes, &daysAgo);
+
+    // If bold, draw twice, shifting right by one pixel
+    for (uint8_t xOff = 0; xOff <= (config.display.heading_bold ? 1 : 0); xOff++) {
+        // Show a timestamp if received today, but longer than 15 minutes ago
+        if (useTimestamp && minutes >= 15 && daysAgo == 0) {
+            display->drawStringf(xOff + x, 0 + y, tempBuf, "At %02hu:%02hu from %s", timestampHours, timestampMinutes,
+                                 (node && node->has_user) ? node->user.short_name : "???");
+        }
+        // Timestamp yesterday (if display is wide enough)
+        else if (useTimestamp && daysAgo == 1 && display->width() >= 200) {
+            display->drawStringf(xOff + x, 0 + y, tempBuf, "Yesterday %02hu:%02hu from %s", timestampHours, timestampMinutes,
+                                 (node && node->has_user) ? node->user.short_name : "???");
+        }
+        // Otherwise, show a time delta
+        else {
+            display->drawStringf(xOff + x, 0 + y, tempBuf, "%s ago from %s",
+                                 screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
+                                 (node && node->has_user) ? node->user.short_name : "???");
+        }
     }
-    display->drawStringf(0 + x, 0 + y, tempBuf, "%s ago from %s", screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
-                         (node && node->has_user) ? node->user.short_name : "???");
 
     display->setColor(WHITE);
+#ifndef EXCLUDE_EMOJI
+    if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\U0001F44D") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - thumbs_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - thumbs_height) / 2 + 2 + 5, thumbs_width, thumbs_height,
+                         thumbup);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\U0001F44E") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - thumbs_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - thumbs_height) / 2 + 2 + 5, thumbs_width, thumbs_height,
+                         thumbdown);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"❓") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - question_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - question_height) / 2 + 2 + 5, question_width, question_height,
+                         question);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"‼️") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - bang_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - bang_height) / 2 + 2 + 5,
+                         bang_width, bang_height, bang);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\U0001F4A9") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - poo_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - poo_height) / 2 + 2 + 5,
+                         poo_width, poo_height, poo);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\xf0\x9f\xa4\xa3") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - haha_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - haha_height) / 2 + 2 + 5,
+                         haha_width, haha_height, haha);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\U0001F44B") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - wave_icon_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - wave_icon_height) / 2 + 2 + 5, wave_icon_width,
+                         wave_icon_height, wave_icon);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\U0001F920") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - cowboy_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - cowboy_height) / 2 + 2 + 5, cowboy_width, cowboy_height,
+                         cowboy);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\U0001F42D") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - deadmau5_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - deadmau5_height) / 2 + 2 + 5, deadmau5_width, deadmau5_height,
+                         deadmau5);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\xE2\x98\x80\xEF\xB8\x8F") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - sun_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - sun_height) / 2 + 2 + 5,
+                         sun_width, sun_height, sun);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\u2614") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - rain_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - rain_height) / 2 + 2 + 10,
+                         rain_width, rain_height, rain);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"☁️") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - cloud_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - cloud_height) / 2 + 2 + 5, cloud_width, cloud_height, cloud);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"🌫️") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - fog_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - fog_height) / 2 + 2 + 5,
+                         fog_width, fog_height, fog);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\xf0\x9f\x98\x88") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - devil_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - devil_height) / 2 + 2 + 5, devil_width, devil_height, devil);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"♥️") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - heart_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - heart_height) / 2 + 2 + 5, heart_width, heart_height, heart);
+    } else {
+        snprintf(tempBuf, sizeof(tempBuf), "%s", mp.decoded.payload.bytes);
+        display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), tempBuf);
+    }
+#else
     snprintf(tempBuf, sizeof(tempBuf), "%s", mp.decoded.payload.bytes);
     display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), tempBuf);
+#endif
 }
 
 /// Draw the last waypoint we received
@@ -1317,19 +1463,32 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
 
     uint32_t agoSecs = sinceLastSeen(node);
     static char lastStr[20];
+
+    // Use an absolute timestamp in some cases.
+    // Particularly useful with E-Ink displays. Static UI, fewer refreshes.
+    uint8_t timestampHours, timestampMinutes;
+    int32_t daysAgo;
+    bool useTimestamp = deltaToTimestamp(agoSecs, &timestampHours, &timestampMinutes, &daysAgo);
+
     if (agoSecs < 120) // last 2 mins?
         snprintf(lastStr, sizeof(lastStr), "%u seconds ago", agoSecs);
+    // -- if suitable for timestamp --
+    else if (useTimestamp && agoSecs < 15 * SECONDS_IN_MINUTE) // Last 15 minutes
+        snprintf(lastStr, sizeof(lastStr), "%u minutes ago", agoSecs / SECONDS_IN_MINUTE);
+    else if (useTimestamp && daysAgo == 0) // Today
+        snprintf(lastStr, sizeof(lastStr), "Last seen: %02u:%02u", (unsigned int)timestampHours, (unsigned int)timestampMinutes);
+    else if (useTimestamp && daysAgo == 1) // Yesterday
+        snprintf(lastStr, sizeof(lastStr), "Seen yesterday");
+    else if (useTimestamp && daysAgo > 1) // Last six months (capped by deltaToTimestamp method)
+        snprintf(lastStr, sizeof(lastStr), "%li days ago", (long)daysAgo);
+    // -- if using time delta instead --
     else if (agoSecs < 120 * 60) // last 2 hrs
         snprintf(lastStr, sizeof(lastStr), "%u minutes ago", agoSecs / 60);
-    else {
-        // Only show hours ago if it's been less than 6 months. Otherwise, we may have bad
-        //   data.
-        if ((agoSecs / 60 / 60) < (hours_in_month * 6)) {
-            snprintf(lastStr, sizeof(lastStr), "%u hours ago", agoSecs / 60 / 60);
-        } else {
-            snprintf(lastStr, sizeof(lastStr), "unknown age");
-        }
-    }
+    // Only show hours ago if it's been less than 6 months. Otherwise, we may have bad data.
+    else if ((agoSecs / 60 / 60) < (hours_in_month * 6))
+        snprintf(lastStr, sizeof(lastStr), "%u hours ago", agoSecs / 60 / 60);
+    else
+        snprintf(lastStr, sizeof(lastStr), "unknown age");
 
     static char distStr[20];
     if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
@@ -1338,7 +1497,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         strncpy(distStr, "? km", sizeof(distStr));
     }
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-    const char *fields[] = {username, distStr, signalStr, lastStr, NULL};
+    const char *fields[] = {username, lastStr, signalStr, distStr, NULL};
     int16_t compassX = 0, compassY = 0;
 
     // coordinates for the center of the compass/circle
@@ -1889,6 +2048,15 @@ void Screen::setFrames()
 {
     LOG_DEBUG("showing standard frames\n");
     showingNormalScreen = true;
+
+#ifdef USE_EINK
+    // If user has disabled the screensaver, warn them after boot
+    static bool warnedScreensaverDisabled = false;
+    if (config.display.screen_on_secs == 0 && !warnedScreensaverDisabled) {
+        screen->print("Screensaver disabled\n");
+        warnedScreensaverDisabled = true;
+    }
+#endif
 
     moduleFrames = MeshModule::GetMeshModulesWithUIFrames();
     LOG_DEBUG("Showing %d module frames\n", moduleFrames.size());

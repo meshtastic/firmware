@@ -217,7 +217,7 @@ jobs:
         id: version
 
       - name: Move files up
-        run: mv -b -t ./ ./release/meshtasticd_linux_aarch64 ./bin/config-dist.yaml
+        run: mv -b -t ./ ./release/meshtasticd_linux_aarch64 ./release/meshtasticd_linux_armv7l ./bin/config-dist.yaml
 
       - name: Repackage in single firmware zip
         uses: actions/upload-artifact@v4
@@ -230,7 +230,7 @@ jobs:
             ./firmware-*-ota.zip
             ./device-*.sh
             ./device-*.bat
-            ./meshtasticd_linux_*64
+            ./meshtasticd_linux_*
             ./config-dist.yaml
             ./littlefs-*.bin
             ./bleota*bin
@@ -300,8 +300,9 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
+          pattern: meshtasticd_${{ steps.version.outputs.version }}_*.deb
           merge-multiple: true
-          name: artifact-deb
+          path: ./output
 
       - name: Display structure of downloaded files
         run: ls -R
@@ -366,7 +367,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./meshtasticd_${{ steps.version.outputs.version }}_arm64.deb
+          asset_path: ./output/meshtasticd_${{ steps.version.outputs.version }}_arm64.deb
           asset_name: meshtasticd_${{ steps.version.outputs.version }}_arm64.deb
           asset_content_type: application/vnd.debian.binary-package
 
@@ -376,7 +377,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./meshtasticd_${{ steps.version.outputs.version }}_armhf.deb
+          asset_path: ./output/meshtasticd_${{ steps.version.outputs.version }}_armhf.deb
           asset_name: meshtasticd_${{ steps.version.outputs.version }}_armhf.deb
           asset_content_type: application/vnd.debian.binary-package
 

@@ -1,3 +1,5 @@
+# trunk-ignore-all(ruff/F821)
+# trunk-ignore-all(flake8/F821): For SConstruct imports
 import sys
 from os.path import join
 
@@ -60,6 +62,7 @@ if platform.name == "espressif32":
     import esptool
 
     env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", esp32_create_combined_bin)
+    env.Append(LINKFLAGS=["--specs=nano.specs", "-u", "_printf_float"])
 
 Import("projenv")
 
