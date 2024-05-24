@@ -75,9 +75,11 @@ int CannedMessageModule::splitConfiguredMessages()
 
     String messages = cannedMessageModuleConfig.messages;
 
+#ifdef T_WATCH_S3
     String separator = messages.length() ? "|" : "";
 
     messages = "[---- Free Text ----]" + separator + messages;
+#endif
 
     // collect all the message parts
     strncpy(this->messageStore, messages.c_str(), sizeof(this->messageStore));
@@ -141,6 +143,8 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         }
     }
     if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT)) {
+
+#ifdef T_WATCH_S3
         if (this->currentMessageIndex == 0) {
             this->runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
 
@@ -150,6 +154,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
             return 0;
         }
+#endif
 
         // when inactive, call the onebutton shortpress instead. Activate Module only on up/down
         if ((this->runState == CANNED_MESSAGE_RUN_STATE_INACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_DISABLED)) {
