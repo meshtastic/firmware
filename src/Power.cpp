@@ -50,7 +50,7 @@ RTC_NOINIT_ATTR uint64_t RTC_reg_b;
 
 esp_adc_cal_characteristics_t *adc_characs = (esp_adc_cal_characteristics_t *)calloc(1, sizeof(esp_adc_cal_characteristics_t));
 #ifndef ADC_ATTENUATION
-static const adc_atten_t atten = ADC_ATTEN_DB_11;
+static const adc_atten_t atten = ADC_ATTEN_DB_12;
 #else
 static const adc_atten_t atten = ADC_ATTENUATION;
 #endif
@@ -555,14 +555,24 @@ void Power::readPowerStatus()
 #ifdef NRF_APM // Section of code detects USB power on the RAK4631 and updates the power states.  Takes 20 seconds or so to detect
                // changes.
 
+        static nrfx_power_usb_state_t prev_nrf_usb_state = (nrfx_power_usb_state_t)-1; // -1 so that state detected at boot
         nrfx_power_usb_state_t nrf_usb_state = nrfx_power_usbstatus_get();
 
-        if (nrf_usb_state == NRFX_POWER_USB_STATE_DISCONNECTED) {
-            powerFSM.trigger(EVENT_POWER_DISCONNECTED);
-            NRF_USB = OptFalse;
-        } else {
-            powerFSM.trigger(EVENT_POWER_CONNECTED);
-            NRF_USB = OptTrue;
+        // If state changed
+        if (nrf_usb_state != prev_nrf_usb_state) {
+            // If changed to DISCONNECTED
+            if (nrf_usb_state == NRFX_POWER_USB_STATE_DISCONNECTED) {
+                powerFSM.trigger(EVENT_POWER_DISCONNECTED);
+                NRF_USB = OptFalse;
+            }
+            // If changed to CONNECTED / READY
+            else {
+                powerFSM.trigger(EVENT_POWER_CONNECTED);
+                NRF_USB = OptTrue;
+            }
+
+            // Cache the current state
+            prev_nrf_usb_state = nrf_usb_state;
         }
 #endif
         // Notify any status instances that are observing us
