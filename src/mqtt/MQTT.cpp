@@ -140,15 +140,15 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                 // Generate an implicit ACK towards ourselves (handled and processed only locally!) for this message.
                 // We do this because packets are not rebroadcasted back into MQTT anymore and we assume that at least one node
                 // receives it when we get our own packet back. Then we'll stop our retransmissions.
-                if (e.packet && getFrom(e.packet) == nodeDB->getNodeNum())
-                    routingModule->sendAckNak(meshtastic_Routing_Error_NONE, getFrom(e.packet), e.packet->id, ch.index);
+                if (e.has_packet && getFrom(&e.packet) == nodeDB->getNodeNum())
+                    routingModule->sendAckNak(meshtastic_Routing_Error_NONE, getFrom(&e.packet), e.packet.id, ch.index);
                 else
                     LOG_INFO("Ignoring downlink message we originally sent.\n");
             } else {
                 // Find channel by channel_id and check downlink_enabled
-                if (strcmp(e.channel_id, channels.getGlobalId(ch.index)) == 0 && e.packet && ch.settings.downlink_enabled) {
+                if (strcmp(e.channel_id, channels.getGlobalId(ch.index)) == 0 && e.has_packet && ch.settings.downlink_enabled) {
                     LOG_INFO("Received MQTT topic %s, len=%u\n", topic, length);
-                    meshtastic_MeshPacket *p = packetPool.allocCopy(*e.packet);
+                    meshtastic_MeshPacket *p = packetPool.allocCopy(e.packet);
                     p->via_mqtt = true; // Mark that the packet was received via MQTT
 
                     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
@@ -163,10 +163,6 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                 }
             }
         }
-        // make sure to free both strings and the MeshPacket (passing in NULL is acceptable)
-        free(e.channel_id);
-        free(e.gateway_id);
-        free(e.packet);
     }
 }
 
@@ -461,7 +457,7 @@ void MQTT::publishQueuedMessages()
 #ifndef ARCH_NRF52 // JSON is not supported on nRF52, see issue #2804
         if (moduleConfig.mqtt.json_enabled) {
             // handle json topic
-            auto jsonString = this->meshPacketToJson(env->packet);
+            auto jsonString = this->meshPacketToJson(&env->packet);
             if (jsonString.length() != 0) {
                 std::string topicJson = jsonTopic + env->channel_id + "/" + owner.id;
                 LOG_INFO("JSON publish message to %s, %u bytes: %s\n", topicJson.c_str(), jsonString.length(),
@@ -492,16 +488,19 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
         const char *channelId = channels.getGlobalId(chIndex); // FIXME, for now we just use the human name for the channel
 
         meshtastic_ServiceEnvelope *env = mqttPool.allocZeroed();
-        env->channel_id = (char *)channelId;
-        env->gateway_id = owner.id;
+        env->has_packet = true;
+        size_t channelIdLen = std::min(sizeof(env->channel_id) - 1, std::strlen(channelId));
+        strncpy(env->channel_id, channelId, channelIdLen);
+        assert(sizeof(env->gateway_id) == sizeof(owner.id));
+        memcpy(env->gateway_id, owner.id, sizeof(env->gateway_id));
 
         LOG_DEBUG("MQTT onSend - Publishing ");
         if (moduleConfig.mqtt.encryption_enabled) {
-            env->packet = (meshtastic_MeshPacket *)&mp;
+            env->packet = mp;
             LOG_DEBUG("encrypted message\n");
         } else {
-            env->packet = (meshtastic_MeshPacket *)&mp_decoded;
-            LOG_DEBUG("portnum %i message\n", env->packet->decoded.portnum);
+            env->packet = mp_decoded;
+            LOG_DEBUG("portnum %i message\n", env->packet.decoded.portnum);
         }
 
         if (moduleConfig.mqtt.proxy_to_client_enabled || this->isConnectedDirectly()) {
@@ -561,8 +560,13 @@ void MQTT::perhapsReportToMap()
 
         // Allocate ServiceEnvelope and fill it
         meshtastic_ServiceEnvelope *se = mqttPool.allocZeroed();
-        se->channel_id = (char *)channels.getGlobalId(channels.getPrimaryIndex()); // Use primary channel as the channel_id
-        se->gateway_id = owner.id;
+        se->has_packet = true;
+        // Use primary channel as the channel_id
+        const char *channelId = channels.getGlobalId(channels.getPrimaryIndex());
+        size_t channelIdLen = std::min(sizeof(se->channel_id) - 1, std::strlen(channelId));
+        strncpy(se->channel_id, channelId, channelIdLen);
+        assert(sizeof(se->gateway_id) == sizeof(owner.id));
+        memcpy(se->gateway_id, owner.id, sizeof(se->gateway_id));
 
         // Allocate MeshPacket and fill it
         meshtastic_MeshPacket *mp = packetPool.allocZeroed();
@@ -600,7 +604,7 @@ void MQTT::perhapsReportToMap()
         // Encode MapReport message and set it to MeshPacket in ServiceEnvelope
         mp->decoded.payload.size = pb_encode_to_bytes(mp->decoded.payload.bytes, sizeof(mp->decoded.payload.bytes),
                                                       &meshtastic_MapReport_msg, &mapReport);
-        se->packet = mp;
+        se->packet = *mp;
 
         // FIXME - this size calculation is super sloppy, but it will go away once we dynamically alloc meshpackets
         static uint8_t bytes[meshtastic_MeshPacket_size + 64];

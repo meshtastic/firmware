@@ -15,13 +15,14 @@
 /* This message wraps a MeshPacket with extra metadata about the sender and how it arrived. */
 typedef struct _meshtastic_ServiceEnvelope {
     /* The (probably encrypted) packet */
-    struct _meshtastic_MeshPacket *packet;
+    bool has_packet;
+    meshtastic_MeshPacket packet;
     /* The global channel ID it was sent on */
-    char *channel_id;
+    char channel_id[12];
     /* The sending gateway node ID. Can we use this to authenticate/prevent fake
  nodeid impersonation for senders? - i.e. use gateway/mesh id (which is authenticated) + local node id as
  the globally trusted nodenum */
-    char *gateway_id;
+    char gateway_id[16];
 } meshtastic_ServiceEnvelope;
 
 /* Information about a node intended to be reported unencrypted to a map using MQTT. */
@@ -62,9 +63,9 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define meshtastic_ServiceEnvelope_init_default  {NULL, NULL, NULL}
+#define meshtastic_ServiceEnvelope_init_default  {false, meshtastic_MeshPacket_init_default, "", ""}
 #define meshtastic_MapReport_init_default        {"", "", _meshtastic_Config_DeviceConfig_Role_MIN, _meshtastic_HardwareModel_MIN, "", _meshtastic_Config_LoRaConfig_RegionCode_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, 0, 0}
-#define meshtastic_ServiceEnvelope_init_zero     {NULL, NULL, NULL}
+#define meshtastic_ServiceEnvelope_init_zero     {false, meshtastic_MeshPacket_init_zero, "", ""}
 #define meshtastic_MapReport_init_zero           {"", "", _meshtastic_Config_DeviceConfig_Role_MIN, _meshtastic_HardwareModel_MIN, "", _meshtastic_Config_LoRaConfig_RegionCode_MIN, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -87,9 +88,9 @@ extern "C" {
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_ServiceEnvelope_FIELDLIST(X, a) \
-X(a, POINTER,  OPTIONAL, MESSAGE,  packet,            1) \
-X(a, POINTER,  SINGULAR, STRING,   channel_id,        2) \
-X(a, POINTER,  SINGULAR, STRING,   gateway_id,        3)
+X(a, STATIC,   OPTIONAL, MESSAGE,  packet,            1) \
+X(a, STATIC,   SINGULAR, STRING,   channel_id,        2) \
+X(a, STATIC,   SINGULAR, STRING,   gateway_id,        3)
 #define meshtastic_ServiceEnvelope_CALLBACK NULL
 #define meshtastic_ServiceEnvelope_DEFAULT NULL
 #define meshtastic_ServiceEnvelope_packet_MSGTYPE meshtastic_MeshPacket
@@ -119,9 +120,9 @@ extern const pb_msgdesc_t meshtastic_MapReport_msg;
 #define meshtastic_MapReport_fields &meshtastic_MapReport_msg
 
 /* Maximum encoded size of messages (where known) */
-/* meshtastic_ServiceEnvelope_size depends on runtime parameters */
-#define MESHTASTIC_MESHTASTIC_MQTT_PB_H_MAX_SIZE meshtastic_MapReport_size
+#define MESHTASTIC_MESHTASTIC_MQTT_PB_H_MAX_SIZE meshtastic_ServiceEnvelope_size
 #define meshtastic_MapReport_size                108
+#define meshtastic_ServiceEnvelope_size          359
 
 #ifdef __cplusplus
 } /* extern "C" */
