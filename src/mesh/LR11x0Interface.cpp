@@ -271,7 +271,7 @@ template <typename T> bool LR11x0Interface<T>::sleep()
 
     // put chipset into sleep mode (we've already disabled interrupts by now)
     bool keepConfig = true;
-    lora.sleep(keepConfig); // Note: we do not keep the config, full reinit will be needed
+    lora.sleep(keepConfig, 0); // Note: we do not keep the config, full reinit will be needed
 
 #ifdef LR11X0_POWER_EN
     digitalWrite(LR11X0_POWER_EN, LOW);
