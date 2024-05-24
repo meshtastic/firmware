@@ -16,7 +16,7 @@ class ScanI2CTwoWire : public ScanI2C
   public:
     void scanPort(ScanI2C::I2CPort) override;
 
-    void scanPort(ScanI2C::I2CPort, int *) override;
+    void scanPort(ScanI2C::I2CPort, uint8_t *) override;
 
     ScanI2C::FoundDevice find(ScanI2C::DeviceType) const override;
 
