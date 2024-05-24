@@ -159,6 +159,9 @@ typedef enum _meshtastic_HardwareModel {
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
+ /* Radio Master 900 Bandit Nano, SX1276, OLED, Skyworks SKY66122 PA*/
+    meshtastic_HardwareModel_RADIOMASTER_900_BANDIT_NANO = 250,
+
     meshtastic_HardwareModel_PRIVATE_HW = 255
 } meshtastic_HardwareModel;
 
