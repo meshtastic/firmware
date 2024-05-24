@@ -135,7 +135,7 @@ uint16_t ScanI2CTwoWire::getRegisterValue(const ScanI2CTwoWire::RegisterLocation
         type = T;                                                                                                                \
         break;
 
-void ScanI2CTwoWire::scanPort(I2CPort port, int *address)
+void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address)
 {
     concurrency::LockGuard guard((concurrency::Lock *)&lock);
 
@@ -163,8 +163,8 @@ void ScanI2CTwoWire::scanPort(I2CPort port, int *address)
 #endif
 
     for (addr.address = 1; addr.address < 127; addr.address++) {
-        // Skip the address if it is not requested oon a partial scan
-        if (sizeof(address) > 0 && addr.address != *address) {
+        // Skip the address if it is not requested on a partial scan
+        if (address != nullptr && *address != addr.address) {
             continue;
         }
         i2cBus->beginTransmission(addr.address);

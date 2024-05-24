@@ -33,7 +33,7 @@ int32_t KbI2cBase::runOnce()
     if (cardkb_found.address == 0x00) {
         // Input device is not detected. Rescan now.
         auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
-        int i2caddr_scan[] = {CARDKB_ADDR, TDECK_KB_ADDR, BBQ10_KB_ADDR};
+        uint8_t i2caddr_scan[] = {CARDKB_ADDR, TDECK_KB_ADDR, BBQ10_KB_ADDR};
 #if defined(I2C_SDA1)
         i2cScanner->scanPort(ScanI2C::I2CPort::WIRE1, i2caddr_scan);
 #endif
