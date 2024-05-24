@@ -61,7 +61,7 @@
 #define RF95_DIO1 LORA_DIO1
 #define RF95_TXEN LORA_TXEN
 #define RF95_RESET LORA_RESET
-#define MAX_POWER 12
+#define RF95_MAX_POWER 12
 
 /*
   This module has Skyworks SKY66122 controlled by dacWrite
