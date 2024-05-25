@@ -34,10 +34,11 @@ int32_t KbI2cBase::runOnce()
         // Input device is not detected. Rescan now.
         auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
         uint8_t i2caddr_scan[] = {CARDKB_ADDR, TDECK_KB_ADDR, BBQ10_KB_ADDR};
+        uint8_t i2caddr_asize = 3;
 #if defined(I2C_SDA1)
-        i2cScanner->scanPort(ScanI2C::I2CPort::WIRE1, i2caddr_scan);
+        i2cScanner->scanPort(ScanI2C::I2CPort::WIRE1, i2caddr_scan, i2caddr_asize);
 #endif
-        i2cScanner->scanPort(ScanI2C::I2CPort::WIRE, i2caddr_scan);
+        i2cScanner->scanPort(ScanI2C::I2CPort::WIRE, i2caddr_scan, i2caddr_asize);
         auto kb_info = i2cScanner->firstKeyboard();
 
         if (kb_info.type != ScanI2C::DeviceType::NONE) {

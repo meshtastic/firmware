@@ -14,6 +14,15 @@
 #define XPOWERS_AXP192_AXP2101_ADDRESS 0x34
 #endif
 
+bool in_array(uint8_t *array, int size, uint8_t lookfor)
+{
+    int i;
+    for (i = 0; i < size; i++)
+        if (lookfor == array[i])
+            return true;
+    return false;
+}
+
 ScanI2C::FoundDevice ScanI2CTwoWire::find(ScanI2C::DeviceType type) const
 {
     concurrency::LockGuard guard((concurrency::Lock *)&lock);
@@ -135,7 +144,7 @@ uint16_t ScanI2CTwoWire::getRegisterValue(const ScanI2CTwoWire::RegisterLocation
         type = T;                                                                                                                \
         break;
 
-void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address)
+void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 {
     concurrency::LockGuard guard((concurrency::Lock *)&lock);
 
@@ -163,10 +172,10 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address)
 #endif
 
     for (addr.address = 1; addr.address < 127; addr.address++) {
-        // Skip the address if it is not requested on a partial scan
-        if (address != nullptr && *address != addr.address) {
-            continue;
-        }
+        if (asize != 0)
+            if (in_array(address, asize, addr.address))
+                continue;
+
         i2cBus->beginTransmission(addr.address);
 #ifdef ARCH_PORTDUINO
         if (i2cBus->read() != -1)
@@ -373,7 +382,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address)
 
 void ScanI2CTwoWire::scanPort(I2CPort port)
 {
-    scanPort(port, nullptr);
+    scanPort(port, nullptr, 0);
 }
 
 TwoWire *ScanI2CTwoWire::fetchI2CBus(ScanI2C::DeviceAddress address) const
