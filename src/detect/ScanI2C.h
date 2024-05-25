@@ -81,7 +81,7 @@ class ScanI2C
     ScanI2C();
 
     virtual void scanPort(ScanI2C::I2CPort);
-    virtual void scanPort(ScanI2C::I2CPort, uint8_t *);
+    virtual void scanPort(ScanI2C::I2CPort, uint8_t *, uint8_t);
 
     /*
      * A bit of a hack, this tells the scanner not to tell later systems there is a screen to avoid enabling it.
