@@ -35,7 +35,7 @@
 #define RF95_FAN_EN 2
 
 /*
-  LED PIN setup, possible RGB.
+  LED PIN setup.
 */
 #define LED_PIN 15
 
