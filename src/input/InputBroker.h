@@ -8,6 +8,8 @@ typedef struct _InputEvent {
     const char *source;
     char inputEvent;
     char kbchar;
+    uint16_t touchX;
+    uint16_t touchY;
 } InputEvent;
 class InputBroker : public Observable<const InputEvent *>
 {

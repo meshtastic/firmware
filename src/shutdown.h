@@ -28,6 +28,7 @@ void powerCommandsCheck()
         Serial1.end();
         if (screen)
             delete screen;
+        LOG_DEBUG("final reboot!\n");
         reboot();
 #else
         rebootAtMsec = -1;
