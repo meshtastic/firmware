@@ -66,15 +66,13 @@
 /*
   This module has Skyworks SKY66122 controlled by dacWrite
   power rangeing from 100mW to 1000mW.
-*/
-#define RF95_PA_EN 26
-#define RF95_PA_DAC_EN
-
-/*
+  
   Mapping of PA_LEVEL to Power output: GPIO26/dacWrite
   168 -> 100mW  -> 2.11v
   148 -> 250mW  -> 1.87v
   128 -> 500mW  -> 1.63v
   90  -> 1000mW -> 1.16v
 */
+#define RF95_PA_EN 26
+#define RF95_PA_DAC_EN
 #define RF95_PA_LEVEL 90
