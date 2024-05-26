@@ -1459,7 +1459,13 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     const char *username = node->has_user ? node->user.long_name : "Unknown Name";
 
     static char signalStr[20];
-    snprintf(signalStr, sizeof(signalStr), "Signal: %d%%", clamp((int)((node->snr + 10) * 5), 0, 100));
+
+    // section here to choose whether to display hops away rather than signal strength if more than 0 hops away.
+    if (node->hops_away > 0) {
+        snprintf(signalStr, sizeof(signalStr), "Hops Away: %d", node->hops_away);
+    } else {
+        snprintf(signalStr, sizeof(signalStr), "Signal: %d%%", clamp((int)((node->snr + 10) * 5), 0, 100));
+    }
 
     uint32_t agoSecs = sinceLastSeen(node);
     static char lastStr[20];
@@ -2088,6 +2094,10 @@ void Screen::setFrames()
     if (error_code)
         normalFrames[numframes++] = drawCriticalFaultFrame;
 
+#ifdef T_WATCH_S3
+    normalFrames[numframes++] = screen->digitalWatchFace ? &Screen::drawDigitalClockFrame : &Screen::drawAnalogClockFrame;
+#endif
+
     // If we have a text message - show it next, unless it's a phone message and we aren't using any special modules
     if (devicestate.has_rx_text_message && shouldDrawMessage(&devicestate.rx_text_message)) {
         normalFrames[numframes++] = drawTextMessageFrame;
@@ -2096,10 +2106,6 @@ void Screen::setFrames()
     if (devicestate.has_rx_waypoint && shouldDrawMessage(&devicestate.rx_waypoint)) {
         normalFrames[numframes++] = drawWaypointFrame;
     }
-
-#ifdef T_WATCH_S3
-    normalFrames[numframes++] = screen->digitalWatchFace ? &Screen::drawDigitalClockFrame : &Screen::drawAnalogClockFrame;
-#endif
 
     // then all the nodes
     // We only show a few nodes in our scrolling list - because meshes with many nodes would have too many screens
@@ -2675,8 +2681,10 @@ int Screen::handleInputEvent(const InputEvent *event)
 
 #ifdef T_WATCH_S3
     // For the T-Watch, intercept touches to the 'toggle digital/analog watch face' button
-    if (this->ui->getUiState()->currentFrame == 0 && event->touchX >= 204 && event->touchX <= 240 && event->touchY >= 204 &&
-        event->touchY <= 240) {
+    uint8_t watchFaceFrame = error_code ? 1 : 0;
+
+    if (this->ui->getUiState()->currentFrame == watchFaceFrame && event->touchX >= 204 && event->touchX <= 240 &&
+        event->touchY >= 204 && event->touchY <= 240) {
         screen->digitalWatchFace = !screen->digitalWatchFace;
 
         setFrames();
