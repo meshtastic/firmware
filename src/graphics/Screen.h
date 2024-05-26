@@ -360,7 +360,7 @@ class Screen : public concurrency::OSThread
     bool enqueueCmd(const ScreenCmd &cmd)
     {
         if (!useDisplay)
-            return true; // claim success if our display is not in use
+            return false; // not enqueued if our display is not in use
         else {
             bool success = cmdQueue.enqueue(cmd, 0);
             enabled = true; // handle ASAP (we are the registered reader for cmdQueue, but might have been disabled)
