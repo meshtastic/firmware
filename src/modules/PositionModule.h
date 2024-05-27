@@ -54,7 +54,7 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
   private:
     struct SmartPosition getDistanceTraveledSinceLastSend(meshtastic_PositionLite currentPosition);
     meshtastic_MeshPacket *allocAtakPli();
-    void trySetRtc(meshtastic_Position p, bool isLocal);
+    void trySetRtc(meshtastic_Position p, bool isLocal, bool forceUpdate = false);
     uint32_t precision;
     void sendLostAndFoundText();
 
