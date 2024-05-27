@@ -57,7 +57,9 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* Lite On LTR-390UV-01 UV Light Sensor */
     meshtastic_TelemetrySensorType_LTR390UV = 21,
     /* AMS TSL25911FN RGB Light Sensor */
-    meshtastic_TelemetrySensorType_TSL25911FN = 22
+    meshtastic_TelemetrySensorType_TSL25911FN = 22,
+    /* AHT10/AHT20 Temperature and Humidity Sensor */
+    meshtastic_TelemetrySensorType_AHT10 = 23
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */

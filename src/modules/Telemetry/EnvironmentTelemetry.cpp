@@ -18,6 +18,7 @@
 #include <OLEDDisplayUi.h>
 
 // Sensors
+#include "Sensor/AHT10.h"
 #include "Sensor/BME280Sensor.h"
 #include "Sensor/BME680Sensor.h"
 #include "Sensor/BMP085Sensor.h"
@@ -41,6 +42,7 @@ SHT31Sensor sht31Sensor;
 VEML7700Sensor veml7700Sensor;
 SHT4XSensor sht4xSensor;
 RCWL9620Sensor rcwl9620Sensor;
+AHT10Sensor aht10Sensor;
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
@@ -105,6 +107,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = veml7700Sensor.runOnce();
             if (rcwl9620Sensor.hasSensor())
                 result = rcwl9620Sensor.runOnce();
+            if (aht10Sensor.hasSensor())
+                result = aht10Sensor.runOnce();
         }
         return result;
     } else {
@@ -291,6 +295,11 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         valid = valid && rcwl9620Sensor.getMetrics(&m);
         hasSensor = true;
     }
+    if (aht10Sensor.hasSensor()) {
+        valid = valid && aht10Sensor.getMetrics(&m);
+        hasSensor = true;
+    }
+
     valid = valid && hasSensor;
 
     if (valid) {
