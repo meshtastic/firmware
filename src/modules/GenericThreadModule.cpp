@@ -4,9 +4,8 @@
 #include <Arduino.h>
 
 /*
-Generic Thread Module allows for the execution of generic code at a set interval.
+Generic Thread Module allows for the execution of custom code at a set interval.
 */
-
 GenericThreadModule *genericThreadModule;
 
 GenericThreadModule::GenericThreadModule() : concurrency::OSThread("GenericThreadModule") {}
