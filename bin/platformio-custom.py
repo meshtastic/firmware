@@ -63,7 +63,6 @@ if platform.name == "espressif32":
 
     env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", esp32_create_combined_bin)
 
-# if CONFIG_IDF_TARGET_ESP32S3 is defined, add the required linker flags
 if "esp32s3" in env.get("UPLOADERFLAGS") or "esp32c3" in env.get("UPLOADERFLAGS"):
     print("Adding ESP32-S3/ESP32-C3 specific linker flags")
     env.Append(LINKFLAGS=["--specs=nano.specs", "-u", "_printf_float"])
