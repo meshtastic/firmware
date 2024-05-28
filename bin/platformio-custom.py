@@ -63,7 +63,7 @@ if platform.name == "espressif32":
 
     env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", esp32_create_combined_bin)
 
-if env.get("UPLOADERFLAGS") != None and (
+if env.get("UPLOADERFLAGS") is not None and (
     "esp32s3" in env.get("UPLOADERFLAGS") or "esp32c3" in env.get("UPLOADERFLAGS")
 ):
     print("Adding ESP32-S3/ESP32-C3 specific linker flags")
