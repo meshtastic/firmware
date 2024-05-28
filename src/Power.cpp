@@ -50,7 +50,11 @@ RTC_NOINIT_ATTR uint64_t RTC_reg_b;
 
 esp_adc_cal_characteristics_t *adc_characs = (esp_adc_cal_characteristics_t *)calloc(1, sizeof(esp_adc_cal_characteristics_t));
 #ifndef ADC_ATTENUATION
+#if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C3)
 static const adc_atten_t atten = ADC_ATTEN_DB_12;
+#else
+static const adc_atten_t atten = ADC_ATTEN_DB_11;
+#endif
 #else
 static const adc_atten_t atten = ADC_ATTENUATION;
 #endif
