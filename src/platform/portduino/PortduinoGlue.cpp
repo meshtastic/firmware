@@ -93,6 +93,7 @@ void portduinoSetup()
     std::string gpioChipName = "gpiochip";
     settingsStrings[i2cdev] = "";
     settingsStrings[keyboardDevice] = "";
+    settingsStrings[pointerDevice] = "";
     settingsStrings[webserverrootpath] = "";
     settingsStrings[spidev] = "";
     settingsStrings[displayspidev] = "";
@@ -270,6 +271,7 @@ void portduinoSetup()
         }
         if (yamlConfig["Input"]) {
             settingsStrings[keyboardDevice] = (yamlConfig["Input"]["KeyboardDevice"]).as<std::string>("");
+            settingsStrings[pointerDevice] = (yamlConfig["Input"]["PointerDevice"]).as<std::string>("");
         }
 
         if (yamlConfig["Webserver"]) {

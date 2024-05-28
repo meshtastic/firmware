@@ -45,6 +45,7 @@ enum configNames {
     displayOffsetY,
     displayInvert,
     keyboardDevice,
+    pointerDevice,
     logoutputlevel,
     webserver,
     webserverport,

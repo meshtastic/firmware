@@ -665,8 +665,9 @@ void setup()
 #ifdef PORTDUINO
     if (settingsMap[displayPanel] != no_screen) {
         DisplayDriverConfig displayConfig;
-        char *panels[] = {"NOSCREEN", "X11", "ST7789", "ST7735", "ST7735S", "ST7796", "ILI9341", "ILI9486", "ILI9488", "HX8357D"};
-        char *touch[] = {"NOTOUCH", "XPT2046", "STMPE610", "GT911", "FT5x06"};
+        static char *panels[] = {"NOSCREEN", "X11",     "ST7789",  "ST7735",  "ST7735S",
+                                 "ST7796",   "ILI9341", "ILI9486", "ILI9488", "HX8357D"};
+        static char *touch[] = {"NOTOUCH", "XPT2046", "STMPE610", "GT911", "FT5x06"};
 #ifdef USE_X11
         if (settingsMap[displayPanel] == x11) {
             if (settingsMap[displayWidth] && settingsMap[displayHeight])
@@ -696,6 +697,8 @@ void setup()
                                                        .spi{.pin_dc = (int8_t)settingsMap[displayDC],
                                                             .use_lock = true,
                                                             .spi_host = (uint16_t)settingsMap[displayspidev]}})
+                .input(DisplayDriverConfig::input_config_t{.keyboardDevice = settingsStrings[keyboardDevice],
+                                                           .pointerDevice = settingsStrings[pointerDevice]})
                 .light(DisplayDriverConfig::light_config_t{.pin_bl = (int16_t)settingsMap[displayBacklight],
                                                            .pwm_channel = (int8_t)settingsMap[displayBacklightPWMChannel],
                                                            .invert = (bool)settingsMap[displayBacklightInvert]});
