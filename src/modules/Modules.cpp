@@ -126,7 +126,7 @@ void setupModules()
         kbMatrixImpl->init();
 #endif // INPUTBROKER_MATRIX_TYPE
 #endif // HAS_BUTTON
-#if ARCH_PORTDUINO
+#if ARCH_PORTDUINO && !HAS_TFT
         aLinuxInputImpl = new LinuxInputImpl();
         aLinuxInputImpl->init();
 #endif
@@ -134,7 +134,7 @@ void setupModules()
         trackballInterruptImpl1 = new TrackballInterruptImpl1();
         trackballInterruptImpl1->init();
 #endif
-#if (HAS_SCREEN || HAS_TFT) && !MESHTASTIC_EXCLUDE_CANNEDMESSAGES
+#if HAS_SCREEN && !MESHTASTIC_EXCLUDE_CANNEDMESSAGES
         cannedMessageModule = new CannedMessageModule();
 #endif
 #if HAS_TELEMETRY

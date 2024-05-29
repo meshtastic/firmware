@@ -2,7 +2,7 @@
 #if ARCH_PORTDUINO
 #include "PortduinoGlue.h"
 #endif
-#if HAS_SCREEN || HAS_TFT
+#if HAS_SCREEN
 #include "CannedMessageModule.h"
 #include "Channels.h"
 #include "FSCommon.h"
