@@ -296,13 +296,13 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         hasSensor = true;
     }
     if (aht10Sensor.hasSensor()) {
-        if (!bmp280Sensor.hasSensor()){
+        if (!bmp280Sensor.hasSensor()) {
             valid = valid && aht10Sensor.getMetrics(&m);
             hasSensor = true;
         } else {
             // prefer bmp280 temp if both sensors are present, fetch only humidity
             meshtastic_Telemetry m_ahtx;
-            LOG_INFO("AHTX0+BMP280 module detected: using temp from BMP280 and humy from AHTX0");
+            LOG_INFO("AHTX0+BMP280 module detected: using temp from BMP280 and humy from AHTX0\n");
             aht10Sensor.getMetrics(&m_ahtx);
             m.variant.environment_metrics.relative_humidity = m_ahtx.variant.environment_metrics.relative_humidity;
         }
