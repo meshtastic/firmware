@@ -60,7 +60,7 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
 {
     uint32_t now = millis();
     // If we sent our NodeInfo less than 5 min. ago, don't send it again as it may be still underway.
-    if (lastSentToMesh && (now - lastSentToMesh) < (5 * 60 * 1000)) {
+    if (lastSentToMesh && (now - lastSentToMesh) < (5 * 60 * 1000) && airTime->isTxAllowedChannelUtil(false)) {
         LOG_DEBUG("Sending NodeInfo will be ignored since we just sent it.\n");
         ignoreRequest = true; // Mark it as ignored for MeshModule
         return NULL;
