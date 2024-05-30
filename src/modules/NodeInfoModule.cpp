@@ -59,8 +59,12 @@ void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
 meshtastic_MeshPacket *NodeInfoModule::allocReply()
 {
     uint32_t now = millis();
+    if (!airTime->isTxAllowedChannelUtil(false)) {
+        LOG_DEBUG("Not sending NodeInfo due to > 40 percent channel utilization\n");
+        return NULL;
+    }
     // If we sent our NodeInfo less than 5 min. ago, don't send it again as it may be still underway.
-    if (lastSentToMesh && (now - lastSentToMesh) < (5 * 60 * 1000) && airTime->isTxAllowedChannelUtil(false)) {
+    if (lastSentToMesh && (now - lastSentToMesh) < (5 * 60 * 1000)) {
         LOG_DEBUG("Sending NodeInfo will be ignored since we just sent it.\n");
         ignoreRequest = true; // Mark it as ignored for MeshModule
         return NULL;
