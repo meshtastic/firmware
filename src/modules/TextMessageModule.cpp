@@ -14,9 +14,13 @@ ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp
 #endif
 
     // We only store/display messages destined for us.
-    // Keep a copy of the most recent text message.
+
+#ifdef USE_PERSISTENT_MSG
+    nodeDB->addMessage(mp);
+#else
     devicestate.rx_text_message = mp;
     devicestate.has_rx_text_message = true;
+#endif
 
     powerFSM.trigger(EVENT_RECEIVED_MSG);
     notifyObservers(&mp);

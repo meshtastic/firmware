@@ -3,12 +3,18 @@
 #include "Observer.h"
 #include <Arduino.h>
 #include <assert.h>
+#include <set>
 #include <vector>
 
 #include "MeshTypes.h"
 #include "NodeStatus.h"
 #include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/mesh.pb.h" // For CriticalErrorCode
+#include "mesh/generated/meshtastic/message.pb.h"
+
+#ifdef USE_PERSISTENT_MSG
+#include "concurrency/LockGuard.h"
+#endif
 
 /*
 DeviceState versions used to be defined in the .proto file but really only this function cares.  So changed to a
@@ -37,6 +43,7 @@ uint32_t sinceLastSeen(const meshtastic_NodeInfoLite *n);
 
 /// Given a packet, return how many seconds in the past (vs now) it was received
 uint32_t sinceReceived(const meshtastic_MeshPacket *p);
+uint32_t sinceReceived(const meshtastic_Message *msg);
 
 enum LoadFileResult {
     // Successfully opened the file
@@ -71,9 +78,35 @@ class NodeDB
     /// instead just store in flash - possibly even in the initial alpha release do this hack
     NodeDB();
 
-    /// write to flash
+    /// Write to flash
     void saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS),
         saveChannelsToDisk(), saveDeviceStateToDisk();
+
+#ifdef USE_PERSISTENT_MSG
+    void initSavedMessages();
+    void addMessage(const meshtastic_MeshPacket &mp);
+    void addMessage(const meshtastic_Message &msg);
+    uint8_t lastCategorySaved = 0;
+    void clearSavedMessages();
+    const meshtastic_Message loadMessage(uint16_t category, uint16_t index);
+
+    bool messageIsDirectMessage(const meshtastic_MeshPacket &mp);
+    struct MessageCompare {
+        bool operator()(const meshtastic_Message &messageA, const meshtastic_Message &messageB) const
+        {
+            return messageA.rx_time < messageB.rx_time;
+        }
+    };
+
+    static const uint8_t CATEGORY_COUNT = 9;
+    std::set<meshtastic_Message, MessageCompare> messageCache[CATEGORY_COUNT];
+    int *newestMessageIndices = new int[CATEGORY_COUNT];
+    int *oldestMessageIndices = new int[CATEGORY_COUNT];
+    void updateMessageBounds();
+
+    std::vector<meshtastic_Message> *saveMessageBuffer = new std::vector<meshtastic_Message>[CATEGORY_COUNT];
+    concurrency::Lock saveMessageBufferLock;
+#endif
 
     /** Reinit radio config if needed, because either:
      * a) sometimes a buggy android app might send us bogus settings or
