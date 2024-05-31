@@ -162,6 +162,9 @@ bool RF95Interface::init()
     LOG_INFO("Frequency set to %f\n", getFreq());
     LOG_INFO("Bandwidth set to %f\n", bw);
     LOG_INFO("Power output set to %d\n", power);
+#ifdef RADIOMASTER_900_BANDIT_NANO
+    LOG_INFO("DAC output set to %d\n", powerDAC);
+#endif
 
     if (res == RADIOLIB_ERR_NONE)
         res = lora->setCRC(RADIOLIB_SX126X_LORA_CRC_ON);
