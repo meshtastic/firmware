@@ -222,12 +222,14 @@ bool perhapsSetRTC(RTCQuality q, struct tm &t)
  */
 int32_t getTZOffset()
 {
+    tzset();
     time_t now;
     struct tm *gmt;
+    struct tm *local;
     now = time(NULL);
     gmt = gmtime(&now);
-    gmt->tm_isdst = -1;
-    return (int32_t)difftime(now, mktime(gmt));
+    local = localtime(&now);
+    return (int32_t)difftime(mktime(local), mktime(gmt));
 }
 
 /**
