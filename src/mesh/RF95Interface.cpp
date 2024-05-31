@@ -94,9 +94,6 @@ bool RF95Interface::init()
 {
     RadioLibInterface::init();
 
-    if (power > RF95_MAX_POWER) // This chip has lower power limits than some
-        power = RF95_MAX_POWER;
-
 #ifdef RADIOMASTER_900_BANDIT_NANO
     // DAC and DB values based on dBm using interpolation
     DACDB dacDbValues = getDACandDB(power);
@@ -104,6 +101,9 @@ bool RF95Interface::init()
     power = dacDbValues.db;
 #endif
 
+    if (power > RF95_MAX_POWER) // This chip has lower power limits than some
+        power = RF95_MAX_POWER;
+    
     limitPower();
 
     iface = lora = new RadioLibRF95(&module);
