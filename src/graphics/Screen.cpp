@@ -419,6 +419,466 @@ static bool shouldDrawMessage(const meshtastic_MeshPacket *packet)
     return packet->from != 0 && !moduleConfig.store_forward.enabled;
 }
 
+// Draw power bars or a charging indicator on an image of a battery, determined by battery charge voltage or percentage.
+static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *imgBuffer, const PowerStatus *powerStatus)
+{
+    static const uint8_t powerBar[3] = {0x81, 0xBD, 0xBD};
+    static const uint8_t lightning[8] = {0xA1, 0xA1, 0xA5, 0xAD, 0xB5, 0xA5, 0x85, 0x85};
+    // Clear the bar area on the battery image
+    for (int i = 1; i < 14; i++) {
+        imgBuffer[i] = 0x81;
+    }
+    // If charging, draw a charging indicator
+    if (powerStatus->getIsCharging()) {
+        memcpy(imgBuffer + 3, lightning, 8);
+        // If not charging, Draw power bars
+    } else {
+        for (int i = 0; i < 4; i++) {
+            if (powerStatus->getBatteryChargePercent() >= 25 * i)
+                memcpy(imgBuffer + 1 + (i * 3), powerBar, 3);
+        }
+    }
+    display->drawFastImage(x, y, 16, 8, imgBuffer);
+}
+
+#ifdef T_WATCH_S3
+
+void Screen::drawWatchFaceToggleButton(OLEDDisplay *display, int16_t x, int16_t y, bool digitalMode, float scale)
+{
+    uint16_t segmentWidth = SEGMENT_WIDTH * scale;
+    uint16_t segmentHeight = SEGMENT_HEIGHT * scale;
+
+    if (digitalMode) {
+        uint16_t radius = (segmentWidth + (segmentHeight * 2) + 4) / 2;
+        uint16_t centerX = (x + segmentHeight + 2) + (radius / 2);
+        uint16_t centerY = (y + segmentHeight + 2) + (radius / 2);
+
+        display->drawCircle(centerX, centerY, radius);
+        display->drawCircle(centerX, centerY, radius + 1);
+        display->drawLine(centerX, centerY, centerX, centerY - radius + 3);
+        display->drawLine(centerX, centerY, centerX + radius - 3, centerY);
+    } else {
+        uint16_t segmentOneX = x + segmentHeight + 2;
+        uint16_t segmentOneY = y;
+
+        uint16_t segmentTwoX = segmentOneX + segmentWidth + 2;
+        uint16_t segmentTwoY = segmentOneY + segmentHeight + 2;
+
+        uint16_t segmentThreeX = segmentOneX;
+        uint16_t segmentThreeY = segmentTwoY + segmentWidth + 2;
+
+        uint16_t segmentFourX = x;
+        uint16_t segmentFourY = y + segmentHeight + 2;
+
+        drawHorizontalSegment(display, segmentOneX, segmentOneY, segmentWidth, segmentHeight);
+        drawVerticalSegment(display, segmentTwoX, segmentTwoY, segmentWidth, segmentHeight);
+        drawHorizontalSegment(display, segmentThreeX, segmentThreeY, segmentWidth, segmentHeight);
+        drawVerticalSegment(display, segmentFourX, segmentFourY, segmentWidth, segmentHeight);
+    }
+}
+
+// Draw a digital clock
+void Screen::drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    drawBattery(display, x, y + 7, imgBattery, powerStatus);
+
+    if (powerStatus->getHasBattery()) {
+        String batteryPercent = String(powerStatus->getBatteryChargePercent()) + "%";
+
+        display->setFont(FONT_SMALL);
+
+        display->drawString(x + 20, y + 2, batteryPercent);
+    }
+
+    if (nimbleBluetooth->isConnected()) {
+        drawBluetoothConnectedIcon(display, display->getWidth() - 18, y + 2);
+    }
+
+    drawWatchFaceToggleButton(display, display->getWidth() - 36, display->getHeight() - 36, screen->digitalWatchFace, 1);
+
+    display->setColor(OLEDDISPLAY_COLOR::WHITE);
+
+    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // Display local timezone
+    if (rtc_sec > 0) {
+        long hms = rtc_sec % SEC_PER_DAY;
+        hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
+
+        int hour = hms / SEC_PER_HOUR;
+        int minute = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
+        int second = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
+
+        hour = hour > 12 ? hour - 12 : hour;
+
+        if (hour == 0) {
+            hour = 12;
+        }
+
+        // hours string
+        String hourString = String(hour);
+
+        // minutes string
+        String minuteString = minute < 10 ? "0" + String(minute) : String(minute);
+
+        String timeString = hourString + ":" + minuteString;
+
+        // seconds string
+        String secondString = second < 10 ? "0" + String(second) : String(second);
+
+        float scale = 1.5;
+
+        uint16_t segmentWidth = SEGMENT_WIDTH * scale;
+        uint16_t segmentHeight = SEGMENT_HEIGHT * scale;
+
+        // calculate hours:minutes string width
+        uint16_t timeStringWidth = timeString.length() * 5;
+
+        for (uint8_t i = 0; i < timeString.length(); i++) {
+            String character = String(timeString[i]);
+
+            if (character == ":") {
+                timeStringWidth += segmentHeight;
+            } else {
+                timeStringWidth += segmentWidth + (segmentHeight * 2) + 4;
+            }
+        }
+
+        // calculate seconds string width
+        uint16_t secondStringWidth = (secondString.length() * 12) + 4;
+
+        // sum these to get total string width
+        uint16_t totalWidth = timeStringWidth + secondStringWidth;
+
+        uint16_t hourMinuteTextX = (display->getWidth() / 2) - (totalWidth / 2);
+
+        uint16_t startingHourMinuteTextX = hourMinuteTextX;
+
+        uint16_t hourMinuteTextY = (display->getHeight() / 2) - (((segmentWidth * 2) + (segmentHeight * 3) + 8) / 2);
+
+        // iterate over characters in hours:minutes string and draw segmented characters
+        for (uint8_t i = 0; i < timeString.length(); i++) {
+            String character = String(timeString[i]);
+
+            if (character == ":") {
+                drawSegmentedDisplayColon(display, hourMinuteTextX, hourMinuteTextY, scale);
+
+                hourMinuteTextX += segmentHeight + 6;
+            } else {
+                drawSegmentedDisplayCharacter(display, hourMinuteTextX, hourMinuteTextY, character.toInt(), scale);
+
+                hourMinuteTextX += segmentWidth + (segmentHeight * 2) + 4;
+            }
+
+            hourMinuteTextX += 5;
+        }
+
+        // draw seconds string
+        display->setFont(FONT_MEDIUM);
+        display->drawString(startingHourMinuteTextX + timeStringWidth + 4,
+                            (display->getHeight() - hourMinuteTextY) - FONT_HEIGHT_MEDIUM + 6, secondString);
+    }
+}
+
+void Screen::drawSegmentedDisplayColon(OLEDDisplay *display, int x, int y, float scale)
+{
+    uint16_t segmentWidth = SEGMENT_WIDTH * scale;
+    uint16_t segmentHeight = SEGMENT_HEIGHT * scale;
+
+    uint16_t cellHeight = (segmentWidth * 2) + (segmentHeight * 3) + 8;
+
+    uint16_t topAndBottomX = x + (4 * scale);
+
+    uint16_t quarterCellHeight = cellHeight / 4;
+
+    uint16_t topY = y + quarterCellHeight;
+    uint16_t bottomY = y + (quarterCellHeight * 3);
+
+    display->fillRect(topAndBottomX, topY, segmentHeight, segmentHeight);
+    display->fillRect(topAndBottomX, bottomY, segmentHeight, segmentHeight);
+}
+
+void Screen::drawSegmentedDisplayCharacter(OLEDDisplay *display, int x, int y, uint8_t number, float scale)
+{
+    // the numbers 0-9, each expressed as an array of seven boolean (0|1) values encoding the on/off state of
+    // segment {innerIndex + 1}
+    // e.g., to display the numeral '0', segments 1-6 are on, and segment 7 is off.
+    uint8_t numbers[10][7] = {
+        {1, 1, 1, 1, 1, 1, 0}, // 0          Display segment key
+        {0, 1, 1, 0, 0, 0, 0}, // 1                   1
+        {1, 1, 0, 1, 1, 0, 1}, // 2                  ___
+        {1, 1, 1, 1, 0, 0, 1}, // 3              6  |   | 2
+        {0, 1, 1, 0, 0, 1, 1}, // 4                 |_7̲_|
+        {1, 0, 1, 1, 0, 1, 1}, // 5              5  |   | 3
+        {1, 0, 1, 1, 1, 1, 1}, // 6                 |___|
+        {1, 1, 1, 0, 0, 1, 0}, // 7
+        {1, 1, 1, 1, 1, 1, 1}, // 8                   4
+        {1, 1, 1, 1, 0, 1, 1}, // 9
+    };
+
+    // the width and height of each segment's central rectangle:
+    //             _____________________
+    //           ⋰|  (only this part,  |⋱
+    //         ⋰  |   not including    |  ⋱
+    //         ⋱  |   the triangles    |  ⋰
+    //           ⋱|    on the ends)    |⋰
+    //             ‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
+
+    uint16_t segmentWidth = SEGMENT_WIDTH * scale;
+    uint16_t segmentHeight = SEGMENT_HEIGHT * scale;
+
+    // segment x and y coordinates
+    uint16_t segmentOneX = x + segmentHeight + 2;
+    uint16_t segmentOneY = y;
+
+    uint16_t segmentTwoX = segmentOneX + segmentWidth + 2;
+    uint16_t segmentTwoY = segmentOneY + segmentHeight + 2;
+
+    uint16_t segmentThreeX = segmentTwoX;
+    uint16_t segmentThreeY = segmentTwoY + segmentWidth + 2 + segmentHeight + 2;
+
+    uint16_t segmentFourX = segmentOneX;
+    uint16_t segmentFourY = segmentThreeY + segmentWidth + 2;
+
+    uint16_t segmentFiveX = x;
+    uint16_t segmentFiveY = segmentThreeY;
+
+    uint16_t segmentSixX = x;
+    uint16_t segmentSixY = segmentTwoY;
+
+    uint16_t segmentSevenX = segmentOneX;
+    uint16_t segmentSevenY = segmentTwoY + segmentWidth + 2;
+
+    if (numbers[number][0]) {
+        drawHorizontalSegment(display, segmentOneX, segmentOneY, segmentWidth, segmentHeight);
+    }
+
+    if (numbers[number][1]) {
+        drawVerticalSegment(display, segmentTwoX, segmentTwoY, segmentWidth, segmentHeight);
+    }
+
+    if (numbers[number][2]) {
+        drawVerticalSegment(display, segmentThreeX, segmentThreeY, segmentWidth, segmentHeight);
+    }
+
+    if (numbers[number][3]) {
+        drawHorizontalSegment(display, segmentFourX, segmentFourY, segmentWidth, segmentHeight);
+    }
+
+    if (numbers[number][4]) {
+        drawVerticalSegment(display, segmentFiveX, segmentFiveY, segmentWidth, segmentHeight);
+    }
+
+    if (numbers[number][5]) {
+        drawVerticalSegment(display, segmentSixX, segmentSixY, segmentWidth, segmentHeight);
+    }
+
+    if (numbers[number][6]) {
+        drawHorizontalSegment(display, segmentSevenX, segmentSevenY, segmentWidth, segmentHeight);
+    }
+}
+
+void Screen::drawHorizontalSegment(OLEDDisplay *display, int x, int y, int width, int height)
+{
+    int halfHeight = height / 2;
+
+    // draw central rectangle
+    display->fillRect(x, y, width, height);
+
+    // draw end triangles
+    display->fillTriangle(x, y, x, y + height - 1, x - halfHeight, y + halfHeight);
+
+    display->fillTriangle(x + width, y, x + width + halfHeight, y + halfHeight, x + width, y + height - 1);
+}
+
+void Screen::drawVerticalSegment(OLEDDisplay *display, int x, int y, int width, int height)
+{
+    int halfHeight = height / 2;
+
+    // draw central rectangle
+    display->fillRect(x, y, height, width);
+
+    // draw end triangles
+    display->fillTriangle(x + halfHeight, y - halfHeight, x + height - 1, y, x, y);
+
+    display->fillTriangle(x, y + width, x + height - 1, y + width, x + halfHeight, y + width + halfHeight);
+}
+
+void Screen::drawBluetoothConnectedIcon(OLEDDisplay *display, int16_t x, int16_t y)
+{
+    display->drawFastImage(x, y, 18, 14, bluetoothConnectedIcon);
+}
+
+// Draw an analog clock
+void Screen::drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    drawBattery(display, x, y + 7, imgBattery, powerStatus);
+
+    if (powerStatus->getHasBattery()) {
+        String batteryPercent = String(powerStatus->getBatteryChargePercent()) + "%";
+
+        display->setFont(FONT_SMALL);
+
+        display->drawString(x + 20, y + 2, batteryPercent);
+    }
+
+    if (nimbleBluetooth->isConnected()) {
+        drawBluetoothConnectedIcon(display, display->getWidth() - 18, y + 2);
+    }
+
+    drawWatchFaceToggleButton(display, display->getWidth() - 36, display->getHeight() - 36, screen->digitalWatchFace, 1);
+
+    // clock face center coordinates
+    int16_t centerX = display->getWidth() / 2;
+    int16_t centerY = display->getHeight() / 2;
+
+    // clock face radius
+    int16_t radius = (display->getWidth() / 2) * 0.8;
+
+    // noon (0 deg) coordinates (outermost circle)
+    int16_t noonX = centerX;
+    int16_t noonY = centerY - radius;
+
+    // second hand radius and y coordinate (outermost circle)
+    int16_t secondHandNoonY = noonY + 1;
+
+    // tick mark outer y coordinate; (first nested circle)
+    int16_t tickMarkOuterNoonY = secondHandNoonY;
+
+    // seconds tick mark inner y coordinate; (second nested circle)
+    double secondsTickMarkInnerNoonY = (double)noonY + 8;
+
+    // hours tick mark inner y coordinate; (third nested circle)
+    double hoursTickMarkInnerNoonY = (double)noonY + 16;
+
+    // minute hand y coordinate
+    int16_t minuteHandNoonY = secondsTickMarkInnerNoonY + 4;
+
+    // hour string y coordinate
+    int16_t hourStringNoonY = minuteHandNoonY + 18;
+
+    // hour hand radius and y coordinate
+    int16_t hourHandRadius = radius * 0.55;
+    int16_t hourHandNoonY = centerY - hourHandRadius;
+
+    display->setColor(OLEDDISPLAY_COLOR::WHITE);
+    display->drawCircle(centerX, centerY, radius);
+
+    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // Display local timezone
+    if (rtc_sec > 0) {
+        long hms = rtc_sec % SEC_PER_DAY;
+        hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
+
+        // Tear apart hms into h:m:s
+        int hour = hms / SEC_PER_HOUR;
+        int minute = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
+        int second = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
+
+        hour = hour > 12 ? hour - 12 : hour;
+
+        int16_t degreesPerHour = 30;
+        int16_t degreesPerMinuteOrSecond = 6;
+
+        double hourBaseAngle = hour * degreesPerHour;
+        double hourAngleOffset = ((double)minute / 60) * degreesPerHour;
+        double hourAngle = radians(hourBaseAngle + hourAngleOffset);
+
+        double minuteBaseAngle = minute * degreesPerMinuteOrSecond;
+        double minuteAngleOffset = ((double)second / 60) * degreesPerMinuteOrSecond;
+        double minuteAngle = radians(minuteBaseAngle + minuteAngleOffset);
+
+        double secondAngle = radians(second * degreesPerMinuteOrSecond);
+
+        double hourX = sin(-hourAngle) * (hourHandNoonY - centerY) + noonX;
+        double hourY = cos(-hourAngle) * (hourHandNoonY - centerY) + centerY;
+
+        double minuteX = sin(-minuteAngle) * (minuteHandNoonY - centerY) + noonX;
+        double minuteY = cos(-minuteAngle) * (minuteHandNoonY - centerY) + centerY;
+
+        double secondX = sin(-secondAngle) * (secondHandNoonY - centerY) + noonX;
+        double secondY = cos(-secondAngle) * (secondHandNoonY - centerY) + centerY;
+
+        display->setFont(FONT_MEDIUM);
+
+        // draw minute and hour tick marks and hour numbers
+        for (uint16_t angle = 0; angle < 360; angle += 6) {
+            double angleInRadians = radians(angle);
+
+            double sineAngleInRadians = sin(-angleInRadians);
+            double cosineAngleInRadians = cos(-angleInRadians);
+
+            double endX = sineAngleInRadians * (tickMarkOuterNoonY - centerY) + noonX;
+            double endY = cosineAngleInRadians * (tickMarkOuterNoonY - centerY) + centerY;
+
+            if (angle % degreesPerHour == 0) {
+                double startX = sineAngleInRadians * (hoursTickMarkInnerNoonY - centerY) + noonX;
+                double startY = cosineAngleInRadians * (hoursTickMarkInnerNoonY - centerY) + centerY;
+
+                // draw hour tick mark
+                display->drawLine(startX, startY, endX, endY);
+
+                static char buffer[2];
+
+                uint8_t hourInt = (angle / 30);
+
+                if (hourInt == 0) {
+                    hourInt = 12;
+                }
+
+                // hour number x offset needs to be adjusted for some cases
+                int8_t hourStringXOffset;
+                int8_t hourStringYOffset = 13;
+
+                switch (hourInt) {
+                case 3:
+                    hourStringXOffset = 5;
+                    break;
+                case 9:
+                    hourStringXOffset = 7;
+                    break;
+                case 10:
+                case 11:
+                    hourStringXOffset = 8;
+                    break;
+                case 12:
+                    hourStringXOffset = 13;
+                    break;
+                default:
+                    hourStringXOffset = 6;
+                    break;
+                }
+
+                double hourStringX = (sineAngleInRadians * (hourStringNoonY - centerY) + noonX) - hourStringXOffset;
+                double hourStringY = (cosineAngleInRadians * (hourStringNoonY - centerY) + centerY) - hourStringYOffset;
+
+                // draw hour number
+                display->drawStringf(hourStringX, hourStringY, buffer, "%d", hourInt);
+            }
+
+            if (angle % degreesPerMinuteOrSecond == 0) {
+                double startX = sineAngleInRadians * (secondsTickMarkInnerNoonY - centerY) + noonX;
+                double startY = cosineAngleInRadians * (secondsTickMarkInnerNoonY - centerY) + centerY;
+
+                // draw minute tick mark
+                display->drawLine(startX, startY, endX, endY);
+            }
+        }
+
+        // draw hour hand
+        display->drawLine(centerX, centerY, hourX, hourY);
+
+        // draw minute hand
+        display->drawLine(centerX, centerY, minuteX, minuteY);
+
+        // draw second hand
+        display->drawLine(centerX, centerY, secondX, secondY);
+    }
+}
+
+#endif
+
 // Get an absolute time from "seconds ago" info. Returns false if no valid timestamp possible
 bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int32_t *daysAgo)
 {
@@ -542,8 +1002,66 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     }
 
     display->setColor(WHITE);
+#ifndef EXCLUDE_EMOJI
+    if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\U0001F44D") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - thumbs_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - thumbs_height) / 2 + 2 + 5, thumbs_width, thumbs_height,
+                         thumbup);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\U0001F44E") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - thumbs_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - thumbs_height) / 2 + 2 + 5, thumbs_width, thumbs_height,
+                         thumbdown);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"❓") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - question_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - question_height) / 2 + 2 + 5, question_width, question_height,
+                         question);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"‼️") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - bang_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - bang_height) / 2 + 2 + 5,
+                         bang_width, bang_height, bang);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\U0001F4A9") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - poo_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - poo_height) / 2 + 2 + 5,
+                         poo_width, poo_height, poo);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\xf0\x9f\xa4\xa3") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - haha_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - haha_height) / 2 + 2 + 5,
+                         haha_width, haha_height, haha);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\U0001F44B") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - wave_icon_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - wave_icon_height) / 2 + 2 + 5, wave_icon_width,
+                         wave_icon_height, wave_icon);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\U0001F920") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - cowboy_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - cowboy_height) / 2 + 2 + 5, cowboy_width, cowboy_height,
+                         cowboy);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\U0001F42D") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - deadmau5_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - deadmau5_height) / 2 + 2 + 5, deadmau5_width, deadmau5_height,
+                         deadmau5);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\xE2\x98\x80\xEF\xB8\x8F") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - sun_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - sun_height) / 2 + 2 + 5,
+                         sun_width, sun_height, sun);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\u2614") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - rain_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - rain_height) / 2 + 2 + 10,
+                         rain_width, rain_height, rain);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"☁️") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - cloud_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - cloud_height) / 2 + 2 + 5, cloud_width, cloud_height, cloud);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"🌫️") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - fog_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - fog_height) / 2 + 2 + 5,
+                         fog_width, fog_height, fog);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\xf0\x9f\x98\x88") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - devil_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - devil_height) / 2 + 2 + 5, devil_width, devil_height, devil);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"♥️") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - heart_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - heart_height) / 2 + 2 + 5, heart_width, heart_height, heart);
+    } else {
+        snprintf(tempBuf, sizeof(tempBuf), "%s", mp.decoded.payload.bytes);
+        display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), tempBuf);
+    }
+#else
     snprintf(tempBuf, sizeof(tempBuf), "%s", mp.decoded.payload.bytes);
     display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), tempBuf);
+#endif
 }
 
 /// Draw the last waypoint we received
@@ -604,28 +1122,6 @@ static void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char *
         }
         f++;
     }
-}
-
-// Draw power bars or a charging indicator on an image of a battery, determined by battery charge voltage or percentage.
-static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *imgBuffer, const PowerStatus *powerStatus)
-{
-    static const uint8_t powerBar[3] = {0x81, 0xBD, 0xBD};
-    static const uint8_t lightning[8] = {0xA1, 0xA1, 0xA5, 0xAD, 0xB5, 0xA5, 0x85, 0x85};
-    // Clear the bar area on the battery image
-    for (int i = 1; i < 14; i++) {
-        imgBuffer[i] = 0x81;
-    }
-    // If charging, draw a charging indicator
-    if (powerStatus->getIsCharging()) {
-        memcpy(imgBuffer + 3, lightning, 8);
-        // If not charging, Draw power bars
-    } else {
-        for (int i = 0; i < 4; i++) {
-            if (powerStatus->getBatteryChargePercent() >= 25 * i)
-                memcpy(imgBuffer + 1 + (i * 3), powerBar, 3);
-        }
-    }
-    display->drawFastImage(x, y, 16, 8, imgBuffer);
 }
 
 // Draw nodes status
@@ -963,7 +1459,13 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     const char *username = node->has_user ? node->user.long_name : "Unknown Name";
 
     static char signalStr[20];
-    snprintf(signalStr, sizeof(signalStr), "Signal: %d%%", clamp((int)((node->snr + 10) * 5), 0, 100));
+
+    // section here to choose whether to display hops away rather than signal strength if more than 0 hops away.
+    if (node->hops_away > 0) {
+        snprintf(signalStr, sizeof(signalStr), "Hops Away: %d", node->hops_away);
+    } else {
+        snprintf(signalStr, sizeof(signalStr), "Signal: %d%%", clamp((int)((node->snr + 10) * 5), 0, 100));
+    }
 
     uint32_t agoSecs = sinceLastSeen(node);
     static char lastStr[20];
@@ -1319,6 +1821,10 @@ int32_t Screen::runOnce()
         return RUN_SAME;
     }
 
+    if (displayHeight == 0) {
+        displayHeight = dispdev->getHeight();
+    }
+
     // Show boot screen for first logo_timeout seconds, then switch to normal operation.
     // serialSinceMsec adjusts for additional serial wait time during nRF52 bootup
     static bool showingBootScreen = true;
@@ -1587,6 +2093,10 @@ void Screen::setFrames()
     // If we have a critical fault, show it first
     if (error_code)
         normalFrames[numframes++] = drawCriticalFaultFrame;
+
+#ifdef T_WATCH_S3
+    normalFrames[numframes++] = screen->digitalWatchFace ? &Screen::drawDigitalClockFrame : &Screen::drawAnalogClockFrame;
+#endif
 
     // If we have a text message - show it next, unless it's a phone message and we aren't using any special modules
     if (devicestate.has_rx_text_message && shouldDrawMessage(&devicestate.rx_text_message)) {
@@ -2168,6 +2678,21 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 
 int Screen::handleInputEvent(const InputEvent *event)
 {
+
+#ifdef T_WATCH_S3
+    // For the T-Watch, intercept touches to the 'toggle digital/analog watch face' button
+    uint8_t watchFaceFrame = error_code ? 1 : 0;
+
+    if (this->ui->getUiState()->currentFrame == watchFaceFrame && event->touchX >= 204 && event->touchX <= 240 &&
+        event->touchY >= 204 && event->touchY <= 240) {
+        screen->digitalWatchFace = !screen->digitalWatchFace;
+
+        setFrames();
+
+        return 0;
+    }
+#endif
+
     if (showingNormalScreen && moduleFrames.size() == 0) {
         // LOG_DEBUG("Screen::handleInputEvent from %s\n", event->source);
         if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
