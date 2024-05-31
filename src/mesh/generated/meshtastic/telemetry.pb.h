@@ -58,11 +58,7 @@ typedef enum _meshtastic_TelemetrySensorType {
     meshtastic_TelemetrySensorType_LTR390UV = 21,
     /* AMS TSL25911FN RGB Light Sensor */
     meshtastic_TelemetrySensorType_TSL25911FN = 22,
-<<<<<<< trackerd
     /* AHT10/20 Temperature Sensor */
-=======
-    /* AHT10 Integrated temperature and humidity sensor */
->>>>>>> master
     meshtastic_TelemetrySensorType_AHT10 = 23
 } meshtastic_TelemetrySensorType;
 
