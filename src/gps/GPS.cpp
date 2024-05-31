@@ -1322,6 +1322,14 @@ GPS *GPS::createGps()
 #if defined(GPS_UC6580)
         _serial_gps->updateBaudRate(115200);
 #endif
+#if defined(GPS_L76K)
+        /*
+         * L76K default baudrate is 9600
+         * https://www.waveshare.com/wiki/L76K_GPS_Module
+         */
+
+        _serial_gps->updateBaudRate(9600);
+#endif
     }
     return new_gps;
 }
