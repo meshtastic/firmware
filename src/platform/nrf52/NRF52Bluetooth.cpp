@@ -215,6 +215,19 @@ void NRF52Bluetooth::shutdown()
     Bluefruit.Advertising.stop();
 }
 
+void NRF52Bluetooth::startDisabled()
+{
+    LOG_DEBUG("Initializing NRF52 Bluetooth, then disabling. (workaround)\n");
+
+    // Setup Bluetooth
+    nrf52Bluetooth = new NRF52Bluetooth();
+    nrf52Bluetooth->setup();
+
+    // Shutdown bluetooth for minimum power draw
+    Bluefruit.Advertising.stop();
+    Bluefruit.setTxPower(0); // Minimum power
+}
+
 bool NRF52Bluetooth::isConnected()
 {
     return Bluefruit.connected(connectionHandle);

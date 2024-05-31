@@ -68,7 +68,18 @@ static const bool useSoftDevice = true; // Set to false for easier debugging
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
 void setBluetoothEnable(bool enable)
 {
-    if (enable && config.bluetooth.enabled) {
+    // Workaround: if bluetooth disabled, init then disable advertising & reduce power
+    if (!config.bluetooth.enabled) {
+        static bool initialized = false;
+        if (!initialized) {
+            nrf52Bluetooth->startDisabled();
+            initBrownout();
+            initialized = true;
+        }
+        return;
+    }
+
+    if (enable) {
         if (!useSoftDevice) {
             LOG_INFO("DISABLING NRF52 BLUETOOTH WHILE DEBUGGING\n");
         } else {
@@ -90,6 +101,7 @@ void setBluetoothEnable(bool enable)
     }
 }
 #else
+#warning NRF52 "Bluetooth disable" workaround does not apply to builds with MESHTASTIC_EXCLUDE_BLUETOOTH
 void setBluetoothEnable(bool enable) {}
 #endif
 /**
