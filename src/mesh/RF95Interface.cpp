@@ -8,7 +8,10 @@
 #include "PortduinoGlue.h"
 #endif
 
-#define MAX_POWER 20
+#ifndef RF95_MAX_POWER
+#define RF95_MAX_POWER 20
+#endif
+
 // if we use 20 we are limited to 1% duty cycle or hw might overheat.  For continuous operation set a limit of 17
 // In theory up to 27 dBm is possible, but the modules installed in most radios can cope with a max of 20.  So BIG WARNING
 // if you set power to something higher than 17 or 20 you might fry your board.
@@ -49,8 +52,8 @@ bool RF95Interface::init()
 {
     RadioLibInterface::init();
 
-    if (power > MAX_POWER) // This chip has lower power limits than some
-        power = MAX_POWER;
+    if (power > RF95_MAX_POWER) // This chip has lower power limits than some
+        power = RF95_MAX_POWER;
 
     limitPower();
 
@@ -59,6 +62,13 @@ bool RF95Interface::init()
 #ifdef RF95_TCXO
     pinMode(RF95_TCXO, OUTPUT);
     digitalWrite(RF95_TCXO, 1);
+#endif
+
+    // enable PA
+#ifdef RF95_PA_EN
+#if defined(RF95_PA_DAC_EN)
+    dacWrite(RF95_PA_EN, RF95_PA_LEVEL);
+#endif
 #endif
 
     /*
@@ -146,10 +156,14 @@ bool RF95Interface::reconfigure()
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
-    if (power > MAX_POWER) // This chip has lower power limits than some
-        power = MAX_POWER;
+    if (power > RF95_MAX_POWER) // This chip has lower power limits than some
+        power = RF95_MAX_POWER;
 
+#ifdef USE_RF95_RFO
+    err = lora->setOutputPower(power, true);
+#else
     err = lora->setOutputPower(power);
+#endif
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
