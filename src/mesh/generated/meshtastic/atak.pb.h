@@ -73,6 +73,9 @@ typedef struct _meshtastic_GeoChat {
     /* Uid recipient of the message */
     bool has_to;
     char to[120];
+    /* Callsign of the recipient for the message */
+    bool has_to_callsign;
+    char to_callsign[120];
 } meshtastic_GeoChat;
 
 /* ATAK Group
@@ -164,13 +167,13 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_TAKPacket_init_default        {0, false, meshtastic_Contact_init_default, false, meshtastic_Group_init_default, false, meshtastic_Status_init_default, 0, {meshtastic_PLI_init_default}}
-#define meshtastic_GeoChat_init_default          {"", false, ""}
+#define meshtastic_GeoChat_init_default          {"", false, "", false, ""}
 #define meshtastic_Group_init_default            {_meshtastic_MemberRole_MIN, _meshtastic_Team_MIN}
 #define meshtastic_Status_init_default           {0}
 #define meshtastic_Contact_init_default          {"", ""}
 #define meshtastic_PLI_init_default              {0, 0, 0, 0, 0}
 #define meshtastic_TAKPacket_init_zero           {0, false, meshtastic_Contact_init_zero, false, meshtastic_Group_init_zero, false, meshtastic_Status_init_zero, 0, {meshtastic_PLI_init_zero}}
-#define meshtastic_GeoChat_init_zero             {"", false, ""}
+#define meshtastic_GeoChat_init_zero             {"", false, "", false, ""}
 #define meshtastic_Group_init_zero               {_meshtastic_MemberRole_MIN, _meshtastic_Team_MIN}
 #define meshtastic_Status_init_zero              {0}
 #define meshtastic_Contact_init_zero             {"", ""}
@@ -179,6 +182,7 @@ extern "C" {
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_GeoChat_message_tag           1
 #define meshtastic_GeoChat_to_tag                2
+#define meshtastic_GeoChat_to_callsign_tag       3
 #define meshtastic_Group_role_tag                1
 #define meshtastic_Group_team_tag                2
 #define meshtastic_Status_battery_tag            1
@@ -214,7 +218,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,chat,payload_variant.chat), 
 
 #define meshtastic_GeoChat_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   message,           1) \
-X(a, STATIC,   OPTIONAL, STRING,   to,                2)
+X(a, STATIC,   OPTIONAL, STRING,   to,                2) \
+X(a, STATIC,   OPTIONAL, STRING,   to_callsign,       3)
 #define meshtastic_GeoChat_CALLBACK NULL
 #define meshtastic_GeoChat_DEFAULT NULL
 
@@ -262,11 +267,11 @@ extern const pb_msgdesc_t meshtastic_PLI_msg;
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_ATAK_PB_H_MAX_SIZE meshtastic_TAKPacket_size
 #define meshtastic_Contact_size                  242
-#define meshtastic_GeoChat_size                  323
+#define meshtastic_GeoChat_size                  444
 #define meshtastic_Group_size                    4
 #define meshtastic_PLI_size                      31
 #define meshtastic_Status_size                   3
-#define meshtastic_TAKPacket_size                584
+#define meshtastic_TAKPacket_size                705
 
 #ifdef __cplusplus
 } /* extern "C" */

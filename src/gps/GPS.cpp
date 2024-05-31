@@ -472,6 +472,9 @@ bool GPS::setup()
             // Turn off GSV messages, we don't really care about which and where the sats are, maybe someday.
             _serial_gps->write("$CFGMSG,0,3,0\r\n");
             delay(250);
+            // Turn off GSA messages, TinyGPS++ doesn't use this message.
+            _serial_gps->write("$CFGMSG,0,2,0\r\n");
+            delay(250);
             // Turn off NOTICE __TXT messages, these may provide Unicore some info but we don't care.
             _serial_gps->write("$CFGMSG,6,0,0\r\n");
             delay(250);

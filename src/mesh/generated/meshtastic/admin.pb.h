@@ -75,7 +75,7 @@ typedef struct _meshtastic_HamParameters {
  Ensure your radio is capable of operating of the selected frequency before setting this. */
     float frequency;
     /* Optional short name of user */
-    char short_name[6];
+    char short_name[5];
 } meshtastic_HamParameters;
 
 /* Response envelope for node_remote_hardware_pins */
@@ -342,7 +342,7 @@ extern const pb_msgdesc_t meshtastic_NodeRemoteHardwarePinsResponse_msg;
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_ADMIN_PB_H_MAX_SIZE meshtastic_AdminMessage_size
 #define meshtastic_AdminMessage_size             500
-#define meshtastic_HamParameters_size            32
+#define meshtastic_HamParameters_size            31
 #define meshtastic_NodeRemoteHardwarePinsResponse_size 496
 
 #ifdef __cplusplus
