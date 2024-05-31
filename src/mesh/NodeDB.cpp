@@ -292,6 +292,9 @@ void NodeDB::installDefaultConfig()
          meshtastic_Config_PositionConfig_PositionFlags_SPEED | meshtastic_Config_PositionConfig_PositionFlags_HEADING |
          meshtastic_Config_PositionConfig_PositionFlags_DOP | meshtastic_Config_PositionConfig_PositionFlags_SATINVIEW);
 
+#ifdef RADIOMASTER_900_BANDIT_NANO
+    config.display.flip_screen = true;
+#endif
 #ifdef T_WATCH_S3
     config.display.screen_on_secs = 30;
     config.display.wake_on_tap_or_motion = true;
