@@ -20,16 +20,34 @@
 #define LORA_DIO1 33
 #define LORA_DIO2 32 // Not really used
 
-#define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+#undef BAT_MEASURE_ADC_UNIT
+#define BATTERY_PIN 35      // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
+#define ADC_MULTIPLIER 1.34 //  tracked resistance divider is 100k+470k, so it can not fillfull well on esp32 adc
+#define ADC_CHANNEL ADC1_GPIO35_CHANNEL
+#define ADC_ATTENUATION ADC_ATTEN_DB_12 // lower dB for high resistance voltage divider
 
-// Battery
-// The battery sense is hooked to pin A0 (4)
-// it is defined in the anlaolgue pin section of this file
-// and has 12 bit resolution
-// #define BATTERY_SENSE_SAMPLES 15 // Set the number of samples, It has an effect of increasing sensitivity.
-#define BATTERY_SENSE_RESOLUTION_BITS 12
-#define BATTERY_SENSE_RESOLUTION 4096.0
-#undef AREF_VOLTAGE
-#define AREF_VOLTAGE 3.0
-#define VBAT_AR_INTERNAL AR_INTERNAL_3_0
-#define ADC_MULTIPLIER (2.0F)
+#undef GPS_RX_PIN
+#undef GPS_TX_PIN
+#undef PIN_GPS_PPS
+
+#define PIN_GPS_EN 12
+#define GPS_EN_ACTIVE 1
+
+#define GPS_TX_PIN 10
+#define GPS_RX_PIN 9
+
+#define PIN_GPS_RESET 25
+// #define PIN_GPS_REINIT 25
+#define GPS_RESET_MODE 1
+
+#define GPS_L76K
+
+#undef PIN_LED1
+#undef PIN_LED2
+#undef PIN_LED3
+
+#define PIN_LED1 13
+#define PIN_LED2 15
+#define PIN_LED3 2
+
+#define ledOff(pin) pinMode(pin, INPUT)
