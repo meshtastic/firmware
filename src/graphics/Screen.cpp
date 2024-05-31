@@ -599,9 +599,8 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     // the max length of this buffer is much longer than we can possibly print
     static char tempBuf[237];
 
-    const meshtastic_Message msg = nodeDB->loadMessage(nodeDB->lastCategorySaved, 0);
-    // const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
-    // meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
+    const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
 
     // Demo for drawStringMaxWidth:
     // with the third parameter you can define the width after which words will
@@ -613,20 +612,21 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
         display->setColor(BLACK);
     }
 
-    uint32_t seconds = sinceReceived(&msg);
+    uint32_t seconds = sinceReceived(&mp);
     uint32_t minutes = seconds / 60;
     uint32_t hours = minutes / 60;
     uint32_t days = hours / 24;
 
     if (config.display.heading_bold) {
         display->drawStringf(1 + x, 0 + y, tempBuf, "%s ago from %s",
-                             screen->drawTimeDelta(days, hours, minutes, seconds).c_str(), msg.sender_short_name);
+                             screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
+                             (node && node->has_user) ? node->user.short_name : "???");
     }
     display->drawStringf(0 + x, 0 + y, tempBuf, "%s ago from %s", screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
-                         msg.sender_short_name);
+                         (node && node->has_user) ? node->user.short_name : "???");
 
     display->setColor(WHITE);
-    snprintf(tempBuf, sizeof(tempBuf), "%s", msg.content);
+    snprintf(tempBuf, sizeof(tempBuf), "%s", mp.decoded.payload.bytes);
     display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), tempBuf);
 }
 #endif
@@ -1655,7 +1655,7 @@ void Screen::setFrames()
     normalFrames[numframes++] = drawMessageLogFrame;
 #else
     // If we have a text message - show it next
-    if (nodeDB->messageFileList->size() > 0) {
+    if (devicestate.has_rx_text_message && shouldDrawMessage(&devicestate.rx_text_message)) {
         normalFrames[numframes++] = drawTextMessageFrame;
     }
 #endif

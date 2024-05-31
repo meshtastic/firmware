@@ -49,6 +49,12 @@
 #include <utility/bonding.h>
 #endif
 
+#ifdef USE_PERSISTENT_MSG
+using namespace concurrency;
+
+static Periodic *saveMessagesToDiskPeriodic;
+#endif
+
 NodeDB *nodeDB = nullptr;
 
 // we have plenty of ram so statically alloc this tempbuf (for now)
@@ -100,6 +106,51 @@ meshtastic_CriticalErrorCode error_code =
 uint32_t error_address = 0;
 
 static uint8_t ourMacAddr[6];
+
+#ifdef USE_PERSISTENT_MSG
+static int32_t saveMessagesToDisk()
+{
+    LockGuard guard(&nodeDB->saveMessageBufferLock);
+
+    for (uint8_t i = 0; i < nodeDB->CATEGORY_COUNT; i++) {
+        uint8_t messageCount = nodeDB->saveMessageBuffer[i].size();
+
+        if (messageCount == 0)
+            continue;
+
+        size_t bufferSize = meshtastic_Message_size * messageCount;
+        uint8_t *buffer = new uint8_t[bufferSize];
+        pb_ostream_t stream = pb_ostream_from_buffer(buffer, bufferSize);
+
+        for (uint8_t j = 0; j < messageCount; j++) {
+            auto &messages = nodeDB->saveMessageBuffer[i];
+
+            if (!pb_encode(&stream, &meshtastic_Message_msg, &messages[j])) {
+                LOG_ERROR("Could not encode protobuf: ");
+                LOG_ERROR(PB_GET_ERROR(&stream));
+                LOG_ERROR("\n");
+
+                delete[] buffer;
+                return 30000;
+            }
+        }
+
+        std::string path = "/msgs/" + std::to_string(i);
+        File file = FSCom.open(path.c_str(), FILE_APPEND);
+        size_t bytesWritten = file.write(buffer, bufferSize);
+        if (bytesWritten != bufferSize) {
+            LOG_ERROR("Could not write all data to file. Wrote %d out of %d bytes\n", bytesWritten, bufferSize);
+        }
+
+        file.close();
+        delete[] buffer;
+
+        nodeDB->saveMessageBuffer[i].clear();
+    }
+
+    return 30000;
+}
+#endif
 
 NodeDB::NodeDB()
 {
@@ -160,8 +211,9 @@ NodeDB::NodeDB()
 
 #ifdef USE_PERSISTENT_MSG
     initSavedMessages();
-#else
-    clearSavedMessages();
+    // clearSavedMessages();
+
+    saveMessagesToDiskPeriodic = new Periodic("SaveMessagesToDisk", saveMessagesToDisk);
 #endif
 }
 
@@ -732,13 +784,10 @@ void NodeDB::saveDeviceStateToDisk()
               &devicestate);
 }
 
+#ifdef USE_PERSISTENT_MSG
 void NodeDB::initSavedMessages()
 {
     FSCom.mkdir("/msgs");
-    for (int category = 0; category < CATEGORY_COUNT; category++)
-        FSCom.mkdir(("/msgs/" + std::to_string(category)).c_str());
-
-    updateMessageFileList();
 
     updateMessageBounds();
 }
@@ -764,7 +813,7 @@ bool NodeDB::messageIsDirectMessage(const meshtastic_MeshPacket &mp)
     return false;
 }
 
-void NodeDB::saveMessageToDisk(const meshtastic_MeshPacket &mp)
+void NodeDB::addMessage(const meshtastic_MeshPacket &mp)
 {
     auto *msg = new meshtastic_Message();
     auto senderNode = nodeDB->getMeshNode(getFrom(&mp));
@@ -776,87 +825,36 @@ void NodeDB::saveMessageToDisk(const meshtastic_MeshPacket &mp)
     snprintf(msg->content, sizeof(msg->content), "%s", mp.decoded.payload.bytes);
     msg->rx_time = mp.rx_time;
     if (nodeDB->messageIsDirectMessage(mp))
-        msg->category = nodeDB->CATEGORY_COUNT - 1;
+        msg->category = CATEGORY_COUNT - 1;
     else
         msg->category = mp.channel;
 
-    saveMessageToDisk(*msg);
+    addMessage(*msg);
     delete msg;
 }
 
-bool NodeDB::deleteOldestMessage()
-{
-    meshtastic_Message *oldestMessage = nullptr;
-    int oldestMessageIndex = -1;
-    for (uint8_t i = 0; i < CATEGORY_COUNT; i++) {
-        if (oldestMessageIndices[i] == std::numeric_limits<int>::max())
-            continue;
-
-        meshtastic_Message currentMessage = loadMessage(i, oldestMessageIndices[i]);
-        if (oldestMessage == nullptr || currentMessage.rx_time < oldestMessage->rx_time) {
-            oldestMessage = &currentMessage;
-            oldestMessageIndex = oldestMessageIndices[i];
-        }
-    }
-
-    if (oldestMessage == nullptr) {
-        return false;
-    }
-
-    LOG_WARN("Storage full! Erasing oldest message with category %d and index %d\n", oldestMessage->category, oldestMessageIndex);
-
-    bool deleted =
-        FSCom.remove(("/msgs/" + std::to_string(oldestMessage->category) + "/" + std::to_string(oldestMessageIndex)).c_str());
-
-    if (!deleted) {
-        LOG_ERROR("Message deletion failed\n");
-        return false;
-    }
-
-    messageCache[oldestMessage->category].erase(*oldestMessage);
-
-    // Reset indicies of there are no messages left in storage
-    if (oldestMessageIndices[oldestMessage->category] == newestMessageIndices[oldestMessage->category]) {
-        newestMessageIndices[oldestMessage->category] = std::numeric_limits<int>::min();
-        oldestMessageIndices[oldestMessage->category] = std::numeric_limits<int>::max();
-    } else {
-        oldestMessageIndices[oldestMessage->category]++;
-    }
-
-    return true;
-}
-
-void NodeDB::saveMessageToDisk(const meshtastic_Message &msg)
+void NodeDB::addMessage(const meshtastic_Message &msg)
 {
     LOG_DEBUG("Saving message to disk with category %d\n", msg.category);
 
-#ifdef USE_PERSISTENT_MSG
     // Delete oldest messages if storage below a threshold
-    const uint16_t STORAGE_THRESHOLD = 8192 * 2 + 1;
-    while (FSCom.totalBytes() - FSCom.usedBytes() < STORAGE_THRESHOLD) {
-        if (!deleteOldestMessage()) {
-            LOG_CRIT("Not enough free storage to save any messages to disk\n");
-            // TODO: Warn the user on the screen
-            return;
-        }
+    const uint16_t STORAGE_THRESHOLD = FSCom.totalBytes() / 2 + 1;
+    if (FSCom.totalBytes() - FSCom.usedBytes() < STORAGE_THRESHOLD) {
+        LOG_CRIT("Not enough free storage to save any messages to disk. Deleting all saved messages\n");
+
+        clearSavedMessages();
     }
-#else
-    // Maintain only one latest message saved only
-    deleteOldestMessage();
-#endif
 
     // Initialize indices if first message stored in category
     if (oldestMessageIndices[msg.category] == std::numeric_limits<int>::max()) {
         oldestMessageIndices[msg.category] = 0;
-        newestMessageIndices[msg.category] = -1;
+        newestMessageIndices[msg.category] = 0;
+    } else {
+        newestMessageIndices[msg.category]++;
     }
 
-    newestMessageIndices[msg.category]++;
-    std::string path = "/msgs/" + std::to_string(msg.category) + "/" + std::to_string(newestMessageIndices[msg.category]);
-
-    saveProto(path.c_str(), meshtastic_Message_size, &meshtastic_Message_msg, &msg);
-
-    messageFileList[msg.category].push_back(path.substr(path.rfind("/") + 1));
+    LockGuard guard(&saveMessageBufferLock);
+    saveMessageBuffer[msg.category].push_back(msg);
 
     lastCategorySaved = msg.category;
 }
@@ -870,50 +868,18 @@ void NodeDB::updateMessageBounds()
     }
 
     for (int category = 0; category < CATEGORY_COUNT; category++) {
-        std::string oldestFileName;
-        std::string newestFileName;
+        std::string path = "/msgs/" + std::to_string(category);
 
-        std::regex pattern("^([0-9]+)$");
-
-        if (messageFileList[category].size() == 0)
+        if (!FSCom.exists(path.c_str()))
             continue;
 
-        for (const std::string &fileName : messageFileList[category]) {
-            std::cmatch match;
-            if (std::regex_search(fileName.c_str(), match, pattern) && match.size() > 1) {
-                uint16_t messageIndex = std::stoi(match.str(1));
-                if (messageIndex < oldestMessageIndices[category]) {
-                    oldestMessageIndices[category] = messageIndex;
-                    oldestFileName = fileName;
-                }
-                if (messageIndex > newestMessageIndices[category]) {
-                    newestMessageIndices[category] = messageIndex;
-                    newestFileName = fileName;
-                }
-            }
-        }
-
-        LOG_DEBUG("Message bounds for category %d set to %d and %d", category, oldestMessageIndices[category],
-                  newestMessageIndices[category]);
-    }
-}
-
-void NodeDB::updateMessageFileList()
-{
-    for (int category = 0; category < CATEGORY_COUNT; category++) {
-        messageFileList[category].clear();
-
-        File directory = FSCom.open(("/msgs/" + std::to_string(category)).c_str());
-
-        File file = directory.openNextFile();
-        while (file) {
-            messageFileList[category].push_back(file.name());
-
-            file = directory.openNextFile();
-        }
-
+        File file = FSCom.open(path.c_str(), FILE_O_READ);
+        newestMessageIndices[category] = file.size() / meshtastic_Message_size - 1;
+        oldestMessageIndices[category] = 0;
         file.close();
-        directory.close();
+
+        LOG_DEBUG("Message bounds for category %d set to %d and %d\n", category, oldestMessageIndices[category],
+                  newestMessageIndices[category]);
     }
 }
 
@@ -953,16 +919,39 @@ const meshtastic_Message NodeDB::loadMessage(uint16_t category, uint16_t index)
     }
 
     // Load from disk if messsage not found in cache
-    std::string path = "/msgs/" + std::to_string(category) + "/" + std::to_string(index);
+    std::string path = "/msgs/" + std::to_string(category);
 
+    if (!FSCom.exists(path.c_str())) {
+        meshtastic_Message zero_message = meshtastic_Message_init_zero;
+        return zero_message;
+    }
+
+    File file = FSCom.open(path.c_str(), FILE_O_READ);
+    if (!file.seek(meshtastic_Message_size * index, SeekSet)) {
+        LOG_ERROR("Could not seek file\n", index, category);
+    }
+
+    uint8_t buffer[meshtastic_Message_size];
+    if (!file.read(buffer, sizeof(buffer))) {
+        LOG_ERROR("Could not read file\n");
+    }
+    file.close();
+
+    pb_istream_t stream = pb_istream_from_buffer(buffer, meshtastic_Message_size);
     meshtastic_Message msg;
-    loadProto(path.c_str(), meshtastic_Message_size, sizeof(meshtastic_Message), &meshtastic_Message_msg, &msg);
+    memset(&msg, 0, sizeof(msg));
+    if (!pb_decode(&stream, &meshtastic_Message_msg, &msg)) {
+        LOG_ERROR("Could not decode file: ");
+        LOG_ERROR(PB_GET_ERROR(&stream));
+        LOG_ERROR("\n");
+    }
 
     // Put message in cache
     categoryCache.insert(msg);
 
     return msg;
 }
+#endif
 
 void NodeDB::saveToDisk(int saveWhat)
 {
@@ -1038,6 +1027,7 @@ uint32_t sinceReceived(const meshtastic_MeshPacket *p)
     return delta;
 }
 
+#ifdef USE_PERSISTENT_MSG
 uint32_t sinceReceived(const meshtastic_Message *msg)
 {
     uint32_t now = getTime();
@@ -1048,6 +1038,7 @@ uint32_t sinceReceived(const meshtastic_Message *msg)
 
     return delta;
 }
+#endif
 
 #define NUM_ONLINE_SECS (60 * 60 * 2) // 2 hrs to consider someone offline
 

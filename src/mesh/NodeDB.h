@@ -12,6 +12,10 @@
 #include "mesh/generated/meshtastic/mesh.pb.h" // For CriticalErrorCode
 #include "mesh/generated/meshtastic/message.pb.h"
 
+#ifdef USE_PERSISTENT_MSG
+#include "concurrency/LockGuard.h"
+#endif
+
 /*
 DeviceState versions used to be defined in the .proto file but really only this function cares.  So changed to a
 #define here.
@@ -78,10 +82,10 @@ class NodeDB
     void saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS),
         saveChannelsToDisk(), saveDeviceStateToDisk();
 
+#ifdef USE_PERSISTENT_MSG
     void initSavedMessages();
-    bool deleteOldestMessage();
-    void saveMessageToDisk(const meshtastic_MeshPacket &mp);
-    void saveMessageToDisk(const meshtastic_Message &msg);
+    void addMessage(const meshtastic_MeshPacket &mp);
+    void addMessage(const meshtastic_Message &msg);
     uint8_t lastCategorySaved = 0;
     void clearSavedMessages();
     const meshtastic_Message loadMessage(uint16_t category, uint16_t index);
@@ -100,8 +104,9 @@ class NodeDB
     int *oldestMessageIndices = new int[CATEGORY_COUNT];
     void updateMessageBounds();
 
-    std::vector<std::string> *messageFileList = new std::vector<std::string>[CATEGORY_COUNT];
-    void updateMessageFileList();
+    std::vector<meshtastic_Message> *saveMessageBuffer = new std::vector<meshtastic_Message>[CATEGORY_COUNT];
+    concurrency::Lock saveMessageBufferLock;
+#endif
 
     /** Reinit radio config if needed, because either:
      * a) sometimes a buggy android app might send us bogus settings or

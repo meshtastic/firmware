@@ -291,7 +291,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
     // Don't waste the one message you can see on your own message if not using
     // persistent message feature
 #ifdef USE_PERSISTENT_MSG
-    nodeDB->saveMessageToDisk(*p);
+    nodeDB->addMessage(*p);
 #endif
 
     service.sendToMesh(
