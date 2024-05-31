@@ -225,7 +225,7 @@ void NRF52Bluetooth::startDisabled()
 
     // Shutdown bluetooth for minimum power draw
     Bluefruit.Advertising.stop();
-    Bluefruit.setTxPower(0); // Minimum power
+    Bluefruit.setTxPower(-40); // Minimum power
 }
 
 bool NRF52Bluetooth::isConnected()
