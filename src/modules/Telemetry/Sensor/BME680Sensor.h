@@ -8,7 +8,9 @@
 
 #define STATE_SAVE_PERIOD UINT32_C(360 * 60 * 1000) // That's 6 hours worth of millis()
 
-#include "bme680_iaq_33v_3s_4d/bsec_iaq.h"
+const uint8_t bsec_config[] = {
+#include "config/bme680/bme680_iaq_33v_3s_4d/bsec_iaq.txt"
+};
 
 class BME680Sensor : public TelemetrySensor
 {
