@@ -46,6 +46,7 @@ class ScanI2C
         RCWL9620,
         NCP5623,
         TSL2591,
+        OPT3001,
         AHT10,
     } DeviceType;
 
