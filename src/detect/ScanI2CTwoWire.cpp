@@ -302,6 +302,9 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                 if (registerValue == 0x11a2) {
                     type = SHT4X;
                     LOG_INFO("SHT4X sensor found\n");
+                } else if (getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x7E), 2) == 0x5449) {
+                    type = OPT3001;
+                    LOG_INFO("OPT3001 light sensor found\n");
                 } else {
                     type = SHT31;
                     LOG_INFO("SHT31 sensor found\n");

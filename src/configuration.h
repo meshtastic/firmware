@@ -133,6 +133,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define VEML7700_ADDR 0x10
 #define TSL25911_ADDR 0x29
 #define OPT3001_ADDRESS 0x45
+#define OPT3001_ADDRESS_ALT 0x44
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER

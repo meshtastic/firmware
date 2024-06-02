@@ -12,7 +12,8 @@ int32_t OPT3001Sensor::runOnce()
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
-    status = opt3001.begin(nodeTelemetrySensorsMap[sensorType].first);
+    auto errorCode = opt3001.begin(nodeTelemetrySensorsMap[sensorType].first);
+    status = errorCode == NO_ERROR;
 
     return initI2CSensor();
 }
