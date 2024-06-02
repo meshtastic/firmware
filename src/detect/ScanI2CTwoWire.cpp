@@ -256,7 +256,12 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                     type = BMP_280;
                 }
                 break;
-
+#ifndef HAS_NCP5623
+            case AHT10_ADDR:
+                LOG_INFO("AHT10 sensor found at address 0x%x\n", (uint8_t)addr.address);
+                type = AHT10;
+                break;
+#endif
             case INA_ADDR:
             case INA_ADDR_ALTERNATE:
             case INA_ADDR_WAVESHARE_UPS:
@@ -337,6 +342,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                 SCAN_SIMPLE_CASE(LSM6DS3_ADDR, LSM6DS3, "LSM6DS3 accelerometer found at address 0x%x\n", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(TCA9555_ADDR, TCA9555, "TCA9555 I2C expander found\n");
                 SCAN_SIMPLE_CASE(VEML7700_ADDR, VEML7700, "VEML7700 light sensor found\n");
+                SCAN_SIMPLE_CASE(TSL25911_ADDR, TSL2591, "TSL2591 light sensor found\n");
 
             default:
                 LOG_INFO("Device found at address 0x%x was not able to be enumerated\n", addr.address);

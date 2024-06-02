@@ -45,6 +45,8 @@ class ScanI2C
         VEML7700,
         RCWL9620,
         NCP5623,
+        TSL2591,
+        AHT10,
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;
