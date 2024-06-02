@@ -28,7 +28,7 @@ int32_t BME680Sensor::runOnce()
 
     if (bme680.status == BSEC_OK) {
         status = 1;
-        if (!bme680.setConfig(bsec_config_iaq)) {
+        if (!bme680.setConfig(bsec_config)) {
             checkStatus("setConfig");
             status = 0;
         }
