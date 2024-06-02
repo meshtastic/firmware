@@ -29,6 +29,7 @@
 #include "Sensor/SHT31Sensor.h"
 #include "Sensor/SHT4XSensor.h"
 #include "Sensor/SHTC3Sensor.h"
+#include "Sensor/TSL2591Sensor.h"
 #include "Sensor/VEML7700Sensor.h"
 
 BMP085Sensor bmp085Sensor;
@@ -40,6 +41,7 @@ SHTC3Sensor shtc3Sensor;
 LPS22HBSensor lps22hbSensor;
 SHT31Sensor sht31Sensor;
 VEML7700Sensor veml7700Sensor;
+TSL2591Sensor tsl2591Sensor;
 SHT4XSensor sht4xSensor;
 RCWL9620Sensor rcwl9620Sensor;
 AHT10Sensor aht10Sensor;
@@ -65,7 +67,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
     */
 
     // moduleConfig.telemetry.environment_measurement_enabled = 1;
-    // moduleConfig.telemetry.environment_screen_enabled = 1;
+    //  moduleConfig.telemetry.environment_screen_enabled = 1;
     // moduleConfig.telemetry.environment_update_interval = 45;
 
     if (!(moduleConfig.telemetry.environment_measurement_enabled || moduleConfig.telemetry.environment_screen_enabled)) {
@@ -105,6 +107,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = ina260Sensor.runOnce();
             if (veml7700Sensor.hasSensor())
                 result = veml7700Sensor.runOnce();
+            if (tsl2591Sensor.hasSensor())
+                result = tsl2591Sensor.runOnce();
             if (rcwl9620Sensor.hasSensor())
                 result = rcwl9620Sensor.runOnce();
             if (aht10Sensor.hasSensor())
@@ -289,6 +293,10 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     }
     if (veml7700Sensor.hasSensor()) {
         valid = valid && veml7700Sensor.getMetrics(&m);
+        hasSensor = true;
+    }
+    if (tsl2591Sensor.hasSensor()) {
+        valid = valid && tsl2591Sensor.getMetrics(&m);
         hasSensor = true;
     }
     if (rcwl9620Sensor.hasSensor()) {
