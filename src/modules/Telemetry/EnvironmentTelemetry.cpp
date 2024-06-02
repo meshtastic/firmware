@@ -25,6 +25,7 @@
 #include "Sensor/BMP280Sensor.h"
 #include "Sensor/LPS22HBSensor.h"
 #include "Sensor/MCP9808Sensor.h"
+#include "Sensor/MLX90632Sensor.h"
 #include "Sensor/OPT3001Sensor.h"
 #include "Sensor/RCWL9620Sensor.h"
 #include "Sensor/SHT31Sensor.h"
@@ -47,6 +48,7 @@ OPT3001Sensor opt3001Sensor;
 SHT4XSensor sht4xSensor;
 RCWL9620Sensor rcwl9620Sensor;
 AHT10Sensor aht10Sensor;
+MLX90632Sensor mlx90632Sensor;
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
@@ -117,6 +119,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = rcwl9620Sensor.runOnce();
             if (aht10Sensor.hasSensor())
                 result = aht10Sensor.runOnce();
+            if (mlx90632Sensor.hasSensor())
+                result = mlx90632Sensor.runOnce();
         }
         return result;
     } else {
@@ -305,6 +309,10 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     }
     if (opt3001Sensor.hasSensor()) {
         valid = valid && opt3001Sensor.getMetrics(&m);
+        hasSensor = true;
+    }
+    if (mlx90632Sensor.hasSensor()) {
+        valid = valid && mlx90632Sensor.getMetrics(&m);
         hasSensor = true;
     }
     if (rcwl9620Sensor.hasSensor()) {
