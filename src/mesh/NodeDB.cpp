@@ -444,9 +444,9 @@ void NodeDB::installDefaultChannels()
 
 void NodeDB::resetNodes()
 {
+    clearLocalPosition();
     numMeshNodes = 1;
     std::fill(devicestate.node_db_lite.begin() + 1, devicestate.node_db_lite.end(), meshtastic_NodeInfoLite());
-    clearLocalPosition();
     saveDeviceStateToDisk();
     if (neighborInfoModule && moduleConfig.neighbor_info.enabled)
         neighborInfoModule->resetNeighbors();
