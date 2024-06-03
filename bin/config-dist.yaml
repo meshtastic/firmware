@@ -121,6 +121,19 @@ Display:
 #  Height: 480
 #  OffsetRotate: 2
 
+### TZT 2.0 Inch TFT Display ST7789V 240RGBx320
+#  Panel: ST7789
+#  spidev: spidev0.0
+#  # CS: 8     # can be freely chosen
+#  BusFrequency: 80000000
+#  DC: 24      # can be freely chosen
+#  Width: 320
+#  Height: 240
+#  Reset: 25   # can be freely chosen
+#  Rotate: true
+#  OffsetRotate: 1
+#  Invert: true
+
 Touchscreen:
 ### Note, at least for now, the touchscreen must have a CS pin defined, even if you let Linux manage the CS switching.
 
