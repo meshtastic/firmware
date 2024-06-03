@@ -217,7 +217,7 @@ void NRF52Bluetooth::shutdown()
 
 void NRF52Bluetooth::startDisabled()
 {
-    LOG_DEBUG("Initializing NRF52 Bluetooth, then disabling. (workaround)\n");
+    LOG_DEBUG("Initializing NRF52 Bluetooth, then disabling. (Workaround)\n");
 
     // Setup Bluetooth
     nrf52Bluetooth = new NRF52Bluetooth();
