@@ -55,7 +55,7 @@ class AccelerometerThread : public concurrency::OSThread
         }
         acceleremoter_type = type;
 #ifndef RAK_4631
-        if (!config.display.wake_on_tap_or_motion && !config.device.double_tap_as_button_press &&) {
+        if (!config.display.wake_on_tap_or_motion && !config.device.double_tap_as_button_press) {
             LOG_DEBUG("AccelerometerThread disabling due to no interested configurations\n");
             disable();
             return;
