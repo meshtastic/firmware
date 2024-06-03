@@ -156,6 +156,9 @@ typedef enum _meshtastic_HardwareModel {
     /* NRF52_PROMICRO_DIY
  Promicro NRF52840 with SX1262/LLCC68, SSD1306 OLED and NEO6M GPS */
     meshtastic_HardwareModel_NRF52_PROMICRO_DIY = 63,
+    /* RadioMaster 900 Bandit Nano, https://www.radiomasterrc.com/products/bandit-nano-expresslrs-rf-module
+ ESP32-D0WDQ6 With SX1276/SKY66122, SSD1306 OLED and No GPS */
+    meshtastic_HardwareModel_RADIOMASTER_900_BANDIT_NANO = 64,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */

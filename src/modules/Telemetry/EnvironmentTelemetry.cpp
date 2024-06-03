@@ -18,16 +18,20 @@
 #include <OLEDDisplayUi.h>
 
 // Sensors
+#include "Sensor/AHT10.h"
 #include "Sensor/BME280Sensor.h"
 #include "Sensor/BME680Sensor.h"
 #include "Sensor/BMP085Sensor.h"
 #include "Sensor/BMP280Sensor.h"
 #include "Sensor/LPS22HBSensor.h"
 #include "Sensor/MCP9808Sensor.h"
+#include "Sensor/MLX90632Sensor.h"
+#include "Sensor/OPT3001Sensor.h"
 #include "Sensor/RCWL9620Sensor.h"
 #include "Sensor/SHT31Sensor.h"
 #include "Sensor/SHT4XSensor.h"
 #include "Sensor/SHTC3Sensor.h"
+#include "Sensor/TSL2591Sensor.h"
 #include "Sensor/VEML7700Sensor.h"
 
 BMP085Sensor bmp085Sensor;
@@ -39,8 +43,12 @@ SHTC3Sensor shtc3Sensor;
 LPS22HBSensor lps22hbSensor;
 SHT31Sensor sht31Sensor;
 VEML7700Sensor veml7700Sensor;
+TSL2591Sensor tsl2591Sensor;
+OPT3001Sensor opt3001Sensor;
 SHT4XSensor sht4xSensor;
 RCWL9620Sensor rcwl9620Sensor;
+AHT10Sensor aht10Sensor;
+MLX90632Sensor mlx90632Sensor;
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
@@ -63,7 +71,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
     */
 
     // moduleConfig.telemetry.environment_measurement_enabled = 1;
-    // moduleConfig.telemetry.environment_screen_enabled = 1;
+    //  moduleConfig.telemetry.environment_screen_enabled = 1;
     // moduleConfig.telemetry.environment_update_interval = 45;
 
     if (!(moduleConfig.telemetry.environment_measurement_enabled || moduleConfig.telemetry.environment_screen_enabled)) {
@@ -103,8 +111,16 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = ina260Sensor.runOnce();
             if (veml7700Sensor.hasSensor())
                 result = veml7700Sensor.runOnce();
+            if (tsl2591Sensor.hasSensor())
+                result = tsl2591Sensor.runOnce();
+            if (opt3001Sensor.hasSensor())
+                result = opt3001Sensor.runOnce();
             if (rcwl9620Sensor.hasSensor())
                 result = rcwl9620Sensor.runOnce();
+            if (aht10Sensor.hasSensor())
+                result = aht10Sensor.runOnce();
+            if (mlx90632Sensor.hasSensor())
+                result = mlx90632Sensor.runOnce();
         }
         return result;
     } else {
@@ -287,10 +303,35 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         valid = valid && veml7700Sensor.getMetrics(&m);
         hasSensor = true;
     }
+    if (tsl2591Sensor.hasSensor()) {
+        valid = valid && tsl2591Sensor.getMetrics(&m);
+        hasSensor = true;
+    }
+    if (opt3001Sensor.hasSensor()) {
+        valid = valid && opt3001Sensor.getMetrics(&m);
+        hasSensor = true;
+    }
+    if (mlx90632Sensor.hasSensor()) {
+        valid = valid && mlx90632Sensor.getMetrics(&m);
+        hasSensor = true;
+    }
     if (rcwl9620Sensor.hasSensor()) {
         valid = valid && rcwl9620Sensor.getMetrics(&m);
         hasSensor = true;
     }
+    if (aht10Sensor.hasSensor()) {
+        if (!bmp280Sensor.hasSensor()) {
+            valid = valid && aht10Sensor.getMetrics(&m);
+            hasSensor = true;
+        } else {
+            // prefer bmp280 temp if both sensors are present, fetch only humidity
+            meshtastic_Telemetry m_ahtx;
+            LOG_INFO("AHTX0+BMP280 module detected: using temp from BMP280 and humy from AHTX0\n");
+            aht10Sensor.getMetrics(&m_ahtx);
+            m.variant.environment_metrics.relative_humidity = m_ahtx.variant.environment_metrics.relative_humidity;
+        }
+    }
+
     valid = valid && hasSensor;
 
     if (valid) {

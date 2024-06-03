@@ -42,7 +42,11 @@ int16_t RadioLibRF95::begin(float freq, float bw, uint8_t sf, uint8_t cr, uint8_
     state = setCodingRate(cr);
     RADIOLIB_ASSERT(state);
 
+#ifdef USE_RF95_RFO
+    state = setOutputPower(power, true);
+#else
     state = setOutputPower(power);
+#endif
     RADIOLIB_ASSERT(state);
 
     state = setGain(gain);
