@@ -34,7 +34,7 @@
 // Buzzer
 #define PIN_BUZZER 19
 // Buttons
-#define BUTTON_PIN 36 // Use the WAKE button as the user button
+//#define BUTTON_PIN 36 // Use the WAKE button as the user button
 // I2C
 // #define I2C_SCL 27
 // #define I2C_SDA 26
