@@ -50,16 +50,24 @@ template <typename T> bool LR11x0Interface<T>::init()
 
     limitPower();
 
-    int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
-    // \todo Display actual typename of the adapter, not just `LR11x0`
-    LOG_INFO("LR11x0 init result %d\n", res);
-    if (res == RADIOLIB_ERR_CHIP_NOT_FOUND)
-        return false;
+    // set RF switch configuration for Wio WM1110
+    // Wio WM1110 uses DIO5 and DIO6 for RF switching
+    // NOTE: other boards may be different. If you are
+    // using a different board, you may need to wrap
+    // this in a conditional.
 
-    LOG_INFO("Frequency set to %f\n", getFreq());
-    LOG_INFO("Bandwidth set to %f\n", bw);
-    LOG_INFO("Power output set to %d\n", power);
+    static const uint32_t rfswitch_dio_pins[] = {RADIOLIB_LR11X0_DIO5, RADIOLIB_LR11X0_DIO6, RADIOLIB_NC, RADIOLIB_NC,
+                                                 RADIOLIB_NC};
 
+    static const Module::RfSwitchMode_t rfswitch_table[] = {
+        // mode                  DIO5  DIO6
+        {LR11x0::MODE_STBY, {LOW, LOW}},  {LR11x0::MODE_RX, {HIGH, LOW}},
+        {LR11x0::MODE_TX, {HIGH, HIGH}},  {LR11x0::MODE_TX_HP, {LOW, HIGH}},
+        {LR11x0::MODE_TX_HF, {LOW, LOW}}, {LR11x0::MODE_GNSS, {LOW, LOW}},
+        {LR11x0::MODE_WIFI, {LOW, LOW}},  END_OF_MODE_TABLE,
+    };
+
+// We need to do this before begin() call
 #ifdef LR11X0_DIO_AS_RF_SWITCH
     LOG_DEBUG("Setting DIO RF switch\n");
     bool dioAsRfSwitch = true;
@@ -73,22 +81,32 @@ template <typename T> bool LR11x0Interface<T>::init()
     bool dioAsRfSwitch = false;
 #endif
 
+    if (dioAsRfSwitch)
+        lora.setRfSwitchTable(rfswitch_dio_pins, rfswitch_table);
+
+    int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
+    // \todo Display actual typename of the adapter, not just `LR11x0`
+    LOG_INFO("LR11x0 init result %d\n", res);
+    if (res == RADIOLIB_ERR_CHIP_NOT_FOUND)
+        return false;
+
+    LOG_INFO("Frequency set to %f\n", getFreq());
+    LOG_INFO("Bandwidth set to %f\n", bw);
+    LOG_INFO("Power output set to %d\n", power);
+
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setCRC(2);
 
+    // FIXME: May want to set depending on a definition, currently all LR1110 variant files use the DC-DC regulator option
     if (res == RADIOLIB_ERR_NONE)
-        res = lora.setRegMode(RADIOLIB_LR11X0_REG_MODE_DC_DC);
-
-    if (res == RADIOLIB_ERR_NONE)
-        if (dioAsRfSwitch)
-            res = lora.setDioAsRfSwitch(0x03, 0x0, 0x01, 0x03, 0x02, 0x0, 0x0, 0x0);
+        res = lora.setRegulatorDCDC();
 
     if (res == RADIOLIB_ERR_NONE) {
         if (config.lora.sx126x_rx_boosted_gain) { // the name is unfortunate but historically accurate
-            res = lora.setRxBoosted(true);
+            res = lora.setRxBoostedGainMode(true);
             LOG_INFO("Set RX gain to boosted mode; result: %d\n", res);
         } else {
-            res = lora.setRxBoosted(false);
+            res = lora.setRxBoostedGainMode(false);
             LOG_INFO("Set RX gain to power saving mode (boosted mode off); result: %d\n", res);
         }
     }
