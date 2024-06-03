@@ -15,6 +15,7 @@
 #include <SensorBMA423.hpp>
 #include <Wire.h>
 #ifdef RAK_4631
+#include "Fusion/Fusion.h"
 #include <Rak_BMX160.h>
 #endif
 
@@ -98,7 +99,6 @@ class AccelerometerThread : public concurrency::OSThread
 
             /* Get a new sensor event */
             bmx160.getAllData(&magAccel, NULL, &gAccel);
-            LOG_DEBUG("X:%f, Y: %f, Z: %f, \n", magAccel.x, magAccel.y, magAccel.z);
 
             // very expirimental calibrate routine. Maybe limit to first 30 seconds?
             if (magAccel.x > highestX)
@@ -114,19 +114,31 @@ class AccelerometerThread : public concurrency::OSThread
             if (magAccel.z < lowestZ)
                 lowestZ = magAccel.z;
 
+            int highestRealX = highestX - (highestX + lowestX) / 2;
+
             magAccel.x -= (highestX + lowestX) / 2;
             magAccel.y -= (highestY + lowestY) / 2;
             magAccel.z -= (highestZ + lowestZ) / 2;
-
+            FusionVector ga, ma;
+            ga.axis.x = -gAccel.x;
+            ga.axis.y = -gAccel.y;
+            ga.axis.z = gAccel.z;
+            ma.axis.x = -magAccel.x;
+            ma.axis.y = -magAccel.y;
+            ma.axis.z = magAccel.z * 3;
+            // ma = FusionAxesSwap(ma, FusionAxesAlignmentNXPYNZ);
+            // ga = FusionAxesSwap(ga, FusionAxesAlignmentNXPYNZ);
+            float heading = FusionCompassCalculateHeading(FusionConventionNed, ga, ma);
+            /*
             // Inverted? Something isn't right about the following.
-            // magAccel.x *= -1;
+            magAccel.x *= -1;
             magAccel.y *= -1;
 
-            magAccel.z *= -1;
+            magAccel.z *= 3;
 
             gAccel.x *= -1;
-            // gAccel.y *= -1;
-            gAccel.z *= -1;
+            gAccel.y *= -1;
+            // gAccel.z *= -1;
 
             // https://stackoverflow.com/questions/41299720/compass-heading-from-magnetometer-on-other-axis
             float roll = atan2(gAccel.y, gAccel.z);
@@ -142,8 +154,8 @@ class AccelerometerThread : public concurrency::OSThread
                 heading += 2 * PI;
             if (heading > 2 * PI)
                 heading -= 2 * PI;
-            heading *= -180 / PI;
-            heading += 180;
+             heading *= 180 / PI;
+            //  heading += 180; */
 
             screen->setHeading(heading);
 
