@@ -261,7 +261,7 @@ bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPac
 
 bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 {
-    meshtastic_Telemetry m;
+    meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
     bool valid = true;
     bool hasSensor = false;
     m.time = getTime();
@@ -337,7 +337,7 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
             hasSensor = true;
         } else {
             // prefer bmp280 temp if both sensors are present, fetch only humidity
-            meshtastic_Telemetry m_ahtx;
+            meshtastic_Telemetry m_ahtx = meshtastic_Telemetry_init_zero;
             LOG_INFO("AHTX0+BMP280 module detected: using temp from BMP280 and humy from AHTX0\n");
             aht10Sensor.getMetrics(&m_ahtx);
             m.variant.environment_metrics.relative_humidity = m_ahtx.variant.environment_metrics.relative_humidity;
