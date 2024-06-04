@@ -4,19 +4,21 @@
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
-#include <Adafruit_TSL2591.h>
+#include <DFRobot_LarkWeatherStation.h>
+#include <string>
 
-class TSL2591Sensor : public TelemetrySensor
+class DFRobotLarkSensor : public TelemetrySensor
 {
   private:
-    Adafruit_TSL2591 tsl;
+    DFRobot_LarkWeatherStation_I2C lark = DFRobot_LarkWeatherStation_I2C();
 
   protected:
     virtual void setup() override;
 
   public:
-    TSL2591Sensor();
+    DFRobotLarkSensor();
     virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
 };
+
 #endif

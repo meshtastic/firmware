@@ -64,7 +64,7 @@ meshtastic_MeshPacket *DeviceTelemetryModule::allocReply()
 
 meshtastic_Telemetry DeviceTelemetryModule::getDeviceTelemetry()
 {
-    meshtastic_Telemetry t;
+    meshtastic_Telemetry t = meshtastic_Telemetry_init_zero;
 
     t.time = getTime();
     t.which_variant = meshtastic_Telemetry_device_metrics_tag;
