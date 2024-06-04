@@ -18,16 +18,21 @@
 #include <OLEDDisplayUi.h>
 
 // Sensors
+#include "Sensor/AHT10.h"
 #include "Sensor/BME280Sensor.h"
 #include "Sensor/BME680Sensor.h"
 #include "Sensor/BMP085Sensor.h"
 #include "Sensor/BMP280Sensor.h"
+#include "Sensor/DFRobotLarkSensor.h"
 #include "Sensor/LPS22HBSensor.h"
 #include "Sensor/MCP9808Sensor.h"
+#include "Sensor/MLX90632Sensor.h"
+#include "Sensor/OPT3001Sensor.h"
 #include "Sensor/RCWL9620Sensor.h"
 #include "Sensor/SHT31Sensor.h"
 #include "Sensor/SHT4XSensor.h"
 #include "Sensor/SHTC3Sensor.h"
+#include "Sensor/TSL2591Sensor.h"
 #include "Sensor/VEML7700Sensor.h"
 
 BMP085Sensor bmp085Sensor;
@@ -39,8 +44,13 @@ SHTC3Sensor shtc3Sensor;
 LPS22HBSensor lps22hbSensor;
 SHT31Sensor sht31Sensor;
 VEML7700Sensor veml7700Sensor;
+TSL2591Sensor tsl2591Sensor;
+OPT3001Sensor opt3001Sensor;
 SHT4XSensor sht4xSensor;
 RCWL9620Sensor rcwl9620Sensor;
+AHT10Sensor aht10Sensor;
+MLX90632Sensor mlx90632Sensor;
+DFRobotLarkSensor dfRobotLarkSensor;
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
@@ -63,8 +73,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
     */
 
     // moduleConfig.telemetry.environment_measurement_enabled = 1;
-    // moduleConfig.telemetry.environment_screen_enabled = 1;
-    // moduleConfig.telemetry.environment_update_interval = 45;
+    //  moduleConfig.telemetry.environment_screen_enabled = 1;
+    // moduleConfig.telemetry.environment_update_interval = 15;
 
     if (!(moduleConfig.telemetry.environment_measurement_enabled || moduleConfig.telemetry.environment_screen_enabled)) {
         // If this module is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
@@ -79,6 +89,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
             LOG_INFO("Environment Telemetry: Initializing\n");
             // it's possible to have this module enabled, only for displaying values on the screen.
             // therefore, we should only enable the sensor loop if measurement is also enabled
+            if (dfRobotLarkSensor.hasSensor())
+                result = dfRobotLarkSensor.runOnce();
             if (bmp085Sensor.hasSensor())
                 result = bmp085Sensor.runOnce();
             if (bmp280Sensor.hasSensor())
@@ -103,8 +115,16 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = ina260Sensor.runOnce();
             if (veml7700Sensor.hasSensor())
                 result = veml7700Sensor.runOnce();
+            if (tsl2591Sensor.hasSensor())
+                result = tsl2591Sensor.runOnce();
+            if (opt3001Sensor.hasSensor())
+                result = opt3001Sensor.runOnce();
             if (rcwl9620Sensor.hasSensor())
                 result = rcwl9620Sensor.runOnce();
+            if (aht10Sensor.hasSensor())
+                result = aht10Sensor.runOnce();
+            if (mlx90632Sensor.hasSensor())
+                result = mlx90632Sensor.runOnce();
         }
         return result;
     } else {
@@ -224,6 +244,10 @@ bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPac
                  t->variant.environment_metrics.temperature);
         LOG_INFO("(Received from %s): voltage=%f, IAQ=%d, distance=%f, lux=%f\n", sender, t->variant.environment_metrics.voltage,
                  t->variant.environment_metrics.iaq, t->variant.environment_metrics.distance, t->variant.environment_metrics.lux);
+
+        LOG_INFO("(Received from %s): wind speed=%fm/s, direction=%d degrees\n", sender,
+                 t->variant.environment_metrics.wind_speed, t->variant.environment_metrics.wind_direction);
+
 #endif
         // release previous packet before occupying a new spot
         if (lastMeasurementPacket != nullptr)
@@ -243,6 +267,10 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.time = getTime();
     m.which_variant = meshtastic_Telemetry_environment_metrics_tag;
 
+    if (dfRobotLarkSensor.hasSensor()) {
+        valid = valid && dfRobotLarkSensor.getMetrics(&m);
+        hasSensor = true;
+    }
     if (sht31Sensor.hasSensor()) {
         valid = valid && sht31Sensor.getMetrics(&m);
         hasSensor = true;
@@ -287,10 +315,35 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         valid = valid && veml7700Sensor.getMetrics(&m);
         hasSensor = true;
     }
+    if (tsl2591Sensor.hasSensor()) {
+        valid = valid && tsl2591Sensor.getMetrics(&m);
+        hasSensor = true;
+    }
+    if (opt3001Sensor.hasSensor()) {
+        valid = valid && opt3001Sensor.getMetrics(&m);
+        hasSensor = true;
+    }
+    if (mlx90632Sensor.hasSensor()) {
+        valid = valid && mlx90632Sensor.getMetrics(&m);
+        hasSensor = true;
+    }
     if (rcwl9620Sensor.hasSensor()) {
         valid = valid && rcwl9620Sensor.getMetrics(&m);
         hasSensor = true;
     }
+    if (aht10Sensor.hasSensor()) {
+        if (!bmp280Sensor.hasSensor()) {
+            valid = valid && aht10Sensor.getMetrics(&m);
+            hasSensor = true;
+        } else {
+            // prefer bmp280 temp if both sensors are present, fetch only humidity
+            meshtastic_Telemetry m_ahtx;
+            LOG_INFO("AHTX0+BMP280 module detected: using temp from BMP280 and humy from AHTX0\n");
+            aht10Sensor.getMetrics(&m_ahtx);
+            m.variant.environment_metrics.relative_humidity = m_ahtx.variant.environment_metrics.relative_humidity;
+        }
+    }
+
     valid = valid && hasSensor;
 
     if (valid) {
@@ -300,6 +353,9 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
                  m.variant.environment_metrics.temperature);
         LOG_INFO("(Sending): voltage=%f, IAQ=%d, distance=%f, lux=%f\n", m.variant.environment_metrics.voltage,
                  m.variant.environment_metrics.iaq, m.variant.environment_metrics.distance, m.variant.environment_metrics.lux);
+
+        LOG_INFO("(Sending): wind speed=%fm/s, direction=%d degrees\n", m.variant.environment_metrics.wind_speed,
+                 m.variant.environment_metrics.wind_direction);
 
         sensor_read_error_count = 0;
 

@@ -211,11 +211,11 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     // Strip out any time information before sending packets to other nodes - to keep the wire size small (and because other
     // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS to include the time, so that gpsless
     // devices can get time.
-    if (getRTCQuality() < RTCQualityDevice) {
+    if (getRTCQuality() < RTCQualityGPS) {
         LOG_INFO("Stripping time %u from position send\n", p.time);
         p.time = 0;
     } else {
-        p.time = getValidTime(RTCQualityDevice);
+        p.time = getValidTime(RTCQualityGPS);
         LOG_INFO("Providing time to mesh %u\n", p.time);
     }
 
