@@ -165,7 +165,7 @@ bool PowerTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &m
 
 bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 {
-    meshtastic_Telemetry m;
+    meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
     bool valid = false;
     m.time = getTime();
     m.which_variant = meshtastic_Telemetry_power_metrics_tag;

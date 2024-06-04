@@ -65,6 +65,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_LORA_TYPE = 19,
     /* wiphone https://www.wiphone.io/ */
     meshtastic_HardwareModel_WIPHONE = 20,
+    /* WIO Tracker WM1110 family from Seeed Studio. Includes wio-1110-tracker and wio-1110-sdk */
+    meshtastic_HardwareModel_WIO_WM1110 = 21,
     /* B&Q Consulting Station Edition G1: https://uniteng.com/wiki/doku.php?id=meshtastic:station */
     meshtastic_HardwareModel_STATION_G1 = 25,
     /* RAK11310 (RP2040 + SX1262) */
@@ -853,6 +855,38 @@ typedef struct _meshtastic_NodeRemoteHardwarePin {
     meshtastic_RemoteHardwarePin pin;
 } meshtastic_NodeRemoteHardwarePin;
 
+typedef PB_BYTES_ARRAY_T(228) meshtastic_ChunkedPayload_payload_chunk_t;
+typedef struct _meshtastic_ChunkedPayload {
+    /* The ID of the entire payload */
+    uint32_t payload_id;
+    /* The total number of chunks in the payload */
+    uint16_t chunk_count;
+    /* The current chunk index in the total */
+    uint16_t chunk_index;
+    /* The binary data of the current chunk */
+    meshtastic_ChunkedPayload_payload_chunk_t payload_chunk;
+} meshtastic_ChunkedPayload;
+
+/* Wrapper message for broken repeated oneof support */
+typedef struct _meshtastic_resend_chunks {
+    pb_callback_t chunks;
+} meshtastic_resend_chunks;
+
+/* Responses to a ChunkedPayload request */
+typedef struct _meshtastic_ChunkedPayloadResponse {
+    /* The ID of the entire payload */
+    uint32_t payload_id;
+    pb_size_t which_payload_variant;
+    union {
+        /* Request to transfer chunked payload */
+        bool request_transfer;
+        /* Accept the transfer chunked payload */
+        bool accept_transfer;
+        /* Request missing indexes in the chunked payload */
+        meshtastic_resend_chunks resend_chunks;
+    } payload_variant;
+} meshtastic_ChunkedPayloadResponse;
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -928,6 +962,9 @@ extern "C" {
 
 
 
+
+
+
 /* Initializer values for message structs */
 #define meshtastic_Position_init_default         {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_User_init_default             {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN}
@@ -949,6 +986,9 @@ extern "C" {
 #define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0}
 #define meshtastic_Heartbeat_init_default        {0}
 #define meshtastic_NodeRemoteHardwarePin_init_default {0, false, meshtastic_RemoteHardwarePin_init_default}
+#define meshtastic_ChunkedPayload_init_default   {0, 0, 0, {0, {0}}}
+#define meshtastic_resend_chunks_init_default    {{{NULL}, NULL}}
+#define meshtastic_ChunkedPayloadResponse_init_default {0, 0, {0}}
 #define meshtastic_Position_init_zero            {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_User_init_zero                {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN}
 #define meshtastic_RouteDiscovery_init_zero      {0, {0, 0, 0, 0, 0, 0, 0, 0}}
@@ -969,6 +1009,9 @@ extern "C" {
 #define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0}
 #define meshtastic_Heartbeat_init_zero           {0}
 #define meshtastic_NodeRemoteHardwarePin_init_zero {0, false, meshtastic_RemoteHardwarePin_init_zero}
+#define meshtastic_ChunkedPayload_init_zero      {0, 0, 0, {0, {0}}}
+#define meshtastic_resend_chunks_init_zero       {{{NULL}, NULL}}
+#define meshtastic_ChunkedPayloadResponse_init_zero {0, 0, {0}}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_Position_latitude_i_tag       1
@@ -1103,6 +1146,15 @@ extern "C" {
 #define meshtastic_ToRadio_heartbeat_tag         7
 #define meshtastic_NodeRemoteHardwarePin_node_num_tag 1
 #define meshtastic_NodeRemoteHardwarePin_pin_tag 2
+#define meshtastic_ChunkedPayload_payload_id_tag 1
+#define meshtastic_ChunkedPayload_chunk_count_tag 2
+#define meshtastic_ChunkedPayload_chunk_index_tag 3
+#define meshtastic_ChunkedPayload_payload_chunk_tag 4
+#define meshtastic_resend_chunks_chunks_tag      1
+#define meshtastic_ChunkedPayloadResponse_payload_id_tag 1
+#define meshtastic_ChunkedPayloadResponse_request_transfer_tag 2
+#define meshtastic_ChunkedPayloadResponse_accept_transfer_tag 3
+#define meshtastic_ChunkedPayloadResponse_resend_chunks_tag 4
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_Position_FIELDLIST(X, a) \
@@ -1341,6 +1393,28 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  pin,               2)
 #define meshtastic_NodeRemoteHardwarePin_DEFAULT NULL
 #define meshtastic_NodeRemoteHardwarePin_pin_MSGTYPE meshtastic_RemoteHardwarePin
 
+#define meshtastic_ChunkedPayload_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   payload_id,        1) \
+X(a, STATIC,   SINGULAR, UINT32,   chunk_count,       2) \
+X(a, STATIC,   SINGULAR, UINT32,   chunk_index,       3) \
+X(a, STATIC,   SINGULAR, BYTES,    payload_chunk,     4)
+#define meshtastic_ChunkedPayload_CALLBACK NULL
+#define meshtastic_ChunkedPayload_DEFAULT NULL
+
+#define meshtastic_resend_chunks_FIELDLIST(X, a) \
+X(a, CALLBACK, REPEATED, UINT32,   chunks,            1)
+#define meshtastic_resend_chunks_CALLBACK pb_default_field_callback
+#define meshtastic_resend_chunks_DEFAULT NULL
+
+#define meshtastic_ChunkedPayloadResponse_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   payload_id,        1) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,request_transfer,payload_variant.request_transfer),   2) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,accept_transfer,payload_variant.accept_transfer),   3) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,resend_chunks,payload_variant.resend_chunks),   4)
+#define meshtastic_ChunkedPayloadResponse_CALLBACK NULL
+#define meshtastic_ChunkedPayloadResponse_DEFAULT NULL
+#define meshtastic_ChunkedPayloadResponse_payload_variant_resend_chunks_MSGTYPE meshtastic_resend_chunks
+
 extern const pb_msgdesc_t meshtastic_Position_msg;
 extern const pb_msgdesc_t meshtastic_User_msg;
 extern const pb_msgdesc_t meshtastic_RouteDiscovery_msg;
@@ -1361,6 +1435,9 @@ extern const pb_msgdesc_t meshtastic_Neighbor_msg;
 extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
 extern const pb_msgdesc_t meshtastic_Heartbeat_msg;
 extern const pb_msgdesc_t meshtastic_NodeRemoteHardwarePin_msg;
+extern const pb_msgdesc_t meshtastic_ChunkedPayload_msg;
+extern const pb_msgdesc_t meshtastic_resend_chunks_msg;
+extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_Position_fields &meshtastic_Position_msg
@@ -1383,9 +1460,15 @@ extern const pb_msgdesc_t meshtastic_NodeRemoteHardwarePin_msg;
 #define meshtastic_DeviceMetadata_fields &meshtastic_DeviceMetadata_msg
 #define meshtastic_Heartbeat_fields &meshtastic_Heartbeat_msg
 #define meshtastic_NodeRemoteHardwarePin_fields &meshtastic_NodeRemoteHardwarePin_msg
+#define meshtastic_ChunkedPayload_fields &meshtastic_ChunkedPayload_msg
+#define meshtastic_resend_chunks_fields &meshtastic_resend_chunks_msg
+#define meshtastic_ChunkedPayloadResponse_fields &meshtastic_ChunkedPayloadResponse_msg
 
 /* Maximum encoded size of messages (where known) */
+/* meshtastic_resend_chunks_size depends on runtime parameters */
+/* meshtastic_ChunkedPayloadResponse_size depends on runtime parameters */
 #define MESHTASTIC_MESHTASTIC_MESH_PB_H_MAX_SIZE meshtastic_FromRadio_size
+#define meshtastic_ChunkedPayload_size           245
 #define meshtastic_Compressed_size               243
 #define meshtastic_Data_size                     270
 #define meshtastic_DeviceMetadata_size           46
