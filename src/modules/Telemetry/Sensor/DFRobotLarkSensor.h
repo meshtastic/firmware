@@ -5,6 +5,7 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
 #include <DFRobot_LarkWeatherStation.h>
+#include <string>
 
 class DFRobotLarkSensor : public TelemetrySensor
 {

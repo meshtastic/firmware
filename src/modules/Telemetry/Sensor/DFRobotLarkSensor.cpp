@@ -7,6 +7,7 @@
 #include "TelemetrySensor.h"
 #include "gps/GeoCoord.h"
 #include <DFRobot_LarkWeatherStation.h>
+#include <string>
 
 DFRobotLarkSensor::DFRobotLarkSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_DFROBOT_LARK, "DFROBOT_LARK") {}
 
