@@ -537,7 +537,7 @@ uint GeoCoord::bearingToDegrees(const char *bearing)
  * The bearing in degrees
  * @return Bearing in string format
  */
-char *GeoCoord::degreesToBearing(uint degrees)
+const char *GeoCoord::degreesToBearing(uint degrees)
 {
     if (degrees >= 348 || degrees < 11)
         return "N";
