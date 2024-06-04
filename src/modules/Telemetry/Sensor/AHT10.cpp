@@ -1,7 +1,11 @@
-#include "AHT10.h"
-#include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "TelemetrySensor.h"
 #include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
+#include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "AHT10.h"
+#include "TelemetrySensor.h"
+
 #include <Adafruit_AHTX0.h>
 #include <typeinfo>
 
@@ -33,3 +37,5 @@ bool AHT10Sensor::getMetrics(meshtastic_Telemetry *measurement)
 
     return true;
 }
+
+#endif
