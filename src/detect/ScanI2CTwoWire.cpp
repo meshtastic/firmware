@@ -281,8 +281,9 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                 if (registerValue == 0x5449) {
                     LOG_INFO("INA3221 sensor found at address 0x%x\n", (uint8_t)addr.address);
                     type = INA3221;
-                } else { // Unknown device
-                    LOG_INFO("No INA3221 found at address 0x%x\n", (uint8_t)addr.address);
+                } else {
+                    LOG_INFO("DFRobot Lark weather station found at address 0x%x\n", (uint8_t)addr.address);
+                    type = DFROBOT_LARK;
                 }
                 break;
             case MCP9808_ADDR:
