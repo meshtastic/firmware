@@ -23,6 +23,7 @@
 #include "Sensor/BME680Sensor.h"
 #include "Sensor/BMP085Sensor.h"
 #include "Sensor/BMP280Sensor.h"
+#include "Sensor/DFRobotLarkSensor.h"
 #include "Sensor/LPS22HBSensor.h"
 #include "Sensor/MCP9808Sensor.h"
 #include "Sensor/MLX90632Sensor.h"
@@ -49,6 +50,7 @@ SHT4XSensor sht4xSensor;
 RCWL9620Sensor rcwl9620Sensor;
 AHT10Sensor aht10Sensor;
 MLX90632Sensor mlx90632Sensor;
+DFRobotLarkSensor dfRobotLarkSensor;
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
@@ -72,7 +74,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
 
     // moduleConfig.telemetry.environment_measurement_enabled = 1;
     //  moduleConfig.telemetry.environment_screen_enabled = 1;
-    // moduleConfig.telemetry.environment_update_interval = 45;
+    // moduleConfig.telemetry.environment_update_interval = 15;
 
     if (!(moduleConfig.telemetry.environment_measurement_enabled || moduleConfig.telemetry.environment_screen_enabled)) {
         // If this module is not enabled, and the user doesn't want the display screen don't waste any OSThread time on it
@@ -87,6 +89,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
             LOG_INFO("Environment Telemetry: Initializing\n");
             // it's possible to have this module enabled, only for displaying values on the screen.
             // therefore, we should only enable the sensor loop if measurement is also enabled
+            if (dfRobotLarkSensor.hasSensor())
+                result = dfRobotLarkSensor.runOnce();
             if (bmp085Sensor.hasSensor())
                 result = bmp085Sensor.runOnce();
             if (bmp280Sensor.hasSensor())
@@ -240,6 +244,10 @@ bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPac
                  t->variant.environment_metrics.temperature);
         LOG_INFO("(Received from %s): voltage=%f, IAQ=%d, distance=%f, lux=%f\n", sender, t->variant.environment_metrics.voltage,
                  t->variant.environment_metrics.iaq, t->variant.environment_metrics.distance, t->variant.environment_metrics.lux);
+
+        LOG_INFO("(Received from %s): wind speed=%fm/s, direction=%d degrees\n", sender,
+                 t->variant.environment_metrics.wind_speed, t->variant.environment_metrics.wind_direction);
+
 #endif
         // release previous packet before occupying a new spot
         if (lastMeasurementPacket != nullptr)
@@ -259,6 +267,10 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.time = getTime();
     m.which_variant = meshtastic_Telemetry_environment_metrics_tag;
 
+    if (dfRobotLarkSensor.hasSensor()) {
+        valid = valid && dfRobotLarkSensor.getMetrics(&m);
+        hasSensor = true;
+    }
     if (sht31Sensor.hasSensor()) {
         valid = valid && sht31Sensor.getMetrics(&m);
         hasSensor = true;
@@ -341,6 +353,9 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
                  m.variant.environment_metrics.temperature);
         LOG_INFO("(Sending): voltage=%f, IAQ=%d, distance=%f, lux=%f\n", m.variant.environment_metrics.voltage,
                  m.variant.environment_metrics.iaq, m.variant.environment_metrics.distance, m.variant.environment_metrics.lux);
+
+        LOG_INFO("(Sending): wind speed=%fm/s, direction=%d degrees\n", m.variant.environment_metrics.wind_speed,
+                 m.variant.environment_metrics.wind_direction);
 
         sensor_read_error_count = 0;
 
