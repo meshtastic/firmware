@@ -2071,7 +2071,7 @@ void Screen::setFrames()
     LOG_DEBUG("Total frame count: %d\n", totalFrameCount);
 #endif
 
-    // We don't show the node info our our node (if we have it yet - we should)
+    // We don't show the node info of our node (if we have it yet - we should)
     size_t numMeshNodes = nodeDB->getNumMeshNodes();
     if (numMeshNodes > 0)
         numMeshNodes--;
