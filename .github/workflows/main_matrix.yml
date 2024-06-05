@@ -109,6 +109,9 @@ jobs:
   package-raspbian-armv7l:
     uses: ./.github/workflows/package_raspbian_armv7l.yml
 
+  package-native:
+    uses: ./.github/workflows/package_amd64.yml
+
   build-native:
     runs-on: ubuntu-latest
     steps:
