@@ -774,18 +774,15 @@ GPS::~GPS()
 
 void GPS::setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime)
 {
-    // Record the current state
-    LOG_INFO("Setting GPS powerState=");
-    if (on) {
+    // Record the current powerState
+    if (on)
         powerState = GPS_AWAKE;
-        LOG_INFO("AWAKE\n");
-    } else if (!on && standbyOnly) {
+    else if (!on && standbyOnly)
         powerState = GPS_STANDBY;
-        LOG_INFO("STANDBY\n");
-    } else {
+    else
         powerState = GPS_OFF;
-        LOG_INFO("OFF\n");
-    }
+
+    LOG_DEBUG("GPS::powerState=%d\n", powerState);
 
     if (on) {
         clearBuffer(); // drop any old data waiting in the buffer before re-enabling
