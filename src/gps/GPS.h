@@ -39,9 +39,9 @@ typedef enum {
 } GPS_RESPONSE;
 
 enum GPSPowerState : uint8_t {
-    GPS_OFF,
-    GPS_STANDBY,
-    GPS_AWAKE,
+    GPS_OFF = 0,
+    GPS_AWAKE = 1,
+    GPS_STANDBY = 2,
 };
 
 // Generate a string representation of DOP
