@@ -2151,7 +2151,7 @@ void Screen::setFrames()
     setFastFramerate(); // Draw ASAP
 
     if (currentFrameNum > numframes - 1) { // If we were on a frame that no longer exists
-        ui->switchToFrame(numframes - 2); // Attempt to return to last frame
+        ui->switchToFrame(0); // Return to Frame 0 , if we can't 
         } 
     else {
         ui->switchToFrame(currentFrameNum); // Attempt to return to same frame after rebuilding the frames
