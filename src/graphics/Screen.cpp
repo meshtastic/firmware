@@ -2056,7 +2056,8 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
 // restore our regular frame list
 void Screen::setFrames()
 {
-    LOG_DEBUG("showing standard frames\n");
+    uint8_t currentFrameNum = ui->getUiState()->currentFrame;
+    LOG_DEBUG("Showing standard frame number %d\n", currentFrameNum);
     showingNormalScreen = true;
 
 #ifdef USE_EINK
@@ -2147,6 +2148,13 @@ void Screen::setFrames()
                     // just changed)
 
     setFastFramerate(); // Draw ASAP
+
+    if (currentFrameNum > numframes - 1) { // If we were on a frame that no longer exists
+        ui->switchToFrame(numframes - 2); // Attempt to return to last frame
+        } 
+    else {
+        ui->switchToFrame(currentFrameNum); // Attempt to return to same frame after rebuilding the frames
+        }    
 }
 
 void Screen::handleStartBluetoothPinScreen(uint32_t pin)
