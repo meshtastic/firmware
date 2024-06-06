@@ -399,6 +399,9 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
     !defined(M5STACK) // set display brightness when turning on screens. Just moved function from TFTDisplay to here.
             static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
 #endif
+#ifdef TFT_BL
+            digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
+#endif
 
             dispdev->displayOn();
 #ifdef HELTEC_TRACKER_V1_X
@@ -454,6 +457,9 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 
 #ifdef T_WATCH_S3
             PMU->disablePowerOutput(XPOWERS_ALDO2);
+#endif
+#ifdef TFT_BL
+            digitalWrite(TFT_BL, !TFT_BACKLIGHT_ON);
 #endif
             enabled = false;
         }

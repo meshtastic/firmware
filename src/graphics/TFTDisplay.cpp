@@ -5,10 +5,6 @@
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
-#ifndef TFT_BACKLIGHT_ON
-#define TFT_BACKLIGHT_ON HIGH
-#endif
-
 #ifdef GPIO_EXTENDER
 #include <SparkFunSX1509.h>
 #include <Wire.h>
