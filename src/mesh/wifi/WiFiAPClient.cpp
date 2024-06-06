@@ -108,8 +108,10 @@ static void onNetworkConnected()
     }
 
     // FIXME this is kinda yucky, instead we should just have an observable for 'wifireconnected'
+#ifndef MESHTASTIC_EXCLUDE_MQTT
     if (mqtt)
         mqtt->reconnect();
+#endif
 }
 
 static int32_t reconnectWiFi()
