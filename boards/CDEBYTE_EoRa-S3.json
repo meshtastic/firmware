@@ -5,12 +5,12 @@
     },
     "core": "esp32",
     "extra_flags": [
-      "-D CDEBYTE_EORA_S3",
-      "-D ARDUINO_USB_CDC_ON_BOOT=1",
-      "-D ARDUINO_USB_MODE=0",
-      "-D ARDUINO_RUNNING_CORE=1",
-      "-D ARDUINO_EVENT_RUNNING_CORE=1",
-      "-D BOARD_HAS_PSRAM"
+      "-DCDEBYTE_EORA_S3",
+      "-DARDUINO_USB_CDC_ON_BOOT=1",
+      "-DARDUINO_USB_MODE=1",
+      "-DARDUINO_RUNNING_CORE=1",
+      "-DARDUINO_EVENT_RUNNING_CORE=1",
+      "-DBOARD_HAS_PSRAM"
     ],
     "f_cpu": "240000000L",
     "f_flash": "80000000L",
