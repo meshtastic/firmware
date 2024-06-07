@@ -189,6 +189,12 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
         rebootAtMsec = millis() + (5 * 1000);
     }
 
+#ifdef T_DECK &&HAS_TFT
+    config.bluetooth.enabled = false;
+    if (moduleConfig.external_notification.nag_timeout == 60)
+        moduleConfig.external_notification.nag_timeout = 3;
+#endif
+
     return didFactoryReset;
 }
 
