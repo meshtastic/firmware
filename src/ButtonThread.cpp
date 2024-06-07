@@ -232,10 +232,10 @@ void ButtonThread::attachButtonInterrupts()
     attachInterrupt(
         config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN,
         []() {
-            BaseType_t higherWake = 0;
-            mainDelay.interruptFromISR(&higherWake);
             ButtonThread::userButton.tick();
             runASAP = true;
+            BaseType_t higherWake = 0;
+            mainDelay.interruptFromISR(&higherWake);
         },
         CHANGE);
 #endif
