@@ -81,6 +81,7 @@ void setBluetoothEnable(bool enable)
     if (!config.bluetooth.enabled) {
         static bool initialized = false;
         if (!initialized) {
+            nrf52Bluetooth = new NRF52Bluetooth();
             nrf52Bluetooth->startDisabled();
             initBrownout();
             initialized = true;
