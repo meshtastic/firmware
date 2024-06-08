@@ -217,14 +217,14 @@ void NRF52Bluetooth::shutdown()
 
 void NRF52Bluetooth::startDisabled()
 {
-    LOG_DEBUG("Initializing NRF52 Bluetooth, then disabling. (Workaround)\n");
-
     // Setup Bluetooth
     nrf52Bluetooth->setup();
 
     // Shutdown bluetooth for minimum power draw
     Bluefruit.Advertising.stop();
     Bluefruit.setTxPower(-40); // Minimum power
+
+    LOG_INFO("Disabling NRF52 Bluetooth. (Workaround: tx power min, advertising stopped)\n");
 }
 
 bool NRF52Bluetooth::isConnected()
