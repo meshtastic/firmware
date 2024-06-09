@@ -109,6 +109,9 @@ jobs:
   package-raspbian-armv7l:
     uses: ./.github/workflows/package_raspbian_armv7l.yml
 
+  package-native:
+    uses: ./.github/workflows/package_amd64.yml
+
   build-native:
     runs-on: ubuntu-latest
     steps:
@@ -142,6 +145,7 @@ jobs:
           path: |
             release/device-*.sh
             release/device-*.bat
+            release/meshtasticd_linux*
 
       - name: Docker login
         if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
@@ -217,7 +221,7 @@ jobs:
         id: version
 
       - name: Move files up
-        run: mv -b -t ./ ./release/meshtasticd_linux_aarch64 ./release/meshtasticd_linux_armv7l ./bin/config-dist.yaml
+        run: mv -b -t ./ ./release/meshtasticd_linux_* ./bin/config-dist.yaml
 
       - name: Repackage in single firmware zip
         uses: actions/upload-artifact@v4
@@ -379,6 +383,16 @@ jobs:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./output/meshtasticd_${{ steps.version.outputs.version }}_armhf.deb
           asset_name: meshtasticd_${{ steps.version.outputs.version }}_armhf.deb
+          asset_content_type: application/vnd.debian.binary-package
+
+      - name: Add raspbian amd64 .deb
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./output/meshtasticd_${{ steps.version.outputs.version }}_amd64.deb
+          asset_name: meshtasticd_${{ steps.version.outputs.version }}_amd64.deb
           asset_content_type: application/vnd.debian.binary-package
 
       - name: Bump version.properties

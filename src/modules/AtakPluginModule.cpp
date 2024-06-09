@@ -87,6 +87,14 @@ void AtakPluginModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtast
                                                   compressed.payload_variant.chat.to);
                 LOG_DEBUG("Compressed chat to: %d bytes\n", length);
             }
+
+            if (t->payload_variant.chat.has_to_callsign) {
+                compressed.payload_variant.chat.has_to_callsign = true;
+                length =
+                    unishox2_compress_simple(t->payload_variant.chat.to_callsign, strlen(t->payload_variant.chat.to_callsign),
+                                             compressed.payload_variant.chat.to_callsign);
+                LOG_DEBUG("Compressed chat to_callsign: %d bytes\n", length);
+            }
         }
         mp.decoded.payload.size = pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes),
                                                      meshtastic_TAKPacket_fields, &compressed);
@@ -123,6 +131,14 @@ void AtakPluginModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtast
                 length = unishox2_decompress_simple(t->payload_variant.chat.to, strlen(t->payload_variant.chat.to),
                                                     uncompressed.payload_variant.chat.to);
                 LOG_DEBUG("Decompressed chat to: %d bytes\n", length);
+            }
+
+            if (t->payload_variant.chat.has_to_callsign) {
+                uncompressed.payload_variant.chat.has_to_callsign = true;
+                length =
+                    unishox2_decompress_simple(t->payload_variant.chat.to_callsign, strlen(t->payload_variant.chat.to_callsign),
+                                               uncompressed.payload_variant.chat.to_callsign);
+                LOG_DEBUG("Decompressed chat to_callsign: %d bytes\n", length);
             }
         }
         decompressedCopy->decoded.payload.size =

@@ -55,6 +55,15 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
         isLocal = true;
         if (config.position.fixed_position) {
             LOG_DEBUG("Ignore incoming position update from myself except for time, because position.fixed_position is true\n");
+
+#ifdef T_WATCH_S3
+            // Since we return early if position.fixed_position is true, set the T-Watch's RTC to the time received from the
+            // client device here
+            if (p.time && channels.getByIndex(mp.channel).role == meshtastic_Channel_Role_PRIMARY) {
+                trySetRtc(p, isLocal, true);
+            }
+#endif
+
             nodeDB->setLocalPosition(p, true);
             return false;
         } else {
@@ -71,8 +80,17 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
               p.time);
 
     if (p.time && channels.getByIndex(mp.channel).role == meshtastic_Channel_Role_PRIMARY) {
+        bool force = false;
+
+#ifdef T_WATCH_S3
+        // The T-Watch appears to "pause" its RTC when shut down, such that the time it reads upon powering on is the same as when
+        // it was shut down. So we need to force the update here, since otherwise RTC::perhapsSetRTC will ignore it because it
+        // will always be an equivalent or lesser RTCQuality (RTCQualityNTP or RTCQualityNet).
+        force = true;
+#endif
+
         // Set from phone RTC Quality to RTCQualityNTP since it should be approximately so
-        trySetRtc(p, isLocal);
+        trySetRtc(p, isLocal, force);
     }
 
     nodeDB->updatePosition(getFrom(&mp), p);
@@ -104,14 +122,14 @@ void PositionModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic
     }
 }
 
-void PositionModule::trySetRtc(meshtastic_Position p, bool isLocal)
+void PositionModule::trySetRtc(meshtastic_Position p, bool isLocal, bool forceUpdate)
 {
     struct timeval tv;
     uint32_t secs = p.time;
 
     tv.tv_sec = secs;
     tv.tv_usec = 0;
-    perhapsSetRTC(isLocal ? RTCQualityNTP : RTCQualityFromNet, &tv);
+    perhapsSetRTC(isLocal ? RTCQualityNTP : RTCQualityFromNet, &tv, forceUpdate);
 }
 
 meshtastic_MeshPacket *PositionModule::allocReply()
@@ -193,11 +211,11 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     // Strip out any time information before sending packets to other nodes - to keep the wire size small (and because other
     // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS to include the time, so that gpsless
     // devices can get time.
-    if (getRTCQuality() < RTCQualityDevice) {
+    if (getRTCQuality() < RTCQualityGPS) {
         LOG_INFO("Stripping time %u from position send\n", p.time);
         p.time = 0;
     } else {
-        p.time = getValidTime(RTCQualityDevice);
+        p.time = getValidTime(RTCQualityGPS);
         LOG_INFO("Providing time to mesh %u\n", p.time);
     }
 

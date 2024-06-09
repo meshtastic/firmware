@@ -145,6 +145,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_UNPHONE
 #elif defined(WIPHONE)
 #define HW_VENDOR meshtastic_HardwareModel_WIPHONE
+#elif defined(RADIOMASTER_900_BANDIT_NANO)
+#define HW_VENDOR meshtastic_HardwareModel_RADIOMASTER_900_BANDIT_NANO
 #endif
 
 // -----------------------------------------------------------------------------
