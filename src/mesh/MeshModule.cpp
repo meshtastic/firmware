@@ -53,7 +53,8 @@ meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, Nod
     p->hop_limit = routingModule->getHopLimitForResponse(hopStart, hopLimit); // Flood ACK back to original sender
     p->to = to;
     p->decoded.request_id = idFrom;
-    p->channel = chIndex;
+    // If the original packet couldn't be decoded, use the primary channel
+    p->channel = p->which_payload_variant == meshtastic_MeshPacket_decoded_tag ? chIndex : channels.getPrimaryIndex();
     if (err != meshtastic_Routing_Error_NONE)
         LOG_ERROR("Alloc an err=%d,to=0x%x,idFrom=0x%x,id=0x%x\n", err, to, idFrom, p->id);
 
