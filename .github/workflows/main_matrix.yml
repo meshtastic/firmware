@@ -158,7 +158,7 @@ jobs:
         id: version
 
       - name: Move files up
-        run: mv -b -t ./ ./release/meshtasticd_linux_* ./bin/config-dist.yaml
+        run: mv -b -t ./ ./release/meshtasticd_linux_* ./bin/config-dist.yaml ./bin/device-*.sh ./bin/device-*.bat
 
       - name: Repackage in single firmware zip
         uses: actions/upload-artifact@v4
