@@ -53,7 +53,7 @@ jobs:
           mkdir -p .debpkg/usr/lib/systemd/system/
           tar -xf build.tar -C .debpkg/usr/share/doc/meshtasticd/web
           gunzip .debpkg/usr/share/doc/meshtasticd/web/*.gz
-          cp meshtasticd_linux_x86_64 .debpkg/usr/sbin/meshtasticd
+          cp release/meshtasticd_linux_x86_64 .debpkg/usr/sbin/meshtasticd
           cp bin/config-dist.yaml .debpkg/etc/meshtasticd/config.yaml
           chmod +x .debpkg/usr/sbin/meshtasticd
           cp bin/meshtasticd.service .debpkg/usr/lib/systemd/system/meshtasticd.service
