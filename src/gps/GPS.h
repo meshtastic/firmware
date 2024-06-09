@@ -38,6 +38,12 @@ typedef enum {
     GNSS_RESPONSE_OK,
 } GPS_RESPONSE;
 
+enum GPSPowerState : uint8_t {
+    GPS_OFF = 0,
+    GPS_AWAKE = 1,
+    GPS_STANDBY = 2,
+};
+
 // Generate a string representation of DOP
 const char *getDOPString(uint32_t dop);
 
@@ -78,8 +84,6 @@ class GPS : private concurrency::OSThread
      */
     bool hasValidLocation = false; // default to false, until we complete our first read
 
-    bool isAwake = false; // true if we want a location right now
-
     bool isInPowersave = false;
 
     bool shouldPublish = false; // If we've changed GPS state, this will force a publish the next loop()
@@ -88,6 +92,8 @@ class GPS : private concurrency::OSThread
 
     bool GPSInitFinished = false; // Init thread finished?
     bool GPSInitStarted = false;  // Init thread finished?
+
+    GPSPowerState powerState = GPS_OFF; // GPS_AWAKE if we want a location right now
 
     uint8_t numSatellites = 0;
 

@@ -281,8 +281,9 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                 if (registerValue == 0x5449) {
                     LOG_INFO("INA3221 sensor found at address 0x%x\n", (uint8_t)addr.address);
                     type = INA3221;
-                } else { // Unknown device
-                    LOG_INFO("No INA3221 found at address 0x%x\n", (uint8_t)addr.address);
+                } else {
+                    LOG_INFO("DFRobot Lark weather station found at address 0x%x\n", (uint8_t)addr.address);
+                    type = DFROBOT_LARK;
                 }
                 break;
             case MCP9808_ADDR:
@@ -302,6 +303,9 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                 if (registerValue == 0x11a2) {
                     type = SHT4X;
                     LOG_INFO("SHT4X sensor found\n");
+                } else if (getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x7E), 2) == 0x5449) {
+                    type = OPT3001;
+                    LOG_INFO("OPT3001 light sensor found\n");
                 } else {
                     type = SHT31;
                     LOG_INFO("SHT31 sensor found\n");
@@ -342,6 +346,9 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                 SCAN_SIMPLE_CASE(LSM6DS3_ADDR, LSM6DS3, "LSM6DS3 accelerometer found at address 0x%x\n", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(TCA9555_ADDR, TCA9555, "TCA9555 I2C expander found\n");
                 SCAN_SIMPLE_CASE(VEML7700_ADDR, VEML7700, "VEML7700 light sensor found\n");
+                SCAN_SIMPLE_CASE(TSL25911_ADDR, TSL2591, "TSL2591 light sensor found\n");
+                SCAN_SIMPLE_CASE(OPT3001_ADDR, OPT3001, "OPT3001 light sensor found\n");
+                SCAN_SIMPLE_CASE(MLX90632_ADDR, MLX90632, "MLX90632 IR temp sensor found\n");
 
             default:
                 LOG_INFO("Device found at address 0x%x was not able to be enumerated\n", addr.address);
