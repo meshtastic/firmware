@@ -56,7 +56,7 @@ jobs:
         uses: docker/login-action@v3
         with:
           username: meshtastic
-          password: ${{ secrets.DOCKER_TOKEN }}
+          password: ${{ secrets.DOCKER_FIRMWARE_TOKEN }}
 
       - name: Docker setup
         if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
