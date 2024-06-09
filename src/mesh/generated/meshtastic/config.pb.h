@@ -220,7 +220,9 @@ typedef enum _meshtastic_Config_LoRaConfig_RegionCode {
     /* Malaysia 919mhz */
     meshtastic_Config_LoRaConfig_RegionCode_MY_919 = 17,
     /* Singapore 923mhz */
-    meshtastic_Config_LoRaConfig_RegionCode_SG_923 = 18
+    meshtastic_Config_LoRaConfig_RegionCode_SG_923 = 18,
+    /* Israel AS923-4 (917-920mhz) */
+    meshtastic_Config_LoRaConfig_RegionCode_IL = 19
 } meshtastic_Config_LoRaConfig_RegionCode;
 
 /* Standard predefined channel settings
@@ -548,8 +550,8 @@ extern "C" {
 #define _meshtastic_Config_DisplayConfig_DisplayMode_ARRAYSIZE ((meshtastic_Config_DisplayConfig_DisplayMode)(meshtastic_Config_DisplayConfig_DisplayMode_COLOR+1))
 
 #define _meshtastic_Config_LoRaConfig_RegionCode_MIN meshtastic_Config_LoRaConfig_RegionCode_UNSET
-#define _meshtastic_Config_LoRaConfig_RegionCode_MAX meshtastic_Config_LoRaConfig_RegionCode_SG_923
-#define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_SG_923+1))
+#define _meshtastic_Config_LoRaConfig_RegionCode_MAX meshtastic_Config_LoRaConfig_RegionCode_IL
+#define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_IL+1))
 
 #define _meshtastic_Config_LoRaConfig_ModemPreset_MIN meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST
 #define _meshtastic_Config_LoRaConfig_ModemPreset_MAX meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE

@@ -135,6 +135,13 @@ const RegionInfo regions[] = {
     RDEF(SG_923, 917.0f, 925.0f, 100, 0, 20, true, false, false),
 
     /*
+        Israel (AS923-4, supported since RP002-1.0.3)
+        917 - 920 Mhz at 40mW with 1% duty cycle.
+        https://resources.lora-alliance.org/technical-specifications/rp002-1-0-4-regional-parameters
+    */
+    RDEF(IL, 917.0f, 920.0f, 1, 0, 16, true, false, false),
+
+    /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
     */
     RDEF(LORA_24, 2400.0f, 2483.5f, 100, 0, 10, true, false, true),
