@@ -89,7 +89,8 @@ int32_t SerialKeyboard::runOnce()
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP;
             }
             else if (!(shiftRegister2 & (1 << 2))) {
-                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN;
+                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
+                e.kbchar = 0xb7;
             }
             else if (!(shiftRegister2 & (1 << 1))) {
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
@@ -129,11 +130,15 @@ int32_t SerialKeyboard::runOnce()
             else if (!(shiftRegister1 & (1 << 0))) {
                 keyPressed = 9;
             }
-            // BACKSPACE
+            // BACKSPACE or TAB
             else if (!(shiftRegister1 & (1 << 7))) {
-                e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK;
-                e.kbchar = 0x08;
-                Serial.println("backspace");
+                if (shift == 0 || shift ==2){ // BACKSPACE
+                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK;
+                    e.kbchar = 0x08;
+                } else { // shift = 1 or 3 => TAB
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = 0x09;
+                }
             }
             // SHIFT
             else if (!(shiftRegister2 & (1 << 7))) {
