@@ -112,69 +112,6 @@ jobs:
   package-native:
     uses: ./.github/workflows/package_amd64.yml
 
-  build-native:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build base
-        id: base
-        uses: ./.github/actions/setup-base
-
-      # We now run integration test before other build steps (to quickly see runtime failures)
-      #- name: Build for native
-      #  run: platformio run -e native
-      #- name: Integration test
-      # run: |
-      #.pio/build/native/program
-      #& sleep 20 # 5 seconds was not enough
-      #echo "Simulator started, launching python test..."
-      #python3 -c 'from meshtastic.test import testSimulator; testSimulator()'
-
-      - name: Build Native
-        run: bin/build-native.sh
-
-      - name: Get release version string
-        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
-        id: version
-
-      - name: Store binaries as an artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: firmware-native-${{ steps.version.outputs.version }}.zip
-          overwrite: true
-          path: |
-            release/device-*.sh
-            release/device-*.bat
-            release/meshtasticd_linux*
-
-      - name: Docker login
-        if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
-        uses: docker/login-action@v3
-        with:
-          username: meshtastic
-          password: ${{ secrets.DOCKER_TOKEN }}
-      - name: Docker setup
-        if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
-        uses: docker/setup-buildx-action@v3
-
-      - name: Docker build and push tagged versions
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: meshtastic/device-simulator:${{ steps.version.outputs.version }}
-
-      - name: Docker build and push
-        if: ${{ github.ref == 'refs/heads/master' && github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: meshtastic/device-simulator:latest
-
   after-checks:
     runs-on: ubuntu-latest
     needs: [check]
@@ -196,10 +133,10 @@ jobs:
         build-esp32-s3,
         build-esp32-c3,
         build-nrf52,
-        build-native,
         build-rpi2040,
         package-raspbian,
         package-raspbian-armv7l,
+        package-native
       ]
     steps:
       - name: Checkout code
@@ -221,7 +158,7 @@ jobs:
         id: version
 
       - name: Move files up
-        run: mv -b -t ./ ./release/meshtasticd_linux_* ./bin/config-dist.yaml
+        run: mv -b -t ./ ./release/meshtasticd_linux_* ./bin/config-dist.yaml ./bin/device-*.sh ./bin/device-*.bat
 
       - name: Repackage in single firmware zip
         uses: actions/upload-artifact@v4
