@@ -42,7 +42,7 @@ enum GPSPowerState : uint8_t {
     GPS_OFF = 0,     // Physically powered off
     GPS_ACTIVE = 1,  // Awake and want a position
     GPS_STANDBY = 2, // Physically powered on, but soft-sleeping
-    GPS_RESTING = 3, // Awake, but not wanting another position yet
+    GPS_IDLE = 3,    // Awake, but not wanting another position yet
 };
 
 // Generate a string representation of DOP

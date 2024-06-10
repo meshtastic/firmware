@@ -30,8 +30,8 @@
 
 // How many seconds of sleep make it worthwhile for the GPS to use powered-on standby
 // Shorter than this, and we'll just wait instead
-#ifndef GPS_RESTING_THRESHOLD_SECONDS
-#define GPS_RESTING_THRESHOLD_SECONDS 10
+#ifndef GPS_IDLE_THRESHOLD_SECONDS
+#define GPS_IDLE_THRESHOLD_SECONDS 10
 #endif
 
 #if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
@@ -783,8 +783,8 @@ void GPS::setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime)
     // Record the current powerState
     if (on)
         powerState = GPS_ACTIVE;
-    else if (sleepTime <= GPS_RESTING_THRESHOLD_SECONDS * 1000UL && sleepTime > 0) // Note: sleepTime==0 if from GPS::disable()
-        powerState = GPS_RESTING;
+    else if (sleepTime <= GPS_IDLE_THRESHOLD_SECONDS * 1000UL && sleepTime > 0) // Note: sleepTime==0 if from GPS::disable()
+        powerState = GPS_IDLE;
     else if (standbyOnly)
         powerState = GPS_STANDBY;
     else
@@ -793,7 +793,7 @@ void GPS::setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime)
     LOG_DEBUG("GPS::powerState=%d\n", powerState);
 
     // If the next update is due *really soon*, don't actually power off or enter standby. Just wait it out.
-    if (!on && powerState == GPS_RESTING)
+    if (!on && powerState == GPS_IDLE)
         return;
 
     if (on) {
@@ -892,7 +892,7 @@ void GPS::setConnected()
 void GPS::setAwake(bool wantAwake)
 {
 
-    // If user has disabled GPS, make sure it is off, not just in standby or "resting"
+    // If user has disabled GPS, make sure it is off, not just in standby or idle
     if (!wantAwake && !enabled && powerState != GPS_OFF) {
         setGPSPower(false, false, 0);
         return;
