@@ -1,3 +1,5 @@
+# trunk-ignore-all(ruff/F821)
+# trunk-ignore-all(flake8/F821): For SConstruct imports
 import sys
 from os.path import join
 
@@ -60,6 +62,21 @@ if platform.name == "espressif32":
     import esptool
 
     env.AddPostAction("$BUILD_DIR/${PROGNAME}.bin", esp32_create_combined_bin)
+
+    esp32_kind = env.GetProjectOption("custom_esp32_kind")
+    if esp32_kind == "esp32":
+        # Free up some IRAM by removing auxiliary SPI flash chip drivers.
+        # Wrapped stub symbols are defined in src/platform/esp32/iram-quirk.c.
+        env.Append(
+            LINKFLAGS=[
+                "-Wl,--wrap=esp_flash_chip_gd",
+                "-Wl,--wrap=esp_flash_chip_issi",
+                "-Wl,--wrap=esp_flash_chip_winbond",
+            ]
+        )
+    else:
+        # For newer ESP32 targets, using newlib nano works better.
+        env.Append(LINKFLAGS=["--specs=nano.specs", "-u", "_printf_float"])
 
 Import("projenv")
 

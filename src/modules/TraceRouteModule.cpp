@@ -16,14 +16,34 @@ bool TraceRouteModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, m
 void TraceRouteModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r)
 {
     auto &incoming = p.decoded;
-    // Only append an ID for the request (one way) and if we are not the destination (the reply will have our NodeNum already)
-    if (!incoming.request_id && p.to != nodeDB->getNodeNum()) {
-        appendMyID(r);
-        printRoute(r, p.from, NODENUM_BROADCAST);
+    // Only append IDs for the request (one way)
+    if (!incoming.request_id) {
+        // Insert unknown hops if necessary
+        insertUnknownHops(p, r);
 
+        // Don't add ourselves if we are the destination (the reply will have our NodeNum already)
+        if (p.to != nodeDB->getNodeNum()) {
+            appendMyID(r);
+            printRoute(r, p.from, NODENUM_BROADCAST);
+        }
         // Set updated route to the payload of the to be flooded packet
         p.decoded.payload.size =
             pb_encode_to_bytes(p.decoded.payload.bytes, sizeof(p.decoded.payload.bytes), &meshtastic_RouteDiscovery_msg, r);
+    }
+}
+
+void TraceRouteModule::insertUnknownHops(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r)
+{
+    // Only insert unknown hops if hop_start is valid
+    if (p.hop_start != 0 && p.hop_limit <= p.hop_start) {
+        uint8_t hopsTaken = p.hop_start - p.hop_limit;
+        int8_t diff = hopsTaken - r->route_count;
+        for (uint8_t i = 0; i < diff; i++) {
+            if (r->route_count < sizeof(r->route) / sizeof(r->route[0])) {
+                r->route[r->route_count] = NODENUM_BROADCAST; // This will represent an unknown hop
+                r->route_count += 1;
+            }
+        }
     }
 }
 
