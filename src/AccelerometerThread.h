@@ -100,19 +100,21 @@ class AccelerometerThread : public concurrency::OSThread
             /* Get a new sensor event */
             bmx160.getAllData(&magAccel, NULL, &gAccel);
 
-            // very expirimental calibrate routine. Maybe limit to first 30 seconds?
-            if (magAccel.x > highestX)
-                highestX = magAccel.x;
-            if (magAccel.x < lowestX)
-                lowestX = magAccel.x;
-            if (magAccel.y > highestY)
-                highestY = magAccel.y;
-            if (magAccel.y < lowestY)
-                lowestY = magAccel.y;
-            if (magAccel.z > highestZ)
-                highestZ = magAccel.z;
-            if (magAccel.z < lowestZ)
-                lowestZ = magAccel.z;
+            // expirimental calibrate routine. Limited to between 10 and 30 seconds after boot
+            if (millis() > 10 * 1000 && millis() < 30 * 1000) {
+                if (magAccel.x > highestX)
+                    highestX = magAccel.x;
+                if (magAccel.x < lowestX)
+                    lowestX = magAccel.x;
+                if (magAccel.y > highestY)
+                    highestY = magAccel.y;
+                if (magAccel.y < lowestY)
+                    lowestY = magAccel.y;
+                if (magAccel.z > highestZ)
+                    highestZ = magAccel.z;
+                if (magAccel.z < lowestZ)
+                    lowestZ = magAccel.z;
+            }
 
             int highestRealX = highestX - (highestX + lowestX) / 2;
 
@@ -120,42 +122,37 @@ class AccelerometerThread : public concurrency::OSThread
             magAccel.y -= (highestY + lowestY) / 2;
             magAccel.z -= (highestZ + lowestZ) / 2;
             FusionVector ga, ma;
-            ga.axis.x = -gAccel.x;
+            ga.axis.x = -gAccel.x; // default location for the BMX160 is on the rear of the board
             ga.axis.y = -gAccel.y;
             ga.axis.z = gAccel.z;
             ma.axis.x = -magAccel.x;
             ma.axis.y = -magAccel.y;
             ma.axis.z = magAccel.z * 3;
-            // ma = FusionAxesSwap(ma, FusionAxesAlignmentNXPYNZ);
-            // ga = FusionAxesSwap(ga, FusionAxesAlignmentNXPYNZ);
+
+            // If we're set to one of the inverted positions
+            if (config.display.compass_orientation > meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270) {
+                ma = FusionAxesSwap(ma, FusionAxesAlignmentNXNYPZ);
+                ga = FusionAxesSwap(ga, FusionAxesAlignmentNXNYPZ);
+            }
+
             float heading = FusionCompassCalculateHeading(FusionConventionNed, ga, ma);
-            /*
-            // Inverted? Something isn't right about the following.
-            magAccel.x *= -1;
-            magAccel.y *= -1;
 
-            magAccel.z *= 3;
-
-            gAccel.x *= -1;
-            gAccel.y *= -1;
-            // gAccel.z *= -1;
-
-            // https://stackoverflow.com/questions/41299720/compass-heading-from-magnetometer-on-other-axis
-            float roll = atan2(gAccel.y, gAccel.z);
-            // float pitch = atan(-1 * gAccel.x / (gAccel.y * sin(roll) + gAccel.z * cos(roll)));
-            float pitch = atan2(-1 * gAccel.x, sqrt(gAccel.y * gAccel.y + gAccel.z * gAccel.z));
-
-            float heading =
-                atan2((magAccel.z) * sin(roll) - (magAccel.y) * cos(roll),
-                      (magAccel.x) * cos(pitch) + (magAccel.y) * sin(pitch) * sin(roll) + (magAccel.z) * sin(pitch) * cos(roll));
-            // float heading = atan2(magAccel.y, magAccel.x);
-
-            if (heading < 0)
-                heading += 2 * PI;
-            if (heading > 2 * PI)
-                heading -= 2 * PI;
-             heading *= 180 / PI;
-            //  heading += 180; */
+            switch (config.display.compass_orientation) {
+            case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_0:
+                break;
+            case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_90:
+            case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_90_INVERTED:
+                heading += 90;
+                break;
+            case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_180:
+            case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_180_INVERTED:
+                heading += 180;
+                break;
+            case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270:
+            case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270_INVERTED:
+                heading += 270;
+                break;
+            }
 
             screen->setHeading(heading);
 
