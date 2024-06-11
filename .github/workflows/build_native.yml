@@ -50,3 +50,36 @@ jobs:
           path: |
             release/meshtasticd_linux_x86_64
             bin/config-dist.yaml
+
+      - name: Docker login
+        if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
+        uses: docker/login-action@v3
+        continue-on-error: true # FIXME: Failing docker login auth
+        with:
+          username: meshtastic
+          password: ${{ secrets.DOCKER_FIRMWARE_TOKEN }}
+
+      - name: Docker setup
+        if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
+        continue-on-error: true # FIXME: Failing docker login auth
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker build and push tagged versions
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        continue-on-error: true # FIXME: Failing docker login auth
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: meshtastic/device-simulator:${{ steps.version.outputs.version }}
+
+      - name: Docker build and push
+        if: ${{ github.ref == 'refs/heads/master' && github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
+        continue-on-error: true # FIXME: Failing docker login auth
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: meshtastic/device-simulator:latest
