@@ -162,7 +162,7 @@ int32_t SerialKeyboard::runOnce()
                 }
                 else { //then it's shift
                     shift += 1;
-                    if (shift > 3){
+                    if (shift > 2){
                         shift = 0;
                     }
                 }
