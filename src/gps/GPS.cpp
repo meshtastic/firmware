@@ -783,7 +783,9 @@ void GPS::setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime)
     // Record the current powerState
     if (on)
         powerState = GPS_ACTIVE;
-    else if (sleepTime <= GPS_IDLE_THRESHOLD_SECONDS * 1000UL && sleepTime > 0) // Note: sleepTime==0 if from GPS::disable()
+    else if (!enabled) // User has disabled with triple press
+        powerState = GPS_OFF;
+    else if (sleepTime <= GPS_IDLE_THRESHOLD_SECONDS * 1000UL)
         powerState = GPS_IDLE;
     else if (standbyOnly)
         powerState = GPS_STANDBY;
@@ -1664,6 +1666,10 @@ bool GPS::whileIdle()
 }
 void GPS::enable()
 {
+    // Clear the old lock-time prediction
+    GPSCycles = 0;
+    averageLockTime = 0;
+
     enabled = true;
     setInterval(GPS_THREAD_INTERVAL);
     setAwake(true);
