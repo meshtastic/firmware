@@ -49,7 +49,8 @@ class ScanI2C
         OPT3001,
         MLX90632,
         AHT10,
-        DFROBOT_LARK,
+        BMX160,
+        DFROBOT_LARK
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;
