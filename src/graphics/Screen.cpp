@@ -2678,7 +2678,13 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
 int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 {
     if (showingNormalScreen) {
-        setFrames(); // Regen the list of screens (will show new text message)
+        // Outgoing message
+        if (packet->from == 0)
+            setFrames(true); // Return to same frame
+
+        // Incoming message
+        else
+            setFrames(false); // Regen the list of screens (will show new text message)
     }
 
     return 0;
