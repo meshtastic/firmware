@@ -319,7 +319,8 @@ const uint8_t GPS::_message_SAVE[] = {
 // As the M10 has no flash, the best we can do to preserve the config is to set it in RAM and BBR.
 // BBR will survive a restart, and power off for a while, but modules with small backup
 // batteries or super caps will not retain the config for a long power off time.
-// for all configurations using sleep / low power modes, V_BCKP needs to be hooked to permanent power for fast aquisition after sleep
+// for all configurations using sleep / low power modes, V_BCKP needs to be hooked to permanent power for fast aquisition after
+// sleep
 
 // VALSET Commands for M10
 // Please refer to the M10 Protocol Specification:
@@ -337,15 +338,15 @@ const uint8_t GPS::_message_SAVE[] = {
 CFG-PM2 has been replaced by many CFG-PM commands
 CFG-PMS has been removed
 
-CFG-PM-OPERATEMODE E1 (0 | 1 | 2) -> 1 (PSMOO), because sporadic position updates are required instead of continous tracking <10s (PSMCT)
-CFG-PM-POSUPDATEPERIOD U4 -> 0ms, no self-timed wakup because receiver power mode is controlled via "software standby mode" by legacy UBX-RXM-PMREQ request
-CFG-PM-ACQPERIOD U4 -> 0ms, because receiver power mode is controlled via "software standby mode" by legacy UBX-RXM-PMREQ request
-CFG-PM-ONTIME U4 -> 0ms, optional I guess
-CFG-PM-EXTINTBACKUP L -> 1, force receiver into BACKUP mode when EXTINT (should be connected to GPS_EN_PIN) pin is "low"
+CFG-PM-OPERATEMODE E1 (0 | 1 | 2) -> 1 (PSMOO), because sporadic position updates are required instead of continous tracking <10s
+(PSMCT) CFG-PM-POSUPDATEPERIOD U4 -> 0ms, no self-timed wakup because receiver power mode is controlled via "software standby
+mode" by legacy UBX-RXM-PMREQ request CFG-PM-ACQPERIOD U4 -> 0ms, because receiver power mode is controlled via "software standby
+mode" by legacy UBX-RXM-PMREQ request CFG-PM-ONTIME U4 -> 0ms, optional I guess CFG-PM-EXTINTBACKUP L -> 1, force receiver into
+BACKUP mode when EXTINT (should be connected to GPS_EN_PIN) pin is "low"
 
 This is required because the receiver never enters low power mode if microcontroller is in deep-sleep.
-Maybe the changing UART_RX levels trigger a wakeup but even with UBX-RXM-PMREQ[12] = 0x00 (all external wakeup sources disabled) the receivcer remains 
-in aquisition state -> potentially a bug
+Maybe the changing UART_RX levels trigger a wakeup but even with UBX-RXM-PMREQ[12] = 0x00 (all external wakeup sources disabled)
+the receivcer remains in aquisition state -> potentially a bug
 
 Workaround: Control the EXTINT pin by the GPS_EN_PIN signal
 
@@ -358,14 +359,12 @@ CFG-SIGNAL-BDS_B1C_ENA L -> 0
 // BBR layer config message:
 // 01 02 00 00 01 00 D0 20 01 02 00 D0 40 00 00 00 00 03 00 D0 40 00 00 00 00 05 00 D0 30 00 00 0D 00 D0 10 01
 */
-const uint8_t GPS::_message_VALSET_PM_RAM[] = {0x01, 0x01, 0x00, 0x00, 0x0F, 0x00, 0x31, 0x10, 0x00, 0x01, 0x00, 0xD0, 0x20,
-                                               0x01, 0x02, 0x00, 0xD0, 0x40, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0xD0, 0x40, 
-                                               0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0xD0, 0x30, 0x00, 0x00, 0x0D, 0x00, 0xD0, 
-                                               0x10, 0x01};
-const uint8_t GPS::_message_VALSET_PM_BBR[] = {0x01, 0x02, 0x00, 0x00, 0x0F, 0x00, 0x31, 0x10, 0x00, 0x01, 0x00, 0xD0, 0x20,
-                                               0x01, 0x02, 0x00, 0xD0, 0x40, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0xD0, 0x40, 
-                                               0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0xD0, 0x30, 0x00, 0x00, 0x0D, 0x00, 0xD0, 
-                                               0x10, 0x01};
+const uint8_t GPS::_message_VALSET_PM_RAM[] = {0x01, 0x01, 0x00, 0x00, 0x0F, 0x00, 0x31, 0x10, 0x00, 0x01, 0x00, 0xD0, 0x20, 0x01,
+                                               0x02, 0x00, 0xD0, 0x40, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0xD0, 0x40, 0x00, 0x00,
+                                               0x00, 0x00, 0x05, 0x00, 0xD0, 0x30, 0x00, 0x00, 0x0D, 0x00, 0xD0, 0x10, 0x01};
+const uint8_t GPS::_message_VALSET_PM_BBR[] = {0x01, 0x02, 0x00, 0x00, 0x0F, 0x00, 0x31, 0x10, 0x00, 0x01, 0x00, 0xD0, 0x20, 0x01,
+                                               0x02, 0x00, 0xD0, 0x40, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0xD0, 0x40, 0x00, 0x00,
+                                               0x00, 0x00, 0x05, 0x00, 0xD0, 0x30, 0x00, 0x00, 0x0D, 0x00, 0xD0, 0x10, 0x01};
 
 /*
 CFG-ITFM replaced by 5 valset messages which can be combined into one for RAM and one for BBR
