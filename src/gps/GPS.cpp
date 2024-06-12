@@ -785,7 +785,7 @@ void GPS::setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime)
         powerState = GPS_ACTIVE;
     else if (!enabled) // User has disabled with triple press
         powerState = GPS_OFF;
-    else if (sleepTime <= GPS_IDLE_THRESHOLD_SECONDS * 1000UL && sleepTime > 0) // sleepTime=0 indicates indefinite GPS poweroff
+    else if (sleepTime <= GPS_IDLE_THRESHOLD_SECONDS * 1000UL)
         powerState = GPS_IDLE;
     else if (standbyOnly)
         powerState = GPS_STANDBY;
@@ -940,8 +940,7 @@ void GPS::setAwake(bool wantAwake)
 
         // How long to wait before attempting next GPS update
         // Aims to hit position.gps_update_interval by using the lock-time prediction
-        // Sleep for at least 1 second, so we don't ask GPS hardware to sleep indefinitely with a "0 second PMREQ"
-        uint32_t compensatedSleepTime = (getSleepTime() > predictedLockTime) ? (getSleepTime() - predictedLockTime) : 1;
+        uint32_t compensatedSleepTime = (getSleepTime() > predictedLockTime) ? (getSleepTime() - predictedLockTime) : 0;
 
         // If long interval between updates: power off between updates
         if (compensatedSleepTime > GPS_STANDBY_THRESHOLD_MINUTES * MS_IN_MINUTE) {
@@ -1130,10 +1129,11 @@ void GPS::clearBuffer()
 /// Prepare the GPS for the cpu entering deep or light sleep, expect to be gone for at least 100s of msecs
 int GPS::prepareDeepSleep(void *unused)
 {
-    /*
-     * GPS power was previously set here.
-     * Now removed, as the same call is already made directly in doDeepSleep.
-     */
+    LOG_INFO("GPS deep sleep!\n");
+
+    // Manually enter GPSPowerState::OFF, so we can ensure a PMREQ with duration 0 has been sent
+    setGPSPower(false, false, 0);
+
     return 0;
 }
 
