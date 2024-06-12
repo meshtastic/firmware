@@ -920,31 +920,31 @@ void GPS::setAwake(bool wantAwake)
             uint32_t lockTime = lastSleepStartMsec - lastWakeStartMsec;
 
             // Update the lock-time prediction
-            // Used pre-emptively, attemtping to hit target of gps.position_update_interal
+            // Used pre-emptively, attempting to hit target of gps.position_update_interval
             switch (GPSCycles) {
             case 0:
                 LOG_DEBUG("Initial GPS lock took %ds\n", lockTime / 1000);
                 break;
             case 1:
-                averageLockTime = lockTime; // Avoid slow ramp-up - start with a real value
+                predictedLockTime = lockTime; // Avoid slow ramp-up - start with a real value
                 LOG_DEBUG("GPS Lock took %ds\n", lockTime / 1000);
                 break;
             default:
                 // Predict lock-time using exponential smoothing: respond slowly to changes
-                averageLockTime = (lockTime * 0.2) + (averageLockTime * 0.8); // Latest lock time has 20% weight on prediction
+                predictedLockTime = (lockTime * 0.2) + (predictedLockTime * 0.8); // Latest lock time has 20% weight on prediction
                 LOG_INFO("GPS Lock took %ds. %s by %ds. Next lock predicted to take %ds.\n", lockTime / 1000,
-                         (lateByMsec > 0) ? "Late" : "Early", abs(lateByMsec) / 1000, averageLockTime / 1000);
+                         (lateByMsec > 0) ? "Late" : "Early", abs(lateByMsec) / 1000, predictedLockTime / 1000);
             }
             GPSCycles++;
         }
 
         // How long to wait before attempting next GPS update
         // Aims to hit position.gps_update_interval by using the lock-time prediction
-        uint32_t compensatedSleepTime = (getSleepTime() > averageLockTime) ? (getSleepTime() - averageLockTime) : 0;
+        uint32_t compensatedSleepTime = (getSleepTime() > predictedLockTime) ? (getSleepTime() - predictedLockTime) : 0;
 
         // If long interval between updates: power off between updates
         if (compensatedSleepTime > GPS_STANDBY_THRESHOLD_MINUTES * MS_IN_MINUTE) {
-            setGPSPower(wantAwake, false, getSleepTime() - averageLockTime);
+            setGPSPower(wantAwake, false, getSleepTime() - predictedLockTime);
         }
 
         // If waking relatively frequently: don't power off. Would use more energy trying to reacquire lock each time
@@ -1063,7 +1063,7 @@ int32_t GPS::runOnce()
 
     auto sleepTime = getSleepTime();
     if (powerState != GPS_ACTIVE && (sleepTime != UINT32_MAX) &&
-        ((timeAsleep > sleepTime) || (isInPowersave && timeAsleep > (sleepTime - averageLockTime)))) {
+        ((timeAsleep > sleepTime) || (isInPowersave && timeAsleep > (sleepTime - predictedLockTime)))) {
         // We now want to be awake - so wake up the GPS
         setAwake(true);
     }
@@ -1681,7 +1681,7 @@ void GPS::enable()
 {
     // Clear the old lock-time prediction
     GPSCycles = 0;
-    averageLockTime = 0;
+    predictedLockTime = 0;
 
     enabled = true;
     setInterval(GPS_THREAD_INTERVAL);
