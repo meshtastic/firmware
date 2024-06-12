@@ -2054,7 +2054,7 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
 #endif
 
 // restore our regular frame list
-void Screen::setFrames()
+void Screen::setFrames(bool holdPosition = false)
 {
     uint8_t currentFrameNum = ui->getUiState()->currentFrame;
     LOG_DEBUG("Showing standard frame number %d\n", currentFrameNum);
@@ -2150,13 +2150,13 @@ void Screen::setFrames()
 
     setFastFramerate(); // Draw ASAP
 
-    if (currentFrameNum > numframes - 1) { // If we were on a frame that no longer exists
-        ui->switchToFrame(0); // Return to Frame 0 , if we can't 
-        } 
-    else {
-        ui->switchToFrame(currentFrameNum); // Attempt to return to same frame after rebuilding the frames
-        }    
-}
+    if (holdPosition) {
+        ui->switchToFrame(currentFrameNum); // Attempt to return to same frame after rebuilding the frames,
+        // if holdPosition is true (currently only Screen::handleStatusUpdate calls this
+    } else {
+        continue; // We leave the displayed frame as it is or chnage focuse to new frame
+    }   
+}    
 
 void Screen::handleStartBluetoothPinScreen(uint32_t pin)
 {
@@ -2655,7 +2655,7 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
     switch (arg->getStatusType()) {
     case STATUS_TYPE_NODE:
         if (showingNormalScreen && nodeStatus->getLastNumTotal() != nodeStatus->getNumTotal()) {
-            setFrames(); // Regen the list of screens
+            setFrames(true); // Regen the list of screens, will show the previously displayed frame
         }
         nodeDB->updateGUI = false;
         break;
