@@ -904,7 +904,7 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
         jsonObj["hops_away"] = new JSONValue((unsigned int)(mp->hop_start - mp->hop_limit));
         jsonObj["hop_start"] = new JSONValue((unsigned int)(mp->hop_start));
     }
-    
+
     // serialize and write it to the stream
     JSONValue *value = new JSONValue(jsonObj);
     std::string jsonStr = value->Stringify();
