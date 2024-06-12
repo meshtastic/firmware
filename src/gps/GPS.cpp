@@ -1131,7 +1131,8 @@ int GPS::prepareDeepSleep(void *unused)
 {
     LOG_INFO("GPS deep sleep!\n");
 
-    setAwake(false);
+    // Manually enter GPSPowerState::OFF, so we can ensure a PMREQ with duration 0 has been sent
+    setGPSPower(false, false, 0);
 
     return 0;
 }
