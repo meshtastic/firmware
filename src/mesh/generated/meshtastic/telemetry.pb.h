@@ -61,7 +61,9 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* AHT10 Integrated temperature and humidity sensor */
     meshtastic_TelemetrySensorType_AHT10 = 23,
     /* DFRobot Lark Weather station (temperature, humidity, pressure, wind speed and direction) */
-    meshtastic_TelemetrySensorType_DFROBOT_LARK = 24
+    meshtastic_TelemetrySensorType_DFROBOT_LARK = 24,
+    /* NAU7802 Scale Chip or compatible */
+    meshtastic_TelemetrySensorType_NAU7802 = 25
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -174,6 +176,14 @@ typedef struct _meshtastic_Telemetry {
     } variant;
 } meshtastic_Telemetry;
 
+/* NAU7802 Telemetry configuration, for saving to flash */
+typedef struct _meshtastic_Nau7802Config {
+    /* The offset setting for the NAU7802 */
+    int32_t zeroOffset;
+    /* The calibration factor for the NAU7802 */
+    float calibrationFactor;
+} meshtastic_Nau7802Config;
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -181,8 +191,9 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_DFROBOT_LARK
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_DFROBOT_LARK+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_NAU7802
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_NAU7802+1))
+
 
 
 
@@ -196,11 +207,13 @@ extern "C" {
 #define meshtastic_PowerMetrics_init_default     {0, 0, 0, 0, 0, 0}
 #define meshtastic_AirQualityMetrics_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Telemetry_init_default        {0, 0, {meshtastic_DeviceMetrics_init_default}}
+#define meshtastic_Nau7802Config_init_default    {0, 0}
 #define meshtastic_DeviceMetrics_init_zero       {0, 0, 0, 0, 0}
 #define meshtastic_EnvironmentMetrics_init_zero  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_PowerMetrics_init_zero        {0, 0, 0, 0, 0, 0}
 #define meshtastic_AirQualityMetrics_init_zero   {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Telemetry_init_zero           {0, 0, {meshtastic_DeviceMetrics_init_zero}}
+#define meshtastic_Nau7802Config_init_zero       {0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_DeviceMetrics_battery_level_tag 1
@@ -245,6 +258,8 @@ extern "C" {
 #define meshtastic_Telemetry_environment_metrics_tag 3
 #define meshtastic_Telemetry_air_quality_metrics_tag 4
 #define meshtastic_Telemetry_power_metrics_tag   5
+#define meshtastic_Nau7802Config_zeroOffset_tag  1
+#define meshtastic_Nau7802Config_calibrationFactor_tag 2
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_DeviceMetrics_FIELDLIST(X, a) \
@@ -313,11 +328,18 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (variant,power_metrics,variant.power_metrics)
 #define meshtastic_Telemetry_variant_air_quality_metrics_MSGTYPE meshtastic_AirQualityMetrics
 #define meshtastic_Telemetry_variant_power_metrics_MSGTYPE meshtastic_PowerMetrics
 
+#define meshtastic_Nau7802Config_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, INT32,    zeroOffset,        1) \
+X(a, STATIC,   SINGULAR, FLOAT,    calibrationFactor,   2)
+#define meshtastic_Nau7802Config_CALLBACK NULL
+#define meshtastic_Nau7802Config_DEFAULT NULL
+
 extern const pb_msgdesc_t meshtastic_DeviceMetrics_msg;
 extern const pb_msgdesc_t meshtastic_EnvironmentMetrics_msg;
 extern const pb_msgdesc_t meshtastic_PowerMetrics_msg;
 extern const pb_msgdesc_t meshtastic_AirQualityMetrics_msg;
 extern const pb_msgdesc_t meshtastic_Telemetry_msg;
+extern const pb_msgdesc_t meshtastic_Nau7802Config_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_DeviceMetrics_fields &meshtastic_DeviceMetrics_msg
@@ -325,12 +347,14 @@ extern const pb_msgdesc_t meshtastic_Telemetry_msg;
 #define meshtastic_PowerMetrics_fields &meshtastic_PowerMetrics_msg
 #define meshtastic_AirQualityMetrics_fields &meshtastic_AirQualityMetrics_msg
 #define meshtastic_Telemetry_fields &meshtastic_Telemetry_msg
+#define meshtastic_Nau7802Config_fields &meshtastic_Nau7802Config_msg
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_TELEMETRY_PB_H_MAX_SIZE meshtastic_Telemetry_size
 #define meshtastic_AirQualityMetrics_size        72
 #define meshtastic_DeviceMetrics_size            27
 #define meshtastic_EnvironmentMetrics_size       68
+#define meshtastic_Nau7802Config_size            16
 #define meshtastic_PowerMetrics_size             30
 #define meshtastic_Telemetry_size                79
 
