@@ -118,7 +118,16 @@ static LGFX *tft = nullptr;
 
 #elif defined(RAK14014)
 #include <TFT_eSPI.h>
+#include <RAK14014_FT6336U.h>
+
 TFT_eSPI *tft = nullptr;
+FT6336U ft6336u; 
+
+static uint8_t _rak14014_touch_int = false; // TP interrupt generation flag.
+static void rak14014_tpIntHandle(void)
+{
+    _rak14014_touch_int = true;
+}
 
 #elif defined(ST7789_CS)
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
@@ -642,8 +651,12 @@ void TFTDisplay::sendCommand(uint8_t com)
 
 void TFTDisplay::setDisplayBrightness(uint8_t _brightness)
 {
+#ifdef RAK14014
+    //to do
+#else
     tft->setBrightness(_brightness);
     LOG_DEBUG("Brightness is set to value: %i \n", _brightness);
+#endif    
 }
 
 void TFTDisplay::flipScreenVertically()
@@ -657,6 +670,7 @@ void TFTDisplay::flipScreenVertically()
 bool TFTDisplay::hasTouch(void)
 {
 #ifdef RAK14014
+    return true;
 #elif !defined(M5STACK)
     return tft->touch() != nullptr;
 #else
@@ -667,6 +681,15 @@ bool TFTDisplay::hasTouch(void)
 bool TFTDisplay::getTouch(int16_t *x, int16_t *y)
 {
 #ifdef RAK14014
+    if(_rak14014_touch_int) {
+        _rak14014_touch_int = false;
+        /* The X and Y axes have to be switched */
+        *y = ft6336u.read_touch1_x();
+        *x = TFT_HEIGHT - ft6336u.read_touch1_y();
+        return true;
+    } else {
+        return false;
+    }
 #elif !defined(M5STACK)
     return tft->getTouch(x, y);
 #else
@@ -716,6 +739,11 @@ bool TFTDisplay::connect()
 #elif defined(RAK14014)
     tft->setRotation(1);
     tft->setSwapBytes(true);
+
+    ft6336u.begin();
+    pinMode(SCREEN_TOUCH_INT, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(SCREEN_TOUCH_INT), rak14014_tpIntHandle, FALLING);
+
 //    tft->fillScreen(TFT_BLACK);
 #elif defined(T_DECK) || defined(PICOMPUTER_S3) || defined(CHATTER_2)
     tft->setRotation(1); // T-Deck has the TFT in landscape
