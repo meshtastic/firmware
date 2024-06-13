@@ -21,6 +21,7 @@ unsigned char KeyMap[3][4][10]=  {{{'.','a','d','g','j','m','p','t','w',' '},
 
 #endif
 
+
 SerialKeyboard::SerialKeyboard(const char *name) : concurrency::OSThread(name)
 {
     this->_originName = name;
@@ -54,8 +55,6 @@ int32_t SerialKeyboard::runOnce()
         prevKeys = 0b1111111111111111;
         LOG_DEBUG("Serial Keyboard setup\n");
     }
-
-    
 
     if (INPUTBROKER_SERIAL_TYPE == 1) { //Chatter V1.0 & V2.0 keypads
         // scan for keypresses
@@ -135,7 +134,7 @@ int32_t SerialKeyboard::runOnce()
                 if (shift == 0 || shift ==2){ // BACKSPACE
                     e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_BACK;
                     e.kbchar = 0x08;
-                } else { // shift = 1 or 3 => TAB
+                } else { // shift = 1 => TAB
                     e.inputEvent = ANYKEY;
                     e.kbchar = 0x09;
                 }
@@ -170,19 +169,6 @@ int32_t SerialKeyboard::runOnce()
                 lastKeyPressed = keyPressed;
                 keyPressed = 13;
             }
-
-
-
-
-
-
-
-
-
-
-
-
-
 
             if (e.inputEvent != meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE) {
                 this->notifyObservers(&e);
