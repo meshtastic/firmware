@@ -17,7 +17,10 @@
     "f_cpu": "240000000L",
     "f_flash": "80000000L",
     "flash_mode": "qio",
-    "hwids": [["0x16D0", "0x1178"]],
+    "hwids": [
+      ["0x16D0", "0x1178"],
+      ["0x303a", "0x1001"]
+    ],
     "mcu": "esp32s3",
     "variant": "unphone"
   },
