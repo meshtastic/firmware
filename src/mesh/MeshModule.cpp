@@ -62,7 +62,10 @@ meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, Nod
 
 meshtastic_MeshPacket *MeshModule::allocErrorResponse(meshtastic_Routing_Error err, const meshtastic_MeshPacket *p)
 {
-    auto r = allocAckNak(err, getFrom(p), p->id, p->channel);
+    // If the original packet couldn't be decoded, use the primary channel
+    uint8_t channelIndex =
+        p->which_payload_variant == meshtastic_MeshPacket_decoded_tag ? p->channel : channels.getPrimaryIndex();
+    auto r = allocAckNak(err, getFrom(p), p->id, channelIndex);
 
     setReplyTo(r, *p);
 
@@ -114,13 +117,13 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
             /// Also: if a packet comes in on the local PC interface, we don't check for bound channels, because it is TRUSTED and
             /// it needs to to be able to fetch the initial admin packets without yet knowing any channels.
 
-            bool rxChannelOk = !pi.boundChannel || (mp.from == 0) || (strcasecmp(ch->settings.name, pi.boundChannel) == 0);
+            bool rxChannelOk = !pi.boundChannel || (mp.from == 0) || (ch && strcasecmp(ch->settings.name, pi.boundChannel) == 0);
 
             if (!rxChannelOk) {
                 // no one should have already replied!
                 assert(!currentReply);
 
-                if (mp.decoded.want_response) {
+                if (isDecoded && mp.decoded.want_response) {
                     printPacket("packet on wrong channel, returning error", &mp);
                     currentReply = pi.allocErrorResponse(meshtastic_Routing_Error_NOT_AUTHORIZED, &mp);
                 } else
@@ -138,7 +141,8 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
                 // because currently when the phone sends things, it sends things using the local node ID as the from address.  A
                 // better solution (FIXME) would be to let phones have their own distinct addresses and we 'route' to them like
                 // any other node.
-                if (mp.decoded.want_response && toUs && (getFrom(&mp) != ourNodeNum || mp.to == ourNodeNum) && !currentReply) {
+                if (isDecoded && mp.decoded.want_response && toUs && (getFrom(&mp) != ourNodeNum || mp.to == ourNodeNum) &&
+                    !currentReply) {
                     pi.sendResponse(mp);
                     ignoreRequest = ignoreRequest || pi.ignoreRequest; // If at least one module asks it, we may ignore a request
                     LOG_INFO("Asked module '%s' to send a response\n", pi.name);
@@ -163,7 +167,7 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
         pi.currentRequest = NULL;
     }
 
-    if (mp.decoded.want_response && toUs) {
+    if (isDecoded && mp.decoded.want_response && toUs) {
         if (currentReply) {
             printPacket("Sending response", currentReply);
             service.sendToMesh(currentReply);
@@ -183,7 +187,7 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
         }
     }
 
-    if (!moduleFound) {
+    if (!moduleFound && isDecoded) {
         LOG_DEBUG("No modules interested in portnum=%d, src=%s\n", mp.decoded.portnum,
                   (src == RX_SRC_LOCAL) ? "LOCAL" : "REMOTE");
     }
