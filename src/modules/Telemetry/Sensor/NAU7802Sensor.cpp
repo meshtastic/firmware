@@ -44,14 +44,16 @@ bool NAU7802Sensor::getMetrics(meshtastic_Telemetry *measurement)
             return false;
         }
     }
-    measurement->variant.environment_metrics.weight = nau7802.getWeight();
+    // Check if we have correct calibration values after powerup
+    LOG_DEBUG("Offset: %d, Calibration factor: %.2f\n", nau7802.getZeroOffset(), nau7802.getCalibrationFactor());
+    measurement->variant.environment_metrics.weight = nau7802.getWeight() / 1000; // sample is in kg
     nau7802.powerDown();
     return true;
 }
 
 void NAU7802Sensor::calibrate(float weight)
 {
-    nau7802.calculateCalibrationFactor(weight, 64);
+    nau7802.calculateCalibrationFactor(weight * 1000, 64); // internal sample is in grams
     if (!saveCalibrationData()) {
         LOG_WARN("Failed to save calibration data\n");
     }
