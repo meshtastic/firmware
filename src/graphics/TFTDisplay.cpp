@@ -117,10 +117,15 @@ class LGFX : public lgfx::LGFX_Device
 static LGFX *tft = nullptr;
 
 #elif defined(RAK14014)
+#include "RAK14014_FT6336U.h"
 #include <TFT_eSPI.h>
 #include "RAK14014_FT6336U.h" 
 TFT_eSPI *tft = nullptr;
+<<<<<<< HEAD
 FT6336U ft6336u; 
+=======
+FT6336U ft6336u;
+>>>>>>> 3423055a08bae392a2aa68011f739e3ca2db5e0f
 
 static uint8_t _rak14014_touch_int = false; // TP interrupt generation flag.
 static void rak14014_tpIntHandle(void)
@@ -648,7 +653,11 @@ void TFTDisplay::sendCommand(uint8_t com)
 }
 
 void TFTDisplay::setDisplayBrightness(uint8_t _brightness)
+<<<<<<< HEAD
 {   
+=======
+{
+>>>>>>> 3423055a08bae392a2aa68011f739e3ca2db5e0f
 #ifndef RAK14014
     tft->setBrightness(_brightness);
     LOG_DEBUG("Brightness is set to value: %i \n", _brightness);
@@ -677,19 +686,16 @@ bool TFTDisplay::hasTouch(void)
 bool TFTDisplay::getTouch(int16_t *x, int16_t *y)
 {
 #ifdef RAK14014
-    if(_rak14014_touch_int)
-    {
+    if (_rak14014_touch_int) {
         _rak14014_touch_int = false;
         /* The X and Y axes have to be switched */
         *y = ft6336u.read_touch1_x();
         *x = TFT_HEIGHT - ft6336u.read_touch1_y();
         return true;
-    } else
-    {
+    } else {
         return false;
     }
-    
-    
+
 #elif !defined(M5STACK)
     return tft->getTouch(x, y);
 #else
