@@ -247,6 +247,10 @@ void setup()
     // digitalWrite(PIN_POWER_EN1, INPUT);
 #endif
 
+#if !MESHTASTIC_EXCLUDE_DROPZONE
+    pinMode(PIN_A1, INPUT);
+#endif
+
 #if defined(LORA_TCXO_GPIO)
     pinMode(LORA_TCXO_GPIO, OUTPUT);
     digitalWrite(LORA_TCXO_GPIO, HIGH);

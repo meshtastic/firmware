@@ -1,77 +1,61 @@
 #include "DropzoneModule.h"
 #include "MeshService.h"
 #include "configuration.h"
-#include "main.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
+#include "main.h"
 
 #include <assert.h>
 
-#include "telemetry/UnitConversions.h"
 #include "telemetry/Sensor/DFRobotLarkSensor.h"
+#include "telemetry/UnitConversions.h"
 
-void DropzoneModule::alterReceived(meshtastic_MeshPacket &mp)
+#include <string>
+
+DropzoneModule *dropzoneModule;
+
+int32_t DropzoneModule::runOnce()
 {
-    char matchCompare[54];
-    auto incomingMessage = reinterpret_cast<const char *>(&mp.decoded.payload.bytes);
-    sprintf(matchCompare, "%s conditions", owner.short_name);
-    if (strcmp(incomingMessage, matchCompare) == 0)
-    {
-        mp.decoded.want_response = true;
-        mp.from = NODENUM_BROADCAST;
+    // Send on a 5 second delay from rec
+    if (startSendConditions != 0 && (startSendConditions + 5000U) < millis()) {
+        service.sendToMesh(sendConditions(), RX_SRC_LOCAL);
+        startSendConditions = 0;
     }
-
-    sprintf(matchCompare, "%s conditions", owner.long_name);
-    if (strcmp(incomingMessage, matchCompare) == 0)
-    {
-        mp.decoded.want_response = true;
-        mp.from = NODENUM_BROADCAST;
-    }
+    // Run every second
+    return 1000;
 }
 
 ProcessMessage DropzoneModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
-    return ProcessMessage::CONTINUE;
-}
-
-meshtastic_MeshPacket *DropzoneModule::allocReply()
-{
-    assert(currentRequest); // should always be !NULL
-    auto req = *currentRequest;
-    auto &p = req.decoded;
-    // The incoming message is in p.payload
-    LOG_INFO("Allocating reply for message from=0x%0x, id=%d, msg=%.*s\n", req.from, req.id, p.payload.size, p.payload.bytes);
-
+    auto &p = mp.decoded;
+    LOG_DEBUG("DropzoneModule::handleReceived\n");
     char matchCompare[54];
     auto incomingMessage = reinterpret_cast<const char *>(p.payload.bytes);
     sprintf(matchCompare, "%s conditions", owner.short_name);
-    if (strcmp(incomingMessage, matchCompare) == 0)
-    {
-        return sendConditions();
+    if (strncasecmp(incomingMessage, matchCompare, strlen(matchCompare)) == 0) {
+        LOG_DEBUG("Received dropzone conditions request\n");
+        startSendConditions = millis();
     }
 
     sprintf(matchCompare, "%s conditions", owner.long_name);
-    if (strcmp(incomingMessage, matchCompare) == 0)
-    {
-        return sendConditions();
+    if (strncasecmp(incomingMessage, matchCompare, strlen(matchCompare)) == 0) {
+        LOG_DEBUG("Received dropzone conditions request\n");
+        startSendConditions = millis();
     }
-    return NULL;
+    return ProcessMessage::CONTINUE;
 }
 
 meshtastic_MeshPacket *DropzoneModule::sendConditions()
 {
-    LOG_DEBUG("Received dropzone conditions request\n");
     char replyStr[200];
     /*
-    {DZ / node name} conditions @ {HH:MM:SS}
-    Wind 2mph @ 125° ESE
-    Temp 75°F Hum 56%
-    39.123456, -94.023123
+        CLOSED @ {HH:MM:SS}
+        Wind 2 kts @ 125°
+        29.25 inHg 72°C
     */
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
     int hour = 0, min = 0, sec = 0;
-    if (rtc_sec > 0)
-    {
+    if (rtc_sec > 0) {
         long hms = rtc_sec % SEC_PER_DAY;
         hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
 
@@ -80,28 +64,25 @@ meshtastic_MeshPacket *DropzoneModule::sendConditions()
         sec = (hms % SEC_PER_HOUR) % SEC_PER_MIN;
     }
 
-    auto isDropzoneClear = true ? "Clear" : "Closed";
+    auto dropzoneStatus = analogRead(A1) < 100 ? "OPEN" : "CLOSED";
+    LOG_DEBUG("Dropzone status is %s\n", dropzoneStatus);
     auto reply = allocDataPacket();
 
     auto node = nodeDB->getMeshNode(nodeDB->getNodeNum());
-    if (sensor.hasSensor())
-    {
+    if (sensor.hasSensor()) {
         meshtastic_Telemetry telemetry = meshtastic_Telemetry_init_zero;
         sensor.getMetrics(&telemetry);
         LOG_DEBUG("Gathered metrics\n");
-        auto windSpeed = UnitConversions::MetersPerSecondToMilesPerHour(telemetry.variant.environment_metrics.wind_speed);
+        auto windSpeed = UnitConversions::MetersPerSecondToKnots(telemetry.variant.environment_metrics.wind_speed);
         auto windDirection = telemetry.variant.environment_metrics.wind_direction;
-        auto temp = UnitConversions::CelsiusToFahrenheit(telemetry.variant.environment_metrics.temperature);
-        auto hum = telemetry.variant.environment_metrics.relative_humidity;
-        auto baro = telemetry.variant.environment_metrics.barometric_pressure;
+        auto temp = telemetry.variant.environment_metrics.temperature;
+        auto baro = UnitConversions::HectoPascalToInchesOfMercury(telemetry.variant.environment_metrics.barometric_pressure);
 
-        sprintf(replyStr, "%s - %s @ %02d:%02d:%02d\nWind %.2fmph @ %d°\n%.2f hpA  %.2f°F %.2f%% humidity\n%f, %f", owner.long_name, isDropzoneClear, hour, min, sec, windSpeed, windDirection, baro, temp, hum, node->position.latitude_i * 1e-7, node->position.longitude_i * 1e-7);
+        sprintf(replyStr, "%s @ %02d:%02d:%02d\nWind %.2f kts @ %d°\nBaro %.2f inHg %.2f°C", dropzoneStatus, hour, min, sec,
+                windSpeed, windDirection, baro, temp);
         LOG_DEBUG("Conditions reply: %s\n", replyStr);
-    }
-    else
-    {
+    } else {
         LOG_ERROR("No sensor found\n");
-        sprintf(replyStr, "%s - %s @ %02d:%02d:%02d\nConditions unavailable\n%d, %d", owner.long_name, isDropzoneClear, hour, min, sec, node->position.latitude_i * 1e-7, node->position.longitude_i * 1e-7);
     }
     reply->decoded.payload.size = strlen(replyStr); // You must specify how many bytes are in the reply
     memcpy(reply->decoded.payload.bytes, replyStr, reply->decoded.payload.size);

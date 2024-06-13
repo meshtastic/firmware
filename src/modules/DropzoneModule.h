@@ -3,34 +3,31 @@
 #include "telemetry/Sensor/DFRobotLarkSensor.h"
 
 /**
- * A simple example module that just replies with "Message received" to any message it receives.
+ * An example module that replies to a message with the current conditions
+ * and status at the dropzone when it receives a text message mentioning it's name
  */
-class DropzoneModule : public SinglePortModule
+class DropzoneModule : public SinglePortModule, private concurrency::OSThread
 {
-  DFRobotLarkSensor sensor;
+    DFRobotLarkSensor sensor;
 
-public:
-  /** Constructor
-   * name is for debugging output
-   */
-  DropzoneModule() : SinglePortModule("dropzone", meshtastic_PortNum_TEXT_MESSAGE_APP)
-  {
-  }
+  public:
+    /** Constructor
+     * name is for debugging output
+     */
+    DropzoneModule() : SinglePortModule("dropzone", meshtastic_PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("DropzoneModule")
+    {
+    }
 
-protected:
-  /** Called to handle a particular incoming message
-   */
-  virtual void alterReceived(meshtastic_MeshPacket &mp);
+    virtual int32_t runOnce() override;
 
-  /** Called to handle a particular incoming message
-   */
-  virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
+  protected:
+    /** Called to handle a particular incoming message
+     */
+    virtual ProcessMessage handleReceived(const meshtastic_MeshPacket &mp) override;
 
-  /** For reply module we do all of our processing in the (normally optional)
-   * want_replies handling
-   */
-  virtual meshtastic_MeshPacket *allocReply() override;
-
-private:
-  meshtastic_MeshPacket *sendConditions();
+  private:
+    meshtastic_MeshPacket *sendConditions();
+    uint32_t startSendConditions = 0;
 };
+
+extern DropzoneModule *dropzoneModule;

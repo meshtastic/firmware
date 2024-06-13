@@ -14,3 +14,8 @@ float UnitConversions::MetersPerSecondToMilesPerHour(float metersPerSecond)
 {
     return metersPerSecond * 2.23694;
 }
+
+float UnitConversions::HectoPascalToInchesOfMercury(float hectoPascal)
+{
+    return hectoPascal * 0.029529983071445;
+}
