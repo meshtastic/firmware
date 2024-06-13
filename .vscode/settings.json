@@ -3,5 +3,8 @@
   "editor.defaultFormatter": "trunk.io",
   "trunk.enableWindows": true,
   "files.insertFinalNewline": false,
-  "files.trimFinalNewlines": false
+  "files.trimFinalNewlines": false,
+  "stm32-for-vscode.openOCDPath": false,
+  "stm32-for-vscode.makePath": false,
+  "stm32-for-vscode.armToolchainPath": false
 }
