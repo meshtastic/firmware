@@ -53,6 +53,9 @@ extern Adafruit_DRV2605 drv;
 extern AudioThread *audioThread;
 #endif
 
+// Global Screen singleton.
+extern graphics::Screen *screen;
+
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #include "AccelerometerThread.h"
 extern AccelerometerThread *accelerometerThread;
@@ -61,9 +64,6 @@ extern AccelerometerThread *accelerometerThread;
 extern bool isVibrating;
 
 extern int TCPPort; // set by Portduino
-
-// Global Screen singleton.
-extern graphics::Screen *screen;
 
 // extern Observable<meshtastic::PowerStatus> newPowerStatus; //TODO: move this to main-esp32.cpp somehow or a helper class
 

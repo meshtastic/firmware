@@ -1516,9 +1516,13 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     }
     bool hasNodeHeading = false;
 
-    if (ourNode && hasValidPosition(ourNode)) {
+    if (ourNode && (hasValidPosition(ourNode) || screen->hasHeading())) {
         const meshtastic_PositionLite &op = ourNode->position;
-        float myHeading = estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
+        float myHeading;
+        if (screen->hasHeading())
+            myHeading = (screen->getHeading()) * PI / 180; // gotta convert compass degrees to Radians
+        else
+            myHeading = estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
         drawCompassNorth(display, compassX, compassY, myHeading);
 
         if (hasValidPosition(node)) {
@@ -2071,7 +2075,7 @@ void Screen::setFrames()
     LOG_DEBUG("Total frame count: %d\n", totalFrameCount);
 #endif
 
-    // We don't show the node info our our node (if we have it yet - we should)
+    // We don't show the node info of our node (if we have it yet - we should)
     size_t numMeshNodes = nodeDB->getNumMeshNodes();
     if (numMeshNodes > 0)
         numMeshNodes--;

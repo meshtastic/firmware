@@ -26,6 +26,11 @@
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #endif
+
+#if MESHTASTIC_EXCLUDE_GPS
+#include "modules/PositionModule.h"
+#endif
+
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #include "AccelerometerThread.h"
 #endif
@@ -753,7 +758,9 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     if (conn.wifi.status.is_connected) {
         conn.wifi.rssi = WiFi.RSSI();
         conn.wifi.status.ip_address = WiFi.localIP();
+#ifndef MESHTASTIC_EXCLUDE_MQTT
         conn.wifi.status.is_mqtt_connected = mqtt && mqtt->isConnectedDirectly();
+#endif
         conn.wifi.status.is_syslog_connected = false; // FIXME wire this up
     }
 #endif

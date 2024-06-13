@@ -14,6 +14,10 @@
 #include <Arduino.h>
 #include <SensorBMA423.hpp>
 #include <Wire.h>
+#ifdef RAK_4631
+#include "Fusion/Fusion.h"
+#include <Rak_BMX160.h>
+#endif
 
 #define ACCELEROMETER_CHECK_INTERVAL_MS 100
 #define ACCELEROMETER_CLICK_THRESHOLD 40
@@ -50,12 +54,13 @@ class AccelerometerThread : public concurrency::OSThread
             return;
         }
         acceleremoter_type = type;
-
+#ifndef RAK_4631
         if (!config.display.wake_on_tap_or_motion && !config.device.double_tap_as_button_press) {
             LOG_DEBUG("AccelerometerThread disabling due to no interested configurations\n");
             disable();
             return;
         }
+#endif
         init();
     }
 
@@ -87,6 +92,71 @@ class AccelerometerThread : public concurrency::OSThread
                 wakeScreen();
                 return 500;
             }
+#ifdef RAK_4631
+        } else if (acceleremoter_type == ScanI2C::DeviceType::BMX160) {
+            sBmx160SensorData_t magAccel;
+            sBmx160SensorData_t gAccel;
+
+            /* Get a new sensor event */
+            bmx160.getAllData(&magAccel, NULL, &gAccel);
+
+            // expirimental calibrate routine. Limited to between 10 and 30 seconds after boot
+            if (millis() > 10 * 1000 && millis() < 30 * 1000) {
+                if (magAccel.x > highestX)
+                    highestX = magAccel.x;
+                if (magAccel.x < lowestX)
+                    lowestX = magAccel.x;
+                if (magAccel.y > highestY)
+                    highestY = magAccel.y;
+                if (magAccel.y < lowestY)
+                    lowestY = magAccel.y;
+                if (magAccel.z > highestZ)
+                    highestZ = magAccel.z;
+                if (magAccel.z < lowestZ)
+                    lowestZ = magAccel.z;
+            }
+
+            int highestRealX = highestX - (highestX + lowestX) / 2;
+
+            magAccel.x -= (highestX + lowestX) / 2;
+            magAccel.y -= (highestY + lowestY) / 2;
+            magAccel.z -= (highestZ + lowestZ) / 2;
+            FusionVector ga, ma;
+            ga.axis.x = -gAccel.x; // default location for the BMX160 is on the rear of the board
+            ga.axis.y = -gAccel.y;
+            ga.axis.z = gAccel.z;
+            ma.axis.x = -magAccel.x;
+            ma.axis.y = -magAccel.y;
+            ma.axis.z = magAccel.z * 3;
+
+            // If we're set to one of the inverted positions
+            if (config.display.compass_orientation > meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270) {
+                ma = FusionAxesSwap(ma, FusionAxesAlignmentNXNYPZ);
+                ga = FusionAxesSwap(ga, FusionAxesAlignmentNXNYPZ);
+            }
+
+            float heading = FusionCompassCalculateHeading(FusionConventionNed, ga, ma);
+
+            switch (config.display.compass_orientation) {
+            case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_0:
+                break;
+            case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_90:
+            case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_90_INVERTED:
+                heading += 90;
+                break;
+            case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_180:
+            case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_180_INVERTED:
+                heading += 180;
+                break;
+            case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270:
+            case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270_INVERTED:
+                heading += 270;
+                break;
+            }
+
+            screen->setHeading(heading);
+
+#endif
         } else if (acceleremoter_type == ScanI2C::DeviceType::LSM6DS3 && lsm.shake()) {
             wakeScreen();
             return 500;
@@ -149,6 +219,11 @@ class AccelerometerThread : public concurrency::OSThread
             bmaSensor.enableTiltIRQ();
             // It corresponds to isDoubleClick interrupt
             bmaSensor.enableWakeupIRQ();
+#ifdef RAK_4631
+        } else if (acceleremoter_type == ScanI2C::DeviceType::BMX160 && bmx160.begin()) {
+            bmx160.ODR_Config(BMX160_ACCEL_ODR_100HZ, BMX160_GYRO_ODR_100HZ); // set output data rate
+
+#endif
         } else if (acceleremoter_type == ScanI2C::DeviceType::LSM6DS3 && lsm.begin_I2C(accelerometer_found.address)) {
             LOG_DEBUG("LSM6DS3 initializing\n");
             // Default threshold of 2G, less sensitive options are 4, 8 or 16G
@@ -179,6 +254,10 @@ class AccelerometerThread : public concurrency::OSThread
     Adafruit_LIS3DH lis;
     Adafruit_LSM6DS3TRC lsm;
     SensorBMA423 bmaSensor;
+#ifdef RAK_4631
+    RAK_BMX160 bmx160;
+    float highestX = 0, lowestX = 0, highestY = 0, lowestY = 0, highestZ = 0, lowestZ = 0;
+#endif
     bool BMA_IRQ = false;
 };
 

@@ -27,13 +27,17 @@
 #define SCREEN_TRANSITION_FRAMERATE 3 // fps
 #define DISPLAY_FORCE_SMALL_FONTS
 
-#define VEXT_ENABLE_V05 3 // active HIGH, powers the lora antenna boost
+// pin 3 is Vext on v1.1 - HIGH enables LDO for Vext rail which goes to:
+// GPS UC6580:          GPS V_DET(8), VDD_IO(7), DCDC_IN(21), pulls up RESETN(17), D_SEL(33) and BOOT_MODE(34) through 10kR
+// GPS LNA SW7125DE:    VCC(4), pulls up SHDN(5) through 10kR
+// LED:                 VDD, LEDA (through diode)
+#define VEXT_ENABLE_V05 3 // active HIGH - powers the GPS, GPS LNA and OLED VDD/anode
 #define BUTTON_PIN 0
 
 #define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define ADC_CHANNEL ADC1_GPIO1_CHANNEL
 #define ADC_ATTENUATION ADC_ATTEN_DB_2_5 // lower dB for high resistance voltage divider
-#define ADC_MULTIPLIER 4.9
+#define ADC_MULTIPLIER 4.9 * 1.045
 #define ADC_CTRL 2 // active HIGH, powers the voltage divider. Only on 1.1
 #define ADC_CTRL_ENABLED HIGH
 
@@ -43,6 +47,8 @@
 #define GPS_TX_PIN 34
 #define PIN_GPS_RESET 35
 #define PIN_GPS_PPS 36
+// #define PIN_GPS_EN 3    // Uncomment to power off the GPS with triple-click on Tracker v1.1, though we'll also lose the
+// display.
 
 #define GPS_RESET_MODE LOW
 #define GPS_UC6580

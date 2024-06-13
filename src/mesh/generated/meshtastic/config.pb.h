@@ -182,6 +182,25 @@ typedef enum _meshtastic_Config_DisplayConfig_DisplayMode {
     meshtastic_Config_DisplayConfig_DisplayMode_COLOR = 3
 } meshtastic_Config_DisplayConfig_DisplayMode;
 
+typedef enum _meshtastic_Config_DisplayConfig_CompassOrientation {
+    /* The compass and the display are in the same orientation. */
+    meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_0 = 0,
+    /* Rotate the compass by 90 degrees. */
+    meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_90 = 1,
+    /* Rotate the compass by 180 degrees. */
+    meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_180 = 2,
+    /* Rotate the compass by 270 degrees. */
+    meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270 = 3,
+    /* Don't rotate the compass, but invert the result. */
+    meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_0_INVERTED = 4,
+    /* Rotate the compass by 90 degrees and invert. */
+    meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_90_INVERTED = 5,
+    /* Rotate the compass by 180 degrees and invert. */
+    meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_180_INVERTED = 6,
+    /* Rotate the compass by 270 degrees and invert. */
+    meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270_INVERTED = 7
+} meshtastic_Config_DisplayConfig_CompassOrientation;
+
 typedef enum _meshtastic_Config_LoRaConfig_RegionCode {
     /* Region is not set */
     meshtastic_Config_LoRaConfig_RegionCode_UNSET = 0,
@@ -413,6 +432,8 @@ typedef struct _meshtastic_Config_DisplayConfig {
     bool heading_bold;
     /* Should we wake the screen up on accelerometer detected motion or tap */
     bool wake_on_tap_or_motion;
+    /* Indicates how to rotate or invert the compass output to accurate display on the display. */
+    meshtastic_Config_DisplayConfig_CompassOrientation compass_orientation;
 } meshtastic_Config_DisplayConfig;
 
 /* Lora Config */
@@ -547,6 +568,10 @@ extern "C" {
 #define _meshtastic_Config_DisplayConfig_DisplayMode_MAX meshtastic_Config_DisplayConfig_DisplayMode_COLOR
 #define _meshtastic_Config_DisplayConfig_DisplayMode_ARRAYSIZE ((meshtastic_Config_DisplayConfig_DisplayMode)(meshtastic_Config_DisplayConfig_DisplayMode_COLOR+1))
 
+#define _meshtastic_Config_DisplayConfig_CompassOrientation_MIN meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_0
+#define _meshtastic_Config_DisplayConfig_CompassOrientation_MAX meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270_INVERTED
+#define _meshtastic_Config_DisplayConfig_CompassOrientation_ARRAYSIZE ((meshtastic_Config_DisplayConfig_CompassOrientation)(meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270_INVERTED+1))
+
 #define _meshtastic_Config_LoRaConfig_RegionCode_MIN meshtastic_Config_LoRaConfig_RegionCode_UNSET
 #define _meshtastic_Config_LoRaConfig_RegionCode_MAX meshtastic_Config_LoRaConfig_RegionCode_SG_923
 #define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_SG_923+1))
@@ -573,6 +598,7 @@ extern "C" {
 #define meshtastic_Config_DisplayConfig_units_ENUMTYPE meshtastic_Config_DisplayConfig_DisplayUnits
 #define meshtastic_Config_DisplayConfig_oled_ENUMTYPE meshtastic_Config_DisplayConfig_OledType
 #define meshtastic_Config_DisplayConfig_displaymode_ENUMTYPE meshtastic_Config_DisplayConfig_DisplayMode
+#define meshtastic_Config_DisplayConfig_compass_orientation_ENUMTYPE meshtastic_Config_DisplayConfig_CompassOrientation
 
 #define meshtastic_Config_LoRaConfig_modem_preset_ENUMTYPE meshtastic_Config_LoRaConfig_ModemPreset
 #define meshtastic_Config_LoRaConfig_region_ENUMTYPE meshtastic_Config_LoRaConfig_RegionCode
@@ -587,7 +613,7 @@ extern "C" {
 #define meshtastic_Config_PowerConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_default {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_default, ""}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_default {0, 0, 0, 0}
-#define meshtastic_Config_DisplayConfig_init_default {0, _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0}
+#define meshtastic_Config_DisplayConfig_init_default {0, _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN}
 #define meshtastic_Config_LoRaConfig_init_default {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0}
 #define meshtastic_Config_BluetoothConfig_init_default {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0}
 #define meshtastic_Config_init_zero              {0, {meshtastic_Config_DeviceConfig_init_zero}}
@@ -596,7 +622,7 @@ extern "C" {
 #define meshtastic_Config_PowerConfig_init_zero  {0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Config_NetworkConfig_init_zero {0, "", "", "", 0, _meshtastic_Config_NetworkConfig_AddressMode_MIN, false, meshtastic_Config_NetworkConfig_IpV4Config_init_zero, ""}
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_zero {0, 0, 0, 0}
-#define meshtastic_Config_DisplayConfig_init_zero {0, _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0}
+#define meshtastic_Config_DisplayConfig_init_zero {0, _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN}
 #define meshtastic_Config_LoRaConfig_init_zero   {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0}
 #define meshtastic_Config_BluetoothConfig_init_zero {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0}
 
@@ -656,6 +682,7 @@ extern "C" {
 #define meshtastic_Config_DisplayConfig_displaymode_tag 8
 #define meshtastic_Config_DisplayConfig_heading_bold_tag 9
 #define meshtastic_Config_DisplayConfig_wake_on_tap_or_motion_tag 10
+#define meshtastic_Config_DisplayConfig_compass_orientation_tag 11
 #define meshtastic_Config_LoRaConfig_use_preset_tag 1
 #define meshtastic_Config_LoRaConfig_modem_preset_tag 2
 #define meshtastic_Config_LoRaConfig_bandwidth_tag 3
@@ -778,7 +805,8 @@ X(a, STATIC,   SINGULAR, UENUM,    units,             6) \
 X(a, STATIC,   SINGULAR, UENUM,    oled,              7) \
 X(a, STATIC,   SINGULAR, UENUM,    displaymode,       8) \
 X(a, STATIC,   SINGULAR, BOOL,     heading_bold,      9) \
-X(a, STATIC,   SINGULAR, BOOL,     wake_on_tap_or_motion,  10)
+X(a, STATIC,   SINGULAR, BOOL,     wake_on_tap_or_motion,  10) \
+X(a, STATIC,   SINGULAR, UENUM,    compass_orientation,  11)
 #define meshtastic_Config_DisplayConfig_CALLBACK NULL
 #define meshtastic_Config_DisplayConfig_DEFAULT NULL
 
@@ -834,7 +862,7 @@ extern const pb_msgdesc_t meshtastic_Config_BluetoothConfig_msg;
 #define MESHTASTIC_MESHTASTIC_CONFIG_PB_H_MAX_SIZE meshtastic_Config_size
 #define meshtastic_Config_BluetoothConfig_size   10
 #define meshtastic_Config_DeviceConfig_size      100
-#define meshtastic_Config_DisplayConfig_size     28
+#define meshtastic_Config_DisplayConfig_size     30
 #define meshtastic_Config_LoRaConfig_size        80
 #define meshtastic_Config_NetworkConfig_IpV4Config_size 20
 #define meshtastic_Config_NetworkConfig_size     196
