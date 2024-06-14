@@ -1,6 +1,6 @@
 #pragma once
 #include "SinglePortModule.h"
-#include "telemetry/Sensor/DFRobotLarkSensor.h"
+#include "modules/Telemetry/Sensor/DFRobotLarkSensor.h"
 
 /**
  * An example module that replies to a message with the current conditions

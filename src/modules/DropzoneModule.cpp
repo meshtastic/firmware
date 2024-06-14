@@ -7,8 +7,8 @@
 
 #include <assert.h>
 
-#include "modules/telemetry/Sensor/DFRobotLarkSensor.h"
-#include "modules/telemetry/UnitConversions.h"
+#include "modules/Telemetry/Sensor/DFRobotLarkSensor.h"
+#include "modules/Telemetry/UnitConversions.h"
 
 #include <string>
 
