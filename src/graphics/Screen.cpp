@@ -2165,26 +2165,7 @@ void Screen::setFrames(bool holdPosition)
 
         else 
             ui->switchToFrame(oldFrame); // Otherwise, go back to the same frame
-
-        }
-    else //in case a new incoming message is received, we want to show the message frame or if waypoint is received, show the waypoint frame
-        {
-        if (devicestate.has_rx_text_message) {
-            if (moduleFrames.size() > 0) 
-                ui->switchToFrame(moduleFrames.size() + 1);
-            
-            else 
-                ui->switchToFrame(0);
-            
-            }
-        if (devicestate.has_rx_waypoint) {
-            if (moduleFrames.size() > 0) 
-                ui->switchToFrame(moduleFrames.size() + 2);
-            
-            else 
-                ui->switchToFrame(1);
-            }
-        }
+}
     oldNumFrames = numframes; // Store how many frames we have, in case we want to "restore position" next time
 }
 
