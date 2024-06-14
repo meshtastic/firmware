@@ -16,19 +16,18 @@ DropzoneModule *dropzoneModule;
 
 int32_t DropzoneModule::runOnce()
 {
-    // Send on a 5 second delay from rec
+    // Send on a 5 second delay from receiving the matching request
     if (startSendConditions != 0 && (startSendConditions + 5000U) < millis()) {
         service.sendToMesh(sendConditions(), RX_SRC_LOCAL);
         startSendConditions = 0;
     }
-    // Run every second
+    // Run every second to check if we need to send conditions
     return 1000;
 }
 
 ProcessMessage DropzoneModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
     auto &p = mp.decoded;
-    LOG_DEBUG("DropzoneModule::handleReceived\n");
     char matchCompare[54];
     auto incomingMessage = reinterpret_cast<const char *>(p.payload.bytes);
     sprintf(matchCompare, "%s conditions", owner.short_name);
@@ -49,7 +48,7 @@ meshtastic_MeshPacket *DropzoneModule::sendConditions()
 {
     char replyStr[200];
     /*
-        CLOSED @ {HH:MM:SS}
+        CLOSED @ {HH:MM:SS}z
         Wind 2 kts @ 125°
         29.25 inHg 72°C
     */
@@ -64,26 +63,27 @@ meshtastic_MeshPacket *DropzoneModule::sendConditions()
         sec = (hms % SEC_PER_HOUR) % SEC_PER_MIN;
     }
 
+    // Check if the dropzone is open or closed by reading the analog pin
+    // If pin is connected to GND (below 100 should be lower than floating voltage),
+    // the dropzone is open
     auto dropzoneStatus = analogRead(A1) < 100 ? "OPEN" : "CLOSED";
-    LOG_DEBUG("Dropzone status is %s\n", dropzoneStatus);
     auto reply = allocDataPacket();
 
     auto node = nodeDB->getMeshNode(nodeDB->getNodeNum());
     if (sensor.hasSensor()) {
         meshtastic_Telemetry telemetry = meshtastic_Telemetry_init_zero;
         sensor.getMetrics(&telemetry);
-        LOG_DEBUG("Gathered metrics\n");
         auto windSpeed = UnitConversions::MetersPerSecondToKnots(telemetry.variant.environment_metrics.wind_speed);
         auto windDirection = telemetry.variant.environment_metrics.wind_direction;
         auto temp = telemetry.variant.environment_metrics.temperature;
         auto baro = UnitConversions::HectoPascalToInchesOfMercury(telemetry.variant.environment_metrics.barometric_pressure);
-
-        sprintf(replyStr, "%s @ %02d:%02d:%02d\nWind %.2f kts @ %d°\nBaro %.2f inHg %.2f°C", dropzoneStatus, hour, min, sec,
+        sprintf(replyStr, "%s @ %02d:%02d:%02dz\nWind %.2f kts @ %d°\nBaro %.2f inHg %.2f°C", dropzoneStatus, hour, min, sec,
                 windSpeed, windDirection, baro, temp);
-        LOG_DEBUG("Conditions reply: %s\n", replyStr);
     } else {
         LOG_ERROR("No sensor found\n");
+        sprintf(replyStr, "%s @ %02d:%02d:%02d\nNo sensor found", dropzoneStatus, hour, min, sec);
     }
+    LOG_DEBUG("Conditions reply: %s\n", replyStr);
     reply->decoded.payload.size = strlen(replyStr); // You must specify how many bytes are in the reply
     memcpy(reply->decoded.payload.bytes, replyStr, reply->decoded.payload.size);
 

@@ -4,7 +4,7 @@
 
 /**
  * An example module that replies to a message with the current conditions
- * and status at the dropzone when it receives a text message mentioning it's name
+ * and status at the dropzone when it receives a text message mentioning it's name followed by "conditions"
  */
 class DropzoneModule : public SinglePortModule, private concurrency::OSThread
 {
@@ -16,6 +16,8 @@ class DropzoneModule : public SinglePortModule, private concurrency::OSThread
      */
     DropzoneModule() : SinglePortModule("dropzone", meshtastic_PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("DropzoneModule")
     {
+        // Set up the analog pin for reading the dropzone status
+        pinMode(PIN_A1, INPUT);
     }
 
     virtual int32_t runOnce() override;

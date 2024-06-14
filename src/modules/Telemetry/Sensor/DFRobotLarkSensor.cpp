@@ -14,8 +14,7 @@ DFRobotLarkSensor::DFRobotLarkSensor() : TelemetrySensor(meshtastic_TelemetrySen
 int32_t DFRobotLarkSensor::runOnce()
 {
     LOG_INFO("Init sensor: %s\n", sensorName);
-    if (!hasSensor())
-    {
+    if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
 
@@ -25,9 +24,7 @@ int32_t DFRobotLarkSensor::runOnce()
     {
         LOG_DEBUG("DFRobotLarkSensor Init Succeed\n");
         status = true;
-    }
-    else
-    {
+    } else {
         LOG_ERROR("DFRobotLarkSensor Init Failed\n");
         status = false;
     }
