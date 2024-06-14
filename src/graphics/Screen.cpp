@@ -326,7 +326,6 @@ static void drawDeepSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state,
         // Display displayStr on the screen
         drawIconScreen(displayStr, display, state, x, y);
     }
-    drawIconScreen( (idText.empty() ? "Sleeping." : idText + " sleeping."), display, state, x, y);
 }
 
 /// Used on eink displays when screen updates are paused
