@@ -310,7 +310,7 @@ static void drawDeepSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state,
     EINK_ADD_FRAMEFLAG(display, BLOCKING);
 
     LOG_DEBUG("Drawing deep sleep screen\n");
-    drawIconScreen("Sleeping...", display, state, x, y);
+    drawIconScreen( (owner.short_name.empty() ? "Sleeping." : owner.short_name + " sleeping."), display, state, x, y);
 }
 
 /// Used on eink displays when screen updates are paused
