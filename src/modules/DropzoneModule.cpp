@@ -1,3 +1,5 @@
+#if !MESHTASTIC_EXCLUDE_DROPZONE
+
 #include "DropzoneModule.h"
 #include "MeshService.h"
 #include "configuration.h"
@@ -89,3 +91,5 @@ meshtastic_MeshPacket *DropzoneModule::sendConditions()
 
     return reply;
 }
+
+#endif

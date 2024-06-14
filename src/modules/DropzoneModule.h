@@ -1,4 +1,5 @@
 #pragma once
+#if !MESHTASTIC_EXCLUDE_DROPZONE
 #include "SinglePortModule.h"
 #include "modules/Telemetry/Sensor/DFRobotLarkSensor.h"
 
@@ -33,3 +34,4 @@ class DropzoneModule : public SinglePortModule, private concurrency::OSThread
 };
 
 extern DropzoneModule *dropzoneModule;
+#endif
