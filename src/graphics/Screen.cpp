@@ -312,6 +312,20 @@ static void drawDeepSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state,
     EINK_ADD_FRAMEFLAG(display, BLOCKING);
 
     LOG_DEBUG("Drawing deep sleep screen\n");
+    
+    // Check if idText is empty
+    if (strlen(idText) == 0) {
+        drawIconScreen("Sleeping.", display, state, x, y);
+    } else {
+        // Create a new string that is the concatenation of idText and " sleeping."
+        size_t idTextLen = strlen(idText);
+        char displayStr[idTextLen + 12]; // Allocate enough space for the new string
+        strcpy(displayStr, idText); // Copy idText to the new string
+        strcat(displayStr, " sleeping."); // Concatenate " sleeping." to the new string
+
+        // Display displayStr on the screen
+        drawIconScreen(displayStr, display, state, x, y);
+    }
     drawIconScreen( (idText.empty() ? "Sleeping." : idText + " sleeping."), display, state, x, y);
 }
 
