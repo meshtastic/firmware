@@ -312,6 +312,8 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define TOUCH_I2C_PORT 0
 #define TOUCH_SLAVE_ADDRESS 0x5D // GT911
 
+#define CANNED_MESSAGE_MODULE_ENABLE 1
+
 /*----------------------------------------------------------------------------
  *        Arduino objects - C++ only
  *----------------------------------------------------------------------------*/
