@@ -1,3 +1,7 @@
+#pragma once
+
+#ifndef _MT_DFROBOTLARKSENSOR_H
+#define _MT_DFROBOTLARKSENSOR_H
 #include "configuration.h"
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
@@ -21,4 +25,5 @@ class DFRobotLarkSensor : public TelemetrySensor
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
 };
 
+#endif
 #endif
