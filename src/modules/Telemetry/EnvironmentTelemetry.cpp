@@ -403,4 +403,102 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     return valid;
 }
 
+AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
+                                                                                 meshtastic_AdminMessage *request,
+                                                                                 meshtastic_AdminMessage *response)
+{
+    AdminMessageHandleResult result = AdminMessageHandleResult::NOT_HANDLED;
+    if (dfRobotLarkSensor.hasSensor()) {
+        result = dfRobotLarkSensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (sht31Sensor.hasSensor()) {
+        result = sht31Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (lps22hbSensor.hasSensor()) {
+        result = lps22hbSensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (shtc3Sensor.hasSensor()) {
+        result = shtc3Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (bmp085Sensor.hasSensor()) {
+        result = bmp085Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (bmp280Sensor.hasSensor()) {
+        result = bmp280Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (bme280Sensor.hasSensor()) {
+        result = bme280Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (bme680Sensor.hasSensor()) {
+        result = bme680Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (mcp9808Sensor.hasSensor()) {
+        result = mcp9808Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (ina219Sensor.hasSensor()) {
+        result = ina219Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (ina260Sensor.hasSensor()) {
+        result = ina260Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (veml7700Sensor.hasSensor()) {
+        result = veml7700Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (tsl2591Sensor.hasSensor()) {
+        result = tsl2591Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (opt3001Sensor.hasSensor()) {
+        result = opt3001Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (mlx90632Sensor.hasSensor()) {
+        result = mlx90632Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (rcwl9620Sensor.hasSensor()) {
+        result = rcwl9620Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (nau7802Sensor.hasSensor()) {
+        result = nau7802Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (aht10Sensor.hasSensor()) {
+        result = aht10Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    return result;
+}
+
 #endif

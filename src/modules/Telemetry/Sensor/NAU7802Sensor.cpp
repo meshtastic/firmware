@@ -60,6 +60,30 @@ void NAU7802Sensor::calibrate(float weight)
     LOG_INFO("Offset: %d, Calibration factor: %.2f\n", nau7802.getZeroOffset(), nau7802.getCalibrationFactor());
 }
 
+AdminMessageHandleResult NAU7802Sensor::handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
+                                                           meshtastic_AdminMessage *response)
+{
+    AdminMessageHandleResult result;
+
+    switch (request->which_payload_variant) {
+    case meshtastic_AdminMessage_set_scale_tag:
+        if (request->set_scale == 0) {
+            this->tare();
+            LOG_DEBUG("Client requested to tare scale\n");
+        } else {
+            this->calibrate(request->set_scale);
+            LOG_DEBUG("Client requested to calibrate to %d kg\n", request->set_scale);
+        }
+        result = AdminMessageHandleResult::HANDLED;
+        break;
+
+    default:
+        result = AdminMessageHandleResult::NOT_HANDLED;
+    }
+
+    return result;
+}
+
 void NAU7802Sensor::tare()
 {
     nau7802.calculateZeroOffset(64);
