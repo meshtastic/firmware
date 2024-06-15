@@ -117,8 +117,8 @@ class LGFX : public lgfx::LGFX_Device
 static LGFX *tft = nullptr;
 
 #elif defined(RAK14014)
-#include <TFT_eSPI.h>
 #include <RAK14014_FT6336U.h>
+#include <TFT_eSPI.h>
 TFT_eSPI *tft = nullptr;
 FT6336U ft6336u;
 
@@ -651,7 +651,7 @@ void TFTDisplay::sendCommand(uint8_t com)
 void TFTDisplay::setDisplayBrightness(uint8_t _brightness)
 {
 #ifdef RAK14014
-    //todo
+    // todo
 #else
     tft->setBrightness(_brightness);
     LOG_DEBUG("Brightness is set to value: %i \n", _brightness);
@@ -680,7 +680,7 @@ bool TFTDisplay::hasTouch(void)
 bool TFTDisplay::getTouch(int16_t *x, int16_t *y)
 {
 #ifdef RAK14014
-    if(_rak14014_touch_int) {
+    if (_rak14014_touch_int) {
         _rak14014_touch_int = false;
         /* The X and Y axes have to be switched */
         *y = ft6336u.read_touch1_x();
@@ -738,7 +738,7 @@ bool TFTDisplay::connect()
 #elif defined(RAK14014)
     tft->setRotation(1);
     tft->setSwapBytes(true);
-//    tft->fillScreen(TFT_BLACK);
+    //    tft->fillScreen(TFT_BLACK);
     ft6336u.begin();
     pinMode(SCREEN_TOUCH_INT, INPUT_PULLUP);
     attachInterrupt(digitalPinToInterrupt(SCREEN_TOUCH_INT), rak14014_tpIntHandle, FALLING);
