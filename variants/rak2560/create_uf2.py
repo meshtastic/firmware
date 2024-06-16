@@ -1,7 +1,6 @@
 import struct
-import sys
 
-Import("env")
+Import("env")  # noqa: F821
 
 
 # Parse input and create UF2 file
@@ -29,7 +28,7 @@ def create_uf2(source, target, env):
 
 
 # Add callback after .hex file was created
-env.AddPostAction("$BUILD_DIR/${PROGNAME}.hex", create_uf2)
+env.AddPostAction("$BUILD_DIR/${PROGNAME}.hex", create_uf2)  # noqa: F821
 
 # UF2 creation taken from uf2conv.py
 UF2_MAGIC_START0 = 0x0A324655  # "UF2\n"
@@ -97,7 +96,7 @@ def convert_from_hex_to_uf2(buf):
             break
         elif tp == 0:
             addr = upper | (rec[1] << 8) | rec[2]
-            if appstartaddr == None:
+            if appstartaddr is None:
                 appstartaddr = addr
             i = 4
             while i < len(rec) - 1:
