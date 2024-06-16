@@ -100,9 +100,9 @@ static const uint8_t AREF = PIN_AREF;
 #define PIN_SERIAL1_RX (15)
 #define PIN_SERIAL1_TX (16)
 
-// Connected to Jlink CDC
-#define PIN_SERIAL2_RX (8)
-#define PIN_SERIAL2_TX (6)
+// Connected to Serial 2
+#define PIN_SERIAL2_RX (19)
+#define PIN_SERIAL2_TX (20)
 
 /*
  * SPI Interfaces
@@ -228,9 +228,18 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 // #define PIN_GPS_EN PIN_3V3_EN
 #define PIN_GPS_PPS (17) // Pulse per second input from the GPS
 
+// On RAK2560 the GPS is be on a different UART
+#ifdef HAS_RAKPROT
+// #define GPS_RX_PIN PIN_SERIAL2_RX
+// #define GPS_TX_PIN PIN_SERIAL2_TX
+// #define PIN_GPS_EN PIN_3V3_EN
+// Disable GPS
+#define MESHTASTIC_EXCLUDE_GPS 1
+#else
+	// Enable GPS
 #define GPS_RX_PIN PIN_SERIAL1_RX
 #define GPS_TX_PIN PIN_SERIAL1_TX
-
+#endif
 // Define pin to enable GPS toggle (set GPIO to LOW) via user button triple press
 
 // RAK12002 RTC Module
@@ -256,6 +265,21 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define HAS_ETHERNET 1
 
 #define RAK_4631 1
+
+#ifdef HAS_RAKPROT
+
+#define HALF_UART_PIN PIN_SERIAL1_RX
+
+#if defined(GPS_RX_PIN) && (GPS_RX_PIN == HALF_UART_PIN)
+#error pin 15 collision
+
+#endif
+
+#if defined(GPS_TX_PIN) && (GPS_RX_PIN == HALF_UART_PIN)
+#error pin 15 collision
+#endif
+
+#endif
 
 #define PIN_ETHERNET_RESET 21
 #define PIN_ETHERNET_SS PIN_EINK_CS
