@@ -447,7 +447,7 @@ static bool shouldDrawMessage(const meshtastic_MeshPacket *packet)
     return packet->from != 0 && !moduleConfig.store_forward.enabled;
 }
 
-//
+// Determine whether the waypoint frame should be drawn (waypoint deleted? expired?)
 static bool shouldDrawWaypoint(const meshtastic_MeshPacket *packet)
 {
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
