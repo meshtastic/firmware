@@ -1,3 +1,4 @@
+#ifdef HAS_RAKPROT 
 #include "RAK9154Sensor.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
@@ -187,3 +188,4 @@ bool RAK9154Sensor::isCharging()
 {
 	return (dc_cur > 0) ? true : false;
 }
+#endif // HAS_RAKPROT
