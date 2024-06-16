@@ -37,6 +37,10 @@ class EnvironmentTelemetryModule : private concurrency::OSThread, public Protobu
      */
     bool sendTelemetry(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
 
+    virtual AdminMessageHandleResult handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
+                                                                 meshtastic_AdminMessage *request,
+                                                                 meshtastic_AdminMessage *response) override;
+
   private:
     float CelsiusToFahrenheit(float c);
     bool firstTime = 1;

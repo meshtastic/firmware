@@ -28,6 +28,12 @@
 #define GPS_STANDBY_THRESHOLD_MINUTES 15
 #endif
 
+// How many seconds of sleep make it worthwhile for the GPS to use powered-on standby
+// Shorter than this, and we'll just wait instead
+#ifndef GPS_IDLE_THRESHOLD_SECONDS
+#define GPS_IDLE_THRESHOLD_SECONDS 10
+#endif
+
 #if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
 HardwareSerial *GPS::_serial_gps = &Serial1;
 #else
@@ -776,13 +782,21 @@ void GPS::setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime)
 {
     // Record the current powerState
     if (on)
-        powerState = GPS_AWAKE;
-    else if (!on && standbyOnly)
+        powerState = GPS_ACTIVE;
+    else if (!enabled) // User has disabled with triple press
+        powerState = GPS_OFF;
+    else if (sleepTime <= GPS_IDLE_THRESHOLD_SECONDS * 1000UL)
+        powerState = GPS_IDLE;
+    else if (standbyOnly)
         powerState = GPS_STANDBY;
     else
         powerState = GPS_OFF;
 
     LOG_DEBUG("GPS::powerState=%d\n", powerState);
+
+    // If the next update is due *really soon*, don't actually power off or enter standby. Just wait it out.
+    if (!on && powerState == GPS_IDLE)
+        return;
 
     if (on) {
         clearBuffer(); // drop any old data waiting in the buffer before re-enabling
@@ -880,54 +894,69 @@ void GPS::setConnected()
 void GPS::setAwake(bool wantAwake)
 {
 
-    // If user has disabled GPS, make sure it is off, not just in standby
+    // If user has disabled GPS, make sure it is off, not just in standby or idle
     if (!wantAwake && !enabled && powerState != GPS_OFF) {
         setGPSPower(false, false, 0);
         return;
     }
 
     // If GPS power state needs to change
-    if ((wantAwake && powerState != GPS_AWAKE) || (!wantAwake && powerState == GPS_AWAKE)) {
+    if ((wantAwake && powerState != GPS_ACTIVE) || (!wantAwake && powerState == GPS_ACTIVE)) {
         LOG_DEBUG("WANT GPS=%d\n", wantAwake);
 
         // Calculate how long it takes to get a GPS lock
         if (wantAwake) {
+            // Record the time we start looking for a lock
             lastWakeStartMsec = millis();
         } else {
+            // Record by how much we missed our ideal target postion.gps_update_interval (for logging only)
+            // Need to calculate this before we update lastSleepStartMsec, to make the new prediction
+            int32_t lateByMsec = (int32_t)(millis() - lastSleepStartMsec) - (int32_t)getSleepTime();
+
+            // Record the time we finish looking for a lock
             lastSleepStartMsec = millis();
-            if (GPSCycles == 1) { // Skipping initial lock time, as it will likely be much longer than average
-                averageLockTime = lastSleepStartMsec - lastWakeStartMsec;
-            } else if (GPSCycles > 1) {
-                averageLockTime += ((int32_t)(lastSleepStartMsec - lastWakeStartMsec) - averageLockTime) / (int32_t)GPSCycles;
+
+            // How long did it take to get GPS lock this time?
+            uint32_t lockTime = lastSleepStartMsec - lastWakeStartMsec;
+
+            // Update the lock-time prediction
+            // Used pre-emptively, attempting to hit target of gps.position_update_interval
+            switch (GPSCycles) {
+            case 0:
+                LOG_DEBUG("Initial GPS lock took %ds\n", lockTime / 1000);
+                break;
+            case 1:
+                predictedLockTime = lockTime; // Avoid slow ramp-up - start with a real value
+                LOG_DEBUG("GPS Lock took %ds\n", lockTime / 1000);
+                break;
+            default:
+                // Predict lock-time using exponential smoothing: respond slowly to changes
+                predictedLockTime = (lockTime * 0.2) + (predictedLockTime * 0.8); // Latest lock time has 20% weight on prediction
+                LOG_INFO("GPS Lock took %ds. %s by %ds. Next lock predicted to take %ds.\n", lockTime / 1000,
+                         (lateByMsec > 0) ? "Late" : "Early", abs(lateByMsec) / 1000, predictedLockTime / 1000);
             }
             GPSCycles++;
-            LOG_DEBUG("GPS Lock took %d, average %d\n", (lastSleepStartMsec - lastWakeStartMsec) / 1000, averageLockTime / 1000);
         }
+
+        // How long to wait before attempting next GPS update
+        // Aims to hit position.gps_update_interval by using the lock-time prediction
+        uint32_t compensatedSleepTime = (getSleepTime() > predictedLockTime) ? (getSleepTime() - predictedLockTime) : 0;
 
         // If long interval between updates: power off between updates
-        if ((int32_t)getSleepTime() - averageLockTime > GPS_STANDBY_THRESHOLD_MINUTES * MS_IN_MINUTE) {
-            setGPSPower(wantAwake, false, getSleepTime() - averageLockTime);
-            return;
+        if (compensatedSleepTime > GPS_STANDBY_THRESHOLD_MINUTES * MS_IN_MINUTE) {
+            setGPSPower(wantAwake, false, getSleepTime() - predictedLockTime);
         }
 
-        // If waking frequently: standby only. Would use more power trying to reacquire lock each time
-        else if ((int32_t)getSleepTime() - averageLockTime > 10000) { // 10 seconds is enough for standby
+        // If waking relatively frequently: don't power off. Would use more energy trying to reacquire lock each time
+        // We'll either use a "powered-on" standby, or just wait it out, depending on how soon the next update is due
+        // Will decide which inside setGPSPower method
+        else {
 #ifdef GPS_UC6580
-            setGPSPower(wantAwake, false, getSleepTime() - averageLockTime);
+            setGPSPower(wantAwake, false, compensatedSleepTime);
 #else
-            setGPSPower(wantAwake, true, getSleepTime() - averageLockTime);
+            setGPSPower(wantAwake, true, compensatedSleepTime);
 #endif
-            return;
         }
-
-        // Gradually recover from an abnormally long "time to get lock"
-        if (averageLockTime > 20000) {
-            averageLockTime -= 1000; // eventually want to sleep again.
-        }
-
-        // Make sure we don't have a fallthrough where GPS is stuck off
-        if (wantAwake)
-            setGPSPower(true, true, 0);
     }
 }
 
@@ -1033,14 +1062,14 @@ int32_t GPS::runOnce()
     uint32_t timeAsleep = now - lastSleepStartMsec;
 
     auto sleepTime = getSleepTime();
-    if (powerState != GPS_AWAKE && (sleepTime != UINT32_MAX) &&
-        ((timeAsleep > sleepTime) || (isInPowersave && timeAsleep > (sleepTime - averageLockTime)))) {
+    if (powerState != GPS_ACTIVE && (sleepTime != UINT32_MAX) &&
+        ((timeAsleep > sleepTime) || (isInPowersave && timeAsleep > (sleepTime - predictedLockTime)))) {
         // We now want to be awake - so wake up the GPS
         setAwake(true);
     }
 
     // While we are awake
-    if (powerState == GPS_AWAKE) {
+    if (powerState == GPS_ACTIVE) {
         // LOG_DEBUG("looking for location\n");
         // If we've already set time from the GPS, no need to ask the GPS
         bool gotTime = (getRTCQuality() >= RTCQualityGPS);
@@ -1086,7 +1115,7 @@ int32_t GPS::runOnce()
 
     // 9600bps is approx 1 byte per msec, so considering our buffer size we never need to wake more often than 200ms
     // if not awake we can run super infrquently (once every 5 secs?) to see if we need to wake.
-    return (powerState == GPS_AWAKE) ? GPS_THREAD_INTERVAL : 5000;
+    return (powerState == GPS_ACTIVE) ? GPS_THREAD_INTERVAL : 5000;
 }
 
 // clear the GPS rx buffer as quickly as possible
@@ -1617,9 +1646,9 @@ bool GPS::whileIdle()
 {
     unsigned int charsInBuf = 0;
     bool isValid = false;
-    if (powerState != GPS_AWAKE) {
+    if (powerState != GPS_ACTIVE) {
         clearBuffer();
-        return (powerState == GPS_AWAKE);
+        return (powerState == GPS_ACTIVE);
     }
 #ifdef SERIAL_BUFFER_SIZE
     if (_serial_gps->available() >= SERIAL_BUFFER_SIZE - 1) {
@@ -1650,6 +1679,10 @@ bool GPS::whileIdle()
 }
 void GPS::enable()
 {
+    // Clear the old lock-time prediction
+    GPSCycles = 0;
+    predictedLockTime = 0;
+
     enabled = true;
     setInterval(GPS_THREAD_INTERVAL);
     setAwake(true);
