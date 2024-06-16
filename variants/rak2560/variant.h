@@ -34,8 +34,7 @@
 #include "WVariant.h"
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif // __cplusplus
 
 // Number of pins defined in PinDescription array
@@ -56,9 +55,9 @@ extern "C"
 
 #define LED_STATE_ON 1 // State when LED is litted
 
-	/*
-	 * Buttons
-	 */
+/*
+ * Buttons
+ */
 
 #define PIN_BUTTON1 9 // Pin for button on E-ink button module or IO expansion
 #define BUTTON_NEED_PULLUP
@@ -78,14 +77,14 @@ extern "C"
 #define PIN_A6 (0xff)
 #define PIN_A7 (0xff)
 
-	static const uint8_t A0 = PIN_A0;
-	static const uint8_t A1 = PIN_A1;
-	static const uint8_t A2 = PIN_A2;
-	static const uint8_t A3 = PIN_A3;
-	static const uint8_t A4 = PIN_A4;
-	static const uint8_t A5 = PIN_A5;
-	static const uint8_t A6 = PIN_A6;
-	static const uint8_t A7 = PIN_A7;
+static const uint8_t A0 = PIN_A0;
+static const uint8_t A1 = PIN_A1;
+static const uint8_t A2 = PIN_A2;
+static const uint8_t A3 = PIN_A3;
+static const uint8_t A4 = PIN_A4;
+static const uint8_t A5 = PIN_A5;
+static const uint8_t A6 = PIN_A6;
+static const uint8_t A7 = PIN_A7;
 #define ADC_RESOLUTION 14
 
 // Other pins
@@ -93,7 +92,7 @@ extern "C"
 #define PIN_NFC1 (9)
 #define PIN_NFC2 (10)
 
-	static const uint8_t AREF = PIN_AREF;
+static const uint8_t AREF = PIN_AREF;
 
 /*
  * Serial interfaces
@@ -101,9 +100,9 @@ extern "C"
 #define PIN_SERIAL1_RX (15)
 #define PIN_SERIAL1_TX (16)
 
-// Connected to Jlink CDC
-#define PIN_SERIAL2_RX (8)
-#define PIN_SERIAL2_TX (6)
+// Connected to Serial 2
+#define PIN_SERIAL2_RX (19)
+#define PIN_SERIAL2_TX (20)
 
 /*
  * SPI Interfaces
@@ -118,14 +117,14 @@ extern "C"
 #define PIN_SPI1_MOSI (30) // (0 + 30)
 #define PIN_SPI1_SCK (3)   // (0 + 3)
 
-	static const uint8_t SS = 42;
-	static const uint8_t MOSI = PIN_SPI_MOSI;
-	static const uint8_t MISO = PIN_SPI_MISO;
-	static const uint8_t SCK = PIN_SPI_SCK;
+static const uint8_t SS = 42;
+static const uint8_t MOSI = PIN_SPI_MOSI;
+static const uint8_t MISO = PIN_SPI_MISO;
+static const uint8_t SCK = PIN_SPI_SCK;
 
-	/*
-	 * eink display pins
-	 */
+/*
+ * eink display pins
+ */
 
 #define PIN_EINK_CS (0 + 26)
 #define PIN_EINK_BUSY (0 + 4)
@@ -135,9 +134,6 @@ extern "C"
 #define PIN_EINK_MOSI (0 + 30) // also called SDI
 
 // #define USE_EINK
-
-// RAKRGB
-#define HAS_NCP5623
 
 /*
  * Wire Interfaces
@@ -155,48 +151,44 @@ extern "C"
 #define PIN_QSPI_IO2 28
 #define PIN_QSPI_IO3 2
 
-// On-board QSPI Flash
-#define EXTERNAL_FLASH_DEVICES IS25LP080D
-#define EXTERNAL_FLASH_USE_QSPI
+/* @note RAK5005-O GPIO mapping to RAK4631 GPIO ports
+   RAK5005-O <->  nRF52840
+   IO1       <->  P0.17 (Arduino GPIO number 17)
+   IO2       <->  P1.02 (Arduino GPIO number 34)
+   IO3       <->  P0.21 (Arduino GPIO number 21)
+   IO4       <->  P0.04 (Arduino GPIO number 4)
+   IO5       <->  P0.09 (Arduino GPIO number 9)
+   IO6       <->  P0.10 (Arduino GPIO number 10)
+   IO7       <->  P0.28 (Arduino GPIO number 28)
+   SW1       <->  P0.01 (Arduino GPIO number 1)
+   A0        <->  P0.04/AIN2 (Arduino Analog A2
+   A1        <->  P0.31/AIN7 (Arduino Analog A7
+   SPI_CS    <->  P0.26 (Arduino GPIO number 26)
+ */
 
-	/* @note RAK5005-O GPIO mapping to RAK4631 GPIO ports
-	   RAK5005-O <->  nRF52840
-	   IO1       <->  P0.17 (Arduino GPIO number 17)
-	   IO2       <->  P1.02 (Arduino GPIO number 34)
-	   IO3       <->  P0.21 (Arduino GPIO number 21)
-	   IO4       <->  P0.04 (Arduino GPIO number 4)
-	   IO5       <->  P0.09 (Arduino GPIO number 9)
-	   IO6       <->  P0.10 (Arduino GPIO number 10)
-	   IO7       <->  P0.28 (Arduino GPIO number 28)
-	   SW1       <->  P0.01 (Arduino GPIO number 1)
-	   A0        <->  P0.04/AIN2 (Arduino Analog A2
-	   A1        <->  P0.31/AIN7 (Arduino Analog A7
-	   SPI_CS    <->  P0.26 (Arduino GPIO number 26)
-	 */
+// RAK4630 LoRa module
 
-	// RAK4630 LoRa module
+/* Setup of the SX1262 LoRa module ( https://docs.rakwireless.com/Product-Categories/WisBlock/RAK4631/Datasheet/ )
 
-	/* Setup of the SX1262 LoRa module ( https://docs.rakwireless.com/Product-Categories/WisBlock/RAK4631/Datasheet/ )
+P1.10   NSS     SPI NSS (Arduino GPIO number 42)
+P1.11   SCK     SPI CLK (Arduino GPIO number 43)
+P1.12   MOSI    SPI MOSI (Arduino GPIO number 44)
+P1.13   MISO    SPI MISO (Arduino GPIO number 45)
+P1.14   BUSY    BUSY signal (Arduino GPIO number 46)
+P1.15   DIO1    DIO1 event interrupt (Arduino GPIO number 47)
+P1.06   NRESET  NRESET manual reset of the SX1262 (Arduino GPIO number 38)
 
-	P1.10   NSS     SPI NSS (Arduino GPIO number 42)
-	P1.11   SCK     SPI CLK (Arduino GPIO number 43)
-	P1.12   MOSI    SPI MOSI (Arduino GPIO number 44)
-	P1.13   MISO    SPI MISO (Arduino GPIO number 45)
-	P1.14   BUSY    BUSY signal (Arduino GPIO number 46)
-	P1.15   DIO1    DIO1 event interrupt (Arduino GPIO number 47)
-	P1.06   NRESET  NRESET manual reset of the SX1262 (Arduino GPIO number 38)
+Important for successful SX1262 initialization:
 
-	Important for successful SX1262 initialization:
+* Setup DIO2 to control the antenna switch
+* Setup DIO3 to control the TCXO power supply
+* Setup the SX1262 to use it's DCDC regulator and not the LDO
+* RAK4630 schematics show GPIO P1.07 connected to the antenna switch, but it should not be initialized, as DIO2 will do the
+control of the antenna switch
 
-	* Setup DIO2 to control the antenna switch
-	* Setup DIO3 to control the TCXO power supply
-	* Setup the SX1262 to use it's DCDC regulator and not the LDO
-	* RAK4630 schematics show GPIO P1.07 connected to the antenna switch, but it should not be initialized, as DIO2 will do the
-	control of the antenna switch
+SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 
-	SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
-
-	*/
+*/
 
 #define DETECTION_SENSOR_EN 4
 
@@ -229,9 +221,12 @@ extern "C"
 // #define PIN_GPS_EN PIN_3V3_EN
 #define PIN_GPS_PPS (17) // Pulse per second input from the GPS
 
-#define GPS_RX_PIN PIN_SERIAL1_RX
-#define GPS_TX_PIN PIN_SERIAL1_TX
-
+// On RAK2560 the GPS is be on a different UART
+// #define GPS_RX_PIN PIN_SERIAL2_RX
+// #define GPS_TX_PIN PIN_SERIAL2_TX
+// #define PIN_GPS_EN PIN_3V3_EN
+// Disable GPS
+#define MESHTASTIC_EXCLUDE_GPS 1
 // Define pin to enable GPS toggle (set GPIO to LOW) via user button triple press
 
 // RAK12002 RTC Module
@@ -257,6 +252,17 @@ extern "C"
 #define HAS_ETHERNET 1
 
 #define RAK_4631 1
+
+#define HALF_UART_PIN PIN_SERIAL1_RX
+
+#if defined(GPS_RX_PIN) && (GPS_RX_PIN == HALF_UART_PIN)
+#error pin 15 collision
+
+#endif
+
+#if defined(GPS_TX_PIN) && (GPS_RX_PIN == HALF_UART_PIN)
+#error pin 15 collision
+#endif
 
 #define PIN_ETHERNET_RESET 21
 #define PIN_ETHERNET_SS PIN_EINK_CS
