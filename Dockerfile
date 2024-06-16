@@ -48,6 +48,7 @@ USER mesh
 WORKDIR /home/mesh
 COPY --from=builder /tmp/firmware/release/meshtasticd /home/mesh/
 
+RUN mkdir data
 VOLUME /home/mesh/data
 
 CMD [ "sh",  "-cx", "./meshtasticd -d /home/mesh/data --hwid=${HWID:-$RANDOM}" ]
