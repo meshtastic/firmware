@@ -138,6 +138,7 @@ class AccelerometerThread : public concurrency::OSThread
             float heading = FusionCompassCalculateHeading(FusionConventionNed, ga, ma);
 
             switch (config.display.compass_orientation) {
+            case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_0_INVERTED:
             case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_0:
                 break;
             case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_90:
