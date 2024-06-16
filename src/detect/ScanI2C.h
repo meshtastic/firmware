@@ -50,7 +50,8 @@ class ScanI2C
         MLX90632,
         AHT10,
         BMX160,
-        DFROBOT_LARK
+        DFROBOT_LARK,
+        NAU7802
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;
