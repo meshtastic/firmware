@@ -136,6 +136,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define OPT3001_ADDR_ALT 0x44
 #define MLX90632_ADDR 0x3A
 #define DFROBOT_LARK_ADDR 0x42
+#define NAU7802_ADDR 0x2A
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER

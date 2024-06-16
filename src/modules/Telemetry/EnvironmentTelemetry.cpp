@@ -27,6 +27,7 @@
 #include "Sensor/LPS22HBSensor.h"
 #include "Sensor/MCP9808Sensor.h"
 #include "Sensor/MLX90632Sensor.h"
+#include "Sensor/NAU7802Sensor.h"
 #include "Sensor/OPT3001Sensor.h"
 #include "Sensor/RCWL9620Sensor.h"
 #include "Sensor/SHT31Sensor.h"
@@ -51,6 +52,7 @@ RCWL9620Sensor rcwl9620Sensor;
 AHT10Sensor aht10Sensor;
 MLX90632Sensor mlx90632Sensor;
 DFRobotLarkSensor dfRobotLarkSensor;
+NAU7802Sensor nau7802Sensor;
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
@@ -125,6 +127,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = aht10Sensor.runOnce();
             if (mlx90632Sensor.hasSensor())
                 result = mlx90632Sensor.runOnce();
+            if (nau7802Sensor.hasSensor())
+                result = nau7802Sensor.runOnce();
         }
         return result;
     } else {
@@ -223,12 +227,18 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
                             "Volt/Cur: " + String(lastMeasurement.variant.environment_metrics.voltage, 0) + "V / " +
                                 String(lastMeasurement.variant.environment_metrics.current, 0) + "mA");
     }
+
     if (lastMeasurement.variant.environment_metrics.iaq != 0) {
         display->drawString(x, y += fontHeight(FONT_SMALL), "IAQ: " + String(lastMeasurement.variant.environment_metrics.iaq));
     }
+
     if (lastMeasurement.variant.environment_metrics.distance != 0)
         display->drawString(x, y += fontHeight(FONT_SMALL),
                             "Water Level: " + String(lastMeasurement.variant.environment_metrics.distance, 0) + "mm");
+
+    if (lastMeasurement.variant.environment_metrics.weight != 0)
+        display->drawString(x, y += fontHeight(FONT_SMALL),
+                            "Weight: " + String(lastMeasurement.variant.environment_metrics.weight, 0) + "kg");
 }
 
 bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
@@ -245,8 +255,9 @@ bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPac
         LOG_INFO("(Received from %s): voltage=%f, IAQ=%d, distance=%f, lux=%f\n", sender, t->variant.environment_metrics.voltage,
                  t->variant.environment_metrics.iaq, t->variant.environment_metrics.distance, t->variant.environment_metrics.lux);
 
-        LOG_INFO("(Received from %s): wind speed=%fm/s, direction=%d degrees\n", sender,
-                 t->variant.environment_metrics.wind_speed, t->variant.environment_metrics.wind_direction);
+        LOG_INFO("(Received from %s): wind speed=%fm/s, direction=%d degrees, weight=%fkg\n", sender,
+                 t->variant.environment_metrics.wind_speed, t->variant.environment_metrics.wind_direction,
+                 t->variant.environment_metrics.weight);
 
 #endif
         // release previous packet before occupying a new spot
@@ -331,6 +342,10 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         valid = valid && rcwl9620Sensor.getMetrics(&m);
         hasSensor = true;
     }
+    if (nau7802Sensor.hasSensor()) {
+        valid = valid && nau7802Sensor.getMetrics(&m);
+        hasSensor = true;
+    }
     if (aht10Sensor.hasSensor()) {
         if (!bmp280Sensor.hasSensor()) {
             valid = valid && aht10Sensor.getMetrics(&m);
@@ -354,8 +369,8 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         LOG_INFO("(Sending): voltage=%f, IAQ=%d, distance=%f, lux=%f\n", m.variant.environment_metrics.voltage,
                  m.variant.environment_metrics.iaq, m.variant.environment_metrics.distance, m.variant.environment_metrics.lux);
 
-        LOG_INFO("(Sending): wind speed=%fm/s, direction=%d degrees\n", m.variant.environment_metrics.wind_speed,
-                 m.variant.environment_metrics.wind_direction);
+        LOG_INFO("(Sending): wind speed=%fm/s, direction=%d degrees, weight=%fkg\n", m.variant.environment_metrics.wind_speed,
+                 m.variant.environment_metrics.wind_direction, m.variant.environment_metrics.weight);
 
         sensor_read_error_count = 0;
 
@@ -386,6 +401,104 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         }
     }
     return valid;
+}
+
+AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
+                                                                                 meshtastic_AdminMessage *request,
+                                                                                 meshtastic_AdminMessage *response)
+{
+    AdminMessageHandleResult result = AdminMessageHandleResult::NOT_HANDLED;
+    if (dfRobotLarkSensor.hasSensor()) {
+        result = dfRobotLarkSensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (sht31Sensor.hasSensor()) {
+        result = sht31Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (lps22hbSensor.hasSensor()) {
+        result = lps22hbSensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (shtc3Sensor.hasSensor()) {
+        result = shtc3Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (bmp085Sensor.hasSensor()) {
+        result = bmp085Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (bmp280Sensor.hasSensor()) {
+        result = bmp280Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (bme280Sensor.hasSensor()) {
+        result = bme280Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (bme680Sensor.hasSensor()) {
+        result = bme680Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (mcp9808Sensor.hasSensor()) {
+        result = mcp9808Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (ina219Sensor.hasSensor()) {
+        result = ina219Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (ina260Sensor.hasSensor()) {
+        result = ina260Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (veml7700Sensor.hasSensor()) {
+        result = veml7700Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (tsl2591Sensor.hasSensor()) {
+        result = tsl2591Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (opt3001Sensor.hasSensor()) {
+        result = opt3001Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (mlx90632Sensor.hasSensor()) {
+        result = mlx90632Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (rcwl9620Sensor.hasSensor()) {
+        result = rcwl9620Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (nau7802Sensor.hasSensor()) {
+        result = nau7802Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (aht10Sensor.hasSensor()) {
+        result = aht10Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    return result;
 }
 
 #endif
