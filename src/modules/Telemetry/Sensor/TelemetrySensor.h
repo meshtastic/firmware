@@ -4,6 +4,7 @@
 
 #pragma once
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "MeshModule.h"
 #include "NodeDB.h"
 #include <utility>
 
@@ -42,6 +43,12 @@ class TelemetrySensor
     virtual void setup();
 
   public:
+    virtual AdminMessageHandleResult handleAdminMessage(const meshtastic_MeshPacket &mp, meshtastic_AdminMessage *request,
+                                                        meshtastic_AdminMessage *response)
+    {
+        return AdminMessageHandleResult::NOT_HANDLED;
+    }
+
     bool hasSensor() { return nodeTelemetrySensorsMap[sensorType].first > 0; }
 
     virtual int32_t runOnce() = 0;

@@ -71,6 +71,11 @@
 #include "modules/SerialModule.h"
 #endif
 #endif
+
+#if !MESHTASTIC_EXCLUDE_DROPZONE
+#include "modules/DropzoneModule.h"
+#endif
+
 /**
  * Create module instances here.  If you are adding a new module, you must 'new' it here (or somewhere else)
  */
@@ -100,6 +105,10 @@ void setupModules()
 #endif
 #if !MESHTASTIC_EXCLUDE_ATAK
         atakPluginModule = new AtakPluginModule();
+#endif
+
+#if !MESHTASTIC_EXCLUDE_DROPZONE
+        dropzoneModule = new DropzoneModule();
 #endif
         // Note: if the rest of meshtastic doesn't need to explicitly use your module, you do not need to assign the instance
         // to a global variable.

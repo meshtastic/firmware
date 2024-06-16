@@ -64,13 +64,17 @@ meshtastic_MeshPacket *DeviceTelemetryModule::allocReply()
 
 meshtastic_Telemetry DeviceTelemetryModule::getDeviceTelemetry()
 {
-    meshtastic_Telemetry t;
+    meshtastic_Telemetry t = meshtastic_Telemetry_init_zero;
 
     t.time = getTime();
     t.which_variant = meshtastic_Telemetry_device_metrics_tag;
     t.variant.device_metrics.air_util_tx = airTime->utilizationTXPercent();
+#if ARCH_PORTDUINO
+    t.variant.device_metrics.battery_level = MAGIC_USB_BATTERY_LEVEL;
+#else
     t.variant.device_metrics.battery_level =
         powerStatus->getIsCharging() ? MAGIC_USB_BATTERY_LEVEL : powerStatus->getBatteryChargePercent();
+#endif
     t.variant.device_metrics.channel_utilization = airTime->channelUtilizationPercent();
     t.variant.device_metrics.voltage = powerStatus->getBatteryVoltageMv() / 1000.0;
     t.variant.device_metrics.uptime_seconds = getUptimeSeconds();

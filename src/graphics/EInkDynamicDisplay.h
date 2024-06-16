@@ -109,6 +109,7 @@ class EInkDynamicDisplay : public EInkDisplay, protected concurrency::NotifiedWo
     refreshTypes currentConfig = FULL; // Which refresh type is GxEPD2 currently configured for
 
     // Optional - track ghosting, pixel by pixel
+    // May 2024: no longer used by any display. Kept for possible future use.
 #ifdef EINK_LIMIT_GHOSTING_PX
     void countGhostPixels();        // Count any pixels which have moved from black to white since last full-refresh
     void checkExcessiveGhosting();  // Check if ghosting exceeds defined limit

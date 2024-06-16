@@ -8,7 +8,7 @@ on:
     branches: [master, develop]
     paths-ignore:
       - "**.md"
-      - "version.properties"
+      - version.properties
 
   # Note: This is different from "pull_request". Need to specify ref when doing checkouts.
   pull_request_target:
@@ -20,209 +20,104 @@ on:
   workflow_dispatch:
 
 jobs:
-  check:
+  setup:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - board: rak11200
-          - board: tlora-v2-1-1_6
-          - board: tbeam
-          - board: heltec-v2_1
-          - board: meshtastic-diy-v1
-          - board: rak4631
-          - board: t-echo
-          - board: station-g2
-          - board: m5stack-coreink
-          - board: tbeam-s3-core
-          - board: tlora-t3s3-v1
-          - board: t-watch-s3
-          - board: t-deck
-          #- board: rak11310
+        arch: [esp32, esp32s3, esp32c3, nrf52840, rp2040, check]
+    runs-on: ubuntu-latest
+    steps:
+      - id: checkout
+        uses: actions/checkout@v4
+        name: Checkout base
+      - id: jsonStep
+        run: |
+          TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}})
+          echo "$TARGETS"
+          echo "${{matrix.arch}}=$(jq -cn --argjson environments "$TARGETS" '{board: $environments}')" >> $GITHUB_OUTPUT
+    outputs:
+      esp32: ${{ steps.jsonStep.outputs.esp32 }}
+      esp32s3: ${{ steps.jsonStep.outputs.esp32s3 }}
+      esp32c3: ${{ steps.jsonStep.outputs.esp32c3 }}
+      nrf52840: ${{ steps.jsonStep.outputs.nrf52840 }}
+      rp2040: ${{ steps.jsonStep.outputs.rp2040 }}
+      check: ${{ steps.jsonStep.outputs.check }}
+
+  check:
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.check) }}
 
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Build base
         id: base
         uses: ./.github/actions/setup-base
-
-      - name: Trunk Check
-        if: ${{ github.event_name != 'workflow_dispatch' }}
-        uses: trunk-io/trunk-action@782e83f803ca6e369f035d64c6ba2768174ba61b
-
       - name: Check ${{ matrix.board }}
         run: bin/check-all.sh ${{ matrix.board }}
 
   build-esp32:
+    needs: setup
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - board: rak11200
-          - board: tlora-v2
-          - board: tlora-v1
-          - board: tlora_v1_3
-          - board: tlora-v2-1-1_6
-          - board: tlora-v2-1-1_6-tcxo
-          - board: tlora-v2-1-1_8
-          - board: tbeam
-          - board: heltec-v2_0
-          - board: heltec-v2_1
-          - board: tbeam0_7
-          - board: meshtastic-diy-v1
-          - board: hydra
-          - board: meshtastic-dr-dev
-          - board: nano-g1
-          - board: station-g1
-          - board: m5stack-core
-          - board: m5stack-coreink
-          - board: nano-g1-explorer
-          - board: chatter2
+      matrix: ${{ fromJson(needs.setup.outputs.esp32) }}
     uses: ./.github/workflows/build_esp32.yml
     with:
       board: ${{ matrix.board }}
 
   build-esp32-s3:
+    needs: setup
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - board: heltec-v3
-          - board: heltec-wsl-v3
-          - board: heltec-wireless-tracker
-          - board: heltec-wireless-tracker-V1-0
-          - board: heltec-wireless-paper-v1_0
-          - board: heltec-wireless-paper #v1.1
-          - board: tbeam-s3-core
-          - board: tlora-t3s3-v1
-          - board: t-watch-s3
-          - board: t-deck
-          - board: picomputer-s3
-          - board: station-g2
-          - board: unphone
+      matrix: ${{ fromJson(needs.setup.outputs.esp32s3) }}
     uses: ./.github/workflows/build_esp32_s3.yml
     with:
       board: ${{ matrix.board }}
 
   build-esp32-c3:
+    needs: setup
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - board: heltec-ht62-esp32c3-sx1262
+      matrix: ${{ fromJson(needs.setup.outputs.esp32c3) }}
     uses: ./.github/workflows/build_esp32_c3.yml
     with:
       board: ${{ matrix.board }}
 
   build-nrf52:
+    needs: setup
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - board: rak4631
-          - board: rak4631_eink
-          - board: monteops_hw1
-          - board: t-echo
-          - board: canaryone
-          - board: pca10059_diy_eink
-          - board: feather_diy
-          - board: nano-g2-ultra
+      matrix: ${{ fromJson(needs.setup.outputs.nrf52840) }}
     uses: ./.github/workflows/build_nrf52.yml
     with:
       board: ${{ matrix.board }}
 
   build-rpi2040:
+    needs: setup
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - board: pico
-          - board: picow
-          - board: rak11310
-          - board: senselora_rp2040
-          - board: rp2040-lora
+      matrix: ${{ fromJson(needs.setup.outputs.rp2040) }}
     uses: ./.github/workflows/build_rpi2040.yml
     with:
       board: ${{ matrix.board }}
 
-  build-raspbian:
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-    uses: ./.github/workflows/build_raspbian.yml
-
   package-raspbian:
     uses: ./.github/workflows/package_raspbian.yml
 
-  build-native:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Build base
-        id: base
-        uses: ./.github/actions/setup-base
+  package-raspbian-armv7l:
+    uses: ./.github/workflows/package_raspbian_armv7l.yml
 
-      # We now run integration test before other build steps (to quickly see runtime failures)
-      #- name: Build for native
-      #  run: platformio run -e native
-      #- name: Integration test
-      # run: |
-      #.pio/build/native/program
-      #& sleep 20 # 5 seconds was not enough
-      #echo "Simulator started, launching python test..."
-      #python3 -c 'from meshtastic.test import testSimulator; testSimulator()'
-
-      - name: Build Native
-        run: bin/build-native.sh
-
-      - name: Get release version string
-        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
-        id: version
-
-      - name: Store binaries as an artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: firmware-native-${{ steps.version.outputs.version }}.zip
-          path: |
-            release/device-*.sh
-            release/device-*.bat
-
-      - name: Docker login
-        if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
-        uses: docker/login-action@v2
-        with:
-          username: meshtastic
-          password: ${{ secrets.DOCKER_TOKEN }}
-
-      - name: Docker setup
-        if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
-        uses: docker/setup-buildx-action@v2
-
-      - name: Docker build and push tagged versions
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        uses: docker/build-push-action@v3
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: meshtastic/device-simulator:${{ steps.version.outputs.version }}
-
-      - name: Docker build and push
-        if: ${{ github.ref == 'refs/heads/master' && github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
-        uses: docker/build-push-action@v3
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: meshtastic/device-simulator:latest
+  package-native:
+    uses: ./.github/workflows/package_amd64.yml
 
   after-checks:
     runs-on: ubuntu-latest
     needs: [check]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
@@ -238,21 +133,22 @@ jobs:
         build-esp32-s3,
         build-esp32-c3,
         build-nrf52,
-        build-raspbian,
-        build-native,
         build-rpi2040,
         package-raspbian,
+        package-raspbian-armv7l,
+        package-native
       ]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           path: ./
+          merge-multiple: true
 
       - name: Display structure of downloaded files
         run: ls -R
@@ -262,25 +158,30 @@ jobs:
         id: version
 
       - name: Move files up
-        run: mv -b -t ./ ./*tbeam-2*/littlefs*.bin ./*tbeam-2*/bleota.bin ./*tbeam-s3*/bleota-s3.bin ./*esp32c3*/bleota-c3.bin ./**/firmware*.bin ./*t-echo*/Meshtastic_nRF52_factory_erase_v2.uf2 ./**/firmware-*.uf2 ./**/firmware-*-ota.zip ./**/*.elf ./*native*/*device-*.sh ./*native*/*device-*.bat ./firmware-raspbian-*/release/meshtasticd_linux_aarch64 ./firmware-raspbian-*/bin/config-dist.yaml
+        run: mv -b -t ./ ./release/meshtasticd_linux_* ./bin/config-dist.yaml ./bin/device-*.sh ./bin/device-*.bat
 
       - name: Repackage in single firmware zip
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: firmware-${{ steps.version.outputs.version }}
+          overwrite: true
           path: |
-            ./*.bin
-            ./*.uf2
+            ./firmware-*.bin
+            ./firmware-*.uf2
             ./firmware-*-ota.zip
             ./device-*.sh
             ./device-*.bat
-            ./meshtasticd_linux_arm64
+            ./meshtasticd_linux_*
             ./config-dist.yaml
+            ./littlefs-*.bin
+            ./bleota*bin
+            ./Meshtastic_nRF52_factory_erase*.uf2
           retention-days: 90
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: firmware-${{ steps.version.outputs.version }}
+          merge-multiple: true
           path: ./output
 
       # For diagnostics
@@ -296,9 +197,10 @@ jobs:
         run: zip -j -9 -r ./firmware-${{ steps.version.outputs.version }}.zip ./output
 
       - name: Repackage in single elfs zip
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: debug-elfs-${{ steps.version.outputs.version }}.zip
+          overwrite: true
           path: ./*.elf
           retention-days: 30
 
@@ -320,10 +222,10 @@ jobs:
     needs: [gather-artifacts, after-checks]
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: 3.x
 
@@ -331,14 +233,17 @@ jobs:
         run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: firmware-${{ steps.version.outputs.version }}
+          merge-multiple: true
           path: ./output
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
-          name: artifact-deb
+          pattern: meshtasticd_${{ steps.version.outputs.version }}_*.deb
+          merge-multiple: true
+          path: ./output
 
       - name: Display structure of downloaded files
         run: ls -R
@@ -351,9 +256,10 @@ jobs:
       - name: Zip firmware
         run: zip -j -9 -r ./firmware-${{ steps.version.outputs.version }}.zip ./output
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: debug-elfs-${{ steps.version.outputs.version }}.zip
+          merge-multiple: true
           path: ./elfs
 
       - name: Zip Elfs
@@ -396,14 +302,34 @@ jobs:
           asset_name: debug-elfs-${{ steps.version.outputs.version }}.zip
           asset_content_type: application/zip
 
-      - name: Add raspbian .deb
+      - name: Add raspbian aarch64 .deb
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./meshtasticd_${{ steps.version.outputs.version }}_arm64.deb
+          asset_path: ./output/meshtasticd_${{ steps.version.outputs.version }}_arm64.deb
           asset_name: meshtasticd_${{ steps.version.outputs.version }}_arm64.deb
+          asset_content_type: application/vnd.debian.binary-package
+
+      - name: Add raspbian armv7l .deb
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./output/meshtasticd_${{ steps.version.outputs.version }}_armhf.deb
+          asset_name: meshtasticd_${{ steps.version.outputs.version }}_armhf.deb
+          asset_content_type: application/vnd.debian.binary-package
+
+      - name: Add raspbian amd64 .deb
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./output/meshtasticd_${{ steps.version.outputs.version }}_amd64.deb
+          asset_name: meshtasticd_${{ steps.version.outputs.version }}_amd64.deb
           asset_content_type: application/vnd.debian.binary-package
 
       - name: Bump version.properties
@@ -411,7 +337,7 @@ jobs:
           bin/bump_version.py
 
       - name: Create version.properties pull request
-        uses: peter-evans/create-pull-request@v3
+        uses: peter-evans/create-pull-request@v6
         with:
           add-paths: |
             version.properties
