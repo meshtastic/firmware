@@ -2776,6 +2776,7 @@ int Screen::handleWaypoint(const meshtastic_MeshPacket *arg)
 {
     // TODO: move to appropriate frame when redrawing
     setFrames();
+    return 0;
 }
 
 } // namespace graphics
