@@ -43,6 +43,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "meshUtils.h"
 #include "modules/ExternalNotificationModule.h"
 #include "modules/TextMessageModule.h"
+#include "modules/WaypointModule.h"
 #include "sleep.h"
 #include "target_specific.h"
 
@@ -444,6 +445,36 @@ static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
 static bool shouldDrawMessage(const meshtastic_MeshPacket *packet)
 {
     return packet->from != 0 && !moduleConfig.store_forward.enabled;
+}
+
+//
+static bool shouldDrawWaypoint(const meshtastic_MeshPacket *packet)
+{
+#if !MESHTASTIC_EXCLUDE_WAYPOINT
+    // If no waypoint to show
+    if (!devicestate.has_rx_waypoint)
+        return false;
+
+    // Decode the message, to find the expiration time (is waypoint still valid)
+    // This handles "deletion" as well as expiration
+    meshtastic_Waypoint scratch;
+    memset(&scratch, 0, sizeof(scratch));
+    if (pb_decode_from_bytes(packet->decoded.payload.bytes, packet->decoded.payload.size, &meshtastic_Waypoint_msg, &scratch)) {
+        // Valid waypoint
+        if (scratch.expire > getTime())
+            return devicestate.has_rx_waypoint = true;
+
+        // Expired, or deleted
+        else
+            return devicestate.has_rx_waypoint = false;
+    }
+
+    // If decoding failed
+    LOG_ERROR("Failed to decode waypoint\n");
+    return devicestate.has_rx_waypoint = false;
+#else
+    return false;
+#endif
 }
 
 // Draw power bars or a charging indicator on an image of a battery, determined by battery charge voltage or percentage.
@@ -1806,6 +1837,8 @@ void Screen::setup()
         textMessageObserver.observe(textMessageModule);
     if (inputBroker)
         inputObserver.observe(inputBroker);
+    if (waypointModule)
+        waypointObserver.observe(waypointModule);
 
     // Modules can notify screen about refresh
     MeshModule::observeUIEvents(&uiFrameEventObserver);
@@ -2133,9 +2166,12 @@ void Screen::setFrames()
     if (devicestate.has_rx_text_message && shouldDrawMessage(&devicestate.rx_text_message)) {
         normalFrames[numframes++] = drawTextMessageFrame;
     }
-    // If we have a waypoint - show it next, unless it's a phone message and we aren't using any special modules
+
+    // If we have a waypoint (not expired, not deleted)
     if (devicestate.has_rx_waypoint && shouldDrawMessage(&devicestate.rx_waypoint)) {
-        normalFrames[numframes++] = drawWaypointFrame;
+        // If waypoint valid
+        if (shouldDrawWaypoint(&devicestate.rx_waypoint))
+            normalFrames[numframes++] = drawWaypointFrame;
     }
 
     // then all the nodes
@@ -2734,6 +2770,12 @@ int Screen::handleInputEvent(const InputEvent *event)
     }
 
     return 0;
+}
+
+int Screen::handleWaypoint(const meshtastic_MeshPacket *arg)
+{
+    // TODO: move to appropriate frame when redrawing
+    setFrames();
 }
 
 } // namespace graphics

@@ -126,6 +126,8 @@ class Screen : public concurrency::OSThread
         CallbackObserver<Screen, const meshtastic::Status *>(this, &Screen::handleStatusUpdate);
     CallbackObserver<Screen, const meshtastic_MeshPacket *> textMessageObserver =
         CallbackObserver<Screen, const meshtastic_MeshPacket *>(this, &Screen::handleTextMessage);
+    CallbackObserver<Screen, const meshtastic_MeshPacket *> waypointObserver =
+        CallbackObserver<Screen, const meshtastic_MeshPacket *>(this, &Screen::handleWaypoint);
     CallbackObserver<Screen, const UIFrameEvent *> uiFrameEventObserver =
         CallbackObserver<Screen, const UIFrameEvent *>(this, &Screen::handleUIFrameEvent);
     CallbackObserver<Screen, const InputEvent *> inputObserver =
@@ -336,6 +338,7 @@ class Screen : public concurrency::OSThread
     int handleTextMessage(const meshtastic_MeshPacket *arg);
     int handleUIFrameEvent(const UIFrameEvent *arg);
     int handleInputEvent(const InputEvent *arg);
+    int handleWaypoint(const meshtastic_MeshPacket *arg);
 
     /// Used to force (super slow) eink displays to draw critical frames
     void forceDisplay(bool forceUiUpdate = false);
