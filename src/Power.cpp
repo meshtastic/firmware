@@ -351,19 +351,19 @@ class AnalogBatteryLevel : public HasBatteryLevel
     virtual bool isVbusIn() override
     {
 #ifdef EXT_PWR_DETECT
-    #ifdef HELTEC_CAPSULE_SENSOR_V3
-            // if external powered that pin will be pulled down
-            if (digitalRead(EXT_PWR_DETECT) == LOW) {
-                return true;
-            }
-            // if it's not LOW - check the battery
-    #else
-                // if external powered that pin will be pulled up
-            if (digitalRead(EXT_PWR_DETECT) == HIGH) {
-                return true;
-            }
-            // if it's not HIGH - check the battery
-    #endif
+#ifdef HELTEC_CAPSULE_SENSOR_V3
+        // if external powered that pin will be pulled down
+        if (digitalRead(EXT_PWR_DETECT) == LOW) {
+            return true;
+        }
+        // if it's not LOW - check the battery
+#else
+        // if external powered that pin will be pulled up
+        if (digitalRead(EXT_PWR_DETECT) == HIGH) {
+            return true;
+        }
+        // if it's not HIGH - check the battery
+#endif
 #endif
         return getBattVoltage() > chargingVolt;
     }
@@ -461,11 +461,11 @@ Power::Power() : OSThread("Power")
 bool Power::analogInit()
 {
 #ifdef EXT_PWR_DETECT
-    #ifdef HELTEC_CAPSULE_SENSOR_V3
-        pinMode(EXT_PWR_DETECT, INPUT_PULLUP);
-    #else
-        pinMode(EXT_PWR_DETECT, INPUT);
-    #endif
+#ifdef HELTEC_CAPSULE_SENSOR_V3
+    pinMode(EXT_PWR_DETECT, INPUT_PULLUP);
+#else
+    pinMode(EXT_PWR_DETECT, INPUT);
+#endif
 #endif
 #ifdef EXT_CHRG_DETECT
     pinMode(EXT_CHRG_DETECT, ext_chrg_detect_mode);
