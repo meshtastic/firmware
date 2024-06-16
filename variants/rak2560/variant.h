@@ -16,10 +16,11 @@
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-#ifndef _VARIANT_RAK4630_
-#define _VARIANT_RAK4630_
+#ifndef _VARIANT_RAK2560_
+#define _VARIANT_RAK2560_
 
 #define RAK4630
+#define RAK2560
 
 /** Master clock frequency */
 #define VARIANT_MCK (64000000ul)
