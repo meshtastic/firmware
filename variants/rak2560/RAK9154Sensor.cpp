@@ -1,7 +1,7 @@
-#ifdef HAS_RAKPROT 
-#include "RAK9154Sensor.h"
+#ifdef HAS_RAKPROT
+#include "../variants/rak2560/RAK9154Sensor.h"
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "TelemetrySensor.h"
+#include "../modules/Telemetry/Sensor/TelemetrySensor.h"
 #include "configuration.h"
 
 #include <RAK-OneWireSerial.h>

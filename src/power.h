@@ -2,6 +2,8 @@
 #include "PowerStatus.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
+#include "../variants/rak2560/RAK9154Sensor.h"
+
 #ifdef ARCH_ESP32
 #include <esp_adc_cal.h>
 #include <soc/adc_channel.h>
@@ -47,38 +49,38 @@ extern INA3221Sensor ina3221Sensor;
 #endif
 
 #if HAS_RAKPROT && !defined(ARCH_PORTDUINO)
-#include "modules/Telemetry/Sensor/RAK9154Sensor.h"
+#include "../variants/rak2560/RAK9154Sensor.h"
 extern RAK9154Sensor rak9154Sensor;
 #endif
 
 class Power : private concurrency::OSThread
 {
 
-  public:
-    Observable<const meshtastic::PowerStatus *> newStatus;
+public:
+	Observable<const meshtastic::PowerStatus *> newStatus;
 
-    Power();
+	Power();
 
-    void shutdown();
-    void readPowerStatus();
-    virtual bool setup();
-    virtual int32_t runOnce() override;
-    void setStatusHandler(meshtastic::PowerStatus *handler) { statusHandler = handler; }
-    const uint16_t OCV[11] = {OCV_ARRAY};
+	void shutdown();
+	void readPowerStatus();
+	virtual bool setup();
+	virtual int32_t runOnce() override;
+	void setStatusHandler(meshtastic::PowerStatus *handler) { statusHandler = handler; }
+	const uint16_t OCV[11] = {OCV_ARRAY};
 
-  protected:
-    meshtastic::PowerStatus *statusHandler;
+protected:
+	meshtastic::PowerStatus *statusHandler;
 
-    /// Setup a xpowers chip axp192/axp2101, return true if found
-    bool axpChipInit();
-    /// Setup a simple ADC input based battery sensor
-    bool analogInit();
+	/// Setup a xpowers chip axp192/axp2101, return true if found
+	bool axpChipInit();
+	/// Setup a simple ADC input based battery sensor
+	bool analogInit();
 
-  private:
-    // open circuit voltage lookup table
-    uint8_t low_voltage_counter;
+private:
+	// open circuit voltage lookup table
+	uint8_t low_voltage_counter;
 #ifdef DEBUG_HEAP
-    uint32_t lastheap;
+	uint32_t lastheap;
 #endif
 };
 
