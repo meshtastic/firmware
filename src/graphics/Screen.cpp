@@ -313,15 +313,13 @@ static void drawDeepSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state,
 
     LOG_DEBUG("Drawing deep sleep screen\n");
     
-    // Check if idText is empty
-    if (strlen(idText) == 0) {
-        drawIconScreen("Sleeping.", display, state, x, y);
+    // Check if idText is not assigned OR empty OR has non printable characters
+    if (!idText || strlen(idText) == 0 || !(haveGlyphs(idText)) ) {
+        drawIconScreen("Sleeping", display, state, x, y);
     } else {
         // Create a new string that is the concatenation of idText and " sleeping."
-        size_t idTextLen = strlen(idText);
-        char displayStr[idTextLen + 12]; // Allocate enough space for the new string
-        strcpy(displayStr, idText); // Copy idText to the new string
-        strcat(displayStr, " sleeping."); // Concatenate " sleeping." to the new string
+        char displayStr[30]; // Declare a character array for the display string 5+buffer for changes
+        sprintf(displayStr, "%s sleeping", idText);
 
         // Display displayStr on the screen
         drawIconScreen(displayStr, display, state, x, y);
