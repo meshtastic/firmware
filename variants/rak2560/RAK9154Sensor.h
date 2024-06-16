@@ -1,7 +1,9 @@
 #ifdef HAS_RAKPROT
+#ifndef _RAK9154SENSOR_H
+#define _RAK9154SENSOR_H 1
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "TelemetrySensor.h"
-#include "VoltageSensor.h"
+#include "../modules/Telemetry/Sensor/TelemetrySensor.h"
+#include "../modules/Telemetry/Sensor/VoltageSensor.h"
 
 class RAK9154Sensor : public TelemetrySensor, VoltageSensor
 {
@@ -17,4 +19,5 @@ class RAK9154Sensor : public TelemetrySensor, VoltageSensor
     int getBusBatteryPercent();
     bool isCharging();
 };
+#endif // _RAK9154SENSOR_H
 #endif // HAS_RAKPROT
