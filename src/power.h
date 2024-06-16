@@ -46,6 +46,11 @@ extern INA219Sensor ina219Sensor;
 extern INA3221Sensor ina3221Sensor;
 #endif
 
+#if HAS_RAKPROT && !defined(ARCH_PORTDUINO)
+#include "modules/Telemetry/Sensor/RAK9154Sensor.h"
+extern RAK9154Sensor rak9154Sensor;
+#endif
+
 class Power : private concurrency::OSThread
 {
 
