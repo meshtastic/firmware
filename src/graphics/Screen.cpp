@@ -277,6 +277,30 @@ static void drawFunctionOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
     }
 }
 
+/// Check if the display can render a string (detect special chars; emoji)
+static bool haveGlyphs(const char *str)
+{
+#if defined(OLED_UA) || defined(OLED_RU)
+    // Don't want to make any assumptions about custom language support
+    return true;
+#endif
+
+    // Check each character with the lookup function for the OLED library
+    // We're not really meant to use this directly..
+    bool have = true;
+    for (uint16_t i = 0; i < strlen(str); i++) {
+        uint8_t result = Screen::customFontTableLookup((uint8_t)str[i]);
+        // If font doesn't support a character, it is substituted for ¿
+        if (result == 191 && (uint8_t)str[i] != 191) {
+            have = false;
+            break;
+        }
+    }
+
+    LOG_DEBUG("haveGlyphs=%d\n", have);
+    return have;
+}
+
 #ifdef USE_EINK
 /// Used on eink displays while in deep sleep
 static void drawDeepSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -301,14 +325,15 @@ static void drawScreensaverOverlay(OLEDDisplay *display, OLEDDisplayUiState *sta
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     const char *pauseText = "Screen Paused";
     const char *idText = owner.short_name;
+    const bool useId = haveGlyphs(idText); // This bool is used to hide the idText box if we can't render the short name
     constexpr uint16_t padding = 5;
     constexpr uint8_t dividerGap = 1;
     constexpr uint8_t imprecision = 5; // How far the box origins can drift from center. Combat burn-in.
 
     // Dimensions
-    const uint16_t idTextWidth = display->getStringWidth(idText, strlen(idText));
+    const uint16_t idTextWidth = display->getStringWidth(idText, strlen(idText), true); // "true": handle utf8 chars
     const uint16_t pauseTextWidth = display->getStringWidth(pauseText, strlen(pauseText));
-    const uint16_t boxWidth = padding + idTextWidth + padding + padding + pauseTextWidth + padding;
+    const uint16_t boxWidth = padding + (useId ? idTextWidth + padding + padding : 0) + pauseTextWidth + padding;
     const uint16_t boxHeight = padding + FONT_HEIGHT_SMALL + padding;
 
     // Position
@@ -318,7 +343,7 @@ static void drawScreensaverOverlay(OLEDDisplay *display, OLEDDisplayUiState *sta
     const int16_t boxBottom = boxTop + boxHeight - 1;
     const int16_t idTextLeft = boxLeft + padding;
     const int16_t idTextTop = boxTop + padding;
-    const int16_t pauseTextLeft = boxLeft + padding + idTextWidth + padding + padding;
+    const int16_t pauseTextLeft = boxLeft + (useId ? padding + idTextWidth + padding : 0) + padding;
     const int16_t pauseTextTop = boxTop + padding;
     const int16_t dividerX = boxLeft + padding + idTextWidth + padding;
     const int16_t dividerTop = boxTop + 1 + dividerGap;
@@ -331,12 +356,14 @@ static void drawScreensaverOverlay(OLEDDisplay *display, OLEDDisplayUiState *sta
     display->drawRect(boxLeft, boxTop, boxWidth, boxHeight);
 
     // Draw: Text
-    display->drawString(idTextLeft, idTextTop, idText);
+    if (useId)
+        display->drawString(idTextLeft, idTextTop, idText);
     display->drawString(pauseTextLeft, pauseTextTop, pauseText);
     display->drawString(pauseTextLeft + 1, pauseTextTop, pauseText); // Faux bold
 
     // Draw: divider
-    display->drawLine(dividerX, dividerTop, dividerX, dividerBottom);
+    if (useId)
+        display->drawLine(dividerX, dividerTop, dividerX, dividerBottom);
 }
 #endif
 
@@ -1516,9 +1543,13 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     }
     bool hasNodeHeading = false;
 
-    if (ourNode && hasValidPosition(ourNode)) {
+    if (ourNode && (hasValidPosition(ourNode) || screen->hasHeading())) {
         const meshtastic_PositionLite &op = ourNode->position;
-        float myHeading = estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
+        float myHeading;
+        if (screen->hasHeading())
+            myHeading = (screen->getHeading()) * PI / 180; // gotta convert compass degrees to Radians
+        else
+            myHeading = estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
         drawCompassNorth(display, compassX, compassY, myHeading);
 
         if (hasValidPosition(node)) {

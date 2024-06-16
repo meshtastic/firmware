@@ -142,6 +142,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define OPT3001_ADDR_ALT 0x44
 #define MLX90632_ADDR 0x3A
 #define DFROBOT_LARK_ADDR 0x42
+#define NAU7802_ADDR 0x2A
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
@@ -150,6 +151,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LIS3DH_ADR 0x18
 #define BMA423_ADDR 0x19
 #define LSM6DS3_ADDR 0x6A
+#define BMX160_ADDR 0x69
 
 // -----------------------------------------------------------------------------
 // LED

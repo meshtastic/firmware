@@ -675,6 +675,8 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
                     msgPayload["lux"] = new JSONValue(decoded->variant.environment_metrics.lux);
                     msgPayload["white_lux"] = new JSONValue(decoded->variant.environment_metrics.white_lux);
                     msgPayload["iaq"] = new JSONValue((uint)decoded->variant.environment_metrics.iaq);
+                    msgPayload["wind_speed"] = new JSONValue((uint)decoded->variant.environment_metrics.wind_speed);
+                    msgPayload["wind_direction"] = new JSONValue((uint)decoded->variant.environment_metrics.wind_direction);
                 } else if (decoded->which_variant == meshtastic_Telemetry_power_metrics_tag) {
                     msgPayload["voltage_ch1"] = new JSONValue(decoded->variant.power_metrics.ch1_voltage);
                     msgPayload["current_ch1"] = new JSONValue(decoded->variant.power_metrics.ch1_current);
@@ -898,8 +900,10 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
         jsonObj["rssi"] = new JSONValue((int)mp->rx_rssi);
     if (mp->rx_snr != 0)
         jsonObj["snr"] = new JSONValue((float)mp->rx_snr);
-    if (mp->hop_start != 0 && mp->hop_limit <= mp->hop_start)
+    if (mp->hop_start != 0 && mp->hop_limit <= mp->hop_start) {
         jsonObj["hops_away"] = new JSONValue((unsigned int)(mp->hop_start - mp->hop_limit));
+        jsonObj["hop_start"] = new JSONValue((unsigned int)(mp->hop_start));
+    }
 
     // serialize and write it to the stream
     JSONValue *value = new JSONValue(jsonObj);
