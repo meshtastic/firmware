@@ -5,37 +5,25 @@ runs:
   using: "composite"
   steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         submodules: "recursive"
         ref: ${{github.event.pull_request.head.ref}}
         repository: ${{github.event.pull_request.head.repo.full_name}}
 
-    - name: Install cppcheck
+    - name: Install dependencies 
       shell: bash
       run: |
-        sudo apt-get install -y cppcheck
-
-    - name: Install libbluetooth
-      shell: bash
-      run: |
-        sudo apt-get install -y libbluetooth-dev
-    - name: Install libgpiod
-      shell: bash
-      run: |
-        sudo apt-get install -y libgpiod-dev
-    - name: Install libyaml-cpp
-      shell: bash
-      run: |
-        sudo apt-get install -y libyaml-cpp-dev
+        sudo apt-get -y update 
+        sudo apt-get install -y cppcheck libbluetooth-dev libgpiod-dev libyaml-cpp-dev
 
     - name: Setup Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: 3.x
 
     - name: Cache python libs
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       id: cache-pip # needed in if test
       with:
         path: ~/.cache/pip

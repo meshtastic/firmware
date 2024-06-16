@@ -311,7 +311,10 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
         if (channels.decryptForHash(chIndex, p->channel)) {
             // Try to decrypt the packet if we can
             size_t rawSize = p->encrypted.size;
-            assert(rawSize <= sizeof(bytes));
+            if (rawSize > sizeof(bytes)) {
+                LOG_ERROR("Packet too large to attempt decription! (rawSize=%d > 256)\n", rawSize);
+                return false;
+            }
             memcpy(bytes, p->encrypted.bytes,
                    rawSize); // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf
             crypto->decrypt(p->from, p->id, rawSize, bytes);

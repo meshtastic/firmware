@@ -19,6 +19,9 @@ class TraceRouteModule : public ProtobufModule<meshtastic_RouteDiscovery>
     void alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r) override;
 
   private:
+    // Call to add unknown hops (e.g. when a node couldn't decrypt it) to the route based on hopStart and current hopLimit
+    void insertUnknownHops(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r);
+
     // Call to add your ID to the route array of a RouteDiscovery message
     void appendMyID(meshtastic_RouteDiscovery *r);
 

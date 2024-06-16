@@ -24,17 +24,23 @@
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 void setBluetoothEnable(bool enable)
 {
-    if (!isWifiAvailable() && config.bluetooth.enabled == true) {
-        if (!nimbleBluetooth) {
-            nimbleBluetooth = new NimbleBluetooth();
+#ifndef MESHTASTIC_EXCLUDE_WIFI
+    if (!isWifiAvailable() && config.bluetooth.enabled == true)
+#endif
+#ifdef MESHTASTIC_EXCLUDE_WIFI
+        if (config.bluetooth.enabled == true)
+#endif
+        {
+            if (!nimbleBluetooth) {
+                nimbleBluetooth = new NimbleBluetooth();
+            }
+            if (enable && !nimbleBluetooth->isActive()) {
+                nimbleBluetooth->setup();
+            }
+            // For ESP32, no way to recover from bluetooth shutdown without reboot
+            // BLE advertising automatically stops when MCU enters light-sleep(?)
+            // For deep-sleep, shutdown hardware with nimbleBluetooth->deinit(). Requires reboot to reverse
         }
-        if (enable && !nimbleBluetooth->isActive()) {
-            nimbleBluetooth->setup();
-        }
-        // For ESP32, no way to recover from bluetooth shutdown without reboot
-        // BLE advertising automatically stops when MCU enters light-sleep(?)
-        // For deep-sleep, shutdown hardware with nimbleBluetooth->deinit(). Requires reboot to reverse
-    }
 }
 #else
 void setBluetoothEnable(bool enable) {}
@@ -214,11 +220,16 @@ void cpuDeepSleep(uint32_t msecToWake)
 #endif
 
     // Not needed because both of the current boards have external pullups
-    // FIXME change polarity in hw so we can wake on ANY_HIGH instead - that would allow us to use all three buttons (instead of
-    // just the first) gpio_pullup_en((gpio_num_t)BUTTON_PIN);
+    // FIXME change polarity in hw so we can wake on ANY_HIGH instead - that would allow us to use all three buttons (instead
+    // of just the first) gpio_pullup_en((gpio_num_t)BUTTON_PIN);
 
 #if SOC_PM_SUPPORT_EXT_WAKEUP
+#ifdef CONFIG_IDF_TARGET_ESP32
+    // ESP_EXT1_WAKEUP_ALL_LOW has been deprecated since esp-idf v5.4 for any other target.
     esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ALL_LOW);
+#else
+    esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ANY_LOW);
+#endif
 #endif
 #endif
 
