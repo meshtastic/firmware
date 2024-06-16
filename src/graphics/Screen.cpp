@@ -2081,9 +2081,12 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
 #endif
 
 // restore our regular frame list
-void Screen::setFrames()
+void Screen::setFrames(bool holdPosition)
 {
-    LOG_DEBUG("showing standard frames\n");
+    // Which frame we are currently showing. We might want to return here after the new frames are set
+    uint8_t oldFrame = ui->getUiState()->currentFrame;
+
+    LOG_DEBUG("showing standard frames. oldFrame %d\n", oldFrame);
     showingNormalScreen = true;
 
 #ifdef USE_EINK
@@ -2174,7 +2177,25 @@ void Screen::setFrames()
                     // just changed)
 
     setFastFramerate(); // Draw ASAP
+
+    // In some situations, we'd like to return to the same frame
+    static size_t oldNumFrames = numframes;
+    if (holdPosition) {
+        if (oldFrame == (oldNumFrames - 1))  // If we were on the final frame (settings)
+            ui->switchToFrame(numframes - 1); // then move back to the final frame
+
+        else if (oldFrame == (oldNumFrames - 2)) // If we were on the log buffer frame
+            ui->switchToFrame(numframes - 2);    // then move back there
+
+        else if (oldFrame > numframes - 1) // If we were on a frame that no longer exists
+            ui->switchToFrame(0);          // back to the first frame
+
+        else 
+            ui->switchToFrame(oldFrame); // Otherwise, go back to the same frame
 }
+    oldNumFrames = numframes; // Store how many frames we have, in case we want to "restore position" next time
+}
+
 
 void Screen::handleStartBluetoothPinScreen(uint32_t pin)
 {
@@ -2669,11 +2690,12 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 
 int Screen::handleStatusUpdate(const meshtastic::Status *arg)
 {
-    // LOG_DEBUG("Screen got status update %d\n", arg->getStatusType());
+    LOG_DEBUG("Screen got status update %d\n", arg->getStatusType());
     switch (arg->getStatusType()) {
     case STATUS_TYPE_NODE:
         if (showingNormalScreen && nodeStatus->getLastNumTotal() != nodeStatus->getNumTotal()) {
-            setFrames(); // Regen the list of screens
+            LOG_DEBUG("Screen: Node count changed, regenerating frames, will show the previously displayed frame\n");
+            setFrames(true); // Regen the list of screens, will show the previously displayed frame
         }
         nodeDB->updateGUI = false;
         break;
@@ -2685,7 +2707,13 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
 int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 {
     if (showingNormalScreen) {
-        setFrames(); // Regen the list of screens (will show new text message)
+        // Outgoing message
+        if (packet->from == 0)
+            setFrames(true); // Return to same frame
+
+        // Incoming message
+        else
+            setFrames(false); // Regen the list of screens (will show new text message)
     }
 
     return 0;

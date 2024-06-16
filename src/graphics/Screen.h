@@ -390,7 +390,7 @@ class Screen : public concurrency::OSThread
     void handleShutdownScreen();
     void handleRebootScreen();
     /// Rebuilds our list of frames (screens) to default ones.
-    void setFrames();
+    void setFrames(bool holdPosition = false);
 
     /// Try to start drawing ASAP
     void setFastFramerate();
