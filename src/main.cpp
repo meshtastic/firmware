@@ -106,14 +106,12 @@ AccelerometerThread *accelerometerThread = nullptr;
 #ifdef HAS_I2S
 #include "AudioThread.h"
 AudioThread *audioThread = nullptr;
-;
 #endif
 
 using namespace concurrency;
 
 // We always create a screen object, but we only init it if we find the hardware
 graphics::Screen *screen = nullptr;
-;
 
 // Global power status
 meshtastic::PowerStatus *powerStatus = new meshtastic::PowerStatus();
