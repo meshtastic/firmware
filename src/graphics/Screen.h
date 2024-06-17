@@ -204,6 +204,17 @@ class Screen : public concurrency::OSThread
         enqueueCmd(cmd);
     }
 
+    // Function to allow the AccelerometerThread to set the heading if a sensor provides it
+    // Mutex needed?
+    void setHeading(long _heading)
+    {
+        hasCompass = true;
+        compassHeading = _heading;
+    }
+
+    bool hasHeading() { return hasCompass; }
+
+    long getHeading() { return compassHeading; }
     // functions for display brightness
     void increaseBrightness();
     void decreaseBrightness();
@@ -360,7 +371,7 @@ class Screen : public concurrency::OSThread
     bool enqueueCmd(const ScreenCmd &cmd)
     {
         if (!useDisplay)
-            return true; // claim success if our display is not in use
+            return false; // not enqueued if our display is not in use
         else {
             bool success = cmdQueue.enqueue(cmd, 0);
             enabled = true; // handle ASAP (we are the registered reader for cmdQueue, but might have been disabled)
@@ -428,6 +439,8 @@ class Screen : public concurrency::OSThread
     // Implementation to Adjust Brightness
     uint8_t brightness = BRIGHTNESS_DEFAULT; // H = 254, MH = 192, ML = 130 L = 103
 
+    bool hasCompass = false;
+    float compassHeading;
     /// Holds state for debug information
     DebugInfo debugInfo;
 

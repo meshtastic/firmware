@@ -140,16 +140,18 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
  *
  * We assume buf is at least FromRadio_size bytes long.
  *
- * Our sending states progress in the following sequence (the client app ASSUMES THIS SEQUENCE, DO NOT CHANGE IT):
- *      STATE_SEND_MY_INFO, // send our my info record
- *      STATE_SEND_CHANNELS
- *      STATE_SEND_NODEINFO, // states progress in this order as the device sends to the client
-        STATE_SEND_CONFIG,
-        STATE_SEND_MODULE_CONFIG,
-        STATE_SEND_METADATA,
-        STATE_SEND_COMPLETE_ID,
-        STATE_SEND_PACKETS // send packets or debug strings
+ * Our sending states progress in the following sequence (the client apps ASSUME THIS SEQUENCE, DO NOT CHANGE IT):
+    STATE_SEND_MY_INFO, // send our my info record
+    STATE_SEND_OWN_NODEINFO,
+    STATE_SEND_METADATA,
+    STATE_SEND_CHANNELS
+    STATE_SEND_CONFIG,
+    STATE_SEND_MODULE_CONFIG,
+    STATE_SEND_OTHER_NODEINFOS, // states progress in this order as the device sends to the client
+    STATE_SEND_COMPLETE_ID,
+    STATE_SEND_PACKETS // send packets or debug strings
  */
+
 size_t PhoneAPI::getFromRadio(uint8_t *buf)
 {
     if (!available()) {
@@ -171,36 +173,31 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         // app not to send locations on our behalf.
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_my_info_tag;
         fromRadioScratch.my_info = myNodeInfo;
-        state = STATE_SEND_METADATA;
+        state = STATE_SEND_OWN_NODEINFO;
 
         service.refreshLocalMeshNode(); // Update my NodeInfo because the client will be asking for it soon.
         break;
+
+    case STATE_SEND_OWN_NODEINFO: {
+        LOG_INFO("getFromRadio=STATE_SEND_OWN_NODEINFO\n");
+        auto us = nodeDB->readNextMeshNode(readIndex);
+        if (us) {
+            nodeInfoForPhone = TypeConversions::ConvertToNodeInfo(us);
+            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_node_info_tag;
+            fromRadioScratch.node_info = nodeInfoForPhone;
+            // Should allow us to resume sending NodeInfo in STATE_SEND_OTHER_NODEINFOS
+            nodeInfoForPhone.num = 0;
+        }
+        state = STATE_SEND_METADATA;
+        break;
+    }
 
     case STATE_SEND_METADATA:
         LOG_INFO("getFromRadio=STATE_SEND_METADATA\n");
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_metadata_tag;
         fromRadioScratch.metadata = getDeviceMetadata();
-        state = STATE_SEND_NODEINFO;
+        state = STATE_SEND_CHANNELS;
         break;
-
-    case STATE_SEND_NODEINFO: {
-        LOG_INFO("getFromRadio=STATE_SEND_NODEINFO\n");
-
-        if (nodeInfoForPhone.num != 0) {
-            LOG_INFO("nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s\n", nodeInfoForPhone.num, nodeInfoForPhone.last_heard,
-                     nodeInfoForPhone.user.id, nodeInfoForPhone.user.long_name);
-            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_node_info_tag;
-            fromRadioScratch.node_info = nodeInfoForPhone;
-            // Stay in current state until done sending nodeinfos
-            nodeInfoForPhone.num = 0; // We just consumed a nodeinfo, will need a new one next time
-        } else {
-            LOG_INFO("Done sending nodeinfos\n");
-            state = STATE_SEND_CHANNELS;
-            // Go ahead and send that ID right now
-            return getFromRadio(buf);
-        }
-        break;
-    }
 
     case STATE_SEND_CHANNELS:
         LOG_INFO("getFromRadio=STATE_SEND_CHANNELS\n");
@@ -325,10 +322,29 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         config_state++;
         // Advance when we have sent all of our ModuleConfig objects
         if (config_state > (_meshtastic_AdminMessage_ModuleConfigType_MAX + 1)) {
-            state = STATE_SEND_COMPLETE_ID;
+            // Clients sending special nonce don't want to see other nodeinfos
+            state = config_nonce == SPECIAL_NONCE ? STATE_SEND_COMPLETE_ID : STATE_SEND_OTHER_NODEINFOS;
             config_state = 0;
         }
         break;
+
+    case STATE_SEND_OTHER_NODEINFOS: {
+        LOG_INFO("getFromRadio=STATE_SEND_OTHER_NODEINFOS\n");
+        if (nodeInfoForPhone.num != 0) {
+            LOG_INFO("nodeinfo: num=0x%x, lastseen=%u, id=%s, name=%s\n", nodeInfoForPhone.num, nodeInfoForPhone.last_heard,
+                     nodeInfoForPhone.user.id, nodeInfoForPhone.user.long_name);
+            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_node_info_tag;
+            fromRadioScratch.node_info = nodeInfoForPhone;
+            // Stay in current state until done sending nodeinfos
+            nodeInfoForPhone.num = 0; // We just consumed a nodeinfo, will need a new one next time
+        } else {
+            LOG_INFO("Done sending nodeinfos\n");
+            state = STATE_SEND_COMPLETE_ID;
+            // Go ahead and send that ID right now
+            return getFromRadio(buf);
+        }
+        break;
+    }
 
     case STATE_SEND_COMPLETE_ID:
         LOG_INFO("getFromRadio=STATE_SEND_COMPLETE_ID\n");
@@ -422,10 +438,11 @@ bool PhoneAPI::available()
     case STATE_SEND_CONFIG:
     case STATE_SEND_MODULECONFIG:
     case STATE_SEND_METADATA:
+    case STATE_SEND_OWN_NODEINFO:
     case STATE_SEND_COMPLETE_ID:
         return true;
 
-    case STATE_SEND_NODEINFO:
+    case STATE_SEND_OTHER_NODEINFOS:
         if (nodeInfoForPhone.num == 0) {
             auto nextNode = nodeDB->readNextMeshNode(readIndex);
             if (nextNode) {
