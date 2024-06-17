@@ -42,13 +42,14 @@
 #endif
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "nimble/NimbleBluetooth.h"
-NimbleBluetooth *nimbleBluetooth;
+NimbleBluetooth *nimbleBluetooth = nullptr;
 #endif
 #endif
 
 #ifdef ARCH_NRF52
 #include "NRF52Bluetooth.h"
-NRF52Bluetooth *nrf52Bluetooth;
+NRF52Bluetooth *nrf52Bluetooth = nullptr;
+;
 #endif
 
 #if HAS_WIFI
@@ -95,17 +96,17 @@ NRF52Bluetooth *nrf52Bluetooth;
 #include "ButtonThread.h"
 #endif
 
+#include "AmbientLightingThread.h"
 #include "PowerFSMThread.h"
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #include "AccelerometerThread.h"
-#include "AmbientLightingThread.h"
-AccelerometerThread *accelerometerThread;
+AccelerometerThread *accelerometerThread = nullptr;
 #endif
 
 #ifdef HAS_I2S
 #include "AudioThread.h"
-AudioThread *audioThread;
+AudioThread *audioThread = nullptr;
 #endif
 
 #if HAS_TFT
@@ -123,7 +124,7 @@ DeviceScreen *deviceScreen = nullptr;
 using namespace concurrency;
 
 // We always create a screen object, but we only init it if we find the hardware
-graphics::Screen *screen;
+graphics::Screen *screen = nullptr;
 
 // Global power status
 meshtastic::PowerStatus *powerStatus = new meshtastic::PowerStatus();

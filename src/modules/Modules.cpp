@@ -42,6 +42,7 @@
 #include "modules/Telemetry/DeviceTelemetry.h"
 #endif
 #if HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#include "main.h"
 #include "modules/Telemetry/AirQualityTelemetry.h"
 #include "modules/Telemetry/EnvironmentTelemetry.h"
 #endif
