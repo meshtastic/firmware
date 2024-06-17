@@ -1,6 +1,7 @@
 #include "kbI2cBase.h"
 #include "configuration.h"
 #include "detect/ScanI2C.h"
+#include "detect/ScanI2CTwoWire.h"
 
 extern ScanI2C::DeviceAddress cardkb_found;
 extern uint8_t kb_model;
@@ -29,11 +30,6 @@ uint8_t read_from_14004(TwoWire *i2cBus, uint8_t reg, uint8_t *data, uint8_t len
 
 int32_t KbI2cBase::runOnce()
 {
-    if (cardkb_found.address == 0x00) {
-        // Input device is not detected.
-        return INT32_MAX;
-    }
-
     if (!i2cBus) {
         switch (cardkb_found.port) {
         case ScanI2C::WIRE1:
