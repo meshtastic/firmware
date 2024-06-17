@@ -45,6 +45,13 @@ class ScanI2C
         VEML7700,
         RCWL9620,
         NCP5623,
+        TSL2591,
+        OPT3001,
+        MLX90632,
+        AHT10,
+        BMX160,
+        DFROBOT_LARK,
+        NAU7802
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;
