@@ -1088,7 +1088,7 @@ void setup()
 
 #if HAS_TFT
 #ifdef HAS_FREE_RTOS
-    xTaskCreatePinnedToCore(tft_task_handler, "tft", 8192, NULL, 9, NULL, 0);
+    xTaskCreatePinnedToCore(tft_task_handler, "tft", 8192, NULL, 5, NULL, 0);
 #endif
 #else
     setCPUFast(false); // 80MHz is fine for our slow peripherals
@@ -1176,7 +1176,7 @@ void tft_task_handler(void *param = nullptr)
         if (deviceScreen)
             deviceScreen->task_handler();
 #ifdef HAS_FREE_RTOS
-        vTaskDelay((TickType_t)5);
+        vTaskDelay((TickType_t)15);
 #else
         delay(5);
 #endif
