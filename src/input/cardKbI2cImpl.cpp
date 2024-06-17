@@ -1,7 +1,7 @@
 #include "cardKbI2cImpl.h"
 #include "InputBroker.h"
-#include "main.h"
 #include "detect/ScanI2CTwoWire.h"
+#include "main.h"
 
 CardKbI2cImpl *cardKbI2cImpl;
 
