@@ -101,7 +101,6 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #include "AccelerometerThread.h"
 AccelerometerThread *accelerometerThread = nullptr;
-;
 #endif
 
 #ifdef HAS_I2S
