@@ -422,10 +422,6 @@ void setup()
     auto i2cCount = i2cScanner->countDevices();
     if (i2cCount == 0) {
         LOG_INFO("No I2C devices found\n");
-        Wire.end();
-#ifdef I2C_SDA1
-        Wire1.end();
-#endif
     } else {
         LOG_INFO("%i I2C devices found\n", i2cCount);
     }
