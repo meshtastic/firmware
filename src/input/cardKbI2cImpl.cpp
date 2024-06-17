@@ -1,5 +1,6 @@
 #include "cardKbI2cImpl.h"
 #include "InputBroker.h"
+#include "main.h"
 
 CardKbI2cImpl *cardKbI2cImpl;
 
