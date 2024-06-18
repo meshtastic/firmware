@@ -208,6 +208,7 @@ static void drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
 static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    const char *idText = owner.short_name; // for easy changes later - idText will be displayed
 #ifdef ARCH_ESP32
     if (wakeCause == ESP_SLEEP_WAKEUP_TIMER || wakeCause == ESP_SLEEP_WAKEUP_EXT1) {
         drawFrameText(display, state, x, y, "Resuming...");
