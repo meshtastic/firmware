@@ -14,6 +14,15 @@
 #define XPOWERS_AXP192_AXP2101_ADDRESS 0x34
 #endif
 
+bool in_array(uint8_t *array, int size, uint8_t lookfor)
+{
+    int i;
+    for (i = 0; i < size; i++)
+        if (lookfor == array[i])
+            return true;
+    return false;
+}
+
 ScanI2C::FoundDevice ScanI2CTwoWire::find(ScanI2C::DeviceType type) const
 {
     concurrency::LockGuard guard((concurrency::Lock *)&lock);
@@ -135,11 +144,11 @@ uint16_t ScanI2CTwoWire::getRegisterValue(const ScanI2CTwoWire::RegisterLocation
         type = T;                                                                                                                \
         break;
 
-void ScanI2CTwoWire::scanPort(I2CPort port)
+void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 {
     concurrency::LockGuard guard((concurrency::Lock *)&lock);
 
-    LOG_DEBUG("Scanning for i2c devices on port %d\n", port);
+    LOG_DEBUG("Scanning for I2C devices on port %d\n", port);
 
     uint8_t err;
 
@@ -163,6 +172,11 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
 #endif
 
     for (addr.address = 1; addr.address < 127; addr.address++) {
+        if (asize != 0) {
+            if (!in_array(address, asize, addr.address))
+                continue;
+            LOG_DEBUG("Scanning address 0x%x\n", addr.address);
+        }
         i2cBus->beginTransmission(addr.address);
 #ifdef ARCH_PORTDUINO
         if (i2cBus->read() != -1)
@@ -356,7 +370,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                 LOG_INFO("Device found at address 0x%x was not able to be enumerated\n", addr.address);
             }
         } else if (err == 4) {
-            LOG_ERROR("Unknown error at address 0x%x\n", addr);
+            LOG_ERROR("Unknown error at address 0x%x\n", addr.address);
         }
 
         // Check if a type was found for the enumerated device - save, if so
@@ -365,6 +379,11 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
             foundDevices[addr] = type;
         }
     }
+}
+
+void ScanI2CTwoWire::scanPort(I2CPort port)
+{
+    scanPort(port, nullptr, 0);
 }
 
 TwoWire *ScanI2CTwoWire::fetchI2CBus(ScanI2C::DeviceAddress address) const
