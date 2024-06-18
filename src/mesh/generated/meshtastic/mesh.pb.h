@@ -67,6 +67,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_WIPHONE = 20,
     /* WIO Tracker WM1110 family from Seeed Studio. Includes wio-1110-tracker and wio-1110-sdk */
     meshtastic_HardwareModel_WIO_WM1110 = 21,
+    /* RAK2560 Solar base station based on RAK4630 */
+    meshtastic_HardwareModel_RAK2560 = 22,
     /* B&Q Consulting Station Edition G1: https://uniteng.com/wiki/doku.php?id=meshtastic:station */
     meshtastic_HardwareModel_STATION_G1 = 25,
     /* RAK11310 (RP2040 + SX1262) */

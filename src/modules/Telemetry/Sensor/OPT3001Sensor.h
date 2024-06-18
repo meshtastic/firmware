@@ -1,3 +1,8 @@
+#pragma once
+#include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
 #include <ClosedCube_OPT3001.h>
@@ -15,3 +20,5 @@ class OPT3001Sensor : public TelemetrySensor
     virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
 };
+
+#endif
