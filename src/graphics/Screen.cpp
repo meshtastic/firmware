@@ -206,17 +206,50 @@ static void drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     display->drawString(x_offset + x, 26 + y, message);
 }
 
+/// Check if the display can render a string (detect special chars; emoji)
+static bool haveGlyphs(const char *str)
+{
+#if defined(OLED_UA) || defined(OLED_RU)
+    // Don't want to make any assumptions about custom language support
+    return true;
+#endif
+
+    // Check each character with the lookup function for the OLED library
+    // We're not really meant to use this directly..
+    bool have = true;
+    for (uint16_t i = 0; i < strlen(str); i++) {
+        uint8_t result = Screen::customFontTableLookup((uint8_t)str[i]);
+        // If font doesn't support a character, it is substituted for ¿
+        if (result == 191 && (uint8_t)str[i] != 191) {
+            have = false;
+            break;
+        }
+    }
+
+    LOG_DEBUG("haveGlyphs=%d\n", have);
+    return have;
+}
+
 static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    const char *idText = owner.short_name; // for easy changes later - idText will be displayed
+
 #ifdef ARCH_ESP32
     if (wakeCause == ESP_SLEEP_WAKEUP_TIMER || wakeCause == ESP_SLEEP_WAKEUP_EXT1) {
         drawFrameText(display, state, x, y, "Resuming...");
     } else
 #endif
     {
-        // Draw region in upper left
+        // Draw region & short_name in upper left
         const char *region = myRegion ? myRegion->name : NULL;
-        drawIconScreen(region, display, state, x, y);
+        char displayStr[25]; // Declare a character array for the display string
+        if (strlen(idText) == 0 || !haveGlyphs(idText)) {
+            snprintf(displayStr, sizeof(displayStr), "%s", region); // show only region if no short_name def or with glyphs
+        } else {
+            // Create a new string concatenation of region & idText
+            snprintf(displayStr, sizeof(displayStr), "%s:%s", region, idText); // generate region:short_name
+        }
+        drawIconScreen(displayStr, display, state, x, y);
     }
 }
 
@@ -277,40 +310,29 @@ static void drawFunctionOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
     }
 }
 
-/// Check if the display can render a string (detect special chars; emoji)
-static bool haveGlyphs(const char *str)
-{
-#if defined(OLED_UA) || defined(OLED_RU)
-    // Don't want to make any assumptions about custom language support
-    return true;
-#endif
-
-    // Check each character with the lookup function for the OLED library
-    // We're not really meant to use this directly..
-    bool have = true;
-    for (uint16_t i = 0; i < strlen(str); i++) {
-        uint8_t result = Screen::customFontTableLookup((uint8_t)str[i]);
-        // If font doesn't support a character, it is substituted for ¿
-        if (result == 191 && (uint8_t)str[i] != 191) {
-            have = false;
-            break;
-        }
-    }
-
-    LOG_DEBUG("haveGlyphs=%d\n", have);
-    return have;
-}
-
 #ifdef USE_EINK
 /// Used on eink displays while in deep sleep
 static void drawDeepSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    const char *idText = owner.short_name;
+
     // Next frame should use full-refresh, and block while running, else device will sleep before async callback
     EINK_ADD_FRAMEFLAG(display, COSMETIC);
     EINK_ADD_FRAMEFLAG(display, BLOCKING);
 
     LOG_DEBUG("Drawing deep sleep screen\n");
-    drawIconScreen("Sleeping...", display, state, x, y);
+
+    // Check if idText is not assigned OR empty OR has non printable characters
+    if (strlen(idText) == 0 || !haveGlyphs(idText)) {
+        drawIconScreen("Sleeping", display, state, x, y);
+    } else {
+        // Create a new string that is the concatenation of idText and " sleeping"
+        char displayStr[25]; // Declare a character array for the display string 5+buffer for changes
+        snprintf(displayStr, sizeof(displayStr), "%s sleeping", idText); // Use snprintf for safety
+
+        // Display displayStr on the screen
+        drawIconScreen(displayStr, display, state, x, y);
+    }
 }
 
 /// Used on eink displays when screen updates are paused
