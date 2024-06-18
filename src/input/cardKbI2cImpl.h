@@ -1,6 +1,5 @@
 #pragma once
 #include "kbI2cBase.h"
-#include "main.h"
 
 /**
  * @brief The idea behind this class to have static methods for the event handlers.
