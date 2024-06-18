@@ -12,6 +12,7 @@ static BLEService meshBleService = BLEService(BLEUuid(MESH_SERVICE_UUID_16));
 static BLECharacteristic fromNum = BLECharacteristic(BLEUuid(FROMNUM_UUID_16));
 static BLECharacteristic fromRadio = BLECharacteristic(BLEUuid(FROMRADIO_UUID_16));
 static BLECharacteristic toRadio = BLECharacteristic(BLEUuid(TORADIO_UUID_16));
+static BLECharacteristic logC = BLECharacteristic(BLEUuid(LOG_UUID_16));
 
 static BLEDis bledis; // DIS (Device Information Service) helper class instance
 static BLEBas blebas; // BAS (Battery Service) helper class instance
@@ -25,28 +26,28 @@ static uint8_t toRadioBytes[meshtastic_ToRadio_size];
 
 static uint16_t connectionHandle;
 
-class BluetoothPhoneAPI : public PhoneAPI
+/**
+ * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
+ */
+void BluetoothPhoneAPI::onNowHasData(uint32_t fromRadioNum)
 {
-    /**
-     * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
-     */
-    virtual void onNowHasData(uint32_t fromRadioNum) override
-    {
-        PhoneAPI::onNowHasData(fromRadioNum);
+    PhoneAPI::onNowHasData(fromRadioNum);
 
-        LOG_INFO("BLE notify fromNum\n");
-        fromNum.notify32(fromRadioNum);
-    }
+    LOG_INFO("BLE notify fromNum\n");
+    fromNum.notify32(fromRadioNum);
+}
 
-    /// Check the current underlying physical link to see if the client is currently connected
-    virtual bool checkIsConnected() override
-    {
-        BLEConnection *connection = Bluefruit.Connection(connectionHandle);
-        return connection->connected();
-    }
-};
+/// Check the current underlying physical link to see if the client is currently connected
+bool BluetoothPhoneAPI::checkIsConnected()
+{
+    BLEConnection *connection = Bluefruit.Connection(connectionHandle);
+    return connection->connected();
+}
 
-static BluetoothPhoneAPI *bluetoothPhoneAPI;
+void BluetoothPhoneAPI::sendLog(const char *logMessage)
+{
+    logC.notify(logMessage);
+}
 
 void onConnect(uint16_t conn_handle)
 {

@@ -20,6 +20,7 @@ extern NimbleBluetooth *nimbleBluetooth;
 #ifdef ARCH_NRF52
 #include "NRF52Bluetooth.h"
 extern NRF52Bluetooth *nrf52Bluetooth;
+extern BluetoothPhoneAPI *bluetoothPhoneAPI;
 #endif
 
 #if ARCH_PORTDUINO

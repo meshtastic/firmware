@@ -3,6 +3,14 @@
 #include "BluetoothCommon.h"
 #include <Arduino.h>
 
+class BluetoothPhoneAPI : public PhoneAPI
+{
+  public:
+    virtual void onNowHasData(uint32_t fromRadioNum);
+    virtual bool checkIsConnected();
+    virtual void sendLog(const char *logMessage);
+};
+
 class NRF52Bluetooth : BluetoothApi
 {
   public:
@@ -16,7 +24,6 @@ class NRF52Bluetooth : BluetoothApi
 
   private:
     static void onConnectionSecured(uint16_t conn_handle);
-    void convertToUint8(uint8_t target[4], uint32_t source);
     static bool onPairingPasskey(uint16_t conn_handle, uint8_t const passkey[6], bool match_request);
     static void onPairingCompleted(uint16_t conn_handle, uint8_t auth_status);
 };

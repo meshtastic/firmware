@@ -48,6 +48,7 @@ NimbleBluetooth *nimbleBluetooth;
 #ifdef ARCH_NRF52
 #include "NRF52Bluetooth.h"
 NRF52Bluetooth *nrf52Bluetooth;
+BluetoothPhoneAPI *bluetoothPhoneAPI;
 #endif
 
 #if HAS_WIFI

@@ -3,6 +3,7 @@
 #include "RTC.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
+#include "main.h"
 #include <assert.h>
 #include <cstring>
 #include <memory>
@@ -163,6 +164,16 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
             } else {
                 syslog.vlogf(ll, format, arg);
             }
+        }
+#endif
+
+#ifdef ARCH_ESP32
+        // if(nimbleBluetooth->isConnected()) {
+
+        // }
+#elif defined(ARCH_NRF52)
+        if (nrf52Bluetooth->isConnected()) {
+            bluetoothPhoneAPI->sendLog(format);
         }
 #endif
 
