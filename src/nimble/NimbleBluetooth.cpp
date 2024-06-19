@@ -59,7 +59,6 @@ class NimbleBluetoothFromRadioCallback : public NimBLECharacteristicCallbacks
 {
     virtual void onRead(NimBLECharacteristic *pCharacteristic)
     {
-        LOG_INFO("From Radio onread\n");
         uint8_t fromRadioBytes[meshtastic_FromRadio_size];
         size_t numBytes = bluetoothPhoneAPI->getFromRadio(fromRadioBytes);
 
@@ -246,8 +245,7 @@ void NimbleBluetooth::sendLog(const char *logMessage)
     if (!bleServer || !isConnected() || strlen(logMessage) > 512) {
         return;
     }
-    logRadioCharacteristic->setValue(logMessage);
-    logRadioCharacteristic->notify();
+    logRadioCharacteristic->notify((uint8_t *)logMessage, strlen(logMessage));
 }
 
 void clearNVS()
