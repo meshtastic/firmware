@@ -585,7 +585,7 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
     }
 #else
     LOG_ERROR("ERROR: Filesystem not implemented\n");
-    state = LoadFileState::NO_FILESYSTEM;
+    state = LoadFileResult::NO_FILESYSTEM;
 #endif
     return state;
 }
