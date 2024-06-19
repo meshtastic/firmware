@@ -42,6 +42,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_NRF52840DK
 #elif defined(ARDUINO_NRF52840_PPR)
 #define HW_VENDOR meshtastic_HardwareModel_PPR
+#elif defined(RAK2560)
+#define HW_VENDOR meshtastic_HardwareModel_RAK2560
 #elif defined(RAK4630)
 #define HW_VENDOR meshtastic_HardwareModel_RAK4631
 #elif defined(TTGO_T_ECHO)
