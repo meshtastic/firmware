@@ -171,14 +171,14 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
 
         isContinuationMessage = !hasNewline;
 
-        if (!isContinuationMessage) {
-            bool isConnected = false;
+        if (!isContinuationMessage && config.bluetooth.device_logging_enabled) {
+            bool isBleConnected = false;
 #ifdef ARCH_ESP32
             isConnected = nimbleBluetooth != nullptr && nimbleBluetooth->isConnected();
 #elif defined(ARCH_NRF52)
-            isConnected = nrf52Bluetooth != nullptr && nrf52Bluetooth->isConnected();
+            isBleConnected = nrf52Bluetooth != nullptr && nrf52Bluetooth->isConnected();
 #endif
-            if (isConnected) {
+            if (isBleConnected) {
                 char *message;
                 size_t initialLen;
                 size_t len;
