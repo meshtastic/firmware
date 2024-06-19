@@ -191,10 +191,17 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
                     message = new char[len + 1];
                     vsnprintf(message, len + 1, format, arg);
                 }
+                auto thread = concurrency::OSThread::currentThread;
 #ifdef ARCH_ESP32
-                nimbleBluetooth->sendLog(format);
+                if (thread)
+                    nimbleBluetooth->sendLog(mt_sprintf("%s | [%s] %s", logLevel, thread->ThreadName.c_str(), message).c_str());
+                else
+                    nimbleBluetooth->sendLog(mt_sprintf("%s | %s", logLevel, message).c_str());
 #elif defined(ARCH_NRF52)
-                nrf52Bluetooth->sendLog(message);
+                if (thread)
+                    nrf52Bluetooth->sendLog(mt_sprintf("%s | [%s] %s", logLevel, thread->ThreadName.c_str(), message).c_str());
+                else
+                    nrf52Bluetooth->sendLog(mt_sprintf("%s | %s", logLevel, message).c_str());
 #endif
                 delete[] message;
             }
