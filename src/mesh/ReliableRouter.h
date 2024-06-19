@@ -1,6 +1,6 @@
 #pragma once
 
-#include "FloodingRouter.h"
+#include "NextHopRouter.h"
 #include <unordered_map>
 
 /**
@@ -51,7 +51,7 @@ class GlobalPacketIdHashFunction
 /**
  * This is a mixin that extends Router with the ability to do (one hop only) reliable message sends.
  */
-class ReliableRouter : public FloodingRouter
+class ReliableRouter : public NextHopRouter
 {
   private:
     std::unordered_map<GlobalPacketId, PendingPacket, GlobalPacketIdHashFunction> pending;

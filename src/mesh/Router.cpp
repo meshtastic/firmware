@@ -238,6 +238,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     // the lora we need to make sure we have replaced it with our local address
     p->from = getFrom(p);
 
+    p->relay_node = nodeDB->getLastByteOfNodeNum(getNodeNum()); // set the relayer to us
     // If we are the original transmitter, set the hop limit with which we start
     if (p->from == getNodeNum())
         p->hop_start = p->hop_limit;

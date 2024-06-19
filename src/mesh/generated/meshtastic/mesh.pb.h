@@ -620,6 +620,10 @@ typedef struct _meshtastic_MeshPacket {
     /* Hop limit with which the original packet started. Sent via LoRa using three bits in the unencrypted header.
  When receiving a packet, the difference between hop_start and hop_limit gives how many hops it traveled. */
     uint8_t hop_start;
+    /* Last byte of the node number of the node that should be used as the next hop in routing. */
+    uint8_t next_hop;
+    /* Last byte of the node number of the node that will relay/relayed this packet. */
+    uint8_t relay_node;
 } meshtastic_MeshPacket;
 
 /* The bluetooth to device link:
@@ -977,7 +981,7 @@ extern "C" {
 #define meshtastic_Data_init_default             {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Waypoint_init_default         {0, 0, 0, 0, 0, "", "", 0}
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
-#define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0}
+#define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, 0, 0}
 #define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, 0, 0}
 #define meshtastic_MyNodeInfo_init_default       {0, 0, 0}
 #define meshtastic_LogRecord_init_default        {"", 0, "", _meshtastic_LogRecord_Level_MIN}
@@ -1000,7 +1004,7 @@ extern "C" {
 #define meshtastic_Data_init_zero                {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Waypoint_init_zero            {0, 0, 0, 0, 0, "", "", 0}
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
-#define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0}
+#define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, 0, 0}
 #define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, 0, 0}
 #define meshtastic_MyNodeInfo_init_zero          {0, 0, 0}
 #define meshtastic_LogRecord_init_zero           {"", 0, "", _meshtastic_LogRecord_Level_MIN}
@@ -1087,6 +1091,8 @@ extern "C" {
 #define meshtastic_MeshPacket_delayed_tag        13
 #define meshtastic_MeshPacket_via_mqtt_tag       14
 #define meshtastic_MeshPacket_hop_start_tag      15
+#define meshtastic_MeshPacket_next_hop_tag       16
+#define meshtastic_MeshPacket_relay_node_tag     17
 #define meshtastic_NodeInfo_num_tag              1
 #define meshtastic_NodeInfo_user_tag             2
 #define meshtastic_NodeInfo_position_tag         3
@@ -1260,7 +1266,9 @@ X(a, STATIC,   SINGULAR, UENUM,    priority,         11) \
 X(a, STATIC,   SINGULAR, INT32,    rx_rssi,          12) \
 X(a, STATIC,   SINGULAR, UENUM,    delayed,          13) \
 X(a, STATIC,   SINGULAR, BOOL,     via_mqtt,         14) \
-X(a, STATIC,   SINGULAR, UINT32,   hop_start,        15)
+X(a, STATIC,   SINGULAR, UINT32,   hop_start,        15) \
+X(a, STATIC,   SINGULAR, UINT32,   next_hop,         16) \
+X(a, STATIC,   SINGULAR, UINT32,   relay_node,       17)
 #define meshtastic_MeshPacket_CALLBACK NULL
 #define meshtastic_MeshPacket_DEFAULT NULL
 #define meshtastic_MeshPacket_payload_variant_decoded_MSGTYPE meshtastic_Data
@@ -1479,7 +1487,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_FromRadio_size                510
 #define meshtastic_Heartbeat_size                0
 #define meshtastic_LogRecord_size                81
-#define meshtastic_MeshPacket_size               326
+#define meshtastic_MeshPacket_size               334
 #define meshtastic_MqttClientProxyMessage_size   501
 #define meshtastic_MyNodeInfo_size               18
 #define meshtastic_NeighborInfo_size             258

@@ -573,14 +573,14 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
     h->to = p->to;
     h->id = p->id;
     h->channel = p->channel;
-    h->next_hop = 0;   // *** For future use ***
-    h->relay_node = 0; // *** For future use ***
     if (p->hop_limit > HOP_MAX) {
         LOG_WARN("hop limit %d is too high, setting to %d\n", p->hop_limit, HOP_RELIABLE);
         p->hop_limit = HOP_RELIABLE;
     }
     h->flags = p->hop_limit | (p->want_ack ? PACKET_FLAGS_WANT_ACK_MASK : 0) | (p->via_mqtt ? PACKET_FLAGS_VIA_MQTT_MASK : 0);
     h->flags |= (p->hop_start << PACKET_FLAGS_HOP_START_SHIFT) & PACKET_FLAGS_HOP_START_MASK;
+    h->next_hop = p->next_hop;
+    h->relay_node = p->relay_node;
 
     // if the sender nodenum is zero, that means uninitialized
     assert(h->from);
