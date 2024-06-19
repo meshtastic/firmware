@@ -163,6 +163,7 @@ void setupMeshService(void)
     // fromNum.setReadAuthorizeCallback(fromNumAuthorizeCb);
     fromNum.write32(0); // Provide default fromNum of 0
     fromNum.begin();
+
     fromRadio.setProperties(CHR_PROPS_READ);
     fromRadio.setPermission(secMode, SECMODE_NO_ACCESS);
     fromRadio.setMaxLen(sizeof(fromRadioBytes));
@@ -172,6 +173,7 @@ void setupMeshService(void)
     fromRadio.setBuffer(fromRadioBytes, sizeof(fromRadioBytes)); // we preallocate our fromradio buffer so we won't waste space
     // for two copies
     fromRadio.begin();
+
     toRadio.setProperties(CHR_PROPS_WRITE);
     toRadio.setPermission(secMode, secMode); // FIXME secure this!
     toRadio.setFixedLen(0);
@@ -185,6 +187,7 @@ void setupMeshService(void)
     logRadio.setPermission(secMode, SECMODE_NO_ACCESS);
     logRadio.setFixedLen(0);
     logRadio.setMaxLen(512);
+    logRadio.setCccdWriteCallback(onCccd);
     logRadio.begin();
 }
 static uint32_t configuredPasskey;
@@ -316,8 +319,5 @@ void NRF52Bluetooth::onPairingCompleted(uint16_t conn_handle, uint8_t auth_statu
 
 void NRF52Bluetooth::sendLog(const char *logMessage)
 {
-    if (!isConnected())
-        return;
-
     logRadio.notify(logMessage);
 }
