@@ -319,5 +319,8 @@ void NRF52Bluetooth::onPairingCompleted(uint16_t conn_handle, uint8_t auth_statu
 
 void NRF52Bluetooth::sendLog(const char *logMessage)
 {
+    if (!isConnected() || strlen(logMessage) > 512)
+        return;
+
     logRadio.notify(logMessage);
 }
