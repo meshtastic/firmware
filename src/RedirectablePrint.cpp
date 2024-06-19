@@ -197,7 +197,6 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
                 else
                     nimbleBluetooth->sendLog(mt_sprintf("%s | %s", logLevel, message).c_str());
 #elif defined(ARCH_NRF52)
-                Serial.print(message);
                 if (thread)
                     nrf52Bluetooth->sendLog(mt_sprintf("%s | [%s] %s", logLevel, thread->ThreadName.c_str(), message).c_str());
                 else
