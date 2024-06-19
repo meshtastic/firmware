@@ -173,7 +173,7 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
         // }
 #elif defined(ARCH_NRF52)
         if (nrf52Bluetooth->isConnected()) {
-            bluetoothPhoneAPI->sendLog(format);
+            nrf52Bluetooth->sendLog(format);
         }
 #endif
 

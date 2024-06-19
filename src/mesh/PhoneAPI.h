@@ -92,11 +92,6 @@ class PhoneAPI
     size_t getFromRadio(uint8_t *buf);
 
     /**
-     * Log a message to the phone
-     */
-    virtual void sendLog(const char *msg);
-
-    /**
      * Return true if we have data available to send to the phone
      */
     bool available();
