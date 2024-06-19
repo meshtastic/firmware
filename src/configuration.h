@@ -126,8 +126,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define SHTC3_ADDR 0x70
 #define LPS22HB_ADDR 0x5C
 #define LPS22HB_ADDR_ALT 0x5D
-#define SHT31_ADDR 0x44
+#define SHT31_4x_ADDR 0x44
 #define PMSA0031_ADDR 0x12
+#define AHT10_ADDR 0x38
+#define RCWL9620_ADDR 0x57
+#define VEML7700_ADDR 0x10
+#define TSL25911_ADDR 0x29
+#define OPT3001_ADDR 0x45
+#define OPT3001_ADDR_ALT 0x44
+#define MLX90632_ADDR 0x3A
+#define DFROBOT_LARK_ADDR 0x42
+#define NAU7802_ADDR 0x2A
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
@@ -136,6 +145,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LIS3DH_ADR 0x18
 #define BMA423_ADDR 0x19
 #define LSM6DS3_ADDR 0x6A
+#define BMX160_ADDR 0x69
 
 // -----------------------------------------------------------------------------
 // LED

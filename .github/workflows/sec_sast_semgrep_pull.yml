@@ -11,7 +11,7 @@ jobs:
     steps:
       # step 1
       - name: clone application source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 

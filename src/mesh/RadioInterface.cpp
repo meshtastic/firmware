@@ -31,18 +31,18 @@ const RegionInfo regions[] = {
     RDEF(EU_433, 433.0f, 434.0f, 10, 0, 12, true, false, false),
 
     /*
-        https://www.thethingsnetwork.org/docs/lorawan/duty-cycle/
-        https://www.thethingsnetwork.org/docs/lorawan/regional-parameters/
-        https://www.legislation.gov.uk/uksi/1999/930/schedule/6/part/III/made/data.xht?view=snippet&wrap=true
+       https://www.thethingsnetwork.org/docs/lorawan/duty-cycle/
+       https://www.thethingsnetwork.org/docs/lorawan/regional-parameters/
+       https://www.legislation.gov.uk/uksi/1999/930/schedule/6/part/III/made/data.xht?view=snippet&wrap=true
 
-        audio_permitted = false per regulation
+       audio_permitted = false per regulation
 
-        Special Note:
-        The link above describes LoRaWAN's band plan, stating a power limit of 16 dBm. This is their own suggested specification,
-        we do not need to follow it. The European Union regulations clearly state that the power limit for this frequency range is
-       500 mW, or 27 dBm. It also states that we can use interference avoidance and spectrum access techniques to avoid a duty
-       cycle. (Please refer to section 4.21 in the following document)
-        https://ec.europa.eu/growth/tools-databases/tris/index.cfm/ro/search/?trisaction=search.detail&year=2021&num=528&dLang=EN
+       Special Note:
+       The link above describes LoRaWAN's band plan, stating a power limit of 16 dBm. This is their own suggested specification,
+       we do not need to follow it. The European Union regulations clearly state that the power limit for this frequency range is
+       500 mW, or 27 dBm. It also states that we can use interference avoidance and spectrum access techniques (such as LBT +
+       AFA) to avoid a duty cycle. (Please refer to line P page 22 of this document.)
+       https://www.etsi.org/deliver/etsi_en/300200_300299/30022002/03.01.01_60/en_30022002v030101p.pdf
      */
     RDEF(EU_868, 869.4f, 869.65f, 10, 0, 27, false, false, false),
 
@@ -495,7 +495,7 @@ void RadioInterface::applyModemConfig()
     // If user has manually specified a channel num, then use that, otherwise generate one by hashing the name
     const char *channelName = channels.getName(channels.getPrimaryIndex());
     // channel_num is actually (channel_num - 1), since modulus (%) returns values from 0 to (numChannels - 1)
-    uint channel_num = (loraConfig.channel_num ? loraConfig.channel_num - 1 : hash(channelName)) % numChannels;
+    uint32_t channel_num = (loraConfig.channel_num ? loraConfig.channel_num - 1 : hash(channelName)) % numChannels;
 
     // Check if we use the default frequency slot
     RadioInterface::uses_default_frequency_slot =

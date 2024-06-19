@@ -25,7 +25,31 @@ void LockingArduinoHal::spiEndTransaction()
 #if ARCH_PORTDUINO
 void LockingArduinoHal::spiTransfer(uint8_t *out, size_t len, uint8_t *in)
 {
-    spi->transfer(out, in, len);
+    if (busy == RADIOLIB_NC) {
+        spi->transfer(out, in, len);
+    } else {
+        uint16_t offset = 0;
+
+        while (len) {
+            uint8_t block_size = (len < 20 ? len : 20);
+            spi->transfer((out != NULL ? out + offset : NULL), (in != NULL ? in + offset : NULL), block_size);
+            if (block_size == len)
+                return;
+
+            // ensure GPIO is low
+
+            uint32_t start = millis();
+            while (digitalRead(busy)) {
+                if (millis() - start >= 2000) {
+                    LOG_ERROR("GPIO mid-transfer timeout, is it connected?");
+                    return;
+                }
+            }
+
+            offset += block_size;
+            len -= block_size;
+        }
+    }
 }
 #endif
 

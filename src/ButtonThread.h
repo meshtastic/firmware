@@ -4,11 +4,22 @@
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 
+#ifndef BUTTON_CLICK_MS
+#define BUTTON_CLICK_MS 250
+#endif
+
+#ifndef BUTTON_LONGPRESS_MS
+#define BUTTON_LONGPRESS_MS 5000
+#endif
+
+#ifndef BUTTON_TOUCH_MS
+#define BUTTON_TOCH_MS 400
+#endif
+
 class ButtonThread : public concurrency::OSThread
 {
   public:
-    static const uint32_t c_longPressTime = 5000; // shutdown after 5s
-    static const uint32_t c_holdOffTime = 30000;  // hold off 30s after boot
+    static const uint32_t c_holdOffTime = 30000; // hold off 30s after boot
 
     enum ButtonEventType {
         BUTTON_EVENT_NONE,

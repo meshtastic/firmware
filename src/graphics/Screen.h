@@ -48,6 +48,7 @@ class Screen
 
 #include "EInkDisplay2.h"
 #include "EInkDynamicDisplay.h"
+#include "PointStruct.h"
 #include "TFTDisplay.h"
 #include "TypedQueue.h"
 #include "commands.h"
@@ -76,6 +77,10 @@ class Screen
 // Intuitive colors. E-Ink display is inverted from OLED(?)
 #define EINK_BLACK OLEDDISPLAY_COLOR::WHITE
 #define EINK_WHITE OLEDDISPLAY_COLOR::BLACK
+
+// Base segment dimensions for T-Watch segmented display
+#define SEGMENT_WIDTH 16
+#define SEGMENT_HEIGHT 4
 
 namespace graphics
 {
@@ -166,9 +171,6 @@ class Screen : public concurrency::OSThread
     void showPrevFrame() { enqueueCmd(ScreenCmd{.cmd = Cmd::SHOW_PREV_FRAME}); }
     void showNextFrame() { enqueueCmd(ScreenCmd{.cmd = Cmd::SHOW_NEXT_FRAME}); }
 
-    // Implementation to Adjust Brightness
-    uint8_t brightness = BRIGHTNESS_DEFAULT;
-
     /// Starts showing the Bluetooth PIN screen.
     //
     // Switches over to a static frame showing the Bluetooth pairing screen
@@ -201,6 +203,24 @@ class Screen : public concurrency::OSThread
         cmd.cmd = Cmd::START_REBOOT_SCREEN;
         enqueueCmd(cmd);
     }
+
+    // Function to allow the AccelerometerThread to set the heading if a sensor provides it
+    // Mutex needed?
+    void setHeading(long _heading)
+    {
+        hasCompass = true;
+        compassHeading = _heading;
+    }
+
+    bool hasHeading() { return hasCompass; }
+
+    long getHeading() { return compassHeading; }
+    // functions for display brightness
+    void increaseBrightness();
+    void decreaseBrightness();
+
+    void setFunctionSymbal(std::string sym);
+    void removeFunctionSymbal(std::string sym);
 
     /// Stops showing the bluetooth PIN screen.
     void stopBluetoothPinScreen() { enqueueCmd(ScreenCmd{.cmd = Cmd::STOP_BLUETOOTH_PIN_SCREEN}); }
@@ -351,7 +371,7 @@ class Screen : public concurrency::OSThread
     bool enqueueCmd(const ScreenCmd &cmd)
     {
         if (!useDisplay)
-            return true; // claim success if our display is not in use
+            return false; // not enqueued if our display is not in use
         else {
             bool success = cmdQueue.enqueue(cmd, 0);
             enabled = true; // handle ASAP (we are the registered reader for cmdQueue, but might have been disabled)
@@ -385,6 +405,27 @@ class Screen : public concurrency::OSThread
 
     static void drawDebugInfoWiFiTrampoline(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
+#ifdef T_WATCH_S3
+    static void drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+
+    static void drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+
+    static void drawSegmentedDisplayCharacter(OLEDDisplay *display, int x, int y, uint8_t number, float scale = 1);
+
+    static void drawHorizontalSegment(OLEDDisplay *display, int x, int y, int width, int height);
+
+    static void drawVerticalSegment(OLEDDisplay *display, int x, int y, int width, int height);
+
+    static void drawSegmentedDisplayColon(OLEDDisplay *display, int x, int y, float scale = 1);
+
+    static void drawWatchFaceToggleButton(OLEDDisplay *display, int16_t x, int16_t y, bool digitalMode = true, float scale = 1);
+
+    static void drawBluetoothConnectedIcon(OLEDDisplay *display, int16_t x, int16_t y);
+
+    // Whether we are showing the digital watch face or the analog one
+    bool digitalWatchFace = true;
+#endif
+
     /// Queue of commands to execute in doTask.
     TypedQueue<ScreenCmd> cmdQueue;
     /// Whether we are using a display
@@ -395,6 +436,11 @@ class Screen : public concurrency::OSThread
     // Bluetooth PIN screen)
     bool showingNormalScreen = false;
 
+    // Implementation to Adjust Brightness
+    uint8_t brightness = BRIGHTNESS_DEFAULT; // H = 254, MH = 192, ML = 130 L = 103
+
+    bool hasCompass = false;
+    float compassHeading;
     /// Holds state for debug information
     DebugInfo debugInfo;
 

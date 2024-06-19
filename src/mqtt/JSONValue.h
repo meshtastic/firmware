@@ -45,7 +45,7 @@ class JSONValue
     JSONValue(bool m_bool_value);
     JSONValue(double m_number_value);
     JSONValue(int m_integer_value);
-    JSONValue(uint m_integer_value);
+    JSONValue(unsigned int m_integer_value);
     JSONValue(const JSONArray &m_array_value);
     JSONValue(const JSONObject &m_object_value);
     JSONValue(const JSONValue &m_source);

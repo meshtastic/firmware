@@ -92,7 +92,7 @@ bool AirQualityTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         return false;
     }
 
-    meshtastic_Telemetry m;
+    meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
     m.time = getTime();
     m.which_variant = meshtastic_Telemetry_air_quality_metrics_tag;
     m.variant.air_quality_metrics.pm10_standard = data.pm10_standard;

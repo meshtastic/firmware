@@ -116,9 +116,8 @@ Will be used for broadcast.
 */
 int32_t NeighborInfoModule::runOnce()
 {
-    bool requestReplies = false;
     if (airTime->isTxAllowedChannelUtil(true) && airTime->isTxAllowedAirUtil()) {
-        sendNeighborInfo(NODENUM_BROADCAST, requestReplies);
+        sendNeighborInfo(NODENUM_BROADCAST, false);
     }
     return Default::getConfiguredOrDefaultMs(moduleConfig.neighbor_info.update_interval, default_broadcast_interval_secs);
 }

@@ -314,7 +314,7 @@ extern const pb_msgdesc_t meshtastic_OEMStore_msg;
 #define meshtastic_ChannelFile_size              718
 #define meshtastic_NodeInfoLite_size             166
 
-#define meshtastic_OEMStore_size                 3346
+#define meshtastic_OEMStore_size                 3370
 #define meshtastic_PositionLite_size             28
 
 #ifdef __cplusplus
