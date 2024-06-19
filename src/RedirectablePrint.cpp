@@ -167,8 +167,6 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
         }
 #endif
 
-        va_end(arg);
-
         isContinuationMessage = !hasNewline;
 
         if (config.bluetooth.device_logging_enabled) {
@@ -205,6 +203,7 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
                 delete[] message;
             }
         }
+        va_end(arg);
 #ifdef HAS_FREE_RTOS
         xSemaphoreGive(inDebugPrint);
 #else
