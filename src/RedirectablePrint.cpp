@@ -167,25 +167,38 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
         }
 #endif
 
-#ifdef ARCH_ESP32
-        if (nimbleBluetooth != nullptr && nimbleBluetooth->isConnected()) {
-            // meshtastic_LogRecord logRecord = meshtastic_LogRecord_init_zero;
-            // logRecord.level = meshtastic_LogRecord_Level_DEBUG;
-            // logRecord.message = format;
-            nimbleBluetooth->sendLog(format);
-        }
-#elif defined(ARCH_NRF52)
-        if (nrf52Bluetooth != nullptr && nrf52Bluetooth->isConnected()) {
-            // meshtastic_LogRecord logRecord = meshtastic_LogRecord_init_zero;
-            // logRecord.level = meshtastic_LogRecord_Level_DEBUG;
-            // logRecord.message = format;
-            nrf52Bluetooth->sendLog(format);
-        }
-#endif
-
         va_end(arg);
 
         isContinuationMessage = !hasNewline;
+
+        if (!isContinuationMessage) {
+            bool isConnected = false;
+#ifdef ARCH_ESP32
+            isConnected = nimbleBluetooth != nullptr && nimbleBluetooth->isConnected();
+#elif defined(ARCH_NRF52)
+            isConnected = nrf52Bluetooth != nullptr && nrf52Bluetooth->isConnected();
+#endif
+            if (isConnected) {
+                char *message;
+                size_t initialLen;
+                size_t len;
+                bool result;
+                initialLen = strlen(format);
+                message = new char[initialLen + 1];
+                len = vsnprintf(message, initialLen + 1, format, arg);
+                if (len > initialLen) {
+                    delete[] message;
+                    message = new char[len + 1];
+                    vsnprintf(message, len + 1, format, arg);
+                }
+#ifdef ARCH_ESP32
+                nimbleBluetooth->sendLog(format);
+#elif defined(ARCH_NRF52)
+                nrf52Bluetooth->sendLog(message);
+#endif
+                delete[] message;
+            }
+        }
 #ifdef HAS_FREE_RTOS
         xSemaphoreGive(inDebugPrint);
 #else

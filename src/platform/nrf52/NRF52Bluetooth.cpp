@@ -74,7 +74,7 @@ void onCccd(uint16_t conn_hdl, BLECharacteristic *chr, uint16_t cccd_value)
     LOG_INFO("CCCD Updated: %u\n", cccd_value);
     // Check the characteristic this CCCD update is associated with in case
     // this handler is used for multiple CCCD records.
-    if (chr->uuid == fromNum.uuid) {
+    if (chr->uuid == fromNum.uuid || chr->uuid == logRadio.uuid) {
         if (chr->notifyEnabled(conn_hdl)) {
             LOG_INFO("fromNum 'Notify' enabled\n");
         } else {
@@ -135,14 +135,7 @@ void onToRadioWrite(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *data, ui
     LOG_INFO("toRadioWriteCb data %p, len %u\n", data, len);
     bluetoothPhoneAPI->handleToRadio(data, len);
 }
-/**
- * client is starting read, pull the bytes from our API class
- */
-void onFromNumAuthorize(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_evt_read_t *request)
-{
-    LOG_INFO("fromNumAuthorizeCb\n");
-    authorizeRead(conn_hdl);
-}
+
 void setupMeshService(void)
 {
     bluetoothPhoneAPI = new BluetoothPhoneAPI();
@@ -183,11 +176,11 @@ void setupMeshService(void)
     toRadio.setWriteCallback(onToRadioWrite, false);
     toRadio.begin();
 
-    logRadio.setProperties(CHR_PROPS_NOTIFY);
+    logRadio.setProperties(CHR_PROPS_NOTIFY | CHR_PROPS_READ);
     logRadio.setPermission(secMode, SECMODE_NO_ACCESS);
-    logRadio.setFixedLen(0);
     logRadio.setMaxLen(512);
     logRadio.setCccdWriteCallback(onCccd);
+    logRadio.write32(0);
     logRadio.begin();
 }
 static uint32_t configuredPasskey;
@@ -321,6 +314,5 @@ void NRF52Bluetooth::sendLog(const char *logMessage)
 {
     if (!isConnected() || strlen(logMessage) > 512)
         return;
-
     logRadio.notify(logMessage);
 }
