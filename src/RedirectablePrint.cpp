@@ -168,11 +168,11 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
 #endif
 
 #ifdef ARCH_ESP32
-        // if(nimbleBluetooth->isConnected()) {
+        // if(nimbleBluetooth != nullptr && nimbleBluetooth->isConnected()) {
 
         // }
 #elif defined(ARCH_NRF52)
-        if (nrf52Bluetooth->isConnected()) {
+        if (nrf52Bluetooth != nullptr && nrf52Bluetooth->isConnected()) {
             nrf52Bluetooth->sendLog(format);
         }
 #endif
