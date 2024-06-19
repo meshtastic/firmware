@@ -3,12 +3,6 @@
 #include "BluetoothCommon.h"
 #include <Arduino.h>
 
-// class BluetoothWrapper
-// {
-// public:
-//   virtual void sendLog(const char *logMessage);
-// };
-
 class NRF52Bluetooth : BluetoothApi
 {
   public:
