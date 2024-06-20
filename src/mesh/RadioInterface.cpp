@@ -154,8 +154,8 @@ static uint8_t bytes[MAX_RHPACKETLEN];
 void initRegion()
 {
     const RegionInfo *r = regions;
-#ifdef LORA_REGIONCODE
-    for (; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET && r->code != LORA_REGIONCODE; r++)
+#ifdef REGULATORY_LORA_REGIONCODE
+    for (; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET && r->code != REGULATORY_LORA_REGIONCODE; r++)
         ;
     LOG_INFO("Wanted region %d, regulatory override to %s\n", config.lora.region, r->name);
 #else
@@ -478,8 +478,8 @@ void RadioInterface::applyModemConfig()
 
     power = loraConfig.tx_power;
 
-    if ((power == 0) || ((power > myRegion->powerLimit) && !devicestate.owner.is_licensed))
-        power = myRegion->powerLimit;
+    if ((power == 0) || ((power + REGULATORY_GAIN_LORA > myRegion->powerLimit) && !devicestate.owner.is_licensed))
+        power = myRegion->powerLimit - REGULATORY_GAIN_LORA;
 
     if (power == 0)
         power = 17; // Default to this power level if we don't have a valid regional power limit (powerLimit of myRegion defaults

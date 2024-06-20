@@ -3,6 +3,7 @@
 #include "RTC.h"
 #include "concurrency/OSThread.h"
 #include "configuration.h"
+#include "main.h"
 #include <assert.h>
 #include <cstring>
 #include <memory>
@@ -166,9 +167,43 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
         }
 #endif
 
-        va_end(arg);
-
         isContinuationMessage = !hasNewline;
+
+        if (config.bluetooth.device_logging_enabled) {
+            bool isBleConnected = false;
+#ifdef ARCH_ESP32
+            isBleConnected = nimbleBluetooth && nimbleBluetooth->isActive() && nimbleBluetooth->isConnected();
+#elif defined(ARCH_NRF52)
+            isBleConnected = nrf52Bluetooth != nullptr && nrf52Bluetooth->isConnected();
+#endif
+            if (isBleConnected) {
+                char *message;
+                size_t initialLen;
+                size_t len;
+                initialLen = strlen(format);
+                message = new char[initialLen + 1];
+                len = vsnprintf(message, initialLen + 1, format, arg);
+                if (len > initialLen) {
+                    delete[] message;
+                    message = new char[len + 1];
+                    vsnprintf(message, len + 1, format, arg);
+                }
+                auto thread = concurrency::OSThread::currentThread;
+#ifdef ARCH_ESP32
+                if (thread)
+                    nimbleBluetooth->sendLog(mt_sprintf("%s | [%s] %s", logLevel, thread->ThreadName.c_str(), message).c_str());
+                else
+                    nimbleBluetooth->sendLog(mt_sprintf("%s | %s", logLevel, message).c_str());
+#elif defined(ARCH_NRF52)
+                if (thread)
+                    nrf52Bluetooth->sendLog(mt_sprintf("%s | [%s] %s", logLevel, thread->ThreadName.c_str(), message).c_str());
+                else
+                    nrf52Bluetooth->sendLog(mt_sprintf("%s | %s", logLevel, message).c_str());
+#endif
+                delete[] message;
+            }
+        }
+        va_end(arg);
 #ifdef HAS_FREE_RTOS
         xSemaphoreGive(inDebugPrint);
 #else

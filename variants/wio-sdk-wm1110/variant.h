@@ -31,6 +31,13 @@
 
 #include "WVariant.h"
 
+#ifdef USE_TINYUSB
+#error TinyUSB must be disabled by platformio before using this variant
+#endif
+
+// We use the hardware serial port for the serial console
+#define Serial Serial1
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
