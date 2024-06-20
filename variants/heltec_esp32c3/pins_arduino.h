@@ -2,23 +2,20 @@
 #define Pins_Arduino_h
 
 #include <stdint.h>
+#include <variant.h>
 
-static const uint8_t TX = 21;
-static const uint8_t RX = 20;
+// Serial
+static const uint8_t TX = UART_TX;
+static const uint8_t RX = UART_RX;
 
-static const uint8_t SDA = 1;
-static const uint8_t SCL = 0;
+// Default SPI will be mapped to Radio
+static const uint8_t SS = LORA_CS;
+static const uint8_t SCK = LORA_SCK;
+static const uint8_t MOSI = LORA_MOSI;
+static const uint8_t MISO = LORA_MISO;
 
-static const uint8_t SS = 8;
-static const uint8_t MOSI = 7;
-static const uint8_t MISO = 6;
-static const uint8_t SCK = 10;
-
-static const uint8_t A0 = 0;
-static const uint8_t A1 = 1;
-static const uint8_t A2 = 2;
-static const uint8_t A3 = 3;
-static const uint8_t A4 = 4;
-static const uint8_t A5 = 5;
+// Wire
+static const uint8_t SCL = I2C_SCL;
+static const uint8_t SDA = I2C_SDA;
 
 #endif /* Pins_Arduino_h */
