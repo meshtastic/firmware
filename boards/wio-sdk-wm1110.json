@@ -7,13 +7,6 @@
     "cpu": "cortex-m4",
     "extra_flags": "-DARDUINO_WIO_WM1110 -DNRF52840_XXAA",
     "f_cpu": "64000000L",
-    "hwids": [
-      ["0x239A", "0x8029"],
-      ["0x239A", "0x0029"],
-      ["0x239A", "0x002A"],
-      ["0x239A", "0x802A"]
-    ],
-    "usb_product": "WIO-BOOT",
     "mcu": "nrf52840",
     "variant": "Seeed_WIO_WM1110",
     "bsp": {

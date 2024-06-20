@@ -242,7 +242,7 @@ void setup()
     initDeepSleep();
 
     // power on peripherals
-#if defined(TTGO_T_ECHO) && defined(PIN_POWER_EN)
+#if defined(PIN_POWER_EN)
     pinMode(PIN_POWER_EN, OUTPUT);
     digitalWrite(PIN_POWER_EN, HIGH);
     // digitalWrite(PIN_POWER_EN1, INPUT);
