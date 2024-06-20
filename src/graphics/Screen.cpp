@@ -247,7 +247,7 @@ static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int1
             snprintf(displayStr, sizeof(displayStr), "%s", region); // show only region if no short_name def or with glyphs
         } else {
             // Create a new string concatenation of region & idText
-            snprintf(displayStr, sizeof(displayStr), "%s:%s", region, idText); // generate region:short_name
+            snprintf(displayStr, sizeof(displayStr), "%s\n%s", region, idText); // generate region:short_name
         }
         drawIconScreen(displayStr, display, state, x, y);
     }
