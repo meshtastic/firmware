@@ -1,4 +1,5 @@
 #include "NRF52Bluetooth.h"
+#include "BLEDfuSecure.h"
 #include "BluetoothCommon.h"
 #include "PowerFSM.h"
 #include "configuration.h"
@@ -15,6 +16,10 @@ static BLECharacteristic logRadio = BLECharacteristic(BLEUuid(LOGRADIO_UUID_16))
 
 static BLEDis bledis; // DIS (Device Information Service) helper class instance
 static BLEBas blebas; // BAS (Battery Service) helper class instance
+static BLEDis bledis;             // DIS (Device Information Service) helper class instance
+static BLEBas blebas;             // BAS (Battery Service) helper class instance
+static BLEDfu bledfu;             // DFU software update helper service
+static BLEDfuSecure bledfusecure; // DFU software update helper service
 
 static BLEDfu bledfu; // DFU software update helper service
 // This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in
@@ -247,8 +252,13 @@ void NRF52Bluetooth::setup()
     // Set the connect/disconnect callback handlers
     Bluefruit.Periph.setConnectCallback(onConnect);
     Bluefruit.Periph.setDisconnectCallback(onDisconnect);
+#ifndef BLE_DFU_SECURE
     bledfu.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
     bledfu.begin(); // Install the DFU helper
+#else
+    bledfusecure.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM); // add by WayenWeng
+    bledfusecure.begin();                                                     // Install the DFU helper
+#endif
     // Configure and Start the Device Information Service
     LOG_INFO("Configuring the Device Information Service\n");
     bledis.setModel(optstr(HW_VERSION));
