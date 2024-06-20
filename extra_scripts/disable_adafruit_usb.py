@@ -1,3 +1,6 @@
+# trunk-ignore-all(flake8/F821)
+# trunk-ignore-all(ruff/F821)
+
 Import("env")
 
 # NOTE: This is not currently used, but can serve as an example on how to write extra_scripts
