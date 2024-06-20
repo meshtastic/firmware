@@ -48,7 +48,6 @@ NimbleBluetooth *nimbleBluetooth = nullptr;
 #ifdef ARCH_NRF52
 #include "NRF52Bluetooth.h"
 NRF52Bluetooth *nrf52Bluetooth = nullptr;
-;
 #endif
 
 #if HAS_WIFI
