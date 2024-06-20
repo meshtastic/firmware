@@ -25,7 +25,8 @@ typedef struct {
 } DACDB;
 
 // Interpolation function
-DACDB interpolate(uint8_t dbm, uint8_t dbm1, uint8_t dbm2, DACDB val1, DACDB val2) {
+DACDB interpolate(uint8_t dbm, uint8_t dbm1, uint8_t dbm2, DACDB val1, DACDB val2)
+{
     DACDB result;
     double fraction = (double)(dbm - dbm1) / (dbm2 - dbm1);
     result.dac = (uint8_t)(val1.dac + fraction * (val2.dac - val1.dac));
@@ -34,16 +35,17 @@ DACDB interpolate(uint8_t dbm, uint8_t dbm1, uint8_t dbm2, DACDB val1, DACDB val
 }
 
 // Function to find the correct DAC and DB values based on dBm using interpolation
-DACDB getDACandDB(uint8_t dbm) {
+DACDB getDACandDB(uint8_t dbm)
+{
     // Predefined values
     static const struct {
         uint8_t dbm;
         DACDB values;
     } dbmToDACDB[] = {
-        {20, {168, 2}},  // 100mW
-        {24, {148, 6}},  // 250mW
-        {27, {128, 9}},  // 500mW
-        {30, {90, 12}}   // 1000mW
+        {20, {168, 2}}, // 100mW
+        {24, {148, 6}}, // 250mW
+        {27, {128, 9}}, // 500mW
+        {30, {90, 12}}  // 1000mW
     };
     const int numValues = sizeof(dbmToDACDB) / sizeof(dbmToDACDB[0]);
 
@@ -103,7 +105,7 @@ bool RF95Interface::init()
 
     if (power > RF95_MAX_POWER) // This chip has lower power limits than some
         power = RF95_MAX_POWER;
-    
+
     limitPower();
 
     iface = lora = new RadioLibRF95(&module);
@@ -116,13 +118,13 @@ bool RF95Interface::init()
     // enable PA
 #ifdef RF95_PA_EN
 #if defined(RF95_PA_DAC_EN)
-    #ifdef RADIOMASTER_900_BANDIT_NANO
-        // Use calculated DAC value
-        dacWrite(RF95_PA_EN, powerDAC);
-    #else
-        // Use Value set in /*/variant.h
-        dacWrite(RF95_PA_EN, RF95_PA_LEVEL);
-    #endif
+#ifdef RADIOMASTER_900_BANDIT_NANO
+    // Use calculated DAC value
+    dacWrite(RF95_PA_EN, powerDAC);
+#else
+    // Use Value set in /*/variant.h
+    dacWrite(RF95_PA_EN, RF95_PA_LEVEL);
+#endif
 #endif
 #endif
 
@@ -254,6 +256,7 @@ void RF95Interface::setStandby()
     isReceiving = false; // If we were receiving, not any more
     disableInterrupt();
     completeSending(); // If we were sending, not anymore
+    RadioLibInterface::setStandby();
 }
 
 /** We override to turn on transmitter power as needed.
