@@ -11,10 +11,10 @@
 #include "NodeDB.h"
 #include "PacketHistory.h"
 #include "PowerFSM.h"
-#include "RTC.h"
 #include "Router.h"
 #include "TypeConversions.h"
 #include "error.h"
+#include "gps/RTC.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "modules/NeighborInfoModule.h"
@@ -197,9 +197,11 @@ bool NodeDB::factoryReset()
     LOG_INFO("Performing factory reset!\n");
     // first, remove the "/prefs" (this removes most prefs)
     rmDir("/prefs");
+#ifdef FSCom
     if (FSCom.exists("/static/rangetest.csv") && !FSCom.remove("/static/rangetest.csv")) {
         LOG_ERROR("Could not remove rangetest.csv file\n");
     }
+#endif
     // second, install default state (this will deal with the duplicate mac address issue)
     installDefaultDeviceState();
     installDefaultConfig();
@@ -583,7 +585,7 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
     }
 #else
     LOG_ERROR("ERROR: Filesystem not implemented\n");
-    state = LoadFileState::NO_FILESYSTEM;
+    state = LoadFileResult::NO_FILESYSTEM;
 #endif
     return state;
 }
