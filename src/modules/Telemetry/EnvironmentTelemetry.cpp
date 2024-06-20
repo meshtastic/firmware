@@ -33,6 +33,9 @@
 #include "Sensor/SHT31Sensor.h"
 #include "Sensor/SHT4XSensor.h"
 #include "Sensor/SHTC3Sensor.h"
+#ifdef T1000X_SENSOR_EN
+#include "Sensor/T1000xSensor.h"
+#endif
 #include "Sensor/TSL2591Sensor.h"
 #include "Sensor/VEML7700Sensor.h"
 
@@ -53,6 +56,9 @@ AHT10Sensor aht10Sensor;
 MLX90632Sensor mlx90632Sensor;
 DFRobotLarkSensor dfRobotLarkSensor;
 NAU7802Sensor nau7802Sensor;
+#ifdef T1000X_SENSOR_EN
+T1000xSensor t1000xSensor;
+#endif
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
@@ -91,6 +97,9 @@ int32_t EnvironmentTelemetryModule::runOnce()
             LOG_INFO("Environment Telemetry: Initializing\n");
             // it's possible to have this module enabled, only for displaying values on the screen.
             // therefore, we should only enable the sensor loop if measurement is also enabled
+#ifdef T1000X_SENSOR_EN // add by WayenWeng
+            result = t1000xSensor.runOnce();
+#else
             if (dfRobotLarkSensor.hasSensor())
                 result = dfRobotLarkSensor.runOnce();
             if (bmp085Sensor.hasSensor())
@@ -129,6 +138,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = mlx90632Sensor.runOnce();
             if (nau7802Sensor.hasSensor())
                 result = nau7802Sensor.runOnce();
+#endif
         }
         return result;
     } else {
@@ -278,6 +288,10 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.time = getTime();
     m.which_variant = meshtastic_Telemetry_environment_metrics_tag;
 
+#ifdef T1000X_SENSOR_EN // add by WayenWeng
+    valid = valid && t1000xSensor.getMetrics(&m);
+    hasSensor = true;
+#else
     if (dfRobotLarkSensor.hasSensor()) {
         valid = valid && dfRobotLarkSensor.getMetrics(&m);
         hasSensor = true;
@@ -358,7 +372,7 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
             m.variant.environment_metrics.relative_humidity = m_ahtx.variant.environment_metrics.relative_humidity;
         }
     }
-
+#endif
     valid = valid && hasSensor;
 
     if (valid) {

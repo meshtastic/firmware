@@ -7,6 +7,13 @@
     "cpu": "cortex-m4",
     "extra_flags": "-DARDUINO_WIO_WM1110 -DNRF52840_XXAA",
     "f_cpu": "64000000L",
+    "hwids": [
+      ["0x239A", "0x8029"],
+      ["0x239A", "0x0029"],
+      ["0x239A", "0x002A"],
+      ["0x239A", "0x802A"]
+    ],
+    "usb_product": "WIO-BOOT",
     "mcu": "nrf52840",
     "variant": "Seeed_WIO_WM1110",
     "bsp": {
@@ -46,6 +53,6 @@
     "require_upload_port": true,
     "wait_for_upload_port": true
   },
-  "url": "https://www.seeedstudio.com/Wio-WM1110-Dev-Kit-p-5677.html",
+  "url": "https://www.seeedstudio.com/LoRaWAN-Tracker-c-1938.html",
   "vendor": "Seeed Studio"
 }
