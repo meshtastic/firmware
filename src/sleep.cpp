@@ -242,6 +242,24 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     if (gps)
         gps->setGPSPower(false, false, 0);
 #endif
+
+#ifdef GNSS_Airoha // add by WayenWeng
+    digitalWrite(GPS_VRTC_EN, LOW);
+    digitalWrite(PIN_GPS_RESET, LOW);
+    digitalWrite(GPS_SLEEP_INT, LOW);
+    digitalWrite(GPS_RTC_INT, LOW);
+    pinMode(GPS_RESETB_OUT, OUTPUT);
+    digitalWrite(GPS_RESETB_OUT, LOW);
+#endif
+
+#ifdef BUZZER_EN_PIN // add by WayenWeng
+    digitalWrite(BUZZER_EN_PIN, LOW);
+#endif
+
+#ifdef PIN_3V3_EN // add by WayenWeng
+    digitalWrite(PIN_3V3_EN, LOW);
+#endif
+
     setLed(false);
 
 #ifdef RESET_OLED
