@@ -511,6 +511,8 @@ typedef struct _meshtastic_Config_BluetoothConfig {
     meshtastic_Config_BluetoothConfig_PairingMode mode;
     /* Specified PIN for PairingMode.FixedPin */
     uint32_t fixed_pin;
+    /* Enables device (serial style logs) over Bluetooth */
+    bool device_logging_enabled;
 } meshtastic_Config_BluetoothConfig;
 
 typedef struct _meshtastic_Config {
@@ -615,7 +617,7 @@ extern "C" {
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_default {0, 0, 0, 0}
 #define meshtastic_Config_DisplayConfig_init_default {0, _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN}
 #define meshtastic_Config_LoRaConfig_init_default {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0}
-#define meshtastic_Config_BluetoothConfig_init_default {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0}
+#define meshtastic_Config_BluetoothConfig_init_default {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0, 0}
 #define meshtastic_Config_init_zero              {0, {meshtastic_Config_DeviceConfig_init_zero}}
 #define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0}
 #define meshtastic_Config_PositionConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _meshtastic_Config_PositionConfig_GpsMode_MIN}
@@ -624,7 +626,7 @@ extern "C" {
 #define meshtastic_Config_NetworkConfig_IpV4Config_init_zero {0, 0, 0, 0}
 #define meshtastic_Config_DisplayConfig_init_zero {0, _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN}
 #define meshtastic_Config_LoRaConfig_init_zero   {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0}
-#define meshtastic_Config_BluetoothConfig_init_zero {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0}
+#define meshtastic_Config_BluetoothConfig_init_zero {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_Config_DeviceConfig_role_tag  1
@@ -702,6 +704,7 @@ extern "C" {
 #define meshtastic_Config_BluetoothConfig_enabled_tag 1
 #define meshtastic_Config_BluetoothConfig_mode_tag 2
 #define meshtastic_Config_BluetoothConfig_fixed_pin_tag 3
+#define meshtastic_Config_BluetoothConfig_device_logging_enabled_tag 4
 #define meshtastic_Config_device_tag             1
 #define meshtastic_Config_position_tag           2
 #define meshtastic_Config_power_tag              3
@@ -833,7 +836,8 @@ X(a, STATIC,   SINGULAR, BOOL,     ignore_mqtt,     104)
 #define meshtastic_Config_BluetoothConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
 X(a, STATIC,   SINGULAR, UENUM,    mode,              2) \
-X(a, STATIC,   SINGULAR, UINT32,   fixed_pin,         3)
+X(a, STATIC,   SINGULAR, UINT32,   fixed_pin,         3) \
+X(a, STATIC,   SINGULAR, BOOL,     device_logging_enabled,   4)
 #define meshtastic_Config_BluetoothConfig_CALLBACK NULL
 #define meshtastic_Config_BluetoothConfig_DEFAULT NULL
 
@@ -860,7 +864,7 @@ extern const pb_msgdesc_t meshtastic_Config_BluetoothConfig_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_CONFIG_PB_H_MAX_SIZE meshtastic_Config_size
-#define meshtastic_Config_BluetoothConfig_size   10
+#define meshtastic_Config_BluetoothConfig_size   12
 #define meshtastic_Config_DeviceConfig_size      100
 #define meshtastic_Config_DisplayConfig_size     30
 #define meshtastic_Config_LoRaConfig_size        80
