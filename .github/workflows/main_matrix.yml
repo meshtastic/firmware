@@ -254,7 +254,7 @@ jobs:
           chmod +x ./output/device-update.sh
 
       - name: Zip firmware
-        run: zip -j -9 -r ./firmware-${{ steps.version.outputs.version }}.zip ./output
+        run: zip -j -9 -r ./firmware-${{ steps.version.outputs.version }}.zip ./output -x *.deb
 
       - uses: actions/download-artifact@v4
         with:
