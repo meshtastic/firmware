@@ -219,7 +219,7 @@ meshtastic_MeshPacket *PositionModule::allocReply()
         LOG_INFO("Providing time to mesh %u\n", p.time);
     }
 
-    LOG_INFO("Position reply: time=%i, latI=%i, lonI=%i\n", p.time, p.latitude_i, p.longitude_i);
+    LOG_INFO("Position reply: time=%i lat=%i lon=%i\n", p.time, p.latitude_i, p.longitude_i);
 
     // TAK Tracker devices should send their position in a TAK packet over the ATAK port
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)
