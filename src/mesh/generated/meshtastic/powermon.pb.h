@@ -25,14 +25,14 @@ typedef enum _meshtastic_PowerMon_State {
     meshtastic_PowerMon_State_Screen_On = 256,
     meshtastic_PowerMon_State_Screen_Drawing = 512,
     meshtastic_PowerMon_State_Wifi_On = 1024,
-    meshtastic_PowerMon_State_GPS_LowPower = 2048,
-    meshtastic_PowerMon_State_GPS_MediumPower = 4096,
-    meshtastic_PowerMon_State_GPS_HighPower = 8192
+    /* GPS is actively trying to find our location
+See GPSPowerState for more details */
+    meshtastic_PowerMon_State_GPS_Active = 2048
 } meshtastic_PowerMon_State;
 
 /* Struct definitions */
 /* the log messages will be short and complete (see PowerMon.Event in the protobufs for details). 
-something like "PwrMon,C,0x00001234,REASON" where the hex number is the bitmask of all current states. 
+something like "PwrMon:C,0x00001234,REASON" where the hex number is the bitmask of all current states. 
 (We use a bitmask for states so that if a log message gets lost it won't be fatal) */
 typedef struct _meshtastic_PowerMon_Event {
     /* Bitwise-OR of States */
@@ -47,8 +47,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_PowerMon_State_MIN meshtastic_PowerMon_State_None
-#define _meshtastic_PowerMon_State_MAX meshtastic_PowerMon_State_GPS_HighPower
-#define _meshtastic_PowerMon_State_ARRAYSIZE ((meshtastic_PowerMon_State)(meshtastic_PowerMon_State_GPS_HighPower+1))
+#define _meshtastic_PowerMon_State_MAX meshtastic_PowerMon_State_GPS_Active
+#define _meshtastic_PowerMon_State_ARRAYSIZE ((meshtastic_PowerMon_State)(meshtastic_PowerMon_State_GPS_Active+1))
 
 
 
