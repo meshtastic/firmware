@@ -101,6 +101,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_STATION_G1
 #elif defined(DR_DEV)
 #define HW_VENDOR meshtastic_HardwareModel_DR_DEV
+#elif defined(HELTEC_HRU_3601)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_HRU_3601
 #elif defined(HELTEC_V3)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_V3
 #elif defined(HELTEC_WSL_V3)
