@@ -15,7 +15,7 @@ If you are making new meshtastic features feel free to add new entries at the en
 typedef enum _meshtastic_PowerMon_State {
     meshtastic_PowerMon_State_None = 0,
     meshtastic_PowerMon_State_CPU_DeepSleep = 1,
-    meshtastic_PowerMon_State_CPU_Sleep = 2,
+    meshtastic_PowerMon_State_CPU_LightSleep = 2,
     meshtastic_PowerMon_State_CPU_Awake = 4,
     meshtastic_PowerMon_State_Lora_RXOn = 8,
     meshtastic_PowerMon_State_Lora_TXOn = 16,

@@ -11,6 +11,7 @@
 #include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PowerMon.h"
 #include "configuration.h"
 #include "graphics/Screen.h"
 #include "main.h"
@@ -49,6 +50,7 @@ static bool isPowered()
 static void sdsEnter()
 {
     LOG_DEBUG("Enter state: SDS\n");
+    powerMon->setState(meshtastic_PowerMon_State_CPU_DeepSleep);
     // FIXME - make sure GPS and LORA radio are off first - because we want close to zero current draw
     doDeepSleep(Default::getConfiguredOrDefaultMs(config.power.sds_secs), false);
 }
@@ -87,8 +89,10 @@ static void lsIdle()
             // Briefly come out of sleep long enough to blink the led once every few seconds
             uint32_t sleepTime = SLEEP_TIME;
 
+            powerMon->setState(meshtastic_PowerMon_State_CPU_LightSleep);
             setLed(false); // Never leave led on while in light sleep
             esp_sleep_source_t wakeCause2 = doLightSleep(sleepTime * 1000LL);
+            powerMon->clearState(meshtastic_PowerMon_State_CPU_LightSleep);
 
             switch (wakeCause2) {
             case ESP_SLEEP_WAKEUP_TIMER:
