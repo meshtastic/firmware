@@ -299,8 +299,8 @@ void AdminModule::handleGetModuleConfigResponse(const meshtastic_MeshPacket &mp,
 {
     // Skip if it's disabled or no pins are exposed
     if (!r->get_module_config_response.payload_variant.remote_hardware.enabled ||
-        !r->get_module_config_response.payload_variant.remote_hardware.available_pins) {
-        LOG_DEBUG("Remote hardware module disabled or no vailable_pins. Skipping...\n");
+        r->get_module_config_response.payload_variant.remote_hardware.available_pins_count == 0) {
+        LOG_DEBUG("Remote hardware module disabled or no available_pins. Skipping...\n");
         return;
     }
     for (uint8_t i = 0; i < devicestate.node_remote_hardware_pins_count; i++) {
