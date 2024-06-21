@@ -554,7 +554,7 @@ void setup()
 #endif
 
     // Hello
-    LOG_INFO("Meshtastic hwvendor=%d, swver=%s\n", HW_VENDOR, optstr(APP_VERSION));
+    LOG_INFO("S:B:%d,%s\n", HW_VENDOR, optstr(APP_VERSION));
 
 #ifdef ARCH_ESP32
     esp32Setup();
