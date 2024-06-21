@@ -778,6 +778,22 @@ GPS::~GPS()
     notifyGPSSleepObserver.observe(&notifyGPSSleep);
 }
 
+const char *GPS::powerStateToString()
+{
+    switch (powerState) {
+    case GPS_OFF:
+        return "OFF";
+    case GPS_IDLE:
+        return "IDLE";
+    case GPS_STANDBY:
+        return "STANDBY";
+    case GPS_ACTIVE:
+        return "ACTIVE";
+    default:
+        return "UNKNOWN";
+    }
+}
+
 void GPS::setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime)
 {
     // Record the current powerState
@@ -792,7 +808,7 @@ void GPS::setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime)
     else
         powerState = GPS_OFF;
 
-    LOG_DEBUG("GPS::powerState=%d\n", powerState);
+    LOG_DEBUG("GPS::powerState=%s\n", powerStateToString());
 
     // If the next update is due *really soon*, don't actually power off or enter standby. Just wait it out.
     if (!on && powerState == GPS_IDLE)
