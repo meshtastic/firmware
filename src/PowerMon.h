@@ -3,6 +3,7 @@
 
 #include "meshtastic/powermon.pb.h"
 
+#define USE_POWERMON // FIXME turn this only for certain builds
 /**
  * The singleton class for monitoring power consumption of device
  * subsystems/modes.
