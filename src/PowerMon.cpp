@@ -1,12 +1,18 @@
 #include "PowerMon.h"
-#include "configuration.h"
+#include "NodeDB.h"
+
+// Use the 'live' config flag to figure out if we should be showing this message
+static bool is_power_enabled(uint64_t m)
+{
+    return (m & config.power.powermon_enables) ? true : false;
+}
 
 void PowerMon::setState(_meshtastic_PowerMon_State state, const char *reason)
 {
 #ifdef USE_POWERMON
     auto oldstates = states;
     states |= state;
-    if (oldstates != states) {
+    if (oldstates != states && is_power_enabled(state)) {
         emitLog(reason);
     }
 #endif
@@ -17,7 +23,7 @@ void PowerMon::clearState(_meshtastic_PowerMon_State state, const char *reason)
 #ifdef USE_POWERMON
     auto oldstates = states;
     states &= ~state;
-    if (oldstates != states) {
+    if (oldstates != states && is_power_enabled(state)) {
         emitLog(reason);
     }
 #endif
