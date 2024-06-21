@@ -3,7 +3,6 @@
 #define I2C_SDA 4
 #define I2C_SCL 5
 #define BATTERY_PIN 34
-#define ADC_CHANNEL ADC1_GPIO34_CHANNEL
 
 // GPS
 #undef GPS_RX_PIN

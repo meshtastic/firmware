@@ -32,6 +32,8 @@
 #include "modules/esp32/StoreForwardModule.h"
 #include <Preferences.h>
 #include <nvs_flash.h>
+#undef EXT_RAM_ATTR
+#define EXT_RAM_ATTR EXT_RAM_BSS_ATTR
 #endif
 
 #ifdef ARCH_PORTDUINO

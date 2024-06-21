@@ -36,6 +36,7 @@
 // #include <driver/rtc_io.h>
 
 #ifdef ARCH_ESP32
+#include "driver/gpio.h"
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "mesh/http/WebServer.h"
 #endif

@@ -245,13 +245,13 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
                                               .battery = powerStatus->getBatteryChargePercent(),
                                           },
                                       .which_payload_variant = meshtastic_TAKPacket_pli_tag,
-                                      {.pli = {
-                                           .latitude_i = localPosition.latitude_i,
-                                           .longitude_i = localPosition.longitude_i,
-                                           .altitude = localPosition.altitude_hae,
-                                           .speed = localPosition.ground_speed,
-                                           .course = static_cast<uint16_t>(localPosition.ground_track),
-                                       }}};
+                                      .payload_variant = {.pli = {
+                                                              .latitude_i = localPosition.latitude_i,
+                                                              .longitude_i = localPosition.longitude_i,
+                                                              .altitude = localPosition.altitude_hae,
+                                                              .speed = localPosition.ground_speed,
+                                                              .course = static_cast<uint16_t>(localPosition.ground_track),
+                                                          }}};
 
     auto length = unishox2_compress_simple(owner.long_name, strlen(owner.long_name), takPacket.contact.device_callsign);
     LOG_DEBUG("Uncompressed device_callsign '%s' - %d bytes\n", owner.long_name, strlen(owner.long_name));

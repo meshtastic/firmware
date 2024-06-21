@@ -5,8 +5,14 @@
 #include "configuration.h"
 
 #ifdef ARCH_ESP32
-#include <esp_adc_cal.h>
+#include "esp_adc/adc_cali_scheme.h"
+#include <esp_adc/adc_cali.h>
+#include <esp_adc/adc_oneshot.h>
 #include <soc/adc_channel.h>
+#include <soc/soc.h>
+#ifndef CONFIG_IDF_TARGET_ESP32C3
+#include <soc/sens_reg.h>
+#endif
 #endif
 
 #ifndef NUM_OCV_POINTS
@@ -35,7 +41,7 @@
 #endif
 
 #ifdef BAT_MEASURE_ADC_UNIT
-extern RTC_NOINIT_ATTR uint64_t RTC_reg_b;
+extern uint64_t RTC_reg_b;
 #include "soc/sens_reg.h" // needed for adc pin reset
 #endif
 

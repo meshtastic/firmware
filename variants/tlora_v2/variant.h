@@ -1,5 +1,4 @@
 #define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define ADC_CHANNEL ADC1_GPIO35_CHANNEL
 
 #define I2C_SDA 21 // I2C pins for this board
 #define I2C_SCL 22

@@ -18,7 +18,6 @@
 
 // Battery voltage monitoring - TODO: test, currently untested, copied from T3S3 variant
 #define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define ADC_CHANNEL ADC1_GPIO1_CHANNEL
 #define ADC_MULTIPLIER                                                                                                           \
     2.11 // ratio of voltage divider = 2.0 (R10=1M, R13=1M), plus some undervoltage correction - TODO: this was carried over from
          // the T3S3, test to see if the undervoltage correction is needed.
