@@ -278,10 +278,15 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
 #ifndef BAT_MEASURE_ADC_UNIT // ADC1
 #ifdef ADC_CTRL              // enable adc voltage divider when we need to read
+#ifdef HELTEC_TRACKER_V1_1
+	pinMode(ADC_CTRL,  ADC_CTRL_ENABLED == LOW ? INPUT_PULLDOWN : INPUT_PULLUP);
+	//suggested in discourse.
+#else	
         pinMode(ADC_CTRL, OUTPUT);
         digitalWrite(ADC_CTRL, ADC_CTRL_ENABLED);
+#endif	
         delay(10);
-#endif
+#endif // ADC_CTRL
         for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
             int val_ = adc1_get_raw(adc_channel);
             if (val_ >= 0) { // save only valid readings
