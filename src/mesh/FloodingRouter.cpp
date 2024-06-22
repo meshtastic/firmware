@@ -20,7 +20,7 @@ ErrorCode FloodingRouter::send(meshtastic_MeshPacket *p)
 bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 {
     if (wasSeenRecently(p)) { // Note: this will also add a recent packet record
-        printPacket("Ignoring incoming msg, because we've already seen it", p);
+        printPacket("Ignoring incoming msg we've already seen", p);
         if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER &&
             config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT &&
             config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER) {
