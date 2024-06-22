@@ -766,7 +766,6 @@ bool GPS::setup()
     }
 
     notifyDeepSleepObserver.observe(&notifyDeepSleep);
-    notifyGPSSleepObserver.observe(&notifyGPSSleep);
 
     return true;
 }
@@ -775,7 +774,6 @@ GPS::~GPS()
 {
     // we really should unregister our sleep observer
     notifyDeepSleepObserver.unobserve(&notifyDeepSleep);
-    notifyGPSSleepObserver.observe(&notifyGPSSleep);
 }
 
 void GPS::setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime)
