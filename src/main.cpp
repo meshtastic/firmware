@@ -41,13 +41,13 @@
 #endif
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "nimble/NimbleBluetooth.h"
-NimbleBluetooth *nimbleBluetooth;
+NimbleBluetooth *nimbleBluetooth = nullptr;
 #endif
 #endif
 
 #ifdef ARCH_NRF52
 #include "NRF52Bluetooth.h"
-NRF52Bluetooth *nrf52Bluetooth;
+NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #endif
 
 #if HAS_WIFI
@@ -94,23 +94,23 @@ NRF52Bluetooth *nrf52Bluetooth;
 #include "ButtonThread.h"
 #endif
 
+#include "AmbientLightingThread.h"
 #include "PowerFSMThread.h"
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #include "AccelerometerThread.h"
-#include "AmbientLightingThread.h"
-AccelerometerThread *accelerometerThread;
+AccelerometerThread *accelerometerThread = nullptr;
 #endif
 
 #ifdef HAS_I2S
 #include "AudioThread.h"
-AudioThread *audioThread;
+AudioThread *audioThread = nullptr;
 #endif
 
 using namespace concurrency;
 
 // We always create a screen object, but we only init it if we find the hardware
-graphics::Screen *screen;
+graphics::Screen *screen = nullptr;
 
 // Global power status
 meshtastic::PowerStatus *powerStatus = new meshtastic::PowerStatus();
@@ -172,7 +172,7 @@ const char *getDeviceName()
     static char name[20];
     snprintf(name, sizeof(name), "%02x%02x", dmac[4], dmac[5]);
     // if the shortname exists and is NOT the new default of ab3c, use it for BLE name.
-    if ((owner.short_name != NULL) && (strcmp(owner.short_name, name) != 0)) {
+    if (strcmp(owner.short_name, name) != 0) {
         snprintf(name, sizeof(name), "%s_%02x%02x", owner.short_name, dmac[4], dmac[5]);
     } else {
         snprintf(name, sizeof(name), "Meshtastic_%02x%02x", dmac[4], dmac[5]);
@@ -241,7 +241,7 @@ void setup()
     initDeepSleep();
 
     // power on peripherals
-#if defined(TTGO_T_ECHO) && defined(PIN_POWER_EN)
+#if defined(PIN_POWER_EN)
     pinMode(PIN_POWER_EN, OUTPUT);
     digitalWrite(PIN_POWER_EN, HIGH);
     // digitalWrite(PIN_POWER_EN1, INPUT);
@@ -421,10 +421,6 @@ void setup()
     auto i2cCount = i2cScanner->countDevices();
     if (i2cCount == 0) {
         LOG_INFO("No I2C devices found\n");
-        Wire.end();
-#ifdef I2C_SDA1
-        Wire1.end();
-#endif
     } else {
         LOG_INFO("%i I2C devices found\n", i2cCount);
     }
