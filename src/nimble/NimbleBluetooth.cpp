@@ -245,7 +245,7 @@ void NimbleBluetooth::sendLog(const char *logMessage)
     if (!bleServer || !isConnected() || strlen(logMessage) > 512) {
         return;
     }
-    logRadioCharacteristic->notify((uint8_t *)logMessage, strlen(logMessage));
+    logRadioCharacteristic->notify(reinterpret_cast<const uint8_t *>(logMessage), strlen(logMessage));
 }
 
 void clearNVS()
