@@ -14,6 +14,15 @@
 #define XPOWERS_AXP192_AXP2101_ADDRESS 0x34
 #endif
 
+bool in_array(uint8_t *array, int size, uint8_t lookfor)
+{
+    int i;
+    for (i = 0; i < size; i++)
+        if (lookfor == array[i])
+            return true;
+    return false;
+}
+
 ScanI2C::FoundDevice ScanI2CTwoWire::find(ScanI2C::DeviceType type) const
 {
     concurrency::LockGuard guard((concurrency::Lock *)&lock);
@@ -135,11 +144,11 @@ uint16_t ScanI2CTwoWire::getRegisterValue(const ScanI2CTwoWire::RegisterLocation
         type = T;                                                                                                                \
         break;
 
-void ScanI2CTwoWire::scanPort(I2CPort port)
+void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 {
     concurrency::LockGuard guard((concurrency::Lock *)&lock);
 
-    LOG_DEBUG("Scanning for i2c devices on port %d\n", port);
+    LOG_DEBUG("Scanning for I2C devices on port %d\n", port);
 
     uint8_t err;
 
@@ -163,6 +172,11 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
 #endif
 
     for (addr.address = 1; addr.address < 127; addr.address++) {
+        if (asize != 0) {
+            if (!in_array(address, asize, addr.address))
+                continue;
+            LOG_DEBUG("Scanning address 0x%x\n", addr.address);
+        }
         i2cBus->beginTransmission(addr.address);
 #ifdef ARCH_PORTDUINO
         if (i2cBus->read() != -1)
@@ -342,6 +356,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
 
                 SCAN_SIMPLE_CASE(PMSA0031_ADDR, PMSA0031, "PMSA0031 air quality sensor found\n")
                 SCAN_SIMPLE_CASE(MPU6050_ADDR, MPU6050, "MPU6050 accelerometer found\n");
+                SCAN_SIMPLE_CASE(BMX160_ADDR, BMX160, "BMX160 accelerometer found\n");
                 SCAN_SIMPLE_CASE(BMA423_ADDR, BMA423, "BMA423 accelerometer found\n");
                 SCAN_SIMPLE_CASE(LSM6DS3_ADDR, LSM6DS3, "LSM6DS3 accelerometer found at address 0x%x\n", (uint8_t)addr.address);
                 SCAN_SIMPLE_CASE(TCA9555_ADDR, TCA9555, "TCA9555 I2C expander found\n");
@@ -349,12 +364,13 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
                 SCAN_SIMPLE_CASE(TSL25911_ADDR, TSL2591, "TSL2591 light sensor found\n");
                 SCAN_SIMPLE_CASE(OPT3001_ADDR, OPT3001, "OPT3001 light sensor found\n");
                 SCAN_SIMPLE_CASE(MLX90632_ADDR, MLX90632, "MLX90632 IR temp sensor found\n");
+                SCAN_SIMPLE_CASE(NAU7802_ADDR, NAU7802, "NAU7802 based scale found\n");
 
             default:
                 LOG_INFO("Device found at address 0x%x was not able to be enumerated\n", addr.address);
             }
         } else if (err == 4) {
-            LOG_ERROR("Unknown error at address 0x%x\n", addr);
+            LOG_ERROR("Unknown error at address 0x%x\n", addr.address);
         }
 
         // Check if a type was found for the enumerated device - save, if so
@@ -363,6 +379,11 @@ void ScanI2CTwoWire::scanPort(I2CPort port)
             foundDevices[addr] = type;
         }
     }
+}
+
+void ScanI2CTwoWire::scanPort(I2CPort port)
+{
+    scanPort(port, nullptr, 0);
 }
 
 TwoWire *ScanI2CTwoWire::fetchI2CBus(ScanI2C::DeviceAddress address) const
