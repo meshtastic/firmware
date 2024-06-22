@@ -142,6 +142,16 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // (which is the default for the sx1262interface code)
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
+#ifdef EBYTE_E22_900M30S
+// 10dB PA gain and 30dB rated output; based on PA output table from Ebyte Robin <sales06@ebyte.com>
+#define REGULATORY_GAIN_LORA 10
+#define SX126X_MAX_POWER 20
+#endif
+#ifdef EBYTE_E22_900M33S
+// 25dB PA gain and 33dB rated output; based on TX Power Curve from E22-900M33S_UserManual_EN_v1.0.pdf
+#define REGULATORY_GAIN_LORA 25
+#define SX126X_MAX_POWER 8
+#endif
 #endif
 
 /*

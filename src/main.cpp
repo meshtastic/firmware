@@ -48,7 +48,6 @@ NimbleBluetooth *nimbleBluetooth = nullptr;
 #ifdef ARCH_NRF52
 #include "NRF52Bluetooth.h"
 NRF52Bluetooth *nrf52Bluetooth = nullptr;
-;
 #endif
 
 #if HAS_WIFI
@@ -173,7 +172,7 @@ const char *getDeviceName()
     static char name[20];
     snprintf(name, sizeof(name), "%02x%02x", dmac[4], dmac[5]);
     // if the shortname exists and is NOT the new default of ab3c, use it for BLE name.
-    if ((owner.short_name != NULL) && (strcmp(owner.short_name, name) != 0)) {
+    if (strcmp(owner.short_name, name) != 0) {
         snprintf(name, sizeof(name), "%s_%02x%02x", owner.short_name, dmac[4], dmac[5]);
     } else {
         snprintf(name, sizeof(name), "Meshtastic_%02x%02x", dmac[4], dmac[5]);
@@ -242,7 +241,7 @@ void setup()
     initDeepSleep();
 
     // power on peripherals
-#if defined(TTGO_T_ECHO) && defined(PIN_POWER_EN)
+#if defined(PIN_POWER_EN)
     pinMode(PIN_POWER_EN, OUTPUT);
     digitalWrite(PIN_POWER_EN, HIGH);
     // digitalWrite(PIN_POWER_EN1, INPUT);
