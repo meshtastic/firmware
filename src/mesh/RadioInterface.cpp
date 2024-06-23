@@ -413,7 +413,13 @@ void RadioInterface::applyModemConfig()
     // Set up default configuration
     // No Sync Words in LORA mode
     meshtastic_Config_LoRaConfig &loraConfig = config.lora;
-    if (loraConfig.use_preset) {
+
+    sf = loraConfig.spread_factor;
+    cr = loraConfig.coding_rate;
+    bw = loraConfig.bandwidth;
+
+    // If we are not using a preset, the parameters save in flash better be valid or we'll fallback to defaults
+    if (loraConfig.use_preset || !sf || !cr || !bw) {
 
         switch (loraConfig.modem_preset) {
         case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
@@ -458,18 +464,6 @@ void RadioInterface::applyModemConfig()
             break;
         }
     } else {
-        sf = loraConfig.spread_factor;
-        cr = loraConfig.coding_rate;
-        bw = loraConfig.bandwidth;
-
-        if (cr == 0) // This parameter is not an integer
-            cr = 5; // An invalid cr/sf will cause the rx1262 init to bail partway through with an error. Which is bad because not
-                    // all registers may be inited.
-        if (sf == 0)
-            sf = 11;
-        if (bw == 0)
-            bw = 250; // Just guess and use long fast settings
-
         if (bw == 31) // This parameter is not an integer
             bw = 31.25;
         if (bw == 62) // Fix for 62.5Khz bandwidth
