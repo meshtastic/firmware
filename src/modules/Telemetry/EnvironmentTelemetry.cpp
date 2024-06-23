@@ -270,98 +270,129 @@ bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPac
     return false; // Let others look at this message also if they want
 }
 
-bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
+bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m)
 {
-    meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
     bool valid = true;
     bool hasSensor = false;
-    m.time = getTime();
-    m.which_variant = meshtastic_Telemetry_environment_metrics_tag;
+    m->time = getTime();
+    m->which_variant = meshtastic_Telemetry_environment_metrics_tag;
 
     if (dfRobotLarkSensor.hasSensor()) {
-        valid = valid && dfRobotLarkSensor.getMetrics(&m);
+        valid = valid && dfRobotLarkSensor.getMetrics(m);
         hasSensor = true;
     }
     if (sht31Sensor.hasSensor()) {
-        valid = valid && sht31Sensor.getMetrics(&m);
+        valid = valid && sht31Sensor.getMetrics(m);
         hasSensor = true;
     }
     if (lps22hbSensor.hasSensor()) {
-        valid = valid && lps22hbSensor.getMetrics(&m);
+        valid = valid && lps22hbSensor.getMetrics(m);
         hasSensor = true;
     }
     if (shtc3Sensor.hasSensor()) {
-        valid = valid && shtc3Sensor.getMetrics(&m);
+        valid = valid && shtc3Sensor.getMetrics(m);
         hasSensor = true;
     }
     if (bmp085Sensor.hasSensor()) {
-        valid = valid && bmp085Sensor.getMetrics(&m);
+        valid = valid && bmp085Sensor.getMetrics(m);
         hasSensor = true;
     }
     if (bmp280Sensor.hasSensor()) {
-        valid = valid && bmp280Sensor.getMetrics(&m);
+        valid = valid && bmp280Sensor.getMetrics(m);
         hasSensor = true;
     }
     if (bme280Sensor.hasSensor()) {
-        valid = valid && bme280Sensor.getMetrics(&m);
+        valid = valid && bme280Sensor.getMetrics(m);
         hasSensor = true;
     }
     if (bme680Sensor.hasSensor()) {
-        valid = valid && bme680Sensor.getMetrics(&m);
+        valid = valid && bme680Sensor.getMetrics(m);
         hasSensor = true;
     }
     if (mcp9808Sensor.hasSensor()) {
-        valid = valid && mcp9808Sensor.getMetrics(&m);
+        valid = valid && mcp9808Sensor.getMetrics(m);
         hasSensor = true;
     }
     if (ina219Sensor.hasSensor()) {
-        valid = valid && ina219Sensor.getMetrics(&m);
+        valid = valid && ina219Sensor.getMetrics(m);
         hasSensor = true;
     }
     if (ina260Sensor.hasSensor()) {
-        valid = valid && ina260Sensor.getMetrics(&m);
+        valid = valid && ina260Sensor.getMetrics(m);
         hasSensor = true;
     }
     if (veml7700Sensor.hasSensor()) {
-        valid = valid && veml7700Sensor.getMetrics(&m);
+        valid = valid && veml7700Sensor.getMetrics(m);
         hasSensor = true;
     }
     if (tsl2591Sensor.hasSensor()) {
-        valid = valid && tsl2591Sensor.getMetrics(&m);
+        valid = valid && tsl2591Sensor.getMetrics(m);
         hasSensor = true;
     }
     if (opt3001Sensor.hasSensor()) {
-        valid = valid && opt3001Sensor.getMetrics(&m);
+        valid = valid && opt3001Sensor.getMetrics(m);
         hasSensor = true;
     }
     if (mlx90632Sensor.hasSensor()) {
-        valid = valid && mlx90632Sensor.getMetrics(&m);
+        valid = valid && mlx90632Sensor.getMetrics(m);
         hasSensor = true;
     }
     if (rcwl9620Sensor.hasSensor()) {
-        valid = valid && rcwl9620Sensor.getMetrics(&m);
+        valid = valid && rcwl9620Sensor.getMetrics(m);
         hasSensor = true;
     }
     if (nau7802Sensor.hasSensor()) {
-        valid = valid && nau7802Sensor.getMetrics(&m);
+        valid = valid && nau7802Sensor.getMetrics(m);
         hasSensor = true;
     }
     if (aht10Sensor.hasSensor()) {
         if (!bmp280Sensor.hasSensor()) {
-            valid = valid && aht10Sensor.getMetrics(&m);
+            valid = valid && aht10Sensor.getMetrics(m);
             hasSensor = true;
         } else {
             // prefer bmp280 temp if both sensors are present, fetch only humidity
             meshtastic_Telemetry m_ahtx = meshtastic_Telemetry_init_zero;
             LOG_INFO("AHTX0+BMP280 module detected: using temp from BMP280 and humy from AHTX0\n");
             aht10Sensor.getMetrics(&m_ahtx);
-            m.variant.environment_metrics.relative_humidity = m_ahtx.variant.environment_metrics.relative_humidity;
+            m->variant.environment_metrics.relative_humidity = m_ahtx.variant.environment_metrics.relative_humidity;
         }
     }
 
-    valid = valid && hasSensor;
+    return valid && hasSensor;
+}
 
-    if (valid) {
+meshtastic_MeshPacket *EnvironmentTelemetryModule::allocReply()
+{
+    if (currentRequest) {
+        auto req = *currentRequest;
+        const auto &p = req.decoded;
+        meshtastic_Telemetry scratch;
+        meshtastic_Telemetry *decoded = NULL;
+        memset(&scratch, 0, sizeof(scratch));
+        if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &scratch)) {
+            decoded = &scratch;
+        } else {
+            LOG_ERROR("Error decoding EnvironmentTelemetry module!\n");
+            return NULL;
+        }
+        // Check for a request for environment metrics
+        if (decoded->which_variant == meshtastic_Telemetry_environment_metrics_tag) {
+            meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
+            if (getEnvironmentTelemetry(&m)) {
+                LOG_INFO("Environment telemetry replying to request\n");
+                return allocDataProtobuf(m);
+            } else {
+                return NULL;
+            }
+        }
+    }
+    return NULL;
+}
+
+bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
+{
+    meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
+    if (getEnvironmentTelemetry(&m)) {
         LOG_INFO("(Sending): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f\n",
                  m.variant.environment_metrics.barometric_pressure, m.variant.environment_metrics.current,
                  m.variant.environment_metrics.gas_resistance, m.variant.environment_metrics.relative_humidity,
@@ -399,8 +430,9 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
                 setIntervalFromNow(5000);
             }
         }
+        return true;
     }
-    return valid;
+    return false;
 }
 
 AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
