@@ -20,7 +20,7 @@
  */
 NoopPrint noopPrint;
 
-#if HAS_WIFI || HAS_ETHERNET
+#if HAS_NETWORKING
 extern Syslog syslog;
 #endif
 void RedirectablePrint::rpInit()
@@ -135,7 +135,7 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
         }
         r += vprintf(format, arg);
 
-#if (HAS_WIFI || HAS_ETHERNET) && !defined(ARCH_PORTDUINO)
+#if HAS_NETWORKING && !defined(ARCH_PORTDUINO)
         // if syslog is in use, collect the log messages and send them to syslog
         if (syslog.isEnabled()) {
             int ll = 0;

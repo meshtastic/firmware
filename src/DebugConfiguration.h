@@ -1,6 +1,8 @@
 #ifndef SYSLOG_H
 #define SYSLOG_H
 
+#include "configuration.h"
+
 // DEBUG LED
 #ifndef LED_INVERTED
 #define LED_INVERTED 0 // define as 1 if LED is active low (on)
@@ -117,7 +119,7 @@
 #include <WiFi.h>
 #endif // HAS_WIFI
 
-#if HAS_WIFI || HAS_ETHERNET
+#if HAS_NETWORKING
 
 class Syslog
 {
