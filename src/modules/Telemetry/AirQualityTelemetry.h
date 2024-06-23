@@ -26,6 +26,11 @@ class AirQualityTelemetryModule : private concurrency::OSThread, public Protobuf
     */
     virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *p) override;
     virtual int32_t runOnce() override;
+    /** Called to get current Air Quality data
+    @return true if it contains valid data
+    */
+    bool getAirQualityTelemetry(meshtastic_Telemetry *m);
+    virtual meshtastic_MeshPacket *allocReply() override;
     /**
      * Send our Telemetry into the mesh
      */

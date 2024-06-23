@@ -289,6 +289,8 @@ class GPS : private concurrency::OSThread
     // delay counter to allow more sats before fixed position stops GPS thread
     uint8_t fixeddelayCtr = 0;
 
+    const char *powerStateToString();
+
   protected:
     GnssModel_t gnssModel = GNSS_MODEL_UNKNOWN;
 };
