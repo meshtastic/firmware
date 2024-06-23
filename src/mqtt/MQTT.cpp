@@ -14,7 +14,7 @@
 #endif
 #include "mesh/generated/meshtastic/remote_hardware.pb.h"
 #include "sleep.h"
-#if HAS_WIFI && !MESHTASTIC_EXCLUDE_WIFI
+#if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #include <WiFi.h>
 #endif
