@@ -154,6 +154,7 @@ bool isVibrating = false;
 bool eink_found = true;
 
 uint32_t serialSinceMsec;
+bool pauseBluetoothLogging = false;
 
 bool pmu_found;
 
