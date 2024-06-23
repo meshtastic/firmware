@@ -16,8 +16,7 @@ int32_t INA3221Sensor::runOnce()
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
     if (!status) {
-        ina3221.setAddr(INA3221_ADDR42_SDA); // i2c address 0x42
-        ina3221.begin();
+        ina3221.begin(nodeTelemetrySensorsMap[sensorType].second);
         ina3221.setShuntRes(100, 100, 100); // 0.1 Ohm shunt resistors
         status = true;
     } else {
