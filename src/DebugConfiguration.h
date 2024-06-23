@@ -1,5 +1,4 @@
-#ifndef SYSLOG_H
-#define SYSLOG_H
+#pragma once
 
 #include "configuration.h"
 
@@ -155,5 +154,3 @@ class Syslog
 };
 
 #endif // HAS_ETHERNET || HAS_WIFI
-
-#endif // SYSLOG_H
