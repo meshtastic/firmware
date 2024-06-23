@@ -462,6 +462,14 @@ void RadioInterface::applyModemConfig()
         cr = loraConfig.coding_rate;
         bw = loraConfig.bandwidth;
 
+        if (cr == 0) // This parameter is not an integer
+            cr = 5; // An invalid cr/sf will cause the rx1262 init to bail partway through with an error. Which is bad because not
+                    // all registers may be inited.
+        if (sf == 0)
+            sf = 11;
+        if (bw == 0)
+            bw = 250; // Just guess and use long fast settings
+
         if (bw == 31) // This parameter is not an integer
             bw = 31.25;
         if (bw == 62) // Fix for 62.5Khz bandwidth
@@ -520,8 +528,8 @@ void RadioInterface::applyModemConfig()
     maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
 
     LOG_INFO("Radio freq=%.3f, config.lora.frequency_offset=%.3f\n", freq, loraConfig.frequency_offset);
-    LOG_INFO("Set radio: region=%s, name=%s, config=%u, ch=%d, power=%d\n", myRegion->name, channelName, loraConfig.modem_preset,
-             channel_num, power);
+    LOG_INFO("Set radio: region=%s, name=%s, config=%u, ch=%d, power=%d, cr=%d\n", myRegion->name, channelName,
+             loraConfig.modem_preset, channel_num, power, cr);
     LOG_INFO("Radio myRegion->freqStart -> myRegion->freqEnd: %f -> %f (%f mhz)\n", myRegion->freqStart, myRegion->freqEnd,
              myRegion->freqEnd - myRegion->freqStart);
     LOG_INFO("Radio myRegion->numChannels: %d x %.3fkHz\n", numChannels, bw);
