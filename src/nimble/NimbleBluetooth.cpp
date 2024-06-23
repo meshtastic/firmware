@@ -180,7 +180,8 @@ void NimbleBluetooth::setupService()
         ToRadioCharacteristic = bleService->createCharacteristic(TORADIO_UUID, NIMBLE_PROPERTY::WRITE);
         FromRadioCharacteristic = bleService->createCharacteristic(FROMRADIO_UUID, NIMBLE_PROPERTY::READ);
         fromNumCharacteristic = bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ);
-        logRadioCharacteristic = bleService->createCharacteristic(LOGRADIO_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ);
+        logRadioCharacteristic =
+            bleService->createCharacteristic(LOGRADIO_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ, 512U);
     } else {
         ToRadioCharacteristic = bleService->createCharacteristic(
             TORADIO_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_AUTHEN | NIMBLE_PROPERTY::WRITE_ENC);
@@ -189,9 +190,10 @@ void NimbleBluetooth::setupService()
         fromNumCharacteristic =
             bleService->createCharacteristic(FROMNUM_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ |
                                                                NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
-        logRadioCharacteristic =
-            bleService->createCharacteristic(LOGRADIO_UUID, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ |
-                                                                NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC);
+        logRadioCharacteristic = bleService->createCharacteristic(
+            LOGRADIO_UUID,
+            NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC, 512U);
+        logRadioCharacteristic->setValue("Init");
     }
     bluetoothPhoneAPI = new BluetoothPhoneAPI();
 
@@ -245,7 +247,7 @@ void NimbleBluetooth::sendLog(const char *logMessage)
     if (!bleServer || !isConnected() || strlen(logMessage) > 512) {
         return;
     }
-    logRadioCharacteristic->notify(reinterpret_cast<const uint8_t *>(logMessage), strlen(logMessage));
+    logRadioCharacteristic->notify(reinterpret_cast<const uint8_t *>(logMessage), strlen(logMessage), true);
 }
 
 void clearNVS()
