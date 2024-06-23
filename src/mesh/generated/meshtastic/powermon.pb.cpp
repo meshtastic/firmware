@@ -6,7 +6,7 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
-PB_BIND(meshtastic_PowerMon_Event, meshtastic_PowerMon_Event, AUTO)
+PB_BIND(meshtastic_PowerMon, meshtastic_PowerMon, AUTO)
 
 
 
