@@ -23,6 +23,7 @@ class Screen
     void forceDisplay(bool forceUiUpdate = false) {}
     void startFirmwareUpdateScreen() {}
     void startAlert(const char *) {}
+    void endAlert() {}
 };
 } // namespace graphics
 #else
