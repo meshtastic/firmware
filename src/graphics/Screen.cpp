@@ -379,7 +379,7 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
     // in the array of "drawScreen" functions; however,
     // the passed-state doesn't quite reflect the "current"
     // screen, so we have to detect it.
-    if (state->frameState == IN_TRANSITION && state->transitionFrameRelationship == INCOMING) {
+    if (state->frameState == IN_TRANSITION && state->transitionFrameRelationship == TransitionRelationship_INCOMING) {
         // if we're transitioning from the end of the frame list back around to the first
         // frame, then we want this to be `0`
         module_frame = state->transitionFrameTarget;
