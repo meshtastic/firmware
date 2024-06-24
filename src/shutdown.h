@@ -38,12 +38,7 @@ void powerCommandsCheck()
 
 #if defined(ARCH_ESP32) || defined(ARCH_NRF52)
     if (shutdownAtMsec) {
-        screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
-            uint16_t x_offset = display->width() / 2;
-            display->setTextAlignment(TEXT_ALIGN_CENTER);
-            display->setFont(FONT_MEDIUM);
-            display->drawString(x_offset + x, 26 + y, "Shutting down...");
-        });
+        screen->startAlert("Shutting down...");
     }
 #endif
 

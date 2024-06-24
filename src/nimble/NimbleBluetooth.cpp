@@ -72,7 +72,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 {
     virtual uint32_t onPassKeyRequest()
     {
-        static uint32_t passkey = config.bluetooth.fixed_pin;
+        uint32_t passkey = config.bluetooth.fixed_pin;
 
         if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN) {
             LOG_INFO("Using random passkey\n");
@@ -83,7 +83,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 
         powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
 #if HAS_SCREEN
-        screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
+        screen->startAlert([passkey](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
             char btPIN[16] = "888888";
             snprintf(btPIN, sizeof(btPIN), "%06u", passkey);
             int x_offset = display->width() / 2;

@@ -137,12 +137,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
         if (BleOta::getOtaAppVersion().isEmpty()) {
             LOG_INFO("No OTA firmware available, scheduling regular reboot in %d seconds\n", s);
-            screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
-                uint16_t x_offset = display->width() / 2;
-                display->setTextAlignment(TEXT_ALIGN_CENTER);
-                display->setFont(FONT_MEDIUM);
-                display->drawString(x_offset + x, 26 + y, "Rebooting...");
-            });
+            screen->startAlert("Rebooting...");
         } else {
             screen->startFirmwareUpdateScreen();
             BleOta::switchToOtaApp();
@@ -150,12 +145,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         }
 #else
         LOG_INFO("Not on ESP32, scheduling regular reboot in %d seconds\n", s);
-        screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
-            uint16_t x_offset = display->width() / 2;
-            display->setTextAlignment(TEXT_ALIGN_CENTER);
-            display->setFont(FONT_MEDIUM);
-            display->drawString(x_offset + x, 26 + y, "Rebooting...");
-        });
+        screen->startAlert("Rebooting...");
 #endif
         rebootAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
         break;
@@ -821,12 +811,7 @@ void AdminModule::handleGetChannel(const meshtastic_MeshPacket &req, uint32_t ch
 void AdminModule::reboot(int32_t seconds)
 {
     LOG_INFO("Rebooting in %d seconds\n", seconds);
-    screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
-        uint16_t x_offset = display->width() / 2;
-        display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->setFont(FONT_MEDIUM);
-        display->drawString(x_offset + x, 26 + y, "Rebooting...");
-    });
+    screen->startAlert("Rebooting...");
     rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
 }
 

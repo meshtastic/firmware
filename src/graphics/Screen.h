@@ -181,7 +181,7 @@ class Screen : public concurrency::OSThread
         enqueueCmd(cmd);
     }
 
-    void startAlert(char *_alertMessage)
+    void startAlert(const char *_alertMessage)
     {
         startAlert([_alertMessage](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
             uint16_t x_offset = display->width() / 2;
