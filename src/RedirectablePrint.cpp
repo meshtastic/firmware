@@ -169,7 +169,7 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
 
         isContinuationMessage = !hasNewline;
 
-        if (config.bluetooth.device_logging_enabled) {
+        if (config.bluetooth.device_logging_enabled && !pauseBluetoothLogging) {
             bool isBleConnected = false;
 #ifdef ARCH_ESP32
             isBleConnected = nimbleBluetooth && nimbleBluetooth->isActive() && nimbleBluetooth->isConnected();
