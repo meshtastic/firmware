@@ -182,12 +182,7 @@ int32_t ButtonThread::runOnce()
             LOG_BUTTON("Long press!\n");
             powerFSM.trigger(EVENT_PRESS);
             if (screen) {
-                screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
-                    uint16_t x_offset = display->width() / 2;
-                    display->setTextAlignment(TEXT_ALIGN_CENTER);
-                    display->setFont(FONT_MEDIUM);
-                    display->drawString(x_offset + x, 26 + y, "Shutting down...");
-                });
+                screen->startAlert("Shutting down...");
             }
             playBeep();
             break;

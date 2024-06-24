@@ -3,8 +3,6 @@
 #include "configuration.h"
 
 #include "detect/ScanI2C.h"
-#include "gps/GeoCoord.h"
-#include "graphics/ScreenFonts.h"
 #include "mesh/generated/meshtastic/config.pb.h"
 #include <OLEDDisplay.h>
 
@@ -24,6 +22,7 @@ class Screen
     void doDeepSleep() {}
     void forceDisplay(bool forceUiUpdate = false) {}
     void startFirmwareUpdateScreen() {}
+    void startAlert(const char *) {}
 };
 } // namespace graphics
 #else
@@ -32,6 +31,8 @@ class Screen
 #include <OLEDDisplayUi.h>
 
 #include "../configuration.h"
+#include "gps/GeoCoord.h"
+#include "graphics/ScreenFonts.h"
 
 #ifdef USE_ST7567
 #include <ST7567Wire.h>
@@ -178,6 +179,16 @@ class Screen : public concurrency::OSThread
         ScreenCmd cmd;
         cmd.cmd = Cmd::START_ALERT_FRAME;
         enqueueCmd(cmd);
+    }
+
+    void startAlert(char *_alertMessage)
+    {
+        startAlert([_alertMessage](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
+            uint16_t x_offset = display->width() / 2;
+            display->setTextAlignment(TEXT_ALIGN_CENTER);
+            display->setFont(FONT_MEDIUM);
+            display->drawString(x_offset + x, 26 + y, _alertMessage);
+        });
     }
 
     void endAlert()
@@ -414,6 +425,7 @@ class Screen : public concurrency::OSThread
 
     /// callback for current alert frame
     FrameCallback alertFrame;
+
     /// Queue of commands to execute in doTask.
     TypedQueue<ScreenCmd> cmdQueue;
     /// Whether we are using a display

@@ -82,6 +82,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         LOG_INFO("*** Enter passkey %d on the peer side ***\n", passkey);
 
         powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
+#if HAS_SCREEN
         screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
             char btPIN[16] = "888888";
             snprintf(btPIN, sizeof(btPIN), "%06u", passkey);
@@ -107,7 +108,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
             y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_LARGE - 6 : y_offset + FONT_HEIGHT_LARGE + 5;
             display->drawString(x_offset + x, y_offset + y, deviceName);
         });
-        // screen->startBluetoothPinScreen(passkey);
+#endif
         passkeyShowing = true;
 
         return passkey;
