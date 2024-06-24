@@ -1916,12 +1916,22 @@ int32_t Screen::runOnce()
         case Cmd::SHOW_NEXT_FRAME:
             handleShowNextFrame();
             break;
+        case Cmd::START_ALERT_FRAME:
+            LOG_DEBUG("showing bluetooth screen\n");
+            showingNormalScreen = false;
+            EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // E-Ink: Explicitly use fast-refresh for next frame
+
+            setFrameImmediateDraw({alertFrame});
+
+            break;
         case Cmd::START_BLUETOOTH_PIN_SCREEN:
             handleStartBluetoothPinScreen(cmd.bluetooth_pin);
             break;
         case Cmd::START_FIRMWARE_UPDATE_SCREEN:
             handleStartFirmwareUpdateScreen();
             break;
+        case Cmd::STOP_ALERT_FRAME:
+            alertFrame = nullptr;
         case Cmd::STOP_BLUETOOTH_PIN_SCREEN:
         case Cmd::STOP_BOOT_SCREEN:
             EINK_ADD_FRAMEFLAG(dispdev, COSMETIC); // E-Ink: Explicitly use full-refresh for next frame

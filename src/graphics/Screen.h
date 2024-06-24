@@ -171,6 +171,22 @@ class Screen : public concurrency::OSThread
     void showPrevFrame() { enqueueCmd(ScreenCmd{.cmd = Cmd::SHOW_PREV_FRAME}); }
     void showNextFrame() { enqueueCmd(ScreenCmd{.cmd = Cmd::SHOW_NEXT_FRAME}); }
 
+    // generic alert start
+    void startAlert(FrameCallback *_alertFrame)
+    {
+        alertFrame = _alertFrame;
+        ScreenCmd cmd;
+        cmd.cmd = Cmd::START_ALERT_FRAME;
+        enqueueCmd(cmd);
+    }
+
+    void endAlert()
+    {
+        ScreenCmd cmd;
+        cmd.cmd = Cmd::STOP_ALERT_FRAME;
+        enqueueCmd(cmd);
+    }
+
     /// Starts showing the Bluetooth PIN screen.
     //
     // Switches over to a static frame showing the Bluetooth pairing screen
@@ -426,6 +442,8 @@ class Screen : public concurrency::OSThread
     bool digitalWatchFace = true;
 #endif
 
+    /// callback for current alert frame
+    FrameCallback *alertFrame = nullptr;
     /// Queue of commands to execute in doTask.
     TypedQueue<ScreenCmd> cmdQueue;
     /// Whether we are using a display
