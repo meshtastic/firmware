@@ -232,9 +232,9 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #if !MESHTASTIC_EXCLUDE_GPS
             if (gps != nullptr)
                 gps->enable();
-#endif
             // Send our new fixed position to the mesh for good measure
             positionModule->sendOurPosition();
+#endif
         }
         break;
     }
