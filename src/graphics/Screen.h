@@ -174,10 +174,12 @@ class Screen : public concurrency::OSThread
     // generic alert start
     void startAlert(FrameCallback *_alertFrame)
     {
+        LOG_DEBUG("getting alert screen\n");
         alertFrame = _alertFrame;
         ScreenCmd cmd;
         cmd.cmd = Cmd::START_ALERT_FRAME;
         enqueueCmd(cmd);
+        LOG_DEBUG("Done getting alert screen\n");
     }
 
     void endAlert()
