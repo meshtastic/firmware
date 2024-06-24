@@ -1309,49 +1309,6 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
     }
 }
 #endif
-namespace
-{
-
-/// A basic 2D point class for drawing
-class Point
-{
-  public:
-    float x, y;
-
-    Point(float _x, float _y) : x(_x), y(_y) {}
-
-    /// Apply a rotation around zero (standard rotation matrix math)
-    void rotate(float radian)
-    {
-        float cos = cosf(radian), sin = sinf(radian);
-        float rx = x * cos + y * sin, ry = -x * sin + y * cos;
-
-        x = rx;
-        y = ry;
-    }
-
-    void translate(int16_t dx, int dy)
-    {
-        x += dx;
-        y += dy;
-    }
-
-    void scale(float f)
-    {
-        // We use -f here to counter the flip that happens
-        // on the y axis when drawing and rotating on screen
-        x *= f;
-        y *= -f;
-    }
-};
-
-} // namespace
-
-static void drawLine(OLEDDisplay *d, const Point &p1, const Point &p2)
-{
-    d->drawLine(p1.x, p1.y, p2.x, p2.y);
-}
-
 /**
  * Given a recent lat/lon return a guess of the heading the user is walking on.
  *
@@ -1382,31 +1339,6 @@ static float estimatedHeading(double lat, double lon)
     return b;
 }
 
-static uint16_t getCompassDiam(OLEDDisplay *display)
-{
-    uint16_t diam = 0;
-    uint16_t offset = 0;
-
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT)
-        offset = FONT_HEIGHT_SMALL;
-
-    // get the smaller of the 2 dimensions and subtract 20
-    if (display->getWidth() > (display->getHeight() - offset)) {
-        diam = display->getHeight() - offset;
-        // if 2/3 of the other size would be smaller, use that
-        if (diam > (display->getWidth() * 2 / 3)) {
-            diam = display->getWidth() * 2 / 3;
-        }
-    } else {
-        diam = display->getWidth();
-        if (diam > ((display->getHeight() - offset) * 2 / 3)) {
-            diam = (display->getHeight() - offset) * 2 / 3;
-        }
-    }
-
-    return diam - 20;
-};
-
 /// We will skip one node - the one for us, so we just blindly loop over all
 /// nodes
 static size_t nodeIndex;
@@ -1430,7 +1362,7 @@ static void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t comp
     drawLine(display, leftArrow, tip);
     drawLine(display, rightArrow, tip);
 }
-
+/*
 // Draw north
 static void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading)
 {
@@ -1451,7 +1383,7 @@ static void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t com
     drawLine(display, N1, N3);
     drawLine(display, N2, N4);
     drawLine(display, N1, N4);
-}
+}*/
 
 /// Convert an integer GPS coords to a floating point
 #define DegD(i) (i * 1e-7)
@@ -1917,10 +1849,9 @@ int32_t Screen::runOnce()
             handleShowNextFrame();
             break;
         case Cmd::START_ALERT_FRAME: {
-            LOG_DEBUG("showing alert screen1\n");
-            LOG_DEBUG("showing alert screen2\n");
+            showingBootScreen = false; // this should avoid the edge case where an alert triggers before the boot screen goes away
             showingNormalScreen = false;
-            FrameCallback frames[] = {*alertFrame};
+            static FrameCallback frames[] = {alertFrame};
             EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // E-Ink: Explicitly use fast-refresh for next frame
             setFrameImmediateDraw(frames);
             break;
@@ -1932,7 +1863,6 @@ int32_t Screen::runOnce()
             handleStartFirmwareUpdateScreen();
             break;
         case Cmd::STOP_ALERT_FRAME:
-            alertFrame = nullptr;
         case Cmd::STOP_BLUETOOTH_PIN_SCREEN:
         case Cmd::STOP_BOOT_SCREEN:
             EINK_ADD_FRAMEFLAG(dispdev, COSMETIC); // E-Ink: Explicitly use full-refresh for next frame

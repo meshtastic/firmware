@@ -16,6 +16,7 @@
 #include <Wire.h>
 #ifdef RAK_4631
 #include "Fusion/Fusion.h"
+#include "graphics/Screen.h"
 #include "graphics/ScreenFonts.h"
 #include <Rak_BMX160.h>
 #endif
@@ -102,10 +103,10 @@ class AccelerometerThread : public concurrency::OSThread
             bmx160.getAllData(&magAccel, NULL, &gAccel);
 
             // expirimental calibrate routine. Limited to between 10 and 30 seconds after boot
-            if (millis() > 15 * 1000 && millis() < 30 * 1000) {
+            if (millis() > 12 * 1000 && millis() < 30 * 1000) {
                 if (!showingScreen) {
                     showingScreen = true;
-                    screen->startAlert((FrameCallback *)&drawFrameCalibration);
+                    screen->startAlert((FrameCallback)drawFrameCalibration);
                 }
                 if (magAccel.x > highestX)
                     highestX = magAccel.x;
@@ -269,15 +270,25 @@ class AccelerometerThread : public concurrency::OSThread
     RAK_BMX160 bmx160;
     float highestX = 0, lowestX = 0, highestY = 0, lowestY = 0, highestZ = 0, lowestZ = 0;
 
-  public:
     static void drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
     {
-        LOG_DEBUG("Made it!\n");
         int x_offset = display->width() / 2;
         int y_offset = display->height() <= 80 ? 0 : 32;
-        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->setFont(FONT_MEDIUM);
-        display->drawString(x_offset + x, y_offset + y, "Calibrating");
+        display->drawString(x, y, "Calibrating\nCompass");
+        int16_t compassX = 0, compassY = 0;
+
+        // coordinates for the center of the compass/circle
+        if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
+            compassX = x + display->getWidth() - getCompassDiam(display) / 2 - 5;
+            compassY = y + display->getHeight() / 2;
+        } else {
+            compassX = x + display->getWidth() - getCompassDiam(display) / 2 - 5;
+            compassY = y + FONT_HEIGHT_SMALL + (display->getHeight() - FONT_HEIGHT_SMALL) / 2;
+        }
+        display->drawCircle(compassX, compassY, getCompassDiam(display) / 2);
+        drawCompassNorth(display, compassX, compassY, screen->getHeading() * PI / 180);
     }
 #endif
 };
