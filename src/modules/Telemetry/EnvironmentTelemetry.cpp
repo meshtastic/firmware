@@ -188,7 +188,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     if (lastMeasurementPacket == nullptr) {
         // If there's no valid packet, display "Environment"
         display->drawString(x, y, "Environment");
-        display->drawString(x, y += fontHeight(FONT_SMALL), "No measurement");
+        display->drawString(x, y += _fontHeight(FONT_SMALL), "No measurement");
         return;
     }
 
@@ -213,31 +213,31 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     }
 
     // Continue with the remaining details
-    display->drawString(x, y += fontHeight(FONT_SMALL),
+    display->drawString(x, y += _fontHeight(FONT_SMALL),
                         "Temp/Hum: " + last_temp + " / " +
                             String(lastMeasurement.variant.environment_metrics.relative_humidity, 0) + "%");
 
     if (lastMeasurement.variant.environment_metrics.barometric_pressure != 0) {
-        display->drawString(x, y += fontHeight(FONT_SMALL),
+        display->drawString(x, y += _fontHeight(FONT_SMALL),
                             "Press: " + String(lastMeasurement.variant.environment_metrics.barometric_pressure, 0) + "hPA");
     }
 
     if (lastMeasurement.variant.environment_metrics.voltage != 0) {
-        display->drawString(x, y += fontHeight(FONT_SMALL),
+        display->drawString(x, y += _fontHeight(FONT_SMALL),
                             "Volt/Cur: " + String(lastMeasurement.variant.environment_metrics.voltage, 0) + "V / " +
                                 String(lastMeasurement.variant.environment_metrics.current, 0) + "mA");
     }
 
     if (lastMeasurement.variant.environment_metrics.iaq != 0) {
-        display->drawString(x, y += fontHeight(FONT_SMALL), "IAQ: " + String(lastMeasurement.variant.environment_metrics.iaq));
+        display->drawString(x, y += _fontHeight(FONT_SMALL), "IAQ: " + String(lastMeasurement.variant.environment_metrics.iaq));
     }
 
     if (lastMeasurement.variant.environment_metrics.distance != 0)
-        display->drawString(x, y += fontHeight(FONT_SMALL),
+        display->drawString(x, y += _fontHeight(FONT_SMALL),
                             "Water Level: " + String(lastMeasurement.variant.environment_metrics.distance, 0) + "mm");
 
     if (lastMeasurement.variant.environment_metrics.weight != 0)
-        display->drawString(x, y += fontHeight(FONT_SMALL),
+        display->drawString(x, y += _fontHeight(FONT_SMALL),
                             "Weight: " + String(lastMeasurement.variant.environment_metrics.weight, 0) + "kg");
 }
 
