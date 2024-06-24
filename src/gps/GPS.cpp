@@ -815,6 +815,8 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
     switch (newState) {
     case GPS_ACTIVE:
     case GPS_IDLE:
+        if (oldState == GPS_ACTIVE || oldState == GPS_IDLE) // If hardware already awake, no changes needed
+            break;
         assert(sleepTime == 0); // sleepTime arg has no impact here!
         writePinEN(true);       // Power (EN pin): on
         setPowerPMU(true);      // Power (PMU): on
