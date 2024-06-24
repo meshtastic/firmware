@@ -951,7 +951,7 @@ void GPS::setPowerUBLOX(bool on, uint32_t sleepMs)
         // If we're being asked to sleep indefinitely, make *sure* we're awake first, to process the new sleep command
         if (sleepMs == 0) {
             setPowerUBLOX(true);
-            delay(100);
+            delay(500);
         }
 
         // Determine hardware version
