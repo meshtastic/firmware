@@ -1934,7 +1934,11 @@ int32_t Screen::runOnce()
             showingBootScreen = false; // this should avoid the edge case where an alert triggers before the boot screen goes away
             showingNormalScreen = false;
             alertFrames[0] = alertFrame;
-            EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // E-Ink: Explicitly use fast-refresh for next frame
+#ifdef USE_EINK
+            EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Use fast-refresh for next frame, no skip please
+            EINK_ADD_FRAMEFLAG(dispdev, BLOCKING);    // Edge case: if this frame is promoted to COSMETIC, wait for update
+            handleSetOn(true); // Ensure power-on to receive deep-sleep screensaver (PowerFSM should handle?)
+#endif
             setFrameImmediateDraw(alertFrames);
             break;
         }
