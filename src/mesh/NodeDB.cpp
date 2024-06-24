@@ -180,7 +180,12 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
 
     if (didFactoryReset) {
         LOG_INFO("Rebooting due to factory reset");
-        screen->startRebootScreen();
+        screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
+            uint16_t x_offset = display->width() / 2;
+            display->setTextAlignment(TEXT_ALIGN_CENTER);
+            display->setFont(FONT_MEDIUM);
+            display->drawString(x_offset + x, 26 + y, "Rebooting...");
+        });
         rebootAtMsec = millis() + (5 * 1000);
     }
 

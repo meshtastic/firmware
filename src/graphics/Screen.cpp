@@ -393,31 +393,6 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
     pi.drawFrame(display, state, x, y);
 }
 
-static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    int x_offset = display->width() / 2;
-    int y_offset = display->height() <= 80 ? 0 : 32;
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->setFont(FONT_MEDIUM);
-    display->drawString(x_offset + x, y_offset + y, "Bluetooth");
-
-    display->setFont(FONT_SMALL);
-    y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
-    display->drawString(x_offset + x, y_offset + y, "Enter this code");
-
-    display->setFont(FONT_LARGE);
-    String displayPin(btPIN);
-    String pin = displayPin.substring(0, 3) + " " + displayPin.substring(3, 6);
-    y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
-    display->drawString(x_offset + x, y_offset + y, pin);
-
-    display->setFont(FONT_SMALL);
-    String deviceName = "Name: ";
-    deviceName.concat(getDeviceName());
-    y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_LARGE - 6 : y_offset + FONT_HEIGHT_LARGE + 5;
-    display->drawString(x_offset + x, y_offset + y, deviceName);
-}
-
 static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->setTextAlignment(TEXT_ALIGN_CENTER);
@@ -1958,19 +1933,15 @@ int32_t Screen::runOnce()
         case Cmd::START_ALERT_FRAME: {
             showingBootScreen = false; // this should avoid the edge case where an alert triggers before the boot screen goes away
             showingNormalScreen = false;
-            static FrameCallback frames[] = {alertFrame};
+            alertFrames[0] = alertFrame;
             EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // E-Ink: Explicitly use fast-refresh for next frame
-            setFrameImmediateDraw(frames);
+            setFrameImmediateDraw(alertFrames);
             break;
         }
-        case Cmd::START_BLUETOOTH_PIN_SCREEN:
-            handleStartBluetoothPinScreen(cmd.bluetooth_pin);
-            break;
         case Cmd::START_FIRMWARE_UPDATE_SCREEN:
             handleStartFirmwareUpdateScreen();
             break;
         case Cmd::STOP_ALERT_FRAME:
-        case Cmd::STOP_BLUETOOTH_PIN_SCREEN:
         case Cmd::STOP_BOOT_SCREEN:
             EINK_ADD_FRAMEFLAG(dispdev, COSMETIC); // E-Ink: Explicitly use full-refresh for next frame
             setFrames();
@@ -1978,12 +1949,6 @@ int32_t Screen::runOnce()
         case Cmd::PRINT:
             handlePrint(cmd.print_text);
             free(cmd.print_text);
-            break;
-        case Cmd::START_SHUTDOWN_SCREEN:
-            handleShutdownScreen();
-            break;
-        case Cmd::START_REBOOT_SCREEN:
-            handleRebootScreen();
             break;
         default:
             LOG_ERROR("Invalid screen cmd\n");
@@ -2225,57 +2190,11 @@ void Screen::setFrames()
     setFastFramerate(); // Draw ASAP
 }
 
-void Screen::handleStartBluetoothPinScreen(uint32_t pin)
-{
-    LOG_DEBUG("showing bluetooth screen\n");
-    showingNormalScreen = false;
-    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // E-Ink: Explicitly use fast-refresh for next frame
-
-    static FrameCallback frames[] = {drawFrameBluetooth};
-    snprintf(btPIN, sizeof(btPIN), "%06u", pin);
-    setFrameImmediateDraw(frames);
-}
-
 void Screen::setFrameImmediateDraw(FrameCallback *drawFrames)
 {
     ui->disableAllIndicators();
     ui->setFrames(drawFrames, 1);
     setFastFramerate();
-}
-
-void Screen::handleShutdownScreen()
-{
-    LOG_DEBUG("showing shutdown screen\n");
-    showingNormalScreen = false;
-#ifdef USE_EINK
-    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Use fast-refresh for next frame, no skip please
-    EINK_ADD_FRAMEFLAG(dispdev, BLOCKING);    // Edge case: if this frame is promoted to COSMETIC, wait for update
-    handleSetOn(true);                        // Ensure power-on to receive deep-sleep screensaver (PowerFSM should handle?)
-#endif
-
-    auto frame = [](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
-        drawFrameText(display, state, x, y, "Shutting down...");
-    };
-    static FrameCallback frames[] = {frame};
-
-    setFrameImmediateDraw(frames);
-}
-
-void Screen::handleRebootScreen()
-{
-    LOG_DEBUG("showing reboot screen\n");
-    showingNormalScreen = false;
-#ifdef USE_EINK
-    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Use fast-refresh for next frame, no skip please
-    EINK_ADD_FRAMEFLAG(dispdev, BLOCKING);    // Edge case: if this frame is promoted to COSMETIC, wait for update
-    handleSetOn(true);                        // Power-on to show rebooting screen (PowerFSM should handle?)
-#endif
-
-    auto frame = [](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
-        drawFrameText(display, state, x, y, "Rebooting...");
-    };
-    static FrameCallback frames[] = {frame};
-    setFrameImmediateDraw(frames);
 }
 
 void Screen::handleStartFirmwareUpdateScreen()

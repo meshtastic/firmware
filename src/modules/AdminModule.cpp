@@ -145,7 +145,12 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         }
 #else
         LOG_INFO("Not on ESP32, scheduling regular reboot in %d seconds\n", s);
-        screen->startRebootScreen();
+        screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
+            uint16_t x_offset = display->width() / 2;
+            display->setTextAlignment(TEXT_ALIGN_CENTER);
+            display->setFont(FONT_MEDIUM);
+            display->drawString(x_offset + x, 26 + y, "Rebooting...");
+        });
 #endif
         rebootAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
         break;
@@ -811,7 +816,12 @@ void AdminModule::handleGetChannel(const meshtastic_MeshPacket &req, uint32_t ch
 void AdminModule::reboot(int32_t seconds)
 {
     LOG_INFO("Rebooting in %d seconds\n", seconds);
-    screen->startRebootScreen();
+    screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
+        uint16_t x_offset = display->width() / 2;
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->setFont(FONT_MEDIUM);
+        display->drawString(x_offset + x, 26 + y, "Rebooting...");
+    });
     rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
 }
 

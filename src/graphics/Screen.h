@@ -23,10 +23,7 @@ class Screen
     void print(const char *) {}
     void doDeepSleep() {}
     void forceDisplay(bool forceUiUpdate = false) {}
-    void startBluetoothPinScreen(uint32_t pin) {}
-    void stopBluetoothPinScreen() {}
     void startRebootScreen() {}
-    void startShutdownScreen() {}
     void startFirmwareUpdateScreen() {}
 };
 } // namespace graphics
@@ -191,36 +188,10 @@ class Screen : public concurrency::OSThread
         enqueueCmd(cmd);
     }
 
-    /// Starts showing the Bluetooth PIN screen.
-    //
-    // Switches over to a static frame showing the Bluetooth pairing screen
-    // with the PIN.
-    void startBluetoothPinScreen(uint32_t pin)
-    {
-        ScreenCmd cmd;
-        cmd.cmd = Cmd::START_BLUETOOTH_PIN_SCREEN;
-        cmd.bluetooth_pin = pin;
-        enqueueCmd(cmd);
-    }
-
     void startFirmwareUpdateScreen()
     {
         ScreenCmd cmd;
         cmd.cmd = Cmd::START_FIRMWARE_UPDATE_SCREEN;
-        enqueueCmd(cmd);
-    }
-
-    void startShutdownScreen()
-    {
-        ScreenCmd cmd;
-        cmd.cmd = Cmd::START_SHUTDOWN_SCREEN;
-        enqueueCmd(cmd);
-    }
-
-    void startRebootScreen()
-    {
-        ScreenCmd cmd;
-        cmd.cmd = Cmd::START_REBOOT_SCREEN;
         enqueueCmd(cmd);
     }
 
@@ -241,9 +212,6 @@ class Screen : public concurrency::OSThread
 
     void setFunctionSymbal(std::string sym);
     void removeFunctionSymbal(std::string sym);
-
-    /// Stops showing the bluetooth PIN screen.
-    void stopBluetoothPinScreen() { enqueueCmd(ScreenCmd{.cmd = Cmd::STOP_BLUETOOTH_PIN_SCREEN}); }
 
     /// Stops showing the boot screen.
     void stopBootScreen() { enqueueCmd(ScreenCmd{.cmd = Cmd::STOP_BOOT_SCREEN}); }
@@ -380,6 +348,7 @@ class Screen : public concurrency::OSThread
     bool isAUTOOled = false;
 
   private:
+    FrameCallback alertFrames[1];
     struct ScreenCmd {
         Cmd cmd;
         union {
@@ -405,11 +374,8 @@ class Screen : public concurrency::OSThread
     void handleOnPress();
     void handleShowNextFrame();
     void handleShowPrevFrame();
-    void handleStartBluetoothPinScreen(uint32_t pin);
     void handlePrint(const char *text);
     void handleStartFirmwareUpdateScreen();
-    void handleShutdownScreen();
-    void handleRebootScreen();
     /// Rebuilds our list of frames (screens) to default ones.
     void setFrames();
 
