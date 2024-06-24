@@ -98,8 +98,6 @@ class PhoneAPI
 
     bool isConnected() { return state != STATE_SEND_NOTHING; }
 
-    void setInitialState() { state = STATE_SEND_MY_INFO; }
-
   protected:
     /// Our fromradio packet while it is being assembled
     meshtastic_FromRadio fromRadioScratch = {};
