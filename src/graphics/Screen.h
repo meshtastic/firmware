@@ -23,7 +23,6 @@ class Screen
     void print(const char *) {}
     void doDeepSleep() {}
     void forceDisplay(bool forceUiUpdate = false) {}
-    void startRebootScreen() {}
     void startFirmwareUpdateScreen() {}
 };
 } // namespace graphics
