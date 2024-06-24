@@ -25,6 +25,14 @@
 
 #include "SerialConsole.h"
 
+// If defined we will include support for ARM ICE "semihosting" for a virtual
+// console over the JTAG port (to replace the normal serial port)
+// Note: Normally this flag is passed into the gcc commandline by platformio.ini.
+// for an example see env:rak4631_dap.
+// #ifndef USE_SEMIHOSTING
+// #define USE_SEMIHOSTING
+// #endif
+
 #define DEBUG_PORT (*console) // Serial debug port
 
 #ifdef USE_SEGGER
