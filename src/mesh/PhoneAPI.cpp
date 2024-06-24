@@ -46,6 +46,7 @@ void PhoneAPI::handleStartConfig()
 
     // even if we were already connected - restart our state machine
     state = STATE_SEND_MY_INFO;
+    pauseBluetoothLogging = true;
 
     LOG_INFO("Starting API client config\n");
     nodeInfoForPhone.num = 0; // Don't keep returning old nodeinfos
@@ -352,9 +353,11 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         fromRadioScratch.config_complete_id = config_nonce;
         config_nonce = 0;
         state = STATE_SEND_PACKETS;
+        pauseBluetoothLogging = false;
         break;
 
     case STATE_SEND_PACKETS:
+        pauseBluetoothLogging = false;
         // Do we have a message from the mesh or packet from the local device?
         LOG_INFO("getFromRadio=STATE_SEND_PACKETS\n");
         if (queueStatusPacketForPhone) {
@@ -398,6 +401,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
 void PhoneAPI::handleDisconnect()
 {
+    pauseBluetoothLogging = false;
     LOG_INFO("PhoneAPI disconnect\n");
 }
 
