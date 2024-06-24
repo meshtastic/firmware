@@ -149,12 +149,42 @@ void nrf52Loop()
     checkSDEvents();
 }
 
+#ifdef USE_SEMIHOSTING
+#include <SemihostingStream.h>
+
+/**
+ * Note: this variable is in BSS and therfore false by default.  But the gdbinit
+ * file will be installing a temporary breakpoint that changes wantSemihost to true.
+ */
+bool wantSemihost;
+
+/**
+ * Turn on semihosting if the ICE debugger wants it.
+ */
+void nrf52InitSemiHosting()
+{
+    if (wantSemihost) {
+        static SemihostingStream semiStream;
+        // We must dynamically alloc because the constructor does semihost operations which
+        // would crash any load not talking to a debugger
+        semiStream.open();
+        semiStream.println("Semihosting starts!");
+        // Redirect our serial output to instead go via the ICE port
+        console->setDestination(&semiStream);
+    }
+}
+#endif
+
 void nrf52Setup()
 {
-    auto why = NRF_POWER->RESETREAS;
+    uint32_t why = NRF_POWER->RESETREAS;
     // per
     // https://infocenter.nordicsemi.com/index.jsp?topic=%2Fcom.nordic.infocenter.nrf52832.ps.v1.1%2Fpower.html
     LOG_DEBUG("Reset reason: 0x%x\n", why);
+
+#ifdef USE_SEMIHOSTING
+    nrf52InitSemiHosting();
+#endif
 
     // Per
     // https://devzone.nordicsemi.com/nordic/nordic-blog/b/blog/posts/monitor-mode-debugging-with-j-link-and-gdbeclipse
