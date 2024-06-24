@@ -948,6 +948,12 @@ void GPS::setPowerUBLOX(bool on, uint32_t sleepMs)
     else {
         uint8_t msglen;
 
+        // If we're being asked to sleep indefinitely, make *sure* we're awake first, to process the new sleep command
+        if (sleepMs == 0) {
+            setPowerUBLOX(true);
+            delay(100);
+        }
+
         // Determine hardware version
         if (strncmp(info.hwVersion, "000A0000", 8) != 0) {
             // Encode the sleep time in millis into the packet
@@ -1722,11 +1728,11 @@ void GPS::toggleGpsMode()
 {
     if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
-        LOG_DEBUG("Flag set to false for gps power. GpsMode: DISABLED\n");
+        LOG_INFO("User toggled GpsMode. Now DISABLED.\n");
         disable();
     } else if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED) {
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
-        LOG_DEBUG("Flag set to true to restore power. GpsMode: ENABLED\n");
+        LOG_INFO("User toggled GpsMode. Now ENABLED\n");
         enable();
     }
 }
