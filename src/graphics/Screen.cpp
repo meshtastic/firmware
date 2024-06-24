@@ -2242,10 +2242,8 @@ void Screen::setFrames()
     }
 
     // If we have a waypoint (not expired, not deleted)
-    if (devicestate.has_rx_waypoint && shouldDrawMessage(&devicestate.rx_waypoint)) {
-        // If waypoint valid
-        if (shouldDrawWaypoint(&devicestate.rx_waypoint))
-            normalFrames[numframes++] = drawWaypointFrame;
+    if (devicestate.has_rx_waypoint && shouldDrawWaypoint(&devicestate.rx_waypoint)) {
+        normalFrames[numframes++] = drawWaypointFrame;
     }
 
     // then all the nodes
