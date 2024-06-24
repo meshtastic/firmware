@@ -72,7 +72,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 {
     virtual uint32_t onPassKeyRequest()
     {
-        uint32_t passkey = config.bluetooth.fixed_pin;
+        static uint32_t passkey = config.bluetooth.fixed_pin;
 
         if (config.bluetooth.mode == meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN) {
             LOG_INFO("Using random passkey\n");
@@ -119,7 +119,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 
         if (passkeyShowing) {
             passkeyShowing = false;
-            screen->stopAlert();
+            screen->endAlert();
         }
     }
 
