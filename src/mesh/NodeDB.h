@@ -155,8 +155,8 @@ class NodeDB
             localPosition.timestamp = position.timestamp > 0 ? position.timestamp : position.time;
             return;
         }
-        LOG_DEBUG("Setting local position: latitude=%i, longitude=%i, time=%u, timestamp=%u\n", position.latitude_i,
-                  position.longitude_i, position.time, position.timestamp);
+        LOG_DEBUG("Setting local position: lat=%i lon=%i time=%u timestamp=%u\n", position.latitude_i, position.longitude_i,
+                  position.time, position.timestamp);
         localPosition = position;
     }
 

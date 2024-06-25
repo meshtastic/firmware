@@ -32,10 +32,19 @@ class EnvironmentTelemetryModule : private concurrency::OSThread, public Protobu
     */
     virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *p) override;
     virtual int32_t runOnce() override;
+    /** Called to get current Environment telemetry data
+    @return true if it contains valid data
+    */
+    bool getEnvironmentTelemetry(meshtastic_Telemetry *m);
+    virtual meshtastic_MeshPacket *allocReply() override;
     /**
      * Send our Telemetry into the mesh
      */
     bool sendTelemetry(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
+
+    virtual AdminMessageHandleResult handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
+                                                                 meshtastic_AdminMessage *request,
+                                                                 meshtastic_AdminMessage *response) override;
 
   private:
     float CelsiusToFahrenheit(float c);

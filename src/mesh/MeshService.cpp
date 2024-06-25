@@ -373,8 +373,8 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
     pos.time = getValidTime(RTCQualityFromNet);
 
     // In debug logs, identify position by @timestamp:stage (stage 4 = nodeDB)
-    LOG_DEBUG("onGPSChanged() pos@%x, time=%u, lat=%d, lon=%d, alt=%d\n", pos.timestamp, pos.time, pos.latitude_i,
-              pos.longitude_i, pos.altitude);
+    LOG_DEBUG("onGPSChanged() pos@%x time=%u lat=%d lon=%d alt=%d\n", pos.timestamp, pos.time, pos.latitude_i, pos.longitude_i,
+              pos.altitude);
 
     // Update our current position in the local DB
     nodeDB->updatePosition(nodeDB->getNodeNum(), pos, RX_SRC_LOCAL);
