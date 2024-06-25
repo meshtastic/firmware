@@ -45,6 +45,9 @@ PB_BIND(meshtastic_QueueStatus, meshtastic_QueueStatus, AUTO)
 PB_BIND(meshtastic_FromRadio, meshtastic_FromRadio, 2)
 
 
+PB_BIND(meshtastic_FileInfo, meshtastic_FileInfo, AUTO)
+
+
 PB_BIND(meshtastic_ToRadio, meshtastic_ToRadio, 2)
 
 
