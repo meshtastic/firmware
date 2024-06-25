@@ -82,7 +82,33 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         LOG_INFO("*** Enter passkey %d on the peer side ***\n", passkey);
 
         powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
-        screen->startBluetoothPinScreen(passkey);
+#if HAS_SCREEN
+        screen->startAlert([passkey](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
+            char btPIN[16] = "888888";
+            snprintf(btPIN, sizeof(btPIN), "%06u", passkey);
+            int x_offset = display->width() / 2;
+            int y_offset = display->height() <= 80 ? 0 : 32;
+            display->setTextAlignment(TEXT_ALIGN_CENTER);
+            display->setFont(FONT_MEDIUM);
+            display->drawString(x_offset + x, y_offset + y, "Bluetooth");
+
+            display->setFont(FONT_SMALL);
+            y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
+            display->drawString(x_offset + x, y_offset + y, "Enter this code");
+
+            display->setFont(FONT_LARGE);
+            String displayPin(btPIN);
+            String pin = displayPin.substring(0, 3) + " " + displayPin.substring(3, 6);
+            y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
+            display->drawString(x_offset + x, y_offset + y, pin);
+
+            display->setFont(FONT_SMALL);
+            String deviceName = "Name: ";
+            deviceName.concat(getDeviceName());
+            y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_LARGE - 6 : y_offset + FONT_HEIGHT_LARGE + 5;
+            display->drawString(x_offset + x, y_offset + y, deviceName);
+        });
+#endif
         passkeyShowing = true;
 
         return passkey;
@@ -94,7 +120,7 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
 
         if (passkeyShowing) {
             passkeyShowing = false;
-            screen->stopBluetoothPinScreen();
+            screen->endAlert();
         }
     }
 
