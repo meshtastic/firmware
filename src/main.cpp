@@ -930,7 +930,7 @@ void setup()
         nodeDB->saveToDisk(SEGMENT_CONFIG);
         if (!rIf->reconfigure()) {
             LOG_WARN("Reconfigure failed, rebooting\n");
-            screen->startRebootScreen();
+            screen->startAlert("Rebooting...");
             rebootAtMsec = millis() + 5000;
         }
     }
