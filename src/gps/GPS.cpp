@@ -815,28 +815,28 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
     switch (newState) {
     case GPS_ACTIVE:
     case GPS_IDLE:
+        assert(sleepTime == 0);                             // sleepTime arg has no impact here!
         if (oldState == GPS_ACTIVE || oldState == GPS_IDLE) // If hardware already awake, no changes needed
             break;
-        assert(sleepTime == 0); // sleepTime arg has no impact here!
-        writePinEN(true);       // Power (EN pin): on
-        setPowerPMU(true);      // Power (PMU): on
-        writePinStandby(true);  // Standby (pin): awake
-        setPowerUBLOX(true);    // Standby (UBLOX): awake
+        writePinEN(true);      // Power (EN pin): on
+        setPowerPMU(true);     // Power (PMU): on
+        writePinStandby(true); // Standby (pin): awake
+        setPowerUBLOX(true);   // Standby (UBLOX): awake
         break;
 
     case GPS_SOFTSLEEP:
         assert(sleepTime > 0);           // This is a timed sleep!
         writePinEN(true);                // Power (EN pin): on
         setPowerPMU(true);               // Power (PMU): on
-        writePinStandby(true);           // Standby (pin): asleep
+        writePinStandby(false);          // Standby (pin): asleep
         setPowerUBLOX(false, sleepTime); // Standby (UBLOX): asleep, timed
         break;
 
     case GPS_HARDSLEEP:
         assert(sleepTime > 0);           // This is a timed sleep!
-        writePinEN(true);                // Power (EN pin): off
-        setPowerPMU(true);               // Power (PMU): off
-        writePinStandby(true);           // Standby (pin): off
+        writePinEN(false);               // Power (EN pin): off
+        setPowerPMU(false);              // Power (PMU): off
+        writePinStandby(false);          // Standby (pin): asleep
         setPowerUBLOX(false, sleepTime); // Standby (UBLOX): asleep, timed
         break;
 
@@ -844,7 +844,7 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         assert(sleepTime == 0);  // This is an indefinite sleep
         writePinEN(false);       // Power (EN pin): off
         setPowerPMU(false);      // Power (PMU): off
-        writePinStandby(false);  // Standby (pin): off
+        writePinStandby(false);  // Standby (pin): asleep
         setPowerUBLOX(false, 0); // Standby (UBLOX): asleep, indefinitely
         break;
     }
