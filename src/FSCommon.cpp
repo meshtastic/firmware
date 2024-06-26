@@ -112,7 +112,7 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
 #ifdef ARCH_ESP32
                 std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(file.path(), levels - 1);
 #else
-                std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(file.path(), levels - 1);
+                std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(file.name(), levels - 1);
 #endif
                 filenames.insert(filenames.end(), subDirFilenames.begin(), subDirFilenames.end());
                 file.close();
