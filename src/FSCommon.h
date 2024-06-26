@@ -1,6 +1,7 @@
 #pragma once
 
 #include "configuration.h"
+#include <vector>
 
 // Cross platform filesystem API
 
@@ -49,6 +50,7 @@ using namespace Adafruit_LittleFS_Namespace;
 void fsInit();
 bool copyFile(const char *from, const char *to);
 bool renameFile(const char *pathFrom, const char *pathTo);
+std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels);
 void listDir(const char *dirname, uint8_t levels, bool del);
 void rmDir(const char *dirname);
 void setupSDCard();
