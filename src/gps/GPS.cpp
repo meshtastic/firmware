@@ -22,18 +22,6 @@
 #define GPS_RESET_MODE HIGH
 #endif
 
-// How many minutes between updates makes it worthwhile to power-off the GPS (hard sleep)
-// Shorter than this, and GPS will only enter standby (soft sleep)
-#ifndef GPS_HARDSLEEP_THRESHOLD_MINUTES
-#define GPS_HARDSLEEP_THRESHOLD_MINUTES 15
-#endif
-
-// How many seconds between updates make it worthwhile to enter standby (soft sleep)
-// Shorter than this, and we'll just remain active instead
-#ifndef GPS_SOFTSLEEP_THRESHOLD_SECONDS
-#define GPS_SOFTSLEEP_THRESHOLD_SECONDS 10
-#endif
-
 #if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
 HardwareSerial *GPS::_serial_gps = &Serial1;
 #else
@@ -1000,21 +988,32 @@ void GPS::up()
 void GPS::down()
 {
     scheduling.informGotLock();
+    uint32_t predictedSearchDuration = scheduling.predictedSearchDurationMs();
     uint32_t sleepTime = scheduling.msUntilNextSearch();
+    uint32_t updateInterval = Default::getConfiguredOrDefaultMs(config.position.gps_update_interval);
 
     LOG_DEBUG("%us until next search\n", sleepTime / 1000);
 
-    // If long interval between updates: hard sleep (power off)
-    if (sleepTime > GPS_HARDSLEEP_THRESHOLD_MINUTES * MS_IN_MINUTE)
-        setPowerState(GPS_HARDSLEEP, sleepTime);
-
-    // If moderate interval between updates: soft sleep (standby)
-    else if (sleepTime > GPS_SOFTSLEEP_THRESHOLD_SECONDS * 1000UL)
-        setPowerState(GPS_SOFTSLEEP, sleepTime);
-
-    // If short interval between updates: just wait
-    else
+    // If update interval less than 10 seconds, no attempt to sleep
+    if (updateInterval <= 10 * 1000UL)
         setPowerState(GPS_IDLE);
+
+    else {
+        // How long does gps_update_interval need to be to justify hardsleep?
+        // Heuristic equation. A compromise manually fitted to power observations from U-blox NEO-6M and M10050
+        // https://www.desmos.com/calculator/6gvjghoumr
+        // This is not particularly accurate, but probably an impromevement over a single, fixed threshold
+        uint32_t hardsleepThreshold = (2750 * pow(predictedSearchDuration / 1000, 1.22));
+        LOG_DEBUG("gps_update_interval >= %us needed to justify hardsleep\n", hardsleepThreshold / 1000);
+
+        // If update interval too short: softsleep
+        if (updateInterval < hardsleepThreshold)
+            setPowerState(GPS_SOFTSLEEP, sleepTime);
+
+        // If update interval long enough: hardsleep
+        else
+            setPowerState(GPS_HARDSLEEP, sleepTime);
+    }
 }
 
 /** Get how long we should stay looking for each acquisition in msecs

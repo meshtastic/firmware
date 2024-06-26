@@ -15,10 +15,10 @@ class GPSUpdateScheduling
 
     uint32_t msUntilNextSearch(); // How long until we need to begin searching for a GPS? Info provided to GPS hardware for sleep
     uint32_t elapsedSearchMs();   // How long have we been searching so far?
+    uint32_t predictedSearchDurationMs(); // How long do we expect to spend searching for a lock?
 
   private:
     void updateLockTimePrediction(); // Called from informGotLock
-    uint32_t nextSearchAtMs();       // Used by msUntilNextSearch & elapsedSearchMs
     uint32_t searchStartedMs = 0;
     uint32_t searchEndedMs = 0;
     uint32_t searchCount = 0;

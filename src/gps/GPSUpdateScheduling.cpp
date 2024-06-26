@@ -90,3 +90,9 @@ void GPSUpdateScheduling::updateLockTimePrediction()
 
     LOG_DEBUG("Predicting %us to get next lock\n", predictedMsToGetLock / 1000);
 }
+
+// How long do we expect to spend searching for a lock?
+uint32_t GPSUpdateScheduling::predictedSearchDurationMs()
+{
+    return GPSUpdateScheduling::predictedMsToGetLock;
+}
