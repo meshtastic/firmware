@@ -330,6 +330,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             // Clients sending special nonce don't want to see other nodeinfos
             state = config_nonce == SPECIAL_NONCE ? STATE_SEND_FILEMANIFEST : STATE_SEND_OTHER_NODEINFOS;
             config_state = 0;
+            filesManifest.clear();
         }
         break;
 
