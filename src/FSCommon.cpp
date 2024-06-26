@@ -109,7 +109,11 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
     while (file) {
         if (file.isDirectory() && !String(file.name()).endsWith(".")) {
             if (levels) {
+#ifdef ARCH_ESP32
                 std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(file.path(), levels - 1);
+#else
+                std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(file.path(), levels - 1);
+#endif
                 filenames.insert(filenames.end(), subDirFilenames.begin(), subDirFilenames.end());
                 file.close();
             }
@@ -117,8 +121,6 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
             meshtastic_FileInfo fileInfo = {"", file.size()};
 #ifdef ARCH_ESP32
             strcpy(fileInfo.file_name, file.path());
-#elif (defined(ARCH_RP2040) || defined(ARCH_PORTDUINO))
-            strcpy(fileInfo.file_name, file.name());
 #else
             strcpy(fileInfo.file_name, file.name());
 #endif
