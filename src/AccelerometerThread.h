@@ -288,7 +288,7 @@ class AccelerometerThread : public concurrency::OSThread
             compassY = y + FONT_HEIGHT_SMALL + (display->getHeight() - FONT_HEIGHT_SMALL) / 2;
         }
         display->drawCircle(compassX, compassY, getCompassDiam(display) / 2);
-        drawCompassNorth(display, compassX, compassY, screen->getHeading() * PI / 180);
+        screen->drawCompassNorth(display, compassX, compassY, screen->getHeading() * PI / 180);
     }
 #endif
 };

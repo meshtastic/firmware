@@ -79,7 +79,6 @@ namespace graphics
 // A text message frame + debug frame + all the node infos
 FrameCallback *normalFrames;
 static uint32_t targetFramerate = IDLE_FRAMERATE;
-static char btPIN[16] = "888888";
 
 uint32_t logo_timeout = 5000; // 4 seconds for EACH logo
 
@@ -202,26 +201,12 @@ static void drawOEMBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
     drawOEMIconScreen(region, display, state, x, y);
 }
 
-static void drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *message)
+void Screen::drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *message)
 {
     uint16_t x_offset = display->width() / 2;
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(FONT_MEDIUM);
     display->drawString(x_offset + x, 26 + y, message);
-}
-
-static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-#ifdef ARCH_ESP32
-    if (wakeCause == ESP_SLEEP_WAKEUP_TIMER || wakeCause == ESP_SLEEP_WAKEUP_EXT1) {
-        drawFrameText(display, state, x, y, "Resuming...");
-    } else
-#endif
-    {
-        // Draw region in upper left
-        const char *region = myRegion ? myRegion->name : NULL;
-        drawIconScreen(region, display, state, x, y);
-    }
 }
 
 // Used on boot when a certificate is being created
@@ -282,7 +267,7 @@ static void drawFunctionOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
 }
 
 /// Check if the display can render a string (detect special chars; emoji)
-static bool haveGlyphs(const char *str)
+bool Screen::haveGlyphs(const char *str)
 {
 #if defined(OLED_UA) || defined(OLED_RU)
     // Don't want to make any assumptions about custom language support
@@ -1331,32 +1316,10 @@ static void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t comp
         arrowPoints[i]->scale(getCompassDiam(display) * 0.6);
         arrowPoints[i]->translate(compassX, compassY);
     }
-    drawLine(display, tip, tail);
-    drawLine(display, leftArrow, tip);
-    drawLine(display, rightArrow, tip);
+    display->drawLine(tip.x, tip.y, tail.x, tail.y);
+    display->drawLine(leftArrow.x, leftArrow.y, tip.x, tip.y);
+    display->drawLine(rightArrow.x, rightArrow.y, tip.x, tip.y);
 }
-/*
-// Draw north
-static void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading)
-{
-    // If north is supposed to be at the top of the compass we want rotation to be +0
-    if (config.display.compass_north_top)
-        myHeading = -0;
-
-    Point N1(-0.04f, 0.65f), N2(0.04f, 0.65f);
-    Point N3(-0.04f, 0.55f), N4(0.04f, 0.55f);
-    Point *rosePoints[] = {&N1, &N2, &N3, &N4};
-
-    for (int i = 0; i < 4; i++) {
-        // North on compass will be negative of heading
-        rosePoints[i]->rotate(-myHeading);
-        rosePoints[i]->scale(getCompassDiam(display));
-        rosePoints[i]->translate(compassX, compassY);
-    }
-    drawLine(display, N1, N3);
-    drawLine(display, N2, N4);
-    drawLine(display, N1, N4);
-}*/
 
 // Get a string representation of the time passed since something happened
 static void getTimeAgoStr(uint32_t agoSecs, char *timeStr, uint8_t maxLength)
@@ -1456,7 +1419,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             myHeading = (screen->getHeading()) * PI / 180; // gotta convert compass degrees to Radians
         else
             myHeading = estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
-        drawCompassNorth(display, compassX, compassY, myHeading);
+        screen->drawCompassNorth(display, compassX, compassY, myHeading);
 
         if (hasValidPosition(node)) {
             // display direction toward node
@@ -1557,7 +1520,7 @@ static void drawWaypointFrame(OLEDDisplay *display, OLEDDisplayUiState *state, i
             myHeading = (screen->getHeading()) * PI / 180; // gotta convert compass degrees to Radians
         else
             myHeading = estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
-        drawCompassNorth(display, compassX, compassY, myHeading);
+        screen->drawCompassNorth(display, compassX, compassY, myHeading);
 
         // Distance to Waypoint
         float d = GeoCoord::latLongToMeter(DegD(wp.latitude_i), DegD(wp.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
@@ -1753,9 +1716,20 @@ void Screen::setup()
 
     // Add frames.
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST);
-    static FrameCallback bootFrames[] = {drawBootScreen};
-    static const int bootFrameCount = sizeof(bootFrames) / sizeof(bootFrames[0]);
-    ui->setFrames(bootFrames, bootFrameCount);
+    FrameCallback bootFrames[1];
+    bootFrames[0] = [this](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
+#ifdef ARCH_ESP32
+        if (wakeCause == ESP_SLEEP_WAKEUP_TIMER || wakeCause == ESP_SLEEP_WAKEUP_EXT1) {
+            drawFrameText(display, state, x, y, "Resuming...");
+        } else
+#endif
+        {
+            // Draw region in upper left
+            const char *region = myRegion ? myRegion->name : NULL;
+            drawIconScreen(region, display, state, x, y);
+        }
+    };
+    ui->setFrames(bootFrames, 1);
     // No overlays.
     ui->setOverlays(nullptr, 0);
 
