@@ -89,3 +89,31 @@ bool SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
         return false;
     }
 }
+
+void SerialConsole::log_to_serial(const char *logLevel, const char *format, va_list arg)
+{
+    if (usingProtobufs) {
+        meshtastic_LogRecord_Level ll = meshtastic_LogRecord_Level_UNSET; // default to unset
+        switch (logLevel[0]) {
+        case 'D':
+            ll = meshtastic_LogRecord_Level_DEBUG;
+            break;
+        case 'I':
+            ll = meshtastic_LogRecord_Level_INFO;
+            break;
+        case 'W':
+            ll = meshtastic_LogRecord_Level_WARNING;
+            break;
+        case 'E':
+            ll = meshtastic_LogRecord_Level_ERROR;
+            break;
+        case 'C':
+            ll = meshtastic_LogRecord_Level_CRITICAL;
+            break;
+        }
+
+        auto thread = concurrency::OSThread::currentThread;
+        emitLogRecord(ll, thread ? thread->ThreadName.c_str() : "", format, arg);
+    } else
+        RedirectablePrint::log_to_serial(logLevel, format, arg);
+}

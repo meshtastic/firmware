@@ -1,5 +1,6 @@
 #include "StreamAPI.h"
 #include "PowerFSM.h"
+#include "RTC.h"
 #include "configuration.h"
 
 #define START1 0x94
@@ -96,7 +97,6 @@ void StreamAPI::writeStream()
 void StreamAPI::emitTxBuffer(size_t len)
 {
     if (len != 0) {
-        // LOG_DEBUG("emit tx %d\n", len);
         txBuf[0] = START1;
         txBuf[1] = START2;
         txBuf[2] = (len >> 8) & 0xff;
@@ -116,6 +116,21 @@ void StreamAPI::emitRebooted()
     fromRadioScratch.rebooted = true;
 
     // LOG_DEBUG("Emitting reboot packet for serial shell\n");
+    emitTxBuffer(pb_encode_to_bytes(txBuf + HEADER_LEN, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratch));
+}
+
+void StreamAPI::emitLogRecord(meshtastic_LogRecord_Level level, const char *src, const char *format, va_list arg)
+{
+    // In case we send a FromRadio packet
+    memset(&fromRadioScratch, 0, sizeof(fromRadioScratch));
+    fromRadioScratch.which_payload_variant = meshtastic_FromRadio_log_record_tag;
+    fromRadioScratch.log_record.level = level;
+
+    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
+    fromRadioScratch.log_record.time = rtc_sec;
+    strncpy(fromRadioScratch.log_record.source, src, sizeof(fromRadioScratch.log_record.source));
+
+    vsnprintf(fromRadioScratch.log_record.message, sizeof(fromRadioScratch.log_record.message), format, arg);
     emitTxBuffer(pb_encode_to_bytes(txBuf + HEADER_LEN, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratch));
 }
 

@@ -210,8 +210,7 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
         va_list arg;
         va_start(arg, format);
 
-        if (!usingProtobufs)
-            log_to_serial(logLevel, format, arg);
+        log_to_serial(logLevel, format, arg);
         log_to_syslog(logLevel, format, arg);
         log_to_ble(logLevel, format, arg);
 
