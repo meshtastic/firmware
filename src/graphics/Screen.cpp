@@ -314,7 +314,7 @@ static void drawScreensaverOverlay(OLEDDisplay *display, OLEDDisplayUiState *sta
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     const char *pauseText = "Screen Paused";
     const char *idText = owner.short_name;
-    const bool useId = haveGlyphs(idText); // This bool is used to hide the idText box if we can't render the short name
+    const bool useId = screen->haveGlyphs(idText); // This bool is used to hide the idText box if we can't render the short name
     constexpr uint16_t padding = 5;
     constexpr uint8_t dividerGap = 1;
     constexpr uint8_t imprecision = 5; // How far the box origins can drift from center. Combat burn-in.
