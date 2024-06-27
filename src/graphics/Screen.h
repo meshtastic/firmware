@@ -388,7 +388,7 @@ class Screen : public concurrency::OSThread
     void handlePrint(const char *text);
     void handleStartFirmwareUpdateScreen();
     /// Rebuilds our list of frames (screens) to default ones.
-    void setFrames(bool holdPosition = false);
+    void setFrames();
 
     /// Try to start drawing ASAP
     void setFastFramerate();

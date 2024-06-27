@@ -6,7 +6,4 @@
         "platformio.platformio-ide",
         "trunk.io"
     ],
-    "unwantedRecommendations": [
-        "ms-vscode.cpptools-extension-pack"
-    ]
 }
