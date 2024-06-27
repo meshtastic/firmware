@@ -23,6 +23,12 @@ class RedirectablePrint : public Print
 #else
     volatile bool inDebugPrint = false;
 #endif
+  protected:
+    /**
+     * If true we are talking to a smart host and all messages (including log messages) must be framed as protobufs.
+     */
+    bool usingProtobufs = false;
+
   public:
     explicit RedirectablePrint(Print *_dest) : dest(_dest) {}
 
@@ -49,6 +55,11 @@ class RedirectablePrint : public Print
     void hexDump(const char *logLevel, unsigned char *buf, uint16_t len);
 
     std::string mt_sprintf(const std::string fmt_str, ...);
+
+  private:
+    void log_to_serial(const char *logLevel, const char *format, va_list arg);
+    void log_to_syslog(const char *logLevel, const char *format, va_list arg);
+    void log_to_ble(const char *logLevel, const char *format, va_list arg);
 };
 
 class NoopPrint : public Print
