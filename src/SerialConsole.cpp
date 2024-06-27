@@ -34,7 +34,6 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), con
     assert(!console);
     console = this;
     canWrite = false; // We don't send packets to our port until it has talked to us first
-                      // setDestination(&noopPrint); for testing, try turning off 'all' debug output and see what leaks
 
 #ifdef RP2040_SLOW_CLOCK
     Port.setTX(SERIAL2_TX);

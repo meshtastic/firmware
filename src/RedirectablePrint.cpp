@@ -15,11 +15,6 @@
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
-/**
- * A printer that doesn't go anywhere
- */
-NoopPrint noopPrint;
-
 #if HAS_WIFI || HAS_ETHERNET
 extern Syslog syslog;
 #endif
@@ -215,7 +210,8 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
         va_list arg;
         va_start(arg, format);
 
-        log_to_serial(logLevel, format, arg);
+        if (!usingProtobufs)
+            log_to_serial(logLevel, format, arg);
         log_to_syslog(logLevel, format, arg);
         log_to_ble(logLevel, format, arg);
 

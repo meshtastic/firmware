@@ -61,14 +61,3 @@ class RedirectablePrint : public Print
     void log_to_syslog(const char *logLevel, const char *format, va_list arg);
     void log_to_ble(const char *logLevel, const char *format, va_list arg);
 };
-
-class NoopPrint : public Print
-{
-  public:
-    virtual size_t write(uint8_t c) { return 1; }
-};
-
-/**
- * A printer that doesn't go anywhere
- */
-extern NoopPrint noopPrint;
