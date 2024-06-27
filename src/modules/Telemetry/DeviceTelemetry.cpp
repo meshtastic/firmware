@@ -52,14 +52,27 @@ bool DeviceTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
 
 meshtastic_MeshPacket *DeviceTelemetryModule::allocReply()
 {
-    if (ignoreRequest) {
-        return NULL;
+    if (currentRequest) {
+        auto req = *currentRequest;
+        const auto &p = req.decoded;
+        meshtastic_Telemetry scratch;
+        meshtastic_Telemetry *decoded = NULL;
+        memset(&scratch, 0, sizeof(scratch));
+        if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &scratch)) {
+            decoded = &scratch;
+        } else {
+            LOG_ERROR("Error decoding DeviceTelemetry module!\n");
+            return NULL;
+        }
+        // Check for a request for device metrics
+        if (decoded->which_variant == meshtastic_Telemetry_device_metrics_tag) {
+            LOG_INFO("Device telemetry replying to request\n");
+
+            meshtastic_Telemetry telemetry = getDeviceTelemetry();
+            return allocDataProtobuf(telemetry);
+        }
     }
-
-    LOG_INFO("Device telemetry replying to request\n");
-
-    meshtastic_Telemetry telemetry = getDeviceTelemetry();
-    return allocDataProtobuf(telemetry);
+    return NULL;
 }
 
 meshtastic_Telemetry DeviceTelemetryModule::getDeviceTelemetry()

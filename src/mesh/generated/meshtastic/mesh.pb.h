@@ -711,6 +711,14 @@ typedef struct _meshtastic_QueueStatus {
     uint32_t mesh_packet_id;
 } meshtastic_QueueStatus;
 
+/* Individual File info for the device */
+typedef struct _meshtastic_FileInfo {
+    /* The fully qualified path of the file */
+    char file_name[228];
+    /* The size of the file in bytes */
+    uint32_t size_bytes;
+} meshtastic_FileInfo;
+
 typedef PB_BYTES_ARRAY_T(237) meshtastic_Compressed_data_t;
 /* Compressed message payload */
 typedef struct _meshtastic_Compressed {
@@ -815,6 +823,8 @@ typedef struct _meshtastic_FromRadio {
         meshtastic_DeviceMetadata metadata;
         /* MQTT Client Proxy Message (device sending to client / phone for publishing to MQTT) */
         meshtastic_MqttClientProxyMessage mqttClientProxyMessage;
+        /* File system manifest messages */
+        meshtastic_FileInfo fileInfo;
     };
 } meshtastic_FromRadio;
 
@@ -958,6 +968,7 @@ extern "C" {
 
 
 
+
 #define meshtastic_Compressed_portnum_ENUMTYPE meshtastic_PortNum
 
 
@@ -985,6 +996,7 @@ extern "C" {
 #define meshtastic_LogRecord_init_default        {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_default      {0, 0, 0, 0}
 #define meshtastic_FromRadio_init_default        {0, 0, {meshtastic_MeshPacket_init_default}}
+#define meshtastic_FileInfo_init_default         {"", 0}
 #define meshtastic_ToRadio_init_default          {0, {meshtastic_MeshPacket_init_default}}
 #define meshtastic_Compressed_init_default       {_meshtastic_PortNum_MIN, {0, {0}}}
 #define meshtastic_NeighborInfo_init_default     {0, 0, 0, 0, {meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default}}
@@ -1008,6 +1020,7 @@ extern "C" {
 #define meshtastic_LogRecord_init_zero           {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_zero         {0, 0, 0, 0}
 #define meshtastic_FromRadio_init_zero           {0, 0, {meshtastic_MeshPacket_init_zero}}
+#define meshtastic_FileInfo_init_zero            {"", 0}
 #define meshtastic_ToRadio_init_zero             {0, {meshtastic_MeshPacket_init_zero}}
 #define meshtastic_Compressed_init_zero          {_meshtastic_PortNum_MIN, {0, {0}}}
 #define meshtastic_NeighborInfo_init_zero        {0, 0, 0, 0, {meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero}}
@@ -1110,6 +1123,8 @@ extern "C" {
 #define meshtastic_QueueStatus_free_tag          2
 #define meshtastic_QueueStatus_maxlen_tag        3
 #define meshtastic_QueueStatus_mesh_packet_id_tag 4
+#define meshtastic_FileInfo_file_name_tag        1
+#define meshtastic_FileInfo_size_bytes_tag       2
 #define meshtastic_Compressed_portnum_tag        1
 #define meshtastic_Compressed_data_tag           2
 #define meshtastic_Neighbor_node_id_tag          1
@@ -1144,6 +1159,7 @@ extern "C" {
 #define meshtastic_FromRadio_xmodemPacket_tag    12
 #define meshtastic_FromRadio_metadata_tag        13
 #define meshtastic_FromRadio_mqttClientProxyMessage_tag 14
+#define meshtastic_FromRadio_fileInfo_tag        15
 #define meshtastic_ToRadio_packet_tag            1
 #define meshtastic_ToRadio_want_config_id_tag    3
 #define meshtastic_ToRadio_disconnect_tag        4
@@ -1321,7 +1337,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,channel,channel),  10) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,queueStatus,queueStatus),  11) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,xmodemPacket,xmodemPacket),  12) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,metadata,metadata),  13) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,mqttClientProxyMessage,mqttClientProxyMessage),  14)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,mqttClientProxyMessage,mqttClientProxyMessage),  14) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,fileInfo,fileInfo),  15)
 #define meshtastic_FromRadio_CALLBACK NULL
 #define meshtastic_FromRadio_DEFAULT NULL
 #define meshtastic_FromRadio_payload_variant_packet_MSGTYPE meshtastic_MeshPacket
@@ -1335,6 +1352,13 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,mqttClientProxyMessage,mqttC
 #define meshtastic_FromRadio_payload_variant_xmodemPacket_MSGTYPE meshtastic_XModem
 #define meshtastic_FromRadio_payload_variant_metadata_MSGTYPE meshtastic_DeviceMetadata
 #define meshtastic_FromRadio_payload_variant_mqttClientProxyMessage_MSGTYPE meshtastic_MqttClientProxyMessage
+#define meshtastic_FromRadio_payload_variant_fileInfo_MSGTYPE meshtastic_FileInfo
+
+#define meshtastic_FileInfo_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, STRING,   file_name,         1) \
+X(a, STATIC,   SINGULAR, UINT32,   size_bytes,        2)
+#define meshtastic_FileInfo_CALLBACK NULL
+#define meshtastic_FileInfo_DEFAULT NULL
 
 #define meshtastic_ToRadio_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,packet,packet),   1) \
@@ -1434,6 +1458,7 @@ extern const pb_msgdesc_t meshtastic_MyNodeInfo_msg;
 extern const pb_msgdesc_t meshtastic_LogRecord_msg;
 extern const pb_msgdesc_t meshtastic_QueueStatus_msg;
 extern const pb_msgdesc_t meshtastic_FromRadio_msg;
+extern const pb_msgdesc_t meshtastic_FileInfo_msg;
 extern const pb_msgdesc_t meshtastic_ToRadio_msg;
 extern const pb_msgdesc_t meshtastic_Compressed_msg;
 extern const pb_msgdesc_t meshtastic_NeighborInfo_msg;
@@ -1459,6 +1484,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_LogRecord_fields &meshtastic_LogRecord_msg
 #define meshtastic_QueueStatus_fields &meshtastic_QueueStatus_msg
 #define meshtastic_FromRadio_fields &meshtastic_FromRadio_msg
+#define meshtastic_FileInfo_fields &meshtastic_FileInfo_msg
 #define meshtastic_ToRadio_fields &meshtastic_ToRadio_msg
 #define meshtastic_Compressed_fields &meshtastic_Compressed_msg
 #define meshtastic_NeighborInfo_fields &meshtastic_NeighborInfo_msg
@@ -1478,6 +1504,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_Compressed_size               243
 #define meshtastic_Data_size                     270
 #define meshtastic_DeviceMetadata_size           46
+#define meshtastic_FileInfo_size                 236
 #define meshtastic_FromRadio_size                510
 #define meshtastic_Heartbeat_size                0
 #define meshtastic_LogRecord_size                81
