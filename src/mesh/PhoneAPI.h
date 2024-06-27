@@ -2,7 +2,9 @@
 
 #include "Observer.h"
 #include "mesh-pb-constants.h"
+#include <iterator>
 #include <string>
+#include <vector>
 
 // Make sure that we never let our packets grow too large for one BLE packet
 #define MAX_TO_FROM_RADIO_SIZE 512
@@ -29,6 +31,7 @@ class PhoneAPI
         STATE_SEND_CONFIG,          // Replacement for the old Radioconfig
         STATE_SEND_MODULECONFIG,    // Send Module specific config
         STATE_SEND_OTHER_NODEINFOS, // states progress in this order as the device sends to to the client
+        STATE_SEND_FILEMANIFEST,    // Send file manifest
         STATE_SEND_COMPLETE_ID,
         STATE_SEND_PACKETS // send packets or debug strings
     };
@@ -64,6 +67,8 @@ class PhoneAPI
     /// Use to ensure that clients don't get confused about old messages from the radio
     uint32_t config_nonce = 0;
     uint32_t readIndex = 0;
+
+    std::vector<meshtastic_FileInfo> filesManifest = {};
 
     void resetReadIndex() { readIndex = 0; }
 
