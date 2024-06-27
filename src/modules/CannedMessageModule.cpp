@@ -49,7 +49,7 @@ CannedMessageModule::CannedMessageModule()
             LOG_INFO("CannedMessageModule is enabled\n");
 
             // T-Watch interface currently has no way to select destination type, so default to 'node'
-#ifdef T_WATCH_S3
+#if defined(T_WATCH_S3) || defined(RAK14014)
             this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
 #endif
 
@@ -75,7 +75,7 @@ int CannedMessageModule::splitConfiguredMessages()
 
     String messages = cannedMessageModuleConfig.messages;
 
-#ifdef T_WATCH_S3
+#if defined(T_WATCH_S3) || defined(RAK14014)
     String separator = messages.length() ? "|" : "";
 
     messages = "[---- Free Text ----]" + separator + messages;
@@ -144,7 +144,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     }
     if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT)) {
 
-#ifdef T_WATCH_S3
+#if defined(T_WATCH_S3) || defined(RAK14014)
         if (this->currentMessageIndex == 0) {
             this->runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
 
@@ -170,7 +170,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         e.frameChanged = true;
         this->currentMessageIndex = -1;
 
-#ifndef T_WATCH_S3
+#if !defined(T_WATCH_S3) && !defined(RAK14014)
         this->freetext = ""; // clear freetext
         this->cursor = 0;
         this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
@@ -183,7 +183,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) ||
         (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT))) {
 
-#ifdef T_WATCH_S3
+#if defined(T_WATCH_S3) || defined(RAK14014)
         if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
             this->payload = 0xb4;
         } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
@@ -283,7 +283,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         }
     }
 
-#ifdef T_WATCH_S3
+#if defined(T_WATCH_S3) || defined(RAK14014)
     if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
         String keyTapped = keyForCoordinates(event->touchX, event->touchY);
 
@@ -404,7 +404,7 @@ int32_t CannedMessageModule::runOnce()
         this->freetext = ""; // clear freetext
         this->cursor = 0;
 
-#ifndef T_WATCH_S3
+#if !defined(T_WATCH_S3) && !defined(RAK14014)
         this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
 #endif
 
@@ -417,7 +417,7 @@ int32_t CannedMessageModule::runOnce()
         this->freetext = ""; // clear freetext
         this->cursor = 0;
 
-#ifndef T_WATCH_S3
+#if !defined(T_WATCH_S3) && !defined(RAK14014)
         this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
 #endif
 
@@ -437,7 +437,7 @@ int32_t CannedMessageModule::runOnce()
                     powerFSM.trigger(EVENT_PRESS);
                     return INT32_MAX;
                 } else {
-#ifdef T_WATCH_S3
+#if defined(T_WATCH_S3) || defined(RAK14014)
                     sendText(this->dest, indexChannels[this->channel], this->messages[this->currentMessageIndex], true);
 #else
                     sendText(NODENUM_BROADCAST, channels.getPrimaryIndex(), this->messages[this->currentMessageIndex], true);
@@ -454,7 +454,7 @@ int32_t CannedMessageModule::runOnce()
         this->freetext = ""; // clear freetext
         this->cursor = 0;
 
-#ifndef T_WATCH_S3
+#if !defined(T_WATCH_S3) && !defined(RAK14014)
         this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
 #endif
 
@@ -471,7 +471,7 @@ int32_t CannedMessageModule::runOnce()
             this->freetext = ""; // clear freetext
             this->cursor = 0;
 
-#ifndef T_WATCH_S3
+#if !defined(T_WATCH_S3) && !defined(RAK14014)
             this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
 #endif
 
@@ -484,7 +484,7 @@ int32_t CannedMessageModule::runOnce()
             this->freetext = ""; // clear freetext
             this->cursor = 0;
 
-#ifndef T_WATCH_S3
+#if !defined(T_WATCH_S3) && !defined(RAK14014)
             this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
 #endif
 
@@ -597,14 +597,14 @@ int32_t CannedMessageModule::runOnce()
                 // handle fn+s for shutdown
             case 0x9b:
                 if (screen)
-                    screen->startShutdownScreen();
+                    screen->startAlert("Shutting down...");
                 shutdownAtMsec = millis() + DEFAULT_SHUTDOWN_SECONDS * 1000;
                 runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
                 break;
             // and fn+r for reboot
             case 0x90:
                 if (screen)
-                    screen->startRebootScreen();
+                    screen->startAlert("Rebooting...");
                 rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
                 runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
                 break;
@@ -714,7 +714,7 @@ void CannedMessageModule::showTemporaryMessage(const String &message)
     setIntervalFromNow(2000);
 }
 
-#ifdef T_WATCH_S3
+#if defined(T_WATCH_S3) || defined(RAK14014)
 
 String CannedMessageModule::keyForCoordinates(uint x, uint y)
 {
@@ -949,7 +949,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         display->drawString(10 + x, 0 + y + FONT_HEIGHT_SMALL, "Canned Message\nModule disabled.");
     } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
 
-#ifdef T_WATCH_S3
+#if defined(T_WATCH_S3) || defined(RAK14014)
         drawKeyboard(display, state, 0, 0);
 #else
 

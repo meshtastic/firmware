@@ -482,7 +482,12 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
 
     auto &ch = channels.getByIndex(chIndex);
 
-    if (&mp_decoded.decoded && strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0 &&
+    if (mp_decoded.which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
+        LOG_CRIT("MQTT::onSend(): mp_decoded isn't actually decoded\n");
+        return;
+    }
+
+    if (strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0 &&
         (mp_decoded.decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
          mp_decoded.decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP)) {
         LOG_DEBUG("MQTT onSend - Ignoring range test or detection sensor message on public mqtt\n");
@@ -900,8 +905,10 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
         jsonObj["rssi"] = new JSONValue((int)mp->rx_rssi);
     if (mp->rx_snr != 0)
         jsonObj["snr"] = new JSONValue((float)mp->rx_snr);
-    if (mp->hop_start != 0 && mp->hop_limit <= mp->hop_start)
+    if (mp->hop_start != 0 && mp->hop_limit <= mp->hop_start) {
         jsonObj["hops_away"] = new JSONValue((unsigned int)(mp->hop_start - mp->hop_limit));
+        jsonObj["hop_start"] = new JSONValue((unsigned int)(mp->hop_start));
+    }
 
     // serialize and write it to the stream
     JSONValue *value = new JSONValue(jsonObj);

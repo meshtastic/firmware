@@ -39,9 +39,10 @@ typedef enum {
 } GPS_RESPONSE;
 
 enum GPSPowerState : uint8_t {
-    GPS_OFF = 0,
-    GPS_AWAKE = 1,
-    GPS_STANDBY = 2,
+    GPS_OFF = 0,     // Physically powered off
+    GPS_ACTIVE = 1,  // Awake and want a position
+    GPS_STANDBY = 2, // Physically powered on, but soft-sleeping
+    GPS_IDLE = 3,    // Awake, but not wanting another position yet
 };
 
 // Generate a string representation of DOP
@@ -72,7 +73,7 @@ class GPS : private concurrency::OSThread
     uint32_t rx_gpio = 0;
     uint32_t tx_gpio = 0;
     uint32_t en_gpio = 0;
-    int32_t averageLockTime = 0;
+    uint32_t predictedLockTime = 0;
     uint32_t GPSCycles = 0;
 
     int speedSelect = 0;
@@ -93,7 +94,7 @@ class GPS : private concurrency::OSThread
     bool GPSInitFinished = false; // Init thread finished?
     bool GPSInitStarted = false;  // Init thread finished?
 
-    GPSPowerState powerState = GPS_OFF; // GPS_AWAKE if we want a location right now
+    GPSPowerState powerState = GPS_OFF; // GPS_ACTIVE if we want a location right now
 
     uint8_t numSatellites = 0;
 
@@ -287,6 +288,8 @@ class GPS : private concurrency::OSThread
 
     // delay counter to allow more sats before fixed position stops GPS thread
     uint8_t fixeddelayCtr = 0;
+
+    const char *powerStateToString();
 
   protected:
     GnssModel_t gnssModel = GNSS_MODEL_UNKNOWN;
