@@ -180,7 +180,7 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
 
     if (didFactoryReset) {
         LOG_INFO("Rebooting due to factory reset");
-        screen->startRebootScreen();
+        screen->startAlert("Rebooting...");
         rebootAtMsec = millis() + (5 * 1000);
     }
 
