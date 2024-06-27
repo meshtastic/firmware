@@ -1,5 +1,8 @@
 #pragma once
 
+#include "configuration.h"
+#if !MESHTASTIC_EXCLUDE_I2C
+
 #include <map>
 #include <memory>
 #include <stddef.h>
@@ -54,3 +57,5 @@ class ScanI2CTwoWire : public ScanI2C
 
     DeviceType probeOLED(ScanI2C::DeviceAddress) const;
 };
+
+#endif
