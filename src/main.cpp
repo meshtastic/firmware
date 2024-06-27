@@ -215,6 +215,14 @@ __attribute__((weak, noinline)) bool loopCanSleep()
     return true;
 }
 
+/**
+ * Print info as a structured log message (for automated log processing)
+ */
+void printInfo()
+{
+    LOG_INFO("S:B:%d,%s\n", HW_VENDOR, optstr(APP_VERSION));
+}
+
 void setup()
 {
     concurrency::hasBeenSetup = true;
@@ -555,7 +563,7 @@ void setup()
 #endif
 
     // Hello
-    LOG_INFO("S:B:%d,%s\n", HW_VENDOR, optstr(APP_VERSION));
+    printInfo();
 
 #ifdef ARCH_ESP32
     esp32Setup();
