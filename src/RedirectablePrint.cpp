@@ -39,7 +39,7 @@ void RedirectablePrint::setDestination(Print *_dest)
 size_t RedirectablePrint::write(uint8_t c)
 {
     // Always send the characters to our segger JTAG debugger
-#ifdef SEGGER_STDOUT_CH
+#ifdef USE_SEGGER
     SEGGER_RTT_PutChar(SEGGER_STDOUT_CH, c);
 #endif
 
