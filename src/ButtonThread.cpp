@@ -181,8 +181,9 @@ int32_t ButtonThread::runOnce()
         case BUTTON_EVENT_LONG_PRESSED: {
             LOG_BUTTON("Long press!\n");
             powerFSM.trigger(EVENT_PRESS);
-            if (screen)
-                screen->startShutdownScreen();
+            if (screen) {
+                screen->startAlert("Shutting down...");
+            }
             playBeep();
             break;
         }
