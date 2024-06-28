@@ -63,7 +63,8 @@ static void initBrownout()
     // We don't bother with setting up brownout if soft device is disabled - because during production we always use softdevice
 }
 
-static const bool useSoftDevice = true; // Set to false for easier debugging
+// This is a public global so that the debugger can set it to false automatically from our gdbinit
+bool useSoftDevice = true; // Set to false for easier debugging
 
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
 void setBluetoothEnable(bool enable)
