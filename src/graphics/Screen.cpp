@@ -1722,8 +1722,7 @@ void Screen::setup()
 
     // Add frames.
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST);
-    FrameCallback bootFrames[1];
-    bootFrames[0] = [this](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
+    alertFrames[0] = [this](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
 #ifdef ARCH_ESP32
         if (wakeCause == ESP_SLEEP_WAKEUP_TIMER || wakeCause == ESP_SLEEP_WAKEUP_EXT1) {
             drawFrameText(display, state, x, y, "Resuming...");
@@ -1735,7 +1734,7 @@ void Screen::setup()
             drawIconScreen(region, display, state, x, y);
         }
     };
-    ui->setFrames(bootFrames, 1);
+    ui->setFrames(alertFrames, 1);
     // No overlays.
     ui->setOverlays(nullptr, 0);
 
