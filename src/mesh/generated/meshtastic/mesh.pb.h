@@ -691,11 +691,11 @@ typedef struct _meshtastic_MyNodeInfo {
  and then extend as needed by emitting multiple records. */
 typedef struct _meshtastic_LogRecord {
     /* Log levels, chosen to match python logging conventions. */
-    char message[64];
+    char message[384];
     /* Seconds since 1970 - or 0 for unknown/unset */
     uint32_t time;
     /* Usually based on thread name - if known */
-    char source[8];
+    char source[32];
     /* Not yet set */
     meshtastic_LogRecord_Level level;
 } meshtastic_LogRecord;
@@ -1507,7 +1507,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_FileInfo_size                 236
 #define meshtastic_FromRadio_size                510
 #define meshtastic_Heartbeat_size                0
-#define meshtastic_LogRecord_size                81
+#define meshtastic_LogRecord_size                426
 #define meshtastic_MeshPacket_size               326
 #define meshtastic_MqttClientProxyMessage_size   501
 #define meshtastic_MyNodeInfo_size               18
