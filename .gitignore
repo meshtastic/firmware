@@ -33,3 +33,5 @@ release/
 /compile_commands.json
 src/mesh/raspihttp/certificate.pem
 src/mesh/raspihttp/private_key.pem
+src/desktop.ini
+.vscode/extensions.json
