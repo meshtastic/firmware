@@ -354,15 +354,14 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
     case STATE_SEND_FILEMANIFEST: {
         LOG_INFO("getFromRadio=STATE_SEND_FILEMANIFEST\n");
-        fromRadioScratch.which_payload_variant = meshtastic_FromRadio_fileInfo_tag;
-        if (config_state < filesManifest.size()) {
+        // last element
+        if (config_state == filesManifest.size()) { // also handles an empty filesManifest
+            state = STATE_SEND_COMPLETE_ID;
+            config_state = 0;
+        } else {
+            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_fileInfo_tag;
             fromRadioScratch.fileInfo = filesManifest.at(config_state);
             config_state++;
-            // last element
-            if (config_state == filesManifest.size()) {
-                state = STATE_SEND_COMPLETE_ID;
-                config_state = 0;
-            }
         }
         break;
     }
