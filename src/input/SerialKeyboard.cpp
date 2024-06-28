@@ -148,12 +148,15 @@ int32_t SerialKeyboard::runOnce()
             if (keyPressed < 11){
                 if (keyPressed == lastKeyPressed && millis()-lastPressTime < 500){
                     quickPress += 1;
-                    if (quickPress > 4){
+                    if (quickPress > 3){
                         quickPress = 0;
                     }
                 }
+                if (keyPressed != lastKeyPressed){
+                    quickPress = 0;
+                }
                 if (keyPressed < 10){ // if it's a letter
-                    if (quickPress > 0){
+                    if (keyPressed == lastKeyPressed && millis()-lastPressTime < 500){
                         erase();
                     } 
                     e.inputEvent = ANYKEY;
