@@ -597,14 +597,14 @@ int32_t CannedMessageModule::runOnce()
                 // handle fn+s for shutdown
             case 0x9b:
                 if (screen)
-                    screen->startShutdownScreen();
+                    screen->startAlert("Shutting down...");
                 shutdownAtMsec = millis() + DEFAULT_SHUTDOWN_SECONDS * 1000;
                 runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
                 break;
             // and fn+r for reboot
             case 0x90:
                 if (screen)
-                    screen->startRebootScreen();
+                    screen->startAlert("Rebooting...");
                 rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
                 runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
                 break;

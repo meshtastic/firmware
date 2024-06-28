@@ -137,7 +137,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
         if (BleOta::getOtaAppVersion().isEmpty()) {
             LOG_INFO("No OTA firmware available, scheduling regular reboot in %d seconds\n", s);
-            screen->startRebootScreen();
+            screen->startAlert("Rebooting...");
         } else {
             screen->startFirmwareUpdateScreen();
             BleOta::switchToOtaApp();
@@ -145,7 +145,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         }
 #else
         LOG_INFO("Not on ESP32, scheduling regular reboot in %d seconds\n", s);
-        screen->startRebootScreen();
+        screen->startAlert("Rebooting...");
 #endif
         rebootAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
         break;
@@ -811,7 +811,7 @@ void AdminModule::handleGetChannel(const meshtastic_MeshPacket &req, uint32_t ch
 void AdminModule::reboot(int32_t seconds)
 {
     LOG_INFO("Rebooting in %d seconds\n", seconds);
-    screen->startRebootScreen();
+    screen->startAlert("Rebooting...");
     rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
 }
 
