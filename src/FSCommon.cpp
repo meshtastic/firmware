@@ -124,7 +124,9 @@ std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
 #else
             strcpy(fileInfo.file_name, file.name());
 #endif
-            filenames.push_back(fileInfo);
+            if (!String(fileInfo.file_name).endsWith(".")) {
+                filenames.push_back(fileInfo);
+            }
             file.close();
         }
         file = root.openNextFile();
