@@ -222,8 +222,8 @@ External serial flash WP25R1635FZUIL0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 #define ADC_MULTIPLIER (4.90F)
 
-#define HAS_RTC 1
-#define HAS_GPS 0
+#define HAS_RTC 0
+// #define HAS_GPS 0
 #ifdef __cplusplus
 }
 #endif
