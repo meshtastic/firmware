@@ -121,6 +121,30 @@ static uint16_t displayWidth, displayHeight;
 
 #define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
 
+/// Check if the display can render a string (detect special chars; emoji)
+static bool haveGlyphs(const char *str)
+{
+#if defined(OLED_UA) || defined(OLED_RU)
+    // Don't want to make any assumptions about custom language support
+    return true;
+#endif
+
+    // Check each character with the lookup function for the OLED library
+    // We're not really meant to use this directly..
+    bool have = true;
+    for (uint16_t i = 0; i < strlen(str); i++) {
+        uint8_t result = Screen::customFontTableLookup((uint8_t)str[i]);
+        // If font doesn't support a character, it is substituted for ¿
+        if (result == 191 && (uint8_t)str[i] != 191) {
+            have = false;
+            break;
+        }
+    }
+
+    LOG_DEBUG("haveGlyphs=%d\n", have);
+    return have;
+}
+
 /**
  * Draw the icon with extra info printed around the corners
  */
@@ -144,13 +168,15 @@ static void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDispl
     if (upperMsg)
         display->drawString(x + 0, y + 0, upperMsg);
 
-    // Draw version in upper right
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%s",
-             xstr(APP_VERSION_SHORT)); // Note: we don't bother printing region or now, it makes the string too long
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(buf), y + 0, buf);
+    // Draw version and short name in upper right
+    char buf[25];
+    snprintf(buf, sizeof(buf), "%s\n%s", xstr(APP_VERSION_SHORT), haveGlyphs(owner.short_name) ? owner.short_name : "");
+
+    display->setTextAlignment(TEXT_ALIGN_RIGHT);
+    display->drawString(x + SCREEN_WIDTH, y + 0, buf);
     screen->forceDisplay();
-    // FIXME - draw serial # somewhere?
+
+    display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
 }
 
 static void drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -185,14 +211,15 @@ static void drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDi
     if (upperMsg)
         display->drawString(x + 0, y + 0, upperMsg);
 
-    // Draw version in upper right
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%s",
-             xstr(APP_VERSION_SHORT)); // Note: we don't bother printing region or now, it makes the string too long
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(buf), y + 0, buf);
+    // Draw version and shortname in upper right
+    char buf[25];
+    snprintf(buf, sizeof(buf), "%s\n%s", xstr(APP_VERSION_SHORT), haveGlyphs(owner.short_name) ? owner.short_name : "");
+
+    display->setTextAlignment(TEXT_ALIGN_RIGHT);
+    display->drawString(x + SCREEN_WIDTH, y + 0, buf);
     screen->forceDisplay();
 
-    // FIXME - draw serial # somewhere?
+    display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
 }
 
 static void drawOEMBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -218,7 +245,6 @@ static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int1
     } else
 #endif
     {
-        // Draw region in upper left
         const char *region = myRegion ? myRegion->name : NULL;
         drawIconScreen(region, display, state, x, y);
     }
@@ -281,40 +307,19 @@ static void drawFunctionOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
     }
 }
 
-/// Check if the display can render a string (detect special chars; emoji)
-static bool haveGlyphs(const char *str)
-{
-#if defined(OLED_UA) || defined(OLED_RU)
-    // Don't want to make any assumptions about custom language support
-    return true;
-#endif
-
-    // Check each character with the lookup function for the OLED library
-    // We're not really meant to use this directly..
-    bool have = true;
-    for (uint16_t i = 0; i < strlen(str); i++) {
-        uint8_t result = Screen::customFontTableLookup((uint8_t)str[i]);
-        // If font doesn't support a character, it is substituted for ¿
-        if (result == 191 && (uint8_t)str[i] != 191) {
-            have = false;
-            break;
-        }
-    }
-
-    LOG_DEBUG("haveGlyphs=%d\n", have);
-    return have;
-}
-
 #ifdef USE_EINK
 /// Used on eink displays while in deep sleep
 static void drawDeepSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+
     // Next frame should use full-refresh, and block while running, else device will sleep before async callback
     EINK_ADD_FRAMEFLAG(display, COSMETIC);
     EINK_ADD_FRAMEFLAG(display, BLOCKING);
 
     LOG_DEBUG("Drawing deep sleep screen\n");
-    drawIconScreen("Sleeping...", display, state, x, y);
+
+    // Display displayStr on the screen
+    drawIconScreen("Sleeping", display, state, x, y);
 }
 
 /// Used on eink displays when screen updates are paused
