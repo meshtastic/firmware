@@ -128,9 +128,9 @@ void StreamAPI::emitLogRecord(meshtastic_LogRecord_Level level, const char *src,
 
     uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true);
     fromRadioScratch.log_record.time = rtc_sec;
-    strncpy(fromRadioScratch.log_record.source, src, sizeof(fromRadioScratch.log_record.source));
+    strncpy(fromRadioScratch.log_record.source, src, sizeof(fromRadioScratch.log_record.source) - 1);
 
-    vsnprintf(fromRadioScratch.log_record.message, sizeof(fromRadioScratch.log_record.message), format, arg);
+    vsnprintf(fromRadioScratch.log_record.message, sizeof(fromRadioScratch.log_record.message) - 1, format, arg);
     emitTxBuffer(pb_encode_to_bytes(txBuf + HEADER_LEN, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratch));
 }
 
