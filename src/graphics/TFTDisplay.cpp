@@ -15,7 +15,11 @@ extern SX1509 gpioExtender;
 #endif
 
 #ifndef TFT_MESH
+#ifdef T_DECK
+#define TFT_MESH COLOR565(0xFF, 0xFF, 0xFF)
+#else
 #define TFT_MESH COLOR565(0x67, 0xEA, 0x94)
+#endif
 #endif
 
 #if defined(ST7735S)

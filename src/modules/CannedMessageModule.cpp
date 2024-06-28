@@ -987,7 +987,11 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             uint16_t charsLeft =
                 meshtastic_Constants_DATA_PAYLOAD_LEN - this->freetext.length() - (moduleConfig.canned_message.send_bell ? 1 : 0);
             snprintf(buffer, sizeof(buffer), "%d left", charsLeft);
-            display->drawString(x + display->getWidth() - display->getStringWidth(buffer), y + 0, buffer);
+#ifdef T_DECK
+            display->drawString(x + display->getWidth() - display->getStringWidth(buffer), y + 180, buffer);
+#else
+						display->drawString(x + display->getWidth() - display->getStringWidth(buffer), y + 0, buffer);
+#endif
         }
         display->setColor(WHITE);
         display->drawStringMaxWidth(

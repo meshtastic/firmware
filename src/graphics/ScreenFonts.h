@@ -11,7 +11,11 @@
 #if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS) || defined(HX8357_CS)) &&          \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
 // The screen is bigger so use bigger fonts
+#ifdef T_DECK
+#define FONT_SMALL ArialMT_Plain_24  // Height: 19
+#else
 #define FONT_SMALL ArialMT_Plain_16  // Height: 19
+#endif
 #define FONT_MEDIUM ArialMT_Plain_24 // Height: 28
 #define FONT_LARGE ArialMT_Plain_24  // Height: 28
 #else
@@ -30,6 +34,10 @@
 
 #define _fontHeight(font) ((font)[1] + 1) // height is position 1
 
+#ifdef T_DECK
+#define FONT_HEIGHT_SMALL _fontHeight(FONT_LARGE)
+#else
 #define FONT_HEIGHT_SMALL _fontHeight(FONT_SMALL)
+#endif
 #define FONT_HEIGHT_MEDIUM _fontHeight(FONT_MEDIUM)
 #define FONT_HEIGHT_LARGE _fontHeight(FONT_LARGE)
