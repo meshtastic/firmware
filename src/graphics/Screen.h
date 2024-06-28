@@ -254,7 +254,6 @@ class Screen : public concurrency::OSThread
         display->drawLine(N1.x, N1.y, N4.x, N4.y);
     }
 
-    bool haveGlyphs(const char *);
     /// Handle button press, trackball or swipe action)
     void onPress() { enqueueCmd(ScreenCmd{.cmd = Cmd::ON_PRESS}); }
     void showPrevFrame() { enqueueCmd(ScreenCmd{.cmd = Cmd::SHOW_PREV_FRAME}); }
