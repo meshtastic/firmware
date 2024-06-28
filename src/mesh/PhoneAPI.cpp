@@ -330,7 +330,6 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             // Clients sending special nonce don't want to see other nodeinfos
             state = config_nonce == SPECIAL_NONCE ? STATE_SEND_FILEMANIFEST : STATE_SEND_OTHER_NODEINFOS;
             config_state = 0;
-            filesManifest.clear();
         }
         break;
 
@@ -358,9 +357,11 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         if (config_state == filesManifest.size()) { // also handles an empty filesManifest
             state = STATE_SEND_COMPLETE_ID;
             config_state = 0;
+            filesManifest.clear();
         } else {
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_fileInfo_tag;
             fromRadioScratch.fileInfo = filesManifest.at(config_state);
+            LOG_DEBUG("File: %s (%d) bytes\n", fromRadioScratch.fileInfo.file_name, fromRadioScratch.fileInfo.size_bytes);
             config_state++;
         }
         break;
