@@ -15,11 +15,6 @@
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
-/**
- * A printer that doesn't go anywhere
- */
-NoopPrint noopPrint;
-
 #if HAS_WIFI || HAS_ETHERNET
 extern Syslog syslog;
 #endif
@@ -71,6 +66,126 @@ size_t RedirectablePrint::vprintf(const char *format, va_list arg)
     return len;
 }
 
+void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, va_list arg)
+{
+    size_t r = 0;
+
+    // Cope with 0 len format strings, but look for new line terminator
+    bool hasNewline = *format && format[strlen(format) - 1] == '\n';
+
+    // If we are the first message on a report, include the header
+    if (!isContinuationMessage) {
+        uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // display local time on logfile
+        if (rtc_sec > 0) {
+            long hms = rtc_sec % SEC_PER_DAY;
+            // hms += tz.tz_dsttime * SEC_PER_HOUR;
+            // hms -= tz.tz_minuteswest * SEC_PER_MIN;
+            // mod `hms` to ensure in positive range of [0...SEC_PER_DAY)
+            hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
+
+            // Tear apart hms into h:m:s
+            int hour = hms / SEC_PER_HOUR;
+            int min = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
+            int sec = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
+#ifdef ARCH_PORTDUINO
+            r += ::printf("%s | %02d:%02d:%02d %u ", logLevel, hour, min, sec, millis() / 1000);
+#else
+            r += printf("%s | %02d:%02d:%02d %u ", logLevel, hour, min, sec, millis() / 1000);
+#endif
+        } else
+#ifdef ARCH_PORTDUINO
+            r += ::printf("%s | ??:??:?? %u ", logLevel, millis() / 1000);
+#else
+            r += printf("%s | ??:??:?? %u ", logLevel, millis() / 1000);
+#endif
+
+        auto thread = concurrency::OSThread::currentThread;
+        if (thread) {
+            print("[");
+            // printf("%p ", thread);
+            // assert(thread->ThreadName.length());
+            print(thread->ThreadName);
+            print("] ");
+        }
+    }
+    r += vprintf(format, arg);
+
+    isContinuationMessage = !hasNewline;
+}
+
+void RedirectablePrint::log_to_syslog(const char *logLevel, const char *format, va_list arg)
+{
+#if (HAS_WIFI || HAS_ETHERNET) && !defined(ARCH_PORTDUINO)
+    // if syslog is in use, collect the log messages and send them to syslog
+    if (syslog.isEnabled()) {
+        int ll = 0;
+        switch (logLevel[0]) {
+        case 'D':
+            ll = SYSLOG_DEBUG;
+            break;
+        case 'I':
+            ll = SYSLOG_INFO;
+            break;
+        case 'W':
+            ll = SYSLOG_WARN;
+            break;
+        case 'E':
+            ll = SYSLOG_ERR;
+            break;
+        case 'C':
+            ll = SYSLOG_CRIT;
+            break;
+        default:
+            ll = 0;
+        }
+        auto thread = concurrency::OSThread::currentThread;
+        if (thread) {
+            syslog.vlogf(ll, thread->ThreadName.c_str(), format, arg);
+        } else {
+            syslog.vlogf(ll, format, arg);
+        }
+    }
+#endif
+}
+
+void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_list arg)
+{
+    if (config.bluetooth.device_logging_enabled && !pauseBluetoothLogging) {
+        bool isBleConnected = false;
+#ifdef ARCH_ESP32
+        isBleConnected = nimbleBluetooth && nimbleBluetooth->isActive() && nimbleBluetooth->isConnected();
+#elif defined(ARCH_NRF52)
+        isBleConnected = nrf52Bluetooth != nullptr && nrf52Bluetooth->isConnected();
+#endif
+        if (isBleConnected) {
+            char *message;
+            size_t initialLen;
+            size_t len;
+            initialLen = strlen(format);
+            message = new char[initialLen + 1];
+            len = vsnprintf(message, initialLen + 1, format, arg);
+            if (len > initialLen) {
+                delete[] message;
+                message = new char[len + 1];
+                vsnprintf(message, len + 1, format, arg);
+            }
+            auto thread = concurrency::OSThread::currentThread;
+#ifdef ARCH_ESP32
+            if (thread)
+                nimbleBluetooth->sendLog(mt_sprintf("%s | [%s] %s", logLevel, thread->ThreadName.c_str(), message).c_str());
+            else
+                nimbleBluetooth->sendLog(mt_sprintf("%s | %s", logLevel, message).c_str());
+#elif defined(ARCH_NRF52)
+            if (thread)
+                nrf52Bluetooth->sendLog(mt_sprintf("%s | [%s] %s", logLevel, thread->ThreadName.c_str(), message).c_str());
+            else
+                nrf52Bluetooth->sendLog(mt_sprintf("%s | %s", logLevel, message).c_str());
+#endif
+            delete[] message;
+        }
+    }
+}
+
 size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
 {
 #ifdef ARCH_PORTDUINO
@@ -84,7 +199,7 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
     if (moduleConfig.serial.override_console_serial_port && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0) {
         return 0;
     }
-    size_t r = 0;
+
 #ifdef HAS_FREE_RTOS
     if (inDebugPrint != nullptr && xSemaphoreTake(inDebugPrint, portMAX_DELAY) == pdTRUE) {
 #else
@@ -95,114 +210,10 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
         va_list arg;
         va_start(arg, format);
 
-        // Cope with 0 len format strings, but look for new line terminator
-        bool hasNewline = *format && format[strlen(format) - 1] == '\n';
+        log_to_serial(logLevel, format, arg);
+        log_to_syslog(logLevel, format, arg);
+        log_to_ble(logLevel, format, arg);
 
-        // If we are the first message on a report, include the header
-        if (!isContinuationMessage) {
-            uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // display local time on logfile
-            if (rtc_sec > 0) {
-                long hms = rtc_sec % SEC_PER_DAY;
-                // hms += tz.tz_dsttime * SEC_PER_HOUR;
-                // hms -= tz.tz_minuteswest * SEC_PER_MIN;
-                // mod `hms` to ensure in positive range of [0...SEC_PER_DAY)
-                hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
-
-                // Tear apart hms into h:m:s
-                int hour = hms / SEC_PER_HOUR;
-                int min = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
-                int sec = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
-#ifdef ARCH_PORTDUINO
-                r += ::printf("%s | %02d:%02d:%02d %u ", logLevel, hour, min, sec, millis() / 1000);
-#else
-                r += printf("%s | %02d:%02d:%02d %u ", logLevel, hour, min, sec, millis() / 1000);
-#endif
-            } else
-#ifdef ARCH_PORTDUINO
-                r += ::printf("%s | ??:??:?? %u ", logLevel, millis() / 1000);
-#else
-                r += printf("%s | ??:??:?? %u ", logLevel, millis() / 1000);
-#endif
-
-            auto thread = concurrency::OSThread::currentThread;
-            if (thread) {
-                print("[");
-                // printf("%p ", thread);
-                // assert(thread->ThreadName.length());
-                print(thread->ThreadName);
-                print("] ");
-            }
-        }
-        r += vprintf(format, arg);
-
-#if (HAS_WIFI || HAS_ETHERNET) && !defined(ARCH_PORTDUINO)
-        // if syslog is in use, collect the log messages and send them to syslog
-        if (syslog.isEnabled()) {
-            int ll = 0;
-            switch (logLevel[0]) {
-            case 'D':
-                ll = SYSLOG_DEBUG;
-                break;
-            case 'I':
-                ll = SYSLOG_INFO;
-                break;
-            case 'W':
-                ll = SYSLOG_WARN;
-                break;
-            case 'E':
-                ll = SYSLOG_ERR;
-                break;
-            case 'C':
-                ll = SYSLOG_CRIT;
-                break;
-            default:
-                ll = 0;
-            }
-            auto thread = concurrency::OSThread::currentThread;
-            if (thread) {
-                syslog.vlogf(ll, thread->ThreadName.c_str(), format, arg);
-            } else {
-                syslog.vlogf(ll, format, arg);
-            }
-        }
-#endif
-
-        isContinuationMessage = !hasNewline;
-
-        if (config.bluetooth.device_logging_enabled && !pauseBluetoothLogging) {
-            bool isBleConnected = false;
-#ifdef ARCH_ESP32
-            isBleConnected = nimbleBluetooth && nimbleBluetooth->isActive() && nimbleBluetooth->isConnected();
-#elif defined(ARCH_NRF52)
-            isBleConnected = nrf52Bluetooth != nullptr && nrf52Bluetooth->isConnected();
-#endif
-            if (isBleConnected) {
-                char *message;
-                size_t initialLen;
-                size_t len;
-                initialLen = strlen(format);
-                message = new char[initialLen + 1];
-                len = vsnprintf(message, initialLen + 1, format, arg);
-                if (len > initialLen) {
-                    delete[] message;
-                    message = new char[len + 1];
-                    vsnprintf(message, len + 1, format, arg);
-                }
-                auto thread = concurrency::OSThread::currentThread;
-#ifdef ARCH_ESP32
-                if (thread)
-                    nimbleBluetooth->sendLog(mt_sprintf("%s | [%s] %s", logLevel, thread->ThreadName.c_str(), message).c_str());
-                else
-                    nimbleBluetooth->sendLog(mt_sprintf("%s | %s", logLevel, message).c_str());
-#elif defined(ARCH_NRF52)
-                if (thread)
-                    nrf52Bluetooth->sendLog(mt_sprintf("%s | [%s] %s", logLevel, thread->ThreadName.c_str(), message).c_str());
-                else
-                    nrf52Bluetooth->sendLog(mt_sprintf("%s | %s", logLevel, message).c_str());
-#endif
-                delete[] message;
-            }
-        }
         va_end(arg);
 #ifdef HAS_FREE_RTOS
         xSemaphoreGive(inDebugPrint);
@@ -211,7 +222,8 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
 #endif
     }
 
-    return r;
+    return 0; // We assume callers don't really care about the # of chars printed (given that this method now sometimes goes out
+              // via BLE or syslog)
 }
 
 void RedirectablePrint::hexDump(const char *logLevel, unsigned char *buf, uint16_t len)
