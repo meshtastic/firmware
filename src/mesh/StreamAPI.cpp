@@ -130,7 +130,11 @@ void StreamAPI::emitLogRecord(meshtastic_LogRecord_Level level, const char *src,
     fromRadioScratch.log_record.time = rtc_sec;
     strncpy(fromRadioScratch.log_record.source, src, sizeof(fromRadioScratch.log_record.source) - 1);
 
-    vsnprintf(fromRadioScratch.log_record.message, sizeof(fromRadioScratch.log_record.message) - 1, format, arg);
+    auto num_printed =
+        vsnprintf(fromRadioScratch.log_record.message, sizeof(fromRadioScratch.log_record.message) - 1, format, arg);
+    if (num_printed > 0 && fromRadioScratch.log_record.message[num_printed - 1] ==
+                               '\n') // Strip any ending newline, because we have records for framing instead.
+        fromRadioScratch.log_record.message[num_printed - 1] = '\0';
     emitTxBuffer(pb_encode_to_bytes(txBuf + HEADER_LEN, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratch));
 }
 
