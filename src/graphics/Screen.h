@@ -122,31 +122,6 @@ class Point
 
 } // namespace
 
-static uint16_t getCompassDiam(OLEDDisplay *display)
-{
-    uint16_t diam = 0;
-    uint16_t offset = 0;
-
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT)
-        offset = FONT_HEIGHT_SMALL;
-
-    // get the smaller of the 2 dimensions and subtract 20
-    if (display->getWidth() > (display->getHeight() - offset)) {
-        diam = display->getHeight() - offset;
-        // if 2/3 of the other size would be smaller, use that
-        if (diam > (display->getWidth() * 2 / 3)) {
-            diam = display->getWidth() * 2 / 3;
-        }
-    } else {
-        diam = display->getWidth();
-        if (diam > ((display->getHeight() - offset) * 2 / 3)) {
-            diam = (display->getHeight() - offset) * 2 / 3;
-        }
-    }
-
-    return diam - 20;
-};
-
 namespace graphics
 {
 
@@ -238,9 +213,11 @@ class Screen : public concurrency::OSThread
     // Draw north
     void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading);
 
+    static uint16_t getCompassDiam(uint32_t displayWidth, uint32_t displayHeight);
+
     float estimatedHeading(double lat, double lon);
 
-    void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, float headingRadian);
+    void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, uint16_t compassDiam, float headingRadian);
 
     void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields);
 

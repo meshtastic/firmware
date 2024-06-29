@@ -1274,7 +1274,7 @@ static size_t nodeIndex;
 static int8_t prevFrame = -1;
 
 // Draw the arrow pointing to a node's location
-void Screen::drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, float headingRadian)
+void Screen::drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, uint16_t compassDiam, float headingRadian)
 {
     Point tip(0.0f, 0.5f), tail(0.0f, -0.5f); // pointing up initially
     float arrowOffsetX = 0.2f, arrowOffsetY = 0.2f;
@@ -1284,7 +1284,7 @@ void Screen::drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t com
 
     for (int i = 0; i < 4; i++) {
         arrowPoints[i]->rotate(headingRadian);
-        arrowPoints[i]->scale(getCompassDiam(display) * 0.6);
+        arrowPoints[i]->scale(compassDiam * 0.6);
         arrowPoints[i]->translate(compassX, compassY);
     }
     display->drawLine(tip.x, tip.y, tail.x, tail.y);
@@ -1332,16 +1332,43 @@ void Screen::drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t co
     Point N3(-0.04f, 0.55f), N4(0.04f, 0.55f);
     Point *rosePoints[] = {&N1, &N2, &N3, &N4};
 
+    uint16_t compassDiam = Screen::getCompassDiam(SCREEN_WIDTH, SCREEN_HEIGHT);
+
     for (int i = 0; i < 4; i++) {
         // North on compass will be negative of heading
         rosePoints[i]->rotate(-myHeading);
-        rosePoints[i]->scale(getCompassDiam(display));
+        rosePoints[i]->scale(compassDiam);
         rosePoints[i]->translate(compassX, compassY);
     }
     display->drawLine(N1.x, N1.y, N3.x, N3.y);
     display->drawLine(N2.x, N2.y, N4.x, N4.y);
     display->drawLine(N1.x, N1.y, N4.x, N4.y);
 }
+
+uint16_t Screen::getCompassDiam(uint32_t displayWidth, uint32_t displayHeight)
+{
+    uint16_t diam = 0;
+    uint16_t offset = 0;
+
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT)
+        offset = FONT_HEIGHT_SMALL;
+
+    // get the smaller of the 2 dimensions and subtract 20
+    if (displayWidth > (displayHeight - offset)) {
+        diam = displayHeight - offset;
+        // if 2/3 of the other size would be smaller, use that
+        if (diam > (displayWidth * 2 / 3)) {
+            diam = displayWidth * 2 / 3;
+        }
+    } else {
+        diam = displayWidth;
+        if (diam > ((displayHeight - offset) * 2 / 3)) {
+            diam = (displayHeight - offset) * 2 / 3;
+        }
+    }
+
+    return diam - 20;
+};
 
 static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -1393,13 +1420,14 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     const char *fields[] = {username, lastStr, signalStr, distStr, NULL};
     int16_t compassX = 0, compassY = 0;
+    uint16_t compassDiam = Screen::getCompassDiam(SCREEN_WIDTH, SCREEN_HEIGHT);
 
     // coordinates for the center of the compass/circle
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
-        compassX = x + SCREEN_WIDTH - getCompassDiam(display) / 2 - 5;
+        compassX = x + SCREEN_WIDTH - compassDiam / 2 - 5;
         compassY = y + SCREEN_HEIGHT / 2;
     } else {
-        compassX = x + SCREEN_WIDTH - getCompassDiam(display) / 2 - 5;
+        compassX = x + SCREEN_WIDTH - compassDiam / 2 - 5;
         compassY = y + FONT_HEIGHT_SMALL + (SCREEN_HEIGHT - FONT_HEIGHT_SMALL) / 2;
     }
     bool hasNodeHeading = false;
@@ -1438,7 +1466,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             // If the top of the compass is not a static north we need adjust bearingToOther based on heading
             if (!config.display.compass_north_top)
                 bearingToOther -= myHeading;
-            screen->drawNodeHeading(display, compassX, compassY, bearingToOther);
+            screen->drawNodeHeading(display, compassX, compassY, compassDiam, bearingToOther);
         }
     }
     if (!hasNodeHeading) {
@@ -1448,7 +1476,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         // hasValidPosition(node));
         display->drawString(compassX - FONT_HEIGHT_SMALL / 4, compassY - FONT_HEIGHT_SMALL / 2, "?");
     }
-    display->drawCircle(compassX, compassY, getCompassDiam(display) / 2);
+    display->drawCircle(compassX, compassY, compassDiam / 2);
 
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
         display->setColor(BLACK);
