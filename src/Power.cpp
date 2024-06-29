@@ -379,7 +379,15 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #endif
 #ifdef EXT_CHRG_DETECT
         return digitalRead(EXT_CHRG_DETECT) == ext_chrg_detect_value;
+
+#elif HAS_TELEMETRY && !defined(ARCH_PORTDUINO) && !defined(HAS_PMU) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+        if (hasINA()) {
+            return (getINACurrent() > 0) ? OptTrue : OptFalse;
+        } else {
+            return OptFalse;
+        }
 #else
+
         return isBatteryConnect() && isVbusIn();
 #endif
     }
@@ -413,6 +421,15 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #endif
 
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO)
+    int16_t getINACurrent()
+    {
+        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first == config.power.device_battery_ina_address) {
+            return ina219Sensor.getCurrentMa();
+        }
+
+        return -1;
+    }
+
     uint16_t getINAVoltage()
     {
         if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first == config.power.device_battery_ina_address) {
@@ -532,6 +549,10 @@ bool Power::analogInit()
 
     batteryLevel = &analogLevel;
     return true;
+#elif HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO)
+    batteryLevel = &analogLevel;
+    return true; // TODO ABK: should be hasINA()
+
 #else
     return false;
 #endif
