@@ -2,7 +2,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "configuration.h"
-#ifdef HAS_SCREEN
+#if HAS_SCREEN
 #include "gps/RTC.h"
 #include "graphics/Screen.h"
 #include "main.h"
@@ -28,6 +28,7 @@ ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }
 
+#if HAS_SCREEN
 bool WaypointModule::shouldDraw()
 {
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
@@ -166,3 +167,4 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     // Must be after distStr is populated
     screen->drawColumns(display, x, y, fields);
 }
+#endif
