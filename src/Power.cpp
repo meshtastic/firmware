@@ -429,42 +429,78 @@ class AnalogBatteryLevel : public HasBatteryLevel
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO)
     int16_t getINACurrent()
     {
-        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first == config.power.device_battery_ina_address) {
-            return ina219Sensor.getCurrentMa();
+        const uint32_t ina_addr = config.power.device_battery_ina_address;
+        int16_t ret;
+
+        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first == ina_addr) {
+            ret = ina219Sensor.getCurrentMa();
+
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first == ina_addr) {
+            ret = ina260Sensor.getCurrentMa();
+
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA3221].first == ina_addr) {
+            ret = ina3221Sensor.getCurrentMa();
+
+        /* don't know how to read current, return -1mA (negative so isCharging() will do the right thing) */
+        } else {
+            ret = -1;
         }
 
-        return -1;
+        return ret;
     }
 
     uint16_t getINAVoltage()
     {
-        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first == config.power.device_battery_ina_address) {
-            return ina219Sensor.getBusVoltageMv();
-        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first ==
-                   config.power.device_battery_ina_address) {
-            return ina260Sensor.getBusVoltageMv();
-        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA3221].first ==
-                   config.power.device_battery_ina_address) {
-            return ina3221Sensor.getBusVoltageMv();
+        const uint32_t ina_addr = config.power.device_battery_ina_address;
+        uint16_t ret;
+
+        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first == ina_addr) {
+            ret = ina219Sensor.getBusVoltageMv();
+
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first == ina_addr) {
+            ret = ina260Sensor.getBusVoltageMv();
+
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA3221].first == ina_addr) {
+            ret = ina3221Sensor.getBusVoltageMv();
+
+        /* don't know how to read voltage, return 0mV */
+        } else {
+            ret = 0;
         }
-        return 0;
+
+        return ret;
     }
 
     bool hasINA()
     {
-        if (!config.power.device_battery_ina_address) {
+        const uint32_t ina_addr = config.power.device_battery_ina_address;
+
+        if (ina_addr == 0) {
             return false;
         }
-        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first == config.power.device_battery_ina_address) {
-            if (!ina219Sensor.isInitialized())
+
+        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first == ina_addr) {
+            if (! ina219Sensor.isInitialized()) {
                 return ina219Sensor.runOnce() > 0;
+            }
+
             return ina219Sensor.isRunning();
-        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first ==
-                   config.power.device_battery_ina_address) {
-            if (!ina260Sensor.isInitialized())
+
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first == ina_addr) {
+            if (! ina260Sensor.isInitialized()) {
                 return ina260Sensor.runOnce() > 0;
+            }
+
             return ina260Sensor.isRunning();
+
+        } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA3221].first == ina_addr) {
+            if (! ina3221Sensor.isInitialized()) {
+                return ina3221Sensor.runOnce() > 0;
+            }
+
+            return ina3221Sensor.isRunning();
         }
+
         return false;
     }
 #endif
