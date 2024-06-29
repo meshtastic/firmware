@@ -82,6 +82,68 @@ class Screen
 #define SEGMENT_WIDTH 16
 #define SEGMENT_HEIGHT 4
 
+namespace
+{
+/// A basic 2D point class for drawing
+class Point
+{
+  public:
+    float x, y;
+
+    Point(float _x, float _y) : x(_x), y(_y) {}
+
+    /// Apply a rotation around zero (standard rotation matrix math)
+    void rotate(float radian)
+    {
+        float cos = cosf(radian), sin = sinf(radian);
+        float rx = x * cos + y * sin, ry = -x * sin + y * cos;
+
+        x = rx;
+        y = ry;
+    }
+
+    void translate(int16_t dx, int dy)
+    {
+        x += dx;
+        y += dy;
+    }
+
+    void scale(float f)
+    {
+        // We use -f here to counter the flip that happens
+        // on the y axis when drawing and rotating on screen
+        x *= f;
+        y *= -f;
+    }
+};
+
+} // namespace
+
+static uint16_t getCompassDiam(OLEDDisplay *display)
+{
+    uint16_t diam = 0;
+    uint16_t offset = 0;
+
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT)
+        offset = FONT_HEIGHT_SMALL;
+
+    // get the smaller of the 2 dimensions and subtract 20
+    if (display->getWidth() > (display->getHeight() - offset)) {
+        diam = display->getHeight() - offset;
+        // if 2/3 of the other size would be smaller, use that
+        if (diam > (display->getWidth() * 2 / 3)) {
+            diam = display->getWidth() * 2 / 3;
+        }
+    } else {
+        diam = display->getWidth();
+        if (diam > ((display->getHeight() - offset) * 2 / 3)) {
+            diam = (display->getHeight() - offset) * 2 / 3;
+        }
+    }
+
+    return diam - 20;
+};
+
 namespace graphics
 {
 
@@ -167,6 +229,30 @@ class Screen : public concurrency::OSThread
     void doDeepSleep();
 
     void blink();
+
+    void drawFrameText(OLEDDisplay *, OLEDDisplayUiState *, int16_t, int16_t, const char *);
+
+    // Draw north
+    void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading)
+    {
+        // If north is supposed to be at the top of the compass we want rotation to be +0
+        if (config.display.compass_north_top)
+            myHeading = -0;
+
+        Point N1(-0.04f, 0.65f), N2(0.04f, 0.65f);
+        Point N3(-0.04f, 0.55f), N4(0.04f, 0.55f);
+        Point *rosePoints[] = {&N1, &N2, &N3, &N4};
+
+        for (int i = 0; i < 4; i++) {
+            // North on compass will be negative of heading
+            rosePoints[i]->rotate(-myHeading);
+            rosePoints[i]->scale(getCompassDiam(display));
+            rosePoints[i]->translate(compassX, compassY);
+        }
+        display->drawLine(N1.x, N1.y, N3.x, N3.y);
+        display->drawLine(N2.x, N2.y, N4.x, N4.y);
+        display->drawLine(N1.x, N1.y, N4.x, N4.y);
+    }
 
     /// Handle button press, trackball or swipe action)
     void onPress() { enqueueCmd(ScreenCmd{.cmd = Cmd::ON_PRESS}); }
@@ -453,92 +539,5 @@ class Screen : public concurrency::OSThread
 };
 
 } // namespace graphics
-namespace
-{
-/// A basic 2D point class for drawing
-class Point
-{
-  public:
-    float x, y;
 
-    Point(float _x, float _y) : x(_x), y(_y) {}
-
-    /// Apply a rotation around zero (standard rotation matrix math)
-    void rotate(float radian)
-    {
-        float cos = cosf(radian), sin = sinf(radian);
-        float rx = x * cos + y * sin, ry = -x * sin + y * cos;
-
-        x = rx;
-        y = ry;
-    }
-
-    void translate(int16_t dx, int dy)
-    {
-        x += dx;
-        y += dy;
-    }
-
-    void scale(float f)
-    {
-        // We use -f here to counter the flip that happens
-        // on the y axis when drawing and rotating on screen
-        x *= f;
-        y *= -f;
-    }
-};
-
-} // namespace
-
-static void drawLine(OLEDDisplay *d, const Point &p1, const Point &p2)
-{
-    d->drawLine(p1.x, p1.y, p2.x, p2.y);
-}
-
-static uint16_t getCompassDiam(OLEDDisplay *display)
-{
-    uint16_t diam = 0;
-    uint16_t offset = 0;
-
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT)
-        offset = FONT_HEIGHT_SMALL;
-
-    // get the smaller of the 2 dimensions and subtract 20
-    if (display->getWidth() > (display->getHeight() - offset)) {
-        diam = display->getHeight() - offset;
-        // if 2/3 of the other size would be smaller, use that
-        if (diam > (display->getWidth() * 2 / 3)) {
-            diam = display->getWidth() * 2 / 3;
-        }
-    } else {
-        diam = display->getWidth();
-        if (diam > ((display->getHeight() - offset) * 2 / 3)) {
-            diam = (display->getHeight() - offset) * 2 / 3;
-        }
-    }
-
-    return diam - 20;
-};
-
-// Draw north
-static void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading)
-{
-    // If north is supposed to be at the top of the compass we want rotation to be +0
-    if (config.display.compass_north_top)
-        myHeading = -0;
-
-    Point N1(-0.04f, 0.65f), N2(0.04f, 0.65f);
-    Point N3(-0.04f, 0.55f), N4(0.04f, 0.55f);
-    Point *rosePoints[] = {&N1, &N2, &N3, &N4};
-
-    for (int i = 0; i < 4; i++) {
-        // North on compass will be negative of heading
-        rosePoints[i]->rotate(-myHeading);
-        rosePoints[i]->scale(getCompassDiam(display));
-        rosePoints[i]->translate(compassX, compassY);
-    }
-    drawLine(display, N1, N3);
-    drawLine(display, N2, N4);
-    drawLine(display, N1, N4);
-}
 #endif
