@@ -202,7 +202,13 @@ class AnalogBatteryLevel : public HasBatteryLevel
 
 #if HAS_TELEMETRY && !defined(ARCH_PORTDUINO) && !defined(HAS_PMU) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
         if (hasINA()) {
-            LOG_DEBUG("Using INA on I2C addr 0x%x for device battery voltage\n", config.power.device_battery_ina_address);
+            static bool first = true;
+
+            if (first) {
+                LOG_DEBUG("Using INA on I2C addr 0x%x for device battery voltage\n", config.power.device_battery_ina_address);
+                first = false;
+            }
+
             return getINAVoltage();
         }
 #endif
