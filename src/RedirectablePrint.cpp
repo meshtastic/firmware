@@ -71,20 +71,49 @@ size_t RedirectablePrint::vprintf(const char *format, va_list arg)
     return len;
 }
 
-size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
+size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_list arg)
+{
+    va_list copy;
+    static char printBuf[160];
+
+    va_copy(copy, arg);
+    size_t len = vsnprintf(printBuf, sizeof(printBuf), format, copy);
+    va_end(copy);
+
+    // If the resulting string is longer than sizeof(printBuf)-1 characters, the remaining characters are still counted for the
+    // return value
+
+    if (len > sizeof(printBuf) - 1) {
+        len = sizeof(printBuf) - 1;
+        printBuf[sizeof(printBuf) - 2] = '\n';
+    }
+    if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0)
+        Print::write("\u001b[34m", 6);
+    if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_INFO) == 0)
+        Print::write("\u001b[32m", 6);
+    if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_WARN) == 0)
+        Print::write("\u001b[33m", 6);
+    if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_ERROR) == 0)
+        Print::write("\u001b[31m", 6);
+    len = Print::write(printBuf, len);
+    Print::write("\u001b[0m", 5);
+    return len;
+}
+
+void RedirectablePrint::log(const char *logLevel, const char *format, ...)
 {
 #ifdef ARCH_PORTDUINO
     if (settingsMap[logoutputlevel] < level_debug && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0)
-        return 0;
+        return;
     else if (settingsMap[logoutputlevel] < level_info && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_INFO) == 0)
-        return 0;
+        return;
     else if (settingsMap[logoutputlevel] < level_warn && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_WARN) == 0)
-        return 0;
+        return;
 #endif
     if (moduleConfig.serial.override_console_serial_port && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0) {
-        return 0;
+        return;
     }
-    size_t r = 0;
+
 #ifdef HAS_FREE_RTOS
     if (inDebugPrint != nullptr && xSemaphoreTake(inDebugPrint, portMAX_DELAY) == pdTRUE) {
 #else
@@ -100,6 +129,14 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
 
         // If we are the first message on a report, include the header
         if (!isContinuationMessage) {
+            if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0)
+                Print::write("\u001b[34m", 6);
+            if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_INFO) == 0)
+                Print::write("\u001b[32m", 6);
+            if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_WARN) == 0)
+                Print::write("\u001b[33m", 6);
+            if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_ERROR) == 0)
+                Print::write("\u001b[31m", 6);
             uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // display local time on logfile
             if (rtc_sec > 0) {
                 long hms = rtc_sec % SEC_PER_DAY;
@@ -113,15 +150,15 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
                 int min = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
                 int sec = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
 #ifdef ARCH_PORTDUINO
-                r += ::printf("%s | %02d:%02d:%02d %u ", logLevel, hour, min, sec, millis() / 1000);
+                ::printf("%s \u001b[0m| %02d:%02d:%02d %u ", logLevel, hour, min, sec, millis() / 1000);
 #else
-                r += printf("%s | %02d:%02d:%02d %u ", logLevel, hour, min, sec, millis() / 1000);
+                printf("%s \u001b[0m| %02d:%02d:%02d %u ", logLevel, hour, min, sec, millis() / 1000);
 #endif
             } else
 #ifdef ARCH_PORTDUINO
-                r += ::printf("%s | ??:??:?? %u ", logLevel, millis() / 1000);
+                ::printf("%s \u001b[0m| ??:??:?? %u ", logLevel, millis() / 1000);
 #else
-                r += printf("%s | ??:??:?? %u ", logLevel, millis() / 1000);
+                printf("%s \u001b[0m| ??:??:?? %u ", logLevel, millis() / 1000);
 #endif
 
             auto thread = concurrency::OSThread::currentThread;
@@ -133,7 +170,7 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
                 print("] ");
             }
         }
-        r += vprintf(format, arg);
+        vprintf(logLevel, format, arg);
 
 #if (HAS_WIFI || HAS_ETHERNET) && !defined(ARCH_PORTDUINO)
         // if syslog is in use, collect the log messages and send them to syslog
@@ -211,7 +248,7 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
 #endif
     }
 
-    return r;
+    return;
 }
 
 void RedirectablePrint::hexDump(const char *logLevel, unsigned char *buf, uint16_t len)
