@@ -82,6 +82,14 @@ class Screen
 #define SEGMENT_WIDTH 16
 #define SEGMENT_HEIGHT 4
 
+static uint16_t displayWidth, displayHeight;
+
+#define SCREEN_WIDTH displayWidth
+#define SCREEN_HEIGHT displayHeight
+
+/// Convert an integer GPS coords to a floating point
+#define DegD(i) (i * 1e-7)
+
 namespace
 {
 /// A basic 2D point class for drawing
@@ -188,8 +196,6 @@ class Screen : public concurrency::OSThread
         CallbackObserver<Screen, const meshtastic::Status *>(this, &Screen::handleStatusUpdate);
     CallbackObserver<Screen, const meshtastic_MeshPacket *> textMessageObserver =
         CallbackObserver<Screen, const meshtastic_MeshPacket *>(this, &Screen::handleTextMessage);
-    CallbackObserver<Screen, const meshtastic_MeshPacket *> waypointObserver =
-        CallbackObserver<Screen, const meshtastic_MeshPacket *>(this, &Screen::handleWaypoint);
     CallbackObserver<Screen, const UIFrameEvent *> uiFrameEventObserver =
         CallbackObserver<Screen, const UIFrameEvent *>(this, &Screen::handleUIFrameEvent);
     CallbackObserver<Screen, const InputEvent *> inputObserver =
@@ -232,27 +238,16 @@ class Screen : public concurrency::OSThread
 
     void drawFrameText(OLEDDisplay *, OLEDDisplayUiState *, int16_t, int16_t, const char *);
 
+    void getTimeAgoStr(uint32_t agoSecs, char *timeStr, uint8_t maxLength);
+
     // Draw north
-    void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading)
-    {
-        // If north is supposed to be at the top of the compass we want rotation to be +0
-        if (config.display.compass_north_top)
-            myHeading = -0;
+    void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading);
 
-        Point N1(-0.04f, 0.65f), N2(0.04f, 0.65f);
-        Point N3(-0.04f, 0.55f), N4(0.04f, 0.55f);
-        Point *rosePoints[] = {&N1, &N2, &N3, &N4};
+    float estimatedHeading(double lat, double lon);
 
-        for (int i = 0; i < 4; i++) {
-            // North on compass will be negative of heading
-            rosePoints[i]->rotate(-myHeading);
-            rosePoints[i]->scale(getCompassDiam(display));
-            rosePoints[i]->translate(compassX, compassY);
-        }
-        display->drawLine(N1.x, N1.y, N3.x, N3.y);
-        display->drawLine(N2.x, N2.y, N4.x, N4.y);
-        display->drawLine(N1.x, N1.y, N4.x, N4.y);
-    }
+    void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, float headingRadian);
+
+    void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields);
 
     /// Handle button press, trackball or swipe action)
     void onPress() { enqueueCmd(ScreenCmd{.cmd = Cmd::ON_PRESS}); }
@@ -421,7 +416,6 @@ class Screen : public concurrency::OSThread
     int handleTextMessage(const meshtastic_MeshPacket *arg);
     int handleUIFrameEvent(const UIFrameEvent *arg);
     int handleInputEvent(const InputEvent *arg);
-    int handleWaypoint(const meshtastic_MeshPacket *arg);
 
     /// Used to force (super slow) eink displays to draw critical frames
     void forceDisplay(bool forceUiUpdate = false);
