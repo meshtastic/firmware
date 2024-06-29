@@ -171,6 +171,11 @@ uint16_t RAK9154Sensor::getBusVoltageMv()
     return dc_vol;
 }
 
+int16_t RAK9154Sensor::getCurrentMa()
+{
+    return 0;
+}
+
 int RAK9154Sensor::getBusBatteryPercent()
 {
     return (int)dc_prec;
