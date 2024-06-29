@@ -79,7 +79,6 @@ namespace graphics
 // A text message frame + debug frame + all the node infos
 FrameCallback *normalFrames;
 static uint32_t targetFramerate = IDLE_FRAMERATE;
-static char btPIN[16] = "888888";
 
 uint32_t logo_timeout = 5000; // 4 seconds for EACH logo
 
@@ -121,6 +120,30 @@ static uint16_t displayWidth, displayHeight;
 
 #define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
 
+/// Check if the display can render a string (detect special chars; emoji)
+static bool haveGlyphs(const char *str)
+{
+#if defined(OLED_UA) || defined(OLED_RU)
+    // Don't want to make any assumptions about custom language support
+    return true;
+#endif
+
+    // Check each character with the lookup function for the OLED library
+    // We're not really meant to use this directly..
+    bool have = true;
+    for (uint16_t i = 0; i < strlen(str); i++) {
+        uint8_t result = Screen::customFontTableLookup((uint8_t)str[i]);
+        // If font doesn't support a character, it is substituted for ¿
+        if (result == 191 && (uint8_t)str[i] != 191) {
+            have = false;
+            break;
+        }
+    }
+
+    LOG_DEBUG("haveGlyphs=%d\n", have);
+    return have;
+}
+
 /**
  * Draw the icon with extra info printed around the corners
  */
@@ -144,13 +167,15 @@ static void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDispl
     if (upperMsg)
         display->drawString(x + 0, y + 0, upperMsg);
 
-    // Draw version in upper right
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%s",
-             xstr(APP_VERSION_SHORT)); // Note: we don't bother printing region or now, it makes the string too long
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(buf), y + 0, buf);
+    // Draw version and short name in upper right
+    char buf[25];
+    snprintf(buf, sizeof(buf), "%s\n%s", xstr(APP_VERSION_SHORT), haveGlyphs(owner.short_name) ? owner.short_name : "");
+
+    display->setTextAlignment(TEXT_ALIGN_RIGHT);
+    display->drawString(x + SCREEN_WIDTH, y + 0, buf);
     screen->forceDisplay();
-    // FIXME - draw serial # somewhere?
+
+    display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
 }
 
 static void drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -185,14 +210,15 @@ static void drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDi
     if (upperMsg)
         display->drawString(x + 0, y + 0, upperMsg);
 
-    // Draw version in upper right
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%s",
-             xstr(APP_VERSION_SHORT)); // Note: we don't bother printing region or now, it makes the string too long
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(buf), y + 0, buf);
+    // Draw version and shortname in upper right
+    char buf[25];
+    snprintf(buf, sizeof(buf), "%s\n%s", xstr(APP_VERSION_SHORT), haveGlyphs(owner.short_name) ? owner.short_name : "");
+
+    display->setTextAlignment(TEXT_ALIGN_RIGHT);
+    display->drawString(x + SCREEN_WIDTH, y + 0, buf);
     screen->forceDisplay();
 
-    // FIXME - draw serial # somewhere?
+    display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
 }
 
 static void drawOEMBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -202,26 +228,12 @@ static void drawOEMBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
     drawOEMIconScreen(region, display, state, x, y);
 }
 
-static void drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *message)
+void Screen::drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *message)
 {
     uint16_t x_offset = display->width() / 2;
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(FONT_MEDIUM);
     display->drawString(x_offset + x, 26 + y, message);
-}
-
-static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-#ifdef ARCH_ESP32
-    if (wakeCause == ESP_SLEEP_WAKEUP_TIMER || wakeCause == ESP_SLEEP_WAKEUP_EXT1) {
-        drawFrameText(display, state, x, y, "Resuming...");
-    } else
-#endif
-    {
-        // Draw region in upper left
-        const char *region = myRegion ? myRegion->name : NULL;
-        drawIconScreen(region, display, state, x, y);
-    }
 }
 
 // Used on boot when a certificate is being created
@@ -281,40 +293,19 @@ static void drawFunctionOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
     }
 }
 
-/// Check if the display can render a string (detect special chars; emoji)
-static bool haveGlyphs(const char *str)
-{
-#if defined(OLED_UA) || defined(OLED_RU)
-    // Don't want to make any assumptions about custom language support
-    return true;
-#endif
-
-    // Check each character with the lookup function for the OLED library
-    // We're not really meant to use this directly..
-    bool have = true;
-    for (uint16_t i = 0; i < strlen(str); i++) {
-        uint8_t result = Screen::customFontTableLookup((uint8_t)str[i]);
-        // If font doesn't support a character, it is substituted for ¿
-        if (result == 191 && (uint8_t)str[i] != 191) {
-            have = false;
-            break;
-        }
-    }
-
-    LOG_DEBUG("haveGlyphs=%d\n", have);
-    return have;
-}
-
 #ifdef USE_EINK
 /// Used on eink displays while in deep sleep
 static void drawDeepSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+
     // Next frame should use full-refresh, and block while running, else device will sleep before async callback
     EINK_ADD_FRAMEFLAG(display, COSMETIC);
     EINK_ADD_FRAMEFLAG(display, BLOCKING);
 
     LOG_DEBUG("Drawing deep sleep screen\n");
-    drawIconScreen("Sleeping...", display, state, x, y);
+
+    // Display displayStr on the screen
+    drawIconScreen("Sleeping", display, state, x, y);
 }
 
 /// Used on eink displays when screen updates are paused
@@ -379,7 +370,7 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
     // in the array of "drawScreen" functions; however,
     // the passed-state doesn't quite reflect the "current"
     // screen, so we have to detect it.
-    if (state->frameState == IN_TRANSITION && state->transitionFrameRelationship == INCOMING) {
+    if (state->frameState == IN_TRANSITION && state->transitionFrameRelationship == TransitionRelationship_INCOMING) {
         // if we're transitioning from the end of the frame list back around to the first
         // frame, then we want this to be `0`
         module_frame = state->transitionFrameTarget;
@@ -391,31 +382,6 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
     // LOG_DEBUG("Drawing Module Frame %d\n\n", module_frame);
     MeshModule &pi = *moduleFrames.at(module_frame);
     pi.drawFrame(display, state, x, y);
-}
-
-static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    int x_offset = display->width() / 2;
-    int y_offset = display->height() <= 80 ? 0 : 32;
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->setFont(FONT_MEDIUM);
-    display->drawString(x_offset + x, y_offset + y, "Bluetooth");
-
-    display->setFont(FONT_SMALL);
-    y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
-    display->drawString(x_offset + x, y_offset + y, "Enter this code");
-
-    display->setFont(FONT_LARGE);
-    String displayPin(btPIN);
-    String pin = displayPin.substring(0, 3) + " " + displayPin.substring(3, 6);
-    y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
-    display->drawString(x_offset + x, y_offset + y, pin);
-
-    display->setFont(FONT_SMALL);
-    String deviceName = "Name: ";
-    deviceName.concat(getDeviceName());
-    y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_LARGE - 6 : y_offset + FONT_HEIGHT_LARGE + 5;
-    display->drawString(x_offset + x, y_offset + y, deviceName);
 }
 
 static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -1307,49 +1273,6 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
     }
 }
 #endif
-namespace
-{
-
-/// A basic 2D point class for drawing
-class Point
-{
-  public:
-    float x, y;
-
-    Point(float _x, float _y) : x(_x), y(_y) {}
-
-    /// Apply a rotation around zero (standard rotation matrix math)
-    void rotate(float radian)
-    {
-        float cos = cosf(radian), sin = sinf(radian);
-        float rx = x * cos + y * sin, ry = -x * sin + y * cos;
-
-        x = rx;
-        y = ry;
-    }
-
-    void translate(int16_t dx, int dy)
-    {
-        x += dx;
-        y += dy;
-    }
-
-    void scale(float f)
-    {
-        // We use -f here to counter the flip that happens
-        // on the y axis when drawing and rotating on screen
-        x *= f;
-        y *= -f;
-    }
-};
-
-} // namespace
-
-static void drawLine(OLEDDisplay *d, const Point &p1, const Point &p2)
-{
-    d->drawLine(p1.x, p1.y, p2.x, p2.y);
-}
-
 /**
  * Given a recent lat/lon return a guess of the heading the user is walking on.
  *
@@ -1380,31 +1303,6 @@ static float estimatedHeading(double lat, double lon)
     return b;
 }
 
-static uint16_t getCompassDiam(OLEDDisplay *display)
-{
-    uint16_t diam = 0;
-    uint16_t offset = 0;
-
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT)
-        offset = FONT_HEIGHT_SMALL;
-
-    // get the smaller of the 2 dimensions and subtract 20
-    if (display->getWidth() > (display->getHeight() - offset)) {
-        diam = display->getHeight() - offset;
-        // if 2/3 of the other size would be smaller, use that
-        if (diam > (display->getWidth() * 2 / 3)) {
-            diam = display->getWidth() * 2 / 3;
-        }
-    } else {
-        diam = display->getWidth();
-        if (diam > ((display->getHeight() - offset) * 2 / 3)) {
-            diam = (display->getHeight() - offset) * 2 / 3;
-        }
-    }
-
-    return diam - 20;
-};
-
 /// We will skip one node - the one for us, so we just blindly loop over all
 /// nodes
 static size_t nodeIndex;
@@ -1424,31 +1322,9 @@ static void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t comp
         arrowPoints[i]->scale(getCompassDiam(display) * 0.6);
         arrowPoints[i]->translate(compassX, compassY);
     }
-    drawLine(display, tip, tail);
-    drawLine(display, leftArrow, tip);
-    drawLine(display, rightArrow, tip);
-}
-
-// Draw north
-static void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading)
-{
-    // If north is supposed to be at the top of the compass we want rotation to be +0
-    if (config.display.compass_north_top)
-        myHeading = -0;
-
-    Point N1(-0.04f, 0.65f), N2(0.04f, 0.65f);
-    Point N3(-0.04f, 0.55f), N4(0.04f, 0.55f);
-    Point *rosePoints[] = {&N1, &N2, &N3, &N4};
-
-    for (int i = 0; i < 4; i++) {
-        // North on compass will be negative of heading
-        rosePoints[i]->rotate(-myHeading);
-        rosePoints[i]->scale(getCompassDiam(display));
-        rosePoints[i]->translate(compassX, compassY);
-    }
-    drawLine(display, N1, N3);
-    drawLine(display, N2, N4);
-    drawLine(display, N1, N4);
+    display->drawLine(tip.x, tip.y, tail.x, tail.y);
+    display->drawLine(leftArrow.x, leftArrow.y, tip.x, tip.y);
+    display->drawLine(rightArrow.x, rightArrow.y, tip.x, tip.y);
 }
 
 // Get a string representation of the time passed since something happened
@@ -1549,7 +1425,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             myHeading = (screen->getHeading()) * PI / 180; // gotta convert compass degrees to Radians
         else
             myHeading = estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
-        drawCompassNorth(display, compassX, compassY, myHeading);
+        screen->drawCompassNorth(display, compassX, compassY, myHeading);
 
         if (hasValidPosition(node)) {
             // display direction toward node
@@ -1650,7 +1526,7 @@ static void drawWaypointFrame(OLEDDisplay *display, OLEDDisplayUiState *state, i
             myHeading = (screen->getHeading()) * PI / 180; // gotta convert compass degrees to Radians
         else
             myHeading = estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
-        drawCompassNorth(display, compassX, compassY, myHeading);
+        screen->drawCompassNorth(display, compassX, compassY, myHeading);
 
         // Distance to Waypoint
         float d = GeoCoord::latLongToMeter(DegD(wp.latitude_i), DegD(wp.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
@@ -1846,9 +1722,19 @@ void Screen::setup()
 
     // Add frames.
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST);
-    static FrameCallback bootFrames[] = {drawBootScreen};
-    static const int bootFrameCount = sizeof(bootFrames) / sizeof(bootFrames[0]);
-    ui->setFrames(bootFrames, bootFrameCount);
+    alertFrames[0] = [this](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
+#ifdef ARCH_ESP32
+        if (wakeCause == ESP_SLEEP_WAKEUP_TIMER || wakeCause == ESP_SLEEP_WAKEUP_EXT1) {
+            drawFrameText(display, state, x, y, "Resuming...");
+        } else
+#endif
+        {
+            // Draw region in upper left
+            const char *region = myRegion ? myRegion->name : NULL;
+            drawIconScreen(region, display, state, x, y);
+        }
+    };
+    ui->setFrames(alertFrames, 1);
     // No overlays.
     ui->setOverlays(nullptr, 0);
 
@@ -2023,13 +1909,22 @@ int32_t Screen::runOnce()
         case Cmd::SHOW_NEXT_FRAME:
             handleShowNextFrame();
             break;
-        case Cmd::START_BLUETOOTH_PIN_SCREEN:
-            handleStartBluetoothPinScreen(cmd.bluetooth_pin);
+        case Cmd::START_ALERT_FRAME: {
+            showingBootScreen = false; // this should avoid the edge case where an alert triggers before the boot screen goes away
+            showingNormalScreen = false;
+            alertFrames[0] = alertFrame;
+#ifdef USE_EINK
+            EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Use fast-refresh for next frame, no skip please
+            EINK_ADD_FRAMEFLAG(dispdev, BLOCKING);    // Edge case: if this frame is promoted to COSMETIC, wait for update
+            handleSetOn(true); // Ensure power-on to receive deep-sleep screensaver (PowerFSM should handle?)
+#endif
+            setFrameImmediateDraw(alertFrames);
             break;
+        }
         case Cmd::START_FIRMWARE_UPDATE_SCREEN:
             handleStartFirmwareUpdateScreen();
             break;
-        case Cmd::STOP_BLUETOOTH_PIN_SCREEN:
+        case Cmd::STOP_ALERT_FRAME:
         case Cmd::STOP_BOOT_SCREEN:
             EINK_ADD_FRAMEFLAG(dispdev, COSMETIC); // E-Ink: Explicitly use full-refresh for next frame
             setFrames();
@@ -2037,12 +1932,6 @@ int32_t Screen::runOnce()
         case Cmd::PRINT:
             handlePrint(cmd.print_text);
             free(cmd.print_text);
-            break;
-        case Cmd::START_SHUTDOWN_SCREEN:
-            handleShutdownScreen();
-            break;
-        case Cmd::START_REBOOT_SCREEN:
-            handleRebootScreen();
             break;
         default:
             LOG_ERROR("Invalid screen cmd\n");
@@ -2284,57 +2173,11 @@ void Screen::setFrames()
     setFastFramerate(); // Draw ASAP
 }
 
-void Screen::handleStartBluetoothPinScreen(uint32_t pin)
-{
-    LOG_DEBUG("showing bluetooth screen\n");
-    showingNormalScreen = false;
-    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // E-Ink: Explicitly use fast-refresh for next frame
-
-    static FrameCallback frames[] = {drawFrameBluetooth};
-    snprintf(btPIN, sizeof(btPIN), "%06u", pin);
-    setFrameImmediateDraw(frames);
-}
-
 void Screen::setFrameImmediateDraw(FrameCallback *drawFrames)
 {
     ui->disableAllIndicators();
     ui->setFrames(drawFrames, 1);
     setFastFramerate();
-}
-
-void Screen::handleShutdownScreen()
-{
-    LOG_DEBUG("showing shutdown screen\n");
-    showingNormalScreen = false;
-#ifdef USE_EINK
-    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Use fast-refresh for next frame, no skip please
-    EINK_ADD_FRAMEFLAG(dispdev, BLOCKING);    // Edge case: if this frame is promoted to COSMETIC, wait for update
-    handleSetOn(true);                        // Ensure power-on to receive deep-sleep screensaver (PowerFSM should handle?)
-#endif
-
-    auto frame = [](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
-        drawFrameText(display, state, x, y, "Shutting down...");
-    };
-    static FrameCallback frames[] = {frame};
-
-    setFrameImmediateDraw(frames);
-}
-
-void Screen::handleRebootScreen()
-{
-    LOG_DEBUG("showing reboot screen\n");
-    showingNormalScreen = false;
-#ifdef USE_EINK
-    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Use fast-refresh for next frame, no skip please
-    EINK_ADD_FRAMEFLAG(dispdev, BLOCKING);    // Edge case: if this frame is promoted to COSMETIC, wait for update
-    handleSetOn(true);                        // Power-on to show rebooting screen (PowerFSM should handle?)
-#endif
-
-    auto frame = [](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
-        drawFrameText(display, state, x, y, "Rebooting...");
-    };
-    static FrameCallback frames[] = {frame};
-    setFrameImmediateDraw(frames);
 }
 
 void Screen::handleStartFirmwareUpdateScreen()
