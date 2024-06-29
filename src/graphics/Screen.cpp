@@ -107,6 +107,11 @@ GeoCoord geoCoord;
 static bool heartbeat = false;
 #endif
 
+// Quick access to screen dimensions from static drawing functions
+// DEPRECATED. To-do: move static functions inside Screen class
+#define SCREEN_WIDTH display->getWidth()
+#define SCREEN_HEIGHT display->getHeight()
+
 #include "graphics/ScreenFonts.h"
 
 #define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
@@ -2064,7 +2069,7 @@ void Screen::blink()
     uint8_t count = 10;
     dispdev->setBrightness(254);
     while (count > 0) {
-        dispdev->fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+        dispdev->fillRect(0, 0, dispdev->getWidth(), dispdev->getHeight());
         dispdev->display();
         delay(50);
         dispdev->clear();

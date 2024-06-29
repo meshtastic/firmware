@@ -82,11 +82,6 @@ class Screen
 #define SEGMENT_WIDTH 16
 #define SEGMENT_HEIGHT 4
 
-static uint16_t displayWidth, displayHeight;
-
-#define SCREEN_WIDTH displayWidth
-#define SCREEN_HEIGHT displayHeight
-
 /// Convert an integer GPS coords to a floating point
 #define DegD(i) (i * 1e-7)
 
@@ -437,6 +432,11 @@ class Screen : public concurrency::OSThread
     int32_t runOnce() final;
 
     bool isAUTOOled = false;
+
+    // Screen dimensions (for convenience)
+    // Defined during Screen::setup
+    uint16_t displayWidth = 0;
+    uint16_t displayHeight = 0;
 
   private:
     FrameCallback alertFrames[1];

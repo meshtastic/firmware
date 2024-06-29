@@ -99,11 +99,11 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
     // Co-ordinates for the center of the compass/circle
     int16_t compassX = 0, compassY = 0;
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
-        compassX = x + SCREEN_WIDTH - getCompassDiam(display) / 2 - 5;
-        compassY = y + SCREEN_HEIGHT / 2;
+        compassX = x + display->getWidth() - getCompassDiam(display) / 2 - 5;
+        compassY = y + display->getHeight() / 2;
     } else {
-        compassX = x + SCREEN_WIDTH - getCompassDiam(display) / 2 - 5;
-        compassY = y + FONT_HEIGHT_SMALL + (SCREEN_HEIGHT - FONT_HEIGHT_SMALL) / 2;
+        compassX = x + display->getWidth() - getCompassDiam(display) / 2 - 5;
+        compassY = y + FONT_HEIGHT_SMALL + (display->getHeight() - FONT_HEIGHT_SMALL) / 2;
     }
 
     // If our node has a position:
