@@ -50,27 +50,6 @@ size_t RedirectablePrint::write(uint8_t c)
               // serial port said (which could be zero)
 }
 
-size_t RedirectablePrint::vprintf(const char *format, va_list arg)
-{
-    va_list copy;
-    static char printBuf[160];
-
-    va_copy(copy, arg);
-    size_t len = vsnprintf(printBuf, sizeof(printBuf), format, copy);
-    va_end(copy);
-
-    // If the resulting string is longer than sizeof(printBuf)-1 characters, the remaining characters are still counted for the
-    // return value
-
-    if (len > sizeof(printBuf) - 1) {
-        len = sizeof(printBuf) - 1;
-        printBuf[sizeof(printBuf) - 2] = '\n';
-    }
-
-    len = Print::write(printBuf, len);
-    return len;
-}
-
 size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_list arg)
 {
     va_list copy;
@@ -87,14 +66,20 @@ size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_l
         len = sizeof(printBuf) - 1;
         printBuf[sizeof(printBuf) - 2] = '\n';
     }
-    if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0)
-        Print::write("\u001b[34m", 6);
-    if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_INFO) == 0)
-        Print::write("\u001b[32m", 6);
-    if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_WARN) == 0)
-        Print::write("\u001b[33m", 6);
-    if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_ERROR) == 0)
-        Print::write("\u001b[31m", 6);
+    for (size_t f = 0; f < len; f++) {
+        if (!std::isprint(static_cast<unsigned char>(printBuf[f])) && printBuf[f] != '\n')
+            printBuf[f] = '#';
+    }
+    if (logLevel != nullptr) {
+        if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0)
+            Print::write("\u001b[34m", 6);
+        if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_INFO) == 0)
+            Print::write("\u001b[32m", 6);
+        if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_WARN) == 0)
+            Print::write("\u001b[33m", 6);
+        if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_ERROR) == 0)
+            Print::write("\u001b[31m", 6);
+    }
     len = Print::write(printBuf, len);
     Print::write("\u001b[0m", 5);
     return len;

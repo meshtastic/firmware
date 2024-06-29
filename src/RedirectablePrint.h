@@ -44,7 +44,6 @@ class RedirectablePrint : public Print
     void log(const char *logLevel, const char *format, ...) __attribute__((format(printf, 3, 4)));
 
     /** like printf but va_list based */
-    size_t vprintf(const char *format, va_list arg);
     size_t vprintf(const char *logLevel, const char *format, va_list arg);
 
     void hexDump(const char *logLevel, unsigned char *buf, uint16_t len);
