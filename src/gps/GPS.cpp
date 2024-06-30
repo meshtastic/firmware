@@ -1107,7 +1107,7 @@ int32_t GPS::runOnce()
 
     bool tooLong = scheduling.searchedTooLong();
     if (tooLong)
-        LOG_INFO("Searching for GPS lock taking too long. Giving up; try again later\n");
+        LOG_WARN("Searching for GPS lock taking too long: giving up for now\n");
 
     // Once we get a location we no longer desperately want an update
     // LOG_DEBUG("gotLoc %d, tooLong %d, gotTime %d\n", gotLoc, tooLong, gotTime);
