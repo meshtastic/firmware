@@ -104,6 +104,8 @@ class PhoneAPI
      */
     size_t getFromRadio(uint8_t *buf);
 
+    void sendConfigComplete();
+
     /**
      * Return true if we have data available to send to the phone
      */
