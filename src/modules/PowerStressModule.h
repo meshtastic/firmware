@@ -9,6 +9,7 @@
 class PowerStressModule : public ProtobufModule<meshtastic_PowerStressMessage>, private concurrency::OSThread
 {
     meshtastic_PowerStressMessage currentMessage;
+    bool isRunningCommand = false;
 
   public:
     /** Constructor
