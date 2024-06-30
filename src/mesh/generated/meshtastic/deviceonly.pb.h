@@ -8,7 +8,6 @@
 #include "meshtastic/channel.pb.h"
 #include "meshtastic/localonly.pb.h"
 #include "meshtastic/mesh.pb.h"
-#include "meshtastic/module_config.pb.h"
 #include "meshtastic/telemetry.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
