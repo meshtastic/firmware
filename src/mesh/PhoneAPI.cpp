@@ -355,9 +355,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         LOG_INFO("getFromRadio=STATE_SEND_FILEMANIFEST\n");
         // last element
         if (config_state == filesManifest.size()) { // also handles an empty filesManifest
-            state = STATE_SEND_COMPLETE_ID;
             config_state = 0;
             filesManifest.clear();
+            // Skip to complete packet
             sendConfigComplete();
         } else {
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_fileInfo_tag;
