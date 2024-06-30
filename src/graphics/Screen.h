@@ -82,6 +82,9 @@ class Screen
 #define SEGMENT_WIDTH 16
 #define SEGMENT_HEIGHT 4
 
+/// Convert an integer GPS coords to a floating point
+#define DegD(i) (i * 1e-7)
+
 namespace
 {
 /// A basic 2D point class for drawing
@@ -118,31 +121,6 @@ class Point
 };
 
 } // namespace
-
-static uint16_t getCompassDiam(OLEDDisplay *display)
-{
-    uint16_t diam = 0;
-    uint16_t offset = 0;
-
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT)
-        offset = FONT_HEIGHT_SMALL;
-
-    // get the smaller of the 2 dimensions and subtract 20
-    if (display->getWidth() > (display->getHeight() - offset)) {
-        diam = display->getHeight() - offset;
-        // if 2/3 of the other size would be smaller, use that
-        if (diam > (display->getWidth() * 2 / 3)) {
-            diam = display->getWidth() * 2 / 3;
-        }
-    } else {
-        diam = display->getWidth();
-        if (diam > ((display->getHeight() - offset) * 2 / 3)) {
-            diam = (display->getHeight() - offset) * 2 / 3;
-        }
-    }
-
-    return diam - 20;
-};
 
 namespace graphics
 {
@@ -188,8 +166,6 @@ class Screen : public concurrency::OSThread
         CallbackObserver<Screen, const meshtastic::Status *>(this, &Screen::handleStatusUpdate);
     CallbackObserver<Screen, const meshtastic_MeshPacket *> textMessageObserver =
         CallbackObserver<Screen, const meshtastic_MeshPacket *>(this, &Screen::handleTextMessage);
-    CallbackObserver<Screen, const meshtastic_MeshPacket *> waypointObserver =
-        CallbackObserver<Screen, const meshtastic_MeshPacket *>(this, &Screen::handleWaypoint);
     CallbackObserver<Screen, const UIFrameEvent *> uiFrameEventObserver =
         CallbackObserver<Screen, const UIFrameEvent *>(this, &Screen::handleUIFrameEvent);
     CallbackObserver<Screen, const InputEvent *> inputObserver =
@@ -232,27 +208,18 @@ class Screen : public concurrency::OSThread
 
     void drawFrameText(OLEDDisplay *, OLEDDisplayUiState *, int16_t, int16_t, const char *);
 
+    void getTimeAgoStr(uint32_t agoSecs, char *timeStr, uint8_t maxLength);
+
     // Draw north
-    void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading)
-    {
-        // If north is supposed to be at the top of the compass we want rotation to be +0
-        if (config.display.compass_north_top)
-            myHeading = -0;
+    void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading);
 
-        Point N1(-0.04f, 0.65f), N2(0.04f, 0.65f);
-        Point N3(-0.04f, 0.55f), N4(0.04f, 0.55f);
-        Point *rosePoints[] = {&N1, &N2, &N3, &N4};
+    static uint16_t getCompassDiam(uint32_t displayWidth, uint32_t displayHeight);
 
-        for (int i = 0; i < 4; i++) {
-            // North on compass will be negative of heading
-            rosePoints[i]->rotate(-myHeading);
-            rosePoints[i]->scale(getCompassDiam(display));
-            rosePoints[i]->translate(compassX, compassY);
-        }
-        display->drawLine(N1.x, N1.y, N3.x, N3.y);
-        display->drawLine(N2.x, N2.y, N4.x, N4.y);
-        display->drawLine(N1.x, N1.y, N4.x, N4.y);
-    }
+    float estimatedHeading(double lat, double lon);
+
+    void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, uint16_t compassDiam, float headingRadian);
+
+    void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields);
 
     /// Handle button press, trackball or swipe action)
     void onPress() { enqueueCmd(ScreenCmd{.cmd = Cmd::ON_PRESS}); }
@@ -421,7 +388,6 @@ class Screen : public concurrency::OSThread
     int handleTextMessage(const meshtastic_MeshPacket *arg);
     int handleUIFrameEvent(const UIFrameEvent *arg);
     int handleInputEvent(const InputEvent *arg);
-    int handleWaypoint(const meshtastic_MeshPacket *arg);
 
     /// Used to force (super slow) eink displays to draw critical frames
     void forceDisplay(bool forceUiUpdate = false);
@@ -443,6 +409,11 @@ class Screen : public concurrency::OSThread
     int32_t runOnce() final;
 
     bool isAUTOOled = false;
+
+    // Screen dimensions (for convenience)
+    // Defined during Screen::setup
+    uint16_t displayWidth = 0;
+    uint16_t displayHeight = 0;
 
   private:
     FrameCallback alertFrames[1];
