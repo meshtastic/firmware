@@ -1018,18 +1018,6 @@ void GPS::down()
     }
 }
 
-/** Get how long we should stay looking for each acquisition in msecs
- */
-uint32_t GPS::getWakeTime() const
-{
-    uint32_t t = config.position.position_broadcast_secs;
-
-    if (t == UINT32_MAX)
-        return t; // already maxint
-
-    return Default::getConfiguredOrDefaultMs(t, default_broadcast_interval_secs);
-}
-
 void GPS::publishUpdate()
 {
     if (shouldPublish) {
@@ -1117,8 +1105,7 @@ int32_t GPS::runOnce()
         shouldPublish = true;
     }
 
-    auto wakeTime = getWakeTime();
-    bool tooLong = wakeTime != UINT32_MAX && scheduling.elapsedSearchMs() > wakeTime;
+    bool tooLong = scheduling.searchedTooLong();
 
     // Once we get a location we no longer desperately want an update
     // LOG_DEBUG("gotLoc %d, tooLong %d, gotTime %d\n", gotLoc, tooLong, gotTime);

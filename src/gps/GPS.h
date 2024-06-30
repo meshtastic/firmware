@@ -265,10 +265,6 @@ class GPS : private concurrency::OSThread
     void UBXChecksum(uint8_t *message, size_t length);
     void CASChecksum(uint8_t *message, size_t length);
 
-    /** Get how long we should stay looking for each aquisition
-     */
-    uint32_t getWakeTime() const;
-
     /** Set power with EN pin, if relevant
      */
     void writePinEN(bool on);
