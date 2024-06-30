@@ -5,6 +5,7 @@
 
 #include "Channels.h"
 #include "Default.h"
+#include "FSCommon.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PhoneAPI.h"
@@ -46,6 +47,9 @@ void PhoneAPI::handleStartConfig()
 
     // even if we were already connected - restart our state machine
     state = STATE_SEND_MY_INFO;
+    pauseBluetoothLogging = true;
+    filesManifest = getFiles("/", 10);
+    LOG_DEBUG("Got %d files in manifest\n", filesManifest.size());
 
     LOG_INFO("Starting API client config\n");
     nodeInfoForPhone.num = 0; // Don't keep returning old nodeinfos
@@ -148,6 +152,7 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
     STATE_SEND_CONFIG,
     STATE_SEND_MODULE_CONFIG,
     STATE_SEND_OTHER_NODEINFOS, // states progress in this order as the device sends to the client
+    STATE_SEND_FILEMANIFEST,
     STATE_SEND_COMPLETE_ID,
     STATE_SEND_PACKETS // send packets or debug strings
  */
@@ -323,7 +328,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         // Advance when we have sent all of our ModuleConfig objects
         if (config_state > (_meshtastic_AdminMessage_ModuleConfigType_MAX + 1)) {
             // Clients sending special nonce don't want to see other nodeinfos
-            state = config_nonce == SPECIAL_NONCE ? STATE_SEND_COMPLETE_ID : STATE_SEND_OTHER_NODEINFOS;
+            state = config_nonce == SPECIAL_NONCE ? STATE_SEND_FILEMANIFEST : STATE_SEND_OTHER_NODEINFOS;
             config_state = 0;
         }
         break;
@@ -339,9 +344,25 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             nodeInfoForPhone.num = 0; // We just consumed a nodeinfo, will need a new one next time
         } else {
             LOG_INFO("Done sending nodeinfos\n");
-            state = STATE_SEND_COMPLETE_ID;
+            state = STATE_SEND_FILEMANIFEST;
             // Go ahead and send that ID right now
             return getFromRadio(buf);
+        }
+        break;
+    }
+
+    case STATE_SEND_FILEMANIFEST: {
+        LOG_INFO("getFromRadio=STATE_SEND_FILEMANIFEST\n");
+        // last element
+        if (config_state == filesManifest.size()) { // also handles an empty filesManifest
+            state = STATE_SEND_COMPLETE_ID;
+            config_state = 0;
+            filesManifest.clear();
+        } else {
+            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_fileInfo_tag;
+            fromRadioScratch.fileInfo = filesManifest.at(config_state);
+            LOG_DEBUG("File: %s (%d) bytes\n", fromRadioScratch.fileInfo.file_name, fromRadioScratch.fileInfo.size_bytes);
+            config_state++;
         }
         break;
     }
@@ -352,9 +373,11 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         fromRadioScratch.config_complete_id = config_nonce;
         config_nonce = 0;
         state = STATE_SEND_PACKETS;
+        pauseBluetoothLogging = false;
         break;
 
     case STATE_SEND_PACKETS:
+        pauseBluetoothLogging = false;
         // Do we have a message from the mesh or packet from the local device?
         LOG_INFO("getFromRadio=STATE_SEND_PACKETS\n");
         if (queueStatusPacketForPhone) {
@@ -398,6 +421,8 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
 
 void PhoneAPI::handleDisconnect()
 {
+    filesManifest.clear();
+    pauseBluetoothLogging = false;
     LOG_INFO("PhoneAPI disconnect\n");
 }
 
@@ -439,6 +464,7 @@ bool PhoneAPI::available()
     case STATE_SEND_MODULECONFIG:
     case STATE_SEND_METADATA:
     case STATE_SEND_OWN_NODEINFO:
+    case STATE_SEND_FILEMANIFEST:
     case STATE_SEND_COMPLETE_ID:
         return true;
 
@@ -453,7 +479,6 @@ bool PhoneAPI::available()
             }
         }
         return true; // Always say we have something, because we might need to advance our state machine
-
     case STATE_SEND_PACKETS: {
         if (!queueStatusPacketForPhone)
             queueStatusPacketForPhone = service.getQueueStatusForPhone();

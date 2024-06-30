@@ -66,10 +66,6 @@ bool PaxcounterModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, m
 
 meshtastic_MeshPacket *PaxcounterModule::allocReply()
 {
-    if (ignoreRequest) {
-        return NULL;
-    }
-
     meshtastic_Paxcount pl = meshtastic_Paxcount_init_default;
     pl.wifi = count_from_libpax.wifi_count;
     pl.ble = count_from_libpax.ble_count;
