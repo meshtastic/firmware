@@ -24,7 +24,7 @@ void consolePrintf(const char *format, ...)
 {
     va_list arg;
     va_start(arg, format);
-    console->vprintf(format, arg);
+    console->vprintf(nullptr, format, arg);
     va_end(arg);
     console->flush();
 }

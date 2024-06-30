@@ -45,7 +45,7 @@ size_t RedirectablePrint::write(uint8_t c)
               // serial port said (which could be zero)
 }
 
-size_t RedirectablePrint::vprintf(const char *format, va_list arg)
+size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_list arg)
 {
     va_list copy;
     static char printBuf[160];
@@ -61,8 +61,22 @@ size_t RedirectablePrint::vprintf(const char *format, va_list arg)
         len = sizeof(printBuf) - 1;
         printBuf[sizeof(printBuf) - 2] = '\n';
     }
-
+    for (size_t f = 0; f < len; f++) {
+        if (!std::isprint(static_cast<unsigned char>(printBuf[f])) && printBuf[f] != '\n')
+            printBuf[f] = '#';
+    }
+    if (logLevel != nullptr) {
+        if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0)
+            Print::write("\u001b[34m", 6);
+        if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_INFO) == 0)
+            Print::write("\u001b[32m", 6);
+        if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_WARN) == 0)
+            Print::write("\u001b[33m", 6);
+        if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_ERROR) == 0)
+            Print::write("\u001b[31m", 6);
+    }
     len = Print::write(printBuf, len);
+    Print::write("\u001b[0m", 5);
     return len;
 }
 
@@ -75,6 +89,14 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
 
     // If we are the first message on a report, include the header
     if (!isContinuationMessage) {
+        if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0)
+            Print::write("\u001b[34m", 6);
+        if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_INFO) == 0)
+            Print::write("\u001b[32m", 6);
+        if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_WARN) == 0)
+            Print::write("\u001b[33m", 6);
+        if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_ERROR) == 0)
+            Print::write("\u001b[31m", 6);
         uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // display local time on logfile
         if (rtc_sec > 0) {
             long hms = rtc_sec % SEC_PER_DAY;
@@ -88,15 +110,15 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
             int min = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
             int sec = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
 #ifdef ARCH_PORTDUINO
-            r += ::printf("%s | %02d:%02d:%02d %u ", logLevel, hour, min, sec, millis() / 1000);
+            ::printf("%s \u001b[0m| %02d:%02d:%02d %u ", logLevel, hour, min, sec, millis() / 1000);
 #else
-            r += printf("%s | %02d:%02d:%02d %u ", logLevel, hour, min, sec, millis() / 1000);
+            printf("%s \u001b[0m| %02d:%02d:%02d %u ", logLevel, hour, min, sec, millis() / 1000);
 #endif
         } else
 #ifdef ARCH_PORTDUINO
-            r += ::printf("%s | ??:??:?? %u ", logLevel, millis() / 1000);
+            ::printf("%s \u001b[0m| ??:??:?? %u ", logLevel, millis() / 1000);
 #else
-            r += printf("%s | ??:??:?? %u ", logLevel, millis() / 1000);
+            printf("%s \u001b[0m| ??:??:?? %u ", logLevel, millis() / 1000);
 #endif
 
         auto thread = concurrency::OSThread::currentThread;
@@ -108,7 +130,7 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
             print("] ");
         }
     }
-    r += vprintf(format, arg);
+    r += vprintf(logLevel, format, arg);
 
     isContinuationMessage = !hasNewline;
 }
@@ -186,18 +208,18 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
     }
 }
 
-size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
+void RedirectablePrint::log(const char *logLevel, const char *format, ...)
 {
 #ifdef ARCH_PORTDUINO
     if (settingsMap[logoutputlevel] < level_debug && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0)
-        return 0;
+        return;
     else if (settingsMap[logoutputlevel] < level_info && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_INFO) == 0)
-        return 0;
+        return;
     else if (settingsMap[logoutputlevel] < level_warn && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_WARN) == 0)
-        return 0;
+        return;
 #endif
     if (moduleConfig.serial.override_console_serial_port && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0) {
-        return 0;
+        return;
     }
 
 #ifdef HAS_FREE_RTOS
@@ -222,8 +244,7 @@ size_t RedirectablePrint::log(const char *logLevel, const char *format, ...)
 #endif
     }
 
-    return 0; // We assume callers don't really care about the # of chars printed (given that this method now sometimes goes out
-              // via BLE or syslog)
+    return;
 }
 
 void RedirectablePrint::hexDump(const char *logLevel, unsigned char *buf, uint16_t len)

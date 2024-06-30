@@ -319,8 +319,8 @@ ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &m
 #ifdef ARCH_ESP32
     if (moduleConfig.store_forward.enabled) {
 
-        // The router node should not be sending messages as a client. Unless he is a ROUTER_CLIENT
-        if ((getFrom(&mp) != nodeDB->getNodeNum()) || (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT)) {
+        // The router node should not be sending messages as a client
+        if ((getFrom(&mp) != nodeDB->getNodeNum())) {
 
             if ((mp.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) && is_server) {
                 auto &p = mp.decoded;
