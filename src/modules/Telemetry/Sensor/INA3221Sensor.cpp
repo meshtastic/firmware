@@ -58,6 +58,9 @@ bool INA3221Sensor::getMetrics(meshtastic_Telemetry *measurement)
     case meshtastic_Telemetry_power_metrics_tag:
         return getPowerMetrics(measurement);
     }
+
+    // unsupported metric
+    return false;
 }
 
 bool INA3221Sensor::getEnvironmentMetrics(meshtastic_Telemetry *measurement)
