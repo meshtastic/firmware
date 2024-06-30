@@ -43,7 +43,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "meshUtils.h"
 #include "modules/ExternalNotificationModule.h"
 #include "modules/TextMessageModule.h"
-#include "modules/WaypointModule.h"
 #include "sleep.h"
 #include "target_specific.h"
 
@@ -59,9 +58,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #if ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
-
-/// Convert an integer GPS coords to a floating point
-#define DegD(i) (i * 1e-7)
 
 using namespace meshtastic; /** @todo remove */
 
@@ -111,10 +107,10 @@ GeoCoord geoCoord;
 static bool heartbeat = false;
 #endif
 
-static uint16_t displayWidth, displayHeight;
-
-#define SCREEN_WIDTH displayWidth
-#define SCREEN_HEIGHT displayHeight
+// Quick access to screen dimensions from static drawing functions
+// DEPRECATED. To-do: move static functions inside Screen class
+#define SCREEN_WIDTH display->getWidth()
+#define SCREEN_HEIGHT display->getHeight()
 
 #include "graphics/ScreenFonts.h"
 
@@ -414,37 +410,6 @@ static void drawCriticalFaultFrame(OLEDDisplay *display, OLEDDisplayUiState *sta
 static bool shouldDrawMessage(const meshtastic_MeshPacket *packet)
 {
     return packet->from != 0 && !moduleConfig.store_forward.enabled;
-}
-
-// Determine whether the waypoint frame should be drawn (waypoint deleted? expired?)
-static bool shouldDrawWaypoint(const meshtastic_MeshPacket *packet)
-{
-#if !MESHTASTIC_EXCLUDE_WAYPOINT
-    // If no waypoint to show
-    if (!devicestate.has_rx_waypoint)
-        return false;
-
-    // Decode the message, to find the expiration time (is waypoint still valid)
-    // This handles "deletion" as well as expiration
-    meshtastic_Waypoint wp;
-    memset(&wp, 0, sizeof(wp));
-    if (pb_decode_from_bytes(packet->decoded.payload.bytes, packet->decoded.payload.size, &meshtastic_Waypoint_msg, &wp)) {
-        // Valid waypoint
-        if (wp.expire > getTime())
-            return devicestate.has_rx_waypoint = true;
-
-        // Expired, or deleted
-        else
-            return devicestate.has_rx_waypoint = false;
-    }
-
-    // If decoding failed
-    LOG_ERROR("Failed to decode waypoint\n");
-    devicestate.has_rx_waypoint = false;
-    return false;
-#else
-    return false;
-#endif
 }
 
 // Draw power bars or a charging indicator on an image of a battery, determined by battery charge voltage or percentage.
@@ -1093,7 +1058,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
 }
 
 /// Draw a series of fields in a column, wrapping to multiple columns if needed
-static void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields)
+void Screen::drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields)
 {
     // The coordinates define the left starting point of the text
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -1279,7 +1244,7 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
  * We keep a series of "after you've gone 10 meters, what is your heading since
  * the last reference point?"
  */
-static float estimatedHeading(double lat, double lon)
+float Screen::estimatedHeading(double lat, double lon)
 {
     static double oldLat, oldLon;
     static float b;
@@ -1309,7 +1274,7 @@ static size_t nodeIndex;
 static int8_t prevFrame = -1;
 
 // Draw the arrow pointing to a node's location
-static void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, float headingRadian)
+void Screen::drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, uint16_t compassDiam, float headingRadian)
 {
     Point tip(0.0f, 0.5f), tail(0.0f, -0.5f); // pointing up initially
     float arrowOffsetX = 0.2f, arrowOffsetY = 0.2f;
@@ -1319,7 +1284,7 @@ static void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t comp
 
     for (int i = 0; i < 4; i++) {
         arrowPoints[i]->rotate(headingRadian);
-        arrowPoints[i]->scale(getCompassDiam(display) * 0.6);
+        arrowPoints[i]->scale(compassDiam * 0.6);
         arrowPoints[i]->translate(compassX, compassY);
     }
     display->drawLine(tip.x, tip.y, tail.x, tail.y);
@@ -1328,7 +1293,7 @@ static void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t comp
 }
 
 // Get a string representation of the time passed since something happened
-static void getTimeAgoStr(uint32_t agoSecs, char *timeStr, uint8_t maxLength)
+void Screen::getTimeAgoStr(uint32_t agoSecs, char *timeStr, uint8_t maxLength)
 {
     // Use an absolute timestamp in some cases.
     // Particularly useful with E-Ink displays. Static UI, fewer refreshes.
@@ -1356,6 +1321,54 @@ static void getTimeAgoStr(uint32_t agoSecs, char *timeStr, uint8_t maxLength)
     else
         snprintf(timeStr, maxLength, "unknown age");
 }
+
+void Screen::drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading)
+{
+    // If north is supposed to be at the top of the compass we want rotation to be +0
+    if (config.display.compass_north_top)
+        myHeading = -0;
+
+    Point N1(-0.04f, 0.65f), N2(0.04f, 0.65f);
+    Point N3(-0.04f, 0.55f), N4(0.04f, 0.55f);
+    Point *rosePoints[] = {&N1, &N2, &N3, &N4};
+
+    uint16_t compassDiam = Screen::getCompassDiam(SCREEN_WIDTH, SCREEN_HEIGHT);
+
+    for (int i = 0; i < 4; i++) {
+        // North on compass will be negative of heading
+        rosePoints[i]->rotate(-myHeading);
+        rosePoints[i]->scale(compassDiam);
+        rosePoints[i]->translate(compassX, compassY);
+    }
+    display->drawLine(N1.x, N1.y, N3.x, N3.y);
+    display->drawLine(N2.x, N2.y, N4.x, N4.y);
+    display->drawLine(N1.x, N1.y, N4.x, N4.y);
+}
+
+uint16_t Screen::getCompassDiam(uint32_t displayWidth, uint32_t displayHeight)
+{
+    uint16_t diam = 0;
+    uint16_t offset = 0;
+
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT)
+        offset = FONT_HEIGHT_SMALL;
+
+    // get the smaller of the 2 dimensions and subtract 20
+    if (displayWidth > (displayHeight - offset)) {
+        diam = displayHeight - offset;
+        // if 2/3 of the other size would be smaller, use that
+        if (diam > (displayWidth * 2 / 3)) {
+            diam = displayWidth * 2 / 3;
+        }
+    } else {
+        diam = displayWidth;
+        if (diam > ((displayHeight - offset) * 2 / 3)) {
+            diam = (displayHeight - offset) * 2 / 3;
+        }
+    }
+
+    return diam - 20;
+};
 
 static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -1396,7 +1409,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     }
 
     static char lastStr[20];
-    getTimeAgoStr(sinceLastSeen(node), lastStr, sizeof(lastStr));
+    screen->getTimeAgoStr(sinceLastSeen(node), lastStr, sizeof(lastStr));
 
     static char distStr[20];
     if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
@@ -1407,13 +1420,14 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
     const char *fields[] = {username, lastStr, signalStr, distStr, NULL};
     int16_t compassX = 0, compassY = 0;
+    uint16_t compassDiam = Screen::getCompassDiam(SCREEN_WIDTH, SCREEN_HEIGHT);
 
     // coordinates for the center of the compass/circle
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
-        compassX = x + SCREEN_WIDTH - getCompassDiam(display) / 2 - 5;
+        compassX = x + SCREEN_WIDTH - compassDiam / 2 - 5;
         compassY = y + SCREEN_HEIGHT / 2;
     } else {
-        compassX = x + SCREEN_WIDTH - getCompassDiam(display) / 2 - 5;
+        compassX = x + SCREEN_WIDTH - compassDiam / 2 - 5;
         compassY = y + FONT_HEIGHT_SMALL + (SCREEN_HEIGHT - FONT_HEIGHT_SMALL) / 2;
     }
     bool hasNodeHeading = false;
@@ -1424,7 +1438,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         if (screen->hasHeading())
             myHeading = (screen->getHeading()) * PI / 180; // gotta convert compass degrees to Radians
         else
-            myHeading = estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
+            myHeading = screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
         screen->drawCompassNorth(display, compassX, compassY, myHeading);
 
         if (hasValidPosition(node)) {
@@ -1452,7 +1466,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             // If the top of the compass is not a static north we need adjust bearingToOther based on heading
             if (!config.display.compass_north_top)
                 bearingToOther -= myHeading;
-            drawNodeHeading(display, compassX, compassY, bearingToOther);
+            screen->drawNodeHeading(display, compassX, compassY, compassDiam, bearingToOther);
         }
     }
     if (!hasNodeHeading) {
@@ -1462,119 +1476,13 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         // hasValidPosition(node));
         display->drawString(compassX - FONT_HEIGHT_SMALL / 4, compassY - FONT_HEIGHT_SMALL / 2, "?");
     }
-    display->drawCircle(compassX, compassY, getCompassDiam(display) / 2);
+    display->drawCircle(compassX, compassY, compassDiam / 2);
 
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
         display->setColor(BLACK);
     }
     // Must be after distStr is populated
-    drawColumns(display, x, y, fields);
-}
-
-/// Draw the last waypoint we received
-static void drawWaypointFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    // Prepare to draw
-    display->setFont(FONT_SMALL);
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-
-    // Handle inverted display
-    // Unsure of expected behavior: for now, copy drawNodeInfo
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED)
-        display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-
-    // Decode the waypoint
-    meshtastic_MeshPacket &mp = devicestate.rx_waypoint;
-    meshtastic_Waypoint wp;
-    memset(&wp, 0, sizeof(wp));
-    if (!pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_Waypoint_msg, &wp)) {
-        // This *should* be caught by shouldDrawWaypoint, but we'll short-circuit here just in case
-        display->drawStringMaxWidth(0 + x, 0 + y, x + display->getWidth(), "Couldn't decode waypoint");
-        devicestate.has_rx_waypoint = false;
-        return;
-    }
-
-    // Get timestamp info. Will pass as a field to drawColumns
-    static char lastStr[20];
-    getTimeAgoStr(sinceReceived(&mp), lastStr, sizeof(lastStr));
-
-    // Will contain distance information, passed as a field to drawColumns
-    static char distStr[20];
-
-    // Get our node, to use our own position
-    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
-
-    // Text fields to draw (left of compass)
-    // Last element must be NULL. This signals the end of the char*[] to drawColumns
-    const char *fields[] = {"Waypoint", lastStr, wp.name, distStr, NULL};
-
-    // Co-ordinates for the center of the compass/circle
-    int16_t compassX = 0, compassY = 0;
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
-        compassX = x + SCREEN_WIDTH - getCompassDiam(display) / 2 - 5;
-        compassY = y + SCREEN_HEIGHT / 2;
-    } else {
-        compassX = x + SCREEN_WIDTH - getCompassDiam(display) / 2 - 5;
-        compassY = y + FONT_HEIGHT_SMALL + (SCREEN_HEIGHT - FONT_HEIGHT_SMALL) / 2;
-    }
-
-    // If our node has a position:
-    if (ourNode && (hasValidPosition(ourNode) || screen->hasHeading())) {
-        const meshtastic_PositionLite &op = ourNode->position;
-        float myHeading;
-        if (screen->hasHeading())
-            myHeading = (screen->getHeading()) * PI / 180; // gotta convert compass degrees to Radians
-        else
-            myHeading = estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
-        screen->drawCompassNorth(display, compassX, compassY, myHeading);
-
-        // Distance to Waypoint
-        float d = GeoCoord::latLongToMeter(DegD(wp.latitude_i), DegD(wp.longitude_i), DegD(op.latitude_i), DegD(op.longitude_i));
-        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
-            if (d < (2 * MILES_TO_FEET))
-                snprintf(distStr, sizeof(distStr), "%.0f ft", d * METERS_TO_FEET);
-            else
-                snprintf(distStr, sizeof(distStr), "%.1f mi", d * METERS_TO_FEET / MILES_TO_FEET);
-        } else {
-            if (d < 2000)
-                snprintf(distStr, sizeof(distStr), "%.0f m", d);
-            else
-                snprintf(distStr, sizeof(distStr), "%.1f km", d / 1000);
-        }
-
-        // Compass bearing to waypoint
-        float bearingToOther =
-            GeoCoord::bearing(DegD(op.latitude_i), DegD(op.longitude_i), DegD(wp.latitude_i), DegD(wp.longitude_i));
-        // If the top of the compass is a static north then bearingToOther can be drawn on the compass directly
-        // If the top of the compass is not a static north we need adjust bearingToOther based on heading
-        if (!config.display.compass_north_top)
-            bearingToOther -= myHeading;
-        drawNodeHeading(display, compassX, compassY, bearingToOther);
-    }
-
-    // If our node doesn't have position
-    else {
-        // ? in the compass
-        display->drawString(compassX - FONT_HEIGHT_SMALL / 4, compassY - FONT_HEIGHT_SMALL / 2, "?");
-
-        // ? in the distance field
-        if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL)
-            strncpy(distStr, "? mi", sizeof(distStr));
-        else
-            strncpy(distStr, "? km", sizeof(distStr));
-    }
-
-    // Undo color-inversion, if set prior to drawing header
-    // Unsure of expected behavior? For now: copy drawNodeInfo
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
-        display->setColor(BLACK);
-    }
-
-    // Draw compass circle
-    display->drawCircle(compassX, compassY, getCompassDiam(display) / 2);
-
-    // Must be after distStr is populated
-    drawColumns(display, x, y, fields);
+    screen->drawColumns(display, x, y, fields);
 }
 
 Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_OledType screenType, OLEDDISPLAY_GEOMETRY geometry)
@@ -1797,8 +1705,6 @@ void Screen::setup()
         textMessageObserver.observe(textMessageModule);
     if (inputBroker)
         inputObserver.observe(inputBroker);
-    if (waypointModule)
-        waypointObserver.observe(waypointModule);
 
     // Modules can notify screen about refresh
     MeshModule::observeUIEvents(&uiFrameEventObserver);
@@ -2130,11 +2036,6 @@ void Screen::setFrames()
         normalFrames[numframes++] = drawTextMessageFrame;
     }
 
-    // If we have a waypoint (not expired, not deleted)
-    if (devicestate.has_rx_waypoint && shouldDrawWaypoint(&devicestate.rx_waypoint)) {
-        normalFrames[numframes++] = drawWaypointFrame;
-    }
-
     // then all the nodes
     // We only show a few nodes in our scrolling list - because meshes with many nodes would have too many screens
     size_t numToShow = min(numMeshNodes, 4U);
@@ -2196,7 +2097,7 @@ void Screen::blink()
     uint8_t count = 10;
     dispdev->setBrightness(254);
     while (count > 0) {
-        dispdev->fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+        dispdev->fillRect(0, 0, dispdev->getWidth(), dispdev->getHeight());
         dispdev->display();
         delay(50);
         dispdev->clear();
@@ -2684,13 +2585,6 @@ int Screen::handleInputEvent(const InputEvent *event)
         }
     }
 
-    return 0;
-}
-
-int Screen::handleWaypoint(const meshtastic_MeshPacket *arg)
-{
-    // TODO: move to appropriate frame when redrawing
-    setFrames();
     return 0;
 }
 

@@ -388,6 +388,10 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             LOG_DEBUG("Tried to set node_info_broadcast_secs too low, setting to %d\n", min_node_info_broadcast_secs);
             config.device.node_info_broadcast_secs = min_node_info_broadcast_secs;
         }
+        // Router Client is deprecated; Set it to client
+        if (c.payload_variant.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT) {
+            config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+        }
         break;
     case meshtastic_Config_position_tag:
         LOG_INFO("Setting config: Position\n");

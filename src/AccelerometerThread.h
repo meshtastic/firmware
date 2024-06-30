@@ -278,16 +278,17 @@ class AccelerometerThread : public concurrency::OSThread
         display->setFont(FONT_MEDIUM);
         display->drawString(x, y, "Calibrating\nCompass");
         int16_t compassX = 0, compassY = 0;
+        uint16_t compassDiam = graphics::Screen::getCompassDiam(display->getWidth(), display->getHeight());
 
         // coordinates for the center of the compass/circle
         if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
-            compassX = x + display->getWidth() - getCompassDiam(display) / 2 - 5;
+            compassX = x + display->getWidth() - compassDiam / 2 - 5;
             compassY = y + display->getHeight() / 2;
         } else {
-            compassX = x + display->getWidth() - getCompassDiam(display) / 2 - 5;
+            compassX = x + display->getWidth() - compassDiam / 2 - 5;
             compassY = y + FONT_HEIGHT_SMALL + (display->getHeight() - FONT_HEIGHT_SMALL) / 2;
         }
-        display->drawCircle(compassX, compassY, getCompassDiam(display) / 2);
+        display->drawCircle(compassX, compassY, compassDiam / 2);
         screen->drawCompassNorth(display, compassX, compassY, screen->getHeading() * PI / 180);
     }
 #endif
