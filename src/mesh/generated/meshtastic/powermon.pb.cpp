@@ -9,5 +9,9 @@
 PB_BIND(meshtastic_PowerMon, meshtastic_PowerMon, AUTO)
 
 
+PB_BIND(meshtastic_PowerStressMessage, meshtastic_PowerStressMessage, AUTO)
+
+
+
 
 
