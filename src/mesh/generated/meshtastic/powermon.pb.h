@@ -38,12 +38,46 @@ See GPSPowerState for more details */
     meshtastic_PowerMon_State_GPS_Active = 2048
 } meshtastic_PowerMon_State;
 
+/* What operation would we like the UUT to perform.
+note: senders should probably set want_response in their request packets, so that they can know when the state
+machine has started processing their request */
+typedef enum _meshtastic_PowerStressMessage_Opcode {
+    /* Unset/unused */
+    meshtastic_PowerStressMessage_Opcode_UNSET = 0,
+    meshtastic_PowerStressMessage_Opcode_PRINT_INFO = 1, /* Print board version slog and send an ack that we are alive and ready to process commands */
+    meshtastic_PowerStressMessage_Opcode_FORCE_QUIET = 2, /* Try to turn off all automatic processing of packets, screen, sleeping, etc (to make it easier to measure in isolation) */
+    meshtastic_PowerStressMessage_Opcode_END_QUIET = 3, /* Stop powerstress processing - probably by just rebooting the board */
+    meshtastic_PowerStressMessage_Opcode_SCREEN_ON = 16, /* Turn the screen on */
+    meshtastic_PowerStressMessage_Opcode_SCREEN_OFF = 17, /* Turn the screen off */
+    meshtastic_PowerStressMessage_Opcode_CPU_IDLE = 32, /* Let the CPU run but we assume mostly idling for num_seconds */
+    meshtastic_PowerStressMessage_Opcode_CPU_DEEPSLEEP = 33, /* Force deep sleep for FIXME seconds */
+    meshtastic_PowerStressMessage_Opcode_CPU_FULLON = 34, /* Spin the CPU as fast as possible for num_seconds */
+    meshtastic_PowerStressMessage_Opcode_LED_ON = 48, /* Turn the LED on for num_seconds (and leave it on - for baseline power measurement purposes) */
+    meshtastic_PowerStressMessage_Opcode_LED_OFF = 49, /* Force the LED off for num_seconds */
+    meshtastic_PowerStressMessage_Opcode_LORA_OFF = 64, /* Completely turn off the LORA radio for num_seconds */
+    meshtastic_PowerStressMessage_Opcode_LORA_TX = 65, /* Send Lora packets for num_seconds */
+    meshtastic_PowerStressMessage_Opcode_LORA_RX = 66, /* Receive Lora packets for num_seconds (node will be mostly just listening, unless an external agent is helping stress this by sending packets on the current channel) */
+    meshtastic_PowerStressMessage_Opcode_BT_OFF = 80, /* Turn off the BT radio for num_seconds */
+    meshtastic_PowerStressMessage_Opcode_BT_ON = 81, /* Turn on the BT radio for num_seconds */
+    meshtastic_PowerStressMessage_Opcode_WIFI_OFF = 96, /* Turn off the WIFI radio for num_seconds */
+    meshtastic_PowerStressMessage_Opcode_WIFI_ON = 97, /* Turn on the WIFI radio for num_seconds */
+    meshtastic_PowerStressMessage_Opcode_GPS_OFF = 112, /* Turn off the GPS radio for num_seconds */
+    meshtastic_PowerStressMessage_Opcode_GPS_ON = 113 /* Turn on the GPS radio for num_seconds */
+} meshtastic_PowerStressMessage_Opcode;
+
 /* Struct definitions */
 /* Note: There are no 'PowerMon' messages normally in use (PowerMons are sent only as structured logs - slogs).
 But we wrap our State enum in this message to effectively nest a namespace (without our linter yelling at us) */
 typedef struct _meshtastic_PowerMon {
     char dummy_field;
 } meshtastic_PowerMon;
+
+/* PowerStress testing support via the C++ PowerStress module */
+typedef struct _meshtastic_PowerStressMessage {
+    /* What type of HardwareMessage is this? */
+    meshtastic_PowerStressMessage_Opcode cmd;
+    float num_seconds;
+} meshtastic_PowerStressMessage;
 
 
 #ifdef __cplusplus
@@ -55,13 +89,23 @@ extern "C" {
 #define _meshtastic_PowerMon_State_MAX meshtastic_PowerMon_State_GPS_Active
 #define _meshtastic_PowerMon_State_ARRAYSIZE ((meshtastic_PowerMon_State)(meshtastic_PowerMon_State_GPS_Active+1))
 
+#define _meshtastic_PowerStressMessage_Opcode_MIN meshtastic_PowerStressMessage_Opcode_UNSET
+#define _meshtastic_PowerStressMessage_Opcode_MAX meshtastic_PowerStressMessage_Opcode_GPS_ON
+#define _meshtastic_PowerStressMessage_Opcode_ARRAYSIZE ((meshtastic_PowerStressMessage_Opcode)(meshtastic_PowerStressMessage_Opcode_GPS_ON+1))
+
+
+#define meshtastic_PowerStressMessage_cmd_ENUMTYPE meshtastic_PowerStressMessage_Opcode
 
 
 /* Initializer values for message structs */
 #define meshtastic_PowerMon_init_default         {0}
+#define meshtastic_PowerStressMessage_init_default {_meshtastic_PowerStressMessage_Opcode_MIN, 0}
 #define meshtastic_PowerMon_init_zero            {0}
+#define meshtastic_PowerStressMessage_init_zero  {_meshtastic_PowerStressMessage_Opcode_MIN, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
+#define meshtastic_PowerStressMessage_cmd_tag    1
+#define meshtastic_PowerStressMessage_num_seconds_tag 2
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_PowerMon_FIELDLIST(X, a) \
@@ -69,14 +113,23 @@ extern "C" {
 #define meshtastic_PowerMon_CALLBACK NULL
 #define meshtastic_PowerMon_DEFAULT NULL
 
+#define meshtastic_PowerStressMessage_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UENUM,    cmd,               1) \
+X(a, STATIC,   SINGULAR, FLOAT,    num_seconds,       2)
+#define meshtastic_PowerStressMessage_CALLBACK NULL
+#define meshtastic_PowerStressMessage_DEFAULT NULL
+
 extern const pb_msgdesc_t meshtastic_PowerMon_msg;
+extern const pb_msgdesc_t meshtastic_PowerStressMessage_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_PowerMon_fields &meshtastic_PowerMon_msg
+#define meshtastic_PowerStressMessage_fields &meshtastic_PowerStressMessage_msg
 
 /* Maximum encoded size of messages (where known) */
-#define MESHTASTIC_MESHTASTIC_POWERMON_PB_H_MAX_SIZE meshtastic_PowerMon_size
+#define MESHTASTIC_MESHTASTIC_POWERMON_PB_H_MAX_SIZE meshtastic_PowerStressMessage_size
 #define meshtastic_PowerMon_size                 0
+#define meshtastic_PowerStressMessage_size       7
 
 #ifdef __cplusplus
 } /* extern "C" */
