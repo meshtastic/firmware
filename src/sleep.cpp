@@ -17,7 +17,7 @@
 #ifdef ARCH_ESP32
 #include "esp32/pm.h"
 #include "esp_pm.h"
-#if !MESHTASTIC_EXCLUDE_WIFI
+#if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 #include "rom/rtc.h"
@@ -56,7 +56,7 @@ RTC_DATA_ATTR int bootCount = 0;
  */
 void setCPUFast(bool on)
 {
-#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
+#if defined(ARCH_ESP32) && HAS_WIFI
 
     if (isWifiAvailable()) {
         /*

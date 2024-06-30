@@ -1,5 +1,6 @@
-#ifndef SYSLOG_H
-#define SYSLOG_H
+#pragma once
+
+#include "configuration.h"
 
 // DEBUG LED
 #ifndef LED_INVERTED
@@ -125,7 +126,7 @@
 #include <WiFi.h>
 #endif // HAS_WIFI
 
-#if HAS_WIFI || HAS_ETHERNET
+#if HAS_NETWORKING
 
 class Syslog
 {
@@ -161,5 +162,3 @@ class Syslog
 };
 
 #endif // HAS_ETHERNET || HAS_WIFI
-
-#endif // SYSLOG_H

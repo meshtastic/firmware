@@ -26,7 +26,7 @@ SOFTWARE.*/
 
 #include "DebugConfiguration.h"
 
-#if HAS_WIFI || HAS_ETHERNET
+#if HAS_NETWORKING
 
 Syslog::Syslog(UDP &client)
 {
