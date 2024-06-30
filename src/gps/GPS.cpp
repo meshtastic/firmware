@@ -788,13 +788,6 @@ GPS::~GPS()
 // Put the GPS hardware into a specified state
 void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
 {
-#ifdef GPS_UC6580
-    // Special case: no soft sleep?
-    // TODO: enquire why
-    if (newState == GPS_SOFTSLEEP)
-        newState == GPS_HARDSLEEP;
-#endif
-
     // Update the stored GPSPowerstate, and create local copies
     GPSPowerState oldState = powerState;
     powerState = newState;
@@ -999,18 +992,27 @@ void GPS::down()
         setPowerState(GPS_IDLE);
 
     else {
-        // How long does gps_update_interval need to be to justify hardsleep?
+        // Check whether the GPS hardware is capable of GPS_SOFTSLEEP
+        // If not, fallback to GPS_HARDSLEEP instead
+        bool softsleepSupported = false;
+        if (gnssModel != GNSS_MODEL_UBLOX) // U-blox is supported via PMREQ
+            softsleepSupported = true;
+        #ifdef PIN_GPS_STANDBY // L76B, L76K and clones have a standby pin
+        softsleepSupported = true;
+        #endif
+
+        // How long does gps_update_interval need to be, for GPS_HARDSLEEP to become more efficient than GPS_SOFTSLEEP?
         // Heuristic equation. A compromise manually fitted to power observations from U-blox NEO-6M and M10050
         // https://www.desmos.com/calculator/6gvjghoumr
         // This is not particularly accurate, but probably an impromevement over a single, fixed threshold
         uint32_t hardsleepThreshold = (2750 * pow(predictedSearchDuration / 1000, 1.22));
         LOG_DEBUG("gps_update_interval >= %us needed to justify hardsleep\n", hardsleepThreshold / 1000);
 
-        // If update interval too short: softsleep
-        if (updateInterval < hardsleepThreshold)
+        // If update interval too short: softsleep (if supported by hardware)
+        if (softsleepSupported && updateInterval < hardsleepThreshold)
             setPowerState(GPS_SOFTSLEEP, sleepTime);
 
-        // If update interval long enough: hardsleep
+        // If update interval long enough (or softsleep unsupported): hardsleep instead
         else
             setPowerState(GPS_HARDSLEEP, sleepTime);
     }
