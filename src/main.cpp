@@ -14,6 +14,7 @@
 #include "power.h"
 // #include "debug.h"
 #include "FSCommon.h"
+#include "Led.h"
 #include "RTC.h"
 #include "SPILock.h"
 #include "concurrency/OSThread.h"
@@ -191,7 +192,7 @@ static int32_t ledBlinker()
     static bool ledOn;
     ledOn ^= 1;
 
-    setLed(ledOn);
+    ledBlink.set(ledOn);
 
     // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
     return powerStatus->getIsCharging() ? 1000 : (ledOn ? 1 : 1000);
