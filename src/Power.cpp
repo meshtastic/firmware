@@ -439,8 +439,8 @@ class AnalogBatteryLevel : public HasBatteryLevel
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA3221].first == ina_addr) {
             ret = ina3221Sensor.getCurrentMa();
 
-        /* don't know how to read current, return -1mA (negative so isCharging() will do the right thing) */
         } else {
+            /* don't know how to read current, return -1mA (negative so isCharging() will do the right thing) */
             ret = -1;
         }
 
@@ -461,8 +461,8 @@ class AnalogBatteryLevel : public HasBatteryLevel
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA3221].first == ina_addr) {
             ret = ina3221Sensor.getBusVoltageMv();
 
-        /* don't know how to read voltage, return 0mV */
         } else {
+            /* don't know how to read voltage, return 0mV */
             ret = 0;
         }
 
@@ -478,21 +478,21 @@ class AnalogBatteryLevel : public HasBatteryLevel
         }
 
         if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA219].first == ina_addr) {
-            if (! ina219Sensor.isInitialized()) {
+            if (!ina219Sensor.isInitialized()) {
                 return ina219Sensor.runOnce() > 0;
             }
 
             return ina219Sensor.isRunning();
 
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA260].first == ina_addr) {
-            if (! ina260Sensor.isInitialized()) {
+            if (!ina260Sensor.isInitialized()) {
                 return ina260Sensor.runOnce() > 0;
             }
 
             return ina260Sensor.isRunning();
 
         } else if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_INA3221].first == ina_addr) {
-            if (! ina3221Sensor.isInitialized()) {
+            if (!ina3221Sensor.isInitialized()) {
                 return ina3221Sensor.runOnce() > 0;
             }
 
