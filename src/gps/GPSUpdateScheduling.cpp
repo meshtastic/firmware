@@ -43,7 +43,6 @@ uint32_t GPSUpdateScheduling::msUntilNextSearch()
 
     // If we should have already started (negative value), start ASAP
     remainingMs = max(remainingMs, 0);
-    LOG_DEBUG("msUntilNextSearch() = %i\n", remainingMs);
 
     return remainingMs;
 }

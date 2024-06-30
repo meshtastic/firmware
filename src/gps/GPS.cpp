@@ -1106,6 +1106,8 @@ int32_t GPS::runOnce()
     }
 
     bool tooLong = scheduling.searchedTooLong();
+    if (tooLong)
+        LOG_INFO("Searching for GPS lock taking too long. Giving up; try again later\n");
 
     // Once we get a location we no longer desperately want an update
     // LOG_DEBUG("gotLoc %d, tooLong %d, gotTime %d\n", gotLoc, tooLong, gotTime);
@@ -1114,7 +1116,7 @@ int32_t GPS::runOnce()
         if (tooLong) {
             // we didn't get a location during this ack window, therefore declare loss of lock
             if (hasValidLocation) {
-                LOG_DEBUG("hasValidLocation FALLING EDGE (last read: %d)\n", gotLoc);
+                LOG_DEBUG("hasValidLocation FALLING EDGE\n");
             }
             p = meshtastic_Position_init_default;
             hasValidLocation = false;
