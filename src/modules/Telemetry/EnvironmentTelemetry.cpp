@@ -115,6 +115,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = ina219Sensor.runOnce();
             if (ina260Sensor.hasSensor())
                 result = ina260Sensor.runOnce();
+            if (ina3221Sensor.hasSensor())
+                result = ina3221Sensor.runOnce();
             if (veml7700Sensor.hasSensor())
                 result = veml7700Sensor.runOnce();
             if (tsl2591Sensor.hasSensor())
@@ -321,6 +323,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         valid = valid && ina260Sensor.getMetrics(m);
         hasSensor = true;
     }
+    if (ina3221Sensor.hasSensor()) {
+        valid = valid && ina3221Sensor.getMetrics(m);
+        hasSensor = true;
+    }
     if (veml7700Sensor.hasSensor()) {
         valid = valid && veml7700Sensor.getMetrics(m);
         hasSensor = true;
@@ -492,6 +498,11 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
     }
     if (ina260Sensor.hasSensor()) {
         result = ina260Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (ina3221Sensor.hasSensor()) {
+        result = ina3221Sensor.handleAdminMessage(mp, request, response);
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }
