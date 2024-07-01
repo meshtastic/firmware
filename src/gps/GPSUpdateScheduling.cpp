@@ -42,9 +42,10 @@ uint32_t GPSUpdateScheduling::msUntilNextSearch()
     int32_t remainingMs = compensatedStart - now;
 
     // If we should have already started (negative value), start ASAP
-    remainingMs = max(remainingMs, 0);
+    if (remainingMs < 0)
+        remainingMs = 0;
 
-    return remainingMs;
+    return (uint32_t)remainingMs;
 }
 
 // How long have we already been searching?
@@ -90,7 +91,8 @@ void GPSUpdateScheduling::updateLockTimePrediction()
     // How long did it take to get GPS lock this time?
     // Duration between down() calls
     int32_t lockTime = searchEndedMs - searchStartedMs;
-    lockTime = max(lockTime, 0);
+    if (lockTime < 0)
+        lockTime = 0;
 
     // Ignore the first lock-time: likely to be long, will skew data
 
