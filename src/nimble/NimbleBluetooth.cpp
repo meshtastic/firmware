@@ -268,12 +268,12 @@ void NimbleBluetooth::clearBonds()
     NimBLEDevice::deleteAllBonds();
 }
 
-void NimbleBluetooth::sendLog(const char *logMessage)
+void NimbleBluetooth::sendLog(const uint8_t *logMessage)
 {
-    if (!bleServer || !isConnected() || strlen(logMessage) > 512) {
+    if (!bleServer || !isConnected() || sizeof(logMessage) > 512) {
         return;
     }
-    logRadioCharacteristic->notify(reinterpret_cast<const uint8_t *>(logMessage), strlen(logMessage), true);
+    logRadioCharacteristic->notify(logMessage, sizeof(logMessage), true);
 }
 
 void clearNVS()
