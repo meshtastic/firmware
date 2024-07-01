@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include <sys/time.h>
 #include <time.h>
+#include "mesh/generated/meshtastic/mesh.pb.h"
 
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
@@ -201,9 +202,9 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
             logRecord.time = getValidTime(RTCQuality::RTCQualityDevice, true);
 
             uint8_t *buffer = new uint8_t[meshtastic_LogRecord_size];
-            auto size = pb_encode_to_bytes(buffer, sizeof(meshtastic_LogRecord), meshtastic_LogRecord_fields, &logRecord);
+            size_t size = pb_encode_to_bytes(buffer, meshtastic_LogRecord_size, meshtastic_LogRecord_fields, &logRecord);
 #ifdef ARCH_ESP32
-            nimbleBluetooth->sendLog(reinterpret_cast<const char *>(buffer));
+            nimbleBluetooth->sendLog(buffer, size);
 #elif defined(ARCH_NRF52)
             nrf52Bluetooth->sendLog(reinterpret_cast<const char *>(buffer));
 #endif

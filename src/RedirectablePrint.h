@@ -4,6 +4,7 @@
 #include <Print.h>
 #include <stdarg.h>
 #include <string>
+#include "mesh/generated/meshtastic/mesh.pb.h"
 
 /**
  * A Printable that can be switched to squirt its bytes to a different sink.

@@ -29,5 +29,4 @@ class BluetoothApi
     virtual void clearBonds();
     virtual bool isConnected();
     virtual int getRssi() = 0;
-    virtual void sendLog(const char *logMessage);
 };
