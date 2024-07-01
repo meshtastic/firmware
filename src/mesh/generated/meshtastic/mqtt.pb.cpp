@@ -6,7 +6,7 @@
 #error Regenerate this file with the current version of nanopb generator.
 #endif
 
-PB_BIND(meshtastic_ServiceEnvelope, meshtastic_ServiceEnvelope, AUTO)
+PB_BIND(meshtastic_ServiceEnvelope, meshtastic_ServiceEnvelope, 2)
 
 
 PB_BIND(meshtastic_MapReport, meshtastic_MapReport, AUTO)
