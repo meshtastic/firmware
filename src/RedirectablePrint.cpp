@@ -181,7 +181,6 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
         isBleConnected = nrf52Bluetooth != nullptr && nrf52Bluetooth->isConnected();
 #endif
         if (isBleConnected) {
-            getLogLevel(logLevel);
             char *message;
             size_t initialLen;
             size_t len;
