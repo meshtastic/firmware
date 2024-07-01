@@ -801,17 +801,17 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
             break;
         if (oldState != GPS_ACTIVE && oldState != GPS_IDLE) // If hardware just waking now, clear buffer
             clearBuffer();
-        writePinEN(true);      // Power (EN pin): on
-        setPowerPMU(true);     // Power (PMU): on
-        writePinStandby(true); // Standby (pin): awake
-        setPowerUBLOX(true);   // Standby (UBLOX): awake
+        writePinEN(true);       // Power (EN pin): on
+        setPowerPMU(true);      // Power (PMU): on
+        writePinStandby(false); // Standby (pin): awake (not standby)
+        setPowerUBLOX(true);    // Standby (UBLOX): awake
         break;
 
     case GPS_SOFTSLEEP:
         assert(sleepTime > 0);           // This is a timed sleep!
         writePinEN(true);                // Power (EN pin): on
         setPowerPMU(true);               // Power (PMU): on
-        writePinStandby(false);          // Standby (pin): asleep
+        writePinStandby(true);           // Standby (pin): asleep (not awake)
         setPowerUBLOX(false, sleepTime); // Standby (UBLOX): asleep, timed
         break;
 
@@ -819,7 +819,7 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         assert(sleepTime > 0);           // This is a timed sleep!
         writePinEN(false);               // Power (EN pin): off
         setPowerPMU(false);              // Power (PMU): off
-        writePinStandby(false);          // Standby (pin): asleep
+        writePinStandby(true);           // Standby (pin): asleep (not awake)
         setPowerUBLOX(false, sleepTime); // Standby (UBLOX): asleep, timed
         break;
 
@@ -856,6 +856,7 @@ void GPS::writePinEN(bool on)
 }
 
 // Set the value of the STANDBY pin, if relevant
+// true for standby state, false for awake
 void GPS::writePinStandby(bool standby)
 {
 #ifdef PIN_GPS_STANDBY // Specifically the standby pin for L76B, L76K and clones
@@ -999,9 +1000,9 @@ void GPS::down()
         bool softsleepSupported = false;
         if (gnssModel != GNSS_MODEL_UBLOX) // U-blox is supported via PMREQ
             softsleepSupported = true;
-        #ifdef PIN_GPS_STANDBY // L76B, L76K and clones have a standby pin
+#ifdef PIN_GPS_STANDBY // L76B, L76K and clones have a standby pin
         softsleepSupported = true;
-        #endif
+#endif
 
         // How long does gps_update_interval need to be, for GPS_HARDSLEEP to become more efficient than GPS_SOFTSLEEP?
         // Heuristic equation. A compromise manually fitted to power observations from U-blox NEO-6M and M10050
