@@ -40,7 +40,7 @@ uint32_t sinceReceived(const meshtastic_MeshPacket *p);
 
 enum LoadFileResult {
     // Successfully opened the file
-    SUCCESS = 1,
+    LOAD_SUCCESS = 1,
     // File does not exist
     NOT_FOUND = 2,
     // Device does not have a filesystem
