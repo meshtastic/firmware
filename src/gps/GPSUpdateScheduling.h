@@ -10,8 +10,8 @@ class GPSUpdateScheduling
     void informSearching();
     void informGotLock(); // Predicted lock-time is recalculated here
 
-    void reset();       // Reset the prediction - after GPS::disable() / GPS::enable()
-    bool isUpdateDue(); // Is it time to begin searching for a GPS position?
+    void reset();           // Reset the prediction - after GPS::disable() / GPS::enable()
+    bool isUpdateDue();     // Is it time to begin searching for a GPS position?
     bool searchedTooLong(); // Have we been searching for too long?
 
     uint32_t msUntilNextSearch(); // How long until we need to begin searching for a GPS? Info provided to GPS hardware for sleep

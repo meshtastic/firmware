@@ -68,9 +68,11 @@ bool GPSUpdateScheduling::isUpdateDue()
 }
 
 // Have we been searching for a GPS position for too long?
-bool GPSUpdateScheduling::searchedTooLong() {
-    uint32_t maxSearchMs = Default::getConfiguredOrDefaultMs(config.position.position_broadcast_secs, default_broadcast_interval_secs);
-    
+bool GPSUpdateScheduling::searchedTooLong()
+{
+    uint32_t maxSearchMs =
+        Default::getConfiguredOrDefaultMs(config.position.position_broadcast_secs, default_broadcast_interval_secs);
+
     // If broadcast interval set to max, no such thing as "too long"
     if (maxSearchMs == UINT32_MAX)
         return false;
