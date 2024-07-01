@@ -796,7 +796,6 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
     switch (newState) {
     case GPS_ACTIVE:
     case GPS_IDLE:
-        assert(sleepTime == 0);                             // sleepTime arg has no impact here!
         if (oldState == GPS_ACTIVE || oldState == GPS_IDLE) // If hardware already awake, no changes needed
             break;
         if (oldState != GPS_ACTIVE && oldState != GPS_IDLE) // If hardware just waking now, clear buffer
@@ -808,7 +807,6 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         break;
 
     case GPS_SOFTSLEEP:
-        assert(sleepTime > 0);           // This is a timed sleep!
         writePinEN(true);                // Power (EN pin): on
         setPowerPMU(true);               // Power (PMU): on
         writePinStandby(true);           // Standby (pin): asleep (not awake)
@@ -816,7 +814,6 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         break;
 
     case GPS_HARDSLEEP:
-        assert(sleepTime > 0);           // This is a timed sleep!
         writePinEN(false);               // Power (EN pin): off
         setPowerPMU(false);              // Power (PMU): off
         writePinStandby(true);           // Standby (pin): asleep (not awake)
