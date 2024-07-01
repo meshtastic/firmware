@@ -412,7 +412,13 @@ void RadioInterface::applyModemConfig()
     // Set up default configuration
     // No Sync Words in LORA mode
     meshtastic_Config_LoRaConfig &loraConfig = config.lora;
-    if (loraConfig.use_preset) {
+
+    sf = loraConfig.spread_factor;
+    cr = loraConfig.coding_rate;
+    bw = loraConfig.bandwidth;
+
+    // If we are not using a preset, the parameters save in flash better be valid or we'll fallback to defaults
+    if (loraConfig.use_preset || !sf || !cr || !bw) {
 
         switch (loraConfig.modem_preset) {
         case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
@@ -457,10 +463,6 @@ void RadioInterface::applyModemConfig()
             break;
         }
     } else {
-        sf = loraConfig.spread_factor;
-        cr = loraConfig.coding_rate;
-        bw = loraConfig.bandwidth;
-
         if (bw == 31) // This parameter is not an integer
             bw = 31.25;
         if (bw == 62) // Fix for 62.5Khz bandwidth
@@ -519,8 +521,8 @@ void RadioInterface::applyModemConfig()
     maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
 
     LOG_INFO("Radio freq=%.3f, config.lora.frequency_offset=%.3f\n", freq, loraConfig.frequency_offset);
-    LOG_INFO("Set radio: region=%s, name=%s, config=%u, ch=%d, power=%d\n", myRegion->name, channelName, loraConfig.modem_preset,
-             channel_num, power);
+    LOG_INFO("Set radio: region=%s, name=%s, config=%u, ch=%d, power=%d, cr=%d\n", myRegion->name, channelName,
+             loraConfig.modem_preset, channel_num, power, cr);
     LOG_INFO("Radio myRegion->freqStart -> myRegion->freqEnd: %f -> %f (%f mhz)\n", myRegion->freqStart, myRegion->freqEnd,
              myRegion->freqEnd - myRegion->freqStart);
     LOG_INFO("Radio myRegion->numChannels: %d x %.3fkHz\n", numChannels, bw);
