@@ -799,6 +799,8 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         assert(sleepTime == 0);                             // sleepTime arg has no impact here!
         if (oldState == GPS_ACTIVE || oldState == GPS_IDLE) // If hardware already awake, no changes needed
             break;
+        if (oldState != GPS_ACTIVE && oldState != GPS_IDLE) // If hardware just waking now, clear buffer
+            clearBuffer();
         writePinEN(true);      // Power (EN pin): on
         setPowerPMU(true);     // Power (PMU): on
         writePinStandby(true); // Standby (pin): awake
@@ -919,7 +921,7 @@ void GPS::setPowerUBLOX(bool on, uint32_t sleepMs)
     // If waking
     if (on) {
         gps->_serial_gps->write(0xFF);
-        clearBuffer(); // This ofter returns old data, so drop it
+        clearBuffer(); // This often returns old data, so drop it
 #ifdef GPS_EXTRAVERBOSE
         LOG_DEBUG("UBLOX: wake\n");
 #endif
