@@ -27,7 +27,7 @@
     "jlink_device": "nRF52840_xxAA",
     "svd_path": "nrf52840.svd"
   },
-  "frameworks": ["arduino"],
+  "frameworks": ["arduino", "freertos"],
   "name": "Seeed WIO WM1110",
   "upload": {
     "maximum_ram_size": 248832,

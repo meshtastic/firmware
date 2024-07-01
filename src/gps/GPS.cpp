@@ -3,6 +3,7 @@
 #include "Default.h"
 #include "GPS.h"
 #include "NodeDB.h"
+#include "PowerMon.h"
 #include "RTC.h"
 
 #include "main.h" // pmu_found
@@ -815,9 +816,12 @@ void GPS::setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime)
         return;
 
     if (on) {
+        powerMon->setState(meshtastic_PowerMon_State_GPS_Active);
         clearBuffer(); // drop any old data waiting in the buffer before re-enabling
         if (en_gpio)
             digitalWrite(en_gpio, on ? GPS_EN_ACTIVE : !GPS_EN_ACTIVE); // turn this on if defined, every time
+    } else {
+        powerMon->clearState(meshtastic_PowerMon_State_GPS_Active);
     }
     isInPowersave = !on;
     if (!standbyOnly && en_gpio != 0 &&
