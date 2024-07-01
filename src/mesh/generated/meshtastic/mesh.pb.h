@@ -167,6 +167,15 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_RADIOMASTER_900_BANDIT_NANO = 64,
     /* Heltec Capsule Sensor V3 with ESP32-S3 CPU, Portable LoRa device that can replace GNSS modules or sensors */
     meshtastic_HardwareModel_HELTEC_CAPSULE_SENSOR_V3 = 65,
+    /* Heltec Vision Master T190 with ESP32-S3 CPU, and a 1.90 inch TFT display */
+    meshtastic_HardwareModel_HELTEC_VISION_MASTER_T190 = 66,
+    /* Heltec Vision Master E213 with ESP32-S3 CPU, and a 2.13 inch E-Ink display */
+    meshtastic_HardwareModel_HELTEC_VISION_MASTER_E213 = 67,
+    /* Heltec Vision Master E290 with ESP32-S3 CPU, and a 2.9 inch E-Ink display */
+    meshtastic_HardwareModel_HELTEC_VISION_MASTER_E290 = 68,
+    /* Heltec Mesh Node T114 board with nRF52840 CPU, and a 1.14 inch TFT display, Ultimate low-power design,
+ specifically adapted for the Meshtatic project */
+    meshtastic_HardwareModel_HELTEC_MESH_NODE_T114 = 69,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
