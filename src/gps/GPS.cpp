@@ -1348,12 +1348,6 @@ GPS *GPS::createGps()
     new_gps->tx_gpio = _tx_gpio;
     new_gps->en_gpio = _en_gpio;
 
-    if (_en_gpio != 0) {
-        LOG_DEBUG("Setting %d to output.\n", _en_gpio);
-        pinMode(_en_gpio, OUTPUT);
-        digitalWrite(_en_gpio, !GPS_EN_ACTIVE);
-    }
-
 #ifdef PIN_GPS_PPS
     // pulse per second
     pinMode(PIN_GPS_PPS, INPUT);
@@ -1368,6 +1362,7 @@ GPS *GPS::createGps()
     LOG_DEBUG("Using " NMEA_MSG_GXGSA " for 3DFIX and PDOP\n");
 #endif
 
+    // Make sure the GPS is awake before performing any init.
     new_gps->up();
 
 #ifdef PIN_GPS_RESET
