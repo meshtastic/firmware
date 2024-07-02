@@ -824,7 +824,7 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         assert(sleepTime == 0);  // This is an indefinite sleep
         writePinEN(false);       // Power (EN pin): off
         setPowerPMU(false);      // Power (PMU): off
-        writePinStandby(false);  // Standby (pin): asleep
+        writePinStandby(true);   // Standby (pin): asleep
         setPowerUBLOX(false, 0); // Standby (UBLOX): asleep, indefinitely
         break;
     }
