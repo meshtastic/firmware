@@ -489,7 +489,18 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 {
     // assert(radioConfig.has_preferences);
-    bool ignore = is_in_repeated(config.lora.ignore_incoming, p->from) || (config.lora.ignore_mqtt && p->via_mqtt);
+    bool ignore = is_in_repeated(config.lora.ignore_incoming, p->from);
+
+    if (p->via_mqtt && config.lora.ignore_mqtt) {
+        bool allow_mqtt = false;
+        // Check if this packet was received via MQTT on a channel we have downlink enabled (in that case packet is decoded here)
+        if (moduleConfig.mqtt.enabled && p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+            meshtastic_Channel channel = channels.getByIndex(p->channel);
+            if (channel.has_settings && channel.settings.downlink_enabled)
+                allow_mqtt = true;
+        }
+        ignore |= !allow_mqtt;
+    }
 
     if (ignore) {
         LOG_DEBUG("Ignoring incoming message, 0x%x is in our ignore list or came via MQTT\n", p->from);
