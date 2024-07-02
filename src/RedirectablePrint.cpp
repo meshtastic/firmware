@@ -4,13 +4,13 @@
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include "main.h"
+#include "mesh/generated/meshtastic/mesh.pb.h"
 #include <assert.h>
 #include <cstring>
 #include <memory>
 #include <stdexcept>
 #include <sys/time.h>
 #include <time.h>
-#include "mesh/generated/meshtastic/mesh.pb.h"
 
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
