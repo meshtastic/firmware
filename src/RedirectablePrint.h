@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../freertosinc.h"
+#include "mesh/generated/meshtastic/mesh.pb.h"
 #include <Print.h>
 #include <stdarg.h>
 #include <string>
@@ -57,4 +58,5 @@ class RedirectablePrint : public Print
   private:
     void log_to_syslog(const char *logLevel, const char *format, va_list arg);
     void log_to_ble(const char *logLevel, const char *format, va_list arg);
+    meshtastic_LogRecord_Level getLogLevel(const char *logLevel);
 };
