@@ -20,6 +20,7 @@ class INA3221Sensor : public TelemetrySensor, VoltageSensor
     int32_t runOnce() override;
     bool getMetrics(meshtastic_Telemetry *measurement) override;
     virtual uint16_t getBusVoltageMv() override;
+    virtual int16_t getCurrentMa() override;
 };
 
 #endif

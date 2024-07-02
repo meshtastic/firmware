@@ -20,6 +20,7 @@ class INA260Sensor : public TelemetrySensor, VoltageSensor
     virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
     virtual uint16_t getBusVoltageMv() override;
+    virtual int16_t getCurrentMa() override;
 };
 
 #endif
