@@ -208,6 +208,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef HAS_SCREEN
 #define HAS_SCREEN 0
 #endif
+#ifndef HAS_TFT
+#define HAS_TFT 0
+#endif
 #ifndef HAS_WIRE
 #define HAS_WIRE 0
 #endif

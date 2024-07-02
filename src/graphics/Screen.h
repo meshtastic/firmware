@@ -22,6 +22,10 @@ class Screen
     void doDeepSleep() {}
     void forceDisplay(bool forceUiUpdate = false) {}
     void startFirmwareUpdateScreen() {}
+    void increaseBrightness() {}
+    void decreaseBrightness() {}
+    void setFunctionSymbal(std::string) {}
+    void removeFunctionSymbal(std::string) {}
     void startAlert(const char *) {}
     void endAlert() {}
 };

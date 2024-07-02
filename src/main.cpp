@@ -36,6 +36,7 @@
 // #include <driver/rtc_io.h>
 
 #ifdef ARCH_ESP32
+#include "freertosinc.h"
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "mesh/http/WebServer.h"
 #endif
@@ -107,6 +108,18 @@ AccelerometerThread *accelerometerThread = nullptr;
 AudioThread *audioThread = nullptr;
 #endif
 
+#if HAS_TFT
+#include "DeviceScreen.h"
+#include "DisplayDriverConfig.h"
+#include "PacketClient.h"
+#include "PacketServer.h"
+#include "api/PacketAPI.h"
+
+void tft_task_handler(void *);
+
+DeviceScreen *deviceScreen = nullptr;
+#endif
+
 using namespace concurrency;
 
 // We always create a screen object, but we only init it if we find the hardware
@@ -162,6 +175,8 @@ bool pmu_found;
 std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1] = {};
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
+
+const char *firmware_version = optstr(APP_VERSION_SHORT);
 
 const char *getDeviceName()
 {
@@ -233,6 +248,9 @@ void setup()
 
 #ifdef DEBUG_PORT
     consoleInit(); // Set serial baud rate and init our mesh console
+#endif
+#ifdef UNPHONE
+    unphone.printStore();
 #endif
 
     serialSinceMsec = millis();
@@ -345,7 +363,7 @@ void setup()
     Wire.begin(I2C_SDA, I2C_SCL);
 #elif defined(ARCH_PORTDUINO)
     if (settingsStrings[i2cdev] != "") {
-        LOG_INFO("Using %s as I2C device.\n", settingsStrings[i2cdev].c_str());
+        LOG_INFO("Using %s as I2C device.\n", settingsStrings[i2cdev]);
         Wire.begin(settingsStrings[i2cdev].c_str());
     } else {
         LOG_INFO("No I2C device configured, skipping.\n");
@@ -369,13 +387,13 @@ void setup()
     digitalWrite(AQ_SET_PIN, HIGH);
 #endif
 
-#ifdef T_DECK
+#if defined(T_DECK)
     // enable keyboard
     pinMode(KB_POWERON, OUTPUT);
     digitalWrite(KB_POWERON, HIGH);
     // There needs to be a delay after power on, give LILYGO-KEYBOARD some startup time
     // otherwise keyboard and touch screen will not work
-    delay(800);
+    delay(200);
 #endif
 
     // Currently only the tbeam has a PMU
@@ -522,7 +540,6 @@ void setup()
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::INA219, meshtastic_TelemetrySensorType_INA219)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::INA3221, meshtastic_TelemetrySensorType_INA3221)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::MCP9808, meshtastic_TelemetrySensorType_MCP9808)
-    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::MCP9808, meshtastic_TelemetrySensorType_MCP9808)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::SHT31, meshtastic_TelemetrySensorType_SHT31)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::SHTC3, meshtastic_TelemetrySensorType_SHTC3)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::LPS22HB, meshtastic_TelemetrySensorType_LPS22)
@@ -648,9 +665,91 @@ void setup()
     SPI.setFrequency(4000000);
 #endif
 
-    // Initialize the screen first so we can show the logo while we start up everything else.
-    screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
+#if HAS_TFT
+#ifdef PORTDUINO
+    if (settingsMap[displayPanel] != no_screen) {
+        DisplayDriverConfig displayConfig;
+        static char *panels[] = {"NOSCREEN", "X11",     "ST7789",  "ST7735",  "ST7735S",
+                                 "ST7796",   "ILI9341", "ILI9486", "ILI9488", "HX8357D"};
+        static char *touch[] = {"NOTOUCH", "XPT2046", "STMPE610", "GT911", "FT5x06"};
+#ifdef USE_X11
+        if (settingsMap[displayPanel] == x11) {
+            if (settingsMap[displayWidth] && settingsMap[displayHeight])
+                displayConfig = DisplayDriverConfig(DisplayDriverConfig::device_t::X11, (uint16_t)settingsMap[displayWidth],
+                                                    (uint16_t)settingsMap[displayHeight]);
+            else
+                displayConfig.device(DisplayDriverConfig::device_t::X11);
+        } else
+#endif
+        {
+            displayConfig.device(DisplayDriverConfig::device_t::CUSTOM_TFT)
+                .panel(DisplayDriverConfig::panel_config_t{.type = panels[settingsMap[displayPanel]],
+                                                           .panel_width = (uint16_t)settingsMap[displayWidth],
+                                                           .panel_height = (uint16_t)settingsMap[displayHeight],
+                                                           .rotation = (bool)settingsMap[displayRotate],
+                                                           .pin_cs = (int16_t)settingsMap[displayCS],
+                                                           .pin_rst = (int16_t)settingsMap[displayReset],
+                                                           .offset_x = (uint16_t)settingsMap[displayOffsetX],
+                                                           .offset_y = (uint16_t)settingsMap[displayOffsetY],
+                                                           .offset_rotation = (uint8_t)settingsMap[displayOffsetRotate],
+                                                           .invert = settingsMap[displayInvert] ? true : false,
+                                                           .rgb_order = (bool)settingsMap[displayRGBOrder],
+                                                           .dlen_16bit = settingsMap[displayPanel] == ili9486 ||
+                                                                         settingsMap[displayPanel] == ili9488})
+                .bus(DisplayDriverConfig::bus_config_t{.freq_write = (uint32_t)settingsMap[displayBusFrequency],
+                                                       .freq_read = 16000000,
+                                                       .spi{.pin_dc = (int8_t)settingsMap[displayDC],
+                                                            .use_lock = true,
+                                                            .spi_host = (uint16_t)settingsMap[displayspidev]}})
+                .input(DisplayDriverConfig::input_config_t{.keyboardDevice = settingsStrings[keyboardDevice],
+                                                           .pointerDevice = settingsStrings[pointerDevice]})
+                .light(DisplayDriverConfig::light_config_t{.pin_bl = (int16_t)settingsMap[displayBacklight],
+                                                           .pwm_channel = (int8_t)settingsMap[displayBacklightPWMChannel],
+                                                           .invert = (bool)settingsMap[displayBacklightInvert]});
+            if (settingsMap[touchscreenI2CAddr] == -1) {
+                displayConfig.touch(
+                    DisplayDriverConfig::touch_config_t{.type = touch[settingsMap[touchscreenModule]],
+                                                        .freq = (uint32_t)settingsMap[touchscreenBusFrequency],
+                                                        .pin_int = (int16_t)settingsMap[touchscreenIRQ],
+                                                        .offset_rotation = (uint8_t)settingsMap[touchscreenRotate],
+                                                        .spi{
+                                                            .spi_host = (int8_t)settingsMap[touchscreenspidev],
+                                                        },
+                                                        .pin_cs = (int16_t)settingsMap[touchscreenCS]});
+            } else {
+                displayConfig.touch(DisplayDriverConfig::touch_config_t{
+                    .type = touch[settingsMap[touchscreenModule]],
+                    .freq = (uint32_t)settingsMap[touchscreenBusFrequency],
+                    .x_min = 0,
+                    .x_max =
+                        (int16_t)((settingsMap[touchscreenRotate] & 1 ? settingsMap[displayWidth] : settingsMap[displayHeight]) -
+                                  1),
+                    .y_min = 0,
+                    .y_max =
+                        (int16_t)((settingsMap[touchscreenRotate] & 1 ? settingsMap[displayHeight] : settingsMap[displayWidth]) -
+                                  1),
+                    .pin_int = (int16_t)settingsMap[touchscreenIRQ],
+                    .offset_rotation = (uint8_t)settingsMap[touchscreenRotate],
+                    .i2c{.i2c_addr = (uint8_t)settingsMap[touchscreenI2CAddr]}});
+            }
+        }
+        deviceScreen = &DeviceScreen::create(&displayConfig);
+        PacketAPI::create(PacketServer::init());
+        deviceScreen->init(new PacketClient);
+    } else {
+        LOG_INFO("Running without TFT display!\n");
+    }
+#else
+    deviceScreen = &DeviceScreen::create();
+    PacketAPI::create(PacketServer::init());
+    deviceScreen->init(new PacketClient);
+#endif
+#endif
 
+    // Initialize the screen first so we can show the logo while we start up everything else.
+#if HAS_SCREEN
+    screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
+#endif
     // setup TZ prior to time actions.
     if (*config.device.tzdef) {
         setenv("TZ", config.device.tzdef, 1);
@@ -983,7 +1082,19 @@ void setup()
     // This must be _after_ service.init because we need our preferences loaded from flash to have proper timeout values
     PowerFSM_setup(); // we will transition to ON in a couple of seconds, FIXME, only do this for cold boots, not waking from SDS
     powerFSMthread = new PowerFSMThread();
+
+#if HAS_TFT
+#ifdef HAS_FREE_RTOS
+    xTaskCreatePinnedToCore(tft_task_handler, "tft", 8192, NULL, 5, NULL, 0);
+#endif
+#else
     setCPUFast(false); // 80MHz is fine for our slow peripherals
+#endif
+
+#ifdef ARDUINO_ARCH_ESP32
+    LOG_DEBUG("Free heap  : %7d bytes\n", ESP.getFreeHeap());
+    LOG_DEBUG("Free PSRAM : %7d bytes\n", ESP.getFreePsram());
+#endif
 }
 
 uint32_t rebootAtMsec;   // If not zero we will reboot at this time (used to reboot shortly after the update completes)
@@ -1054,3 +1165,18 @@ void loop()
     }
     // if (didWake) LOG_DEBUG("wake!\n");
 }
+
+#if HAS_TFT
+void tft_task_handler(void *param = nullptr)
+{
+    while (true) {
+        if (deviceScreen)
+            deviceScreen->task_handler();
+#ifdef HAS_FREE_RTOS
+        vTaskDelay((TickType_t)20);
+#else
+        delay(5);
+#endif
+    }
+}
+#endif

@@ -1,3 +1,6 @@
 [submodule "protobufs"]
 	path = protobufs
 	url = https://github.com/meshtastic/protobufs.git
+[submodule "lib/device-ui"]
+	path = lib/device-ui
+	url = https://github.com/meshtastic/device-ui.git
