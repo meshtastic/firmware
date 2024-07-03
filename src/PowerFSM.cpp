@@ -9,6 +9,7 @@
  */
 #include "PowerFSM.h"
 #include "Default.h"
+#include "Led.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
@@ -91,7 +92,7 @@ static void lsIdle()
             uint32_t sleepTime = SLEEP_TIME;
 
             powerMon->setState(meshtastic_PowerMon_State_CPU_LightSleep);
-            setLed(false); // Never leave led on while in light sleep
+            ledBlink.set(false); // Never leave led on while in light sleep
             esp_sleep_source_t wakeCause2 = doLightSleep(sleepTime * 1000LL);
             powerMon->clearState(meshtastic_PowerMon_State_CPU_LightSleep);
 
@@ -99,7 +100,7 @@ static void lsIdle()
             case ESP_SLEEP_WAKEUP_TIMER:
                 // Normal case: timer expired, we should just go back to sleep ASAP
 
-                setLed(true);                   // briefly turn on led
+                ledBlink.set(true);             // briefly turn on led
                 wakeCause2 = doLightSleep(100); // leave led on for 1ms
 
                 secsSlept += sleepTime;
@@ -134,7 +135,7 @@ static void lsIdle()
         }
     } else {
         // Time to stop sleeping!
-        setLed(false);
+        ledBlink.set(false);
         LOG_INFO("Reached ls_secs, servicing loop()\n");
         powerFSM.trigger(EVENT_WAKE_TIMER);
     }

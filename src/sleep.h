@@ -22,7 +22,6 @@ extern XPowersLibInterface *PMU;
 void initDeepSleep();
 
 void setCPUFast(bool on);
-void setLed(bool ledOn);
 
 /** return true if sleep is allowed right now */
 bool doPreflightSleep();
