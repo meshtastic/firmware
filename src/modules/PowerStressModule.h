@@ -8,7 +8,7 @@
  */
 class PowerStressModule : public ProtobufModule<meshtastic_PowerStressMessage>, private concurrency::OSThread
 {
-    meshtastic_PowerStressMessage currentMessage;
+    meshtastic_PowerStressMessage currentMessage = meshtastic_PowerStressMessage_init_default;
     bool isRunningCommand = false;
 
   public:
