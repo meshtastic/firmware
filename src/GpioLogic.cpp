@@ -10,20 +10,21 @@ void GpioVirtPin::set(bool value)
     }
 }
 
-GpioLogicPin::GpioLogicPin(GpioPin *outPin) : outPin(outPin) {}
+GpioTransformer::GpioTransformer(GpioPin *outPin) : outPin(outPin) {}
 
-void GpioLogicPin::set(bool value)
+void GpioTransformer::set(bool value)
 {
     outPin->set(value);
 }
 
-GpioNotPin::GpioNotPin(GpioVirtPin *inPin, GpioPin *outPin) : GpioLogicPin(outPin), inPin(inPin)
+GpioNotTransformer::GpioNotTransformer(GpioVirtPin *inPin, GpioPin *outPin) : GpioTransformer(outPin), inPin(inPin)
 {
     assert(!inPin->dependentPin); // We only allow one dependent pin
     inPin->dependentPin = this;
     update();
 }
-void GpioNotPin::set(bool value)
+
+void GpioNotTransformer::set(bool value)
 {
     outPin->set(value);
 }
@@ -31,7 +32,7 @@ void GpioNotPin::set(bool value)
 /**
  * Update the output pin based on the current state of the input pin.
  */
-void GpioNotPin::update()
+void GpioNotTransformer::update()
 {
     auto p = inPin->get();
     if (p == GpioVirtPin::PinState::Unset)
@@ -40,8 +41,8 @@ void GpioNotPin::update()
     set(!p);
 }
 
-GpioBinaryLogicPin::GpioBinaryLogicPin(GpioVirtPin *inPin1, GpioVirtPin *inPin2, GpioPin *outPin, Operation operation)
-    : GpioLogicPin(outPin), inPin1(inPin1), inPin2(inPin2), operation(operation)
+GpioBinaryTransformer::GpioBinaryTransformer(GpioVirtPin *inPin1, GpioVirtPin *inPin2, GpioPin *outPin, Operation operation)
+    : GpioTransformer(outPin), inPin1(inPin1), inPin2(inPin2), operation(operation)
 {
     assert(!inPin1->dependentPin); // We only allow one dependent pin
     inPin1->dependentPin = this;
@@ -50,7 +51,7 @@ GpioBinaryLogicPin::GpioBinaryLogicPin(GpioVirtPin *inPin1, GpioVirtPin *inPin2,
     update();
 }
 
-void GpioBinaryLogicPin::update()
+void GpioBinaryTransformer::update()
 {
     auto p1 = inPin1->get(), p2 = inPin2->get();
     GpioVirtPin::PinState newValue = GpioVirtPin::PinState::Unset;

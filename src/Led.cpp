@@ -5,7 +5,7 @@ GpioVirtPin ledForceOn, ledBlink;
 #if defined(LED_PIN)
 
 // Most boards have a GPIO for LED control
-GpioHwPin ledRawHwPin(LED_PIN);
+static GpioHwPin ledRawHwPin(LED_PIN);
 
 #elif defined(HAS_PMU)
 
@@ -25,13 +25,14 @@ class GpioPmuPin : public GpioPin
 } ledRawHwPin;
 
 #else
-GpioVirtPin ledRawHwPin; // Dummy pin for no hardware
+static GpioVirtPin ledRawHwPin; // Dummy pin for no hardware
 #endif
 
 #if LED_INVERTED
-GpioPin ledHwPin = GpioNotPin(&ledRawHwPin);
+static GpioVirtPin ledHwPin;
+static GpioNotTransformer ledInverter(&ledHwPin, &ledRawHwPin);
 #else
-GpioPin &ledHwPin = ledRawHwPin;
+static GpioPin &ledHwPin = ledRawHwPin;
 #endif
 
-static GpioBinaryLogicPin ledForcer(&ledForceOn, &ledBlink, &ledHwPin, GpioBinaryLogicPin::Or);
+static GpioBinaryTransformer ledForcer(&ledForceOn, &ledBlink, &ledHwPin, GpioBinaryTransformer::Or);
