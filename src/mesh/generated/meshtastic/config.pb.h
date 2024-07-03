@@ -22,7 +22,6 @@ typedef enum _meshtastic_Config_DeviceConfig_Role {
    The wifi radio and the oled screen will be put to sleep.
    This mode may still potentially have higher power usage due to it's preference in message rebroadcasting on the mesh. */
     meshtastic_Config_DeviceConfig_Role_ROUTER = 2,
-    /* Description: Combination of both ROUTER and CLIENT. Not for mobile devices. */
     meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT = 3,
     /* Description: Infrastructure node for extending network coverage by relaying messages with minimal overhead. Not visible in Nodes list.
  Technical Details: Mesh packets will simply be rebroadcasted over this node. Nodes configured with this role will not originate NodeInfo, Position, Telemetry

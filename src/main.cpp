@@ -221,7 +221,7 @@ void setup()
         meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;
     OLEDDISPLAY_GEOMETRY screen_geometry = GEOMETRY_128_64;
 
-#ifdef SEGGER_STDOUT_CH
+#ifdef USE_SEGGER
     auto mode = false ? SEGGER_RTT_MODE_BLOCK_IF_FIFO_FULL : SEGGER_RTT_MODE_NO_BLOCK_TRIM;
 #ifdef NRF52840_XXAA
     auto buflen = 4096; // this board has a fair amount of ram
@@ -930,7 +930,7 @@ void setup()
         nodeDB->saveToDisk(SEGMENT_CONFIG);
         if (!rIf->reconfigure()) {
             LOG_WARN("Reconfigure failed, rebooting\n");
-            screen->startRebootScreen();
+            screen->startAlert("Rebooting...");
             rebootAtMsec = millis() + 5000;
         }
     }

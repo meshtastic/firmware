@@ -108,7 +108,7 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
     display->drawString(x, y, "Power Telemetry");
     if (lastMeasurementPacket == nullptr) {
         display->setFont(FONT_SMALL);
-        display->drawString(x, y += fontHeight(FONT_MEDIUM), "No measurement");
+        display->drawString(x, y += _fontHeight(FONT_MEDIUM), "No measurement");
         return;
     }
 
@@ -120,22 +120,22 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
     auto &p = lastMeasurementPacket->decoded;
     if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &lastMeasurement)) {
         display->setFont(FONT_SMALL);
-        display->drawString(x, y += fontHeight(FONT_MEDIUM), "Measurement Error");
+        display->drawString(x, y += _fontHeight(FONT_MEDIUM), "Measurement Error");
         LOG_ERROR("Unable to decode last packet");
         return;
     }
 
     display->setFont(FONT_SMALL);
     String last_temp = String(lastMeasurement.variant.environment_metrics.temperature, 0) + "°C";
-    display->drawString(x, y += fontHeight(FONT_MEDIUM) - 2, "From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
+    display->drawString(x, y += _fontHeight(FONT_MEDIUM) - 2, "From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
     if (lastMeasurement.variant.power_metrics.ch1_voltage != 0) {
-        display->drawString(x, y += fontHeight(FONT_SMALL),
+        display->drawString(x, y += _fontHeight(FONT_SMALL),
                             "Ch 1 Volt/Cur: " + String(lastMeasurement.variant.power_metrics.ch1_voltage, 0) + "V / " +
                                 String(lastMeasurement.variant.power_metrics.ch1_current, 0) + "mA");
-        display->drawString(x, y += fontHeight(FONT_SMALL),
+        display->drawString(x, y += _fontHeight(FONT_SMALL),
                             "Ch 2 Volt/Cur: " + String(lastMeasurement.variant.power_metrics.ch2_voltage, 0) + "V / " +
                                 String(lastMeasurement.variant.power_metrics.ch2_current, 0) + "mA");
-        display->drawString(x, y += fontHeight(FONT_SMALL),
+        display->drawString(x, y += _fontHeight(FONT_SMALL),
                             "Ch 3 Volt/Cur: " + String(lastMeasurement.variant.power_metrics.ch3_voltage, 0) + "V / " +
                                 String(lastMeasurement.variant.power_metrics.ch3_current, 0) + "mA");
     }

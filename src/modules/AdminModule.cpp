@@ -137,7 +137,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
         if (BleOta::getOtaAppVersion().isEmpty()) {
             LOG_INFO("No OTA firmware available, scheduling regular reboot in %d seconds\n", s);
-            screen->startRebootScreen();
+            screen->startAlert("Rebooting...");
         } else {
             screen->startFirmwareUpdateScreen();
             BleOta::switchToOtaApp();
@@ -145,7 +145,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         }
 #else
         LOG_INFO("Not on ESP32, scheduling regular reboot in %d seconds\n", s);
-        screen->startRebootScreen();
+        screen->startAlert("Rebooting...");
 #endif
         rebootAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
         break;
@@ -387,6 +387,10 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         if (config.device.node_info_broadcast_secs < min_node_info_broadcast_secs) {
             LOG_DEBUG("Tried to set node_info_broadcast_secs too low, setting to %d\n", min_node_info_broadcast_secs);
             config.device.node_info_broadcast_secs = min_node_info_broadcast_secs;
+        }
+        // Router Client is deprecated; Set it to client
+        if (c.payload_variant.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT) {
+            config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
         }
         break;
     case meshtastic_Config_position_tag:
@@ -811,7 +815,7 @@ void AdminModule::handleGetChannel(const meshtastic_MeshPacket &req, uint32_t ch
 void AdminModule::reboot(int32_t seconds)
 {
     LOG_INFO("Rebooting in %d seconds\n", seconds);
-    screen->startRebootScreen();
+    screen->startAlert("Rebooting...");
     rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
 }
 

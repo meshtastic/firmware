@@ -62,14 +62,14 @@ void setCPUFast(bool on)
         /*
          *
          * There's a newly introduced bug in the espressif framework where WiFi is
-         *   unstable when the frequency is less than 240mhz.
+         *   unstable when the frequency is less than 240MHz.
          *
          *   This mostly impacts WiFi AP mode but we'll bump the frequency for
          *     all WiFi use cases.
          * (Added: Dec 23, 2021 by Jm Casler)
          */
 #ifndef CONFIG_IDF_TARGET_ESP32C3
-        LOG_DEBUG("Setting CPU to 240mhz because WiFi is in use.\n");
+        LOG_DEBUG("Setting CPU to 240MHz because WiFi is in use.\n");
         setCpuFrequencyMhz(240);
 #endif
         return;
