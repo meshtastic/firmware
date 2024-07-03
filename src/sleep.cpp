@@ -8,6 +8,7 @@
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PowerMon.h"
 #include "detect/LoRaRadioType.h"
 #include "error.h"
 #include "main.h"
@@ -85,6 +86,11 @@ void setCPUFast(bool on)
 
 void setLed(bool ledOn)
 {
+    if (ledOn)
+        powerMon->setState(meshtastic_PowerMon_State_LED_On);
+    else
+        powerMon->clearState(meshtastic_PowerMon_State_LED_On);
+
 #ifdef LED_PIN
     // toggle the led so we can get some rough sense of how often loop is pausing
     digitalWrite(LED_PIN, ledOn ^ LED_INVERTED);
