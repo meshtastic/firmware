@@ -285,6 +285,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         valid = valid && sht31Sensor.getMetrics(m);
         hasSensor = true;
     }
+    if (sht4xSensor.hasSensor()) {
+        valid = valid && sht4xSensor.getMetrics(m);
+        hasSensor = true;
+    }
     if (lps22hbSensor.hasSensor()) {
         valid = valid && lps22hbSensor.getMetrics(m);
         hasSensor = true;

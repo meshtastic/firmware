@@ -8,6 +8,14 @@
 
 // Make sure that we never let our packets grow too large for one BLE packet
 #define MAX_TO_FROM_RADIO_SIZE 512
+
+#if meshtastic_FromRadio_size > MAX_TO_FROM_RADIO_SIZE
+#error "meshtastic_FromRadio_size is too large for our BLE packets"
+#endif
+#if meshtastic_ToRadio_size > MAX_TO_FROM_RADIO_SIZE
+#error "meshtastic_ToRadio_size is too large for our BLE packets"
+#endif
+
 #define SPECIAL_NONCE 69420
 
 /**
@@ -95,6 +103,8 @@ class PhoneAPI
      * Returns number of bytes in the FromRadio packet (or 0 if no packet available)
      */
     size_t getFromRadio(uint8_t *buf);
+
+    void sendConfigComplete();
 
     /**
      * Return true if we have data available to send to the phone

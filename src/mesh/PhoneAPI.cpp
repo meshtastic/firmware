@@ -330,7 +330,6 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             // Clients sending special nonce don't want to see other nodeinfos
             state = config_nonce == SPECIAL_NONCE ? STATE_SEND_FILEMANIFEST : STATE_SEND_OTHER_NODEINFOS;
             config_state = 0;
-            filesManifest.clear();
         }
         break;
 
@@ -356,23 +355,21 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         LOG_INFO("getFromRadio=STATE_SEND_FILEMANIFEST\n");
         // last element
         if (config_state == filesManifest.size()) { // also handles an empty filesManifest
-            state = STATE_SEND_COMPLETE_ID;
             config_state = 0;
+            filesManifest.clear();
+            // Skip to complete packet
+            sendConfigComplete();
         } else {
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_fileInfo_tag;
             fromRadioScratch.fileInfo = filesManifest.at(config_state);
+            LOG_DEBUG("File: %s (%d) bytes\n", fromRadioScratch.fileInfo.file_name, fromRadioScratch.fileInfo.size_bytes);
             config_state++;
         }
         break;
     }
 
     case STATE_SEND_COMPLETE_ID:
-        LOG_INFO("getFromRadio=STATE_SEND_COMPLETE_ID\n");
-        fromRadioScratch.which_payload_variant = meshtastic_FromRadio_config_complete_id_tag;
-        fromRadioScratch.config_complete_id = config_nonce;
-        config_nonce = 0;
-        state = STATE_SEND_PACKETS;
-        pauseBluetoothLogging = false;
+        sendConfigComplete();
         break;
 
     case STATE_SEND_PACKETS:
@@ -410,12 +407,24 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         // Encapsulate as a FromRadio packet
         size_t numbytes = pb_encode_to_bytes(buf, meshtastic_FromRadio_size, &meshtastic_FromRadio_msg, &fromRadioScratch);
 
-        LOG_DEBUG("encoding toPhone packet to phone variant=%d, %d bytes\n", fromRadioScratch.which_payload_variant, numbytes);
+        // VERY IMPORTANT to not print debug messages while writing to fromRadioScratch - because we use that same buffer
+        // for logging (when we are encapsulating with protobufs)
+        // LOG_DEBUG("encoding toPhone packet to phone variant=%d, %d bytes\n", fromRadioScratch.which_payload_variant, numbytes);
         return numbytes;
     }
 
     LOG_DEBUG("no FromRadio packet available\n");
     return 0;
+}
+
+void PhoneAPI::sendConfigComplete()
+{
+    LOG_INFO("getFromRadio=STATE_SEND_COMPLETE_ID\n");
+    fromRadioScratch.which_payload_variant = meshtastic_FromRadio_config_complete_id_tag;
+    fromRadioScratch.config_complete_id = config_nonce;
+    config_nonce = 0;
+    state = STATE_SEND_PACKETS;
+    pauseBluetoothLogging = false;
 }
 
 void PhoneAPI::handleDisconnect()
