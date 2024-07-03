@@ -1,4 +1,6 @@
 #include "Led.h"
+#include "main.h"
+#include "power.h"
 
 GpioVirtPin ledForceOn, ledBlink;
 
@@ -19,7 +21,7 @@ class GpioPmuPin : public GpioPin
     {
         if (pmu_found && PMU) {
             // blink the axp led
-            PMU->setChargingLedMode(ledOn ? XPOWERS_CHG_LED_ON : XPOWERS_CHG_LED_OFF);
+            PMU->setChargingLedMode(value ? XPOWERS_CHG_LED_ON : XPOWERS_CHG_LED_OFF);
         }
     }
 } ledRawHwPin;
