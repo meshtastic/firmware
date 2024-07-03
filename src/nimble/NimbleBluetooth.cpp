@@ -269,7 +269,7 @@ void NimbleBluetooth::clearBonds()
 
 void NimbleBluetooth::sendLog(const uint8_t *logMessage, size_t length)
 {
-    if (!bleServer || !isConnected() || sizeof(logMessage) > 512) {
+    if (!bleServer || !isConnected() || length > 512) {
         return;
     }
     logRadioCharacteristic->notify(logMessage, length, true);
