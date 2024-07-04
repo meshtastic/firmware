@@ -32,17 +32,17 @@ class GpioHwPin : public GpioPin
     void set(bool value) { digitalWrite(num, value); }
 };
 
-class GpioLogicPin;
-class GpioNotPin;
-class GpioBinaryLogicPin;
+class GpioTransformer;
+class GpioNotTransformer;
+class GpioBinaryTransformer;
 
 /**
  * A virtual GPIO pin.
  */
 class GpioVirtPin : public GpioPin
 {
-    friend class GpioBinaryLogicPin;
-    friend class GpioNotPin;
+    friend class GpioBinaryTransformer;
+    friend class GpioNotTransformer;
 
   public:
     enum PinState { On = true, Off = false, Unset = 2 };
@@ -52,15 +52,16 @@ class GpioVirtPin : public GpioPin
 
   private:
     PinState value = PinState::Unset;
-    GpioLogicPin *dependentPin = NULL;
+    GpioTransformer *dependentPin = NULL;
 };
 
 #include <assert.h>
 
 /**
- * A logical GPIO pin baseclass, notably: the set method is not public (because it always is calculated by a subclass)
+ * A 'smart' trigger that can depend in a fake GPIO and if that GPIO changes, drive some other downstream GPIO to change.
+ * notably: the set method is not public (because it always is calculated by a subclass)
  */
-class GpioLogicPin
+class GpioTransformer
 {
   public:
     /**
@@ -69,7 +70,7 @@ class GpioLogicPin
     virtual void update() = 0;
 
   protected:
-    GpioLogicPin(GpioPin *outPin);
+    GpioTransformer(GpioPin *outPin);
 
     void set(bool value);
 
@@ -78,12 +79,12 @@ class GpioLogicPin
 };
 
 /**
- * A logical GPIO pin that performs a unary NOT operation on a virtual pin.
+ * A transformer that performs a unary NOT operation from an input.
  */
-class GpioNotPin : public GpioLogicPin
+class GpioNotTransformer : public GpioTransformer
 {
   public:
-    GpioNotPin(GpioVirtPin *inPin, GpioPin *outPin);
+    GpioNotTransformer(GpioVirtPin *inPin, GpioPin *outPin);
     void set(bool value);
 
   protected:
@@ -100,15 +101,15 @@ class GpioNotPin : public GpioLogicPin
 };
 
 /**
- * A logical GPIO pin that combines multiple virtual pins to drive a real physical pin
+ * A transformer that combines multiple virtual pins to drive an output pin
  */
-class GpioBinaryLogicPin : public GpioLogicPin
+class GpioBinaryTransformer : public GpioTransformer
 {
 
   public:
     enum Operation { And, Or, Xor };
 
-    GpioBinaryLogicPin(GpioVirtPin *inPin1, GpioVirtPin *inPin2, GpioPin *outPin, Operation operation);
+    GpioBinaryTransformer(GpioVirtPin *inPin1, GpioVirtPin *inPin2, GpioPin *outPin, Operation operation);
 
   protected:
     friend class GpioVirtPin;

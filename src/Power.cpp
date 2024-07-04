@@ -80,9 +80,6 @@ RAK9154Sensor rak9154Sensor;
 #endif
 
 #ifdef HAS_PMU
-#include "XPowersAXP192.tpp"
-#include "XPowersAXP2101.tpp"
-#include "XPowersLibInterface.hpp"
 XPowersLibInterface *PMU = NULL;
 #else
 
