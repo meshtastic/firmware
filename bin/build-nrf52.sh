@@ -31,7 +31,7 @@ echo "Generating NRF52 uf2 file"
 SRCHEX=.pio/build/$1/firmware.hex
 
 # if WM1110 target, merge hex with softdevice 7.3.0
-if (echo $1 | grep -q "wm1110"); then
+if (echo $1 | grep -q "wio-sdk-wm1110"); then
 	echo "Merging with softdevice"
 	bin/mergehex -m bin/s140_nrf52_7.3.0_softdevice.hex $SRCHEX -o .pio/build/$1/merged_fimware.hex
 	SRCHEX=.pio/build/$1/merged_fimware.hex
