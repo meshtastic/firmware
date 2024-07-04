@@ -208,6 +208,7 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
             nrf52Bluetooth->sendLog(reinterpret_cast<const char *>(buffer));
 #endif
             delete[] message;
+            delete[] buffer;
         }
     }
 }
