@@ -6,6 +6,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "PowerMon.h"
 #include "ReliableRouter.h"
 #include "airtime.h"
 #include "buzz.h"
@@ -229,6 +230,14 @@ __attribute__((weak, noinline)) bool loopCanSleep()
     return true;
 }
 
+/**
+ * Print info as a structured log message (for automated log processing)
+ */
+void printInfo()
+{
+    LOG_INFO("S:B:%d,%s\n", HW_VENDOR, optstr(APP_VERSION));
+}
+
 void setup()
 {
     concurrency::hasBeenSetup = true;
@@ -249,9 +258,12 @@ void setup()
 #ifdef DEBUG_PORT
     consoleInit(); // Set serial baud rate and init our mesh console
 #endif
+
 #ifdef UNPHONE
     unphone.printStore();
 #endif
+
+    powerMonInit();
 
     serialSinceMsec = millis();
 
@@ -570,7 +582,7 @@ void setup()
 #endif
 
     // Hello
-    LOG_INFO("Meshtastic hwvendor=%d, swver=%s\n", HW_VENDOR, optstr(APP_VERSION));
+    printInfo();
 
 #ifdef ARCH_ESP32
     esp32Setup();
