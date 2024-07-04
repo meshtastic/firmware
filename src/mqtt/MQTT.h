@@ -8,17 +8,15 @@
 #include "mqtt/JSON.h"
 #if HAS_WIFI
 #include <WiFiClient.h>
-#define HAS_NETWORKING 1
 #if !defined(ARCH_PORTDUINO)
 #include <WiFiClientSecure.h>
 #endif
 #endif
 #if HAS_ETHERNET
 #include <EthernetClient.h>
-#define HAS_NETWORKING 1
 #endif
 
-#ifdef HAS_NETWORKING
+#if HAS_NETWORKING
 #include <PubSubClient.h>
 #endif
 
@@ -43,7 +41,7 @@ class MQTT : private concurrency::OSThread
 #endif
 
   public:
-#ifdef HAS_NETWORKING
+#if HAS_NETWORKING
     PubSubClient pubSub;
 #endif
     MQTT();
