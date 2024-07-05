@@ -214,6 +214,8 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     notifyDeepSleep.notifyObservers(NULL);
 #endif
 
+    powerMon->setState(meshtastic_PowerMon_State_CPU_DeepSleep);
+
     screen->doDeepSleep(); // datasheet says this will draw only 10ua
 
     nodeDB->saveToDisk();

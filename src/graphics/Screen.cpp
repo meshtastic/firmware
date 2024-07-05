@@ -20,6 +20,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 #include "Screen.h"
+#include "PowerMon.h"
 #include "configuration.h"
 #if HAS_SCREEN
 #include <OLEDDisplay.h>
@@ -1557,6 +1558,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
     if (on != screenOn) {
         if (on) {
             LOG_INFO("Turning on screen\n");
+            powerMon->setState(meshtastic_PowerMon_State_Screen_On);
 #ifdef T_WATCH_S3
             PMU->enablePowerOutput(XPOWERS_ALDO2);
 #endif
@@ -1575,6 +1577,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             setInterval(0); // Draw ASAP
             runASAP = true;
         } else {
+            powerMon->clearState(meshtastic_PowerMon_State_Screen_On);
 #ifdef USE_EINK
             // eInkScreensaver parameter is usually NULL (default argument), default frame used instead
             setScreensaverFrames(einkScreensaver);
