@@ -57,7 +57,7 @@ RTC_DATA_ATTR int bootCount = 0;
  */
 void setCPUFast(bool on)
 {
-#if defined(ARCH_ESP32) && HAS_WIFI
+#if defined(ARCH_ESP32) && HAS_WIFI && !HAS_TFT
 
     if (isWifiAvailable()) {
         /*
