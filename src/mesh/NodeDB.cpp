@@ -26,7 +26,7 @@
 #include <vector>
 
 #ifdef ARCH_ESP32
-#if !MESHTASTIC_EXCLUDE_WIFI
+#if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 #include "modules/esp32/StoreForwardModule.h"

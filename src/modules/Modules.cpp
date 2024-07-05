@@ -27,6 +27,9 @@
 #if !MESHTASTIC_EXCLUDE_REMOTEHARDWARE
 #include "modules/RemoteHardwareModule.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_POWERSTRESS
+#include "modules/PowerStressModule.h"
+#endif
 #include "modules/RoutingModule.h"
 #include "modules/TextMessageModule.h"
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
@@ -115,6 +118,9 @@ void setupModules()
 
 #if !MESHTASTIC_EXCLUDE_REMOTEHARDWARE
         new RemoteHardwareModule();
+#endif
+#if !MESHTASTIC_EXCLUDE_POWERSTRESS
+        new PowerStressModule();
 #endif
         // Example: Put your module here
         // new ReplyModule();

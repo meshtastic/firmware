@@ -219,7 +219,6 @@ void NimbleBluetooth::setupService()
         logRadioCharacteristic = bleService->createCharacteristic(
             LOGRADIO_UUID,
             NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::READ_ENC, 512U);
-        logRadioCharacteristic->setValue("Init");
     }
     bluetoothPhoneAPI = new BluetoothPhoneAPI();
 
@@ -268,12 +267,12 @@ void NimbleBluetooth::clearBonds()
     NimBLEDevice::deleteAllBonds();
 }
 
-void NimbleBluetooth::sendLog(const char *logMessage)
+void NimbleBluetooth::sendLog(const uint8_t *logMessage, size_t length)
 {
-    if (!bleServer || !isConnected() || strlen(logMessage) > 512) {
+    if (!bleServer || !isConnected() || length > 512) {
         return;
     }
-    logRadioCharacteristic->notify(reinterpret_cast<const uint8_t *>(logMessage), strlen(logMessage), true);
+    logRadioCharacteristic->notify(logMessage, length, true);
 }
 
 void clearNVS()
