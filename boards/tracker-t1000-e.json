@@ -5,7 +5,7 @@
     },
     "core": "nRF5",
     "cpu": "cortex-m4",
-    "extra_flags": "-DARDUINO_SenseCap_card_tracker_T1000_E -DNRF52840_XXAA",
+    "extra_flags": "-DARDUINO_WIO_WM1110 -DNRF52840_XXAA",
     "f_cpu": "64000000L",
     "hwids": [
       ["0x239A", "0x8029"],
@@ -13,9 +13,9 @@
       ["0x239A", "0x002A"],
       ["0x239A", "0x802A"]
     ],
-    "usb_product": "T1000_E",
+    "usb_product": "T1000-E-BOOT",
     "mcu": "nrf52840",
-    "variant": "Seeed_T1000_E",
+    "variant": "Seeed_T1000-E",
     "bsp": {
       "name": "adafruit"
     },
@@ -35,7 +35,7 @@
     "svd_path": "nrf52840.svd"
   },
   "frameworks": ["arduino"],
-  "name": "SenseCap_card_tracker_T1000_E",
+  "name": "Seeed T1000 -E",
   "upload": {
     "maximum_ram_size": 248832,
     "maximum_size": 815104,
