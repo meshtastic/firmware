@@ -17,6 +17,7 @@ class STM32WLCryptoEngine : public CryptoEngine
     virtual void encrypt(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes) override
     {
         if (key.length > 0) {
+            assert(key.length == 32); // FIXME: we should add support for AES128
             AES_ctx ctx;
             initNonce(fromNode, packetNum);
             AES_init_ctx_iv(&ctx, key.bytes, nonce);
