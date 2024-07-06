@@ -414,6 +414,7 @@ int32_t MQTT::runOnce()
         if (!wantConnection)
             return 5000; // If we don't want connection now, check again in 5 secs
         else {
+            LOG_DEBUG("Reconnecting MQTT because the PubSub loop returned false\n");
             reconnect();
             // If we succeeded, empty the queue one by one and start reading rapidly, else try again in 30 seconds (TCP
             // connections are EXPENSIVE so try rarely)
