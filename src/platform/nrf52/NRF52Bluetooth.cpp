@@ -74,11 +74,16 @@ void onCccd(uint16_t conn_hdl, BLECharacteristic *chr, uint16_t cccd_value)
     LOG_INFO("CCCD Updated: %u\n", cccd_value);
     // Check the characteristic this CCCD update is associated with in case
     // this handler is used for multiple CCCD records.
+
+    // According to the GATT spec: cccd value = 0x0001 means notifications are enabled
+    // and cccd value = 0x0002 means indications are enabled
+
     if (chr->uuid == fromNum.uuid || chr->uuid == logRadio.uuid) {
-        if (chr->notifyEnabled(conn_hdl)) {
-            LOG_INFO("fromNum 'Notify' enabled\n");
+        auto result = cccd_value == 2 ? chr->indicateEnabled(conn_hdl) : chr->notifyEnabled(conn_hdl);
+        if (result) {
+            LOG_INFO("Notify/Indicate enabled\n");
         } else {
-            LOG_INFO("fromNum 'Notify' disabled\n");
+            LOG_INFO("Notify/Indicate disabled\n");
         }
     }
 }
@@ -176,7 +181,7 @@ void setupMeshService(void)
     toRadio.setWriteCallback(onToRadioWrite, false);
     toRadio.begin();
 
-    logRadio.setProperties(CHR_PROPS_NOTIFY | CHR_PROPS_READ);
+    logRadio.setProperties(CHR_PROPS_INDICATE | CHR_PROPS_NOTIFY | CHR_PROPS_READ);
     logRadio.setPermission(secMode, SECMODE_NO_ACCESS);
     logRadio.setMaxLen(512);
     logRadio.setCccdWriteCallback(onCccd);
@@ -338,5 +343,8 @@ void NRF52Bluetooth::sendLog(const char *logMessage)
 {
     if (!isConnected() || strlen(logMessage) > 512)
         return;
-    logRadio.notify(logMessage);
+    if (logRadio.indicateEnabled())
+        logRadio.indicate(logMessage);
+    else
+        logRadio.notify(logMessage);
 }
