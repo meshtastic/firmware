@@ -206,7 +206,7 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
 #ifdef ARCH_ESP32
             nimbleBluetooth->sendLog(buffer, size);
 #elif defined(ARCH_NRF52)
-            nrf52Bluetooth->sendLog(reinterpret_cast<const char *>(buffer));
+            nrf52Bluetooth->sendLog(buffer, size);
 #endif
             delete[] message;
             delete[] buffer;
