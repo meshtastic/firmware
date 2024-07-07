@@ -6,7 +6,7 @@
 #define LED_PIN 2 // LED
 #define LED_INVERTED 0
 
-#define HAS_SCREEN 1
+#define HAS_SCREEN 0
 #define HAS_GPS 0
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
