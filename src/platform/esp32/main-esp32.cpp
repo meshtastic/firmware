@@ -3,11 +3,14 @@
 #include "esp_task_wdt.h"
 #include "main.h"
 
-#if !defined(CONFIG_IDF_TARGET_ESP32S2)
+#if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
+#include "BleOta.h"
 #include "nimble/NimbleBluetooth.h"
 #endif
-#include "BleOta.h"
+
+#if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
+#endif
 
 #include "meshUtils.h"
 #include "sleep.h"
@@ -18,19 +21,24 @@
 #include <nvs.h>
 #include <nvs_flash.h>
 
-#if !defined(CONFIG_IDF_TARGET_ESP32S2)
-
+#if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 void setBluetoothEnable(bool enable)
 {
-    if (!isWifiAvailable() && config.bluetooth.enabled == true) {
+#if HAS_WIFI
+    if (!isWifiAvailable() && config.bluetooth.enabled == true)
+#else
+    if (config.bluetooth.enabled == true)
+#endif
+    {
         if (!nimbleBluetooth) {
             nimbleBluetooth = new NimbleBluetooth();
         }
         if (enable && !nimbleBluetooth->isActive()) {
             nimbleBluetooth->setup();
-        } else if (!enable) {
-            nimbleBluetooth->shutdown();
         }
+        // For ESP32, no way to recover from bluetooth shutdown without reboot
+        // BLE advertising automatically stops when MCU enters light-sleep(?)
+        // For deep-sleep, shutdown hardware with nimbleBluetooth->deinit(). Requires reboot to reverse
     }
 }
 #else
@@ -108,12 +116,16 @@ void esp32Setup()
     preferences.putUInt("rebootCounter", rebootCounter);
     preferences.end();
     LOG_DEBUG("Number of Device Reboots: %d\n", rebootCounter);
+#if !MESHTASTIC_EXCLUDE_BLUETOOTH
     String BLEOTA = BleOta::getOtaAppVersion();
     if (BLEOTA.isEmpty()) {
         LOG_DEBUG("No OTA firmware available\n");
     } else {
         LOG_DEBUG("OTA firmware version %s\n", BLEOTA.c_str());
     }
+#else
+    LOG_DEBUG("No OTA firmware available\n");
+#endif
 
     // enableModemSleep();
 
@@ -207,11 +219,16 @@ void cpuDeepSleep(uint32_t msecToWake)
 #endif
 
     // Not needed because both of the current boards have external pullups
-    // FIXME change polarity in hw so we can wake on ANY_HIGH instead - that would allow us to use all three buttons (instead of
-    // just the first) gpio_pullup_en((gpio_num_t)BUTTON_PIN);
+    // FIXME change polarity in hw so we can wake on ANY_HIGH instead - that would allow us to use all three buttons (instead
+    // of just the first) gpio_pullup_en((gpio_num_t)BUTTON_PIN);
 
 #if SOC_PM_SUPPORT_EXT_WAKEUP
+#ifdef CONFIG_IDF_TARGET_ESP32
+    // ESP_EXT1_WAKEUP_ALL_LOW has been deprecated since esp-idf v5.4 for any other target.
     esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ALL_LOW);
+#else
+    esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ANY_LOW);
+#endif
 #endif
 #endif
 

@@ -1,4 +1,6 @@
 #pragma once
+#include "configuration.h"
+#if !MESHTASTIC_EXCLUDE_GPS
 
 #include "GPSStatus.h"
 #include "Observer.h"
@@ -21,10 +23,12 @@ struct uBloxGnssModelInfo {
 };
 
 typedef enum {
+    GNSS_MODEL_ATGM336H,
     GNSS_MODEL_MTK,
     GNSS_MODEL_UBLOX,
     GNSS_MODEL_UC6580,
     GNSS_MODEL_UNKNOWN,
+    GNSS_MODEL_MTK_L76B
 } GnssModel_t;
 
 typedef enum {
@@ -33,6 +37,13 @@ typedef enum {
     GNSS_RESPONSE_FRAME_ERRORS,
     GNSS_RESPONSE_OK,
 } GPS_RESPONSE;
+
+enum GPSPowerState : uint8_t {
+    GPS_OFF = 0,     // Physically powered off
+    GPS_ACTIVE = 1,  // Awake and want a position
+    GPS_STANDBY = 2, // Physically powered on, but soft-sleeping
+    GPS_IDLE = 3,    // Awake, but not wanting another position yet
+};
 
 // Generate a string representation of DOP
 const char *getDOPString(uint32_t dop);
@@ -62,7 +73,7 @@ class GPS : private concurrency::OSThread
     uint32_t rx_gpio = 0;
     uint32_t tx_gpio = 0;
     uint32_t en_gpio = 0;
-    int32_t averageLockTime = 0;
+    uint32_t predictedLockTime = 0;
     uint32_t GPSCycles = 0;
 
     int speedSelect = 0;
@@ -74,8 +85,6 @@ class GPS : private concurrency::OSThread
      */
     bool hasValidLocation = false; // default to false, until we complete our first read
 
-    bool isAwake = false; // true if we want a location right now
-
     bool isInPowersave = false;
 
     bool shouldPublish = false; // If we've changed GPS state, this will force a publish the next loop()
@@ -85,6 +94,8 @@ class GPS : private concurrency::OSThread
     bool GPSInitFinished = false; // Init thread finished?
     bool GPSInitStarted = false;  // Init thread finished?
 
+    GPSPowerState powerState = GPS_OFF; // GPS_ACTIVE if we want a location right now
+
     uint8_t numSatellites = 0;
 
     CallbackObserver<GPS, void *> notifyDeepSleepObserver = CallbackObserver<GPS, void *>(this, &GPS::prepareDeepSleep);
@@ -92,8 +103,11 @@ class GPS : private concurrency::OSThread
 
   public:
     /** If !NULL we will use this serial port to construct our GPS */
+#if defined(RPI_PICO_WAVESHARE)
+    static SerialUART *_serial_gps;
+#else
     static HardwareSerial *_serial_gps;
-
+#endif
     static uint8_t _message_PMREQ[];
     static uint8_t _message_PMREQ_10[];
     static const uint8_t _message_CFG_RXM_PSM[];
@@ -132,6 +146,11 @@ class GPS : private concurrency::OSThread
     static const uint8_t _message_VALSET_ENABLE_NMEA_BBR[];
     static const uint8_t _message_VALSET_DISABLE_SBAS_RAM[];
     static const uint8_t _message_VALSET_DISABLE_SBAS_BBR[];
+
+    // CASIC commands for ATGM336H
+    static const uint8_t _message_CAS_CFG_RST_FACTORY[];
+    static const uint8_t _message_CAS_CFG_NAVX_CONF[];
+    static const uint8_t _message_CAS_CFG_RATE_1HZ[];
 
     meshtastic_Position p = meshtastic_Position_init_default;
 
@@ -174,6 +193,7 @@ class GPS : private concurrency::OSThread
 
     // Create a ublox packet for editing in memory
     uint8_t makeUBXPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_size, const uint8_t *msg);
+    uint8_t makeCASPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_size, const uint8_t *msg);
 
     // scratch space for creating ublox packets
     uint8_t UBXscratch[250] = {0};
@@ -183,6 +203,8 @@ class GPS : private concurrency::OSThread
     int getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t requestedID, uint32_t waitMillis);
     GPS_RESPONSE getACK(uint8_t c, uint8_t i, uint32_t waitMillis);
     GPS_RESPONSE getACK(const char *message, uint32_t waitMillis);
+
+    GPS_RESPONSE getACKCas(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis);
 
     /**
      * Switch the GPS into a mode where we are actively looking for a lock, or alternatively switch GPS into a low power mode
@@ -243,6 +265,7 @@ class GPS : private concurrency::OSThread
 
     // Calculate checksum
     void UBXChecksum(uint8_t *message, size_t length);
+    void CASChecksum(uint8_t *message, size_t length);
 
     /** Get how long we should stay looking for each aquisition
      */
@@ -266,8 +289,11 @@ class GPS : private concurrency::OSThread
     // delay counter to allow more sats before fixed position stops GPS thread
     uint8_t fixeddelayCtr = 0;
 
+    const char *powerStateToString();
+
   protected:
     GnssModel_t gnssModel = GNSS_MODEL_UNKNOWN;
 };
 
 extern GPS *gps;
+#endif // Exclude GPS

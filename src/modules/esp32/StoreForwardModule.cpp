@@ -255,7 +255,7 @@ void StoreForwardModule::sendMessage(NodeNum dest, const meshtastic_StoreAndForw
 
     p->to = dest;
 
-    p->priority = meshtastic_MeshPacket_Priority_MIN;
+    p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
 
     // FIXME - Determine if the delayed packet is broadcast or delayed. For now, assume
     //  everything is broadcast.
@@ -319,12 +319,12 @@ ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &m
 #ifdef ARCH_ESP32
     if (moduleConfig.store_forward.enabled) {
 
-        // The router node should not be sending messages as a client. Unless he is a ROUTER_CLIENT
-        if ((getFrom(&mp) != nodeDB.getNodeNum()) || (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT)) {
+        // The router node should not be sending messages as a client
+        if ((getFrom(&mp) != nodeDB->getNodeNum())) {
 
             if ((mp.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) && is_server) {
                 auto &p = mp.decoded;
-                if (mp.to == nodeDB.getNodeNum() && (p.payload.bytes[0] == 'S') && (p.payload.bytes[1] == 'F') &&
+                if (mp.to == nodeDB->getNodeNum() && (p.payload.bytes[0] == 'S') && (p.payload.bytes[1] == 'F') &&
                     (p.payload.bytes[2] == 0x00)) {
                     LOG_DEBUG("*** Legacy Request to send\n");
 
@@ -334,7 +334,7 @@ ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &m
                         LOG_INFO("*** S&F - Busy. Try again shortly.\n");
                         meshtastic_MeshPacket *pr = allocReply();
                         pr->to = getFrom(&mp);
-                        pr->priority = meshtastic_MeshPacket_Priority_MIN;
+                        pr->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
                         pr->want_ack = false;
                         pr->decoded.want_response = false;
                         pr->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
@@ -506,7 +506,7 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
         break;
 
     default:
-        assert(0); // unexpected state
+        break; // no need to do anything
     }
     return true; // There's no need for others to look at this message.
 }

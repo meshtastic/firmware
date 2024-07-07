@@ -1,4 +1,9 @@
 #pragma once
+
+#include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "NodeDB.h"
 #include "ProtobufModule.h"
@@ -28,6 +33,11 @@ class PowerTelemetryModule : private concurrency::OSThread, public ProtobufModul
     */
     virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *p) override;
     virtual int32_t runOnce() override;
+    /** Called to get current Power telemetry data
+    @return true if it contains valid data
+    */
+    bool getPowerTelemetry(meshtastic_Telemetry *m);
+    virtual meshtastic_MeshPacket *allocReply() override;
     /**
      * Send our Telemetry into the mesh
      */
@@ -41,3 +51,5 @@ class PowerTelemetryModule : private concurrency::OSThread, public ProtobufModul
     uint32_t lastSentToPhone = 0;
     uint32_t sensor_read_error_count = 0;
 };
+
+#endif

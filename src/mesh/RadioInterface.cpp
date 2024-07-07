@@ -1,5 +1,6 @@
 #include "RadioInterface.h"
 #include "Channels.h"
+#include "DisplayFormatters.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -30,18 +31,18 @@ const RegionInfo regions[] = {
     RDEF(EU_433, 433.0f, 434.0f, 10, 0, 12, true, false, false),
 
     /*
-        https://www.thethingsnetwork.org/docs/lorawan/duty-cycle/
-        https://www.thethingsnetwork.org/docs/lorawan/regional-parameters/
-        https://www.legislation.gov.uk/uksi/1999/930/schedule/6/part/III/made/data.xht?view=snippet&wrap=true
+       https://www.thethingsnetwork.org/docs/lorawan/duty-cycle/
+       https://www.thethingsnetwork.org/docs/lorawan/regional-parameters/
+       https://www.legislation.gov.uk/uksi/1999/930/schedule/6/part/III/made/data.xht?view=snippet&wrap=true
 
-        audio_permitted = false per regulation
+       audio_permitted = false per regulation
 
-        Special Note:
-        The link above describes LoRaWAN's band plan, stating a power limit of 16 dBm. This is their own suggested specification,
-        we do not need to follow it. The European Union regulations clearly state that the power limit for this frequency range is
-       500 mW, or 27 dBm. It also states that we can use interference avoidance and spectrum access techniques to avoid a duty
-       cycle. (Please refer to section 4.21 in the following document)
-        https://ec.europa.eu/growth/tools-databases/tris/index.cfm/ro/search/?trisaction=search.detail&year=2021&num=528&dLang=EN
+       Special Note:
+       The link above describes LoRaWAN's band plan, stating a power limit of 16 dBm. This is their own suggested specification,
+       we do not need to follow it. The European Union regulations clearly state that the power limit for this frequency range is
+       500 mW, or 27 dBm. It also states that we can use interference avoidance and spectrum access techniques (such as LBT +
+       AFA) to avoid a duty cycle. (Please refer to line P page 22 of this document.)
+       https://www.etsi.org/deliver/etsi_en/300200_300299/30022002/03.01.01_60/en_30022002v030101p.pdf
      */
     RDEF(EU_868, 869.4f, 869.65f, 10, 0, 27, false, false, false),
 
@@ -75,9 +76,12 @@ const RegionInfo regions[] = {
     RDEF(KR, 920.0f, 923.0f, 100, 0, 0, true, false, false),
 
     /*
-        ???
+        Taiwan, 920-925Mhz, limited to 0.5W indoor or coastal, 1.0W outdoor.
+        5.8.1 in the Low-power Radio-frequency Devices Technical Regulations
+        https://www.ncc.gov.tw/english/files/23070/102_5190_230703_1_doc_C.PDF
+        https://gazette.nat.gov.tw/egFront/e_detail.do?metaid=147283
      */
-    RDEF(TW, 920.0f, 925.0f, 100, 0, 0, true, false, false),
+    RDEF(TW, 920.0f, 925.0f, 100, 0, 27, true, false, false),
 
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
@@ -143,16 +147,23 @@ const RegionInfo regions[] = {
 };
 
 const RegionInfo *myRegion;
+bool RadioInterface::uses_default_frequency_slot = true;
 
 static uint8_t bytes[MAX_RHPACKETLEN];
 
 void initRegion()
 {
     const RegionInfo *r = regions;
+#ifdef REGULATORY_LORA_REGIONCODE
+    for (; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET && r->code != REGULATORY_LORA_REGIONCODE; r++)
+        ;
+    LOG_INFO("Wanted region %d, regulatory override to %s\n", config.lora.region, r->name);
+#else
     for (; r->code != meshtastic_Config_LoRaConfig_RegionCode_UNSET && r->code != config.lora.region; r++)
         ;
-    myRegion = r;
     LOG_INFO("Wanted region %d, using %s\n", config.lora.region, r->name);
+#endif
+    myRegion = r;
 }
 
 /**
@@ -250,7 +261,6 @@ uint32_t RadioInterface::getTxDelayMsecWeighted(float snr)
     uint8_t CWsize = map(snr, SNR_MIN, SNR_MAX, CWmin, CWmax);
     // LOG_DEBUG("rx_snr of %f so setting CWsize to:%d\n", snr, CWsize);
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
-        config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT ||
         config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
         delay = random(0, 2 * CWsize) * slotTimeMsec;
         LOG_DEBUG("rx_snr found in packet. As a router, setting tx delay:%d\n", delay);
@@ -332,8 +342,8 @@ bool RadioInterface::init()
     notifyDeepSleepObserver.observe(&notifyDeepSleep);
 
     // we now expect interfaces to operate in promiscuous mode
-    // radioIf.setThisAddress(nodeDB.getNodeNum()); // Note: we must do this here, because the nodenum isn't inited at constructor
-    // time.
+    // radioIf.setThisAddress(nodeDB->getNodeNum()); // Note: we must do this here, because the nodenum isn't inited at
+    // constructor time.
 
     applyModemConfig();
 
@@ -467,8 +477,8 @@ void RadioInterface::applyModemConfig()
 
     power = loraConfig.tx_power;
 
-    if ((power == 0) || ((power > myRegion->powerLimit) && !devicestate.owner.is_licensed))
-        power = myRegion->powerLimit;
+    if ((power == 0) || ((power + REGULATORY_GAIN_LORA > myRegion->powerLimit) && !devicestate.owner.is_licensed))
+        power = myRegion->powerLimit - REGULATORY_GAIN_LORA;
 
     if (power == 0)
         power = 17; // Default to this power level if we don't have a valid regional power limit (powerLimit of myRegion defaults
@@ -484,7 +494,11 @@ void RadioInterface::applyModemConfig()
     // If user has manually specified a channel num, then use that, otherwise generate one by hashing the name
     const char *channelName = channels.getName(channels.getPrimaryIndex());
     // channel_num is actually (channel_num - 1), since modulus (%) returns values from 0 to (numChannels - 1)
-    int channel_num = (loraConfig.channel_num ? loraConfig.channel_num - 1 : hash(channelName)) % numChannels;
+    uint32_t channel_num = (loraConfig.channel_num ? loraConfig.channel_num - 1 : hash(channelName)) % numChannels;
+
+    // Check if we use the default frequency slot
+    RadioInterface::uses_default_frequency_slot =
+        channel_num == hash(DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false)) % numChannels;
 
     // Old frequency selection formula
     // float freq = myRegion->freqStart + ((((myRegion->freqEnd - myRegion->freqStart) / numChannels) / 2) * channel_num);
@@ -507,7 +521,7 @@ void RadioInterface::applyModemConfig()
     LOG_INFO("Radio freq=%.3f, config.lora.frequency_offset=%.3f\n", freq, loraConfig.frequency_offset);
     LOG_INFO("Set radio: region=%s, name=%s, config=%u, ch=%d, power=%d\n", myRegion->name, channelName, loraConfig.modem_preset,
              channel_num, power);
-    LOG_INFO("Radio myRegion->freqStart -> myRegion->freqEnd: %f -> %f (%f mhz)\n", myRegion->freqStart, myRegion->freqEnd,
+    LOG_INFO("Radio myRegion->freqStart -> myRegion->freqEnd: %f -> %f (%f MHz)\n", myRegion->freqStart, myRegion->freqEnd,
              myRegion->freqEnd - myRegion->freqStart);
     LOG_INFO("Radio myRegion->numChannels: %d x %.3fkHz\n", numChannels, bw);
     LOG_INFO("Radio channel_num: %d\n", channel_num + 1);
@@ -558,6 +572,8 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
     h->to = p->to;
     h->id = p->id;
     h->channel = p->channel;
+    h->next_hop = 0;   // *** For future use ***
+    h->relay_node = 0; // *** For future use ***
     if (p->hop_limit > HOP_MAX) {
         LOG_WARN("hop limit %d is too high, setting to %d\n", p->hop_limit, HOP_RELIABLE);
         p->hop_limit = HOP_RELIABLE;

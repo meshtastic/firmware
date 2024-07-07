@@ -24,7 +24,8 @@ LinuxInput::LinuxInput(const char *name) : concurrency::OSThread(name)
 
 void LinuxInput::deInit()
 {
-    close(fd);
+    if (fd >= 0)
+        close(fd);
 }
 
 int32_t LinuxInput::runOnce()
@@ -153,6 +154,9 @@ int32_t LinuxInput::runOnce()
                         e.kbchar = 0xb7;
                     case KEY_ENTER: // Enter
                         e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
+                        break;
+                    case KEY_POWER:
+                        system("poweroff");
                         break;
                     default: // all other keys
                         if (keymap[code]) {

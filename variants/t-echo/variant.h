@@ -65,6 +65,9 @@ extern "C" {
 #define PIN_BUTTON2 (0 + 18)      // 0.18 is labeled on the board as RESET but we configure it in the bootloader as a regular GPIO
 #define PIN_BUTTON_TOUCH (0 + 11) // 0.11 is the soft touch button on T-Echo
 
+#define BUTTON_CLICK_MS 400
+#define BUTTON_TOUCH_MS 200
+
 /*
  * Analog pins
  */
@@ -131,7 +134,7 @@ External serial flash WP25R1635FZUIL0
 // Note DIO2 is attached internally to the module to an analog switch for TX/RX switching
 #define SX1262_DIO3                                                                                                              \
     (0 + 21) // This is used as an *output* from the sx1262 and connected internally to power the tcxo, do not drive from the main
-             // CPU?
+// CPU?
 #define SX126X_BUSY (0 + 17)
 #define SX126X_RESET (0 + 25)
 // Not really an E22 but TTGO seems to be trying to clone that
@@ -158,7 +161,7 @@ External serial flash WP25R1635FZUIL0
 
 // Controls power for all peripherals (eink + GPS + LoRa + Sensor)
 #define PIN_POWER_EN (0 + 12)
-#define PIN_POWER_EN1 (0 + 13)
+// #define PIN_POWER_EN1 (0 + 13)
 
 #define USE_EINK
 
@@ -177,13 +180,13 @@ External serial flash WP25R1635FZUIL0
 #define PIN_GPS_STANDBY (32 + 2) // An output to wake GPS, low means allow sleep, high means force wake
 // Seems to be missing on this new board
 // #define PIN_GPS_PPS (32 + 4)  // Pulse per second input from the GPS
-#define PIN_GPS_TX (32 + 9) // This is for bits going TOWARDS the CPU
-#define PIN_GPS_RX (32 + 8) // This is for bits going TOWARDS the GPS
+#define GPS_TX_PIN (32 + 9) // This is for bits going TOWARDS the CPU
+#define GPS_RX_PIN (32 + 8) // This is for bits going TOWARDS the GPS
 
 #define GPS_THREAD_INTERVAL 50
 
-#define PIN_SERIAL1_RX PIN_GPS_TX
-#define PIN_SERIAL1_TX PIN_GPS_RX
+#define PIN_SERIAL1_RX GPS_TX_PIN
+#define PIN_SERIAL1_TX GPS_RX_PIN
 
 // PCF8563 RTC Module
 #define PCF8563_RTC 0x51
@@ -209,19 +212,10 @@ External serial flash WP25R1635FZUIL0
 // and has 12 bit resolution
 #define BATTERY_SENSE_RESOLUTION_BITS 12
 #define BATTERY_SENSE_RESOLUTION 4096.0
-// Definition of milliVolt per LSB => 3.0V ADC range and 12-bit ADC resolution = 3000mV/4096
-#define VBAT_MV_PER_LSB (0.73242188F)
-// Voltage divider value => 100K + 100K voltage divider on VBAT = (100K / (100K + 100K))
-#define VBAT_DIVIDER (0.5F)
-// Compensation factor for the VBAT divider
-#define VBAT_DIVIDER_COMP (2.0F)
-// Fixed calculation of milliVolt from compensation value
-#define REAL_VBAT_MV_PER_LSB (VBAT_DIVIDER_COMP * VBAT_MV_PER_LSB)
 #undef AREF_VOLTAGE
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
-#define ADC_MULTIPLIER VBAT_DIVIDER_COMP
-#define VBAT_RAW_TO_SCALED(x) (REAL_VBAT_MV_PER_LSB * x)
+#define ADC_MULTIPLIER (2.0F)
 
 #define HAS_RTC 1
 

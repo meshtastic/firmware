@@ -1,6 +1,7 @@
 #include "RadioLibInterface.h"
 #include "MeshTypes.h"
 #include "NodeDB.h"
+#include "PowerMon.h"
 #include "SPILock.h"
 #include "configuration.h"
 #include "error.h"
@@ -22,6 +23,36 @@ void LockingArduinoHal::spiEndTransaction()
 
     ArduinoHal::spiEndTransaction();
 }
+#if ARCH_PORTDUINO
+void LockingArduinoHal::spiTransfer(uint8_t *out, size_t len, uint8_t *in)
+{
+    if (busy == RADIOLIB_NC) {
+        spi->transfer(out, in, len);
+    } else {
+        uint16_t offset = 0;
+
+        while (len) {
+            uint8_t block_size = (len < 20 ? len : 20);
+            spi->transfer((out != NULL ? out + offset : NULL), (in != NULL ? in + offset : NULL), block_size);
+            if (block_size == len)
+                return;
+
+            // ensure GPIO is low
+
+            uint32_t start = millis();
+            while (digitalRead(busy)) {
+                if (millis() - start >= 2000) {
+                    LOG_ERROR("GPIO mid-transfer timeout, is it connected?");
+                    return;
+                }
+            }
+
+            offset += block_size;
+            len -= block_size;
+        }
+    }
+}
+#endif
 
 RadioLibInterface::RadioLibInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                                      RADIOLIB_PIN_TYPE busy, PhysicalLayer *_iface)
@@ -287,6 +318,7 @@ void RadioLibInterface::handleTransmitInterrupt()
     // ignore the transmit interrupt
     if (sendingPacket)
         completeSending();
+    powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // But our transmitter is deffinitely off now
 }
 
 void RadioLibInterface::completeSending()
@@ -313,7 +345,7 @@ void RadioLibInterface::handleReceiveInterrupt()
     // when this is called, we should be in receive mode - if we are not, just jump out instead of bombing. Possible Race
     // Condition?
     if (!isReceiving) {
-        LOG_DEBUG("*** WAS_ASSERT *** handleReceiveInterrupt called when not in receive mode\n");
+        LOG_ERROR("handleReceiveInterrupt called when not in receive mode, which shouldn't happen.\n");
         return;
     }
 
@@ -382,6 +414,24 @@ void RadioLibInterface::handleReceiveInterrupt()
     }
 }
 
+void RadioLibInterface::startReceive()
+{
+    isReceiving = true;
+    powerMon->setState(meshtastic_PowerMon_State_Lora_RXOn);
+}
+
+void RadioLibInterface::configHardwareForSend()
+{
+    powerMon->setState(meshtastic_PowerMon_State_Lora_TXOn);
+}
+
+void RadioLibInterface::setStandby()
+{
+    // neither sending nor receiving
+    powerMon->clearState(meshtastic_PowerMon_State_Lora_RXOn);
+    powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn);
+}
+
 /** start an immediate transmit */
 void RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 {
@@ -401,6 +451,7 @@ void RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 
             // This send failed, but make sure to 'complete' it properly
             completeSending();
+            powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // Transmitter off now
             startReceive(); // Restart receive mode (because startTransmit failed to put us in xmit mode)
         }
 

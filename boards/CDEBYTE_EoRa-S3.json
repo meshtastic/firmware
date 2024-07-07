@@ -1,0 +1,38 @@
+{
+  "build": {
+    "arduino": {
+      "ldscript": "esp32s3_out.ld"
+    },
+    "core": "esp32",
+    "extra_flags": [
+      "-D CDEBYTE_EORA_S3",
+      "-D ARDUINO_USB_CDC_ON_BOOT=1",
+      "-D ARDUINO_USB_MODE=0",
+      "-D ARDUINO_RUNNING_CORE=1",
+      "-D ARDUINO_EVENT_RUNNING_CORE=1",
+      "-D BOARD_HAS_PSRAM"
+    ],
+    "f_cpu": "240000000L",
+    "f_flash": "80000000L",
+    "flash_mode": "dio",
+    "hwids": [["0x303A", "0x1001"]],
+    "mcu": "esp32s3",
+    "variant": "CDEBYTE_EoRa-S3"
+  },
+  "connectivity": ["wifi"],
+  "debug": {
+    "openocd_target": "esp32s3.cfg"
+  },
+  "frameworks": ["arduino", "espidf"],
+  "name": "CDEBYTE EoRa-S3",
+  "upload": {
+    "flash_size": "4MB",
+    "maximum_ram_size": 327680,
+    "maximum_size": 4194304,
+    "wait_for_upload_port": true,
+    "require_upload_port": true,
+    "speed": 921600
+  },
+  "url": "https://www.cdebyte.com/Module-Testkits-EoRaPI",
+  "vendor": "CDEBYTE"
+}

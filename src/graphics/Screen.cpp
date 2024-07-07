@@ -25,7 +25,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <OLEDDisplay.h>
 
 #include "DisplayFormatters.h"
+#if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
+#endif
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "error.h"
@@ -71,9 +73,8 @@ namespace graphics
 // #define SHOW_REDRAWS
 
 // A text message frame + debug frame + all the node infos
-static FrameCallback normalFrames[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
+FrameCallback *normalFrames;
 static uint32_t targetFramerate = IDLE_FRAMERATE;
-static char btPIN[16] = "888888";
 
 uint32_t logo_timeout = 5000; // 4 seconds for EACH logo
 
@@ -92,21 +93,52 @@ std::vector<MeshModule *> moduleFrames;
 // Stores the last 4 of our hardware ID, to make finding the device for pairing easier
 static char ourId[5];
 
+// vector where symbols (string) are displayed in bottom corner of display.
+std::vector<std::string> functionSymbals;
+// string displayed in bottom right corner of display. Created from elements in functionSymbals vector
+std::string functionSymbalString = "";
+
+#if HAS_GPS
 // GeoCoord object for the screen
 GeoCoord geoCoord;
+#endif
 
 #ifdef SHOW_REDRAWS
 static bool heartbeat = false;
 #endif
 
-static uint16_t displayWidth, displayHeight;
-
-#define SCREEN_WIDTH displayWidth
-#define SCREEN_HEIGHT displayHeight
+// Quick access to screen dimensions from static drawing functions
+// DEPRECATED. To-do: move static functions inside Screen class
+#define SCREEN_WIDTH display->getWidth()
+#define SCREEN_HEIGHT display->getHeight()
 
 #include "graphics/ScreenFonts.h"
 
 #define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
+
+/// Check if the display can render a string (detect special chars; emoji)
+static bool haveGlyphs(const char *str)
+{
+#if defined(OLED_UA) || defined(OLED_RU)
+    // Don't want to make any assumptions about custom language support
+    return true;
+#endif
+
+    // Check each character with the lookup function for the OLED library
+    // We're not really meant to use this directly..
+    bool have = true;
+    for (uint16_t i = 0; i < strlen(str); i++) {
+        uint8_t result = Screen::customFontTableLookup((uint8_t)str[i]);
+        // If font doesn't support a character, it is substituted for ¿
+        if (result == 191 && (uint8_t)str[i] != 191) {
+            have = false;
+            break;
+        }
+    }
+
+    LOG_DEBUG("haveGlyphs=%d\n", have);
+    return have;
+}
 
 /**
  * Draw the icon with extra info printed around the corners
@@ -131,13 +163,15 @@ static void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDispl
     if (upperMsg)
         display->drawString(x + 0, y + 0, upperMsg);
 
-    // Draw version in upper right
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%s",
-             xstr(APP_VERSION_SHORT)); // Note: we don't bother printing region or now, it makes the string too long
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(buf), y + 0, buf);
+    // Draw version and short name in upper right
+    char buf[25];
+    snprintf(buf, sizeof(buf), "%s\n%s", xstr(APP_VERSION_SHORT), haveGlyphs(owner.short_name) ? owner.short_name : "");
+
+    display->setTextAlignment(TEXT_ALIGN_RIGHT);
+    display->drawString(x + SCREEN_WIDTH, y + 0, buf);
     screen->forceDisplay();
-    // FIXME - draw serial # somewhere?
+
+    display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
 }
 
 static void drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -172,14 +206,15 @@ static void drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDi
     if (upperMsg)
         display->drawString(x + 0, y + 0, upperMsg);
 
-    // Draw version in upper right
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%s",
-             xstr(APP_VERSION_SHORT)); // Note: we don't bother printing region or now, it makes the string too long
-    display->drawString(x + SCREEN_WIDTH - display->getStringWidth(buf), y + 0, buf);
+    // Draw version and shortname in upper right
+    char buf[25];
+    snprintf(buf, sizeof(buf), "%s\n%s", xstr(APP_VERSION_SHORT), haveGlyphs(owner.short_name) ? owner.short_name : "");
+
+    display->setTextAlignment(TEXT_ALIGN_RIGHT);
+    display->drawString(x + SCREEN_WIDTH, y + 0, buf);
     screen->forceDisplay();
 
-    // FIXME - draw serial # somewhere?
+    display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
 }
 
 static void drawOEMBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -189,26 +224,12 @@ static void drawOEMBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
     drawOEMIconScreen(region, display, state, x, y);
 }
 
-static void drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *message)
+void Screen::drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *message)
 {
     uint16_t x_offset = display->width() / 2;
     display->setTextAlignment(TEXT_ALIGN_CENTER);
     display->setFont(FONT_MEDIUM);
     display->drawString(x_offset + x, 26 + y, message);
-}
-
-static void drawBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-#ifdef ARCH_ESP32
-    if (wakeCause == ESP_SLEEP_WAKEUP_TIMER || wakeCause == ESP_SLEEP_WAKEUP_EXT1) {
-        drawFrameText(display, state, x, y, "Resuming...");
-    } else
-#endif
-    {
-        // Draw region in upper left
-        const char *region = myRegion ? myRegion->name : NULL;
-        drawIconScreen(region, display, state, x, y);
-    }
 }
 
 // Used on boot when a certificate is being created
@@ -256,11 +277,84 @@ static void drawWelcomeScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
 #endif
 }
 
+// draw overlay in bottom right corner of screen to show when notifications are muted or modifier key is active
+static void drawFunctionOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
+{
+    // LOG_DEBUG("Drawing function overlay\n");
+    if (functionSymbals.begin() != functionSymbals.end()) {
+        char buf[64];
+        display->setFont(FONT_SMALL);
+        snprintf(buf, sizeof(buf), "%s", functionSymbalString.c_str());
+        display->drawString(SCREEN_WIDTH - display->getStringWidth(buf), SCREEN_HEIGHT - FONT_HEIGHT_SMALL, buf);
+    }
+}
+
 #ifdef USE_EINK
 /// Used on eink displays while in deep sleep
-static void drawSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+static void drawDeepSleepScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
-    drawIconScreen("Sleeping...", display, state, x, y);
+
+    // Next frame should use full-refresh, and block while running, else device will sleep before async callback
+    EINK_ADD_FRAMEFLAG(display, COSMETIC);
+    EINK_ADD_FRAMEFLAG(display, BLOCKING);
+
+    LOG_DEBUG("Drawing deep sleep screen\n");
+
+    // Display displayStr on the screen
+    drawIconScreen("Sleeping", display, state, x, y);
+}
+
+/// Used on eink displays when screen updates are paused
+static void drawScreensaverOverlay(OLEDDisplay *display, OLEDDisplayUiState *state)
+{
+    LOG_DEBUG("Drawing screensaver overlay\n");
+
+    EINK_ADD_FRAMEFLAG(display, COSMETIC); // Take the opportunity for a full-refresh
+
+    // Config
+    display->setFont(FONT_SMALL);
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    const char *pauseText = "Screen Paused";
+    const char *idText = owner.short_name;
+    const bool useId = haveGlyphs(idText); // This bool is used to hide the idText box if we can't render the short name
+    constexpr uint16_t padding = 5;
+    constexpr uint8_t dividerGap = 1;
+    constexpr uint8_t imprecision = 5; // How far the box origins can drift from center. Combat burn-in.
+
+    // Dimensions
+    const uint16_t idTextWidth = display->getStringWidth(idText, strlen(idText), true); // "true": handle utf8 chars
+    const uint16_t pauseTextWidth = display->getStringWidth(pauseText, strlen(pauseText));
+    const uint16_t boxWidth = padding + (useId ? idTextWidth + padding + padding : 0) + pauseTextWidth + padding;
+    const uint16_t boxHeight = padding + FONT_HEIGHT_SMALL + padding;
+
+    // Position
+    const int16_t boxLeft = (display->width() / 2) - (boxWidth / 2) + random(-imprecision, imprecision + 1);
+    // const int16_t boxRight = boxLeft + boxWidth - 1;
+    const int16_t boxTop = (display->height() / 2) - (boxHeight / 2 + random(-imprecision, imprecision + 1));
+    const int16_t boxBottom = boxTop + boxHeight - 1;
+    const int16_t idTextLeft = boxLeft + padding;
+    const int16_t idTextTop = boxTop + padding;
+    const int16_t pauseTextLeft = boxLeft + (useId ? padding + idTextWidth + padding : 0) + padding;
+    const int16_t pauseTextTop = boxTop + padding;
+    const int16_t dividerX = boxLeft + padding + idTextWidth + padding;
+    const int16_t dividerTop = boxTop + 1 + dividerGap;
+    const int16_t dividerBottom = boxBottom - 1 - dividerGap;
+
+    // Draw: box
+    display->setColor(EINK_WHITE);
+    display->fillRect(boxLeft - 1, boxTop - 1, boxWidth + 2, boxHeight + 2); // Clear a slightly oversized area for the box
+    display->setColor(EINK_BLACK);
+    display->drawRect(boxLeft, boxTop, boxWidth, boxHeight);
+
+    // Draw: Text
+    if (useId)
+        display->drawString(idTextLeft, idTextTop, idText);
+    display->drawString(pauseTextLeft, pauseTextTop, pauseText);
+    display->drawString(pauseTextLeft + 1, pauseTextTop, pauseText); // Faux bold
+
+    // Draw: divider
+    if (useId)
+        display->drawLine(dividerX, dividerTop, dividerX, dividerBottom);
 }
 #endif
 
@@ -272,7 +366,7 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
     // in the array of "drawScreen" functions; however,
     // the passed-state doesn't quite reflect the "current"
     // screen, so we have to detect it.
-    if (state->frameState == IN_TRANSITION && state->transitionFrameRelationship == INCOMING) {
+    if (state->frameState == IN_TRANSITION && state->transitionFrameRelationship == TransitionRelationship_INCOMING) {
         // if we're transitioning from the end of the frame list back around to the first
         // frame, then we want this to be `0`
         module_frame = state->transitionFrameTarget;
@@ -284,31 +378,6 @@ static void drawModuleFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int
     // LOG_DEBUG("Drawing Module Frame %d\n\n", module_frame);
     MeshModule &pi = *moduleFrames.at(module_frame);
     pi.drawFrame(display, state, x, y);
-}
-
-static void drawFrameBluetooth(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    int x_offset = display->width() / 2;
-    int y_offset = display->height() <= 80 ? 0 : 32;
-    display->setTextAlignment(TEXT_ALIGN_CENTER);
-    display->setFont(FONT_MEDIUM);
-    display->drawString(x_offset + x, y_offset + y, "Bluetooth");
-
-    display->setFont(FONT_SMALL);
-    y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_MEDIUM - 4 : y_offset + FONT_HEIGHT_MEDIUM + 5;
-    display->drawString(x_offset + x, y_offset + y, "Enter this code");
-
-    display->setFont(FONT_LARGE);
-    String displayPin(btPIN);
-    String pin = displayPin.substring(0, 3) + " " + displayPin.substring(3, 6);
-    y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_SMALL - 5 : y_offset + FONT_HEIGHT_SMALL + 5;
-    display->drawString(x_offset + x, y_offset + y, pin);
-
-    display->setFont(FONT_SMALL);
-    String deviceName = "Name: ";
-    deviceName.concat(getDeviceName());
-    y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_LARGE - 6 : y_offset + FONT_HEIGHT_LARGE + 5;
-    display->drawString(x_offset + x, y_offset + y, deviceName);
 }
 
 static void drawFrameFirmware(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
@@ -343,105 +412,6 @@ static bool shouldDrawMessage(const meshtastic_MeshPacket *packet)
     return packet->from != 0 && !moduleConfig.store_forward.enabled;
 }
 
-/// Draw the last text message we received
-static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    // the max length of this buffer is much longer than we can possibly print
-    static char tempBuf[237];
-
-    const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
-    meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(getFrom(&mp));
-    // LOG_DEBUG("drawing text message from 0x%x: %s\n", mp.from,
-    // mp.decoded.variant.data.decoded.bytes);
-
-    // Demo for drawStringMaxWidth:
-    // with the third parameter you can define the width after which words will
-    // be wrapped. Currently only spaces and "-" are allowed for wrapping
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->setFont(FONT_SMALL);
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
-        display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-        display->setColor(BLACK);
-    }
-
-    uint32_t seconds = sinceReceived(&mp);
-    uint32_t minutes = seconds / 60;
-    uint32_t hours = minutes / 60;
-    uint32_t days = hours / 24;
-
-    if (config.display.heading_bold) {
-        display->drawStringf(1 + x, 0 + y, tempBuf, "%s ago from %s",
-                             screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
-                             (node && node->has_user) ? node->user.short_name : "???");
-    }
-    display->drawStringf(0 + x, 0 + y, tempBuf, "%s ago from %s", screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
-                         (node && node->has_user) ? node->user.short_name : "???");
-
-    display->setColor(WHITE);
-    snprintf(tempBuf, sizeof(tempBuf), "%s", mp.decoded.payload.bytes);
-    display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), tempBuf);
-}
-
-/// Draw the last waypoint we received
-static void drawWaypointFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    static char tempBuf[237];
-
-    meshtastic_MeshPacket &mp = devicestate.rx_waypoint;
-    meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(getFrom(&mp));
-
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    display->setFont(FONT_SMALL);
-    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
-        display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-        display->setColor(BLACK);
-    }
-
-    uint32_t seconds = sinceReceived(&mp);
-    uint32_t minutes = seconds / 60;
-    uint32_t hours = minutes / 60;
-    uint32_t days = hours / 24;
-
-    if (config.display.heading_bold) {
-        display->drawStringf(1 + x, 0 + y, tempBuf, "%s ago from %s",
-                             screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
-                             (node && node->has_user) ? node->user.short_name : "???");
-    }
-    display->drawStringf(0 + x, 0 + y, tempBuf, "%s ago from %s", screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
-                         (node && node->has_user) ? node->user.short_name : "???");
-
-    display->setColor(WHITE);
-    meshtastic_Waypoint scratch;
-    memset(&scratch, 0, sizeof(scratch));
-    if (pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_Waypoint_msg, &scratch)) {
-        snprintf(tempBuf, sizeof(tempBuf), "Received waypoint: %s", scratch.name);
-        display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), tempBuf);
-    }
-}
-
-/// Draw a series of fields in a column, wrapping to multiple columns if needed
-static void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields)
-{
-    // The coordinates define the left starting point of the text
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-
-    const char **f = fields;
-    int xo = x, yo = y;
-    while (*f) {
-        display->drawString(xo, yo, *f);
-        if ((display->getColor() == BLACK) && config.display.heading_bold)
-            display->drawString(xo + 1, yo, *f);
-
-        display->setColor(WHITE);
-        yo += FONT_HEIGHT_SMALL;
-        if (yo > SCREEN_HEIGHT - FONT_HEIGHT_SMALL) {
-            xo += SCREEN_WIDTH / 2;
-            yo = 0;
-        }
-        f++;
-    }
-}
-
 // Draw power bars or a charging indicator on an image of a battery, determined by battery charge voltage or percentage.
 static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *imgBuffer, const PowerStatus *powerStatus)
 {
@@ -464,12 +434,658 @@ static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *img
     display->drawFastImage(x, y, 16, 8, imgBuffer);
 }
 
+#ifdef T_WATCH_S3
+
+void Screen::drawWatchFaceToggleButton(OLEDDisplay *display, int16_t x, int16_t y, bool digitalMode, float scale)
+{
+    uint16_t segmentWidth = SEGMENT_WIDTH * scale;
+    uint16_t segmentHeight = SEGMENT_HEIGHT * scale;
+
+    if (digitalMode) {
+        uint16_t radius = (segmentWidth + (segmentHeight * 2) + 4) / 2;
+        uint16_t centerX = (x + segmentHeight + 2) + (radius / 2);
+        uint16_t centerY = (y + segmentHeight + 2) + (radius / 2);
+
+        display->drawCircle(centerX, centerY, radius);
+        display->drawCircle(centerX, centerY, radius + 1);
+        display->drawLine(centerX, centerY, centerX, centerY - radius + 3);
+        display->drawLine(centerX, centerY, centerX + radius - 3, centerY);
+    } else {
+        uint16_t segmentOneX = x + segmentHeight + 2;
+        uint16_t segmentOneY = y;
+
+        uint16_t segmentTwoX = segmentOneX + segmentWidth + 2;
+        uint16_t segmentTwoY = segmentOneY + segmentHeight + 2;
+
+        uint16_t segmentThreeX = segmentOneX;
+        uint16_t segmentThreeY = segmentTwoY + segmentWidth + 2;
+
+        uint16_t segmentFourX = x;
+        uint16_t segmentFourY = y + segmentHeight + 2;
+
+        drawHorizontalSegment(display, segmentOneX, segmentOneY, segmentWidth, segmentHeight);
+        drawVerticalSegment(display, segmentTwoX, segmentTwoY, segmentWidth, segmentHeight);
+        drawHorizontalSegment(display, segmentThreeX, segmentThreeY, segmentWidth, segmentHeight);
+        drawVerticalSegment(display, segmentFourX, segmentFourY, segmentWidth, segmentHeight);
+    }
+}
+
+// Draw a digital clock
+void Screen::drawDigitalClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    drawBattery(display, x, y + 7, imgBattery, powerStatus);
+
+    if (powerStatus->getHasBattery()) {
+        String batteryPercent = String(powerStatus->getBatteryChargePercent()) + "%";
+
+        display->setFont(FONT_SMALL);
+
+        display->drawString(x + 20, y + 2, batteryPercent);
+    }
+
+    if (nimbleBluetooth->isConnected()) {
+        drawBluetoothConnectedIcon(display, display->getWidth() - 18, y + 2);
+    }
+
+    drawWatchFaceToggleButton(display, display->getWidth() - 36, display->getHeight() - 36, screen->digitalWatchFace, 1);
+
+    display->setColor(OLEDDISPLAY_COLOR::WHITE);
+
+    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // Display local timezone
+    if (rtc_sec > 0) {
+        long hms = rtc_sec % SEC_PER_DAY;
+        hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
+
+        int hour = hms / SEC_PER_HOUR;
+        int minute = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
+        int second = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
+
+        hour = hour > 12 ? hour - 12 : hour;
+
+        if (hour == 0) {
+            hour = 12;
+        }
+
+        // hours string
+        String hourString = String(hour);
+
+        // minutes string
+        String minuteString = minute < 10 ? "0" + String(minute) : String(minute);
+
+        String timeString = hourString + ":" + minuteString;
+
+        // seconds string
+        String secondString = second < 10 ? "0" + String(second) : String(second);
+
+        float scale = 1.5;
+
+        uint16_t segmentWidth = SEGMENT_WIDTH * scale;
+        uint16_t segmentHeight = SEGMENT_HEIGHT * scale;
+
+        // calculate hours:minutes string width
+        uint16_t timeStringWidth = timeString.length() * 5;
+
+        for (uint8_t i = 0; i < timeString.length(); i++) {
+            String character = String(timeString[i]);
+
+            if (character == ":") {
+                timeStringWidth += segmentHeight;
+            } else {
+                timeStringWidth += segmentWidth + (segmentHeight * 2) + 4;
+            }
+        }
+
+        // calculate seconds string width
+        uint16_t secondStringWidth = (secondString.length() * 12) + 4;
+
+        // sum these to get total string width
+        uint16_t totalWidth = timeStringWidth + secondStringWidth;
+
+        uint16_t hourMinuteTextX = (display->getWidth() / 2) - (totalWidth / 2);
+
+        uint16_t startingHourMinuteTextX = hourMinuteTextX;
+
+        uint16_t hourMinuteTextY = (display->getHeight() / 2) - (((segmentWidth * 2) + (segmentHeight * 3) + 8) / 2);
+
+        // iterate over characters in hours:minutes string and draw segmented characters
+        for (uint8_t i = 0; i < timeString.length(); i++) {
+            String character = String(timeString[i]);
+
+            if (character == ":") {
+                drawSegmentedDisplayColon(display, hourMinuteTextX, hourMinuteTextY, scale);
+
+                hourMinuteTextX += segmentHeight + 6;
+            } else {
+                drawSegmentedDisplayCharacter(display, hourMinuteTextX, hourMinuteTextY, character.toInt(), scale);
+
+                hourMinuteTextX += segmentWidth + (segmentHeight * 2) + 4;
+            }
+
+            hourMinuteTextX += 5;
+        }
+
+        // draw seconds string
+        display->setFont(FONT_MEDIUM);
+        display->drawString(startingHourMinuteTextX + timeStringWidth + 4,
+                            (display->getHeight() - hourMinuteTextY) - FONT_HEIGHT_MEDIUM + 6, secondString);
+    }
+}
+
+void Screen::drawSegmentedDisplayColon(OLEDDisplay *display, int x, int y, float scale)
+{
+    uint16_t segmentWidth = SEGMENT_WIDTH * scale;
+    uint16_t segmentHeight = SEGMENT_HEIGHT * scale;
+
+    uint16_t cellHeight = (segmentWidth * 2) + (segmentHeight * 3) + 8;
+
+    uint16_t topAndBottomX = x + (4 * scale);
+
+    uint16_t quarterCellHeight = cellHeight / 4;
+
+    uint16_t topY = y + quarterCellHeight;
+    uint16_t bottomY = y + (quarterCellHeight * 3);
+
+    display->fillRect(topAndBottomX, topY, segmentHeight, segmentHeight);
+    display->fillRect(topAndBottomX, bottomY, segmentHeight, segmentHeight);
+}
+
+void Screen::drawSegmentedDisplayCharacter(OLEDDisplay *display, int x, int y, uint8_t number, float scale)
+{
+    // the numbers 0-9, each expressed as an array of seven boolean (0|1) values encoding the on/off state of
+    // segment {innerIndex + 1}
+    // e.g., to display the numeral '0', segments 1-6 are on, and segment 7 is off.
+    uint8_t numbers[10][7] = {
+        {1, 1, 1, 1, 1, 1, 0}, // 0          Display segment key
+        {0, 1, 1, 0, 0, 0, 0}, // 1                   1
+        {1, 1, 0, 1, 1, 0, 1}, // 2                  ___
+        {1, 1, 1, 1, 0, 0, 1}, // 3              6  |   | 2
+        {0, 1, 1, 0, 0, 1, 1}, // 4                 |_7̲_|
+        {1, 0, 1, 1, 0, 1, 1}, // 5              5  |   | 3
+        {1, 0, 1, 1, 1, 1, 1}, // 6                 |___|
+        {1, 1, 1, 0, 0, 1, 0}, // 7
+        {1, 1, 1, 1, 1, 1, 1}, // 8                   4
+        {1, 1, 1, 1, 0, 1, 1}, // 9
+    };
+
+    // the width and height of each segment's central rectangle:
+    //             _____________________
+    //           ⋰|  (only this part,  |⋱
+    //         ⋰  |   not including    |  ⋱
+    //         ⋱  |   the triangles    |  ⋰
+    //           ⋱|    on the ends)    |⋰
+    //             ‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
+
+    uint16_t segmentWidth = SEGMENT_WIDTH * scale;
+    uint16_t segmentHeight = SEGMENT_HEIGHT * scale;
+
+    // segment x and y coordinates
+    uint16_t segmentOneX = x + segmentHeight + 2;
+    uint16_t segmentOneY = y;
+
+    uint16_t segmentTwoX = segmentOneX + segmentWidth + 2;
+    uint16_t segmentTwoY = segmentOneY + segmentHeight + 2;
+
+    uint16_t segmentThreeX = segmentTwoX;
+    uint16_t segmentThreeY = segmentTwoY + segmentWidth + 2 + segmentHeight + 2;
+
+    uint16_t segmentFourX = segmentOneX;
+    uint16_t segmentFourY = segmentThreeY + segmentWidth + 2;
+
+    uint16_t segmentFiveX = x;
+    uint16_t segmentFiveY = segmentThreeY;
+
+    uint16_t segmentSixX = x;
+    uint16_t segmentSixY = segmentTwoY;
+
+    uint16_t segmentSevenX = segmentOneX;
+    uint16_t segmentSevenY = segmentTwoY + segmentWidth + 2;
+
+    if (numbers[number][0]) {
+        drawHorizontalSegment(display, segmentOneX, segmentOneY, segmentWidth, segmentHeight);
+    }
+
+    if (numbers[number][1]) {
+        drawVerticalSegment(display, segmentTwoX, segmentTwoY, segmentWidth, segmentHeight);
+    }
+
+    if (numbers[number][2]) {
+        drawVerticalSegment(display, segmentThreeX, segmentThreeY, segmentWidth, segmentHeight);
+    }
+
+    if (numbers[number][3]) {
+        drawHorizontalSegment(display, segmentFourX, segmentFourY, segmentWidth, segmentHeight);
+    }
+
+    if (numbers[number][4]) {
+        drawVerticalSegment(display, segmentFiveX, segmentFiveY, segmentWidth, segmentHeight);
+    }
+
+    if (numbers[number][5]) {
+        drawVerticalSegment(display, segmentSixX, segmentSixY, segmentWidth, segmentHeight);
+    }
+
+    if (numbers[number][6]) {
+        drawHorizontalSegment(display, segmentSevenX, segmentSevenY, segmentWidth, segmentHeight);
+    }
+}
+
+void Screen::drawHorizontalSegment(OLEDDisplay *display, int x, int y, int width, int height)
+{
+    int halfHeight = height / 2;
+
+    // draw central rectangle
+    display->fillRect(x, y, width, height);
+
+    // draw end triangles
+    display->fillTriangle(x, y, x, y + height - 1, x - halfHeight, y + halfHeight);
+
+    display->fillTriangle(x + width, y, x + width + halfHeight, y + halfHeight, x + width, y + height - 1);
+}
+
+void Screen::drawVerticalSegment(OLEDDisplay *display, int x, int y, int width, int height)
+{
+    int halfHeight = height / 2;
+
+    // draw central rectangle
+    display->fillRect(x, y, height, width);
+
+    // draw end triangles
+    display->fillTriangle(x + halfHeight, y - halfHeight, x + height - 1, y, x, y);
+
+    display->fillTriangle(x, y + width, x + height - 1, y + width, x + halfHeight, y + width + halfHeight);
+}
+
+void Screen::drawBluetoothConnectedIcon(OLEDDisplay *display, int16_t x, int16_t y)
+{
+    display->drawFastImage(x, y, 18, 14, bluetoothConnectedIcon);
+}
+
+// Draw an analog clock
+void Screen::drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    drawBattery(display, x, y + 7, imgBattery, powerStatus);
+
+    if (powerStatus->getHasBattery()) {
+        String batteryPercent = String(powerStatus->getBatteryChargePercent()) + "%";
+
+        display->setFont(FONT_SMALL);
+
+        display->drawString(x + 20, y + 2, batteryPercent);
+    }
+
+    if (nimbleBluetooth->isConnected()) {
+        drawBluetoothConnectedIcon(display, display->getWidth() - 18, y + 2);
+    }
+
+    drawWatchFaceToggleButton(display, display->getWidth() - 36, display->getHeight() - 36, screen->digitalWatchFace, 1);
+
+    // clock face center coordinates
+    int16_t centerX = display->getWidth() / 2;
+    int16_t centerY = display->getHeight() / 2;
+
+    // clock face radius
+    int16_t radius = (display->getWidth() / 2) * 0.8;
+
+    // noon (0 deg) coordinates (outermost circle)
+    int16_t noonX = centerX;
+    int16_t noonY = centerY - radius;
+
+    // second hand radius and y coordinate (outermost circle)
+    int16_t secondHandNoonY = noonY + 1;
+
+    // tick mark outer y coordinate; (first nested circle)
+    int16_t tickMarkOuterNoonY = secondHandNoonY;
+
+    // seconds tick mark inner y coordinate; (second nested circle)
+    double secondsTickMarkInnerNoonY = (double)noonY + 8;
+
+    // hours tick mark inner y coordinate; (third nested circle)
+    double hoursTickMarkInnerNoonY = (double)noonY + 16;
+
+    // minute hand y coordinate
+    int16_t minuteHandNoonY = secondsTickMarkInnerNoonY + 4;
+
+    // hour string y coordinate
+    int16_t hourStringNoonY = minuteHandNoonY + 18;
+
+    // hour hand radius and y coordinate
+    int16_t hourHandRadius = radius * 0.55;
+    int16_t hourHandNoonY = centerY - hourHandRadius;
+
+    display->setColor(OLEDDISPLAY_COLOR::WHITE);
+    display->drawCircle(centerX, centerY, radius);
+
+    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // Display local timezone
+    if (rtc_sec > 0) {
+        long hms = rtc_sec % SEC_PER_DAY;
+        hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
+
+        // Tear apart hms into h:m:s
+        int hour = hms / SEC_PER_HOUR;
+        int minute = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
+        int second = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
+
+        hour = hour > 12 ? hour - 12 : hour;
+
+        int16_t degreesPerHour = 30;
+        int16_t degreesPerMinuteOrSecond = 6;
+
+        double hourBaseAngle = hour * degreesPerHour;
+        double hourAngleOffset = ((double)minute / 60) * degreesPerHour;
+        double hourAngle = radians(hourBaseAngle + hourAngleOffset);
+
+        double minuteBaseAngle = minute * degreesPerMinuteOrSecond;
+        double minuteAngleOffset = ((double)second / 60) * degreesPerMinuteOrSecond;
+        double minuteAngle = radians(minuteBaseAngle + minuteAngleOffset);
+
+        double secondAngle = radians(second * degreesPerMinuteOrSecond);
+
+        double hourX = sin(-hourAngle) * (hourHandNoonY - centerY) + noonX;
+        double hourY = cos(-hourAngle) * (hourHandNoonY - centerY) + centerY;
+
+        double minuteX = sin(-minuteAngle) * (minuteHandNoonY - centerY) + noonX;
+        double minuteY = cos(-minuteAngle) * (minuteHandNoonY - centerY) + centerY;
+
+        double secondX = sin(-secondAngle) * (secondHandNoonY - centerY) + noonX;
+        double secondY = cos(-secondAngle) * (secondHandNoonY - centerY) + centerY;
+
+        display->setFont(FONT_MEDIUM);
+
+        // draw minute and hour tick marks and hour numbers
+        for (uint16_t angle = 0; angle < 360; angle += 6) {
+            double angleInRadians = radians(angle);
+
+            double sineAngleInRadians = sin(-angleInRadians);
+            double cosineAngleInRadians = cos(-angleInRadians);
+
+            double endX = sineAngleInRadians * (tickMarkOuterNoonY - centerY) + noonX;
+            double endY = cosineAngleInRadians * (tickMarkOuterNoonY - centerY) + centerY;
+
+            if (angle % degreesPerHour == 0) {
+                double startX = sineAngleInRadians * (hoursTickMarkInnerNoonY - centerY) + noonX;
+                double startY = cosineAngleInRadians * (hoursTickMarkInnerNoonY - centerY) + centerY;
+
+                // draw hour tick mark
+                display->drawLine(startX, startY, endX, endY);
+
+                static char buffer[2];
+
+                uint8_t hourInt = (angle / 30);
+
+                if (hourInt == 0) {
+                    hourInt = 12;
+                }
+
+                // hour number x offset needs to be adjusted for some cases
+                int8_t hourStringXOffset;
+                int8_t hourStringYOffset = 13;
+
+                switch (hourInt) {
+                case 3:
+                    hourStringXOffset = 5;
+                    break;
+                case 9:
+                    hourStringXOffset = 7;
+                    break;
+                case 10:
+                case 11:
+                    hourStringXOffset = 8;
+                    break;
+                case 12:
+                    hourStringXOffset = 13;
+                    break;
+                default:
+                    hourStringXOffset = 6;
+                    break;
+                }
+
+                double hourStringX = (sineAngleInRadians * (hourStringNoonY - centerY) + noonX) - hourStringXOffset;
+                double hourStringY = (cosineAngleInRadians * (hourStringNoonY - centerY) + centerY) - hourStringYOffset;
+
+                // draw hour number
+                display->drawStringf(hourStringX, hourStringY, buffer, "%d", hourInt);
+            }
+
+            if (angle % degreesPerMinuteOrSecond == 0) {
+                double startX = sineAngleInRadians * (secondsTickMarkInnerNoonY - centerY) + noonX;
+                double startY = cosineAngleInRadians * (secondsTickMarkInnerNoonY - centerY) + centerY;
+
+                // draw minute tick mark
+                display->drawLine(startX, startY, endX, endY);
+            }
+        }
+
+        // draw hour hand
+        display->drawLine(centerX, centerY, hourX, hourY);
+
+        // draw minute hand
+        display->drawLine(centerX, centerY, minuteX, minuteY);
+
+        // draw second hand
+        display->drawLine(centerX, centerY, secondX, secondY);
+    }
+}
+
+#endif
+
+// Get an absolute time from "seconds ago" info. Returns false if no valid timestamp possible
+bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int32_t *daysAgo)
+{
+    // Cache the result - avoid frequent recalculation
+    static uint8_t hoursCached = 0, minutesCached = 0;
+    static uint32_t daysAgoCached = 0;
+    static uint32_t secondsAgoCached = 0;
+    static bool validCached = false;
+
+    // Abort: if timezone not set
+    if (strlen(config.device.tzdef) == 0) {
+        validCached = false;
+        return validCached;
+    }
+
+    // Abort: if invalid pointers passed
+    if (hours == nullptr || minutes == nullptr || daysAgo == nullptr) {
+        validCached = false;
+        return validCached;
+    }
+
+    // Abort: if time seems invalid.. (> 6 months ago, probably seen before RTC set)
+    if (secondsAgo > SEC_PER_DAY * 30UL * 6) {
+        validCached = false;
+        return validCached;
+    }
+
+    // If repeated request, don't bother recalculating
+    if (secondsAgo - secondsAgoCached < 60 && secondsAgoCached != 0) {
+        if (validCached) {
+            *hours = hoursCached;
+            *minutes = minutesCached;
+            *daysAgo = daysAgoCached;
+        }
+        return validCached;
+    }
+
+    // Get local time
+    uint32_t secondsRTC = getValidTime(RTCQuality::RTCQualityDevice, true); // Get local time
+
+    // Abort: if RTC not set
+    if (!secondsRTC) {
+        validCached = false;
+        return validCached;
+    }
+
+    // Get absolute time when last seen
+    uint32_t secondsSeenAt = secondsRTC - secondsAgo;
+
+    // Calculate daysAgo
+    *daysAgo = (secondsRTC / SEC_PER_DAY) - (secondsSeenAt / SEC_PER_DAY); // How many "midnights" have passed
+
+    // Get seconds since midnight
+    uint32_t hms = (secondsRTC - secondsAgo) % SEC_PER_DAY;
+    hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
+
+    // Tear apart hms into hours and minutes
+    *hours = hms / SEC_PER_HOUR;
+    *minutes = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
+
+    // Cache the result
+    daysAgoCached = *daysAgo;
+    hoursCached = *hours;
+    minutesCached = *minutes;
+    secondsAgoCached = secondsAgo;
+
+    validCached = true;
+    return validCached;
+}
+
+/// Draw the last text message we received
+static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    // the max length of this buffer is much longer than we can possibly print
+    static char tempBuf[237];
+
+    const meshtastic_MeshPacket &mp = devicestate.rx_text_message;
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(getFrom(&mp));
+    // LOG_DEBUG("drawing text message from 0x%x: %s\n", mp.from,
+    // mp.decoded.variant.data.decoded.bytes);
+
+    // Demo for drawStringMaxWidth:
+    // with the third parameter you can define the width after which words will
+    // be wrapped. Currently only spaces and "-" are allowed for wrapping
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_SMALL);
+    if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
+        display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
+        display->setColor(BLACK);
+    }
+
+    // For time delta
+    uint32_t seconds = sinceReceived(&mp);
+    uint32_t minutes = seconds / 60;
+    uint32_t hours = minutes / 60;
+    uint32_t days = hours / 24;
+
+    // For timestamp
+    uint8_t timestampHours, timestampMinutes;
+    int32_t daysAgo;
+    bool useTimestamp = deltaToTimestamp(seconds, &timestampHours, &timestampMinutes, &daysAgo);
+
+    // If bold, draw twice, shifting right by one pixel
+    for (uint8_t xOff = 0; xOff <= (config.display.heading_bold ? 1 : 0); xOff++) {
+        // Show a timestamp if received today, but longer than 15 minutes ago
+        if (useTimestamp && minutes >= 15 && daysAgo == 0) {
+            display->drawStringf(xOff + x, 0 + y, tempBuf, "At %02hu:%02hu from %s", timestampHours, timestampMinutes,
+                                 (node && node->has_user) ? node->user.short_name : "???");
+        }
+        // Timestamp yesterday (if display is wide enough)
+        else if (useTimestamp && daysAgo == 1 && display->width() >= 200) {
+            display->drawStringf(xOff + x, 0 + y, tempBuf, "Yesterday %02hu:%02hu from %s", timestampHours, timestampMinutes,
+                                 (node && node->has_user) ? node->user.short_name : "???");
+        }
+        // Otherwise, show a time delta
+        else {
+            display->drawStringf(xOff + x, 0 + y, tempBuf, "%s ago from %s",
+                                 screen->drawTimeDelta(days, hours, minutes, seconds).c_str(),
+                                 (node && node->has_user) ? node->user.short_name : "???");
+        }
+    }
+
+    display->setColor(WHITE);
+#ifndef EXCLUDE_EMOJI
+    if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\U0001F44D") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - thumbs_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - thumbs_height) / 2 + 2 + 5, thumbs_width, thumbs_height,
+                         thumbup);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\U0001F44E") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - thumbs_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - thumbs_height) / 2 + 2 + 5, thumbs_width, thumbs_height,
+                         thumbdown);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"❓") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - question_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - question_height) / 2 + 2 + 5, question_width, question_height,
+                         question);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"‼️") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - bang_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - bang_height) / 2 + 2 + 5,
+                         bang_width, bang_height, bang);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\U0001F4A9") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - poo_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - poo_height) / 2 + 2 + 5,
+                         poo_width, poo_height, poo);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\xf0\x9f\xa4\xa3") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - haha_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - haha_height) / 2 + 2 + 5,
+                         haha_width, haha_height, haha);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\U0001F44B") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - wave_icon_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - wave_icon_height) / 2 + 2 + 5, wave_icon_width,
+                         wave_icon_height, wave_icon);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\U0001F920") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - cowboy_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - cowboy_height) / 2 + 2 + 5, cowboy_width, cowboy_height,
+                         cowboy);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\U0001F42D") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - deadmau5_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - deadmau5_height) / 2 + 2 + 5, deadmau5_width, deadmau5_height,
+                         deadmau5);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\xE2\x98\x80\xEF\xB8\x8F") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - sun_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - sun_height) / 2 + 2 + 5,
+                         sun_width, sun_height, sun);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\u2614") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - rain_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - rain_height) / 2 + 2 + 10,
+                         rain_width, rain_height, rain);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"☁️") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - cloud_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - cloud_height) / 2 + 2 + 5, cloud_width, cloud_height, cloud);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"🌫️") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - fog_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - fog_height) / 2 + 2 + 5,
+                         fog_width, fog_height, fog);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\xf0\x9f\x98\x88") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - devil_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - devil_height) / 2 + 2 + 5, devil_width, devil_height, devil);
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"♥️") == 0) {
+        display->drawXbm(x + (SCREEN_WIDTH - heart_width) / 2,
+                         y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - heart_height) / 2 + 2 + 5, heart_width, heart_height, heart);
+    } else {
+        snprintf(tempBuf, sizeof(tempBuf), "%s", mp.decoded.payload.bytes);
+        display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), tempBuf);
+    }
+#else
+    snprintf(tempBuf, sizeof(tempBuf), "%s", mp.decoded.payload.bytes);
+    display->drawStringMaxWidth(0 + x, 0 + y + FONT_HEIGHT_SMALL, x + display->getWidth(), tempBuf);
+#endif
+}
+
+/// Draw a series of fields in a column, wrapping to multiple columns if needed
+void Screen::drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields)
+{
+    // The coordinates define the left starting point of the text
+    display->setTextAlignment(TEXT_ALIGN_LEFT);
+
+    const char **f = fields;
+    int xo = x, yo = y;
+    while (*f) {
+        display->drawString(xo, yo, *f);
+        if ((display->getColor() == BLACK) && config.display.heading_bold)
+            display->drawString(xo + 1, yo, *f);
+
+        display->setColor(WHITE);
+        yo += FONT_HEIGHT_SMALL;
+        if (yo > SCREEN_HEIGHT - FONT_HEIGHT_SMALL) {
+            xo += SCREEN_WIDTH / 2;
+            yo = 0;
+        }
+        f++;
+    }
+}
+
 // Draw nodes status
 static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const NodeStatus *nodeStatus)
 {
     char usersString[20];
     snprintf(usersString, sizeof(usersString), "%d/%d", nodeStatus->getNumOnline(), nodeStatus->getNumTotal());
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)) &&                                \
+#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS) || defined(HX8357_CS)) &&          \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
     display->drawFastImage(x, y + 3, 8, 8, imgUser);
 #else
@@ -479,7 +1095,7 @@ static void drawNodes(OLEDDisplay *display, int16_t x, int16_t y, const NodeStat
     if (config.display.heading_bold)
         display->drawString(x + 11, y - 2, usersString);
 }
-
+#if HAS_GPS
 // Draw GPS status summary
 static void drawGPS(OLEDDisplay *display, int16_t x, int16_t y, const GPSStatus *gps)
 {
@@ -621,57 +1237,14 @@ static void drawGPScoordinates(OLEDDisplay *display, int16_t x, int16_t y, const
         }
     }
 }
-
-namespace
-{
-
-/// A basic 2D point class for drawing
-class Point
-{
-  public:
-    float x, y;
-
-    Point(float _x, float _y) : x(_x), y(_y) {}
-
-    /// Apply a rotation around zero (standard rotation matrix math)
-    void rotate(float radian)
-    {
-        float cos = cosf(radian), sin = sinf(radian);
-        float rx = x * cos + y * sin, ry = -x * sin + y * cos;
-
-        x = rx;
-        y = ry;
-    }
-
-    void translate(int16_t dx, int dy)
-    {
-        x += dx;
-        y += dy;
-    }
-
-    void scale(float f)
-    {
-        // We use -f here to counter the flip that happens
-        // on the y axis when drawing and rotating on screen
-        x *= f;
-        y *= -f;
-    }
-};
-
-} // namespace
-
-static void drawLine(OLEDDisplay *d, const Point &p1, const Point &p2)
-{
-    d->drawLine(p1.x, p1.y, p2.x, p2.y);
-}
-
+#endif
 /**
  * Given a recent lat/lon return a guess of the heading the user is walking on.
  *
  * We keep a series of "after you've gone 10 meters, what is your heading since
  * the last reference point?"
  */
-static float estimatedHeading(double lat, double lon)
+float Screen::estimatedHeading(double lat, double lon)
 {
     static double oldLat, oldLon;
     static float b;
@@ -695,38 +1268,13 @@ static float estimatedHeading(double lat, double lon)
     return b;
 }
 
-static uint16_t getCompassDiam(OLEDDisplay *display)
-{
-    uint16_t diam = 0;
-    uint16_t offset = 0;
-
-    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT)
-        offset = FONT_HEIGHT_SMALL;
-
-    // get the smaller of the 2 dimensions and subtract 20
-    if (display->getWidth() > (display->getHeight() - offset)) {
-        diam = display->getHeight() - offset;
-        // if 2/3 of the other size would be smaller, use that
-        if (diam > (display->getWidth() * 2 / 3)) {
-            diam = display->getWidth() * 2 / 3;
-        }
-    } else {
-        diam = display->getWidth();
-        if (diam > ((display->getHeight() - offset) * 2 / 3)) {
-            diam = (display->getHeight() - offset) * 2 / 3;
-        }
-    }
-
-    return diam - 20;
-};
-
 /// We will skip one node - the one for us, so we just blindly loop over all
 /// nodes
 static size_t nodeIndex;
 static int8_t prevFrame = -1;
 
 // Draw the arrow pointing to a node's location
-static void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, float headingRadian)
+void Screen::drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, uint16_t compassDiam, float headingRadian)
 {
     Point tip(0.0f, 0.5f), tail(0.0f, -0.5f); // pointing up initially
     float arrowOffsetX = 0.2f, arrowOffsetY = 0.2f;
@@ -736,16 +1284,45 @@ static void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t comp
 
     for (int i = 0; i < 4; i++) {
         arrowPoints[i]->rotate(headingRadian);
-        arrowPoints[i]->scale(getCompassDiam(display) * 0.6);
+        arrowPoints[i]->scale(compassDiam * 0.6);
         arrowPoints[i]->translate(compassX, compassY);
     }
-    drawLine(display, tip, tail);
-    drawLine(display, leftArrow, tip);
-    drawLine(display, rightArrow, tip);
+    display->drawLine(tip.x, tip.y, tail.x, tail.y);
+    display->drawLine(leftArrow.x, leftArrow.y, tip.x, tip.y);
+    display->drawLine(rightArrow.x, rightArrow.y, tip.x, tip.y);
 }
 
-// Draw north
-static void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading)
+// Get a string representation of the time passed since something happened
+void Screen::getTimeAgoStr(uint32_t agoSecs, char *timeStr, uint8_t maxLength)
+{
+    // Use an absolute timestamp in some cases.
+    // Particularly useful with E-Ink displays. Static UI, fewer refreshes.
+    uint8_t timestampHours, timestampMinutes;
+    int32_t daysAgo;
+    bool useTimestamp = deltaToTimestamp(agoSecs, &timestampHours, &timestampMinutes, &daysAgo);
+
+    if (agoSecs < 120) // last 2 mins?
+        snprintf(timeStr, maxLength, "%u seconds ago", agoSecs);
+    // -- if suitable for timestamp --
+    else if (useTimestamp && agoSecs < 15 * SECONDS_IN_MINUTE) // Last 15 minutes
+        snprintf(timeStr, maxLength, "%u minutes ago", agoSecs / SECONDS_IN_MINUTE);
+    else if (useTimestamp && daysAgo == 0) // Today
+        snprintf(timeStr, maxLength, "Last seen: %02u:%02u", (unsigned int)timestampHours, (unsigned int)timestampMinutes);
+    else if (useTimestamp && daysAgo == 1) // Yesterday
+        snprintf(timeStr, maxLength, "Seen yesterday");
+    else if (useTimestamp && daysAgo > 1) // Last six months (capped by deltaToTimestamp method)
+        snprintf(timeStr, maxLength, "%li days ago", (long)daysAgo);
+    // -- if using time delta instead --
+    else if (agoSecs < 120 * 60) // last 2 hrs
+        snprintf(timeStr, maxLength, "%u minutes ago", agoSecs / 60);
+    // Only show hours ago if it's been less than 6 months. Otherwise, we may have bad data.
+    else if ((agoSecs / 60 / 60) < (hours_in_month * 6))
+        snprintf(timeStr, maxLength, "%u hours ago", agoSecs / 60 / 60);
+    else
+        snprintf(timeStr, maxLength, "unknown age");
+}
+
+void Screen::drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading)
 {
     // If north is supposed to be at the top of the compass we want rotation to be +0
     if (config.display.compass_north_top)
@@ -755,19 +1332,43 @@ static void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t com
     Point N3(-0.04f, 0.55f), N4(0.04f, 0.55f);
     Point *rosePoints[] = {&N1, &N2, &N3, &N4};
 
+    uint16_t compassDiam = Screen::getCompassDiam(SCREEN_WIDTH, SCREEN_HEIGHT);
+
     for (int i = 0; i < 4; i++) {
         // North on compass will be negative of heading
         rosePoints[i]->rotate(-myHeading);
-        rosePoints[i]->scale(getCompassDiam(display));
+        rosePoints[i]->scale(compassDiam);
         rosePoints[i]->translate(compassX, compassY);
     }
-    drawLine(display, N1, N3);
-    drawLine(display, N2, N4);
-    drawLine(display, N1, N4);
+    display->drawLine(N1.x, N1.y, N3.x, N3.y);
+    display->drawLine(N2.x, N2.y, N4.x, N4.y);
+    display->drawLine(N1.x, N1.y, N4.x, N4.y);
 }
 
-/// Convert an integer GPS coords to a floating point
-#define DegD(i) (i * 1e-7)
+uint16_t Screen::getCompassDiam(uint32_t displayWidth, uint32_t displayHeight)
+{
+    uint16_t diam = 0;
+    uint16_t offset = 0;
+
+    if (config.display.displaymode != meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT)
+        offset = FONT_HEIGHT_SMALL;
+
+    // get the smaller of the 2 dimensions and subtract 20
+    if (displayWidth > (displayHeight - offset)) {
+        diam = displayHeight - offset;
+        // if 2/3 of the other size would be smaller, use that
+        if (diam > (displayWidth * 2 / 3)) {
+            diam = displayWidth * 2 / 3;
+        }
+    } else {
+        diam = displayWidth;
+        if (diam > ((displayHeight - offset) * 2 / 3)) {
+            diam = (displayHeight - offset) * 2 / 3;
+        }
+    }
+
+    return diam - 20;
+};
 
 static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
@@ -776,16 +1377,16 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     if (state->currentFrame != prevFrame) {
         prevFrame = state->currentFrame;
 
-        nodeIndex = (nodeIndex + 1) % nodeDB.getNumMeshNodes();
-        meshtastic_NodeInfoLite *n = nodeDB.getMeshNodeByIndex(nodeIndex);
-        if (n->num == nodeDB.getNodeNum()) {
+        nodeIndex = (nodeIndex + 1) % nodeDB->getNumMeshNodes();
+        meshtastic_NodeInfoLite *n = nodeDB->getMeshNodeByIndex(nodeIndex);
+        if (n->num == nodeDB->getNodeNum()) {
             // Don't show our node, just skip to next
-            nodeIndex = (nodeIndex + 1) % nodeDB.getNumMeshNodes();
-            n = nodeDB.getMeshNodeByIndex(nodeIndex);
+            nodeIndex = (nodeIndex + 1) % nodeDB->getNumMeshNodes();
+            n = nodeDB->getMeshNodeByIndex(nodeIndex);
         }
     }
 
-    meshtastic_NodeInfoLite *node = nodeDB.getMeshNodeByIndex(nodeIndex);
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNodeByIndex(nodeIndex);
 
     display->setFont(FONT_SMALL);
 
@@ -799,23 +1400,16 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     const char *username = node->has_user ? node->user.long_name : "Unknown Name";
 
     static char signalStr[20];
-    snprintf(signalStr, sizeof(signalStr), "Signal: %d%%", clamp((int)((node->snr + 10) * 5), 0, 100));
 
-    uint32_t agoSecs = sinceLastSeen(node);
-    static char lastStr[20];
-    if (agoSecs < 120) // last 2 mins?
-        snprintf(lastStr, sizeof(lastStr), "%u seconds ago", agoSecs);
-    else if (agoSecs < 120 * 60) // last 2 hrs
-        snprintf(lastStr, sizeof(lastStr), "%u minutes ago", agoSecs / 60);
-    else {
-        // Only show hours ago if it's been less than 6 months. Otherwise, we may have bad
-        //   data.
-        if ((agoSecs / 60 / 60) < (hours_in_month * 6)) {
-            snprintf(lastStr, sizeof(lastStr), "%u hours ago", agoSecs / 60 / 60);
-        } else {
-            snprintf(lastStr, sizeof(lastStr), "unknown age");
-        }
+    // section here to choose whether to display hops away rather than signal strength if more than 0 hops away.
+    if (node->hops_away > 0) {
+        snprintf(signalStr, sizeof(signalStr), "Hops Away: %d", node->hops_away);
+    } else {
+        snprintf(signalStr, sizeof(signalStr), "Signal: %d%%", clamp((int)((node->snr + 10) * 5), 0, 100));
     }
+
+    static char lastStr[20];
+    screen->getTimeAgoStr(sinceLastSeen(node), lastStr, sizeof(lastStr));
 
     static char distStr[20];
     if (config.display.units == meshtastic_Config_DisplayConfig_DisplayUnits_IMPERIAL) {
@@ -823,24 +1417,29 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     } else {
         strncpy(distStr, "? km", sizeof(distStr));
     }
-    meshtastic_NodeInfoLite *ourNode = nodeDB.getMeshNode(nodeDB.getNodeNum());
-    const char *fields[] = {username, distStr, signalStr, lastStr, NULL};
+    meshtastic_NodeInfoLite *ourNode = nodeDB->getMeshNode(nodeDB->getNodeNum());
+    const char *fields[] = {username, lastStr, signalStr, distStr, NULL};
     int16_t compassX = 0, compassY = 0;
+    uint16_t compassDiam = Screen::getCompassDiam(SCREEN_WIDTH, SCREEN_HEIGHT);
 
     // coordinates for the center of the compass/circle
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
-        compassX = x + SCREEN_WIDTH - getCompassDiam(display) / 2 - 5;
+        compassX = x + SCREEN_WIDTH - compassDiam / 2 - 5;
         compassY = y + SCREEN_HEIGHT / 2;
     } else {
-        compassX = x + SCREEN_WIDTH - getCompassDiam(display) / 2 - 5;
+        compassX = x + SCREEN_WIDTH - compassDiam / 2 - 5;
         compassY = y + FONT_HEIGHT_SMALL + (SCREEN_HEIGHT - FONT_HEIGHT_SMALL) / 2;
     }
     bool hasNodeHeading = false;
 
-    if (ourNode && hasValidPosition(ourNode)) {
+    if (ourNode && (hasValidPosition(ourNode) || screen->hasHeading())) {
         const meshtastic_PositionLite &op = ourNode->position;
-        float myHeading = estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
-        drawCompassNorth(display, compassX, compassY, myHeading);
+        float myHeading;
+        if (screen->hasHeading())
+            myHeading = (screen->getHeading()) * PI / 180; // gotta convert compass degrees to Radians
+        else
+            myHeading = screen->estimatedHeading(DegD(op.latitude_i), DegD(op.longitude_i));
+        screen->drawCompassNorth(display, compassX, compassY, myHeading);
 
         if (hasValidPosition(node)) {
             // display direction toward node
@@ -867,7 +1466,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
             // If the top of the compass is not a static north we need adjust bearingToOther based on heading
             if (!config.display.compass_north_top)
                 bearingToOther -= myHeading;
-            drawNodeHeading(display, compassX, compassY, bearingToOther);
+            screen->drawNodeHeading(display, compassX, compassY, compassDiam, bearingToOther);
         }
     }
     if (!hasNodeHeading) {
@@ -877,25 +1476,26 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
         // hasValidPosition(node));
         display->drawString(compassX - FONT_HEIGHT_SMALL / 4, compassY - FONT_HEIGHT_SMALL / 2, "?");
     }
-    display->drawCircle(compassX, compassY, getCompassDiam(display) / 2);
+    display->drawCircle(compassX, compassY, compassDiam / 2);
 
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
         display->setColor(BLACK);
     }
     // Must be after distStr is populated
-    drawColumns(display, x, y, fields);
+    screen->drawColumns(display, x, y, fields);
 }
 
 Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_OledType screenType, OLEDDISPLAY_GEOMETRY geometry)
     : concurrency::OSThread("Screen"), address_found(address), model(screenType), geometry(geometry), cmdQueue(32)
 {
+    graphics::normalFrames = new FrameCallback[MAX_NUM_NODES + NUM_EXTRA_FRAMES];
 #if defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SH1107_128_64)
     dispdev = new SH1106Wire(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
 #elif defined(USE_SSD1306)
     dispdev = new SSD1306Wire(address.address, -1, -1, geometry,
                               (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
-#elif defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(RAK14014)
+#elif defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(RAK14014) || defined(HX8357_CS)
     dispdev = new TFTDisplay(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
 #elif defined(USE_EINK) && !defined(USE_EINK_DYNAMICDISPLAY)
@@ -927,6 +1527,11 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
     cmdQueue.setReader(this);
 }
 
+Screen::~Screen()
+{
+    delete[] graphics::normalFrames;
+}
+
 /**
  * Prepare the display for the unit going to the lowest power mode possible.  Most screens will just
  * poweroff, but eink screens will show a "I'm sleeping" graphic, possibly with a QR code
@@ -934,18 +1539,17 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 void Screen::doDeepSleep()
 {
 #ifdef USE_EINK
-    static FrameCallback sleepFrames[] = {drawSleepScreen};
-    static const int sleepFrameCount = sizeof(sleepFrames) / sizeof(sleepFrames[0]);
-    ui->setFrames(sleepFrames, sleepFrameCount);
-    ui->update();
+    setOn(false, drawDeepSleepScreen);
 #ifdef PIN_EINK_EN
     digitalWrite(PIN_EINK_EN, LOW); // power off backlight
 #endif
-#endif
+#else
+    // Without E-Ink display:
     setOn(false);
+#endif
 }
 
-void Screen::handleSetOn(bool on)
+void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 {
     if (!useDisplay)
         return;
@@ -959,11 +1563,22 @@ void Screen::handleSetOn(bool on)
 #if !ARCH_PORTDUINO
             dispdev->displayOn();
 #endif
+
+#if defined(ST7789_CS) &&                                                                                                        \
+    !defined(M5STACK) // set display brightness when turning on screens. Just moved function from TFTDisplay to here.
+            static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
+#endif
+
             dispdev->displayOn();
+
             enabled = true;
             setInterval(0); // Draw ASAP
             runASAP = true;
         } else {
+#ifdef USE_EINK
+            // eInkScreensaver parameter is usually NULL (default argument), default frame used instead
+            setScreensaverFrames(einkScreensaver);
+#endif
             LOG_INFO("Turning off screen\n");
             dispdev->displayOff();
 #ifdef T_WATCH_S3
@@ -1014,9 +1629,20 @@ void Screen::setup()
         logo_timeout *= 2;
 
     // Add frames.
-    static FrameCallback bootFrames[] = {drawBootScreen};
-    static const int bootFrameCount = sizeof(bootFrames) / sizeof(bootFrames[0]);
-    ui->setFrames(bootFrames, bootFrameCount);
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST);
+    alertFrames[0] = [this](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
+#ifdef ARCH_ESP32
+        if (wakeCause == ESP_SLEEP_WAKEUP_TIMER || wakeCause == ESP_SLEEP_WAKEUP_EXT1) {
+            drawFrameText(display, state, x, y, "Resuming...");
+        } else
+#endif
+        {
+            // Draw region in upper left
+            const char *region = myRegion ? myRegion->name : NULL;
+            drawIconScreen(region, display, state, x, y);
+        }
+    };
+    ui->setFrames(alertFrames, 1);
     // No overlays.
     ui->setOverlays(nullptr, 0);
 
@@ -1032,7 +1658,7 @@ void Screen::setup()
     // Standard behaviour is to FLIP the screen (needed on T-Beam). If this config item is set, unflip it, and thereby logically
     // flip it. If you have a headache now, you're welcome.
     if (!config.display.flip_screen) {
-#if defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(RAK14014)
+#if defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(RAK14014) || defined(HX8357_CS)
         static_cast<TFTDisplay *>(dispdev)->flipScreenVertically();
 #else
         dispdev->flipScreenVertically();
@@ -1084,10 +1710,33 @@ void Screen::setup()
     MeshModule::observeUIEvents(&uiFrameEventObserver);
 }
 
-void Screen::forceDisplay()
+void Screen::forceDisplay(bool forceUiUpdate)
 {
     // Nasty hack to force epaper updates for 'key' frames.  FIXME, cleanup.
 #ifdef USE_EINK
+    // If requested, make sure queued commands are run, and UI has rendered a new frame
+    if (forceUiUpdate) {
+        // No delay between UI frame rendering
+        setFastFramerate();
+
+        // Make sure all CMDs have run first
+        while (!cmdQueue.isEmpty())
+            runOnce();
+
+        // Ensure at least one frame has drawn
+        uint64_t startUpdate;
+        do {
+            startUpdate = millis(); // Handle impossibly unlikely corner case of a millis() overflow..
+            delay(10);
+            ui->update();
+        } while (ui->getUiState()->lastUpdate < startUpdate);
+
+        // Return to normal frame rate
+        targetFramerate = IDLE_FRAMERATE;
+        ui->setTargetFPS(targetFramerate);
+    }
+
+    // Tell EInk class to update the display
     static_cast<EInkDisplay *>(dispdev)->forceDisplay();
 #endif
 }
@@ -1100,6 +1749,10 @@ int32_t Screen::runOnce()
     if (!useDisplay) {
         enabled = false;
         return RUN_SAME;
+    }
+
+    if (displayHeight == 0) {
+        displayHeight = dispdev->getHeight();
     }
 
     // Show boot screen for first logo_timeout seconds, then switch to normal operation.
@@ -1162,25 +1815,29 @@ int32_t Screen::runOnce()
         case Cmd::SHOW_NEXT_FRAME:
             handleShowNextFrame();
             break;
-        case Cmd::START_BLUETOOTH_PIN_SCREEN:
-            handleStartBluetoothPinScreen(cmd.bluetooth_pin);
+        case Cmd::START_ALERT_FRAME: {
+            showingBootScreen = false; // this should avoid the edge case where an alert triggers before the boot screen goes away
+            showingNormalScreen = false;
+            alertFrames[0] = alertFrame;
+#ifdef USE_EINK
+            EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // Use fast-refresh for next frame, no skip please
+            EINK_ADD_FRAMEFLAG(dispdev, BLOCKING);    // Edge case: if this frame is promoted to COSMETIC, wait for update
+            handleSetOn(true); // Ensure power-on to receive deep-sleep screensaver (PowerFSM should handle?)
+#endif
+            setFrameImmediateDraw(alertFrames);
             break;
+        }
         case Cmd::START_FIRMWARE_UPDATE_SCREEN:
             handleStartFirmwareUpdateScreen();
             break;
-        case Cmd::STOP_BLUETOOTH_PIN_SCREEN:
+        case Cmd::STOP_ALERT_FRAME:
         case Cmd::STOP_BOOT_SCREEN:
+            EINK_ADD_FRAMEFLAG(dispdev, COSMETIC); // E-Ink: Explicitly use full-refresh for next frame
             setFrames();
             break;
         case Cmd::PRINT:
             handlePrint(cmd.print_text);
             free(cmd.print_text);
-            break;
-        case Cmd::START_SHUTDOWN_SCREEN:
-            handleShutdownScreen();
-            break;
-        case Cmd::START_REBOOT_SCREEN:
-            handleRebootScreen();
             break;
         default:
             LOG_ERROR("Invalid screen cmd\n");
@@ -1268,11 +1925,77 @@ void Screen::setWelcomeFrames()
     }
 }
 
+#ifdef USE_EINK
+/// Determine which screensaver frame to use, then set the FrameCallback
+void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
+{
+    // Remember current frame, restore position at power-on
+    uint8_t frameNumber = ui->getUiState()->currentFrame;
+
+    // Retain specified frame / overlay callback beyond scope of this method
+    static FrameCallback screensaverFrame;
+    static OverlayCallback screensaverOverlay;
+
+#if defined(HAS_EINK_ASYNCFULL) && defined(USE_EINK_DYNAMICDISPLAY)
+    // Join (await) a currently running async refresh, then run the post-update code.
+    // Avoid skipping of screensaver frame. Would otherwise be handled by NotifiedWorkerThread.
+    EINK_JOIN_ASYNCREFRESH(dispdev);
+#endif
+
+    // If: one-off screensaver frame passed as argument. Handles doDeepSleep()
+    if (einkScreensaver != NULL) {
+        screensaverFrame = einkScreensaver;
+        ui->setFrames(&screensaverFrame, 1);
+    }
+
+    // Else, display the usual "overlay" screensaver
+    else {
+        screensaverOverlay = drawScreensaverOverlay;
+        ui->setOverlays(&screensaverOverlay, 1);
+    }
+
+    // Request new frame, ASAP
+    setFastFramerate();
+    uint64_t startUpdate;
+    do {
+        startUpdate = millis(); // Handle impossibly unlikely corner case of a millis() overflow..
+        delay(1);
+        ui->update();
+    } while (ui->getUiState()->lastUpdate < startUpdate);
+
+    // Old EInkDisplay class
+#if !defined(USE_EINK_DYNAMICDISPLAY)
+    static_cast<EInkDisplay *>(dispdev)->forceDisplay(0); // Screen::forceDisplay(), but override rate-limit
+#endif
+
+    // Prepare now for next frame, shown when display wakes
+    ui->setOverlays(NULL, 0);       // Clear overlay
+    setFrames();                    // Return to normal display updates
+    ui->switchToFrame(frameNumber); // Attempt to return to same frame after power-on
+
+    // Pick a refresh method, for when display wakes
+#ifdef EINK_HASQUIRK_GHOSTING
+    EINK_ADD_FRAMEFLAG(dispdev, COSMETIC); // Really ugly to see ghosting from "screen paused"
+#else
+    EINK_ADD_FRAMEFLAG(dispdev, RESPONSIVE); // Really nice to wake screen with a fast-refresh
+#endif
+}
+#endif
+
 // restore our regular frame list
 void Screen::setFrames()
 {
     LOG_DEBUG("showing standard frames\n");
     showingNormalScreen = true;
+
+#ifdef USE_EINK
+    // If user has disabled the screensaver, warn them after boot
+    static bool warnedScreensaverDisabled = false;
+    if (config.display.screen_on_secs == 0 && !warnedScreensaverDisabled) {
+        screen->print("Screensaver disabled\n");
+        warnedScreensaverDisabled = true;
+    }
+#endif
 
     moduleFrames = MeshModule::GetMeshModulesWithUIFrames();
     LOG_DEBUG("Showing %d module frames\n", moduleFrames.size());
@@ -1281,8 +2004,8 @@ void Screen::setFrames()
     LOG_DEBUG("Total frame count: %d\n", totalFrameCount);
 #endif
 
-    // We don't show the node info our our node (if we have it yet - we should)
-    size_t numMeshNodes = nodeDB.getNumMeshNodes();
+    // We don't show the node info of our node (if we have it yet - we should)
+    size_t numMeshNodes = nodeDB->getNumMeshNodes();
     if (numMeshNodes > 0)
         numMeshNodes--;
 
@@ -1304,13 +2027,13 @@ void Screen::setFrames()
     if (error_code)
         normalFrames[numframes++] = drawCriticalFaultFrame;
 
+#ifdef T_WATCH_S3
+    normalFrames[numframes++] = screen->digitalWatchFace ? &Screen::drawDigitalClockFrame : &Screen::drawAnalogClockFrame;
+#endif
+
     // If we have a text message - show it next, unless it's a phone message and we aren't using any special modules
     if (devicestate.has_rx_text_message && shouldDrawMessage(&devicestate.rx_text_message)) {
         normalFrames[numframes++] = drawTextMessageFrame;
-    }
-    // If we have a waypoint - show it next, unless it's a phone message and we aren't using any special modules
-    if (devicestate.has_rx_waypoint && shouldDrawMessage(&devicestate.rx_waypoint)) {
-        normalFrames[numframes++] = drawWaypointFrame;
     }
 
     // then all the nodes
@@ -1340,20 +2063,15 @@ void Screen::setFrames()
     ui->setFrames(normalFrames, numframes);
     ui->enableAllIndicators();
 
+    // Add function overlay here. This can show when notifications muted, modifier key is active etc
+    static OverlayCallback functionOverlay[] = {drawFunctionOverlay};
+    static const int functionOverlayCount = sizeof(functionOverlay) / sizeof(functionOverlay[0]);
+    ui->setOverlays(functionOverlay, functionOverlayCount);
+
     prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list
                     // just changed)
 
     setFastFramerate(); // Draw ASAP
-}
-
-void Screen::handleStartBluetoothPinScreen(uint32_t pin)
-{
-    LOG_DEBUG("showing bluetooth screen\n");
-    showingNormalScreen = false;
-
-    static FrameCallback frames[] = {drawFrameBluetooth};
-    snprintf(btPIN, sizeof(btPIN), "%06u", pin);
-    setFrameImmediateDraw(frames);
 }
 
 void Screen::setFrameImmediateDraw(FrameCallback *drawFrames)
@@ -1363,35 +2081,11 @@ void Screen::setFrameImmediateDraw(FrameCallback *drawFrames)
     setFastFramerate();
 }
 
-void Screen::handleShutdownScreen()
-{
-    LOG_DEBUG("showing shutdown screen\n");
-    showingNormalScreen = false;
-
-    auto frame = [](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
-        drawFrameText(display, state, x, y, "Shutting down...");
-    };
-    static FrameCallback frames[] = {frame};
-
-    setFrameImmediateDraw(frames);
-}
-
-void Screen::handleRebootScreen()
-{
-    LOG_DEBUG("showing reboot screen\n");
-    showingNormalScreen = false;
-
-    auto frame = [](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
-        drawFrameText(display, state, x, y, "Rebooting...");
-    };
-    static FrameCallback frames[] = {frame};
-    setFrameImmediateDraw(frames);
-}
-
 void Screen::handleStartFirmwareUpdateScreen()
 {
     LOG_DEBUG("showing firmware screen\n");
     showingNormalScreen = false;
+    EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST); // E-Ink: Explicitly use fast-refresh for next frame
 
     static FrameCallback frames[] = {drawFrameFirmware};
     setFrameImmediateDraw(frames);
@@ -1403,7 +2097,7 @@ void Screen::blink()
     uint8_t count = 10;
     dispdev->setBrightness(254);
     while (count > 0) {
-        dispdev->fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+        dispdev->fillRect(0, 0, dispdev->getWidth(), dispdev->getHeight());
         dispdev->display();
         delay(50);
         dispdev->clear();
@@ -1411,7 +2105,53 @@ void Screen::blink()
         delay(50);
         count = count - 1;
     }
+    // The dispdev->setBrightness does not work for t-deck display, it seems to run the setBrightness function in OLEDDisplay.
     dispdev->setBrightness(brightness);
+}
+
+void Screen::increaseBrightness()
+{
+    brightness = ((brightness + 62) > 254) ? brightness : (brightness + 62);
+
+#if defined(ST7789_CS)
+    // run the setDisplayBrightness function. This works on t-decks
+    static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
+#endif
+
+    /* TO DO: add little popup in center of screen saying what brightness level it is set to*/
+}
+
+void Screen::decreaseBrightness()
+{
+    brightness = (brightness < 70) ? brightness : (brightness - 62);
+
+#if defined(ST7789_CS)
+    static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
+#endif
+
+    /* TO DO: add little popup in center of screen saying what brightness level it is set to*/
+}
+
+void Screen::setFunctionSymbal(std::string sym)
+{
+    if (std::find(functionSymbals.begin(), functionSymbals.end(), sym) == functionSymbals.end()) {
+        functionSymbals.push_back(sym);
+        functionSymbalString = "";
+        for (auto symbol : functionSymbals) {
+            functionSymbalString = symbol + " " + functionSymbalString;
+        }
+        setFastFramerate();
+    }
+}
+
+void Screen::removeFunctionSymbal(std::string sym)
+{
+    functionSymbals.erase(std::remove(functionSymbals.begin(), functionSymbals.end(), sym), functionSymbals.end());
+    functionSymbalString = "";
+    for (auto symbol : functionSymbals) {
+        functionSymbalString = symbol + " " + functionSymbalString;
+    }
+    setFastFramerate();
 }
 
 std::string Screen::drawTimeDelta(uint32_t days, uint32_t hours, uint32_t minutes, uint32_t seconds)
@@ -1504,8 +2244,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     char channelStr[20];
     {
         concurrency::LockGuard guard(&lock);
-        auto chName = channels.getPrimaryName();
-        snprintf(channelStr, sizeof(channelStr), "%s", chName);
+        snprintf(channelStr, sizeof(channelStr), "#%s", channels.getName(channels.getPrimaryIndex()));
     }
 
     // Display power status
@@ -1528,6 +2267,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     } else {
         drawNodes(display, x + (SCREEN_WIDTH * 0.25), y + 3, nodeStatus);
     }
+#if HAS_GPS
     // Display GPS status
     if (config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         drawGPSpowerstat(display, x, y + 2, gpsStatus);
@@ -1538,7 +2278,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
             drawGPS(display, x + (SCREEN_WIDTH * 0.63), y + 3, gpsStatus);
         }
     }
-
+#endif
     display->setColor(WHITE);
     // Draw the channel name
     display->drawString(x, y + FONT_HEIGHT_SMALL, channelStr);
@@ -1547,7 +2287,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 #ifdef ARCH_ESP32
         if (millis() - storeForwardModule->lastHeartbeat >
             (storeForwardModule->heartbeatInterval * 1200)) { // no heartbeat, overlap a bit
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)) &&                                \
+#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS) || defined(HX8357_CS)) &&          \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
             display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8,
                                    imgQuestionL1);
@@ -1558,7 +2298,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
                                    imgQuestion);
 #endif
         } else {
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)) &&                                \
+#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS) || defined(HX8357_CS)) &&          \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
             display->drawFastImage(x + SCREEN_WIDTH - 18 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 16, 8,
                                    imgSFL1);
@@ -1572,7 +2312,8 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 #endif
     } else {
         // TODO: Raspberry Pi supports more than just the one screen size
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS) || ARCH_PORTDUINO) &&              \
+#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS) || defined(HX8357_CS) ||           \
+     ARCH_PORTDUINO) &&                                                                                                          \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
         display->drawFastImage(x + SCREEN_WIDTH - 14 - display->getStringWidth(ourId), y + 3 + FONT_HEIGHT_SMALL, 12, 8,
                                imgInfoL1);
@@ -1733,7 +2474,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     // Show uptime as days, hours, minutes OR seconds
     std::string uptime = screen->drawTimeDelta(days, hours, minutes, seconds);
 
-    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice);
+    uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // Display local timezone
     if (rtc_sec > 0) {
         long hms = rtc_sec % SEC_PER_DAY;
         // hms += tz.tz_dsttime * SEC_PER_HOUR;
@@ -1757,6 +2498,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     char chUtil[13];
     snprintf(chUtil, sizeof(chUtil), "ChUtil %2.0f%%", airTime->channelUtilizationPercent());
     display->drawString(x + SCREEN_WIDTH - display->getStringWidth(chUtil), y + FONT_HEIGHT_SMALL * 1, chUtil);
+#if HAS_GPS
     if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         // Line 3
         if (config.display.gps_format !=
@@ -1768,6 +2510,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     } else {
         drawGPSpowerstat(display, x, y + FONT_HEIGHT_SMALL * 2, gpsStatus);
     }
+#endif
     /* Display a heartbeat pixel that blinks every time the frame is redrawn */
 #ifdef SHOW_REDRAWS
     if (heartbeat)
@@ -1784,7 +2527,7 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
         if (showingNormalScreen && nodeStatus->getLastNumTotal() != nodeStatus->getNumTotal()) {
             setFrames(); // Regen the list of screens
         }
-        nodeDB.updateGUI = false;
+        nodeDB->updateGUI = false;
         break;
     }
 
@@ -1818,6 +2561,21 @@ int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 
 int Screen::handleInputEvent(const InputEvent *event)
 {
+
+#ifdef T_WATCH_S3
+    // For the T-Watch, intercept touches to the 'toggle digital/analog watch face' button
+    uint8_t watchFaceFrame = error_code ? 1 : 0;
+
+    if (this->ui->getUiState()->currentFrame == watchFaceFrame && event->touchX >= 204 && event->touchX <= 240 &&
+        event->touchY >= 204 && event->touchY <= 240) {
+        screen->digitalWatchFace = !screen->digitalWatchFace;
+
+        setFrames();
+
+        return 0;
+    }
+#endif
+
     if (showingNormalScreen && moduleFrames.size() == 0) {
         // LOG_DEBUG("Screen::handleInputEvent from %s\n", event->source);
         if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {

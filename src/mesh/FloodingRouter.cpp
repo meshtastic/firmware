@@ -20,9 +20,8 @@ ErrorCode FloodingRouter::send(meshtastic_MeshPacket *p)
 bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 {
     if (wasSeenRecently(p)) { // Note: this will also add a recent packet record
-        printPacket("Ignoring incoming msg, because we've already seen it", p);
+        printPacket("Ignoring incoming msg we've already seen", p);
         if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER &&
-            config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT &&
             config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER) {
             // cancel rebroadcast of this message *if* there was already one, unless we're a router/repeater!
             Router::cancelSending(p->from, p->id);
@@ -35,11 +34,10 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 
 void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c)
 {
-    bool isAck =
-        ((c && c->error_reason == meshtastic_Routing_Error_NONE)); // consider only ROUTING_APP message without error as ACK
-    if (isAck && p->to != getNodeNum()) {
-        // do not flood direct message that is ACKed
-        LOG_DEBUG("Receiving an ACK not for me, but don't need to rebroadcast this direct message anymore.\n");
+    bool isAckorReply = (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) && (p->decoded.request_id != 0);
+    if (isAckorReply && p->to != getNodeNum() && p->to != NODENUM_BROADCAST) {
+        // do not flood direct message that is ACKed or replied to
+        LOG_DEBUG("Receiving an ACK or reply not for me, but don't need to rebroadcast this direct message anymore.\n");
         Router::cancelSending(p->to, p->decoded.request_id); // cancel rebroadcast for this DM
     }
     if ((p->to != getNodeNum()) && (p->hop_limit > 0) && (getFrom(p) != getNodeNum())) {
@@ -48,15 +46,6 @@ void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                 meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
 
                 tosend->hop_limit--; // bump down the hop count
-
-                if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
-                    // If it is a traceRoute request, update the route that it went via me
-                    if (traceRouteModule && traceRouteModule->wantPacket(p))
-                        traceRouteModule->updateRoute(tosend);
-                    // If it is a neighborInfo packet, update last_sent_by_id
-                    if (neighborInfoModule && neighborInfoModule->wantPacket(p))
-                        neighborInfoModule->updateLastSentById(tosend);
-                }
 
                 LOG_INFO("Rebroadcasting received floodmsg to neighbors\n");
                 // Note: we are careful to resend using the original senders node id

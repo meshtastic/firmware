@@ -1,3 +1,7 @@
+#include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
 #pragma once
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "Adafruit_PM25AQI.h"
@@ -22,6 +26,11 @@ class AirQualityTelemetryModule : private concurrency::OSThread, public Protobuf
     */
     virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *p) override;
     virtual int32_t runOnce() override;
+    /** Called to get current Air Quality data
+    @return true if it contains valid data
+    */
+    bool getAirQualityTelemetry(meshtastic_Telemetry *m);
+    virtual meshtastic_MeshPacket *allocReply() override;
     /**
      * Send our Telemetry into the mesh
      */
@@ -35,3 +44,5 @@ class AirQualityTelemetryModule : private concurrency::OSThread, public Protobuf
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute
     uint32_t lastSentToMesh = 0;
 };
+
+#endif

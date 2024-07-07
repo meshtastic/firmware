@@ -6,6 +6,7 @@ const ScanI2C::FoundDevice ScanI2C::DEVICE_NONE = ScanI2C::FoundDevice(ScanI2C::
 ScanI2C::ScanI2C() = default;
 
 void ScanI2C::scanPort(ScanI2C::I2CPort port) {}
+void ScanI2C::scanPort(ScanI2C::I2CPort port, uint8_t *address, uint8_t asize) {}
 
 void ScanI2C::setSuppressScreen()
 {
@@ -36,8 +37,8 @@ ScanI2C::FoundDevice ScanI2C::firstKeyboard() const
 
 ScanI2C::FoundDevice ScanI2C::firstAccelerometer() const
 {
-    ScanI2C::DeviceType types[] = {MPU6050, LIS3DH, BMA423};
-    return firstOfOrNONE(3, types);
+    ScanI2C::DeviceType types[] = {MPU6050, LIS3DH, BMA423, LSM6DS3, BMX160};
+    return firstOfOrNONE(5, types);
 }
 
 ScanI2C::FoundDevice ScanI2C::find(ScanI2C::DeviceType) const

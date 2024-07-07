@@ -62,35 +62,38 @@ bool EInkDisplay::forceDisplay(uint32_t msecLimit)
         return false;
 
     // FIXME - only draw bits have changed (use backbuf similar to the other displays)
+    const bool flipped = config.display.flip_screen;
     for (uint32_t y = 0; y < displayHeight; y++) {
         for (uint32_t x = 0; x < displayWidth; x++) {
             // get src pixel in the page based ordering the OLED lib uses FIXME, super inefficient
             auto b = buffer[x + (y / 8) * displayWidth];
             auto isset = b & (1 << (y & 7));
-            adafruitDisplay->drawPixel(x, y, isset ? GxEPD_BLACK : GxEPD_WHITE);
+
+            // Handle flip here, rather than with setRotation(),
+            // Avoids issues when display width is not a multiple of 8
+            if (flipped)
+                adafruitDisplay->drawPixel((displayWidth - 1) - x, (displayHeight - 1) - y, isset ? GxEPD_BLACK : GxEPD_WHITE);
+            else
+                adafruitDisplay->drawPixel(x, y, isset ? GxEPD_BLACK : GxEPD_WHITE);
         }
     }
 
+    // Trigger the refresh in GxEPD2
     LOG_DEBUG("Updating E-Paper... ");
-
-#if false
-    // Currently unused; rescued from commented-out line during a refactor
-    // Use a meaningful macro here if variant doesn't want fast refresh
-
-    // Full update mode (slow)
-    adafruitDisplay->display(false)
-#else
-    // Fast update mode
     adafruitDisplay->nextPage();
-#endif
 
-#ifndef EINK_NO_HIBERNATE // Only hibernate if controller IC will preserve image memory
-    // Put screen to sleep to save power (possibly not necessary because we already did poweroff inside of display)
-    adafruitDisplay->hibernate();
-#endif
+    // End the update process
+    endUpdate();
 
     LOG_DEBUG("done\n");
     return true;
+}
+
+// End the update process - virtual method, overriden in derived class
+void EInkDisplay::endUpdate()
+{
+    // Power off display hardware, then deep-sleep (Except Wireless Paper V1.1, no deep-sleep)
+    adafruitDisplay->hibernate();
 }
 
 // Write the buffer to the display memory
@@ -155,31 +158,12 @@ bool EInkDisplay::connect()
 
 #elif defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_WIRELESS_PAPER)
     {
-        // Is this a normal boot, or a wake from deep sleep?
-        esp_sleep_wakeup_cause_t wakeReason = esp_sleep_get_wakeup_cause();
-
-        // If waking from sleep, need to reverse rtc_gpio_isolate(), called in cpuDeepSleep()
-        // Otherwise, SPI won't work
-        if (wakeReason != ESP_SLEEP_WAKEUP_UNDEFINED) {
-            // HSPI + other display pins
-            rtc_gpio_hold_dis((gpio_num_t)PIN_EINK_SCLK);
-            rtc_gpio_hold_dis((gpio_num_t)PIN_EINK_DC);
-            rtc_gpio_hold_dis((gpio_num_t)PIN_EINK_RES);
-            rtc_gpio_hold_dis((gpio_num_t)PIN_EINK_BUSY);
-            rtc_gpio_hold_dis((gpio_num_t)PIN_EINK_CS);
-            rtc_gpio_hold_dis((gpio_num_t)PIN_EINK_MOSI);
-        }
-
         // Start HSPI
         hspi = new SPIClass(HSPI);
         hspi->begin(PIN_EINK_SCLK, -1, PIN_EINK_MOSI, PIN_EINK_CS); // SCLK, MISO, MOSI, SS
 
-        // Enable VExt (ACTIVE LOW)
-        // Unsure if called elsewhere first?
-        delay(100);
-        pinMode(Vext, OUTPUT);
-        digitalWrite(Vext, LOW);
-        delay(100);
+        // VExt already enabled in setup()
+        // RTC GPIO hold disabled in setup()
 
         // Create GxEPD2 objects
         auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY, *hspi);

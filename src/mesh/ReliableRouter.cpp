@@ -76,7 +76,7 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
      * Resending real ACKs is omitted, as you might receive a packet multiple times due to flooding and
      * flooding this ACK back to the original sender already adds redundancy. */
     bool isRepeated = p->hop_start == 0 ? (p->hop_limit == HOP_RELIABLE) : (p->hop_start == p->hop_limit);
-    if (wasSeenRecently(p, false) && isRepeated && !MeshModule::currentReply && p->to != nodeDB.getNodeNum()) {
+    if (wasSeenRecently(p, false) && isRepeated && !MeshModule::currentReply && p->to != nodeDB->getNodeNum()) {
         LOG_DEBUG("Resending implicit ack for a repeated floodmsg\n");
         meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p);
         tosend->hop_limit--; // bump down the hop count
@@ -167,8 +167,6 @@ bool ReliableRouter::stopRetransmission(GlobalPacketId key)
     auto old = findPendingPacket(key);
     if (old) {
         auto p = old->packet;
-        auto numErased = pending.erase(key);
-        assert(numErased == 1);
         /* Only when we already transmitted a packet via LoRa, we will cancel the packet in the Tx queue
           to avoid canceling a transmission if it was ACKed super fast via MQTT */
         if (old->numRetransmissions < NUM_RETRANSMISSIONS - 1) {
@@ -177,6 +175,8 @@ bool ReliableRouter::stopRetransmission(GlobalPacketId key)
             // now free the pooled copy for retransmission too
             packetPool.release(p);
         }
+        auto numErased = pending.erase(key);
+        assert(numErased == 1);
         return true;
     } else
         return false;

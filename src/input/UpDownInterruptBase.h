@@ -3,7 +3,7 @@
 #include "InputBroker.h"
 #include "mesh/NodeDB.h"
 
-class UpDownInterruptBase : public Observable<const InputEvent *>
+class UpDownInterruptBase : public Observable<const InputEvent *>, public concurrency::OSThread
 {
   public:
     explicit UpDownInterruptBase(const char *name);
@@ -12,6 +12,13 @@ class UpDownInterruptBase : public Observable<const InputEvent *>
     void intPressHandler();
     void intDownHandler();
     void intUpHandler();
+
+    int32_t runOnce() override;
+
+  protected:
+    enum UpDownInterruptBaseActionType { UPDOWN_ACTION_NONE, UPDOWN_ACTION_PRESSED, UPDOWN_ACTION_UP, UPDOWN_ACTION_DOWN };
+
+    volatile UpDownInterruptBaseActionType action = UPDOWN_ACTION_NONE;
 
   private:
     uint8_t _pinDown = 0;

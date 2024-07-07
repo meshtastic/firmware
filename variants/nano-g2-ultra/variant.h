@@ -165,19 +165,10 @@ External serial flash W25Q16JV_IQ
 // and has 12 bit resolution
 #define BATTERY_SENSE_RESOLUTION_BITS 12
 #define BATTERY_SENSE_RESOLUTION 4096.0
-// Definition of milliVolt per LSB => 3.0V ADC range and 12-bit ADC resolution = 3000mV/4096
-#define VBAT_MV_PER_LSB (0.73242188F)
-// Voltage divider value => 100K + 100K voltage divider on VBAT = (100K / (100K + 100K))
-#define VBAT_DIVIDER (0.5F)
-// Compensation factor for the VBAT divider
-#define VBAT_DIVIDER_COMP (2.0F)
-// Fixed calculation of milliVolt from compensation value
-#define REAL_VBAT_MV_PER_LSB (VBAT_DIVIDER_COMP * VBAT_MV_PER_LSB)
 #undef AREF_VOLTAGE
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
-#define ADC_MULTIPLIER VBAT_DIVIDER_COMP
-#define VBAT_RAW_TO_SCALED(x) (REAL_VBAT_MV_PER_LSB * x)
+#define ADC_MULTIPLIER (2.0F)
 
 #define HAS_RTC 1
 

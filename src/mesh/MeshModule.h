@@ -64,11 +64,11 @@ class MeshModule
 
     /** For use only by MeshService
      */
-    static void callPlugins(meshtastic_MeshPacket &mp, RxSource src = RX_SRC_RADIO);
+    static void callModules(meshtastic_MeshPacket &mp, RxSource src = RX_SRC_RADIO);
 
     static std::vector<MeshModule *> GetMeshModulesWithUIFrames();
     static void observeUIEvents(Observer<const UIFrameEvent *> *observer);
-    static AdminMessageHandleResult handleAdminMessageForAllPlugins(const meshtastic_MeshPacket &mp,
+    static AdminMessageHandleResult handleAdminMessageForAllModules(const meshtastic_MeshPacket &mp,
                                                                     meshtastic_AdminMessage *request,
                                                                     meshtastic_AdminMessage *response);
 #if HAS_SCREEN

@@ -74,9 +74,28 @@ void portduinoCustomInit()
 void portduinoSetup()
 {
     printf("Setting up Meshtastic on Portduino...\n");
-    gpioInit();
+    int max_GPIO = 0;
+    const configNames GPIO_lines[] = {cs,
+                                      irq,
+                                      busy,
+                                      reset,
+                                      txen,
+                                      rxen,
+                                      displayDC,
+                                      displayCS,
+                                      displayBacklight,
+                                      displayBacklightPWMChannel,
+                                      displayReset,
+                                      touchscreenCS,
+                                      touchscreenIRQ,
+                                      user};
 
     std::string gpioChipName = "gpiochip";
+    settingsStrings[i2cdev] = "";
+    settingsStrings[keyboardDevice] = "";
+    settingsStrings[webserverrootpath] = "";
+    settingsStrings[spidev] = "";
+    settingsStrings[displayspidev] = "";
 
     YAML::Node yamlConfig;
 
@@ -84,7 +103,7 @@ void portduinoSetup()
         std::cout << "Using " << configPath << " as config file" << std::endl;
         try {
             yamlConfig = YAML::LoadFile(configPath);
-        } catch (YAML::Exception e) {
+        } catch (YAML::Exception &e) {
             std::cout << "Could not open " << configPath << " because of error: " << e.what() << std::endl;
             exit(EXIT_FAILURE);
         }
@@ -92,7 +111,7 @@ void portduinoSetup()
         std::cout << "Using local config.yaml as config file" << std::endl;
         try {
             yamlConfig = YAML::LoadFile("config.yaml");
-        } catch (YAML::Exception e) {
+        } catch (YAML::Exception &e) {
             std::cout << "*** Exception " << e.what() << std::endl;
             exit(EXIT_FAILURE);
         }
@@ -100,12 +119,14 @@ void portduinoSetup()
         std::cout << "Using /etc/meshtasticd/config.yaml as config file" << std::endl;
         try {
             yamlConfig = YAML::LoadFile("/etc/meshtasticd/config.yaml");
-        } catch (YAML::Exception e) {
+        } catch (YAML::Exception &e) {
             std::cout << "*** Exception " << e.what() << std::endl;
             exit(EXIT_FAILURE);
         }
     } else {
         std::cout << "No 'config.yaml' found, running simulated." << std::endl;
+        settingsMap[maxnodes] = 200;               // Default to 200 nodes
+        settingsMap[logoutputlevel] = level_debug; // Default to debug
         // Set the random seed equal to TCPPort to have a different seed per instance
         randomSeed(TCPPort);
         return;
@@ -127,6 +148,7 @@ void portduinoSetup()
             settingsMap[use_sx1262] = false;
             settingsMap[use_rf95] = false;
             settingsMap[use_sx1280] = false;
+            settingsMap[use_sx1268] = false;
 
             if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "sx1262") {
                 settingsMap[use_sx1262] = true;
@@ -134,6 +156,8 @@ void portduinoSetup()
                 settingsMap[use_rf95] = true;
             } else if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "sx1280") {
                 settingsMap[use_sx1280] = true;
+            } else if (yamlConfig["Lora"]["Module"] && yamlConfig["Lora"]["Module"].as<std::string>("") == "sx1268") {
+                settingsMap[use_sx1268] = true;
             }
             settingsMap[dio2_as_rf_switch] = yamlConfig["Lora"]["DIO2_AS_RF_SWITCH"].as<bool>(false);
             settingsMap[dio3_tcxo_voltage] = yamlConfig["Lora"]["DIO3_TCXO_VOLTAGE"].as<bool>(false);
@@ -144,9 +168,19 @@ void portduinoSetup()
             settingsMap[txen] = yamlConfig["Lora"]["TXen"].as<int>(RADIOLIB_NC);
             settingsMap[rxen] = yamlConfig["Lora"]["RXen"].as<int>(RADIOLIB_NC);
             settingsMap[gpiochip] = yamlConfig["Lora"]["gpiochip"].as<int>(0);
+            settingsMap[ch341Quirk] = yamlConfig["Lora"]["ch341_quirk"].as<bool>(false);
             gpioChipName += std::to_string(settingsMap[gpiochip]);
 
             settingsStrings[spidev] = "/dev/" + yamlConfig["Lora"]["spidev"].as<std::string>("spidev0.0");
+            if (settingsStrings[spidev].length() == 14) {
+                int x = settingsStrings[spidev].at(11) - '0';
+                int y = settingsStrings[spidev].at(13) - '0';
+                if (x >= 0 && x < 10 && y >= 0 && y < 10) {
+                    settingsMap[spidev] = x + y << 4;
+                    settingsMap[displayspidev] = settingsMap[spidev];
+                    settingsMap[touchscreenspidev] = settingsMap[spidev];
+                }
+            }
         }
         if (yamlConfig["GPIO"]) {
             settingsMap[user] = yamlConfig["GPIO"]["User"].as<int>(RADIOLIB_NC);
@@ -169,18 +203,42 @@ void portduinoSetup()
                 settingsMap[displayPanel] = st7735;
             else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ST7735S")
                 settingsMap[displayPanel] = st7735s;
+            else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ST7796")
+                settingsMap[displayPanel] = st7796;
             else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ILI9341")
                 settingsMap[displayPanel] = ili9341;
+            else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ILI9488")
+                settingsMap[displayPanel] = ili9488;
+            else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "HX8357D")
+                settingsMap[displayPanel] = hx8357d;
+            else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "X11")
+                settingsMap[displayPanel] = x11;
             settingsMap[displayHeight] = yamlConfig["Display"]["Height"].as<int>(0);
             settingsMap[displayWidth] = yamlConfig["Display"]["Width"].as<int>(0);
             settingsMap[displayDC] = yamlConfig["Display"]["DC"].as<int>(-1);
             settingsMap[displayCS] = yamlConfig["Display"]["CS"].as<int>(-1);
+            settingsMap[displayRGBOrder] = yamlConfig["Display"]["RGBOrder"].as<bool>(false);
             settingsMap[displayBacklight] = yamlConfig["Display"]["Backlight"].as<int>(-1);
+            settingsMap[displayBacklightInvert] = yamlConfig["Display"]["BacklightInvert"].as<bool>(false);
+            settingsMap[displayBacklightPWMChannel] = yamlConfig["Display"]["BacklightPWMChannel"].as<int>(-1);
             settingsMap[displayReset] = yamlConfig["Display"]["Reset"].as<int>(-1);
             settingsMap[displayOffsetX] = yamlConfig["Display"]["OffsetX"].as<int>(0);
             settingsMap[displayOffsetY] = yamlConfig["Display"]["OffsetY"].as<int>(0);
             settingsMap[displayRotate] = yamlConfig["Display"]["Rotate"].as<bool>(false);
+            settingsMap[displayOffsetRotate] = yamlConfig["Display"]["OffsetRotate"].as<int>(1);
             settingsMap[displayInvert] = yamlConfig["Display"]["Invert"].as<bool>(false);
+            settingsMap[displayBusFrequency] = yamlConfig["Display"]["BusFrequency"].as<int>(40000000);
+            if (yamlConfig["Display"]["spidev"]) {
+                settingsStrings[displayspidev] = "/dev/" + yamlConfig["Display"]["spidev"].as<std::string>("spidev0.1");
+                if (settingsStrings[displayspidev].length() == 14) {
+                    int x = settingsStrings[displayspidev].at(11) - '0';
+                    int y = settingsStrings[displayspidev].at(13) - '0';
+                    if (x >= 0 && x < 10 && y >= 0 && y < 10) {
+                        settingsMap[displayspidev] = x + y << 4;
+                        settingsMap[touchscreenspidev] = settingsMap[displayspidev];
+                    }
+                }
+            }
         }
         settingsMap[touchscreenModule] = no_touchscreen;
         if (yamlConfig["Touchscreen"]) {
@@ -188,8 +246,25 @@ void portduinoSetup()
                 settingsMap[touchscreenModule] = xpt2046;
             else if (yamlConfig["Touchscreen"]["Module"].as<std::string>("") == "STMPE610")
                 settingsMap[touchscreenModule] = stmpe610;
+            else if (yamlConfig["Touchscreen"]["Module"].as<std::string>("") == "GT911")
+                settingsMap[touchscreenModule] = gt911;
+            else if (yamlConfig["Touchscreen"]["Module"].as<std::string>("") == "FT5x06")
+                settingsMap[touchscreenModule] = ft5x06;
             settingsMap[touchscreenCS] = yamlConfig["Touchscreen"]["CS"].as<int>(-1);
             settingsMap[touchscreenIRQ] = yamlConfig["Touchscreen"]["IRQ"].as<int>(-1);
+            settingsMap[touchscreenBusFrequency] = yamlConfig["Touchscreen"]["BusFrequency"].as<int>(1000000);
+            settingsMap[touchscreenRotate] = yamlConfig["Touchscreen"]["Rotate"].as<int>(-1);
+            settingsMap[touchscreenI2CAddr] = yamlConfig["Touchscreen"]["I2CAddr"].as<int>(-1);
+            if (yamlConfig["Touchscreen"]["spidev"]) {
+                settingsStrings[touchscreenspidev] = "/dev/" + yamlConfig["Touchscreen"]["spidev"].as<std::string>("");
+                if (settingsStrings[touchscreenspidev].length() == 14) {
+                    int x = settingsStrings[touchscreenspidev].at(11) - '0';
+                    int y = settingsStrings[touchscreenspidev].at(13) - '0';
+                    if (x >= 0 && x < 10 && y >= 0 && y < 10) {
+                        settingsMap[touchscreenspidev] = x + y << 4;
+                    }
+                }
+            }
         }
         if (yamlConfig["Input"]) {
             settingsStrings[keyboardDevice] = (yamlConfig["Input"]["KeyboardDevice"]).as<std::string>("");
@@ -200,10 +275,19 @@ void portduinoSetup()
             settingsStrings[webserverrootpath] = (yamlConfig["Webserver"]["RootPath"]).as<std::string>("");
         }
 
-    } catch (YAML::Exception e) {
+        settingsMap[maxnodes] = (yamlConfig["General"]["MaxNodes"]).as<int>(200);
+
+    } catch (YAML::Exception &e) {
         std::cout << "*** Exception " << e.what() << std::endl;
         exit(EXIT_FAILURE);
     }
+
+    for (configNames i : GPIO_lines) {
+        if (settingsMap.count(i) && settingsMap[i] > max_GPIO)
+            max_GPIO = settingsMap[i];
+    }
+
+    gpioInit(max_GPIO + 1); // Done here so we can inform Portduino how many GPIOs we need.
 
     // Need to bind all the configured GPIO pins so they're not simulated
     if (settingsMap.count(cs) > 0 && settingsMap[cs] != RADIOLIB_NC) {
@@ -259,11 +343,15 @@ void portduinoSetup()
             initGPIOPin(settingsMap[touchscreenIRQ], gpioChipName);
     }
 
+    if (settingsStrings[spidev] != "") {
+        SPI.begin(settingsStrings[spidev].c_str());
+    }
     return;
 }
 
-int initGPIOPin(int pinNum, std::string gpioChipName)
+int initGPIOPin(int pinNum, const std::string gpioChipName)
 {
+#ifdef PORTDUINO_LINUX_HARDWARE
     std::string gpio_name = "GPIO" + std::to_string(pinNum);
     try {
         GPIOPin *csPin;
@@ -276,4 +364,7 @@ int initGPIOPin(int pinNum, std::string gpioChipName)
         std::cout << "Warning, cannot claim pin " << gpio_name << (p ? p.__cxa_exception_type()->name() : "null") << std::endl;
         return ERRNO_DISABLED;
     }
+#else
+    return ERRNO_OK;
+#endif
 }

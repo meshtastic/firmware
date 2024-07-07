@@ -8,7 +8,7 @@
 #include "graphics/fonts/OLEDDisplayFontsUA.h"
 #endif
 
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)) &&                                \
+#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS) || defined(HX8357_CS)) &&          \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
 // The screen is bigger so use bigger fonts
 #define FONT_SMALL ArialMT_Plain_16  // Height: 19
@@ -28,8 +28,8 @@
 #define FONT_LARGE ArialMT_Plain_24  // Height: 28
 #endif
 
-#define fontHeight(font) ((font)[1] + 1) // height is position 1
+#define _fontHeight(font) ((font)[1] + 1) // height is position 1
 
-#define FONT_HEIGHT_SMALL fontHeight(FONT_SMALL)
-#define FONT_HEIGHT_MEDIUM fontHeight(FONT_MEDIUM)
-#define FONT_HEIGHT_LARGE fontHeight(FONT_LARGE)
+#define FONT_HEIGHT_SMALL _fontHeight(FONT_SMALL)
+#define FONT_HEIGHT_MEDIUM _fontHeight(FONT_MEDIUM)
+#define FONT_HEIGHT_LARGE _fontHeight(FONT_LARGE)

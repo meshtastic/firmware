@@ -8,11 +8,15 @@
 #include <libpax_api.h>
 
 /**
- * A simple example module that just replies with "Message received" to any message it receives.
+ * Wrapper module for the estimate passenger (PAX) count library (https://github.com/dbinfrago/libpax) which
+ * implements the core functionality of the ESP32 Paxcounter project (https://github.com/cyberman54/ESP32-Paxcounter)
  */
 class PaxcounterModule : private concurrency::OSThread, public ProtobufModule<meshtastic_Paxcount>
 {
     bool firstTime = true;
+    bool reportedDataSent = true;
+
+    static void handlePaxCounterReportRequest();
 
   public:
     PaxcounterModule();

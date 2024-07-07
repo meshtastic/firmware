@@ -4,8 +4,6 @@
 #include "configuration.h"
 #include <Arduino.h>
 
-extern NodeDB nodeDB;
-
 namespace meshtastic
 {
 
@@ -55,7 +53,7 @@ class GPSStatus : public Status
 #ifdef GPS_EXTRAVERBOSE
             LOG_WARN("Using fixed latitude\n");
 #endif
-            meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
+            meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
             return node->position.latitude_i;
         } else {
             return p.latitude_i;
@@ -68,7 +66,7 @@ class GPSStatus : public Status
 #ifdef GPS_EXTRAVERBOSE
             LOG_WARN("Using fixed longitude\n");
 #endif
-            meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
+            meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
             return node->position.longitude_i;
         } else {
             return p.longitude_i;
@@ -81,27 +79,18 @@ class GPSStatus : public Status
 #ifdef GPS_EXTRAVERBOSE
             LOG_WARN("Using fixed altitude\n");
 #endif
-            meshtastic_NodeInfoLite *node = nodeDB.getMeshNode(nodeDB.getNodeNum());
+            meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
             return node->position.altitude;
         } else {
             return p.altitude;
         }
     }
 
-    uint32_t getDOP() const
-    {
-        return p.PDOP;
-    }
+    uint32_t getDOP() const { return p.PDOP; }
 
-    uint32_t getHeading() const
-    {
-        return p.ground_track;
-    }
+    uint32_t getHeading() const { return p.ground_track; }
 
-    uint32_t getNumSatellites() const
-    {
-        return p.sats_in_view;
-    }
+    uint32_t getNumSatellites() const { return p.sats_in_view; }
 
     bool matches(const GPSStatus *newStatus) const
     {
@@ -135,7 +124,7 @@ class GPSStatus : public Status
         if (isDirty) {
             if (hasLock) {
                 // In debug logs, identify position by @timestamp:stage (stage 3 = notify)
-                LOG_DEBUG("New GPS pos@%x:3 lat=%f, lon=%f, alt=%d, pdop=%.2f, track=%.2f, speed=%.2f, sats=%d\n", p.timestamp,
+                LOG_DEBUG("New GPS pos@%x:3 lat=%f lon=%f alt=%d pdop=%.2f track=%.2f speed=%.2f sats=%d\n", p.timestamp,
                           p.latitude_i * 1e-7, p.longitude_i * 1e-7, p.altitude, p.PDOP * 1e-2, p.ground_track * 1e-5,
                           p.ground_speed * 1e-2, p.sats_in_view);
             } else {

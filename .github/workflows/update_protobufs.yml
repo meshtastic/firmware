@@ -7,7 +7,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: true
 
@@ -17,16 +17,16 @@ jobs:
 
       - name: Download nanopb
         run: |
-          wget https://jpa.kapsi.fi/nanopb/download/nanopb-0.4.7-linux-x86.tar.gz
-          tar xvzf nanopb-0.4.7-linux-x86.tar.gz
-          mv nanopb-0.4.7-linux-x86 nanopb-0.4.7
+          wget https://jpa.kapsi.fi/nanopb/download/nanopb-0.4.8-linux-x86.tar.gz
+          tar xvzf nanopb-0.4.8-linux-x86.tar.gz
+          mv nanopb-0.4.8-linux-x86 nanopb-0.4.8
 
       - name: Re-generate protocol buffers
         run: |
           ./bin/regen-protos.sh
 
       - name: Create pull request
-        uses: peter-evans/create-pull-request@v3
+        uses: peter-evans/create-pull-request@v6
         with:
           add-paths: |
             protobufs

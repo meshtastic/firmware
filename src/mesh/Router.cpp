@@ -8,12 +8,9 @@
 #include "main.h"
 #include "mesh-pb-constants.h"
 #include "modules/RoutingModule.h"
-extern "C" {
-#include "mesh/compression/unishox2.h"
-}
-
+#if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
-
+#endif
 /**
  * Router todo
  *
@@ -119,7 +116,7 @@ meshtastic_MeshPacket *Router::allocForSending()
     meshtastic_MeshPacket *p = packetPool.allocZeroed();
 
     p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // Assume payload is decoded at start.
-    p->from = nodeDB.getNodeNum();
+    p->from = nodeDB->getNodeNum();
     p->to = NODENUM_BROADCAST;
     p->hop_limit = (config.lora.hop_limit >= HOP_MAX) ? HOP_MAX : config.lora.hop_limit;
     p->id = generatePacketId();
@@ -165,7 +162,7 @@ meshtastic_QueueStatus Router::getQueueStatus()
 ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
 {
     // No need to deliver externally if the destination is the local node
-    if (p->to == nodeDB.getNodeNum()) {
+    if (p->to == nodeDB->getNodeNum()) {
         printPacket("Enqueued local", p);
         enqueueReceivedMessage(p);
         return ERRNO_OK;
@@ -182,7 +179,7 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
         }
 
         if (!p->channel) { // don't override if a channel was requested
-            p->channel = nodeDB.getMeshNodeChannel(p->to);
+            p->channel = nodeDB->getMeshNodeChannel(p->to);
             LOG_DEBUG("localSend to channel %d\n", p->channel);
         }
 
@@ -205,7 +202,7 @@ void printBytes(const char *label, const uint8_t *p, size_t numbytes)
  */
 ErrorCode Router::send(meshtastic_MeshPacket *p)
 {
-    if (p->to == nodeDB.getNodeNum()) {
+    if (p->to == nodeDB->getNodeNum()) {
         LOG_ERROR("BUG! send() called with packet destined for local node!\n");
         packetPool.release(p);
         return meshtastic_Routing_Error_BAD_REQUEST;
@@ -220,7 +217,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             LOG_WARN("Duty cycle limit exceeded. Aborting send for now, you can send again in %d minutes.\n", silentMinutes);
 #endif
             meshtastic_Routing_Error err = meshtastic_Routing_Error_DUTY_CYCLE_LIMIT;
-            if (getFrom(p) == nodeDB.getNodeNum()) { // only send NAK to API, not to the mesh
+            if (getFrom(p) == nodeDB->getNodeNum()) { // only send NAK to API, not to the mesh
                 abortSendAndNak(err, p);
             } else {
                 packetPool.release(p);
@@ -247,8 +244,10 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 
     // If the packet hasn't yet been encrypted, do so now (it might already be encrypted if we are just forwarding it)
 
-    assert(p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag ||
-           p->which_payload_variant == meshtastic_MeshPacket_decoded_tag); // I _think_ all packets should have a payload by now
+    if (!(p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag ||
+          p->which_payload_variant == meshtastic_MeshPacket_decoded_tag)) {
+        return meshtastic_Routing_Error_BAD_REQUEST;
+    }
 
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
@@ -261,11 +260,12 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             abortSendAndNak(encodeResult, p);
             return encodeResult; // FIXME - this isn't a valid ErrorCode
         }
-
+#if !MESHTASTIC_EXCLUDE_MQTT
         // Only publish to MQTT if we're the original transmitter of the packet
-        if (moduleConfig.mqtt.enabled && p->from == nodeDB.getNodeNum() && mqtt) {
+        if (moduleConfig.mqtt.enabled && p->from == nodeDB->getNodeNum() && mqtt) {
             mqtt->onSend(*p, *p_decoded, chIndex);
         }
+#endif
         packetPool.release(p_decoded);
     }
 
@@ -297,8 +297,8 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
         return false;
 
     if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_KNOWN_ONLY &&
-        (nodeDB.getMeshNode(p->from) == NULL || !nodeDB.getMeshNode(p->from)->has_user)) {
-        LOG_DEBUG("Node 0x%x not in NodeDB. Rebroadcast mode KNOWN_ONLY will ignore packet\n", p->from);
+        (nodeDB->getMeshNode(p->from) == NULL || !nodeDB->getMeshNode(p->from)->has_user)) {
+        LOG_DEBUG("Node 0x%x not in nodeDB-> Rebroadcast mode KNOWN_ONLY will ignore packet\n", p->from);
         return false;
     }
 
@@ -313,7 +313,10 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
         if (channels.decryptForHash(chIndex, p->channel)) {
             // Try to decrypt the packet if we can
             size_t rawSize = p->encrypted.size;
-            assert(rawSize <= sizeof(bytes));
+            if (rawSize > sizeof(bytes)) {
+                LOG_ERROR("Packet too large to attempt decription! (rawSize=%d > 256)\n", rawSize);
+                return false;
+            }
             memcpy(bytes, p->encrypted.bytes,
                    rawSize); // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf
             crypto->decrypt(p->from, p->id, rawSize, bytes);
@@ -331,6 +334,7 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
                 p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
                 p->channel = chIndex;                                         // change to store the index instead of the hash
 
+                /* Not actually ever used.
                 // Decompress if needed. jm
                 if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP) {
                     // Decompress the payload
@@ -348,7 +352,7 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
 
                     // Switch the port from PortNum_TEXT_MESSAGE_COMPRESSED_APP to PortNum_TEXT_MESSAGE_APP
                     p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
-                }
+                } */
 
                 printPacket("decoded message", p);
                 return true;
@@ -370,6 +374,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded);
 
+        /* Not actually used, so save the cycles
         // Only allow encryption on the text message app.
         //  TODO: Allow modules to opt into compression.
         if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) {
@@ -403,7 +408,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 
                 p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP;
             }
-        }
+        } */
 
         if (numbytes > MAX_RHPACKETLEN)
             return meshtastic_Routing_Error_TOO_LARGE;
@@ -431,7 +436,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 
 NodeNum Router::getNodeNum()
 {
-    return nodeDB.getNodeNum();
+    return nodeDB->getNodeNum();
 }
 
 /**
@@ -465,19 +470,22 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             cancelSending(p->from, p->id);
             skipHandle = true;
         }
-
-        // Publish received message to MQTT if we're not the original transmitter of the packet
-        if (!skipHandle && moduleConfig.mqtt.enabled && getFrom(p) != nodeDB.getNodeNum() && mqtt)
-            mqtt->onSend(*p_encrypted, *p, p->channel);
     } else {
         printPacket("packet decoding failed or skipped (no PSK?)", p);
     }
 
-    packetPool.release(p_encrypted); // Release the encrypted packet
-
     // call modules here
-    if (!skipHandle)
-        MeshModule::callPlugins(*p, src);
+    if (!skipHandle) {
+        MeshModule::callModules(*p, src);
+
+#if !MESHTASTIC_EXCLUDE_MQTT
+        // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the packet
+        if (decoded && moduleConfig.mqtt.enabled && getFrom(p) != nodeDB->getNodeNum() && mqtt)
+            mqtt->onSend(*p_encrypted, *p, p->channel);
+#endif
+    }
+
+    packetPool.release(p_encrypted); // Release the encrypted packet
 }
 
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)

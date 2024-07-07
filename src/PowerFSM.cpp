@@ -8,13 +8,19 @@
  * actions to be taken upon entering or exiting each state.
  */
 #include "PowerFSM.h"
+#include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PowerMon.h"
 #include "configuration.h"
 #include "graphics/Screen.h"
 #include "main.h"
 #include "sleep.h"
 #include "target_specific.h"
+
+#ifndef SLEEP_TIME
+#define SLEEP_TIME 30
+#endif
 
 /// Should we behave as if we have AC power now?
 static bool isPowered()
@@ -44,8 +50,9 @@ static bool isPowered()
 static void sdsEnter()
 {
     LOG_DEBUG("Enter state: SDS\n");
+    powerMon->setState(meshtastic_PowerMon_State_CPU_DeepSleep);
     // FIXME - make sure GPS and LORA radio are off first - because we want close to zero current draw
-    doDeepSleep(getConfiguredOrDefaultMs(config.power.sds_secs), false);
+    doDeepSleep(Default::getConfiguredOrDefaultMs(config.power.sds_secs), false);
 }
 
 extern Power *power;
@@ -63,6 +70,7 @@ static uint32_t secsSlept;
 static void lsEnter()
 {
     LOG_INFO("lsEnter begin, ls_secs=%u\n", config.power.ls_secs);
+    powerMon->clearState(meshtastic_PowerMon_State_Screen_On);
     screen->setOn(false);
     secsSlept = 0; // How long have we been sleeping this time
 
@@ -80,10 +88,12 @@ static void lsIdle()
         // If some other service would stall sleep, don't let sleep happen yet
         if (doPreflightSleep()) {
             // Briefly come out of sleep long enough to blink the led once every few seconds
-            uint32_t sleepTime = 30;
+            uint32_t sleepTime = SLEEP_TIME;
 
+            powerMon->setState(meshtastic_PowerMon_State_CPU_LightSleep);
             setLed(false); // Never leave led on while in light sleep
             esp_sleep_source_t wakeCause2 = doLightSleep(sleepTime * 1000LL);
+            powerMon->clearState(meshtastic_PowerMon_State_CPU_LightSleep);
 
             switch (wakeCause2) {
             case ESP_SLEEP_WAKEUP_TIMER:
@@ -102,9 +112,7 @@ static void lsIdle()
                 break;
 
             default:
-                // We woke for some other reason (button press, device interrupt)
-                // uint64_t status = esp_sleep_get_ext1_wakeup_status();
-                LOG_INFO("wakeCause2 %d\n", wakeCause2);
+                // We woke for some other reason (button press, device IRQ interrupt)
 
 #ifdef BUTTON_PIN
                 bool pressed = !digitalRead(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN);
@@ -141,6 +149,7 @@ static void lsExit()
 static void nbEnter()
 {
     LOG_DEBUG("Enter state: NB\n");
+    powerMon->clearState(meshtastic_PowerMon_State_BT_On);
     screen->setOn(false);
 #ifdef ARCH_ESP32
     // Only ESP32 should turn off bluetooth
@@ -152,6 +161,8 @@ static void nbEnter()
 
 static void darkEnter()
 {
+    powerMon->clearState(meshtastic_PowerMon_State_BT_On);
+    powerMon->clearState(meshtastic_PowerMon_State_Screen_On);
     setBluetoothEnable(true);
     screen->setOn(false);
 }
@@ -159,6 +170,8 @@ static void darkEnter()
 static void serialEnter()
 {
     LOG_DEBUG("Enter state: SERIAL\n");
+    powerMon->clearState(meshtastic_PowerMon_State_BT_On);
+    powerMon->setState(meshtastic_PowerMon_State_Screen_On);
     setBluetoothEnable(false);
     screen->setOn(true);
     screen->print("Serial connected\n");
@@ -167,6 +180,7 @@ static void serialEnter()
 static void serialExit()
 {
     // Turn bluetooth back on when we leave serial stream API
+    powerMon->setState(meshtastic_PowerMon_State_BT_On);
     setBluetoothEnable(true);
     screen->print("Serial disconnected\n");
 }
@@ -179,13 +193,17 @@ static void powerEnter()
         LOG_INFO("Loss of power in Powered\n");
         powerFSM.trigger(EVENT_POWER_DISCONNECTED);
     } else {
+        powerMon->setState(meshtastic_PowerMon_State_BT_On);
+        powerMon->setState(meshtastic_PowerMon_State_Screen_On);
         screen->setOn(true);
         setBluetoothEnable(true);
         // within enter() the function getState() returns the state we came from
-        if (strcmp(powerFSM.getState()->name, "BOOT") != 0 && strcmp(powerFSM.getState()->name, "POWER") != 0 &&
+
+        // Mothballed: print change of power-state to device screen
+        /* if (strcmp(powerFSM.getState()->name, "BOOT") != 0 && strcmp(powerFSM.getState()->name, "POWER") != 0 &&
             strcmp(powerFSM.getState()->name, "DARK") != 0) {
             screen->print("Powered...\n");
-        }
+        }*/
     }
 }
 
@@ -200,15 +218,21 @@ static void powerIdle()
 
 static void powerExit()
 {
+    powerMon->setState(meshtastic_PowerMon_State_BT_On);
+    powerMon->setState(meshtastic_PowerMon_State_Screen_On);
     screen->setOn(true);
     setBluetoothEnable(true);
-    if (!isPowered())
-        screen->print("Unpowered...\n");
+
+    // Mothballed: print change of power-state to device screen
+    /*if (!isPowered())
+        screen->print("Unpowered...\n");*/
 }
 
 static void onEnter()
 {
     LOG_DEBUG("Enter state: ON\n");
+    powerMon->setState(meshtastic_PowerMon_State_BT_On);
+    powerMon->setState(meshtastic_PowerMon_State_Screen_On);
     screen->setOn(true);
     setBluetoothEnable(true);
 }
@@ -245,7 +269,6 @@ Fsm powerFSM(&stateBOOT);
 void PowerFSM_setup()
 {
     bool isRouter = (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ? 1 : 0);
-    bool isInfrastructureRole = isRouter || config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER;
     bool isTrackerOrSensor = config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
                              config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER ||
                              config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR;
@@ -342,15 +365,18 @@ void PowerFSM_setup()
 
     powerFSM.add_transition(&stateDARK, &stateDARK, EVENT_CONTACT_FROM_PHONE, NULL, "Contact from phone");
 
-    powerFSM.add_timed_transition(&stateON, &stateDARK,
-                                  getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL,
-                                  "Screen-on timeout");
-    powerFSM.add_timed_transition(&statePOWER, &stateDARK,
-                                  getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL,
-                                  "Screen-on timeout");
-    powerFSM.add_timed_transition(&stateDARK, &stateDARK,
-                                  getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL,
-                                  "Screen-on timeout");
+#ifdef USE_EINK
+    // Allow E-Ink devices to suppress the screensaver, if screen timeout set to 0
+    if (config.display.screen_on_secs > 0)
+#endif
+    {
+        powerFSM.add_timed_transition(&stateON, &stateDARK,
+                                      Default::getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs),
+                                      NULL, "Screen-on timeout");
+        powerFSM.add_timed_transition(&statePOWER, &stateDARK,
+                                      Default::getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs),
+                                      NULL, "Screen-on timeout");
+    }
 
 // We never enter light-sleep or NB states on NRF52 (because the CPU uses so little power normally)
 #ifdef ARCH_ESP32
@@ -358,13 +384,27 @@ void PowerFSM_setup()
     // Don't add power saving transitions if we are a power saving tracker or sensor. Sleep will be initiatiated through the
     // modules
     if ((isRouter || config.power.is_power_saving) && !isTrackerOrSensor) {
-        powerFSM.add_timed_transition(&stateNB, isInfrastructureRole ? &stateSDS : &stateLS,
-                                      getConfiguredOrDefaultMs(config.power.min_wake_secs, default_min_wake_secs), NULL,
+        powerFSM.add_timed_transition(&stateNB, &stateLS,
+                                      Default::getConfiguredOrDefaultMs(config.power.min_wake_secs, default_min_wake_secs), NULL,
                                       "Min wake timeout");
-        powerFSM.add_timed_transition(&stateDARK, isInfrastructureRole ? &stateSDS : &stateLS,
-                                      getConfiguredOrDefaultMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs),
-                                      NULL, "Bluetooth timeout");
+
+        // If ESP32 and using power-saving, timer mover from DARK to light-sleep
+        // Also serves purpose of the old DARK to DARK transition(?) See https://github.com/meshtastic/firmware/issues/3517
+        powerFSM.add_timed_transition(
+            &stateDARK, &stateLS,
+            Default::getConfiguredOrDefaultMs(config.power.wait_bluetooth_secs, default_wait_bluetooth_secs), NULL,
+            "Bluetooth timeout");
+    } else {
+        // If ESP32, but not using power-saving, check periodically if config has drifted out of stateDark
+        powerFSM.add_timed_transition(&stateDARK, &stateDARK,
+                                      Default::getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs),
+                                      NULL, "Screen-on timeout");
     }
+#else
+    // If not ESP32, light-sleep not used. Check periodically if config has drifted out of stateDark
+    powerFSM.add_timed_transition(&stateDARK, &stateDARK,
+                                  Default::getConfiguredOrDefaultMs(config.display.screen_on_secs, default_screen_on_secs), NULL,
+                                  "Screen-on timeout");
 #endif
 
     powerFSM.run_machine(); // run one iteration of the state machine, so we run our on enter tasks for the initial DARK state

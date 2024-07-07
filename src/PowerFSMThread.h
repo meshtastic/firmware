@@ -1,3 +1,4 @@
+#include "Default.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "concurrency/OSThread.h"
@@ -28,7 +29,7 @@ class PowerFSMThread : public OSThread
             timeLastPowered = millis();
         } else if (config.power.on_battery_shutdown_after_secs > 0 && config.power.on_battery_shutdown_after_secs != UINT32_MAX &&
                    millis() > (timeLastPowered +
-                               getConfiguredOrDefaultMs(
+                               Default::getConfiguredOrDefaultMs(
                                    config.power.on_battery_shutdown_after_secs))) { // shutdown after 30 minutes unpowered
             powerFSM.trigger(EVENT_SHUTDOWN);
         }
