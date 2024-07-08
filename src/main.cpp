@@ -6,6 +6,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "PowerMon.h"
 #include "ReliableRouter.h"
 #include "airtime.h"
 #include "buzz.h"
@@ -214,6 +215,14 @@ __attribute__((weak, noinline)) bool loopCanSleep()
     return true;
 }
 
+/**
+ * Print info as a structured log message (for automated log processing)
+ */
+void printInfo()
+{
+    LOG_INFO("S:B:%d,%s\n", HW_VENDOR, optstr(APP_VERSION));
+}
+
 void setup()
 {
     concurrency::hasBeenSetup = true;
@@ -221,7 +230,7 @@ void setup()
         meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;
     OLEDDISPLAY_GEOMETRY screen_geometry = GEOMETRY_128_64;
 
-#ifdef SEGGER_STDOUT_CH
+#ifdef USE_SEGGER
     auto mode = false ? SEGGER_RTT_MODE_BLOCK_IF_FIFO_FULL : SEGGER_RTT_MODE_NO_BLOCK_TRIM;
 #ifdef NRF52840_XXAA
     auto buflen = 4096; // this board has a fair amount of ram
@@ -234,6 +243,7 @@ void setup()
 #ifdef DEBUG_PORT
     consoleInit(); // Set serial baud rate and init our mesh console
 #endif
+    powerMonInit();
 
     serialSinceMsec = millis();
 
@@ -553,7 +563,7 @@ void setup()
 #endif
 
     // Hello
-    LOG_INFO("Meshtastic hwvendor=%d, swver=%s\n", HW_VENDOR, optstr(APP_VERSION));
+    printInfo();
 
 #ifdef ARCH_ESP32
     esp32Setup();
