@@ -23,7 +23,7 @@
       "sd_flags": "-DS140",
       "sd_name": "s140",
       "sd_version": "7.3.0",
-      "sd_fwid": "0x00B6"
+      "sd_fwid": "0x0123"
     },
     "bootloader": {
       "settings_addr": "0xFF000"

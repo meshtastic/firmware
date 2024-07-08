@@ -184,6 +184,7 @@ template <typename T> void LR11x0Interface<T>::setStandby()
     activeReceiveStart = 0;
     disableInterrupt();
     completeSending(); // If we were sending, not anymore
+    RadioLibInterface::setStandby();
 }
 
 /**
@@ -223,7 +224,7 @@ template <typename T> void LR11x0Interface<T>::startReceive()
         0); // only RX_DONE IRQ is needed, we'll check for PREAMBLE_DETECTED and HEADER_VALID in isActivelyReceiving
     assert(err == RADIOLIB_ERR_NONE);
 
-    isReceiving = true;
+    RadioLibInterface::startReceive();
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);

@@ -108,7 +108,7 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
     display->drawString(x, y, "Power Telemetry");
     if (lastMeasurementPacket == nullptr) {
         display->setFont(FONT_SMALL);
-        display->drawString(x, y += fontHeight(FONT_MEDIUM), "No measurement");
+        display->drawString(x, y += _fontHeight(FONT_MEDIUM), "No measurement");
         return;
     }
 
@@ -120,22 +120,22 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
     auto &p = lastMeasurementPacket->decoded;
     if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &lastMeasurement)) {
         display->setFont(FONT_SMALL);
-        display->drawString(x, y += fontHeight(FONT_MEDIUM), "Measurement Error");
+        display->drawString(x, y += _fontHeight(FONT_MEDIUM), "Measurement Error");
         LOG_ERROR("Unable to decode last packet");
         return;
     }
 
     display->setFont(FONT_SMALL);
     String last_temp = String(lastMeasurement.variant.environment_metrics.temperature, 0) + "°C";
-    display->drawString(x, y += fontHeight(FONT_MEDIUM) - 2, "From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
+    display->drawString(x, y += _fontHeight(FONT_MEDIUM) - 2, "From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
     if (lastMeasurement.variant.power_metrics.ch1_voltage != 0) {
-        display->drawString(x, y += fontHeight(FONT_SMALL),
+        display->drawString(x, y += _fontHeight(FONT_SMALL),
                             "Ch 1 Volt/Cur: " + String(lastMeasurement.variant.power_metrics.ch1_voltage, 0) + "V / " +
                                 String(lastMeasurement.variant.power_metrics.ch1_current, 0) + "mA");
-        display->drawString(x, y += fontHeight(FONT_SMALL),
+        display->drawString(x, y += _fontHeight(FONT_SMALL),
                             "Ch 2 Volt/Cur: " + String(lastMeasurement.variant.power_metrics.ch2_voltage, 0) + "V / " +
                                 String(lastMeasurement.variant.power_metrics.ch2_current, 0) + "mA");
-        display->drawString(x, y += fontHeight(FONT_SMALL),
+        display->drawString(x, y += _fontHeight(FONT_SMALL),
                             "Ch 3 Volt/Cur: " + String(lastMeasurement.variant.power_metrics.ch3_voltage, 0) + "V / " +
                                 String(lastMeasurement.variant.power_metrics.ch3_current, 0) + "mA");
     }
@@ -163,29 +163,63 @@ bool PowerTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &m
     return false; // Let others look at this message also if they want
 }
 
+bool PowerTelemetryModule::getPowerTelemetry(meshtastic_Telemetry *m)
+{
+    bool valid = false;
+    m->time = getTime();
+    m->which_variant = meshtastic_Telemetry_power_metrics_tag;
+
+    m->variant.power_metrics.ch1_voltage = 0;
+    m->variant.power_metrics.ch1_current = 0;
+    m->variant.power_metrics.ch2_voltage = 0;
+    m->variant.power_metrics.ch2_current = 0;
+    m->variant.power_metrics.ch3_voltage = 0;
+    m->variant.power_metrics.ch3_current = 0;
+#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
+    if (ina219Sensor.hasSensor())
+        valid = ina219Sensor.getMetrics(m);
+    if (ina260Sensor.hasSensor())
+        valid = ina260Sensor.getMetrics(m);
+    if (ina3221Sensor.hasSensor())
+        valid = ina3221Sensor.getMetrics(m);
+#endif
+
+    return valid;
+}
+
+meshtastic_MeshPacket *PowerTelemetryModule::allocReply()
+{
+    if (currentRequest) {
+        auto req = *currentRequest;
+        const auto &p = req.decoded;
+        meshtastic_Telemetry scratch;
+        meshtastic_Telemetry *decoded = NULL;
+        memset(&scratch, 0, sizeof(scratch));
+        if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &scratch)) {
+            decoded = &scratch;
+        } else {
+            LOG_ERROR("Error decoding PowerTelemetry module!\n");
+            return NULL;
+        }
+        // Check for a request for power metrics
+        if (decoded->which_variant == meshtastic_Telemetry_power_metrics_tag) {
+            meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
+            if (getPowerTelemetry(&m)) {
+                LOG_INFO("Power telemetry replying to request\n");
+                return allocDataProtobuf(m);
+            } else {
+                return NULL;
+            }
+        }
+    }
+
+    return NULL;
+}
+
 bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 {
     meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
-    bool valid = false;
-    m.time = getTime();
-    m.which_variant = meshtastic_Telemetry_power_metrics_tag;
-
-    m.variant.power_metrics.ch1_voltage = 0;
-    m.variant.power_metrics.ch1_current = 0;
-    m.variant.power_metrics.ch2_voltage = 0;
-    m.variant.power_metrics.ch2_current = 0;
-    m.variant.power_metrics.ch3_voltage = 0;
-    m.variant.power_metrics.ch3_current = 0;
-#if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
-    if (ina219Sensor.hasSensor())
-        valid = ina219Sensor.getMetrics(&m);
-    if (ina260Sensor.hasSensor())
-        valid = ina260Sensor.getMetrics(&m);
-    if (ina3221Sensor.hasSensor())
-        valid = ina3221Sensor.getMetrics(&m);
-#endif
-
-    if (valid) {
+    if (getPowerTelemetry(&m)) {
         LOG_INFO("(Sending): ch1_voltage=%f, ch1_current=%f, ch2_voltage=%f, ch2_current=%f, "
                  "ch3_voltage=%f, ch3_current=%f\n",
                  m.variant.power_metrics.ch1_voltage, m.variant.power_metrics.ch1_current, m.variant.power_metrics.ch2_voltage,
@@ -218,8 +252,9 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
                 setIntervalFromNow(5000);
             }
         }
+        return true;
     }
-    return valid;
+    return false;
 }
 
 #endif
