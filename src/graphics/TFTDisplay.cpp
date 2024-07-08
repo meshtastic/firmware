@@ -94,13 +94,28 @@ class LGFX : public lgfx::LGFX_Device
             // Configure settings for touch control.
             auto touch_cfg = _touch_instance.config();
 
-            touch_cfg.pin_cs = TOUCH_CS;
+#if defined(UNPHONE)
             touch_cfg.x_min = 0;
             touch_cfg.x_max = TFT_HEIGHT - 1;
             touch_cfg.y_min = 0;
             touch_cfg.y_max = TFT_WIDTH - 1;
             touch_cfg.bus_shared = true;
             touch_cfg.offset_rotation = 0;
+            touch_cfg.bus_shared = true;
+
+// Elecrow-CRT01262M
+#elif defined(PRIVATE_HW)
+            // Uses defaults from lgfx::v1:Touch_XPT2046 constructor
+            // touch_cfg.x_min = 300;
+            // touch_cfg.x_max = 3900;
+            // touch_cfg.y_min = 400;
+            // touch_cfg.y_max = 3900;
+
+            touch_cfg.bus_shared = true;
+            touch_cfg.offset_rotation = 2; // Touch panel is connected opposite to display?
+#endif
+
+// Both UNPHONE and Elecrow-CRT01262M set *some* of their pins with these variant.h macros
 #ifdef TOUCH_SPIHOST
             touch_cfg.spi_host = TOUCH_SPIHOST;
 #endif
@@ -112,6 +127,9 @@ class LGFX : public lgfx::LGFX_Device
 #endif
 #ifdef TOUCH_MISO
             touch_cfg.pin_miso = TOUCH_MISO;
+#endif
+#ifdef TOUCH_CS
+            touch_cfg.pin_cs = TOUCH_CS;
 #endif
 #ifdef TOUCH_IRQ
             touch_cfg.pin_int = TOUCH_IRQ;
