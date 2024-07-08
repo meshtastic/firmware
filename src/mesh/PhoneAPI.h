@@ -2,10 +2,20 @@
 
 #include "Observer.h"
 #include "mesh-pb-constants.h"
+#include <iterator>
 #include <string>
+#include <vector>
 
 // Make sure that we never let our packets grow too large for one BLE packet
 #define MAX_TO_FROM_RADIO_SIZE 512
+
+#if meshtastic_FromRadio_size > MAX_TO_FROM_RADIO_SIZE
+#error "meshtastic_FromRadio_size is too large for our BLE packets"
+#endif
+#if meshtastic_ToRadio_size > MAX_TO_FROM_RADIO_SIZE
+#error "meshtastic_ToRadio_size is too large for our BLE packets"
+#endif
+
 #define SPECIAL_NONCE 69420
 
 /**
@@ -29,6 +39,7 @@ class PhoneAPI
         STATE_SEND_CONFIG,          // Replacement for the old Radioconfig
         STATE_SEND_MODULECONFIG,    // Send Module specific config
         STATE_SEND_OTHER_NODEINFOS, // states progress in this order as the device sends to to the client
+        STATE_SEND_FILEMANIFEST,    // Send file manifest
         STATE_SEND_COMPLETE_ID,
         STATE_SEND_PACKETS // send packets or debug strings
     };
@@ -65,6 +76,8 @@ class PhoneAPI
     uint32_t config_nonce = 0;
     uint32_t readIndex = 0;
 
+    std::vector<meshtastic_FileInfo> filesManifest = {};
+
     void resetReadIndex() { readIndex = 0; }
 
   public:
@@ -91,14 +104,14 @@ class PhoneAPI
      */
     size_t getFromRadio(uint8_t *buf);
 
+    void sendConfigComplete();
+
     /**
      * Return true if we have data available to send to the phone
      */
     bool available();
 
     bool isConnected() { return state != STATE_SEND_NOTHING; }
-
-    void setInitialState() { state = STATE_SEND_MY_INFO; }
 
   protected:
     /// Our fromradio packet while it is being assembled

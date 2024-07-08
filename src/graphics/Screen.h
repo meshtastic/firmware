@@ -21,11 +21,13 @@ class Screen
     void print(const char *) {}
     void doDeepSleep() {}
     void forceDisplay(bool forceUiUpdate = false) {}
-    void startBluetoothPinScreen(uint32_t pin) {}
-    void stopBluetoothPinScreen() {}
-    void startRebootScreen() {}
-    void startShutdownScreen() {}
     void startFirmwareUpdateScreen() {}
+    void increaseBrightness() {}
+    void decreaseBrightness() {}
+    void setFunctionSymbal(std::string) {}
+    void removeFunctionSymbal(std::string) {}
+    void startAlert(const char *) {}
+    void endAlert() {}
 };
 } // namespace graphics
 #else
@@ -34,6 +36,8 @@ class Screen
 #include <OLEDDisplayUi.h>
 
 #include "../configuration.h"
+#include "gps/GeoCoord.h"
+#include "graphics/ScreenFonts.h"
 
 #ifdef USE_ST7567
 #include <ST7567Wire.h>
@@ -81,6 +85,46 @@ class Screen
 // Base segment dimensions for T-Watch segmented display
 #define SEGMENT_WIDTH 16
 #define SEGMENT_HEIGHT 4
+
+/// Convert an integer GPS coords to a floating point
+#define DegD(i) (i * 1e-7)
+
+namespace
+{
+/// A basic 2D point class for drawing
+class Point
+{
+  public:
+    float x, y;
+
+    Point(float _x, float _y) : x(_x), y(_y) {}
+
+    /// Apply a rotation around zero (standard rotation matrix math)
+    void rotate(float radian)
+    {
+        float cos = cosf(radian), sin = sinf(radian);
+        float rx = x * cos + y * sin, ry = -x * sin + y * cos;
+
+        x = rx;
+        y = ry;
+    }
+
+    void translate(int16_t dx, int dy)
+    {
+        x += dx;
+        y += dy;
+    }
+
+    void scale(float f)
+    {
+        // We use -f here to counter the flip that happens
+        // on the y axis when drawing and rotating on screen
+        x *= f;
+        y *= -f;
+    }
+};
+
+} // namespace
 
 namespace graphics
 {
@@ -166,20 +210,49 @@ class Screen : public concurrency::OSThread
 
     void blink();
 
+    void drawFrameText(OLEDDisplay *, OLEDDisplayUiState *, int16_t, int16_t, const char *);
+
+    void getTimeAgoStr(uint32_t agoSecs, char *timeStr, uint8_t maxLength);
+
+    // Draw north
+    void drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t compassY, float myHeading);
+
+    static uint16_t getCompassDiam(uint32_t displayWidth, uint32_t displayHeight);
+
+    float estimatedHeading(double lat, double lon);
+
+    void drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, uint16_t compassDiam, float headingRadian);
+
+    void drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char **fields);
+
     /// Handle button press, trackball or swipe action)
     void onPress() { enqueueCmd(ScreenCmd{.cmd = Cmd::ON_PRESS}); }
     void showPrevFrame() { enqueueCmd(ScreenCmd{.cmd = Cmd::SHOW_PREV_FRAME}); }
     void showNextFrame() { enqueueCmd(ScreenCmd{.cmd = Cmd::SHOW_NEXT_FRAME}); }
 
-    /// Starts showing the Bluetooth PIN screen.
-    //
-    // Switches over to a static frame showing the Bluetooth pairing screen
-    // with the PIN.
-    void startBluetoothPinScreen(uint32_t pin)
+    // generic alert start
+    void startAlert(FrameCallback _alertFrame)
+    {
+        alertFrame = _alertFrame;
+        ScreenCmd cmd;
+        cmd.cmd = Cmd::START_ALERT_FRAME;
+        enqueueCmd(cmd);
+    }
+
+    void startAlert(const char *_alertMessage)
+    {
+        startAlert([_alertMessage](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
+            uint16_t x_offset = display->width() / 2;
+            display->setTextAlignment(TEXT_ALIGN_CENTER);
+            display->setFont(FONT_MEDIUM);
+            display->drawString(x_offset + x, 26 + y, _alertMessage);
+        });
+    }
+
+    void endAlert()
     {
         ScreenCmd cmd;
-        cmd.cmd = Cmd::START_BLUETOOTH_PIN_SCREEN;
-        cmd.bluetooth_pin = pin;
+        cmd.cmd = Cmd::STOP_ALERT_FRAME;
         enqueueCmd(cmd);
     }
 
@@ -187,20 +260,6 @@ class Screen : public concurrency::OSThread
     {
         ScreenCmd cmd;
         cmd.cmd = Cmd::START_FIRMWARE_UPDATE_SCREEN;
-        enqueueCmd(cmd);
-    }
-
-    void startShutdownScreen()
-    {
-        ScreenCmd cmd;
-        cmd.cmd = Cmd::START_SHUTDOWN_SCREEN;
-        enqueueCmd(cmd);
-    }
-
-    void startRebootScreen()
-    {
-        ScreenCmd cmd;
-        cmd.cmd = Cmd::START_REBOOT_SCREEN;
         enqueueCmd(cmd);
     }
 
@@ -221,9 +280,6 @@ class Screen : public concurrency::OSThread
 
     void setFunctionSymbal(std::string sym);
     void removeFunctionSymbal(std::string sym);
-
-    /// Stops showing the bluetooth PIN screen.
-    void stopBluetoothPinScreen() { enqueueCmd(ScreenCmd{.cmd = Cmd::STOP_BLUETOOTH_PIN_SCREEN}); }
 
     /// Stops showing the boot screen.
     void stopBootScreen() { enqueueCmd(ScreenCmd{.cmd = Cmd::STOP_BOOT_SCREEN}); }
@@ -358,7 +414,13 @@ class Screen : public concurrency::OSThread
 
     bool isAUTOOled = false;
 
+    // Screen dimensions (for convenience)
+    // Defined during Screen::setup
+    uint16_t displayWidth = 0;
+    uint16_t displayHeight = 0;
+
   private:
+    FrameCallback alertFrames[1];
     struct ScreenCmd {
         Cmd cmd;
         union {
@@ -384,11 +446,8 @@ class Screen : public concurrency::OSThread
     void handleOnPress();
     void handleShowNextFrame();
     void handleShowPrevFrame();
-    void handleStartBluetoothPinScreen(uint32_t pin);
     void handlePrint(const char *text);
     void handleStartFirmwareUpdateScreen();
-    void handleShutdownScreen();
-    void handleRebootScreen();
     /// Rebuilds our list of frames (screens) to default ones.
     void setFrames();
 
@@ -426,6 +485,9 @@ class Screen : public concurrency::OSThread
     bool digitalWatchFace = true;
 #endif
 
+    /// callback for current alert frame
+    FrameCallback alertFrame;
+
     /// Queue of commands to execute in doTask.
     TypedQueue<ScreenCmd> cmdQueue;
     /// Whether we are using a display
@@ -452,4 +514,5 @@ class Screen : public concurrency::OSThread
 };
 
 } // namespace graphics
+
 #endif

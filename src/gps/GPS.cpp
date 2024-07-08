@@ -3,6 +3,7 @@
 #include "Default.h"
 #include "GPS.h"
 #include "NodeDB.h"
+#include "PowerMon.h"
 #include "RTC.h"
 
 #include "main.h" // pmu_found
@@ -784,6 +785,22 @@ GPS::~GPS()
     notifyGPSSleepObserver.observe(&notifyGPSSleep);
 }
 
+const char *GPS::powerStateToString()
+{
+    switch (powerState) {
+    case GPS_OFF:
+        return "OFF";
+    case GPS_IDLE:
+        return "IDLE";
+    case GPS_STANDBY:
+        return "STANDBY";
+    case GPS_ACTIVE:
+        return "ACTIVE";
+    default:
+        return "UNKNOWN";
+    }
+}
+
 void GPS::setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime)
 {
     // Record the current powerState
@@ -798,16 +815,19 @@ void GPS::setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime)
     else
         powerState = GPS_OFF;
 
-    LOG_DEBUG("GPS::powerState=%d\n", powerState);
+    LOG_DEBUG("GPS::powerState=%s\n", powerStateToString());
 
     // If the next update is due *really soon*, don't actually power off or enter standby. Just wait it out.
     if (!on && powerState == GPS_IDLE)
         return;
 
     if (on) {
+        powerMon->setState(meshtastic_PowerMon_State_GPS_Active);
         clearBuffer(); // drop any old data waiting in the buffer before re-enabling
         if (en_gpio)
             digitalWrite(en_gpio, on ? GPS_EN_ACTIVE : !GPS_EN_ACTIVE); // turn this on if defined, every time
+    } else {
+        powerMon->clearState(meshtastic_PowerMon_State_GPS_Active);
     }
     isInPowersave = !on;
     if (!standbyOnly && en_gpio != 0 &&
