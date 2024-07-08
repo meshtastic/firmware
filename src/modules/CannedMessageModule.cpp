@@ -51,16 +51,23 @@ CannedMessageModule *cannedMessageModule;
 CannedMessageModule::CannedMessageModule()
     : SinglePortModule("canned", meshtastic_PortNum_TEXT_MESSAGE_APP), concurrency::OSThread("CannedMessage")
 {
-    this->loadProtoForModule();
-    if ((this->splitConfiguredMessages() <= 0) && (cardkb_found.address == 0x00) && !INPUTBROKER_MATRIX_TYPE &&
-        !CANNED_MESSAGE_MODULE_ENABLE) {
-        LOG_INFO("CannedMessageModule: No messages are configured. Module is disabled");
+    if (moduleConfig.canned_message.enabled || CANNED_MESSAGE_MODULE_ENABLE) {
+        this->loadProtoForModule();
+        if ((this->splitConfiguredMessages() <= 0) && (cardkb_found.address == 0x00) && !INPUTBROKER_MATRIX_TYPE &&
+            !CANNED_MESSAGE_MODULE_ENABLE) {
+            LOG_INFO("CannedMessageModule: No messages are configured. Module is disabled");
+            this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
+            disable();
+        } else {
+            LOG_INFO("CannedMessageModule is enabled");
+#if defined(T_WATCH_S3) || defined(RAK14014) || defined(PRIVATE_HW)
+            this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
+#endif
+            this->inputObserver.observe(inputBroker);
+        }
+    } else {
         this->runState = CANNED_MESSAGE_RUN_STATE_DISABLED;
         disable();
-    } else {
-        LOG_INFO("CannedMessageModule is enabled");
-        moduleConfig.canned_message.enabled = true;
-        this->inputObserver.observe(inputBroker);
     }
 }
 
@@ -441,6 +448,7 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
         }
     }
 
+<<<<<<< HEAD
     if (event->kbchar >= 32 && event->kbchar <= 126 && !isUp && !isDown && event->inputEvent != INPUT_BROKER_LEFT &&
         event->inputEvent != INPUT_BROKER_RIGHT && event->inputEvent != INPUT_BROKER_SELECT) {
         this->searchQuery += (char)event->kbchar;
@@ -448,6 +456,64 @@ int CannedMessageModule::handleDestinationSelectionInput(const InputEvent *event
         if ((millis() - lastFilterUpdate) > filterDebounceMs) {
             runOnce(); // update filter immediately
             lastFilterUpdate = millis();
+=======
+#if defined(T_WATCH_S3) || defined(RAK14014) || defined(PRIVATE_HW) // Elecrow-CRT01262M
+    if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
+        String keyTapped = keyForCoordinates(event->touchX, event->touchY);
+
+        if (keyTapped == "⇧") {
+            this->highlight = -1;
+
+            this->payload = 0x00;
+
+            validEvent = true;
+
+            this->shift = !this->shift;
+        } else if (keyTapped == "⌫") {
+            this->highlight = keyTapped[0];
+
+            this->payload = 0x08;
+
+            validEvent = true;
+
+            this->shift = false;
+        } else if (keyTapped == "123" || keyTapped == "ABC") {
+            this->highlight = -1;
+
+            this->payload = 0x00;
+
+            this->charSet = this->charSet == 0 ? 1 : 0;
+
+            validEvent = true;
+        } else if (keyTapped == " ") {
+            this->highlight = keyTapped[0];
+
+            this->payload = keyTapped[0];
+
+            validEvent = true;
+
+            this->shift = false;
+        } else if (keyTapped == "↵") {
+            this->highlight = 0x00;
+
+            this->runState = CANNED_MESSAGE_RUN_STATE_ACTION_SELECT;
+
+            this->payload = CANNED_MESSAGE_RUN_STATE_FREETEXT;
+
+            this->currentMessageIndex = event->kbchar - 1;
+
+            validEvent = true;
+
+            this->shift = false;
+        } else if (keyTapped != "") {
+            this->highlight = keyTapped[0];
+
+            this->payload = this->shift ? keyTapped[0] : std::tolower(keyTapped[0]);
+
+            validEvent = true;
+
+            this->shift = false;
+            
         }
         return 1;
     }
@@ -984,7 +1050,15 @@ int32_t CannedMessageModule::runOnce()
                 if (strcmp(this->messages[this->currentMessageIndex], "~") == 0) {
                     return INT32_MAX;
                 } else {
+<<<<<<< HEAD
                     sendText(this->dest, this->channel, this->messages[this->currentMessageIndex], true);
+=======
+#if defined(T_WATCH_S3) || defined(RAK14014) || defined(PRIVATE_HW) // Elecrow-CRT01262M
+                    sendText(this->dest, indexChannels[this->channel], this->messages[this->currentMessageIndex], true);
+#else
+                    sendText(NODENUM_BROADCAST, channels.getPrimaryIndex(), this->messages[this->currentMessageIndex], true);
+#endif
+>>>>>>> 4d3edf320 (Enable free-text via canned messages)
                 }
                 this->runState = CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE;
             } else {
@@ -1168,7 +1242,11 @@ void CannedMessageModule::showTemporaryMessage(const String &message)
     setIntervalFromNow(2000);
 }
 
+<<<<<<< HEAD
 #if defined(USE_VIRTUAL_KEYBOARD)
+=======
+#if defined(T_WATCH_S3) || defined(RAK14014) || defined(PRIVATE_HW) // Elecrow-CRT01262M
+>>>>>>> 4d3edf320 (Enable free-text via canned messages)
 
 String CannedMessageModule::keyForCoordinates(uint x, uint y)
 {
@@ -1194,9 +1272,24 @@ void CannedMessageModule::drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState 
 {
     int outerSize = *(&this->keyboard[this->charSet] + 1) - this->keyboard[this->charSet];
 
+// Elecrow-CRT01262M
+// Special keys like shift, backspace, enter are already scaled manually
+// We want to use a smaller scale factor, to match our FONT_SMALL
+#ifdef PRIVATE_HW
+    constexpr float specialKeyScale = 0.5;
+#else
+    constexpr float specialKeyScale = 1.2;
+#endif
+
     int xOffset = 0;
 
+// Elecrow-CRT01262M
+// Screen too small, start drawing the keyboard hard up against screen left
+#ifdef PRIVATE_HW
+    int yOffset = 36;
+#else
     int yOffset = 56;
+#endif
 
     display->setTextAlignment(TEXT_ALIGN_LEFT);
 
@@ -1206,8 +1299,9 @@ void CannedMessageModule::drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState 
 
     display->drawStringMaxWidth(0, 0, display->getWidth(),
                                 cannedMessageModule->drawWithCursor(cannedMessageModule->freetext, cannedMessageModule->cursor));
-
-    display->setFont(FONT_MEDIUM);
+    // Elecrow-CRT01262M
+    // Small font for tiny lil' screen
+    display->setFont(FONT_SMALL);
 
     int cellHeight = round((display->height() - 64) / outerSize);
 
@@ -1242,21 +1336,27 @@ void CannedMessageModule::drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState 
 #endif
             this->keyboard[this->charSet][outerIndex][innerIndex] = updatedLetter;
 
+            // Elecrow-CRT01262M
+            // Offset all the letters in the keyboard
+            // Better centering in the key boxes, because the whole graphic is squish on the tiny display
+#ifdef PRIVATE_HW
+            float characterOffset = ((cellWidth / 2) - (letter.width / 2)) + 4;
+#else
             float characterOffset = ((cellWidth / 2) - (letter.width / 2));
-
+#endif
             if (letter.character == "⇧") {
                 if (this->shift) {
                     display->fillRect(xOffset, yOffset, cellWidth, cellHeight);
 
                     display->setColor(OLEDDISPLAY_COLOR::BLACK);
 
-                    drawShiftIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, 1.2);
+                    drawShiftIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, specialKeyScale);
 
                     display->setColor(OLEDDISPLAY_COLOR::WHITE);
                 } else {
                     display->drawRect(xOffset, yOffset, cellWidth, cellHeight);
 
-                    drawShiftIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, 1.2);
+                    drawShiftIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, specialKeyScale);
                 }
             } else if (letter.character == "⌫") {
                 if (this->highlight == letter.character[0]) {
@@ -1264,7 +1364,7 @@ void CannedMessageModule::drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState 
 
                     display->setColor(OLEDDISPLAY_COLOR::BLACK);
 
-                    drawBackspaceIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, 1.2);
+                    drawBackspaceIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, specialKeyScale);
 
                     display->setColor(OLEDDISPLAY_COLOR::WHITE);
 
@@ -1272,29 +1372,43 @@ void CannedMessageModule::drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState 
                 } else {
                     display->drawRect(xOffset, yOffset, cellWidth, cellHeight);
 
-                    drawBackspaceIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, 1.2);
+                    drawBackspaceIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, specialKeyScale);
                 }
             } else if (letter.character == "↵") {
                 display->drawRect(xOffset, yOffset, cellWidth, cellHeight);
 
-                drawEnterIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, 1.7);
+                drawEnterIcon(display, xOffset + characterOffset, yOffset + yCorrection + 5, specialKeyScale);
             } else {
                 if (this->highlight == letter.character[0]) {
                     display->fillRect(xOffset, yOffset, cellWidth, cellHeight);
 
                     display->setColor(OLEDDISPLAY_COLOR::BLACK);
 
+// Elecrow-CRT01262M
+// Kludge: move the spacebar text over, to fit in the box
+#ifdef PRIVATE_HW
+                    display->drawString(xOffset + characterOffset + (letter.character == " " ? 10 : 0), yOffset + yCorrection,
+                                        letter.character == " " ? "space" : letter.character);
+#else
                     display->drawString(xOffset + characterOffset, yOffset + yCorrection,
                                         letter.character == " " ? "space" : letter.character);
-
+#endif
                     display->setColor(OLEDDISPLAY_COLOR::WHITE);
 
                     setIntervalFromNow(0);
                 } else {
                     display->drawRect(xOffset, yOffset, cellWidth, cellHeight);
 
+// Elecrow-CRT01262M
+// Kludge: move the spacebar text over, to fit in the box
+#ifdef PRIVATE_HW
+                    display->drawString(xOffset + characterOffset + (letter.character == " " ? 10 : 0), yOffset + yCorrection,
+                                        letter.character == " " ? "space" : letter.character);
+#else
                     display->drawString(xOffset + characterOffset, yOffset + yCorrection,
                                         letter.character == " " ? "space" : letter.character);
+
+#endif
                 }
             }
         }
@@ -1665,6 +1779,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         display->setTextAlignment(TEXT_ALIGN_LEFT);
         display->setFont(FONT_SMALL);
         display->drawString(10 + x, 0 + y + FONT_HEIGHT_SMALL, "Canned Message\nModule disabled.");
+<<<<<<< HEAD
         return;
     }
 
@@ -1676,6 +1791,11 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         einkDisplay->enableUnlimitedFastMode();
 #endif
 #if defined(USE_VIRTUAL_KEYBOARD)
+=======
+    } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
+        requestFocus(); // Tell Screen::setFrames to move to our module's frame
+#if defined(T_WATCH_S3) || defined(RAK14014) || defined(PRIVATE_HW) // Elecrow-CRT01262M
+>>>>>>> 4d3edf320 (Enable free-text via canned messages)
         drawKeyboard(display, state, 0, 0);
 #else
         display->setTextAlignment(TEXT_ALIGN_LEFT);

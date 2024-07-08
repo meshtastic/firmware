@@ -877,6 +877,11 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.ambient_lighting.green = (myNodeInfo.my_node_num & 0x00FF00) >> 8;
     moduleConfig.ambient_lighting.blue = myNodeInfo.my_node_num & 0x0000FF;
 
+// Elecrow-CRT01262M free-text
+#ifdef PRIVATE_HW
+    moduleConfig.canned_message.enabled = true;
+#endif
+
     initModuleConfigIntervals();
 }
 
