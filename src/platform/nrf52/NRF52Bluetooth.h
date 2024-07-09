@@ -13,7 +13,7 @@ class NRF52Bluetooth : BluetoothApi
     void clearBonds();
     bool isConnected();
     int getRssi();
-    void sendLog(const char *logMessage);
+    void sendLog(const uint8_t *logMessage, size_t length);
 
   private:
     static void onConnectionSecured(uint16_t conn_handle);

@@ -4,6 +4,7 @@
 #include "concurrency/OSThread.h"
 #include "configuration.h"
 #include "main.h"
+#include "mesh/generated/meshtastic/mesh.pb.h"
 #include <assert.h>
 #include <cstring>
 #include <memory>
@@ -15,7 +16,7 @@
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
-#if HAS_WIFI || HAS_ETHERNET
+#if HAS_NETWORKING
 extern Syslog syslog;
 #endif
 void RedirectablePrint::rpInit()
@@ -137,7 +138,7 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
 
 void RedirectablePrint::log_to_syslog(const char *logLevel, const char *format, va_list arg)
 {
-#if (HAS_WIFI || HAS_ETHERNET) && !defined(ARCH_PORTDUINO)
+#if HAS_NETWORKING && !defined(ARCH_PORTDUINO)
     // if syslog is in use, collect the log messages and send them to syslog
     if (syslog.isEnabled()) {
         int ll = 0;
@@ -172,6 +173,7 @@ void RedirectablePrint::log_to_syslog(const char *logLevel, const char *format, 
 
 void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_list arg)
 {
+#if !MESHTASTIC_EXCLUDE_BLUETOOTH
     if (config.bluetooth.device_logging_enabled && !pauseBluetoothLogging) {
         bool isBleConnected = false;
 #ifdef ARCH_ESP32
@@ -192,20 +194,52 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
                 vsnprintf(message, len + 1, format, arg);
             }
             auto thread = concurrency::OSThread::currentThread;
+            meshtastic_LogRecord logRecord = meshtastic_LogRecord_init_zero;
+            logRecord.level = getLogLevel(logLevel);
+            strcpy(logRecord.message, message);
+            if (thread)
+                strcpy(logRecord.source, thread->ThreadName.c_str());
+            logRecord.time = getValidTime(RTCQuality::RTCQualityDevice, true);
+
+            uint8_t *buffer = new uint8_t[meshtastic_LogRecord_size];
+            size_t size = pb_encode_to_bytes(buffer, meshtastic_LogRecord_size, meshtastic_LogRecord_fields, &logRecord);
 #ifdef ARCH_ESP32
-            if (thread)
-                nimbleBluetooth->sendLog(mt_sprintf("%s | [%s] %s", logLevel, thread->ThreadName.c_str(), message).c_str());
-            else
-                nimbleBluetooth->sendLog(mt_sprintf("%s | %s", logLevel, message).c_str());
+            nimbleBluetooth->sendLog(buffer, size);
 #elif defined(ARCH_NRF52)
-            if (thread)
-                nrf52Bluetooth->sendLog(mt_sprintf("%s | [%s] %s", logLevel, thread->ThreadName.c_str(), message).c_str());
-            else
-                nrf52Bluetooth->sendLog(mt_sprintf("%s | %s", logLevel, message).c_str());
+            nrf52Bluetooth->sendLog(buffer, size);
 #endif
             delete[] message;
+            delete[] buffer;
         }
     }
+#else
+    (void)logLevel;
+    (void)format;
+    (void)arg;
+#endif
+}
+
+meshtastic_LogRecord_Level RedirectablePrint::getLogLevel(const char *logLevel)
+{
+    meshtastic_LogRecord_Level ll = meshtastic_LogRecord_Level_UNSET; // default to unset
+    switch (logLevel[0]) {
+    case 'D':
+        ll = meshtastic_LogRecord_Level_DEBUG;
+        break;
+    case 'I':
+        ll = meshtastic_LogRecord_Level_INFO;
+        break;
+    case 'W':
+        ll = meshtastic_LogRecord_Level_WARNING;
+        break;
+    case 'E':
+        ll = meshtastic_LogRecord_Level_ERROR;
+        break;
+    case 'C':
+        ll = meshtastic_LogRecord_Level_CRITICAL;
+        break;
+    }
+    return ll;
 }
 
 void RedirectablePrint::log(const char *logLevel, const char *format, ...)

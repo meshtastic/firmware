@@ -3,6 +3,7 @@
 #include "Default.h"
 #include "GPS.h"
 #include "NodeDB.h"
+#include "PowerMon.h"
 #include "RTC.h"
 
 #include "main.h" // pmu_found
@@ -800,32 +801,36 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
             break;
         if (oldState != GPS_ACTIVE && oldState != GPS_IDLE) // If hardware just waking now, clear buffer
             clearBuffer();
-        writePinEN(true);       // Power (EN pin): on
-        setPowerPMU(true);      // Power (PMU): on
-        writePinStandby(false); // Standby (pin): awake (not standby)
-        setPowerUBLOX(true);    // Standby (UBLOX): awake
+        powerMon->setState(meshtastic_PowerMon_State_GPS_Active); // Report change for power monitoring (during testing)
+        writePinEN(true);                                         // Power (EN pin): on
+        setPowerPMU(true);                                        // Power (PMU): on
+        writePinStandby(false);                                   // Standby (pin): awake (not standby)
+        setPowerUBLOX(true);                                      // Standby (UBLOX): awake
         break;
 
     case GPS_SOFTSLEEP:
-        writePinEN(true);                // Power (EN pin): on
-        setPowerPMU(true);               // Power (PMU): on
-        writePinStandby(true);           // Standby (pin): asleep (not awake)
-        setPowerUBLOX(false, sleepTime); // Standby (UBLOX): asleep, timed
+        powerMon->clearState(meshtastic_PowerMon_State_GPS_Active); // Report change for power monitoring (during testing)
+        writePinEN(true);                                           // Power (EN pin): on
+        setPowerPMU(true);                                          // Power (PMU): on
+        writePinStandby(true);                                      // Standby (pin): asleep (not awake)
+        setPowerUBLOX(false, sleepTime);                            // Standby (UBLOX): asleep, timed
         break;
 
     case GPS_HARDSLEEP:
-        writePinEN(false);               // Power (EN pin): off
-        setPowerPMU(false);              // Power (PMU): off
-        writePinStandby(true);           // Standby (pin): asleep (not awake)
-        setPowerUBLOX(false, sleepTime); // Standby (UBLOX): asleep, timed
+        powerMon->clearState(meshtastic_PowerMon_State_GPS_Active); // Report change for power monitoring (during testing)
+        writePinEN(false);                                          // Power (EN pin): off
+        setPowerPMU(false);                                         // Power (PMU): off
+        writePinStandby(true);                                      // Standby (pin): asleep (not awake)
+        setPowerUBLOX(false, sleepTime);                            // Standby (UBLOX): asleep, timed
         break;
 
     case GPS_OFF:
-        assert(sleepTime == 0);  // This is an indefinite sleep
-        writePinEN(false);       // Power (EN pin): off
-        setPowerPMU(false);      // Power (PMU): off
-        writePinStandby(true);   // Standby (pin): asleep
-        setPowerUBLOX(false, 0); // Standby (UBLOX): asleep, indefinitely
+        assert(sleepTime == 0);                                     // This is an indefinite sleep
+        powerMon->clearState(meshtastic_PowerMon_State_GPS_Active); // Report change for power monitoring (during testing)
+        writePinEN(false);                                          // Power (EN pin): off
+        setPowerPMU(false);                                         // Power (PMU): off
+        writePinStandby(true);                                      // Standby (pin): asleep
+        setPowerUBLOX(false, 0);                                    // Standby (UBLOX): asleep, indefinitely
         break;
     }
 }
