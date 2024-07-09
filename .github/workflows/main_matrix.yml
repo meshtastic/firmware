@@ -136,7 +136,7 @@ jobs:
         build-rpi2040,
         package-raspbian,
         package-raspbian-armv7l,
-        package-native
+        package-native,
       ]
     steps:
       - name: Checkout code
@@ -168,6 +168,7 @@ jobs:
           path: |
             ./firmware-*.bin
             ./firmware-*.uf2
+            ./firmware-*.hex
             ./firmware-*-ota.zip
             ./device-*.sh
             ./device-*.bat
