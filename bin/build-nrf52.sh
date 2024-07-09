@@ -33,9 +33,6 @@ else
 	cp $DFUPKG $OUTDIR/$basename-ota.zip
 fi
 
-DFUPKG=.pio/build/$1/firmware.zip
-cp $DFUPKG $OUTDIR/$basename-ota.zip
-
 echo "Generating NRF52 uf2 file"
 SRCHEX=.pio/build/$1/firmware.hex
 
