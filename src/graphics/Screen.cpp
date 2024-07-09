@@ -1498,9 +1498,10 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
 #elif defined(USE_ST7789)
 #ifdef ESP_PLATFORM
-	dispdev = new ST7789Spi(&SPI1, ST7789_RESET, ST7789_RS, ST7789_NSS,GEOMETRY_RAWMODE,TFT_WIDTH,TFT_HEIGHT,ST7789_SDA,ST7789_MISO,ST7789_SCK);
+    dispdev = new ST7789Spi(&SPI1, ST7789_RESET, ST7789_RS, ST7789_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT, ST7789_SDA,
+                            ST7789_MISO, ST7789_SCK);
 #else
-	dispdev = new ST7789Spi(&SPI1, ST7789_RESET, ST7789_RS, ST7789_NSS,GEOMETRY_RAWMODE,TFT_WIDTH,TFT_HEIGHT);
+    dispdev = new ST7789Spi(&SPI1, ST7789_RESET, ST7789_RS, ST7789_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT);
 #endif
 #elif defined(USE_SSD1306)
     dispdev = new SSD1306Wire(address.address, -1, -1, geometry,
@@ -1582,10 +1583,10 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             dispdev->displayOn();
 #ifdef USE_ST7789
 #ifdef ESP_PLATFORM
-            analogWrite(VTFT_LEDA,BRIGHTNESS_DEFAULT);
+            analogWrite(VTFT_LEDA, BRIGHTNESS_DEFAULT);
 #else
-            pinMode(VTFT_LEDA,OUTPUT);
-            digitalWrite(VTFT_LEDA,TFT_BACKLIGHT_ON);
+            pinMode(VTFT_LEDA, OUTPUT);
+            digitalWrite(VTFT_LEDA, TFT_BACKLIGHT_ON);
 #endif
 #endif
             enabled = true;
@@ -1600,8 +1601,8 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             dispdev->displayOff();
 
 #ifdef USE_ST7789
-            pinMode(VTFT_LEDA,OUTPUT);
-            digitalWrite(VTFT_LEDA,!TFT_BACKLIGHT_ON);
+            pinMode(VTFT_LEDA, OUTPUT);
+            digitalWrite(VTFT_LEDA, !TFT_BACKLIGHT_ON);
 #endif
 
 #ifdef T_WATCH_S3
@@ -1618,7 +1619,7 @@ void Screen::setup()
     // We don't set useDisplay until setup() is called, because some boards have a declaration of this object but the device
     // is never found when probing i2c and therefore we don't call setup and never want to do (invalid) accesses to this device.
     useDisplay = true;
-    
+
 #ifdef AutoOLEDWire_h
     if (isAUTOOled)
         static_cast<AutoOLEDWire *>(dispdev)->setDetected(model);

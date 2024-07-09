@@ -53,13 +53,12 @@ extern "C" {
 #define SPI_FREQUENCY 40000000
 #define SPI_READ_FREQUENCY 16000000
 #define TFT_HEIGHT 135
-#define TFT_WIDTH  240
+#define TFT_WIDTH 240
 #define TFT_OFFSET_X 0
 #define TFT_OFFSET_Y 0
 // #define TFT_OFFSET_ROTATION 0
 // #define SCREEN_ROTATE
 // #define SCREEN_TRANSITION_FRAMERATE 5
-
 
 // Number of pins defined in PinDescription array
 #define PINS_COUNT (48)
@@ -70,7 +69,7 @@ extern "C" {
 // LEDs
 #define PIN_LED1 (32 + 3) // 13 red (confirmed on 1.0 board)
 // Unused(by firmware) LEDs:
-#define PIN_LED2 (1 + 1) // 14 blue
+#define PIN_LED2 (1 + 1)  // 14 blue
 #define PIN_LED3 (1 + 11) // 15 green
 
 #define LED_RED PIN_LED3
@@ -87,7 +86,8 @@ extern "C" {
  * Buttons
  */
 #define PIN_BUTTON1 (32 + 10)
-//#define PIN_BUTTON2 (0 + 18)      // 0.18 is labeled on the board as RESET but we configure it in the bootloader as a regular GPIO
+// #define PIN_BUTTON2 (0 + 18)      // 0.18 is labeled on the board as RESET but we configure it in the bootloader as a regular
+// GPIO
 
 /*
 No longer populated on PCB
@@ -103,7 +103,6 @@ No longer populated on PCB
 
 #define PIN_WIRE_SDA (26)
 #define PIN_WIRE_SCL (27)
-
 
 // QSPI Pins
 #define PIN_QSPI_SCK (32 + 14)
@@ -124,21 +123,23 @@ No longer populated on PCB
 #define USE_SX1262
 // #define USE_SX1268
 #define SX126X_CS (0 + 24) // FIXME - we really should define LORA_CS instead
-#define LORA_CS   (0 + 24)
+#define LORA_CS (0 + 24)
 #define SX126X_DIO1 (0 + 20)
 // Note DIO2 is attached internally to the module to an analog switch for TX/RX switching
-//#define SX1262_DIO3                                                                                                              \
-//    (0 + 21) // This is used as an *output* from the sx1262 and connected internally to power the tcxo, do not drive from the main
-             // CPU?
+// #define SX1262_DIO3 \
+//    (0 + 21) // This is used as an *output* from the sx1262 and connected internally to power the tcxo, do not drive from the
+//    main
+// CPU?
 #define SX126X_BUSY (0 + 17)
 #define SX126X_RESET (0 + 25)
 // Not really an E22 but TTGO seems to be trying to clone that
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
-#define PIN_SPI1_MISO  ST7789_MISO  // FIXME not really needed, but for now the SPI code requires something to be defined, pick an used GPIO
-#define PIN_SPI1_MOSI  ST7789_SDA
-#define PIN_SPI1_SCK   ST7789_SCK
+#define PIN_SPI1_MISO                                                                                                            \
+    ST7789_MISO // FIXME not really needed, but for now the SPI code requires something to be defined, pick an used GPIO
+#define PIN_SPI1_MOSI ST7789_SDA
+#define PIN_SPI1_SCK ST7789_SCK
 
 /*
  * GPS pins
@@ -146,12 +147,12 @@ No longer populated on PCB
 
 #define GPS_L76K
 
-#define PIN_GPS_RESET (32 + 6)   // An output to reset L76K GPS. As per datasheet, low for > 100ms will reset the L76K
+#define PIN_GPS_RESET (32 + 6) // An output to reset L76K GPS. As per datasheet, low for > 100ms will reset the L76K
 #define GPS_RESET_MODE LOW
 #define PIN_GPS_EN (21)
 #define GPS_EN_ACTIVE HIGH
 #define PIN_GPS_STANDBY (32 + 2) // An output to wake GPS, low means allow sleep, high means force wake
-#define PIN_GPS_PPS (32+4)
+#define PIN_GPS_PPS (32 + 4)
 // Seems to be missing on this new board
 // #define PIN_GPS_PPS (32 + 4)  // Pulse per second input from the GPS
 #define GPS_TX_PIN (32 + 5) // This is for bits going TOWARDS the CPU
@@ -175,7 +176,7 @@ No longer populated on PCB
 #define PIN_SPI_MOSI (0 + 22)
 #define PIN_SPI_SCK (0 + 19)
 
-//#define PIN_PWR_EN (0 + 6)
+// #define PIN_PWR_EN (0 + 6)
 
 // To debug via the segger JLINK console rather than the CDC-ACM serial device
 // #define USE_SEGGER
