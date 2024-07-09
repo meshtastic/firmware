@@ -90,24 +90,10 @@ extern "C" {
 //#define PIN_BUTTON2 (0 + 18)      // 0.18 is labeled on the board as RESET but we configure it in the bootloader as a regular GPIO
 
 /*
- * Analog pins
- */
-
-#define ADC_CTRL 6
-#define ADC_CTRL_ENABLED HIGH
-#define BATTERY_PIN 4
-#define ADC_RESOLUTION 14
-
-
-/*
- * Serial interfaces
- */
-
-/*
 No longer populated on PCB
 */
-#define PIN_SERIAL2_RX (0 + 6)
-#define PIN_SERIAL2_TX (0 + 8)
+#define PIN_SERIAL2_RX (0 + 9)
+#define PIN_SERIAL2_TX (0 + 10)
 //  #define PIN_SERIAL2_EN (0 + 17)
 
 /**
@@ -118,15 +104,6 @@ No longer populated on PCB
 #define PIN_WIRE_SDA (26)
 #define PIN_WIRE_SCL (27)
 
-/* touch sensor, active high */
-
-#define TP_SER_IO (0 + 11)
-
-#define PIN_RTC_INT (0 + 16) // Interrupt from the PCF8563 RTC
-
-/*
-External serial flash WP25R1635FZUIL0
-*/
 
 // QSPI Pins
 #define PIN_QSPI_SCK (32 + 14)
@@ -158,18 +135,6 @@ External serial flash WP25R1635FZUIL0
 // Not really an E22 but TTGO seems to be trying to clone that
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
-// Internally the TTGO module hooks the SX1262-DIO2 in to control the TX/RX switch (which is the default for the sx1262interface
-// code)
-
-// #define LORA_DISABLE_SENDING // Define this to disable transmission for testing (power testing etc...)
-
-// #undef SX126X_CS
-
-// Controls power for all peripherals (RGB + GPS +  Sensor)
-#define PIN_POWER_EN (0 + 21)
-// #define PIN_POWER_EN1 (0 + 13)
-
-// #define USE_EINK
 
 #define PIN_SPI1_MISO  ST7789_MISO  // FIXME not really needed, but for now the SPI code requires something to be defined, pick an used GPIO
 #define PIN_SPI1_MOSI  ST7789_SDA
@@ -179,19 +144,23 @@ External serial flash WP25R1635FZUIL0
  * GPS pins
  */
 
-// #define GPS_L76K
-#define PIN_GPS_REINIT (32 + 6) // An output to reset L76K GPS. As per datasheet, low for > 100ms will reset the L76K
+#define GPS_L76K
 
+#define PIN_GPS_RESET (32 + 6)   // An output to reset L76K GPS. As per datasheet, low for > 100ms will reset the L76K
+#define GPS_RESET_MODE LOW
+#define PIN_GPS_EN (21)
+#define GPS_EN_ACTIVE HIGH
 #define PIN_GPS_STANDBY (32 + 2) // An output to wake GPS, low means allow sleep, high means force wake
+#define PIN_GPS_PPS (32+4)
 // Seems to be missing on this new board
 // #define PIN_GPS_PPS (32 + 4)  // Pulse per second input from the GPS
-#define PIN_GPS_TX (32 + 5) // This is for bits going TOWARDS the CPU
-#define PIN_GPS_RX (32 + 7) // This is for bits going TOWARDS the GPS
+#define GPS_TX_PIN (32 + 5) // This is for bits going TOWARDS the CPU
+#define GPS_RX_PIN (32 + 7) // This is for bits going TOWARDS the GPS
 
 #define GPS_THREAD_INTERVAL 50
 
-#define PIN_SERIAL1_RX PIN_GPS_TX
-#define PIN_SERIAL1_TX PIN_GPS_RX
+#define PIN_SERIAL1_RX GPS_TX_PIN
+#define PIN_SERIAL1_TX GPS_RX_PIN
 
 // PCF8563 RTC Module
 #define PCF8563_RTC 0x51
@@ -215,6 +184,12 @@ External serial flash WP25R1635FZUIL0
 // The battery sense is hooked to pin A0 (4)
 // it is defined in the anlaolgue pin section of this file
 // and has 12 bit resolution
+
+#define ADC_CTRL 6
+#define ADC_CTRL_ENABLED HIGH
+#define BATTERY_PIN 4
+#define ADC_RESOLUTION 14
+
 #define BATTERY_SENSE_RESOLUTION_BITS 12
 #define BATTERY_SENSE_RESOLUTION 4096.0
 #undef AREF_VOLTAGE
@@ -223,7 +198,6 @@ External serial flash WP25R1635FZUIL0
 #define ADC_MULTIPLIER (4.90F)
 
 #define HAS_RTC 0
-// #define HAS_GPS 0
 #ifdef __cplusplus
 }
 #endif
