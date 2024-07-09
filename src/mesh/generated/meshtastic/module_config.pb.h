@@ -273,6 +273,8 @@ typedef struct _meshtastic_ModuleConfig_StoreForwardConfig {
     uint32_t history_return_max;
     /* TODO: REPLACE */
     uint32_t history_return_window;
+    /* Set to true to let this node act as a server that stores received messages and resends them upon request. */
+    bool is_server;
 } meshtastic_ModuleConfig_StoreForwardConfig;
 
 /* Preferences for the RangeTestModule */
@@ -474,7 +476,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_PaxcounterConfig_init_default {0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define meshtastic_ModuleConfig_StoreForwardConfig_init_default {0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_StoreForwardConfig_init_default {0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_RangeTestConfig_init_default {0, 0, 0}
 #define meshtastic_ModuleConfig_TelemetryConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
@@ -490,7 +492,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_PaxcounterConfig_init_zero {0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-#define meshtastic_ModuleConfig_StoreForwardConfig_init_zero {0, 0, 0, 0, 0}
+#define meshtastic_ModuleConfig_StoreForwardConfig_init_zero {0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_RangeTestConfig_init_zero {0, 0, 0}
 #define meshtastic_ModuleConfig_TelemetryConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_CannedMessageConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, _meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_MIN, 0, 0, "", 0}
@@ -560,6 +562,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_StoreForwardConfig_records_tag 3
 #define meshtastic_ModuleConfig_StoreForwardConfig_history_return_max_tag 4
 #define meshtastic_ModuleConfig_StoreForwardConfig_history_return_window_tag 5
+#define meshtastic_ModuleConfig_StoreForwardConfig_is_server_tag 6
 #define meshtastic_ModuleConfig_RangeTestConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_RangeTestConfig_sender_tag 2
 #define meshtastic_ModuleConfig_RangeTestConfig_save_tag 3
@@ -743,7 +746,8 @@ X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
 X(a, STATIC,   SINGULAR, BOOL,     heartbeat,         2) \
 X(a, STATIC,   SINGULAR, UINT32,   records,           3) \
 X(a, STATIC,   SINGULAR, UINT32,   history_return_max,   4) \
-X(a, STATIC,   SINGULAR, UINT32,   history_return_window,   5)
+X(a, STATIC,   SINGULAR, UINT32,   history_return_window,   5) \
+X(a, STATIC,   SINGULAR, BOOL,     is_server,         6)
 #define meshtastic_ModuleConfig_StoreForwardConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_StoreForwardConfig_DEFAULT NULL
 
@@ -848,7 +852,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_RangeTestConfig_size 10
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_size 96
 #define meshtastic_ModuleConfig_SerialConfig_size 28
-#define meshtastic_ModuleConfig_StoreForwardConfig_size 22
+#define meshtastic_ModuleConfig_StoreForwardConfig_size 24
 #define meshtastic_ModuleConfig_TelemetryConfig_size 36
 #define meshtastic_ModuleConfig_size             257
 #define meshtastic_RemoteHardwarePin_size        21
