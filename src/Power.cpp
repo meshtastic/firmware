@@ -232,11 +232,11 @@ class AnalogBatteryLevel : public HasBatteryLevel
             raw = espAdcRead();
             scaled = esp_adc_cal_raw_to_voltage(raw, adc_characs);
             scaled *= operativeAdcMultiplier;
-#else // block for all other platforms
-#ifdef ADC_CTRL              // enable adc voltage divider when we need to read
-        pinMode(ADC_CTRL, OUTPUT);
-        digitalWrite(ADC_CTRL, ADC_CTRL_ENABLED);
-        delay(10);
+#else           // block for all other platforms
+#ifdef ADC_CTRL // enable adc voltage divider when we need to read
+            pinMode(ADC_CTRL, OUTPUT);
+            digitalWrite(ADC_CTRL, ADC_CTRL_ENABLED);
+            delay(10);
 #endif
             for (uint32_t i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
                 raw += analogRead(BATTERY_PIN);
@@ -244,7 +244,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
             raw = raw / BATTERY_SENSE_SAMPLES;
             scaled = operativeAdcMultiplier * ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * raw;
 #ifdef ADC_CTRL // disable adc voltage divider when we need to read
-        digitalWrite(ADC_CTRL, !ADC_CTRL_ENABLED);
+            digitalWrite(ADC_CTRL, !ADC_CTRL_ENABLED);
 #endif
 #endif
 

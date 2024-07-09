@@ -33,7 +33,7 @@
 #define ADC_CTRL_ENABLED HIGH
 #define BATTERY_PIN 7
 #define ADC_CHANNEL ADC1_GPIO7_CHANNEL
-#define ADC_MULTIPLIER 4.9*1.03 // Voltage divider is roughly 1:1
+#define ADC_MULTIPLIER 4.9 * 1.03        // Voltage divider is roughly 1:1
 #define ADC_ATTENUATION ADC_ATTEN_DB_2_5 // Voltage divider output is quite high
 
 #define USE_SX1262

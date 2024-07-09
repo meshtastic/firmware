@@ -67,7 +67,8 @@ class EInkDisplay : public OLEDDisplay
     GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT> *adafruitDisplay = NULL;
 
     // If display uses HSPI
-#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_VISION_MASTER_E213) || defined(HELTEC_VISION_MASTER_E290)
+#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_VISION_MASTER_E213) ||               \
+    defined(HELTEC_VISION_MASTER_E290)
     SPIClass *hspi = NULL;
 #endif
 

@@ -21,9 +21,9 @@
  */
 #define SPI_INTERFACES_COUNT 2
 
-#define PIN_SPI_MISO 10 // MISO     
-#define PIN_SPI_MOSI 11 // MOSI      
-#define PIN_SPI_SCK 9   // SCK     
+#define PIN_SPI_MISO 10 // MISO
+#define PIN_SPI_MOSI 11 // MOSI
+#define PIN_SPI_SCK 9   // SCK
 
 #define VEXT_ENABLE 18 // powers the e-ink display
 #define VEXT_ON_VALUE 1
@@ -33,7 +33,7 @@
 #define ADC_CTRL_ENABLED HIGH
 #define BATTERY_PIN 7
 #define ADC_CHANNEL ADC1_GPIO7_CHANNEL
-#define ADC_MULTIPLIER 4.9*1.03
+#define ADC_MULTIPLIER 4.9 * 1.03
 #define ADC_ATTENUATION ADC_ATTEN_DB_2_5 // Voltage divider output is quite high
 
 #define USE_SX1262
