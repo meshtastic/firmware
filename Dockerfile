@@ -24,10 +24,10 @@ USER mesh
 
 WORKDIR /tmp/firmware
 RUN python3 -m venv /tmp/firmware 
-RUN source ./bin/activate && pip3 install --no-cache-dir -U platformio==6.1.14
+RUN bash -c "source bin/activate; pip3 install --no-cache-dir -U platformio==6.1.15"
 # trunk-ignore(terrascan/AC_DOCKER_00024): We would actually like these files to be owned by mesh tyvm
 COPY --chown=mesh:mesh . /tmp/firmware
-RUN source ./bin/activate && chmod +x /tmp/firmware/bin/build-native.sh && ./bin/build-native.sh
+RUN bash -c "source ./bin/activate && bash ./bin/build-native.sh"
 RUN cp "/tmp/firmware/release/meshtasticd_linux_$(uname -m)" "/tmp/firmware/release/meshtasticd"
 
 
