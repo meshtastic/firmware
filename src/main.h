@@ -85,6 +85,8 @@ extern uint32_t serialSinceMsec;
 // This will suppress the current delay and instead try to run ASAP.
 extern bool runASAP;
 
+extern bool pauseBluetoothLogging;
+
 void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop(), rp2040Setup(), clearBonds(), enterDfuMode();
 
 meshtastic_DeviceMetadata getDeviceMetadata();
