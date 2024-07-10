@@ -2636,17 +2636,21 @@ int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
     return 0;
 }
 
+// Triggered by MeshModules
 int Screen::handleUIFrameEvent(const UIFrameEvent *event)
 {
     if (showingNormalScreen) {
-        if (event->frameChanged) {
-            setFrames(); // Regen the list of screens (will show new text message)
-        } else if (event->needRedraw) {
+        // Regenerate the frameset, potentially honoring a module's internal requestFocus() call
+        if (event->action == UIFrameEvent::Action::REGENERATE_FRAMESET)
+            setFrames(FOCUS_MODULE);
+
+        // Regenerate the frameset, while attempting to maintain focus on the current frame
+        else if (event->action == UIFrameEvent::Action::REGENERATE_FRAMESET_BACKGROUND)
+            setFrames(FOCUS_PRESERVE);
+
+        // Don't regenerate the frameset, just re-draw whatever is on screen ASAP
+        else if (event->action == UIFrameEvent::Action::REDRAW_ONLY)
             setFastFramerate();
-            // TODO: We might also want switch to corresponding frame,
-            //       but we don't know the exact frame number.
-            // ui->switchToFrame(0);
-        }
     }
 
     return 0;
