@@ -22,6 +22,10 @@ class Screen
     void doDeepSleep() {}
     void forceDisplay(bool forceUiUpdate = false) {}
     void startFirmwareUpdateScreen() {}
+    void increaseBrightness() {}
+    void decreaseBrightness() {}
+    void setFunctionSymbal(std::string) {}
+    void removeFunctionSymbal(std::string) {}
     void startAlert(const char *) {}
     void endAlert() {}
 };
@@ -41,6 +45,8 @@ class Screen
 #include <SH1106Wire.h>
 #elif defined(USE_SSD1306)
 #include <SSD1306Wire.h>
+#elif defined(USE_ST7789)
+#include <ST7789Spi.h>
 #else
 // the SH1106/SSD1306 variant is auto-detected
 #include <AutoOLEDWire.h>
