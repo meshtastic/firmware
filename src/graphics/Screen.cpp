@@ -41,6 +41,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "mesh/Channels.h"
 #include "mesh/generated/meshtastic/deviceonly.pb.h"
 #include "meshUtils.h"
+#include "modules/AdminModule.h"
 #include "modules/ExternalNotificationModule.h"
 #include "modules/TextMessageModule.h"
 #include "sleep.h"
@@ -1725,6 +1726,7 @@ void Screen::setup()
     powerStatusObserver.observe(&powerStatus->onNewStatus);
     gpsStatusObserver.observe(&gpsStatus->onNewStatus);
     nodeStatusObserver.observe(&nodeStatus->onNewStatus);
+    adminMessageObserver.observe(adminModule);
     if (textMessageModule)
         textMessageObserver.observe(textMessageModule);
     if (inputBroker)
@@ -2619,6 +2621,11 @@ int Screen::handleInputEvent(const InputEvent *event)
         }
     }
 
+    return 0;
+}
+
+int Screen::handleAdminMessage(const meshtastic_AdminMessage *arg)
+{
     return 0;
 }
 
