@@ -1,6 +1,6 @@
 version: 0.1
 cli:
-  version: 1.22.1
+  version: 1.22.2
 plugins:
   sources:
     - id: trunk
@@ -31,6 +31,10 @@ lint:
     - gitleaks@8.18.2
     - clang-format@16.0.3
     - prettier@3.2.5
+  ignore:
+    - linters: [ALL]
+      paths:
+        - bin/**
 runtimes:
   enabled:
     - python@3.10.8
