@@ -313,12 +313,19 @@ int32_t SerialModule::runOnce()
                     LOG_INFO("(Sending): wind speed=%fm/s, direction=%d degrees\n", m.variant.environment_metrics.wind_speed,
                              m.variant.environment_metrics.wind_direction);
 
-                    meshtastic_MeshPacket *p = allocDataProtobuf(m);
+                    meshtastic_MeshPacket *p = router->allocForSending();
+
+                    p->decoded.portnum = meshtastic_PortNum_TELEMETRY_APP;
+
+                    p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes),
+                                                                 &meshtastic_Telemetry_msg, &m);
+
                     p->to = NODENUM_BROADCAST;
                     p->decoded.want_response = false;
                     p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
                     service.sendToMesh(p, RX_SRC_LOCAL, true);
 
+                    // reset counters
                     velSum = velCount = dirSum = dirCount = 0;
                     gust = 0;
 
