@@ -200,9 +200,10 @@ int32_t SerialModule::runOnce()
             } else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85)) {
                 static unsigned int lastAveraged = 0;
                 static unsigned int averageIntervalMillis = 300000; // 5 minutes
-                static int dirSum = 0;
+                static int dirSum = 0; // TODO : this needs trig, probably a second variable to keep track
                 static float velSum = 0;
                 static float gust = 0;
+                static float lull = -1;
                 static int velCount = 0;
                 static int dirCount = 0;
                 static char windDir[4] = "xxx";   // Assuming windDir is 3 characters long + null terminator
@@ -210,8 +211,8 @@ int32_t SerialModule::runOnce()
                 static char windGust[5] = "xx.x"; // Assuming windGust is 4 characters long + null terminator
                 static char batVoltage[5] = "0.0V";
                 static char capVoltage[5] = "0.0V";
-                static float batVoltageF = 1;
-                static float capVoltageF = 1;
+                static float batVoltageF = 0;
+                static float capVoltageF = 0;
                 bool gotwind = false;
 
                 while (Serial2.available()) {
@@ -220,9 +221,10 @@ int32_t SerialModule::runOnce()
                     // memset(formattedString, '\0', sizeof(formattedString));
                     serialPayloadSize = Serial2.readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
                     // check for a string we care about
-                    // WindDir = 173
-                    // 19 : 21 : 37.325->WindSpeed = 0.0
-                    // 19 : 21 : 37.325->WindGust = 0.5
+                    // WindDir      = 79
+                    // WindSpeed    = 0.5
+                    // WindGust     = 0.6
+                    // GXTS04Temp   = 24.4
                     if (serialPayloadSize > 0) {
                         // Define variables for line processing
                         int lineStart = 0;
@@ -254,8 +256,12 @@ int32_t SerialModule::runOnce()
                                     } else if (windSpeedPos != NULL) {
                                         // Extract data after "=" for WindSpeed
                                         strcpy(windVel, windSpeedPos + 15); // Add 15 to skip "WindSpeed = "
-                                        velSum += strtof(windVel, nullptr);
+                                        float newv = strtof(windVel, nullptr);
+                                        velSum += newv;
                                         velCount++;
+                                        if (newv < lull)
+                                            lull = newv;
+
                                     } else if (windGustPos != NULL) {
                                         strcpy(windGust, windGustPos + 15); // Add 15 to skip "WindSpeed = "
                                         float newg = strtof(windGust, nullptr);
@@ -263,24 +269,18 @@ int32_t SerialModule::runOnce()
                                             gust = newg;
                                     }
 
-                                    // there are also voltage data we care about possibly
-                                } else if (strstr(line, "BatVoltage") != NULL) { // we have a battVoltage line
-                                    char *batVoltagePos = strstr(line, "BatVoltage     = ");
-                                    if (batVoltagePos != NULL) {
-                                        strcpy(batVoltage, batVoltagePos + 17); // 18 for ws 80, 17 for ws85
-                                        batVoltageF = strtof(batVoltage, nullptr);
-                                        // float voltage_f = strtof(batVoltage, &endptr);
-                                        // batVoltageInt = static_cast<int>(voltage_f * 10);
-                                    }
+                                    // these are also voltage data we care about possibly
+                                    // } else if (strstr(line, "BatVoltage") != NULL) { // we have a battVoltage line
+                                    //     char *batVoltagePos = strstr(line, "BatVoltage     = ");
+                                    //     if (batVoltagePos != NULL) {
+                                    //         strcpy(batVoltage, batVoltagePos + 17); // 18 for ws 80, 17 for ws85
+                                    //         batVoltageF = strtof(batVoltage, nullptr);
+                                    //     }
                                 } else if (strstr(line, "CapVoltage") != NULL) { // we have a cappVoltage line
-                                    //                     should parse CapVoltage     = 5.40V } else if (strstr(line,
-                                    //                     "CapVoltage") != NULL) { // we have a battVoltage line
                                     char *capVoltagePos = strstr(line, "CapVoltage     = ");
                                     if (capVoltagePos != NULL) {
                                         strcpy(capVoltage, capVoltagePos + 17); // 18 for ws 80, 17 for ws85
                                         capVoltageF = strtof(capVoltage, nullptr);
-                                        // float voltage_f = strtof(capVoltage, &endptr);
-                                        // capVoltageInt = static_cast<int>(voltage_f * 10);
                                     }
                                 }
 
@@ -291,13 +291,14 @@ int32_t SerialModule::runOnce()
                     }
                 }
                 if (gotwind) {
+
                     LOG_INFO("WS85 : %i %.1fg%.1f %.1fv %.1fv\n", atoi(windDir), strtof(windVel, nullptr),
                              strtof(windGust, nullptr), batVoltageF, capVoltageF);
                 }
                 if (gotwind && millis() - lastAveraged > averageIntervalMillis) {
                     // calulate average and send to the mesh
                     float velAvg = 1.0 * velSum / velCount;
-                    float dirAvg = dirSum / dirCount;
+                    float dirAvg = dirSum / dirCount; // TODO : this needs some trig to be accurate
                     // gust = gust
                     // sprintf(formattedString, "%i %.1fg%.1f %.1fv %.1fv", dirAvg, velAvg * 2.23, gust * 2.23, batVoltageF,
                     // capVoltageF);
@@ -307,8 +308,9 @@ int32_t SerialModule::runOnce()
                     meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
                     m.variant.environment_metrics.wind_speed = velAvg;
                     m.variant.environment_metrics.wind_direction = dirAvg;
-                    // m.variant.environment_metrics.wind_gust = gust;
-                    // m.variant.environment_metrics.wind_lull = lull;
+                    m.variant.environment_metrics.wind_gust = gust;
+                    m.variant.environment_metrics.wind_lull = lull;
+                    m.variant.environment_metrics.voltage = capVoltageF; // why not send sensor voltage too ?
 
                     LOG_INFO("(Sending): wind speed=%fm/s, direction=%d degrees\n", m.variant.environment_metrics.wind_speed,
                              m.variant.environment_metrics.wind_direction);
@@ -325,9 +327,10 @@ int32_t SerialModule::runOnce()
                     p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
                     service.sendToMesh(p, RX_SRC_LOCAL, true);
 
-                    // reset counters
+                    // reset counters and gust/lull
                     velSum = velCount = dirSum = dirCount = 0;
                     gust = 0;
+                    lull = -1;
 
                     // clear serialBytes first;
                     // memset(serialBytes, '\0', sizeof(serialBytes));
