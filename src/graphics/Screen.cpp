@@ -1955,9 +1955,6 @@ void Screen::setWelcomeFrames()
 /// Determine which screensaver frame to use, then set the FrameCallback
 void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
 {
-    // Remember current frame, restore position at power-on
-    uint8_t frameNumber = ui->getUiState()->currentFrame;
-
     // Retain specified frame / overlay callback beyond scope of this method
     static FrameCallback screensaverFrame;
     static OverlayCallback screensaverOverlay;
@@ -1995,9 +1992,8 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
 #endif
 
     // Prepare now for next frame, shown when display wakes
-    ui->setOverlays(NULL, 0);       // Clear overlay
-    setFrames();                    // Return to normal display updates
-    ui->switchToFrame(frameNumber); // Attempt to return to same frame after power-on
+    ui->setOverlays(NULL, 0);  // Clear overlay
+    setFrames(FOCUS_PRESERVE); // Return to normal display updates, showing same frame as before screensaver, ideally
 
     // Pick a refresh method, for when display wakes
 #ifdef EINK_HASQUIRK_GHOSTING
