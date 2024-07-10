@@ -450,8 +450,21 @@ class Screen : public concurrency::OSThread
     void handleShowPrevFrame();
     void handlePrint(const char *text);
     void handleStartFirmwareUpdateScreen();
-    /// Rebuilds our list of frames (screens) to default ones.
-    void setFrames();
+
+    // Info collected by setFrames method.
+    // Index location of specific frames. Used to apply the FrameFocus parameter of setFrames
+    struct FramesetInfo {
+        struct FramePositions {
+            uint8_t fault = 0;
+            uint8_t textMessage = 0;
+            uint8_t focussedModule = 0;
+            uint8_t log = 0;
+            uint8_t settings = 0;
+            uint8_t wifi = 0;
+        } positions;
+
+        uint8_t frameCount = 0;
+    } framesetInfo;
 
     /// Try to start drawing ASAP
     void setFastFramerate();

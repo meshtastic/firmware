@@ -2009,6 +2009,8 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
 // restore our regular frame list
 void Screen::setFrames()
 {
+    FramesetInfo fsi; // Location of specific frames, for applying focus parameter
+
     LOG_DEBUG("showing standard frames\n");
     showingNormalScreen = true;
 
@@ -2048,7 +2050,7 @@ void Screen::setFrames()
     LOG_DEBUG("Added modules.  numframes: %d\n", numframes);
 
     // If we have a critical fault, show it first
-    if (error_code)
+    fsi.positions.fault = numframes;
         normalFrames[numframes++] = drawCriticalFaultFrame;
 
 #ifdef T_WATCH_S3
@@ -2056,6 +2058,7 @@ void Screen::setFrames()
 #endif
 
     // If we have a text message - show it next, unless it's a phone message and we aren't using any special modules
+    fsi.positions.textMessage = numframes;
     if (devicestate.has_rx_text_message && shouldDrawMessage(&devicestate.rx_text_message)) {
         normalFrames[numframes++] = drawTextMessageFrame;
     }
@@ -2070,11 +2073,14 @@ void Screen::setFrames()
     //
     // Since frames are basic function pointers, we have to use a helper to
     // call a method on debugInfo object.
+    fsi.positions.log = numframes;
     normalFrames[numframes++] = &Screen::drawDebugInfoTrampoline;
 
     // call a method on debugInfoScreen object (for more details)
+    fsi.positions.settings = numframes;
     normalFrames[numframes++] = &Screen::drawDebugInfoSettingsTrampoline;
 
+    fsi.positions.wifi = numframes;
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
     if (isWifiAvailable()) {
         // call a method on debugInfoScreen object (for more details)
@@ -2082,6 +2088,7 @@ void Screen::setFrames()
     }
 #endif
 
+    fsi.frameCount = numframes; // Total framecount is used to apply FOCUS_PRESERVE
     LOG_DEBUG("Finished building frames. numframes: %d\n", numframes);
 
     ui->setFrames(normalFrames, numframes);
@@ -2094,6 +2101,9 @@ void Screen::setFrames()
 
     prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list
                     // just changed)
+
+    // Store the info about this frameset, for future setFrames calls
+    this->framesetInfo = fsi;
 
     setFastFramerate(); // Draw ASAP
 }
