@@ -275,6 +275,9 @@ void setup()
     digitalWrite(VEXT_ENABLE_V05, 1); // turn on the lora antenna boost
     digitalWrite(ST7735_BL_V05, 1);   // turn on display backligth
     LOG_DEBUG("HELTEC Detect Tracker V1.1\n");
+#elif defined(VEXT_ENABLE) && defined(VEXT_ON_VALUE)
+    pinMode(VEXT_ENABLE, OUTPUT);
+    digitalWrite(VEXT_ENABLE, VEXT_ON_VALUE); // turn on the display power
 #elif defined(VEXT_ENABLE)
     pinMode(VEXT_ENABLE, OUTPUT);
     digitalWrite(VEXT_ENABLE, 0); // turn on the display power
@@ -713,7 +716,8 @@ void setup()
 
 // Don't call screen setup until after nodedb is setup (because we need
 // the current region name)
-#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(HX8357_CS)
+#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(HX8357_CS) ||            \
+    defined(USE_ST7789)
     screen->setup();
 #elif defined(ARCH_PORTDUINO)
     if (screen_found.port != ScanI2C::I2CPort::NO_I2C || settingsMap[displayPanel]) {
