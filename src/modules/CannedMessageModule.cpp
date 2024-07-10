@@ -378,6 +378,11 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
         p->decoded.payload.size++;
     }
 
+    // Only receive routing messages when expecting ACK for a canned message
+    // Prevents the canned message module from regenerating the screen's frameset at unexpected times,
+    // or raising a UIFrameEvent before another module has the chance
+    this->waitingForAck = true;
+
     LOG_INFO("Sending message id=%d, dest=%x, msg=%.*s\n", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
 
     service.sendToMesh(
@@ -1030,7 +1035,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
 
 ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
-    if (mp.decoded.portnum == meshtastic_PortNum_ROUTING_APP) {
+    if (mp.decoded.portnum == meshtastic_PortNum_ROUTING_APP && waitingForAck) {
         // look for a request_id
         if (mp.decoded.request_id != 0) {
             UIFrameEvent e = {false, true};
@@ -1040,6 +1045,7 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
             meshtastic_Routing decoded = meshtastic_Routing_init_default;
             pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, meshtastic_Routing_fields, &decoded);
             this->ack = decoded.error_reason == meshtastic_Routing_Error_NONE;
+            waitingForAck = false; // No longer want routing packets
             this->notifyObservers(&e);
             // run the next time 2 seconds later
             setIntervalFromNow(2000);
