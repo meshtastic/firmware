@@ -2008,9 +2008,11 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
 }
 #endif
 
-// restore our regular frame list
-void Screen::setFrames()
+// Regenerate the normal set of frames, focussing a specific frame if requested
+// Called when a frame should be added / removed, or custom frames should be cleared
+void Screen::setFrames(FrameFocus focus)
 {
+    uint8_t originalPosition = ui->getUiState()->currentFrame;
     FramesetInfo fsi; // Location of specific frames, for applying focus parameter
 
     LOG_DEBUG("showing standard frames\n");
@@ -2053,7 +2055,10 @@ void Screen::setFrames()
 
     // If we have a critical fault, show it first
     fsi.positions.fault = numframes;
+    if (error_code) {
         normalFrames[numframes++] = drawCriticalFaultFrame;
+        focus = FOCUS_FAULT; // Change our "focus" parameter, to ensure we show the fault frame
+    }
 
 #ifdef T_WATCH_S3
     normalFrames[numframes++] = screen->digitalWatchFace ? &Screen::drawDigitalClockFrame : &Screen::drawAnalogClockFrame;
@@ -2103,6 +2108,52 @@ void Screen::setFrames()
 
     prevFrame = -1; // Force drawNodeInfo to pick a new node (because our list
                     // just changed)
+
+    // Focus on a specific frame, in the frame set we just created
+    switch (focus) {
+    case FOCUS_DEFAULT:
+        ui->switchToFrame(0); // First frame
+        break;
+    case FOCUS_FAULT:
+        ui->switchToFrame(fsi.positions.fault);
+        break;
+    case FOCUS_TEXTMESSAGE:
+        ui->switchToFrame(fsi.positions.textMessage);
+        break;
+    case FOCUS_MODULE:
+        // Whichever frame was marked by MeshModule::requestFocus(), if any
+        // If no module requested focus, will show the first frame instead
+        ui->switchToFrame(fsi.positions.focussedModule);
+        break;
+
+    case FOCUS_PRESERVE:
+        // If we can identify which type of frame "originalPosition" was, can move directly to it in the new frameset
+        FramesetInfo &oldFsi = this->framesetInfo;
+        if (originalPosition == oldFsi.positions.log)
+            ui->switchToFrame(fsi.positions.log);
+        else if (originalPosition == oldFsi.positions.settings)
+            ui->switchToFrame(fsi.positions.settings);
+        else if (originalPosition == oldFsi.positions.wifi)
+            ui->switchToFrame(fsi.positions.wifi);
+
+        // If frame count has decreased
+        else if (fsi.frameCount < oldFsi.frameCount) {
+            uint8_t numDropped = oldFsi.frameCount - fsi.frameCount;
+            // Move n frames backwards
+            if (numDropped <= originalPosition)
+                ui->switchToFrame(originalPosition - numDropped);
+            // Unless that would put us "out of bounds" (< 0)
+            else
+                ui->switchToFrame(0);
+        }
+
+        // If we're not sure exactly which frame we were on, at least return to the same frame number
+        // (node frames; module frames)
+        else
+            ui->switchToFrame(originalPosition);
+
+        break;
+    }
 
     // Store the info about this frameset, for future setFrames calls
     this->framesetInfo = fsi;
@@ -2561,7 +2612,7 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
     switch (arg->getStatusType()) {
     case STATUS_TYPE_NODE:
         if (showingNormalScreen && nodeStatus->getLastNumTotal() != nodeStatus->getNumTotal()) {
-            setFrames(); // Regen the list of screens
+            setFrames(FOCUS_PRESERVE); // Regen the list of screen frames (returning to same frame, if possible)
         }
         nodeDB->updateGUI = false;
         break;
@@ -2573,7 +2624,13 @@ int Screen::handleStatusUpdate(const meshtastic::Status *arg)
 int Screen::handleTextMessage(const meshtastic_MeshPacket *packet)
 {
     if (showingNormalScreen) {
-        setFrames(); // Regen the list of screens (will show new text message)
+        // Outgoing message
+        if (packet->from == 0)
+            setFrames(FOCUS_PRESERVE); // Return to same frame (quietly hiding the rx text message frame)
+
+        // Incoming message
+        else
+            setFrames(FOCUS_TEXTMESSAGE); // Focus on the new message
     }
 
     return 0;
@@ -2626,6 +2683,19 @@ int Screen::handleInputEvent(const InputEvent *event)
 
 int Screen::handleAdminMessage(const meshtastic_AdminMessage *arg)
 {
+    // Note: only selected admin messages notify this observer
+    // If you wish to handle a new type of message, you should modify AdminModule.cpp first
+
+    switch (arg->which_payload_variant) {
+    // Node removed manually (i.e. via app)
+    case meshtastic_AdminMessage_remove_by_nodenum_tag:
+        setFrames(FOCUS_PRESERVE);
+        break;
+
+    // Default no-op, in case the admin message observable gets used by other classes in future
+    default:
+        break;
+    }
     return 0;
 }
 
