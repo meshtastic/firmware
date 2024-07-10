@@ -148,6 +148,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
         if (this->currentMessageIndex == 0) {
             this->runState = CANNED_MESSAGE_RUN_STATE_FREETEXT;
 
+            requestFocus(); // Tell Screen::setFrames to move to our module's frame, next time it runs
             UIFrameEvent e;
             e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
             this->notifyObservers(&e);
@@ -353,6 +354,8 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     }
 
     if (validEvent) {
+        requestFocus(); // Tell Screen::setFrames to move to our module's frame, next time it runs
+
         // Let runOnce to be called immediately.
         if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_SELECT) {
             setIntervalFromNow(0); // on fast keypresses, this isn't fast enough.
@@ -919,11 +922,13 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
     char buffer[50];
 
     if (temporaryMessage.length() != 0) {
+        requestFocus(); // Tell Screen::setFrames to move to our module's frame
         LOG_DEBUG("Drawing temporary message: %s", temporaryMessage.c_str());
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->setFont(FONT_MEDIUM);
         display->drawString(display->getWidth() / 2 + x, 0 + y + 12, temporaryMessage);
     } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) {
+        requestFocus(); // Tell Screen::setFrames to move to our module's frame
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->setFont(FONT_MEDIUM);
         String displayString;
@@ -945,6 +950,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             display->drawStringf(display->getWidth() / 2 + x, y + 130, buffer, rssiString, this->lastRxRssi);
         }
     } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {
+        requestFocus(); // Tell Screen::setFrames to move to our module's frame
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->setFont(FONT_MEDIUM);
         display->drawString(display->getWidth() / 2 + x, 0 + y + 12, "Sending...");
@@ -953,7 +959,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         display->setFont(FONT_SMALL);
         display->drawString(10 + x, 0 + y + FONT_HEIGHT_SMALL, "Canned Message\nModule disabled.");
     } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT) {
-
+        requestFocus(); // Tell Screen::setFrames to move to our module's frame
 #if defined(T_WATCH_S3) || defined(RAK14014)
         drawKeyboard(display, state, 0, 0);
 #else
@@ -1040,6 +1046,7 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
         if (mp.decoded.request_id != 0) {
             UIFrameEvent e;
             e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
+            requestFocus(); // Tell Screen::setFrames that our module's frame should be shown, even if not "first" in the frameset
             this->runState = CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED;
             this->incoming = service.getNodenumFromRequestId(mp.decoded.request_id);
             meshtastic_Routing decoded = meshtastic_Routing_init_default;

@@ -2048,7 +2048,16 @@ void Screen::setFrames(FrameFocus focus)
     // is the same offset into the moduleFrames vector
     // so that we can invoke the module's callback
     for (auto i = moduleFrames.begin(); i != moduleFrames.end(); ++i) {
-        normalFrames[numframes++] = drawModuleFrame;
+        // Draw the module frame, using the hack described above
+        normalFrames[numframes] = drawModuleFrame;
+
+        // Check if the module being drawn has requested focus
+        // We will honor this request later, if setFrames was triggered by a UIFrameEvent
+        MeshModule *m = *i;
+        if (m->isRequestingFocus())
+            fsi.positions.focussedModule = numframes;
+
+        numframes++;
     }
 
     LOG_DEBUG("Added modules.  numframes: %d\n", numframes);

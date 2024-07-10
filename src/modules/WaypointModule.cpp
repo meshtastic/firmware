@@ -25,7 +25,9 @@ ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
 
     UIFrameEvent e;
 
+    // New or updated waypoint: focus on this frame next time Screen::setFrames runs
     if (shouldDraw()) {
+        requestFocus();
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
     }
 
