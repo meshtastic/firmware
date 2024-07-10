@@ -197,7 +197,139 @@ int32_t SerialModule::runOnce()
                         tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
                     }
                 }
+            } else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85)) {
+                static unsigned int lastAveraged = 0;
+                static unsigned int averageIntervalMillis = 300000; // 5 minutes
+                static int dirSum = 0;
+                static float velSum = 0;
+                static float gust = 0;
+                static int velCount = 0;
+                static int dirCount = 0;
+                static char windDir[4] = "xxx";   // Assuming windDir is 3 characters long + null terminator
+                static char windVel[5] = "xx.x";  // Assuming windVel is 4 characters long + null terminator
+                static char windGust[5] = "xx.x"; // Assuming windGust is 4 characters long + null terminator
+                static char batVoltage[5] = "0.0V";
+                static char capVoltage[5] = "0.0V";
+                static float batVoltageF = 1;
+                static float capVoltageF = 1;
+                bool gotwind = false;
+
+                while (Serial2.available()) {
+                    // clear serialBytes buffer
+                    memset(serialBytes, '\0', sizeof(serialBytes));
+                    // memset(formattedString, '\0', sizeof(formattedString));
+                    serialPayloadSize = Serial2.readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
+                    // check for a string we care about
+                    // WindDir = 173
+                    // 19 : 21 : 37.325->WindSpeed = 0.0
+                    // 19 : 21 : 37.325->WindGust = 0.5
+                    if (serialPayloadSize > 0) {
+                        // Define variables for line processing
+                        int lineStart = 0;
+                        int lineEnd = -1;
+
+                        // Process each byte in the received data
+                        for (size_t i = 0; i < serialPayloadSize; i++) {
+                            // go until we hit the end of line and then process the line
+                            if (serialBytes[i] == '\n') {
+                                lineEnd = i;
+                                // Extract the current line
+                                char line[meshtastic_Constants_DATA_PAYLOAD_LEN];
+                                memset(line, '\0', sizeof(line));
+                                memcpy(line, &serialBytes[lineStart], lineEnd - lineStart);
+
+                                if (strstr(line, "Wind") != NULL) // we have a wind line
+                                {
+                                    gotwind = true;
+                                    // Find the positions of "=" signs in the line
+                                    char *windDirPos = strstr(line, "WindDir      = ");
+                                    char *windSpeedPos = strstr(line, "WindSpeed    = ");
+                                    char *windGustPos = strstr(line, "WindGust     = ");
+
+                                    if (windDirPos != NULL) {
+                                        // Extract data after "=" for WindDir
+                                        strcpy(windDir, windDirPos + 15); // Add 15 to skip "WindDir = "
+                                        dirSum += atoi(windDir);
+                                        dirCount++;
+                                    } else if (windSpeedPos != NULL) {
+                                        // Extract data after "=" for WindSpeed
+                                        strcpy(windVel, windSpeedPos + 15); // Add 15 to skip "WindSpeed = "
+                                        velSum += strtof(windVel, nullptr);
+                                        velCount++;
+                                    } else if (windGustPos != NULL) {
+                                        strcpy(windGust, windGustPos + 15); // Add 15 to skip "WindSpeed = "
+                                        float newg = strtof(windGust, nullptr);
+                                        if (newg > gust)
+                                            gust = newg;
+                                    }
+
+                                    // there are also voltage data we care about possibly
+                                } else if (strstr(line, "BatVoltage") != NULL) { // we have a battVoltage line
+                                    char *batVoltagePos = strstr(line, "BatVoltage     = ");
+                                    if (batVoltagePos != NULL) {
+                                        strcpy(batVoltage, batVoltagePos + 17); // 18 for ws 80, 17 for ws85
+                                        batVoltageF = strtof(batVoltage, nullptr);
+                                        // float voltage_f = strtof(batVoltage, &endptr);
+                                        // batVoltageInt = static_cast<int>(voltage_f * 10);
+                                    }
+                                } else if (strstr(line, "CapVoltage") != NULL) { // we have a cappVoltage line
+                                    //                     should parse CapVoltage     = 5.40V } else if (strstr(line,
+                                    //                     "CapVoltage") != NULL) { // we have a battVoltage line
+                                    char *capVoltagePos = strstr(line, "CapVoltage     = ");
+                                    if (capVoltagePos != NULL) {
+                                        strcpy(capVoltage, capVoltagePos + 17); // 18 for ws 80, 17 for ws85
+                                        capVoltageF = strtof(capVoltage, nullptr);
+                                        // float voltage_f = strtof(capVoltage, &endptr);
+                                        // capVoltageInt = static_cast<int>(voltage_f * 10);
+                                    }
+                                }
+
+                                // Update lineStart for the next line
+                                lineStart = lineEnd + 1;
+                            }
+                        }
+                    }
+                }
+                if (gotwind) {
+                    LOG_INFO("WS85 : %i %.1fg%.1f %.1fv %.1fv\n", atoi(windDir), strtof(windVel, nullptr),
+                             strtof(windGust, nullptr), batVoltageF, capVoltageF);
+                }
+                if (gotwind && millis() - lastAveraged > averageIntervalMillis) {
+                    // calulate average and send to the mesh
+                    float velAvg = 1.0 * velSum / velCount;
+                    float dirAvg = dirSum / dirCount;
+                    // gust = gust
+                    // sprintf(formattedString, "%i %.1fg%.1f %.1fv %.1fv", dirAvg, velAvg * 2.23, gust * 2.23, batVoltageF,
+                    // capVoltageF);
+                    lastAveraged = millis();
+
+                    // make a telemetry packet with the data
+                    meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
+                    m.variant.environment_metrics.wind_speed = velAvg;
+                    m.variant.environment_metrics.wind_direction = dirAvg;
+                    // m.variant.environment_metrics.wind_gust = gust;
+                    // m.variant.environment_metrics.wind_lull = lull;
+
+                    LOG_INFO("(Sending): wind speed=%fm/s, direction=%d degrees\n", m.variant.environment_metrics.wind_speed,
+                             m.variant.environment_metrics.wind_direction);
+
+                    meshtastic_MeshPacket *p = allocDataProtobuf(m);
+                    p->to = NODENUM_BROADCAST;
+                    p->decoded.want_response = false;
+                    p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+                    service.sendToMesh(p, RX_SRC_LOCAL, true);
+
+                    velSum = velCount = dirSum = dirCount = 0;
+                    gust = 0;
+
+                    // clear serialBytes first;
+                    // memset(serialBytes, '\0', sizeof(serialBytes));
+                    // return (2000); // don't return for a 2 seconds, allow for transmission.
+                }
+                // Serial.println(formattedString);
+
             }
+
 #if !defined(TTGO_T_ECHO) && !defined(CANARYONE)
             else {
                 while (Serial2.available()) {
