@@ -25,13 +25,9 @@ pio run --environment $1 # -v
 SRCELF=.pio/build/$1/firmware.elf
 cp $SRCELF $OUTDIR/$basename.elf
 
-if (echo $1 | grep -q "wio-sdk-wm1110"); then
-	echo "Skipping dfu file"
-else
-	echo "Generating NRF52 dfu file"
-	DFUPKG=.pio/build/$1/firmware.zip
-	cp $DFUPKG $OUTDIR/$basename-ota.zip
-fi
+echo "Generating NRF52 dfu file"
+DFUPKG=.pio/build/$1/firmware.zip
+cp $DFUPKG $OUTDIR/$basename-ota.zip
 
 echo "Generating NRF52 uf2 file"
 SRCHEX=.pio/build/$1/firmware.hex
