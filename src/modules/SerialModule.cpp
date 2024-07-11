@@ -310,12 +310,14 @@ int32_t SerialModule::runOnce()
                     meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
                     m.variant.environment_metrics.wind_speed = velAvg;
                     m.variant.environment_metrics.wind_direction = dirAvg;
-                    // m.variant.environment_metrics.wind_gust = gust;
-                    // m.variant.environment_metrics.wind_lull = lull;
-                    // m.variant.environment_metrics.voltage = capVoltageF; // why not send sensor voltage too ?
+                    m.variant.environment_metrics.wind_gust = gust;
+                    m.variant.environment_metrics.wind_lull = lull;
+                    m.variant.environment_metrics.voltage = capVoltageF; // why not send sensor voltage too ?
 
-                    LOG_INFO("(Sending): wind speed=%fm/s, direction=%d degrees\n", m.variant.environment_metrics.wind_speed,
-                             m.variant.environment_metrics.wind_direction);
+                    LOG_INFO("(Sending):  wind speed=%fm/s, direction=%d degrees,gust=%f,lull = %f, voltage: %f \n",
+                             m.variant.environment_metrics.wind_speed, m.variant.environment_metrics.wind_direction,
+                             m.variant.environment_metrics.wind_lull, m.variant.environment_metrics.wind_gust,
+                             m.variant.environment_metrics.voltage);
 
                     meshtastic_MeshPacket *p = router->allocForSending();
 
@@ -324,6 +326,7 @@ int32_t SerialModule::runOnce()
                     p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes),
                                                                  &meshtastic_Telemetry_msg, &m);
 
+                    LOG_INFO("payload : %s", p->decoded.payload.bytes);
                     p->to = NODENUM_BROADCAST;
                     p->decoded.want_response = false;
                     p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
