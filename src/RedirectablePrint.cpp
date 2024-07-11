@@ -173,6 +173,7 @@ void RedirectablePrint::log_to_syslog(const char *logLevel, const char *format, 
 
 void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_list arg)
 {
+#if !MESHTASTIC_EXCLUDE_BLUETOOTH
     if (config.bluetooth.device_logging_enabled && !pauseBluetoothLogging) {
         bool isBleConnected = false;
 #ifdef ARCH_ESP32
@@ -205,12 +206,17 @@ void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_
 #ifdef ARCH_ESP32
             nimbleBluetooth->sendLog(buffer, size);
 #elif defined(ARCH_NRF52)
-            nrf52Bluetooth->sendLog(reinterpret_cast<const char *>(buffer));
+            nrf52Bluetooth->sendLog(buffer, size);
 #endif
             delete[] message;
             delete[] buffer;
         }
     }
+#else
+    (void)logLevel;
+    (void)format;
+    (void)arg;
+#endif
 }
 
 meshtastic_LogRecord_Level RedirectablePrint::getLogLevel(const char *logLevel)
