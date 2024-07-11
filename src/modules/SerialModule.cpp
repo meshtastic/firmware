@@ -197,9 +197,10 @@ int32_t SerialModule::runOnce()
                         tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
                     }
                 }
-            } else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85)) {
+                // } else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85)) {
+            } else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG)) {
                 static unsigned int lastAveraged = 0;
-                static unsigned int averageIntervalMillis = 300000; // 5 minutes
+                static unsigned int averageIntervalMillis = 30000; // 5 minutes
                 static int dirSum = 0; // TODO : this needs trig, probably a second variable to keep track
                 static float velSum = 0;
                 static float gust = 0;
@@ -220,6 +221,7 @@ int32_t SerialModule::runOnce()
                     memset(serialBytes, '\0', sizeof(serialBytes));
                     // memset(formattedString, '\0', sizeof(formattedString));
                     serialPayloadSize = Serial2.readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
+                    // LOG_INFO(serialBytes);
                     // check for a string we care about
                     // WindDir      = 79
                     // WindSpeed    = 0.5
@@ -308,9 +310,9 @@ int32_t SerialModule::runOnce()
                     meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
                     m.variant.environment_metrics.wind_speed = velAvg;
                     m.variant.environment_metrics.wind_direction = dirAvg;
-                    m.variant.environment_metrics.wind_gust = gust;
-                    m.variant.environment_metrics.wind_lull = lull;
-                    m.variant.environment_metrics.voltage = capVoltageF; // why not send sensor voltage too ?
+                    // m.variant.environment_metrics.wind_gust = gust;
+                    // m.variant.environment_metrics.wind_lull = lull;
+                    // m.variant.environment_metrics.voltage = capVoltageF; // why not send sensor voltage too ?
 
                     LOG_INFO("(Sending): wind speed=%fm/s, direction=%d degrees\n", m.variant.environment_metrics.wind_speed,
                              m.variant.environment_metrics.wind_direction);
