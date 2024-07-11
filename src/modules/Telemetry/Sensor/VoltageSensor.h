@@ -8,6 +8,7 @@ class VoltageSensor
 {
   public:
     virtual uint16_t getBusVoltageMv() = 0;
+    virtual int16_t getCurrentMa() = 0;
 };
 
 #endif
