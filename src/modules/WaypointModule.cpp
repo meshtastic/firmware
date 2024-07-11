@@ -23,6 +23,8 @@ ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
 
     powerFSM.trigger(EVENT_RECEIVED_MSG);
 
+#if HAS_SCREEN
+
     UIFrameEvent e;
 
     // New or updated waypoint: focus on this frame next time Screen::setFrames runs
@@ -36,6 +38,8 @@ ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET_BACKGROUND;
 
     notifyObservers(&e);
+
+#endif
 
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }
