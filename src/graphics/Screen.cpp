@@ -1485,6 +1485,10 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     screen->drawColumns(display, x, y, fields);
 }
 
+#if defined(ESP_PLATFORM) && defined(USE_ST7789)
+SPIClass SPI1(HSPI);
+#endif
+
 Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_OledType screenType, OLEDDISPLAY_GEOMETRY geometry)
     : concurrency::OSThread("Screen"), address_found(address), model(screenType), geometry(geometry), cmdQueue(32)
 {
@@ -1492,6 +1496,13 @@ Screen::Screen(ScanI2C::DeviceAddress address, meshtastic_Config_DisplayConfig_O
 #if defined(USE_SH1106) || defined(USE_SH1107) || defined(USE_SH1107_128_64)
     dispdev = new SH1106Wire(address.address, -1, -1, geometry,
                              (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
+#elif defined(USE_ST7789)
+#ifdef ESP_PLATFORM
+    dispdev = new ST7789Spi(&SPI1, ST7789_RESET, ST7789_RS, ST7789_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT, ST7789_SDA,
+                            ST7789_MISO, ST7789_SCK);
+#else
+    dispdev = new ST7789Spi(&SPI1, ST7789_RESET, ST7789_RS, ST7789_NSS, GEOMETRY_RAWMODE, TFT_WIDTH, TFT_HEIGHT);
+#endif
 #elif defined(USE_SSD1306)
     dispdev = new SSD1306Wire(address.address, -1, -1, geometry,
                               (address.port == ScanI2C::I2CPort::WIRE1) ? HW_I2C::I2C_TWO : HW_I2C::I2C_ONE);
@@ -1570,7 +1581,14 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #endif
 
             dispdev->displayOn();
-
+#ifdef USE_ST7789
+#ifdef ESP_PLATFORM
+            analogWrite(VTFT_LEDA, BRIGHTNESS_DEFAULT);
+#else
+            pinMode(VTFT_LEDA, OUTPUT);
+            digitalWrite(VTFT_LEDA, TFT_BACKLIGHT_ON);
+#endif
+#endif
             enabled = true;
             setInterval(0); // Draw ASAP
             runASAP = true;
@@ -1581,6 +1599,12 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #endif
             LOG_INFO("Turning off screen\n");
             dispdev->displayOff();
+
+#ifdef USE_ST7789
+            pinMode(VTFT_LEDA, OUTPUT);
+            digitalWrite(VTFT_LEDA, !TFT_BACKLIGHT_ON);
+#endif
+
 #ifdef T_WATCH_S3
             PMU->disablePowerOutput(XPOWERS_ALDO2);
 #endif
