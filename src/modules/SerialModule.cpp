@@ -308,6 +308,7 @@ int32_t SerialModule::runOnce()
 
                     // make a telemetry packet with the data
                     meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
+                    m.which_variant = meshtastic_Telemetry_environment_metrics_tag;
                     m.variant.environment_metrics.wind_speed = velAvg;
                     m.variant.environment_metrics.wind_direction = dirAvg;
                     m.variant.environment_metrics.wind_gust = gust;
@@ -326,7 +327,7 @@ int32_t SerialModule::runOnce()
                     p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes),
                                                                  &meshtastic_Telemetry_msg, &m);
 
-                    LOG_INFO("payload : %s", p->decoded.payload.bytes);
+                    LOG_INFO("payload size : %i\n", p->decoded.payload.size);
                     p->to = NODENUM_BROADCAST;
                     p->decoded.want_response = false;
                     p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
