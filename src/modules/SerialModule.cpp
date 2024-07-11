@@ -197,8 +197,8 @@ int32_t SerialModule::runOnce()
                         tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
                     }
                 }
-                // } else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85)) {
-            } else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG)) {
+            } else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85)) {
+                // } else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG)) {
                 static unsigned int lastAveraged = 0;
                 static unsigned int averageIntervalMillis = 30000; // 5 minutes
                 static int dirSum = 0; // TODO : this needs trig, probably a second variable to keep track
@@ -272,12 +272,12 @@ int32_t SerialModule::runOnce()
                                     }
 
                                     // these are also voltage data we care about possibly
-                                    // } else if (strstr(line, "BatVoltage") != NULL) { // we have a battVoltage line
-                                    //     char *batVoltagePos = strstr(line, "BatVoltage     = ");
-                                    //     if (batVoltagePos != NULL) {
-                                    //         strcpy(batVoltage, batVoltagePos + 17); // 18 for ws 80, 17 for ws85
-                                    //         batVoltageF = strtof(batVoltage, nullptr);
-                                    //     }
+                                } else if (strstr(line, "BatVoltage") != NULL) { // we have a battVoltage line
+                                    char *batVoltagePos = strstr(line, "BatVoltage     = ");
+                                    if (batVoltagePos != NULL) {
+                                        strcpy(batVoltage, batVoltagePos + 17); // 18 for ws 80, 17 for ws85
+                                        batVoltageF = strtof(batVoltage, nullptr);
+                                    }
                                 } else if (strstr(line, "CapVoltage") != NULL) { // we have a cappVoltage line
                                     char *capVoltagePos = strstr(line, "CapVoltage     = ");
                                     if (capVoltagePos != NULL) {
@@ -313,7 +313,8 @@ int32_t SerialModule::runOnce()
                     m.variant.environment_metrics.wind_direction = dirAvg;
                     m.variant.environment_metrics.wind_gust = gust;
                     m.variant.environment_metrics.wind_lull = lull;
-                    m.variant.environment_metrics.voltage = capVoltageF; // why not send sensor voltage too ?
+                    m.variant.environment_metrics.voltage =
+                        capVoltageF > batVoltageF ? capVoltageF : batVoltageF; // send the larger of the two voltage values.
 
                     LOG_INFO("(Sending):  wind speed=%fm/s, direction=%d degrees,gust=%f,lull = %f, voltage: %f \n",
                              m.variant.environment_metrics.wind_speed, m.variant.environment_metrics.wind_direction,
