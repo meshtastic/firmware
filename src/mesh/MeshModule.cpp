@@ -287,7 +287,7 @@ AdminMessageHandleResult MeshModule::handleAdminMessageForAllModules(const mesht
 }
 
 #ifdef HAS_SCREEN
-// Would our module like its frame to be focussed after Screen::setFrames has regenerated the list of frames?
+// Would our module like its frame to be focused after Screen::setFrames has regenerated the list of frames?
 // Only considered if setFrames is triggered by a UIFrameEvent
 bool MeshModule::isRequestingFocus()
 {

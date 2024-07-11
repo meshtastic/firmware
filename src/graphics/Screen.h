@@ -460,7 +460,7 @@ class Screen : public concurrency::OSThread
         struct FramePositions {
             uint8_t fault = 0;
             uint8_t textMessage = 0;
-            uint8_t focussedModule = 0;
+            uint8_t focusedModule = 0;
             uint8_t log = 0;
             uint8_t settings = 0;
             uint8_t wifi = 0;
@@ -478,7 +478,7 @@ class Screen : public concurrency::OSThread
         FOCUS_MODULE, // Note: target module should call requestFocus(), otherwise no info about which module to focus
     };
 
-    // Regenerate the normal set of frames, focussing a specific frame if requested
+    // Regenerate the normal set of frames, focusing a specific frame if requested
     // Call when a frame should be added / removed, or custom frames should be cleared
     void setFrames(FrameFocus focus = FOCUS_DEFAULT);
 

@@ -184,7 +184,7 @@ class MeshModule
     };
 
 #if HAS_SCREEN
-    /** Request that our module's screen frame be focussed when Screen::setFrames runs
+    /** Request that our module's screen frame be focused when Screen::setFrames runs
      * Only considered if Screen::setFrames is triggered via a UIFrameEvent
      *
      * Having this as a separate call, instead of part of the UIFrameEvent, allows the module to delay decision

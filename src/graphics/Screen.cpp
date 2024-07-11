@@ -2004,7 +2004,7 @@ void Screen::setScreensaverFrames(FrameCallback einkScreensaver)
 }
 #endif
 
-// Regenerate the normal set of frames, focussing a specific frame if requested
+// Regenerate the normal set of frames, focusing a specific frame if requested
 // Called when a frame should be added / removed, or custom frames should be cleared
 void Screen::setFrames(FrameFocus focus)
 {
@@ -2051,7 +2051,7 @@ void Screen::setFrames(FrameFocus focus)
         // We will honor this request later, if setFrames was triggered by a UIFrameEvent
         MeshModule *m = *i;
         if (m->isRequestingFocus())
-            fsi.positions.focussedModule = numframes;
+            fsi.positions.focusedModule = numframes;
 
         numframes++;
     }
@@ -2128,7 +2128,7 @@ void Screen::setFrames(FrameFocus focus)
     case FOCUS_MODULE:
         // Whichever frame was marked by MeshModule::requestFocus(), if any
         // If no module requested focus, will show the first frame instead
-        ui->switchToFrame(fsi.positions.focussedModule);
+        ui->switchToFrame(fsi.positions.focusedModule);
         break;
 
     case FOCUS_PRESERVE:
