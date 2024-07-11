@@ -193,7 +193,7 @@ class MeshModule
     bool _requestingFocus = false;
     void requestFocus() { _requestingFocus = true; }
 #else
-    void requestFocus() {}; // No-op
+    void requestFocus(){}; // No-op
 #endif
 
   private:
