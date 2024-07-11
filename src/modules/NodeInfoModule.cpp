@@ -58,9 +58,9 @@ void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
 
 meshtastic_MeshPacket *NodeInfoModule::allocReply()
 {
-    if (!airTime->isTxAllowedChannelUtil(false)) {
+    if (!airTime->isTxAllowedChannelUtil(true)) {
         ignoreRequest = true; // Mark it as ignored for MeshModule
-        LOG_DEBUG("Skip sending NodeInfo due to > 40 percent channel util.\n");
+        LOG_DEBUG("Skip sending NodeInfo due to > 25 percent channel util.\n");
         return NULL;
     }
     uint32_t now = millis();
