@@ -24,7 +24,8 @@ int32_t PowerTelemetryModule::runOnce()
 {
     if (sleepOnNextExecution == true) {
         sleepOnNextExecution = false;
-        uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.power_update_interval);
+        uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.power_update_interval,
+                                                                   default_telemetry_broadcast_interval_secs);
         LOG_DEBUG("Sleeping for %ims, then awaking to send metrics again.\n", nightyNightMs);
         doDeepSleep(nightyNightMs, true);
     }
@@ -70,7 +71,8 @@ int32_t PowerTelemetryModule::runOnce()
 
         uint32_t now = millis();
         if (((lastSentToMesh == 0) ||
-             ((now - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.power_update_interval))) &&
+             ((now - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.power_update_interval,
+                                                                          default_telemetry_broadcast_interval_secs))) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
             lastSentToMesh = now;
