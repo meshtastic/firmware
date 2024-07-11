@@ -286,5 +286,10 @@ void clearBonds()
 
 void enterDfuMode()
 {
+// SDK kit does not have native USB like almost all other NRF52 boards
+#ifdef WIO_WM1110_SDK
+    enterSerialDfu();
+#else
     enterUf2Dfu();
+#endif
 }
