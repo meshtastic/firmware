@@ -22,6 +22,7 @@ class AirQualityTelemetryModule : private concurrency::OSThread, public Protobuf
         lastMeasurementPacket = nullptr;
         setIntervalFromNow(10 * 1000);
         aqi = Adafruit_PM25AQI();
+        nodeStatusObserver.observe(&nodeStatus->onNewStatus);
     }
 
   protected:

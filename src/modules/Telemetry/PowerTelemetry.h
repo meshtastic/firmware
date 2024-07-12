@@ -21,6 +21,7 @@ class PowerTelemetryModule : private concurrency::OSThread, public ProtobufModul
           ProtobufModule("PowerTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
         lastMeasurementPacket = nullptr;
+        nodeStatusObserver.observe(&nodeStatus->onNewStatus);
         setIntervalFromNow(10 * 1000);
     }
     virtual bool wantUIFrame() override;

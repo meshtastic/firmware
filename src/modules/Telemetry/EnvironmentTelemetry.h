@@ -21,6 +21,7 @@ class EnvironmentTelemetryModule : private concurrency::OSThread, public Protobu
           ProtobufModule("EnvironmentTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
         lastMeasurementPacket = nullptr;
+        nodeStatusObserver.observe(&nodeStatus->onNewStatus);
         setIntervalFromNow(10 * 1000);
     }
     virtual bool wantUIFrame() override;

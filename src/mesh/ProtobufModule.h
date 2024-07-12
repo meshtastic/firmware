@@ -65,7 +65,7 @@ template <class T> class ProtobufModule : protected SinglePortModule
     int handleStatusUpdate(const meshtastic::Status *arg)
     {
         if (arg->getStatusType() == STATUS_TYPE_NODE) {
-            numOnlineNodes = nodeStatus->getLastNumTotal();
+            numOnlineNodes = nodeStatus->getNumOnline();
         }
         return 0;
     }

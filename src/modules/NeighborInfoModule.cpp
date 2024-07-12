@@ -39,6 +39,7 @@ NeighborInfoModule::NeighborInfoModule()
       concurrency::OSThread("NeighborInfoModule")
 {
     ourPortNum = meshtastic_PortNum_NEIGHBORINFO_APP;
+    nodeStatusObserver.observe(&nodeStatus->onNewStatus);
 
     if (moduleConfig.neighbor_info.enabled) {
         isPromiscuous = true; // Update neighbors from all packets
