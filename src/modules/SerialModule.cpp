@@ -200,7 +200,7 @@ int32_t SerialModule::runOnce()
             } else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85)) {
                 // } else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG)) {
                 static unsigned int lastAveraged = 0;
-                static unsigned int averageIntervalMillis = 30000; // 5 minutes
+                static unsigned int averageIntervalMillis = 300000; // 5 minutes hard coded.
                 static int dirSum = 0; // TODO : this needs trig, probably a second variable to keep track
                 static float velSum = 0;
                 static float gust = 0;
@@ -261,7 +261,7 @@ int32_t SerialModule::runOnce()
                                         float newv = strtof(windVel, nullptr);
                                         velSum += newv;
                                         velCount++;
-                                        if (newv < lull)
+                                        if (newv < lull || lull == -1)
                                             lull = newv;
 
                                     } else if (windGustPos != NULL) {
@@ -301,9 +301,6 @@ int32_t SerialModule::runOnce()
                     // calulate average and send to the mesh
                     float velAvg = 1.0 * velSum / velCount;
                     float dirAvg = dirSum / dirCount; // TODO : this needs some trig to be accurate
-                    // gust = gust
-                    // sprintf(formattedString, "%i %.1fg%.1f %.1fv %.1fv", dirAvg, velAvg * 2.23, gust * 2.23, batVoltageF,
-                    // capVoltageF);
                     lastAveraged = millis();
 
                     // make a telemetry packet with the data
@@ -316,7 +313,7 @@ int32_t SerialModule::runOnce()
                     m.variant.environment_metrics.voltage =
                         capVoltageF > batVoltageF ? capVoltageF : batVoltageF; // send the larger of the two voltage values.
 
-                    LOG_INFO("(Sending):  wind speed=%fm/s, direction=%d degrees,gust=%f,lull = %f, voltage: %f \n",
+                    LOG_INFO("WS85 Transmit speed=%fm/s, direction=%d , lull=%f, gust=%f, voltage=%f\n",
                              m.variant.environment_metrics.wind_speed, m.variant.environment_metrics.wind_direction,
                              m.variant.environment_metrics.wind_lull, m.variant.environment_metrics.wind_gust,
                              m.variant.environment_metrics.voltage);
