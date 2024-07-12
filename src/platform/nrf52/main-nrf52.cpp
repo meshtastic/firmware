@@ -286,5 +286,10 @@ void clearBonds()
 
 void enterDfuMode()
 {
+// SDK kit does not have native USB like almost all other NRF52 boards
+#ifdef NRF_USE_SERIAL_DFU
+    enterSerialDfu();
+#else
     enterUf2Dfu();
+#endif
 }
