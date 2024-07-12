@@ -201,7 +201,8 @@ int32_t SerialModule::runOnce()
                 // } else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG)) {
                 static unsigned int lastAveraged = 0;
                 static unsigned int averageIntervalMillis = 300000; // 5 minutes hard coded.
-                static int dirSum = 0; // TODO : this needs trig, probably a second variable to keep track
+                static double dir_sum_sin = 0;
+                static double dir_sum_cos = 0;
                 static float velSum = 0;
                 static float gust = 0;
                 static float lull = -1;
@@ -253,7 +254,9 @@ int32_t SerialModule::runOnce()
                                     if (windDirPos != NULL) {
                                         // Extract data after "=" for WindDir
                                         strcpy(windDir, windDirPos + 15); // Add 15 to skip "WindDir = "
-                                        dirSum += atoi(windDir);
+                                        double radians = toRadians(strtof(windDir, nullptr));
+                                        dir_sum_sin += sin(radians);
+                                        dir_sum_cos += cos(radians);
                                         dirCount++;
                                     } else if (windSpeedPos != NULL) {
                                         // Extract data after "=" for WindSpeed
@@ -300,7 +303,17 @@ int32_t SerialModule::runOnce()
                 if (gotwind && millis() - lastAveraged > averageIntervalMillis) {
                     // calulate average and send to the mesh
                     float velAvg = 1.0 * velSum / velCount;
-                    float dirAvg = dirSum / dirCount; // TODO : this needs some trig to be accurate
+                    // float dirAvg = dirSum / dirCount; // TODO : this needs some trig to be accurate
+
+                    double avgSin = dir_sum_sin / dirCount;
+                    double avgCos = dir_sum_cos / dirCount;
+
+                    double avgRadians = atan2(avgSin, avgCos);
+                    float dirAvg = toDegrees(avgRadians);
+
+                    if (dirAvg < 0) {
+                        dirAvg += 360.0;
+                    }
                     lastAveraged = millis();
 
                     // make a telemetry packet with the data
@@ -332,7 +345,8 @@ int32_t SerialModule::runOnce()
                     service.sendToMesh(p, RX_SRC_LOCAL, true);
 
                     // reset counters and gust/lull
-                    velSum = velCount = dirSum = dirCount = 0;
+                    velSum = velCount = dirCount = 0;
+                    dir_sum_sin = dir_sum_cos = 0;
                     gust = 0;
                     lull = -1;
 
