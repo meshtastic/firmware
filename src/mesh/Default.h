@@ -5,6 +5,7 @@
 #define ONE_MINUTE_MS 60 * 1000
 
 #define default_gps_update_interval IF_ROUTER(ONE_DAY, 2 * 60)
+#define default_telemetry_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 30 * 60)
 #define default_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 15 * 60)
 #define default_wait_bluetooth_secs IF_ROUTER(1, 60)
 #define default_sds_secs IF_ROUTER(ONE_DAY, UINT32_MAX) // Default to forever super deep sleep
