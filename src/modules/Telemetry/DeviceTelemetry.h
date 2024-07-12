@@ -7,6 +7,9 @@
 
 class DeviceTelemetryModule : private concurrency::OSThread, public ProtobufModule<meshtastic_Telemetry>
 {
+    CallbackObserver<DeviceTelemetryModule, const meshtastic::Status *> nodeStatusObserver =
+        CallbackObserver<DeviceTelemetryModule, const meshtastic::Status *>(this, &DeviceTelemetryModule::handleStatusUpdate);
+
   public:
     DeviceTelemetryModule()
         : concurrency::OSThread("DeviceTelemetryModule"),

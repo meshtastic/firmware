@@ -11,6 +11,10 @@
 
 class EnvironmentTelemetryModule : private concurrency::OSThread, public ProtobufModule<meshtastic_Telemetry>
 {
+    CallbackObserver<EnvironmentTelemetryModule, const meshtastic::Status *> nodeStatusObserver =
+        CallbackObserver<EnvironmentTelemetryModule, const meshtastic::Status *>(this,
+                                                                                 &EnvironmentTelemetryModule::handleStatusUpdate);
+
   public:
     EnvironmentTelemetryModule()
         : concurrency::OSThread("EnvironmentTelemetryModule"),

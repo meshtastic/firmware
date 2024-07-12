@@ -100,8 +100,8 @@ int32_t PaxcounterModule::runOnce()
         } else {
             sendInfo(NODENUM_BROADCAST);
         }
-        return Default::getConfiguredOrDefaultMs(moduleConfig.paxcounter.paxcounter_update_interval,
-                                                 default_telemetry_broadcast_interval_secs);
+        return Default::getConfiguredOrDefaultMsScaled(moduleConfig.paxcounter.paxcounter_update_interval,
+                                                       default_telemetry_broadcast_interval_secs, numOnlineNodes);
     } else {
         return disable();
     }

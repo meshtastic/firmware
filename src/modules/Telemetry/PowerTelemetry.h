@@ -12,6 +12,9 @@
 
 class PowerTelemetryModule : private concurrency::OSThread, public ProtobufModule<meshtastic_Telemetry>
 {
+    CallbackObserver<PowerTelemetryModule, const meshtastic::Status *> nodeStatusObserver =
+        CallbackObserver<PowerTelemetryModule, const meshtastic::Status *>(this, &PowerTelemetryModule::handleStatusUpdate);
+
   public:
     PowerTelemetryModule()
         : concurrency::OSThread("PowerTelemetryModule"),

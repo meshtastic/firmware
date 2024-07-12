@@ -10,6 +10,10 @@
 
 class AirQualityTelemetryModule : private concurrency::OSThread, public ProtobufModule<meshtastic_Telemetry>
 {
+    CallbackObserver<AirQualityTelemetryModule, const meshtastic::Status *> nodeStatusObserver =
+        CallbackObserver<AirQualityTelemetryModule, const meshtastic::Status *>(this,
+                                                                                &AirQualityTelemetryModule::handleStatusUpdate);
+
   public:
     AirQualityTelemetryModule()
         : concurrency::OSThread("AirQualityTelemetryModule"),

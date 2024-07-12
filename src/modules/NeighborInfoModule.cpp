@@ -42,8 +42,8 @@ NeighborInfoModule::NeighborInfoModule()
 
     if (moduleConfig.neighbor_info.enabled) {
         isPromiscuous = true; // Update neighbors from all packets
-        setIntervalFromNow(
-            Default::getConfiguredOrDefaultMs(moduleConfig.neighbor_info.update_interval, default_broadcast_interval_secs));
+        setIntervalFromNow(Default::getConfiguredOrDefaultMs(moduleConfig.neighbor_info.update_interval,
+                                                             default_telemetry_broadcast_interval_secs));
     } else {
         LOG_DEBUG("NeighborInfoModule is disabled\n");
         disable();
@@ -119,7 +119,8 @@ int32_t NeighborInfoModule::runOnce()
     if (airTime->isTxAllowedChannelUtil(true) && airTime->isTxAllowedAirUtil()) {
         sendNeighborInfo(NODENUM_BROADCAST, false);
     }
-    return Default::getConfiguredOrDefaultMs(moduleConfig.neighbor_info.update_interval, default_broadcast_interval_secs);
+    return Default::getConfiguredOrDefaultMsScaled(moduleConfig.neighbor_info.update_interval, default_broadcast_interval_secs,
+                                                   numOnlineNodes);
 }
 
 /*

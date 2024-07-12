@@ -31,14 +31,15 @@ class Default
     static uint32_t getConfiguredOrDefault(uint32_t configured, uint32_t defaultValue);
     static uint32_t getConfiguredOrDefaultMsScaled(uint32_t configured, uint32_t defaultValue, uint32_t numOnlineNodes);
 
-  private: 
-    static float congestionScalingCoefficient(int numOnlineNodes) {
-      if (numOnlineNodes <= 40) {
-          return 1.0; // No scaling for 40 or fewer nodes
-      } else {
-          // Calculate scaling based on number of nodes over 40
-          int nodesOverForty = (numOnlineNodes - 40);
-          return 1.0 + (nodesOverForty * 0.075); // Each number of online node scales by 0.075
-      }
+  private:
+    static float congestionScalingCoefficient(int numOnlineNodes)
+    {
+        if (numOnlineNodes <= 40) {
+            return 1.0; // No scaling for 40 or fewer nodes
+        } else {
+            // Sscaling based on number of nodes over 40
+            int nodesOverForty = (numOnlineNodes - 40);
+            return 1.0 + (nodesOverForty * 0.075); // Each number of online node scales by 0.075
+        }
     }
 };
