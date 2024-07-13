@@ -63,7 +63,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
 {
     if (sleepOnNextExecution == true) {
         sleepOnNextExecution = false;
-        uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval);
+        uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval,
+                                                                   default_telemetry_broadcast_interval_secs);
         LOG_DEBUG("Sleeping for %ims, then awaking to send metrics again.\n", nightyNightMs);
         doDeepSleep(nightyNightMs, true);
     }
@@ -115,6 +116,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = ina219Sensor.runOnce();
             if (ina260Sensor.hasSensor())
                 result = ina260Sensor.runOnce();
+            if (ina3221Sensor.hasSensor())
+                result = ina3221Sensor.runOnce();
             if (veml7700Sensor.hasSensor())
                 result = veml7700Sensor.runOnce();
             if (tsl2591Sensor.hasSensor())
@@ -142,7 +145,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
 
         uint32_t now = millis();
         if (((lastSentToMesh == 0) ||
-             ((now - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval))) &&
+             ((now - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval,
+                                                                          default_telemetry_broadcast_interval_secs))) &&
             airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
@@ -325,6 +329,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         valid = valid && ina260Sensor.getMetrics(m);
         hasSensor = true;
     }
+    if (ina3221Sensor.hasSensor()) {
+        valid = valid && ina3221Sensor.getMetrics(m);
+        hasSensor = true;
+    }
     if (veml7700Sensor.hasSensor()) {
         valid = valid && veml7700Sensor.getMetrics(m);
         hasSensor = true;
@@ -496,6 +504,11 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
     }
     if (ina260Sensor.hasSensor()) {
         result = ina260Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (ina3221Sensor.hasSensor()) {
+        result = ina3221Sensor.handleAdminMessage(mp, request, response);
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }

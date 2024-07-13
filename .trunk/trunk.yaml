@@ -33,7 +33,8 @@ lint:
     - prettier@3.2.5
   ignore:
     - linters: [ALL]
-      paths: bin/**
+      paths:
+        - bin/**
 runtimes:
   enabled:
     - python@3.10.8
