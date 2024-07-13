@@ -7,7 +7,6 @@
     "core": "esp32",
     "extra_flags": [
       "-DBOARD_HAS_PSRAM",
-      "-DHELTEC_VISION_MASTER_E213",
       "-DARDUINO_USB_CDC_ON_BOOT=1",
       "-DARDUINO_USB_MODE=0",
       "-DARDUINO_RUNNING_CORE=1",

@@ -6,8 +6,8 @@
 #define HELTEC_VISION_MASTER_E213 true
 
 // Enable bus for external periherals
-#define I2C_SCL 38
-#define I2C_SDA 39
+#define I2C_SCL SCL
+#define I2C_SDA SDA
 
 #define USE_EINK
 
