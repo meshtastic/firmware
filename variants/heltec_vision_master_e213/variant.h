@@ -1,13 +1,8 @@
-#ifndef VARIANT_H
-#define VARIANT_H
 // #define LED_PIN 18
 
-#ifdef HELTEC_VISION_MASTER_E213
-#define HELTEC_VISION_MASTER_E213 true
-
 // Enable bus for external periherals
-#define I2C_SCL SCL
 #define I2C_SDA SDA
+#define I2C_SCL SCL
 
 #define USE_EINK
 
@@ -38,7 +33,7 @@
 #define ADC_CTRL_ENABLED HIGH
 #define BATTERY_PIN 7
 #define ADC_CHANNEL ADC1_GPIO7_CHANNEL
-#define ADC_MULTIPLIER 4.9*1.03 // Voltage divider is roughly 1:1
+#define ADC_MULTIPLIER 4.9 * 1.03        // Voltage divider is roughly 1:1
 #define ADC_ATTENUATION ADC_ATTEN_DB_2_5 // Voltage divider output is quite high
 
 #define USE_SX1262
@@ -61,8 +56,3 @@
 
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
-
-
-#endif // HELTEC_VISION_MASTER_E213
-
-#endif // VARIANT_H
