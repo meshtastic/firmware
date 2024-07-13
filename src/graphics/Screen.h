@@ -173,9 +173,11 @@ class Screen : public concurrency::OSThread
     CallbackObserver<Screen, const meshtastic_MeshPacket *> textMessageObserver =
         CallbackObserver<Screen, const meshtastic_MeshPacket *>(this, &Screen::handleTextMessage);
     CallbackObserver<Screen, const UIFrameEvent *> uiFrameEventObserver =
-        CallbackObserver<Screen, const UIFrameEvent *>(this, &Screen::handleUIFrameEvent);
+        CallbackObserver<Screen, const UIFrameEvent *>(this, &Screen::handleUIFrameEvent); // Sent by Mesh Modules
     CallbackObserver<Screen, const InputEvent *> inputObserver =
         CallbackObserver<Screen, const InputEvent *>(this, &Screen::handleInputEvent);
+    CallbackObserver<Screen, const meshtastic_AdminMessage *> adminMessageObserver =
+        CallbackObserver<Screen, const meshtastic_AdminMessage *>(this, &Screen::handleAdminMessage);
 
   public:
     explicit Screen(ScanI2C::DeviceAddress, meshtastic_Config_DisplayConfig_OledType, OLEDDISPLAY_GEOMETRY);
@@ -394,6 +396,7 @@ class Screen : public concurrency::OSThread
     int handleTextMessage(const meshtastic_MeshPacket *arg);
     int handleUIFrameEvent(const UIFrameEvent *arg);
     int handleInputEvent(const InputEvent *arg);
+    int handleAdminMessage(const meshtastic_AdminMessage *arg);
 
     /// Used to force (super slow) eink displays to draw critical frames
     void forceDisplay(bool forceUiUpdate = false);
@@ -450,8 +453,34 @@ class Screen : public concurrency::OSThread
     void handleShowPrevFrame();
     void handlePrint(const char *text);
     void handleStartFirmwareUpdateScreen();
-    /// Rebuilds our list of frames (screens) to default ones.
-    void setFrames();
+
+    // Info collected by setFrames method.
+    // Index location of specific frames. Used to apply the FrameFocus parameter of setFrames
+    struct FramesetInfo {
+        struct FramePositions {
+            uint8_t fault = 0;
+            uint8_t textMessage = 0;
+            uint8_t focusedModule = 0;
+            uint8_t log = 0;
+            uint8_t settings = 0;
+            uint8_t wifi = 0;
+        } positions;
+
+        uint8_t frameCount = 0;
+    } framesetInfo;
+
+    // Which frame we want to be displayed, after we regen the frameset by calling setFrames
+    enum FrameFocus : uint8_t {
+        FOCUS_DEFAULT,  // No specific frame
+        FOCUS_PRESERVE, // Return to the previous frame
+        FOCUS_FAULT,
+        FOCUS_TEXTMESSAGE,
+        FOCUS_MODULE, // Note: target module should call requestFocus(), otherwise no info about which module to focus
+    };
+
+    // Regenerate the normal set of frames, focusing a specific frame if requested
+    // Call when a frame should be added / removed, or custom frames should be cleared
+    void setFrames(FrameFocus focus = FOCUS_DEFAULT);
 
     /// Try to start drawing ASAP
     void setFastFramerate();
