@@ -277,6 +277,17 @@ const char *Channels::getName(size_t chIndex)
     return channelName;
 }
 
+bool Channels::isDefaultChannel(const meshtastic_Channel &ch)
+{
+    if (ch.settings.psk.size == 1 && ch.settings.psk.bytes[0] == 1) {
+        const char *presetName = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false);
+        // Check if the name is the default derived from the modem preset
+        if (strcmp(ch.settings.name, presetName) == 0)
+            return true;
+    }
+    return false;
+}
+
 bool Channels::hasDefaultChannel()
 {
     // If we don't use a preset or the default frequency slot, or we override the frequency, we don't have a default channel
@@ -285,13 +296,8 @@ bool Channels::hasDefaultChannel()
     // Check if any of the channels are using the default name and PSK
     for (size_t i = 0; i < getNumChannels(); i++) {
         const auto &ch = getByIndex(i);
-        if (ch.settings.psk.size == 1 && ch.settings.psk.bytes[0] == 1) {
-            const char *name = getName(i);
-            const char *presetName = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false);
-            // Check if the name is the default derived from the modem preset
-            if (strcmp(name, presetName) == 0)
-                return true;
-        }
+        if (isDefaultChannel(ch))
+            return true;
     }
     return false;
 }

@@ -59,6 +59,7 @@ class StoreForwardModule : private concurrency::OSThread, public ProtobufModule<
     meshtastic_MeshPacket *preparePayload(NodeNum dest, uint32_t packetHistory_index, bool local = false);
     void sendMessage(NodeNum dest, const meshtastic_StoreAndForward &payload);
     void sendMessage(NodeNum dest, meshtastic_StoreAndForward_RequestResponse rr);
+    void sendErrorTextMessage(NodeNum dest, bool want_response);
     meshtastic_MeshPacket *getForPhone();
     // Returns true if we are configured as server AND we could allocate PSRAM.
     bool isServer() { return is_server; }

@@ -311,6 +311,35 @@ void StoreForwardModule::sendMessage(NodeNum dest, meshtastic_StoreAndForward_Re
 }
 
 /**
+ * Sends a text message with an error (busy or channel not available) to the specified destination node.
+ *
+ * @param dest The destination node number.
+ * @param want_response True if the original message requested a response, false otherwise.
+ */
+void StoreForwardModule::sendErrorTextMessage(NodeNum dest, bool want_response)
+{
+    meshtastic_MeshPacket *pr = allocDataPacket();
+    pr->to = dest;
+    pr->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+    pr->want_ack = false;
+    pr->decoded.want_response = false;
+    pr->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+    const char *str;
+    if (this->busy) {
+        str = "** S&F - Busy. Try again shortly.";
+    } else {
+        str = "** S&F - Not available on this channel.";
+    }
+    LOG_WARN("%s\n", str);
+    memcpy(pr->decoded.payload.bytes, str, strlen(str));
+    pr->decoded.payload.size = strlen(str);
+    if (want_response) {
+        ignoreRequest = true; // This text message counts as response.
+    }
+    service.sendToMesh(pr);
+}
+
+/**
  * Sends statistics about the store and forward module to the specified node.
  *
  * @param to The node ID to send the statistics to.
@@ -353,16 +382,8 @@ ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &m
                 LOG_DEBUG("*** Legacy Request to send\n");
 
                 // Send the last 60 minutes of messages.
-                if (this->busy) {
-                    meshtastic_MeshPacket *pr = allocDataPacket();
-                    pr->to = getFrom(&mp);
-                    pr->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
-                    pr->want_ack = false;
-                    pr->decoded.want_response = false;
-                    pr->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
-                    memcpy(pr->decoded.payload.bytes, "** S&F - Busy. Try again shortly.", 34);
-                    pr->decoded.payload.size = 34;
-                    service.sendToMesh(pr);
+                if (this->busy || channels.isDefaultChannel(channels.getByIndex(mp.channel))) {
+                    sendErrorTextMessage(getFrom(&mp), mp.decoded.want_response);
                 } else {
                     storeForwardModule->historySend(historyReturnWindow * 60, getFrom(&mp));
                 }
@@ -426,9 +447,8 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
             requests_history++;
             LOG_INFO("*** Client Request to send HISTORY\n");
             // Send the last 60 minutes of messages.
-            if (this->busy) {
-                storeForwardModule->sendMessage(getFrom(&mp), meshtastic_StoreAndForward_RequestResponse_ROUTER_BUSY);
-                LOG_INFO("*** S&F - Busy. Try again shortly.\n");
+            if (this->busy || channels.isDefaultChannel(channels.getByIndex(mp.channel))) {
+                sendErrorTextMessage(getFrom(&mp), mp.decoded.want_response);
             } else {
                 if ((p->which_variant == meshtastic_StoreAndForward_history_tag) && (p->variant.history.window > 0)) {
                     // window is in minutes
