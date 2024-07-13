@@ -234,6 +234,18 @@ void cpuDeepSleep(uint32_t msecToWake)
     // RAK-12039 set pin for Air quality sensor
     digitalWrite(AQ_SET_PIN, LOW);
 #endif
+#ifdef RAK14014
+    // GPIO restores input status, otherwise there will be leakage current
+    nrf_gpio_cfg_default(TFT_BL);
+    nrf_gpio_cfg_default(TFT_DC);
+    nrf_gpio_cfg_default(TFT_CS);
+    nrf_gpio_cfg_default(TFT_SCLK);
+    nrf_gpio_cfg_default(TFT_MOSI);
+    nrf_gpio_cfg_default(TFT_MISO);
+    nrf_gpio_cfg_default(SCREEN_TOUCH_INT);
+    nrf_gpio_cfg_default(WB_I2C1_SCL);
+    nrf_gpio_cfg_default(WB_I2C1_SDA);
+#endif
 #endif
     // Sleepy trackers or sensors can low power "sleep"
     // Don't enter this if we're sleeping portMAX_DELAY, since that's a shutdown event
@@ -274,5 +286,10 @@ void clearBonds()
 
 void enterDfuMode()
 {
+// SDK kit does not have native USB like almost all other NRF52 boards
+#ifdef NRF_USE_SERIAL_DFU
+    enterSerialDfu();
+#else
     enterUf2Dfu();
+#endif
 }
