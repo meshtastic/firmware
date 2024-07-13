@@ -12,12 +12,16 @@
 
 class PowerTelemetryModule : private concurrency::OSThread, public ProtobufModule<meshtastic_Telemetry>
 {
+    CallbackObserver<PowerTelemetryModule, const meshtastic::Status *> nodeStatusObserver =
+        CallbackObserver<PowerTelemetryModule, const meshtastic::Status *>(this, &PowerTelemetryModule::handleStatusUpdate);
+
   public:
     PowerTelemetryModule()
         : concurrency::OSThread("PowerTelemetryModule"),
           ProtobufModule("PowerTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
         lastMeasurementPacket = nullptr;
+        nodeStatusObserver.observe(&nodeStatus->onNewStatus);
         setIntervalFromNow(10 * 1000);
     }
     virtual bool wantUIFrame() override;
