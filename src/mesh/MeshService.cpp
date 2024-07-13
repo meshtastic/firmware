@@ -293,6 +293,17 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 {
     perhapsDecode(p);
 
+#ifdef ARCH_ESP32
+#if !MESHTASTIC_EXCLUDE_STOREFORWARD
+    if (moduleConfig.store_forward.enabled && storeForwardModule->isServer() &&
+        p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) {
+        releaseToPool(p); // Copy is already stored in StoreForward history
+        fromNum++;        // Notify observers for packet from radio
+        return;
+    }
+#endif
+#endif
+
     if (toPhoneQueue.numFree() == 0) {
         if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
             p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP) {
