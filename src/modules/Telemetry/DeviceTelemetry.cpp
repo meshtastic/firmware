@@ -17,8 +17,9 @@ int32_t DeviceTelemetryModule::runOnce()
 {
     refreshUptime();
     if (((lastSentToMesh == 0) ||
-         ((uptimeLastMs - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.device_update_interval,
-                                                                               default_telemetry_broadcast_interval_secs))) &&
+         ((uptimeLastMs - lastSentToMesh) >=
+          Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.device_update_interval,
+                                                  default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
         airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
         airTime->isTxAllowedAirUtil() && config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {

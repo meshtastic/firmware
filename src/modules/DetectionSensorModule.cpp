@@ -58,8 +58,8 @@ int32_t DetectionSensorModule::runOnce()
     // of heartbeat. We only do this if the minimum broadcast interval is greater than zero, otherwise we'll only broadcast state
     // change detections.
     else if (moduleConfig.detection_sensor.state_broadcast_secs > 0 &&
-             (millis() - lastSentToMesh) >=
-                 Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs)) {
+             (millis() - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs,
+                                                                              default_telemetry_broadcast_interval_secs)) {
         sendCurrentStateMessage();
         return DELAYED_INTERVAL;
     }
