@@ -113,6 +113,7 @@ void StoreForwardModule::historySend(uint32_t secAgo, uint32_t to)
     sf.variant.history.window = secAgo * 1000;
     sf.variant.history.last_request = lastRequest[to];
     storeForwardModule->sendMessage(to, sf);
+    setIntervalFromNow(this->packetTimeMax); // Delay start of sending payloads
 }
 
 /**
