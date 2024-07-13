@@ -52,6 +52,7 @@ body:
         - Raspberry Pi Pico (W)
         - Relay v1
         - Relay v2
+        - Seeed Wio Tracker 1110
         - DIY
         - Other
     validations:
