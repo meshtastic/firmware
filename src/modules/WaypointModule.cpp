@@ -16,14 +16,30 @@ ProcessMessage WaypointModule::handleReceived(const meshtastic_MeshPacket &mp)
     auto &p = mp.decoded;
     LOG_INFO("Received waypoint msg from=0x%0x, id=0x%x, msg=%.*s\n", mp.from, mp.id, p.payload.size, p.payload.bytes);
 #endif
-    UIFrameEvent e = {true, true};
     // We only store/display messages destined for us.
     // Keep a copy of the most recent text message.
     devicestate.rx_waypoint = mp;
     devicestate.has_rx_waypoint = true;
 
     powerFSM.trigger(EVENT_RECEIVED_MSG);
+
+#if HAS_SCREEN
+
+    UIFrameEvent e;
+
+    // New or updated waypoint: focus on this frame next time Screen::setFrames runs
+    if (shouldDraw()) {
+        requestFocus();
+        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET;
+    }
+
+    // Deleting an old waypoint: remove the frame quietly, don't change frame position if possible
+    else
+        e.action = UIFrameEvent::Action::REGENERATE_FRAMESET_BACKGROUND;
+
     notifyObservers(&e);
+
+#endif
 
     return ProcessMessage::CONTINUE; // Let others look at this message also if they want
 }
