@@ -14,8 +14,6 @@ static BLECharacteristic fromRadio = BLECharacteristic(BLEUuid(FROMRADIO_UUID_16
 static BLECharacteristic toRadio = BLECharacteristic(BLEUuid(TORADIO_UUID_16));
 static BLECharacteristic logRadio = BLECharacteristic(BLEUuid(LOGRADIO_UUID_16));
 
-static BLEDis bledis; // DIS (Device Information Service) helper class instance
-static BLEBas blebas; // BAS (Battery Service) helper class instance
 static BLEDis bledis;             // DIS (Device Information Service) helper class instance
 static BLEBas blebas;             // BAS (Battery Service) helper class instance
 static BLEDfu bledfu;             // DFU software update helper service
@@ -252,6 +250,7 @@ void NRF52Bluetooth::setup()
     // Set the connect/disconnect callback handlers
     Bluefruit.Periph.setConnectCallback(onConnect);
     Bluefruit.Periph.setDisconnectCallback(onDisconnect);
+
 #ifndef BLE_DFU_SECURE
     bledfu.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
     bledfu.begin(); // Install the DFU helper
