@@ -3,8 +3,6 @@
 
 #include <stdint.h>
 
-#define HELTEC_VISION_MASTER_E213 true
-
 static const uint8_t LED_BUILTIN = 35;
 #define BUILTIN_LED LED_BUILTIN // backward compatibility
 #define LED_BUILTIN LED_BUILTIN
@@ -12,8 +10,8 @@ static const uint8_t LED_BUILTIN = 35;
 static const uint8_t TX = 43;
 static const uint8_t RX = 44;
 
-static const uint8_t SDA = 41;
-static const uint8_t SCL = 42;
+static const uint8_t SDA = 39;
+static const uint8_t SCL = 38;
 
 static const uint8_t SS = 8;
 static const uint8_t MOSI = 10;

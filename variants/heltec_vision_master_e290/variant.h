@@ -27,7 +27,7 @@
 
 #define VEXT_ENABLE 18 // powers the e-ink display
 #define VEXT_ON_VALUE 1
-#define BUTTON_PIN 21
+#define BUTTON_PIN 0
 
 #define ADC_CTRL 46
 #define ADC_CTRL_ENABLED HIGH
