@@ -18,10 +18,12 @@
     "flash_mode": "qio",
     "hwids": [["0x1A86", "0x7523"]],
     "mcu": "esp32s3",
-    "variant": "seeed-sensecap-indicator"
+    "variant": "esp32s3r8"
   },
   "connectivity": ["wifi", "bluetooth", "lora"],
   "debug": {
+    "default_tool": "esp-builtin",
+    "onboard_tools": ["esp-builtin"],
     "openocd_target": "esp32s3.cfg"
   },
   "frameworks": ["arduino"],
