@@ -1006,7 +1006,7 @@ void GPS::down()
     LOG_DEBUG("%us until next search\n", sleepTime / 1000);
 
 #ifdef GNSS_Airoha
-            lastFixStartMsec = 0;
+    lastFixStartMsec = 0;
 #endif
 
     // If update interval less than 10 seconds, no attempt to sleep
