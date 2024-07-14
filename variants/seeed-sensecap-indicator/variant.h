@@ -1,3 +1,6 @@
+#define IO_EXPANDER 0x40
+#define IO_EXPANDER_ADDR 0x20
+
 #define I2C_SDA 39
 #define I2C_SCL 40
 
@@ -8,32 +11,33 @@
 // #define ADC_CHANNEL ADC1_GPIO27_CHANNEL
 // #define ADC_MULTIPLIER 2
 
-// ST7789 TFT LCD
-#define ST7789_CS -1  // IO04
-#define ST7789_RS -1  // DC
-#define ST7789_SDA 48 // MOSI
-#define ST7789_SCK 41
-#define ST7789_RESET -1 // IO05
-#define ST7789_MISO 47
-#define ST7789_BUSY -1
-#define ST7789_BL 45
-#define ST7789_SPI_HOST SPI2_HOST
-#define ST7789_BACKLIGHT_EN 45
+// ST7701 TFT LCD
+#define ST7701_CS -1  // (4 | IO_EXPANDER)
+#define ST7701_RS -1  // DC
+#define ST7701_SDA 48 // MOSI
+#define ST7701_SCK 41
+#define ST7701_RESET (5 | IO_EXPANDER)
+#define ST7701_MISO 47
+#define ST7701_BUSY -1
+#define ST7701_BL 45
+#define ST7701_SPI_HOST SPI2_HOST
+#define ST7701_BACKLIGHT_EN 45
 #define SPI_FREQUENCY 20000000
 #define SPI_READ_FREQUENCY 16000000
 #define TFT_HEIGHT 480
 #define TFT_WIDTH 480
 #define TFT_OFFSET_X 0
 #define TFT_OFFSET_Y 0
-#define TFT_OFFSET_ROTATION 2
-#define TFT_BL ST7789_BACKLIGHT_EN
+#define TFT_OFFSET_ROTATION 1
+#define TFT_BL 45
 #define SCREEN_ROTATE
 #define SCREEN_TRANSITION_FRAMERATE 5 // fps
 
-#define HAS_TOUCHSCREEN 1
-#define SCREEN_TOUCH_INT -1 // IO06
-#define TOUCH_I2C_PORT 0x55
-#define TOUCH_SLAVE_ADDRESS -1
+#define HAS_TOUCHSCREEN 3
+#define SCREEN_TOUCH_INT (6 | IO_EXPANDER)
+#define SCREEN_TOUCH_RST (7 | IO_EXPANDER)
+#define TOUCH_I2C_PORT 1
+#define TOUCH_SLAVE_ADDRESS 0x48
 
 // Buzzer
 #define PIN_BUZZER 19
@@ -48,12 +52,12 @@
 #define LORA_SCK 41
 #define LORA_MISO 47
 #define LORA_MOSI 48
-#define LORA_CS -1 // IO00
+#define LORA_CS -1 // (0 | IO_EXPANDER)
 
 #define LORA_DIO0 -1  // a no connect on the SX1262 module
-#define LORA_RESET -1 // IO01
-#define LORA_DIO1 -1  // IO03 SX1262 IRQ
-#define LORA_DIO2 -1  // IO02 SX1262 BUSY
+#define LORA_RESET -1 // (1 | IO_EXPANDER)
+#define LORA_DIO1 -1  // (3 | IO_EXPANDER) // SX1262 IRQ
+#define LORA_DIO2 -1  // (2 | IO_EXPANDER) // SX1262 BUSY
 #define LORA_DIO3
 
 #define SX126X_CS LORA_CS
