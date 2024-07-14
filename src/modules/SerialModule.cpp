@@ -198,7 +198,6 @@ int32_t SerialModule::runOnce()
                     }
                 }
             } else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85)) {
-                // } else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_TEXTMSG)) {
                 static unsigned int lastAveraged = 0;
                 static unsigned int averageIntervalMillis = 300000; // 5 minutes hard coded.
                 static double dir_sum_sin = 0;
@@ -222,8 +221,8 @@ int32_t SerialModule::runOnce()
                     memset(serialBytes, '\0', sizeof(serialBytes));
                     // memset(formattedString, '\0', sizeof(formattedString));
                     serialPayloadSize = Serial2.readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
-                    // LOG_INFO(serialBytes);
-                    // check for a string we care about
+                    // check for a strings we care about
+                    // example output of serial data fields from the WS85
                     // WindDir      = 79
                     // WindSpeed    = 0.5
                     // WindGust     = 0.6
@@ -349,12 +348,7 @@ int32_t SerialModule::runOnce()
                     dir_sum_sin = dir_sum_cos = 0;
                     gust = 0;
                     lull = -1;
-
-                    // clear serialBytes first;
-                    // memset(serialBytes, '\0', sizeof(serialBytes));
-                    // return (2000); // don't return for a 2 seconds, allow for transmission.
                 }
-                // Serial.println(formattedString);
 
             }
 
