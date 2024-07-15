@@ -71,8 +71,9 @@ int32_t PowerTelemetryModule::runOnce()
 
         uint32_t now = millis();
         if (((lastSentToMesh == 0) ||
-             ((now - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.power_update_interval,
-                                                                          default_telemetry_broadcast_interval_secs))) &&
+             ((now - lastSentToMesh) >= Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.power_update_interval,
+                                                                                default_telemetry_broadcast_interval_secs,
+                                                                                numOnlineNodes))) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
             lastSentToMesh = now;

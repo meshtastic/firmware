@@ -392,6 +392,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         // Router Client is deprecated; Set it to client
         if (c.payload_variant.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT) {
             config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+            if (moduleConfig.store_forward.enabled && !moduleConfig.store_forward.is_server) {
+                moduleConfig.store_forward.is_server = true;
+                changes |= SEGMENT_MODULECONFIG;
+                requiresReboot = true;
+            }
         }
         break;
     case meshtastic_Config_position_tag:
