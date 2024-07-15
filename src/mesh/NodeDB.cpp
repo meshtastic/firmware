@@ -651,7 +651,7 @@ void NodeDB::loadFromDisk()
 
     // 2.4.X - configuration migration to update new default intervals
     if (moduleConfig.version < DEVICESTATE_CUR_VER) {
-        LOG_DEBUG("ModuleConfig %d is stale, upgrading intervals\n", devicestate.version);
+        LOG_DEBUG("ModuleConfig version %d is stale, upgrading to new default intervals\n", moduleConfig.version);
         moduleConfig.version = DEVICESTATE_CUR_VER;
         if (moduleConfig.telemetry.device_update_interval == 900)
             moduleConfig.telemetry.device_update_interval = 0;
