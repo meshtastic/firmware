@@ -1186,10 +1186,13 @@ void loop()
 void tft_task_handler(void *param = nullptr)
 {
     while (true) {
-        if (deviceScreen)
+        if (deviceScreen) {
+            spiLock->lock();
             deviceScreen->task_handler();
+            spiLock->unlock();
+        }
 #ifdef HAS_FREE_RTOS
-        vTaskDelay((TickType_t)20);
+        vTaskDelay((TickType_t)10);
 #else
         delay(5);
 #endif
