@@ -76,10 +76,12 @@ void setBluetoothEnable(bool enable)
         return;
     }
 
-    // If user disabled bluetooth: init then disable advertising & reduce power
+    // If user disabled bluetooth (or router / repeater):
+    // init then disable advertising & reduce power
     // Workaround. Avoid issue where device hangs several days after boot..
     // Allegedly, no significant increase in power consumption
-    if (!config.bluetooth.enabled) {
+    if (!config.bluetooth.enabled || config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+        config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
         static bool initialized = false;
         if (!initialized) {
             nrf52Bluetooth = new NRF52Bluetooth();
