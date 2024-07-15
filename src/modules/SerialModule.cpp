@@ -66,7 +66,7 @@ SerialModule::SerialModule() : StreamAPI(&Serial2), concurrency::OSThread("Seria
 static Print *serialPrint = &Serial2;
 #endif
 
-char serialBytes[meshtastic_Constants_DATA_PAYLOAD_LEN];
+char serialBytes[512];
 size_t serialPayloadSize;
 
 SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
@@ -220,7 +220,7 @@ int32_t SerialModule::runOnce()
                     // clear serialBytes buffer
                     memset(serialBytes, '\0', sizeof(serialBytes));
                     // memset(formattedString, '\0', sizeof(formattedString));
-                    serialPayloadSize = Serial2.readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
+                    serialPayloadSize = Serial2.readBytes(serialBytes, 512);
                     // check for a strings we care about
                     // example output of serial data fields from the WS85
                     // WindDir      = 79
@@ -279,6 +279,7 @@ int32_t SerialModule::runOnce()
                                     if (batVoltagePos != NULL) {
                                         strcpy(batVoltage, batVoltagePos + 17); // 18 for ws 80, 17 for ws85
                                         batVoltageF = strtof(batVoltage, nullptr);
+                                        break; // last possible data we want so break
                                     }
                                 } else if (strstr(line, "CapVoltage") != NULL) { // we have a cappVoltage line
                                     char *capVoltagePos = strstr(line, "CapVoltage     = ");
@@ -291,6 +292,11 @@ int32_t SerialModule::runOnce()
                                 // Update lineStart for the next line
                                 lineStart = lineEnd + 1;
                             }
+                        }
+                        break;
+                        // clear the input buffer
+                        while (Serial2.available() > 0) {
+                            Serial2.read(); // Read and discard the bytes in the input buffer
                         }
                     }
                 }
