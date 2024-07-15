@@ -648,6 +648,26 @@ void NodeDB::loadFromDisk()
     if (state == LoadFileResult::SUCCESS) {
         LOG_INFO("Loaded OEMStore\n");
     }
+
+    // 2.4.X - configuration migration to update new default intervals
+    if (moduleConfig.version < DEVICESTATE_CUR_VER) {
+        LOG_DEBUG("ModuleConfig %d is stale, upgrading intervals\n", devicestate.version);
+        moduleConfig.version = DEVICESTATE_CUR_VER;
+        if (moduleConfig.telemetry.device_update_interval == 900)
+            moduleConfig.telemetry.device_update_interval = 0;
+        if (moduleConfig.telemetry.environment_update_interval == 900)
+            moduleConfig.telemetry.environment_update_interval = 0;
+        if (moduleConfig.telemetry.air_quality_interval == 900)
+            moduleConfig.telemetry.air_quality_interval = 0;
+        if (moduleConfig.telemetry.power_update_interval == 900)
+            moduleConfig.telemetry.power_update_interval = 0;
+        if (moduleConfig.neighbor_info.update_interval == 900)
+            moduleConfig.neighbor_info.update_interval = 0;
+        if (moduleConfig.paxcounter.paxcounter_update_interval == 900)
+            moduleConfig.paxcounter.paxcounter_update_interval = 0;
+
+        saveToDisk(SEGMENT_MODULECONFIG);
+    }
 }
 
 /** Save a protobuf from a file, return true for success */
