@@ -3,7 +3,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "configuration.h"
-
+#include "buzz.h"
 TextMessageModule *textMessageModule;
 
 ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp)
@@ -12,7 +12,11 @@ ProcessMessage TextMessageModule::handleReceived(const meshtastic_MeshPacket &mp
     auto &p = mp.decoded;
     LOG_INFO("Received text msg from=0x%0x, id=0x%x, msg=%.*s\n", mp.from, mp.id, p.payload.size, p.payload.bytes);
 #endif
-
+#ifdef PIN_BUZZER 
+    if (mp.from != 0x0) {
+        playBeep();
+    }
+#endif
     // We only store/display messages destined for us.
     // Keep a copy of the most recent text message.
     devicestate.rx_text_message = mp;
