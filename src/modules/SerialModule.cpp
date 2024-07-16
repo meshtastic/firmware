@@ -197,7 +197,10 @@ int32_t SerialModule::runOnce()
                         tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
                     }
                 }
-            } else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85)) {
+            }
+
+#if !defined(TTGO_T_ECHO) && !defined(CANARYONE)
+            else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85)) {
                 static unsigned int lastAveraged = 0;
                 static unsigned int averageIntervalMillis = 300000; // 5 minutes hard coded.
                 static double dir_sum_sin = 0;
@@ -345,10 +348,7 @@ int32_t SerialModule::runOnce()
                     lull = -1;
                 }
 
-            }
-
-#if !defined(TTGO_T_ECHO) && !defined(CANARYONE)
-            else {
+            } else {
                 while (Serial2.available()) {
                     serialPayloadSize = Serial2.readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
                     serialModuleRadio->sendPayload();
