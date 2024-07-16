@@ -1187,7 +1187,7 @@ GnssModel_t GPS::probe(int serialSpeed)
 #endif
 
 #ifdef GNSS_Airoha
-    return GNSS_MODEL_UNKNOWN
+    return GNSS_MODEL_UNKNOWN;
 #else
 #ifdef GPS_DEBUG
     for (int i = 0; i < 20; i++) {
