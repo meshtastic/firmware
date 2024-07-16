@@ -55,12 +55,12 @@ extern "C" {
 #define BUTTON_ACTIVE_PULLUP false
 #define BUTTON_SENSE_TYPE INPUT_SENSE_HIGH
 
-#define HAS_WIRE 0
+#define HAS_WIRE 1
 
 #define WIRE_INTERFACES_COUNT 1
 
-#define PIN_WIRE_SDA (0 + 26) // P0.26
-#define PIN_WIRE_SCL (0 + 27) // P0.27
+#define PIN_WIRE_SDA (0 + 9) // P0.26
+#define PIN_WIRE_SCL (0 + 10) // P0.27
 
 /*
  * Serial interfaces
