@@ -28,7 +28,6 @@ class SerialModule : public StreamAPI, private concurrency::OSThread
 
   private:
     uint32_t getBaudRate();
-    void sendTelemetry(meshtastic_Telemetry m);
 };
 
 extern SerialModule *serialModule;

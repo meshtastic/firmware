@@ -336,7 +336,18 @@ int32_t SerialModule::runOnce()
                              m.variant.environment_metrics.wind_lull, m.variant.environment_metrics.wind_gust,
                              m.variant.environment_metrics.voltage);
 
-                    sendTelemetry(m);
+                    meshtastic_MeshPacket *p = router->allocForSending();
+
+                    p->decoded.portnum = meshtastic_PortNum_TELEMETRY_APP;
+
+                    p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes),
+                                                                 &meshtastic_Telemetry_msg, &m);
+
+                    LOG_INFO("payload size : %i\n", p->decoded.payload.size);
+                    p->to = NODENUM_BROADCAST;
+                    p->decoded.want_response = false;
+                    p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+                    service.sendToMesh(p, RX_SRC_LOCAL, true);
 
                     // reset counters and gust/lull
                     velSum = velCount = dirCount = 0;
@@ -360,27 +371,6 @@ int32_t SerialModule::runOnce()
     } else {
         return disable();
     }
-}
-
-/**
- * Sends telemetry packet over the mesh network.
- *
- * @param m The telemetry data to be sent
- *
- * @return void
- *
- * @throws None
- */
-void SerialModule::sendTelemetry(meshtastic_Telemetry m)
-{
-    meshtastic_MeshPacket *p = router->allocForSending();
-    p->decoded.portnum = meshtastic_PortNum_TELEMETRY_APP;
-    p->decoded.payload.size =
-        pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Telemetry_msg, &m);
-    p->to = NODENUM_BROADCAST;
-    p->decoded.want_response = false;
-    p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
-    service.sendToMesh(p, RX_SRC_LOCAL, true);
 }
 
 /**
