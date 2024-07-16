@@ -56,6 +56,7 @@ DFRobotLarkSensor dfRobotLarkSensor;
 NAU7802Sensor nau7802Sensor;
 T1000xSensor t1000xSensor;
 
+
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
@@ -65,8 +66,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
 {
     if (sleepOnNextExecution == true) {
         sleepOnNextExecution = false;
-        uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval,
-                                                                   default_telemetry_broadcast_interval_secs);
+        uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval);
         LOG_DEBUG("Sleeping for %ims, then awaking to send metrics again.\n", nightyNightMs);
         doDeepSleep(nightyNightMs, true);
     }
@@ -94,7 +94,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
             LOG_INFO("Environment Telemetry: Initializing\n");
             // it's possible to have this module enabled, only for displaying values on the screen.
             // therefore, we should only enable the sensor loop if measurement is also enabled
-#ifdef T1000X_SENSOR_EN  
+#ifdef T1000X_SENSOR_EN 
             result = t1000xSensor.runOnce();
 #else
             if (dfRobotLarkSensor.hasSensor())
@@ -151,9 +151,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
 
         uint32_t now = millis();
         if (((lastSentToMesh == 0) ||
-             ((now - lastSentToMesh) >=
-              Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.environment_update_interval,
-                                                      default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
+             ((now - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval))) &&
             airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
@@ -288,10 +286,6 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     m->time = getTime();
     m->which_variant = meshtastic_Telemetry_environment_metrics_tag;
 
-#ifdef T1000X_SENSOR_EN
-    valid = valid && t1000xSensor.getMetrics(m);
-    hasSensor = true;
-#else
     if (dfRobotLarkSensor.hasSensor()) {
         valid = valid && dfRobotLarkSensor.getMetrics(m);
         hasSensor = true;
@@ -380,7 +374,7 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
             m->variant.environment_metrics.relative_humidity = m_ahtx.variant.environment_metrics.relative_humidity;
         }
     }
-#endif
+
     return valid && hasSensor;
 }
 
@@ -415,7 +409,11 @@ meshtastic_MeshPacket *EnvironmentTelemetryModule::allocReply()
 bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 {
     meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
+#ifdef T1000X_SENSOR_EN 
+    if (t1000xSensor.getMetrics(&m)) {
+#else
     if (getEnvironmentTelemetry(&m)) {
+#endif
         LOG_INFO("(Sending): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f\n",
                  m.variant.environment_metrics.barometric_pressure, m.variant.environment_metrics.current,
                  m.variant.environment_metrics.gas_resistance, m.variant.environment_metrics.relative_humidity,
