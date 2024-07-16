@@ -190,13 +190,13 @@ int32_t AudioModule::runOnce()
 
             firstTime = false;
         } else {
-            UIFrameEvent e = {false, true};
+            UIFrameEvent e;
             // Check if PTT is pressed. TODO hook that into Onebutton/Interrupt drive.
             if (digitalRead(moduleConfig.audio.ptt_pin ? moduleConfig.audio.ptt_pin : PTT_PIN) == HIGH) {
                 if (radio_state == RadioState::rx) {
                     LOG_INFO("PTT pressed, switching to TX\n");
                     radio_state = RadioState::tx;
-                    e.frameChanged = true;
+                    e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
                     this->notifyObservers(&e);
                 }
             } else {
@@ -209,7 +209,7 @@ int32_t AudioModule::runOnce()
                     }
                     tx_encode_frame_index = sizeof(tx_header);
                     radio_state = RadioState::rx;
-                    e.frameChanged = true;
+                    e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
                     this->notifyObservers(&e);
                 }
             }

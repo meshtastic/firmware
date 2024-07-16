@@ -13,6 +13,11 @@
 #if defined(ARCH_PORTDUINO) && !HAS_RADIO
 #include "../platform/portduino/SimRadio.h"
 #endif
+#ifdef ARCH_ESP32
+#if !MESHTASTIC_EXCLUDE_STOREFORWARD
+#include "modules/esp32/StoreForwardModule.h"
+#endif
+#endif
 
 extern Allocator<meshtastic_QueueStatus> &queueStatusPool;
 extern Allocator<meshtastic_MqttClientProxyMessage> &mqttClientProxyMessagePool;
