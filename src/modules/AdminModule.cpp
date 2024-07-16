@@ -200,6 +200,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     case meshtastic_AdminMessage_remove_by_nodenum_tag: {
         LOG_INFO("Client is receiving a remove_nodenum command.\n");
         nodeDB->removeNodeByNum(r->remove_by_nodenum);
+        this->notifyObservers(r); // Observed by screen
         break;
     }
     case meshtastic_AdminMessage_set_favorite_node_tag: {
@@ -391,6 +392,11 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         // Router Client is deprecated; Set it to client
         if (c.payload_variant.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT) {
             config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+            if (moduleConfig.store_forward.enabled && !moduleConfig.store_forward.is_server) {
+                moduleConfig.store_forward.is_server = true;
+                changes |= SEGMENT_MODULECONFIG;
+                requiresReboot = true;
+            }
         }
         break;
     case meshtastic_Config_position_tag:
