@@ -101,6 +101,12 @@ template <typename T> bool LR11x0Interface<T>::init()
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setRegulatorDCDC();
 
+#ifdef LR11X0_DIO_RF_SWITCH_CONFIG 
+            res = lora.setDioAsRfSwitch(LR11X0_DIO_RF_SWITCH_CONFIG);
+#else
+            res = lora.setDioAsRfSwitch(0x03, 0x0, 0x01, 0x03, 0x02, 0x0, 0x0, 0x0);
+#endif
+
     if (res == RADIOLIB_ERR_NONE) {
         if (config.lora.sx126x_rx_boosted_gain) { // the name is unfortunate but historically accurate
             res = lora.setRxBoostedGainMode(true);
