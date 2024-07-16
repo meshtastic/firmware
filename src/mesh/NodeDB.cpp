@@ -429,6 +429,7 @@ void NodeDB::initModuleConfigIntervals()
     moduleConfig.telemetry.device_update_interval = 0;
     moduleConfig.telemetry.environment_update_interval = 0;
     moduleConfig.telemetry.air_quality_interval = 0;
+    moduleConfig.telemetry.power_update_interval = 0;
     moduleConfig.neighbor_info.update_interval = 0;
     moduleConfig.paxcounter.paxcounter_update_interval = 0;
     moduleConfig.neighbor_info.update_interval = 0;
