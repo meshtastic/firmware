@@ -1,4 +1,5 @@
 #include "SerialModule.h"
+#include "GeoCoord.h"
 #include "MeshService.h"
 #include "NMEAWPL.h"
 #include "NodeDB.h"
