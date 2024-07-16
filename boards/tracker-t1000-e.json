@@ -35,7 +35,7 @@
     "svd_path": "nrf52840.svd"
   },
   "frameworks": ["arduino"],
-  "name": "Seeed T1000 -E",
+  "name": "Seeed T1000-E",
   "upload": {
     "maximum_ram_size": 248832,
     "maximum_size": 815104,
