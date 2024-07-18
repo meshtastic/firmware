@@ -25,7 +25,8 @@ int16_t RadioLibRF95::begin(float freq, float bw, uint8_t sf, uint8_t cr, uint8_
     RADIOLIB_ASSERT(state);
 
 #ifdef RF95_TCXO
-    state = _mod->SPIsetRegValue(RADIOLIB_SX127X_REG_TCXO, 0x10 | _mod->SPIgetRegValue(RADIOLIB_SX127X_REG_TCXO));
+    Module *_mod = this->getMod();
+    state = _mod->SPIsetRegValue(RADIOLIB_SX127X_REG_TCXO, 0x10 | _mod->SPIgetRegValue(SX127X_REG_TCXO));
     RADIOLIB_ASSERT(state);
 #endif
 
@@ -59,7 +60,11 @@ int16_t RadioLibRF95::setFrequency(float freq)
     // RADIOLIB_CHECK_RANGE(freq, 862.0, 1020.0, ERR_INVALID_FREQUENCY);
 
     // set frequency
-    return (SX127x::setFrequencyRaw(freq));
+    int16_t state = SX127x:setFrequencyRaw(freq);
+    if(state == RADIOLIB_ERR_NONE){
+    SX127x::frequency = freq;
+    }
+    return (state);
 }
 
 #define RH_RF95_MODEM_STATUS_CLEAR 0x10
