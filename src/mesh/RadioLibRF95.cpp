@@ -60,7 +60,7 @@ int16_t RadioLibRF95::setFrequency(float freq)
     // RADIOLIB_CHECK_RANGE(freq, 862.0, 1020.0, ERR_INVALID_FREQUENCY);
 
     // set frequency
-    int16_t state = SX127x:setFrequencyRaw(freq);
+    int16_t state = SX127x::setFrequencyRaw(freq);
     if(state == RADIOLIB_ERR_NONE){
     SX127x::frequency = freq;
     }
