@@ -1550,7 +1550,7 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
  */
 bool GPS::lookForLocation()
 {
-#ifdef GNSS_Airoha // add by WayenWeng
+#ifdef GNSS_Airoha 
     if ((config.position.gps_update_interval * 1000) >= (GPS_FIX_HOLD_TIME * 2)) {
         uint8_t fix = reader.fixQuality();
         uint32_t now = millis();
