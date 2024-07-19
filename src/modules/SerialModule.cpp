@@ -392,6 +392,7 @@ uint32_t SerialModule::getBaudRate()
  */
 void SerialModule::processWXSerial()
 {
+#if !defined(TTGO_T_ECHO) && !defined(CANARYONE)
     static unsigned int lastAveraged = 0;
     static unsigned int averageIntervalMillis = 300000; // 5 minutes hard coded.
     static double dir_sum_sin = 0;
@@ -537,5 +538,7 @@ void SerialModule::processWXSerial()
         gust = 0;
         lull = -1;
     }
+#endif
+    return;
 }
 #endif
