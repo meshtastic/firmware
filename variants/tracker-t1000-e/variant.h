@@ -16,14 +16,13 @@
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-#ifndef _VARIANT_WIO_SDK_WM1110_
-#define _VARIANT_WIO_SDK_WM1110_
+#ifndef _VARIANT_TRACKER_T1000_E_
+#define _VARIANT_TRACKER_T1000_E_
 
 /** Master clock frequency */
 #define VARIANT_MCK (64000000ul)
 
 #define USE_LFXO // Board uses 32khz crystal for LF
-// define USE_LFRC    // Board uses RC for LF
 
 /*----------------------------------------------------------------------------
  *        Headers
@@ -53,12 +52,13 @@ extern "C" {
 #define BUTTON_PIN (0 + 6) // P0.6
 #define BUTTON_ACTIVE_LOW false
 #define BUTTON_ACTIVE_PULLUP false
-#define BUTTON_SENSE_TYPE INPUT_SENSE_HIGH
+#define BUTTON_SENSE_TYPE 0x6
 
 #define HAS_WIRE 1
 
 #define WIRE_INTERFACES_COUNT 1
 
+// unused pins
 #define PIN_WIRE_SDA (0 + 9) // P0.26
 #define PIN_WIRE_SCL (0 + 10) // P0.27
 
@@ -120,23 +120,16 @@ extern "C" {
 #define GPS_RTC_INT (0 + 15) // P0.15, normal is LOW, wake by HIGH
 #define GPS_RESETB_OUT (32 + 14) // P1.14, awlays input pull_up
 
-// #define GPS_THREAD_INTERVAL 50
 #define GPS_FIX_HOLD_TIME 15000 // ms
-
 #define BATTERY_PIN 2
-// #define ADC_CHANNEL ADC1_GPIO2_CHANNEL
 #define ADC_MULTIPLIER (2.0F)
 
 #define ADC_RESOLUTION 14
 #define BATTERY_SENSE_RESOLUTION_BITS 12
-// #define BATTERY_SENSE_RESOLUTION 4096.0
 
 #undef AREF_VOLTAGE
 #define AREF_VOLTAGE 3.0
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
-
-// #define ADC_CTRL (32 + 6)
-// #define ADC_CTRL_ENABLED HIGH
 
 // Buzzer
 #define BUZZER_EN_PIN (32 + 5) // P1.05, awlays high
@@ -155,4 +148,4 @@ extern "C" {
  *        Arduino objects - C++ only
  *----------------------------------------------------------------------------*/
 
-#endif // _VARIANT_WIO_SDK_WM1110_
+#endif // _VARIANT_TRACKER_T1000_E_
