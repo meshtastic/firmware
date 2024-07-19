@@ -310,9 +310,8 @@ int32_t SerialModule::runOnce()
                              strtof(windGust, nullptr), batVoltageF, capVoltageF);
                 }
                 if (gotwind && millis() - lastAveraged > averageIntervalMillis) {
-                    // calulate average and send to the mesh
+                    // calulate averages and send to the mesh
                     float velAvg = 1.0 * velSum / velCount;
-                    // float dirAvg = dirSum / dirCount; // TODO : this needs some trig to be accurate
 
                     double avgSin = dir_sum_sin / dirCount;
                     double avgCos = dir_sum_cos / dirCount;
