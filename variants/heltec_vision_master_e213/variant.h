@@ -20,7 +20,8 @@
 #define PIN_SPI_SCK 9   // SCK
 
 // Power
-#define VEXT_ENABLE 18 // Powers the E-Ink display
+#define VEXT_ENABLE 18            // Powers the E-Ink display, and the 3.3V supply to the I2C QuickLink connector
+#define PERIPHERAL_WARMUP_MS 1000 // Make sure I2C QuickLink has stable power before continuing
 #define VEXT_ON_VALUE HIGH
 #define ADC_CTRL 46
 #define ADC_CTRL_ENABLED HIGH
