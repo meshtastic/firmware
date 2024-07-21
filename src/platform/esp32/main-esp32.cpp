@@ -93,6 +93,7 @@ void esp32Setup()
 {
     uint32_t seed = esp_random();
     LOG_DEBUG("Setting random seed %u\n", seed);
+    randomSeed(seed);
 
     LOG_DEBUG("Total heap: %d\n", ESP.getHeapSize());
     LOG_DEBUG("Free heap: %d\n", ESP.getFreeHeap());
