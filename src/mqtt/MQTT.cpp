@@ -673,8 +673,10 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
                     msgPayload["lux"] = new JSONValue(decoded->variant.environment_metrics.lux);
                     msgPayload["white_lux"] = new JSONValue(decoded->variant.environment_metrics.white_lux);
                     msgPayload["iaq"] = new JSONValue((uint)decoded->variant.environment_metrics.iaq);
-                    msgPayload["wind_speed"] = new JSONValue((uint)decoded->variant.environment_metrics.wind_speed);
+                    msgPayload["wind_speed"] = new JSONValue(decoded->variant.environment_metrics.wind_speed);
                     msgPayload["wind_direction"] = new JSONValue((uint)decoded->variant.environment_metrics.wind_direction);
+                    msgPayload["wind_gust"] = new JSONValue(decoded->variant.environment_metrics.wind_gust);
+                    msgPayload["wind_lull"] = new JSONValue(decoded->variant.environment_metrics.wind_lull);
                 } else if (decoded->which_variant == meshtastic_Telemetry_power_metrics_tag) {
                     msgPayload["voltage_ch1"] = new JSONValue(decoded->variant.power_metrics.ch1_voltage);
                     msgPayload["current_ch1"] = new JSONValue(decoded->variant.power_metrics.ch1_current);
