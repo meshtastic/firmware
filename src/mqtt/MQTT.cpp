@@ -188,12 +188,10 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
         mqtt = this;
 
         if (*moduleConfig.mqtt.root) {
-            statusTopic = moduleConfig.mqtt.root + statusTopic;
             cryptTopic = moduleConfig.mqtt.root + cryptTopic;
             jsonTopic = moduleConfig.mqtt.root + jsonTopic;
             mapTopic = moduleConfig.mqtt.root + mapTopic;
         } else {
-            statusTopic = "msh" + statusTopic;
             cryptTopic = "msh" + cryptTopic;
             jsonTopic = "msh" + jsonTopic;
             mapTopic = "msh" + mapTopic;
@@ -216,7 +214,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
             enabled = true;
             runASAP = true;
             reconnectCount = 0;
-            publishStatus();
+            publishNodeInfo();
         }
         // preflightSleepObserver.observe(&preflightSleep);
     } else {
@@ -281,7 +279,7 @@ void MQTT::reconnect()
             runASAP = true;
             reconnectCount = 0;
 
-            publishStatus();
+            publishNodeInfo();
             return; // Don't try to connect directly to the server
         }
 #if HAS_NETWORKING
@@ -330,15 +328,14 @@ void MQTT::reconnect()
         LOG_INFO("Attempting to connect directly to MQTT server %s, port: %d, username: %s, password: %s\n", serverAddr,
                  serverPort, mqttUsername, mqttPassword);
 
-        auto myStatus = (statusTopic + owner.id);
-        bool connected = pubSub.connect(owner.id, mqttUsername, mqttPassword, myStatus.c_str(), 1, true, "offline");
+        bool connected = pubSub.connect(owner.id, mqttUsername, mqttPassword);
         if (connected) {
             LOG_INFO("MQTT connected\n");
             enabled = true; // Start running background process again
             runASAP = true;
             reconnectCount = 0;
 
-            publishStatus();
+            publishNodeInfo();
             sendSubscriptions();
         } else {
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
@@ -437,14 +434,10 @@ int32_t MQTT::runOnce()
     return 30000;
 }
 
-/// FIXME, include more information in the status text
-void MQTT::publishStatus()
+void MQTT::publishNodeInfo()
 {
-    auto myStatus = (statusTopic + owner.id);
-    bool ok = publish(myStatus.c_str(), "online", true);
-    LOG_INFO("published online=%d\n", ok);
+    // TODO: NodeInfo broadcast over MQTT only (NODENUM_BROADCAST_NO_LORA)
 }
-
 void MQTT::publishQueuedMessages()
 {
     if (!mqttQueue.isEmpty()) {
