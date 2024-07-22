@@ -126,9 +126,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * Start waiting to receive a message
      *
      * External functions can call this method to wake the device from sleep.
-     * Subclasses must override and call this base method
      */
-    virtual void startReceive();
+    virtual void startReceive() = 0;
 
     /** can we detect a LoRa preamble on the current channel? */
     virtual bool isChannelActive() = 0;
@@ -167,9 +166,8 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     meshtastic_QueueStatus getQueueStatus();
 
   protected:
-    /** Do any hardware setup needed on entry into send configuration for the radio.
-     * Subclasses can customize, but must also call this base method */
-    virtual void configHardwareForSend();
+    /** Do any hardware setup needed on entry into send configuration for the radio.  Subclasses can customize */
+    virtual void configHardwareForSend() {}
 
     /** Could we send right now (i.e. either not actively receiving or transmitting)? */
     virtual bool canSendImmediately();
@@ -188,8 +186,5 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     virtual void addReceiveMetadata(meshtastic_MeshPacket *mp) = 0;
 
-    /**
-     * Subclasses must override, implement and then call into this base class implementation
-     */
-    virtual void setStandby();
+    virtual void setStandby() = 0;
 };

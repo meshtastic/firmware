@@ -1,5 +1,5 @@
 #include "configuration.h"
-#if HAS_WIFI
+#if !MESHTASTIC_EXCLUDE_WIFI
 #include "NodeDB.h"
 #include "RTC.h"
 #include "concurrency/Periodic.h"

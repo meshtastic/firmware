@@ -12,8 +12,6 @@
 #include <RAK13800_W5100S.h>
 #include <SPI.h>
 
-#if HAS_NETWORKING
-
 #ifndef DISABLE_NTP
 #include <NTPClient.h>
 
@@ -185,5 +183,3 @@ bool isEthernetAvailable()
         return true;
     }
 }
-
-#endif

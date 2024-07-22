@@ -29,7 +29,6 @@ jobs:
           name: firmware-${{ inputs.board }}-${{ steps.version.outputs.version }}.zip
           overwrite: true
           path: |
-            release/*.hex
             release/*.uf2
             release/*.elf
             release/*.zip

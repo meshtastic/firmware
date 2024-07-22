@@ -115,10 +115,6 @@ typedef struct _meshtastic_EnvironmentMetrics {
     float wind_speed;
     /* Weight in KG */
     float weight;
-    /* Wind gust in m/s */
-    float wind_gust;
-    /* Wind lull in m/s */
-    float wind_lull;
 } meshtastic_EnvironmentMetrics;
 
 /* Power Metrics (voltage / current / etc) */
@@ -209,13 +205,13 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_DeviceMetrics_init_default    {0, 0, 0, 0, 0}
-#define meshtastic_EnvironmentMetrics_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_EnvironmentMetrics_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_PowerMetrics_init_default     {0, 0, 0, 0, 0, 0}
 #define meshtastic_AirQualityMetrics_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Telemetry_init_default        {0, 0, {meshtastic_DeviceMetrics_init_default}}
 #define meshtastic_Nau7802Config_init_default    {0, 0}
 #define meshtastic_DeviceMetrics_init_zero       {0, 0, 0, 0, 0}
-#define meshtastic_EnvironmentMetrics_init_zero  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_EnvironmentMetrics_init_zero  {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_PowerMetrics_init_zero        {0, 0, 0, 0, 0, 0}
 #define meshtastic_AirQualityMetrics_init_zero   {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Telemetry_init_zero           {0, 0, {meshtastic_DeviceMetrics_init_zero}}
@@ -242,8 +238,6 @@ extern "C" {
 #define meshtastic_EnvironmentMetrics_wind_direction_tag 13
 #define meshtastic_EnvironmentMetrics_wind_speed_tag 14
 #define meshtastic_EnvironmentMetrics_weight_tag 15
-#define meshtastic_EnvironmentMetrics_wind_gust_tag 16
-#define meshtastic_EnvironmentMetrics_wind_lull_tag 17
 #define meshtastic_PowerMetrics_ch1_voltage_tag  1
 #define meshtastic_PowerMetrics_ch1_current_tag  2
 #define meshtastic_PowerMetrics_ch2_voltage_tag  3
@@ -295,9 +289,7 @@ X(a, STATIC,   SINGULAR, FLOAT,    ir_lux,           11) \
 X(a, STATIC,   SINGULAR, FLOAT,    uv_lux,           12) \
 X(a, STATIC,   SINGULAR, UINT32,   wind_direction,   13) \
 X(a, STATIC,   SINGULAR, FLOAT,    wind_speed,       14) \
-X(a, STATIC,   SINGULAR, FLOAT,    weight,           15) \
-X(a, STATIC,   SINGULAR, FLOAT,    wind_gust,        16) \
-X(a, STATIC,   SINGULAR, FLOAT,    wind_lull,        17)
+X(a, STATIC,   SINGULAR, FLOAT,    weight,           15)
 #define meshtastic_EnvironmentMetrics_CALLBACK NULL
 #define meshtastic_EnvironmentMetrics_DEFAULT NULL
 
@@ -365,10 +357,10 @@ extern const pb_msgdesc_t meshtastic_Nau7802Config_msg;
 #define MESHTASTIC_MESHTASTIC_TELEMETRY_PB_H_MAX_SIZE meshtastic_Telemetry_size
 #define meshtastic_AirQualityMetrics_size        72
 #define meshtastic_DeviceMetrics_size            27
-#define meshtastic_EnvironmentMetrics_size       85
+#define meshtastic_EnvironmentMetrics_size       73
 #define meshtastic_Nau7802Config_size            16
 #define meshtastic_PowerMetrics_size             30
-#define meshtastic_Telemetry_size                92
+#define meshtastic_Telemetry_size                80
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -4,8 +4,5 @@
   "trunk.enableWindows": true,
   "files.insertFinalNewline": false,
   "files.trimFinalNewlines": false,
-  "cmake.configureOnOpen": false,
-  "[cpp]": {
-    "editor.defaultFormatter": "trunk.io"
-  }
+  "cmake.configureOnOpen": false
 }

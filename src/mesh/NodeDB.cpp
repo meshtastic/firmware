@@ -26,7 +26,7 @@
 #include <vector>
 
 #ifdef ARCH_ESP32
-#if HAS_WIFI
+#if !MESHTASTIC_EXCLUDE_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 #include "modules/esp32/StoreForwardModule.h"
@@ -141,6 +141,11 @@ NodeDB::NodeDB()
     if (channelFileCRC != crc32Buffer(&channelFile, sizeof(channelFile)))
         saveWhat |= SEGMENT_CHANNELS;
 
+    if (!devicestate.node_remote_hardware_pins) {
+        meshtastic_NodeRemoteHardwarePin empty[12] = {meshtastic_RemoteHardwarePin_init_default};
+        memcpy(devicestate.node_remote_hardware_pins, empty, sizeof(empty));
+    }
+
     if (config.position.gps_enabled) {
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
         config.position.gps_enabled = 0;
@@ -180,7 +185,7 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
 
     if (didFactoryReset) {
         LOG_INFO("Rebooting due to factory reset");
-        screen->startAlert("Rebooting...");
+        screen->startRebootScreen();
         rebootAtMsec = millis() + (5 * 1000);
     }
 
@@ -268,8 +273,7 @@ void NodeDB::installDefaultConfig()
     // FIXME: Default to bluetooth capability of platform as default
     config.bluetooth.enabled = true;
     config.bluetooth.fixed_pin = defaultBLEPin;
-#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(HX8357_CS) ||            \
-    defined(USE_ST7789)
+#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(HX8357_CS)
     bool hasScreen = true;
 #elif ARCH_PORTDUINO
     bool hasScreen = false;
@@ -822,8 +826,8 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
 
     if (src == RX_SRC_LOCAL) {
         // Local packet, fully authoritative
-        LOG_INFO("updatePosition LOCAL pos@%x time=%u lat=%d lon=%d alt=%d\n", p.timestamp, p.time, p.latitude_i, p.longitude_i,
-                 p.altitude);
+        LOG_INFO("updatePosition LOCAL pos@%x, time=%u, latI=%d, lonI=%d, alt=%d\n", p.timestamp, p.time, p.latitude_i,
+                 p.longitude_i, p.altitude);
 
         setLocalPosition(p);
         info->position = TypeConversions::ConvertToPositionLite(p);
@@ -838,7 +842,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
         // recorded based on the packet rxTime
         //
         // FIXME perhaps handle RX_SRC_USER separately?
-        LOG_INFO("updatePosition REMOTE node=0x%x time=%u lat=%d lon=%d\n", nodeId, p.time, p.latitude_i, p.longitude_i);
+        LOG_INFO("updatePosition REMOTE node=0x%x time=%u, latI=%d, lonI=%d\n", nodeId, p.time, p.latitude_i, p.longitude_i);
 
         // First, back up fields that we want to protect from overwrite
         uint32_t tmp_time = info->position.time;

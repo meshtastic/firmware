@@ -1,7 +1,0 @@
-# This is a config file to control pyocd ICE debugger probe options (only used for NRF52 targets with hardware debugging connections)
-# for more info see FIXMEURL
-
-# console or telnet
-semihost_console_type: telnet
-enable_semihosting: True
-telnet_port: 4444

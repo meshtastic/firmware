@@ -17,8 +17,7 @@ int32_t DeviceTelemetryModule::runOnce()
 {
     refreshUptime();
     if (((lastSentToMesh == 0) ||
-         ((uptimeLastMs - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.device_update_interval,
-                                                                               default_telemetry_broadcast_interval_secs))) &&
+         ((uptimeLastMs - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.device_update_interval))) &&
         airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
         airTime->isTxAllowedAirUtil() && config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
@@ -53,27 +52,14 @@ bool DeviceTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
 
 meshtastic_MeshPacket *DeviceTelemetryModule::allocReply()
 {
-    if (currentRequest) {
-        auto req = *currentRequest;
-        const auto &p = req.decoded;
-        meshtastic_Telemetry scratch;
-        meshtastic_Telemetry *decoded = NULL;
-        memset(&scratch, 0, sizeof(scratch));
-        if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &scratch)) {
-            decoded = &scratch;
-        } else {
-            LOG_ERROR("Error decoding DeviceTelemetry module!\n");
-            return NULL;
-        }
-        // Check for a request for device metrics
-        if (decoded->which_variant == meshtastic_Telemetry_device_metrics_tag) {
-            LOG_INFO("Device telemetry replying to request\n");
-
-            meshtastic_Telemetry telemetry = getDeviceTelemetry();
-            return allocDataProtobuf(telemetry);
-        }
+    if (ignoreRequest) {
+        return NULL;
     }
-    return NULL;
+
+    LOG_INFO("Device telemetry replying to request\n");
+
+    meshtastic_Telemetry telemetry = getDeviceTelemetry();
+    return allocDataProtobuf(telemetry);
 }
 
 meshtastic_Telemetry DeviceTelemetryModule::getDeviceTelemetry()
