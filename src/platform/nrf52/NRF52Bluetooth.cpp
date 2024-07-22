@@ -14,12 +14,12 @@ static BLECharacteristic fromRadio = BLECharacteristic(BLEUuid(FROMRADIO_UUID_16
 static BLECharacteristic toRadio = BLECharacteristic(BLEUuid(TORADIO_UUID_16));
 static BLECharacteristic logRadio = BLECharacteristic(BLEUuid(LOGRADIO_UUID_16));
 
-static BLEDis bledis;             // DIS (Device Information Service) helper class instance
-static BLEBas blebas;             // BAS (Battery Service) helper class instance
+static BLEDis bledis; // DIS (Device Information Service) helper class instance
+static BLEBas blebas; // BAS (Battery Service) helper class instance
 #ifndef BLE_DFU_SECURE
-static BLEDfu bledfu;             // DFU software update helper service
+static BLEDfu bledfu; // DFU software update helper service
 #else
-static BLEDfuSecure bledfusecure; // DFU software update helper service
+static BLEDfuSecure bledfusecure;                                             // DFU software update helper service
 #endif
 
 // This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in
