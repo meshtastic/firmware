@@ -44,7 +44,7 @@ void initVariant()
 
     pinMode(BUZZER_EN_PIN, OUTPUT);
     digitalWrite(BUZZER_EN_PIN, HIGH);
-    
+
     pinMode(PIN_GPS_EN, OUTPUT);
     digitalWrite(PIN_GPS_EN, LOW);
 

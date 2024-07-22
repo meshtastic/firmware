@@ -40,13 +40,13 @@ extern "C" {
 #define NUM_ANALOG_INPUTS (6)
 #define NUM_ANALOG_OUTPUTS (0)
 
-#define PIN_3V3_EN (32 + 6) // P1.6, Power to Sensors
+#define PIN_3V3_EN (32 + 6)     // P1.6, Power to Sensors
 #define PIN_3V3_ACC_EN (32 + 7) // P1.7, Power to Acc
 
 #define PIN_LED1 (0 + 24) // P0.24
 #define LED_PIN PIN_LED1
 #define LED_BUILTIN -1
-#define LED_BLUE -1 // Actually green
+#define LED_BLUE -1    // Actually green
 #define LED_STATE_ON 1 // State when LED is lit
 
 #define BUTTON_PIN (0 + 6) // P0.6
@@ -59,7 +59,7 @@ extern "C" {
 #define WIRE_INTERFACES_COUNT 1
 
 // unused pins
-#define PIN_WIRE_SDA (0 + 9) // P0.26
+#define PIN_WIRE_SDA (0 + 9)  // P0.26
 #define PIN_WIRE_SCL (0 + 10) // P0.27
 
 /*
@@ -70,7 +70,6 @@ extern "C" {
 
 #define PIN_SERIAL2_RX (0 + 17) // P0.17
 #define PIN_SERIAL2_TX (0 + 16) // P0.16
-
 
 #define SPI_INTERFACES_COUNT 1
 
@@ -115,9 +114,9 @@ extern "C" {
 #define PIN_GPS_RESET (32 + 15) // P1.15
 #define GPS_RESET_MODE HIGH
 
-#define GPS_VRTC_EN (0 + 8) // P0.8, awlays high
-#define GPS_SLEEP_INT (32 + 12) // P1.12, awlays high
-#define GPS_RTC_INT (0 + 15) // P0.15, normal is LOW, wake by HIGH
+#define GPS_VRTC_EN (0 + 8)      // P0.8, awlays high
+#define GPS_SLEEP_INT (32 + 12)  // P1.12, awlays high
+#define GPS_RTC_INT (0 + 15)     // P0.15, normal is LOW, wake by HIGH
 #define GPS_RESETB_OUT (32 + 14) // P1.14, awlays input pull_up
 
 #define GPS_FIX_HOLD_TIME 15000 // ms
@@ -133,10 +132,10 @@ extern "C" {
 
 // Buzzer
 #define BUZZER_EN_PIN (32 + 5) // P1.05, awlays high
-#define PIN_BUZZER (0 + 25) // P0.25, pwm output
+#define PIN_BUZZER (0 + 25)    // P0.25, pwm output
 
 #define T1000X_SENSOR_EN
-#define T1000X_VCC_PIN (0 + 4) // P0.4
+#define T1000X_VCC_PIN (0 + 4)  // P0.4
 #define T1000X_NTC_PIN (0 + 31) // P0.31
 #define T1000X_LUX_PIN (0 + 29) // P0.29
 

@@ -239,7 +239,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     // pinMode(PIN_POWER_EN1, INPUT_PULLDOWN);
 #endif
 
-#ifdef GNSS_Airoha 
+#ifdef GNSS_Airoha
     digitalWrite(GPS_VRTC_EN, LOW);
     digitalWrite(PIN_GPS_RESET, LOW);
     digitalWrite(GPS_SLEEP_INT, LOW);
@@ -248,11 +248,11 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     digitalWrite(GPS_RESETB_OUT, LOW);
 #endif
 
-#ifdef BUZZER_EN_PIN 
+#ifdef BUZZER_EN_PIN
     digitalWrite(BUZZER_EN_PIN, LOW);
 #endif
 
-#ifdef PIN_3V3_EN 
+#ifdef PIN_3V3_EN
     digitalWrite(PIN_3V3_EN, LOW);
 #endif
 
