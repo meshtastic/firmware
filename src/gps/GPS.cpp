@@ -881,7 +881,7 @@ void GPS::writePinStandby(bool standby)
 
 // Determine the new value for the pin
 // Normally: active HIGH for awake
-#if PIN_GPS_STANDBY_INVERTED
+#ifdef PIN_GPS_STANDBY_INVERTED
     bool val = standby;
 #else
     bool val = !standby;
