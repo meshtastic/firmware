@@ -439,7 +439,6 @@ void NodeDB::initModuleConfigIntervals()
     moduleConfig.telemetry.power_update_interval = 0;
     moduleConfig.neighbor_info.update_interval = 0;
     moduleConfig.paxcounter.paxcounter_update_interval = 0;
-    moduleConfig.neighbor_info.update_interval = 0;
 }
 
 void NodeDB::installDefaultChannels()

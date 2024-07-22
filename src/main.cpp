@@ -328,6 +328,13 @@ void setup()
     digitalWrite(RESET_OLED, 1);
 #endif
 
+#ifdef PERIPHERAL_WARMUP_MS
+    // Some peripherals may require additional time to stabilize after power is connected
+    // e.g. I2C on Heltec Vision Master
+    LOG_INFO("Waiting for peripherals to stabilize\n");
+    delay(PERIPHERAL_WARMUP_MS);
+#endif
+
 #ifdef BUTTON_PIN
 #ifdef ARCH_ESP32
 
