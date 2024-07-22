@@ -8,7 +8,6 @@
 #include "meshtastic/channel.pb.h"
 #include "meshtastic/localonly.pb.h"
 #include "meshtastic/mesh.pb.h"
-#include "meshtastic/module_config.pb.h"
 #include "meshtastic/telemetry.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
@@ -308,7 +307,7 @@ extern const pb_msgdesc_t meshtastic_OEMStore_msg;
 #define MESHTASTIC_MESHTASTIC_DEVICEONLY_PB_H_MAX_SIZE meshtastic_OEMStore_size
 #define meshtastic_ChannelFile_size              718
 #define meshtastic_NodeInfoLite_size             166
-#define meshtastic_OEMStore_size                 3372
+#define meshtastic_OEMStore_size                 3388
 #define meshtastic_PositionLite_size             28
 
 #ifdef __cplusplus

@@ -14,7 +14,7 @@
 #endif
 #include "mesh/generated/meshtastic/remote_hardware.pb.h"
 #include "sleep.h"
-#if HAS_WIFI && !MESHTASTIC_EXCLUDE_WIFI
+#if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #include <WiFi.h>
 #endif
@@ -175,7 +175,7 @@ void mqttInit()
     new MQTT();
 }
 
-#ifdef HAS_NETWORKING
+#if HAS_NETWORKING
 MQTT::MQTT() : concurrency::OSThread("mqtt"), pubSub(mqttClient), mqttQueue(MAX_MQTT_QUEUE)
 #else
 MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
@@ -188,12 +188,10 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
         mqtt = this;
 
         if (*moduleConfig.mqtt.root) {
-            statusTopic = moduleConfig.mqtt.root + statusTopic;
             cryptTopic = moduleConfig.mqtt.root + cryptTopic;
             jsonTopic = moduleConfig.mqtt.root + jsonTopic;
             mapTopic = moduleConfig.mqtt.root + mapTopic;
         } else {
-            statusTopic = "msh" + statusTopic;
             cryptTopic = "msh" + cryptTopic;
             jsonTopic = "msh" + jsonTopic;
             mapTopic = "msh" + mapTopic;
@@ -206,7 +204,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
                 moduleConfig.mqtt.map_report_settings.publish_interval_secs, default_map_publish_interval_secs);
         }
 
-#ifdef HAS_NETWORKING
+#if HAS_NETWORKING
         if (!moduleConfig.mqtt.proxy_to_client_enabled)
             pubSub.setCallback(mqttCallback);
 #endif
@@ -216,7 +214,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
             enabled = true;
             runASAP = true;
             reconnectCount = 0;
-            publishStatus();
+            publishNodeInfo();
         }
         // preflightSleepObserver.observe(&preflightSleep);
     } else {
@@ -226,7 +224,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
 
 bool MQTT::isConnectedDirectly()
 {
-#ifdef HAS_NETWORKING
+#if HAS_NETWORKING
     return pubSub.connected();
 #else
     return false;
@@ -244,7 +242,7 @@ bool MQTT::publish(const char *topic, const char *payload, bool retained)
         service.sendMqttMessageToClientProxy(msg);
         return true;
     }
-#ifdef HAS_NETWORKING
+#if HAS_NETWORKING
     else if (isConnectedDirectly()) {
         return pubSub.publish(topic, payload, retained);
     }
@@ -264,7 +262,7 @@ bool MQTT::publish(const char *topic, const uint8_t *payload, size_t length, boo
         service.sendMqttMessageToClientProxy(msg);
         return true;
     }
-#ifdef HAS_NETWORKING
+#if HAS_NETWORKING
     else if (isConnectedDirectly()) {
         return pubSub.publish(topic, payload, length, retained);
     }
@@ -281,10 +279,10 @@ void MQTT::reconnect()
             runASAP = true;
             reconnectCount = 0;
 
-            publishStatus();
+            publishNodeInfo();
             return; // Don't try to connect directly to the server
         }
-#ifdef HAS_NETWORKING
+#if HAS_NETWORKING
         // Defaults
         int serverPort = 1883;
         const char *serverAddr = default_mqtt_address;
@@ -330,15 +328,14 @@ void MQTT::reconnect()
         LOG_INFO("Attempting to connect directly to MQTT server %s, port: %d, username: %s, password: %s\n", serverAddr,
                  serverPort, mqttUsername, mqttPassword);
 
-        auto myStatus = (statusTopic + owner.id);
-        bool connected = pubSub.connect(owner.id, mqttUsername, mqttPassword, myStatus.c_str(), 1, true, "offline");
+        bool connected = pubSub.connect(owner.id, mqttUsername, mqttPassword);
         if (connected) {
             LOG_INFO("MQTT connected\n");
             enabled = true; // Start running background process again
             runASAP = true;
             reconnectCount = 0;
 
-            publishStatus();
+            publishNodeInfo();
             sendSubscriptions();
         } else {
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
@@ -357,7 +354,7 @@ void MQTT::reconnect()
 
 void MQTT::sendSubscriptions()
 {
-#ifdef HAS_NETWORKING
+#if HAS_NETWORKING
     size_t numChan = channels.getNumChannels();
     for (size_t i = 0; i < numChan; i++) {
         const auto &ch = channels.getByIndex(i);
@@ -396,7 +393,7 @@ bool MQTT::wantsLink() const
 
 int32_t MQTT::runOnce()
 {
-#ifdef HAS_NETWORKING
+#if HAS_NETWORKING
     if (!moduleConfig.mqtt.enabled || !(moduleConfig.mqtt.map_reporting_enabled || channels.anyMqttEnabled()))
         return disable();
 
@@ -437,14 +434,10 @@ int32_t MQTT::runOnce()
     return 30000;
 }
 
-/// FIXME, include more information in the status text
-void MQTT::publishStatus()
+void MQTT::publishNodeInfo()
 {
-    auto myStatus = (statusTopic + owner.id);
-    bool ok = publish(myStatus.c_str(), "online", true);
-    LOG_INFO("published online=%d\n", ok);
+    // TODO: NodeInfo broadcast over MQTT only (NODENUM_BROADCAST_NO_LORA)
 }
-
 void MQTT::publishQueuedMessages()
 {
     if (!mqttQueue.isEmpty()) {
@@ -482,7 +475,12 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
 
     auto &ch = channels.getByIndex(chIndex);
 
-    if (&mp_decoded.decoded && strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0 &&
+    if (mp_decoded.which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
+        LOG_CRIT("MQTT::onSend(): mp_decoded isn't actually decoded\n");
+        return;
+    }
+
+    if (strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0 &&
         (mp_decoded.decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
          mp_decoded.decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP)) {
         LOG_DEBUG("MQTT onSend - Ignoring range test or detection sensor message on public mqtt\n");
@@ -675,8 +673,10 @@ std::string MQTT::meshPacketToJson(meshtastic_MeshPacket *mp)
                     msgPayload["lux"] = new JSONValue(decoded->variant.environment_metrics.lux);
                     msgPayload["white_lux"] = new JSONValue(decoded->variant.environment_metrics.white_lux);
                     msgPayload["iaq"] = new JSONValue((uint)decoded->variant.environment_metrics.iaq);
-                    msgPayload["wind_speed"] = new JSONValue((uint)decoded->variant.environment_metrics.wind_speed);
+                    msgPayload["wind_speed"] = new JSONValue(decoded->variant.environment_metrics.wind_speed);
                     msgPayload["wind_direction"] = new JSONValue((uint)decoded->variant.environment_metrics.wind_direction);
+                    msgPayload["wind_gust"] = new JSONValue(decoded->variant.environment_metrics.wind_gust);
+                    msgPayload["wind_lull"] = new JSONValue(decoded->variant.environment_metrics.wind_lull);
                 } else if (decoded->which_variant == meshtastic_Telemetry_power_metrics_tag) {
                     msgPayload["voltage_ch1"] = new JSONValue(decoded->variant.power_metrics.ch1_voltage);
                     msgPayload["current_ch1"] = new JSONValue(decoded->variant.power_metrics.ch1_current);
