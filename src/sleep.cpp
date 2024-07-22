@@ -8,6 +8,7 @@
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PowerMon.h"
 #include "detect/LoRaRadioType.h"
 #include "error.h"
 #include "main.h"
@@ -17,7 +18,7 @@
 #ifdef ARCH_ESP32
 #include "esp32/pm.h"
 #include "esp_pm.h"
-#if !MESHTASTIC_EXCLUDE_WIFI
+#if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 #include "rom/rtc.h"
@@ -36,10 +37,7 @@ Observable<void *> preflightSleep;
 
 /// Called to tell observers we are now entering sleep and you should prepare.  Must return 0
 /// notifySleep will be called for light or deep sleep, notifyDeepSleep is only called for deep sleep
-/// notifyGPSSleep will be called when config.position.gps_enabled is set to 0 or from buttonthread when GPS_POWER_TOGGLE is
-/// enabled.
 Observable<void *> notifySleep, notifyDeepSleep;
-Observable<void *> notifyGPSSleep;
 
 // deep sleep support
 RTC_DATA_ATTR int bootCount = 0;
@@ -56,20 +54,20 @@ RTC_DATA_ATTR int bootCount = 0;
  */
 void setCPUFast(bool on)
 {
-#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WIFI
+#if defined(ARCH_ESP32) && HAS_WIFI
 
     if (isWifiAvailable()) {
         /*
          *
          * There's a newly introduced bug in the espressif framework where WiFi is
-         *   unstable when the frequency is less than 240mhz.
+         *   unstable when the frequency is less than 240MHz.
          *
          *   This mostly impacts WiFi AP mode but we'll bump the frequency for
          *     all WiFi use cases.
          * (Added: Dec 23, 2021 by Jm Casler)
          */
 #ifndef CONFIG_IDF_TARGET_ESP32C3
-        LOG_DEBUG("Setting CPU to 240mhz because WiFi is in use.\n");
+        LOG_DEBUG("Setting CPU to 240MHz because WiFi is in use.\n");
         setCpuFrequencyMhz(240);
 #endif
         return;
@@ -85,6 +83,11 @@ void setCPUFast(bool on)
 
 void setLed(bool ledOn)
 {
+    if (ledOn)
+        powerMon->setState(meshtastic_PowerMon_State_LED_On);
+    else
+        powerMon->clearState(meshtastic_PowerMon_State_LED_On);
+
 #ifdef LED_PIN
     // toggle the led so we can get some rough sense of how often loop is pausing
     digitalWrite(LED_PIN, ledOn ^ LED_INVERTED);
@@ -235,29 +238,6 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     pinMode(PIN_POWER_EN, INPUT); // power off peripherals
     // pinMode(PIN_POWER_EN1, INPUT_PULLDOWN);
 #endif
-#if HAS_GPS
-    // Kill GPS power completely (even if previously we just had it in sleep mode)
-    if (gps)
-        gps->setGPSPower(false, false, 0);
-#endif
-
-#ifdef GNSS_Airoha // add by WayenWeng
-    digitalWrite(GPS_VRTC_EN, LOW);
-    digitalWrite(PIN_GPS_RESET, LOW);
-    digitalWrite(GPS_SLEEP_INT, LOW);
-    digitalWrite(GPS_RTC_INT, LOW);
-    pinMode(GPS_RESETB_OUT, OUTPUT);
-    digitalWrite(GPS_RESETB_OUT, LOW);
-#endif
-
-#ifdef BUZZER_EN_PIN // add by WayenWeng
-    digitalWrite(BUZZER_EN_PIN, LOW);
-#endif
-
-#ifdef PIN_3V3_EN // add by WayenWeng
-    digitalWrite(PIN_3V3_EN, LOW);
-#endif
-
     setLed(false);
 
 #ifdef RESET_OLED
@@ -269,6 +249,8 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
 #elif defined(VEXT_ENABLE_V05)
     digitalWrite(VEXT_ENABLE_V05, 0); // turn off the lora amplifier power
     digitalWrite(ST7735_BL_V05, 0);   // turn off the display power
+#elif defined(VEXT_ENABLE) && defined(VEXT_ON_VALUE)
+    digitalWrite(VEXT_ENABLE, !VEXT_ON_VALUE); // turn on the display power
 #elif defined(VEXT_ENABLE)
     digitalWrite(VEXT_ENABLE, 1); // turn off the display power
 #endif
