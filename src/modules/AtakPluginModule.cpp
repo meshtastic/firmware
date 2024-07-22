@@ -69,7 +69,7 @@ void AtakPluginModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtast
             auto length = unishox2_compress_lines(t->contact.callsign, strlen(t->contact.callsign), compressed.contact.callsign,
                                                   sizeof(compressed.contact.callsign) - 1, USX_PSET_DFLT, NULL);
             if (length < 0) {
-                LOG_WARN("Compression overflowed contact.callsign\n");
+                LOG_WARN("Compression overflowed contact.callsign. Reverting to uncompressed packet\n");
                 return;
             }
             LOG_DEBUG("Compressed callsign: %d bytes\n", length);
