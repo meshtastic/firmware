@@ -400,14 +400,13 @@ bool GPS::setup()
     int msglen = 0;
 
     if (!didSerialInit) {
-#ifdef GNSS_Airoha 
-    if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
-        probe(GPS_BAUDRATE);
-        LOG_INFO("GPS setting to %d.\n", GPS_BAUDRATE);
-    }
+#ifdef GNSS_Airoha // change by WayenWeng
+        if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
+            probe(GPS_BAUDRATE);
+            LOG_INFO("GPS setting to %d.\n", GPS_BAUDRATE);
+        }
 #else
 #if !defined(GPS_UC6580)
-
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
             LOG_DEBUG("Probing for GPS at %d \n", serialSpeeds[speedSelect]);
             gnssModel = probe(serialSpeeds[speedSelect]);
@@ -778,7 +777,7 @@ bool GPS::setup()
                 LOG_INFO("GNSS module configuration saved!\n");
             }
         }
-#endif
+#endif // !GNSS_Airoha
         didSerialInit = true;
     }
 
@@ -1185,8 +1184,8 @@ GnssModel_t GPS::probe(int serialSpeed)
         _serial_gps->updateBaudRate(serialSpeed);
     }
 #endif
+#ifdef GNSS_Airoha // add by WayenWeng
 
-#ifdef GNSS_Airoha
     return GNSS_MODEL_UNKNOWN;
 #else
 #ifdef GPS_DEBUG
@@ -1335,7 +1334,7 @@ GnssModel_t GPS::probe(int serialSpeed)
     }
 
     return GNSS_MODEL_UBLOX;
-#endif
+#endif // !GNSS_Airoha
 }
 
 GPS *GPS::createGps()

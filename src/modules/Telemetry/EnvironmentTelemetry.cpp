@@ -33,6 +33,9 @@
 #include "Sensor/SHT31Sensor.h"
 #include "Sensor/SHT4XSensor.h"
 #include "Sensor/SHTC3Sensor.h"
+#ifdef T1000X_SENSOR_EN
+#include "Sensor/T1000xSensor.h"
+#endif
 #include "Sensor/TSL2591Sensor.h"
 #include "Sensor/VEML7700Sensor.h"
 #include "Sensor/T1000xSensor.h"
@@ -54,8 +57,9 @@ AHT10Sensor aht10Sensor;
 MLX90632Sensor mlx90632Sensor;
 DFRobotLarkSensor dfRobotLarkSensor;
 NAU7802Sensor nau7802Sensor;
+#ifdef T1000X_SENSOR_EN
 T1000xSensor t1000xSensor;
-
+#endif
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
@@ -286,6 +290,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     m->time = getTime();
     m->which_variant = meshtastic_Telemetry_environment_metrics_tag;
 
+#ifdef T1000X_SENSOR_EN // add by WayenWeng
+    valid = valid && t1000xSensor.getMetrics(m);
+    hasSensor = true;
+#else
     if (dfRobotLarkSensor.hasSensor()) {
         valid = valid && dfRobotLarkSensor.getMetrics(m);
         hasSensor = true;
@@ -375,6 +383,7 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         }
     }
 
+#endif
     return valid && hasSensor;
 }
 

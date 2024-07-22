@@ -40,7 +40,9 @@ ButtonThread::ButtonThread() : OSThread("Button")
     }
 #elif defined(BUTTON_PIN)
     int pin = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN; // Resolved button pin
-#ifdef BUTTON_ACTIVE_LOW 
+#if defined(HELTEC_CAPSULE_SENSOR_V3)
+    this->userButton = OneButton(pin, false, false);
+#elif defined(BUTTON_ACTIVE_LOW) // change by WayenWeng
     this->userButton = OneButton(pin, BUTTON_ACTIVE_LOW, BUTTON_ACTIVE_PULLUP);
 #else
     this->userButton = OneButton(pin, true, true);
