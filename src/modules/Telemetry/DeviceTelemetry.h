@@ -7,6 +7,9 @@
 
 class DeviceTelemetryModule : private concurrency::OSThread, public ProtobufModule<meshtastic_Telemetry>
 {
+    CallbackObserver<DeviceTelemetryModule, const meshtastic::Status *> nodeStatusObserver =
+        CallbackObserver<DeviceTelemetryModule, const meshtastic::Status *>(this, &DeviceTelemetryModule::handleStatusUpdate);
+
   public:
     DeviceTelemetryModule()
         : concurrency::OSThread("DeviceTelemetryModule"),
@@ -14,6 +17,7 @@ class DeviceTelemetryModule : private concurrency::OSThread, public ProtobufModu
     {
         uptimeWrapCount = 0;
         uptimeLastMs = millis();
+        nodeStatusObserver.observe(&nodeStatus->onNewStatus);
         setIntervalFromNow(45 * 1000); // Wait until NodeInfo is sent
     }
     virtual bool wantUIFrame() { return false; }
