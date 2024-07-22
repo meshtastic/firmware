@@ -28,6 +28,8 @@ PositionModule::PositionModule()
 {
     precision = 0;        // safe starting value
     isPromiscuous = true; // We always want to update our nodedb, even if we are sniffing on others
+    nodeStatusObserver.observe(&nodeStatus->onNewStatus);
+
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)
         setIntervalFromNow(60 * 1000);
@@ -73,7 +75,7 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     }
 
     // Log packet size and data fields
-    LOG_DEBUG("POSITION node=%08x l=%d latI=%d lonI=%d msl=%d hae=%d geo=%d pdop=%d hdop=%d vdop=%d siv=%d fxq=%d fxt=%d pts=%d "
+    LOG_DEBUG("POSITION node=%08x l=%d lat=%d lon=%d msl=%d hae=%d geo=%d pdop=%d hdop=%d vdop=%d siv=%d fxq=%d fxt=%d pts=%d "
               "time=%d\n",
               getFrom(&mp), mp.decoded.payload.size, p.latitude_i, p.longitude_i, p.altitude, p.altitude_hae,
               p.altitude_geoidal_separation, p.PDOP, p.HDOP, p.VDOP, p.sats_in_view, p.fix_quality, p.fix_type, p.timestamp,
@@ -219,7 +221,7 @@ meshtastic_MeshPacket *PositionModule::allocReply()
         LOG_INFO("Providing time to mesh %u\n", p.time);
     }
 
-    LOG_INFO("Position reply: time=%i, latI=%i, lonI=%i\n", p.time, p.latitude_i, p.longitude_i);
+    LOG_INFO("Position reply: time=%i lat=%i lon=%i\n", p.time, p.latitude_i, p.longitude_i);
 
     // TAK Tracker devices should send their position in a TAK packet over the ATAK port
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)
@@ -333,8 +335,8 @@ int32_t PositionModule::runOnce()
 
     // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();
-    uint32_t intervalMs =
-        Default::getConfiguredOrDefaultMs(config.position.position_broadcast_secs, default_broadcast_interval_secs);
+    uint32_t intervalMs = Default::getConfiguredOrDefaultMsScaled(config.position.position_broadcast_secs,
+                                                                  default_broadcast_interval_secs, numOnlineNodes);
     uint32_t msSinceLastSend = now - lastGpsSend;
     // Only send packets if the channel util. is less than 25% utilized or we're a tracker with less than 40% utilized.
     if (!airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER &&

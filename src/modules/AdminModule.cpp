@@ -137,7 +137,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
         if (BleOta::getOtaAppVersion().isEmpty()) {
             LOG_INFO("No OTA firmware available, scheduling regular reboot in %d seconds\n", s);
-            screen->startRebootScreen();
+            screen->startAlert("Rebooting...");
         } else {
             screen->startFirmwareUpdateScreen();
             BleOta::switchToOtaApp();
@@ -145,7 +145,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         }
 #else
         LOG_INFO("Not on ESP32, scheduling regular reboot in %d seconds\n", s);
-        screen->startRebootScreen();
+        screen->startAlert("Rebooting...");
 #endif
         rebootAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
         break;
@@ -200,6 +200,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     case meshtastic_AdminMessage_remove_by_nodenum_tag: {
         LOG_INFO("Client is receiving a remove_nodenum command.\n");
         nodeDB->removeNodeByNum(r->remove_by_nodenum);
+        this->notifyObservers(r); // Observed by screen
         break;
     }
     case meshtastic_AdminMessage_set_favorite_node_tag: {
@@ -232,7 +233,6 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
 #if !MESHTASTIC_EXCLUDE_GPS
             if (gps != nullptr)
                 gps->enable();
-
             // Send our new fixed position to the mesh for good measure
             positionModule->sendOurPosition();
 #endif
@@ -302,8 +302,8 @@ void AdminModule::handleGetModuleConfigResponse(const meshtastic_MeshPacket &mp,
 {
     // Skip if it's disabled or no pins are exposed
     if (!r->get_module_config_response.payload_variant.remote_hardware.enabled ||
-        !r->get_module_config_response.payload_variant.remote_hardware.available_pins) {
-        LOG_DEBUG("Remote hardware module disabled or no vailable_pins. Skipping...\n");
+        r->get_module_config_response.payload_variant.remote_hardware.available_pins_count == 0) {
+        LOG_DEBUG("Remote hardware module disabled or no available_pins. Skipping...\n");
         return;
     }
     for (uint8_t i = 0; i < devicestate.node_remote_hardware_pins_count; i++) {
@@ -390,6 +390,15 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         if (config.device.node_info_broadcast_secs < min_node_info_broadcast_secs) {
             LOG_DEBUG("Tried to set node_info_broadcast_secs too low, setting to %d\n", min_node_info_broadcast_secs);
             config.device.node_info_broadcast_secs = min_node_info_broadcast_secs;
+        }
+        // Router Client is deprecated; Set it to client
+        if (c.payload_variant.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER_CLIENT) {
+            config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+            if (moduleConfig.store_forward.enabled && !moduleConfig.store_forward.is_server) {
+                moduleConfig.store_forward.is_server = true;
+                changes |= SEGMENT_MODULECONFIG;
+                requiresReboot = true;
+            }
         }
         break;
     case meshtastic_Config_position_tag:
@@ -814,7 +823,7 @@ void AdminModule::handleGetChannel(const meshtastic_MeshPacket &req, uint32_t ch
 void AdminModule::reboot(int32_t seconds)
 {
     LOG_INFO("Rebooting in %d seconds\n", seconds);
-    screen->startRebootScreen();
+    screen->startAlert("Rebooting...");
     rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
 }
 

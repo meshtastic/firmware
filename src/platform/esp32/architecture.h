@@ -101,6 +101,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_STATION_G1
 #elif defined(DR_DEV)
 #define HW_VENDOR meshtastic_HardwareModel_DR_DEV
+#elif defined(HELTEC_HRU_3601)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_HRU_3601
 #elif defined(HELTEC_V3)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_V3
 #elif defined(HELTEC_WSL_V3)
@@ -149,6 +151,14 @@
 #define HW_VENDOR meshtastic_HardwareModel_RADIOMASTER_900_BANDIT_NANO
 #elif defined(HELTEC_CAPSULE_SENSOR_V3)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_CAPSULE_SENSOR_V3
+#elif defined(HELTEC_VISION_MASTER_T190)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_VISION_MASTER_T190
+#elif defined(HELTEC_VISION_MASTER_E213)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_VISION_MASTER_E213
+#elif defined(HELTEC_VISION_MASTER_E290)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_VISION_MASTER_E290
+#elif defined(HELTEC_MESH_NODE_T114)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_NODE_T114
 #endif
 
 // -----------------------------------------------------------------------------

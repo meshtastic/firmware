@@ -1,19 +1,12 @@
 {
   "build": {
     "arduino": {
-      "ldscript": "nrf52840_s140_v6.ld"
+      "ldscript": "nrf52840_s140_v7.ld"
     },
     "core": "nRF5",
     "cpu": "cortex-m4",
     "extra_flags": "-DARDUINO_WIO_WM1110 -DNRF52840_XXAA",
     "f_cpu": "64000000L",
-    "hwids": [
-      ["0x239A", "0x8029"],
-      ["0x239A", "0x0029"],
-      ["0x239A", "0x002A"],
-      ["0x239A", "0x802A"]
-    ],
-    "usb_product": "WIO-BOOT",
     "mcu": "nrf52840",
     "variant": "Seeed_WIO_WM1110",
     "bsp": {
@@ -22,8 +15,8 @@
     "softdevice": {
       "sd_flags": "-DS140",
       "sd_name": "s140",
-      "sd_version": "6.1.1",
-      "sd_fwid": "0x00B6"
+      "sd_version": "7.3.0",
+      "sd_fwid": "0x0123"
     },
     "bootloader": {
       "settings_addr": "0xFF000"
@@ -34,7 +27,7 @@
     "jlink_device": "nRF52840_xxAA",
     "svd_path": "nrf52840.svd"
   },
-  "frameworks": ["arduino"],
+  "frameworks": ["arduino", "freertos"],
   "name": "Seeed WIO WM1110",
   "upload": {
     "maximum_ram_size": 248832,

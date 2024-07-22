@@ -26,7 +26,7 @@
 #include <vector>
 
 #ifdef ARCH_ESP32
-#if !MESHTASTIC_EXCLUDE_WIFI
+#if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 #include "modules/esp32/StoreForwardModule.h"
@@ -141,11 +141,6 @@ NodeDB::NodeDB()
     if (channelFileCRC != crc32Buffer(&channelFile, sizeof(channelFile)))
         saveWhat |= SEGMENT_CHANNELS;
 
-    if (!devicestate.node_remote_hardware_pins) {
-        meshtastic_NodeRemoteHardwarePin empty[12] = {meshtastic_RemoteHardwarePin_init_default};
-        memcpy(devicestate.node_remote_hardware_pins, empty, sizeof(empty));
-    }
-
     if (config.position.gps_enabled) {
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
         config.position.gps_enabled = 0;
@@ -185,7 +180,7 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
 
     if (didFactoryReset) {
         LOG_INFO("Rebooting due to factory reset");
-        screen->startRebootScreen();
+        screen->startAlert("Rebooting...");
         rebootAtMsec = millis() + (5 * 1000);
     }
 
@@ -275,7 +270,8 @@ void NodeDB::installDefaultConfig()
     // FIXME: Default to bluetooth capability of platform as default
     config.bluetooth.enabled = true;
     config.bluetooth.fixed_pin = defaultBLEPin;
-#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(HX8357_CS)
+#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(HX8357_CS) ||            \
+    defined(USE_ST7789)
     bool hasScreen = true;
 #elif ARCH_PORTDUINO
     bool hasScreen = false;
@@ -431,10 +427,13 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
 
 void NodeDB::initModuleConfigIntervals()
 {
-    moduleConfig.telemetry.device_update_interval = default_broadcast_interval_secs;
-    moduleConfig.telemetry.environment_update_interval = default_broadcast_interval_secs;
-    moduleConfig.telemetry.air_quality_interval = default_broadcast_interval_secs;
-    moduleConfig.neighbor_info.update_interval = default_broadcast_interval_secs;
+    // Zero out telemetry intervals so that they coalesce to defaults in Default.h
+    moduleConfig.telemetry.device_update_interval = 0;
+    moduleConfig.telemetry.environment_update_interval = 0;
+    moduleConfig.telemetry.air_quality_interval = 0;
+    moduleConfig.telemetry.power_update_interval = 0;
+    moduleConfig.neighbor_info.update_interval = 0;
+    moduleConfig.paxcounter.paxcounter_update_interval = 0;
 }
 
 void NodeDB::installDefaultChannels()
@@ -654,6 +653,26 @@ void NodeDB::loadFromDisk()
     if (state == LoadFileResult::LOAD_SUCCESS) {
         LOG_INFO("Loaded OEMStore\n");
     }
+
+    // 2.4.X - configuration migration to update new default intervals
+    if (moduleConfig.version < 23) {
+        LOG_DEBUG("ModuleConfig version %d is stale, upgrading to new default intervals\n", moduleConfig.version);
+        moduleConfig.version = DEVICESTATE_CUR_VER;
+        if (moduleConfig.telemetry.device_update_interval == 900)
+            moduleConfig.telemetry.device_update_interval = 0;
+        if (moduleConfig.telemetry.environment_update_interval == 900)
+            moduleConfig.telemetry.environment_update_interval = 0;
+        if (moduleConfig.telemetry.air_quality_interval == 900)
+            moduleConfig.telemetry.air_quality_interval = 0;
+        if (moduleConfig.telemetry.power_update_interval == 900)
+            moduleConfig.telemetry.power_update_interval = 0;
+        if (moduleConfig.neighbor_info.update_interval == 900)
+            moduleConfig.neighbor_info.update_interval = 0;
+        if (moduleConfig.paxcounter.paxcounter_update_interval == 900)
+            moduleConfig.paxcounter.paxcounter_update_interval = 0;
+
+        saveToDisk(SEGMENT_MODULECONFIG);
+    }
 }
 
 /** Save a protobuf from a file, return true for success */
@@ -828,8 +847,8 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
 
     if (src == RX_SRC_LOCAL) {
         // Local packet, fully authoritative
-        LOG_INFO("updatePosition LOCAL pos@%x, time=%u, latI=%d, lonI=%d, alt=%d\n", p.timestamp, p.time, p.latitude_i,
-                 p.longitude_i, p.altitude);
+        LOG_INFO("updatePosition LOCAL pos@%x time=%u lat=%d lon=%d alt=%d\n", p.timestamp, p.time, p.latitude_i, p.longitude_i,
+                 p.altitude);
 
         setLocalPosition(p);
         info->position = TypeConversions::ConvertToPositionLite(p);
@@ -844,7 +863,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
         // recorded based on the packet rxTime
         //
         // FIXME perhaps handle RX_SRC_USER separately?
-        LOG_INFO("updatePosition REMOTE node=0x%x time=%u, latI=%d, lonI=%d\n", nodeId, p.time, p.latitude_i, p.longitude_i);
+        LOG_INFO("updatePosition REMOTE node=0x%x time=%u lat=%d lon=%d\n", nodeId, p.time, p.latitude_i, p.longitude_i);
 
         // First, back up fields that we want to protect from overwrite
         uint32_t tmp_time = info->position.time;
