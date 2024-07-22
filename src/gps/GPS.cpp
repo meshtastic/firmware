@@ -1489,20 +1489,6 @@ bool GPS::lookForTime()
 #ifdef GNSS_Airoha // add by WayenWeng
     uint8_t fix = reader.fixQuality();
     uint32_t now = millis();
-    if (fix > 0) {
-        if (lastFixStartMsec > 0) {
-            if ((now - lastFixStartMsec) < GPS_FIX_HOLD_TIME) {
-                return false;
-            } else {
-                clearBuffer();
-            }
-        } else {
-            lastFixStartMsec = now;
-            return false;
-        }
-    } else {
-        return false;
-    }
 #endif
 
     auto ti = reader.time;
@@ -1543,20 +1529,6 @@ bool GPS::lookForLocation()
     if ((config.position.gps_update_interval * 1000) >= (GPS_FIX_HOLD_TIME * 2)) {
         uint8_t fix = reader.fixQuality();
         uint32_t now = millis();
-        if (fix > 0) {
-            if (lastFixStartMsec > 0) {
-                if ((now - lastFixStartMsec) < GPS_FIX_HOLD_TIME) {
-                    return false;
-                } else {
-                    clearBuffer();
-                }
-            } else {
-                lastFixStartMsec = now;
-                return false;
-            }
-        } else {
-            return false;
-        }
     }
 #endif
 

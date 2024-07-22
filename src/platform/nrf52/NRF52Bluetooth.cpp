@@ -16,10 +16,12 @@ static BLECharacteristic logRadio = BLECharacteristic(BLEUuid(LOGRADIO_UUID_16))
 
 static BLEDis bledis;             // DIS (Device Information Service) helper class instance
 static BLEBas blebas;             // BAS (Battery Service) helper class instance
+#ifndef BLE_DFU_SECURE
 static BLEDfu bledfu;             // DFU software update helper service
+#else
 static BLEDfuSecure bledfusecure; // DFU software update helper service
+#endif
 
-static BLEDfu bledfu; // DFU software update helper service
 // This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in
 // process at once
 // static uint8_t trBytes[_max(_max(_max(_max(ToRadio_size, RadioConfig_size), User_size), MyNodeInfo_size), FromRadio_size)];
