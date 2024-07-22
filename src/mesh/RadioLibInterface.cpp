@@ -1,7 +1,6 @@
 #include "RadioLibInterface.h"
 #include "MeshTypes.h"
 #include "NodeDB.h"
-#include "PowerMon.h"
 #include "SPILock.h"
 #include "configuration.h"
 #include "error.h"
@@ -318,7 +317,6 @@ void RadioLibInterface::handleTransmitInterrupt()
     // ignore the transmit interrupt
     if (sendingPacket)
         completeSending();
-    powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // But our transmitter is deffinitely off now
 }
 
 void RadioLibInterface::completeSending()
@@ -414,24 +412,6 @@ void RadioLibInterface::handleReceiveInterrupt()
     }
 }
 
-void RadioLibInterface::startReceive()
-{
-    isReceiving = true;
-    powerMon->setState(meshtastic_PowerMon_State_Lora_RXOn);
-}
-
-void RadioLibInterface::configHardwareForSend()
-{
-    powerMon->setState(meshtastic_PowerMon_State_Lora_TXOn);
-}
-
-void RadioLibInterface::setStandby()
-{
-    // neither sending nor receiving
-    powerMon->clearState(meshtastic_PowerMon_State_Lora_RXOn);
-    powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn);
-}
-
 /** start an immediate transmit */
 void RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 {
@@ -451,7 +431,6 @@ void RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 
             // This send failed, but make sure to 'complete' it properly
             completeSending();
-            powerMon->clearState(meshtastic_PowerMon_State_Lora_TXOn); // Transmitter off now
             startReceive(); // Restart receive mode (because startTransmit failed to put us in xmit mode)
         }
 

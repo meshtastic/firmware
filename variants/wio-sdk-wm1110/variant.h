@@ -107,8 +107,6 @@ extern "C" {
 
 #define LR1110_GNSS_ANT_PIN (32 + 5) // P1.05 37
 
-#define NRF_USE_SERIAL_DFU
-
 #ifdef __cplusplus
 }
 #endif

@@ -11,7 +11,6 @@
 #include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
-#include "PowerMon.h"
 #include "configuration.h"
 #include "graphics/Screen.h"
 #include "main.h"
@@ -50,7 +49,6 @@ static bool isPowered()
 static void sdsEnter()
 {
     LOG_DEBUG("Enter state: SDS\n");
-    powerMon->setState(meshtastic_PowerMon_State_CPU_DeepSleep);
     // FIXME - make sure GPS and LORA radio are off first - because we want close to zero current draw
     doDeepSleep(Default::getConfiguredOrDefaultMs(config.power.sds_secs), false);
 }
@@ -70,7 +68,6 @@ static uint32_t secsSlept;
 static void lsEnter()
 {
     LOG_INFO("lsEnter begin, ls_secs=%u\n", config.power.ls_secs);
-    powerMon->clearState(meshtastic_PowerMon_State_Screen_On);
     screen->setOn(false);
     secsSlept = 0; // How long have we been sleeping this time
 
@@ -90,10 +87,8 @@ static void lsIdle()
             // Briefly come out of sleep long enough to blink the led once every few seconds
             uint32_t sleepTime = SLEEP_TIME;
 
-            powerMon->setState(meshtastic_PowerMon_State_CPU_LightSleep);
             setLed(false); // Never leave led on while in light sleep
             esp_sleep_source_t wakeCause2 = doLightSleep(sleepTime * 1000LL);
-            powerMon->clearState(meshtastic_PowerMon_State_CPU_LightSleep);
 
             switch (wakeCause2) {
             case ESP_SLEEP_WAKEUP_TIMER:
@@ -149,7 +144,6 @@ static void lsExit()
 static void nbEnter()
 {
     LOG_DEBUG("Enter state: NB\n");
-    powerMon->clearState(meshtastic_PowerMon_State_BT_On);
     screen->setOn(false);
 #ifdef ARCH_ESP32
     // Only ESP32 should turn off bluetooth
@@ -161,8 +155,6 @@ static void nbEnter()
 
 static void darkEnter()
 {
-    powerMon->clearState(meshtastic_PowerMon_State_BT_On);
-    powerMon->clearState(meshtastic_PowerMon_State_Screen_On);
     setBluetoothEnable(true);
     screen->setOn(false);
 }
@@ -170,8 +162,6 @@ static void darkEnter()
 static void serialEnter()
 {
     LOG_DEBUG("Enter state: SERIAL\n");
-    powerMon->clearState(meshtastic_PowerMon_State_BT_On);
-    powerMon->setState(meshtastic_PowerMon_State_Screen_On);
     setBluetoothEnable(false);
     screen->setOn(true);
     screen->print("Serial connected\n");
@@ -180,7 +170,6 @@ static void serialEnter()
 static void serialExit()
 {
     // Turn bluetooth back on when we leave serial stream API
-    powerMon->setState(meshtastic_PowerMon_State_BT_On);
     setBluetoothEnable(true);
     screen->print("Serial disconnected\n");
 }
@@ -193,8 +182,6 @@ static void powerEnter()
         LOG_INFO("Loss of power in Powered\n");
         powerFSM.trigger(EVENT_POWER_DISCONNECTED);
     } else {
-        powerMon->setState(meshtastic_PowerMon_State_BT_On);
-        powerMon->setState(meshtastic_PowerMon_State_Screen_On);
         screen->setOn(true);
         setBluetoothEnable(true);
         // within enter() the function getState() returns the state we came from
@@ -218,8 +205,6 @@ static void powerIdle()
 
 static void powerExit()
 {
-    powerMon->setState(meshtastic_PowerMon_State_BT_On);
-    powerMon->setState(meshtastic_PowerMon_State_Screen_On);
     screen->setOn(true);
     setBluetoothEnable(true);
 
@@ -231,8 +216,6 @@ static void powerExit()
 static void onEnter()
 {
     LOG_DEBUG("Enter state: ON\n");
-    powerMon->setState(meshtastic_PowerMon_State_BT_On);
-    powerMon->setState(meshtastic_PowerMon_State_Screen_On);
     screen->setOn(true);
     setBluetoothEnable(true);
 }

@@ -94,11 +94,7 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
     } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB->getMeshNode(mp->from)->has_user &&
                nodeInfoModule) {
         LOG_INFO("Heard a node on channel %d we don't know, sending NodeInfo and asking for a response.\n", mp->channel);
-        if (airTime->isTxAllowedChannelUtil(true)) {
-            nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
-        } else {
-            LOG_DEBUG("Skip sending NodeInfo due to > 25 percent channel util.\n");
-        }
+        nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
     }
 
     printPacket("Forwarding to phone", mp);
@@ -273,7 +269,7 @@ bool MeshService::trySendPosition(NodeNum dest, bool wantReplies)
     assert(node);
 
     if (hasValidPosition(node)) {
-#if HAS_GPS && !MESHTASTIC_EXCLUDE_GPS
+#if HAS_GPS
         if (positionModule) {
             LOG_INFO("Sending position ping to 0x%x, wantReplies=%d, channel=%d\n", dest, wantReplies, node->channel);
             positionModule->sendOurPosition(dest, wantReplies, node->channel);
@@ -303,7 +299,6 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
         } else {
             LOG_WARN("ToPhone queue is full, dropping packet.\n");
             releaseToPool(p);
-            fromNum++; // Make sure to notify observers in case they are reconnected so they can get the packets
             return;
         }
     }
@@ -378,8 +373,8 @@ int MeshService::onGPSChanged(const meshtastic::GPSStatus *newStatus)
     pos.time = getValidTime(RTCQualityFromNet);
 
     // In debug logs, identify position by @timestamp:stage (stage 4 = nodeDB)
-    LOG_DEBUG("onGPSChanged() pos@%x time=%u lat=%d lon=%d alt=%d\n", pos.timestamp, pos.time, pos.latitude_i, pos.longitude_i,
-              pos.altitude);
+    LOG_DEBUG("onGPSChanged() pos@%x, time=%u, lat=%d, lon=%d, alt=%d\n", pos.timestamp, pos.time, pos.latitude_i,
+              pos.longitude_i, pos.altitude);
 
     // Update our current position in the local DB
     nodeDB->updatePosition(nodeDB->getNodeNum(), pos, RX_SRC_LOCAL);

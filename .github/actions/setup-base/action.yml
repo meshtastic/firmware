@@ -14,7 +14,7 @@ runs:
     - name: Install dependencies 
       shell: bash
       run: |
-        sudo apt-get -y update --fix-missing
+        sudo apt-get -y update 
         sudo apt-get install -y cppcheck libbluetooth-dev libgpiod-dev libyaml-cpp-dev
 
     - name: Setup Python

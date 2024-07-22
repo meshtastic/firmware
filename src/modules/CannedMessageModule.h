@@ -81,8 +81,9 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
         }
 
         switch (p->decoded.portnum) {
+        case meshtastic_PortNum_TEXT_MESSAGE_APP:
         case meshtastic_PortNum_ROUTING_APP:
-            return waitingForAck;
+            return true;
         default:
             return false;
         }
@@ -139,8 +140,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     uint8_t numChannels = 0;
     ChannelIndex indexChannels[MAX_NUM_CHANNELS] = {0};
     NodeNum incoming = NODENUM_BROADCAST;
-    bool ack = false;           // True means ACK, false means NAK (error_reason != NONE)
-    bool waitingForAck = false; // Are currently interested in routing packets?
+    bool ack = false; // True means ACK, false means NAK (error_reason != NONE)
     float lastRxSnr = 0;
     int32_t lastRxRssi = 0;
 

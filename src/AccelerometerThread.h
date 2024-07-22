@@ -16,8 +16,6 @@
 #include <Wire.h>
 #ifdef RAK_4631
 #include "Fusion/Fusion.h"
-#include "graphics/Screen.h"
-#include "graphics/ScreenFonts.h"
 #include <Rak_BMX160.h>
 #endif
 
@@ -103,11 +101,7 @@ class AccelerometerThread : public concurrency::OSThread
             bmx160.getAllData(&magAccel, NULL, &gAccel);
 
             // expirimental calibrate routine. Limited to between 10 and 30 seconds after boot
-            if (millis() > 12 * 1000 && millis() < 30 * 1000) {
-                if (!showingScreen) {
-                    showingScreen = true;
-                    screen->startAlert((FrameCallback)drawFrameCalibration);
-                }
+            if (millis() > 10 * 1000 && millis() < 30 * 1000) {
                 if (magAccel.x > highestX)
                     highestX = magAccel.x;
                 if (magAccel.x < lowestX)
@@ -120,9 +114,6 @@ class AccelerometerThread : public concurrency::OSThread
                     highestZ = magAccel.z;
                 if (magAccel.z < lowestZ)
                     lowestZ = magAccel.z;
-            } else if (showingScreen && millis() >= 30 * 1000) {
-                showingScreen = false;
-                screen->endAlert();
             }
 
             int highestRealX = highestX - (highestX + lowestX) / 2;
@@ -264,34 +255,11 @@ class AccelerometerThread : public concurrency::OSThread
     Adafruit_LIS3DH lis;
     Adafruit_LSM6DS3TRC lsm;
     SensorBMA423 bmaSensor;
-    bool BMA_IRQ = false;
 #ifdef RAK_4631
-    bool showingScreen = false;
     RAK_BMX160 bmx160;
     float highestX = 0, lowestX = 0, highestY = 0, lowestY = 0, highestZ = 0, lowestZ = 0;
-
-    static void drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-    {
-        int x_offset = display->width() / 2;
-        int y_offset = display->height() <= 80 ? 0 : 32;
-        display->setTextAlignment(TEXT_ALIGN_LEFT);
-        display->setFont(FONT_MEDIUM);
-        display->drawString(x, y, "Calibrating\nCompass");
-        int16_t compassX = 0, compassY = 0;
-        uint16_t compassDiam = graphics::Screen::getCompassDiam(display->getWidth(), display->getHeight());
-
-        // coordinates for the center of the compass/circle
-        if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_DEFAULT) {
-            compassX = x + display->getWidth() - compassDiam / 2 - 5;
-            compassY = y + display->getHeight() / 2;
-        } else {
-            compassX = x + display->getWidth() - compassDiam / 2 - 5;
-            compassY = y + FONT_HEIGHT_SMALL + (display->getHeight() - FONT_HEIGHT_SMALL) / 2;
-        }
-        display->drawCircle(compassX, compassY, compassDiam / 2);
-        screen->drawCompassNorth(display, compassX, compassY, screen->getHeading() * PI / 180);
-    }
 #endif
+    bool BMA_IRQ = false;
 };
 
 #endif

@@ -244,10 +244,8 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 
     // If the packet hasn't yet been encrypted, do so now (it might already be encrypted if we are just forwarding it)
 
-    if (!(p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag ||
-          p->which_payload_variant == meshtastic_MeshPacket_decoded_tag)) {
-        return meshtastic_Routing_Error_BAD_REQUEST;
-    }
+    assert(p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag ||
+           p->which_payload_variant == meshtastic_MeshPacket_decoded_tag); // I _think_ all packets should have a payload by now
 
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {

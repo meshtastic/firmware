@@ -156,8 +156,7 @@ bool EInkDisplay::connect()
         }
     }
 
-#elif defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_VISION_MASTER_E213) ||             \
-    defined(HELTEC_VISION_MASTER_E290)
+#elif defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_WIRELESS_PAPER)
     {
         // Start HSPI
         hspi = new SPIClass(HSPI);

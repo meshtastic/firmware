@@ -1,6 +1,5 @@
-#pragma once
-
-#include "configuration.h"
+#ifndef SYSLOG_H
+#define SYSLOG_H
 
 // DEBUG LED
 #ifndef LED_INVERTED
@@ -25,14 +24,6 @@
 #define MESHTASTIC_LOG_LEVEL_TRACE "TRACE"
 
 #include "SerialConsole.h"
-
-// If defined we will include support for ARM ICE "semihosting" for a virtual
-// console over the JTAG port (to replace the normal serial port)
-// Note: Normally this flag is passed into the gcc commandline by platformio.ini.
-// for an example see env:rak4631_dap.
-// #ifndef USE_SEMIHOSTING
-// #define USE_SEMIHOSTING
-// #endif
 
 #define DEBUG_PORT (*console) // Serial debug port
 
@@ -126,7 +117,7 @@
 #include <WiFi.h>
 #endif // HAS_WIFI
 
-#if HAS_NETWORKING
+#if HAS_WIFI || HAS_ETHERNET
 
 class Syslog
 {
@@ -162,3 +153,5 @@ class Syslog
 };
 
 #endif // HAS_ETHERNET || HAS_WIFI
+
+#endif // SYSLOG_H

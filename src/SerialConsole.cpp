@@ -28,7 +28,7 @@ void consolePrintf(const char *format, ...)
 {
     va_list arg;
     va_start(arg, format);
-    console->vprintf(nullptr, format, arg);
+    console->vprintf(format, arg);
     va_end(arg);
     console->flush();
 }
@@ -38,6 +38,7 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), con
     assert(!console);
     console = this;
     canWrite = false; // We don't send packets to our port until it has talked to us first
+                      // setDestination(&noopPrint); for testing, try turning off 'all' debug output and see what leaks
 
 #ifdef RP2040_SLOW_CLOCK
     Port.setTX(SERIAL2_TX);
@@ -84,40 +85,13 @@ bool SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
 {
     // only talk to the API once the configuration has been loaded and we're sure the serial port is not disabled.
     if (config.has_lora && config.device.serial_enabled) {
-        // Switch to protobufs for log messages
-        usingProtobufs = true;
+        // Turn off debug serial printing once the API is activated, because other threads could print and corrupt packets
+        if (!config.device.debug_log_enabled)
+            setDestination(&noopPrint);
         canWrite = true;
 
         return StreamAPI::handleToRadio(buf, len);
     } else {
         return false;
     }
-}
-
-void SerialConsole::log_to_serial(const char *logLevel, const char *format, va_list arg)
-{
-    if (usingProtobufs) {
-        meshtastic_LogRecord_Level ll = meshtastic_LogRecord_Level_UNSET; // default to unset
-        switch (logLevel[0]) {
-        case 'D':
-            ll = meshtastic_LogRecord_Level_DEBUG;
-            break;
-        case 'I':
-            ll = meshtastic_LogRecord_Level_INFO;
-            break;
-        case 'W':
-            ll = meshtastic_LogRecord_Level_WARNING;
-            break;
-        case 'E':
-            ll = meshtastic_LogRecord_Level_ERROR;
-            break;
-        case 'C':
-            ll = meshtastic_LogRecord_Level_CRITICAL;
-            break;
-        }
-
-        auto thread = concurrency::OSThread::currentThread;
-        emitLogRecord(ll, thread ? thread->ThreadName.c_str() : "", format, arg);
-    } else
-        RedirectablePrint::log_to_serial(logLevel, format, arg);
 }

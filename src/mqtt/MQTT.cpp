@@ -14,7 +14,7 @@
 #endif
 #include "mesh/generated/meshtastic/remote_hardware.pb.h"
 #include "sleep.h"
-#if HAS_WIFI
+#if HAS_WIFI && !MESHTASTIC_EXCLUDE_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #include <WiFi.h>
 #endif
@@ -175,7 +175,7 @@ void mqttInit()
     new MQTT();
 }
 
-#if HAS_NETWORKING
+#ifdef HAS_NETWORKING
 MQTT::MQTT() : concurrency::OSThread("mqtt"), pubSub(mqttClient), mqttQueue(MAX_MQTT_QUEUE)
 #else
 MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
@@ -206,7 +206,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
                 moduleConfig.mqtt.map_report_settings.publish_interval_secs, default_map_publish_interval_secs);
         }
 
-#if HAS_NETWORKING
+#ifdef HAS_NETWORKING
         if (!moduleConfig.mqtt.proxy_to_client_enabled)
             pubSub.setCallback(mqttCallback);
 #endif
@@ -226,7 +226,7 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
 
 bool MQTT::isConnectedDirectly()
 {
-#if HAS_NETWORKING
+#ifdef HAS_NETWORKING
     return pubSub.connected();
 #else
     return false;
@@ -244,7 +244,7 @@ bool MQTT::publish(const char *topic, const char *payload, bool retained)
         service.sendMqttMessageToClientProxy(msg);
         return true;
     }
-#if HAS_NETWORKING
+#ifdef HAS_NETWORKING
     else if (isConnectedDirectly()) {
         return pubSub.publish(topic, payload, retained);
     }
@@ -264,7 +264,7 @@ bool MQTT::publish(const char *topic, const uint8_t *payload, size_t length, boo
         service.sendMqttMessageToClientProxy(msg);
         return true;
     }
-#if HAS_NETWORKING
+#ifdef HAS_NETWORKING
     else if (isConnectedDirectly()) {
         return pubSub.publish(topic, payload, length, retained);
     }
@@ -284,7 +284,7 @@ void MQTT::reconnect()
             publishStatus();
             return; // Don't try to connect directly to the server
         }
-#if HAS_NETWORKING
+#ifdef HAS_NETWORKING
         // Defaults
         int serverPort = 1883;
         const char *serverAddr = default_mqtt_address;
@@ -357,7 +357,7 @@ void MQTT::reconnect()
 
 void MQTT::sendSubscriptions()
 {
-#if HAS_NETWORKING
+#ifdef HAS_NETWORKING
     size_t numChan = channels.getNumChannels();
     for (size_t i = 0; i < numChan; i++) {
         const auto &ch = channels.getByIndex(i);
@@ -396,7 +396,7 @@ bool MQTT::wantsLink() const
 
 int32_t MQTT::runOnce()
 {
-#if HAS_NETWORKING
+#ifdef HAS_NETWORKING
     if (!moduleConfig.mqtt.enabled || !(moduleConfig.mqtt.map_reporting_enabled || channels.anyMqttEnabled()))
         return disable();
 
@@ -482,12 +482,7 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
 
     auto &ch = channels.getByIndex(chIndex);
 
-    if (mp_decoded.which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
-        LOG_CRIT("MQTT::onSend(): mp_decoded isn't actually decoded\n");
-        return;
-    }
-
-    if (strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0 &&
+    if (&mp_decoded.decoded && strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0 &&
         (mp_decoded.decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
          mp_decoded.decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP)) {
         LOG_DEBUG("MQTT onSend - Ignoring range test or detection sensor message on public mqtt\n");

@@ -242,6 +242,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define HAS_BLUETOOTH 0
 #endif
 
+#include "DebugConfiguration.h"
+#include "RF95Configuration.h"
+
 #ifndef HW_VENDOR
 #error HW_VENDOR must be defined
 #endif
@@ -258,7 +261,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_GPS 1
 #define MESHTASTIC_EXCLUDE_SCREEN 1
 #define MESHTASTIC_EXCLUDE_MQTT 1
-#define MESHTASTIC_EXCLUDE_POWERMON 1
 #endif
 
 // Turn off all optional modules
@@ -279,7 +281,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_WAYPOINT 1
 #define MESHTASTIC_EXCLUDE_INPUTBROKER 1
 #define MESHTASTIC_EXCLUDE_SERIAL 1
-#define MESHTASTIC_EXCLUDE_POWERSTRESS 1
 #endif
 
 // // Turn off wifi even if HW supports wifi (webserver relies on wifi and is also disabled)
@@ -288,9 +289,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #undef HAS_WIFI
 #define HAS_WIFI 0
 #endif
-
-// Allow code that needs internet to just check HAS_NETWORKING rather than HAS_WIFI || HAS_ETHERNET
-#define HAS_NETWORKING (HAS_WIFI || HAS_ETHERNET)
 
 // // Turn off Bluetooth
 #ifdef MESHTASTIC_EXCLUDE_BLUETOOTH
@@ -311,6 +309,3 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #undef HAS_SCREEN
 #define HAS_SCREEN 0
 #endif
-
-#include "DebugConfiguration.h"
-#include "RF95Configuration.h"
