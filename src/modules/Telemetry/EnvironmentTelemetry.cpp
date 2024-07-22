@@ -293,7 +293,7 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     m->which_variant = meshtastic_Telemetry_environment_metrics_tag;
 
 #ifdef T1000X_SENSOR_EN // add by WayenWeng
-    valid = valid && t1000xSensor.getMetrics(&m);
+    valid = valid && t1000xSensor.getMetrics(m);
     hasSensor = true;
 #else
     if (dfRobotLarkSensor.hasSensor()) {
