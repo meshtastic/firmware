@@ -410,6 +410,7 @@ bool GPS::setup()
 
             // if GPS_BAUDRATE is specified in variant (i.e. not 9600), skip to the specified rate.
             if (speedSelect == 0 && GPS_BAUDRATE != serialSpeeds[speedSelect]) {
+            if (GPS_BAUDRATE > serialSpeeds[speedSelect]) {
                 speedSelect = std::find(serialSpeeds, std::end(serialSpeeds), GPS_BAUDRATE) - serialSpeeds;
             }
 
