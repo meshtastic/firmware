@@ -400,6 +400,12 @@ bool GPS::setup()
     int msglen = 0;
 
     if (!didSerialInit) {
+#ifdef GNSS_Airoha // change by WayenWeng
+        if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
+            probe(GPS_BAUDRATE);
+            LOG_INFO("GPS setting to %d.\n", GPS_BAUDRATE);
+        }
+#else
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
 
             // if GPS_BAUDRATE is specified in variant (i.e. not 9600), skip to the specified rate.
@@ -773,6 +779,7 @@ bool GPS::setup()
                 LOG_INFO("GNSS module configuration saved!\n");
             }
         }
+#endif // !GNSS_Airoha
         didSerialInit = true;
     }
 
@@ -1170,6 +1177,9 @@ GnssModel_t GPS::probe(int serialSpeed)
         _serial_gps->updateBaudRate(serialSpeed);
     }
 #endif
+#ifdef GNSS_Airoha // add by WayenWeng
+    return GNSS_MODEL_UNKNOWN;
+#else
 #ifdef GPS_DEBUG
     for (int i = 0; i < 20; i++) {
         getACK("$GP", 200);
@@ -1325,6 +1335,7 @@ GnssModel_t GPS::probe(int serialSpeed)
     }
 
     return GNSS_MODEL_UBLOX;
+#endif // !GNSS_Airoha
 }
 
 GPS *GPS::createGps()
@@ -1479,6 +1490,11 @@ bool GPS::factoryReset()
  */
 bool GPS::lookForTime()
 {
+#ifdef GNSS_Airoha // add by WayenWeng
+    uint8_t fix = reader.fixQuality();
+    uint32_t now = millis();
+#endif
+
     auto ti = reader.time;
     auto d = reader.date;
     if (ti.isValid() && d.isValid()) { // Note: we don't check for updated, because we'll only be called if needed
@@ -1513,6 +1529,13 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
  */
 bool GPS::lookForLocation()
 {
+#ifdef GNSS_Airoha // add by WayenWeng
+    if ((config.position.gps_update_interval * 1000) >= (GPS_FIX_HOLD_TIME * 2)) {
+        uint8_t fix = reader.fixQuality();
+        uint32_t now = millis();
+    }
+#endif
+
     // By default, TinyGPS++ does not parse GPGSA lines, which give us
     //   the 2D/3D fixType (see NMEAGPS.h)
     // At a minimum, use the fixQuality indicator in GPGGA (FIXME?)
