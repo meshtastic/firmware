@@ -7,7 +7,11 @@
 #ifdef RP2040_SLOW_CLOCK
 #define Port Serial2
 #else
+#ifdef USER_DEBUG_PORT // change by WayenWeng
+#define Port USER_DEBUG_PORT
+#else
 #define Port Serial
+#endif
 #endif
 // Defaulting to the formerly removed phone_timeout_secs value of 15 minutes
 #define SERIAL_CONNECTION_TIMEOUT (15 * 60) * 1000UL
