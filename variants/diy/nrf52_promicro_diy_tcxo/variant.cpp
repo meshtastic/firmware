@@ -32,7 +32,7 @@ const uint32_t g_ADigitalPinMap[] = {
 
 void initVariant()
 {
-     // 3V3 Power Rail
+    // 3V3 Power Rail
     pinMode(PIN_3V3_EN, OUTPUT);
     digitalWrite(PIN_3V3_EN, HIGH);
 }
