@@ -100,6 +100,25 @@ extern "C" {
 
 #define LR1110_GNSS_ANT_PIN (32 + 5) // P1.05 37
 
+#define HAS_GPS 1
+#define GNSS_Airoha
+#define GPS_RX_PIN PIN_SERIAL1_RX
+#define GPS_TX_PIN PIN_SERIAL1_TX
+
+#define PIN_GPS_EN (32 + 11) // P1.11
+#define GPS_EN_ACTIVE HIGH
+
+#define PIN_GPS_RESET (32 + 15) // P1.15
+#define GPS_RESET_MODE HIGH
+
+#define GPS_VRTC_EN (0 + 8)      // P0.8, awlays high
+#define GPS_SLEEP_INT (32 + 12)  // P1.12, awlays high
+#define GPS_RTC_INT (0 + 15)     // P0.15, normal is LOW, wake by HIGH
+#define GPS_RESETB_OUT (32 + 14) // P1.14, awlays input pull_up
+
+// #define GPS_THREAD_INTERVAL 50
+#define GPS_FIX_HOLD_TIME 15000 // ms
+
 #ifdef __cplusplus
 }
 #endif

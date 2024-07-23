@@ -773,6 +773,21 @@ bool GPS::setup()
             } else {
                 LOG_INFO("GNSS module configuration saved!\n");
             }
+        } else if (gnssModel == GNSS_MODEL_AIROHA) {
+            clearBuffer();
+            // Set Normal Mode
+            _serial_gps->write("$PGKC105,0*37\r\n");
+            delay(250);
+            // Disable NMEA while we're configuring
+            _serial_gps->write("$PGKC242,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*37\r\n");
+            // Set NMEAInterval to 1000ms
+            _serial_gps->write("$PGKC101,1000\r\n");
+            // Initialize the AIROHA Chip, use GPS + GLONASS + BEIDOU + GALILEO
+            _serial_gps->write("$PGKC115,1,1,1,1,0*2B\r\n");
+            delay(250);
+            // Enable NMEA, only ask for RMC and GGA
+            _serial_gps->write("$PGKC242,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*37\r\n");
+            delay(250);
         }
         didSerialInit = true;
     }
@@ -1171,9 +1186,7 @@ GnssModel_t GPS::probe(int serialSpeed)
         _serial_gps->updateBaudRate(serialSpeed);
     }
 #endif
-#ifdef GNSS_Airoha // add by WayenWeng
-    return GNSS_MODEL_UNKNOWN;
-#else
+
 #ifdef GPS_DEBUG
     for (int i = 0; i < 20; i++) {
         getACK("$GP", 200);
@@ -1194,6 +1207,16 @@ GnssModel_t GPS::probe(int serialSpeed)
     if (getACK("UC6580", 500) == GNSS_RESPONSE_OK) {
         LOG_INFO("UC6580 detected, using UC6580 Module\n");
         return GNSS_MODEL_UC6580;
+    }
+
+    // get version information for Airoha chips
+    _serial_gps->write("$PGKC105,0*37\r\n");
+    delay(250);
+    _serial_gps->write("$PGKC462*2F\r\n");
+    delay(750);
+    if (getACK("PGKC463", 500) == GNSS_RESPONSE_OK) {
+        LOG_INFO("Air530 detected, using Airoha Module\n");
+        return GNSS_MODEL_AIROHA;
     }
 
     // Get version information
@@ -1329,7 +1352,6 @@ GnssModel_t GPS::probe(int serialSpeed)
     }
 
     return GNSS_MODEL_UBLOX;
-#endif // !GNSS_Airoha
 }
 
 GPS *GPS::createGps()
