@@ -10,7 +10,7 @@
  * eink display pins
  */
 #define PIN_EINK_CS 3
-#define PIN_EINK_BUSY 5
+#define PIN_EINK_BUSY 6
 #define PIN_EINK_DC 4
 #define PIN_EINK_RES 5
 #define PIN_EINK_SCLK 2

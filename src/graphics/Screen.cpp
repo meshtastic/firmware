@@ -1902,6 +1902,13 @@ int32_t Screen::runOnce()
         // standard screen loop handling here
         if (config.display.auto_screen_carousel_secs > 0 &&
             (millis() - lastScreenTransition) > (config.display.auto_screen_carousel_secs * 1000)) {
+
+// If an E-Ink display struggles with fast refresh, force carousel to use full refresh instead
+// Carousel is potentially a major source of E-Ink display wear
+#if !defined(EINK_BACKGROUND_USES_FAST)
+            EINK_ADD_FRAMEFLAG(dispdev, COSMETIC);
+#endif
+
             LOG_DEBUG("LastScreenTransition exceeded %ums transitioning to next frame\n", (millis() - lastScreenTransition));
             handleOnPress();
         }
