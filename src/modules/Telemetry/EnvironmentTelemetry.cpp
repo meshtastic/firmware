@@ -33,9 +33,6 @@
 #include "Sensor/SHT31Sensor.h"
 #include "Sensor/SHT4XSensor.h"
 #include "Sensor/SHTC3Sensor.h"
-#ifdef T1000X_SENSOR_EN
-#include "Sensor/T1000xSensor.h"
-#endif
 #include "Sensor/T1000xSensor.h"
 #include "Sensor/TSL2591Sensor.h"
 #include "Sensor/VEML7700Sensor.h"
