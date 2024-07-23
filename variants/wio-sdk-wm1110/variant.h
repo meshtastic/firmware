@@ -31,6 +31,13 @@
 
 #include "WVariant.h"
 
+#ifdef USE_TINYUSB
+#error TinyUSB must be disabled by platformio before using this variant
+#endif
+
+// We use the hardware serial port for the serial console
+#define Serial Serial1
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
@@ -99,6 +106,8 @@ extern "C" {
 #define LR11X0_DIO_AS_RF_SWITCH
 
 #define LR1110_GNSS_ANT_PIN (32 + 5) // P1.05 37
+
+#define NRF_USE_SERIAL_DFU
 
 #ifdef __cplusplus
 }

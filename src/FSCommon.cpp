@@ -84,6 +84,58 @@ bool renameFile(const char *pathFrom, const char *pathTo)
 #endif
 }
 
+#include <vector>
+
+/**
+ * @brief Get the list of files in a directory.
+ *
+ * This function returns a list of files in a directory. The list includes the full path of each file.
+ *
+ * @param dirname The name of the directory.
+ * @param levels The number of levels of subdirectories to list.
+ * @return A vector of strings containing the full path of each file in the directory.
+ */
+std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
+{
+    std::vector<meshtastic_FileInfo> filenames = {};
+#ifdef FSCom
+    File root = FSCom.open(dirname, FILE_O_READ);
+    if (!root)
+        return filenames;
+    if (!root.isDirectory())
+        return filenames;
+
+    File file = root.openNextFile();
+    while (file) {
+        if (file.isDirectory() && !String(file.name()).endsWith(".")) {
+            if (levels) {
+#ifdef ARCH_ESP32
+                std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(file.path(), levels - 1);
+#else
+                std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(file.name(), levels - 1);
+#endif
+                filenames.insert(filenames.end(), subDirFilenames.begin(), subDirFilenames.end());
+                file.close();
+            }
+        } else {
+            meshtastic_FileInfo fileInfo = {"", file.size()};
+#ifdef ARCH_ESP32
+            strcpy(fileInfo.file_name, file.path());
+#else
+            strcpy(fileInfo.file_name, file.name());
+#endif
+            if (!String(fileInfo.file_name).endsWith(".")) {
+                filenames.push_back(fileInfo);
+            }
+            file.close();
+        }
+        file = root.openNextFile();
+    }
+    root.close();
+#endif
+    return filenames;
+}
+
 /**
  * Lists the contents of a directory.
  *

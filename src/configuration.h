@@ -75,11 +75,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 
 // -----------------------------------------------------------------------------
-// Regulatory overrides for producing regional builds
+// Regulatory overrides
 // -----------------------------------------------------------------------------
 
-// Define if region should override user saved region
-// #define LORA_REGIONCODE meshtastic_Config_LoRaConfig_RegionCode_SG_923
+// Override user saved region, for producing region-locked builds
+// #define REGULATORY_LORA_REGIONCODE meshtastic_Config_LoRaConfig_RegionCode_SG_923
+
+// Total system gain in dBm to subtract from Tx power to remain within regulatory ERP limit for non-licensed operators
+// This value should be set in variant.h and is PA gain + antenna gain (if system ships with an antenna)
+#ifndef REGULATORY_GAIN_LORA
+#define REGULATORY_GAIN_LORA 0
+#endif
 
 // -----------------------------------------------------------------------------
 // Feature toggles
@@ -165,10 +171,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // GPS
 // -----------------------------------------------------------------------------
-#ifndef GPS_BAUDRATE
-#define GPS_BAUDRATE 9600
-#endif
-
 #ifndef GPS_THREAD_INTERVAL
 #define GPS_THREAD_INTERVAL 200
 #endif
@@ -178,6 +180,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 /* Step #1: offer chance for variant-specific defines */
 #include "variant.h"
+
+#ifndef GPS_BAUDRATE
+#define GPS_BAUDRATE 9600
+#endif
 
 /* Step #2: follow with defines common to the architecture;
    also enable HAS_ option not specifically disabled by variant.h */
@@ -236,9 +242,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define HAS_BLUETOOTH 0
 #endif
 
-#include "DebugConfiguration.h"
-#include "RF95Configuration.h"
-
 #ifndef HW_VENDOR
 #error HW_VENDOR must be defined
 #endif
@@ -255,6 +258,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_GPS 1
 #define MESHTASTIC_EXCLUDE_SCREEN 1
 #define MESHTASTIC_EXCLUDE_MQTT 1
+#define MESHTASTIC_EXCLUDE_POWERMON 1
 #endif
 
 // Turn off all optional modules
@@ -275,6 +279,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_WAYPOINT 1
 #define MESHTASTIC_EXCLUDE_INPUTBROKER 1
 #define MESHTASTIC_EXCLUDE_SERIAL 1
+#define MESHTASTIC_EXCLUDE_POWERSTRESS 1
 #endif
 
 // // Turn off wifi even if HW supports wifi (webserver relies on wifi and is also disabled)
@@ -283,6 +288,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #undef HAS_WIFI
 #define HAS_WIFI 0
 #endif
+
+// Allow code that needs internet to just check HAS_NETWORKING rather than HAS_WIFI || HAS_ETHERNET
+#define HAS_NETWORKING (HAS_WIFI || HAS_ETHERNET)
 
 // // Turn off Bluetooth
 #ifdef MESHTASTIC_EXCLUDE_BLUETOOTH
@@ -303,3 +311,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #undef HAS_SCREEN
 #define HAS_SCREEN 0
 #endif
+
+#include "DebugConfiguration.h"
+#include "RF95Configuration.h"

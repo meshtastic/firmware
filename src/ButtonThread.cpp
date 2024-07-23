@@ -43,6 +43,8 @@ ButtonThread::ButtonThread() : OSThread("Button")
     int pin = config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN; // Resolved button pin
 #if defined(HELTEC_CAPSULE_SENSOR_V3)
     this->userButton = OneButton(pin, false, false);
+#elif defined(BUTTON_ACTIVE_LOW) // change by WayenWeng
+    this->userButton = OneButton(pin, BUTTON_ACTIVE_LOW, BUTTON_ACTIVE_PULLUP);
 #else
     this->userButton = OneButton(pin, true, true);
 #endif
@@ -51,7 +53,11 @@ ButtonThread::ButtonThread() : OSThread("Button")
 
 #ifdef INPUT_PULLUP_SENSE
     // Some platforms (nrf52) have a SENSE variant which allows wake from sleep - override what OneButton did
+#ifdef BUTTON_SENSE_TYPE // change by WayenWeng
+    pinMode(pin, BUTTON_SENSE_TYPE);
+#else
     pinMode(pin, INPUT_PULLUP_SENSE);
+#endif
 #endif
 
 #if defined(BUTTON_PIN) || defined(ARCH_PORTDUINO)
@@ -181,8 +187,9 @@ int32_t ButtonThread::runOnce()
         case BUTTON_EVENT_LONG_PRESSED: {
             LOG_BUTTON("Long press!\n");
             powerFSM.trigger(EVENT_PRESS);
-            if (screen)
-                screen->startShutdownScreen();
+            if (screen) {
+                screen->startAlert("Shutting down...");
+            }
             playBeep();
             break;
         }
