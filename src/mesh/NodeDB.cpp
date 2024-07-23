@@ -1,3 +1,4 @@
+#include "../userPrefs.h"
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
@@ -235,8 +236,16 @@ void NodeDB::installDefaultConfig()
     config.lora.tx_enabled =
         true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
     config.lora.override_duty_cycle = false;
+#ifdef CONFIG_LORA_REGION_DEFAULT
+    config.lora.region = CONFIG_LORA_REGION_DEFAULT;
+#else
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+#endif
+#ifdef CONFIG_LORA_MODEM_PRESET
+    config.lora.modem_preset = CONFIG_LORA_MODEM_PRESET;
+#else
     config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+#endif
     config.lora.hop_limit = HOP_RELIABLE;
     config.lora.ignore_mqtt = false;
 #ifdef PIN_GPS_EN
