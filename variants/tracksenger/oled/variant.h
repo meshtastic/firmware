@@ -50,6 +50,7 @@
 
 #define GPS_RESET_MODE LOW
 #define GPS_UC6580
+#define GPS_BAUDRATE 115200
 
 #define USE_SX1262
 #define LORA_DIO0 -1 // a No connect on the SX1262 module
