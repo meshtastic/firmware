@@ -91,8 +91,12 @@ void enableSlowCLK()
 
 void esp32Setup()
 {
+    /* We explicitly don't want to do call randomSeed,
+    // as that triggers the esp32 core to use a less secure pseudorandom function.
     uint32_t seed = esp_random();
     LOG_DEBUG("Setting random seed %u\n", seed);
+    randomSeed(seed);
+    */
 
     LOG_DEBUG("Total heap: %d\n", ESP.getHeapSize());
     LOG_DEBUG("Free heap: %d\n", ESP.getFreeHeap());
