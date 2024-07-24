@@ -823,7 +823,7 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         setPowerPMU(false);                                         // Power (PMU): off
         writePinStandby(true);                                      // Standby (pin): asleep (not awake)
         setPowerUBLOX(false, sleepTime);                            // Standby (UBLOX): asleep, timed
-#ifdef GNSS_Airoha
+#ifdef GNSS_AIROHA
         if (config.position.gps_update_interval * 1000 >= GPS_FIX_HOLD_TIME * 2) {
             digitalWrite(PIN_GPS_EN, LOW);
         }
@@ -837,7 +837,7 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         setPowerPMU(false);                                         // Power (PMU): off
         writePinStandby(true);                                      // Standby (pin): asleep
         setPowerUBLOX(false, 0);                                    // Standby (UBLOX): asleep, indefinitely
-#ifdef GNSS_Airoha
+#ifdef GNSS_AIROHA
         if (config.position.gps_update_interval * 1000 >= GPS_FIX_HOLD_TIME * 2) {
             digitalWrite(PIN_GPS_EN, LOW);
         }
@@ -1180,7 +1180,7 @@ GnssModel_t GPS::probe(int serialSpeed)
         _serial_gps->updateBaudRate(serialSpeed);
     }
 #endif
-#ifdef GNSS_Airoha // add by WayenWeng
+#ifdef GNSS_AIROHA 
 
     return GNSS_MODEL_UNKNOWN;
 #else
@@ -1495,7 +1495,7 @@ bool GPS::factoryReset()
 bool GPS::lookForTime()
 {
 
-#ifdef GNSS_Airoha
+#ifdef GNSS_AIROHA
     uint8_t fix = reader.fixQuality();
     uint32_t now = millis();
     if (fix > 0) {
@@ -1547,7 +1547,7 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
  */
 bool GPS::lookForLocation()
 {
-#ifdef GNSS_Airoha
+#ifdef GNSS_AIROHA
     if ((config.position.gps_update_interval * 1000) >= (GPS_FIX_HOLD_TIME * 2)) {
         uint8_t fix = reader.fixQuality();
         uint32_t now = millis();
@@ -1776,7 +1776,7 @@ void GPS::toggleGpsMode()
     if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
         LOG_INFO("User toggled GpsMode. Now DISABLED.\n");
-#ifdef GNSS_Airoha
+#ifdef GNSS_AIROHA
         if (powerState == GPS_ACTIVE) {
             LOG_DEBUG("User power Off GPS\n");
             digitalWrite(PIN_GPS_EN, LOW);

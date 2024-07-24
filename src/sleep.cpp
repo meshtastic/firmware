@@ -239,7 +239,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     // pinMode(PIN_POWER_EN1, INPUT_PULLDOWN);
 #endif
 
-#ifdef GNSS_Airoha
+#ifdef GNSS_AIROHA
     digitalWrite(GPS_VRTC_EN, LOW);
     digitalWrite(PIN_GPS_RESET, LOW);
     digitalWrite(GPS_SLEEP_INT, LOW);
