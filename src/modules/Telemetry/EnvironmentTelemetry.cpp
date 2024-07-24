@@ -33,6 +33,9 @@
 #include "Sensor/SHT31Sensor.h"
 #include "Sensor/SHT4XSensor.h"
 #include "Sensor/SHTC3Sensor.h"
+#ifdef T1000X_SENSOR_EN
+#include "Sensor/T1000xSensor.h"
+#endif
 #include "Sensor/TSL2591Sensor.h"
 #include "Sensor/VEML7700Sensor.h"
 
@@ -53,6 +56,9 @@ AHT10Sensor aht10Sensor;
 MLX90632Sensor mlx90632Sensor;
 DFRobotLarkSensor dfRobotLarkSensor;
 NAU7802Sensor nau7802Sensor;
+#ifdef T1000X_SENSOR_EN
+T1000xSensor t1000xSensor;
+#endif
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
@@ -63,7 +69,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
 {
     if (sleepOnNextExecution == true) {
         sleepOnNextExecution = false;
-        uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval);
+        uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval,
+                                                                   default_telemetry_broadcast_interval_secs);
         LOG_DEBUG("Sleeping for %ims, then awaking to send metrics again.\n", nightyNightMs);
         doDeepSleep(nightyNightMs, true);
     }
@@ -91,6 +98,9 @@ int32_t EnvironmentTelemetryModule::runOnce()
             LOG_INFO("Environment Telemetry: Initializing\n");
             // it's possible to have this module enabled, only for displaying values on the screen.
             // therefore, we should only enable the sensor loop if measurement is also enabled
+#ifdef T1000X_SENSOR_EN // add by WayenWeng
+            result = t1000xSensor.runOnce();
+#else
             if (dfRobotLarkSensor.hasSensor())
                 result = dfRobotLarkSensor.runOnce();
             if (bmp085Sensor.hasSensor())
@@ -115,6 +125,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = ina219Sensor.runOnce();
             if (ina260Sensor.hasSensor())
                 result = ina260Sensor.runOnce();
+            if (ina3221Sensor.hasSensor())
+                result = ina3221Sensor.runOnce();
             if (veml7700Sensor.hasSensor())
                 result = veml7700Sensor.runOnce();
             if (tsl2591Sensor.hasSensor())
@@ -129,6 +141,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = mlx90632Sensor.runOnce();
             if (nau7802Sensor.hasSensor())
                 result = nau7802Sensor.runOnce();
+#endif
         }
         return result;
     } else {
@@ -142,7 +155,9 @@ int32_t EnvironmentTelemetryModule::runOnce()
 
         uint32_t now = millis();
         if (((lastSentToMesh == 0) ||
-             ((now - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.environment_update_interval))) &&
+             ((now - lastSentToMesh) >=
+              Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.environment_update_interval,
+                                                      default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
             airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
@@ -277,6 +292,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     m->time = getTime();
     m->which_variant = meshtastic_Telemetry_environment_metrics_tag;
 
+#ifdef T1000X_SENSOR_EN // add by WayenWeng
+    valid = valid && t1000xSensor.getMetrics(m);
+    hasSensor = true;
+#else
     if (dfRobotLarkSensor.hasSensor()) {
         valid = valid && dfRobotLarkSensor.getMetrics(m);
         hasSensor = true;
@@ -325,6 +344,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         valid = valid && ina260Sensor.getMetrics(m);
         hasSensor = true;
     }
+    if (ina3221Sensor.hasSensor()) {
+        valid = valid && ina3221Sensor.getMetrics(m);
+        hasSensor = true;
+    }
     if (veml7700Sensor.hasSensor()) {
         valid = valid && veml7700Sensor.getMetrics(m);
         hasSensor = true;
@@ -362,6 +385,7 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         }
     }
 
+#endif
     return valid && hasSensor;
 }
 
@@ -496,6 +520,11 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
     }
     if (ina260Sensor.hasSensor()) {
         result = ina260Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (ina3221Sensor.hasSensor()) {
+        result = ina3221Sensor.handleAdminMessage(mp, request, response);
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }

@@ -38,10 +38,7 @@ Observable<void *> preflightSleep;
 
 /// Called to tell observers we are now entering sleep and you should prepare.  Must return 0
 /// notifySleep will be called for light or deep sleep, notifyDeepSleep is only called for deep sleep
-/// notifyGPSSleep will be called when config.position.gps_enabled is set to 0 or from buttonthread when GPS_POWER_TOGGLE is
-/// enabled.
 Observable<void *> notifySleep, notifyDeepSleep;
-Observable<void *> notifyGPSSleep;
 
 // deep sleep support
 RTC_DATA_ATTR int bootCount = 0;
@@ -224,11 +221,6 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     pinMode(PIN_POWER_EN, INPUT); // power off peripherals
     // pinMode(PIN_POWER_EN1, INPUT_PULLDOWN);
 #endif
-#if HAS_GPS
-    // Kill GPS power completely (even if previously we just had it in sleep mode)
-    if (gps)
-        gps->setGPSPower(false, false, 0);
-#endif
     ledBlink.set(false);
 
 #ifdef RESET_OLED
@@ -240,6 +232,8 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
 #elif defined(VEXT_ENABLE_V05)
     digitalWrite(VEXT_ENABLE_V05, 0); // turn off the lora amplifier power
     digitalWrite(ST7735_BL_V05, 0);   // turn off the display power
+#elif defined(VEXT_ENABLE) && defined(VEXT_ON_VALUE)
+    digitalWrite(VEXT_ENABLE, !VEXT_ON_VALUE); // turn on the display power
 #elif defined(VEXT_ENABLE)
     digitalWrite(VEXT_ENABLE, 1); // turn off the display power
 #endif
