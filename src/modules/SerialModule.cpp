@@ -1,4 +1,5 @@
 #include "SerialModule.h"
+#include "GeoCoord.h"
 #include "MeshService.h"
 #include "NMEAWPL.h"
 #include "NodeDB.h"
@@ -66,7 +67,7 @@ SerialModule::SerialModule() : StreamAPI(&Serial2), concurrency::OSThread("Seria
 static Print *serialPrint = &Serial2;
 #endif
 
-char serialBytes[meshtastic_Constants_DATA_PAYLOAD_LEN];
+char serialBytes[512];
 size_t serialPayloadSize;
 
 SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
@@ -198,8 +199,12 @@ int32_t SerialModule::runOnce()
                     }
                 }
             }
+
 #if !defined(TTGO_T_ECHO) && !defined(CANARYONE)
-            else {
+            else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_WS85)) {
+                processWXSerial();
+
+            } else {
                 while (Serial2.available()) {
                     serialPayloadSize = Serial2.readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
                     serialModuleRadio->sendPayload();
@@ -211,6 +216,27 @@ int32_t SerialModule::runOnce()
     } else {
         return disable();
     }
+}
+
+/**
+ * Sends telemetry packet over the mesh network.
+ *
+ * @param m The telemetry data to be sent
+ *
+ * @return void
+ *
+ * @throws None
+ */
+void SerialModule::sendTelemetry(meshtastic_Telemetry m)
+{
+    meshtastic_MeshPacket *p = router->allocForSending();
+    p->decoded.portnum = meshtastic_PortNum_TELEMETRY_APP;
+    p->decoded.payload.size =
+        pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Telemetry_msg, &m);
+    p->to = NODENUM_BROADCAST;
+    p->decoded.want_response = false;
+    p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+    service.sendToMesh(p, RX_SRC_LOCAL, true);
 }
 
 /**
@@ -356,5 +382,163 @@ uint32_t SerialModule::getBaudRate()
         return 921600;
     }
     return BAUD;
+}
+
+/**
+ * Process the received weather station serial data, extract wind, voltage, and temperature information,
+ * calculate averages and send telemetry data over the mesh network.
+ *
+ * @return void
+ */
+void SerialModule::processWXSerial()
+{
+#if !defined(TTGO_T_ECHO) && !defined(CANARYONE)
+    static unsigned int lastAveraged = 0;
+    static unsigned int averageIntervalMillis = 300000; // 5 minutes hard coded.
+    static double dir_sum_sin = 0;
+    static double dir_sum_cos = 0;
+    static float velSum = 0;
+    static float gust = 0;
+    static float lull = -1;
+    static int velCount = 0;
+    static int dirCount = 0;
+    static char windDir[4] = "xxx";   // Assuming windDir is 3 characters long + null terminator
+    static char windVel[5] = "xx.x";  // Assuming windVel is 4 characters long + null terminator
+    static char windGust[5] = "xx.x"; // Assuming windGust is 4 characters long + null terminator
+    static char batVoltage[5] = "0.0V";
+    static char capVoltage[5] = "0.0V";
+    static float batVoltageF = 0;
+    static float capVoltageF = 0;
+    bool gotwind = false;
+
+    while (Serial2.available()) {
+        // clear serialBytes buffer
+        memset(serialBytes, '\0', sizeof(serialBytes));
+        // memset(formattedString, '\0', sizeof(formattedString));
+        serialPayloadSize = Serial2.readBytes(serialBytes, 512);
+        // check for a strings we care about
+        // example output of serial data fields from the WS85
+        // WindDir      = 79
+        // WindSpeed    = 0.5
+        // WindGust     = 0.6
+        // GXTS04Temp   = 24.4
+        if (serialPayloadSize > 0) {
+            // Define variables for line processing
+            int lineStart = 0;
+            int lineEnd = -1;
+
+            // Process each byte in the received data
+            for (size_t i = 0; i < serialPayloadSize; i++) {
+                // go until we hit the end of line and then process the line
+                if (serialBytes[i] == '\n') {
+                    lineEnd = i;
+                    // Extract the current line
+                    char line[meshtastic_Constants_DATA_PAYLOAD_LEN];
+                    memset(line, '\0', sizeof(line));
+                    memcpy(line, &serialBytes[lineStart], lineEnd - lineStart);
+
+                    if (strstr(line, "Wind") != NULL) // we have a wind line
+                    {
+                        gotwind = true;
+                        // Find the positions of "=" signs in the line
+                        char *windDirPos = strstr(line, "WindDir      = ");
+                        char *windSpeedPos = strstr(line, "WindSpeed    = ");
+                        char *windGustPos = strstr(line, "WindGust     = ");
+
+                        if (windDirPos != NULL) {
+                            // Extract data after "=" for WindDir
+                            strcpy(windDir, windDirPos + 15); // Add 15 to skip "WindDir = "
+                            double radians = toRadians(strtof(windDir, nullptr));
+                            dir_sum_sin += sin(radians);
+                            dir_sum_cos += cos(radians);
+                            dirCount++;
+                        } else if (windSpeedPos != NULL) {
+                            // Extract data after "=" for WindSpeed
+                            strcpy(windVel, windSpeedPos + 15); // Add 15 to skip "WindSpeed = "
+                            float newv = strtof(windVel, nullptr);
+                            velSum += newv;
+                            velCount++;
+                            if (newv < lull || lull == -1)
+                                lull = newv;
+
+                        } else if (windGustPos != NULL) {
+                            strcpy(windGust, windGustPos + 15); // Add 15 to skip "WindSpeed = "
+                            float newg = strtof(windGust, nullptr);
+                            if (newg > gust)
+                                gust = newg;
+                        }
+
+                        // these are also voltage data we care about possibly
+                    } else if (strstr(line, "BatVoltage") != NULL) { // we have a battVoltage line
+                        char *batVoltagePos = strstr(line, "BatVoltage     = ");
+                        if (batVoltagePos != NULL) {
+                            strcpy(batVoltage, batVoltagePos + 17); // 18 for ws 80, 17 for ws85
+                            batVoltageF = strtof(batVoltage, nullptr);
+                            break; // last possible data we want so break
+                        }
+                    } else if (strstr(line, "CapVoltage") != NULL) { // we have a cappVoltage line
+                        char *capVoltagePos = strstr(line, "CapVoltage     = ");
+                        if (capVoltagePos != NULL) {
+                            strcpy(capVoltage, capVoltagePos + 17); // 18 for ws 80, 17 for ws85
+                            capVoltageF = strtof(capVoltage, nullptr);
+                        }
+                    }
+
+                    // Update lineStart for the next line
+                    lineStart = lineEnd + 1;
+                }
+            }
+            break;
+            // clear the input buffer
+            while (Serial2.available() > 0) {
+                Serial2.read(); // Read and discard the bytes in the input buffer
+            }
+        }
+    }
+    if (gotwind) {
+
+        LOG_INFO("WS85 : %i %.1fg%.1f %.1fv %.1fv\n", atoi(windDir), strtof(windVel, nullptr), strtof(windGust, nullptr),
+                 batVoltageF, capVoltageF);
+    }
+    if (gotwind && millis() - lastAveraged > averageIntervalMillis) {
+        // calulate averages and send to the mesh
+        float velAvg = 1.0 * velSum / velCount;
+
+        double avgSin = dir_sum_sin / dirCount;
+        double avgCos = dir_sum_cos / dirCount;
+
+        double avgRadians = atan2(avgSin, avgCos);
+        float dirAvg = toDegrees(avgRadians);
+
+        if (dirAvg < 0) {
+            dirAvg += 360.0;
+        }
+        lastAveraged = millis();
+
+        // make a telemetry packet with the data
+        meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
+        m.which_variant = meshtastic_Telemetry_environment_metrics_tag;
+        m.variant.environment_metrics.wind_speed = velAvg;
+        m.variant.environment_metrics.wind_direction = dirAvg;
+        m.variant.environment_metrics.wind_gust = gust;
+        m.variant.environment_metrics.wind_lull = lull;
+        m.variant.environment_metrics.voltage =
+            capVoltageF > batVoltageF ? capVoltageF : batVoltageF; // send the larger of the two voltage values.
+
+        LOG_INFO("WS85 Transmit speed=%fm/s, direction=%d , lull=%f, gust=%f, voltage=%f\n",
+                 m.variant.environment_metrics.wind_speed, m.variant.environment_metrics.wind_direction,
+                 m.variant.environment_metrics.wind_lull, m.variant.environment_metrics.wind_gust,
+                 m.variant.environment_metrics.voltage);
+
+        sendTelemetry(m);
+
+        // reset counters and gust/lull
+        velSum = velCount = dirCount = 0;
+        dir_sum_sin = dir_sum_cos = 0;
+        gust = 0;
+        lull = -1;
+    }
+#endif
+    return;
 }
 #endif

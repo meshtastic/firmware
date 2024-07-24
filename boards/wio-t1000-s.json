@@ -1,0 +1,58 @@
+{
+  "build": {
+    "arduino": {
+      "ldscript": "nrf52840_s140_v7.ld"
+    },
+    "core": "nRF5",
+    "cpu": "cortex-m4",
+    "extra_flags": "-DARDUINO_WIO_WM1110 -DNRF52840_XXAA",
+    "f_cpu": "64000000L",
+    "hwids": [
+      ["0x239A", "0x8029"],
+      ["0x239A", "0x0029"],
+      ["0x239A", "0x002A"],
+      ["0x239A", "0x802A"]
+    ],
+    "usb_product": "WIO-BOOT",
+    "mcu": "nrf52840",
+    "variant": "Seeed_WIO_WM1110",
+    "bsp": {
+      "name": "adafruit"
+    },
+    "softdevice": {
+      "sd_flags": "-DS140",
+      "sd_name": "s140",
+      "sd_version": "7.3.0",
+      "sd_fwid": "0x0123"
+    },
+    "bootloader": {
+      "settings_addr": "0xFF000"
+    }
+  },
+  "connectivity": ["bluetooth"],
+  "debug": {
+    "jlink_device": "nRF52840_xxAA",
+    "svd_path": "nrf52840.svd"
+  },
+  "frameworks": ["arduino"],
+  "name": "Seeed WIO WM1110",
+  "upload": {
+    "maximum_ram_size": 248832,
+    "maximum_size": 815104,
+    "speed": 115200,
+    "protocol": "nrfutil",
+    "protocols": [
+      "jlink",
+      "nrfjprog",
+      "nrfutil",
+      "stlink",
+      "cmsis-dap",
+      "blackmagic"
+    ],
+    "use_1200bps_touch": true,
+    "require_upload_port": true,
+    "wait_for_upload_port": true
+  },
+  "url": "https://www.seeedstudio.com/LoRaWAN-Tracker-c-1938.html",
+  "vendor": "Seeed Studio"
+}

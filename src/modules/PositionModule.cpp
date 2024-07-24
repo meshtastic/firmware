@@ -11,12 +11,12 @@
 #include "configuration.h"
 #include "gps/GeoCoord.h"
 #include "main.h"
+#include "mesh/compression/unishox2.h"
 #include "meshtastic/atak.pb.h"
 #include "sleep.h"
 #include "target_specific.h"
 
 extern "C" {
-#include "mesh/compression/unishox2.h"
 #include <Throttle.h>
 }
 
@@ -255,10 +255,12 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
                                            .course = static_cast<uint16_t>(localPosition.ground_track),
                                        }}};
 
-    auto length = unishox2_compress_simple(owner.long_name, strlen(owner.long_name), takPacket.contact.device_callsign);
+    auto length = unishox2_compress_lines(owner.long_name, strlen(owner.long_name), takPacket.contact.device_callsign,
+                                          sizeof(takPacket.contact.device_callsign) - 1, USX_PSET_DFLT, NULL);
     LOG_DEBUG("Uncompressed device_callsign '%s' - %d bytes\n", owner.long_name, strlen(owner.long_name));
     LOG_DEBUG("Compressed device_callsign '%s' - %d bytes\n", takPacket.contact.device_callsign, length);
-    length = unishox2_compress_simple(owner.long_name, strlen(owner.long_name), takPacket.contact.callsign);
+    length = unishox2_compress_lines(owner.long_name, strlen(owner.long_name), takPacket.contact.callsign,
+                                     sizeof(takPacket.contact.callsign) - 1, USX_PSET_DFLT, NULL);
     mp->decoded.payload.size =
         pb_encode_to_bytes(mp->decoded.payload.bytes, sizeof(mp->decoded.payload.bytes), &meshtastic_TAKPacket_msg, &takPacket);
     return mp;
