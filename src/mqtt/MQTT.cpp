@@ -135,6 +135,10 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
             LOG_ERROR("Invalid MQTT service envelope, topic %s, len %u!\n", topic, length);
             return;
         } else {
+            if (e.channel_id == NULL || e.gateway_id == NULL) {
+                LOG_ERROR("Invalid MQTT service envelope, topic %s, len %u!\n", topic, length);
+                return;
+            }
             meshtastic_Channel ch = channels.getByName(e.channel_id);
             if (strcmp(e.gateway_id, owner.id) == 0) {
                 // Generate an implicit ACK towards ourselves (handled and processed only locally!) for this message.
