@@ -1180,7 +1180,7 @@ GnssModel_t GPS::probe(int serialSpeed)
         _serial_gps->updateBaudRate(serialSpeed);
     }
 #endif
-#ifdef GNSS_AIROHA 
+#ifdef GNSS_AIROHA
 
     return GNSS_MODEL_UNKNOWN;
 #else
