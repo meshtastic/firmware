@@ -239,6 +239,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     // pinMode(PIN_POWER_EN1, INPUT_PULLDOWN);
 #endif
 
+#ifdef TRACKER_T1000_E
 #ifdef GNSS_AIROHA
     digitalWrite(GPS_VRTC_EN, LOW);
     digitalWrite(PIN_GPS_RESET, LOW);
@@ -255,7 +256,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
 #ifdef PIN_3V3_EN
     digitalWrite(PIN_3V3_EN, LOW);
 #endif
-
+#endif
     setLed(false);
 
 #ifdef RESET_OLED
