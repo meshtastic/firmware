@@ -409,7 +409,7 @@ bool GPS::setup()
 #if !defined(GPS_UC6580)
 
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
-            
+
             // if GPS_BAUDRATE is specified in variant (i.e. not 9600), skip to the specified rate.
             if (speedSelect == 0 && GPS_BAUDRATE != serialSpeeds[speedSelect]) {
                 speedSelect = std::find(serialSpeeds, std::end(serialSpeeds), GPS_BAUDRATE) - serialSpeeds;
