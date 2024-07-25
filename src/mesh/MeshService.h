@@ -144,7 +144,7 @@ class MeshService
     /// returns 0 to allow further processing
     int onGPSChanged(const meshtastic::GPSStatus *arg);
 #endif
-    /// Handle a packet that just arrived from the radio.  This method does _ReliableRouternot_ free the provided packet.  If it
+    /// Handle a packet that just arrived from the radio.  This method does _not_ free the provided packet.  If it
     /// needs to keep the packet around it makes a copy
     int handleFromRadio(const meshtastic_MeshPacket *p);
     friend class RoutingModule;
