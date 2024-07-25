@@ -92,22 +92,23 @@ void Router::enqueueReceivedMessage(meshtastic_MeshPacket *p)
 // FIXME, move this someplace better
 PacketId generatePacketId()
 {
-    static uint32_t i; // Note: trying to keep this in noinit didn't help for working across reboots
+    static uint32_t rollingPacketId; // Note: trying to keep this in noinit didn't help for working across reboots
     static bool didInit = false;
-
-    uint32_t numPacketId = UINT32_MAX;
 
     if (!didInit) {
         didInit = true;
 
         // pick a random initial sequence number at boot (to prevent repeated reboots always starting at 0)
         // Note: we mask the high order bit to ensure that we never pass a 'negative' number to random
-        i = random(numPacketId & 0x7fffffff);
-        LOG_DEBUG("Initial packet id %u, numPacketId %u\n", i, numPacketId);
+        rollingPacketId = random(UINT32_MAX & 0x7fffffff);
+        LOG_DEBUG("Initial packet id %u\n", rollingPacketId);
     }
 
-    i++;
-    PacketId id = (i % numPacketId) + 1; // return number between 1 and numPacketId (ie - never zero)
+    rollingPacketId++;
+
+    rollingPacketId &= UINT32_MAX >> 22;                                   // Mask out the top 22 bits
+    PacketId id = rollingPacketId | random(UINT32_MAX & 0x7fffffff) << 10; // top 22 bits
+    LOG_DEBUG("Partially randomized packet id %u\n", id);
     return id;
 }
 
@@ -244,8 +245,10 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 
     // If the packet hasn't yet been encrypted, do so now (it might already be encrypted if we are just forwarding it)
 
-    assert(p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag ||
-           p->which_payload_variant == meshtastic_MeshPacket_decoded_tag); // I _think_ all packets should have a payload by now
+    if (!(p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag ||
+          p->which_payload_variant == meshtastic_MeshPacket_decoded_tag)) {
+        return meshtastic_Routing_Error_BAD_REQUEST;
+    }
 
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {

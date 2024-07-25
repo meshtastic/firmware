@@ -190,6 +190,7 @@ template <typename T> void SX128xInterface<T>::setStandby()
     activeReceiveStart = 0;
     disableInterrupt();
     completeSending(); // If we were sending, not anymore
+    RadioLibInterface::setStandby();
 }
 
 /**
@@ -263,7 +264,7 @@ template <typename T> void SX128xInterface<T>::startReceive()
         LOG_ERROR("Radiolib error %d when attempting SX128X startReceive!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
-    isReceiving = true;
+    RadioLibInterface::startReceive();
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);

@@ -1,7 +1,7 @@
 {
   "build": {
     "arduino": {
-      "ldscript": "nrf52840_s140_v6.ld"
+      "ldscript": "nrf52840_s140_v7.ld"
     },
     "core": "nRF5",
     "cpu": "cortex-m4",
@@ -22,8 +22,8 @@
     "softdevice": {
       "sd_flags": "-DS140",
       "sd_name": "s140",
-      "sd_version": "6.1.1",
-      "sd_fwid": "0x00B6"
+      "sd_version": "7.3.0",
+      "sd_fwid": "0x0123"
     },
     "bootloader": {
       "settings_addr": "0xFF000"
@@ -53,6 +53,6 @@
     "require_upload_port": true,
     "wait_for_upload_port": true
   },
-  "url": "https://www.seeedstudio.com/Wio-WM1110-Dev-Kit-p-5677.html",
+  "url": "https://www.seeedstudio.com/Wio-Tracker-1110-Dev-Board-p-5799.html",
   "vendor": "Seeed Studio"
 }
