@@ -802,7 +802,6 @@ GPS::~GPS()
     // we really should unregister our sleep observer
     notifyDeepSleepObserver.unobserve(&notifyDeepSleep);
 }
-
 // Put the GPS hardware into a specified state
 void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
 {
@@ -839,6 +838,11 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         setPowerPMU(false);                                         // Power (PMU): off
         writePinStandby(true);                                      // Standby (pin): asleep (not awake)
         setPowerUBLOX(false, sleepTime);                            // Standby (UBLOX): asleep, timed
+#ifdef GNSS_AIROHA
+        if (config.position.gps_update_interval * 1000 >= GPS_FIX_HOLD_TIME * 2) {
+            digitalWrite(PIN_GPS_EN, LOW);
+        }
+#endif
         break;
 
     case GPS_OFF:
@@ -848,6 +852,11 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         setPowerPMU(false);                                         // Power (PMU): off
         writePinStandby(true);                                      // Standby (pin): asleep
         setPowerUBLOX(false, 0);                                    // Standby (UBLOX): asleep, indefinitely
+#ifdef GNSS_AIROHA
+        if (config.position.gps_update_interval * 1000 >= GPS_FIX_HOLD_TIME * 2) {
+            digitalWrite(PIN_GPS_EN, LOW);
+        }
+#endif
         break;
     }
 }
@@ -1186,7 +1195,6 @@ GnssModel_t GPS::probe(int serialSpeed)
         _serial_gps->updateBaudRate(serialSpeed);
     }
 #endif
-
 #ifdef GPS_DEBUG
     for (int i = 0; i < 20; i++) {
         getACK("$GP", 200);
@@ -1506,11 +1514,25 @@ bool GPS::factoryReset()
  */
 bool GPS::lookForTime()
 {
-#ifdef GNSS_Airoha // add by WayenWeng
+
+#ifdef GNSS_AIROHA
     uint8_t fix = reader.fixQuality();
     uint32_t now = millis();
+    if (fix > 0) {
+        if (lastFixStartMsec > 0) {
+            if ((now - lastFixStartMsec) < GPS_FIX_HOLD_TIME) {
+                return false;
+            } else {
+                clearBuffer();
+            }
+        } else {
+            lastFixStartMsec = now;
+            return false;
+        }
+    } else {
+        return false;
+    }
 #endif
-
     auto ti = reader.time;
     auto d = reader.date;
     if (ti.isValid() && d.isValid()) { // Note: we don't check for updated, because we'll only be called if needed
@@ -1545,13 +1567,26 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
  */
 bool GPS::lookForLocation()
 {
-#ifdef GNSS_Airoha // add by WayenWeng
+#ifdef GNSS_AIROHA
     if ((config.position.gps_update_interval * 1000) >= (GPS_FIX_HOLD_TIME * 2)) {
         uint8_t fix = reader.fixQuality();
         uint32_t now = millis();
+        if (fix > 0) {
+            if (lastFixStartMsec > 0) {
+                if ((now - lastFixStartMsec) < GPS_FIX_HOLD_TIME) {
+                    return false;
+                } else {
+                    clearBuffer();
+                }
+            } else {
+                lastFixStartMsec = now;
+                return false;
+            }
+        } else {
+            return false;
+        }
     }
 #endif
-
     // By default, TinyGPS++ does not parse GPGSA lines, which give us
     //   the 2D/3D fixType (see NMEAGPS.h)
     // At a minimum, use the fixQuality indicator in GPGGA (FIXME?)
@@ -1761,6 +1796,12 @@ void GPS::toggleGpsMode()
     if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
         LOG_INFO("User toggled GpsMode. Now DISABLED.\n");
+#ifdef GNSS_AIROHA
+        if (powerState == GPS_ACTIVE) {
+            LOG_DEBUG("User power Off GPS\n");
+            digitalWrite(PIN_GPS_EN, LOW);
+        }
+#endif
         disable();
     } else if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED) {
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
