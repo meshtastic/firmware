@@ -69,7 +69,7 @@ class GPS : private concurrency::OSThread
 #endif
   private:
     const int serialSpeeds[6] = {9600, 4800, 38400, 57600, 115200, 9600};
-
+    uint32_t lastWakeStartMsec = 0, lastSleepStartMsec = 0, lastFixStartMsec = 0;
     uint32_t rx_gpio = 0;
     uint32_t tx_gpio = 0;
     uint32_t en_gpio = 0;

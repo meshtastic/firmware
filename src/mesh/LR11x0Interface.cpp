@@ -100,7 +100,13 @@ template <typename T> bool LR11x0Interface<T>::init()
     // FIXME: May want to set depending on a definition, currently all LR1110 variant files use the DC-DC regulator option
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setRegulatorDCDC();
-
+#ifdef TRACKER_T1000_E
+#ifdef LR11X0_DIO_RF_SWITCH_CONFIG
+    res = lora.setDioAsRfSwitch(LR11X0_DIO_RF_SWITCH_CONFIG);
+#else
+    res = lora.setDioAsRfSwitch(0x03, 0x0, 0x01, 0x03, 0x02, 0x0, 0x0, 0x0);
+#endif
+#endif
     if (res == RADIOLIB_ERR_NONE) {
         if (config.lora.sx126x_rx_boosted_gain) { // the name is unfortunate but historically accurate
             res = lora.setRxBoostedGainMode(true);
