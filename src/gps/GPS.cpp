@@ -400,9 +400,16 @@ bool GPS::setup()
     int msglen = 0;
 
     if (!didSerialInit) {
+#ifdef GNSS_AIROHA
+        if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
+            probe(GPS_BAUDRATE);
+            LOG_INFO("GPS setting to %d.\n", GPS_BAUDRATE);
+        }
+#else
+#if !defined(GPS_UC6580)
 
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
-
+            
             // if GPS_BAUDRATE is specified in variant (i.e. not 9600), skip to the specified rate.
             if (speedSelect == 0 && GPS_BAUDRATE != serialSpeeds[speedSelect]) {
                 speedSelect = std::find(serialSpeeds, std::end(serialSpeeds), GPS_BAUDRATE) - serialSpeeds;
@@ -423,6 +430,9 @@ bool GPS::setup()
         } else {
             gnssModel = GNSS_MODEL_UNKNOWN;
         }
+#else
+        gnssModel = GNSS_MODEL_UC6580;
+#endif
 
         if (gnssModel == GNSS_MODEL_MTK) {
             /*
@@ -789,6 +799,7 @@ bool GPS::setup()
             _serial_gps->write("$PGKC242,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*37\r\n");
             delay(250);
         }
+#endif
         didSerialInit = true;
     }
 
