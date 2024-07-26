@@ -26,11 +26,3 @@ void getMacAddr(uint8_t *dmac)
 }
 
 void cpuDeepSleep(uint32_t msecToWake) {}
-
-/* pacify libc_nano */
-extern "C" {
-int _gettimeofday(struct timeval *tv, void *tzvp)
-{
-    return -1;
-}
-}
