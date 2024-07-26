@@ -9,9 +9,8 @@
 #define GPS_TX_PIN 15
 #define GPS_UBLOX
 
-#define BUTTON_PIN 39  // The middle button GPIO on the T-Beam
-#define BATTERY_PIN 35 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define ADC_CHANNEL ADC1_GPIO35_CHANNEL
+#define BUTTON_PIN 39       // The middle button GPIO on the T-Beam
+#define BATTERY_PIN 35      // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define ADC_MULTIPLIER 1.85 // (R1 = 470k, R2 = 680k)
 #define EXT_PWR_DETECT 4    // Pin to detect connected external power source for LILYGO® TTGO T-Energy T18 and other DIY boards
 #define EXT_NOTIFY_OUT 12   // Overridden default pin to use for Ext Notify Module (#975).

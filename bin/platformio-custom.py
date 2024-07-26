@@ -72,11 +72,20 @@ if platform.name == "espressif32":
                 "-Wl,--wrap=esp_flash_chip_gd",
                 "-Wl,--wrap=esp_flash_chip_issi",
                 "-Wl,--wrap=esp_flash_chip_winbond",
+                # For IDF5 build
+                "-Wl,--wrap=abort",
             ]
         )
     else:
         # For newer ESP32 targets, using newlib nano works better.
         env.Append(LINKFLAGS=["--specs=nano.specs", "-u", "_printf_float"])
+
+    # XXX
+    for lb in env.GetLibBuilders():
+        if lb.name == "NonBlockingRTTTL":
+            lb.env.Append(CPPDEFINES=[("QUIRK_RTTTL", 1)])
+        elif lb.name == "LovyanGFX":
+            lb.env.Append(CPPDEFINES=[("QUIRK_LOVYAN", 1)])
 
 Import("projenv")
 

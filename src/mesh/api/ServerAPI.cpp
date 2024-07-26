@@ -45,7 +45,11 @@ template <class T, class U> void APIServerPort<T, U>::init()
 
 template <class T, class U> int32_t APIServerPort<T, U>::runOnce()
 {
+#ifdef ARCH_ESP32
+    auto client = U::accept();
+#else
     auto client = U::available();
+#endif
     if (client) {
         // Close any previous connection (see FIXME in header file)
         if (openAPI) {

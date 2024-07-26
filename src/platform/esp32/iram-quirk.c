@@ -4,6 +4,7 @@
 
 #include <esp_attr.h>
 #include <esp_flash.h>
+#include <esp_system.h>
 #include <spi_flash_chip_driver.h>
 
 #define IRAM_SECTION section(".iram1.stub")
@@ -21,3 +22,8 @@ const spi_flash_chip_t stub_flash_chip __attribute__((IRAM_SECTION)) = {
 extern const spi_flash_chip_t __wrap_esp_flash_chip_gd __attribute__((IRAM_SECTION, alias("stub_flash_chip")));
 extern const spi_flash_chip_t __wrap_esp_flash_chip_issi __attribute__((IRAM_SECTION, alias("stub_flash_chip")));
 extern const spi_flash_chip_t __wrap_esp_flash_chip_winbond __attribute__((IRAM_SECTION, alias("stub_flash_chip")));
+
+IRAM_ATTR __attribute__((noreturn)) void __wrap_abort(void)
+{
+    esp_system_abort("abort() was called");
+}

@@ -42,18 +42,18 @@ static void IRAM_ATTR onTimer()
 bool scheduleHWCallback(PendableFunction callback, void *param1, uint32_t param2, uint32_t delayMsec)
 {
     if (!timer) {
-        timer = timerBegin(0, 80, true); // one usec per tick (main clock is 80MhZ on ESP32)
+        timer = timerBegin(80); // one usec per tick (main clock is 80MhZ on ESP32)
         assert(timer);
-        timerAttachInterrupt(timer, &onTimer, true);
+        timerAttachInterrupt(timer, &onTimer);
     }
 
     tCallback = callback;
     tParam1 = param1;
     tParam2 = param2;
 
-    timerAlarmWrite(timer, delayMsec * 1000UL, false); // Do not reload, we want it to be a single shot timer
+    timerAlarm(timer, delayMsec * 1000UL, false, 0); // Do not reload, we want it to be a single shot timer
     timerRestart(timer);
-    timerAlarmEnable(timer);
+    timerStart(timer);
     return true;
 }
 

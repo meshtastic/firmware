@@ -324,7 +324,7 @@ int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
 {
     uint16_t ubxFrameCounter = 0;
     uint32_t startTime = millis();
-    uint16_t needRead;
+    uint16_t needRead = 0;
 
     while (millis() - startTime < waitMillis) {
         if (_serial_gps->available()) {

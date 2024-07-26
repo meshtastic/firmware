@@ -32,6 +32,5 @@
 #define ADC_MULTIPLIER 3.2 // 220k + 100k (320k/100k=3.2)
 // #define ADC_WIDTH ADC_WIDTH_BIT_10
 
-#define BATTERY_PIN 37 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
-#define ADC_CHANNEL ADC1_GPIO37_CHANNEL
+#define BATTERY_PIN 37    // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Module.
