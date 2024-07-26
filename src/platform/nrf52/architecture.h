@@ -60,7 +60,7 @@
 #define HW_VENDOR meshtastic_HardwareModel_NRF52_PROMICRO_DIY
 #elif defined(WIO_WM1110)
 #define HW_VENDOR meshtastic_HardwareModel_WIO_WM1110
-#elif defined(TRACKER_T1000_E)  
+#elif defined(TRACKER_T1000_E)
 #define HW_VENDOR meshtastic_HardwareModel_TRACKER_T1000_E
 #elif defined(PRIVATE_HW) || defined(FEATHER_DIY)
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
