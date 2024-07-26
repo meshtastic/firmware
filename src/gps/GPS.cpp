@@ -1182,7 +1182,7 @@ int GPS::prepareDeepSleep(void *unused)
 
 GnssModel_t GPS::probe(int serialSpeed)
 {
-#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_RP2040)
+#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)
     _serial_gps->end();
     _serial_gps->begin(serialSpeed);
 #else
@@ -1270,7 +1270,7 @@ GnssModel_t GPS::probe(int serialSpeed)
         _serial_gps->write(_message_prt, sizeof(_message_prt));
         delay(500);
         serialSpeed = 9600;
-#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_RP2040)
+#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)
         _serial_gps->end();
         _serial_gps->begin(serialSpeed);
 #else
