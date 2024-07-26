@@ -259,11 +259,13 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_delete_file_request_tag: {
         LOG_DEBUG("Client is requesting to delete file: %s\n", r->delete_file_request);
+#ifdef FSCom
         if (FSCom.remove(r->delete_file_request)) {
             LOG_DEBUG("Successfully deleted file\n");
         } else {
             LOG_DEBUG("Failed to delete file\n");
         }
+#endif
         break;
     }
 #ifdef ARCH_PORTDUINO
