@@ -49,7 +49,11 @@ size_t RedirectablePrint::write(uint8_t c)
 size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_list arg)
 {
     va_list copy;
+#ifdef ENABLE_JSON_LOGGING
+    static char printBuf[512];
+#else
     static char printBuf[160];
+#endif
 
     va_copy(copy, arg);
     size_t len = vsnprintf(printBuf, sizeof(printBuf), format, copy);
@@ -98,6 +102,8 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
             Print::write("\u001b[33m", 6);
         if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_ERROR) == 0)
             Print::write("\u001b[31m", 6);
+        if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_TRACE) == 0)
+            Print::write("\u001b[35m", 6);
         uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // display local time on logfile
         if (rtc_sec > 0) {
             long hms = rtc_sec % SEC_PER_DAY;

@@ -11,6 +11,9 @@
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
+#ifdef ENABLE_JSON_LOGGING
+#include "serialization/MeshPacketSerializer.h"
+#endif
 /**
  * Router todo
  *
@@ -356,6 +359,9 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
                 } */
 
                 printPacket("decoded message", p);
+#ifdef ENABLE_JSON_LOGGING
+                LOG_TRACE("%s\n", MeshPacketSerializer::JsonSerialize(p, false).c_str());
+#endif
                 return true;
             }
         }
@@ -491,6 +497,11 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 {
+#ifdef ENABLE_JSON_LOGGING
+    // Even ignored packets get logged in the trace
+    p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
+    LOG_TRACE("%s\n", MeshPacketSerializer::JsonSerializeEncrypted(p).c_str());
+#endif
     // assert(radioConfig.has_preferences);
     bool ignore = is_in_repeated(config.lora.ignore_incoming, p->from) || (config.lora.ignore_mqtt && p->via_mqtt);
 
