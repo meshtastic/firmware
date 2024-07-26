@@ -5,7 +5,7 @@
 #include "concurrency/OSThread.h"
 #include "mesh/Channels.h"
 #include "mesh/generated/meshtastic/mqtt.pb.h"
-#include "mqtt/JSON.h"
+#include "serialization/JSON.h"
 #if HAS_WIFI
 #include <WiFiClient.h>
 #if !defined(ARCH_PORTDUINO)
@@ -105,9 +105,6 @@ class MQTT : private concurrency::OSThread
 
     /// Called when a new publish arrives from the MQTT server
     void onReceive(char *topic, byte *payload, size_t length);
-
-    /// Called when a new publish arrives from the MQTT server
-    std::string meshPacketToJson(meshtastic_MeshPacket *mp);
 
     void publishQueuedMessages();
 
