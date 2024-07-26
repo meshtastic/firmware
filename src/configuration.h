@@ -171,10 +171,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // GPS
 // -----------------------------------------------------------------------------
-#ifndef GPS_BAUDRATE
-#define GPS_BAUDRATE 9600
-#endif
-
 #ifndef GPS_THREAD_INTERVAL
 #define GPS_THREAD_INTERVAL 200
 #endif
@@ -184,6 +180,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 /* Step #1: offer chance for variant-specific defines */
 #include "variant.h"
+
+#ifndef GPS_BAUDRATE
+#define GPS_BAUDRATE 9600
+#endif
 
 /* Step #2: follow with defines common to the architecture;
    also enable HAS_ option not specifically disabled by variant.h */
@@ -259,6 +259,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_SCREEN 1
 #define MESHTASTIC_EXCLUDE_MQTT 1
 #define MESHTASTIC_EXCLUDE_POWERMON 1
+#define MESHTASTIC_EXCLUDE_I2C 1
 #endif
 
 // Turn off all optional modules

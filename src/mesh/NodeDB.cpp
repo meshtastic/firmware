@@ -192,9 +192,11 @@ bool NodeDB::factoryReset()
     LOG_INFO("Performing factory reset!\n");
     // first, remove the "/prefs" (this removes most prefs)
     rmDir("/prefs");
+#ifdef FSCom
     if (FSCom.exists("/static/rangetest.csv") && !FSCom.remove("/static/rangetest.csv")) {
         LOG_ERROR("Could not remove rangetest.csv file\n");
     }
+#endif
     // second, install default state (this will deal with the duplicate mac address issue)
     installDefaultDeviceState();
     installDefaultConfig();
@@ -574,7 +576,7 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
             state = LoadFileResult::DECODE_FAILED;
         } else {
             LOG_INFO("Loaded %s successfully\n", filename);
-            state = LoadFileResult::SUCCESS;
+            state = LoadFileResult::LOAD_SUCCESS;
         }
         f.close();
     } else {
@@ -582,7 +584,7 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
     }
 #else
     LOG_ERROR("ERROR: Filesystem not implemented\n");
-    state = LoadFileState::NO_FILESYSTEM;
+    state = LoadFileResult::NO_FILESYSTEM;
 #endif
     return state;
 }
@@ -593,7 +595,7 @@ void NodeDB::loadFromDisk()
     auto state = loadProto(prefFileName, sizeof(meshtastic_DeviceState) + MAX_NUM_NODES * sizeof(meshtastic_NodeInfo),
                            sizeof(meshtastic_DeviceState), &meshtastic_DeviceState_msg, &devicestate);
 
-    if (state != LoadFileResult::SUCCESS) {
+    if (state != LoadFileResult::LOAD_SUCCESS) {
         installDefaultDeviceState(); // Our in RAM copy might now be corrupt
     } else {
         if (devicestate.version < DEVICESTATE_MIN_VER) {
@@ -610,7 +612,7 @@ void NodeDB::loadFromDisk()
 
     state = loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig), &meshtastic_LocalConfig_msg,
                       &config);
-    if (state != LoadFileResult::SUCCESS) {
+    if (state != LoadFileResult::LOAD_SUCCESS) {
         installDefaultConfig(); // Our in RAM copy might now be corrupt
     } else {
         if (config.version < DEVICESTATE_MIN_VER) {
@@ -623,7 +625,7 @@ void NodeDB::loadFromDisk()
 
     state = loadProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, sizeof(meshtastic_LocalModuleConfig),
                       &meshtastic_LocalModuleConfig_msg, &moduleConfig);
-    if (state != LoadFileResult::SUCCESS) {
+    if (state != LoadFileResult::LOAD_SUCCESS) {
         installDefaultModuleConfig(); // Our in RAM copy might now be corrupt
     } else {
         if (moduleConfig.version < DEVICESTATE_MIN_VER) {
@@ -636,7 +638,7 @@ void NodeDB::loadFromDisk()
 
     state = loadProto(channelFileName, meshtastic_ChannelFile_size, sizeof(meshtastic_ChannelFile), &meshtastic_ChannelFile_msg,
                       &channelFile);
-    if (state != LoadFileResult::SUCCESS) {
+    if (state != LoadFileResult::LOAD_SUCCESS) {
         installDefaultChannels(); // Our in RAM copy might now be corrupt
     } else {
         if (channelFile.version < DEVICESTATE_MIN_VER) {
@@ -648,7 +650,7 @@ void NodeDB::loadFromDisk()
     }
 
     state = loadProto(oemConfigFile, meshtastic_OEMStore_size, sizeof(meshtastic_OEMStore), &meshtastic_OEMStore_msg, &oemStore);
-    if (state == LoadFileResult::SUCCESS) {
+    if (state == LoadFileResult::LOAD_SUCCESS) {
         LOG_INFO("Loaded OEMStore\n");
     }
 
