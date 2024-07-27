@@ -41,6 +41,7 @@ jobs:
       esp32c3: ${{ steps.jsonStep.outputs.esp32c3 }}
       nrf52840: ${{ steps.jsonStep.outputs.nrf52840 }}
       rp2040: ${{ steps.jsonStep.outputs.rp2040 }}
+      stm32: ${{ steps.jsonStep.outputs.stm32 }}
       check: ${{ steps.jsonStep.outputs.check }}
 
   check:
@@ -100,6 +101,15 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.setup.outputs.rp2040) }}
     uses: ./.github/workflows/build_rpi2040.yml
+    with:
+      board: ${{ matrix.board }}
+
+  build-stm32:
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.stm32) }}
+    uses: ./.github/workflows/build_stm32.yml
     with:
       board: ${{ matrix.board }}
 
