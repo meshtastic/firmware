@@ -2,8 +2,8 @@
 
 set -e
 
-VERSION=`bin/buildinfo.py long`
-SHORT_VERSION=`bin/buildinfo.py short`
+VERSION=$(bin/buildinfo.py long)
+SHORT_VERSION=$(bin/buildinfo.py short)
 
 OUTDIR=release/
 
@@ -25,16 +25,5 @@ pio run --environment $1 # -v
 SRCELF=.pio/build/$1/firmware.elf
 cp $SRCELF $OUTDIR/$basename.elf
 
-echo "Copying ESP32 bin file"
-SRCBIN=.pio/build/$1/firmware.factory.bin
-cp $SRCBIN $OUTDIR/$basename.bin
-
-echo "Copying ESP32 update bin file"
 SRCBIN=.pio/build/$1/firmware.bin
-cp $SRCBIN $OUTDIR/$basename-update.bin
-
-echo "Building Filesystem for ESP32 targets"
-pio run --environment $1 -t buildfs
-cp .pio/build/$1/littlefs.bin $OUTDIR/littlefs-$VERSION.bin
-cp bin/device-install.* $OUTDIR
-cp bin/device-update.* $OUTDIR
+cp $SRCBIN $OUTDIR/$basename.bin
