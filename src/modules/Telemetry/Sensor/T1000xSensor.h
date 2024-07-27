@@ -7,7 +7,6 @@
 
 class T1000xSensor : public TelemetrySensor
 {
-  private:
   protected:
     virtual void setup() override;
 

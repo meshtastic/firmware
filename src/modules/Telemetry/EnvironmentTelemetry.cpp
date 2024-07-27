@@ -33,9 +33,7 @@
 #include "Sensor/SHT31Sensor.h"
 #include "Sensor/SHT4XSensor.h"
 #include "Sensor/SHTC3Sensor.h"
-#ifdef T1000X_SENSOR_EN
 #include "Sensor/T1000xSensor.h"
-#endif
 #include "Sensor/TSL2591Sensor.h"
 #include "Sensor/VEML7700Sensor.h"
 
@@ -98,7 +96,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
             LOG_INFO("Environment Telemetry: Initializing\n");
             // it's possible to have this module enabled, only for displaying values on the screen.
             // therefore, we should only enable the sensor loop if measurement is also enabled
-#ifdef T1000X_SENSOR_EN // add by WayenWeng
+#ifdef T1000X_SENSOR_EN
             result = t1000xSensor.runOnce();
 #else
             if (dfRobotLarkSensor.hasSensor())
@@ -420,7 +418,11 @@ meshtastic_MeshPacket *EnvironmentTelemetryModule::allocReply()
 bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 {
     meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
+#ifdef T1000X_SENSOR_EN
+    if (t1000xSensor.getMetrics(&m)) {
+#else
     if (getEnvironmentTelemetry(&m)) {
+#endif
         LOG_INFO("(Sending): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f\n",
                  m.variant.environment_metrics.barometric_pressure, m.variant.environment_metrics.current,
                  m.variant.environment_metrics.gas_resistance, m.variant.environment_metrics.relative_humidity,
