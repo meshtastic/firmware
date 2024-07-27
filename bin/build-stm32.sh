@@ -25,5 +25,5 @@ pio run --environment $1 # -v
 SRCELF=.pio/build/$1/firmware.elf
 cp $SRCELF $OUTDIR/$basename.elf
 
-SRCELF=.pio/build/$1/firmware.bin
-cp $SRCHEX $OUTDIR/$basename.bin
+SRCBIN=.pio/build/$1/firmware.bin
+cp $SRCBIN $OUTDIR/$basename.bin
