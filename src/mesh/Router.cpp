@@ -11,7 +11,10 @@
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
-#ifdef ENABLE_JSON_LOGGING
+#if ARCH_PORTDUINO
+#include "platform/portduino/PortduinoGlue.h"
+#endif
+#if ENABLE_JSON_LOGGING || ARCH_PORTDUINO
 #include "serialization/MeshPacketSerializer.h"
 #endif
 /**
@@ -359,8 +362,12 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
                 } */
 
                 printPacket("decoded message", p);
-#ifdef ENABLE_JSON_LOGGING
+#if ENABLE_JSON_LOGGING
                 LOG_TRACE("%s\n", MeshPacketSerializer::JsonSerialize(p, false).c_str());
+#elif ARCH_PORTDUINO
+                if (settingsStrings[traceFilename] != "" || settingsMap[logoutputlevel] == level_trace) {
+                    LOG_TRACE("%s\n", MeshPacketSerializer::JsonSerialize(p, false).c_str());
+                }
 #endif
                 return true;
             }
@@ -497,10 +504,16 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 {
-#ifdef ENABLE_JSON_LOGGING
+#if ENABLE_JSON_LOGGING
     // Even ignored packets get logged in the trace
     p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
     LOG_TRACE("%s\n", MeshPacketSerializer::JsonSerializeEncrypted(p).c_str());
+#elif ARCH_PORTDUINO
+    // Even ignored packets get logged in the trace
+    if (settingsStrings[traceFilename] != "" || settingsMap[logoutputlevel] == level_trace) {
+        p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
+        LOG_TRACE("%s\n", MeshPacketSerializer::JsonSerializeEncrypted(p).c_str());
+    }
 #endif
     // assert(radioConfig.has_preferences);
     bool ignore = is_in_repeated(config.lora.ignore_incoming, p->from) || (config.lora.ignore_mqtt && p->via_mqtt);
