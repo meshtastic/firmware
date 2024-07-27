@@ -1,4 +1,5 @@
 #include "Channels.h"
+#include "../userPrefs.h"
 #include "CryptoEngine.h"
 #include "DisplayFormatters.h"
 #include "NodeDB.h"
@@ -99,6 +100,26 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
 
     ch.has_settings = true;
     ch.role = meshtastic_Channel_Role_PRIMARY;
+
+#ifdef CONFIG_LORA_MODEM_PRESET
+    loraConfig.modem_preset = CONFIG_LORA_MODEM_PRESET;
+#endif
+
+    // Install custom defaults. Will eventually support setting multiple default channels
+    if (chIndex == 0) {
+#ifdef CHANNEL_0_DEFAULT_PSK
+        static const uint8_t defaultpsk[] = CHANNEL_0_DEFAULT_PSK;
+        memcpy(channelSettings.psk.bytes, defaultpsk, sizeof(defaultpsk));
+        channelSettings.psk.size = sizeof(defaultpsk);
+
+#endif
+#ifdef CHANNEL_0_DEFAULT_NAME
+        strcpy(channelSettings.name, CHANNEL_0_DEFAULT_NAME);
+#endif
+#ifdef CHANNEL_0_PRECISION_DEFAULT
+        channelSettings.module_settings.position_precision = CHANNEL_0_PRECISION_DEFAULT;
+#endif
+    }
 }
 
 CryptoKey Channels::getKey(ChannelIndex chIndex)
