@@ -336,8 +336,8 @@ std::string MeshPacketSerializer::JsonSerializeEncrypted(const meshtastic_MeshPa
         jsonObj["hop_start"] = new JSONValue((unsigned int)(mp->hop_start));
     }
     jsonObj["size"] = new JSONValue((unsigned int)mp->encrypted.size);
-    std::string encryptedStr(reinterpret_cast<const char *>(mp->encrypted.bytes), mp->encrypted.size);
-    jsonObj["bytes"] = new JSONValue(encryptedStr);
+    auto encryptedStr = bytesToHex(mp->encrypted.bytes, mp->encrypted.size);
+    jsonObj["bytes"] = new JSONValue(encryptedStr.c_str());
 
     // serialize and write it to the stream
     JSONValue *value = new JSONValue(jsonObj);
