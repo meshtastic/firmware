@@ -2,24 +2,24 @@
 #define _USERPREFS_
 // Uncomment and modify to set device defaults
 
-// #define CONFIG_LORA_REGION_DEFAULT meshtastic_Config_LoRaConfig_RegionCode_US
-// #define CONFIG_LORA_MODEM_PRESET meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST
-// #define CONFIG_LORA_CHANNELNUM_DEFAULT 31
-// #define CONFIG_LORA_IGNORE_MQTT_DEFAULT true
+// #define CONFIG_LORA_REGION_USERPREFS meshtastic_Config_LoRaConfig_RegionCode_US
+// #define LORACONFIG_MODEM_PRESET_USERPREFS meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST
+// #define LORACONFIG_CHANNEL_NUM_USERPREFS 31
+// #define CONFIG_LORA_IGNORE_MQTT_USERPREFS true
 /*
-#define CHANNEL_0_DEFAULT_PSK                                                                                                    \
+#define CHANNEL_0_PSK_USERPREFS \
     {                                                                                                                            \
         0x38, 0x4b, 0xbc, 0xc0, 0x1d, 0xc0, 0x22, 0xd1, 0x81, 0xbf, 0x36, 0xb8, 0x61, 0x21, 0xe1, 0xfb, 0x96, 0xb7, 0x2e, 0x55,  \
             0xbf, 0x74, 0x22, 0x7e, 0x9d, 0x6a, 0xfb, 0x48, 0xd6, 0x4c, 0xb1, 0xa1                                               \
     }
 */
-// #define CHANNEL_0_DEFAULT_NAME "DEFCONnect"
-// #define CHANNEL_0_PRECISION_DEFAULT 13
+// #define CHANNEL_0_NAME_USERPREFS "DEFCONnect"
+// #define CHANNEL_0_PRECISION_USERPREFS 13
 
-// #define SPLASH_TITLE "DEFCONtastic"
+// #define SPLASH_TITLE_USERPREFS "DEFCONtastic"
 // #define icon_width 34
 // #define icon_height 29
-// #define HAS_CUSTOM_SPLASH
+// #define HAS_USERPREFS_SPLASH
 /*
 static unsigned char icon_bits[] = {
     0x00, 0xC0, 0x0F, 0x00, 0x00, 0x00, 0xF0, 0x3F, 0x00, 0x00, 0x00, 0xF8, 0x7F, 0x00, 0x00, 0x00, 0xFC, 0xFF, 0x00, 0x00, 0x00,

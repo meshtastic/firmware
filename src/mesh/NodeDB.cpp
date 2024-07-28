@@ -238,19 +238,19 @@ void NodeDB::installDefaultConfig()
     config.lora.tx_enabled =
         true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
     config.lora.override_duty_cycle = false;
-#ifdef CONFIG_LORA_REGION_DEFAULT
-    config.lora.region = CONFIG_LORA_REGION_DEFAULT;
+#ifdef CONFIG_LORA_REGION_USERPREFS
+    config.lora.region = CONFIG_LORA_REGION_USERPREFS;
 #else
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
 #endif
-#ifdef CONFIG_LORA_MODEM_PRESET
-    config.lora.modem_preset = CONFIG_LORA_MODEM_PRESET;
+#ifdef LORACONFIG_MODEM_PRESET_USERPREFS
+    config.lora.modem_preset = LORACONFIG_MODEM_PRESET_USERPREFS;
 #else
     config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
 #endif
     config.lora.hop_limit = HOP_RELIABLE;
-#ifdef CONFIG_LORA_IGNORE_MQTT_DEFAULT
-    config.lora.ignore_mqtt = CONFIG_LORA_IGNORE_MQTT_DEFAULT;
+#ifdef CONFIG_LORA_IGNORE_MQTT_USERPREFS
+    config.lora.ignore_mqtt = CONFIG_LORA_IGNORE_MQTT_USERPREFS;
 #else
     config.lora.ignore_mqtt = false;
 #endif

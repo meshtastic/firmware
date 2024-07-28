@@ -91,6 +91,7 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
     loraConfig.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST; // Default to Long Range & Fast
     loraConfig.use_preset = true;
     loraConfig.tx_power = 0; // default
+    loraConfig.channel_num = 0;
     uint8_t defaultpskIndex = 1;
     channelSettings.psk.bytes[0] = defaultpskIndex;
     channelSettings.psk.size = 1;
@@ -101,23 +102,26 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
     ch.has_settings = true;
     ch.role = meshtastic_Channel_Role_PRIMARY;
 
-#ifdef CONFIG_LORA_MODEM_PRESET
-    loraConfig.modem_preset = CONFIG_LORA_MODEM_PRESET;
+#ifdef LORACONFIG_MODEM_PRESET_USERPREFS
+    loraConfig.modem_preset = LORACONFIG_MODEM_PRESET_USERPREFS;
+#endif
+#ifdef LORACONFIG_CHANNEL_NUM_USERPREFS
+    loraConfig.channel_num = LORACONFIG_CHANNEL_NUM_USERPREFS;
 #endif
 
     // Install custom defaults. Will eventually support setting multiple default channels
     if (chIndex == 0) {
-#ifdef CHANNEL_0_DEFAULT_PSK
-        static const uint8_t defaultpsk[] = CHANNEL_0_DEFAULT_PSK;
+#ifdef CHANNEL_0_PSK_USERPREFS
+        static const uint8_t defaultpsk[] = CHANNEL_0_PSK_USERPREFS;
         memcpy(channelSettings.psk.bytes, defaultpsk, sizeof(defaultpsk));
         channelSettings.psk.size = sizeof(defaultpsk);
 
 #endif
-#ifdef CHANNEL_0_DEFAULT_NAME
-        strcpy(channelSettings.name, CHANNEL_0_DEFAULT_NAME);
+#ifdef CHANNEL_0_NAME_USERPREFS
+        strcpy(channelSettings.name, CHANNEL_0_NAME_USERPREFS);
 #endif
-#ifdef CHANNEL_0_PRECISION_DEFAULT
-        channelSettings.module_settings.position_precision = CHANNEL_0_PRECISION_DEFAULT;
+#ifdef CHANNEL_0_PRECISION_USERPREFS
+        channelSettings.module_settings.position_precision = CHANNEL_0_PRECISION_USERPREFS;
 #endif
     }
 }
