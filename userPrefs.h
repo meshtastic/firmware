@@ -5,6 +5,7 @@
 // #define CONFIG_LORA_REGION_DEFAULT meshtastic_Config_LoRaConfig_RegionCode_US
 // #define CONFIG_LORA_MODEM_PRESET meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST
 // #define CONFIG_LORA_CHANNELNUM_DEFAULT 31
+// #define CONFIG_LORA_IGNORE_MQTT_DEFAULT true
 /*
 #define CHANNEL_0_DEFAULT_PSK                                                                                                    \
     {                                                                                                                            \

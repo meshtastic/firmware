@@ -249,7 +249,11 @@ void NodeDB::installDefaultConfig()
     config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
 #endif
     config.lora.hop_limit = HOP_RELIABLE;
+#ifdef CONFIG_LORA_IGNORE_MQTT_DEFAULT
+    config.lora.ignore_mqtt = CONFIG_LORA_IGNORE_MQTT_DEFAULT;
+#else
     config.lora.ignore_mqtt = false;
+#endif
 #ifdef PIN_GPS_EN
     config.position.gps_en_gpio = PIN_GPS_EN;
 #endif
