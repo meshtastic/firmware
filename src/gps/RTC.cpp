@@ -113,6 +113,11 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
         // Every 12 hrs we will slam in a new GPS or Phone GPS / NTP time, to correct for local RTC clock drift
         shouldSet = true;
         LOG_DEBUG("Reapplying external time to correct clock drift %ld secs\n", tv->tv_sec);
+    } else if (q == currentQuality && tv->tv_sec > (zeroOffsetSecs + 3 * 24 * 60 * 60)) {
+        // Sometimes nodes have RTC issues and broadcast time in the past. Jump clock forward if our time is "older" than 3 days.
+        shouldSet = true;
+        LOG_INFO("External time is more than 3 days in the future. Setting RTC to %ld. A neighbour likely has a broken clock.\n", tv->tv_sec);
+        LOG_DEBUG("new_time=%ld, old_time=%ld, diff=%ld\n", tv->tv_sec, zeroOffsetSecs, (tv->tv_sec - zeroOffsetSecs));
     } else {
         shouldSet = false;
         LOG_DEBUG("Current RTC quality: %s. Ignoring time of RTC quality of %s\n", RtcName(currentQuality), RtcName(q));
