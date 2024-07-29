@@ -1057,6 +1057,9 @@ void loop()
 #ifdef ARCH_NRF52
     nrf52Loop();
 #endif
+#ifdef ARCH_RP2040
+    rp2040Loop();
+#endif
     powerCommandsCheck();
 
     // For debugging
