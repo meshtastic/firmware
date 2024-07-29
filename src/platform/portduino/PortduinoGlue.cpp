@@ -17,6 +17,7 @@
 
 std::map<configNames, int> settingsMap;
 std::map<configNames, std::string> settingsStrings;
+std::ofstream traceFile;
 char *configPath = nullptr;
 
 // FIXME - move setBluetoothEnable into a HALPlatform class
@@ -134,7 +135,9 @@ void portduinoSetup()
 
     try {
         if (yamlConfig["Logging"]) {
-            if (yamlConfig["Logging"]["LogLevel"].as<std::string>("info") == "debug") {
+            if (yamlConfig["Logging"]["LogLevel"].as<std::string>("info") == "trace") {
+                settingsMap[logoutputlevel] = level_trace;
+            } else if (yamlConfig["Logging"]["LogLevel"].as<std::string>("info") == "debug") {
                 settingsMap[logoutputlevel] = level_debug;
             } else if (yamlConfig["Logging"]["LogLevel"].as<std::string>("info") == "info") {
                 settingsMap[logoutputlevel] = level_info;
@@ -143,6 +146,7 @@ void portduinoSetup()
             } else if (yamlConfig["Logging"]["LogLevel"].as<std::string>("info") == "error") {
                 settingsMap[logoutputlevel] = level_error;
             }
+            settingsStrings[traceFilename] = yamlConfig["Logging"]["TraceFile"].as<std::string>("");
         }
         if (yamlConfig["Lora"]) {
             settingsMap[use_sx1262] = false;
@@ -345,6 +349,14 @@ void portduinoSetup()
 
     if (settingsStrings[spidev] != "") {
         SPI.begin(settingsStrings[spidev].c_str());
+    }
+    if (settingsStrings[traceFilename] != "") {
+        try {
+            traceFile.open(settingsStrings[traceFilename], std::ios::out | std::ios::app);
+        } catch (std::ofstream::failure &e) {
+            std::cout << "*** traceFile Exception " << e.what() << std::endl;
+            exit(EXIT_FAILURE);
+        }
     }
     return;
 }
