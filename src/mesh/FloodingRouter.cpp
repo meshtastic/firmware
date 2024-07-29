@@ -1,4 +1,5 @@
 #include "FloodingRouter.h"
+#include "../userPrefs.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 

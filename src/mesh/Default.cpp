@@ -1,4 +1,5 @@
 #include "Default.h"
+#include "../userPrefs.h"
 
 uint32_t Default::getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t defaultInterval)
 {
