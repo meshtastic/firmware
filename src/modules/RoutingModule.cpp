@@ -1,4 +1,5 @@
 #include "RoutingModule.h"
+#include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Router.h"
@@ -55,7 +56,7 @@ uint8_t RoutingModule::getHopLimitForResponse(uint8_t hopStart, uint8_t hopLimit
             return hopsUsed + 2; // Use only the amount of hops needed with some margin as the way back may be different
         }
     }
-    return config.lora.hop_limit; // Use the default hop limit
+    return Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit); // Use the default hop limit
 }
 
 RoutingModule::RoutingModule() : ProtobufModule("routing", meshtastic_PortNum_ROUTING_APP, &meshtastic_Routing_msg)
