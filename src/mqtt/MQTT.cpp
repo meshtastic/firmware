@@ -382,6 +382,12 @@ void MQTT::sendSubscriptions()
 
 bool MQTT::wantsLink() const
 {
+#if EVENT_MODE
+    // Don't publish messages or subscribe on the public MQTT broker if we are in event mode
+    if (strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0) {
+        return false;
+    }
+#endif
     bool hasChannelorMapReport =
         moduleConfig.mqtt.enabled && (moduleConfig.mqtt.map_reporting_enabled || channels.anyMqttEnabled());
 
