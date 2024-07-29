@@ -135,6 +135,7 @@ Input:
 
 Logging:
   LogLevel: info # debug, info, warn, error
+#  TraceFile: /var/log/meshtasticd.json
 
 Webserver:
 #  Port: 443 # Port for Webserver & Webservices
