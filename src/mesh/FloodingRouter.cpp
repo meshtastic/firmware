@@ -48,6 +48,8 @@ void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                 tosend->hop_limit--; // bump down the hop count
 #if EVENT_MODE
                 if (tosend->hop_limit > 2) {
+                    // if we are "correcting" the hop_limit, "correct" the hop_start by the same amount to preserve hops away.
+                    tosend->hop_start -= (tosend->hop_limit - 2);
                     tosend->hop_limit = 2;
                 }
 #endif
