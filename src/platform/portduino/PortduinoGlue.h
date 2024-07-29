@@ -1,4 +1,5 @@
 #pragma once
+#include <fstream>
 #include <map>
 
 enum configNames {
@@ -46,6 +47,7 @@ enum configNames {
     displayInvert,
     keyboardDevice,
     logoutputlevel,
+    traceFilename,
     webserver,
     webserverport,
     webserverrootpath,
@@ -53,8 +55,9 @@ enum configNames {
 };
 enum { no_screen, x11, st7789, st7735, st7735s, st7796, ili9341, ili9488, hx8357d };
 enum { no_touchscreen, xpt2046, stmpe610, gt911, ft5x06 };
-enum { level_error, level_warn, level_info, level_debug };
+enum { level_error, level_warn, level_info, level_debug, level_trace };
 
 extern std::map<configNames, int> settingsMap;
 extern std::map<configNames, std::string> settingsStrings;
+extern std::ofstream traceFile;
 int initGPIOPin(int pinNum, std::string gpioChipname);
