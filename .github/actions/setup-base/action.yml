@@ -32,8 +32,8 @@ runs:
     - name: Upgrade python tools
       shell: bash
       run: |
+        pip install --no-build-isolation --no-cache-dir "setuptools<72"
         python -m pip install --upgrade pip
-        pip install -U setuptools<72.0.0
         pip install -U platformio adafruit-nrfutil
         pip install -U meshtastic --pre
 
