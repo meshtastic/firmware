@@ -276,6 +276,12 @@ void Channels::setChannel(const meshtastic_Channel &c)
 
 bool Channels::anyMqttEnabled()
 {
+#if EVENT_MODE
+    // Don't publish messages on the public MQTT broker if we are in event mode
+    if (strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0) {
+        return false;
+    }
+#endif
     for (int i = 0; i < getNumChannels(); i++)
         if (channelFile.channels[i].role != meshtastic_Channel_Role_DISABLED && channelFile.channels[i].has_settings &&
             (channelFile.channels[i].settings.downlink_enabled || channelFile.channels[i].settings.uplink_enabled))
