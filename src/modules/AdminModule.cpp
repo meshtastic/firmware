@@ -400,6 +400,13 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
                 requiresReboot = true;
             }
         }
+#if EVENT_MODE
+        // If we're in event mode, nobody is a Router or Repeater
+        if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+            config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
+            config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+        }
+#endif
         break;
     case meshtastic_Config_position_tag:
         LOG_INFO("Setting config: Position\n");
@@ -459,6 +466,15 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             config.lora.sx126x_rx_boosted_gain == c.payload_variant.lora.sx126x_rx_boosted_gain) {
             requiresReboot = false;
         }
+
+#ifdef RF95_FAN_EN
+        // Turn PA off if disabled by config
+        if (c.payload_variant.lora.pa_fan_disabled) {
+            digitalWrite(RF95_FAN_EN, LOW ^ 0);
+        } else {
+            digitalWrite(RF95_FAN_EN, HIGH ^ 0);
+        }
+#endif
         config.lora = c.payload_variant.lora;
         // If we're setting region for the first time, init the region
         if (isRegionUnset && config.lora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
