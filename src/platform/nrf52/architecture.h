@@ -88,10 +88,6 @@
 
 #endif
 
-#ifndef TTGO_T_ECHO
-#define GPS_UBLOX
-#endif
-
 #define LED_PIN PIN_LED1 // LED1 on nrf52840-DK
 
 #ifdef PIN_BUTTON1
