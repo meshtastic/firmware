@@ -1,4 +1,5 @@
 #include "RoutingModule.h"
+#include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "Router.h"
@@ -50,12 +51,15 @@ uint8_t RoutingModule::getHopLimitForResponse(uint8_t hopStart, uint8_t hopLimit
         // Hops used by the request. If somebody in between running modified firmware modified it, ignore it
         uint8_t hopsUsed = hopStart < hopLimit ? config.lora.hop_limit : hopStart - hopLimit;
         if (hopsUsed > config.lora.hop_limit) {
+// In event mode, we never want to send packets with more than our default 3 hops.
+#if !(EVENTMODE)             // This falls through to the default.
             return hopsUsed; // If the request used more hops than the limit, use the same amount of hops
+#endif
         } else if ((uint8_t)(hopsUsed + 2) < config.lora.hop_limit) {
             return hopsUsed + 2; // Use only the amount of hops needed with some margin as the way back may be different
         }
     }
-    return config.lora.hop_limit; // Use the default hop limit
+    return Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit); // Use the default hop limit
 }
 
 RoutingModule::RoutingModule() : ProtobufModule("routing", meshtastic_PortNum_ROUTING_APP, &meshtastic_Routing_msg)
