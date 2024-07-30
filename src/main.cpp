@@ -973,9 +973,9 @@ void setup()
     mqttInit();
 #endif
 
+#ifdef RF95_FAN_EN
     // Ability to disable FAN if PIN has been set with RF95_FAN_EN.
     // Make sure LoRa has been started before disabling FAN.
-#ifdef RF95_FAN_EN
     if (config.lora.pa_fan_disabled)
         digitalWrite(RF95_FAN_EN, LOW ^ 0);
 #endif
