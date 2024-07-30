@@ -6,6 +6,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "PowerMon.h"
 #include "ReliableRouter.h"
 #include "airtime.h"
 #include "buzz.h"
@@ -19,7 +20,11 @@
 #include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
 #include "detect/ScanI2C.h"
+
+#if !MESHTASTIC_EXCLUDE_I2C
 #include "detect/ScanI2CTwoWire.h"
+#include <Wire.h>
+#endif
 #include "detect/axpDebug.h"
 #include "detect/einkScan.h"
 #include "graphics/RAKled.h"
@@ -30,7 +35,6 @@
 #include "shutdown.h"
 #include "sleep.h"
 #include "target_specific.h"
-#include <Wire.h>
 #include <memory>
 #include <utility>
 // #include <driver/rtc_io.h>
@@ -41,13 +45,13 @@
 #endif
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "nimble/NimbleBluetooth.h"
-NimbleBluetooth *nimbleBluetooth;
+NimbleBluetooth *nimbleBluetooth = nullptr;
 #endif
 #endif
 
 #ifdef ARCH_NRF52
 #include "NRF52Bluetooth.h"
-NRF52Bluetooth *nrf52Bluetooth;
+NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #endif
 
 #if HAS_WIFI
@@ -94,23 +98,23 @@ NRF52Bluetooth *nrf52Bluetooth;
 #include "ButtonThread.h"
 #endif
 
+#include "AmbientLightingThread.h"
 #include "PowerFSMThread.h"
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #include "AccelerometerThread.h"
-#include "AmbientLightingThread.h"
-AccelerometerThread *accelerometerThread;
+AccelerometerThread *accelerometerThread = nullptr;
 #endif
 
 #ifdef HAS_I2S
 #include "AudioThread.h"
-AudioThread *audioThread;
+AudioThread *audioThread = nullptr;
 #endif
 
 using namespace concurrency;
 
 // We always create a screen object, but we only init it if we find the hardware
-graphics::Screen *screen;
+graphics::Screen *screen = nullptr;
 
 // Global power status
 meshtastic::PowerStatus *powerStatus = new meshtastic::PowerStatus();
@@ -154,11 +158,14 @@ bool isVibrating = false;
 bool eink_found = true;
 
 uint32_t serialSinceMsec;
+bool pauseBluetoothLogging = false;
 
 bool pmu_found;
 
+#if !MESHTASTIC_EXCLUDE_I2C
 // Array map of sensor types with i2c address and wire as we'll find in the i2c scan
 std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1] = {};
+#endif
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
 
@@ -172,7 +179,7 @@ const char *getDeviceName()
     static char name[20];
     snprintf(name, sizeof(name), "%02x%02x", dmac[4], dmac[5]);
     // if the shortname exists and is NOT the new default of ab3c, use it for BLE name.
-    if ((owner.short_name != NULL) && (strcmp(owner.short_name, name) != 0)) {
+    if (strcmp(owner.short_name, name) != 0) {
         snprintf(name, sizeof(name), "%s_%02x%02x", owner.short_name, dmac[4], dmac[5]);
     } else {
         snprintf(name, sizeof(name), "Meshtastic_%02x%02x", dmac[4], dmac[5]);
@@ -213,6 +220,14 @@ __attribute__((weak, noinline)) bool loopCanSleep()
     return true;
 }
 
+/**
+ * Print info as a structured log message (for automated log processing)
+ */
+void printInfo()
+{
+    LOG_INFO("S:B:%d,%s\n", HW_VENDOR, optstr(APP_VERSION));
+}
+
 void setup()
 {
     concurrency::hasBeenSetup = true;
@@ -220,7 +235,7 @@ void setup()
         meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;
     OLEDDISPLAY_GEOMETRY screen_geometry = GEOMETRY_128_64;
 
-#ifdef SEGGER_STDOUT_CH
+#ifdef USE_SEGGER
     auto mode = false ? SEGGER_RTT_MODE_BLOCK_IF_FIFO_FULL : SEGGER_RTT_MODE_NO_BLOCK_TRIM;
 #ifdef NRF52840_XXAA
     auto buflen = 4096; // this board has a fair amount of ram
@@ -233,6 +248,7 @@ void setup()
 #ifdef DEBUG_PORT
     consoleInit(); // Set serial baud rate and init our mesh console
 #endif
+    powerMonInit();
 
     serialSinceMsec = millis();
 
@@ -241,7 +257,7 @@ void setup()
     initDeepSleep();
 
     // power on peripherals
-#if defined(TTGO_T_ECHO) && defined(PIN_POWER_EN)
+#if defined(PIN_POWER_EN)
     pinMode(PIN_POWER_EN, OUTPUT);
     digitalWrite(PIN_POWER_EN, HIGH);
     // digitalWrite(PIN_POWER_EN1, INPUT);
@@ -264,6 +280,9 @@ void setup()
     digitalWrite(VEXT_ENABLE_V05, 1); // turn on the lora antenna boost
     digitalWrite(ST7735_BL_V05, 1);   // turn on display backligth
     LOG_DEBUG("HELTEC Detect Tracker V1.1\n");
+#elif defined(VEXT_ENABLE) && defined(VEXT_ON_VALUE)
+    pinMode(VEXT_ENABLE, OUTPUT);
+    digitalWrite(VEXT_ENABLE, VEXT_ON_VALUE); // turn on the display power
 #elif defined(VEXT_ENABLE)
     pinMode(VEXT_ENABLE, OUTPUT);
     digitalWrite(VEXT_ENABLE, 0); // turn on the display power
@@ -292,6 +311,13 @@ void setup()
 #ifdef RESET_OLED
     pinMode(RESET_OLED, OUTPUT);
     digitalWrite(RESET_OLED, 1);
+#endif
+
+#ifdef PERIPHERAL_WARMUP_MS
+    // Some peripherals may require additional time to stabilize after power is connected
+    // e.g. I2C on Heltec Vision Master
+    LOG_INFO("Waiting for peripherals to stabilize\n");
+    delay(PERIPHERAL_WARMUP_MS);
 #endif
 
 #ifdef BUTTON_PIN
@@ -328,6 +354,7 @@ void setup()
 
 #endif
 
+#if !MESHTASTIC_EXCLUDE_I2C
 #if defined(I2C_SDA1) && defined(ARCH_RP2040)
     Wire1.setSDA(I2C_SDA1);
     Wire1.setSCL(I2C_SCL1);
@@ -351,6 +378,7 @@ void setup()
     }
 #elif HAS_WIRE
     Wire.begin();
+#endif
 #endif
 
 #ifdef PIN_LCD_RESET
@@ -384,6 +412,7 @@ void setup()
     powerStatus->observe(&power->newStatus);
     power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
 
+#if !MESHTASTIC_EXCLUDE_I2C
     // We need to scan here to decide if we have a screen for nodeDB.init() and because power has been applied to
     // accessories
     auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
@@ -421,10 +450,6 @@ void setup()
     auto i2cCount = i2cScanner->countDevices();
     if (i2cCount == 0) {
         LOG_INFO("No I2C devices found\n");
-        Wire.end();
-#ifdef I2C_SDA1
-        Wire1.end();
-#endif
     } else {
         LOG_INFO("%i I2C devices found\n", i2cCount);
     }
@@ -543,6 +568,7 @@ void setup()
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::DFROBOT_LARK, meshtastic_TelemetrySensorType_DFROBOT_LARK)
 
     i2cScanner.reset();
+#endif
 
 #ifdef HAS_SDCARD
     setupSDCard();
@@ -556,7 +582,7 @@ void setup()
 #endif
 
     // Hello
-    LOG_INFO("Meshtastic hwvendor=%d, swver=%s\n", HW_VENDOR, optstr(APP_VERSION));
+    printInfo();
 
 #ifdef ARCH_ESP32
     esp32Setup();
@@ -603,6 +629,7 @@ void setup()
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
 #endif
 
+#if !MESHTASTIC_EXCLUDE_I2C
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
         config.display.wake_on_tap_or_motion = true;
@@ -617,6 +644,7 @@ void setup()
     if (rgb_found.type != ScanI2C::DeviceType::NONE) {
         ambientLightingThread = new AmbientLightingThread(rgb_found.type);
     }
+#endif
 #endif
 
 #ifdef T_WATCH_S3
@@ -704,9 +732,11 @@ void setup()
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_AXP192); // Record a hardware fault for missing hardware
 #endif
 
+#if !MESHTASTIC_EXCLUDE_I2C
 // Don't call screen setup until after nodedb is setup (because we need
 // the current region name)
-#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(HX8357_CS)
+#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(HX8357_CS) ||            \
+    defined(USE_ST7789)
     screen->setup();
 #elif defined(ARCH_PORTDUINO)
     if (screen_found.port != ScanI2C::I2CPort::NO_I2C || settingsMap[displayPanel]) {
@@ -715,6 +745,7 @@ void setup()
 #else
     if (screen_found.port != ScanI2C::I2CPort::NO_I2C)
         screen->setup();
+#endif
 #endif
 
     screen->print("Started...\n");
@@ -933,7 +964,7 @@ void setup()
         nodeDB->saveToDisk(SEGMENT_CONFIG);
         if (!rIf->reconfigure()) {
             LOG_WARN("Reconfigure failed, rebooting\n");
-            screen->startRebootScreen();
+            screen->startAlert("Rebooting...");
             rebootAtMsec = millis() + 5000;
         }
     }

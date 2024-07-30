@@ -8,7 +8,9 @@
 #include "input/kbMatrixImpl.h"
 #include "input/SerialKeyboardImpl.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_ADMIN
 #include "modules/AdminModule.h"
+#endif
 #if !MESHTASTIC_EXCLUDE_ATAK
 #include "modules/AtakPluginModule.h"
 #endif
@@ -21,12 +23,17 @@
 #if !MESHTASTIC_EXCLUDE_NEIGHBORINFO
 #include "modules/NeighborInfoModule.h"
 #endif
+#if !MESHTASTIC_EXCLUDE_NODEINFO
 #include "modules/NodeInfoModule.h"
+#endif
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "modules/PositionModule.h"
 #endif
 #if !MESHTASTIC_EXCLUDE_REMOTEHARDWARE
 #include "modules/RemoteHardwareModule.h"
+#endif
+#if !MESHTASTIC_EXCLUDE_POWERSTRESS
+#include "modules/PowerStressModule.h"
 #endif
 #include "modules/RoutingModule.h"
 #include "modules/TextMessageModule.h"
@@ -43,6 +50,7 @@
 #include "modules/Telemetry/DeviceTelemetry.h"
 #endif
 #if HAS_SENSOR && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#include "main.h"
 #include "modules/Telemetry/AirQualityTelemetry.h"
 #include "modules/Telemetry/EnvironmentTelemetry.h"
 #endif
@@ -71,6 +79,11 @@
 #include "modules/SerialModule.h"
 #endif
 #endif
+
+#if !MESHTASTIC_EXCLUDE_DROPZONE
+#include "modules/DropzoneModule.h"
+#endif
+
 /**
  * Create module instances here.  If you are adding a new module, you must 'new' it here (or somewhere else)
  */
@@ -80,8 +93,12 @@ void setupModules()
 #if (HAS_BUTTON || ARCH_PORTDUINO) && !MESHTASTIC_EXCLUDE_INPUTBROKER
         inputBroker = new InputBroker();
 #endif
+#if !MESHTASTIC_EXCLUDE_ADMIN
         adminModule = new AdminModule();
+#endif
+#if !MESHTASTIC_EXCLUDE_NODEINFO
         nodeInfoModule = new NodeInfoModule();
+#endif
 #if !MESHTASTIC_EXCLUDE_GPS
         positionModule = new PositionModule();
 #endif
@@ -101,11 +118,18 @@ void setupModules()
 #if !MESHTASTIC_EXCLUDE_ATAK
         atakPluginModule = new AtakPluginModule();
 #endif
+
+#if !MESHTASTIC_EXCLUDE_DROPZONE
+        dropzoneModule = new DropzoneModule();
+#endif
         // Note: if the rest of meshtastic doesn't need to explicitly use your module, you do not need to assign the instance
         // to a global variable.
 
 #if !MESHTASTIC_EXCLUDE_REMOTEHARDWARE
         new RemoteHardwareModule();
+#endif
+#if !MESHTASTIC_EXCLUDE_POWERSTRESS
+        new PowerStressModule();
 #endif
         // Example: Put your module here
         // new ReplyModule();
@@ -181,7 +205,9 @@ void setupModules()
 #endif
 #endif
     } else {
+#if !MESHTASTIC_EXCLUDE_ADMIN
         adminModule = new AdminModule();
+#endif
 #if HAS_TELEMETRY
         new DeviceTelemetryModule();
 #endif

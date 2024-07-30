@@ -1,7 +1,10 @@
-#include "OPT3001Sensor.h"
-#include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "TelemetrySensor.h"
 #include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
+#include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "OPT3001Sensor.h"
+#include "TelemetrySensor.h"
 #include <ClosedCube_OPT3001.h>
 
 OPT3001Sensor::OPT3001Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_OPT3001, "OPT3001") {}
@@ -42,3 +45,5 @@ bool OPT3001Sensor::getMetrics(meshtastic_Telemetry *measurement)
 
     return true;
 }
+
+#endif

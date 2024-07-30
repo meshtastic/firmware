@@ -39,9 +39,11 @@ typedef enum {
 } GPS_RESPONSE;
 
 enum GPSPowerState : uint8_t {
-    GPS_OFF = 0,
-    GPS_AWAKE = 1,
-    GPS_STANDBY = 2,
+    GPS_ACTIVE,    // Awake and want a position
+    GPS_IDLE,      // Awake, but not wanting another position yet
+    GPS_SOFTSLEEP, // Physically powered on, but soft-sleeping
+    GPS_HARDSLEEP, // Physically powered off, but scheduled to wake
+    GPS_OFF        // Powered off indefinitely
 };
 
 // Generate a string representation of DOP
@@ -66,14 +68,11 @@ class GPS : private concurrency::OSThread
     uint8_t fixType = 0;      // fix type from GPGSA
 #endif
   private:
-    uint32_t lastWakeStartMsec = 0, lastSleepStartMsec = 0;
     const int serialSpeeds[6] = {9600, 4800, 38400, 57600, 115200, 9600};
-
+    uint32_t lastWakeStartMsec = 0, lastSleepStartMsec = 0, lastFixStartMsec = 0;
     uint32_t rx_gpio = 0;
     uint32_t tx_gpio = 0;
     uint32_t en_gpio = 0;
-    int32_t averageLockTime = 0;
-    uint32_t GPSCycles = 0;
 
     int speedSelect = 0;
     int probeTries = 2;
@@ -93,12 +92,11 @@ class GPS : private concurrency::OSThread
     bool GPSInitFinished = false; // Init thread finished?
     bool GPSInitStarted = false;  // Init thread finished?
 
-    GPSPowerState powerState = GPS_OFF; // GPS_AWAKE if we want a location right now
+    GPSPowerState powerState = GPS_OFF; // GPS_ACTIVE if we want a location right now
 
     uint8_t numSatellites = 0;
 
     CallbackObserver<GPS, void *> notifyDeepSleepObserver = CallbackObserver<GPS, void *>(this, &GPS::prepareDeepSleep);
-    CallbackObserver<GPS, void *> notifyGPSSleepObserver = CallbackObserver<GPS, void *>(this, &GPS::prepareDeepSleep);
 
   public:
     /** If !NULL we will use this serial port to construct our GPS */
@@ -174,7 +172,8 @@ class GPS : private concurrency::OSThread
     // toggle between enabled/disabled
     void toggleGpsMode();
 
-    void setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime);
+    // Change the power state of the GPS - for power saving / shutdown
+    void setPowerState(GPSPowerState newState, uint32_t sleepMs = 0);
 
     /// Returns true if we have acquired GPS lock.
     virtual bool hasLock();
@@ -205,17 +204,17 @@ class GPS : private concurrency::OSThread
 
     GPS_RESPONSE getACKCas(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis);
 
-    /**
-     * Switch the GPS into a mode where we are actively looking for a lock, or alternatively switch GPS into a low power mode
-     *
-     * calls sleep/wake
-     */
-    void setAwake(bool on);
     virtual bool factoryReset();
 
     // Creates an instance of the GPS class.
     // Returns the new instance or null if the GPS is not present.
     static GPS *createGps();
+
+    // Wake the GPS hardware - ready for an update
+    void up();
+
+    // Let the GPS hardware save power between updates
+    void down();
 
   protected:
     /**
@@ -239,7 +238,7 @@ class GPS : private concurrency::OSThread
      *
      * Return true if we received a valid message from the GPS
      */
-    virtual bool whileIdle();
+    virtual bool whileActive();
 
     /**
      * Perform any processing that should be done only while the GPS is awake and looking for a fix.
@@ -266,13 +265,21 @@ class GPS : private concurrency::OSThread
     void UBXChecksum(uint8_t *message, size_t length);
     void CASChecksum(uint8_t *message, size_t length);
 
-    /** Get how long we should stay looking for each aquisition
+    /** Set power with EN pin, if relevant
      */
-    uint32_t getWakeTime() const;
+    void writePinEN(bool on);
 
-    /** Get how long we should sleep between aqusition attempts
+    /** Set the value of the STANDBY pin, if relevant
      */
-    uint32_t getSleepTime() const;
+    void writePinStandby(bool standby);
+
+    /** Set GPS power with PMU, if relevant
+     */
+    void setPowerPMU(bool on);
+
+    /** Set UBLOX power, if relevant
+     */
+    void setPowerUBLOX(bool on, uint32_t sleepMs = 0);
 
     /**
      * Tell users we have new GPS readings
@@ -287,6 +294,8 @@ class GPS : private concurrency::OSThread
 
     // delay counter to allow more sats before fixed position stops GPS thread
     uint8_t fixeddelayCtr = 0;
+
+    const char *powerStateToString();
 
   protected:
     GnssModel_t gnssModel = GNSS_MODEL_UNKNOWN;
