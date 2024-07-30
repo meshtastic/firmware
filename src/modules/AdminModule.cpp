@@ -466,6 +466,15 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             config.lora.sx126x_rx_boosted_gain == c.payload_variant.lora.sx126x_rx_boosted_gain) {
             requiresReboot = false;
         }
+
+#ifdef RF95_FAN_EN
+        // Turn PA off if disabled by config
+        if (c.payload_variant.lora.pa_fan_disabled) {
+            digitalWrite(RF95_FAN_EN, LOW ^ 0);
+        } else {
+            digitalWrite(RF95_FAN_EN, HIGH ^ 0);
+        }
+#endif
         config.lora = c.payload_variant.lora;
         // If we're setting region for the first time, init the region
         if (isRegionUnset && config.lora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
