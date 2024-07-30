@@ -347,11 +347,11 @@ ExternalNotificationModule::ExternalNotificationModule()
     // moduleConfig.external_notification.nag_timeout = 300;
 
     // T-Watch / T-Deck i2s audio as buzzer:
-    // moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.enabled = false;
     // moduleConfig.external_notification.nag_timeout = 300;
     // moduleConfig.external_notification.output_ms = 1000;
-    // moduleConfig.external_notification.use_i2s_as_buzzer = true;
-    // moduleConfig.external_notification.alert_message_buzzer = true;
+    moduleConfig.external_notification.use_i2s_as_buzzer = false;
+    moduleConfig.external_notification.alert_message_buzzer = false;
 
     if (moduleConfig.external_notification.enabled) {
         if (nodeDB->loadProto(rtttlConfigFile, meshtastic_RTTTLConfig_size, sizeof(meshtastic_RTTTLConfig),
