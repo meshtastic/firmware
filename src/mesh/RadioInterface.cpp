@@ -177,8 +177,6 @@ The band is from 902 to 928 MHz. It mentions channel number and its respective c
 separated by 2.16 MHz with respect to the adjacent channels. Channel zero starts at 903.08 MHz center frequency.
 */
 
-// 1kb was too small
-#define RADIO_STACK_SIZE 4096
 
 /**
  * Calculate airtime per
