@@ -400,6 +400,13 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
                 requiresReboot = true;
             }
         }
+#if EVENT_MODE
+        // If we're in event mode, nobody is a Router or Repeater
+        if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+            config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
+            config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+        }
+#endif
         break;
     case meshtastic_Config_position_tag:
         LOG_INFO("Setting config: Position\n");

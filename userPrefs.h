@@ -1,6 +1,9 @@
 #ifndef _USERPREFS_
 #define _USERPREFS_
+
 // Uncomment and modify to set device defaults
+
+// #define EVENT_MODE 1
 
 // #define CONFIG_LORA_REGION_USERPREFS meshtastic_Config_LoRaConfig_RegionCode_US
 // #define LORACONFIG_MODEM_PRESET_USERPREFS meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST

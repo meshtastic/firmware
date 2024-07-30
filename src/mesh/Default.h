@@ -30,6 +30,7 @@ class Default
     static uint32_t getConfiguredOrDefaultMs(uint32_t configuredInterval, uint32_t defaultInterval);
     static uint32_t getConfiguredOrDefault(uint32_t configured, uint32_t defaultValue);
     static uint32_t getConfiguredOrDefaultMsScaled(uint32_t configured, uint32_t defaultValue, uint32_t numOnlineNodes);
+    static uint8_t getConfiguredOrDefaultHopLimit(uint8_t configured);
 
   private:
     static float congestionScalingCoefficient(int numOnlineNodes)
