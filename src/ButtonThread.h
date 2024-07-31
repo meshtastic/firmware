@@ -13,7 +13,7 @@
 #endif
 
 #ifndef BUTTON_TOUCH_MS
-#define BUTTON_TOCH_MS 400
+#define BUTTON_TOUCH_MS 400
 #endif
 
 class ButtonThread : public concurrency::OSThread
