@@ -527,8 +527,8 @@ class LGFX : public lgfx::LGFX_Device
             auto cfg = _panel_instance.config();
             cfg.memory_width = 800;
             cfg.memory_height = 480;
-            cfg.panel_width = 800;
-            cfg.panel_height = 480;
+            cfg.panel_width = TFT_WIDTH;
+            cfg.panel_height = TFT_HEIGHT;
             cfg.offset_x = TFT_OFFSET_X;
             cfg.offset_y = TFT_OFFSET_Y;
             _panel_instance.config(cfg);
@@ -595,8 +595,8 @@ class LGFX : public lgfx::LGFX_Device
             cfg.x_max = 479;
             cfg.y_min = 0;
             cfg.y_max = 479;
-            cfg.pin_int = -1; // SCREEN_TOUCH_INT
-            cfg.pin_rst = -1; // SCREEN_TOUCH_RST
+            cfg.pin_int = SCREEN_TOUCH_INT;
+            cfg.pin_rst = SCREEN_TOUCH_RST;
             cfg.bus_shared = true;
             cfg.offset_rotation = TFT_OFFSET_ROTATION;
 
@@ -819,12 +819,12 @@ bool TFTDisplay::connect()
     tft = new LGFX;
 #endif
 
+    LOG_INFO("Power to TFT Backlight\n");
 #ifdef TFT_BL
     pinMode(TFT_BL, OUTPUT);
     digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
     // pinMode(PIN_3V3_EN, OUTPUT);
     // digitalWrite(PIN_3V3_EN, HIGH);
-    LOG_INFO("Power to TFT Backlight\n");
 #endif
 
 #ifdef ST7735_BL_V03
@@ -835,7 +835,6 @@ bool TFTDisplay::connect()
 #endif
 #ifdef UNPHONE
     unphone.backlight(true); // using unPhone library
-    LOG_INFO("Power to TFT Backlight\n");
 #endif
 
     tft->init();
