@@ -27,10 +27,6 @@ RangeTestModule::RangeTestModule() : concurrency::OSThread("RangeTestModule") {}
 
 uint32_t packetSequence = 0;
 
-#define SEC_PER_DAY 86400
-#define SEC_PER_HOUR 3600
-#define SEC_PER_MIN 60
-
 int32_t RangeTestModule::runOnce()
 {
 #if defined(ARCH_ESP32) || defined(ARCH_NRF52)
