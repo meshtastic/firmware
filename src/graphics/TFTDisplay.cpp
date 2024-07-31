@@ -535,6 +535,15 @@ class LGFX : public lgfx::LGFX_Device
         }
 
         {
+            auto cfg = _panel_instance.config_detail();
+            cfg.pin_cs = ST7701_CS;
+            cfg.pin_sclk = ST7701_SCK;
+            cfg.pin_mosi = ST7701_SDA;
+            // cfg.use_psram = 1;
+            _panel_instance.config_detail(cfg);
+        }
+
+        {
             auto cfg = _bus_instance.config();
             cfg.panel = &_panel_instance;
 #ifdef SENSECAP_INDICATOR
