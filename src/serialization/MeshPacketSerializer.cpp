@@ -11,7 +11,7 @@
 #endif
 #include "mesh/generated/meshtastic/remote_hardware.pb.h"
 
-std::string MeshPacketSerializer::JsonSerialize(meshtastic_MeshPacket *mp, bool shouldLog)
+std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp, bool shouldLog)
 {
     // the created jsonObj is immutable after creation, so
     // we need to do the heavy lifting before assembling it.
@@ -311,6 +311,38 @@ std::string MeshPacketSerializer::JsonSerialize(meshtastic_MeshPacket *mp, bool 
 
     if (shouldLog)
         LOG_INFO("serialized json message: %s\n", jsonStr.c_str());
+
+    delete value;
+    return jsonStr;
+}
+
+std::string MeshPacketSerializer::JsonSerializeEncrypted(const meshtastic_MeshPacket *mp)
+{
+    JSONObject jsonObj;
+
+    jsonObj["id"] = new JSONValue((unsigned int)mp->id);
+    jsonObj["time_ms"] = new JSONValue((double)millis());
+    jsonObj["timestamp"] = new JSONValue((unsigned int)mp->rx_time);
+    jsonObj["to"] = new JSONValue((unsigned int)mp->to);
+    jsonObj["from"] = new JSONValue((unsigned int)mp->from);
+    jsonObj["channel"] = new JSONValue((unsigned int)mp->channel);
+    jsonObj["want_ack"] = new JSONValue(mp->want_ack);
+
+    if (mp->rx_rssi != 0)
+        jsonObj["rssi"] = new JSONValue((int)mp->rx_rssi);
+    if (mp->rx_snr != 0)
+        jsonObj["snr"] = new JSONValue((float)mp->rx_snr);
+    if (mp->hop_start != 0 && mp->hop_limit <= mp->hop_start) {
+        jsonObj["hops_away"] = new JSONValue((unsigned int)(mp->hop_start - mp->hop_limit));
+        jsonObj["hop_start"] = new JSONValue((unsigned int)(mp->hop_start));
+    }
+    jsonObj["size"] = new JSONValue((unsigned int)mp->encrypted.size);
+    auto encryptedStr = bytesToHex(mp->encrypted.bytes, mp->encrypted.size);
+    jsonObj["bytes"] = new JSONValue(encryptedStr.c_str());
+
+    // serialize and write it to the stream
+    JSONValue *value = new JSONValue(jsonObj);
+    std::string jsonStr = value->Stringify();
 
     delete value;
     return jsonStr;

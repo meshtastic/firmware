@@ -2,6 +2,7 @@
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
 #include "input/InputBroker.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
+#include "input/SerialKeyboardImpl.h"
 #include "input/TrackballInterruptImpl1.h"
 #include "input/UpDownInterruptImpl1.h"
 #include "input/cardKbI2cImpl.h"
@@ -148,6 +149,10 @@ void setupModules()
 #ifdef INPUTBROKER_MATRIX_TYPE
         kbMatrixImpl = new KbMatrixImpl();
         kbMatrixImpl->init();
+#endif // INPUTBROKER_MATRIX_TYPE
+#ifdef INPUTBROKER_SERIAL_TYPE
+        aSerialKeyboardImpl = new SerialKeyboardImpl();
+        aSerialKeyboardImpl->init();
 #endif // INPUTBROKER_MATRIX_TYPE
 #endif // HAS_BUTTON
 #if ARCH_PORTDUINO

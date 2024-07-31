@@ -34,7 +34,7 @@
 // Buzzer
 #define PIN_BUZZER 19
 // Buttons
-#define BUTTON_PIN 36 // Use the WAKE button as the user button
+// #define BUTTON_PIN 36 // Use the WAKE button as the user button
 // I2C
 // #define I2C_SCL 27
 // #define I2C_SDA 26
@@ -90,6 +90,13 @@
 #undef GPS_RX_PIN
 #define GPS_TX_PIN 13
 #define GPS_RX_PIN 2
+
+// keyboard
+#define INPUTBROKER_SERIAL_TYPE 1
+#define KB_LOAD 21 // load values from the switch and store in shift register
+#define KB_CLK 22  // clock pin for serial data out
+#define KB_DATA 23 // data pin
+#define CANNED_MESSAGE_MODULE_ENABLE 1
 
 /////////////////////////////////////////////////////////////////////////////////
 //                                                                             //

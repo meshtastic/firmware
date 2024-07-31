@@ -16,7 +16,6 @@
 // In theory up to 27 dBm is possible, but the modules installed in most radios can cope with a max of 20.  So BIG WARNING
 // if you set power to something higher than 17 or 20 you might fry your board.
 
-#define POWER_DEFAULT 17 // How much power to use if the user hasn't set a power level
 #ifdef RADIOMASTER_900_BANDIT_NANO
 // Structure to hold DAC and DB values
 typedef struct {
