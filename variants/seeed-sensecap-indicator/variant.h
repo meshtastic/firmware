@@ -1,6 +1,3 @@
-#define IO_EXPANDER 0x40
-#define IO_EXPANDER_ADDR 0x20
-
 #define I2C_SDA 39
 #define I2C_SCL 40
 
@@ -12,7 +9,7 @@
 // #define ADC_MULTIPLIER 2
 
 // ST7701 TFT LCD
-#define ST7701_CS -1  // (4 | IO_EXPANDER)
+#define ST7701_CS (4 | IO_EXPANDER)
 #define ST7701_RS -1  // DC
 #define ST7701_SDA 48 // MOSI
 #define ST7701_SCK 41
@@ -52,12 +49,12 @@
 #define LORA_SCK 41
 #define LORA_MISO 47
 #define LORA_MOSI 48
-#define LORA_CS -1 // (0 | IO_EXPANDER)
+#define LORA_CS (0 | IO_EXPANDER)
 
-#define LORA_DIO0 -1  // a no connect on the SX1262 module
-#define LORA_RESET -1 // (1 | IO_EXPANDER)
-#define LORA_DIO1 -1  // (3 | IO_EXPANDER) // SX1262 IRQ
-#define LORA_DIO2 -1  // (2 | IO_EXPANDER) // SX1262 BUSY
+#define LORA_DIO0 -1 // a no connect on the SX1262 module
+#define LORA_RESET (1 | IO_EXPANDER)
+#define LORA_DIO1 (3 | IO_EXPANDER) // SX1262 IRQ
+#define LORA_DIO2 (2 | IO_EXPANDER) // SX1262 BUSY
 #define LORA_DIO3
 
 #define SX126X_CS LORA_CS
