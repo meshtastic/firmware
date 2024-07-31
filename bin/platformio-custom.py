@@ -91,3 +91,12 @@ projenv.Append(
         "-DAPP_VERSION_SHORT=" + verObj["short"],
     ]
 )
+
+# Add a custom p.io project task to run the UF2 conversion script.
+env.AddCustomTarget(
+    name="Convert Hex to UF2",
+    dependencies=None,
+    actions=["PYTHON .\\bin\\uf2conv.py $BUILD_DIR\$env\\firmware.hex -c -f 0xADA52840 -o $BUILD_DIR\$env\\firmware.uf2"],
+    title="Convert hex to uf2",
+    description="Runs the python script to convert an already-built .hex file into .uf2 for copying to a device"
+)

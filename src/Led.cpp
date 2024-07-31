@@ -32,7 +32,7 @@ static GpioVirtPin ledRawHwPin; // Dummy pin for no hardware
 #endif
 
 #if LED_INVERTED
-static static GpioVirtPin ledHwPin;
+static GpioVirtPin ledHwPin;
 static GpioNotTransformer ledInverter(&ledHwPin, &ledRawHwPin);
 #else
 static GpioPin &ledHwPin = ledRawHwPin;
@@ -55,7 +55,7 @@ class MonitoredLedPin : public GpioPin
     }
 } monitoredLedPin;
 #else
-static static GpioPin &monitoredLedPin = ledHwPin;
+static GpioPin &monitoredLedPin = ledHwPin;
 #endif
 
 static GpioBinaryTransformer ledForcer(&ledForceOn, &ledBlink, &monitoredLedPin, GpioBinaryTransformer::Or);

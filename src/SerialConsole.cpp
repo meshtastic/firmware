@@ -96,7 +96,7 @@ bool SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
 
 void SerialConsole::log_to_serial(const char *logLevel, const char *format, va_list arg)
 {
-    if (usingProtobufs) {
+    if (usingProtobufs && config.device.debug_log_enabled) {
         meshtastic_LogRecord_Level ll = meshtastic_LogRecord_Level_UNSET; // default to unset
         switch (logLevel[0]) {
         case 'D':

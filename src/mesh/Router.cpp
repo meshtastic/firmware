@@ -11,6 +11,13 @@
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
+#include "Default.h"
+#if ARCH_PORTDUINO
+#include "platform/portduino/PortduinoGlue.h"
+#endif
+#if ENABLE_JSON_LOGGING || ARCH_PORTDUINO
+#include "serialization/MeshPacketSerializer.h"
+#endif
 /**
  * Router todo
  *
@@ -119,7 +126,7 @@ meshtastic_MeshPacket *Router::allocForSending()
     p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // Assume payload is decoded at start.
     p->from = nodeDB->getNodeNum();
     p->to = NODENUM_BROADCAST;
-    p->hop_limit = (config.lora.hop_limit >= HOP_MAX) ? HOP_MAX : config.lora.hop_limit;
+    p->hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
     p->id = generatePacketId();
     p->rx_time =
         getValidTime(RTCQualityFromNet); // Just in case we process the packet locally - make sure it has a valid timestamp
@@ -356,6 +363,13 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
                 } */
 
                 printPacket("decoded message", p);
+#if ENABLE_JSON_LOGGING
+                LOG_TRACE("%s\n", MeshPacketSerializer::JsonSerialize(p, false).c_str());
+#elif ARCH_PORTDUINO
+                if (settingsStrings[traceFilename] != "" || settingsMap[logoutputlevel] == level_trace) {
+                    LOG_TRACE("%s\n", MeshPacketSerializer::JsonSerialize(p, false).c_str());
+                }
+#endif
                 return true;
             }
         }
@@ -491,6 +505,17 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 {
+#if ENABLE_JSON_LOGGING
+    // Even ignored packets get logged in the trace
+    p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
+    LOG_TRACE("%s\n", MeshPacketSerializer::JsonSerializeEncrypted(p).c_str());
+#elif ARCH_PORTDUINO
+    // Even ignored packets get logged in the trace
+    if (settingsStrings[traceFilename] != "" || settingsMap[logoutputlevel] == level_trace) {
+        p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
+        LOG_TRACE("%s\n", MeshPacketSerializer::JsonSerializeEncrypted(p).c_str());
+    }
+#endif
     // assert(radioConfig.has_preferences);
     bool ignore = is_in_repeated(config.lora.ignore_incoming, p->from) || (config.lora.ignore_mqtt && p->via_mqtt);
 

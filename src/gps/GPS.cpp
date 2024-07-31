@@ -400,6 +400,13 @@ bool GPS::setup()
     int msglen = 0;
 
     if (!didSerialInit) {
+#ifdef GNSS_AIROHA
+        if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
+            probe(GPS_BAUDRATE);
+            LOG_INFO("GPS setting to %d.\n", GPS_BAUDRATE);
+        }
+#else
+#if !defined(GPS_UC6580)
 
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
 
@@ -423,6 +430,9 @@ bool GPS::setup()
         } else {
             gnssModel = GNSS_MODEL_UNKNOWN;
         }
+#else
+        gnssModel = GNSS_MODEL_UC6580;
+#endif
 
         if (gnssModel == GNSS_MODEL_MTK) {
             /*
@@ -774,6 +784,7 @@ bool GPS::setup()
                 LOG_INFO("GNSS module configuration saved!\n");
             }
         }
+#endif
         didSerialInit = true;
     }
 
@@ -787,7 +798,6 @@ GPS::~GPS()
     // we really should unregister our sleep observer
     notifyDeepSleepObserver.unobserve(&notifyDeepSleep);
 }
-
 // Put the GPS hardware into a specified state
 void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
 {
@@ -824,6 +834,11 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         setPowerPMU(false);                                         // Power (PMU): off
         writePinStandby(true);                                      // Standby (pin): asleep (not awake)
         setPowerUBLOX(false, sleepTime);                            // Standby (UBLOX): asleep, timed
+#ifdef GNSS_AIROHA
+        if (config.position.gps_update_interval * 1000 >= GPS_FIX_HOLD_TIME * 2) {
+            digitalWrite(PIN_GPS_EN, LOW);
+        }
+#endif
         break;
 
     case GPS_OFF:
@@ -833,6 +848,11 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
         setPowerPMU(false);                                         // Power (PMU): off
         writePinStandby(true);                                      // Standby (pin): asleep
         setPowerUBLOX(false, 0);                                    // Standby (UBLOX): asleep, indefinitely
+#ifdef GNSS_AIROHA
+        if (config.position.gps_update_interval * 1000 >= GPS_FIX_HOLD_TIME * 2) {
+            digitalWrite(PIN_GPS_EN, LOW);
+        }
+#endif
         break;
     }
 }
@@ -1162,7 +1182,7 @@ int GPS::prepareDeepSleep(void *unused)
 
 GnssModel_t GPS::probe(int serialSpeed)
 {
-#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_RP2040)
+#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)
     _serial_gps->end();
     _serial_gps->begin(serialSpeed);
 #else
@@ -1171,7 +1191,8 @@ GnssModel_t GPS::probe(int serialSpeed)
         _serial_gps->updateBaudRate(serialSpeed);
     }
 #endif
-#ifdef GNSS_Airoha // add by WayenWeng
+#ifdef GNSS_AIROHA
+
     return GNSS_MODEL_UNKNOWN;
 #else
 #ifdef GPS_DEBUG
@@ -1196,11 +1217,20 @@ GnssModel_t GPS::probe(int serialSpeed)
         return GNSS_MODEL_UC6580;
     }
 
-    // Get version information
+    // Get version information for ATGM336H
     clearBuffer();
     _serial_gps->write("$PCAS06,1*1A\r\n");
     if (getACK("$GPTXT,01,01,02,HW=ATGM336H", 500) == GNSS_RESPONSE_OK) {
         LOG_INFO("ATGM336H GNSS init succeeded, using ATGM336H Module\n");
+        return GNSS_MODEL_ATGM336H;
+    }
+
+    /* ATGM332D series (-11(GPS), -21(BDS), -31(GPS+BDS), -51(GPS+GLONASS), -71-0(GPS+BDS+GLONASS))
+    based on AT6558 */
+    clearBuffer();
+    _serial_gps->write("$PCAS06,1*1A\r\n");
+    if (getACK("$GPTXT,01,01,02,HW=ATGM332D", 500) == GNSS_RESPONSE_OK) {
+        LOG_INFO("ATGM332D detected, using ATGM336H Module\n");
         return GNSS_MODEL_ATGM336H;
     }
 
@@ -1249,7 +1279,7 @@ GnssModel_t GPS::probe(int serialSpeed)
         _serial_gps->write(_message_prt, sizeof(_message_prt));
         delay(500);
         serialSpeed = 9600;
-#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_RP2040)
+#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)
         _serial_gps->end();
         _serial_gps->begin(serialSpeed);
 #else
@@ -1484,11 +1514,25 @@ bool GPS::factoryReset()
  */
 bool GPS::lookForTime()
 {
-#ifdef GNSS_Airoha // add by WayenWeng
+
+#ifdef GNSS_AIROHA
     uint8_t fix = reader.fixQuality();
     uint32_t now = millis();
+    if (fix > 0) {
+        if (lastFixStartMsec > 0) {
+            if ((now - lastFixStartMsec) < GPS_FIX_HOLD_TIME) {
+                return false;
+            } else {
+                clearBuffer();
+            }
+        } else {
+            lastFixStartMsec = now;
+            return false;
+        }
+    } else {
+        return false;
+    }
 #endif
-
     auto ti = reader.time;
     auto d = reader.date;
     if (ti.isValid() && d.isValid()) { // Note: we don't check for updated, because we'll only be called if needed
@@ -1523,13 +1567,26 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
  */
 bool GPS::lookForLocation()
 {
-#ifdef GNSS_Airoha // add by WayenWeng
+#ifdef GNSS_AIROHA
     if ((config.position.gps_update_interval * 1000) >= (GPS_FIX_HOLD_TIME * 2)) {
         uint8_t fix = reader.fixQuality();
         uint32_t now = millis();
+        if (fix > 0) {
+            if (lastFixStartMsec > 0) {
+                if ((now - lastFixStartMsec) < GPS_FIX_HOLD_TIME) {
+                    return false;
+                } else {
+                    clearBuffer();
+                }
+            } else {
+                lastFixStartMsec = now;
+                return false;
+            }
+        } else {
+            return false;
+        }
     }
 #endif
-
     // By default, TinyGPS++ does not parse GPGSA lines, which give us
     //   the 2D/3D fixType (see NMEAGPS.h)
     // At a minimum, use the fixQuality indicator in GPGGA (FIXME?)
@@ -1739,6 +1796,12 @@ void GPS::toggleGpsMode()
     if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) {
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_DISABLED;
         LOG_INFO("User toggled GpsMode. Now DISABLED.\n");
+#ifdef GNSS_AIROHA
+        if (powerState == GPS_ACTIVE) {
+            LOG_DEBUG("User power Off GPS\n");
+            digitalWrite(PIN_GPS_EN, LOW);
+        }
+#endif
         disable();
     } else if (config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_DISABLED) {
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
