@@ -18,6 +18,7 @@
 #if ENABLE_JSON_LOGGING || ARCH_PORTDUINO
 #include "serialization/MeshPacketSerializer.h"
 #endif
+#include "../userPrefs.h"
 /**
  * Router todo
  *
