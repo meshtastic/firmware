@@ -117,6 +117,8 @@ class GeoCoord
     static float bearing(double lat1, double lon1, double lat2, double lon2);
     static float rangeRadiansToMeters(double range_radians);
     static float rangeMetersToRadians(double range_meters);
+    static unsigned int bearingToDegrees(const char *bearing);
+    static const char *degreesToBearing(unsigned int degrees);
 
     // Point to point conversions
     int32_t distanceTo(const GeoCoord &pointB);

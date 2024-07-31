@@ -486,3 +486,91 @@ std::shared_ptr<GeoCoord> GeoCoord::pointAtDistance(double bearing, double range
 
     return std::make_shared<GeoCoord>(double(lat), double(lon), this->getAltitude());
 }
+
+/**
+ * Convert bearing to degrees
+ * @param bearing
+ * The bearing in string format
+ * @return Bearing in degrees
+ */
+unsigned int GeoCoord::bearingToDegrees(const char *bearing)
+{
+    if (strcmp(bearing, "N") == 0)
+        return 0;
+    else if (strcmp(bearing, "NNE") == 0)
+        return 22;
+    else if (strcmp(bearing, "NE") == 0)
+        return 45;
+    else if (strcmp(bearing, "ENE") == 0)
+        return 67;
+    else if (strcmp(bearing, "E") == 0)
+        return 90;
+    else if (strcmp(bearing, "ESE") == 0)
+        return 112;
+    else if (strcmp(bearing, "SE") == 0)
+        return 135;
+    else if (strcmp(bearing, "SSE") == 0)
+        return 157;
+    else if (strcmp(bearing, "S") == 0)
+        return 180;
+    else if (strcmp(bearing, "SSW") == 0)
+        return 202;
+    else if (strcmp(bearing, "SW") == 0)
+        return 225;
+    else if (strcmp(bearing, "WSW") == 0)
+        return 247;
+    else if (strcmp(bearing, "W") == 0)
+        return 270;
+    else if (strcmp(bearing, "WNW") == 0)
+        return 292;
+    else if (strcmp(bearing, "NW") == 0)
+        return 315;
+    else if (strcmp(bearing, "NNW") == 0)
+        return 337;
+    else
+        return 0;
+}
+
+/**
+ * Convert bearing to string
+ * @param degrees
+ * The bearing in degrees
+ * @return Bearing in string format
+ */
+const char *GeoCoord::degreesToBearing(unsigned int degrees)
+{
+    if (degrees >= 348 || degrees < 11)
+        return "N";
+    else if (degrees >= 11 && degrees < 34)
+        return "NNE";
+    else if (degrees >= 34 && degrees < 56)
+        return "NE";
+    else if (degrees >= 56 && degrees < 79)
+        return "ENE";
+    else if (degrees >= 79 && degrees < 101)
+        return "E";
+    else if (degrees >= 101 && degrees < 124)
+        return "ESE";
+    else if (degrees >= 124 && degrees < 146)
+        return "SE";
+    else if (degrees >= 146 && degrees < 169)
+        return "SSE";
+    else if (degrees >= 169 && degrees < 191)
+        return "S";
+    else if (degrees >= 191 && degrees < 214)
+        return "SSW";
+    else if (degrees >= 214 && degrees < 236)
+        return "SW";
+    else if (degrees >= 236 && degrees < 259)
+        return "WSW";
+    else if (degrees >= 259 && degrees < 281)
+        return "W";
+    else if (degrees >= 281 && degrees < 304)
+        return "WNW";
+    else if (degrees >= 304 && degrees < 326)
+        return "NW";
+    else if (degrees >= 326 && degrees < 348)
+        return "NNW";
+    else
+        return "N";
+}

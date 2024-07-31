@@ -24,6 +24,30 @@ SPIClass SPI1(HSPI);
 
 #endif // HAS_SDCARD
 
+#if defined(ARCH_STM32WL)
+
+uint16_t OSFS::startOfEEPROM = 1;
+uint16_t OSFS::endOfEEPROM = 2048;
+
+// 3) How do I read from the medium?
+void OSFS::readNBytes(uint16_t address, unsigned int num, byte *output)
+{
+    for (uint16_t i = address; i < address + num; i++) {
+        *output = EEPROM.read(i);
+        output++;
+    }
+}
+
+// 4) How to I write to the medium?
+void OSFS::writeNBytes(uint16_t address, unsigned int num, const byte *input)
+{
+    for (uint16_t i = address; i < address + num; i++) {
+        EEPROM.update(i, *input);
+        input++;
+    }
+}
+#endif
+
 /**
  * @brief Copies a file from one location to another.
  *
@@ -33,7 +57,33 @@ SPIClass SPI1(HSPI);
  */
 bool copyFile(const char *from, const char *to)
 {
-#ifdef FSCom
+#ifdef ARCH_STM32WL
+    unsigned char cbuffer[2048];
+
+    // Var to hold the result of actions
+    OSFS::result r;
+
+    r = OSFS::getFile(from, cbuffer);
+
+    if (r == notfound) {
+        LOG_ERROR("Failed to open source file %s\n", from);
+        return false;
+    } else if (r == noerr) {
+        r = OSFS::newFile(to, cbuffer, true);
+        if (r == noerr) {
+            return true;
+        } else {
+            LOG_ERROR("OSFS Error %d\n", r);
+            return false;
+        }
+
+    } else {
+        LOG_ERROR("OSFS Error %d\n", r);
+        return false;
+    }
+    return true;
+
+#elif defined(FSCom)
     unsigned char cbuffer[16];
 
     File f1 = FSCom.open(from, FILE_O_READ);
@@ -70,7 +120,13 @@ bool copyFile(const char *from, const char *to)
  */
 bool renameFile(const char *pathFrom, const char *pathTo)
 {
-#ifdef FSCom
+#ifdef ARCH_STM32WL
+    if (copyFile(pathFrom, pathTo) && (OSFS::deleteFile(pathFrom) == OSFS::result::NO_ERROR)) {
+        return true;
+    } else {
+        return false;
+    }
+#elif defined(FSCom)
 #ifdef ARCH_ESP32
     // rename was fixed for ESP32 IDF LittleFS in April
     return FSCom.rename(pathFrom, pathTo);
@@ -82,6 +138,58 @@ bool renameFile(const char *pathFrom, const char *pathTo)
     }
 #endif
 #endif
+}
+
+#include <vector>
+
+/**
+ * @brief Get the list of files in a directory.
+ *
+ * This function returns a list of files in a directory. The list includes the full path of each file.
+ *
+ * @param dirname The name of the directory.
+ * @param levels The number of levels of subdirectories to list.
+ * @return A vector of strings containing the full path of each file in the directory.
+ */
+std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels)
+{
+    std::vector<meshtastic_FileInfo> filenames = {};
+#ifdef FSCom
+    File root = FSCom.open(dirname, FILE_O_READ);
+    if (!root)
+        return filenames;
+    if (!root.isDirectory())
+        return filenames;
+
+    File file = root.openNextFile();
+    while (file) {
+        if (file.isDirectory() && !String(file.name()).endsWith(".")) {
+            if (levels) {
+#ifdef ARCH_ESP32
+                std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(file.path(), levels - 1);
+#else
+                std::vector<meshtastic_FileInfo> subDirFilenames = getFiles(file.name(), levels - 1);
+#endif
+                filenames.insert(filenames.end(), subDirFilenames.begin(), subDirFilenames.end());
+                file.close();
+            }
+        } else {
+            meshtastic_FileInfo fileInfo = {"", file.size()};
+#ifdef ARCH_ESP32
+            strcpy(fileInfo.file_name, file.path());
+#else
+            strcpy(fileInfo.file_name, file.name());
+#endif
+            if (!String(fileInfo.file_name).endsWith(".")) {
+                filenames.push_back(fileInfo);
+            }
+            file.close();
+        }
+        file = root.openNextFile();
+    }
+    root.close();
+#endif
+    return filenames;
 }
 
 /**

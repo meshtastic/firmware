@@ -1,5 +1,5 @@
 #include "configuration.h"
-#if !MESHTASTIC_EXCLUDE_WIFI
+#if HAS_WIFI
 #include "NodeDB.h"
 #include "RTC.h"
 #include "concurrency/Periodic.h"
@@ -108,8 +108,10 @@ static void onNetworkConnected()
     }
 
     // FIXME this is kinda yucky, instead we should just have an observable for 'wifireconnected'
+#ifndef MESHTASTIC_EXCLUDE_MQTT
     if (mqtt)
         mqtt->reconnect();
+#endif
 }
 
 static int32_t reconnectWiFi()

@@ -42,6 +42,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_NRF52840DK
 #elif defined(ARDUINO_NRF52840_PPR)
 #define HW_VENDOR meshtastic_HardwareModel_PPR
+#elif defined(RAK2560)
+#define HW_VENDOR meshtastic_HardwareModel_RAK2560
 #elif defined(RAK4630)
 #define HW_VENDOR meshtastic_HardwareModel_RAK4631
 #elif defined(TTGO_T_ECHO)
@@ -56,6 +58,10 @@
 #define HW_VENDOR meshtastic_HardwareModel_TWC_MESH_V4
 #elif defined(NRF52_PROMICRO_DIY)
 #define HW_VENDOR meshtastic_HardwareModel_NRF52_PROMICRO_DIY
+#elif defined(WIO_WM1110)
+#define HW_VENDOR meshtastic_HardwareModel_WIO_WM1110
+#elif defined(TRACKER_T1000_E)
+#define HW_VENDOR meshtastic_HardwareModel_TRACKER_T1000_E
 #elif defined(PRIVATE_HW) || defined(FEATHER_DIY)
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #else
@@ -80,10 +86,6 @@
 #undef LED_INVERTED
 #define LED_INVERTED 1
 
-#endif
-
-#ifndef TTGO_T_ECHO
-#define GPS_UBLOX
 #endif
 
 #define LED_PIN PIN_LED1 // LED1 on nrf52840-DK

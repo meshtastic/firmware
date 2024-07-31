@@ -81,9 +81,8 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
         }
 
         switch (p->decoded.portnum) {
-        case meshtastic_PortNum_TEXT_MESSAGE_APP:
         case meshtastic_PortNum_ROUTING_APP:
-            return true;
+            return waitingForAck;
         default:
             return false;
         }
@@ -98,7 +97,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     int getNextIndex();
     int getPrevIndex();
 
-#ifdef T_WATCH_S3
+#if defined(T_WATCH_S3) || defined(RAK14014)
     void drawKeyboard(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     String keyForCoordinates(uint x, uint y);
     bool shift = false;
@@ -140,7 +139,8 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     uint8_t numChannels = 0;
     ChannelIndex indexChannels[MAX_NUM_CHANNELS] = {0};
     NodeNum incoming = NODENUM_BROADCAST;
-    bool ack = false; // True means ACK, false means NAK (error_reason != NONE)
+    bool ack = false;           // True means ACK, false means NAK (error_reason != NONE)
+    bool waitingForAck = false; // Are currently interested in routing packets?
     float lastRxSnr = 0;
     int32_t lastRxRssi = 0;
 
@@ -150,7 +150,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     unsigned long lastTouchMillis = 0;
     String temporaryMessage;
 
-#ifdef T_WATCH_S3
+#if defined(T_WATCH_S3) || defined(RAK14014)
     Letter keyboard[2][4][10] = {{{{"Q", 20, 0, 0, 0, 0},
                                    {"W", 22, 0, 0, 0, 0},
                                    {"E", 17, 0, 0, 0, 0},

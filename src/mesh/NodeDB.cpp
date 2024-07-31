@@ -1,3 +1,4 @@
+#include "../userPrefs.h"
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
@@ -32,7 +33,7 @@
 #include <vector>
 
 #ifdef ARCH_ESP32
-#if !MESHTASTIC_EXCLUDE_WIFI
+#if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 #include "modules/esp32/StoreForwardModule.h"
@@ -198,11 +199,6 @@ NodeDB::NodeDB()
     if (channelFileCRC != crc32Buffer(&channelFile, sizeof(channelFile)))
         saveWhat |= SEGMENT_CHANNELS;
 
-    if (!devicestate.node_remote_hardware_pins) {
-        meshtastic_NodeRemoteHardwarePin empty[12] = {meshtastic_RemoteHardwarePin_init_default};
-        memcpy(devicestate.node_remote_hardware_pins, empty, sizeof(empty));
-    }
-
     if (config.position.gps_enabled) {
         config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_ENABLED;
         config.position.gps_enabled = 0;
@@ -249,7 +245,7 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
 
     if (didFactoryReset) {
         LOG_INFO("Rebooting due to factory reset");
-        screen->startRebootScreen();
+        screen->startAlert("Rebooting...");
         rebootAtMsec = millis() + (5 * 1000);
     }
 
@@ -263,10 +259,12 @@ bool NodeDB::factoryReset()
     rmDir("/msgs");
     // Remove the "/prefs" (this removes most prefs)
     rmDir("/prefs");
+#ifdef FSCom
     if (FSCom.exists("/static/rangetest.csv") && !FSCom.remove("/static/rangetest.csv")) {
         LOG_ERROR("Could not remove rangetest.csv file\n");
     }
-    // Install default state (this will deal with the duplicate mac address issue)
+#endif
+    // second, install default state (this will deal with the duplicate mac address issue)
     installDefaultDeviceState();
     installDefaultConfig();
     installDefaultModuleConfig();
@@ -306,10 +304,22 @@ void NodeDB::installDefaultConfig()
     config.lora.tx_enabled =
         true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
     config.lora.override_duty_cycle = false;
+#ifdef CONFIG_LORA_REGION_USERPREFS
+    config.lora.region = CONFIG_LORA_REGION_USERPREFS;
+#else
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
+#endif
+#ifdef LORACONFIG_MODEM_PRESET_USERPREFS
+    config.lora.modem_preset = LORACONFIG_MODEM_PRESET_USERPREFS;
+#else
     config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+#endif
     config.lora.hop_limit = HOP_RELIABLE;
+#ifdef CONFIG_LORA_IGNORE_MQTT_USERPREFS
+    config.lora.ignore_mqtt = CONFIG_LORA_IGNORE_MQTT_USERPREFS;
+#else
     config.lora.ignore_mqtt = false;
+#endif
 #ifdef PIN_GPS_EN
     config.position.gps_en_gpio = PIN_GPS_EN;
 #endif
@@ -339,7 +349,8 @@ void NodeDB::installDefaultConfig()
     // FIXME: Default to bluetooth capability of platform as default
     config.bluetooth.enabled = true;
     config.bluetooth.fixed_pin = defaultBLEPin;
-#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(HX8357_CS)
+#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(HX8357_CS) ||            \
+    defined(USE_ST7789)
     bool hasScreen = true;
 #elif ARCH_PORTDUINO
     bool hasScreen = false;
@@ -358,6 +369,9 @@ void NodeDB::installDefaultConfig()
          meshtastic_Config_PositionConfig_PositionFlags_SPEED | meshtastic_Config_PositionConfig_PositionFlags_HEADING |
          meshtastic_Config_PositionConfig_PositionFlags_DOP | meshtastic_Config_PositionConfig_PositionFlags_SATINVIEW);
 
+#ifdef RADIOMASTER_900_BANDIT_NANO
+    config.display.flip_screen = true;
+#endif
 #ifdef T_WATCH_S3
     config.display.screen_on_secs = 30;
     config.display.wake_on_tap_or_motion = true;
@@ -492,10 +506,13 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
 
 void NodeDB::initModuleConfigIntervals()
 {
-    moduleConfig.telemetry.device_update_interval = default_broadcast_interval_secs;
-    moduleConfig.telemetry.environment_update_interval = default_broadcast_interval_secs;
-    moduleConfig.telemetry.air_quality_interval = default_broadcast_interval_secs;
-    moduleConfig.neighbor_info.update_interval = default_broadcast_interval_secs;
+    // Zero out telemetry intervals so that they coalesce to defaults in Default.h
+    moduleConfig.telemetry.device_update_interval = 0;
+    moduleConfig.telemetry.environment_update_interval = 0;
+    moduleConfig.telemetry.air_quality_interval = 0;
+    moduleConfig.telemetry.power_update_interval = 0;
+    moduleConfig.neighbor_info.update_interval = 0;
+    moduleConfig.paxcounter.paxcounter_update_interval = 0;
 }
 
 void NodeDB::installDefaultChannels()
@@ -507,9 +524,9 @@ void NodeDB::installDefaultChannels()
 
 void NodeDB::resetNodes()
 {
+    clearLocalPosition();
     numMeshNodes = 1;
     std::fill(devicestate.node_db_lite.begin() + 1, devicestate.node_db_lite.end(), meshtastic_NodeInfoLite());
-    clearLocalPosition();
     saveDeviceStateToDisk();
     if (neighborInfoModule && moduleConfig.neighbor_info.enabled)
         neighborInfoModule->resetNeighbors();
@@ -638,7 +655,7 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
             state = LoadFileResult::DECODE_FAILED;
         } else {
             LOG_INFO("Loaded %s successfully\n", filename);
-            state = LoadFileResult::SUCCESS;
+            state = LoadFileResult::LOAD_SUCCESS;
         }
         f.close();
     } else {
@@ -646,7 +663,7 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
     }
 #else
     LOG_ERROR("ERROR: Filesystem not implemented\n");
-    state = LoadFileState::NO_FILESYSTEM;
+    state = LoadFileResult::NO_FILESYSTEM;
 #endif
     return state;
 }
@@ -657,7 +674,7 @@ void NodeDB::loadFromDisk()
     auto state = loadProto(prefFileName, sizeof(meshtastic_DeviceState) + MAX_NUM_NODES * sizeof(meshtastic_NodeInfo),
                            sizeof(meshtastic_DeviceState), &meshtastic_DeviceState_msg, &devicestate);
 
-    if (state != LoadFileResult::SUCCESS) {
+    if (state != LoadFileResult::LOAD_SUCCESS) {
         installDefaultDeviceState(); // Our in RAM copy might now be corrupt
     } else {
         if (devicestate.version < DEVICESTATE_MIN_VER) {
@@ -674,7 +691,7 @@ void NodeDB::loadFromDisk()
 
     state = loadProto(configFileName, meshtastic_LocalConfig_size, sizeof(meshtastic_LocalConfig), &meshtastic_LocalConfig_msg,
                       &config);
-    if (state != LoadFileResult::SUCCESS) {
+    if (state != LoadFileResult::LOAD_SUCCESS) {
         installDefaultConfig(); // Our in RAM copy might now be corrupt
     } else {
         if (config.version < DEVICESTATE_MIN_VER) {
@@ -687,7 +704,7 @@ void NodeDB::loadFromDisk()
 
     state = loadProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, sizeof(meshtastic_LocalModuleConfig),
                       &meshtastic_LocalModuleConfig_msg, &moduleConfig);
-    if (state != LoadFileResult::SUCCESS) {
+    if (state != LoadFileResult::LOAD_SUCCESS) {
         installDefaultModuleConfig(); // Our in RAM copy might now be corrupt
     } else {
         if (moduleConfig.version < DEVICESTATE_MIN_VER) {
@@ -700,7 +717,7 @@ void NodeDB::loadFromDisk()
 
     state = loadProto(channelFileName, meshtastic_ChannelFile_size, sizeof(meshtastic_ChannelFile), &meshtastic_ChannelFile_msg,
                       &channelFile);
-    if (state != LoadFileResult::SUCCESS) {
+    if (state != LoadFileResult::LOAD_SUCCESS) {
         installDefaultChannels(); // Our in RAM copy might now be corrupt
     } else {
         if (channelFile.version < DEVICESTATE_MIN_VER) {
@@ -712,8 +729,28 @@ void NodeDB::loadFromDisk()
     }
 
     state = loadProto(oemConfigFile, meshtastic_OEMStore_size, sizeof(meshtastic_OEMStore), &meshtastic_OEMStore_msg, &oemStore);
-    if (state == LoadFileResult::SUCCESS) {
+    if (state == LoadFileResult::LOAD_SUCCESS) {
         LOG_INFO("Loaded OEMStore\n");
+    }
+
+    // 2.4.X - configuration migration to update new default intervals
+    if (moduleConfig.version < 23) {
+        LOG_DEBUG("ModuleConfig version %d is stale, upgrading to new default intervals\n", moduleConfig.version);
+        moduleConfig.version = DEVICESTATE_CUR_VER;
+        if (moduleConfig.telemetry.device_update_interval == 900)
+            moduleConfig.telemetry.device_update_interval = 0;
+        if (moduleConfig.telemetry.environment_update_interval == 900)
+            moduleConfig.telemetry.environment_update_interval = 0;
+        if (moduleConfig.telemetry.air_quality_interval == 900)
+            moduleConfig.telemetry.air_quality_interval = 0;
+        if (moduleConfig.telemetry.power_update_interval == 900)
+            moduleConfig.telemetry.power_update_interval = 0;
+        if (moduleConfig.neighbor_info.update_interval == 900)
+            moduleConfig.neighbor_info.update_interval = 0;
+        if (moduleConfig.paxcounter.paxcounter_update_interval == 900)
+            moduleConfig.paxcounter.paxcounter_update_interval = 0;
+
+        saveToDisk(SEGMENT_MODULECONFIG);
     }
 }
 
@@ -1067,8 +1104,8 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
 
     if (src == RX_SRC_LOCAL) {
         // Local packet, fully authoritative
-        LOG_INFO("updatePosition LOCAL pos@%x, time=%u, latI=%d, lonI=%d, alt=%d\n", p.timestamp, p.time, p.latitude_i,
-                 p.longitude_i, p.altitude);
+        LOG_INFO("updatePosition LOCAL pos@%x time=%u lat=%d lon=%d alt=%d\n", p.timestamp, p.time, p.latitude_i, p.longitude_i,
+                 p.altitude);
 
         setLocalPosition(p);
         info->position = TypeConversions::ConvertToPositionLite(p);
@@ -1083,7 +1120,7 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
         // recorded based on the packet rxTime
         //
         // FIXME perhaps handle RX_SRC_USER separately?
-        LOG_INFO("updatePosition REMOTE node=0x%x time=%u, latI=%d, lonI=%d\n", nodeId, p.time, p.latitude_i, p.longitude_i);
+        LOG_INFO("updatePosition REMOTE node=0x%x time=%u lat=%d lon=%d\n", nodeId, p.time, p.latitude_i, p.longitude_i);
 
         // First, back up fields that we want to protect from overwrite
         uint32_t tmp_time = info->position.time;

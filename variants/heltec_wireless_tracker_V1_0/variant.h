@@ -34,7 +34,7 @@
 #define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define ADC_CHANNEL ADC1_GPIO1_CHANNEL
 #define ADC_ATTENUATION ADC_ATTEN_DB_2_5 // lower dB for high resistance voltage divider
-#define ADC_MULTIPLIER 4.9
+#define ADC_MULTIPLIER 4.9 * 1.045
 
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
@@ -49,6 +49,7 @@
 
 #define GPS_RESET_MODE LOW
 #define GPS_UC6580
+#define GPS_BAUDRATE 115200
 
 #define USE_SX1262
 #define LORA_DIO0 -1 // a No connect on the SX1262 module

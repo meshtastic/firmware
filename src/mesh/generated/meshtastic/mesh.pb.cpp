@@ -36,13 +36,16 @@ PB_BIND(meshtastic_NodeInfo, meshtastic_NodeInfo, AUTO)
 PB_BIND(meshtastic_MyNodeInfo, meshtastic_MyNodeInfo, AUTO)
 
 
-PB_BIND(meshtastic_LogRecord, meshtastic_LogRecord, AUTO)
+PB_BIND(meshtastic_LogRecord, meshtastic_LogRecord, 2)
 
 
 PB_BIND(meshtastic_QueueStatus, meshtastic_QueueStatus, AUTO)
 
 
 PB_BIND(meshtastic_FromRadio, meshtastic_FromRadio, 2)
+
+
+PB_BIND(meshtastic_FileInfo, meshtastic_FileInfo, AUTO)
 
 
 PB_BIND(meshtastic_ToRadio, meshtastic_ToRadio, 2)
@@ -64,6 +67,15 @@ PB_BIND(meshtastic_Heartbeat, meshtastic_Heartbeat, AUTO)
 
 
 PB_BIND(meshtastic_NodeRemoteHardwarePin, meshtastic_NodeRemoteHardwarePin, AUTO)
+
+
+PB_BIND(meshtastic_ChunkedPayload, meshtastic_ChunkedPayload, AUTO)
+
+
+PB_BIND(meshtastic_resend_chunks, meshtastic_resend_chunks, AUTO)
+
+
+PB_BIND(meshtastic_ChunkedPayloadResponse, meshtastic_ChunkedPayloadResponse, AUTO)
 
 
 

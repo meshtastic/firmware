@@ -8,7 +8,7 @@
 #include "nimble/NimbleBluetooth.h"
 #endif
 
-#if !MESHTASTIC_EXCLUDE_WIFI
+#if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 
@@ -24,7 +24,12 @@
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 void setBluetoothEnable(bool enable)
 {
-    if (!isWifiAvailable() && config.bluetooth.enabled == true) {
+#if HAS_WIFI
+    if (!isWifiAvailable() && config.bluetooth.enabled == true)
+#else
+    if (config.bluetooth.enabled == true)
+#endif
+    {
         if (!nimbleBluetooth) {
             nimbleBluetooth = new NimbleBluetooth();
         }
@@ -86,8 +91,12 @@ void enableSlowCLK()
 
 void esp32Setup()
 {
+    /* We explicitly don't want to do call randomSeed,
+    // as that triggers the esp32 core to use a less secure pseudorandom function.
     uint32_t seed = esp_random();
     LOG_DEBUG("Setting random seed %u\n", seed);
+    randomSeed(seed);
+    */
 
     LOG_DEBUG("Total heap: %d\n", ESP.getHeapSize());
     LOG_DEBUG("Free heap: %d\n", ESP.getFreeHeap());
@@ -214,8 +223,8 @@ void cpuDeepSleep(uint32_t msecToWake)
 #endif
 
     // Not needed because both of the current boards have external pullups
-    // FIXME change polarity in hw so we can wake on ANY_HIGH instead - that would allow us to use all three buttons (instead of
-    // just the first) gpio_pullup_en((gpio_num_t)BUTTON_PIN);
+    // FIXME change polarity in hw so we can wake on ANY_HIGH instead - that would allow us to use all three buttons (instead
+    // of just the first) gpio_pullup_en((gpio_num_t)BUTTON_PIN);
 
 #if SOC_PM_SUPPORT_EXT_WAKEUP
 #ifdef CONFIG_IDF_TARGET_ESP32

@@ -53,6 +53,9 @@ extern Adafruit_DRV2605 drv;
 extern AudioThread *audioThread;
 #endif
 
+// Global Screen singleton.
+extern graphics::Screen *screen;
+
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 #include "AccelerometerThread.h"
 extern AccelerometerThread *accelerometerThread;
@@ -61,9 +64,6 @@ extern AccelerometerThread *accelerometerThread;
 extern bool isVibrating;
 
 extern int TCPPort; // set by Portduino
-
-// Global Screen singleton.
-extern graphics::Screen *screen;
 
 // extern Observable<meshtastic::PowerStatus> newPowerStatus; //TODO: move this to main-esp32.cpp somehow or a helper class
 
@@ -84,6 +84,8 @@ extern uint32_t serialSinceMsec;
 // If a thread does something that might need for it to be rescheduled ASAP it can set this flag
 // This will suppress the current delay and instead try to run ASAP.
 extern bool runASAP;
+
+extern bool pauseBluetoothLogging;
 
 void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop(), rp2040Setup(), clearBonds(), enterDfuMode();
 

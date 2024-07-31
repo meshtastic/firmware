@@ -11,12 +11,12 @@
 #include "configuration.h"
 #include "gps/GeoCoord.h"
 #include "main.h"
+#include "mesh/compression/unishox2.h"
 #include "meshtastic/atak.pb.h"
 #include "sleep.h"
 #include "target_specific.h"
 
 extern "C" {
-#include "mesh/compression/unishox2.h"
 #include <Throttle.h>
 }
 
@@ -28,6 +28,8 @@ PositionModule::PositionModule()
 {
     precision = 0;        // safe starting value
     isPromiscuous = true; // We always want to update our nodedb, even if we are sniffing on others
+    nodeStatusObserver.observe(&nodeStatus->onNewStatus);
+
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER &&
         config.device.role != meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)
         setIntervalFromNow(60 * 1000);
@@ -73,7 +75,7 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     }
 
     // Log packet size and data fields
-    LOG_DEBUG("POSITION node=%08x l=%d latI=%d lonI=%d msl=%d hae=%d geo=%d pdop=%d hdop=%d vdop=%d siv=%d fxq=%d fxt=%d pts=%d "
+    LOG_DEBUG("POSITION node=%08x l=%d lat=%d lon=%d msl=%d hae=%d geo=%d pdop=%d hdop=%d vdop=%d siv=%d fxq=%d fxt=%d pts=%d "
               "time=%d\n",
               getFrom(&mp), mp.decoded.payload.size, p.latitude_i, p.longitude_i, p.altitude, p.altitude_hae,
               p.altitude_geoidal_separation, p.PDOP, p.HDOP, p.VDOP, p.sats_in_view, p.fix_quality, p.fix_type, p.timestamp,
@@ -209,17 +211,17 @@ meshtastic_MeshPacket *PositionModule::allocReply()
         p.ground_speed = localPosition.ground_speed;
 
     // Strip out any time information before sending packets to other nodes - to keep the wire size small (and because other
-    // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS to include the time, so that gpsless
-    // devices can get time.
-    if (getRTCQuality() < RTCQualityDevice) {
+    // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS or NTP to include the time, so that devices
+    // without can get time.
+    if (getRTCQuality() < RTCQualityNTP) {
         LOG_INFO("Stripping time %u from position send\n", p.time);
         p.time = 0;
     } else {
-        p.time = getValidTime(RTCQualityDevice);
+        p.time = getValidTime(RTCQualityNTP);
         LOG_INFO("Providing time to mesh %u\n", p.time);
     }
 
-    LOG_INFO("Position reply: time=%i, latI=%i, lonI=%i\n", p.time, p.latitude_i, p.longitude_i);
+    LOG_INFO("Position reply: time=%i lat=%i lon=%i\n", p.time, p.latitude_i, p.longitude_i);
 
     // TAK Tracker devices should send their position in a TAK packet over the ATAK port
     if (config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER)
@@ -253,10 +255,12 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
                                            .course = static_cast<uint16_t>(localPosition.ground_track),
                                        }}};
 
-    auto length = unishox2_compress_simple(owner.long_name, strlen(owner.long_name), takPacket.contact.device_callsign);
+    auto length = unishox2_compress_lines(owner.long_name, strlen(owner.long_name), takPacket.contact.device_callsign,
+                                          sizeof(takPacket.contact.device_callsign) - 1, USX_PSET_DFLT, NULL);
     LOG_DEBUG("Uncompressed device_callsign '%s' - %d bytes\n", owner.long_name, strlen(owner.long_name));
     LOG_DEBUG("Compressed device_callsign '%s' - %d bytes\n", takPacket.contact.device_callsign, length);
-    length = unishox2_compress_simple(owner.long_name, strlen(owner.long_name), takPacket.contact.callsign);
+    length = unishox2_compress_lines(owner.long_name, strlen(owner.long_name), takPacket.contact.callsign,
+                                     sizeof(takPacket.contact.callsign) - 1, USX_PSET_DFLT, NULL);
     mp->decoded.payload.size =
         pb_encode_to_bytes(mp->decoded.payload.bytes, sizeof(mp->decoded.payload.bytes), &meshtastic_TAKPacket_msg, &takPacket);
     return mp;
@@ -333,8 +337,8 @@ int32_t PositionModule::runOnce()
 
     // We limit our GPS broadcasts to a max rate
     uint32_t now = millis();
-    uint32_t intervalMs =
-        Default::getConfiguredOrDefaultMs(config.position.position_broadcast_secs, default_broadcast_interval_secs);
+    uint32_t intervalMs = Default::getConfiguredOrDefaultMsScaled(config.position.position_broadcast_secs,
+                                                                  default_broadcast_interval_secs, numOnlineNodes);
     uint32_t msSinceLastSend = now - lastGpsSend;
     // Only send packets if the channel util. is less than 25% utilized or we're a tracker with less than 40% utilized.
     if (!airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER &&

@@ -65,6 +65,12 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_LORA_TYPE = 19,
     /* wiphone https://www.wiphone.io/ */
     meshtastic_HardwareModel_WIPHONE = 20,
+    /* WIO Tracker WM1110 family from Seeed Studio. Includes wio-1110-tracker and wio-1110-sdk */
+    meshtastic_HardwareModel_WIO_WM1110 = 21,
+    /* RAK2560 Solar base station based on RAK4630 */
+    meshtastic_HardwareModel_RAK2560 = 22,
+    /* Heltec HRU-3601: https://heltec.org/project/hru-3601/ */
+    meshtastic_HardwareModel_HELTEC_HRU_3601 = 23,
     /* B&Q Consulting Station Edition G1: https://uniteng.com/wiki/doku.php?id=meshtastic:station */
     meshtastic_HardwareModel_STATION_G1 = 25,
     /* RAK11310 (RP2040 + SX1262) */
@@ -159,6 +165,21 @@ typedef enum _meshtastic_HardwareModel {
     /* RadioMaster 900 Bandit Nano, https://www.radiomasterrc.com/products/bandit-nano-expresslrs-rf-module
  ESP32-D0WDQ6 With SX1276/SKY66122, SSD1306 OLED and No GPS */
     meshtastic_HardwareModel_RADIOMASTER_900_BANDIT_NANO = 64,
+    /* Heltec Capsule Sensor V3 with ESP32-S3 CPU, Portable LoRa device that can replace GNSS modules or sensors */
+    meshtastic_HardwareModel_HELTEC_CAPSULE_SENSOR_V3 = 65,
+    /* Heltec Vision Master T190 with ESP32-S3 CPU, and a 1.90 inch TFT display */
+    meshtastic_HardwareModel_HELTEC_VISION_MASTER_T190 = 66,
+    /* Heltec Vision Master E213 with ESP32-S3 CPU, and a 2.13 inch E-Ink display */
+    meshtastic_HardwareModel_HELTEC_VISION_MASTER_E213 = 67,
+    /* Heltec Vision Master E290 with ESP32-S3 CPU, and a 2.9 inch E-Ink display */
+    meshtastic_HardwareModel_HELTEC_VISION_MASTER_E290 = 68,
+    /* Heltec Mesh Node T114 board with nRF52840 CPU, and a 1.14 inch TFT display, Ultimate low-power design,
+ specifically adapted for the Meshtatic project */
+    meshtastic_HardwareModel_HELTEC_MESH_NODE_T114 = 69,
+    /* Sensecap Indicator from Seeed Studio. ESP32-S3 device with TFT and RP2040 coprocessor */
+    meshtastic_HardwareModel_SENSECAP_INDICATOR = 70,
+    /* Seeed studio T1000-E tracker card. NRF52840 w/ LR1110 radio, GPS, button, buzzer, and sensors. */
+    meshtastic_HardwareModel_TRACKER_T1000_E = 71,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -683,11 +704,11 @@ typedef struct _meshtastic_MyNodeInfo {
  and then extend as needed by emitting multiple records. */
 typedef struct _meshtastic_LogRecord {
     /* Log levels, chosen to match python logging conventions. */
-    char message[64];
+    char message[384];
     /* Seconds since 1970 - or 0 for unknown/unset */
     uint32_t time;
     /* Usually based on thread name - if known */
-    char source[8];
+    char source[32];
     /* Not yet set */
     meshtastic_LogRecord_Level level;
 } meshtastic_LogRecord;
@@ -702,6 +723,14 @@ typedef struct _meshtastic_QueueStatus {
     /* What was mesh packet id that generated this response? */
     uint32_t mesh_packet_id;
 } meshtastic_QueueStatus;
+
+/* Individual File info for the device */
+typedef struct _meshtastic_FileInfo {
+    /* The fully qualified path of the file */
+    char file_name[228];
+    /* The size of the file in bytes */
+    uint32_t size_bytes;
+} meshtastic_FileInfo;
 
 typedef PB_BYTES_ARRAY_T(237) meshtastic_Compressed_data_t;
 /* Compressed message payload */
@@ -807,6 +836,8 @@ typedef struct _meshtastic_FromRadio {
         meshtastic_DeviceMetadata metadata;
         /* MQTT Client Proxy Message (device sending to client / phone for publishing to MQTT) */
         meshtastic_MqttClientProxyMessage mqttClientProxyMessage;
+        /* File system manifest messages */
+        meshtastic_FileInfo fileInfo;
     };
 } meshtastic_FromRadio;
 
@@ -852,6 +883,38 @@ typedef struct _meshtastic_NodeRemoteHardwarePin {
     bool has_pin;
     meshtastic_RemoteHardwarePin pin;
 } meshtastic_NodeRemoteHardwarePin;
+
+typedef PB_BYTES_ARRAY_T(228) meshtastic_ChunkedPayload_payload_chunk_t;
+typedef struct _meshtastic_ChunkedPayload {
+    /* The ID of the entire payload */
+    uint32_t payload_id;
+    /* The total number of chunks in the payload */
+    uint16_t chunk_count;
+    /* The current chunk index in the total */
+    uint16_t chunk_index;
+    /* The binary data of the current chunk */
+    meshtastic_ChunkedPayload_payload_chunk_t payload_chunk;
+} meshtastic_ChunkedPayload;
+
+/* Wrapper message for broken repeated oneof support */
+typedef struct _meshtastic_resend_chunks {
+    pb_callback_t chunks;
+} meshtastic_resend_chunks;
+
+/* Responses to a ChunkedPayload request */
+typedef struct _meshtastic_ChunkedPayloadResponse {
+    /* The ID of the entire payload */
+    uint32_t payload_id;
+    pb_size_t which_payload_variant;
+    union {
+        /* Request to transfer chunked payload */
+        bool request_transfer;
+        /* Accept the transfer chunked payload */
+        bool accept_transfer;
+        /* Request missing indexes in the chunked payload */
+        meshtastic_resend_chunks resend_chunks;
+    } payload_variant;
+} meshtastic_ChunkedPayloadResponse;
 
 
 #ifdef __cplusplus
@@ -918,12 +981,16 @@ extern "C" {
 
 
 
+
 #define meshtastic_Compressed_portnum_ENUMTYPE meshtastic_PortNum
 
 
 
 #define meshtastic_DeviceMetadata_role_ENUMTYPE meshtastic_Config_DeviceConfig_Role
 #define meshtastic_DeviceMetadata_hw_model_ENUMTYPE meshtastic_HardwareModel
+
+
+
 
 
 
@@ -942,6 +1009,7 @@ extern "C" {
 #define meshtastic_LogRecord_init_default        {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_default      {0, 0, 0, 0}
 #define meshtastic_FromRadio_init_default        {0, 0, {meshtastic_MeshPacket_init_default}}
+#define meshtastic_FileInfo_init_default         {"", 0}
 #define meshtastic_ToRadio_init_default          {0, {meshtastic_MeshPacket_init_default}}
 #define meshtastic_Compressed_init_default       {_meshtastic_PortNum_MIN, {0, {0}}}
 #define meshtastic_NeighborInfo_init_default     {0, 0, 0, 0, {meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default, meshtastic_Neighbor_init_default}}
@@ -949,6 +1017,9 @@ extern "C" {
 #define meshtastic_DeviceMetadata_init_default   {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0}
 #define meshtastic_Heartbeat_init_default        {0}
 #define meshtastic_NodeRemoteHardwarePin_init_default {0, false, meshtastic_RemoteHardwarePin_init_default}
+#define meshtastic_ChunkedPayload_init_default   {0, 0, 0, {0, {0}}}
+#define meshtastic_resend_chunks_init_default    {{{NULL}, NULL}}
+#define meshtastic_ChunkedPayloadResponse_init_default {0, 0, {0}}
 #define meshtastic_Position_init_zero            {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_User_init_zero                {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN}
 #define meshtastic_RouteDiscovery_init_zero      {0, {0, 0, 0, 0, 0, 0, 0, 0}}
@@ -962,6 +1033,7 @@ extern "C" {
 #define meshtastic_LogRecord_init_zero           {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_zero         {0, 0, 0, 0}
 #define meshtastic_FromRadio_init_zero           {0, 0, {meshtastic_MeshPacket_init_zero}}
+#define meshtastic_FileInfo_init_zero            {"", 0}
 #define meshtastic_ToRadio_init_zero             {0, {meshtastic_MeshPacket_init_zero}}
 #define meshtastic_Compressed_init_zero          {_meshtastic_PortNum_MIN, {0, {0}}}
 #define meshtastic_NeighborInfo_init_zero        {0, 0, 0, 0, {meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero, meshtastic_Neighbor_init_zero}}
@@ -969,6 +1041,9 @@ extern "C" {
 #define meshtastic_DeviceMetadata_init_zero      {"", 0, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_Role_MIN, 0, _meshtastic_HardwareModel_MIN, 0}
 #define meshtastic_Heartbeat_init_zero           {0}
 #define meshtastic_NodeRemoteHardwarePin_init_zero {0, false, meshtastic_RemoteHardwarePin_init_zero}
+#define meshtastic_ChunkedPayload_init_zero      {0, 0, 0, {0, {0}}}
+#define meshtastic_resend_chunks_init_zero       {{{NULL}, NULL}}
+#define meshtastic_ChunkedPayloadResponse_init_zero {0, 0, {0}}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_Position_latitude_i_tag       1
@@ -1061,6 +1136,8 @@ extern "C" {
 #define meshtastic_QueueStatus_free_tag          2
 #define meshtastic_QueueStatus_maxlen_tag        3
 #define meshtastic_QueueStatus_mesh_packet_id_tag 4
+#define meshtastic_FileInfo_file_name_tag        1
+#define meshtastic_FileInfo_size_bytes_tag       2
 #define meshtastic_Compressed_portnum_tag        1
 #define meshtastic_Compressed_data_tag           2
 #define meshtastic_Neighbor_node_id_tag          1
@@ -1095,6 +1172,7 @@ extern "C" {
 #define meshtastic_FromRadio_xmodemPacket_tag    12
 #define meshtastic_FromRadio_metadata_tag        13
 #define meshtastic_FromRadio_mqttClientProxyMessage_tag 14
+#define meshtastic_FromRadio_fileInfo_tag        15
 #define meshtastic_ToRadio_packet_tag            1
 #define meshtastic_ToRadio_want_config_id_tag    3
 #define meshtastic_ToRadio_disconnect_tag        4
@@ -1103,6 +1181,15 @@ extern "C" {
 #define meshtastic_ToRadio_heartbeat_tag         7
 #define meshtastic_NodeRemoteHardwarePin_node_num_tag 1
 #define meshtastic_NodeRemoteHardwarePin_pin_tag 2
+#define meshtastic_ChunkedPayload_payload_id_tag 1
+#define meshtastic_ChunkedPayload_chunk_count_tag 2
+#define meshtastic_ChunkedPayload_chunk_index_tag 3
+#define meshtastic_ChunkedPayload_payload_chunk_tag 4
+#define meshtastic_resend_chunks_chunks_tag      1
+#define meshtastic_ChunkedPayloadResponse_payload_id_tag 1
+#define meshtastic_ChunkedPayloadResponse_request_transfer_tag 2
+#define meshtastic_ChunkedPayloadResponse_accept_transfer_tag 3
+#define meshtastic_ChunkedPayloadResponse_resend_chunks_tag 4
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_Position_FIELDLIST(X, a) \
@@ -1263,7 +1350,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,channel,channel),  10) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,queueStatus,queueStatus),  11) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,xmodemPacket,xmodemPacket),  12) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,metadata,metadata),  13) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,mqttClientProxyMessage,mqttClientProxyMessage),  14)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,mqttClientProxyMessage,mqttClientProxyMessage),  14) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,fileInfo,fileInfo),  15)
 #define meshtastic_FromRadio_CALLBACK NULL
 #define meshtastic_FromRadio_DEFAULT NULL
 #define meshtastic_FromRadio_payload_variant_packet_MSGTYPE meshtastic_MeshPacket
@@ -1277,6 +1365,13 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,mqttClientProxyMessage,mqttC
 #define meshtastic_FromRadio_payload_variant_xmodemPacket_MSGTYPE meshtastic_XModem
 #define meshtastic_FromRadio_payload_variant_metadata_MSGTYPE meshtastic_DeviceMetadata
 #define meshtastic_FromRadio_payload_variant_mqttClientProxyMessage_MSGTYPE meshtastic_MqttClientProxyMessage
+#define meshtastic_FromRadio_payload_variant_fileInfo_MSGTYPE meshtastic_FileInfo
+
+#define meshtastic_FileInfo_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, STRING,   file_name,         1) \
+X(a, STATIC,   SINGULAR, UINT32,   size_bytes,        2)
+#define meshtastic_FileInfo_CALLBACK NULL
+#define meshtastic_FileInfo_DEFAULT NULL
 
 #define meshtastic_ToRadio_FIELDLIST(X, a) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,packet,packet),   1) \
@@ -1341,6 +1436,28 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  pin,               2)
 #define meshtastic_NodeRemoteHardwarePin_DEFAULT NULL
 #define meshtastic_NodeRemoteHardwarePin_pin_MSGTYPE meshtastic_RemoteHardwarePin
 
+#define meshtastic_ChunkedPayload_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   payload_id,        1) \
+X(a, STATIC,   SINGULAR, UINT32,   chunk_count,       2) \
+X(a, STATIC,   SINGULAR, UINT32,   chunk_index,       3) \
+X(a, STATIC,   SINGULAR, BYTES,    payload_chunk,     4)
+#define meshtastic_ChunkedPayload_CALLBACK NULL
+#define meshtastic_ChunkedPayload_DEFAULT NULL
+
+#define meshtastic_resend_chunks_FIELDLIST(X, a) \
+X(a, CALLBACK, REPEATED, UINT32,   chunks,            1)
+#define meshtastic_resend_chunks_CALLBACK pb_default_field_callback
+#define meshtastic_resend_chunks_DEFAULT NULL
+
+#define meshtastic_ChunkedPayloadResponse_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   payload_id,        1) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,request_transfer,payload_variant.request_transfer),   2) \
+X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,accept_transfer,payload_variant.accept_transfer),   3) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,resend_chunks,payload_variant.resend_chunks),   4)
+#define meshtastic_ChunkedPayloadResponse_CALLBACK NULL
+#define meshtastic_ChunkedPayloadResponse_DEFAULT NULL
+#define meshtastic_ChunkedPayloadResponse_payload_variant_resend_chunks_MSGTYPE meshtastic_resend_chunks
+
 extern const pb_msgdesc_t meshtastic_Position_msg;
 extern const pb_msgdesc_t meshtastic_User_msg;
 extern const pb_msgdesc_t meshtastic_RouteDiscovery_msg;
@@ -1354,6 +1471,7 @@ extern const pb_msgdesc_t meshtastic_MyNodeInfo_msg;
 extern const pb_msgdesc_t meshtastic_LogRecord_msg;
 extern const pb_msgdesc_t meshtastic_QueueStatus_msg;
 extern const pb_msgdesc_t meshtastic_FromRadio_msg;
+extern const pb_msgdesc_t meshtastic_FileInfo_msg;
 extern const pb_msgdesc_t meshtastic_ToRadio_msg;
 extern const pb_msgdesc_t meshtastic_Compressed_msg;
 extern const pb_msgdesc_t meshtastic_NeighborInfo_msg;
@@ -1361,6 +1479,9 @@ extern const pb_msgdesc_t meshtastic_Neighbor_msg;
 extern const pb_msgdesc_t meshtastic_DeviceMetadata_msg;
 extern const pb_msgdesc_t meshtastic_Heartbeat_msg;
 extern const pb_msgdesc_t meshtastic_NodeRemoteHardwarePin_msg;
+extern const pb_msgdesc_t meshtastic_ChunkedPayload_msg;
+extern const pb_msgdesc_t meshtastic_resend_chunks_msg;
+extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_Position_fields &meshtastic_Position_msg
@@ -1376,6 +1497,7 @@ extern const pb_msgdesc_t meshtastic_NodeRemoteHardwarePin_msg;
 #define meshtastic_LogRecord_fields &meshtastic_LogRecord_msg
 #define meshtastic_QueueStatus_fields &meshtastic_QueueStatus_msg
 #define meshtastic_FromRadio_fields &meshtastic_FromRadio_msg
+#define meshtastic_FileInfo_fields &meshtastic_FileInfo_msg
 #define meshtastic_ToRadio_fields &meshtastic_ToRadio_msg
 #define meshtastic_Compressed_fields &meshtastic_Compressed_msg
 #define meshtastic_NeighborInfo_fields &meshtastic_NeighborInfo_msg
@@ -1383,15 +1505,22 @@ extern const pb_msgdesc_t meshtastic_NodeRemoteHardwarePin_msg;
 #define meshtastic_DeviceMetadata_fields &meshtastic_DeviceMetadata_msg
 #define meshtastic_Heartbeat_fields &meshtastic_Heartbeat_msg
 #define meshtastic_NodeRemoteHardwarePin_fields &meshtastic_NodeRemoteHardwarePin_msg
+#define meshtastic_ChunkedPayload_fields &meshtastic_ChunkedPayload_msg
+#define meshtastic_resend_chunks_fields &meshtastic_resend_chunks_msg
+#define meshtastic_ChunkedPayloadResponse_fields &meshtastic_ChunkedPayloadResponse_msg
 
 /* Maximum encoded size of messages (where known) */
+/* meshtastic_resend_chunks_size depends on runtime parameters */
+/* meshtastic_ChunkedPayloadResponse_size depends on runtime parameters */
 #define MESHTASTIC_MESHTASTIC_MESH_PB_H_MAX_SIZE meshtastic_FromRadio_size
+#define meshtastic_ChunkedPayload_size           245
 #define meshtastic_Compressed_size               243
 #define meshtastic_Data_size                     270
 #define meshtastic_DeviceMetadata_size           46
+#define meshtastic_FileInfo_size                 236
 #define meshtastic_FromRadio_size                510
 #define meshtastic_Heartbeat_size                0
-#define meshtastic_LogRecord_size                81
+#define meshtastic_LogRecord_size                426
 #define meshtastic_MeshPacket_size               326
 #define meshtastic_MqttClientProxyMessage_size   501
 #define meshtastic_MyNodeInfo_size               18
