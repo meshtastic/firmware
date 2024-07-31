@@ -816,11 +816,7 @@ bool NodeDB::messageIsDirectMessage(const meshtastic_MeshPacket &mp)
 void NodeDB::addMessage(const meshtastic_MeshPacket &mp)
 {
     auto *msg = new meshtastic_Message();
-    auto senderNode = nodeDB->getMeshNode(getFrom(&mp));
-    if (senderNode == nullptr || strlen(senderNode->user.short_name) == 0)
-        strcpy(msg->sender_short_name, "UNK");
-    else
-        strcpy(msg->sender_short_name, senderNode->user.short_name);
+    msg->from = mp.from;
     msg->from_self = mp.from == getNodeNum();
     snprintf(msg->content, sizeof(msg->content), "%s", mp.decoded.payload.bytes);
     msg->rx_time = mp.rx_time;

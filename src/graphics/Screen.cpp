@@ -956,28 +956,6 @@ bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int
     return validCached;
 }
 
-// Draw power bars or a charging indicator on an image of a battery, determined by battery charge voltage or percentage.
-static void drawBattery(OLEDDisplay *display, int16_t x, int16_t y, uint8_t *imgBuffer, const PowerStatus *powerStatus)
-{
-    static const uint8_t powerBar[3] = {0x81, 0xBD, 0xBD};
-    static const uint8_t lightning[8] = {0xA1, 0xA1, 0xA5, 0xAD, 0xB5, 0xA5, 0x85, 0x85};
-    // Clear the bar area on the battery image
-    for (int i = 1; i < 14; i++) {
-        imgBuffer[i] = 0x81;
-    }
-    // If charging, draw a charging indicator
-    if (powerStatus->getIsCharging()) {
-        memcpy(imgBuffer + 3, lightning, 8);
-        // If not charging, Draw power bars
-    } else {
-        for (int i = 0; i < 4; i++) {
-            if (powerStatus->getBatteryChargePercent() >= 25 * i)
-                memcpy(imgBuffer + 1 + (i * 3), powerBar, 3);
-        }
-    }
-    display->drawFastImage(x, y, 16, 8, imgBuffer);
-}
-
 #ifdef T_WATCH_S3
 
 void Screen::drawWatchFaceToggleButton(OLEDDisplay *display, int16_t x, int16_t y, bool digitalMode, float scale)
@@ -1416,76 +1394,6 @@ void Screen::drawAnalogClockFrame(OLEDDisplay *display, OLEDDisplayUiState *stat
 
 #endif
 
-// Get an absolute time from "seconds ago" info. Returns false if no valid timestamp possible
-bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int32_t *daysAgo)
-{
-    // Cache the result - avoid frequent recalculation
-    static uint8_t hoursCached = 0, minutesCached = 0;
-    static uint32_t daysAgoCached = 0;
-    static uint32_t secondsAgoCached = 0;
-    static bool validCached = false;
-
-    // Abort: if timezone not set
-    if (strlen(config.device.tzdef) == 0) {
-        validCached = false;
-        return validCached;
-    }
-
-    // Abort: if invalid pointers passed
-    if (hours == nullptr || minutes == nullptr || daysAgo == nullptr) {
-        validCached = false;
-        return validCached;
-    }
-
-    // Abort: if time seems invalid.. (> 6 months ago, probably seen before RTC set)
-    if (secondsAgo > SEC_PER_DAY * 30UL * 6) {
-        validCached = false;
-        return validCached;
-    }
-
-    // If repeated request, don't bother recalculating
-    if (secondsAgo - secondsAgoCached < 60 && secondsAgoCached != 0) {
-        if (validCached) {
-            *hours = hoursCached;
-            *minutes = minutesCached;
-            *daysAgo = daysAgoCached;
-        }
-        return validCached;
-    }
-
-    // Get local time
-    uint32_t secondsRTC = getValidTime(RTCQuality::RTCQualityDevice, true); // Get local time
-
-    // Abort: if RTC not set
-    if (!secondsRTC) {
-        validCached = false;
-        return validCached;
-    }
-
-    // Get absolute time when last seen
-    uint32_t secondsSeenAt = secondsRTC - secondsAgo;
-
-    // Calculate daysAgo
-    *daysAgo = (secondsRTC / SEC_PER_DAY) - (secondsSeenAt / SEC_PER_DAY); // How many "midnights" have passed
-
-    // Get seconds since midnight
-    uint32_t hms = (secondsRTC - secondsAgo) % SEC_PER_DAY;
-    hms = (hms + SEC_PER_DAY) % SEC_PER_DAY;
-
-    // Tear apart hms into hours and minutes
-    *hours = hms / SEC_PER_HOUR;
-    *minutes = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
-
-    // Cache the result
-    daysAgoCached = *daysAgo;
-    hoursCached = *hours;
-    minutesCached = *minutes;
-    secondsAgoCached = secondsAgo;
-
-    validCached = true;
-    return validCached;
-}
-
 #ifdef USE_PERSISTENT_MSG
 // Wraps string using modified logic from OLEDDisplay::drawStringMaxWidth
 std::string wrapString(OLEDDisplay *display, uint16_t maxLineWidth, const std::string &text)
@@ -1548,7 +1456,15 @@ std::string createMessageString(OLEDDisplay *display, const meshtastic_Message m
     std::string timestamp = screen->drawTimeDelta(days, hours, minutes, seconds);
     std::string separator = (msg.from_self) ? "::" : ":";
 
-    std::string messageString = timestamp + " " + msg.sender_short_name + separator + " " + msg.content;
+    meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(msg.from);
+    std::string shortName;
+    if (node == NULL || !strcmp(node->user.short_name, "")) {
+        shortName = "UNK";
+    } else {
+        shortName = node->user.short_name;
+    }
+
+    std::string messageString = timestamp + " " + shortName.c_str() + separator + " " + msg.content;
 
     return wrapString(display, display->getWidth(), messageString.c_str()) + '\n';
 }
