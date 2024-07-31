@@ -1,6 +1,6 @@
-#include "configuration.h"
-#include "InputBroker.h"
 #include "SerialKeyboardImpl.h"
+#include "InputBroker.h"
+#include "configuration.h"
 
 #ifdef INPUTBROKER_SERIAL_TYPE
 
