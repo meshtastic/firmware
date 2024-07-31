@@ -400,12 +400,6 @@ bool GPS::setup()
     int msglen = 0;
 
     if (!didSerialInit) {
-#ifdef GNSS_AIROHA
-        if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
-            probe(GPS_BAUDRATE);
-            LOG_INFO("GPS setting to %d.\n", GPS_BAUDRATE);
-        }
-#else
 #if !defined(GPS_UC6580)
 
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
@@ -784,7 +778,6 @@ bool GPS::setup()
                 LOG_INFO("GNSS module configuration saved!\n");
             }
         }
-#endif
         didSerialInit = true;
     }
 
@@ -1191,10 +1184,6 @@ GnssModel_t GPS::probe(int serialSpeed)
         _serial_gps->updateBaudRate(serialSpeed);
     }
 #endif
-#ifdef GNSS_AIROHA
-
-    return GNSS_MODEL_UNKNOWN;
-#else
 #ifdef GPS_DEBUG
     for (int i = 0; i < 20; i++) {
         getACK("$GP", 200);
@@ -1359,7 +1348,6 @@ GnssModel_t GPS::probe(int serialSpeed)
     }
 
     return GNSS_MODEL_UBLOX;
-#endif // !GNSS_Airoha
 }
 
 GPS *GPS::createGps()
