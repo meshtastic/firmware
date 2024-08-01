@@ -282,6 +282,7 @@ void portduinoSetup()
         }
 
         settingsMap[maxnodes] = (yamlConfig["General"]["MaxNodes"]).as<int>(200);
+        settingsMap[maxtophone] = (yamlConfig["General"]["MaxMessageQueue"]).as<int>(100);
 
     } catch (YAML::Exception &e) {
         std::cout << "*** Exception " << e.what() << std::endl;

@@ -23,6 +23,10 @@
 #include "nimble/NimbleBluetooth.h"
 #endif
 
+#if ARCH_PORTDUINO
+#include "PortduinoGlue.h"
+#endif
+
 /*
 receivedPacketQueue - this is a queue of messages we've received from the mesh, which we are keeping to deliver to the phone.
 It is implemented with a FreeRTos queue (wrapped with a little RTQueue class) of pointers to MeshPacket protobufs (which were
