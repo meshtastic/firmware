@@ -50,7 +50,7 @@
 #define BUTTON_PIN 39
 #define BUTTON_NEED_PULLUP
 
-#define SCREEN_ROTATE
+#define DISPLAY_FLIP_SCREEN
 
 /*
   No External notification.
