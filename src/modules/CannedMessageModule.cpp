@@ -264,8 +264,8 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 #endif
             break;
         case 0xaf: // fn+space send network ping like double press does
-            service.refreshLocalMeshNode();
-            if (service.trySendPosition(NODENUM_BROADCAST, true)) {
+            service->refreshLocalMeshNode();
+            if (service->trySendPosition(NODENUM_BROADCAST, true)) {
                 showTemporaryMessage("Position \nUpdate Sent");
             } else {
                 showTemporaryMessage("Node Info \nUpdate Sent");
@@ -388,7 +388,7 @@ void CannedMessageModule::sendText(NodeNum dest, ChannelIndex channel, const cha
 
     LOG_INFO("Sending message id=%d, dest=%x, msg=%.*s\n", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
 
-    service.sendToMesh(
+    service->sendToMesh(
         p, RX_SRC_LOCAL,
         true); // send to mesh, cc to phone. Even if there's no phone connected, this stores the message to match ACKs
 }
@@ -1048,7 +1048,7 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
             e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
             requestFocus(); // Tell Screen::setFrames that our module's frame should be shown, even if not "first" in the frameset
             this->runState = CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED;
-            this->incoming = service.getNodenumFromRequestId(mp.decoded.request_id);
+            this->incoming = service->getNodenumFromRequestId(mp.decoded.request_id);
             meshtastic_Routing decoded = meshtastic_Routing_init_default;
             pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, meshtastic_Routing_fields, &decoded);
             this->ack = decoded.error_reason == meshtastic_Routing_Error_NONE;

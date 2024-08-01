@@ -41,7 +41,7 @@ void PhoneAPI::handleStartConfig()
     // Must be before setting state (because state is how we know !connected)
     if (!isConnected()) {
         onConnectionChanged(true);
-        observe(&service.fromNumChanged);
+        observe(&service->fromNumChanged);
 #ifdef FSCom
         observe(&xModem.packetReady);
 #endif
@@ -63,7 +63,7 @@ void PhoneAPI::close()
     if (state != STATE_SEND_NOTHING) {
         state = STATE_SEND_NOTHING;
 
-        unobserve(&service.fromNumChanged);
+        unobserve(&service->fromNumChanged);
 #ifdef FSCom
         unobserve(&xModem.packetReady);
 #endif
@@ -186,7 +186,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         fromRadioScratch.my_info = myNodeInfo;
         state = STATE_SEND_OWN_NODEINFO;
 
-        service.refreshLocalMeshNode(); // Update my NodeInfo because the client will be asking for it soon.
+        service->refreshLocalMeshNode(); // Update my NodeInfo because the client will be asking for it soon.
         break;
 
     case STATE_SEND_OWN_NODEINFO: {
@@ -443,7 +443,7 @@ void PhoneAPI::handleDisconnect()
 void PhoneAPI::releasePhonePacket()
 {
     if (packetForPhone) {
-        service.releaseToPool(packetForPhone); // we just copied the bytes, so don't need this buffer anymore
+        service->releaseToPool(packetForPhone); // we just copied the bytes, so don't need this buffer anymore
         packetForPhone = NULL;
     }
 }
@@ -451,7 +451,7 @@ void PhoneAPI::releasePhonePacket()
 void PhoneAPI::releaseQueueStatusPhonePacket()
 {
     if (queueStatusPacketForPhone) {
-        service.releaseQueueStatusToPool(queueStatusPacketForPhone);
+        service->releaseQueueStatusToPool(queueStatusPacketForPhone);
         queueStatusPacketForPhone = NULL;
     }
 }
@@ -459,7 +459,7 @@ void PhoneAPI::releaseQueueStatusPhonePacket()
 void PhoneAPI::releaseMqttClientProxyPhonePacket()
 {
     if (mqttClientProxyMessageForPhone) {
-        service.releaseMqttClientProxyMessageToPool(mqttClientProxyMessageForPhone);
+        service->releaseMqttClientProxyMessageToPool(mqttClientProxyMessageForPhone);
         mqttClientProxyMessageForPhone = NULL;
     }
 }
@@ -495,9 +495,9 @@ bool PhoneAPI::available()
         return true; // Always say we have something, because we might need to advance our state machine
     case STATE_SEND_PACKETS: {
         if (!queueStatusPacketForPhone)
-            queueStatusPacketForPhone = service.getQueueStatusForPhone();
+            queueStatusPacketForPhone = service->getQueueStatusForPhone();
         if (!mqttClientProxyMessageForPhone)
-            mqttClientProxyMessageForPhone = service.getMqttClientProxyMessageForPhone();
+            mqttClientProxyMessageForPhone = service->getMqttClientProxyMessageForPhone();
         bool hasPacket = !!queueStatusPacketForPhone || !!mqttClientProxyMessageForPhone;
         if (hasPacket)
             return true;
@@ -520,7 +520,7 @@ bool PhoneAPI::available()
 #endif
 
         if (!packetForPhone)
-            packetForPhone = service.getForPhone();
+            packetForPhone = service->getForPhone();
         hasPacket = !!packetForPhone;
         // LOG_DEBUG("available hasPacket=%d\n", hasPacket);
         return hasPacket;
@@ -538,7 +538,7 @@ bool PhoneAPI::available()
 bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
 {
     printPacket("PACKET FROM PHONE", &p);
-    service.handleToRadio(p);
+    service->handleToRadio(p);
 
     return true;
 }

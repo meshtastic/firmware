@@ -57,7 +57,7 @@ nodenum (filtering against whatever it knows about the nodedb) and rebroadcast t
 FIXME in the initial proof of concept we just skip the entire want/deny flow and just hand pick node numbers at first.
 */
 
-MeshService service;
+MeshService *service;
 
 static MemoryDynamic<meshtastic_MqttClientProxyMessage> staticMqttClientProxyMessagePool;
 

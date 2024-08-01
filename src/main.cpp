@@ -719,8 +719,8 @@ void setup()
     LOG_DEBUG("Starting audio thread\n");
     audioThread = new AudioThread();
 #endif
-
-    service.init();
+    service = new MeshService();
+    service->init();
 
     // Now that the mesh service is created, create any modules
     setupModules();
@@ -1085,7 +1085,7 @@ void loop()
     // TODO: This should go into a thread handled by FreeRTOS.
     // handleWebResponse();
 
-    service.loop();
+    service->loop();
 
     long delayMsec = mainController.runOrDelay();
 

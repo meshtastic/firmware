@@ -161,7 +161,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
             sendTelemetry();
             lastSentToMesh = now;
         } else if (((lastSentToPhone == 0) || ((now - lastSentToPhone) >= sendToPhoneIntervalMs)) &&
-                   (service.isToPhoneQueueEmpty())) {
+                   (service->isToPhoneQueueEmpty())) {
             // Just send to phone when it's not our time to send to mesh yet
             // Only send while queue is empty (phone assumed connected)
             sendTelemetry(NODENUM_BROADCAST, true);
@@ -449,10 +449,10 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         lastMeasurementPacket = packetPool.allocCopy(*p);
         if (phoneOnly) {
             LOG_INFO("Sending packet to phone\n");
-            service.sendToPhone(p);
+            service->sendToPhone(p);
         } else {
             LOG_INFO("Sending packet to mesh\n");
-            service.sendToMesh(p, RX_SRC_LOCAL, true);
+            service->sendToMesh(p, RX_SRC_LOCAL, true);
 
             if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
                 LOG_DEBUG("Starting next execution in 5 seconds and then going to sleep.\n");
