@@ -149,7 +149,7 @@ void onToRadioWrite(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *data, ui
 void setupMeshService(void)
 {
     bluetoothPhoneAPI = new BluetoothPhoneAPI();
-    meshBleservice->begin();
+    meshBleService.begin();
     // Note: You must call .begin() on the BLEService before calling .begin() on
     // any characteristic(s) within that service definition.. Calling .begin() on
     // a BLECharacteristic will cause it to be added to the last BLEService that
@@ -242,10 +242,10 @@ void NRF52Bluetooth::setup()
         Bluefruit.Security.setPairPasskeyCallback(NRF52Bluetooth::onPairingPasskey);
         Bluefruit.Security.setPairCompleteCallback(NRF52Bluetooth::onPairingCompleted);
         Bluefruit.Security.setSecuredCallback(NRF52Bluetooth::onConnectionSecured);
-        meshBleservice->setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
+        meshBleService.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
     } else {
         Bluefruit.Security.setIOCaps(false, false, false);
-        meshBleservice->setPermission(SECMODE_OPEN, SECMODE_OPEN);
+        meshBleService.setPermission(SECMODE_OPEN, SECMODE_OPEN);
     }
     // Set the advertised device name (keep it short!)
     Bluefruit.setName(getDeviceName());
