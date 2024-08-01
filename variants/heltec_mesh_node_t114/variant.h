@@ -126,8 +126,8 @@ No longer populated on PCB
 #define LORA_CS (0 + 24)
 #define SX126X_DIO1 (0 + 20)
 // Note DIO2 is attached internally to the module to an analog switch for TX/RX switching
-// #define SX1262_DIO3 \
-//    (0 + 21) // This is used as an *output* from the sx1262 and connected internally to power the tcxo, do not drive from the
+// #define SX1262_DIO3 (0 + 21)
+// This is used as an *output* from the sx1262 and connected internally to power the tcxo, do not drive from the
 //    main
 // CPU?
 #define SX126X_BUSY (0 + 17)
