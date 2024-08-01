@@ -208,8 +208,11 @@ uint32_t timeLastPowered = 0;
 static Periodic *ledPeriodic;
 static OSThread *powerFSMthread;
 static OSThread *ambientLightingThread;
+#if ARCH_PORTDUINO
+SPISettings spiSettings(settingsMap[spiSpeed], MSBFIRST, SPI_MODE0);
+#else
 SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
-
+#endif
 RadioInterface *rIf = NULL;
 
 /**
