@@ -16,6 +16,10 @@
 #include "concurrency/OSThread.h"
 #include "main.h"
 
+// Normally these input methods are protected by guarding in setupModules
+// In order to have the user button dismiss the canned message frame, this class lightly interacts with the Screen class
+#if HAS_SCREEN
+
 class ScanAndSelectInput : public Observable<const InputEvent *>, public concurrency::OSThread
 {
   public:
@@ -42,3 +46,5 @@ class ScanAndSelectInput : public Observable<const InputEvent *>, public concurr
 };
 
 extern ScanAndSelectInput *scanAndSelectInput; // Instantiated in setupModules method. Deleted if unused, or init() fails
+
+#endif

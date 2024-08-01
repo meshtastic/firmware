@@ -1,3 +1,9 @@
+#include "configuration.h"
+
+// Normally these input methods are protected by guarding in setupModules
+// In order to have the user button dismiss the canned message frame, this class lightly interacts with the Screen class
+#if HAS_SCREEN
+
 #include "ScanAndSelect.h"
 #include "modules/CannedMessageModule.h"
 
@@ -194,3 +200,5 @@ void ScanAndSelectInput::handleChangeInterrupt()
 }
 
 ScanAndSelectInput *scanAndSelectInput = nullptr; // Instantiated in setupModules method. Deleted if unused, or init() fails
+
+#endif
