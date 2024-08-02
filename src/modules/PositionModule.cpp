@@ -141,7 +141,7 @@ meshtastic_MeshPacket *PositionModule::allocReply()
         return nullptr;
     }
 
-    meshtastic_NodeInfoLite *node = service.refreshLocalMeshNode(); // should guarantee there is now a position
+    meshtastic_NodeInfoLite *node = service->refreshLocalMeshNode(); // should guarantee there is now a position
     assert(node->has_position);
 
     // configuration of POSITION packet
@@ -280,7 +280,7 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
 {
     // cancel any not yet sent (now stale) position packets
     if (prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
-        service.cancelSending(prevPacketId);
+        service->cancelSending(prevPacketId);
 
     // Set's the class precision value for this particular packet
     if (channels.getByIndex(channel).settings.has_module_settings) {
@@ -309,7 +309,7 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
     if (channel > 0)
         p->channel = channel;
 
-    service.sendToMesh(p, RX_SRC_LOCAL, true);
+    service->sendToMesh(p, RX_SRC_LOCAL, true);
 
     if ((config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
          config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) &&
@@ -359,7 +359,7 @@ int32_t PositionModule::runOnce()
             }
         }
     } else if (config.position.position_broadcast_smart_enabled) {
-        const meshtastic_NodeInfoLite *node2 = service.refreshLocalMeshNode(); // should guarantee there is now a position
+        const meshtastic_NodeInfoLite *node2 = service->refreshLocalMeshNode(); // should guarantee there is now a position
 
         if (hasValidPosition(node2)) {
             // The minimum time (in seconds) that would pass before we are able to send a new position packet.
@@ -398,7 +398,7 @@ void PositionModule::sendLostAndFoundText()
     p->decoded.payload.size = strlen(message);
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
 
-    service.sendToMesh(p, RX_SRC_LOCAL, true);
+    service->sendToMesh(p, RX_SRC_LOCAL, true);
     delete[] message;
 }
 
@@ -437,7 +437,7 @@ struct SmartPosition PositionModule::getDistanceTraveledSinceLastSend(meshtastic
 void PositionModule::handleNewPosition()
 {
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
-    const meshtastic_NodeInfoLite *node2 = service.refreshLocalMeshNode(); // should guarantee there is now a position
+    const meshtastic_NodeInfoLite *node2 = service->refreshLocalMeshNode(); // should guarantee there is now a position
     // We limit our GPS broadcasts to a max rate
     if (hasValidPosition(node2)) {
         auto smartPosition = getDistanceTraveledSinceLastSend(node->position);

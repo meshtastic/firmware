@@ -54,6 +54,8 @@ Lora:
 
 #  ch341_quirk: true # Uncomment this to use the chunked SPI transfer that seems to fix the ch341
 
+#  spiSpeed: 2000000
+
 ### Set gpio chip to use in /dev/. Defaults to 0.
 ### Notably the Raspberry Pi 5 puts the GPIO header on gpiochip4
 #  gpiochip: 4
@@ -111,6 +113,9 @@ Display:
 #  Height: 320
 #  Rotate: true
 
+### You can also specify the spi device for the display to use
+# spidev: spidev0.0
+
 Touchscreen:
 ### Note, at least for now, the touchscreen must have a CS pin defined, even if you let Linux manage the CS switching.
 
@@ -126,9 +131,13 @@ Touchscreen:
 #  CS: 7
 #  IRQ: 17
 
-### Configure device for direct keyboard input
+### You can also specify the spi device for the touchscreen to use
+# spidev: spidev0.0
+
 
 Input:
+### Configure device for direct keyboard input
+
 #  KeyboardDevice: /dev/input/by-id/usb-_Raspberry_Pi_Internal_Keyboard-event-kbd
 
 ###
@@ -143,3 +152,4 @@ Webserver:
 
 General:
   MaxNodes: 200
+  MaxMessageQueue: 100

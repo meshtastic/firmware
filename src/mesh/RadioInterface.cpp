@@ -334,7 +334,7 @@ bool RadioInterface::init()
 {
     LOG_INFO("Starting meshradio init...\n");
 
-    configChangedObserver.observe(&service.configChanged);
+    configChangedObserver.observe(&service->configChanged);
     preflightSleepObserver.observe(&preflightSleep);
     notifyDeepSleepObserver.observe(&notifyDeepSleep);
 

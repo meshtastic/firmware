@@ -348,7 +348,7 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
     }
 
     if (changed) { // If nothing really changed, don't broadcast on the network or write to flash
-        service.reloadOwner(!hasOpenEditTransaction);
+        service->reloadOwner(!hasOpenEditTransaction);
         saveChanges(SEGMENT_DEVICESTATE);
     }
 }
@@ -848,7 +848,7 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
 {
     if (!hasOpenEditTransaction) {
         LOG_INFO("Saving changes to disk\n");
-        service.reloadConfig(saveWhat); // Calls saveToDisk among other things
+        service->reloadConfig(saveWhat); // Calls saveToDisk among other things
     } else {
         LOG_INFO("Delaying save of changes to disk until the open transaction is committed\n");
     }
@@ -879,7 +879,7 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
     channels.setChannel(primaryChannel);
     channels.onConfigChanged();
 
-    service.reloadOwner(false);
+    service->reloadOwner(false);
     saveChanges(SEGMENT_CONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
 }
 
