@@ -78,6 +78,11 @@ if platform.name == "espressif32":
         # For newer ESP32 targets, using newlib nano works better.
         env.Append(LINKFLAGS=["--specs=nano.specs", "-u", "_printf_float"])
 
+if platform.name == "nordicnrf52":
+    env.AddPostAction("$BUILD_DIR/${PROGNAME}.hex",
+                      env.VerboseAction(f"python ./bin/uf2conv.py $BUILD_DIR/firmware.hex -c -f 0xADA52840 -o $BUILD_DIR/firmware.uf2",
+                                        "Generating UF2 file"))
+
 Import("projenv")
 
 prefsLoc = projenv["PROJECT_DIR"] + "/version.properties"
@@ -90,13 +95,4 @@ projenv.Append(
         "-DAPP_VERSION=" + verObj["long"],
         "-DAPP_VERSION_SHORT=" + verObj["short"],
     ]
-)
-
-# Add a custom p.io project task to run the UF2 conversion script.
-env.AddCustomTarget(
-    name="Convert Hex to UF2",
-    dependencies=None,
-    actions=["PYTHON .\\bin\\uf2conv.py $BUILD_DIR\$env\\firmware.hex -c -f 0xADA52840 -o $BUILD_DIR\$env\\firmware.uf2"],
-    title="Convert hex to uf2",
-    description="Runs the python script to convert an already-built .hex file into .uf2 for copying to a device"
 )
