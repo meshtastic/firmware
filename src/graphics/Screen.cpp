@@ -20,6 +20,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 #include "Screen.h"
+#include "../userPrefs.h"
 #include "configuration.h"
 #if HAS_SCREEN
 #include <OLEDDisplay.h>
@@ -156,7 +157,11 @@ static void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDispl
 
     display->setFont(FONT_MEDIUM);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
+#ifdef SPLASH_TITLE_USERPREFS
+    const char *title = SPLASH_TITLE_USERPREFS;
+#else
     const char *title = "meshtastic.org";
+#endif
     display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
     display->setFont(FONT_SMALL);
 
@@ -1897,6 +1902,13 @@ int32_t Screen::runOnce()
         // standard screen loop handling here
         if (config.display.auto_screen_carousel_secs > 0 &&
             (millis() - lastScreenTransition) > (config.display.auto_screen_carousel_secs * 1000)) {
+
+// If an E-Ink display struggles with fast refresh, force carousel to use full refresh instead
+// Carousel is potentially a major source of E-Ink display wear
+#if !defined(EINK_BACKGROUND_USES_FAST)
+            EINK_ADD_FRAMEFLAG(dispdev, COSMETIC);
+#endif
+
             LOG_DEBUG("LastScreenTransition exceeded %ums transitioning to next frame\n", (millis() - lastScreenTransition));
             handleOnPress();
         }

@@ -1,7 +1,8 @@
 #include "ScanI2CTwoWire.h"
 
+#if !MESHTASTIC_EXCLUDE_I2C
+
 #include "concurrency/LockGuard.h"
-#include "configuration.h"
 #if defined(ARCH_PORTDUINO)
 #include "linux/LinuxHardwareI2C.h"
 #endif
@@ -403,3 +404,4 @@ size_t ScanI2CTwoWire::countDevices() const
 {
     return foundDevices.size();
 }
+#endif

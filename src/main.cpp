@@ -20,7 +20,11 @@
 #include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
 #include "detect/ScanI2C.h"
+
+#if !MESHTASTIC_EXCLUDE_I2C
 #include "detect/ScanI2CTwoWire.h"
+#include <Wire.h>
+#endif
 #include "detect/axpDebug.h"
 #include "detect/einkScan.h"
 #include "graphics/RAKled.h"
@@ -31,7 +35,6 @@
 #include "shutdown.h"
 #include "sleep.h"
 #include "target_specific.h"
-#include <Wire.h>
 #include <memory>
 #include <utility>
 // #include <driver/rtc_io.h>
@@ -172,8 +175,10 @@ bool pauseBluetoothLogging = false;
 
 bool pmu_found;
 
+#if !MESHTASTIC_EXCLUDE_I2C
 // Array map of sensor types with i2c address and wire as we'll find in the i2c scan
 std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1] = {};
+#endif
 
 Router *router = NULL; // Users of router don't care what sort of subclass implements that API
 
@@ -218,7 +223,6 @@ uint32_t timeLastPowered = 0;
 static Periodic *ledPeriodic;
 static OSThread *powerFSMthread;
 static OSThread *ambientLightingThread;
-SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 
 RadioInterface *rIf = NULL;
 
@@ -241,6 +245,12 @@ void printInfo()
 void setup()
 {
     concurrency::hasBeenSetup = true;
+#if ARCH_PORTDUINO
+    SPISettings spiSettings(settingsMap[spiSpeed], MSBFIRST, SPI_MODE0);
+#else
+    SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
+#endif
+
     meshtastic_Config_DisplayConfig_OledType screen_model =
         meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;
     OLEDDISPLAY_GEOMETRY screen_geometry = GEOMETRY_128_64;
@@ -369,6 +379,7 @@ void setup()
 
 #endif
 
+#if !MESHTASTIC_EXCLUDE_I2C
 #if defined(I2C_SDA1) && defined(ARCH_RP2040)
     Wire1.setSDA(I2C_SDA1);
     Wire1.setSCL(I2C_SCL1);
@@ -392,6 +403,7 @@ void setup()
     }
 #elif HAS_WIRE
     Wire.begin();
+#endif
 #endif
 
 #ifdef PIN_LCD_RESET
@@ -425,6 +437,7 @@ void setup()
     powerStatus->observe(&power->newStatus);
     power->setup(); // Must be after status handler is installed, so that handler gets notified of the initial configuration
 
+#if !MESHTASTIC_EXCLUDE_I2C
     // We need to scan here to decide if we have a screen for nodeDB.init() and because power has been applied to
     // accessories
     auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
@@ -579,6 +592,7 @@ void setup()
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::DFROBOT_LARK, meshtastic_TelemetrySensorType_DFROBOT_LARK)
 
     i2cScanner.reset();
+#endif
 
 #ifdef HAS_SDCARD
     setupSDCard();
@@ -639,6 +653,7 @@ void setup()
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // keep dimension of 128x64
 #endif
 
+#if !MESHTASTIC_EXCLUDE_I2C
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
         config.display.wake_on_tap_or_motion = true;
@@ -653,6 +668,7 @@ void setup()
     if (rgb_found.type != ScanI2C::DeviceType::NONE) {
         ambientLightingThread = new AmbientLightingThread(rgb_found.type);
     }
+#endif
 #endif
 
 #ifdef T_WATCH_S3
@@ -804,8 +820,8 @@ void setup()
     LOG_DEBUG("Starting audio thread\n");
     audioThread = new AudioThread();
 #endif
-
-    service.init();
+    service = new MeshService();
+    service->init();
 
     // Now that the mesh service is created, create any modules
     setupModules();
@@ -822,6 +838,7 @@ void setup()
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_AXP192); // Record a hardware fault for missing hardware
 #endif
 
+#if !MESHTASTIC_EXCLUDE_I2C
 // Don't call screen setup until after nodedb is setup (because we need
 // the current region name)
 #if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(HX8357_CS) ||            \
@@ -834,6 +851,7 @@ void setup()
 #else
     if (screen_found.port != ScanI2C::I2CPort::NO_I2C)
         screen->setup();
+#endif
 #endif
 
     screen->print("Started...\n");
@@ -1061,9 +1079,16 @@ void setup()
     mqttInit();
 #endif
 
+#ifdef RF95_FAN_EN
+    // Ability to disable FAN if PIN has been set with RF95_FAN_EN.
+    // Make sure LoRa has been started before disabling FAN.
+    if (config.lora.pa_fan_disabled)
+        digitalWrite(RF95_FAN_EN, LOW ^ 0);
+#endif
+
 #ifndef ARCH_PORTDUINO
 
-    // Initialize Wifi
+        // Initialize Wifi
 #if HAS_WIFI
     initWifi();
 #endif
@@ -1173,7 +1198,7 @@ void loop()
     // TODO: This should go into a thread handled by FreeRTOS.
     // handleWebResponse();
 
-    service.loop();
+    service->loop();
 
     long delayMsec = mainController.runOrDelay();
 

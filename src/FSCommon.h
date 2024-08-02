@@ -15,10 +15,13 @@
 #endif
 
 #if defined(ARCH_STM32WL)
-#include "platform/stm32wl/InternalFileSystem.h" // STM32WL version
-#define FSCom InternalFS
-#define FSBegin() FSCom.begin()
-using namespace LittleFS_Namespace;
+// STM32WL series 2 Kbytes (8 rows of 256 bytes)
+#include <EEPROM.h>
+#include <OSFS.h>
+
+// Useful consts
+const OSFS::result noerr = OSFS::result::NO_ERROR;
+const OSFS::result notfound = OSFS::result::FILE_NOT_FOUND;
 #endif
 
 #if defined(ARCH_RP2040)

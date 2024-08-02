@@ -25,7 +25,7 @@ int32_t DeviceTelemetryModule::runOnce()
         config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_HIDDEN) {
         sendTelemetry();
         lastSentToMesh = uptimeLastMs;
-    } else if (service.isToPhoneQueueEmpty()) {
+    } else if (service->isToPhoneQueueEmpty()) {
         // Just send to phone when it's not our time to send to mesh yet
         // Only send while queue is empty (phone assumed connected)
         sendTelemetry(NODENUM_BROADCAST, true);
@@ -113,10 +113,10 @@ bool DeviceTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     nodeDB->updateTelemetry(nodeDB->getNodeNum(), telemetry, RX_SRC_LOCAL);
     if (phoneOnly) {
         LOG_INFO("Sending packet to phone\n");
-        service.sendToPhone(p);
+        service->sendToPhone(p);
     } else {
         LOG_INFO("Sending packet to mesh\n");
-        service.sendToMesh(p, RX_SRC_LOCAL, true);
+        service->sendToMesh(p, RX_SRC_LOCAL, true);
     }
     return true;
 }

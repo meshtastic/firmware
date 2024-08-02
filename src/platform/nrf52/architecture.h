@@ -60,6 +60,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_NRF52_PROMICRO_DIY
 #elif defined(WIO_WM1110)
 #define HW_VENDOR meshtastic_HardwareModel_WIO_WM1110
+#elif defined(TRACKER_T1000_E)
+#define HW_VENDOR meshtastic_HardwareModel_TRACKER_T1000_E
 #elif defined(PRIVATE_HW) || defined(FEATHER_DIY)
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #else
@@ -84,10 +86,6 @@
 #undef LED_INVERTED
 #define LED_INVERTED 1
 
-#endif
-
-#ifndef TTGO_T_ECHO
-#define GPS_UBLOX
 #endif
 
 #define LED_PIN PIN_LED1 // LED1 on nrf52840-DK

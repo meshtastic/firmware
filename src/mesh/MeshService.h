@@ -150,4 +150,4 @@ class MeshService
     friend class RoutingModule;
 };
 
-extern MeshService service;
+extern MeshService *service;

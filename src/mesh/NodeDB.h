@@ -40,7 +40,7 @@ uint32_t sinceReceived(const meshtastic_MeshPacket *p);
 
 enum LoadFileResult {
     // Successfully opened the file
-    SUCCESS = 1,
+    LOAD_SUCCESS = 1,
     // File does not exist
     NOT_FOUND = 2,
     // Device does not have a filesystem
@@ -203,9 +203,6 @@ extern NodeDB *nodeDB;
 
         prefs.is_power_saving = True
 */
-
-// Our delay functions check for this for times that should never expire
-#define NODE_DELAY_FOREVER 0xffffffff
 
 /// Sometimes we will have Position objects that only have a time, so check for
 /// valid lat/lon

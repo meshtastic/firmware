@@ -211,7 +211,7 @@ bool StoreForwardModule::sendPayload(NodeNum dest, uint32_t last_time)
     meshtastic_MeshPacket *p = preparePayload(dest, last_time);
     if (p) {
         LOG_INFO("*** Sending S&F Payload\n");
-        service.sendToMesh(p);
+        service->sendToMesh(p);
         this->requestCount++;
         return true;
     }
@@ -293,7 +293,7 @@ void StoreForwardModule::sendMessage(NodeNum dest, const meshtastic_StoreAndForw
     p->want_ack = false;
     p->decoded.want_response = false;
 
-    service.sendToMesh(p);
+    service->sendToMesh(p);
 }
 
 /**
@@ -336,7 +336,7 @@ void StoreForwardModule::sendErrorTextMessage(NodeNum dest, bool want_response)
     if (want_response) {
         ignoreRequest = true; // This text message counts as response.
     }
-    service.sendToMesh(pr);
+    service->sendToMesh(pr);
 }
 
 /**
