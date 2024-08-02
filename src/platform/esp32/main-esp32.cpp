@@ -195,16 +195,16 @@ void cpuDeepSleep(uint32_t msecToWake)
     button(s), maybe we should not include any other GPIOs...
     */
 #if SOC_RTCIO_HOLD_SUPPORTED
-    static const uint8_t rtcGpios[] = {/* 0, */ 2,
-    /* 4, */
-#ifndef USE_JTAG
-                                       13,
-    /* 14, */ /* 15, */
+    static const uint8_t rtcGpios[] = {
+#ifndef HELTEC_VISION_MASTER_E213
+        // For this variant, >20mA leaks through the display if pin 2 held
+        // Todo: check if it's safe to remove this pin for all variants
+        2,
 #endif
-                                       /* 25, */ /* 26, */ /* 27, */
-                                       /* 32, */ /* 33, */ 34, 35,
-                                       /* 36, */ 37
-                                       /* 38, 39 */};
+#ifndef USE_JTAG
+        13,
+#endif
+        34, 35, 37};
 
     for (int i = 0; i < sizeof(rtcGpios); i++)
         rtc_gpio_isolate((gpio_num_t)rtcGpios[i]);
