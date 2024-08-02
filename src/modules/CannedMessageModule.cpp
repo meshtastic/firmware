@@ -17,6 +17,9 @@
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
 #endif
+#if defined(USE_EINK) && defined(USE_EINK_DYNAMICDISPLAY)
+#include "graphics/EInkDynamicDisplay.h" // To select between full and fast refresh on E-Ink displays
+#endif
 
 #ifndef INPUTBROKER_MATRIX_TYPE
 #define INPUTBROKER_MATRIX_TYPE 0
@@ -928,6 +931,9 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         display->setFont(FONT_MEDIUM);
         display->drawString(display->getWidth() / 2 + x, 0 + y + 12, temporaryMessage);
     } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) {
+        // E-Ink: clean the screen *after* this pop-up
+        EINK_ADD_FRAMEFLAG(display, COSMETIC);
+
         requestFocus(); // Tell Screen::setFrames to move to our module's frame
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->setFont(FONT_MEDIUM);
@@ -950,6 +956,9 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             display->drawStringf(display->getWidth() / 2 + x, y + 130, buffer, rssiString, this->lastRxRssi);
         }
     } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {
+        // E-Ink: clean the screen *after* this pop-up
+        EINK_ADD_FRAMEFLAG(display, COSMETIC);
+
         requestFocus(); // Tell Screen::setFrames to move to our module's frame
         display->setTextAlignment(TEXT_ALIGN_CENTER);
         display->setFont(FONT_MEDIUM);
