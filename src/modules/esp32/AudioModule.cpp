@@ -266,7 +266,7 @@ void AudioModule::sendPayload(NodeNum dest, bool wantReplies)
     p->decoded.payload.size = tx_encode_frame_index;
     memcpy(p->decoded.payload.bytes, tx_encode_frame, p->decoded.payload.size);
 
-    service.sendToMesh(p);
+    service->sendToMesh(p);
 }
 
 ProcessMessage AudioModule::handleReceived(const meshtastic_MeshPacket &mp)

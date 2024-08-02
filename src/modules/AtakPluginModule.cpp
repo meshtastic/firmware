@@ -188,7 +188,7 @@ void AtakPluginModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtast
             pb_encode_to_bytes(decompressedCopy->decoded.payload.bytes, sizeof(decompressedCopy->decoded.payload),
                                meshtastic_TAKPacket_fields, &uncompressed);
 
-        service.sendToPhone(decompressedCopy);
+        service->sendToPhone(decompressedCopy);
     }
     return;
 }

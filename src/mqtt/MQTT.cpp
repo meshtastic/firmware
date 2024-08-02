@@ -83,7 +83,7 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                         if (jsonPayloadStr.length() <= sizeof(p->decoded.payload.bytes)) {
                             memcpy(p->decoded.payload.bytes, jsonPayloadStr.c_str(), jsonPayloadStr.length());
                             p->decoded.payload.size = jsonPayloadStr.length();
-                            service.sendToMesh(p, RX_SRC_LOCAL);
+                            service->sendToMesh(p, RX_SRC_LOCAL);
                         } else {
                             LOG_WARN("Received MQTT json payload too long, dropping\n");
                         }
@@ -114,7 +114,7 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                         p->decoded.payload.size =
                             pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes),
                                                &meshtastic_Position_msg, &pos); // make the Data protobuf from position
-                        service.sendToMesh(p, RX_SRC_LOCAL);
+                        service->sendToMesh(p, RX_SRC_LOCAL);
                     } else {
                         LOG_DEBUG("JSON Ignoring downlink message with unsupported type.\n");
                     }
@@ -245,7 +245,7 @@ bool MQTT::publish(const char *topic, const char *payload, bool retained)
         strcpy(msg->topic, topic);
         strcpy(msg->payload_variant.text, payload);
         msg->retained = retained;
-        service.sendMqttMessageToClientProxy(msg);
+        service->sendMqttMessageToClientProxy(msg);
         return true;
     }
 #if HAS_NETWORKING
@@ -265,7 +265,7 @@ bool MQTT::publish(const char *topic, const uint8_t *payload, size_t length, boo
         msg->payload_variant.data.size = length;
         memcpy(msg->payload_variant.data.bytes, payload, length);
         msg->retained = retained;
-        service.sendMqttMessageToClientProxy(msg);
+        service->sendMqttMessageToClientProxy(msg);
         return true;
     }
 #if HAS_NETWORKING
