@@ -236,7 +236,7 @@ void SerialModule::sendTelemetry(meshtastic_Telemetry m)
     p->to = NODENUM_BROADCAST;
     p->decoded.want_response = false;
     p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
-    service.sendToMesh(p, RX_SRC_LOCAL, true);
+    service->sendToMesh(p, RX_SRC_LOCAL, true);
 }
 
 /**
@@ -272,7 +272,7 @@ void SerialModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
     p->decoded.payload.size = serialPayloadSize; // You must specify how many bytes are in the reply
     memcpy(p->decoded.payload.bytes, serialBytes, p->decoded.payload.size);
 
-    service.sendToMesh(p);
+    service->sendToMesh(p);
 }
 
 /**

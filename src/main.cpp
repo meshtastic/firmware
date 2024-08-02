@@ -208,7 +208,6 @@ uint32_t timeLastPowered = 0;
 static Periodic *ledPeriodic;
 static OSThread *powerFSMthread;
 static OSThread *ambientLightingThread;
-SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
 
 RadioInterface *rIf = NULL;
 
@@ -231,6 +230,12 @@ void printInfo()
 void setup()
 {
     concurrency::hasBeenSetup = true;
+#if ARCH_PORTDUINO
+    SPISettings spiSettings(settingsMap[spiSpeed], MSBFIRST, SPI_MODE0);
+#else
+    SPISettings spiSettings(4000000, MSBFIRST, SPI_MODE0);
+#endif
+
     meshtastic_Config_DisplayConfig_OledType screen_model =
         meshtastic_Config_DisplayConfig_OledType::meshtastic_Config_DisplayConfig_OledType_OLED_AUTO;
     OLEDDISPLAY_GEOMETRY screen_geometry = GEOMETRY_128_64;
@@ -714,8 +719,8 @@ void setup()
     LOG_DEBUG("Starting audio thread\n");
     audioThread = new AudioThread();
 #endif
-
-    service.init();
+    service = new MeshService();
+    service->init();
 
     // Now that the mesh service is created, create any modules
     setupModules();
@@ -1080,7 +1085,7 @@ void loop()
     // TODO: This should go into a thread handled by FreeRTOS.
     // handleWebResponse();
 
-    service.loop();
+    service->loop();
 
     long delayMsec = mainController.runOrDelay();
 

@@ -26,7 +26,7 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 
     // if user has changed while packet was not for us, inform phone
     if (hasChanged && !wasBroadcast && mp.to != nodeDB->getNodeNum())
-        service.sendToPhone(packetPool.allocCopy(mp));
+        service->sendToPhone(packetPool.allocCopy(mp));
 
     // LOG_DEBUG("did handleReceived\n");
     return false; // Let others look at this message also if they want
@@ -36,7 +36,7 @@ void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
 {
     // cancel any not yet sent (now stale) position packets
     if (prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
-        service.cancelSending(prevPacketId);
+        service->cancelSending(prevPacketId);
 
     meshtastic_MeshPacket *p = allocReply();
     if (p) { // Check whether we didn't ignore it
@@ -52,7 +52,7 @@ void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
 
         prevPacketId = p->id;
 
-        service.sendToMesh(p);
+        service->sendToMesh(p);
     }
 }
 

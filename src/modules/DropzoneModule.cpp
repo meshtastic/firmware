@@ -1,7 +1,7 @@
 #if !MESHTASTIC_EXCLUDE_DROPZONE
 
 #include "DropzoneModule.h"
-#include "MeshService.h"
+#include "Meshservice->h"
 #include "configuration.h"
 #include "gps/GeoCoord.h"
 #include "gps/RTC.h"
@@ -20,7 +20,7 @@ int32_t DropzoneModule::runOnce()
 {
     // Send on a 5 second delay from receiving the matching request
     if (startSendConditions != 0 && (startSendConditions + 5000U) < millis()) {
-        service.sendToMesh(sendConditions(), RX_SRC_LOCAL);
+        service->sendToMesh(sendConditions(), RX_SRC_LOCAL);
         startSendConditions = 0;
     }
     // Run every second to check if we need to send conditions
