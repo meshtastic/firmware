@@ -1223,6 +1223,14 @@ GnssModel_t GPS::probe(int serialSpeed)
         return GNSS_MODEL_ATGM336H;
     }
 
+    /* Airoha (Mediatek) AG3335A/M/S, A3352Q, Quectel L89 2.0, SimCom SIM65M */
+    clearBuffer();
+    _serial_gps->write("PAIR020*38\r\n");
+    if (getACK("$PAIR020,AG3335", 500) == GNSS_RESPONSE_OK) {
+        LOG_INFO("Aioha AG3335 detected, using AG3335 Module\n");
+        return GNSS_MODEL_AG3335;
+    }
+
     // Get version information
     clearBuffer();
     _serial_gps->write("$PCAS06,0*1B\r\n");
