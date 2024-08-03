@@ -57,3 +57,11 @@ char *strnstr(const char *s, const char *find, size_t slen)
     }
     return ((char *)s);
 }
+
+void printBytes(const char *label, const uint8_t *p, size_t numbytes)
+{
+    LOG_DEBUG("%s: ", label);
+    for (size_t i = 0; i < numbytes; i++)
+        LOG_DEBUG("%02x ", p[i]);
+    LOG_DEBUG("\n");
+}

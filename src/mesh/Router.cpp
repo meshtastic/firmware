@@ -7,6 +7,7 @@
 #include "configuration.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
+#include "meshUtils.h"
 #include "modules/RoutingModule.h"
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
@@ -199,14 +200,6 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
 
         return send(p);
     }
-}
-
-void printBytes(const char *label, const uint8_t *p, size_t numbytes)
-{
-    LOG_DEBUG("%s: ", label);
-    for (size_t i = 0; i < numbytes; i++)
-        LOG_DEBUG("%02x ", p[i]);
-    LOG_DEBUG("\n");
 }
 
 /**
