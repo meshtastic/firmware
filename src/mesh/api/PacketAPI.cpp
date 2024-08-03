@@ -44,7 +44,7 @@ bool PacketAPI::receivePacket(void)
         case meshtastic_ToRadio_packet_tag: {
             meshtastic_MeshPacket *mp = &mr->packet;
             printPacket("PACKET FROM QUEUE", mp);
-            service.handleToRadio(*mp);
+            service->handleToRadio(*mp);
             break;
         }
         case meshtastic_ToRadio_want_config_id_tag: {
