@@ -62,6 +62,7 @@ void CryptoEngine::decryptCurve25519_Blake2b(uint32_t fromNode, uint64_t packetN
 
     // Calculate the shared secret with the sending node and decrypt
     crypto->setDHKey(fromNode);
+    LOG_DEBUG("Decrypting using PKI!\n");
     crypto->decrypt(fromNode, packetNum, numBytes, bytes);
 }
 

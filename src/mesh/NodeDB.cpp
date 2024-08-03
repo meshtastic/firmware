@@ -126,6 +126,8 @@ NodeDB::NodeDB()
 
     // Calculate Curve25519 public and private keys
     crypto->generateKeyPair(owner.public_key.bytes, myNodeInfo.private_key.bytes);
+    owner.public_key.size = 32;
+    myNodeInfo.private_key.size = 32;
 
 #ifdef ARCH_ESP32
     Preferences preferences;
