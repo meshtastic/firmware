@@ -27,11 +27,11 @@ class CryptoEngine
     uint8_t nonce[16] = {0};
 
     CryptoKey key = {};
-    uint8_t private_key[32];
-    bool keyPairSet;
+    uint8_t private_key[32] = {0};
+    // bool keyPairSet;
 
   public:
-    uint8_t public_key[32];
+    uint8_t public_key[32] = {0};
 
     virtual ~CryptoEngine() {}
 
