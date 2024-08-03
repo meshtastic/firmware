@@ -26,7 +26,7 @@
 static bool isPowered()
 {
 // Circumvent the battery sensing logic and assumes constant power if no battery pin or power mgmt IC
-#if !defined(BATTERY_PIN) && !defined(HAS_AXP192) && !defined(HAS_AXP2101)
+#if !defined(BATTERY_PIN) && !defined(HAS_AXP192) && !defined(HAS_AXP2101) && !defined(NRF_APM)
     return true;
 #endif
 
