@@ -509,6 +509,22 @@ bool GPS::setup()
             delay(250);
             _serial_gps->write("$CFGMSG,6,1,0\r\n");
             delay(250);
+        } else if (gnssModel == GNSS_MODEL_AG3335) {
+
+            _serial_gps->write("$PAIR066,1,0,1,0,0,1*3B"); // Enable GPS+GALILEO+NAVIC
+
+            // Configure NMEA (sentences will output once per fix)
+            _serial_gps->write("$PAIR062,0,0*3F"); // GGA ON
+            _serial_gps->write("$PAIR062,1,0*3F"); // GLL OFF
+            _serial_gps->write("$PAIR062,2,1*3D"); // GSA ON
+            _serial_gps->write("$PAIR062,3,0*3D"); // GSV OFF
+            _serial_gps->write("$PAIR062,4,0*3B"); // RMC ON
+            _serial_gps->write("$PAIR062,5,0*3B"); // VTG OFF
+            _serial_gps->write("$PAIR062,6,1*39"); // ZDA ON
+
+            delay(250);
+            _serial_gps->write("$PAIR513*3D"); // save configuration
+
         } else if (gnssModel == GNSS_MODEL_UBLOX) {
             // Configure GNSS system to GPS+SBAS+GLONASS (Module may restart after this command)
             // We need set it because by default it is GPS only, and we want to use GLONASS too
