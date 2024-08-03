@@ -1,4 +1,5 @@
 #include "FloodingRouter.h"
+#include "../userPrefs.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 
@@ -46,6 +47,13 @@ void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                 meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
 
                 tosend->hop_limit--; // bump down the hop count
+#if EVENT_MODE
+                if (tosend->hop_limit > 2) {
+                    // if we are "correcting" the hop_limit, "correct" the hop_start by the same amount to preserve hops away.
+                    tosend->hop_start -= (tosend->hop_limit - 2);
+                    tosend->hop_limit = 2;
+                }
+#endif
 
                 LOG_INFO("Rebroadcasting received floodmsg to neighbors\n");
                 // Note: we are careful to resend using the original senders node id

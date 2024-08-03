@@ -176,6 +176,10 @@ typedef enum _meshtastic_HardwareModel {
     /* Heltec Mesh Node T114 board with nRF52840 CPU, and a 1.14 inch TFT display, Ultimate low-power design,
  specifically adapted for the Meshtatic project */
     meshtastic_HardwareModel_HELTEC_MESH_NODE_T114 = 69,
+    /* Sensecap Indicator from Seeed Studio. ESP32-S3 device with TFT and RP2040 coprocessor */
+    meshtastic_HardwareModel_SENSECAP_INDICATOR = 70,
+    /* Seeed studio T1000-E tracker card. NRF52840 w/ LR1110 radio, GPS, button, buzzer, and sensors. */
+    meshtastic_HardwareModel_TRACKER_T1000_E = 71,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */

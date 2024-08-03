@@ -1,4 +1,5 @@
 #include "NRF52Bluetooth.h"
+#include "BLEDfuSecure.h"
 #include "BluetoothCommon.h"
 #include "PowerFSM.h"
 #include "configuration.h"
@@ -15,8 +16,12 @@ static BLECharacteristic logRadio = BLECharacteristic(BLEUuid(LOGRADIO_UUID_16))
 
 static BLEDis bledis; // DIS (Device Information Service) helper class instance
 static BLEBas blebas; // BAS (Battery Service) helper class instance
-
+#ifndef BLE_DFU_SECURE
 static BLEDfu bledfu; // DFU software update helper service
+#else
+static BLEDfuSecure bledfusecure;                                             // DFU software update helper service
+#endif
+
 // This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in
 // process at once
 // static uint8_t trBytes[_max(_max(_max(_max(ToRadio_size, RadioConfig_size), User_size), MyNodeInfo_size), FromRadio_size)];
@@ -74,11 +79,16 @@ void onCccd(uint16_t conn_hdl, BLECharacteristic *chr, uint16_t cccd_value)
     LOG_INFO("CCCD Updated: %u\n", cccd_value);
     // Check the characteristic this CCCD update is associated with in case
     // this handler is used for multiple CCCD records.
+
+    // According to the GATT spec: cccd value = 0x0001 means notifications are enabled
+    // and cccd value = 0x0002 means indications are enabled
+
     if (chr->uuid == fromNum.uuid || chr->uuid == logRadio.uuid) {
-        if (chr->notifyEnabled(conn_hdl)) {
-            LOG_INFO("fromNum 'Notify' enabled\n");
+        auto result = cccd_value == 2 ? chr->indicateEnabled(conn_hdl) : chr->notifyEnabled(conn_hdl);
+        if (result) {
+            LOG_INFO("Notify/Indicate enabled\n");
         } else {
-            LOG_INFO("fromNum 'Notify' disabled\n");
+            LOG_INFO("Notify/Indicate disabled\n");
         }
     }
 }
@@ -176,7 +186,7 @@ void setupMeshService(void)
     toRadio.setWriteCallback(onToRadioWrite, false);
     toRadio.begin();
 
-    logRadio.setProperties(CHR_PROPS_NOTIFY | CHR_PROPS_READ);
+    logRadio.setProperties(CHR_PROPS_INDICATE | CHR_PROPS_NOTIFY | CHR_PROPS_READ);
     logRadio.setPermission(secMode, SECMODE_NO_ACCESS);
     logRadio.setMaxLen(512);
     logRadio.setCccdWriteCallback(onCccd);
@@ -242,8 +252,13 @@ void NRF52Bluetooth::setup()
     // Set the connect/disconnect callback handlers
     Bluefruit.Periph.setConnectCallback(onConnect);
     Bluefruit.Periph.setDisconnectCallback(onDisconnect);
+#ifndef BLE_DFU_SECURE
     bledfu.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM);
     bledfu.begin(); // Install the DFU helper
+#else
+    bledfusecure.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM); // add by WayenWeng
+    bledfusecure.begin();                                                     // Install the DFU helper
+#endif
     // Configure and Start the Device Information Service
     LOG_INFO("Configuring the Device Information Service\n");
     bledis.setModel(optstr(HW_VERSION));
@@ -334,9 +349,12 @@ void NRF52Bluetooth::onPairingCompleted(uint16_t conn_handle, uint8_t auth_statu
     screen->endAlert();
 }
 
-void NRF52Bluetooth::sendLog(const char *logMessage)
+void NRF52Bluetooth::sendLog(const uint8_t *logMessage, size_t length)
 {
-    if (!isConnected() || strlen(logMessage) > 512)
+    if (!isConnected() || length > 512)
         return;
-    logRadio.notify(logMessage);
+    if (logRadio.indicateEnabled())
+        logRadio.indicate(logMessage, (uint16_t)length);
+    else
+        logRadio.notify(logMessage, (uint16_t)length);
 }

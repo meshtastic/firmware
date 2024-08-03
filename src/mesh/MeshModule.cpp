@@ -170,7 +170,7 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
     if (isDecoded && mp.decoded.want_response && toUs) {
         if (currentReply) {
             printPacket("Sending response", currentReply);
-            service.sendToMesh(currentReply);
+            service->sendToMesh(currentReply);
             currentReply = NULL;
         } else if (mp.from != ourNodeNum && !ignoreRequest) {
             // Note: if the message started with the local node or a module asked to ignore the request, we don't want to send a
@@ -285,3 +285,16 @@ AdminMessageHandleResult MeshModule::handleAdminMessageForAllModules(const mesht
     }
     return handled;
 }
+
+#if HAS_SCREEN
+// Would our module like its frame to be focused after Screen::setFrames has regenerated the list of frames?
+// Only considered if setFrames is triggered by a UIFrameEvent
+bool MeshModule::isRequestingFocus()
+{
+    if (_requestingFocus) {
+        _requestingFocus = false; // Consume the request
+        return true;
+    } else
+        return false;
+}
+#endif

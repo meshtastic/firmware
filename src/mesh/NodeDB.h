@@ -20,8 +20,8 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define SEGMENT_DEVICESTATE 4
 #define SEGMENT_CHANNELS 8
 
-#define DEVICESTATE_CUR_VER 22
-#define DEVICESTATE_MIN_VER DEVICESTATE_CUR_VER
+#define DEVICESTATE_CUR_VER 23
+#define DEVICESTATE_MIN_VER 22
 
 extern meshtastic_DeviceState devicestate;
 extern meshtastic_ChannelFile channelFile;
@@ -40,7 +40,7 @@ uint32_t sinceReceived(const meshtastic_MeshPacket *p);
 
 enum LoadFileResult {
     // Successfully opened the file
-    SUCCESS = 1,
+    LOAD_SUCCESS = 1,
     // File does not exist
     NOT_FOUND = 2,
     // Device does not have a filesystem
@@ -203,9 +203,6 @@ extern NodeDB *nodeDB;
 
         prefs.is_power_saving = True
 */
-
-// Our delay functions check for this for times that should never expire
-#define NODE_DELAY_FOREVER 0xffffffff
 
 /// Sometimes we will have Position objects that only have a time, so check for
 /// valid lat/lon

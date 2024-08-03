@@ -24,7 +24,8 @@ int32_t PowerTelemetryModule::runOnce()
 {
     if (sleepOnNextExecution == true) {
         sleepOnNextExecution = false;
-        uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.power_update_interval);
+        uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.power_update_interval,
+                                                                   default_telemetry_broadcast_interval_secs);
         LOG_DEBUG("Sleeping for %ims, then awaking to send metrics again.\n", nightyNightMs);
         doDeepSleep(nightyNightMs, true);
     }
@@ -70,12 +71,14 @@ int32_t PowerTelemetryModule::runOnce()
 
         uint32_t now = millis();
         if (((lastSentToMesh == 0) ||
-             ((now - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.power_update_interval))) &&
+             ((now - lastSentToMesh) >= Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.power_update_interval,
+                                                                                default_telemetry_broadcast_interval_secs,
+                                                                                numOnlineNodes))) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
             lastSentToMesh = now;
         } else if (((lastSentToPhone == 0) || ((now - lastSentToPhone) >= sendToPhoneIntervalMs)) &&
-                   (service.isToPhoneQueueEmpty())) {
+                   (service->isToPhoneQueueEmpty())) {
             // Just send to phone when it's not our time to send to mesh yet
             // Only send while queue is empty (phone assumed connected)
             sendTelemetry(NODENUM_BROADCAST, true);
@@ -241,10 +244,10 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         lastMeasurementPacket = packetPool.allocCopy(*p);
         if (phoneOnly) {
             LOG_INFO("Sending packet to phone\n");
-            service.sendToPhone(p);
+            service->sendToPhone(p);
         } else {
             LOG_INFO("Sending packet to mesh\n");
-            service.sendToMesh(p, RX_SRC_LOCAL, true);
+            service->sendToMesh(p, RX_SRC_LOCAL, true);
 
             if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
                 LOG_DEBUG("Starting next execution in 5 seconds and then going to sleep.\n");

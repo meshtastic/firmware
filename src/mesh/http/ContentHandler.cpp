@@ -6,12 +6,12 @@
 #include "main.h"
 #include "mesh/http/ContentHelper.h"
 #include "mesh/http/WebServer.h"
-#if !MESHTASTIC_EXCLUDE_WIFI
+#if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 #include "Led.h"
-#include "mqtt/JSON.h"
 #include "power.h"
+#include "serialization/JSON.h"
 #include <FSCommon.h>
 #include <HTTPBodyParser.hpp>
 #include <HTTPMultipartBodyParser.hpp>

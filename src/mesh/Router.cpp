@@ -11,6 +11,14 @@
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
+#include "Default.h"
+#if ARCH_PORTDUINO
+#include "platform/portduino/PortduinoGlue.h"
+#endif
+#if ENABLE_JSON_LOGGING || ARCH_PORTDUINO
+#include "serialization/MeshPacketSerializer.h"
+#endif
+#include "../userPrefs.h"
 /**
  * Router todo
  *
@@ -92,22 +100,23 @@ void Router::enqueueReceivedMessage(meshtastic_MeshPacket *p)
 // FIXME, move this someplace better
 PacketId generatePacketId()
 {
-    static uint32_t i; // Note: trying to keep this in noinit didn't help for working across reboots
+    static uint32_t rollingPacketId; // Note: trying to keep this in noinit didn't help for working across reboots
     static bool didInit = false;
-
-    uint32_t numPacketId = UINT32_MAX;
 
     if (!didInit) {
         didInit = true;
 
         // pick a random initial sequence number at boot (to prevent repeated reboots always starting at 0)
         // Note: we mask the high order bit to ensure that we never pass a 'negative' number to random
-        i = random(numPacketId & 0x7fffffff);
-        LOG_DEBUG("Initial packet id %u, numPacketId %u\n", i, numPacketId);
+        rollingPacketId = random(UINT32_MAX & 0x7fffffff);
+        LOG_DEBUG("Initial packet id %u\n", rollingPacketId);
     }
 
-    i++;
-    PacketId id = (i % numPacketId) + 1; // return number between 1 and numPacketId (ie - never zero)
+    rollingPacketId++;
+
+    rollingPacketId &= UINT32_MAX >> 22;                                   // Mask out the top 22 bits
+    PacketId id = rollingPacketId | random(UINT32_MAX & 0x7fffffff) << 10; // top 22 bits
+    LOG_DEBUG("Partially randomized packet id %u\n", id);
     return id;
 }
 
@@ -118,7 +127,7 @@ meshtastic_MeshPacket *Router::allocForSending()
     p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // Assume payload is decoded at start.
     p->from = nodeDB->getNodeNum();
     p->to = NODENUM_BROADCAST;
-    p->hop_limit = (config.lora.hop_limit >= HOP_MAX) ? HOP_MAX : config.lora.hop_limit;
+    p->hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
     p->id = generatePacketId();
     p->rx_time =
         getValidTime(RTCQualityFromNet); // Just in case we process the packet locally - make sure it has a valid timestamp
@@ -244,8 +253,10 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 
     // If the packet hasn't yet been encrypted, do so now (it might already be encrypted if we are just forwarding it)
 
-    assert(p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag ||
-           p->which_payload_variant == meshtastic_MeshPacket_decoded_tag); // I _think_ all packets should have a payload by now
+    if (!(p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag ||
+          p->which_payload_variant == meshtastic_MeshPacket_decoded_tag)) {
+        return meshtastic_Routing_Error_BAD_REQUEST;
+    }
 
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
@@ -353,6 +364,13 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
                 } */
 
                 printPacket("decoded message", p);
+#if ENABLE_JSON_LOGGING
+                LOG_TRACE("%s\n", MeshPacketSerializer::JsonSerialize(p, false).c_str());
+#elif ARCH_PORTDUINO
+                if (settingsStrings[traceFilename] != "" || settingsMap[logoutputlevel] == level_trace) {
+                    LOG_TRACE("%s\n", MeshPacketSerializer::JsonSerialize(p, false).c_str());
+                }
+#endif
                 return true;
             }
         }
@@ -468,6 +486,20 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             cancelSending(p->from, p->id);
             skipHandle = true;
         }
+
+#if EVENT_MODE
+        if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+            (p->decoded.portnum == meshtastic_PortNum_ATAK_FORWARDER || p->decoded.portnum == meshtastic_PortNum_ATAK_PLUGIN ||
+             p->decoded.portnum == meshtastic_PortNum_PAXCOUNTER_APP || p->decoded.portnum == meshtastic_PortNum_IP_TUNNEL_APP ||
+             p->decoded.portnum == meshtastic_PortNum_AUDIO_APP || p->decoded.portnum == meshtastic_PortNum_PRIVATE_APP ||
+             p->decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP ||
+             p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
+             p->decoded.portnum == meshtastic_PortNum_REMOTE_HARDWARE_APP)) {
+            LOG_DEBUG("Ignoring packet on blacklisted portnum during event\n");
+            cancelSending(p->from, p->id);
+            skipHandle = true;
+        }
+#endif
     } else {
         printPacket("packet decoding failed or skipped (no PSK?)", p);
     }
@@ -488,6 +520,17 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 {
+#if ENABLE_JSON_LOGGING
+    // Even ignored packets get logged in the trace
+    p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
+    LOG_TRACE("%s\n", MeshPacketSerializer::JsonSerializeEncrypted(p).c_str());
+#elif ARCH_PORTDUINO
+    // Even ignored packets get logged in the trace
+    if (settingsStrings[traceFilename] != "" || settingsMap[logoutputlevel] == level_trace) {
+        p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
+        LOG_TRACE("%s\n", MeshPacketSerializer::JsonSerializeEncrypted(p).c_str());
+    }
+#endif
     // assert(radioConfig.has_preferences);
     bool ignore = is_in_repeated(config.lora.ignore_incoming, p->from) || (config.lora.ignore_mqtt && p->via_mqtt);
 

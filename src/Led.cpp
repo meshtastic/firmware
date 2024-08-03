@@ -1,4 +1,5 @@
 #include "Led.h"
+#include "PowerMon.h"
 #include "main.h"
 #include "power.h"
 
@@ -37,4 +38,24 @@ static GpioNotTransformer ledInverter(&ledHwPin, &ledRawHwPin);
 static GpioPin &ledHwPin = ledRawHwPin;
 #endif
 
-static GpioBinaryTransformer ledForcer(&ledForceOn, &ledBlink, &ledHwPin, GpioBinaryTransformer::Or);
+#ifdef USE_POWERMON
+/**
+ * We monitor changes to the LED drive output because we use that as a sanity test in our power monitor stuff.
+ */
+class MonitoredLedPin : public GpioPin
+{
+  public:
+    void set(bool value)
+    {
+        if (value)
+            powerMon->setState(meshtastic_PowerMon_State_LED_On);
+        else
+            powerMon->clearState(meshtastic_PowerMon_State_LED_On);
+        ledHwPin.set(value);
+    }
+} monitoredLedPin;
+#else
+static GpioPin &monitoredLedPin = ledHwPin;
+#endif
+
+static GpioBinaryTransformer ledForcer(&ledForceOn, &ledBlink, &monitoredLedPin, GpioBinaryTransformer::Or);

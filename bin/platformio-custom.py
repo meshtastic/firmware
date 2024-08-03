@@ -78,6 +78,11 @@ if platform.name == "espressif32":
         # For newer ESP32 targets, using newlib nano works better.
         env.Append(LINKFLAGS=["--specs=nano.specs", "-u", "_printf_float"])
 
+if platform.name == "nordicnrf52":
+    env.AddPostAction("$BUILD_DIR/${PROGNAME}.hex",
+                      env.VerboseAction(f"python ./bin/uf2conv.py $BUILD_DIR/firmware.hex -c -f 0xADA52840 -o $BUILD_DIR/firmware.uf2",
+                                        "Generating UF2 file"))
+
 Import("projenv")
 
 prefsLoc = projenv["PROJECT_DIR"] + "/version.properties"

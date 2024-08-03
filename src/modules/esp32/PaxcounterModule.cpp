@@ -52,7 +52,7 @@ bool PaxcounterModule::sendInfo(NodeNum dest)
     p->decoded.want_response = false;
     p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
 
-    service.sendToMesh(p, RX_SRC_LOCAL, true);
+    service->sendToMesh(p, RX_SRC_LOCAL, true);
 
     paxcounterModule->reportedDataSent = true;
 
@@ -80,7 +80,7 @@ int32_t PaxcounterModule::runOnce()
             firstTime = false;
             LOG_DEBUG("Paxcounter starting up with interval of %d seconds\n",
                       Default::getConfiguredOrDefault(moduleConfig.paxcounter.paxcounter_update_interval,
-                                                      default_broadcast_interval_secs));
+                                                      default_telemetry_broadcast_interval_secs));
             struct libpax_config_t configuration;
             libpax_default_config(&configuration);
 
@@ -100,8 +100,8 @@ int32_t PaxcounterModule::runOnce()
         } else {
             sendInfo(NODENUM_BROADCAST);
         }
-        return Default::getConfiguredOrDefaultMs(moduleConfig.paxcounter.paxcounter_update_interval,
-                                                 default_broadcast_interval_secs);
+        return Default::getConfiguredOrDefaultMsScaled(moduleConfig.paxcounter.paxcounter_update_interval,
+                                                       default_telemetry_broadcast_interval_secs, numOnlineNodes);
     } else {
         return disable();
     }

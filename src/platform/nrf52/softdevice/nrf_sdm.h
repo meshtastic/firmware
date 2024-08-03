@@ -141,7 +141,7 @@ the start of the SoftDevice (without MBR)*/
  *         Add @ref MBR_SIZE to find the first available flash address when the SoftDevice is installed
  *         just above the MBR (the usual case).
  */
-#define SD_FLASH_SIZE 0x26000
+#define SD_FLASH_SIZE 0x27000
 
 /** @brief Defines a macro for retrieving the actual FWID value from a given base address. Use
  *         @ref MBR_SIZE as the argument when the SoftDevice is installed just above the MBR (the usual

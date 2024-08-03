@@ -8,7 +8,7 @@
 #include "nimble/NimbleBluetooth.h"
 #endif
 
-#if !MESHTASTIC_EXCLUDE_WIFI
+#if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 
@@ -24,23 +24,22 @@
 #if !defined(CONFIG_IDF_TARGET_ESP32S2) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 void setBluetoothEnable(bool enable)
 {
-#ifndef MESHTASTIC_EXCLUDE_WIFI
+#if HAS_WIFI
     if (!isWifiAvailable() && config.bluetooth.enabled == true)
+#else
+    if (config.bluetooth.enabled == true)
 #endif
-#ifdef MESHTASTIC_EXCLUDE_WIFI
-        if (config.bluetooth.enabled == true)
-#endif
-        {
-            if (!nimbleBluetooth) {
-                nimbleBluetooth = new NimbleBluetooth();
-            }
-            if (enable && !nimbleBluetooth->isActive()) {
-                nimbleBluetooth->setup();
-            }
-            // For ESP32, no way to recover from bluetooth shutdown without reboot
-            // BLE advertising automatically stops when MCU enters light-sleep(?)
-            // For deep-sleep, shutdown hardware with nimbleBluetooth->deinit(). Requires reboot to reverse
+    {
+        if (!nimbleBluetooth) {
+            nimbleBluetooth = new NimbleBluetooth();
         }
+        if (enable && !nimbleBluetooth->isActive()) {
+            nimbleBluetooth->setup();
+        }
+        // For ESP32, no way to recover from bluetooth shutdown without reboot
+        // BLE advertising automatically stops when MCU enters light-sleep(?)
+        // For deep-sleep, shutdown hardware with nimbleBluetooth->deinit(). Requires reboot to reverse
+    }
 }
 #else
 void setBluetoothEnable(bool enable) {}
@@ -92,8 +91,12 @@ void enableSlowCLK()
 
 void esp32Setup()
 {
+    /* We explicitly don't want to do call randomSeed,
+    // as that triggers the esp32 core to use a less secure pseudorandom function.
     uint32_t seed = esp_random();
     LOG_DEBUG("Setting random seed %u\n", seed);
+    randomSeed(seed);
+    */
 
     LOG_DEBUG("Total heap: %d\n", ESP.getHeapSize());
     LOG_DEBUG("Free heap: %d\n", ESP.getFreeHeap());
@@ -192,16 +195,16 @@ void cpuDeepSleep(uint32_t msecToWake)
     button(s), maybe we should not include any other GPIOs...
     */
 #if SOC_RTCIO_HOLD_SUPPORTED
-    static const uint8_t rtcGpios[] = {/* 0, */ 2,
-    /* 4, */
-#ifndef USE_JTAG
-                                       13,
-    /* 14, */ /* 15, */
+    static const uint8_t rtcGpios[] = {
+#ifndef HELTEC_VISION_MASTER_E213
+        // For this variant, >20mA leaks through the display if pin 2 held
+        // Todo: check if it's safe to remove this pin for all variants
+        2,
 #endif
-                                       /* 25, */ /* 26, */ /* 27, */
-                                       /* 32, */ /* 33, */ 34, 35,
-                                       /* 36, */ 37
-                                       /* 38, 39 */};
+#ifndef USE_JTAG
+        13,
+#endif
+        34, 35, 37};
 
     for (int i = 0; i < sizeof(rtcGpios); i++)
         rtc_gpio_isolate((gpio_num_t)rtcGpios[i]);
