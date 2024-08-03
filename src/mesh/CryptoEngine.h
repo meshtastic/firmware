@@ -1,6 +1,7 @@
 #pragma once
 
 #include "concurrency/LockGuard.h"
+#include "mesh-pb-constants.h"
 #include <Arduino.h>
 
 extern concurrency::Lock *cryptLock;
@@ -26,9 +27,21 @@ class CryptoEngine
     uint8_t nonce[16] = {0};
 
     CryptoKey key = {};
+    uint8_t private_key[32];
+    bool keyPairSet;
 
   public:
+    uint8_t public_key[32];
+
     virtual ~CryptoEngine() {}
+
+    virtual void generateKeyPair(uint8_t *pubKey, uint8_t *privKey);
+    virtual void clearKeys();
+    virtual void encryptCurve25519_Blake2b(uint32_t toNode, uint32_t fromNode, uint64_t packetNum, size_t numBytes,
+                                           uint8_t *bytes);
+    virtual void decryptCurve25519_Blake2b(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes);
+    virtual void setDHKey(uint32_t nodeNum);
+    virtual void hash(uint8_t *bytes, size_t numBytes);
 
     /**
      * Set the key used for encrypt, decrypt.

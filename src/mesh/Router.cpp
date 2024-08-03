@@ -135,6 +135,11 @@ meshtastic_MeshPacket *Router::allocForSending()
     return p;
 }
 
+bool isDirectMessage(const meshtastic_MeshPacket *p)
+{
+    return p->to != -1 && (p->decoded.portnum == meshtastic_PortNum_ROUTING_APP) ? false : p->want_ack;
+}
+
 /**
  * Send an ack or a nak packet back towards whoever sent idFrom
  */
@@ -264,6 +269,9 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         meshtastic_MeshPacket *p_decoded = packetPool.allocCopy(*p);
 
         auto encodeResult = perhapsEncode(p);
+        if (isDirectMessage(p))
+            p->want_ack = true;
+
         if (encodeResult != meshtastic_Routing_Error_NONE) {
             packetPool.release(p_decoded);
             abortSendAndNak(encodeResult, p);
@@ -340,6 +348,8 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
                 LOG_ERROR("Invalid portnum (bad psk?)!\n");
             } else {
                 // parsing was successful
+                if (isDirectMessage(p) && p->to == nodeDB->getNodeNum()) // This is a direct message to us so decrypt the payload
+                    crypto->decryptCurve25519_Blake2b(p->from, p->id, p->decoded.payload.size, p->decoded.payload.bytes);
                 p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
                 p->channel = chIndex;                                         // change to store the index instead of the hash
 
@@ -388,6 +398,9 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+        if (isDirectMessage(p)) // Encrypt the payload for the recipient node seperately from the rest of the packet
+            crypto->encryptCurve25519_Blake2b(p->to, getFrom(p), p->id, p->decoded.payload.size, p->decoded.payload.bytes);
+
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded);
 
         /* Not actually used, so save the cycles

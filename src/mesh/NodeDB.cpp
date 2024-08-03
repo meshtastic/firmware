@@ -124,6 +124,9 @@ NodeDB::NodeDB()
     info->user = owner;
     info->has_user = true;
 
+    // Calculate Curve25519 public and private keys
+    crypto->generateKeyPair(owner.public_key.bytes, myNodeInfo.private_key.bytes);
+
 #ifdef ARCH_ESP32
     Preferences preferences;
     preferences.begin("meshtastic", false);
@@ -897,6 +900,14 @@ void NodeDB::updatePosition(uint32_t nodeId, const meshtastic_Position &p, RxSou
     notifyObservers(true); // Force an update whether or not our node counts have changed
 }
 
+void printBytes(const uint8_t *bytes, size_t len)
+{
+    for (size_t i = 0; i < len; i++) {
+        LOG_DEBUG("%02x", bytes[i]);
+    }
+    LOG_DEBUG("\n");
+}
+
 /** Update telemetry info for this node based on received metrics
  *  We only care about device telemetry here
  */
@@ -930,6 +941,7 @@ bool NodeDB::updateUser(uint32_t nodeId, const meshtastic_User &p, uint8_t chann
     }
 
     LOG_DEBUG("old user %s/%s/%s, channel=%d\n", info->user.id, info->user.long_name, info->user.short_name, info->channel);
+    printBytes(info->user.public_key.bytes, 32);
 
     // Both of info->user and p start as filled with zero so I think this is okay
     bool changed = memcmp(&info->user, &p, sizeof(info->user)) || (info->channel != channelIndex);
@@ -939,6 +951,8 @@ bool NodeDB::updateUser(uint32_t nodeId, const meshtastic_User &p, uint8_t chann
         info->channel = channelIndex; // Set channel we need to use to reach this node (but don't set our own channel)
     LOG_DEBUG("updating changed=%d user %s/%s/%s, channel=%d\n", changed, info->user.id, info->user.long_name,
               info->user.short_name, info->channel);
+    printBytes(info->user.public_key.bytes, 32);
+
     info->has_user = true;
 
     if (changed) {
