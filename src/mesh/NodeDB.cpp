@@ -122,13 +122,24 @@ NodeDB::NodeDB()
 
     // Include our owner in the node db under our nodenum
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
-    info->user = owner;
-    info->has_user = true;
 
     // Calculate Curve25519 public and private keys
-    crypto->generateKeyPair(owner.public_key.bytes, myNodeInfo.private_key.bytes);
-    owner.public_key.size = 32;
-    myNodeInfo.private_key.size = 32;
+    printBytes("Old Privkey", myNodeInfo.private_key.bytes, 32);
+    printBytes("Old Pubkey", owner.public_key.bytes, 32);
+    if (myNodeInfo.private_key.size == 32 && owner.public_key.size == 32) {
+        LOG_INFO("Using saved DH keys\n");
+    } else {
+        LOG_INFO("Generating new DH keys\n");
+        crypto->generateKeyPair(owner.public_key.bytes, myNodeInfo.private_key.bytes);
+        owner.public_key.size = 32;
+        myNodeInfo.private_key.size = 32;
+
+        printBytes("New Privkey", myNodeInfo.private_key.bytes, 32);
+        printBytes("New Pubkey", owner.public_key.bytes, 32);
+    }
+
+    info->user = owner;
+    info->has_user = true;
 
 #ifdef ARCH_ESP32
     Preferences preferences;
