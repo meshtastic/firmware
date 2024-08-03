@@ -285,17 +285,15 @@ template <typename T> bool LR11x0Interface<T>::isActivelyReceiving()
 
 template <typename T> bool LR11x0Interface<T>::sleep()
 {
-    // Not keeping config is busted - next time nrf52 board boots lora sending fails  tcxo related? - see datasheet
     // \todo Display actual typename of the adapter, not just `LR11x0`
-    LOG_DEBUG("LR11x0 entering sleep mode (FIXME, don't keep config)\n");
+    LOG_DEBUG("LR11x0 entering sleep mode\n");
     setStandby(); // Stop any pending operations
 
     // turn off TCXO if it was powered
-    // FIXME - this isn't correct
-    // lora.setTCXO(0);
+    lora.setTCXO(0);
 
     // put chipset into sleep mode (we've already disabled interrupts by now)
-    bool keepConfig = true;
+    bool keepConfig = false;
     lora.sleep(keepConfig, 0); // Note: we do not keep the config, full reinit will be needed
 
 #ifdef LR11X0_POWER_EN
