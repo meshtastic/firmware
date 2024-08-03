@@ -138,7 +138,7 @@ meshtastic_MeshPacket *Router::allocForSending()
 
 bool isDirectMessage(const meshtastic_MeshPacket *p)
 {
-    return p->to != -1 && (p->decoded.portnum == meshtastic_PortNum_ROUTING_APP) ? false : p->want_ack;
+    return p->to != -1 && p->decoded.portnum != meshtastic_PortNum_ROUTING_APP && p->want_ack;
 }
 
 /**
@@ -262,9 +262,6 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         meshtastic_MeshPacket *p_decoded = packetPool.allocCopy(*p);
 
         auto encodeResult = perhapsEncode(p);
-        if (isDirectMessage(p))
-            p->want_ack = true;
-
         if (encodeResult != meshtastic_Routing_Error_NONE) {
             packetPool.release(p_decoded);
             abortSendAndNak(encodeResult, p);
@@ -315,72 +312,93 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag)
         return true; // If packet was already decoded just return
 
+    size_t rawSize = p->encrypted.size;
+    if (rawSize > sizeof(bytes)) {
+        LOG_ERROR("Packet too large to attempt decription! (rawSize=%d > 256)\n", rawSize);
+        return false;
+    }
+    bool decrypted = false;
+    ChannelIndex chIndex = 0;
+
+    // Attempt PKI decryption first
+    if (p->to == nodeDB->getNodeNum() && p->to > 0 && nodeDB->getMeshNode(p->to)->user.public_key.size > 0) {
+        memcpy(bytes, p->encrypted.bytes, rawSize);
+        memset(&p->decoded, 0, sizeof(p->decoded));
+        crypto->decryptCurve25519_Blake2b(p->from, p->id, rawSize, bytes);
+        if (pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &p->decoded) &&
+            p->decoded.portnum != meshtastic_PortNum_UNKNOWN_APP)
+            decrypted = true;
+    }
+
     // assert(p->which_payloadVariant == MeshPacket_encrypted_tag);
+    if (!decrypted) {
+        // Try to find a channel that works with this hash
+        for (chIndex = 0; chIndex < channels.getNumChannels(); chIndex++) {
+            // Try to use this hash/channel pair
+            if (channels.decryptForHash(chIndex, p->channel)) {
+                // Try to decrypt the packet if we can
 
-    // Try to find a channel that works with this hash
-    for (ChannelIndex chIndex = 0; chIndex < channels.getNumChannels(); chIndex++) {
-        // Try to use this hash/channel pair
-        if (channels.decryptForHash(chIndex, p->channel)) {
-            // Try to decrypt the packet if we can
-            size_t rawSize = p->encrypted.size;
-            if (rawSize > sizeof(bytes)) {
-                LOG_ERROR("Packet too large to attempt decription! (rawSize=%d > 256)\n", rawSize);
-                return false;
-            }
-            memcpy(bytes, p->encrypted.bytes,
-                   rawSize); // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf
-            crypto->decrypt(p->from, p->id, rawSize, bytes);
+                memset(&p->decoded, 0, sizeof(p->decoded));
+                memcpy(
+                    bytes, p->encrypted.bytes,
+                    rawSize); // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf
+                crypto->decrypt(p->from, p->id, rawSize, bytes);
 
-            // printBytes("plaintext", bytes, p->encrypted.size);
+                // printBytes("plaintext", bytes, p->encrypted.size);
 
-            // Take those raw bytes and convert them back into a well structured protobuf we can understand
-            memset(&p->decoded, 0, sizeof(p->decoded));
-            if (!pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &p->decoded)) {
-                LOG_ERROR("Invalid protobufs in received mesh packet (bad psk?)!\n");
-            } else if (p->decoded.portnum == meshtastic_PortNum_UNKNOWN_APP) {
-                LOG_ERROR("Invalid portnum (bad psk?)!\n");
-            } else {
-                // parsing was successful
-                if (isDirectMessage(p) && p->to == nodeDB->getNodeNum()) // This is a direct message to us so decrypt the payload
-                    crypto->decryptCurve25519_Blake2b(p->from, p->id, p->decoded.payload.size, p->decoded.payload.bytes);
-                p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
-                p->channel = chIndex;                                         // change to store the index instead of the hash
-
-                /* Not actually ever used.
-                // Decompress if needed. jm
-                if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP) {
-                    // Decompress the payload
-                    char compressed_in[meshtastic_Constants_DATA_PAYLOAD_LEN] = {};
-                    char decompressed_out[meshtastic_Constants_DATA_PAYLOAD_LEN] = {};
-                    int decompressed_len;
-
-                    memcpy(compressed_in, p->decoded.payload.bytes, p->decoded.payload.size);
-
-                    decompressed_len = unishox2_decompress_simple(compressed_in, p->decoded.payload.size, decompressed_out);
-
-                    // LOG_DEBUG("\n\n**\n\nDecompressed length - %d \n", decompressed_len);
-
-                    memcpy(p->decoded.payload.bytes, decompressed_out, decompressed_len);
-
-                    // Switch the port from PortNum_TEXT_MESSAGE_COMPRESSED_APP to PortNum_TEXT_MESSAGE_APP
-                    p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
-                } */
-
-                printPacket("decoded message", p);
-#if ENABLE_JSON_LOGGING
-                LOG_TRACE("%s\n", MeshPacketSerializer::JsonSerialize(p, false).c_str());
-#elif ARCH_PORTDUINO
-                if (settingsStrings[traceFilename] != "" || settingsMap[logoutputlevel] == level_trace) {
-                    LOG_TRACE("%s\n", MeshPacketSerializer::JsonSerialize(p, false).c_str());
+                // Take those raw bytes and convert them back into a well structured protobuf we can understand
+                if (!pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &p->decoded)) {
+                    LOG_ERROR("Invalid protobufs in received mesh packet (bad psk?)!\n");
+                } else if (p->decoded.portnum == meshtastic_PortNum_UNKNOWN_APP) {
+                    LOG_ERROR("Invalid portnum (bad psk?)!\n");
+                } else {
+                    decrypted = true;
+                    break;
                 }
-#endif
-                return true;
             }
         }
     }
+    if (decrypted) {
+        // parsing was successful
+        /* if (isDirectMessage(p) && p->to == nodeDB->getNodeNum()) // This is a direct message to us so decrypt the
+            payload crypto->decryptCurve25519_Blake2b(p->from, p->id, p->decoded.payload.size, p->decoded.payload.bytes);
+            */
+        p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
+        p->channel = chIndex;                                         // change to store the index instead of the hash
 
-    LOG_WARN("No suitable channel found for decoding, hash was 0x%x!\n", p->channel);
-    return false;
+        /* Not actually ever used.
+        // Decompress if needed. jm
+        if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP) {
+            // Decompress the payload
+            char compressed_in[meshtastic_Constants_DATA_PAYLOAD_LEN] = {};
+            char decompressed_out[meshtastic_Constants_DATA_PAYLOAD_LEN] = {};
+            int decompressed_len;
+
+            memcpy(compressed_in, p->decoded.payload.bytes, p->decoded.payload.size);
+
+            decompressed_len = unishox2_decompress_simple(compressed_in, p->decoded.payload.size, decompressed_out);
+
+            // LOG_DEBUG("\n\n**\n\nDecompressed length - %d \n", decompressed_len);
+
+            memcpy(p->decoded.payload.bytes, decompressed_out, decompressed_len);
+
+            // Switch the port from PortNum_TEXT_MESSAGE_COMPRESSED_APP to PortNum_TEXT_MESSAGE_APP
+            p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+        } */
+
+        printPacket("decoded message", p);
+#if ENABLE_JSON_LOGGING
+        LOG_TRACE("%s\n", MeshPacketSerializer::JsonSerialize(p, false).c_str());
+#elif ARCH_PORTDUINO
+        if (settingsStrings[traceFilename] != "" || settingsMap[logoutputlevel] == level_trace) {
+            LOG_TRACE("%s\n", MeshPacketSerializer::JsonSerialize(p, false).c_str());
+        }
+#endif
+        return true;
+    } else {
+        LOG_WARN("No suitable channel found for decoding, hash was 0x%x!\n", p->channel);
+        return false;
+    }
 }
 
 /** Return 0 for success or a Routing_Errror code for failure
@@ -391,8 +409,10 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+        /*
         if (isDirectMessage(p)) // Encrypt the payload for the recipient node seperately from the rest of the packet
             crypto->encryptCurve25519_Blake2b(p->to, getFrom(p), p->id, p->decoded.payload.size, p->decoded.payload.bytes);
+            */
 
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded);
 
@@ -445,7 +465,11 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 
         // Now that we are encrypting the packet channel should be the hash (no longer the index)
         p->channel = hash;
-        crypto->encrypt(getFrom(p), p->id, numbytes, bytes);
+        if (isDirectMessage(p)) { // Encrypt the payload for the recipient node seperately from the rest of the packet
+            crypto->encryptCurve25519_Blake2b(p->to, getFrom(p), p->id, numbytes, bytes);
+        } else {
+            crypto->encrypt(getFrom(p), p->id, numbytes, bytes);
+        }
 
         // Copy back into the packet and set the variant type
         memcpy(p->encrypted.bytes, bytes, numbytes);
