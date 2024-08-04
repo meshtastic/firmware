@@ -60,13 +60,13 @@ bool RemoteHardwareModule::handleReceivedProtobuf(const meshtastic_MeshPacket &r
             // Print notification to LCD screen
             screen->print("Write GPIOs\n");
 
+            pinModes(p.gpio_mask, OUTPUT);
             for (uint8_t i = 0; i < NUM_GPIOS; i++) {
                 uint64_t mask = 1ULL << i;
                 if (p.gpio_mask & mask) {
                     digitalWrite(i, (p.gpio_value & mask) ? 1 : 0);
                 }
             }
-            pinModes(p.gpio_mask, OUTPUT);
 
             break;
         }
