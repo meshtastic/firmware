@@ -122,3 +122,23 @@ class GpioBinaryTransformer : public GpioTransformer
     GpioVirtPin *inPin2;
     Operation operation;
 };
+
+/**
+ * Sometimes a single output GPIO single needs to drive multiple physical GPIOs.  This class provides that.
+ */
+class GpioSplitter : public GpioPin
+{
+
+  public:
+    GpioSplitter(GpioPin *outPin1, GpioPin *outPin2);
+
+    void set(bool value)
+    {
+        outPin1->set(value);
+        outPin2->set(value);
+    }
+
+  private:
+    GpioPin *outPin1;
+    GpioPin *outPin2;
+};

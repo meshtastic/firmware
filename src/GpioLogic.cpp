@@ -80,3 +80,5 @@ void GpioBinaryTransformer::update()
     }
     set(newValue);
 }
+
+GpioSplitter::GpioSplitter(GpioPin *outPin1, GpioPin *outPin2) : outPin1(outPin1), outPin2(outPin2) {}

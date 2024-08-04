@@ -6,12 +6,20 @@
 GpioVirtPin ledForceOn, ledBlink;
 
 #if defined(LED_PIN)
-
 // Most boards have a GPIO for LED control
 static GpioHwPin ledRawHwPin(LED_PIN);
+#else
+static GpioVirtPin ledRawHwPin; // Dummy pin for no hardware
+#endif
 
-#elif defined(HAS_PMU)
+#if LED_INVERTED
+static GpioVirtPin ledHwPin;
+static GpioNotTransformer ledInverter(&ledHwPin, &ledRawHwPin);
+#else
+static GpioPin &ledHwPin = ledRawHwPin;
+#endif
 
+#if defined(HAS_PMU)
 /**
  * A GPIO controlled by the PMU
  */
@@ -25,17 +33,12 @@ class GpioPmuPin : public GpioPin
             PMU->setChargingLedMode(value ? XPOWERS_CHG_LED_ON : XPOWERS_CHG_LED_OFF);
         }
     }
-} ledRawHwPin;
+} ledPmuHwPin;
 
+// In some cases we need to drive a PMU LED and a normal LED
+static GpioSplitter ledFinalPin(&ledHwPin, &ledPmuHwPin);
 #else
-static GpioVirtPin ledRawHwPin; // Dummy pin for no hardware
-#endif
-
-#if LED_INVERTED
-static GpioVirtPin ledHwPin;
-static GpioNotTransformer ledInverter(&ledHwPin, &ledRawHwPin);
-#else
-static GpioPin &ledHwPin = ledRawHwPin;
+static GpioPin &ledFinalPin = ledHwPin;
 #endif
 
 #ifdef USE_POWERMON
@@ -47,15 +50,17 @@ class MonitoredLedPin : public GpioPin
   public:
     void set(bool value)
     {
-        if (value)
-            powerMon->setState(meshtastic_PowerMon_State_LED_On);
-        else
-            powerMon->clearState(meshtastic_PowerMon_State_LED_On);
-        ledHwPin.set(value);
+        if (powerMon) {
+            if (value)
+                powerMon->setState(meshtastic_PowerMon_State_LED_On);
+            else
+                powerMon->clearState(meshtastic_PowerMon_State_LED_On);
+        }
+        ledFinalPin.set(value);
     }
 } monitoredLedPin;
 #else
-static GpioPin &monitoredLedPin = ledHwPin;
+static GpioPin &monitoredLedPin = ledFinalPin;
 #endif
 
 static GpioBinaryTransformer ledForcer(&ledForceOn, &ledBlink, &monitoredLedPin, GpioBinaryTransformer::Or);
