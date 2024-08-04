@@ -85,7 +85,6 @@ class GpioNotTransformer : public GpioTransformer
 {
   public:
     GpioNotTransformer(GpioVirtPin *inPin, GpioPin *outPin);
-    void set(bool value);
 
   protected:
     friend class GpioVirtPin;
@@ -97,7 +96,6 @@ class GpioNotTransformer : public GpioTransformer
 
   private:
     GpioVirtPin *inPin;
-    GpioPin *outPin;
 };
 
 /**

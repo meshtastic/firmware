@@ -21,12 +21,10 @@ GpioNotTransformer::GpioNotTransformer(GpioVirtPin *inPin, GpioPin *outPin) : Gp
 {
     assert(!inPin->dependentPin); // We only allow one dependent pin
     inPin->dependentPin = this;
-    update();
-}
 
-void GpioNotTransformer::set(bool value)
-{
-    outPin->set(value);
+    // Don't update at construction time, because various GpioPins might be global constructor based not yet initied because
+    // order of operations for global constructors is not defined.
+    // update();
 }
 
 /**
@@ -48,7 +46,10 @@ GpioBinaryTransformer::GpioBinaryTransformer(GpioVirtPin *inPin1, GpioVirtPin *i
     inPin1->dependentPin = this;
     assert(!inPin2->dependentPin); // We only allow one dependent pin
     inPin2->dependentPin = this;
-    update();
+
+    // Don't update at construction time, because various GpioPins might be global constructor based not yet initied because
+    // order of operations for global constructors is not defined.
+    // update();
 }
 
 void GpioBinaryTransformer::update()
