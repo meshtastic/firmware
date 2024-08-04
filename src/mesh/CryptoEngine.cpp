@@ -2,6 +2,8 @@
 #include "NodeDB.h"
 #include "RadioInterface.h"
 #include "configuration.h"
+
+#if !(MESHTASTIC_EXCLUDE_PKI)
 #include <BLAKE2b.h>
 #include <Crypto.h>
 #include <Curve25519.h>
@@ -129,6 +131,7 @@ void CryptoEngine::hash(uint8_t *bytes, size_t numBytes)
     }
     hash.finalize(bytes, 32);
 }
+#endif
 
 concurrency::Lock *cryptLock;
 

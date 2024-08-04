@@ -314,7 +314,7 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
     }
     bool decrypted = false;
     ChannelIndex chIndex = 0;
-
+#if !(MESHTASTIC_EXCLUDE_PKI)
     // Attempt PKI decryption first
     if (p->to == nodeDB->getNodeNum() && p->to > 0 && nodeDB->getMeshNode(p->to)->user.public_key.size > 0) {
         memcpy(bytes, p->encrypted.bytes, rawSize);
@@ -324,6 +324,7 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
             p->decoded.portnum != meshtastic_PortNum_UNKNOWN_APP)
             decrypted = true;
     }
+#endif
 
     // assert(p->which_payloadVariant == MeshPacket_encrypted_tag);
     if (!decrypted) {
@@ -451,12 +452,16 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 
         // Now that we are encrypting the packet channel should be the hash (no longer the index)
         p->channel = hash;
+#if !(MESHTASTIC_EXCLUDE_PKI)
         if (p->to != -1 && nodeDB->getMeshNode(p->to)->user.public_key.size > 0 &&
             p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP) {
             crypto->encryptCurve25519_Blake2b(p->to, getFrom(p), p->id, numbytes, bytes);
         } else {
             crypto->encrypt(getFrom(p), p->id, numbytes, bytes);
         }
+#else
+        crypto->encrypt(getFrom(p), p->id, numbytes, bytes);
+#endif
 
         // Copy back into the packet and set the variant type
         memcpy(p->encrypted.bytes, bytes, numbytes);
