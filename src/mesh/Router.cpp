@@ -136,11 +136,6 @@ meshtastic_MeshPacket *Router::allocForSending()
     return p;
 }
 
-bool isDirectMessage(const meshtastic_MeshPacket *p)
-{
-    return p->to != -1 && p->decoded.portnum != meshtastic_PortNum_ROUTING_APP && p->want_ack;
-}
-
 /**
  * Send an ack or a nak packet back towards whoever sent idFrom
  */
@@ -360,9 +355,6 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
     }
     if (decrypted) {
         // parsing was successful
-        /* if (isDirectMessage(p) && p->to == nodeDB->getNodeNum()) // This is a direct message to us so decrypt the
-            payload crypto->decryptCurve25519_Blake2b(p->from, p->id, p->decoded.payload.size, p->decoded.payload.bytes);
-            */
         p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
         p->channel = chIndex;                                         // change to store the index instead of the hash
 
@@ -409,15 +401,9 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
-        /*
-        if (isDirectMessage(p)) // Encrypt the payload for the recipient node seperately from the rest of the packet
-            crypto->encryptCurve25519_Blake2b(p->to, getFrom(p), p->id, p->decoded.payload.size, p->decoded.payload.bytes);
-            */
-
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded);
 
         /* Not actually used, so save the cycles
-        // Only allow encryption on the text message app.
         //  TODO: Allow modules to opt into compression.
         if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) {
 
@@ -465,7 +451,8 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 
         // Now that we are encrypting the packet channel should be the hash (no longer the index)
         p->channel = hash;
-        if (isDirectMessage(p)) { // Encrypt the payload for the recipient node seperately from the rest of the packet
+        if (p->to != -1 && nodeDB->getMeshNode(p->to)->user.public_key.size > 0 &&
+            p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP) {
             crypto->encryptCurve25519_Blake2b(p->to, getFrom(p), p->id, numbytes, bytes);
         } else {
             crypto->encrypt(getFrom(p), p->id, numbytes, bytes);
