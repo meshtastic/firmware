@@ -7,6 +7,7 @@
 
 #include <Utility.h>
 #include <assert.h>
+#include <time.h>
 
 #include "PortduinoGlue.h"
 #include "linux/gpio/LinuxGPIOPin.h"
@@ -97,6 +98,7 @@ void portduinoSetup()
     settingsStrings[webserverrootpath] = "";
     settingsStrings[spidev] = "";
     settingsStrings[displayspidev] = "";
+    settingsMap[spiSpeed] = 2000000;
 
     YAML::Node yamlConfig;
 
@@ -132,6 +134,9 @@ void portduinoSetup()
         randomSeed(TCPPort);
         return;
     }
+
+    // Rather important to set this, if not running simulated.
+    randomSeed(time(NULL));
 
     try {
         if (yamlConfig["Logging"]) {
@@ -173,6 +178,7 @@ void portduinoSetup()
             settingsMap[rxen] = yamlConfig["Lora"]["RXen"].as<int>(RADIOLIB_NC);
             settingsMap[gpiochip] = yamlConfig["Lora"]["gpiochip"].as<int>(0);
             settingsMap[ch341Quirk] = yamlConfig["Lora"]["ch341_quirk"].as<bool>(false);
+            settingsMap[spiSpeed] = yamlConfig["Lora"]["spiSpeed"].as<int>(2000000);
             gpioChipName += std::to_string(settingsMap[gpiochip]);
 
             settingsStrings[spidev] = "/dev/" + yamlConfig["Lora"]["spidev"].as<std::string>("spidev0.0");
@@ -280,6 +286,7 @@ void portduinoSetup()
         }
 
         settingsMap[maxnodes] = (yamlConfig["General"]["MaxNodes"]).as<int>(200);
+        settingsMap[maxtophone] = (yamlConfig["General"]["MaxMessageQueue"]).as<int>(100);
 
     } catch (YAML::Exception &e) {
         std::cout << "*** Exception " << e.what() << std::endl;

@@ -131,7 +131,7 @@ int32_t RemoteHardwareModule::runOnce()
                 r.type = meshtastic_HardwareMessage_Type_GPIOS_CHANGED;
                 r.gpio_value = curVal;
                 meshtastic_MeshPacket *p = allocDataProtobuf(r);
-                service.sendToMesh(p);
+                service->sendToMesh(p);
             }
         }
     } else {

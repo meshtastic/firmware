@@ -19,6 +19,7 @@ enum configNames {
     user,
     gpiochip,
     spidev,
+    spiSpeed,
     i2cdev,
     has_gps,
     touchscreenModule,
@@ -51,6 +52,7 @@ enum configNames {
     webserver,
     webserverport,
     webserverrootpath,
+    maxtophone,
     maxnodes
 };
 enum { no_screen, x11, st7789, st7735, st7735s, st7796, ili9341, ili9488, hx8357d };

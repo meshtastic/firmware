@@ -38,7 +38,7 @@ template <class T> class ProtobufModule : protected SinglePortModule
     /**
      * Return a mesh packet which has been preinited with a particular protobuf data payload and port number.
      * You can then send this packet (after customizing any of the payload fields you might need) with
-     * service.sendToMesh()
+     * service->sendToMesh()
      */
     meshtastic_MeshPacket *allocDataProtobuf(const T &payload)
     {

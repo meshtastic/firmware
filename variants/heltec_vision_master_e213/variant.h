@@ -15,9 +15,9 @@
 
 // SPI
 #define SPI_INTERFACES_COUNT 2
-#define PIN_SPI_MISO 10 // MISO
-#define PIN_SPI_MOSI 11 // MOSI
-#define PIN_SPI_SCK 9   // SCK
+#define PIN_SPI_MISO 11
+#define PIN_SPI_MOSI 10
+#define PIN_SPI_SCK 9
 
 // Power
 #define VEXT_ENABLE 18            // Powers the E-Ink display, and the 3.3V supply to the I2C QuickLink connector
@@ -29,11 +29,12 @@
 #define ADC_CHANNEL ADC1_GPIO7_CHANNEL
 #define ADC_MULTIPLIER 4.9 * 1.03
 #define ADC_ATTENUATION ADC_ATTEN_DB_2_5
+#define HAS_32768HZ
 
 // LoRa
 #define USE_SX1262
 
-#define LORA_DIO0 -1 // a No connect on the SX1262 module
+#define LORA_DIO0 RADIOLIB_NC // a No connect on the SX1262 module
 #define LORA_RESET 12
 #define LORA_DIO1 14 // SX1262 IRQ
 #define LORA_DIO2 13 // SX1262 BUSY

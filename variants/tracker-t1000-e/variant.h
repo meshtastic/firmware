@@ -40,6 +40,9 @@ extern "C" {
 #define NUM_ANALOG_INPUTS (6)
 #define NUM_ANALOG_OUTPUTS (0)
 
+// Use the native nrf52 usb power detection
+#define NRF_APM
+
 #define PIN_3V3_EN (32 + 6)     // P1.6, Power to Sensors
 #define PIN_3V3_ACC_EN (32 + 7) // P1.7, Power to Acc
 
