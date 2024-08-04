@@ -319,8 +319,8 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
     if (p->to == nodeDB->getNodeNum() && p->to > 0 && nodeDB->getMeshNode(p->to)->user.public_key.size > 0) {
         memcpy(bytes, p->encrypted.bytes, rawSize);
         memset(&p->decoded, 0, sizeof(p->decoded));
-        crypto->decryptCurve25519_Blake2b(p->from, p->id, rawSize, bytes);
-        if (pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &p->decoded) &&
+        if (crypto->decryptCurve25519_Blake2b(p->from, p->id, rawSize, bytes) &&
+            pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &p->decoded) &&
             p->decoded.portnum != meshtastic_PortNum_UNKNOWN_APP)
             decrypted = true;
     }

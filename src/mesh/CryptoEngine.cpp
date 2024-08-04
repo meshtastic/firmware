@@ -55,18 +55,20 @@ void CryptoEngine::encryptCurve25519_Blake2b(uint32_t toNode, uint32_t fromNode,
  *
  * @param bytes is updated in place
  */
-void CryptoEngine::decryptCurve25519_Blake2b(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes)
+bool CryptoEngine::decryptCurve25519_Blake2b(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes)
 {
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(fromNode);
-    if (node->num < 1 || node->user.public_key.bytes[0] == 0) {
+
+    if (node == nullptr || node->num < 1 || node->user.public_key.size == 0) {
         LOG_DEBUG("Node or its public key not found in database\n");
-        return;
+        return false;
     }
 
     // Calculate the shared secret with the sending node and decrypt
     crypto->setDHKey(fromNode);
     LOG_DEBUG("Decrypting using PKI!\n");
     crypto->decrypt(fromNode, packetNum, numBytes, bytes);
+    return true;
 }
 
 /**

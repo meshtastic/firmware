@@ -45,7 +45,7 @@ class CryptoEngine
     virtual void clearKeys();
     virtual void encryptCurve25519_Blake2b(uint32_t toNode, uint32_t fromNode, uint64_t packetNum, size_t numBytes,
                                            uint8_t *bytes);
-    virtual void decryptCurve25519_Blake2b(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes);
+    virtual bool decryptCurve25519_Blake2b(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes);
     virtual void setDHKey(uint32_t nodeNum);
     virtual void hash(uint8_t *bytes, size_t numBytes);
 #endif
