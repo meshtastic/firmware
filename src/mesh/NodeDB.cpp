@@ -122,7 +122,7 @@ NodeDB::NodeDB()
 
     // Include our owner in the node db under our nodenum
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
-#if !(MESHTASTIC_EXCLUDE_PKI)
+#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
     // Calculate Curve25519 public and private keys
     printBytes("Old Privkey", myNodeInfo.private_key.bytes, 32);
     printBytes("Old Pubkey", owner.public_key.bytes, 32);

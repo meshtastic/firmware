@@ -4,10 +4,10 @@
 #include "configuration.h"
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
-#include <BLAKE2b.h>
 #include <Crypto.h>
 #include <Curve25519.h>
-
+#include <SHA256.h>
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
 /**
  * Create a public/private key pair with Curve25519.
  *
@@ -21,6 +21,7 @@ void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey)
     memcpy(pubKey, public_key, sizeof(public_key));
     memcpy(privKey, private_key, sizeof(private_key));
 }
+#endif
 
 void CryptoEngine::clearKeys()
 {
@@ -111,14 +112,14 @@ void CryptoEngine::setDHKey(uint32_t nodeNum)
 }
 
 /**
- * Hash arbitrary data using BLAKE2b.
+ * Hash arbitrary data using SHA256.
  *
  * @param bytes
  * @param numBytes
  */
 void CryptoEngine::hash(uint8_t *bytes, size_t numBytes)
 {
-    BLAKE2b hash;
+    SHA256 hash;
     size_t posn, len;
     uint8_t size = numBytes;
     uint8_t inc = 16;

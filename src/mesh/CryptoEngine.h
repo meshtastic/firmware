@@ -39,7 +39,9 @@ class CryptoEngine
 
     virtual ~CryptoEngine() {}
 #if !(MESHTASTIC_EXCLUDE_PKI)
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
     virtual void generateKeyPair(uint8_t *pubKey, uint8_t *privKey);
+#endif
     virtual void clearKeys();
     virtual void encryptCurve25519_Blake2b(uint32_t toNode, uint32_t fromNode, uint64_t packetNum, size_t numBytes,
                                            uint8_t *bytes);
