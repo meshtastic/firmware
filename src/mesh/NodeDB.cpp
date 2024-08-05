@@ -940,7 +940,7 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
 
 /** Update user info and channel for this node based on received user data
  */
-bool NodeDB::updateUser(uint32_t nodeId, const meshtastic_User &p, uint8_t channelIndex)
+bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex)
 {
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(nodeId);
     if (!info) {
@@ -949,16 +949,10 @@ bool NodeDB::updateUser(uint32_t nodeId, const meshtastic_User &p, uint8_t chann
 
     LOG_DEBUG("old user %s/%s/%s, channel=%d\n", info->user.id, info->user.long_name, info->user.short_name, info->channel);
 #if !(MESHTASTIC_EXCLUDE_PKI)
-    printBytes("Old Pubkey", info->user.public_key.bytes, 32);
-    static uint_least8_t oldKey[32] = {0};
-    static bool wasBlank = false;
-    if (info->user.public_key.size > 0 &&
-        memcmp(oldKey, info->user.public_key.bytes, 32) != 0) { // if key is already set, save a copy
-        memcpy(oldKey, info->user.public_key.bytes, 32);
-    } else {
-        wasBlank = true;
+    if (info->user.public_key.size > 0) { // if we have a key for this user already, don't overwrite with a new one
+        printBytes("Retaining Old Pubkey: ", info->user.public_key.bytes, 32);
+        memcpy(p.public_key.bytes, info->user.public_key.bytes, 32);
     }
-
 #endif
 
     // Both of info->user and p start as filled with zero so I think this is okay
@@ -969,15 +963,6 @@ bool NodeDB::updateUser(uint32_t nodeId, const meshtastic_User &p, uint8_t chann
         info->channel = channelIndex; // Set channel we need to use to reach this node (but don't set our own channel)
     LOG_DEBUG("updating changed=%d user %s/%s/%s, channel=%d\n", changed, info->user.id, info->user.long_name,
               info->user.short_name, info->channel);
-#if !(MESHTASTIC_EXCLUDE_PKI)
-    if (wasBlank) {
-        printBytes("New Pubkey", info->user.public_key.bytes, 32);
-    } else if (info->user.public_key.size > 0 && memcmp(oldKey, info->user.public_key.bytes, 32) != 0) {
-        LOG_WARN("Remote node attempted a public key update.");
-        memcpy(info->user.public_key.bytes, oldKey, 32); // We don't let a remote update their pubkey
-    }
-#endif
-
     info->has_user = true;
 
     if (changed) {

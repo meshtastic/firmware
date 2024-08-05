@@ -97,7 +97,7 @@ class NodeDB
 
     /** Update user info and channel for this node based on received user data
      */
-    bool updateUser(uint32_t nodeId, const meshtastic_User &p, uint8_t channelIndex = 0);
+    bool updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex = 0);
 
     /// @return our node number
     NodeNum getNodeNum() { return myNodeInfo.my_node_num; }
