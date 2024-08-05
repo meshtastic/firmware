@@ -16,14 +16,15 @@
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-#ifndef _VARIANT_WIO_TRACKER_WM1110_
-#define _VARIANT_WIO_TRACKER_WM1110_
+#ifndef _VARIANT_ME25LS01_4Y10TD_
+#define _VARIANT_ME25LS01_4Y10TD_
+
+#define ME25LS01
 
 /** Master clock frequency */
 #define VARIANT_MCK (64000000ul)
 
 #define USE_LFXO // Board uses 32khz crystal for LF
-// define USE_LFRC    // Board uses RC for LF
 
 /*----------------------------------------------------------------------------
  *        Headers
@@ -41,47 +42,49 @@ extern "C" {
 #define NUM_ANALOG_INPUTS (6)
 #define NUM_ANALOG_OUTPUTS (0)
 
-#define WIRE_INTERFACES_COUNT 1
-
-// We rely on the nrf52840 USB controller to tell us if we are hooked to a power supply
+// Use the native nrf52 usb power detection
 #define NRF_APM
 
-#define PIN_3V3_EN (32 + 1) // P1.01, Power to Sensors
+#define PIN_3V3_EN (32 + 5) //-1
+#define PIN_3V3_ACC_EN -1
 
-#define PIN_WIRE_SDA (0 + 5) // P0.05
-#define PIN_WIRE_SCL (0 + 4) // P0.04
+#define PIN_LED1 (32 + 7) // P1.07 Blue D2
 
-#define PIN_LED1 (0 + 6)      // P0.06
-#define PIN_LED2 (PINS_COUNT) // P0.14
+#define LED_PIN PIN_LED1
+#define LED_BUILTIN -1
 
-#define LED_BUILTIN PIN_LED1
+#define LED_BLUE -1
+#define LED_STATE_ON 1 // State when LED is lit
 
-#define LED_GREEN PIN_LED1
-#define LED_BLUE PIN_LED2
+#define BUTTON_PIN (0 + 27) // P0.27 K3
+#define BUTTON_NEED_PULLUP
 
-#define LED_STATE_ON 0
+#define HAS_WIRE 1
 
-#define BUTTON_PIN (32 + 2) // P1.02
+#define WIRE_INTERFACES_COUNT 1
+
+#define PIN_WIRE_SDA (0 + 15) // P0.15
+#define PIN_WIRE_SCL (0 + 17) // P0.17
 
 /*
  * Serial interfaces
  */
-#define PIN_SERIAL1_RX (0 + 24) // P0.24
-#define PIN_SERIAL1_TX (0 + 25) // P0.25
+#define PIN_SERIAL1_RX (0 + 14) // P0.14
+#define PIN_SERIAL1_TX (0 + 13) // P0.13
 
-#define PIN_SERIAL2_RX (0 + 6) // P0.06
-#define PIN_SERIAL2_TX (0 + 8) // P0.08
+#define PIN_SERIAL2_RX (0 + 17) // P0.17
+#define PIN_SERIAL2_TX (0 + 16) // P0.16
 
 #define SPI_INTERFACES_COUNT 1
 
-#define PIN_SPI_MISO (32 + 15) // P1.15 47
-#define PIN_SPI_MOSI (32 + 14) // P1.14 46
-#define PIN_SPI_SCK (32 + 13)  // P1.13 45
-#define PIN_SPI_NSS (32 + 12)  // P1.12 44
+#define PIN_SPI_MISO (0 + 29) // P0.20 // MISO
+#define PIN_SPI_MOSI (0 + 2)  // P0.02 // MOSI
+#define PIN_SPI_SCK (32 + 15) // P1.15 // SCK
+#define PIN_SPI_NSS (32 + 13) // P1.13 // NSS
 
-#define LORA_RESET (32 + 10) // P1.10 10 // RST
-#define LORA_DIO1 (0 + 2)    // P0.02 2 // IRQ
-#define LORA_DIO2 (32 + 11)  // P1.11 43 // BUSY
+#define LORA_RESET (32 + 11) // P1.11 // RST
+#define LORA_DIO1 (32 + 12)  // P1.12 // IRQ
+#define LORA_DIO2 (32 + 10)  // P1.10 // BUSY
 #define LORA_SCK PIN_SPI_SCK
 #define LORA_MISO PIN_SPI_MISO
 #define LORA_MOSI PIN_SPI_MOSI
@@ -100,8 +103,30 @@ extern "C" {
 
 #define LR11X0_DIO3_TCXO_VOLTAGE 1.6
 #define LR11X0_DIO_AS_RF_SWITCH
+#define LR11X0_DIO_RF_SWITCH_CONFIG 0x0f, 0x0, 0x09, 0x0B, 0x0A, 0x0, 0x4, 0x0
 
-#define LR1110_GNSS_ANT_PIN (32 + 5) // P1.05 37
+#define HAS_GPS 0
+
+#define PIN_GPS_EN -1
+#define GPS_EN_ACTIVE HIGH
+#define PIN_GPS_RESET -1
+#define GPS_VRTC_EN -1
+#define GPS_SLEEP_INT -1
+#define GPS_RTC_INT -1
+#define GPS_RESETB_OUT -1
+
+#define BATTERY_PIN -1
+#define ADC_MULTIPLIER (2.0F)
+
+#define ADC_RESOLUTION 14
+#define BATTERY_SENSE_RESOLUTION_BITS 12
+
+#undef AREF_VOLTAGE
+#define AREF_VOLTAGE 3.0
+#define VBAT_AR_INTERNAL AR_INTERNAL_3_0
+
+// Buzzer
+#define BUZZER_EN_PIN -1
 
 #ifdef __cplusplus
 }
@@ -111,4 +136,4 @@ extern "C" {
  *        Arduino objects - C++ only
  *----------------------------------------------------------------------------*/
 
-#endif // _VARIANT_WIO_TRACKER_WM1110_
+#endif // _VARIANT_ME25LS01_4Y10TD_
