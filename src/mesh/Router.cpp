@@ -321,8 +321,11 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
         memset(&p->decoded, 0, sizeof(p->decoded));
         if (crypto->decryptCurve25519_Blake2b(p->from, p->id, rawSize, bytes) &&
             pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &p->decoded) &&
-            p->decoded.portnum != meshtastic_PortNum_UNKNOWN_APP)
+            p->decoded.portnum != meshtastic_PortNum_UNKNOWN_APP) {
             decrypted = true;
+            LOG_INFO("Packet decrypted using PKI!");
+            chIndex = 8;
+        }
     }
 #endif
 
