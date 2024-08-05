@@ -372,7 +372,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 #ifdef LED_PIN
         // Turn LED off if heartbeat by config
         if (c.payload_variant.device.led_heartbeat_disabled) {
-            digitalWrite(LED_PIN, LOW ^ LED_INVERTED);
+            digitalWrite(LED_PIN, HIGH ^ LED_STATE_ON);
         }
 #endif
         if (config.device.button_gpio == c.payload_variant.device.button_gpio &&
