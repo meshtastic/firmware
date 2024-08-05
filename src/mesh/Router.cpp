@@ -324,7 +324,7 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
             if (pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &p->decoded) &&
                 p->decoded.portnum != meshtastic_PortNum_UNKNOWN_APP) {
                 decrypted = true;
-                LOG_INFO("Packet decrypted using PKI!");
+                LOG_INFO("Packet decrypted using PKI!\n");
                 // chIndex = 8;
             }
         }
