@@ -453,7 +453,8 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         // Now that we are encrypting the packet channel should be the hash (no longer the index)
         p->channel = hash;
 #if !(MESHTASTIC_EXCLUDE_PKI)
-        if (p->to != -1 && nodeDB->getMeshNode(p->to)->user.public_key.size > 0 &&
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
+        if (!owner.is_licensed && p->to != -1 && node != nullptr && node->user.public_key.size > 0 &&
             p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP) {
             crypto->encryptCurve25519_Blake2b(p->to, getFrom(p), p->id, numbytes, bytes);
         } else {
