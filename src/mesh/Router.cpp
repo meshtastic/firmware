@@ -331,7 +331,8 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
                 decrypted = true;
                 LOG_INFO("Packet decrypted using PKI!\n");
                 p->pki_encrypted = true;
-                memcpy(&p->public_key, nodeDB->getMeshNode(p->from)->user.public_key.bytes, 32);
+                memcpy(&p->public_key.bytes, nodeDB->getMeshNode(p->from)->user.public_key.bytes, 32);
+                p->public_key.size = 32;
                 // chIndex = 8;
             }
         }
