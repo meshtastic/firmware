@@ -1090,7 +1090,7 @@ int32_t GPS::runOnce()
             if (devicestate.did_gps_reset && scheduling.elapsedSearchMs() > 60 * 1000UL && !hasFlow()) {
                 LOG_DEBUG("GPS is not communicating, trying factory reset on next bootup.\n");
                 devicestate.did_gps_reset = false;
-                nodeDB->saveDeviceStateToDisk();
+                nodeDB->saveToDisk(SEGMENT_DEVICESTATE);
                 return disable(); // Stop the GPS thread as it can do nothing useful until next reboot.
             }
         }
