@@ -320,7 +320,8 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
     memcpy(bytes2, p->encrypted.bytes, rawSize);
 #if !(MESHTASTIC_EXCLUDE_PKI)
     // Attempt PKI decryption first
-    if (p->to == nodeDB->getNodeNum() && p->to > 0 && nodeDB->getMeshNode(p->to)->user.public_key.size > 0) {
+    if (p->to == nodeDB->getNodeNum() && p->to > 0 && nodeDB->getMeshNode(p->from) != nullptr &&
+        nodeDB->getMeshNode(p->from)->user.public_key.size > 0 && nodeDB->getMeshNode(p->to)->user.public_key.size > 0) {
         LOG_DEBUG("Attempting PKI decryption\n");
 
         if (crypto->decryptCurve25519_Blake2b(p->from, p->id, rawSize, bytes)) {
@@ -329,6 +330,8 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
                 p->decoded.portnum != meshtastic_PortNum_UNKNOWN_APP) {
                 decrypted = true;
                 LOG_INFO("Packet decrypted using PKI!\n");
+                p->pki_encrypted = true;
+                memcpy(&p->public_key, nodeDB->getMeshNode(p->from)->user.public_key.bytes, 32);
                 // chIndex = 8;
             }
         }
