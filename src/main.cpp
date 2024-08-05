@@ -583,7 +583,7 @@ void setup()
 
 #ifdef LED_PIN
     pinMode(LED_PIN, OUTPUT);
-    digitalWrite(LED_PIN, 1 ^ LED_INVERTED); // turn on for now
+    digitalWrite(LED_PIN, LED_STATE_ON); // turn on for now
 #endif
 
     // Hello
@@ -728,7 +728,7 @@ void setup()
 #ifdef LED_PIN
     // Turn LED off after boot, if heartbeat by config
     if (config.device.led_heartbeat_disabled)
-        digitalWrite(LED_PIN, LOW ^ LED_INVERTED);
+        digitalWrite(LED_PIN, HIGH ^ LED_STATE_ON);
 #endif
 
 // Do this after service.init (because that clears error_code)

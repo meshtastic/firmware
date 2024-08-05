@@ -3,8 +3,8 @@
 #include "configuration.h"
 
 // DEBUG LED
-#ifndef LED_INVERTED
-#define LED_INVERTED 0 // define as 1 if LED is active low (on)
+#ifndef LED_STATE_ON
+#define LED_STATE_ON 1
 #endif
 
 // -----------------------------------------------------------------------------

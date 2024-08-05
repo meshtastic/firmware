@@ -90,7 +90,7 @@ void setLed(bool ledOn)
 
 #ifdef LED_PIN
     // toggle the led so we can get some rough sense of how often loop is pausing
-    digitalWrite(LED_PIN, ledOn ^ LED_INVERTED);
+    digitalWrite(LED_PIN, ledOn ^ LED_STATE_ON ^ HIGH);
 #endif
 
 #ifdef HAS_PMU
