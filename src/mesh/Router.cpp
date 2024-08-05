@@ -44,6 +44,7 @@ static MemoryDynamic<meshtastic_MeshPacket> staticPool;
 Allocator<meshtastic_MeshPacket> &packetPool = staticPool;
 
 static uint8_t bytes[MAX_RHPACKETLEN];
+static uint8_t bytes2[MAX_RHPACKETLEN];
 
 /**
  * Constructor
@@ -314,11 +315,14 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
     }
     bool decrypted = false;
     ChannelIndex chIndex = 0;
+    memcpy(bytes, p->encrypted.bytes,
+           rawSize); // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf
+    memcpy(bytes2, p->encrypted.bytes, rawSize);
 #if !(MESHTASTIC_EXCLUDE_PKI)
     // Attempt PKI decryption first
     if (p->to == nodeDB->getNodeNum() && p->to > 0 && nodeDB->getMeshNode(p->to)->user.public_key.size > 0) {
         LOG_DEBUG("Attempting PKI decryption\n");
-        memcpy(bytes, p->encrypted.bytes, rawSize);
+
         if (crypto->decryptCurve25519_Blake2b(p->from, p->id, rawSize, bytes)) {
             memset(&p->decoded, 0, sizeof(p->decoded));
             if (pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &p->decoded) &&
@@ -333,14 +337,12 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
 
     // assert(p->which_payloadVariant == MeshPacket_encrypted_tag);
     if (!decrypted) {
+        memcpy(bytes, bytes2, rawSize);
         // Try to find a channel that works with this hash
         for (chIndex = 0; chIndex < channels.getNumChannels(); chIndex++) {
             // Try to use this hash/channel pair
             if (channels.decryptForHash(chIndex, p->channel)) {
                 // Try to decrypt the packet if we can
-                memcpy(
-                    bytes, p->encrypted.bytes,
-                    rawSize); // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf
                 crypto->decrypt(p->from, p->id, rawSize, bytes);
 
                 // printBytes("plaintext", bytes, p->encrypted.size);
