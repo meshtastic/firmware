@@ -106,7 +106,9 @@ void setupModules()
 #if !MESHTASTIC_EXCLUDE_WAYPOINT
         waypointModule = new WaypointModule();
 #endif
+#if !MESHTASTIC_EXCLUDE_TEXTMESSAGE
         textMessageModule = new TextMessageModule();
+#endif
 #if !MESHTASTIC_EXCLUDE_TRACEROUTE
         traceRouteModule = new TraceRouteModule();
 #endif
