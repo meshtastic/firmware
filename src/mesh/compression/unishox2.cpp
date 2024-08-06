@@ -1096,7 +1096,7 @@ int decodeRepeat(const char *in, int len, char *out, int olen, int ol, int *bit_
             return -1;
         if (left <= 0)
             return olen + 1;
-        if (dist >= strlen(cur_line->data))
+        if ((size_t)dist >= strlen(cur_line->data))
             return -1;
         memmove(out + ol, cur_line->data + dist, min_of(left, dict_len));
         if (left < dict_len)
@@ -1289,7 +1289,7 @@ int unishox2_decompress_lines(const char *in, int len, UNISHOX_API_OUT_AND_LEN(c
                         if (usx_templates[idx] == NULL)
                             break;
                         size_t tlen = strlen(usx_templates[idx]);
-                        if (rem > tlen)
+                        if ((size_t)rem > tlen)
                             break;
                         rem = tlen - rem;
                         int eof = 0;

@@ -81,7 +81,7 @@ if platform.name == "espressif32":
 
 if platform.name == "nordicnrf52":
     env.AddPostAction("$BUILD_DIR/${PROGNAME}.hex",
-                      env.VerboseAction(f"/usr/bin/env python3 ./bin/uf2conv.py $BUILD_DIR/firmware.hex -c -f 0xADA52840 -o $BUILD_DIR/firmware.uf2",
+                      env.VerboseAction(f"python3 ./bin/uf2conv.py $BUILD_DIR/firmware.hex -c -f 0xADA52840 -o $BUILD_DIR/firmware.uf2",
                                         "Generating UF2 file"))
 
 Import("projenv")
