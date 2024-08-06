@@ -818,8 +818,11 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
 #endif
 #endif
     conn.has_serial = true; // No serial-less devices
+#if !EXCLUDE_POWER_FSM
     conn.serial.is_connected = powerFSM.getState() == &stateSERIAL;
-    conn.serial.baud = SERIAL_BAUD;
+#else
+    conn.serial.is_connected = powerFSM.getState();
+#endif conn.serial.baud = SERIAL_BAUD;
 
     r.get_device_connection_status_response = conn;
     r.which_payload_variant = meshtastic_AdminMessage_get_device_connection_status_response_tag;
