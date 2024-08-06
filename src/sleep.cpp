@@ -5,6 +5,7 @@
 #endif
 
 #include "ButtonThread.h"
+#include "Led.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
 #include "NodeDB.h"
@@ -78,26 +79,6 @@ void setCPUFast(bool on)
     setCpuFrequencyMhz(on ? 240 : 80);
 #endif
 
-#endif
-}
-
-void setLed(bool ledOn)
-{
-    if (ledOn)
-        powerMon->setState(meshtastic_PowerMon_State_LED_On);
-    else
-        powerMon->clearState(meshtastic_PowerMon_State_LED_On);
-
-#ifdef LED_PIN
-    // toggle the led so we can get some rough sense of how often loop is pausing
-    digitalWrite(LED_PIN, ledOn ^ LED_STATE_ON ^ HIGH);
-#endif
-
-#ifdef HAS_PMU
-    if (pmu_found && PMU) {
-        // blink the axp led
-        PMU->setChargingLedMode(ledOn ? XPOWERS_CHG_LED_ON : XPOWERS_CHG_LED_OFF);
-    }
 #endif
 }
 
@@ -230,6 +211,8 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     notifyDeepSleep.notifyObservers(NULL);
 #endif
 
+    powerMon->setState(meshtastic_PowerMon_State_CPU_DeepSleep);
+
     screen->doDeepSleep(); // datasheet says this will draw only 10ua
 
     nodeDB->saveToDisk();
@@ -257,7 +240,7 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     digitalWrite(PIN_3V3_EN, LOW);
 #endif
 #endif
-    setLed(false);
+    ledBlink.set(false);
 
 #ifdef RESET_OLED
     digitalWrite(RESET_OLED, 1); // put the display in reset before killing its power

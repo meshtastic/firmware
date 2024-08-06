@@ -9,9 +9,9 @@
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
+#include "Led.h"
 #include "power.h"
 #include "serialization/JSON.h"
-#include "sleep.h"
 #include <FSCommon.h>
 #include <HTTPBodyParser.hpp>
 #include <HTTPMultipartBodyParser.hpp>
@@ -798,9 +798,9 @@ void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
     if (blink_target == "LED") {
         uint8_t count = 10;
         while (count > 0) {
-            setLed(true);
+            ledBlink.set(true);
             delay(50);
-            setLed(false);
+            ledBlink.set(false);
             delay(50);
             count = count - 1;
         }
