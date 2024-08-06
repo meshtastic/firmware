@@ -1057,6 +1057,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         // everything is missing except the nodenum
         memset(lite, 0, sizeof(*lite));
         lite->num = n;
+        LOG_INFO("Adding node to database with %i nodes and %i bytes free!\n", numMeshNodes, memGet.getFreeHeap());
     }
 
     return lite;
