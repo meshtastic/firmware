@@ -17,6 +17,13 @@ class PowerMon
 {
     uint64_t states = 0UL;
 
+    friend class PowerStressModule;
+
+    /**
+     * If stress testing we always want all events logged
+     */
+    bool force_enabled = false;
+
   public:
     PowerMon() {}
 
@@ -27,6 +34,9 @@ class PowerMon
   private:
     // Emit the coded log message
     void emitLog(const char *reason);
+
+    // Use the 'live' config flag to figure out if we should be showing this message
+    bool is_power_enabled(uint64_t m);
 };
 
 extern PowerMon *powerMon;
