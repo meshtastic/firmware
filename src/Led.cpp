@@ -12,7 +12,7 @@ static GpioHwPin ledRawHwPin(LED_PIN);
 static GpioVirtPin ledRawHwPin; // Dummy pin for no hardware
 #endif
 
-#if LED_INVERTED
+#if LED_STATE_ON == 0
 static GpioVirtPin ledHwPin;
 static GpioNotTransformer ledInverter(&ledHwPin, &ledRawHwPin);
 #else

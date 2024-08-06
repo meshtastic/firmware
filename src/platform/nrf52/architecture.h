@@ -75,16 +75,16 @@
 #ifdef ARDUINO_NRF52840_PCA10056
 
 // This board uses 0 to be mean LED on
-#undef LED_INVERTED
-#define LED_INVERTED 1
+#undef LED_STATE_ON
+#define LED_STATE_ON 0 // State when LED is lit
 
 #endif
 
 #ifdef _SEEED_XIAO_NRF52840_SENSE_H_
 
 // This board uses 0 to be mean LED on
-#undef LED_INVERTED
-#define LED_INVERTED 1
+#undef LED_STATE_ON
+#define LED_STATE_ON 0 // State when LED is lit
 
 #endif
 
