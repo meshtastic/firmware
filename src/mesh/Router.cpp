@@ -310,7 +310,7 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
 
     size_t rawSize = p->encrypted.size;
     if (rawSize > sizeof(bytes)) {
-        LOG_ERROR("Packet too large to attempt decription! (rawSize=%d > 256)\n", rawSize);
+        LOG_ERROR("Packet too large to attempt decryption! (rawSize=%d > 256)\n", rawSize);
         return false;
     }
     bool decrypted = false;
