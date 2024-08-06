@@ -464,7 +464,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         p->channel = hash;
 #if !(MESHTASTIC_EXCLUDE_PKI)
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
-        if (!owner.is_licensed && p->to != -1 && node != nullptr && node->user.public_key.size > 0 &&
+        if (!owner.is_licensed && p->to != NODENUM_BROADCAST && node != nullptr && node->user.public_key.size > 0 &&
             p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP && p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP) {
             LOG_DEBUG("Using PKI!\n");
             crypto->encryptCurve25519_Blake2b(p->to, getFrom(p), p->id, numbytes, bytes);
