@@ -18,6 +18,7 @@ class PowerFSMThread : public OSThread
   protected:
     int32_t runOnce() override
     {
+#if !EXCLUDE_POWER_FSM
         powerFSM.run_machine();
 
         /// If we are in power state we force the CPU to wake every 10ms to check for serial characters (we don't yet wake
@@ -35,6 +36,9 @@ class PowerFSMThread : public OSThread
         }
 
         return 100;
+#else
+        return INT32_MAX;
+#endif
     }
 };
 
