@@ -14,6 +14,7 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
+#include "SafeFile.h"
 #include "TypeConversions.h"
 #include "error.h"
 #include "main.h"
@@ -54,6 +55,28 @@ meshtastic_LocalConfig config;
 meshtastic_LocalModuleConfig moduleConfig;
 meshtastic_ChannelFile channelFile;
 meshtastic_OEMStore oemStore;
+static bool hasOemStore = false;
+
+// These are not publically exposed - copied from InternalFileSystem.cpp
+// #define FLASH_NRF52_PAGE_SIZE   4096
+// #define LFS_FLASH_TOTAL_SIZE  (7*FLASH_NRF52_PAGE_SIZE)
+// #define LFS_BLOCK_SIZE        128
+
+/// List all files in the FS and test write and readback.
+/// Useful for filesystem stress testing - normally stripped from build by the linker.
+void flashTest()
+{
+    auto filesManifest = getFiles("/", 5);
+
+    uint32_t totalSize = 0;
+    for (size_t i = 0; i < filesManifest.size(); i++) {
+        LOG_INFO("File %s (size %d)\n", filesManifest[i].file_name, filesManifest[i].size_bytes);
+        totalSize += filesManifest[i].size_bytes;
+    }
+    LOG_INFO("%d files (total size %u)\n", filesManifest.size(), totalSize);
+    // LOG_INFO("Filesystem block size %u, total bytes %u", LFS_FLASH_TOTAL_SIZE, LFS_BLOCK_SIZE);
+    nodeDB->saveToDisk();
+}
 
 bool meshtastic_DeviceState_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_iter_t *field)
 {
@@ -626,22 +649,30 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
 
 void NodeDB::loadFromDisk()
 {
+    devicestate.version =
+        0; // Mark the current device state as completely unusable, so that if we fail reading the entire file from
+    // disk we will still factoryReset to restore things.
+
     // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
     auto state = loadProto(prefFileName, sizeof(meshtastic_DeviceState) + MAX_NUM_NODES * sizeof(meshtastic_NodeInfo),
                            sizeof(meshtastic_DeviceState), &meshtastic_DeviceState_msg, &devicestate);
 
-    if (state != LoadFileResult::LOAD_SUCCESS) {
-        installDefaultDeviceState(); // Our in RAM copy might now be corrupt
+    // See https://github.com/meshtastic/firmware/issues/4184#issuecomment-2269390786
+    // It is very important to try and use the saved prefs even if we fail to read meshtastic_DeviceState.  Because most of our
+    // critical config may still be valid (in the other files - loaded next).
+    // Also, if we did fail on reading we probably failed on the enormous (and non critical) nodeDB.  So DO NOT install default
+    // device state.
+    // if (state != LoadFileResult::LOAD_SUCCESS) {
+    //    installDefaultDeviceState(); // Our in RAM copy might now be corrupt
+    //} else {
+    if (devicestate.version < DEVICESTATE_MIN_VER) {
+        LOG_WARN("Devicestate %d is old, discarding\n", devicestate.version);
+        factoryReset();
     } else {
-        if (devicestate.version < DEVICESTATE_MIN_VER) {
-            LOG_WARN("Devicestate %d is old, discarding\n", devicestate.version);
-            factoryReset();
-        } else {
-            LOG_INFO("Loaded saved devicestate version %d, with nodecount: %d\n", devicestate.version,
-                     devicestate.node_db_lite.size());
-            meshNodes = &devicestate.node_db_lite;
-            numMeshNodes = devicestate.node_db_lite.size();
-        }
+        LOG_INFO("Loaded saved devicestate version %d, with nodecount: %d\n", devicestate.version,
+                 devicestate.node_db_lite.size());
+        meshNodes = &devicestate.node_db_lite;
+        numMeshNodes = devicestate.node_db_lite.size();
     }
     meshNodes->resize(MAX_NUM_NODES);
 
@@ -687,6 +718,7 @@ void NodeDB::loadFromDisk()
     state = loadProto(oemConfigFile, meshtastic_OEMStore_size, sizeof(meshtastic_OEMStore), &meshtastic_OEMStore_msg, &oemStore);
     if (state == LoadFileResult::LOAD_SUCCESS) {
         LOG_INFO("Loaded OEMStore\n");
+        hasOemStore = true;
     }
 
     // 2.4.X - configuration migration to update new default intervals
@@ -711,48 +743,26 @@ void NodeDB::loadFromDisk()
 }
 
 /** Save a protobuf from a file, return true for success */
-bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct)
+bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct,
+                       bool fullAtomic)
 {
     bool okay = false;
 #ifdef FSCom
-    // static DeviceState scratch; We no longer read into a tempbuf because this structure is 15KB of valuable RAM
-    String filenameTmp = filename;
-    filenameTmp += ".tmp";
-    auto f = FSCom.open(filenameTmp.c_str(), FILE_O_WRITE);
-    if (f) {
-        LOG_INFO("Saving %s\n", filename);
-        pb_ostream_t stream = {&writecb, &f, protoSize};
+    auto f = SafeFile(filename, fullAtomic);
 
-        if (!pb_encode(&stream, fields, dest_struct)) {
-            LOG_ERROR("Error: can't encode protobuf %s\n", PB_GET_ERROR(&stream));
-        } else {
-            okay = true;
-        }
-        f.flush();
-        f.close();
+    LOG_INFO("Saving %s\n", filename);
+    pb_ostream_t stream = {&writecb, static_cast<Print *>(&f), protoSize};
 
-        // brief window of risk here ;-)
-        if (FSCom.exists(filename) && !FSCom.remove(filename)) {
-            LOG_WARN("Can't remove old pref file\n");
-        }
-        if (!renameFile(filenameTmp.c_str(), filename)) {
-            LOG_ERROR("Error: can't rename new pref file\n");
-        }
+    if (!pb_encode(&stream, fields, dest_struct)) {
+        LOG_ERROR("Error: can't encode protobuf %s\n", PB_GET_ERROR(&stream));
     } else {
-        LOG_ERROR("Can't write prefs\n");
-#ifdef ARCH_NRF52
-        static uint8_t failedCounter = 0;
-        failedCounter++;
-        if (failedCounter >= 2) {
-            LOG_ERROR("Failed to save file twice. Rebooting...\n");
-            delay(100);
-            NVIC_SystemReset();
-            // We used to blow away the filesystem here, but that's a bit extreme
-            // FSCom.format();
-            // // After formatting, the device needs to be restarted
-            // nodeDB->resetRadioConfig(true);
-        }
-#endif
+        okay = true;
+    }
+
+    bool writeSucceeded = f.close();
+
+    if (!okay || !writeSucceeded) {
+        LOG_ERROR("Can't write prefs!\n");
     }
 #else
     LOG_ERROR("ERROR: Filesystem not implemented\n");
@@ -760,32 +770,32 @@ bool NodeDB::saveProto(const char *filename, size_t protoSize, const pb_msgdesc_
     return okay;
 }
 
-void NodeDB::saveChannelsToDisk()
+bool NodeDB::saveChannelsToDisk()
 {
 #ifdef FSCom
     FSCom.mkdir("/prefs");
 #endif
-    saveProto(channelFileName, meshtastic_ChannelFile_size, &meshtastic_ChannelFile_msg, &channelFile);
+    return saveProto(channelFileName, meshtastic_ChannelFile_size, &meshtastic_ChannelFile_msg, &channelFile);
 }
 
-void NodeDB::saveDeviceStateToDisk()
+bool NodeDB::saveDeviceStateToDisk()
 {
 #ifdef FSCom
     FSCom.mkdir("/prefs");
 #endif
-    saveProto(prefFileName, sizeof(devicestate) + numMeshNodes * meshtastic_NodeInfoLite_size, &meshtastic_DeviceState_msg,
-              &devicestate);
+    // Note: if MAX_NUM_NODES=100 and meshtastic_NodeInfoLite_size=166, so will be approximately 17KB
+    // Because so huge we _must_ not use fullAtomic, because the filesystem is probably too small to hold two copies of this
+    return saveProto(prefFileName, sizeof(devicestate) + numMeshNodes * meshtastic_NodeInfoLite_size, &meshtastic_DeviceState_msg,
+                     &devicestate, false);
 }
 
-void NodeDB::saveToDisk(int saveWhat)
+bool NodeDB::saveToDiskNoRetry(int saveWhat)
 {
+    bool success = true;
+
 #ifdef FSCom
     FSCom.mkdir("/prefs");
 #endif
-    if (saveWhat & SEGMENT_DEVICESTATE) {
-        saveDeviceStateToDisk();
-    }
-
     if (saveWhat & SEGMENT_CONFIG) {
         config.has_device = true;
         config.has_display = true;
@@ -795,7 +805,7 @@ void NodeDB::saveToDisk(int saveWhat)
         config.has_network = true;
         config.has_bluetooth = true;
 
-        saveProto(configFileName, meshtastic_LocalConfig_size, &meshtastic_LocalConfig_msg, &config);
+        success &= saveProto(configFileName, meshtastic_LocalConfig_size, &meshtastic_LocalConfig_msg, &config);
     }
 
     if (saveWhat & SEGMENT_MODULECONFIG) {
@@ -812,12 +822,45 @@ void NodeDB::saveToDisk(int saveWhat)
         moduleConfig.has_audio = true;
         moduleConfig.has_paxcounter = true;
 
-        saveProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, &meshtastic_LocalModuleConfig_msg, &moduleConfig);
+        success &=
+            saveProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, &meshtastic_LocalModuleConfig_msg, &moduleConfig);
+    }
+
+    // We might need to rewrite the OEM data if we are reformatting the FS
+    if ((saveWhat & SEGMENT_OEM) && hasOemStore) {
+        success &= saveProto(oemConfigFile, meshtastic_OEMStore_size, &meshtastic_OEMStore_msg, &oemStore);
     }
 
     if (saveWhat & SEGMENT_CHANNELS) {
-        saveChannelsToDisk();
+        success &= saveChannelsToDisk();
     }
+
+    if (saveWhat & SEGMENT_DEVICESTATE) {
+        success &= saveDeviceStateToDisk();
+    }
+
+    return success;
+}
+
+bool NodeDB::saveToDisk(int saveWhat)
+{
+    bool success = saveToDiskNoRetry(saveWhat);
+
+    if (!success) {
+        LOG_ERROR("Failed to save to disk, retrying...\n");
+#ifdef ARCH_NRF52 // @geeksville is not ready yet to say we should do this on other platforms.  See bug #4184 discussion
+        FSCom.format();
+
+        // We need to rewrite the OEM data if we are reformatting the FS
+        saveWhat |= SEGMENT_OEM;
+#endif
+        success = saveToDiskNoRetry(saveWhat);
+
+        RECORD_CRITICALERROR(success ? meshtastic_CriticalErrorCode_FLASH_CORRUPTION_RECOVERABLE
+                                     : meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE);
+    }
+
+    return success;
 }
 
 const meshtastic_NodeInfoLite *NodeDB::readNextMeshNode(uint32_t &readIndex)
