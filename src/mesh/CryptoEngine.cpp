@@ -39,7 +39,7 @@ void CryptoEngine::encryptCurve25519_Blake2b(uint32_t toNode, uint32_t fromNode,
                                              uint8_t *bytes)
 {
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(toNode);
-    if (node->num < 1 || node->user.public_key.bytes[0] == 0) {
+    if (node->num < 1 || node->user.public_key.size == 0) {
         LOG_DEBUG("Node %d or their public_key not found\n", toNode);
         return;
     }

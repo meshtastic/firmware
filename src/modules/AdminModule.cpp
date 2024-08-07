@@ -377,8 +377,6 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 #endif
         if (config.device.button_gpio == c.payload_variant.device.button_gpio &&
             config.device.buzzer_gpio == c.payload_variant.device.buzzer_gpio &&
-            config.device.debug_log_enabled == c.payload_variant.device.debug_log_enabled &&
-            config.device.serial_enabled == c.payload_variant.device.serial_enabled &&
             config.device.role == c.payload_variant.device.role &&
             config.device.disable_triple_click == c.payload_variant.device.disable_triple_click &&
             config.device.rebroadcast_mode == c.payload_variant.device.rebroadcast_mode) {
@@ -494,6 +492,16 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         LOG_INFO("Setting config: Bluetooth\n");
         config.has_bluetooth = true;
         config.bluetooth = c.payload_variant.bluetooth;
+        break;
+    case meshtastic_Config_security_tag:
+        LOG_INFO("Setting config: Security\n");
+        config.security = c.payload_variant.security;
+        owner.public_key.size = config.security.public_key.size;
+        memcpy(owner.public_key.bytes, config.security.public_key.bytes, config.security.public_key.size);
+        if (config.security.debug_log_enabled == c.payload_variant.security.debug_log_enabled &&
+            config.security.serial_enabled == c.payload_variant.security.serial_enabled)
+            requiresReboot = false;
+
         break;
     }
 

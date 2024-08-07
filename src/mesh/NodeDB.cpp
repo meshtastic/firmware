@@ -145,21 +145,28 @@ NodeDB::NodeDB()
 
     // Include our owner in the node db under our nodenum
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
-#if !(MESHTASTIC_EXCLUDE_PKI) && !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
+#if !(MESHTASTIC_EXCLUDE_PKI)
     // Calculate Curve25519 public and private keys
-    printBytes("Old Privkey", myNodeInfo.private_key.bytes, 32);
-    printBytes("Old Pubkey", owner.public_key.bytes, 32);
-    if (myNodeInfo.private_key.size == 32 && owner.public_key.size == 32) {
-        LOG_INFO("Using saved DH keys\n");
+    printBytes("Old Pubkey", config.security.public_key.bytes, 32);
+    if (config.security.private_key.size == 32 || config.security.public_key.size == 32) {
+        LOG_INFO("Using saved PKI keys\n");
+        owner.public_key.size = config.security.public_key.size;
+        memcpy(owner.public_key.bytes, config.security.public_key.bytes, config.security.public_key.size);
     } else {
-        LOG_INFO("Generating new DH keys\n");
-        crypto->generateKeyPair(owner.public_key.bytes, myNodeInfo.private_key.bytes);
-        owner.public_key.size = 32;
-        myNodeInfo.private_key.size = 32;
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
+        LOG_INFO("Generating new PKI keys\n");
+        crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
+        config.security.public_key.size = 32;
+        config.security.private_key.size = 32;
 
-        printBytes("New Privkey", myNodeInfo.private_key.bytes, 32);
-        printBytes("New Pubkey", owner.public_key.bytes, 32);
+        printBytes("New Pubkey", config.security.public_key.bytes, 32);
+        owner.public_key.size = 32;
+        memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
+#else
+        LOG_INFO("No PKI keys set, and generation disabled!\n");
+#endif
     }
+
 #endif
 
     info->user = owner;
@@ -295,6 +302,14 @@ void NodeDB::installDefaultConfig()
 #else
     config.lora.ignore_mqtt = false;
 #endif
+#ifdef ADMIN_KEY_USERPREFS
+    memcpy(config.security.admin_key.bytes, admin_key_userprefs, 32);
+    config.security.admin_key.size = 32;
+#else
+    config.security.admin_key.size = 0;
+#endif
+    config.security.public_key.size = 0;
+    config.security.private_key.size = 0;
 #ifdef PIN_GPS_EN
     config.position.gps_en_gpio = PIN_GPS_EN;
 #endif
@@ -318,7 +333,7 @@ void NodeDB::installDefaultConfig()
     config.position.broadcast_smart_minimum_interval_secs = 30;
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER)
         config.device.node_info_broadcast_secs = default_node_info_broadcast_secs;
-    config.device.serial_enabled = true;
+    config.security.serial_enabled = true;
     resetRadioConfig();
     strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
     // FIXME: Default to bluetooth capability of platform as default
