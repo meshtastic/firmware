@@ -14,6 +14,6 @@ Do not expect a working Meshtastic device with this target.
 
 #define USE_STM32WLx
 #define MAX_NUM_NODES 10
-#define MESHTASTIC_EXCLUDE_PKI 1
+// #define MESHTASTIC_EXCLUDE_PKI 1
 
 #endif
