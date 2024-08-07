@@ -1,9 +1,10 @@
+#include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_GPS
-#include "PositionModule.h"
 #include "Default.h"
 #include "GPS.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PositionModule.h"
 #include "RTC.h"
 #include "Router.h"
 #include "TypeConversions.h"

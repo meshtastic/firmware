@@ -1,3 +1,4 @@
+#include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "NodeDB.h"
 #include "PowerFSM.h"
