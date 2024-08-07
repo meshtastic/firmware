@@ -1,5 +1,6 @@
 #include "RTC.h"
 #include "configuration.h"
+#if !MESHTASTIC_EXCLUDE_RTC
 #include "detect/ScanI2C.h"
 #include "main.h"
 #include <sys/time.h>
@@ -265,3 +266,13 @@ time_t gm_mktime(struct tm *tm)
     }
     return res;
 }
+#else
+uint32_t getTime(bool local)
+{
+    return (((uint32_t)millis()) / 1000);
+}
+uint32_t getValidTime(RTCQuality minQuality, bool local)
+{
+    return getTime(local);
+}
+#endif
