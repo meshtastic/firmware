@@ -546,6 +546,8 @@ typedef struct _meshtastic_Config_SecurityConfig {
     /* Enables device (serial style logs) over Bluetooth
  Moved to SecurityConfig */
     bool bluetooth_logging_enabled;
+    /* Enables incoming admin control over the "admin" channel */
+    bool admin_channel_enabled;
 } meshtastic_Config_SecurityConfig;
 
 typedef struct _meshtastic_Config {
@@ -653,7 +655,7 @@ extern "C" {
 #define meshtastic_Config_DisplayConfig_init_default {0, _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN}
 #define meshtastic_Config_LoRaConfig_init_default {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0}
 #define meshtastic_Config_BluetoothConfig_init_default {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0, 0}
-#define meshtastic_Config_SecurityConfig_init_default {{0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0}
+#define meshtastic_Config_SecurityConfig_init_default {{0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
 #define meshtastic_Config_init_zero              {0, {meshtastic_Config_DeviceConfig_init_zero}}
 #define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0}
 #define meshtastic_Config_PositionConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _meshtastic_Config_PositionConfig_GpsMode_MIN}
@@ -663,7 +665,7 @@ extern "C" {
 #define meshtastic_Config_DisplayConfig_init_zero {0, _meshtastic_Config_DisplayConfig_GpsCoordinateFormat_MIN, 0, 0, 0, _meshtastic_Config_DisplayConfig_DisplayUnits_MIN, _meshtastic_Config_DisplayConfig_OledType_MIN, _meshtastic_Config_DisplayConfig_DisplayMode_MIN, 0, 0, _meshtastic_Config_DisplayConfig_CompassOrientation_MIN}
 #define meshtastic_Config_LoRaConfig_init_zero   {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0}
 #define meshtastic_Config_BluetoothConfig_init_zero {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0, 0}
-#define meshtastic_Config_SecurityConfig_init_zero {{0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0}
+#define meshtastic_Config_SecurityConfig_init_zero {{0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_Config_DeviceConfig_role_tag  1
@@ -751,6 +753,7 @@ extern "C" {
 #define meshtastic_Config_SecurityConfig_serial_enabled_tag 5
 #define meshtastic_Config_SecurityConfig_debug_log_enabled_tag 6
 #define meshtastic_Config_SecurityConfig_bluetooth_logging_enabled_tag 7
+#define meshtastic_Config_SecurityConfig_admin_channel_enabled_tag 8
 #define meshtastic_Config_device_tag             1
 #define meshtastic_Config_position_tag           2
 #define meshtastic_Config_power_tag              3
@@ -899,7 +902,8 @@ X(a, STATIC,   SINGULAR, BYTES,    admin_key,         3) \
 X(a, STATIC,   SINGULAR, BOOL,     is_managed,        4) \
 X(a, STATIC,   SINGULAR, BOOL,     serial_enabled,    5) \
 X(a, STATIC,   SINGULAR, BOOL,     debug_log_enabled,   6) \
-X(a, STATIC,   SINGULAR, BOOL,     bluetooth_logging_enabled,   7)
+X(a, STATIC,   SINGULAR, BOOL,     bluetooth_logging_enabled,   7) \
+X(a, STATIC,   SINGULAR, BOOL,     admin_channel_enabled,   8)
 #define meshtastic_Config_SecurityConfig_CALLBACK NULL
 #define meshtastic_Config_SecurityConfig_DEFAULT NULL
 
@@ -936,7 +940,7 @@ extern const pb_msgdesc_t meshtastic_Config_SecurityConfig_msg;
 #define meshtastic_Config_NetworkConfig_size     196
 #define meshtastic_Config_PositionConfig_size    62
 #define meshtastic_Config_PowerConfig_size       52
-#define meshtastic_Config_SecurityConfig_size    110
+#define meshtastic_Config_SecurityConfig_size    112
 #define meshtastic_Config_size                   199
 
 #ifdef __cplusplus
