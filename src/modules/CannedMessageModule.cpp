@@ -10,6 +10,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h" // needed for button bypass
 #include "detect/ScanI2C.h"
+#include "input/ScanAndSelect.h"
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
 
 #include "main.h"                               // for cardkb_found
@@ -694,7 +695,20 @@ bool CannedMessageModule::shouldDraw()
     if (!moduleConfig.canned_message.enabled && !CANNED_MESSAGE_MODULE_ENABLE) {
         return false;
     }
+
+    // If using "scan and select" input, don't draw the module frame just to say "disabled"
+    // The scanAndSelectInput class will draw its own temporary alert for user, when the input button is pressed
+    else if (scanAndSelectInput != nullptr && !hasMessages())
+        return false;
+
     return (currentMessageIndex != -1) || (this->runState != CANNED_MESSAGE_RUN_STATE_INACTIVE);
+}
+
+// Has the user defined any canned messages?
+// Expose publicly whether canned message module is ready for use
+bool CannedMessageModule::hasMessages()
+{
+    return (this->messagesCount > 0);
 }
 
 int CannedMessageModule::getNextIndex()
@@ -931,13 +945,17 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         display->setFont(FONT_MEDIUM);
         display->drawString(display->getWidth() / 2 + x, 0 + y + 12, temporaryMessage);
     } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) {
-        // E-Ink: clean the screen *after* this pop-up
-        EINK_ADD_FRAMEFLAG(display, COSMETIC);
+        requestFocus();                        // Tell Screen::setFrames to move to our module's frame
+        EINK_ADD_FRAMEFLAG(display, COSMETIC); // Clean after this popup. Layout makes ghosting particularly obvious
 
-        requestFocus(); // Tell Screen::setFrames to move to our module's frame
-        display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->setFont(FONT_MEDIUM);
+#ifdef USE_EINK
+        display->setFont(FONT_SMALL); // No chunky text
+#else
+        display->setFont(FONT_MEDIUM); // Chunky text
+#endif
+
         String displayString;
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
         if (this->ack) {
             displayString = "Delivered to\n%s";
         } else {
@@ -951,17 +969,37 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
         String snrString = "Last Rx SNR: %f";
         String rssiString = "Last Rx RSSI: %d";
 
-        if (this->ack) {
-            display->drawStringf(display->getWidth() / 2 + x, y + 100, buffer, snrString, this->lastRxSnr);
-            display->drawStringf(display->getWidth() / 2 + x, y + 130, buffer, rssiString, this->lastRxRssi);
+        // Don't bother drawing snr and rssi for tiny displays
+        if (display->getHeight() > 100) {
+
+            // Original implementation used constants of y = 100 and y = 130. Shrink this if screen is *slightly* small
+            int16_t snrY = 100;
+            int16_t rssiY = 130;
+
+            // If dislay is *slighly* too small for the original consants, squish up a bit
+            if (display->getHeight() < rssiY) {
+                snrY = display->getHeight() - ((1.5) * FONT_HEIGHT_SMALL);
+                rssiY = display->getHeight() - ((2.5) * FONT_HEIGHT_SMALL);
+            }
+
+            if (this->ack) {
+                display->drawStringf(display->getWidth() / 2 + x, snrY + y, buffer, snrString, this->lastRxSnr);
+                display->drawStringf(display->getWidth() / 2 + x, rssiY + y, buffer, rssiString, this->lastRxRssi);
+            }
         }
     } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {
         // E-Ink: clean the screen *after* this pop-up
         EINK_ADD_FRAMEFLAG(display, COSMETIC);
 
         requestFocus(); // Tell Screen::setFrames to move to our module's frame
+
+#ifdef USE_EINK
+        display->setFont(FONT_SMALL); // No chunky text
+#else
+        display->setFont(FONT_MEDIUM); // Chunky text
+#endif
+
         display->setTextAlignment(TEXT_ALIGN_CENTER);
-        display->setFont(FONT_MEDIUM);
         display->drawString(display->getWidth() / 2 + x, 0 + y + 12, "Sending...");
     } else if (cannedMessageModule->runState == CANNED_MESSAGE_RUN_STATE_DISABLED) {
         display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -1033,11 +1071,18 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
                 int topMsg = (messagesCount > lines && currentMessageIndex >= lines - 1) ? currentMessageIndex - lines + 2 : 0;
                 for (int i = 0; i < std::min(messagesCount, lines); i++) {
                     if (i == currentMessageIndex - topMsg) {
+#ifdef USE_EINK
+                        // Avoid drawing solid black with fillRect: harder to clear for E-Ink
+                        display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1), ">");
+                        display->drawString(12 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1),
+                                            cannedMessageModule->getCurrentMessage());
+#else
                         display->fillRect(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1), x + display->getWidth(),
                                           y + FONT_HEIGHT_SMALL);
                         display->setColor(BLACK);
                         display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1), cannedMessageModule->getCurrentMessage());
                         display->setColor(WHITE);
+#endif
                     } else {
                         display->drawString(0 + x, 0 + y + FONT_HEIGHT_SMALL * (i + 1),
                                             cannedMessageModule->getMessageByIndex(topMsg + i));

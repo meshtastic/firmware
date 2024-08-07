@@ -22,7 +22,10 @@
 #ifndef SLEEP_TIME
 #define SLEEP_TIME 30
 #endif
-
+#if EXCLUDE_POWER_FSM
+FakeFsm powerFSM;
+void PowerFSM_setup(){};
+#else
 /// Should we behave as if we have AC power now?
 static bool isPowered()
 {
@@ -396,3 +399,4 @@ void PowerFSM_setup()
 
     powerFSM.run_machine(); // run one iteration of the state machine, so we run our on enter tasks for the initial DARK state
 }
+#endif

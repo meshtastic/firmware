@@ -412,6 +412,13 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 100;
     moduleConfig.external_notification.active = true;
 #endif
+#ifdef BUTTON_SECONDARY_CANNEDMESSAGES
+    // Use a board's second built-in button as input source for canned messages
+    moduleConfig.canned_message.enabled = true;
+    moduleConfig.canned_message.inputbroker_pin_press = BUTTON_PIN_SECONDARY;
+    strcpy(moduleConfig.canned_message.allow_input_source, "scanAndSelect");
+#endif
+
     moduleConfig.has_canned_message = true;
 
     strncpy(moduleConfig.mqtt.address, default_mqtt_address, sizeof(moduleConfig.mqtt.address));
