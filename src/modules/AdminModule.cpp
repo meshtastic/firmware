@@ -65,7 +65,27 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     bool handled = false;
     assert(r);
     bool fromOthers = mp.from != 0 && mp.from != nodeDB->getNodeNum();
-
+    if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
+        return handled;
+    }
+    // Could tighten this up further by tracking the last poblic_key we went an AdminMessage request to
+    // and only allowing responses from that remote.
+    if (!((mp.from == 0 && !config.security.is_managed) ||
+          r->which_payload_variant == meshtastic_AdminMessage_get_channel_response_tag ||
+          r->which_payload_variant == meshtastic_AdminMessage_get_owner_response_tag ||
+          r->which_payload_variant == meshtastic_AdminMessage_get_config_response_tag ||
+          r->which_payload_variant == meshtastic_AdminMessage_get_module_config_response_tag ||
+          r->which_payload_variant == meshtastic_AdminMessage_get_canned_message_module_messages_response_tag ||
+          r->which_payload_variant == meshtastic_AdminMessage_get_device_metadata_response_tag ||
+          r->which_payload_variant == meshtastic_AdminMessage_get_ringtone_response_tag ||
+          r->which_payload_variant == meshtastic_AdminMessage_get_device_connection_status_response_tag ||
+          r->which_payload_variant == meshtastic_AdminMessage_get_node_remote_hardware_pins_response_tag ||
+          r->which_payload_variant == meshtastic_NodeRemoteHardwarePinsResponse_node_remote_hardware_pins_tag ||
+          (mp.pki_encrypted && memcmp(mp.public_key.bytes, config.security.admin_key.bytes, 32) == 0))) {
+        LOG_INFO("Ignoring admin payload %i\n", r->which_payload_variant);
+        return handled;
+    }
+    LOG_INFO("Handling admin payload %i\n", r->which_payload_variant);
     switch (r->which_payload_variant) {
 
     /**
@@ -830,7 +850,8 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     conn.serial.is_connected = powerFSM.getState() == &stateSERIAL;
 #else
     conn.serial.is_connected = powerFSM.getState();
-#endif conn.serial.baud = SERIAL_BAUD;
+#endif
+    conn.serial.baud = SERIAL_BAUD;
 
     r.get_device_connection_status_response = conn;
     r.which_payload_variant = meshtastic_AdminMessage_get_device_connection_status_response_tag;
@@ -897,5 +918,5 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
 AdminModule::AdminModule() : ProtobufModule("Admin", meshtastic_PortNum_ADMIN_APP, &meshtastic_AdminMessage_msg)
 {
     // restrict to the admin channel for rx
-    boundChannel = Channels::adminChannel;
+    // boundChannel = Channels::adminChannel;
 }
