@@ -136,7 +136,10 @@ int32_t ExpressLRSFiveWay::runOnce()
         if (longPressed) {
             LOG_INFO("Shutdown from long press\n");
             power->shutdown();
-        } else
+        } else if (!moduleConfig.canned_message.enabled)
+            // Allow "press" to act as user button. Canned message module won't do this for us if not enabled
+            powerFSM.trigger(EVENT_PRESS);
+        else
             raiseEvent(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT);
         break;
     case ExpressLRSFiveWay::INPUT_KEY_NO_PRESS:
