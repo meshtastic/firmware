@@ -794,6 +794,16 @@ void GPS::setPowerState(GPSPowerState newState, uint32_t sleepTime)
     powerState = newState;
     LOG_INFO("GPS power state moving from %s to %s\n", getGPSPowerStateString(oldState), getGPSPowerStateString(newState));
 
+#ifdef HELTEC_MESH_NODE_T114
+    if( (oldState==GPS_OFF || oldState==GPS_HARDSLEEP) && (newState!=GPS_OFF && newState!=GPS_HARDSLEEP) )
+    {
+        Serial1.begin(serialSpeeds[speedSelect]);
+    }
+    else if( (newState==GPS_OFF || newState==GPS_HARDSLEEP) && (oldState!=GPS_OFF && oldState!=GPS_HARDSLEEP) )
+    {
+        Serial1.end();
+    }
+#endif
     switch (newState) {
     case GPS_ACTIVE:
     case GPS_IDLE:
