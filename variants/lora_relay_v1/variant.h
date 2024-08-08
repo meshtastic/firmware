@@ -125,15 +125,15 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define USE_SX1262
 
 // CUSTOM GPIOs the SX1262
-#define SX126X_CS (32)
+#define LORA_CS (32)
 
 // If you would prefer to get console debug output over the JTAG ICE connection rather than the CDC-ACM USB serial device, just
 // define this. #define USE_SEGGER
 
-#define SX126X_DIO1 (29)
+#define LORA_DIO1 (29)
 #define SX1262_DIO2 (30)
-#define SX126X_BUSY (33) // Supposed to be P0.18 but because of reworks, now on P0.31 (18)
-#define SX126X_RESET (34)
+#define LORA_BUSY (33) // Supposed to be P0.18 but because of reworks, now on P0.31 (18)
+#define LORA_RESET (34)
 // #define SX126X_ANT_SW (32 + 10)
 #define SX126X_RXEN (14)
 #define SX126X_TXEN (31)

@@ -35,10 +35,7 @@
 #define USE_LLCC68
 
 // common pinouts for SX126X modules
-#define SX126X_CS 18 // NSS for SX126X
-#define SX126X_DIO1 LORA_DIO1
-#define SX126X_BUSY LORA_DIO2
-#define SX126X_RESET LORA_RESET
+#define LORA_BUSY LORA_DIO2
 #define SX126X_RXEN RADIOLIB_NC // Defining the RXEN ruins RFSwitching for the E22 900M30S in RadioLib
 #define SX126X_TXEN 13
 

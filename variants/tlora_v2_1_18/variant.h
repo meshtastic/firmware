@@ -14,7 +14,6 @@
 #define USE_SX1280
 #define LORA_RESET 23
 
-#define SX128X_CS 18
-#define SX128X_DIO1 26
-#define SX128X_BUSY 32
-#define SX128X_RESET LORA_RESET
+#define LORA_CS 18
+#define LORA_DIO1 26
+#define LORA_BUSY 32

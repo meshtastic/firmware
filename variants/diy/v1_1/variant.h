@@ -37,10 +37,7 @@
 // #define RF95_TCXO <GPIO#>
 
 // common pinouts for SX126X modules
-#define SX126X_CS 5
-#define SX126X_DIO1 LORA_DIO1
-#define SX126X_BUSY LORA_DIO2
-#define SX126X_RESET LORA_RESET
+#define LORA_BUSY LORA_DIO2
 #define SX126X_RXEN LORA_RXEN
 #define SX126X_TXEN LORA_TXEN
 

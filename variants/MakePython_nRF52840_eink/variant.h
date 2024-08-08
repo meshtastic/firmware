@@ -115,12 +115,11 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // E-Byte E28 2.4 Ghz LoRa module
 #define USE_SX1280
 #define LORA_RESET (0 + 5)
-#define SX128X_CS (0 + 23)
-#define SX128X_DIO1 (0 + 4)
-#define SX128X_BUSY (0 + 7)
+#define LORA_CS (0 + 23)
+#define LORA_DIO1 (0 + 4)
+#define LORA_BUSY (0 + 7)
 // #define SX128X_TXEN  (32 + 9)
 // #define SX128X_RXEN  (0 + 12)
-#define SX128X_RESET LORA_RESET
 
 #define PIN_GPS_EN (-1)
 #define PIN_GPS_PPS (-1) // Pulse per second input from the GPS

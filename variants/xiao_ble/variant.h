@@ -108,10 +108,10 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define USE_SX1262
 
 // common pinouts for SX126X modules
-#define SX126X_CS D0
-#define SX126X_DIO1 D1
-#define SX126X_BUSY D2
-#define SX126X_RESET D3
+#define LORA_CS D0
+#define LORA_DIO1 D1
+#define LORA_BUSY D2
+#define LORA_RESET D3
 
 // ----------------------------------------------------------------
 

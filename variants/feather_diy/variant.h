@@ -95,10 +95,7 @@ extern "C" {
 #define USE_SX1262
 
 // common pinouts for SX126X modules
-#define SX126X_CS LORA_CS // NSS for SX126X
-#define SX126X_DIO1 LORA_DIO1
-#define SX126X_BUSY LORA_DIO2
-#define SX126X_RESET LORA_RESET
+#define LORA_BUSY LORA_DIO2
 #define SX126X_RXEN (0 + 27) // P0.27 10
 #define SX126X_TXEN (0 + 26) // P0.26 9
 

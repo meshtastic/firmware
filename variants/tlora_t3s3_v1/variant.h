@@ -40,22 +40,16 @@
 
 // per SX1262_Receive_Interrupt/utilities.h
 #ifdef USE_SX1262
-#define SX126X_CS LORA_CS
-#define SX126X_DIO1 33
-#define SX126X_BUSY 34
-#define SX126X_RESET LORA_RESET
+#define LORA_BUSY 34
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 #endif
 
 // per SX128x_Receive_Interrupt/utilities.h
 #ifdef USE_SX1280
-#define SX128X_CS LORA_CS
-#define SX128X_DIO1 9
 #define SX128X_DIO2 33
 #define SX128X_DIO3 34
-#define SX128X_BUSY 36
-#define SX128X_RESET LORA_RESET
+#define LORA_BUSY 36
 #define SX128X_RXEN 21
 #define SX128X_TXEN 10
 #define SX128X_MAX_POWER 3

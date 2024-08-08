@@ -840,7 +840,7 @@ void setup()
     // radio init MUST BE AFTER service.init, so we have our radio config settings (from nodedb init)
 #if defined(USE_STM32WLx)
     if (!rIf) {
-        rIf = new STM32WLE5JCInterface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
+        rIf = new STM32WLE5JCInterface(RadioLibHAL, LORA_CS, LORA_DIO1, LORA_RESET, LORA_BUSY);
         if (!rIf->init()) {
             LOG_WARN("Failed to find STM32WL radio\n");
             delete rIf;
@@ -868,7 +868,7 @@ void setup()
 
 #if defined(RF95_IRQ)
     if (!rIf) {
-        rIf = new RF95Interface(RadioLibHAL, LORA_CS, RF95_IRQ, RF95_RESET, RF95_DIO1);
+        rIf = new RF95Interface(RadioLibHAL, LORA_CS, RF95_IRQ, LORA_RESET, LORA_DIO1);
         if (!rIf->init()) {
             LOG_WARN("Failed to find RF95 radio\n");
             delete rIf;
@@ -882,7 +882,7 @@ void setup()
 
 #if defined(USE_SX1262) && !defined(ARCH_PORTDUINO)
     if (!rIf) {
-        rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
+        rIf = new SX1262Interface(RadioLibHAL, LORA_CS, LORA_DIO1, LORA_RESET, LORA_BUSY);
         if (!rIf->init()) {
             LOG_WARN("Failed to find SX1262 radio\n");
             delete rIf;
@@ -896,7 +896,7 @@ void setup()
 
 #if defined(USE_SX1268)
     if (!rIf) {
-        rIf = new SX1268Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
+        rIf = new SX1268Interface(RadioLibHAL, LORA_CS, LORA_DIO1, LORA_RESET, LORA_BUSY);
         if (!rIf->init()) {
             LOG_WARN("Failed to find SX1268 radio\n");
             delete rIf;
@@ -910,7 +910,7 @@ void setup()
 
 #if defined(USE_LLCC68)
     if (!rIf) {
-        rIf = new LLCC68Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
+        rIf = new LLCC68Interface(RadioLibHAL, LORA_CS, LORA_DIO1, LORA_RESET, LORA_BUSY);
         if (!rIf->init()) {
             LOG_WARN("Failed to find LLCC68 radio\n");
             delete rIf;
@@ -950,7 +950,7 @@ void setup()
 
 #if defined(USE_SX1280)
     if (!rIf) {
-        rIf = new SX1280Interface(RadioLibHAL, SX128X_CS, SX128X_DIO1, SX128X_RESET, SX128X_BUSY);
+        rIf = new SX1280Interface(RadioLibHAL, LORA_CS, LORA_DIO1, LORA_RESET, LORA_BUSY);
         if (!rIf->init()) {
             LOG_WARN("Failed to find SX1280 radio\n");
             delete rIf;

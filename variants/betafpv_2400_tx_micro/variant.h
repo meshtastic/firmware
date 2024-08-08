@@ -28,10 +28,8 @@
 // SX128X 2.4 Ghz LoRa module
 #define USE_SX1280
 #define LORA_RESET 14
-#define SX128X_CS 5
-#define SX128X_DIO1 4
-#define SX128X_BUSY 21
+#define LORA_DIO1 4
+#define LORA_BUSY 21
 #define SX128X_TXEN 26
 #define SX128X_RXEN 27
-#define SX128X_RESET LORA_RESET
 #define SX128X_MAX_POWER 13
