@@ -4,6 +4,7 @@
 #include "configuration.h"
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
+#include "aes-ccm.h"
 #include <Crypto.h>
 #include <Curve25519.h>
 #include <SHA256.h>
@@ -35,28 +36,34 @@ void CryptoEngine::clearKeys()
  *
  * @param bytes is updated in place
  */
-void CryptoEngine::encryptCurve25519_Blake2b(uint32_t toNode, uint32_t fromNode, uint64_t packetNum, size_t numBytes,
-                                             uint8_t *bytes)
+void CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes,
+                                     uint8_t *bytesOut)
 {
+    uint8_t *auth;
+    auth = bytesOut + numBytes;
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(toNode);
     if (node->num < 1 || node->user.public_key.size == 0) {
         LOG_DEBUG("Node %d or their public_key not found\n", toNode);
         return;
     }
+    crypto->setDHKey(toNode);
+    initNonce(fromNode, packetNum);
 
     // Calculate the shared secret with the destination node and encrypt
-    crypto->setDHKey(toNode);
-    crypto->encrypt(fromNode, packetNum, numBytes, bytes);
+
+    aes_ccm_ae(key.bytes, key.length, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut, auth);
 }
 
 /**
- * Decrypt a packet's payload using a key generated with Curve25519 and Blake2b
+ * Decrypt a packet's payload using a key generated with Curve25519 and SHA256
  * for a specific node.
  *
  * @param bytes is updated in place
  */
-bool CryptoEngine::decryptCurve25519_Blake2b(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes)
+bool CryptoEngine::decryptCurve25519(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes, uint8_t *bytesOut)
 {
+    uint8_t *auth; // set to last 8 bytes of text?
+    auth = bytes + numBytes - 8;
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(fromNode);
 
     if (node == nullptr || node->num < 1 || node->user.public_key.size == 0) {
@@ -67,8 +74,8 @@ bool CryptoEngine::decryptCurve25519_Blake2b(uint32_t fromNode, uint64_t packetN
     // Calculate the shared secret with the sending node and decrypt
     crypto->setDHKey(fromNode);
     LOG_DEBUG("Decrypting using PKI!\n");
-    crypto->decrypt(fromNode, packetNum, numBytes, bytes);
-    return true;
+    initNonce(fromNode, packetNum);
+    return aes_ccm_ad(key.bytes, key.length, nonce, 8, bytes, numBytes, nullptr, 0, auth, bytesOut);
 }
 
 /**
@@ -134,6 +141,24 @@ void CryptoEngine::hash(uint8_t *bytes, size_t numBytes)
     }
     hash.finalize(bytes, 32);
 }
+
+void CryptoEngine::aesSetKey(const uint8_t *key_bytes, size_t key_len)
+{
+    if (aes) {
+        delete aes;
+        aes = nullptr;
+    }
+    if (key.length != 0) {
+        aes = new AESSmall256();
+        aes->setKey(key_bytes, key_len);
+    }
+}
+
+void CryptoEngine::aesEncrypt(uint8_t *in, uint8_t *out)
+{
+    aes->encryptBlock(out, in);
+}
+
 #endif
 
 concurrency::Lock *cryptLock;

@@ -1,5 +1,5 @@
 #pragma once
-
+#include "AES.h"
 #include "concurrency/LockGuard.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
@@ -43,11 +43,17 @@ class CryptoEngine
     virtual void generateKeyPair(uint8_t *pubKey, uint8_t *privKey);
 #endif
     virtual void clearKeys();
-    virtual void encryptCurve25519_Blake2b(uint32_t toNode, uint32_t fromNode, uint64_t packetNum, size_t numBytes,
-                                           uint8_t *bytes);
-    virtual bool decryptCurve25519_Blake2b(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes);
+    virtual void encryptCurve25519(uint32_t toNode, uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes,
+                                   uint8_t *bytesOut);
+    virtual bool decryptCurve25519(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes, uint8_t *bytesOut);
     virtual void setDHKey(uint32_t nodeNum);
     virtual void hash(uint8_t *bytes, size_t numBytes);
+
+    virtual void aesSetKey(const uint8_t *key, size_t key_len);
+
+    virtual void aesEncrypt(uint8_t *in, uint8_t *out);
+    AESSmall256 *aes = NULL;
+
 #endif
 
     /**

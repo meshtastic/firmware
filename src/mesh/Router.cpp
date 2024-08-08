@@ -324,15 +324,16 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
         nodeDB->getMeshNode(p->from)->user.public_key.size > 0 && nodeDB->getMeshNode(p->to)->user.public_key.size > 0) {
         LOG_DEBUG("Attempting PKI decryption\n");
 
-        if (crypto->decryptCurve25519_Blake2b(p->from, p->id, rawSize, bytes)) {
+        if (crypto->decryptCurve25519(p->from, p->id, rawSize, bytes, bytes2)) {
             memset(&p->decoded, 0, sizeof(p->decoded));
-            if (pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &p->decoded) &&
+            if (pb_decode_from_bytes(bytes2, rawSize, &meshtastic_Data_msg, &p->decoded) &&
                 p->decoded.portnum != meshtastic_PortNum_UNKNOWN_APP) {
                 decrypted = true;
                 LOG_INFO("Packet decrypted using PKI!\n");
                 p->pki_encrypted = true;
                 memcpy(&p->public_key.bytes, nodeDB->getMeshNode(p->from)->user.public_key.bytes, 32);
                 p->public_key.size = 32;
+                memcpy(bytes, bytes2, rawSize); // TODO: Rename the bytes buffers
                 // chIndex = 8;
             }
         }
@@ -341,7 +342,6 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
 
     // assert(p->which_payloadVariant == MeshPacket_encrypted_tag);
     if (!decrypted) {
-        memcpy(bytes, bytes2, rawSize);
         // Try to find a channel that works with this hash
         for (chIndex = 0; chIndex < channels.getNumChannels(); chIndex++) {
             // Try to use this hash/channel pair
@@ -466,9 +466,12 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
         if (!owner.is_licensed && p->to != NODENUM_BROADCAST && node != nullptr && node->user.public_key.size > 0 &&
             p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP && p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP &&
-            p->decoded.portnum != meshtastic_PortNum_ROUTING_APP) {
+            p->decoded.portnum != meshtastic_PortNum_ROUTING_APP) { // TODO: check for size due to 8 byte tag
             LOG_DEBUG("Using PKI!\n");
-            crypto->encryptCurve25519_Blake2b(p->to, getFrom(p), p->id, numbytes, bytes);
+            if (numbytes + 8 > MAX_RHPACKETLEN)
+                return meshtastic_Routing_Error_TOO_LARGE;
+            crypto->encryptCurve25519(p->to, getFrom(p), p->id, numbytes, bytes, bytes2);
+            numbytes += 8;
         } else {
             crypto->encrypt(getFrom(p), p->id, numbytes, bytes);
         }
@@ -477,7 +480,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 #endif
 
         // Copy back into the packet and set the variant type
-        memcpy(p->encrypted.bytes, bytes, numbytes);
+        memcpy(p->encrypted.bytes, bytes2, numbytes);
         p->encrypted.size = numbytes;
         p->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
     }
