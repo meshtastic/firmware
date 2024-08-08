@@ -24,8 +24,8 @@ static void xor_aes_block(uint8_t *dst, const uint8_t *src)
     *d++ ^= *s++;
     *d++ ^= *s++;
 }
-static void aes_ccm_auth_start(void *aes, size_t M, size_t L, const uint8_t *nonce, const uint8_t *aad, size_t aad_len,
-                               size_t plain_len, uint8_t *x)
+static void aes_ccm_auth_start(size_t M, size_t L, const uint8_t *nonce, const uint8_t *aad, size_t aad_len, size_t plain_len,
+                               uint8_t *x)
 {
     uint8_t aad_buf[2 * AES_BLOCK_SIZE];
     uint8_t b[AES_BLOCK_SIZE];
@@ -50,7 +50,7 @@ static void aes_ccm_auth_start(void *aes, size_t M, size_t L, const uint8_t *non
         crypto->aesEncrypt(&aad_buf[AES_BLOCK_SIZE], x);
     }
 }
-static void aes_ccm_auth(void *aes, const uint8_t *data, size_t len, uint8_t *x)
+static void aes_ccm_auth(const uint8_t *data, size_t len, uint8_t *x)
 {
     size_t last = len % AES_BLOCK_SIZE;
     size_t i;
@@ -73,7 +73,7 @@ static void aes_ccm_encr_start(size_t L, const uint8_t *nonce, uint8_t *a)
     a[0] = L - 1; /* Flags = L' */
     memcpy(&a[1], nonce, 15 - L);
 }
-static void aes_ccm_encr(void *aes, size_t L, const uint8_t *in, size_t len, uint8_t *out, uint8_t *a)
+static void aes_ccm_encr(size_t L, const uint8_t *in, size_t len, uint8_t *out, uint8_t *a)
 {
     size_t last = len % AES_BLOCK_SIZE;
     size_t i;
@@ -94,7 +94,7 @@ static void aes_ccm_encr(void *aes, size_t L, const uint8_t *in, size_t len, uin
             *out++ ^= *in++;
     }
 }
-static void aes_ccm_encr_auth(void *aes, size_t M, uint8_t *x, uint8_t *a, uint8_t *auth)
+static void aes_ccm_encr_auth(size_t M, uint8_t *x, uint8_t *a, uint8_t *auth)
 {
     size_t i;
     uint8_t tmp[AES_BLOCK_SIZE];
@@ -104,7 +104,7 @@ static void aes_ccm_encr_auth(void *aes, size_t M, uint8_t *x, uint8_t *a, uint8
     for (i = 0; i < M; i++)
         auth[i] = x[i] ^ tmp[i];
 }
-static void aes_ccm_decr_auth(void *aes, size_t M, uint8_t *a, const uint8_t *auth, uint8_t *t)
+static void aes_ccm_decr_auth(size_t M, uint8_t *a, const uint8_t *auth, uint8_t *t)
 {
     size_t i;
     uint8_t tmp[AES_BLOCK_SIZE];
@@ -119,19 +119,16 @@ int aes_ccm_ae(const uint8_t *key, size_t key_len, const uint8_t *nonce, size_t 
                const uint8_t *aad, size_t aad_len, uint8_t *crypt, uint8_t *auth)
 {
     const size_t L = 2;
-    void *aes;
     uint8_t x[AES_BLOCK_SIZE], a[AES_BLOCK_SIZE];
     if (aad_len > 30 || M > AES_BLOCK_SIZE)
         return -1;
     crypto->aesSetKey(key, key_len);
-    if (aes == NULL)
-        return -1;
-    aes_ccm_auth_start(aes, M, L, nonce, aad, aad_len, plain_len, x);
-    aes_ccm_auth(aes, plain, plain_len, x);
+    aes_ccm_auth_start(M, L, nonce, aad, aad_len, plain_len, x);
+    aes_ccm_auth(plain, plain_len, x);
     /* Encryption */
     aes_ccm_encr_start(L, nonce, a);
-    aes_ccm_encr(aes, L, plain, plain_len, crypt, a);
-    aes_ccm_encr_auth(aes, M, x, a, auth);
+    aes_ccm_encr(L, plain, plain_len, crypt, a);
+    aes_ccm_encr_auth(M, x, a, auth);
     return 0;
 }
 /* AES-CCM with fixed L=2 and aad_len <= 30 assumption */
@@ -139,21 +136,18 @@ bool aes_ccm_ad(const uint8_t *key, size_t key_len, const uint8_t *nonce, size_t
                 const uint8_t *aad, size_t aad_len, const uint8_t *auth, uint8_t *plain)
 {
     const size_t L = 2;
-    void *aes;
     uint8_t x[AES_BLOCK_SIZE], a[AES_BLOCK_SIZE];
     uint8_t t[AES_BLOCK_SIZE];
     if (aad_len > 30 || M > AES_BLOCK_SIZE)
         return false;
     crypto->aesSetKey(key, key_len);
-    if (aes == NULL)
-        return false;
     /* Decryption */
     aes_ccm_encr_start(L, nonce, a);
-    aes_ccm_decr_auth(aes, M, a, auth, t);
+    aes_ccm_decr_auth(M, a, auth, t);
     /* plaintext = msg XOR (S_1 | S_2 | ... | S_n) */
-    aes_ccm_encr(aes, L, crypt, crypt_len, plain, a);
-    aes_ccm_auth_start(aes, M, L, nonce, aad, aad_len, crypt_len, x);
-    aes_ccm_auth(aes, plain, crypt_len, x);
+    aes_ccm_encr(L, crypt, crypt_len, plain, a);
+    aes_ccm_auth_start(M, L, nonce, aad, aad_len, crypt_len, x);
+    aes_ccm_auth(plain, crypt_len, x);
     if (memcmp(x, t, M) != 0) { // FIXME make const comp
         return false;
     }
