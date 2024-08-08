@@ -199,12 +199,14 @@ void ExpressLRSFiveWay::sendKey(KeyType key)
 // Contained as one method for easier remapping of buttons by user
 void ExpressLRSFiveWay::toggleGPS()
 {
+#if HAS_GPS && !MESHTASTIC_EXCLUDE_GPS
     if (!config.device.disable_triple_click && (gps != nullptr)) {
         gps->toggleGpsMode();
         screen->startAlert("GPS Toggled");
         alerting = true;
         alertingSinceMs = millis();
     }
+#endif
 }
 
 // Send either node-info or position, on demand
@@ -214,13 +216,15 @@ void ExpressLRSFiveWay::sendAdhocPing()
     service->refreshLocalMeshNode();
     bool sentPosition = service->trySendPosition(NODENUM_BROADCAST, true);
 
-    // Adhoc position
-    if (sentPosition)
-        screen->startAlert("Sent ad-hoc position");
-
-    // Position info not available, node info instead
-    else
-        screen->startAlert("Sent ad-hoc nodeinfo");
+    // Show custom alert frame, with multi-line centering
+    screen->startAlert([sentPosition](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
+        uint16_t x_offset = display->width() / 2;
+        uint16_t y_offset = 26; // Same constant as the default startAlert frame
+        display->setTextAlignment(TEXT_ALIGN_CENTER);
+        display->setFont(FONT_MEDIUM);
+        display->drawString(x_offset + x, y_offset + y, "Sent ad-hoc");
+        display->drawString(x_offset + x, y_offset + FONT_HEIGHT_MEDIUM + y, sentPosition ? "position" : "nodeinfo");
+    });
 
     alerting = true;
     alertingSinceMs = millis();
@@ -231,6 +235,13 @@ void ExpressLRSFiveWay::sendAdhocPing()
 void ExpressLRSFiveWay::shutdown()
 {
     LOG_INFO("Shutdown from long press\n");
+    powerFSM.trigger(EVENT_PRESS);
+    screen->startAlert("Shutting down...");
+    // Don't set alerting = true. We don't want to auto-dismiss this alert.
+
+    playShutdownMelody(); // In case user adds a buzzer
+
+    delay(3000); // Instead of trying to fire on button release, just delay.. Officially this is for the "shutdown melody"
     power->shutdown();
 }
 

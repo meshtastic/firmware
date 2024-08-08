@@ -18,12 +18,13 @@
 
 #include "InputBroker.h"
 #include "MeshService.h" // For adhoc ping action
+#include "buzz.h"
 #include "concurrency/OSThread.h"
 #include "graphics/Screen.h" // Feedback for adhoc ping / toggle GPS
 #include "main.h"
 #include "modules/CannedMessageModule.h"
 
-#if !MESHTASTIC_EXCLUDE_GPS
+#if HAS_GPS && !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h" // For toggle GPS action
 #endif
 
