@@ -44,7 +44,7 @@ static MemoryDynamic<meshtastic_MeshPacket> staticPool;
 Allocator<meshtastic_MeshPacket> &packetPool = staticPool;
 
 static uint8_t bytes[MAX_RHPACKETLEN];
-static uint8_t bytes2[MAX_RHPACKETLEN];
+static uint8_t ScratchEncrypted[MAX_RHPACKETLEN];
 
 /**
  * Constructor
@@ -317,24 +317,28 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
     ChannelIndex chIndex = 0;
     memcpy(bytes, p->encrypted.bytes,
            rawSize); // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf
-    memcpy(bytes2, p->encrypted.bytes, rawSize);
+    memcpy(ScratchEncrypted, p->encrypted.bytes, rawSize);
 #if !(MESHTASTIC_EXCLUDE_PKI)
     // Attempt PKI decryption first
     if (p->to == nodeDB->getNodeNum() && p->to > 0 && nodeDB->getMeshNode(p->from) != nullptr &&
         nodeDB->getMeshNode(p->from)->user.public_key.size > 0 && nodeDB->getMeshNode(p->to)->user.public_key.size > 0) {
         LOG_DEBUG("Attempting PKI decryption\n");
 
-        if (crypto->decryptCurve25519(p->from, p->id, rawSize, bytes, bytes2)) {
+        if (crypto->decryptCurve25519(p->from, p->id, rawSize, ScratchEncrypted, bytes)) {
+            LOG_INFO("PKI Decryption worked!\n");
             memset(&p->decoded, 0, sizeof(p->decoded));
-            if (pb_decode_from_bytes(bytes2, rawSize, &meshtastic_Data_msg, &p->decoded) &&
+            rawSize -= 8;
+            if (pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &p->decoded) &&
                 p->decoded.portnum != meshtastic_PortNum_UNKNOWN_APP) {
                 decrypted = true;
                 LOG_INFO("Packet decrypted using PKI!\n");
                 p->pki_encrypted = true;
                 memcpy(&p->public_key.bytes, nodeDB->getMeshNode(p->from)->user.public_key.bytes, 32);
                 p->public_key.size = 32;
-                memcpy(bytes, bytes2, rawSize); // TODO: Rename the bytes buffers
+                // memcpy(bytes, ScratchEncrypted, rawSize); // TODO: Rename the bytes buffers
                 // chIndex = 8;
+            } else {
+                return false;
             }
         }
     }
@@ -354,7 +358,7 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
                 // Take those raw bytes and convert them back into a well structured protobuf we can understand
                 memset(&p->decoded, 0, sizeof(p->decoded));
                 if (!pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &p->decoded)) {
-                    LOG_ERROR("Invalid protobufs in received mesh packet (bad psk?)!\n");
+                    LOG_ERROR("Invalid protobufs in received mesh packet id=0x%08x (bad psk?)!\n", p->id);
                 } else if (p->decoded.portnum == meshtastic_PortNum_UNKNOWN_APP) {
                     LOG_ERROR("Invalid portnum (bad psk?)!\n");
                 } else {
@@ -470,7 +474,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             LOG_DEBUG("Using PKI!\n");
             if (numbytes + 8 > MAX_RHPACKETLEN)
                 return meshtastic_Routing_Error_TOO_LARGE;
-            crypto->encryptCurve25519(p->to, getFrom(p), p->id, numbytes, bytes, bytes2);
+            crypto->encryptCurve25519(p->to, getFrom(p), p->id, numbytes, ScratchEncrypted, bytes);
             numbytes += 8;
         } else {
             crypto->encrypt(getFrom(p), p->id, numbytes, bytes);
@@ -480,7 +484,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 #endif
 
         // Copy back into the packet and set the variant type
-        memcpy(p->encrypted.bytes, bytes2, numbytes);
+        memcpy(p->encrypted.bytes, bytes, numbytes);
         p->encrypted.size = numbytes;
         p->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
     }
