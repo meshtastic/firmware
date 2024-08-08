@@ -5,6 +5,7 @@
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
 #include "aes-ccm.h"
+#include "meshUtils.h"
 #include <Crypto.h>
 #include <Curve25519.h>
 #include <SHA256.h>
@@ -50,7 +51,9 @@ void CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, uint64_
     initNonce(fromNode, packetNum);
 
     // Calculate the shared secret with the destination node and encrypt
-    LOG_DEBUG("Attempting encrypt using nonce: 0x%16x shared_key: 0x%32x\n", nonce, shared_key);
+    printBytes("Attempting encrypt using nonce: ", nonce, 16);
+    printBytes("Attempting encrypt using shared_key: ", shared_key, 32);
+
     aes_ccm_ae(shared_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut, auth);
 }
 
@@ -75,7 +78,8 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, uint64_t packetNum, size
     crypto->setDHKey(fromNode);
     LOG_DEBUG("Decrypting using PKI!\n");
     initNonce(fromNode, packetNum);
-    LOG_DEBUG("Attempting decrypt using nonce: 0x%16x shared_key: 0x%32x\n", nonce, shared_key);
+    printBytes("Attempting decrypt using nonce: ", nonce, 16);
+    printBytes("Attempting decrypt using shared_key: ", shared_key, 32);
     return aes_ccm_ad(shared_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, auth, bytesOut);
 }
 
