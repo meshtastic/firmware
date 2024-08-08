@@ -476,6 +476,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                 return meshtastic_Routing_Error_TOO_LARGE;
             crypto->encryptCurve25519(p->to, getFrom(p), p->id, numbytes, ScratchEncrypted, bytes);
             numbytes += 8;
+            hash = 0;
         } else {
             crypto->encrypt(getFrom(p), p->id, numbytes, bytes);
         }
