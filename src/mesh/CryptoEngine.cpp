@@ -55,6 +55,7 @@ void CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, uint64_
     printBytes("Attempting encrypt using shared_key: ", shared_key, 32);
 
     aes_ccm_ae(shared_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut, auth);
+    printBytes("Encrypted Message with auth tag: ", bytesOut, numBytes + 8);
 }
 
 /**
@@ -80,7 +81,9 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, uint64_t packetNum, size
     initNonce(fromNode, packetNum);
     printBytes("Attempting decrypt using nonce: ", nonce, 16);
     printBytes("Attempting decrypt using shared_key: ", shared_key, 32);
-    return aes_ccm_ad(shared_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, auth, bytesOut);
+    printBytes("Encrypted Message with auth tag: ", bytes, numBytes);
+
+    return aes_ccm_ad(shared_key, 32, nonce, 8, bytes, numBytes - 8, nullptr, 0, auth, bytesOut);
 }
 
 /**
