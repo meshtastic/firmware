@@ -19,10 +19,6 @@
 #include <assert.h>
 #include <string>
 
-#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
-#include "nimble/NimbleBluetooth.h"
-#endif
-
 #if ARCH_PORTDUINO
 #include "PortduinoGlue.h"
 #endif
