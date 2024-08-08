@@ -348,7 +348,7 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
     }
 
     if (changed) { // If nothing really changed, don't broadcast on the network or write to flash
-        service.reloadOwner(!hasOpenEditTransaction);
+        service->reloadOwner(!hasOpenEditTransaction);
         saveChanges(SEGMENT_DEVICESTATE);
     }
 }
@@ -372,7 +372,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 #ifdef LED_PIN
         // Turn LED off if heartbeat by config
         if (c.payload_variant.device.led_heartbeat_disabled) {
-            digitalWrite(LED_PIN, LOW ^ LED_INVERTED);
+            digitalWrite(LED_PIN, HIGH ^ LED_STATE_ON);
         }
 #endif
         if (config.device.button_gpio == c.payload_variant.device.button_gpio &&
@@ -818,8 +818,11 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
 #endif
 #endif
     conn.has_serial = true; // No serial-less devices
+#if !EXCLUDE_POWER_FSM
     conn.serial.is_connected = powerFSM.getState() == &stateSERIAL;
-    conn.serial.baud = SERIAL_BAUD;
+#else
+    conn.serial.is_connected = powerFSM.getState();
+#endif conn.serial.baud = SERIAL_BAUD;
 
     r.get_device_connection_status_response = conn;
     r.which_payload_variant = meshtastic_AdminMessage_get_device_connection_status_response_tag;
@@ -848,7 +851,7 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
 {
     if (!hasOpenEditTransaction) {
         LOG_INFO("Saving changes to disk\n");
-        service.reloadConfig(saveWhat); // Calls saveToDisk among other things
+        service->reloadConfig(saveWhat); // Calls saveToDisk among other things
     } else {
         LOG_INFO("Delaying save of changes to disk until the open transaction is committed\n");
     }
@@ -879,7 +882,7 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
     channels.setChannel(primaryChannel);
     channels.onConfigChanged();
 
-    service.reloadOwner(false);
+    service->reloadOwner(false);
     saveChanges(SEGMENT_CONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
 }
 

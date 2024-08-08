@@ -375,7 +375,7 @@ void EInkDynamicDisplay::hashImage()
 
     // Sum all bytes of the image buffer together
     for (uint16_t b = 0; b < (displayWidth / 8) * displayHeight; b++) {
-        imageHash += buffer[b];
+        imageHash ^= buffer[b] << b;
     }
 }
 

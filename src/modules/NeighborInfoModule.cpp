@@ -108,7 +108,7 @@ void NeighborInfoModule::sendNeighborInfo(NodeNum dest, bool wantReplies)
     p->to = dest;
     p->decoded.want_response = wantReplies;
     printNeighborInfo("SENDING", &neighborInfo);
-    service.sendToMesh(p, RX_SRC_LOCAL, true);
+    service->sendToMesh(p, RX_SRC_LOCAL, true);
 }
 
 /*
