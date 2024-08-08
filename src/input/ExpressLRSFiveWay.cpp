@@ -48,41 +48,44 @@ int ExpressLRSFiveWay::readKey()
 {
     uint16_t value = analogRead(PIN_JOYSTICK);
 
-    constexpr uint8_t IDX_TO_INPUT[N_JOY_ADC_VALUES - 1] = {INPUT_KEY_UP_PRESS, INPUT_KEY_DOWN_PRESS, INPUT_KEY_LEFT_PRESS,
-                                                            INPUT_KEY_RIGHT_PRESS, INPUT_KEY_OK_PRESS};
+    constexpr uint8_t IDX_TO_INPUT[N_JOY_ADC_VALUES - 1] = {UP, DOWN, LEFT, RIGHT, OK};
     for (unsigned int i = 0; i < N_JOY_ADC_VALUES - 1; ++i) {
         if (value < (joyAdcValues[i] + fuzzValues[i]) && value > (joyAdcValues[i] - fuzzValues[i]))
             return IDX_TO_INPUT[i];
     }
-    return INPUT_KEY_NO_PRESS;
+    return NO_PRESS;
 }
 
-ExpressLRSFiveWay::ExpressLRSFiveWay() : concurrency::OSThread(inputSourceName) // Meshtastic: derive from threading class
+ExpressLRSFiveWay::ExpressLRSFiveWay() : concurrency::OSThread(inputSourceName)
 {
+    // ExpressLRS: init values
     isLongPressed = false;
-    keyInProcess = INPUT_KEY_NO_PRESS;
+    keyInProcess = NO_PRESS;
     keyDownStart = 0;
 
+    // Express LRS: calculate the threshold for interpreting ADC values as various buttons
     calcFuzzValues();
 
-    inputBroker->registerSource(this); // Meshtastic: register with canned messages
+    // Meshtastic: register with canned messages
+    inputBroker->registerSource(this);
 }
 
+// ExpressLRS: interpret reading as key events
 void ExpressLRSFiveWay::update(int *keyValue, bool *keyLongPressed)
 {
-    *keyValue = INPUT_KEY_NO_PRESS;
+    *keyValue = NO_PRESS;
 
     int newKey = readKey();
     uint32_t now = millis();
-    if (keyInProcess == INPUT_KEY_NO_PRESS) {
+    if (keyInProcess == NO_PRESS) {
         // New key down
-        if (newKey != INPUT_KEY_NO_PRESS) {
+        if (newKey != NO_PRESS) {
             keyDownStart = now;
             // DBGLN("down=%u", newKey);
         }
     } else {
         // if key released
-        if (newKey == INPUT_KEY_NO_PRESS) {
+        if (newKey == NO_PRESS) {
             // DBGLN("up=%u", keyInProcess);
             if (!isLongPressed) {
                 if ((now - keyDownStart) > KEY_DEBOUNCE_MS) {
@@ -94,7 +97,7 @@ void ExpressLRSFiveWay::update(int *keyValue, bool *keyLongPressed)
         }
         // else if the key has changed while down, reset state for next go-around
         else if (newKey != keyInProcess) {
-            newKey = INPUT_KEY_NO_PRESS;
+            newKey = NO_PRESS;
         }
         // else still pressing, waiting for long if not already signaled
         else if (!isLongPressed) {
@@ -104,48 +107,30 @@ void ExpressLRSFiveWay::update(int *keyValue, bool *keyLongPressed)
                 isLongPressed = true;
             }
         }
-    } // if keyInProcess != INPUT_KEY_NO_PRESS
+    } // if keyInProcess != NO_PRESS
 
     keyInProcess = newKey;
 }
 
+// Meshtastic: runs at regular intervals
 int32_t ExpressLRSFiveWay::runOnce()
 {
     uint32_t now = millis();
 
+    // Dismiss any alert frames after 2 seconds
+    // Feedback for GPS toggle / adhoc ping
+    if (alerting && now > alertingSinceMs + 2000) {
+        alerting = false;
+        screen->endAlert();
+    }
+
+    // Get key events from ExpressLRS code
     int keyValue;
     bool longPressed;
     update(&keyValue, &longPressed);
 
-    switch (keyValue) {
-    // Allow left and right keys to close the canned message frame
-    case ExpressLRSFiveWay::INPUT_KEY_LEFT_PRESS:
-    case ExpressLRSFiveWay::INPUT_KEY_RIGHT_PRESS:
-        if (cannedMessageModule->shouldDraw())
-            raiseEvent(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL);
-        else
-            raiseEvent((_meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar)keyValue);
-        break;
-    case ExpressLRSFiveWay::INPUT_KEY_UP_PRESS:
-    case ExpressLRSFiveWay::INPUT_KEY_DOWN_PRESS:
-        raiseEvent((_meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar)keyValue);
-        break;
-    case ExpressLRSFiveWay::INPUT_KEY_OK_PRESS:
-        // Canned message module interprets SELECT as user button short press when suitable,
-        // but doesn't handle long press, so we'll do that here
-        if (longPressed) {
-            LOG_INFO("Shutdown from long press\n");
-            power->shutdown();
-        } else if (!moduleConfig.canned_message.enabled)
-            // Allow "press" to act as user button. Canned message module won't do this for us if not enabled
-            powerFSM.trigger(EVENT_PRESS);
-        else
-            raiseEvent(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT);
-        break;
-    case ExpressLRSFiveWay::INPUT_KEY_NO_PRESS:
-    default:
-        break;
-    }
+    // Do something about this key press
+    determineAction((KeyType)keyValue, longPressed ? LONG : SHORT);
 
     // If there has been recent key activity, poll the joystick slightly more frequently
     if (now < keyDownStart + (20 * 1000UL)) // Within last 20 seconds
@@ -156,13 +141,108 @@ int32_t ExpressLRSFiveWay::runOnce()
     return 250;
 }
 
+// Determine what action to take when a button press is detected
+// Written verbose for easier remapping by user
+void ExpressLRSFiveWay::determineAction(KeyType key, PressLength length)
+{
+    switch (key) {
+    case LEFT:
+        if (inCannedMessageMenu()) // If in canned message menu
+            sendKey(CANCEL);       // exit the menu (press imaginary cancel key)
+        else
+            sendKey(LEFT);
+        break;
+
+    case RIGHT:
+        if (inCannedMessageMenu()) // If in canned message menu:
+            sendKey(CANCEL);       // exit the menu (press imaginary cancel key)
+        else
+            sendKey(RIGHT);
+        break;
+
+    case UP:
+        if (length == LONG)
+            toggleGPS();
+        else
+            sendKey(UP);
+        break;
+
+    case DOWN:
+        if (length == LONG)
+            sendAdhocPing();
+        else
+            sendKey(DOWN);
+        break;
+
+    case OK:
+        if (length == LONG)
+            shutdown();
+        else
+            click(); // Use instead of sendKey(OK). Works better when canned message module disabled
+        break;
+
+    default:
+        break;
+    }
+}
+
 // Feed input to the canned messages module
-void ExpressLRSFiveWay::raiseEvent(_meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar key)
+void ExpressLRSFiveWay::sendKey(KeyType key)
 {
     InputEvent e;
     e.source = inputSourceName;
     e.inputEvent = key;
     notifyObservers(&e);
+}
+
+// Enable or Disable a connected GPS
+// Contained as one method for easier remapping of buttons by user
+void ExpressLRSFiveWay::toggleGPS()
+{
+    if (!config.device.disable_triple_click && (gps != nullptr)) {
+        gps->toggleGpsMode();
+        screen->startAlert("GPS Toggled");
+        alerting = true;
+        alertingSinceMs = millis();
+    }
+}
+
+// Send either node-info or position, on demand
+// Contained as one method for easier remapping of buttons by user
+void ExpressLRSFiveWay::sendAdhocPing()
+{
+    service->refreshLocalMeshNode();
+    bool sentPosition = service->trySendPosition(NODENUM_BROADCAST, true);
+
+    // Adhoc position
+    if (sentPosition)
+        screen->startAlert("Sent ad-hoc position");
+
+    // Position info not available, node info instead
+    else
+        screen->startAlert("Sent ad-hoc nodeinfo");
+
+    alerting = true;
+    alertingSinceMs = millis();
+}
+
+// Shutdown the node (enter deep-sleep)
+// Contained as one method for easier remapping of buttons by user
+void ExpressLRSFiveWay::shutdown()
+{
+    LOG_INFO("Shutdown from long press\n");
+    power->shutdown();
+}
+
+// Emulate user button, or canned message SELECT
+// This is necessary as canned message module doesn't translate SELECT to user button presses if the module is disabled
+// Contained as one method for easier remapping of buttons by user
+void ExpressLRSFiveWay::click()
+{
+    if (!moduleConfig.canned_message.enabled)
+        powerFSM.trigger(EVENT_PRESS);
+    else
+        sendKey(OK);
 }
 
 ExpressLRSFiveWay *expressLRSFiveWayInput = nullptr;
