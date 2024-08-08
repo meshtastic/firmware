@@ -151,7 +151,7 @@ void CryptoEngine::aesSetKey(const uint8_t *key_bytes, size_t key_len)
         delete aes;
         aes = nullptr;
     }
-    if (key.length != 0) {
+    if (key_len != 0) {
         aes = new AESSmall256();
         aes->setKey(key_bytes, key_len);
     }
