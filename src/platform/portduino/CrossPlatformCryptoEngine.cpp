@@ -11,7 +11,10 @@ class CrossPlatformCryptoEngine : public CryptoEngine
     CTRCommon *ctr = NULL;
 
   public:
-    CrossPlatformCryptoEngine() {}
+    CrossPlatformCryptoEngine()
+    {
+        // do test vectors here
+    }
 
     ~CrossPlatformCryptoEngine() {}
 

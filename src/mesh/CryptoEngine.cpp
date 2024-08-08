@@ -23,7 +23,7 @@ void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey)
     memcpy(privKey, private_key, sizeof(private_key));
 }
 #endif
-
+uint8_t shared_key[32];
 void CryptoEngine::clearKeys()
 {
     memset(public_key, 0, sizeof(public_key));
@@ -50,8 +50,8 @@ void CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, uint64_
     initNonce(fromNode, packetNum);
 
     // Calculate the shared secret with the destination node and encrypt
-
-    aes_ccm_ae(key.bytes, key.length, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut, auth);
+    LOG_DEBUG("Attempting encrypt using nonce: 0x%16x shared_key: 0x%32x\n", nonce, shared_key);
+    aes_ccm_ae(shared_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut, auth);
 }
 
 /**
@@ -75,7 +75,8 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, uint64_t packetNum, size
     crypto->setDHKey(fromNode);
     LOG_DEBUG("Decrypting using PKI!\n");
     initNonce(fromNode, packetNum);
-    return aes_ccm_ad(key.bytes, key.length, nonce, 8, bytes, numBytes, nullptr, 0, auth, bytesOut);
+    LOG_DEBUG("Attempting decrypt using nonce: 0x%16x shared_key: 0x%32x\n", nonce, shared_key);
+    return aes_ccm_ad(shared_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, auth, bytesOut);
 }
 
 /**
@@ -96,7 +97,7 @@ void CryptoEngine::setDHKey(uint32_t nodeNum)
     // Calculate the shared secret with the specified node's
     // public key and our private key
     uint8_t *pubKey = node->user.public_key.bytes;
-    uint8_t shared_key[32];
+
     uint8_t local_priv[32];
     memcpy(shared_key, pubKey, 32);
     memcpy(local_priv, private_key, 32);
@@ -113,11 +114,6 @@ void CryptoEngine::setDHKey(uint32_t nodeNum)
      * it around as needed.
      */
     crypto->hash(shared_key, 32);
-
-    CryptoKey k;
-    memcpy(k.bytes, shared_key, 32);
-    k.length = 32;
-    crypto->setKey(k);
 }
 
 /**
