@@ -1,6 +1,5 @@
 #include "RTC.h"
 #include "configuration.h"
-#if !MESHTASTIC_EXCLUDE_RTC
 #include "detect/ScanI2C.h"
 #include "main.h"
 #include <sys/time.h>

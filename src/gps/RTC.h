@@ -21,11 +21,7 @@ enum RTCQuality {
     /// Our time is based on our own GPS
     RTCQualityGPS = 4
 };
-#define SEC_PER_DAY 86400
-#define SEC_PER_HOUR 3600
-#define SEC_PER_MIN 60
 
-#if !MESHTASTIC_EXCLUDE_RTC
 RTCQuality getRTCQuality();
 
 /// If we haven't yet set our RTC this boot, set it from a GPS derived time
@@ -45,7 +41,6 @@ void readFromRTC();
 
 time_t gm_mktime(struct tm *tm);
 
-#else
-uint32_t getTime(bool local = true);
-uint32_t getValidTime(RTCQuality minQuality, bool local = true);
-#endif
+#define SEC_PER_DAY 86400
+#define SEC_PER_HOUR 3600
+#define SEC_PER_MIN 60

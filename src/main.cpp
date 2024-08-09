@@ -687,7 +687,7 @@ void setup()
 
     // Initialize the screen first so we can show the logo while we start up everything else.
     screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
-#if !MESHTASTIC_EXCLUDE_TZ
+
     // setup TZ prior to time actions.
 #if !MESHTASTIC_EXCLUDE_TZ
     if (*config.device.tzdef) {
@@ -698,8 +698,9 @@ void setup()
     tzset();
     LOG_DEBUG("Set Timezone to %s\n", getenv("TZ"));
 #endif
+
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
-#endif
+
 #if !MESHTASTIC_EXCLUDE_GPS
     // If we're taking on the repeater role, ignore GPS
     if (HAS_GPS) {
