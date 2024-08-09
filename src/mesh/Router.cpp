@@ -19,14 +19,6 @@
 #include "serialization/MeshPacketSerializer.h"
 #endif
 #include "../userPrefs.h"
-/**
- * Router todo
- *
- * DONE: Implement basic interface and use it elsewhere in app
- * Add naive flooding mixin (& drop duplicate rx broadcasts), add tools for sending broadcasts with incrementing sequence #s
- * Add an optional adjacent node only 'send with ack' mixin.  If we timeout waiting for the ack, call handleAckTimeout(packet)
- *
- **/
 
 #define MAX_RX_FROMRADIO                                                                                                         \
     4 // max number of packets destined to our queue, we dispatch packets quickly so it doesn't need to be big
