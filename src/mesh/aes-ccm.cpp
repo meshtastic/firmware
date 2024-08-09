@@ -8,6 +8,7 @@
  */
 #define AES_BLOCK_SIZE 16
 #include "aes-ccm.h"
+#if !MESHTASTIC_EXCLUDE_PKI
 
 static inline void WPA_PUT_BE16(uint8_t *a, uint16_t val)
 {
@@ -153,3 +154,4 @@ bool aes_ccm_ad(const uint8_t *key, size_t key_len, const uint8_t *nonce, size_t
     }
     return true;
 }
+#endif
