@@ -1,5 +1,4 @@
 #pragma once
-#include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_DROPZONE
 #include "SinglePortModule.h"
 #include "modules/Telemetry/Sensor/DFRobotLarkSensor.h"

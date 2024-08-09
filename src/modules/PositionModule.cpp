@@ -9,7 +9,6 @@
 #include "Router.h"
 #include "TypeConversions.h"
 #include "airtime.h"
-#include "configuration.h"
 #include "gps/GeoCoord.h"
 #include "main.h"
 #include "mesh/compression/unishox2.h"
@@ -127,12 +126,13 @@ void PositionModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic
 
 void PositionModule::trySetRtc(meshtastic_Position p, bool isLocal, bool forceUpdate)
 {
+#if !MESHTASTIC_EXCLUDE_RTC
     struct timeval tv;
     uint32_t secs = p.time;
-
     tv.tv_sec = secs;
     tv.tv_usec = 0;
     perhapsSetRTC(isLocal ? RTCQualityNTP : RTCQualityFromNet, &tv, forceUpdate);
+#endif
 }
 
 meshtastic_MeshPacket *PositionModule::allocReply()
@@ -211,9 +211,10 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_SPEED)
         p.ground_speed = localPosition.ground_speed;
 
-    // Strip out any time information before sending packets to other nodes - to keep the wire size small (and because other
-    // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS or NTP to include the time, so that devices
-    // without can get time.
+        // Strip out any time information before sending packets to other nodes - to keep the wire size small (and because other
+        // nodes shouldn't trust it anyways) Note: we allow a device with a local GPS or NTP to include the time, so that devices
+        // without can get time.
+#if !MESHTASTIC_EXCLUDE_RTC
     if (getRTCQuality() < RTCQualityNTP) {
         LOG_INFO("Stripping time %u from position send\n", p.time);
         p.time = 0;
@@ -221,6 +222,9 @@ meshtastic_MeshPacket *PositionModule::allocReply()
         p.time = getValidTime(RTCQualityNTP);
         LOG_INFO("Providing time to mesh %u\n", p.time);
     }
+#else
+    p.time = 0;
+#endif
 
     LOG_INFO("Position reply: time=%i lat=%i lon=%i\n", p.time, p.latitude_i, p.longitude_i);
 

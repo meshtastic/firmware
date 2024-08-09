@@ -3,7 +3,6 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
-#include "configuration.h"
 #include <FSCommon.h>
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "BleOta.h"
