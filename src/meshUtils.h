@@ -13,3 +13,5 @@ template <class T> constexpr const T &clamp(const T &v, const T &lo, const T &hi
 #include <string.h>
 char *strnstr(const char *s, const char *find, size_t slen);
 #endif
+
+void printBytes(const char *label, const uint8_t *p, size_t numbytes);

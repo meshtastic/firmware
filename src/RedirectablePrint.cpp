@@ -39,7 +39,7 @@ size_t RedirectablePrint::write(uint8_t c)
     SEGGER_RTT_PutChar(SEGGER_STDOUT_CH, c);
 #endif
 
-    if (!config.has_lora || config.device.serial_enabled)
+    if (!config.has_lora || config.security.serial_enabled)
         dest->write(c);
 
     return 1; // We always claim one was written, rather than trusting what the
@@ -180,7 +180,7 @@ void RedirectablePrint::log_to_syslog(const char *logLevel, const char *format, 
 void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_list arg)
 {
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
-    if (config.bluetooth.device_logging_enabled && !pauseBluetoothLogging) {
+    if (config.security.bluetooth_logging_enabled && !pauseBluetoothLogging) {
         bool isBleConnected = false;
 #ifdef ARCH_ESP32
         isBleConnected = nimbleBluetooth && nimbleBluetooth->isActive() && nimbleBluetooth->isConnected();
