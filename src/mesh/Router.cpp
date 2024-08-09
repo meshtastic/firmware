@@ -477,18 +477,20 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             printBytes("Decrypted packet", bytes, numbytes);
             if (numbytes + 8 > MAX_RHPACKETLEN)
                 return meshtastic_Routing_Error_TOO_LARGE;
-            crypto->encryptCurve25519(p->to, getFrom(p), p->id, numbytes, ScratchEncrypted, bytes);
+            crypto->encryptCurve25519(p->to, getFrom(p), p->id, numbytes, bytes, ScratchEncrypted);
             numbytes += 8;
+            memcpy(p->encrypted.bytes, ScratchEncrypted, numbytes);
             p->channel = 0;
         } else {
             crypto->encrypt(getFrom(p), p->id, numbytes, bytes);
+            memcpy(p->encrypted.bytes, bytes, numbytes);
         }
 #else
         crypto->encrypt(getFrom(p), p->id, numbytes, bytes);
+        memcpy(p->encrypted.bytes, bytes, numbytes);
 #endif
 
         // Copy back into the packet and set the variant type
-        memcpy(p->encrypted.bytes, bytes, numbytes);
         p->encrypted.size = numbytes;
         p->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
     }
