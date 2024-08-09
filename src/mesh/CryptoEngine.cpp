@@ -102,7 +102,7 @@ bool CryptoEngine::setDHKey(uint32_t nodeNum)
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeNum);
     if (node->num < 1 || node->user.public_key.bytes[0] == 0) {
         LOG_DEBUG("Node %d or their public_key not found\n", nodeNum);
-        return;
+        return false;
     }
 
     // Calculate the shared secret with the specified node's
