@@ -321,7 +321,8 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
 #if !(MESHTASTIC_EXCLUDE_PKI)
     // Attempt PKI decryption first
     if (p->channel == 0 && p->to == nodeDB->getNodeNum() && p->to > 0 && nodeDB->getMeshNode(p->from) != nullptr &&
-        nodeDB->getMeshNode(p->from)->user.public_key.size > 0 && nodeDB->getMeshNode(p->to)->user.public_key.size > 0) {
+        nodeDB->getMeshNode(p->from)->user.public_key.size > 0 && nodeDB->getMeshNode(p->to)->user.public_key.size > 0 &&
+        rawSize > 8) {
         LOG_DEBUG("Attempting PKI decryption\n");
 
         if (crypto->decryptCurve25519(p->from, p->id, rawSize, ScratchEncrypted, bytes)) {
