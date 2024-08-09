@@ -28,7 +28,8 @@ typedef enum {
     GNSS_MODEL_UBLOX,
     GNSS_MODEL_UC6580,
     GNSS_MODEL_UNKNOWN,
-    GNSS_MODEL_MTK_L76B
+    GNSS_MODEL_MTK_L76B,
+    GNSS_MODEL_AG3335
 } GnssModel_t;
 
 typedef enum {
