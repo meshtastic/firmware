@@ -252,6 +252,12 @@ void cpuDeepSleep(uint32_t msecToWake)
     nrf_gpio_cfg_default(WB_I2C1_SDA);
 #endif
 #endif
+
+#ifdef HELTEC_MESH_NODE_T114
+    nrf_gpio_cfg_default(PIN_GPS_PPS);
+    detachInterrupt(PIN_GPS_PPS);
+    detachInterrupt(PIN_BUTTON1);
+#endif
     // Sleepy trackers or sensors can low power "sleep"
     // Don't enter this if we're sleeping portMAX_DELAY, since that's a shutdown event
     if (msecToWake != portMAX_DELAY &&

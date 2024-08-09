@@ -146,7 +146,7 @@ No longer populated on PCB
 
 #define GPS_L76K
 
-#define PIN_GPS_RESET (32 + 6) // An output to reset L76K GPS. As per datasheet, low for > 100ms will reset the L76K
+//#define PIN_GPS_RESET (32 + 6) // An output to reset L76K GPS. As per datasheet, low for > 100ms will reset the L76K
 #define GPS_RESET_MODE LOW
 #define PIN_GPS_EN (21)
 #define GPS_EN_ACTIVE HIGH
