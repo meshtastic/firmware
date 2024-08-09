@@ -8,6 +8,7 @@ from readprops import readProps
 
 Import("env")
 platform = env.PioPlatform()
+board = env.GetProjectOption("board")
 
 
 def esp32_create_combined_bin(source, target, env):
@@ -78,6 +79,9 @@ if platform.name == "espressif32":
     else:
         # For newer ESP32 targets, using newlib nano works better.
         env.Append(LINKFLAGS=["--specs=nano.specs", "-u", "_printf_float"])
+    if board == "ttgo-t-beam":
+        print("patching esp32 libs")
+        env.Execute("tar -xvf bin/arduino-esp32-libs-release_*tar.gz -C ~/.platformio/packages/framework-arduinoespressif32/")
 
 if platform.name == "nordicnrf52":
     env.AddPostAction("$BUILD_DIR/${PROGNAME}.hex",
