@@ -689,6 +689,7 @@ void setup()
     screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
 #if !MESHTASTIC_EXCLUDE_TZ
     // setup TZ prior to time actions.
+#if !MESHTASTIC_EXCLUDE_TZ
     if (*config.device.tzdef) {
         setenv("TZ", config.device.tzdef, 1);
     } else {
@@ -697,7 +698,6 @@ void setup()
     tzset();
     LOG_DEBUG("Set Timezone to %s\n", getenv("TZ"));
 #endif
-#if !MESHTASTIC_EXCLUDE_RTC
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 #endif
 #if !MESHTASTIC_EXCLUDE_GPS

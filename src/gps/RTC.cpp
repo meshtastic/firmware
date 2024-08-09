@@ -257,6 +257,7 @@ uint32_t getValidTime(RTCQuality minQuality, bool local)
 
 time_t gm_mktime(struct tm *tm)
 {
+#if !MESHTASTIC_EXCLUDE_TZ
     setenv("TZ", "GMT0", 1);
     time_t res = mktime(tm);
     if (*config.device.tzdef) {
@@ -265,14 +266,7 @@ time_t gm_mktime(struct tm *tm)
         setenv("TZ", "UTC0", 1);
     }
     return res;
-}
 #else
-uint32_t getTime(bool local)
-{
-    return (((uint32_t)millis()) / 1000);
-}
-uint32_t getValidTime(RTCQuality minQuality, bool local)
-{
-    return getTime(local);
-}
+    return mktime(tm);
 #endif
+}

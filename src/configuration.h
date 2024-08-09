@@ -263,7 +263,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_PKI_KEYGEN 1
 #define MESHTASTIC_EXCLUDE_POWER_FSM 1
 #define MESHTASTIC_EXCLUDE_TZ 1
-#define MESHTASTIC_EXCLUDE_RTC 1
 #endif
 
 // Turn off all optional modules
