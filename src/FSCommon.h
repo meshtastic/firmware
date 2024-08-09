@@ -51,6 +51,7 @@ using namespace Adafruit_LittleFS_Namespace;
 #endif
 
 void fsInit();
+void fsListFiles();
 bool copyFile(const char *from, const char *to);
 bool renameFile(const char *pathFrom, const char *pathTo);
 std::vector<meshtastic_FileInfo> getFiles(const char *dirname, uint8_t levels);

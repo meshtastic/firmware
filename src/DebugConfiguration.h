@@ -62,6 +62,9 @@
 #endif
 #endif
 
+/// A C wrapper for LOG_DEBUG that can be used from arduino C libs that don't know about C++ or meshtastic
+extern "C" void logLegacy(const char *level, const char *fmt, ...);
+
 #define SYSLOG_NILVALUE "-"
 
 #define SYSLOG_CRIT 2  /* critical conditions */

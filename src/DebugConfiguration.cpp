@@ -26,6 +26,16 @@ SOFTWARE.*/
 
 #include "DebugConfiguration.h"
 
+/// A C wrapper for LOG_DEBUG that can be used from arduino C libs that don't know about C++ or meshtastic
+extern "C" void logLegacy(const char *level, const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    if (console)
+        console->vprintf(level, fmt, args);
+    va_end(args);
+}
+
 #if HAS_NETWORKING
 
 Syslog::Syslog(UDP &client)

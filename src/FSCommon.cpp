@@ -414,6 +414,29 @@ void fsInit()
 #endif
 }
 
+// These are not publically exposed - copied from InternalFileSystem.cpp
+// #define FLASH_NRF52_PAGE_SIZE   4096
+// #define LFS_FLASH_TOTAL_SIZE  (7*FLASH_NRF52_PAGE_SIZE)
+// #define LFS_BLOCK_SIZE        128
+
+/// List all files in the FS and test write and readback.
+/// Useful for filesystem stress testing - normally stripped from build by the linker.
+void fsListFiles()
+{
+    auto filesManifest = getFiles("/", 5);
+
+    uint32_t totalSize = 0;
+    for (size_t i = 0; i < filesManifest.size(); i++) {
+        LOG_INFO("File %s (size %d)\n", filesManifest[i].file_name, filesManifest[i].size_bytes);
+        totalSize += filesManifest[i].size_bytes;
+    }
+    LOG_INFO("%d files (total size %u)\n", filesManifest.size(), totalSize);
+#if defined(ARCH_ESP32)
+    LOG_DEBUG("Filesystem files (%d/%d Bytes):\n", FSCom.usedBytes(), FSCom.totalBytes());
+#endif
+    // LOG_INFO("Filesystem block size %u, total bytes %u", LFS_FLASH_TOTAL_SIZE, LFS_BLOCK_SIZE);
+}
+
 /**
  * Initializes the SD card and mounts the file system.
  */
