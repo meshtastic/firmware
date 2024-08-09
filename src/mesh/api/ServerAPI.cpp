@@ -11,6 +11,7 @@ ServerAPI<T>::ServerAPI(T &_client) : StreamAPI(&client), concurrency::OSThread(
 template <typename T> ServerAPI<T>::~ServerAPI()
 {
     client.stop();
+    StreamAPI::close();
 }
 
 template <typename T> void ServerAPI<T>::close()
