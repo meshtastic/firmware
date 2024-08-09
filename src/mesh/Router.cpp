@@ -321,7 +321,6 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
             LOG_INFO("PKI Decryption worked!\n");
             memset(&p->decoded, 0, sizeof(p->decoded));
             rawSize -= 8;
-            printBytes("Decrypted packet", bytes, rawSize);
             if (pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &p->decoded) &&
                 p->decoded.portnum != meshtastic_PortNum_UNKNOWN_APP) {
                 decrypted = true;
@@ -466,7 +465,6 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP && p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP &&
             p->decoded.portnum != meshtastic_PortNum_ROUTING_APP) { // TODO: check for size due to 8 byte tag
             LOG_DEBUG("Using PKI!\n");
-            printBytes("Decrypted packet", bytes, numbytes);
             if (numbytes + 8 > MAX_RHPACKETLEN)
                 return meshtastic_Routing_Error_TOO_LARGE;
             crypto->encryptCurve25519(p->to, getFrom(p), p->id, numbytes, bytes, ScratchEncrypted);

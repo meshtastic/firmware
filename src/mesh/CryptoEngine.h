@@ -44,10 +44,10 @@ class CryptoEngine
 #endif
     void clearKeys();
     void setPrivateKey(uint8_t *_private_key);
-    virtual void encryptCurve25519(uint32_t toNode, uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes,
+    virtual bool encryptCurve25519(uint32_t toNode, uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes,
                                    uint8_t *bytesOut);
     virtual bool decryptCurve25519(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes, uint8_t *bytesOut);
-    virtual void setDHKey(uint32_t nodeNum);
+    virtual bool setDHKey(uint32_t nodeNum);
     virtual void hash(uint8_t *bytes, size_t numBytes);
 
     virtual void aesSetKey(const uint8_t *key, size_t key_len);

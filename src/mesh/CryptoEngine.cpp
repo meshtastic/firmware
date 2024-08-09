@@ -37,7 +37,7 @@ void CryptoEngine::clearKeys()
  *
  * @param bytes is updated in place
  */
-void CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes,
+bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes,
                                      uint8_t *bytesOut)
 {
     uint8_t *auth;
@@ -45,17 +45,18 @@ void CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, uint64_
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(toNode);
     if (node->num < 1 || node->user.public_key.size == 0) {
         LOG_DEBUG("Node %d or their public_key not found\n", toNode);
-        return;
+        return false;
     }
-    crypto->setDHKey(toNode);
+    if (!crypto->setDHKey(toNode)) {
+        return false;
+    }
     initNonce(fromNode, packetNum);
 
     // Calculate the shared secret with the destination node and encrypt
     printBytes("Attempting encrypt using nonce: ", nonce, 16);
     printBytes("Attempting encrypt using shared_key: ", shared_key, 32);
-
     aes_ccm_ae(shared_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut, auth);
-    printBytes("Encrypted Message with auth tag: ", bytesOut, numBytes + 8);
+    return true;
 }
 
 /**
@@ -76,12 +77,12 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, uint64_t packetNum, size
     }
 
     // Calculate the shared secret with the sending node and decrypt
-    crypto->setDHKey(fromNode);
-    LOG_DEBUG("Decrypting using PKI!\n");
+    if (!crypto->setDHKey(fromNode)) {
+        return false;
+    }
     initNonce(fromNode, packetNum);
     printBytes("Attempting decrypt using nonce: ", nonce, 16);
     printBytes("Attempting decrypt using shared_key: ", shared_key, 32);
-    printBytes("Encrypted Message with auth tag: ", bytes, numBytes);
     return aes_ccm_ad(shared_key, 32, nonce, 8, bytes, numBytes - 8, nullptr, 0, auth, bytesOut);
 }
 
@@ -96,7 +97,7 @@ void CryptoEngine::setPrivateKey(uint8_t *_private_key)
  *
  * @param nodeNum the node number of the node who's public key we want to use
  */
-void CryptoEngine::setDHKey(uint32_t nodeNum)
+bool CryptoEngine::setDHKey(uint32_t nodeNum)
 {
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeNum);
     if (node->num < 1 || node->user.public_key.bytes[0] == 0) {
@@ -111,8 +112,10 @@ void CryptoEngine::setDHKey(uint32_t nodeNum)
     uint8_t local_priv[32];
     memcpy(shared_key, pubKey, 32);
     memcpy(local_priv, private_key, 32);
-    if (!Curve25519::dh2(shared_key, local_priv))
-        assert(true);
+    if (!Curve25519::dh2(shared_key, local_priv)) {
+        LOG_WARN("Curve25519DH step 2 failed!\n");
+        return false;
+    }
     printBytes("DH Output: ", shared_key, 32);
 
     /**
@@ -126,6 +129,7 @@ void CryptoEngine::setDHKey(uint32_t nodeNum)
      * it around as needed.
      */
     crypto->hash(shared_key, 32);
+    return true;
 }
 
 /**
