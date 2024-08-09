@@ -12,13 +12,13 @@
 #define USE_LLCC68 // Original Chatter2 with LLCC68 module
 #define USE_SX1262 // Added for when Lora module is swapped for HT-RA62
 
-#define SX126X_CS 14                 // module's NSS pin
+#define LORA_CS 14                   // module's NSS pin
 #define LORA_SCK 16                  // module's SCK pin
 #define LORA_MOSI 5                  // module's MOSI pin
 #define LORA_MISO 17                 // module's MISO pin
-#define SX126X_RESET RADIOLIB_NC     // module's NRST pin
-#define SX126X_BUSY 4                // module's BUSY pin works for both LLCC68 and RA-62 with cut & jumper
-#define SX126X_DIO1 18               // module's DIO1 pin
+#define LORA_RESET RADIOLIB_NC       // module's NRST pin
+#define LORA_BUSY 4                  // module's BUSY pin works for both LLCC68 and RA-62 with cut & jumper
+#define LORA_DIO1 18                 // module's DIO1 pin
 #define SX126X_DIO2_AS_RF_SWITCH     // module's DIO2 pin
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8 // module's DIO pin
 #define SX126X_TXEN RADIOLIB_NC
@@ -104,19 +104,6 @@
 //                                                                             //
 /////////////////////////////////////////////////////////////////////////////////
 
-#define LORA_CS SX126X_CS // FIXME: for some reason both are used in /src
-
-// Many of the below values would only be used if USE_RF95 was defined, but it's not as we aren't actually using an RF95, just
-// that the 4 pins above are named like it If they aren't used they don't need to be defined and doing so cause confusion to those
-// adapting this file LORA_RESET value is never used in src (as we are not using RF95), so no need to define LORA_DIO0 is not used
-// in src (as we are not using RF95) as SX1262 does not have it per SX1262 datasheet, so no need to define
-// FIXME: confirm that the linked lines below are actually only called when using the SX126x or SX128x and no other modules
-// then use SX126X_DIO1 and SX128X_DIO1 respectively for that purpose, removing the need for RF95-style LORA_* definitions when
-// the RF95 isn't used
-#define LORA_DIO1                                                                                                                \
-    SX126X_DIO1 // The old name is used in
-                // https://github.com/meshtastic/firmware/blob/7eff5e7bcb2084499b723c5e3846c15ee089e36d/src/sleep.cpp#L298, so
-                // must also define the old name
 // LORA_DIO2 value is never used in src (as we are not using RF95), so no need to define, and if DIO2_AS_RF_SWITCH is set then it
 // cannot serve any extra function even if requested to LORA_DIO3 value is never used in src (as we are not using RF95), so no
 // need to define, and DIO3_AS_TCXO_AT_1V8 is set so it cannot serve any extra function even if requested to (from 13.3.2.1

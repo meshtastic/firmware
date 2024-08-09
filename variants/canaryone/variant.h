@@ -110,12 +110,12 @@ static const uint8_t A0 = PIN_A0;
  */
 #define RADIOLIB_DEBUG 1
 #define USE_SX1262
-#define SX126X_CS (GPIO_PORT0 + 24)
-#define SX126X_DIO1 (GPIO_PORT1 + 11)
+#define LORA_CS (GPIO_PORT0 + 24)
+#define LORA_DIO1 (GPIO_PORT1 + 11)
 // #define SX126X_DIO3 (GPIO_PORT0 + 21)
 // #define SX126X_DIO2 () // LORA_BUSY // LoRa RX/TX
-#define SX126X_BUSY (GPIO_PORT0 + 17)
-#define SX126X_RESET (GPIO_PORT0 + 25)
+#define LORA_BUSY (GPIO_PORT0 + 17)
+#define LORA_RESET (GPIO_PORT0 + 25)
 #define LORA_RF_PWR (GPIO_PORT0 + 28) // LORA_RF_SWITCH
 
 /*

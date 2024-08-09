@@ -40,8 +40,7 @@
 // #define LORA_RXEN 17 // Input - RF switch RX control, connecting external MCU IO, valid in high level
 #undef LORA_CS
 #define LORA_CS 16
-#define SX126X_BUSY 22
-#define SX126X_CS 16
+#define LORA_BUSY 22
 
 // PINS FOR THE 900M30S
 /*
@@ -51,8 +50,7 @@
 #define LORA_RXEN 21  // Input - RF switch RX control, connecting external MCU IO, valid in high level
 #undef LORA_CS
 #define LORA_CS 33
-#define SX126X_BUSY 35
-#define SX126X_CS 33
+#define LORA_BUSY 35
 */
 
 // RX/TX for RFM95/SX127x
@@ -62,8 +60,6 @@
 
 // common pinouts for SX126X modules
 
-#define SX126X_DIO1 LORA_DIO1
-#define SX126X_RESET LORA_RESET
 // #define SX126X_RXEN LORA_RXEN
 #define SX126X_TXEN LORA_TXEN
 

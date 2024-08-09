@@ -38,10 +38,6 @@
 // #define LORA_DIO1 10
 // #define LORA_DIO2 RADIOLIB_NC
 // #define LORA_BUSY 18
-// #define SX126X_CS LORA_CS
-// #define SX126X_DIO1 LORA_DIO1
-// #define SX126X_BUSY LORA_BUSY
-// #define SX126X_RESET LORA_RESET
 // #define SX126X_DIO2_AS_RF_SWITCH
 // #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
@@ -56,10 +52,6 @@
 // #define LORA_DIO2 21
 // #define LORA_RESET 8
 // #define LORA_BUSY 1
-// #define SX128X_CS LORA_CS
-// #define SX128X_DIO1 LORA_DIO1
-// #define SX128X_BUSY LORA_BUSY
-// #define SX128X_RESET LORA_RESET
 // #define SX128X_MAX_POWER 10
 
 // Not yet tested

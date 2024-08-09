@@ -63,10 +63,7 @@
 */
 #define USE_RF95
 #define USE_RF95_RFO
-#define RF95_CS LORA_CS
-#define RF95_DIO1 LORA_DIO1
 #define RF95_TXEN LORA_TXEN
-#define RF95_RESET LORA_RESET
 #define RF95_MAX_POWER 12
 
 /*

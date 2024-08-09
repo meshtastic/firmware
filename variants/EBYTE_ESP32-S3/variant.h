@@ -12,7 +12,7 @@
 // modules the following): strapping pins (except 0 as a user button input as it already has a pulldown resistor in typical
 // application schematic) (0, 3, 45, 46), USB-reserved (19, 20), and pins which aren't present on the WROOM-2 module for
 // compatiblity as it uses octal SPI, or are likely connected internally in either WROOM version (26-37), and avoid pins whose
-// voltages are set by the SPI voltage (47, 48), and pins that don't exist (22-25) You can ALSO set the SPI pins (SX126X_CS,
+// voltages are set by the SPI voltage (47, 48), and pins that don't exist (22-25) You can ALSO set the SPI pins (LORA_CS,
 // SX126X_SCK, SX126X_MISO, SX126X_MOSI) to any pin with the ESP32-S3 due to \ GPIO Matrix / IO MUX / RTC IO MUX \, and also the
 // serial pins, but this isn't recommended for Serial0 as the WROOM modules have a 499 Ohm resistor on U0TXD (to reduce harmonics
 // but also acting as a sort of protection)
@@ -35,13 +35,13 @@
 //                                                                              //
 //////////////////////////////////////////////////////////////////////////////////
 
-#define SX126X_CS 14    // EBYTE module's NSS pin // FIXME: rename to SX126X_SS
-#define LORA_SCK 21     // EBYTE module's SCK pin
-#define LORA_MOSI 38    // EBYTE module's MOSI pin
-#define LORA_MISO 39    // EBYTE module's MISO pin
-#define SX126X_RESET 40 // EBYTE module's NRST pin
-#define SX126X_BUSY 41  // EBYTE module's BUSY pin
-#define SX126X_DIO1 42  // EBYTE module's DIO1 pin
+#define LORA_CS 14    // EBYTE module's NSS pin // FIXME: rename to SX126X_SS
+#define LORA_SCK 21   // EBYTE module's SCK pin
+#define LORA_MOSI 38  // EBYTE module's MOSI pin
+#define LORA_MISO 39  // EBYTE module's MISO pin
+#define LORA_RESET 40 // EBYTE module's NRST pin
+#define LORA_BUSY 41  // EBYTE module's BUSY pin
+#define LORA_DIO1 42  // EBYTE module's DIO1 pin
 // We don't define a pin for SX126X_DIO2 as Meshtastic doesn't use it as an interrupt output, so it is never connected to an MCU
 // pin! Also E22 module datasheets say not to connect it to an MCU pin.
 // We don't define a pin for SX126X_DIO3 as Meshtastic doesn't use it as an interrupt output, so it is never connected to an MCU
@@ -173,19 +173,6 @@ being defined but having no value #if (!defined(E22_RXEN) || !(0 <= E22_RXEN && 
 // https://github.com/jgromes/RadioLib/issues/12#issuecomment-520695575), so set it as such
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
 
-#define LORA_CS SX126X_CS // FIXME: for some reason both are used in /src
-
-// Many of the below values would only be used if USE_RF95 was defined, but it's not as we aren't actually using an RF95, just
-// that the 4 pins above are named like it If they aren't used they don't need to be defined and doing so cause confusion to those
-// adapting this file LORA_RESET value is never used in src (as we are not using RF95), so no need to define LORA_DIO0 is not used
-// in src (as we are not using RF95) as SX1262 does not have it per SX1262 datasheet, so no need to define
-// FIXME: confirm that the linked lines below are actually only called when using the SX126x or SX128x and no other modules
-// then use SX126X_DIO1 and SX128X_DIO1 respectively for that purpose, removing the need for RF95-style LORA_* definitions when
-// the RF95 isn't used
-#define LORA_DIO1                                                                                                                \
-    SX126X_DIO1 // The old name is used in
-                // https://github.com/meshtastic/firmware/blob/7eff5e7bcb2084499b723c5e3846c15ee089e36d/src/sleep.cpp#L298, so
-                // must also define the old name
 // LORA_DIO2 value is never used in src (as we are not using RF95), so no need to define, and if DIO2_AS_RF_SWITCH is set then it
 // cannot serve any extra function even if requested to LORA_DIO3 value is never used in src (as we are not using RF95), so no
 // need to define, and DIO3_AS_TCXO_AT_1V8 is set so it cannot serve any extra function even if requested to (from 13.3.2.1

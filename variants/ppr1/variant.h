@@ -151,11 +151,11 @@ static const uint8_t SCK = PIN_SPI_SCK;
 
 // CUSTOM GPIOs the SX1262
 #define USE_SX1262
-#define SX126X_CS (0 + 10) // FIXME - we really should define LORA_CS instead
-#define SX126X_DIO1 (0 + 20)
+#define LORA_CS (0 + 10)
+#define LORA_DIO1 (0 + 20)
 #define SX1262_DIO2 (0 + 26)
-#define SX126X_BUSY (0 + 19)
-#define SX126X_RESET (0 + 17)
+#define LORA_BUSY (0 + 19)
+#define LORA_RESET (0 + 17)
 #define SX126X_TXEN (0 + 24)
 #define SX126X_RXEN (0 + 22)
 // Not really an E22 but this board clones using DIO3 for tcxo control

@@ -89,10 +89,7 @@
 #define LORA_DIO2 13 // SX1262 BUSY
 #define LORA_DIO3    // Not connected on PCB, but internally on the TTGO SX1262, if DIO3 is high the TXCO is enabled
 
-#define SX126X_CS LORA_CS // FIXME - we really should define LORA_CS instead
-#define SX126X_DIO1 LORA_DIO1
-#define SX126X_BUSY LORA_DIO2
-#define SX126X_RESET LORA_RESET
+#define LORA_BUSY LORA_DIO2
 // Not really an E22 but TTGO seems to be trying to clone that
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8

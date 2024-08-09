@@ -19,7 +19,7 @@
 #endif
 
 /* virtual pins */
-#define SX126X_CS 1000
-#define SX126X_DIO1 1001
-#define SX126X_RESET 1003
-#define SX126X_BUSY 1004
+#define LORA_CS 1000
+#define LORA_DIO1 1001
+#define LORA_RESET 1003
+#define LORA_BUSY 1004

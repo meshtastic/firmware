@@ -23,10 +23,7 @@
 #define LORA_DIO3    // Not connected on PCB
 
 #ifdef USE_SX1262
-#define SX126X_CS LORA_CS // FIXME - we really should define LORA_CS instead
-#define SX126X_DIO1 LORA_DIO1
-#define SX126X_BUSY LORA_DIO2
-#define SX126X_RESET LORA_RESET
+#define LORA_BUSY LORA_DIO2
 #define SX126X_DIO2_AS_RF_SWITCH // Internally the module hooks the SX1262-DIO2 in to control the TX/RX switch
 #define SX126X_MAX_POWER                                                                                                         \
     16 // Ensure the PA does not exceed the saturation output power. More

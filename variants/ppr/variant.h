@@ -130,11 +130,11 @@ static const uint8_t SCK = PIN_SPI_SCK;
 
 // CUSTOM GPIOs the SX1262
 #define USE_SX1262
-#define SX126X_CS (10)
-#define SX126X_DIO1 (20)
+#define LORA_CS (10)
+#define LORA_DIO1 (20)
 #define SX1262_DIO2 (26)
-#define SX126X_BUSY (31) // Supposed to be P0.18 but because of reworks, now on P0.31 (18)
-#define SX126X_RESET (17)
+#define LORA_BUSY (31) // Supposed to be P0.18 but because of reworks, now on P0.31 (18)
+#define LORA_RESET (17)
 // #define SX126X_ANT_SW (32 + 10)
 #define SX126X_RXEN (22)
 #define SX126X_TXEN (24)

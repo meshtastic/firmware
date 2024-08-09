@@ -128,14 +128,14 @@ External serial flash WP25R1635FZUIL0
 
 #define USE_SX1262
 #define USE_SX1268
-#define SX126X_CS (0 + 24) // FIXME - we really should define LORA_CS instead
-#define SX126X_DIO1 (0 + 20)
+#define LORA_CS (0 + 24)
+#define LORA_DIO1 (0 + 20)
 // Note DIO2 is attached internally to the module to an analog switch for TX/RX switching
 #define SX1262_DIO3                                                                                                              \
     (0 + 21) // This is used as an *output* from the sx1262 and connected internally to power the tcxo, do not drive from the main
 // CPU?
-#define SX126X_BUSY (0 + 17)
-#define SX126X_RESET (0 + 25)
+#define LORA_BUSY (0 + 17)
+#define LORA_RESET (0 + 25)
 // Not really an E22 but TTGO seems to be trying to clone that
 #define SX126X_DIO2_AS_RF_SWITCH
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
@@ -143,8 +143,6 @@ External serial flash WP25R1635FZUIL0
 // code)
 
 // #define LORA_DISABLE_SENDING // Define this to disable transmission for testing (power testing etc...)
-
-// #undef SX126X_CS
 
 /*
  * eink display pins
