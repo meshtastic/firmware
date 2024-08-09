@@ -193,6 +193,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define DEFAULT_SHUTDOWN_SECONDS 2
 #endif
 
+#ifndef MINIMUM_SAFE_FREE_HEAP
+#define MINIMUM_SAFE_FREE_HEAP 1500
+#endif
+
 /* Step #3: mop up with disabled values for HAS_ options not handled by the above two */
 
 #ifndef HAS_WIFI
