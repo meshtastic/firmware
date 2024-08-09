@@ -257,7 +257,16 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 #if !MESHTASTIC_EXCLUDE_MQTT
         // Only publish to MQTT if we're the original transmitter of the packet
         if (moduleConfig.mqtt.enabled && p->from == nodeDB->getNodeNum() && mqtt) {
-            mqtt->onSend(*p, *p_decoded, chIndex);
+
+            // Only publish to MQTT only public messages
+            if(!(p_decoded->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP &&
+                moduleConfig.mqtt.secure_messages &&
+                p_decoded->to != 0xffffffff))
+            {
+                mqtt->onSend(*p, *p_decoded, chIndex);
+            }else{
+                LOG_DEBUG("MQTT secured messages enabled, message was not forwarded to broker\n");
+            }
         }
 #endif
         packetPool.release(p_decoded);
