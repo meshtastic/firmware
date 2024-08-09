@@ -82,10 +82,13 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, uint64_t packetNum, size
     printBytes("Attempting decrypt using nonce: ", nonce, 16);
     printBytes("Attempting decrypt using shared_key: ", shared_key, 32);
     printBytes("Encrypted Message with auth tag: ", bytes, numBytes);
-
     return aes_ccm_ad(shared_key, 32, nonce, 8, bytes, numBytes - 8, nullptr, 0, auth, bytesOut);
 }
 
+void CryptoEngine::setPrivateKey(uint8_t *_private_key)
+{
+    memcpy(private_key, _private_key, 32);
+}
 /**
  * Set the key used for encrypt, decrypt.
  *
@@ -108,7 +111,9 @@ void CryptoEngine::setDHKey(uint32_t nodeNum)
     uint8_t local_priv[32];
     memcpy(shared_key, pubKey, 32);
     memcpy(local_priv, private_key, 32);
-    Curve25519::dh2(shared_key, local_priv);
+    if (!Curve25519::dh2(shared_key, local_priv))
+        assert(true);
+    printBytes("DH Output: ", shared_key, 32);
 
     /**
      * D.J. Bernstein reccomends hashing the shared key. We want to do this because there are

@@ -152,6 +152,7 @@ NodeDB::NodeDB()
         LOG_INFO("Using saved PKI keys\n");
         owner.public_key.size = config.security.public_key.size;
         memcpy(owner.public_key.bytes, config.security.public_key.bytes, config.security.public_key.size);
+        crypto->setPrivateKey(config.security.private_key.bytes);
     } else {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
         LOG_INFO("Generating new PKI keys\n");

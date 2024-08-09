@@ -42,7 +42,8 @@ class CryptoEngine
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
     virtual void generateKeyPair(uint8_t *pubKey, uint8_t *privKey);
 #endif
-    virtual void clearKeys();
+    void clearKeys();
+    void setPrivateKey(uint8_t *_private_key);
     virtual void encryptCurve25519(uint32_t toNode, uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes,
                                    uint8_t *bytesOut);
     virtual bool decryptCurve25519(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes, uint8_t *bytesOut);
