@@ -162,9 +162,15 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         handleGetDeviceMetadata(mp);
         break;
     }
-    case meshtastic_AdminMessage_factory_reset_tag: {
-        LOG_INFO("Initiating factory reset\n");
+    case meshtastic_AdminMessage_factory_reset_config_tag: {
+        LOG_INFO("Initiating factory config reset\n");
         nodeDB->factoryReset();
+        reboot(DEFAULT_REBOOT_SECONDS);
+        break;
+    }
+    case meshtastic_AdminMessage_factory_reset_device_tag: {
+        LOG_INFO("Initiating full factory reset\n");
+        nodeDB->factoryReset(true);
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
