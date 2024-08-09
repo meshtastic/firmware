@@ -241,8 +241,7 @@ void ExpressLRSFiveWay::shutdown()
 
     playShutdownMelody(); // In case user adds a buzzer
 
-    delay(3000); // Instead of trying to fire on button release, just delay.. Officially this is for the "shutdown melody"
-    power->shutdown();
+    shutdownAtMsec = millis() + 3000;
 }
 
 // Emulate user button, or canned message SELECT
