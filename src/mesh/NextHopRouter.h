@@ -1,6 +1,7 @@
 #pragma once
 
 #include "FloodingRouter.h"
+#include <unordered_map>
 
 /**
  * An identifier for a globally unique message - a pair of the sending nodenum and the packet id assigned
@@ -34,11 +35,11 @@ struct PendingPacket {
     /** The next time we should try to retransmit this packet */
     uint32_t nextTxMsec = 0;
 
-    /** Starts at NUM_RETRANSMISSIONS -1(normally 3) and counts down.  Once zero it will be removed from the list */
+    /** Starts at NUM_RETRANSMISSIONS -1 and counts down.  Once zero it will be removed from the list */
     uint8_t numRetransmissions = 0;
 
     PendingPacket() {}
-    explicit PendingPacket(meshtastic_MeshPacket *p);
+    explicit PendingPacket(meshtastic_MeshPacket *p, uint8_t numRetransmissions);
 };
 
 class GlobalPacketIdHashFunction
@@ -82,6 +83,8 @@ class NextHopRouter : public FloodingRouter
         return min(d, r);
     }
 
+    constexpr static uint8_t NUM_RETRANSMISSIONS = 2;
+
   protected:
     /**
      * Pending retransmissions
@@ -114,13 +117,6 @@ class NextHopRouter : public FloodingRouter
      */
     PendingPacket *startRetransmission(meshtastic_MeshPacket *p);
 
-  private:
-    /**
-     * Get the next hop for a destination, given the relay node
-     * @return the node number of the next hop, 0 if no preference (fallback to FloodingRouter)
-     */
-    uint8_t getNextHop(NodeNum to, uint8_t relay_node);
-
     /**
      * Stop any retransmissions we are doing of the specified node/packet ID pair
      *
@@ -137,4 +133,11 @@ class NextHopRouter : public FloodingRouter
     int32_t doRetransmissions();
 
     void setNextTx(PendingPacket *pending);
+
+  private:
+    /**
+     * Get the next hop for a destination, given the relay node
+     * @return the node number of the next hop, 0 if no preference (fallback to FloodingRouter)
+     */
+    uint8_t getNextHop(NodeNum to, uint8_t relay_node);
 };

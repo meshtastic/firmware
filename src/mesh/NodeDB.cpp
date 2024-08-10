@@ -1095,11 +1095,6 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         // If hopStart was set and there wasn't someone messing with the limit in the middle, add hopsAway
         if (mp.hop_start != 0 && mp.hop_limit <= mp.hop_start) {
             info->hops_away = mp.hop_start - mp.hop_limit;
-            if (info->hops_away == 0) {
-                info->next_hop = getLastByteOfNodeNum(mp.from);
-            } else if (info->hops_away == 1) {
-                info->next_hop = getLastByteOfNodeNum(mp.relay_node);
-            }
         }
     }
 }
