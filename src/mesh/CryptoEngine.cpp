@@ -98,7 +98,7 @@ void CryptoEngine::setPrivateKey(uint8_t *_private_key)
 bool CryptoEngine::setDHKey(uint32_t nodeNum)
 {
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeNum);
-    if (node->num < 1 || node->user.public_key.size == 0) { // Do we need to check for a blank key?
+    if (node->num < 1 || node->user.public_key.size == 0) {
         LOG_DEBUG("Node %d or their public_key not found\n", nodeNum);
         return false;
     }
@@ -108,10 +108,12 @@ bool CryptoEngine::setDHKey(uint32_t nodeNum)
     memcpy(shared_key, pubKey, 32);
     memcpy(local_priv, private_key, 32);
     // Calculate the shared secret with the specified node's public key and our private key
+    // This includes an internal weak key check, which among other things looks for an all 0 public key and shared key.
     if (!Curve25519::dh2(shared_key, local_priv)) {
         LOG_WARN("Curve25519DH step 2 failed!\n");
         return false;
     }
+
     printBytes("DH Output: ", shared_key, 32);
 
     /**
