@@ -48,14 +48,18 @@ static MemoryDynamic<meshtastic_MqttClientProxyMessage> staticMqttClientProxyMes
 
 static MemoryDynamic<meshtastic_QueueStatus> staticQueueStatusPool;
 
+static MemoryDynamic<meshtastic_ClientNotification> staticClientNotificationPool;
+
 Allocator<meshtastic_MqttClientProxyMessage> &mqttClientProxyMessagePool = staticMqttClientProxyMessagePool;
+
+Allocator<meshtastic_ClientNotification> &clientNotificationPool = staticClientNotificationPool;
 
 Allocator<meshtastic_QueueStatus> &queueStatusPool = staticQueueStatusPool;
 
 #include "Router.h"
 
 MeshService::MeshService()
-    : toPhoneQueue(MAX_RX_TOPHONE), toPhoneQueueStatusQueue(MAX_RX_TOPHONE), toPhoneMqttProxyQueue(MAX_RX_TOPHONE)
+    : toPhoneQueue(MAX_RX_TOPHONE), toPhoneQueueStatusQueue(MAX_RX_TOPHONE), toPhoneMqttProxyQueue(MAX_RX_TOPHONE), toPhoneClientNotificationQueue(MAX_RX_TOPHONE / 2)
 {
     lastQueueStatus = {0, 0, 16, 0};
 }
@@ -321,6 +325,20 @@ void MeshService::sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage
     }
 
     assert(toPhoneMqttProxyQueue.enqueue(m, 0));
+    fromNum++;
+}
+
+void MeshService::sendClientNotification(meshtastic_ClientNotification *n)
+{
+    LOG_DEBUG("Sending client notification to phone\n");
+    if (toPhoneClientNotificationQueue.numFree() == 0) {
+        LOG_WARN("ClientNotification queue is full, discarding oldest\n");
+        meshtastic_ClientNotification *d = toPhoneClientNotificationQueue.dequeuePtr(0);
+        if (d)
+            releaseClientNotificationToPool(d);
+    }
+
+    assert(toPhoneClientNotificationQueue.enqueue(n, 0));
     fromNum++;
 }
 
