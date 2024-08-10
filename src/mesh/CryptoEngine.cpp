@@ -32,7 +32,7 @@ void CryptoEngine::clearKeys()
 }
 
 /**
- * Encrypt a packet's payload using a key generated with Curve25519 and Blake2b
+ * Encrypt a packet's payload using a key generated with Curve25519 and SHA256
  * for a specific node.
  *
  * @param bytes is updated in place
@@ -91,27 +91,23 @@ void CryptoEngine::setPrivateKey(uint8_t *_private_key)
     memcpy(private_key, _private_key, 32);
 }
 /**
- * Set the key used for encrypt, decrypt.
- *
- * As a special case: If all bytes are zero, we assume _no encryption_ and send all data in cleartext.
+ * Set the PKI key used for encrypt, decrypt.
  *
  * @param nodeNum the node number of the node who's public key we want to use
  */
 bool CryptoEngine::setDHKey(uint32_t nodeNum)
 {
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeNum);
-    if (node->num < 1 || node->user.public_key.bytes[0] == 0) {
+    if (node->num < 1 || node->user.public_key.size == 0) { // Do we need to check for a blank key?
         LOG_DEBUG("Node %d or their public_key not found\n", nodeNum);
         return false;
     }
 
-    // Calculate the shared secret with the specified node's
-    // public key and our private key
     uint8_t *pubKey = node->user.public_key.bytes;
-
     uint8_t local_priv[32];
     memcpy(shared_key, pubKey, 32);
     memcpy(local_priv, private_key, 32);
+    // Calculate the shared secret with the specified node's public key and our private key
     if (!Curve25519::dh2(shared_key, local_priv)) {
         LOG_WARN("Curve25519DH step 2 failed!\n");
         return false;

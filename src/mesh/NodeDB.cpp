@@ -148,7 +148,7 @@ NodeDB::NodeDB()
 #if !(MESHTASTIC_EXCLUDE_PKI)
     // Calculate Curve25519 public and private keys
     printBytes("Old Pubkey", config.security.public_key.bytes, 32);
-    if (config.security.private_key.size == 32 || config.security.public_key.size == 32) {
+    if (config.security.private_key.size == 32 && config.security.public_key.size == 32) {
         LOG_INFO("Using saved PKI keys\n");
         owner.public_key.size = config.security.public_key.size;
         memcpy(owner.public_key.bytes, config.security.public_key.bytes, config.security.public_key.size);
