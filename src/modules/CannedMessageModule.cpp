@@ -360,12 +360,9 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
     if (validEvent) {
         requestFocus(); // Tell Screen::setFrames to move to our module's frame, next time it runs
 
-        // Let runOnce to be called immediately.
-        if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_SELECT) {
-            setIntervalFromNow(0); // on fast keypresses, this isn't fast enough.
-        } else {
-            runOnce();
-        }
+        // Run CannedMessageModule thread now from callee thread context,
+        // and also schedule it to run later in its own context with the requested delay.
+        setIntervalFromNow(runOnce());
     }
 
     return 0;
@@ -423,11 +420,8 @@ int32_t CannedMessageModule::runOnce()
         this->notifyObservers(&e);
     } else if (((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)) &&
                ((millis() - this->lastTouchMillis) > INACTIVATE_AFTER_MS)) {
-        // Reset module
+        // Don't reset module, just hide the frame
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
-        this->currentMessageIndex = -1;
-        this->freetext = ""; // clear freetext
-        this->cursor = 0;
 
 #if !defined(T_WATCH_S3) && !defined(RAK14014)
         this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
