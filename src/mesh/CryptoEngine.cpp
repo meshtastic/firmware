@@ -24,7 +24,6 @@ void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey)
     memcpy(privKey, private_key, sizeof(private_key));
 }
 #endif
-uint8_t shared_key[32];
 void CryptoEngine::clearKeys()
 {
     memset(public_key, 0, sizeof(public_key));
@@ -86,7 +85,7 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, uint64_t packetNum, size
     return aes_ccm_ad(shared_key, 32, nonce, 8, bytes, numBytes - 8, nullptr, 0, auth, bytesOut);
 }
 
-void CryptoEngine::setPrivateKey(uint8_t *_private_key)
+void CryptoEngine::setDHPrivateKey(uint8_t *_private_key)
 {
     memcpy(private_key, _private_key, 32);
 }
@@ -103,16 +102,8 @@ bool CryptoEngine::setDHKey(uint32_t nodeNum)
         return false;
     }
 
-    uint8_t *pubKey = node->user.public_key.bytes;
-    uint8_t local_priv[32];
-    memcpy(shared_key, pubKey, 32);
-    memcpy(local_priv, private_key, 32);
-    // Calculate the shared secret with the specified node's public key and our private key
-    // This includes an internal weak key check, which among other things looks for an all 0 public key and shared key.
-    if (!Curve25519::dh2(shared_key, local_priv)) {
-        LOG_WARN("Curve25519DH step 2 failed!\n");
+    if (!setDHPublicKey(node->user.public_key.bytes))
         return false;
-    }
 
     printBytes("DH Output: ", shared_key, 32);
 
@@ -170,6 +161,20 @@ void CryptoEngine::aesEncrypt(uint8_t *in, uint8_t *out)
 }
 
 #endif
+
+bool CryptoEngine::setDHPublicKey(uint8_t *pubKey)
+{
+    uint8_t local_priv[32];
+    memcpy(shared_key, pubKey, 32);
+    memcpy(local_priv, private_key, 32);
+    // Calculate the shared secret with the specified node's public key and our private key
+    // This includes an internal weak key check, which among other things looks for an all 0 public key and shared key.
+    if (!Curve25519::dh2(shared_key, local_priv)) {
+        LOG_WARN("Curve25519DH step 2 failed!\n");
+        return false;
+    }
+    return true;
+}
 
 concurrency::Lock *cryptLock;
 
