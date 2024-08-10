@@ -168,8 +168,6 @@ typedef struct _meshtastic_AdminMessage {
         bool begin_edit_settings;
         /* Commits an open transaction for any edits made to config, module config, owner, and channel settings */
         bool commit_edit_settings;
-        /* Tell the node to factory reset config everything; all device state and configuration will be returned to factory defaults and BLE bonds will be cleared. */
-        int32_t factory_reset_device;
         /* Tell the node to reboot into the OTA Firmware in this many seconds (or <0 to cancel reboot)
      Only Implemented for ESP32 Devices. This needs to be issued to send a new main firmware via bluetooth. */
         int32_t reboot_ota_seconds;
@@ -180,8 +178,8 @@ typedef struct _meshtastic_AdminMessage {
         int32_t reboot_seconds;
         /* Tell the node to shutdown in this many seconds (or <0 to cancel shutdown) */
         int32_t shutdown_seconds;
-        /* Tell the node to factory reset config; all device state and configuration will be returned to factory defaults; BLE bonds will be preserved. */
-        int32_t factory_reset_config;
+        /* Tell the node to factory reset, all device settings will be returned to factory defaults. */
+        int32_t factory_reset;
         /* Tell the node to reset the nodedb. */
         int32_t nodedb_reset;
     };
@@ -256,12 +254,11 @@ extern "C" {
 #define meshtastic_AdminMessage_remove_fixed_position_tag 42
 #define meshtastic_AdminMessage_begin_edit_settings_tag 64
 #define meshtastic_AdminMessage_commit_edit_settings_tag 65
-#define meshtastic_AdminMessage_factory_reset_device_tag 94
 #define meshtastic_AdminMessage_reboot_ota_seconds_tag 95
 #define meshtastic_AdminMessage_exit_simulator_tag 96
 #define meshtastic_AdminMessage_reboot_seconds_tag 97
 #define meshtastic_AdminMessage_shutdown_seconds_tag 98
-#define meshtastic_AdminMessage_factory_reset_config_tag 99
+#define meshtastic_AdminMessage_factory_reset_tag 99
 #define meshtastic_AdminMessage_nodedb_reset_tag 100
 
 /* Struct field encoding specification for nanopb */
@@ -301,12 +298,11 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_fixed_position,set_fixed
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,remove_fixed_position,remove_fixed_position),  42) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,begin_edit_settings,begin_edit_settings),  64) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,commit_edit_settings,commit_edit_settings),  65) \
-X(a, STATIC,   ONEOF,    INT32,    (payload_variant,factory_reset_device,factory_reset_device),  94) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,reboot_ota_seconds,reboot_ota_seconds),  95) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,exit_simulator,exit_simulator),  96) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,reboot_seconds,reboot_seconds),  97) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,shutdown_seconds,shutdown_seconds),  98) \
-X(a, STATIC,   ONEOF,    INT32,    (payload_variant,factory_reset_config,factory_reset_config),  99) \
+X(a, STATIC,   ONEOF,    INT32,    (payload_variant,factory_reset,factory_reset),  99) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,nodedb_reset,nodedb_reset), 100)
 #define meshtastic_AdminMessage_CALLBACK NULL
 #define meshtastic_AdminMessage_DEFAULT NULL
