@@ -53,6 +53,13 @@ extern INA3221Sensor ina3221Sensor;
 extern RAK9154Sensor rak9154Sensor;
 #endif
 
+#ifdef HAS_PMU
+#include "XPowersAXP192.tpp"
+#include "XPowersAXP2101.tpp"
+#include "XPowersLibInterface.hpp"
+extern XPowersLibInterface *PMU;
+#endif
+
 class Power : private concurrency::OSThread
 {
 

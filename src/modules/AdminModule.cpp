@@ -162,9 +162,15 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         handleGetDeviceMetadata(mp);
         break;
     }
-    case meshtastic_AdminMessage_factory_reset_tag: {
-        LOG_INFO("Initiating factory reset\n");
+    case meshtastic_AdminMessage_factory_reset_config_tag: {
+        LOG_INFO("Initiating factory config reset\n");
         nodeDB->factoryReset();
+        reboot(DEFAULT_REBOOT_SECONDS);
+        break;
+    }
+    case meshtastic_AdminMessage_factory_reset_device_tag: {
+        LOG_INFO("Initiating full factory reset\n");
+        nodeDB->factoryReset(true);
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
@@ -372,7 +378,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 #ifdef LED_PIN
         // Turn LED off if heartbeat by config
         if (c.payload_variant.device.led_heartbeat_disabled) {
-            digitalWrite(LED_PIN, LOW ^ LED_INVERTED);
+            digitalWrite(LED_PIN, HIGH ^ LED_STATE_ON);
         }
 #endif
         if (config.device.button_gpio == c.payload_variant.device.button_gpio &&
@@ -822,8 +828,11 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
 #endif
 #endif
     conn.has_serial = true; // No serial-less devices
+#if !EXCLUDE_POWER_FSM
     conn.serial.is_connected = powerFSM.getState() == &stateSERIAL;
-    conn.serial.baud = SERIAL_BAUD;
+#else
+    conn.serial.is_connected = powerFSM.getState();
+#endif conn.serial.baud = SERIAL_BAUD;
 
     r.get_device_connection_status_response = conn;
     r.which_payload_variant = meshtastic_AdminMessage_get_device_connection_status_response_tag;

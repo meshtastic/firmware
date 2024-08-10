@@ -7,6 +7,7 @@
 
 #include <Utility.h>
 #include <assert.h>
+#include <time.h>
 
 #include "PortduinoGlue.h"
 #include "linux/gpio/LinuxGPIOPin.h"
@@ -134,6 +135,9 @@ void portduinoSetup()
         randomSeed(TCPPort);
         return;
     }
+
+    // Rather important to set this, if not running simulated.
+    randomSeed(time(NULL));
 
     try {
         if (yamlConfig["Logging"]) {

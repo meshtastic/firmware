@@ -84,7 +84,7 @@ class Channels
     int16_t setActiveByIndex(ChannelIndex channelIndex);
 
     // Returns true if the channel has the default name and PSK
-    bool isDefaultChannel(const meshtastic_Channel &ch);
+    bool isDefaultChannel(ChannelIndex chIndex);
 
     // Returns true if we can be reached via a channel with the default settings given a region and modem preset
     bool hasDefaultChannel();

@@ -15,6 +15,7 @@
 #include "power.h"
 // #include "debug.h"
 #include "FSCommon.h"
+#include "Led.h"
 #include "RTC.h"
 #include "SPILock.h"
 #include "concurrency/OSThread.h"
@@ -212,7 +213,7 @@ static int32_t ledBlinker()
     static bool ledOn;
     ledOn ^= 1;
 
-    setLed(ledOn);
+    ledBlink.set(ledOn);
 
     // have a very sparse duty cycle of LED being on, unless charging, then blink 0.5Hz square wave rate to indicate that
     return powerStatus->getIsCharging() ? 1000 : (ledOn ? 1 : 1000);
@@ -602,7 +603,7 @@ void setup()
 
 #ifdef LED_PIN
     pinMode(LED_PIN, OUTPUT);
-    digitalWrite(LED_PIN, 1 ^ LED_INVERTED); // turn on for now
+    digitalWrite(LED_PIN, LED_STATE_ON); // turn on for now
 #endif
 
     // Hello
@@ -789,6 +790,7 @@ void setup()
     screen = new graphics::Screen(screen_found, screen_model, screen_geometry);
 #endif
     // setup TZ prior to time actions.
+#if !MESHTASTIC_EXCLUDE_TZ
     if (*config.device.tzdef) {
         setenv("TZ", config.device.tzdef, 1);
     } else {
@@ -796,6 +798,7 @@ void setup()
     }
     tzset();
     LOG_DEBUG("Set Timezone to %s\n", getenv("TZ"));
+#endif
 
     readFromRTC(); // read the main CPU RTC at first (in case we can't get GPS time)
 
@@ -829,7 +832,7 @@ void setup()
 #ifdef LED_PIN
     // Turn LED off after boot, if heartbeat by config
     if (config.device.led_heartbeat_disabled)
-        digitalWrite(LED_PIN, LOW ^ LED_INVERTED);
+        digitalWrite(LED_PIN, HIGH ^ LED_STATE_ON);
 #endif
 
 // Do this after service.init (because that clears error_code)
