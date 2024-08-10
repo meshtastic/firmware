@@ -19,6 +19,7 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define SEGMENT_MODULECONFIG 2
 #define SEGMENT_DEVICESTATE 4
 #define SEGMENT_CHANNELS 8
+#define SEGMENT_OEM 16
 
 #define DEVICESTATE_CUR_VER 23
 #define DEVICESTATE_MIN_VER 22
@@ -40,7 +41,7 @@ uint32_t sinceReceived(const meshtastic_MeshPacket *p);
 
 enum LoadFileResult {
     // Successfully opened the file
-    SUCCESS = 1,
+    LOAD_SUCCESS = 1,
     // File does not exist
     NOT_FOUND = 2,
     // Device does not have a filesystem
@@ -72,8 +73,8 @@ class NodeDB
     NodeDB();
 
     /// write to flash
-    void saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS),
-        saveChannelsToDisk(), saveDeviceStateToDisk();
+    /// @return true if the save was successful
+    bool saveToDisk(int saveWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
 
     /** Reinit radio config if needed, because either:
      * a) sometimes a buggy android app might send us bogus settings or
@@ -126,11 +127,12 @@ class NodeDB
 
     void initConfigIntervals(), initModuleConfigIntervals(), resetNodes(), removeNodeByNum(NodeNum nodeNum);
 
-    bool factoryReset();
+    bool factoryReset(bool eraseBleBonds = false);
 
     LoadFileResult loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields,
                              void *dest_struct);
-    bool saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct);
+    bool saveProto(const char *filename, size_t protoSize, const pb_msgdesc_t *fields, const void *dest_struct,
+                   bool fullAtomic = true);
 
     void installRoleDefaults(meshtastic_Config_DeviceConfig_Role role);
 
@@ -181,6 +183,13 @@ class NodeDB
 
     /// Reinit device state from scratch (not loading from disk)
     void installDefaultDeviceState(), installDefaultChannels(), installDefaultConfig(), installDefaultModuleConfig();
+
+    /// write to flash
+    /// @return true if the save was successful
+    bool saveToDiskNoRetry(int saveWhat);
+
+    bool saveChannelsToDisk();
+    bool saveDeviceStateToDisk();
 };
 
 extern NodeDB *nodeDB;
@@ -203,9 +212,6 @@ extern NodeDB *nodeDB;
 
         prefs.is_power_saving = True
 */
-
-// Our delay functions check for this for times that should never expire
-#define NODE_DELAY_FOREVER 0xffffffff
 
 /// Sometimes we will have Position objects that only have a time, so check for
 /// valid lat/lon

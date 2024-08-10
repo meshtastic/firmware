@@ -16,9 +16,9 @@
 
 // SPI
 #define SPI_INTERFACES_COUNT 2
-#define PIN_SPI_MISO 10 // MISO
-#define PIN_SPI_MOSI 11 // MOSI
-#define PIN_SPI_SCK 9   // SCK
+#define PIN_SPI_MISO 11
+#define PIN_SPI_MOSI 10
+#define PIN_SPI_SCK 9
 
 // Power
 #define VEXT_ENABLE 45 // Active low, powers the E-Ink display
@@ -28,11 +28,12 @@
 #define ADC_MULTIPLIER 2                // Voltage divider is roughly 1:1
 #define BAT_MEASURE_ADC_UNIT 2          // Use ADC2
 #define ADC_ATTENUATION ADC_ATTEN_DB_12 // Voltage divider output is quite high
+#define HAS_32768HZ
 
 // LoRa
 #define USE_SX1262
 
-#define LORA_DIO0 -1 // a No connect on the SX1262 module
+#define LORA_DIO0 RADIOLIB_NC // a No connect on the SX1262 module
 #define LORA_RESET 12
 #define LORA_DIO1 14 // SX1262 IRQ
 #define LORA_DIO2 13 // SX1262 BUSY

@@ -211,7 +211,7 @@ bool StoreForwardModule::sendPayload(NodeNum dest, uint32_t last_time)
     meshtastic_MeshPacket *p = preparePayload(dest, last_time);
     if (p) {
         LOG_INFO("*** Sending S&F Payload\n");
-        service.sendToMesh(p);
+        service->sendToMesh(p);
         this->requestCount++;
         return true;
     }
@@ -293,7 +293,7 @@ void StoreForwardModule::sendMessage(NodeNum dest, const meshtastic_StoreAndForw
     p->want_ack = false;
     p->decoded.want_response = false;
 
-    service.sendToMesh(p);
+    service->sendToMesh(p);
 }
 
 /**
@@ -336,7 +336,7 @@ void StoreForwardModule::sendErrorTextMessage(NodeNum dest, bool want_response)
     if (want_response) {
         ignoreRequest = true; // This text message counts as response.
     }
-    service.sendToMesh(pr);
+    service->sendToMesh(pr);
 }
 
 /**
@@ -382,7 +382,7 @@ ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &m
                 LOG_DEBUG("*** Legacy Request to send\n");
 
                 // Send the last 60 minutes of messages.
-                if (this->busy || channels.isDefaultChannel(channels.getByIndex(mp.channel))) {
+                if (this->busy || channels.isDefaultChannel(mp.channel)) {
                     sendErrorTextMessage(getFrom(&mp), mp.decoded.want_response);
                 } else {
                     storeForwardModule->historySend(historyReturnWindow * 60, getFrom(&mp));
@@ -447,7 +447,7 @@ bool StoreForwardModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp,
             requests_history++;
             LOG_INFO("*** Client Request to send HISTORY\n");
             // Send the last 60 minutes of messages.
-            if (this->busy || channels.isDefaultChannel(channels.getByIndex(mp.channel))) {
+            if (this->busy || channels.isDefaultChannel(mp.channel)) {
                 sendErrorTextMessage(getFrom(&mp), mp.decoded.want_response);
             } else {
                 if ((p->which_variant == meshtastic_StoreAndForward_history_tag) && (p->variant.history.window > 0)) {

@@ -54,7 +54,6 @@ extern "C" {
 #define LED_CONN PIN_GREEN
 
 #define LED_STATE_ON 0 // State when LED is lit
-// #define LED_INVERTED 1
 
 /*
  * Buttons

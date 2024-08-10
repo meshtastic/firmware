@@ -176,6 +176,10 @@ typedef enum _meshtastic_HardwareModel {
     /* Heltec Mesh Node T114 board with nRF52840 CPU, and a 1.14 inch TFT display, Ultimate low-power design,
  specifically adapted for the Meshtatic project */
     meshtastic_HardwareModel_HELTEC_MESH_NODE_T114 = 69,
+    /* Sensecap Indicator from Seeed Studio. ESP32-S3 device with TFT and RP2040 coprocessor */
+    meshtastic_HardwareModel_SENSECAP_INDICATOR = 70,
+    /* Seeed studio T1000-E tracker card. NRF52840 w/ LR1110 radio, GPS, button, buzzer, and sensors. */
+    meshtastic_HardwareModel_TRACKER_T1000_E = 71,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -224,7 +228,14 @@ typedef enum _meshtastic_CriticalErrorCode {
     meshtastic_CriticalErrorCode_SX1262_FAILURE = 10,
     /* A (likely software but possibly hardware) failure was detected while trying to send packets.
  If this occurs on your board, please post in the forum so that we can ask you to collect some information to allow fixing this bug */
-    meshtastic_CriticalErrorCode_RADIO_SPI_BUG = 11
+    meshtastic_CriticalErrorCode_RADIO_SPI_BUG = 11,
+    /* Corruption was detected on the flash filesystem but we were able to repair things.
+ If you see this failure in the field please post in the forum because we are interested in seeing if this is occurring in the field. */
+    meshtastic_CriticalErrorCode_FLASH_CORRUPTION_RECOVERABLE = 12,
+    /* Corruption was detected on the flash filesystem but we were unable to repair things.
+ NOTE: Your node will probably need to be reconfigured the next time it reboots (it will lose the region code etc...)
+ If you see this failure in the field please post in the forum because we are interested in seeing if this is occurring in the field. */
+    meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE = 13
 } meshtastic_CriticalErrorCode;
 
 /* How the location was acquired: manual, onboard GPS, external (EUD) GPS */
@@ -927,8 +938,8 @@ extern "C" {
 #define _meshtastic_Constants_ARRAYSIZE ((meshtastic_Constants)(meshtastic_Constants_DATA_PAYLOAD_LEN+1))
 
 #define _meshtastic_CriticalErrorCode_MIN meshtastic_CriticalErrorCode_NONE
-#define _meshtastic_CriticalErrorCode_MAX meshtastic_CriticalErrorCode_RADIO_SPI_BUG
-#define _meshtastic_CriticalErrorCode_ARRAYSIZE ((meshtastic_CriticalErrorCode)(meshtastic_CriticalErrorCode_RADIO_SPI_BUG+1))
+#define _meshtastic_CriticalErrorCode_MAX meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE
+#define _meshtastic_CriticalErrorCode_ARRAYSIZE ((meshtastic_CriticalErrorCode)(meshtastic_CriticalErrorCode_FLASH_CORRUPTION_UNRECOVERABLE+1))
 
 #define _meshtastic_Position_LocSource_MIN meshtastic_Position_LocSource_LOC_UNSET
 #define _meshtastic_Position_LocSource_MAX meshtastic_Position_LocSource_LOC_EXTERNAL

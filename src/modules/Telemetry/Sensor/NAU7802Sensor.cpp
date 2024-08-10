@@ -5,6 +5,7 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "FSCommon.h"
 #include "NAU7802Sensor.h"
+#include "SafeFile.h"
 #include "TelemetrySensor.h"
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -95,27 +96,21 @@ void NAU7802Sensor::tare()
 
 bool NAU7802Sensor::saveCalibrationData()
 {
-    if (FSCom.exists(nau7802ConfigFileName) && !FSCom.remove(nau7802ConfigFileName)) {
-        LOG_WARN("Can't remove old state file\n");
-    }
-    auto file = FSCom.open(nau7802ConfigFileName, FILE_O_WRITE);
+    auto file = SafeFile(nau7802ConfigFileName);
     nau7802config.zeroOffset = nau7802.getZeroOffset();
     nau7802config.calibrationFactor = nau7802.getCalibrationFactor();
     bool okay = false;
-    if (file) {
-        LOG_INFO("%s state write to %s.\n", sensorName, nau7802ConfigFileName);
-        pb_ostream_t stream = {&writecb, &file, meshtastic_Nau7802Config_size};
 
-        if (!pb_encode(&stream, &meshtastic_Nau7802Config_msg, &nau7802config)) {
-            LOG_ERROR("Error: can't encode protobuf %s\n", PB_GET_ERROR(&stream));
-        } else {
-            okay = true;
-        }
-        file.flush();
-        file.close();
+    LOG_INFO("%s state write to %s.\n", sensorName, nau7802ConfigFileName);
+    pb_ostream_t stream = {&writecb, static_cast<Print *>(&file), meshtastic_Nau7802Config_size};
+
+    if (!pb_encode(&stream, &meshtastic_Nau7802Config_msg, &nau7802config)) {
+        LOG_ERROR("Error: can't encode protobuf %s\n", PB_GET_ERROR(&stream));
     } else {
-        LOG_INFO("Can't write %s state (File: %s).\n", sensorName, nau7802ConfigFileName);
+        okay = true;
     }
+    okay &= file.close();
+
     return okay;
 }
 

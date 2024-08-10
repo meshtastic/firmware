@@ -7,7 +7,11 @@
 #ifdef RP2040_SLOW_CLOCK
 #define Port Serial2
 #else
+#ifdef USER_DEBUG_PORT // change by WayenWeng
+#define Port USER_DEBUG_PORT
+#else
 #define Port Serial
+#endif
 #endif
 // Defaulting to the formerly removed phone_timeout_secs value of 15 minutes
 #define SERIAL_CONNECTION_TIMEOUT (15 * 60) * 1000UL
@@ -92,7 +96,7 @@ bool SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
 
 void SerialConsole::log_to_serial(const char *logLevel, const char *format, va_list arg)
 {
-    if (usingProtobufs) {
+    if (usingProtobufs && config.device.debug_log_enabled) {
         meshtastic_LogRecord_Level ll = meshtastic_LogRecord_Level_UNSET; // default to unset
         switch (logLevel[0]) {
         case 'D':

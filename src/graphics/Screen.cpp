@@ -20,6 +20,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 #include "Screen.h"
+#include "../userPrefs.h"
+#include "PowerMon.h"
 #include "configuration.h"
 #if HAS_SCREEN
 #include <OLEDDisplay.h>
@@ -35,6 +37,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "gps/RTC.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/images.h"
+#include "input/ScanAndSelect.h"
 #include "input/TouchScreenImpl1.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
@@ -156,7 +159,11 @@ static void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDispl
 
     display->setFont(FONT_MEDIUM);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
+#ifdef SPLASH_TITLE_USERPREFS
+    const char *title = SPLASH_TITLE_USERPREFS;
+#else
     const char *title = "meshtastic.org";
+#endif
     display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
     display->setFont(FONT_SMALL);
 
@@ -1569,6 +1576,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
     if (on != screenOn) {
         if (on) {
             LOG_INFO("Turning on screen\n");
+            powerMon->setState(meshtastic_PowerMon_State_Screen_On);
 #ifdef T_WATCH_S3
             PMU->enablePowerOutput(XPOWERS_ALDO2);
 #endif
@@ -1594,6 +1602,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             setInterval(0); // Draw ASAP
             runASAP = true;
         } else {
+            powerMon->clearState(meshtastic_PowerMon_State_Screen_On);
 #ifdef USE_EINK
             // eInkScreensaver parameter is usually NULL (default argument), default frame used instead
             setScreensaverFrames(einkScreensaver);
@@ -1897,6 +1906,13 @@ int32_t Screen::runOnce()
         // standard screen loop handling here
         if (config.display.auto_screen_carousel_secs > 0 &&
             (millis() - lastScreenTransition) > (config.display.auto_screen_carousel_secs * 1000)) {
+
+// If an E-Ink display struggles with fast refresh, force carousel to use full refresh instead
+// Carousel is potentially a major source of E-Ink display wear
+#if !defined(EINK_BACKGROUND_USES_FAST)
+            EINK_ADD_FRAMEFLAG(dispdev, COSMETIC);
+#endif
+
             LOG_DEBUG("LastScreenTransition exceeded %ums transitioning to next frame\n", (millis() - lastScreenTransition));
             handleOnPress();
         }
@@ -2276,6 +2292,11 @@ void Screen::handlePrint(const char *text)
 
 void Screen::handleOnPress()
 {
+    // If Canned Messages is using the "Scan and Select" input, dismiss the canned message frame when user button is pressed
+    // Minimize impact as a courtesy, as "scan and select" may be used as default config for some boards
+    if (scanAndSelectInput != nullptr && scanAndSelectInput->dismissCannedMessageFrame())
+        return;
+
     // If screen was off, just wake it, otherwise advance to next frame
     // If we are in a transition, the press must have bounced, drop it.
     if (ui->getUiState()->frameState == FIXED) {

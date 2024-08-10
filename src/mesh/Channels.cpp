@@ -1,5 +1,7 @@
 #include "Channels.h"
+#include "../userPrefs.h"
 #include "CryptoEngine.h"
+#include "Default.h"
 #include "DisplayFormatters.h"
 #include "NodeDB.h"
 #include "RadioInterface.h"
@@ -90,6 +92,7 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
     loraConfig.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST; // Default to Long Range & Fast
     loraConfig.use_preset = true;
     loraConfig.tx_power = 0; // default
+    loraConfig.channel_num = 0;
     uint8_t defaultpskIndex = 1;
     channelSettings.psk.bytes[0] = defaultpskIndex;
     channelSettings.psk.size = 1;
@@ -99,6 +102,29 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
 
     ch.has_settings = true;
     ch.role = meshtastic_Channel_Role_PRIMARY;
+
+#ifdef LORACONFIG_MODEM_PRESET_USERPREFS
+    loraConfig.modem_preset = LORACONFIG_MODEM_PRESET_USERPREFS;
+#endif
+#ifdef LORACONFIG_CHANNEL_NUM_USERPREFS
+    loraConfig.channel_num = LORACONFIG_CHANNEL_NUM_USERPREFS;
+#endif
+
+    // Install custom defaults. Will eventually support setting multiple default channels
+    if (chIndex == 0) {
+#ifdef CHANNEL_0_PSK_USERPREFS
+        static const uint8_t defaultpsk[] = CHANNEL_0_PSK_USERPREFS;
+        memcpy(channelSettings.psk.bytes, defaultpsk, sizeof(defaultpsk));
+        channelSettings.psk.size = sizeof(defaultpsk);
+
+#endif
+#ifdef CHANNEL_0_NAME_USERPREFS
+        strcpy(channelSettings.name, CHANNEL_0_NAME_USERPREFS);
+#endif
+#ifdef CHANNEL_0_PRECISION_USERPREFS
+        channelSettings.module_settings.position_precision = CHANNEL_0_PRECISION_USERPREFS;
+#endif
+    }
 }
 
 CryptoKey Channels::getKey(ChannelIndex chIndex)
@@ -251,6 +277,12 @@ void Channels::setChannel(const meshtastic_Channel &c)
 
 bool Channels::anyMqttEnabled()
 {
+#if EVENT_MODE
+    // Don't publish messages on the public MQTT broker if we are in event mode
+    if (strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0) {
+        return false;
+    }
+#endif
     for (int i = 0; i < getNumChannels(); i++)
         if (channelFile.channels[i].role != meshtastic_Channel_Role_DISABLED && channelFile.channels[i].has_settings &&
             (channelFile.channels[i].settings.downlink_enabled || channelFile.channels[i].settings.uplink_enabled))
@@ -277,12 +309,14 @@ const char *Channels::getName(size_t chIndex)
     return channelName;
 }
 
-bool Channels::isDefaultChannel(const meshtastic_Channel &ch)
+bool Channels::isDefaultChannel(ChannelIndex chIndex)
 {
+    const auto &ch = getByIndex(chIndex);
     if (ch.settings.psk.size == 1 && ch.settings.psk.bytes[0] == 1) {
+        const char *name = getName(chIndex);
         const char *presetName = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false);
         // Check if the name is the default derived from the modem preset
-        if (strcmp(ch.settings.name, presetName) == 0)
+        if (strcmp(name, presetName) == 0)
             return true;
     }
     return false;
@@ -295,8 +329,7 @@ bool Channels::hasDefaultChannel()
         return false;
     // Check if any of the channels are using the default name and PSK
     for (size_t i = 0; i < getNumChannels(); i++) {
-        const auto &ch = getByIndex(i);
-        if (isDefaultChannel(ch))
+        if (isDefaultChannel(i))
             return true;
     }
     return false;
