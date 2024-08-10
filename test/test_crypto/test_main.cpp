@@ -2,6 +2,18 @@
 
 #include <unity.h>
 
+void HexToBytes(uint8_t *result, const std::string hex, size_t len = 0)
+{
+    if (len) {
+        memset(result, 0, len);
+    }
+    for (unsigned int i = 0; i < hex.length(); i += 2) {
+        std::string byteString = hex.substr(i, 2);
+        result[i / 2] = (uint8_t)strtol(byteString.c_str(), NULL, 16);
+    }
+    return;
+}
+
 void setUp(void)
 {
     // set stuff up here
@@ -14,25 +26,79 @@ void tearDown(void)
 
 void test_SHA256(void)
 {
-    uint8_t hash2[32] = {0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24,
-                         0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c, 0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55};
+    uint8_t expected[32];
     uint8_t hash[32] = {0};
+
+    HexToBytes(expected, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
     crypto->hash(hash, 0);
-    TEST_ASSERT_EQUAL_MEMORY(hash, hash2, 32);
+    TEST_ASSERT_EQUAL_MEMORY(hash, expected, 32);
+
+    HexToBytes(hash, "d3", 32);
+    HexToBytes(expected, "28969cdfa74a12c82f3bad960b0b000aca2ac329deea5c2328ebc6f2ba9802c1");
+    crypto->hash(hash, 1);
+    TEST_ASSERT_EQUAL_MEMORY(hash, expected, 32);
+
+    HexToBytes(hash, "11af", 32);
+    HexToBytes(expected, "5ca7133fa735326081558ac312c620eeca9970d1e70a4b95533d956f072d1f98");
+    crypto->hash(hash, 2);
+    TEST_ASSERT_EQUAL_MEMORY(hash, expected, 32);
 }
 void test_ECB_AES256(void)
 {
-    uint8_t key[] = {0x60, 0x3d, 0xeb, 0x10, 0x15, 0xca, 0x71, 0xbe, 0x2b, 0x73, 0xae, 0xf0, 0x85, 0x7d, 0x77, 0x81,
-                     0x1f, 0x35, 0x2c, 0x07, 0x3b, 0x61, 0x08, 0xd7, 0x2d, 0x98, 0x10, 0xa3, 0x09, 0x14, 0xdf, 0xf4};
-    uint8_t plain1[] = {0x6b, 0xc1, 0xbe, 0xe2, 0x2e, 0x40, 0x9f, 0x96, 0xe9, 0x3d, 0x7e, 0x11, 0x73, 0x93, 0x17, 0x2a};
-    uint8_t scratch[16] = {0};
+    // https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-and-Guidelines/documents/examples/AES_ECB.pdf
 
-    uint8_t cipher1[] = {0xf3, 0xee, 0xd1, 0xbd, 0xb5, 0xd2, 0xa0, 0x3c, 0x06, 0x4b, 0x5a, 0x7e, 0x3d, 0xb1, 0x81, 0xf8};
+    uint8_t key[32] = {0};
+    uint8_t plain[16] = {0};
+    uint8_t result[16] = {0};
+    uint8_t expected[16] = {0};
+
+    HexToBytes(key, "603DEB1015CA71BE2B73AEF0857D77811F352C073B6108D72D9810A30914DFF4");
+
+    HexToBytes(plain, "6BC1BEE22E409F96E93D7E117393172A");
+    HexToBytes(expected, "F3EED1BDB5D2A03C064B5A7E3DB181F8");
     crypto->aesSetKey(key, 32);
-    crypto->aesEncrypt(plain1, scratch); // Does 16 bytes at a time
-    TEST_ASSERT_EQUAL_MEMORY(scratch, cipher1, 16);
-}
+    crypto->aesEncrypt(plain, result); // Does 16 bytes at a time
+    TEST_ASSERT_EQUAL_MEMORY(expected, result, 16);
 
+    HexToBytes(plain, "AE2D8A571E03AC9C9EB76FAC45AF8E51");
+    HexToBytes(expected, "591CCB10D410ED26DC5BA74A31362870");
+    crypto->aesSetKey(key, 32);
+    crypto->aesEncrypt(plain, result); // Does 16 bytes at a time
+    TEST_ASSERT_EQUAL_MEMORY(expected, result, 16);
+
+    HexToBytes(plain, "30C81C46A35CE411E5FBC1191A0A52EF");
+    HexToBytes(expected, "B6ED21B99CA6F4F9F153E7B1BEAFED1D");
+    crypto->aesSetKey(key, 32);
+    crypto->aesEncrypt(plain, result); // Does 16 bytes at a time
+    TEST_ASSERT_EQUAL_MEMORY(expected, result, 16);
+}
+void test_DH25519(void)
+{
+    // test vectors from wycheproof x25519
+    // https://github.com/C2SP/wycheproof/blob/master/testvectors/x25519_test.json
+    uint8_t private_key[32];
+    uint8_t public_key[32];
+    uint8_t expected_shared[32];
+
+    HexToBytes(public_key, "504a36999f489cd2fdbc08baff3d88fa00569ba986cba22548ffde80f9806829");
+    HexToBytes(private_key, "c8a9d5a91091ad851c668b0736c1c9a02936c0d3ad62670858088047ba057475");
+    HexToBytes(expected_shared, "436a2c040cf45fea9b29a0cb81b1f41458f863d0d61b453d0a982720d6d61320");
+    crypto->setDHPrivateKey(private_key);
+    TEST_ASSERT(crypto->setDHPublicKey(public_key));
+    TEST_ASSERT_EQUAL_MEMORY(expected_shared, crypto->shared_key, 32);
+
+    HexToBytes(public_key, "63aa40c6e38346c5caf23a6df0a5e6c80889a08647e551b3563449befcfc9733");
+    HexToBytes(private_key, "d85d8c061a50804ac488ad774ac716c3f5ba714b2712e048491379a500211958");
+    HexToBytes(expected_shared, "279df67a7c4611db4708a0e8282b195e5ac0ed6f4b2f292c6fbd0acac30d1332");
+    crypto->setDHPrivateKey(private_key);
+    TEST_ASSERT(crypto->setDHPublicKey(public_key));
+    TEST_ASSERT_EQUAL_MEMORY(expected_shared, crypto->shared_key, 32);
+
+    HexToBytes(public_key, "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f");
+    HexToBytes(private_key, "18630f93598637c35da623a74559cf944374a559114c7937811041fc8605564a");
+    crypto->setDHPrivateKey(private_key);
+    TEST_ASSERT(!crypto->setDHPublicKey(public_key)); // Weak public key results in 0 shared key
+}
 void setup()
 {
     // NOTE!!! Wait for >2 secs
@@ -42,6 +108,7 @@ void setup()
     UNITY_BEGIN(); // IMPORTANT LINE!
     RUN_TEST(test_SHA256);
     RUN_TEST(test_ECB_AES256);
+    RUN_TEST(test_DH25519);
 }
 
 void loop()
