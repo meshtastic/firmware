@@ -19,6 +19,7 @@
 #include "error.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
+#include "meshUtils.h"
 #include "modules/NeighborInfoModule.h"
 #include <ErriezCRC32.h>
 #include <algorithm>
@@ -144,6 +145,31 @@ NodeDB::NodeDB()
 
     // Include our owner in the node db under our nodenum
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    // Calculate Curve25519 public and private keys
+    printBytes("Old Pubkey", config.security.public_key.bytes, 32);
+    if (config.security.private_key.size == 32 && config.security.public_key.size == 32) {
+        LOG_INFO("Using saved PKI keys\n");
+        owner.public_key.size = config.security.public_key.size;
+        memcpy(owner.public_key.bytes, config.security.public_key.bytes, config.security.public_key.size);
+        crypto->setPrivateKey(config.security.private_key.bytes);
+    } else {
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
+        LOG_INFO("Generating new PKI keys\n");
+        crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
+        config.security.public_key.size = 32;
+        config.security.private_key.size = 32;
+
+        printBytes("New Pubkey", config.security.public_key.bytes, 32);
+        owner.public_key.size = 32;
+        memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
+#else
+        LOG_INFO("No PKI keys set, and generation disabled!\n");
+#endif
+    }
+
+#endif
+
     info->user = owner;
     info->has_user = true;
 
@@ -258,6 +284,7 @@ void NodeDB::installDefaultConfig()
     config.has_power = true;
     config.has_network = true;
     config.has_bluetooth = (HAS_BLUETOOTH ? true : false);
+    config.has_security = true;
     config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
 
     config.lora.sx126x_rx_boosted_gain = true;
@@ -280,6 +307,14 @@ void NodeDB::installDefaultConfig()
 #else
     config.lora.ignore_mqtt = false;
 #endif
+#ifdef ADMIN_KEY_USERPREFS
+    memcpy(config.security.admin_key.bytes, admin_key_userprefs, 32);
+    config.security.admin_key.size = 32;
+#else
+    config.security.admin_key.size = 0;
+#endif
+    config.security.public_key.size = 0;
+    config.security.private_key.size = 0;
 #ifdef PIN_GPS_EN
     config.position.gps_en_gpio = PIN_GPS_EN;
 #endif
@@ -303,7 +338,8 @@ void NodeDB::installDefaultConfig()
     config.position.broadcast_smart_minimum_interval_secs = 30;
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER)
         config.device.node_info_broadcast_secs = default_node_info_broadcast_secs;
-    config.device.serial_enabled = true;
+    config.security.serial_enabled = true;
+    config.security.admin_channel_enabled = false;
     resetRadioConfig();
     strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
     // FIXME: Default to bluetooth capability of platform as default
@@ -796,6 +832,7 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         config.has_power = true;
         config.has_network = true;
         config.has_bluetooth = true;
+        config.has_security = true;
 
         success &= saveProto(configFileName, meshtastic_LocalConfig_size, &meshtastic_LocalConfig_msg, &config);
     }
@@ -975,7 +1012,7 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
 
 /** Update user info and channel for this node based on received user data
  */
-bool NodeDB::updateUser(uint32_t nodeId, const meshtastic_User &p, uint8_t channelIndex)
+bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex)
 {
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(nodeId);
     if (!info) {
@@ -983,6 +1020,12 @@ bool NodeDB::updateUser(uint32_t nodeId, const meshtastic_User &p, uint8_t chann
     }
 
     LOG_DEBUG("old user %s/%s/%s, channel=%d\n", info->user.id, info->user.long_name, info->user.short_name, info->channel);
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    if (info->user.public_key.size > 0) { // if we have a key for this user already, don't overwrite with a new one
+        printBytes("Retaining Old Pubkey: ", info->user.public_key.bytes, 32);
+        memcpy(p.public_key.bytes, info->user.public_key.bytes, 32);
+    }
+#endif
 
     // Both of info->user and p start as filled with zero so I think this is okay
     bool changed = memcmp(&info->user, &p, sizeof(info->user)) || (info->channel != channelIndex);
@@ -1060,7 +1103,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
     meshtastic_NodeInfoLite *lite = getMeshNode(n);
 
     if (!lite) {
-        if ((numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < meshtastic_NodeInfoLite_size * 3)) {
+        if ((numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < MINIMUM_SAFE_FREE_HEAP)) {
             if (screen)
                 screen->print("Warn: node database full!\nErasing oldest entry\n");
             LOG_WARN("Node database full with %i nodes and %i bytes free! Erasing oldest entry\n", numMeshNodes,
@@ -1086,6 +1129,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         // everything is missing except the nodenum
         memset(lite, 0, sizeof(*lite));
         lite->num = n;
+        LOG_INFO("Adding node to database with %i nodes and %i bytes free!\n", numMeshNodes, memGet.getFreeHeap());
     }
 
     return lite;

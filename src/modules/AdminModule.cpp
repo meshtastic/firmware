@@ -65,7 +65,29 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     bool handled = false;
     assert(r);
     bool fromOthers = mp.from != 0 && mp.from != nodeDB->getNodeNum();
-
+    if (mp.which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
+        return handled;
+    }
+    meshtastic_Channel *ch = &channels.getByIndex(mp.channel);
+    // Could tighten this up further by tracking the last poblic_key we went an AdminMessage request to
+    // and only allowing responses from that remote.
+    if (!((mp.from == 0 && !config.security.is_managed) ||
+          r->which_payload_variant == meshtastic_AdminMessage_get_channel_response_tag ||
+          r->which_payload_variant == meshtastic_AdminMessage_get_owner_response_tag ||
+          r->which_payload_variant == meshtastic_AdminMessage_get_config_response_tag ||
+          r->which_payload_variant == meshtastic_AdminMessage_get_module_config_response_tag ||
+          r->which_payload_variant == meshtastic_AdminMessage_get_canned_message_module_messages_response_tag ||
+          r->which_payload_variant == meshtastic_AdminMessage_get_device_metadata_response_tag ||
+          r->which_payload_variant == meshtastic_AdminMessage_get_ringtone_response_tag ||
+          r->which_payload_variant == meshtastic_AdminMessage_get_device_connection_status_response_tag ||
+          r->which_payload_variant == meshtastic_AdminMessage_get_node_remote_hardware_pins_response_tag ||
+          r->which_payload_variant == meshtastic_NodeRemoteHardwarePinsResponse_node_remote_hardware_pins_tag ||
+          (strcasecmp(ch->settings.name, Channels::adminChannel) == 0 && config.security.admin_channel_enabled) ||
+          (mp.pki_encrypted && memcmp(mp.public_key.bytes, config.security.admin_key.bytes, 32) == 0))) {
+        LOG_INFO("Ignoring admin payload %i\n", r->which_payload_variant);
+        return handled;
+    }
+    LOG_INFO("Handling admin payload %i\n", r->which_payload_variant);
     switch (r->which_payload_variant) {
 
     /**
@@ -383,8 +405,6 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 #endif
         if (config.device.button_gpio == c.payload_variant.device.button_gpio &&
             config.device.buzzer_gpio == c.payload_variant.device.buzzer_gpio &&
-            config.device.debug_log_enabled == c.payload_variant.device.debug_log_enabled &&
-            config.device.serial_enabled == c.payload_variant.device.serial_enabled &&
             config.device.role == c.payload_variant.device.role &&
             config.device.disable_triple_click == c.payload_variant.device.disable_triple_click &&
             config.device.rebroadcast_mode == c.payload_variant.device.rebroadcast_mode) {
@@ -500,6 +520,16 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         LOG_INFO("Setting config: Bluetooth\n");
         config.has_bluetooth = true;
         config.bluetooth = c.payload_variant.bluetooth;
+        break;
+    case meshtastic_Config_security_tag:
+        LOG_INFO("Setting config: Security\n");
+        config.security = c.payload_variant.security;
+        owner.public_key.size = config.security.public_key.size;
+        memcpy(owner.public_key.bytes, config.security.public_key.bytes, config.security.public_key.size);
+        if (config.security.debug_log_api_enabled == c.payload_variant.security.debug_log_api_enabled &&
+            config.security.serial_enabled == c.payload_variant.security.serial_enabled)
+            requiresReboot = false;
+
         break;
     }
 
@@ -828,7 +858,8 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     conn.serial.is_connected = powerFSM.getState() == &stateSERIAL;
 #else
     conn.serial.is_connected = powerFSM.getState();
-#endif conn.serial.baud = SERIAL_BAUD;
+#endif
+    conn.serial.baud = SERIAL_BAUD;
 
     r.get_device_connection_status_response = conn;
     r.which_payload_variant = meshtastic_AdminMessage_get_device_connection_status_response_tag;
@@ -895,5 +926,5 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
 AdminModule::AdminModule() : ProtobufModule("Admin", meshtastic_PortNum_ADMIN_APP, &meshtastic_AdminMessage_msg)
 {
     // restrict to the admin channel for rx
-    boundChannel = Channels::adminChannel;
+    // boundChannel = Channels::adminChannel;
 }
