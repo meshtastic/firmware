@@ -828,7 +828,8 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
     conn.serial.is_connected = powerFSM.getState() == &stateSERIAL;
 #else
     conn.serial.is_connected = powerFSM.getState();
-#endif conn.serial.baud = SERIAL_BAUD;
+#endif
+    conn.serial.baud = SERIAL_BAUD;
 
     r.get_device_connection_status_response = conn;
     r.which_payload_variant = meshtastic_AdminMessage_get_device_connection_status_response_tag;
