@@ -2,6 +2,7 @@
 #include "Channels.h"
 #include "CryptoEngine.h"
 #include "MeshRadio.h"
+#include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
 #include "configuration.h"
@@ -209,6 +210,13 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 #ifdef DEBUG_PORT
             uint8_t silentMinutes = airTime->getSilentMinutes(hourlyTxPercent, myRegion->dutyCycle);
             LOG_WARN("Duty cycle limit exceeded. Aborting send for now, you can send again in %d minutes.\n", silentMinutes);
+            meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+            cn->has_reply_id = true;
+            cn->reply_id = p->id;
+            cn->level = meshtastic_LogRecord_Level_WARNING;
+            cn->time = getValidTime(RTCQualityFromNet);
+            sprintf(cn->message, "Duty cycle limit exceeded. You can send again in %d minutes.", silentMinutes);
+            service->sendClientNotification(cn);
 #endif
             meshtastic_Routing_Error err = meshtastic_Routing_Error_DUTY_CYCLE_LIMIT;
             if (getFrom(p) == nodeDB->getNodeNum()) { // only send NAK to API, not to the mesh
