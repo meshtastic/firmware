@@ -144,8 +144,8 @@ int32_t ButtonThread::runOnce()
 
         case BUTTON_EVENT_DOUBLE_PRESSED: {
             LOG_BUTTON("Double press!\n");
-            service.refreshLocalMeshNode();
-            auto sentPosition = service.trySendPosition(NODENUM_BROADCAST, true);
+            service->refreshLocalMeshNode();
+            auto sentPosition = service->trySendPosition(NODENUM_BROADCAST, true);
             if (screen) {
                 if (sentPosition)
                     screen->print("Sent ad-hoc position\n");

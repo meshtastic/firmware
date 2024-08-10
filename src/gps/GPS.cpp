@@ -400,14 +400,6 @@ bool GPS::setup()
     int msglen = 0;
 
     if (!didSerialInit) {
-#ifdef GNSS_AIROHA
-        if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
-            probe(GPS_BAUDRATE);
-            LOG_INFO("GPS setting to %d.\n", GPS_BAUDRATE);
-        }
-#else
-#if !defined(GPS_UC6580)
-
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
 
             // if GPS_BAUDRATE is specified in variant (i.e. not 9600), skip to the specified rate.
@@ -430,9 +422,6 @@ bool GPS::setup()
         } else {
             gnssModel = GNSS_MODEL_UNKNOWN;
         }
-#else
-        gnssModel = GNSS_MODEL_UC6580;
-#endif
 
         if (gnssModel == GNSS_MODEL_MTK) {
             /*
@@ -515,6 +504,22 @@ bool GPS::setup()
             delay(250);
             _serial_gps->write("$CFGMSG,6,1,0\r\n");
             delay(250);
+        } else if (gnssModel == GNSS_MODEL_AG3335) {
+
+            _serial_gps->write("$PAIR066,1,0,1,0,0,1*3B"); // Enable GPS+GALILEO+NAVIC
+
+            // Configure NMEA (sentences will output once per fix)
+            _serial_gps->write("$PAIR062,0,0*3F"); // GGA ON
+            _serial_gps->write("$PAIR062,1,0*3F"); // GLL OFF
+            _serial_gps->write("$PAIR062,2,1*3D"); // GSA ON
+            _serial_gps->write("$PAIR062,3,0*3D"); // GSV OFF
+            _serial_gps->write("$PAIR062,4,0*3B"); // RMC ON
+            _serial_gps->write("$PAIR062,5,0*3B"); // VTG OFF
+            _serial_gps->write("$PAIR062,6,1*39"); // ZDA ON
+
+            delay(250);
+            _serial_gps->write("$PAIR513*3D"); // save configuration
+
         } else if (gnssModel == GNSS_MODEL_UBLOX) {
             // Configure GNSS system to GPS+SBAS+GLONASS (Module may restart after this command)
             // We need set it because by default it is GPS only, and we want to use GLONASS too
@@ -784,7 +789,6 @@ bool GPS::setup()
                 LOG_INFO("GNSS module configuration saved!\n");
             }
         }
-#endif
         didSerialInit = true;
     }
 
@@ -1102,7 +1106,7 @@ int32_t GPS::runOnce()
             if (devicestate.did_gps_reset && scheduling.elapsedSearchMs() > 60 * 1000UL && !hasFlow()) {
                 LOG_DEBUG("GPS is not communicating, trying factory reset on next bootup.\n");
                 devicestate.did_gps_reset = false;
-                nodeDB->saveDeviceStateToDisk();
+                nodeDB->saveToDisk(SEGMENT_DEVICESTATE);
                 return disable(); // Stop the GPS thread as it can do nothing useful until next reboot.
             }
         }
@@ -1192,9 +1196,8 @@ GnssModel_t GPS::probe(int serialSpeed)
     }
 #endif
 #ifdef GNSS_AIROHA
-
-    return GNSS_MODEL_UNKNOWN;
-#else
+    return GNSS_MODEL_AG3335;
+#endif
 #ifdef GPS_DEBUG
     for (int i = 0; i < 20; i++) {
         getACK("$GP", 200);
@@ -1217,13 +1220,33 @@ GnssModel_t GPS::probe(int serialSpeed)
         return GNSS_MODEL_UC6580;
     }
 
-    // Get version information
+    // Get version information for ATGM336H
     clearBuffer();
     _serial_gps->write("$PCAS06,1*1A\r\n");
     if (getACK("$GPTXT,01,01,02,HW=ATGM336H", 500) == GNSS_RESPONSE_OK) {
         LOG_INFO("ATGM336H GNSS init succeeded, using ATGM336H Module\n");
         return GNSS_MODEL_ATGM336H;
     }
+
+    /* ATGM332D series (-11(GPS), -21(BDS), -31(GPS+BDS), -51(GPS+GLONASS), -71-0(GPS+BDS+GLONASS))
+    based on AT6558 */
+    clearBuffer();
+    _serial_gps->write("$PCAS06,1*1A\r\n");
+    if (getACK("$GPTXT,01,01,02,HW=ATGM332D", 500) == GNSS_RESPONSE_OK) {
+        LOG_INFO("ATGM332D detected, using ATGM336H Module\n");
+        return GNSS_MODEL_ATGM336H;
+    }
+
+    /* Airoha (Mediatek) AG3335A/M/S, A3352Q, Quectel L89 2.0, SimCom SIM65M */
+    clearBuffer();
+    _serial_gps->write("PAIR020*38\r\n");
+    if (getACK("$PAIR020,AG3335", 500) == GNSS_RESPONSE_OK) {
+        LOG_INFO("Aioha AG3335 detected, using AG3335 Module\n");
+        return GNSS_MODEL_AG3335;
+    }
+    // Get version information for Airoha AG3335
+    clearBuffer();
+    _serial_gps->write("$PMTK605*31\r\n");
 
     // Get version information
     clearBuffer();
@@ -1350,7 +1373,6 @@ GnssModel_t GPS::probe(int serialSpeed)
     }
 
     return GNSS_MODEL_UBLOX;
-#endif // !GNSS_Airoha
 }
 
 GPS *GPS::createGps()

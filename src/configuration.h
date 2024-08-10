@@ -52,10 +52,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Configuration
 // -----------------------------------------------------------------------------
 
-// If we are using the JTAG port for debugging, some pins must be left free for that (and things like GPS have to be disabled)
-// we don't support jtag on the ttgo - access to gpio 12 is a PITA
-#define REQUIRE_RADIO true // If true, we will fail to start if the radio is not found
-
 /// Convert a preprocessor name into a quoted string
 #define xstr(s) ystr(s)
 #define ystr(s) #s
@@ -260,6 +256,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_MQTT 1
 #define MESHTASTIC_EXCLUDE_POWERMON 1
 #define MESHTASTIC_EXCLUDE_I2C 1
+#define MESHTASTIC_EXCLUDE_POWER_FSM 1
+#define MESHTASTIC_EXCLUDE_TZ 1
 #endif
 
 // Turn off all optional modules
@@ -273,6 +271,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_RANGETEST 1
 #define MESHTASTIC_EXCLUDE_REMOTEHARDWARE 1
 #define MESHTASTIC_EXCLUDE_STOREFORWARD 1
+#define MESHTASTIC_EXCLUDE_TEXTMESSAGE 1
 #define MESHTASTIC_EXCLUDE_ATAK 1
 #define MESHTASTIC_EXCLUDE_CANNEDMESSAGES 1
 #define MESHTASTIC_EXCLUDE_NEIGHBORINFO 1

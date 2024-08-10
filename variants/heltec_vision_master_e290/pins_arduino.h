@@ -3,15 +3,15 @@
 
 #include <stdint.h>
 
-static const uint8_t LED_BUILTIN = 35;
+static const uint8_t LED_BUILTIN = -1;
 #define BUILTIN_LED LED_BUILTIN // backward compatibility
 #define LED_BUILTIN LED_BUILTIN
 
 static const uint8_t TX = 43;
 static const uint8_t RX = 44;
 
-static const uint8_t SDA = 41;
-static const uint8_t SCL = 42;
+static const uint8_t SDA = 39;
+static const uint8_t SCL = 38;
 
 static const uint8_t SS = 8;
 static const uint8_t MOSI = 10;
@@ -56,6 +56,6 @@ static const uint8_t T14 = 14;
 
 static const uint8_t RST_LoRa = 12;
 static const uint8_t BUSY_LoRa = 13;
-static const uint8_t DIO0 = 14;
+static const uint8_t DIO1 = 14;
 
 #endif /* Pins_Arduino_h */

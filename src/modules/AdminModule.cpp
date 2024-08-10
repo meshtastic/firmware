@@ -16,6 +16,7 @@
 #ifdef ARCH_PORTDUINO
 #include "unistd.h"
 #endif
+#include "../userPrefs.h"
 #include "Default.h"
 #include "TypeConversions.h"
 
@@ -161,9 +162,15 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         handleGetDeviceMetadata(mp);
         break;
     }
-    case meshtastic_AdminMessage_factory_reset_tag: {
-        LOG_INFO("Initiating factory reset\n");
+    case meshtastic_AdminMessage_factory_reset_config_tag: {
+        LOG_INFO("Initiating factory config reset\n");
         nodeDB->factoryReset();
+        reboot(DEFAULT_REBOOT_SECONDS);
+        break;
+    }
+    case meshtastic_AdminMessage_factory_reset_device_tag: {
+        LOG_INFO("Initiating full factory reset\n");
+        nodeDB->factoryReset(true);
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
@@ -347,7 +354,7 @@ void AdminModule::handleSetOwner(const meshtastic_User &o)
     }
 
     if (changed) { // If nothing really changed, don't broadcast on the network or write to flash
-        service.reloadOwner(!hasOpenEditTransaction);
+        service->reloadOwner(!hasOpenEditTransaction);
         saveChanges(SEGMENT_DEVICESTATE);
     }
 }
@@ -371,7 +378,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 #ifdef LED_PIN
         // Turn LED off if heartbeat by config
         if (c.payload_variant.device.led_heartbeat_disabled) {
-            digitalWrite(LED_PIN, LOW ^ LED_INVERTED);
+            digitalWrite(LED_PIN, HIGH ^ LED_STATE_ON);
         }
 #endif
         if (config.device.button_gpio == c.payload_variant.device.button_gpio &&
@@ -400,6 +407,13 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
                 requiresReboot = true;
             }
         }
+#if EVENT_MODE
+        // If we're in event mode, nobody is a Router or Repeater
+        if (config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER ||
+            config.device.role == meshtastic_Config_DeviceConfig_Role_REPEATER) {
+            config.device.role = meshtastic_Config_DeviceConfig_Role_CLIENT;
+        }
+#endif
         break;
     case meshtastic_Config_position_tag:
         LOG_INFO("Setting config: Position\n");
@@ -459,6 +473,15 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             config.lora.sx126x_rx_boosted_gain == c.payload_variant.lora.sx126x_rx_boosted_gain) {
             requiresReboot = false;
         }
+
+#ifdef RF95_FAN_EN
+        // Turn PA off if disabled by config
+        if (c.payload_variant.lora.pa_fan_disabled) {
+            digitalWrite(RF95_FAN_EN, LOW ^ 0);
+        } else {
+            digitalWrite(RF95_FAN_EN, HIGH ^ 0);
+        }
+#endif
         config.lora = c.payload_variant.lora;
         // If we're setting region for the first time, init the region
         if (isRegionUnset && config.lora.region > meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
@@ -801,8 +824,11 @@ void AdminModule::handleGetDeviceConnectionStatus(const meshtastic_MeshPacket &r
 #endif
 #endif
     conn.has_serial = true; // No serial-less devices
+#if !EXCLUDE_POWER_FSM
     conn.serial.is_connected = powerFSM.getState() == &stateSERIAL;
-    conn.serial.baud = SERIAL_BAUD;
+#else
+    conn.serial.is_connected = powerFSM.getState();
+#endif conn.serial.baud = SERIAL_BAUD;
 
     r.get_device_connection_status_response = conn;
     r.which_payload_variant = meshtastic_AdminMessage_get_device_connection_status_response_tag;
@@ -831,7 +857,7 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
 {
     if (!hasOpenEditTransaction) {
         LOG_INFO("Saving changes to disk\n");
-        service.reloadConfig(saveWhat); // Calls saveToDisk among other things
+        service->reloadConfig(saveWhat); // Calls saveToDisk among other things
     } else {
         LOG_INFO("Delaying save of changes to disk until the open transaction is committed\n");
     }
@@ -862,7 +888,7 @@ void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
     channels.setChannel(primaryChannel);
     channels.onConfigChanged();
 
-    service.reloadOwner(false);
+    service->reloadOwner(false);
     saveChanges(SEGMENT_CONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
 }
 

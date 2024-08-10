@@ -7,24 +7,19 @@
 #include "configuration.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
+#include "meshUtils.h"
 #include "modules/RoutingModule.h"
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
+#include "Default.h"
 #if ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 #if ENABLE_JSON_LOGGING || ARCH_PORTDUINO
 #include "serialization/MeshPacketSerializer.h"
 #endif
-/**
- * Router todo
- *
- * DONE: Implement basic interface and use it elsewhere in app
- * Add naive flooding mixin (& drop duplicate rx broadcasts), add tools for sending broadcasts with incrementing sequence #s
- * Add an optional adjacent node only 'send with ack' mixin.  If we timeout waiting for the ack, call handleAckTimeout(packet)
- *
- **/
+#include "../userPrefs.h"
 
 #define MAX_RX_FROMRADIO                                                                                                         \
     4 // max number of packets destined to our queue, we dispatch packets quickly so it doesn't need to be big
@@ -125,7 +120,7 @@ meshtastic_MeshPacket *Router::allocForSending()
     p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // Assume payload is decoded at start.
     p->from = nodeDB->getNodeNum();
     p->to = NODENUM_BROADCAST;
-    p->hop_limit = (config.lora.hop_limit >= HOP_MAX) ? HOP_MAX : config.lora.hop_limit;
+    p->hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
     p->id = generatePacketId();
     p->rx_time =
         getValidTime(RTCQualityFromNet); // Just in case we process the packet locally - make sure it has a valid timestamp
@@ -192,14 +187,6 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
 
         return send(p);
     }
-}
-
-void printBytes(const char *label, const uint8_t *p, size_t numbytes)
-{
-    LOG_DEBUG("%s: ", label);
-    for (size_t i = 0; i < numbytes; i++)
-        LOG_DEBUG("%02x ", p[i]);
-    LOG_DEBUG("\n");
 }
 
 /**
@@ -484,6 +471,20 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             cancelSending(p->from, p->id);
             skipHandle = true;
         }
+
+#if EVENT_MODE
+        if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+            (p->decoded.portnum == meshtastic_PortNum_ATAK_FORWARDER || p->decoded.portnum == meshtastic_PortNum_ATAK_PLUGIN ||
+             p->decoded.portnum == meshtastic_PortNum_PAXCOUNTER_APP || p->decoded.portnum == meshtastic_PortNum_IP_TUNNEL_APP ||
+             p->decoded.portnum == meshtastic_PortNum_AUDIO_APP || p->decoded.portnum == meshtastic_PortNum_PRIVATE_APP ||
+             p->decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP ||
+             p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
+             p->decoded.portnum == meshtastic_PortNum_REMOTE_HARDWARE_APP)) {
+            LOG_DEBUG("Ignoring packet on blacklisted portnum during event\n");
+            cancelSending(p->from, p->id);
+            skipHandle = true;
+        }
+#endif
     } else {
         printPacket("packet decoding failed or skipped (no PSK?)", p);
     }
