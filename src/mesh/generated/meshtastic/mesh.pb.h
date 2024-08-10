@@ -367,10 +367,13 @@ typedef enum _meshtastic_LogRecord_Level {
 typedef struct _meshtastic_Position {
     /* The new preferred location encoding, multiply by 1e-7 to get degrees
  in floating point */
+    bool has_latitude_i;
     int32_t latitude_i;
     /* TODO: REPLACE */
+    bool has_longitude_i;
     int32_t longitude_i;
     /* In meters above MSL (but see issue #359) */
+    bool has_altitude;
     int32_t altitude;
     /* This is usually not sent over the mesh (to save space), but it is sent
  from the phone so that the local device can set its time if it is sent over
@@ -386,8 +389,10 @@ typedef struct _meshtastic_Position {
     /* Pos. timestamp milliseconds adjustment (rarely available or required) */
     int32_t timestamp_millis_adjust;
     /* HAE altitude in meters - can be used instead of MSL altitude */
+    bool has_altitude_hae;
     int32_t altitude_hae;
     /* Geoidal separation in meters */
+    bool has_altitude_geoidal_separation;
     int32_t altitude_geoidal_separation;
     /* Horizontal, Vertical and Position Dilution of Precision, in 1/100 units
  - PDOP is sufficient for most cases
@@ -409,8 +414,10 @@ typedef struct _meshtastic_Position {
  - "heading" is where the fuselage points (measured in horizontal plane)
  - "yaw" indicates a relative rotation about the vertical axis
  TODO: REMOVE/INTEGRATE */
+    bool has_ground_speed;
     uint32_t ground_speed;
     /* TODO: REPLACE */
+    bool has_ground_track;
     uint32_t ground_track;
     /* GPS fix quality (from NMEA GxGGA statement or similar) */
     uint32_t fix_quality;
@@ -543,8 +550,10 @@ typedef struct _meshtastic_Waypoint {
     /* Id of the waypoint */
     uint32_t id;
     /* latitude_i */
+    bool has_latitude_i;
     int32_t latitude_i;
     /* longitude_i */
+    bool has_longitude_i;
     int32_t longitude_i;
     /* Time the waypoint is to expire (epoch) */
     uint32_t expire;
@@ -740,6 +749,22 @@ typedef struct _meshtastic_QueueStatus {
     uint32_t mesh_packet_id;
 } meshtastic_QueueStatus;
 
+/* A notification message from the device to the client
+ To be used for important messages that should to be displayed to the user
+ in the form of push notifications or validation messages when saving
+ invalid configuration. */
+typedef struct _meshtastic_ClientNotification {
+    /* The id of the packet we're notifying in response to */
+    bool has_reply_id;
+    uint32_t reply_id;
+    /* Seconds since 1970 - or 0 for unknown/unset */
+    uint32_t time;
+    /* The level type of notification */
+    meshtastic_LogRecord_Level level;
+    /* The message body of the notification */
+    char message[400];
+} meshtastic_ClientNotification;
+
 /* Individual File info for the device */
 typedef struct _meshtastic_FileInfo {
     /* The fully qualified path of the file */
@@ -854,6 +879,8 @@ typedef struct _meshtastic_FromRadio {
         meshtastic_MqttClientProxyMessage mqttClientProxyMessage;
         /* File system manifest messages */
         meshtastic_FileInfo fileInfo;
+        /* Notification message to the client */
+        meshtastic_ClientNotification clientNotification;
     };
 } meshtastic_FromRadio;
 
@@ -996,6 +1023,8 @@ extern "C" {
 
 
 
+#define meshtastic_ClientNotification_level_ENUMTYPE meshtastic_LogRecord_Level
+
 
 
 #define meshtastic_Compressed_portnum_ENUMTYPE meshtastic_PortNum
@@ -1012,12 +1041,12 @@ extern "C" {
 
 
 /* Initializer values for message structs */
-#define meshtastic_Position_init_default         {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_Position_init_default         {false, 0, false, 0, false, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, false, 0, false, 0, 0, 0, 0, 0, false, 0, false, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_User_init_default             {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}}
 #define meshtastic_RouteDiscovery_init_default   {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define meshtastic_Routing_init_default          {0, {meshtastic_RouteDiscovery_init_default}}
 #define meshtastic_Data_init_default             {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
-#define meshtastic_Waypoint_init_default         {0, 0, 0, 0, 0, "", "", 0}
+#define meshtastic_Waypoint_init_default         {0, false, 0, false, 0, 0, 0, "", "", 0}
 #define meshtastic_MqttClientProxyMessage_init_default {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_default       {0, 0, 0, 0, {meshtastic_Data_init_default}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0}
 #define meshtastic_NodeInfo_init_default         {0, false, meshtastic_User_init_default, false, meshtastic_Position_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, 0, 0}
@@ -1025,6 +1054,7 @@ extern "C" {
 #define meshtastic_LogRecord_init_default        {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_default      {0, 0, 0, 0}
 #define meshtastic_FromRadio_init_default        {0, 0, {meshtastic_MeshPacket_init_default}}
+#define meshtastic_ClientNotification_init_default {false, 0, 0, _meshtastic_LogRecord_Level_MIN, ""}
 #define meshtastic_FileInfo_init_default         {"", 0}
 #define meshtastic_ToRadio_init_default          {0, {meshtastic_MeshPacket_init_default}}
 #define meshtastic_Compressed_init_default       {_meshtastic_PortNum_MIN, {0, {0}}}
@@ -1036,12 +1066,12 @@ extern "C" {
 #define meshtastic_ChunkedPayload_init_default   {0, 0, 0, {0, {0}}}
 #define meshtastic_resend_chunks_init_default    {{{NULL}, NULL}}
 #define meshtastic_ChunkedPayloadResponse_init_default {0, 0, {0}}
-#define meshtastic_Position_init_zero            {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_Position_init_zero            {false, 0, false, 0, false, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, false, 0, false, 0, 0, 0, 0, 0, false, 0, false, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_User_init_zero                {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}}
 #define meshtastic_RouteDiscovery_init_zero      {0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define meshtastic_Routing_init_zero             {0, {meshtastic_RouteDiscovery_init_zero}}
 #define meshtastic_Data_init_zero                {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
-#define meshtastic_Waypoint_init_zero            {0, 0, 0, 0, 0, "", "", 0}
+#define meshtastic_Waypoint_init_zero            {0, false, 0, false, 0, 0, 0, "", "", 0}
 #define meshtastic_MqttClientProxyMessage_init_zero {"", 0, {{0, {0}}}, 0}
 #define meshtastic_MeshPacket_init_zero          {0, 0, 0, 0, {meshtastic_Data_init_zero}, 0, 0, 0, 0, 0, _meshtastic_MeshPacket_Priority_MIN, 0, _meshtastic_MeshPacket_Delayed_MIN, 0, 0, {0, {0}}, 0}
 #define meshtastic_NodeInfo_init_zero            {0, false, meshtastic_User_init_zero, false, meshtastic_Position_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, 0, 0}
@@ -1049,6 +1079,7 @@ extern "C" {
 #define meshtastic_LogRecord_init_zero           {"", 0, "", _meshtastic_LogRecord_Level_MIN}
 #define meshtastic_QueueStatus_init_zero         {0, 0, 0, 0}
 #define meshtastic_FromRadio_init_zero           {0, 0, {meshtastic_MeshPacket_init_zero}}
+#define meshtastic_ClientNotification_init_zero  {false, 0, 0, _meshtastic_LogRecord_Level_MIN, ""}
 #define meshtastic_FileInfo_init_zero            {"", 0}
 #define meshtastic_ToRadio_init_zero             {0, {meshtastic_MeshPacket_init_zero}}
 #define meshtastic_Compressed_init_zero          {_meshtastic_PortNum_MIN, {0, {0}}}
@@ -1155,6 +1186,10 @@ extern "C" {
 #define meshtastic_QueueStatus_free_tag          2
 #define meshtastic_QueueStatus_maxlen_tag        3
 #define meshtastic_QueueStatus_mesh_packet_id_tag 4
+#define meshtastic_ClientNotification_reply_id_tag 1
+#define meshtastic_ClientNotification_time_tag   2
+#define meshtastic_ClientNotification_level_tag  3
+#define meshtastic_ClientNotification_message_tag 4
 #define meshtastic_FileInfo_file_name_tag        1
 #define meshtastic_FileInfo_size_bytes_tag       2
 #define meshtastic_Compressed_portnum_tag        1
@@ -1192,6 +1227,7 @@ extern "C" {
 #define meshtastic_FromRadio_metadata_tag        13
 #define meshtastic_FromRadio_mqttClientProxyMessage_tag 14
 #define meshtastic_FromRadio_fileInfo_tag        15
+#define meshtastic_FromRadio_clientNotification_tag 16
 #define meshtastic_ToRadio_packet_tag            1
 #define meshtastic_ToRadio_want_config_id_tag    3
 #define meshtastic_ToRadio_disconnect_tag        4
@@ -1212,22 +1248,22 @@ extern "C" {
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_Position_FIELDLIST(X, a) \
-X(a, STATIC,   SINGULAR, SFIXED32, latitude_i,        1) \
-X(a, STATIC,   SINGULAR, SFIXED32, longitude_i,       2) \
-X(a, STATIC,   SINGULAR, INT32,    altitude,          3) \
+X(a, STATIC,   OPTIONAL, SFIXED32, latitude_i,        1) \
+X(a, STATIC,   OPTIONAL, SFIXED32, longitude_i,       2) \
+X(a, STATIC,   OPTIONAL, INT32,    altitude,          3) \
 X(a, STATIC,   SINGULAR, FIXED32,  time,              4) \
 X(a, STATIC,   SINGULAR, UENUM,    location_source,   5) \
 X(a, STATIC,   SINGULAR, UENUM,    altitude_source,   6) \
 X(a, STATIC,   SINGULAR, FIXED32,  timestamp,         7) \
 X(a, STATIC,   SINGULAR, INT32,    timestamp_millis_adjust,   8) \
-X(a, STATIC,   SINGULAR, SINT32,   altitude_hae,      9) \
-X(a, STATIC,   SINGULAR, SINT32,   altitude_geoidal_separation,  10) \
+X(a, STATIC,   OPTIONAL, SINT32,   altitude_hae,      9) \
+X(a, STATIC,   OPTIONAL, SINT32,   altitude_geoidal_separation,  10) \
 X(a, STATIC,   SINGULAR, UINT32,   PDOP,             11) \
 X(a, STATIC,   SINGULAR, UINT32,   HDOP,             12) \
 X(a, STATIC,   SINGULAR, UINT32,   VDOP,             13) \
 X(a, STATIC,   SINGULAR, UINT32,   gps_accuracy,     14) \
-X(a, STATIC,   SINGULAR, UINT32,   ground_speed,     15) \
-X(a, STATIC,   SINGULAR, UINT32,   ground_track,     16) \
+X(a, STATIC,   OPTIONAL, UINT32,   ground_speed,     15) \
+X(a, STATIC,   OPTIONAL, UINT32,   ground_track,     16) \
 X(a, STATIC,   SINGULAR, UINT32,   fix_quality,      17) \
 X(a, STATIC,   SINGULAR, UINT32,   fix_type,         18) \
 X(a, STATIC,   SINGULAR, UINT32,   sats_in_view,     19) \
@@ -1278,8 +1314,8 @@ X(a, STATIC,   SINGULAR, FIXED32,  emoji,             8)
 
 #define meshtastic_Waypoint_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   id,                1) \
-X(a, STATIC,   SINGULAR, SFIXED32, latitude_i,        2) \
-X(a, STATIC,   SINGULAR, SFIXED32, longitude_i,       3) \
+X(a, STATIC,   OPTIONAL, SFIXED32, latitude_i,        2) \
+X(a, STATIC,   OPTIONAL, SFIXED32, longitude_i,       3) \
 X(a, STATIC,   SINGULAR, UINT32,   expire,            4) \
 X(a, STATIC,   SINGULAR, UINT32,   locked_to,         5) \
 X(a, STATIC,   SINGULAR, STRING,   name,              6) \
@@ -1373,7 +1409,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,queueStatus,queueStatus),  1
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,xmodemPacket,xmodemPacket),  12) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,metadata,metadata),  13) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,mqttClientProxyMessage,mqttClientProxyMessage),  14) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,fileInfo,fileInfo),  15)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,fileInfo,fileInfo),  15) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,clientNotification,clientNotification),  16)
 #define meshtastic_FromRadio_CALLBACK NULL
 #define meshtastic_FromRadio_DEFAULT NULL
 #define meshtastic_FromRadio_payload_variant_packet_MSGTYPE meshtastic_MeshPacket
@@ -1388,6 +1425,15 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,fileInfo,fileInfo),  15)
 #define meshtastic_FromRadio_payload_variant_metadata_MSGTYPE meshtastic_DeviceMetadata
 #define meshtastic_FromRadio_payload_variant_mqttClientProxyMessage_MSGTYPE meshtastic_MqttClientProxyMessage
 #define meshtastic_FromRadio_payload_variant_fileInfo_MSGTYPE meshtastic_FileInfo
+#define meshtastic_FromRadio_payload_variant_clientNotification_MSGTYPE meshtastic_ClientNotification
+
+#define meshtastic_ClientNotification_FIELDLIST(X, a) \
+X(a, STATIC,   OPTIONAL, UINT32,   reply_id,          1) \
+X(a, STATIC,   SINGULAR, FIXED32,  time,              2) \
+X(a, STATIC,   SINGULAR, UENUM,    level,             3) \
+X(a, STATIC,   SINGULAR, STRING,   message,           4)
+#define meshtastic_ClientNotification_CALLBACK NULL
+#define meshtastic_ClientNotification_DEFAULT NULL
 
 #define meshtastic_FileInfo_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, STRING,   file_name,         1) \
@@ -1493,6 +1539,7 @@ extern const pb_msgdesc_t meshtastic_MyNodeInfo_msg;
 extern const pb_msgdesc_t meshtastic_LogRecord_msg;
 extern const pb_msgdesc_t meshtastic_QueueStatus_msg;
 extern const pb_msgdesc_t meshtastic_FromRadio_msg;
+extern const pb_msgdesc_t meshtastic_ClientNotification_msg;
 extern const pb_msgdesc_t meshtastic_FileInfo_msg;
 extern const pb_msgdesc_t meshtastic_ToRadio_msg;
 extern const pb_msgdesc_t meshtastic_Compressed_msg;
@@ -1519,6 +1566,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_LogRecord_fields &meshtastic_LogRecord_msg
 #define meshtastic_QueueStatus_fields &meshtastic_QueueStatus_msg
 #define meshtastic_FromRadio_fields &meshtastic_FromRadio_msg
+#define meshtastic_ClientNotification_fields &meshtastic_ClientNotification_msg
 #define meshtastic_FileInfo_fields &meshtastic_FileInfo_msg
 #define meshtastic_ToRadio_fields &meshtastic_ToRadio_msg
 #define meshtastic_Compressed_fields &meshtastic_Compressed_msg
@@ -1536,6 +1584,7 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 /* meshtastic_ChunkedPayloadResponse_size depends on runtime parameters */
 #define MESHTASTIC_MESHTASTIC_MESH_PB_H_MAX_SIZE meshtastic_FromRadio_size
 #define meshtastic_ChunkedPayload_size           245
+#define meshtastic_ClientNotification_size       415
 #define meshtastic_Compressed_size               243
 #define meshtastic_Data_size                     270
 #define meshtastic_DeviceMetadata_size           46

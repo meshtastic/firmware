@@ -248,7 +248,8 @@ typedef enum _meshtastic_Config_LoRaConfig_ModemPreset {
     meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST = 0,
     /* Long Range - Slow */
     meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW = 1,
-    /* Very Long Range - Slow */
+    /* Very Long Range - Slow
+ Deprecated in 2.5: Works only with txco and is unusably slow */
     meshtastic_Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW = 2,
     /* Medium Range - Slow */
     meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW = 3,
@@ -259,7 +260,11 @@ typedef enum _meshtastic_Config_LoRaConfig_ModemPreset {
     /* Short Range - Fast */
     meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST = 6,
     /* Long Range - Moderately Fast */
-    meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE = 7
+    meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE = 7,
+    /* Short Range - Turbo
+ This is the fastest preset and the only one with 500kHz bandwidth.
+ It is not legal to use in all regions due to this wider bandwidth. */
+    meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO = 8
 } meshtastic_Config_LoRaConfig_ModemPreset;
 
 typedef enum _meshtastic_Config_BluetoothConfig_PairingMode {
@@ -528,25 +533,24 @@ typedef PB_BYTES_ARRAY_T(32) meshtastic_Config_SecurityConfig_private_key_t;
 typedef PB_BYTES_ARRAY_T(32) meshtastic_Config_SecurityConfig_admin_key_t;
 typedef struct _meshtastic_Config_SecurityConfig {
     /* The public key of the user's device.
- This is sent out to other nodes on the mesh to allow them to compute a shared secret key. */
+ Sent out to other nodes on the mesh to allow them to compute a shared secret key. */
     meshtastic_Config_SecurityConfig_public_key_t public_key;
     /* The private key of the device.
- This is used to create a shared key with a remote device. */
+ Used to create a shared key with a remote device. */
     meshtastic_Config_SecurityConfig_private_key_t private_key;
-    /* This is the public key authorized to send admin messages to this node */
+    /* The public key authorized to send admin messages to this node. */
     meshtastic_Config_SecurityConfig_admin_key_t admin_key;
-    /* If true, device is considered to be "managed" by a mesh administrator
- Clients should then limit available configuration and administrative options inside the user interface */
+    /* If true, device is considered to be "managed" by a mesh administrator via admin messages
+ Device is managed by a mesh administrator. */
     bool is_managed;
-    /* Disabling this will disable the SerialConsole by not initilizing the StreamAPI */
+    /* Serial Console over the Stream API." */
     bool serial_enabled;
     /* By default we turn off logging as soon as an API client connects (to keep shared serial link quiet).
- Set this to true to leave the debug log outputting even when API is active. */
-    bool debug_log_enabled;
-    /* Enables device (serial style logs) over Bluetooth
- Moved to SecurityConfig */
+ Output live debug logging over serial. */
+    bool debug_log_api_enabled;
+    /* Enables device (serial style logs) over Bluetooth */
     bool bluetooth_logging_enabled;
-    /* Enables incoming admin control over the "admin" channel */
+    /* Allow incoming device control over the insecure legacy admin channel. */
     bool admin_channel_enabled;
 } meshtastic_Config_SecurityConfig;
 
@@ -615,8 +619,8 @@ extern "C" {
 #define _meshtastic_Config_LoRaConfig_RegionCode_ARRAYSIZE ((meshtastic_Config_LoRaConfig_RegionCode)(meshtastic_Config_LoRaConfig_RegionCode_SG_923+1))
 
 #define _meshtastic_Config_LoRaConfig_ModemPreset_MIN meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST
-#define _meshtastic_Config_LoRaConfig_ModemPreset_MAX meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE
-#define _meshtastic_Config_LoRaConfig_ModemPreset_ARRAYSIZE ((meshtastic_Config_LoRaConfig_ModemPreset)(meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE+1))
+#define _meshtastic_Config_LoRaConfig_ModemPreset_MAX meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO
+#define _meshtastic_Config_LoRaConfig_ModemPreset_ARRAYSIZE ((meshtastic_Config_LoRaConfig_ModemPreset)(meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO+1))
 
 #define _meshtastic_Config_BluetoothConfig_PairingMode_MIN meshtastic_Config_BluetoothConfig_PairingMode_RANDOM_PIN
 #define _meshtastic_Config_BluetoothConfig_PairingMode_MAX meshtastic_Config_BluetoothConfig_PairingMode_NO_PIN
@@ -751,7 +755,7 @@ extern "C" {
 #define meshtastic_Config_SecurityConfig_admin_key_tag 3
 #define meshtastic_Config_SecurityConfig_is_managed_tag 4
 #define meshtastic_Config_SecurityConfig_serial_enabled_tag 5
-#define meshtastic_Config_SecurityConfig_debug_log_enabled_tag 6
+#define meshtastic_Config_SecurityConfig_debug_log_api_enabled_tag 6
 #define meshtastic_Config_SecurityConfig_bluetooth_logging_enabled_tag 7
 #define meshtastic_Config_SecurityConfig_admin_channel_enabled_tag 8
 #define meshtastic_Config_device_tag             1
@@ -901,7 +905,7 @@ X(a, STATIC,   SINGULAR, BYTES,    private_key,       2) \
 X(a, STATIC,   SINGULAR, BYTES,    admin_key,         3) \
 X(a, STATIC,   SINGULAR, BOOL,     is_managed,        4) \
 X(a, STATIC,   SINGULAR, BOOL,     serial_enabled,    5) \
-X(a, STATIC,   SINGULAR, BOOL,     debug_log_enabled,   6) \
+X(a, STATIC,   SINGULAR, BOOL,     debug_log_api_enabled,   6) \
 X(a, STATIC,   SINGULAR, BOOL,     bluetooth_logging_enabled,   7) \
 X(a, STATIC,   SINGULAR, BOOL,     admin_channel_enabled,   8)
 #define meshtastic_Config_SecurityConfig_CALLBACK NULL
