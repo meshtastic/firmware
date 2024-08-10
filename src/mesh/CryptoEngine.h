@@ -23,15 +23,6 @@ struct CryptoKey {
 
 class CryptoEngine
 {
-  protected:
-    /** Our per packet nonce */
-    uint8_t nonce[16] = {0};
-
-    CryptoKey key = {};
-#if !(MESHTASTIC_EXCLUDE_PKI)
-    uint8_t private_key[32] = {0};
-#endif
-
   public:
 #if !(MESHTASTIC_EXCLUDE_PKI)
     uint8_t public_key[32] = {0};
@@ -43,11 +34,12 @@ class CryptoEngine
     virtual void generateKeyPair(uint8_t *pubKey, uint8_t *privKey);
 #endif
     void clearKeys();
-    void setPrivateKey(uint8_t *_private_key);
+    void setDHPrivateKey(uint8_t *_private_key);
     virtual bool encryptCurve25519(uint32_t toNode, uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes,
                                    uint8_t *bytesOut);
     virtual bool decryptCurve25519(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes, uint8_t *bytesOut);
-    virtual bool setDHKey(uint32_t nodeNum);
+    bool setDHKey(uint32_t nodeNum);
+    virtual bool setDHPublicKey(uint8_t *publicKey);
     virtual void hash(uint8_t *bytes, size_t numBytes);
 
     virtual void aesSetKey(const uint8_t *key, size_t key_len);
@@ -75,8 +67,17 @@ class CryptoEngine
      */
     virtual void encrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes);
     virtual void decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes);
-
+#ifndef PIO_UNIT_TESTING
   protected:
+#endif
+    /** Our per packet nonce */
+    uint8_t nonce[16] = {0};
+
+    CryptoKey key = {};
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    uint8_t shared_key[32] = {0};
+    uint8_t private_key[32] = {0};
+#endif
     /**
      * Init our 128 bit nonce for a new packet
      *
