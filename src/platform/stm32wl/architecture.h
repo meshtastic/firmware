@@ -9,6 +9,9 @@
 #ifndef HAS_RADIO
 #define HAS_RADIO 1
 #endif
+#ifndef HAS_TELEMETRY
+#define HAS_TELEMETRY 1
+#endif
 
 //
 // set HW_VENDOR
