@@ -160,8 +160,6 @@ void CryptoEngine::aesEncrypt(uint8_t *in, uint8_t *out)
     aes->encryptBlock(out, in);
 }
 
-#endif
-
 bool CryptoEngine::setDHPublicKey(uint8_t *pubKey)
 {
     uint8_t local_priv[32];
@@ -176,6 +174,7 @@ bool CryptoEngine::setDHPublicKey(uint8_t *pubKey)
     return true;
 }
 
+#endif
 concurrency::Lock *cryptLock;
 
 void CryptoEngine::setKey(const CryptoKey &k)
