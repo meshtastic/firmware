@@ -99,6 +99,32 @@ void test_DH25519(void)
     crypto->setDHPrivateKey(private_key);
     TEST_ASSERT(!crypto->setDHPublicKey(public_key)); // Weak public key results in 0 shared key
 }
+void test_AES_CTR(void)
+{
+    uint8_t expected[32];
+    uint8_t plain[32];
+    uint8_t nonce[32];
+    CryptoKey k;
+
+    // vectors from https://www.rfc-editor.org/rfc/rfc3686#section-6
+    k.length = 32;
+    HexToBytes(k.bytes, "776BEFF2851DB06F4C8A0542C8696F6C6A81AF1EEC96B4D37FC1D689E6C1C104");
+    HexToBytes(nonce, "00000060DB5672C97AA8F0B200000001");
+    HexToBytes(expected, "145AD01DBF824EC7560863DC71E3E0C0");
+    memcpy(plain, "Single block msg", 16);
+
+    crypto->encryptAESCtr(k, nonce, 16, plain);
+    TEST_ASSERT_EQUAL_MEMORY(expected, plain, 16);
+
+    k.length = 16;
+    memcpy(plain, "Single block msg", 16);
+    HexToBytes(k.bytes, "AE6852F8121067CC4BF7A5765577F39E");
+    HexToBytes(nonce, "00000030000000000000000000000001");
+    HexToBytes(expected, "E4095D4FB7A7B3792D6175A3261311B8");
+    crypto->encryptAESCtr(k, nonce, 16, plain);
+    TEST_ASSERT_EQUAL_MEMORY(expected, plain, 16);
+}
+
 void setup()
 {
     // NOTE!!! Wait for >2 secs
@@ -109,6 +135,7 @@ void setup()
     RUN_TEST(test_SHA256);
     RUN_TEST(test_ECB_AES256);
     RUN_TEST(test_DH25519);
+    RUN_TEST(test_AES_CTR);
 }
 
 void loop()
