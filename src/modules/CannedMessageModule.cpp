@@ -406,17 +406,12 @@ int32_t CannedMessageModule::runOnce()
     if ((this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) ||
         (this->runState == CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED) || (this->runState == CANNED_MESSAGE_RUN_STATE_MESSAGE)) {
         // TODO: might have some feedback of sending state
-        this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+        if (this->runState == CANNED_MESSAGE_RUN_STATE_SENDING_ACTIVE) {
+            this->restoreOldState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+        }
+        this->runState = this->restoreOldState;
         temporaryMessage = "";
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
-        this->currentMessageIndex = -1;
-        this->freetext = ""; // clear freetext
-        this->cursor = 0;
-
-#if !defined(T_WATCH_S3) && !defined(RAK14014)
-        this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
-#endif
-
         this->notifyObservers(&e);
     } else if (((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)) &&
                ((millis() - this->lastTouchMillis) >= INACTIVATE_AFTER_MS)) {
@@ -721,6 +716,7 @@ void CannedMessageModule::showTemporaryMessage(const String &message)
     UIFrameEvent e;
     e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
     notifyObservers(&e);
+    this->restoreOldState = this->runState;
     runState = CANNED_MESSAGE_RUN_STATE_MESSAGE;
     // run this loop again in 2 seconds, next iteration will clear the display
     setIntervalFromNow(2000);
@@ -1088,6 +1084,7 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
             UIFrameEvent e;
             e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
             requestFocus(); // Tell Screen::setFrames that our module's frame should be shown, even if not "first" in the frameset
+            this->restoreOldState = this->runState;
             this->runState = CANNED_MESSAGE_RUN_STATE_ACK_NACK_RECEIVED;
             this->incoming = service->getNodenumFromRequestId(mp.decoded.request_id);
             meshtastic_Routing decoded = meshtastic_Routing_init_default;
