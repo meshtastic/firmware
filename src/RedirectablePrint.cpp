@@ -38,8 +38,9 @@ size_t RedirectablePrint::write(uint8_t c)
 #ifdef USE_SEGGER
     SEGGER_RTT_PutChar(SEGGER_STDOUT_CH, c);
 #endif
-
-    if (!config.has_lora || config.security.serial_enabled)
+    // Account for legacy config transition
+    bool serialEnabled = config.has_security ? config.security.serial_enabled : config.device.serial_enabled;
+    if (!config.has_lora || serialEnabled)
         dest->write(c);
 
     return 1; // We always claim one was written, rather than trusting what the

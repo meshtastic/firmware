@@ -24,7 +24,7 @@ meshtastic_NodeInfo TypeConversions::ConvertToNodeInfo(const meshtastic_NodeInfo
     }
     if (lite->has_user) {
         info.has_user = true;
-        info.user = lite->user;
+        info.user = ConvertToUser(lite->num, lite->user);
     }
     if (lite->has_device_metrics) {
         info.has_device_metrics = true;
@@ -55,4 +55,34 @@ meshtastic_Position TypeConversions::ConvertToPosition(meshtastic_PositionLite l
     position.time = lite.time;
 
     return position;
+}
+
+meshtastic_UserLite TypeConversions::ConvertToUserLite(meshtastic_User user)
+{
+    meshtastic_UserLite lite = meshtastic_UserLite_init_default;
+
+    strncpy(lite.long_name, user.long_name, sizeof(lite.long_name));
+    strncpy(lite.short_name, user.short_name, sizeof(lite.short_name));
+    lite.hw_model = user.hw_model;
+    lite.role = user.role;
+    lite.is_licensed = user.is_licensed;
+    memccpy(lite.macaddr, user.macaddr, sizeof(user.macaddr), sizeof(lite.macaddr));
+    memcpy(lite.public_key.bytes, user.public_key.bytes, sizeof(lite.public_key.bytes));
+    return lite;
+}
+
+meshtastic_User TypeConversions::ConvertToUser(uint32_t nodeNum, meshtastic_UserLite lite)
+{
+    meshtastic_User user = meshtastic_User_init_default;
+
+    snprintf(user.id, sizeof(user.id), "!%08x", nodeNum);
+    strncpy(user.long_name, lite.long_name, sizeof(user.long_name));
+    strncpy(user.short_name, lite.short_name, sizeof(user.short_name));
+    user.hw_model = lite.hw_model;
+    user.role = lite.role;
+    user.is_licensed = lite.is_licensed;
+    memccpy(user.macaddr, lite.macaddr, sizeof(lite.macaddr), sizeof(user.macaddr));
+    memcpy(user.public_key.bytes, lite.public_key.bytes, sizeof(user.public_key.bytes));
+
+    return user;
 }

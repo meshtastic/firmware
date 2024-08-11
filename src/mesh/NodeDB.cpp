@@ -134,6 +134,10 @@ NodeDB::NodeDB()
         crypto->setDHPrivateKey(config.security.private_key.bytes);
     } else {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
+        config.has_security = true;
+        config.security.serial_enabled = config.device.serial_enabled;
+        config.security.bluetooth_logging_enabled = config.bluetooth.device_logging_enabled;
+        config.security.is_managed = config.device.is_managed;
         LOG_INFO("Generating new PKI keys\n");
         crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
         config.security.public_key.size = 32;
@@ -149,7 +153,7 @@ NodeDB::NodeDB()
 
 #endif
 
-    info->user = owner;
+    info->user = TypeConversions::ConvertToUserLite(owner);
     info->has_user = true;
 
 #ifdef ARCH_ESP32
@@ -1001,7 +1005,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         return false;
     }
 
-    LOG_DEBUG("old user %s/%s/%s, channel=%d\n", info->user.id, info->user.long_name, info->user.short_name, info->channel);
+    LOG_DEBUG("old user %s/%s, channel=%d\n", info->user.long_name, info->user.short_name, info->channel);
 #if !(MESHTASTIC_EXCLUDE_PKI)
     if (info->user.public_key.size > 0) { // if we have a key for this user already, don't overwrite with a new one
         printBytes("Retaining Old Pubkey: ", info->user.public_key.bytes, 32);
@@ -1012,11 +1016,11 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
     // Both of info->user and p start as filled with zero so I think this is okay
     bool changed = memcmp(&info->user, &p, sizeof(info->user)) || (info->channel != channelIndex);
 
-    info->user = p;
+    info->user = TypeConversions::ConvertToUserLite(p);
     if (nodeId != getNodeNum())
         info->channel = channelIndex; // Set channel we need to use to reach this node (but don't set our own channel)
-    LOG_DEBUG("updating changed=%d user %s/%s/%s, channel=%d\n", changed, info->user.id, info->user.long_name,
-              info->user.short_name, info->channel);
+    LOG_DEBUG("updating changed=%d user %s/%s, channel=%d\n", changed, info->user.long_name, info->user.short_name,
+              info->channel);
     info->has_user = true;
 
     if (changed) {
