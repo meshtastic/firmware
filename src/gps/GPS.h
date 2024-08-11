@@ -51,7 +51,7 @@ enum GPSPowerState : uint8_t {
 const char *getDOPString(uint32_t dop);
 
 /**
- * A gps class that only reads from the GPS periodically (and FIXME - eventually keeps the gps powered down except when reading)
+ * A gps class that only reads from the GPS periodically and keeps the gps powered down except when reading
  *
  * When new data is available it will notify observers.
  */
