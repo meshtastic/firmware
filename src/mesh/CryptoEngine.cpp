@@ -1,6 +1,7 @@
 #include "CryptoEngine.h"
 #include "NodeDB.h"
 #include "RadioInterface.h"
+#include "architecture.h"
 #include "configuration.h"
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
@@ -160,8 +161,6 @@ void CryptoEngine::aesEncrypt(uint8_t *in, uint8_t *out)
     aes->encryptBlock(out, in);
 }
 
-#endif
-
 bool CryptoEngine::setDHPublicKey(uint8_t *pubKey)
 {
     uint8_t local_priv[32];
@@ -176,6 +175,7 @@ bool CryptoEngine::setDHPublicKey(uint8_t *pubKey)
     return true;
 }
 
+#endif
 concurrency::Lock *cryptLock;
 
 void CryptoEngine::setKey(const CryptoKey &k)
@@ -189,14 +189,44 @@ void CryptoEngine::setKey(const CryptoKey &k)
  *
  * @param bytes is updated in place
  */
-void CryptoEngine::encrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes)
+void CryptoEngine::encryptPacket(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes)
 {
-    LOG_WARN("noop encryption!\n");
+    if (key.length > 0) {
+        initNonce(fromNode, packetId);
+        if (numBytes <= MAX_BLOCKSIZE) {
+            encryptAESCtr(key, nonce, numBytes, bytes);
+        } else {
+            LOG_ERROR("Packet too large for crypto engine: %d. noop encryption!\n", numBytes);
+        }
+    }
 }
 
 void CryptoEngine::decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes)
 {
-    LOG_WARN("noop decryption!\n");
+    // For CTR, the implementation is the same
+    encryptPacket(fromNode, packetId, numBytes, bytes);
+}
+
+// Generic implementation of AES-CTR encryption.
+void CryptoEngine::encryptAESCtr(CryptoKey _key, uint8_t *_nonce, size_t numBytes, uint8_t *bytes)
+{
+    if (ctr) {
+        delete ctr;
+        ctr = nullptr;
+    }
+    if (_key.length == 16)
+        ctr = new CTR<AES128>();
+    else
+        ctr = new CTR<AES256>();
+    ctr->setKey(_key.bytes, _key.length);
+    static uint8_t scratch[MAX_BLOCKSIZE];
+    memcpy(scratch, bytes, numBytes);
+    memset(scratch + numBytes, 0,
+           sizeof(scratch) - numBytes); // Fill rest of buffer with zero (in case cypher looks at it)
+
+    ctr->setIV(_nonce, 16);
+    ctr->setCounterSize(4);
+    ctr->encrypt(bytes, scratch, numBytes);
 }
 
 /**
@@ -210,3 +240,6 @@ void CryptoEngine::initNonce(uint32_t fromNode, uint64_t packetId)
     memcpy(nonce, &packetId, sizeof(uint64_t));
     memcpy(nonce + sizeof(uint64_t), &fromNode, sizeof(uint32_t));
 }
+#ifndef HAS_CUSTOM_CRYPTO_ENGINE
+CryptoEngine *crypto = new CryptoEngine;
+#endif

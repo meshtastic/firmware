@@ -1,5 +1,6 @@
 #pragma once
 #include "AES.h"
+#include "CTR.h"
 #include "concurrency/LockGuard.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
@@ -65,15 +66,16 @@ class CryptoEngine
      *
      * @param bytes is updated in place
      */
-    virtual void encrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes);
+    virtual void encryptPacket(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes);
     virtual void decrypt(uint32_t fromNode, uint64_t packetId, size_t numBytes, uint8_t *bytes);
+    virtual void encryptAESCtr(CryptoKey key, uint8_t *nonce, size_t numBytes, uint8_t *bytes);
 #ifndef PIO_UNIT_TESTING
   protected:
 #endif
     /** Our per packet nonce */
     uint8_t nonce[16] = {0};
-
     CryptoKey key = {};
+    CTRCommon *ctr = NULL;
 #if !(MESHTASTIC_EXCLUDE_PKI)
     uint8_t shared_key[32] = {0};
     uint8_t private_key[32] = {0};
