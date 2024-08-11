@@ -480,7 +480,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             memcpy(p->encrypted.bytes, ScratchEncrypted, numbytes);
             p->channel = 0;
         } else {
-            crypto->encrypt(getFrom(p), p->id, numbytes, bytes);
+            crypto->encryptPacket(getFrom(p), p->id, numbytes, bytes);
             memcpy(p->encrypted.bytes, bytes, numbytes);
         }
 #else
