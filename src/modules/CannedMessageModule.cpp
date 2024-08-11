@@ -419,9 +419,10 @@ int32_t CannedMessageModule::runOnce()
 
         this->notifyObservers(&e);
     } else if (((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)) &&
-               ((millis() - this->lastTouchMillis) > INACTIVATE_AFTER_MS)) {
+               ((millis() - this->lastTouchMillis) >= INACTIVATE_AFTER_MS)) {
         // Don't reset module, just hide the frame
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
+        this->currentMessageIndex = -1;
 
 #if !defined(T_WATCH_S3) && !defined(RAK14014)
         this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
@@ -474,8 +475,6 @@ int32_t CannedMessageModule::runOnce()
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_UP) {
         if (this->messagesCount > 0) {
             this->currentMessageIndex = getPrevIndex();
-            this->freetext = ""; // clear freetext
-            this->cursor = 0;
 
 #if !defined(T_WATCH_S3) && !defined(RAK14014)
             this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
@@ -487,8 +486,6 @@ int32_t CannedMessageModule::runOnce()
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTION_DOWN) {
         if (this->messagesCount > 0) {
             this->currentMessageIndex = this->getNextIndex();
-            this->freetext = ""; // clear freetext
-            this->cursor = 0;
 
 #if !defined(T_WATCH_S3) && !defined(RAK14014)
             this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NONE;
@@ -638,13 +635,9 @@ int32_t CannedMessageModule::runOnce()
             if (screen)
                 screen->removeFunctionSymbal("Fn");
         }
-
-        this->lastTouchMillis = millis();
-        this->notifyObservers(&e);
-        return INACTIVATE_AFTER_MS;
     }
 
-    if (this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
+    if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT || this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
         this->lastTouchMillis = millis();
         this->notifyObservers(&e);
         return INACTIVATE_AFTER_MS;
