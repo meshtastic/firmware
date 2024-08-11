@@ -41,7 +41,7 @@ size_t RedirectablePrint::write(uint8_t c)
     // Account for legacy config transition
     bool serialEnabled = config.has_security ? config.security.serial_enabled : config.device.serial_enabled;
     if (!config.has_lora || serialEnabled)
-        dest->write(c); 
+        dest->write(c);
 
     return 1; // We always claim one was written, rather than trusting what the
               // serial port said (which could be zero)
