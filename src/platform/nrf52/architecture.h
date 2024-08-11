@@ -32,6 +32,9 @@
 #ifndef HAS_CPU_SHUTDOWN
 #define HAS_CPU_SHUTDOWN 1
 #endif
+#ifndef HAS_CUSTOM_CRYPTO_ENGINE
+#define HAS_CUSTOM_CRYPTO_ENGINE 1
+#endif
 
 //
 // set HW_VENDOR
