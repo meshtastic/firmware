@@ -135,7 +135,7 @@ void PositionModule::trySetRtc(meshtastic_Position p, bool isLocal, bool forceUp
 
     tv.tv_sec = secs;
     tv.tv_usec = 0;
- 
+
     perhapsSetRTC(isLocal ? RTCQualityNTP : RTCQualityFromNet, &tv, forceUpdate);
 }
 
