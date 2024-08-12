@@ -1007,9 +1007,15 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
 
     LOG_DEBUG("old user %s/%s, channel=%d\n", info->user.long_name, info->user.short_name, info->channel);
 #if !(MESHTASTIC_EXCLUDE_PKI)
-    if (info->user.public_key.size > 0) { // if we have a key for this user already, don't overwrite with a new one
-        printBytes("Retaining Old Pubkey: ", info->user.public_key.bytes, 32);
-        memcpy(p.public_key.bytes, info->user.public_key.bytes, 32);
+    if (p.public_key.size > 0) {
+        printBytes("Incoming Pubkey: ", p.public_key.bytes, 32);
+        if (info->user.public_key.size > 0) { // if we have a key for this user already, don't overwrite with a new one
+            LOG_INFO("Public Key set for node, not updateing!\n");
+            // we copy the key into the incoming packet, to prevent overwrite
+            memcpy(p.public_key.bytes, info->user.public_key.bytes, 32);
+        } else {
+            LOG_INFO("Updating Node Pubkey!\n");
+        }
     }
 #endif
 
@@ -1017,6 +1023,9 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
     bool changed = memcmp(&info->user, &p, sizeof(info->user)) || (info->channel != channelIndex);
 
     info->user = TypeConversions::ConvertToUserLite(p);
+    if (info->user.public_key.size == 32) {
+        printBytes("Saved Pubkey: ", info->user.public_key.bytes, 32);
+    }
     if (nodeId != getNodeNum())
         info->channel = channelIndex; // Set channel we need to use to reach this node (but don't set our own channel)
     LOG_DEBUG("updating changed=%d user %s/%s, channel=%d\n", changed, info->user.long_name, info->user.short_name,
