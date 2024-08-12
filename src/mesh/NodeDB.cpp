@@ -1097,11 +1097,24 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
             // look for oldest node and erase it
             uint32_t oldest = UINT32_MAX;
             int oldestIndex = -1;
+            int oldestIndex = -1;
+            int oldestBoringIndex = -1;
             for (int i = 1; i < numMeshNodes; i++) {
+                // Simply the oldest non-favorite node
                 if (!meshNodes->at(i).is_favorite && meshNodes->at(i).last_heard < oldest) {
                     oldest = meshNodes->at(i).last_heard;
                     oldestIndex = i;
                 }
+                // The oldest "boring" node
+                if (!meshNodes->at(i).is_favorite && meshNodes->at(i).user.public_key.size == 0 &&
+                    meshNodes->at(i).last_heard < oldestBoring) {
+                    oldestBoring = meshNodes->at(i).last_heard;
+                    oldestBoringIndex = i;
+                }
+            }
+            // if we found a "boring" node, evict it
+            if (oldestBoringIndex != -1) {
+                oldestIndex = oldestBoringIndex;
             }
             // Shove the remaining nodes down the chain
             for (int i = oldestIndex; i < numMeshNodes - 1; i++) {
