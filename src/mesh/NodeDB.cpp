@@ -578,11 +578,6 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
     LoadFileResult state = LoadFileResult::OTHER_FAILURE;
 #ifdef FSCom
 
-    if (!FSCom.exists(filename)) {
-        LOG_INFO("File %s not found\n", filename);
-        return LoadFileResult::NOT_FOUND;
-    }
-
     auto f = FSCom.open(filename, FILE_O_READ);
 
     if (f) {
