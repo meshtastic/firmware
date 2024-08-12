@@ -1220,6 +1220,14 @@ GnssModel_t GPS::probe(int serialSpeed)
         return GNSS_MODEL_UC6580;
     }
 
+    clearBuffer();
+    _serial_gps->write("$PDTINFO\r\n");
+    delay(750);
+    if (getACK("UM600", 500) == GNSS_RESPONSE_OK) {
+        LOG_INFO("UM600 detected, using UC6580 Module\n");
+        return GNSS_MODEL_UC6580;
+    }
+
     // Get version information for ATGM336H
     clearBuffer();
     _serial_gps->write("$PCAS06,1*1A\r\n");
