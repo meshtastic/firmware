@@ -127,7 +127,7 @@ class NodeDB
 
     void initConfigIntervals(), initModuleConfigIntervals(), resetNodes(), removeNodeByNum(NodeNum nodeNum);
 
-    bool factoryReset();
+    bool factoryReset(bool eraseBleBonds = false);
 
     LoadFileResult loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields,
                              void *dest_struct);

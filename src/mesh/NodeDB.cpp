@@ -190,7 +190,7 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
     return didFactoryReset;
 }
 
-bool NodeDB::factoryReset()
+bool NodeDB::factoryReset(bool eraseBleBonds)
 {
     LOG_INFO("Performing factory reset!\n");
     // first, remove the "/prefs" (this removes most prefs)
@@ -207,18 +207,21 @@ bool NodeDB::factoryReset()
     installDefaultChannels();
     // third, write everything to disk
     saveToDisk();
+    if (eraseBleBonds) {
+        LOG_INFO("Erasing BLE bonds\n");
 #ifdef ARCH_ESP32
-    // This will erase what's in NVS including ssl keys, persistent variables and ble pairing
-    nvs_flash_erase();
+        // This will erase what's in NVS including ssl keys, persistent variables and ble pairing
+        nvs_flash_erase();
 #endif
 #ifdef ARCH_NRF52
-    Bluefruit.begin();
-    LOG_INFO("Clearing bluetooth bonds!\n");
-    bond_print_list(BLE_GAP_ROLE_PERIPH);
-    bond_print_list(BLE_GAP_ROLE_CENTRAL);
-    Bluefruit.Periph.clearBonds();
-    Bluefruit.Central.clearBonds();
+        Bluefruit.begin();
+        LOG_INFO("Clearing bluetooth bonds!\n");
+        bond_print_list(BLE_GAP_ROLE_PERIPH);
+        bond_print_list(BLE_GAP_ROLE_CENTRAL);
+        Bluefruit.Periph.clearBonds();
+        Bluefruit.Central.clearBonds();
 #endif
+    }
     return true;
 }
 
@@ -373,6 +376,13 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 100;
     moduleConfig.external_notification.active = true;
 #endif
+#ifdef BUTTON_SECONDARY_CANNEDMESSAGES
+    // Use a board's second built-in button as input source for canned messages
+    moduleConfig.canned_message.enabled = true;
+    moduleConfig.canned_message.inputbroker_pin_press = BUTTON_PIN_SECONDARY;
+    strcpy(moduleConfig.canned_message.allow_input_source, "scanAndSelect");
+#endif
+
     moduleConfig.has_canned_message = true;
 
     strncpy(moduleConfig.mqtt.address, default_mqtt_address, sizeof(moduleConfig.mqtt.address));

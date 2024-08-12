@@ -504,6 +504,22 @@ bool GPS::setup()
             delay(250);
             _serial_gps->write("$CFGMSG,6,1,0\r\n");
             delay(250);
+        } else if (gnssModel == GNSS_MODEL_AG3335) {
+
+            _serial_gps->write("$PAIR066,1,0,1,0,0,1*3B"); // Enable GPS+GALILEO+NAVIC
+
+            // Configure NMEA (sentences will output once per fix)
+            _serial_gps->write("$PAIR062,0,0*3F"); // GGA ON
+            _serial_gps->write("$PAIR062,1,0*3F"); // GLL OFF
+            _serial_gps->write("$PAIR062,2,1*3D"); // GSA ON
+            _serial_gps->write("$PAIR062,3,0*3D"); // GSV OFF
+            _serial_gps->write("$PAIR062,4,0*3B"); // RMC ON
+            _serial_gps->write("$PAIR062,5,0*3B"); // VTG OFF
+            _serial_gps->write("$PAIR062,6,1*39"); // ZDA ON
+
+            delay(250);
+            _serial_gps->write("$PAIR513*3D"); // save configuration
+
         } else if (gnssModel == GNSS_MODEL_UBLOX) {
             // Configure GNSS system to GPS+SBAS+GLONASS (Module may restart after this command)
             // We need set it because by default it is GPS only, and we want to use GLONASS too
@@ -1179,6 +1195,9 @@ GnssModel_t GPS::probe(int serialSpeed)
         _serial_gps->updateBaudRate(serialSpeed);
     }
 #endif
+#ifdef GNSS_AIROHA
+    return GNSS_MODEL_AG3335;
+#endif
 #ifdef GPS_DEBUG
     for (int i = 0; i < 20; i++) {
         getACK("$GP", 200);
@@ -1201,6 +1220,14 @@ GnssModel_t GPS::probe(int serialSpeed)
         return GNSS_MODEL_UC6580;
     }
 
+    clearBuffer();
+    _serial_gps->write("$PDTINFO\r\n");
+    delay(750);
+    if (getACK("UM600", 500) == GNSS_RESPONSE_OK) {
+        LOG_INFO("UM600 detected, using UC6580 Module\n");
+        return GNSS_MODEL_UC6580;
+    }
+
     // Get version information for ATGM336H
     clearBuffer();
     _serial_gps->write("$PCAS06,1*1A\r\n");
@@ -1217,6 +1244,17 @@ GnssModel_t GPS::probe(int serialSpeed)
         LOG_INFO("ATGM332D detected, using ATGM336H Module\n");
         return GNSS_MODEL_ATGM336H;
     }
+
+    /* Airoha (Mediatek) AG3335A/M/S, A3352Q, Quectel L89 2.0, SimCom SIM65M */
+    clearBuffer();
+    _serial_gps->write("PAIR020*38\r\n");
+    if (getACK("$PAIR020,AG3335", 500) == GNSS_RESPONSE_OK) {
+        LOG_INFO("Aioha AG3335 detected, using AG3335 Module\n");
+        return GNSS_MODEL_AG3335;
+    }
+    // Get version information for Airoha AG3335
+    clearBuffer();
+    _serial_gps->write("$PMTK605*31\r\n");
 
     // Get version information
     clearBuffer();
