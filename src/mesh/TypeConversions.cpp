@@ -84,6 +84,7 @@ meshtastic_User TypeConversions::ConvertToUser(uint32_t nodeNum, meshtastic_User
     user.is_licensed = lite.is_licensed;
     memccpy(user.macaddr, lite.macaddr, sizeof(lite.macaddr), sizeof(user.macaddr));
     memcpy(user.public_key.bytes, lite.public_key.bytes, sizeof(user.public_key.bytes));
+    user.public_key.size = lite.public_key.size;
 
     return user;
 }
