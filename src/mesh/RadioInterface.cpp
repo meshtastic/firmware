@@ -53,8 +53,10 @@ const RegionInfo regions[] = {
 
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
+        https://www.arib.or.jp/english/html/overview/doc/5-STD-T108v1_5-E1.pdf
+        https://qiita.com/ammo0613/items/d952154f1195b64dc29f
      */
-    RDEF(JP, 920.8f, 927.8f, 100, 0, 16, true, false, false),
+    RDEF(JP, 920.5f, 923.5f, 100, 0, 13, true, false, false),
 
     /*
         https://www.iot.org.au/wp/wp-content/uploads/2016/12/IoTSpectrumFactSheet.pdf
