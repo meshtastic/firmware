@@ -121,6 +121,9 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
     if (shouldSet) {
         currentQuality = q;
         lastSetMsec = now;
+        if (currentQuality >= RTCQualityNTP) {
+            lastSetFromPhoneOrNTP = now;
+        }
 
         // This delta value works on all platforms
         timeStartMsec = now;
