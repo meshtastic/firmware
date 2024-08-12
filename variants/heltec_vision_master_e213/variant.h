@@ -1,4 +1,6 @@
 #define BUTTON_PIN 0
+#define BUTTON_PIN_SECONDARY 21         // Second built-in button
+#define BUTTON_SECONDARY_CANNEDMESSAGES // By default, use the secondary button as canned message input
 
 // I2C
 #define I2C_SDA SDA

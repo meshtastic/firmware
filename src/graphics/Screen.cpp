@@ -37,6 +37,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "gps/RTC.h"
 #include "graphics/ScreenFonts.h"
 #include "graphics/images.h"
+#include "input/ScanAndSelect.h"
 #include "input/TouchScreenImpl1.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
@@ -2291,6 +2292,11 @@ void Screen::handlePrint(const char *text)
 
 void Screen::handleOnPress()
 {
+    // If Canned Messages is using the "Scan and Select" input, dismiss the canned message frame when user button is pressed
+    // Minimize impact as a courtesy, as "scan and select" may be used as default config for some boards
+    if (scanAndSelectInput != nullptr && scanAndSelectInput->dismissCannedMessageFrame())
+        return;
+
     // If screen was off, just wake it, otherwise advance to next frame
     // If we are in a transition, the press must have bounced, drop it.
     if (ui->getUiState()->frameState == FIXED) {
