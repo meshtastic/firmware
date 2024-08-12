@@ -126,12 +126,23 @@ void PositionModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic
 
 void PositionModule::trySetRtc(meshtastic_Position p, bool isLocal, bool forceUpdate)
 {
+    if (hasQualityTimesource() && !isLocal) {
+        LOG_DEBUG("Completely ignoring time from mesh because we have a GPS or RTC\n");
+        return;
+    }
     struct timeval tv;
     uint32_t secs = p.time;
 
     tv.tv_sec = secs;
     tv.tv_usec = 0;
+ 
     perhapsSetRTC(isLocal ? RTCQualityNTP : RTCQualityFromNet, &tv, forceUpdate);
+}
+
+bool PositionModule::hasQualityTimesource()
+{
+    bool hasGpsOrRtc = gps->isConnected() || rtc_found.address != ScanI2C::ADDRESS_NONE.address;
+    return hasGpsOrRtc;
 }
 
 meshtastic_MeshPacket *PositionModule::allocReply()
