@@ -21,6 +21,10 @@
 #include "esp_task_wdt.h"
 #endif
 
+#ifdef ARCH_RP2040
+#include "platform/rp2040/rp2040Watchdog.h"
+#endif
+
 /*
   Including the esp32_https_server library will trigger a compile time error. I've
   tracked it down to a reoccurrance of this bug:
@@ -532,7 +536,13 @@ void handleFormUpload(HTTPRequest *req, HTTPResponse *res)
         // With endOfField you can check whether the end of field has been reached or if there's
         // still data pending. With multipart bodies, you cannot know the field size in advance.
         while (!parser->endOfField()) {
+#ifdef ARCH_ESP32
             esp_task_wdt_reset();
+#endif
+#ifdef ARCH_RP2040
+            // Todo: Added here to be prepared when we add the rp2040 webserver
+            rp2040Watchdog->reset();
+#endif
 
             byte buf[512];
             size_t readLength = parser->read(buf, 512);

@@ -1,4 +1,5 @@
 #include "configuration.h"
+#include "platform/rp2040/rp2040Watchdog.h"
 #include <hardware/clocks.h>
 #include <hardware/pll.h>
 #include <pico/stdlib.h>
@@ -13,44 +14,8 @@ void setBluetoothEnable(bool enable)
 // loop code specific to RP2040 targets
 void rp2040Loop()
 {
-    // Watchdog can not be enabled on startup since some initializtion wich takes place
-    // after, especially the wifi initialization, takes a long time and and may exceed
-    // the maximum delay of the hardare watchdog. So we start the watchdog after having
-    // called the loop a few times since the first calls to loop() is still interupted
-    // by long running, blocking calls.
-    //
-    // This leaves a small window where the device can get stuck
-    // in the boot phase, and never be rebooted, but it's a heck
-    // better than having no watchdog at all ;)
-    //
-    // Check if the watchdog is enabled, and if not, then start it
-    static bool watchdog_is_enabled = false;
-    static int watchdog_enable_delay = 3;
-    static uint32_t last_reset_ms = to_ms_since_boot(get_absolute_time());
-    static int watchdog_reset_cnt = 0;
-    if (!watchdog_is_enabled) {
-        if (watchdog_enable_delay > 0) {
-            watchdog_enable_delay--;
-            LOG_INFO("rp2040Loop(): Delaying enable of the rp2040 hardware watchdog: %d retries left\n", watchdog_enable_delay);
-        } else {
-            // Enable the hardware watchdog, 8 seconds delay before reboot if not reset
-            LOG_INFO("rp2040Loop(): Enabling rp2040 hardware watchdog\n");
-            watchdog_enable(0x7fffff, true);
-            watchdog_is_enabled = true;
-        }
-    } else {
-        // Reset watchdog periodically, after aprox. 3 seconds.
-        // This leaves plenty of time to perform long running radio operations before the
-        // hardware delay of 8 seconds runs out.
-        // Note: The uint32_t gives us aprox. 49 days of uptime before it rolls over, hence
-        //       the need for checking if 'now' is before last reset also.
-        uint32_t now_ms = to_ms_since_boot(get_absolute_time());
-        if (now_ms - last_reset_ms > 3000 || now_ms < last_reset_ms) {
-            LOG_TRACE("rp2040Loop(): watchdog reset at %ld seconds after boot (or wrap)\n", now_ms / 1000);
-            watchdog_update();
-            last_reset_ms = now_ms;
-        }
-    }
+    // Feed the dog
+    rp2040Watchdog->reset();
 }
 
 void cpuDeepSleep(uint32_t msecs)
@@ -103,10 +68,8 @@ void rp2040Setup()
     LOG_INFO("clk_rtc  = %dkHz\n", f_clk_rtc);
 #endif
 
-    // We have to delay the watchdog initialization since some parts
-    // of the initialization can take longer than the maximum delay
-    // of the hardware watchdog allows.
-    LOG_DEBUG("rp2040Setup(): watchdog initialization delayed\n");
+    LOG_DEBUG("rp2040Setup(): Initializing watchdog\n");
+    rp2040Watchdog = new Rp2040Watchdog();
 }
 
 void enterDfuMode()

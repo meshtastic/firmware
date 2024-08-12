@@ -15,6 +15,9 @@
 #ifdef ARCH_ESP32
 #include "esp_task_wdt.h"
 #endif
+#ifdef ARCH_RP2040
+#include "platform/rp2040/rp2040Watchdog.h"
+#endif
 
 // Persistent Data Storage
 #include <Preferences.h>
@@ -145,8 +148,13 @@ void createSSLCert()
                 if (runLoop) {
                     LOG_DEBUG(".");
 
+#ifdef ARCH_ESP32
                     yield();
+#endif
+#ifdef ARCH_RP2040
+                    // Todo: Added here to be prepared when we add the rp2040 webserver
                     esp_task_wdt_reset();
+#endif
 #if HAS_SCREEN
                     if (millis() / 1000 >= 3) {
                         screen->setSSLFrames();

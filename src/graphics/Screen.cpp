@@ -63,6 +63,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
+#ifdef ARCH_RP2040
+#include "platform/rp2040/rp2040Watchdog.h"
+#endif
+
 using namespace meshtastic; /** @todo remove */
 
 namespace graphics
@@ -251,6 +255,10 @@ static void drawSSLScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     yield();
     esp_task_wdt_reset();
 #endif
+#ifdef ARCH_RP2040
+    yield();
+    rp2040Watchdog->reset();
+#endif
 
     display->setFont(FONT_SMALL);
     if ((millis() / 1000) % 2) {
@@ -282,6 +290,10 @@ static void drawWelcomeScreen(OLEDDisplay *display, OLEDDisplayUiState *state, i
 #ifdef ARCH_ESP32
     yield();
     esp_task_wdt_reset();
+#endif
+#ifdef ARCH_RP2040
+    yield();
+    rp2040Watchdog->reset();
 #endif
 }
 
