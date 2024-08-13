@@ -140,10 +140,6 @@ NodeDB::NodeDB()
         crypto->setDHPrivateKey(config.security.private_key.bytes);
     } else {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
-        config.has_security = true;
-        config.security.serial_enabled = config.device.serial_enabled;
-        config.security.bluetooth_logging_enabled = config.bluetooth.device_logging_enabled;
-        config.security.is_managed = config.device.is_managed;
         LOG_INFO("Generating new PKI keys\n");
         crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
         config.security.public_key.size = 32;
