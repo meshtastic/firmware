@@ -229,7 +229,7 @@ void cpuDeepSleep(uint32_t msecToWake)
     // of just the first) gpio_pullup_en((gpio_num_t)BUTTON_PIN);
 
 #ifdef ESP32S3_WAKE_TYPE
-	esp_sleep_enable_ext1_wakeup(gpioMask, ESP32S3_WAKE_TYPE);
+    esp_sleep_enable_ext1_wakeup(gpioMask, ESP32S3_WAKE_TYPE);
 #else
 #if SOC_PM_SUPPORT_EXT_WAKEUP
 #ifdef CONFIG_IDF_TARGET_ESP32
@@ -240,7 +240,7 @@ void cpuDeepSleep(uint32_t msecToWake)
 #endif
 #endif
 
-#endif //#end ESP32S3_WAKE_TYPE
+#endif // #end ESP32S3_WAKE_TYPE
 #endif
 
     // We want RTC peripherals to stay on

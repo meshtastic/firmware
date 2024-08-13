@@ -280,9 +280,9 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
     }
 
 #if defined(I2C_SDA)
-		Wire.end();
-		pinMode(I2C_SDA,ANALOG);
-		pinMode(I2C_SCL,ANALOG);
+    Wire.end();
+    pinMode(I2C_SDA, ANALOG);
+    pinMode(I2C_SCL, ANALOG);
 #endif
 
 #endif

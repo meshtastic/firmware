@@ -45,7 +45,7 @@
 #define I2C_SCL 2
 #define HAS_SCREEN 0
 #define SENSOR_POWER_CTRL_PIN 21
-#define SENSOR_POWER_ON       1
+#define SENSOR_POWER_ON 1
 
 #define SENSOR_GPS_CONFLICT
 

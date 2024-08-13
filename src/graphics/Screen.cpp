@@ -1592,7 +1592,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             dispdev->displayOn();
 #ifdef USE_ST7789
             pinMode(VTFT_CTRL, OUTPUT);
-            digitalWrite(VTFT_CTRL,LOW);
+            digitalWrite(VTFT_CTRL, LOW);
             ui->init();
 #ifdef ESP_PLATFORM
             analogWrite(VTFT_LEDA, BRIGHTNESS_DEFAULT);
@@ -1617,9 +1617,9 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #if defined(ARCH_ESP32)
             pinMode(VTFT_LEDA, ANALOG);
             pinMode(VTFT_CTRL, ANALOG);
-            pinMode(ST7789_RESET,ANALOG);
-            pinMode(ST7789_RS,ANALOG);
-            pinMode(ST7789_NSS,ANALOG);
+            pinMode(ST7789_RESET, ANALOG);
+            pinMode(ST7789_RS, ANALOG);
+            pinMode(ST7789_NSS, ANALOG);
 #else
             nrf_gpio_cfg_default(VTFT_LEDA);
             nrf_gpio_cfg_default(VTFT_CTRL);
