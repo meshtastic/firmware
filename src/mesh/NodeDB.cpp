@@ -145,6 +145,12 @@ NodeDB::NodeDB()
 
     // Include our owner in the node db under our nodenum
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
+    if (!config.has_security) {
+        config.has_security = true;
+        config.security.serial_enabled = config.device.serial_enabled;
+        config.security.bluetooth_logging_enabled = config.bluetooth.device_logging_enabled;
+        config.security.is_managed = config.device.is_managed;
+    }
 #if !(MESHTASTIC_EXCLUDE_PKI)
     // Calculate Curve25519 public and private keys
     printBytes("Old Pubkey", config.security.public_key.bytes, 32);
