@@ -8,7 +8,6 @@ class Rp2040Watchdog : public concurrency::OSThread
     {
         LOG_TRACE("Rp2040Watchdog::Rp2040Watchdog(): Initializing\n");
         watchdogIsRunning = false;
-        statusOutputCount = 0;
 
         // Todo: We need a port of the 'Preferences' type to rp2040 so that
         //       we can keep track of reboots
@@ -33,29 +32,25 @@ class Rp2040Watchdog : public concurrency::OSThread
                 lastResetTick = currentTick;
             }
         } else {
+
+            // Check for rollover, each 49 days. If so, then assume all is good
+            if (currentTick < lastResetTick) {
+
+                LOG_TRACE("Rp2040Watchdog->runOnce(): rollover detected (lastResetTick = %lu minutes)\n",
+                          lastResetTick / (60 * 1000));
+                lastResetTick = currentTick;
+            }
+
+            // Time since last reset
             uint32_t timeout = currentTick - lastResetTick;
 
-            if (currentTick < lastTick) {
-                rollover++;
-            }
-            uint64_t uptime = (rollover * 0xFFFFFFFF) + currentTick;
-            lastTick = currentTick;
-
-            // Dump trace output aprox. each minute, just to allow some sort of feeling with the watchdog
-            // (We do not handle 49 days rollover, that's not important, we just want to know if
-            // the device has been up for days, and not with hours between restarts)
-            if (statusOutputCount++ > 14) {
-                LOG_TRACE("Rp2040Watchdog->runOnce(): watchdog running (timeout = %u seconds, uptime = %lu minutes)\n", timeout,
-                          uptime / (60 * 1000));
-                statusOutputCount = 0;
-            }
-
-            if (timeout < 90 * 1000) { // 90 seconds, same as esp32 watchdog
+            // Update watchdog if timeout is below 90 seconds, same as esp32 watchdog
+            if (timeout < 90 * 1000) {
                 watchdog_update();
             } else {
                 LOG_ERROR("Rp2040Watchdog->runOnce(): watchdog time since last update has exceeded timeout (timeout = %u "
                           "seconds, uptime = %lu minutes)\n",
-                          timeout, uptime / (60 * 1000));
+                          timeout, currentTick / (60 * 1000));
                 LOG_ERROR("Rp2040Watchdog->runOnce(): WAITING FOR REBOOT\n");
             }
         }
@@ -66,12 +61,7 @@ class Rp2040Watchdog : public concurrency::OSThread
 
   private:
     uint32_t lastResetTick;
-    uint32_t lastTick;
-    uint32_t rollover;
-
     bool watchdogIsRunning;
-
-    int statusOutputCount;
 };
 
 extern Rp2040Watchdog *rp2040Watchdog;
