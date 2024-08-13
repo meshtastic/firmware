@@ -554,10 +554,21 @@ void NodeDB::cleanupMeshDB()
 {
     int newPos = 0, removed = 0;
     for (int i = 0; i < numMeshNodes; i++) {
-        if (meshNodes->at(i).has_user)
+        if (meshNodes->at(i).has_user) {
+            if (meshNodes->at(i).user.public_key.size > 0) {
+                for (int j = 0; j < numMeshNodes; j++) {
+                    if (meshNodes->at(i).user.public_key.bytes[j] != 0) {
+                        break;
+                    }
+                    if (j == 31) {
+                        meshNodes->at(i).user.public_key.size = 0;
+                    }
+                }
+            }
             meshNodes->at(newPos++) = meshNodes->at(i);
-        else
+        } else {
             removed++;
+        }
     }
     numMeshNodes -= removed;
     std::fill(devicestate.node_db_lite.begin() + numMeshNodes, devicestate.node_db_lite.begin() + numMeshNodes + removed,
