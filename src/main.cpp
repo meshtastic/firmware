@@ -320,12 +320,12 @@ void setup()
 #endif
 
 #ifdef SENSOR_POWER_CTRL_PIN
-    pinMode(SENSOR_POWER_CTRL_PIN,OUTPUT);
-    digitalWrite(SENSOR_POWER_CTRL_PIN,SENSOR_POWER_ON);
+    pinMode(SENSOR_POWER_CTRL_PIN, OUTPUT);
+    digitalWrite(SENSOR_POWER_CTRL_PIN, SENSOR_POWER_ON);
 #endif
 
 #ifdef SENSOR_GPS_CONFLICT
-    bool sensor_detected=false;
+    bool sensor_detected = false;
 #endif
 #ifdef PERIPHERAL_WARMUP_MS
     // Some peripherals may require additional time to stabilize after power is connected
@@ -467,7 +467,7 @@ void setup()
     } else {
         LOG_INFO("%i I2C devices found\n", i2cCount);
 #ifdef SENSOR_GPS_CONFLICT
-         sensor_detected=true;
+        sensor_detected = true;
 #endif
     }
 
@@ -715,20 +715,19 @@ void setup()
 #if !MESHTASTIC_EXCLUDE_GPS
     // If we're taking on the repeater role, ignore GPS
 #ifdef SENSOR_GPS_CONFLICT
-     if(sensor_detected==false)
-     {
+    if (sensor_detected == false) {
 #endif
-    if (HAS_GPS) {
-        if (config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER &&
-            config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
-            gps = GPS::createGps();
-            if (gps) {
-                gpsStatus->observe(&gps->newStatus);
-            } else {
-                LOG_DEBUG("Running without GPS.\n");
+        if (HAS_GPS) {
+            if (config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER &&
+                config.position.gps_mode != meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT) {
+                gps = GPS::createGps();
+                if (gps) {
+                    gpsStatus->observe(&gps->newStatus);
+                } else {
+                    LOG_DEBUG("Running without GPS.\n");
+                }
             }
         }
-    }
 #ifdef SENSOR_GPS_CONFLICT
     }
 #endif
