@@ -4,6 +4,7 @@
 #include "MeshTypes.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
+#include "modules/NodeInfoModule.h"
 
 // ReliableRouter::ReliableRouter() {}
 
@@ -107,6 +108,11 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
         if (p->want_ack) {
             if (MeshModule::currentReply) {
                 LOG_DEBUG("Some other module has replied to this message, no need for a 2nd ack\n");
+            } else if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && c &&
+                       c->error_reason == meshtastic_Routing_Error_NO_CHANNEL) {
+                if (owner.public_key.size == 32)
+                    // This seems like a PKI decrypt failure, so send a NodeInfo
+                    nodeInfoModule->sendOurNodeInfo(p->from, false, p->channel, true);
             } else if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
                 sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, p->hop_start, p->hop_limit);
             } else {
