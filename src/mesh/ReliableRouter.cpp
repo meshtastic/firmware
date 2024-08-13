@@ -117,20 +117,17 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
         }
 
         // We consider an ack to be either a !routing packet with a request ID or a routing packet with !error
-        PacketId ackId = ((c && c->error_reason == meshtastic_Routing_Error_NONE) || !c) ? p->decoded.request_id : 0;
+        if ((c && (c->error_reason == meshtastic_Routing_Error_NONE || c->error_reason == meshtastic_Routing_Error_NONE_PKI)) ||
+            !c) {
+            LOG_DEBUG("Received an ack for 0x%x, stopping retransmissions\n", p->decoded.request_id);
+            stopRetransmission(p->to, p->decoded.request_id);
+            // } else if (c && (c->error_reason == meshtastic_Routing_Error_NO_CHANNEL)) {
+            // noop?
+        } else if (c &&
+                   (c->error_reason != meshtastic_Routing_Error_NONE && c->error_reason != meshtastic_Routing_Error_NONE_PKI)) {
 
-        // A nak is a routing packt that has an  error code
-        PacketId nakId = (c && c->error_reason != meshtastic_Routing_Error_NONE) ? p->decoded.request_id : 0;
-
-        // We intentionally don't check wasSeenRecently, because it is harmless to delete non existent retransmission records
-        if (ackId || nakId) {
-            if (ackId) {
-                LOG_DEBUG("Received an ack for 0x%x, stopping retransmissions\n", ackId);
-                stopRetransmission(p->to, ackId);
-            } else {
-                LOG_DEBUG("Received a nak for 0x%x, stopping retransmissions\n", nakId);
-                stopRetransmission(p->to, nakId);
-            }
+            LOG_DEBUG("Received a nak for 0x%x, stopping retransmissions\n", p->decoded.request_id);
+            stopRetransmission(p->to, p->decoded.request_id);
         }
     }
 

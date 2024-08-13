@@ -1105,7 +1105,8 @@ ProcessMessage CannedMessageModule::handleReceived(const meshtastic_MeshPacket &
             this->incoming = service->getNodenumFromRequestId(mp.decoded.request_id);
             meshtastic_Routing decoded = meshtastic_Routing_init_default;
             pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, meshtastic_Routing_fields, &decoded);
-            this->ack = decoded.error_reason == meshtastic_Routing_Error_NONE;
+            this->ack = decoded.error_reason == meshtastic_Routing_Error_NONE ||
+                        decoded.error_reason == meshtastic_Routing_Error_NONE_PKI;
             waitingForAck = false; // No longer want routing packets
             this->notifyObservers(&e);
             // run the next time 2 seconds later
