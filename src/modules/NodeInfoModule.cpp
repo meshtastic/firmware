@@ -44,7 +44,10 @@ void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
         p->decoded.want_response = (config.device.role != meshtastic_Config_DeviceConfig_Role_TRACKER &&
                                     config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
                                    wantReplies;
-        p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+        if (_shorterTimeout)
+            p->priority = meshtastic_MeshPacket_Priority_DEFAULT;
+        else
+            p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
         if (channel > 0) {
             LOG_DEBUG("sending ourNodeInfo to channel %d\n", channel);
             p->channel = channel;
@@ -53,6 +56,7 @@ void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t cha
         prevPacketId = p->id;
 
         service->sendToMesh(p);
+        shorterTimeout = false;
     }
 }
 
@@ -72,11 +76,9 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
     } else if (shorterTimeout && lastSentToMesh && (now - lastSentToMesh) < (60 * 1000)) {
         LOG_DEBUG("Skip sending actively requested NodeInfo since we just sent it less than 60 seconds ago.\n");
         ignoreRequest = true; // Mark it as ignored for MeshModule
-        shorterTimeout = false;
         return NULL;
     } else {
         ignoreRequest = false; // Don't ignore requests anymore
-        shorterTimeout = false;
         meshtastic_User &u = owner;
 
         LOG_INFO("sending owner %s/%s/%s\n", u.id, u.long_name, u.short_name);
