@@ -32,12 +32,12 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     return false; // Let others look at this message also if they want
 }
 
-void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t channel)
+void NodeInfoModule::sendOurNodeInfo(NodeNum dest, bool wantReplies, uint8_t channel, bool _shorterTimeout)
 {
     // cancel any not yet sent (now stale) position packets
     if (prevPacketId) // if we wrap around to zero, we'll simply fail to cancel in that rare case (no big deal)
         service->cancelSending(prevPacketId);
-
+    shorterTimeout = _shorterTimeout;
     meshtastic_MeshPacket *p = allocReply();
     if (p) { // Check whether we didn't ignore it
         p->to = dest;
@@ -65,12 +65,18 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
     }
     uint32_t now = millis();
     // If we sent our NodeInfo less than 5 min. ago, don't send it again as it may be still underway.
-    if (lastSentToMesh && (now - lastSentToMesh) < (5 * 60 * 1000)) {
+    if (!shorterTimeout && lastSentToMesh && (now - lastSentToMesh) < (5 * 60 * 1000)) {
         LOG_DEBUG("Skip sending NodeInfo since we just sent it less than 5 minutes ago.\n");
         ignoreRequest = true; // Mark it as ignored for MeshModule
         return NULL;
+    } else if (shorterTimeout && lastSentToMesh && (now - lastSentToMesh) < (60 * 1000)) {
+        LOG_DEBUG("Skip sending actively requested NodeInfo since we just sent it less than 60 seconds ago.\n");
+        ignoreRequest = true; // Mark it as ignored for MeshModule
+        shorterTimeout = false;
+        return NULL;
     } else {
         ignoreRequest = false; // Don't ignore requests anymore
+        shorterTimeout = false;
         meshtastic_User &u = owner;
 
         LOG_INFO("sending owner %s/%s/%s\n", u.id, u.long_name, u.short_name);
