@@ -253,8 +253,7 @@ void MeshService::sendToMesh(meshtastic_MeshPacket *p, RxSource src, bool ccToPh
         LOG_DEBUG("Can't send status to phone");
     }
 
-    if ((res == ERRNO_OK || res == meshtastic_Routing_Error_NONE_PKI) &&
-        ccToPhone) { // Check if p is not released in case it couldn't be sent
+    if (res == ERRNO_OK && ccToPhone) { // Check if p is not released in case it couldn't be sent
         sendToPhone(packetPool.allocCopy(*p));
     }
 }
