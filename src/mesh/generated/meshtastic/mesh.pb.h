@@ -301,8 +301,8 @@ typedef enum _meshtastic_Routing_Error {
     /* The application layer service on the remote node received your request, but considered your request not authorized
  (i.e you did not send the request on the required bound channel) */
     meshtastic_Routing_Error_NOT_AUTHORIZED = 33,
-    /* This message is not a failure, and indicates that the message was sent via PKI */
-    meshtastic_Routing_Error_NONE_PKI = 34
+    /* The client specified a PKI transport, but the node was unable to send the packet using PKI (and did not send the message at all) */
+    meshtastic_Routing_Error_PKI_FAILED = 34
 } meshtastic_Routing_Error;
 
 /* The priority of this message for sending.
@@ -995,8 +995,8 @@ extern "C" {
 #define _meshtastic_Position_AltSource_ARRAYSIZE ((meshtastic_Position_AltSource)(meshtastic_Position_AltSource_ALT_BAROMETRIC+1))
 
 #define _meshtastic_Routing_Error_MIN meshtastic_Routing_Error_NONE
-#define _meshtastic_Routing_Error_MAX meshtastic_Routing_Error_NONE_PKI
-#define _meshtastic_Routing_Error_ARRAYSIZE ((meshtastic_Routing_Error)(meshtastic_Routing_Error_NONE_PKI+1))
+#define _meshtastic_Routing_Error_MAX meshtastic_Routing_Error_PKI_FAILED
+#define _meshtastic_Routing_Error_ARRAYSIZE ((meshtastic_Routing_Error)(meshtastic_Routing_Error_PKI_FAILED+1))
 
 #define _meshtastic_MeshPacket_Priority_MIN meshtastic_MeshPacket_Priority_UNSET
 #define _meshtastic_MeshPacket_Priority_MAX meshtastic_MeshPacket_Priority_MAX
