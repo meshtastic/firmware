@@ -258,7 +258,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         meshtastic_MeshPacket *p_decoded = packetPool.allocCopy(*p);
 
         auto encodeResult = perhapsEncode(p);
-        if (encodeResult != meshtastic_Routing_Error_NONE) {
+        if (encodeResult != meshtastic_Routing_Error_NONE && encodeResult != meshtastic_Routing_Error_NONE_PKI) {
             packetPool.release(p_decoded);
             abortSendAndNak(encodeResult, p);
             return encodeResult; // FIXME - this isn't a valid ErrorCode
@@ -493,8 +493,10 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         p->encrypted.size = numbytes;
         p->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
     }
-
-    return meshtastic_Routing_Error_NONE;
+    if (p->pki_encrypted)
+        return meshtastic_Routing_Error_NONE_PKI;
+    else
+        return meshtastic_Routing_Error_NONE;
 }
 
 NodeNum Router::getNodeNum()
