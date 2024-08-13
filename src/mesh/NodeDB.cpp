@@ -211,7 +211,7 @@ bool NodeDB::resetRadioConfig(bool factory_reset)
     return didFactoryReset;
 }
 
-bool NodeDB::factoryReset()
+bool NodeDB::factoryReset(bool eraseBleBonds)
 {
     LOG_INFO("Performing factory reset!\n");
     // first, remove the "/prefs" (this removes most prefs)
@@ -228,18 +228,21 @@ bool NodeDB::factoryReset()
     installDefaultChannels();
     // third, write everything to disk
     saveToDisk();
+    if (eraseBleBonds) {
+        LOG_INFO("Erasing BLE bonds\n");
 #ifdef ARCH_ESP32
-    // This will erase what's in NVS including ssl keys, persistent variables and ble pairing
-    nvs_flash_erase();
+        // This will erase what's in NVS including ssl keys, persistent variables and ble pairing
+        nvs_flash_erase();
 #endif
 #ifdef ARCH_NRF52
-    Bluefruit.begin();
-    LOG_INFO("Clearing bluetooth bonds!\n");
-    bond_print_list(BLE_GAP_ROLE_PERIPH);
-    bond_print_list(BLE_GAP_ROLE_CENTRAL);
-    Bluefruit.Periph.clearBonds();
-    Bluefruit.Central.clearBonds();
+        Bluefruit.begin();
+        LOG_INFO("Clearing bluetooth bonds!\n");
+        bond_print_list(BLE_GAP_ROLE_PERIPH);
+        bond_print_list(BLE_GAP_ROLE_CENTRAL);
+        Bluefruit.Periph.clearBonds();
+        Bluefruit.Central.clearBonds();
 #endif
+    }
     return true;
 }
 
@@ -560,8 +563,16 @@ void NodeDB::installDefaultDeviceState()
 
     // Set default owner name
     pickNewNodeNum(); // based on macaddr now
+#ifdef CONFIG_OWNER_LONG_NAME_USERPREFS
+    snprintf(owner.long_name, sizeof(owner.long_name), CONFIG_OWNER_LONG_NAME_USERPREFS);
+#else
     snprintf(owner.long_name, sizeof(owner.long_name), "Meshtastic %02x%02x", ourMacAddr[4], ourMacAddr[5]);
+#endif
+#ifdef CONFIG_OWNER_SHORT_NAME_USERPREFS
+    snprintf(owner.short_name, sizeof(owner.short_name), CONFIG_OWNER_SHORT_NAME_USERPREFS);
+#else
     snprintf(owner.short_name, sizeof(owner.short_name), "%02x%02x", ourMacAddr[4], ourMacAddr[5]);
+#endif
     snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum()); // Default node ID now based on nodenum
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
 }
