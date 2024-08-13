@@ -6,6 +6,7 @@
 #include <time.h>
 
 static RTCQuality currentQuality = RTCQualityNone;
+uint32_t lastSetFromPhoneNtpOrGps = 0;
 
 RTCQuality getRTCQuality()
 {
