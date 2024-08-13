@@ -184,6 +184,9 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_RAK3172 = 72,
     /* Seeed Studio Wio-E5 (either mini or Dev kit) using STM32WL chip. */
     meshtastic_HardwareModel_WIO_E5 = 73,
+    /* RadioMaster 900 Bandit, https://www.radiomasterrc.com/products/bandit-expresslrs-rf-module
+ SSD1306 OLED and No GPS */
+    meshtastic_HardwareModel_RADIOMASTER_900_BANDIT = 74,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
