@@ -222,6 +222,8 @@ meshtastic_MeshPacket *PowerTelemetryModule::allocReply()
 bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 {
     meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
+    m.which_variant = meshtastic_Telemetry_power_metrics_tag;
+    m.time = getTime();
     if (getPowerTelemetry(&m)) {
         LOG_INFO("(Sending): ch1_voltage=%f, ch1_current=%f, ch2_voltage=%f, ch2_current=%f, "
                  "ch3_voltage=%f, ch3_current=%f\n",
