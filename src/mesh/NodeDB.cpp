@@ -57,27 +57,6 @@ meshtastic_ChannelFile channelFile;
 meshtastic_OEMStore oemStore;
 static bool hasOemStore = false;
 
-// These are not publically exposed - copied from InternalFileSystem.cpp
-// #define FLASH_NRF52_PAGE_SIZE   4096
-// #define LFS_FLASH_TOTAL_SIZE  (7*FLASH_NRF52_PAGE_SIZE)
-// #define LFS_BLOCK_SIZE        128
-
-/// List all files in the FS and test write and readback.
-/// Useful for filesystem stress testing - normally stripped from build by the linker.
-void flashTest()
-{
-    auto filesManifest = getFiles("/", 5);
-
-    uint32_t totalSize = 0;
-    for (size_t i = 0; i < filesManifest.size(); i++) {
-        LOG_INFO("File %s (size %d)\n", filesManifest[i].file_name, filesManifest[i].size_bytes);
-        totalSize += filesManifest[i].size_bytes;
-    }
-    LOG_INFO("%d files (total size %u)\n", filesManifest.size(), totalSize);
-    // LOG_INFO("Filesystem block size %u, total bytes %u", LFS_FLASH_TOTAL_SIZE, LFS_BLOCK_SIZE);
-    nodeDB->saveToDisk();
-}
-
 bool meshtastic_DeviceState_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_iter_t *field)
 {
     if (ostream) {
@@ -145,6 +124,12 @@ NodeDB::NodeDB()
 
     // Include our owner in the node db under our nodenum
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
+    if (!config.has_security) {
+        config.has_security = true;
+        config.security.serial_enabled = config.device.serial_enabled;
+        config.security.bluetooth_logging_enabled = config.bluetooth.device_logging_enabled;
+        config.security.is_managed = config.device.is_managed;
+    }
 #if !(MESHTASTIC_EXCLUDE_PKI)
     // Calculate Curve25519 public and private keys
     printBytes("Old Pubkey", config.security.public_key.bytes, 32);
@@ -155,10 +140,6 @@ NodeDB::NodeDB()
         crypto->setDHPrivateKey(config.security.private_key.bytes);
     } else {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
-        config.has_security = true;
-        config.security.serial_enabled = config.device.serial_enabled;
-        config.security.bluetooth_logging_enabled = config.bluetooth.device_logging_enabled;
-        config.security.is_managed = config.device.is_managed;
         LOG_INFO("Generating new PKI keys\n");
         crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
         config.security.public_key.size = 32;
@@ -573,10 +554,21 @@ void NodeDB::cleanupMeshDB()
 {
     int newPos = 0, removed = 0;
     for (int i = 0; i < numMeshNodes; i++) {
-        if (meshNodes->at(i).has_user)
+        if (meshNodes->at(i).has_user) {
+            if (meshNodes->at(i).user.public_key.size > 0) {
+                for (int j = 0; j < numMeshNodes; j++) {
+                    if (meshNodes->at(i).user.public_key.bytes[j] != 0) {
+                        break;
+                    }
+                    if (j == 31) {
+                        meshNodes->at(i).user.public_key.size = 0;
+                    }
+                }
+            }
             meshNodes->at(newPos++) = meshNodes->at(i);
-        else
+        } else {
             removed++;
+        }
     }
     numMeshNodes -= removed;
     std::fill(devicestate.node_db_lite.begin() + numMeshNodes, devicestate.node_db_lite.begin() + numMeshNodes + removed,
@@ -603,8 +595,16 @@ void NodeDB::installDefaultDeviceState()
 
     // Set default owner name
     pickNewNodeNum(); // based on macaddr now
+#ifdef CONFIG_OWNER_LONG_NAME_USERPREFS
+    snprintf(owner.long_name, sizeof(owner.long_name), CONFIG_OWNER_LONG_NAME_USERPREFS);
+#else
     snprintf(owner.long_name, sizeof(owner.long_name), "Meshtastic %02x%02x", ourMacAddr[4], ourMacAddr[5]);
+#endif
+#ifdef CONFIG_OWNER_SHORT_NAME_USERPREFS
+    snprintf(owner.short_name, sizeof(owner.short_name), CONFIG_OWNER_SHORT_NAME_USERPREFS);
+#else
     snprintf(owner.short_name, sizeof(owner.short_name), "%02x%02x", ourMacAddr[4], ourMacAddr[5]);
+#endif
     snprintf(owner.id, sizeof(owner.id), "!%08x", getNodeNum()); // Default node ID now based on nodenum
     memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
 }
@@ -648,11 +648,6 @@ LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t 
 {
     LoadFileResult state = LoadFileResult::OTHER_FAILURE;
 #ifdef FSCom
-
-    if (!FSCom.exists(filename)) {
-        LOG_INFO("File %s not found\n", filename);
-        return LoadFileResult::NOT_FOUND;
-    }
 
     auto f = FSCom.open(filename, FILE_O_READ);
 

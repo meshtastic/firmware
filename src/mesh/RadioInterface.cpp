@@ -283,6 +283,9 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
         if (s.want_response)
             out += DEBUG_PORT.mt_sprintf(" WANTRESP");
 
+        if (p->pki_encrypted)
+            out += DEBUG_PORT.mt_sprintf(" PKI");
+
         if (s.source != 0)
             out += DEBUG_PORT.mt_sprintf(" source=%08x", s.source);
 

@@ -60,6 +60,7 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     void trySetRtc(meshtastic_Position p, bool isLocal, bool forceUpdate = false);
     uint32_t precision;
     void sendLostAndFoundText();
+    bool hasQualityTimesource();
 
     const uint32_t minimumTimeThreshold =
         Default::getConfiguredOrDefaultMsScaled(config.position.broadcast_smart_minimum_interval_secs, 30, numOnlineNodes);

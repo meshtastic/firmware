@@ -415,6 +415,8 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 {
     concurrency::LockGuard g(cryptLock);
 
+    int16_t hash;
+
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded);
@@ -460,31 +462,56 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         // printBytes("plaintext", bytes, numbytes);
 
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
-        auto hash = channels.setActiveByIndex(chIndex);
-        if (hash < 0)
-            // No suitable channel could be found for sending
-            return meshtastic_Routing_Error_NO_CHANNEL;
 
-        // Now that we are encrypting the packet channel should be the hash (no longer the index)
-        p->channel = hash;
 #if !(MESHTASTIC_EXCLUDE_PKI)
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
-        if (!owner.is_licensed && p->to != NODENUM_BROADCAST && node != nullptr && node->user.public_key.size > 0 &&
-            numbytes <= MAX_RHPACKETLEN - 8 && p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP &&
+        if (!owner.is_licensed && config.security.private_key.size == 32 && p->to != NODENUM_BROADCAST && node != nullptr &&
+            node->user.public_key.size > 0 && p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP &&
             p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP && p->decoded.portnum != meshtastic_PortNum_ROUTING_APP &&
             p->decoded.portnum != meshtastic_PortNum_POSITION_APP) {
             LOG_DEBUG("Using PKI!\n");
             if (numbytes + 8 > MAX_RHPACKETLEN)
                 return meshtastic_Routing_Error_TOO_LARGE;
+            if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, 32) &&
+                memcmp(p->public_key.bytes, node->user.public_key.bytes, 32) != 0) {
+                LOG_WARN("Client public key for client differs from requested! Requested 0x%02x, but stored key begins 0x%02x\n",
+                         *p->public_key.bytes, *node->user.public_key.bytes);
+                return meshtastic_Routing_Error_PKI_FAILED;
+            }
             crypto->encryptCurve25519(p->to, getFrom(p), p->id, numbytes, bytes, ScratchEncrypted);
             numbytes += 8;
             memcpy(p->encrypted.bytes, ScratchEncrypted, numbytes);
             p->channel = 0;
+            p->pki_encrypted = true;
         } else {
+            if (p->pki_encrypted == true) {
+                // Client specifically requested PKI encryption
+                return meshtastic_Routing_Error_PKI_FAILED;
+            }
+            hash = channels.setActiveByIndex(chIndex);
+
+            // Now that we are encrypting the packet channel should be the hash (no longer the index)
+            p->channel = hash;
+            if (hash < 0) {
+                // No suitable channel could be found for sending
+                return meshtastic_Routing_Error_NO_CHANNEL;
+            }
             crypto->encryptPacket(getFrom(p), p->id, numbytes, bytes);
             memcpy(p->encrypted.bytes, bytes, numbytes);
         }
 #else
+        if (p->pki_encrypted == true) {
+            // Client specifically requested PKI encryption
+            return meshtastic_Routing_Error_PKI_FAILED;
+        }
+        hash = channels.setActiveByIndex(chIndex);
+
+        // Now that we are encrypting the packet channel should be the hash (no longer the index)
+        p->channel = hash;
+        if (hash < 0) {
+            // No suitable channel could be found for sending
+            return meshtastic_Routing_Error_NO_CHANNEL;
+        }
         crypto->encryptPacket(getFrom(p), p->id, numbytes, bytes);
         memcpy(p->encrypted.bytes, bytes, numbytes);
 #endif

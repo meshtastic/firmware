@@ -65,3 +65,12 @@ void printBytes(const char *label, const uint8_t *p, size_t numbytes)
         LOG_DEBUG("%02x ", p[i]);
     LOG_DEBUG("\n");
 }
+
+bool memfll(const uint8_t *mem, uint8_t find, size_t numbytes)
+{
+    for (int i = 0; i < numbytes; i++) {
+        if (mem[i] != find)
+            return false;
+    }
+    return true;
+}
