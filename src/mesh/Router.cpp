@@ -517,18 +517,26 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
     }
 #endif
     // assert(radioConfig.has_preferences);
-    bool ignore = is_in_repeated(config.lora.ignore_incoming, p->from) || (config.lora.ignore_mqtt && p->via_mqtt);
+    if (is_in_repeated(config.lora.ignore_incoming, p->from)) {
+        LOG_DEBUG("Ignoring incoming message, 0x%x is in our ignore list\n", p->from);
+        packetPool.release(p);
+        return;
+    }
 
-    if (ignore) {
-        LOG_DEBUG("Ignoring incoming message, 0x%x is in our ignore list or came via MQTT\n", p->from);
-    } else if (ignore |= shouldFilterReceived(p)) {
-        LOG_DEBUG("Incoming message was filtered 0x%x\n", p->from);
+    if (config.lora.ignore_mqtt && p->via_mqtt) {
+        LOG_DEBUG("Message came in via MQTT from 0x%x\n", p->from);
+        packetPool.release(p);
+        return;
+    }
+
+    if (shouldFilterReceived(p)) {
+        LOG_DEBUG("Incoming message was filtered from 0x%x\n", p->from);
+        packetPool.release(p);
+        return;
     }
 
     // Note: we avoid calling shouldFilterReceived if we are supposed to ignore certain nodes - because some overrides might
     // cache/learn of the existence of nodes (i.e. FloodRouter) that they should not
-    if (!ignore)
-        handleReceived(p);
-
+    handleReceived(p);
     packetPool.release(p);
 }
