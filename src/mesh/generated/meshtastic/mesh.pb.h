@@ -180,6 +180,13 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_SENSECAP_INDICATOR = 70,
     /* Seeed studio T1000-E tracker card. NRF52840 w/ LR1110 radio, GPS, button, buzzer, and sensors. */
     meshtastic_HardwareModel_TRACKER_T1000_E = 71,
+    /* RAK3172 STM32WLE5 Module (https://store.rakwireless.com/products/wisduo-lpwan-module-rak3172) */
+    meshtastic_HardwareModel_RAK3172 = 72,
+    /* Seeed Studio Wio-E5 (either mini or Dev kit) using STM32WL chip. */
+    meshtastic_HardwareModel_WIO_E5 = 73,
+    /* RadioMaster 900 Bandit, https://www.radiomasterrc.com/products/bandit-expresslrs-rf-module
+ SSD1306 OLED and No GPS */
+    meshtastic_HardwareModel_RADIOMASTER_900_BANDIT = 74,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -293,7 +300,11 @@ typedef enum _meshtastic_Routing_Error {
     meshtastic_Routing_Error_BAD_REQUEST = 32,
     /* The application layer service on the remote node received your request, but considered your request not authorized
  (i.e you did not send the request on the required bound channel) */
-    meshtastic_Routing_Error_NOT_AUTHORIZED = 33
+    meshtastic_Routing_Error_NOT_AUTHORIZED = 33,
+    /* The client specified a PKI transport, but the node was unable to send the packet using PKI (and did not send the message at all) */
+    meshtastic_Routing_Error_PKI_FAILED = 34,
+    /* The receiving node does not have a Public Key to decode with */
+    meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY = 35
 } meshtastic_Routing_Error;
 
 /* The priority of this message for sending.
@@ -986,8 +997,8 @@ extern "C" {
 #define _meshtastic_Position_AltSource_ARRAYSIZE ((meshtastic_Position_AltSource)(meshtastic_Position_AltSource_ALT_BAROMETRIC+1))
 
 #define _meshtastic_Routing_Error_MIN meshtastic_Routing_Error_NONE
-#define _meshtastic_Routing_Error_MAX meshtastic_Routing_Error_NOT_AUTHORIZED
-#define _meshtastic_Routing_Error_ARRAYSIZE ((meshtastic_Routing_Error)(meshtastic_Routing_Error_NOT_AUTHORIZED+1))
+#define _meshtastic_Routing_Error_MAX meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY
+#define _meshtastic_Routing_Error_ARRAYSIZE ((meshtastic_Routing_Error)(meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY+1))
 
 #define _meshtastic_MeshPacket_Priority_MIN meshtastic_MeshPacket_Priority_UNSET
 #define _meshtastic_MeshPacket_Priority_MAX meshtastic_MeshPacket_Priority_MAX

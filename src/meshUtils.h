@@ -15,3 +15,6 @@ char *strnstr(const char *s, const char *find, size_t slen);
 #endif
 
 void printBytes(const char *label, const uint8_t *p, size_t numbytes);
+
+// is the memory region filled with a single character?
+bool memfll(const uint8_t *mem, uint8_t find, size_t numbytes);
