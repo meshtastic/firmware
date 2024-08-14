@@ -472,8 +472,10 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             LOG_DEBUG("Using PKI!\n");
             if (numbytes + 8 > MAX_RHPACKETLEN)
                 return meshtastic_Routing_Error_TOO_LARGE;
-            if (memcmp(p->public_key.bytes, node->user.public_key.bytes, 32) != 0) {
-                LOG_WARN("Client public key for client differs from requested!\n");
+            if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, 32) &&
+                memcmp(p->public_key.bytes, node->user.public_key.bytes, 32) != 0) {
+                LOG_WARN("Client public key for client differs from requested! Requested 0x%02x, but stored key begins 0x%02x\n",
+                         *p->public_key.bytes, *node->user.public_key.bytes);
                 return meshtastic_Routing_Error_PKI_FAILED;
             }
             crypto->encryptCurve25519(p->to, getFrom(p), p->id, numbytes, bytes, ScratchEncrypted);
