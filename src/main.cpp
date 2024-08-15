@@ -111,7 +111,9 @@ AccelerometerThread *accelerometerThread = nullptr;
 #include "AudioThread.h"
 AudioThread *audioThread = nullptr;
 #endif
-
+#if defined(M5STACK_COREBASIC)
+#include <M5Unified.h>
+#endif
 using namespace concurrency;
 
 // We always create a screen object, but we only init it if we find the hardware
@@ -757,7 +759,14 @@ void setup()
     if (!pmu_found)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_AXP192); // Record a hardware fault for missing hardware
 #endif
-
+#if defined(M5STACK_COREBASIC) 
+    M5.begin();
+    M5.Speaker.tone(2000, 600);
+    M5.Display.init();
+    M5.Display.clearDisplay(); 
+    M5.Display.display(); 
+    M5.Display.fillScreen(TFT_BLACK);
+#endif
 #if !MESHTASTIC_EXCLUDE_I2C
 // Don't call screen setup until after nodedb is setup (because we need
 // the current region name)

@@ -311,7 +311,11 @@ class LGFX : public lgfx::LGFX_Device
             cfg.dummy_read_pixel = 8;      // Number of bits for dummy read before pixel readout
             cfg.dummy_read_bits = 1;       // Number of bits for dummy read before non-pixel data read
             cfg.readable = true;           // Set to true if data can be read
+#if defined(M5STACK_COREBASIC)
+            cfg.invert = true;            // Set to true if the light/darkness of the panel is reversed
+#else
             cfg.invert = false;            // Set to true if the light/darkness of the panel is reversed
+#endif
             cfg.rgb_order = false;         // Set to true if the panel's red and blue are swapped
             cfg.dlen_16bit =
                 false;             // Set to true for panels that transmit data length in 16-bit units with 16-bit parallel or SPI
@@ -586,7 +590,7 @@ void TFTDisplay::sendCommand(uint8_t com)
 #elif defined(ST7735_BL_V05)
         pinMode(ST7735_BL_V05, OUTPUT);
         digitalWrite(ST7735_BL_V05, TFT_BACKLIGHT_ON);
-#elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE)
+#elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE) && !defined(M5STACK_COREBASIC)
         tft->wakeup();
         tft->powerSaveOff();
 #elif defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
@@ -604,7 +608,7 @@ void TFTDisplay::sendCommand(uint8_t com)
         unphone.backlight(true); // using unPhone library
 #endif
 #ifdef RAK14014
-#elif !defined(M5STACK) && !defined(ST7789_CS) // T-Deck gets brightness set in Screen.cpp in the handleSetOn function
+#elif !defined(M5STACK) && !defined(ST7789_CS) && !defined(M5STACK_COREBASIC)// T-Deck gets brightness set in Screen.cpp in the handleSetOn function
         tft->setBrightness(172);
 #endif
         break;
@@ -619,7 +623,7 @@ void TFTDisplay::sendCommand(uint8_t com)
 #elif defined(ST7735_BL_V05)
         pinMode(ST7735_BL_V05, OUTPUT);
         digitalWrite(ST7735_BL_V05, !TFT_BACKLIGHT_ON);
-#elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE)
+#elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE) && !defined(M5STACK_COREBASIC)
         tft->sleep();
         tft->powerSaveOn();
 #elif defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
@@ -636,7 +640,7 @@ void TFTDisplay::sendCommand(uint8_t com)
         unphone.backlight(false); // using unPhone library
 #endif
 #ifdef RAK14014
-#elif !defined(M5STACK)
+#elif !defined(M5STACK) || !defined(M5STACK_COREBASIC)
         tft->setBrightness(0);
 #endif
         break;
@@ -670,7 +674,7 @@ bool TFTDisplay::hasTouch(void)
 {
 #ifdef RAK14014
     return true;
-#elif !defined(M5STACK)
+#elif !defined(M5STACK) || !defined(M5STACK_COREBASIC)
     return tft->touch() != nullptr;
 #else
     return false;
@@ -689,7 +693,7 @@ bool TFTDisplay::getTouch(int16_t *x, int16_t *y)
     } else {
         return false;
     }
-#elif !defined(M5STACK)
+#elif !defined(M5STACK) || !defined(M5STACK_COREBASIC)
     return tft->getTouch(x, y);
 #else
     return false;
@@ -733,7 +737,7 @@ bool TFTDisplay::connect()
 
     tft->init();
 
-#if defined(M5STACK)
+#if defined(M5STACK) || defined(M5STACK_COREBASIC)
     tft->setRotation(0);
 #elif defined(RAK14014)
     tft->setRotation(1);
