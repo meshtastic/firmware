@@ -187,8 +187,6 @@ typedef enum _meshtastic_HardwareModel {
     /* RadioMaster 900 Bandit, https://www.radiomasterrc.com/products/bandit-expresslrs-rf-module
  SSD1306 OLED and No GPS */
     meshtastic_HardwareModel_RADIOMASTER_900_BANDIT = 74,
-    /* AdaFruit Feather RP2040 RFM95 with optional SSD1306 display */
-    meshtastic_HardwareModel_RP2040_FEATHER_RFM95 = 75,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
