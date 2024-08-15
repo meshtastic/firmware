@@ -1640,6 +1640,10 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             digitalWrite(VTFT_LEDA, TFT_BACKLIGHT_ON);
 #endif
 #endif
+#if defined(M5STACK_COREBASIC)
+            pinMode(TFT_BL, OUTPUT);
+            digitalWrite(TFT_BL, HIGH);
+#endif
             enabled = true;
             setInterval(0); // Draw ASAP
             runASAP = true;
@@ -1651,6 +1655,10 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #endif
             LOG_INFO("Turning off screen\n");
             dispdev->displayOff();
+#if defined(M5STACK_COREBASIC)
+            pinMode(TFT_BL, OUTPUT);
+            digitalWrite(TFT_BL, LOW);
+#endif
 #ifdef USE_ST7789
             SPI1.end();
 #if defined(ARCH_ESP32)
