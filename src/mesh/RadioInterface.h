@@ -78,7 +78,7 @@ class RadioInterface
     const uint32_t PROCESSING_TIME_MSEC =
         4500;                // time to construct, process and construct a packet again (empirically determined)
     const uint8_t CWmin = 2; // minimum CWsize
-    const uint8_t CWmax = 8; // maximum CWsize
+    const uint8_t CWmax = 7; // maximum CWsize
 
     meshtastic_MeshPacket *sendingPacket = NULL; // The packet we are currently sending
     uint32_t lastTxStart = 0L;
