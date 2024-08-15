@@ -162,9 +162,10 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                         p->channel = ch.index;
                     }
 
-                    // ignore messages if we don't have the channel key
+                    // PKI messages get accepted even if we can't decrypt
                     if (router && p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag && p->channel == 0)
                         router->enqueueReceivedMessage(p);
+                    // ignore messages if we don't have the channel key
                     else if (router && perhapsDecode(p))
                         router->enqueueReceivedMessage(p);
                     else
