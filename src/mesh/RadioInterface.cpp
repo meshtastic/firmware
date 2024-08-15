@@ -415,6 +415,11 @@ void RadioInterface::applyModemConfig()
     if (loraConfig.use_preset) {
 
         switch (loraConfig.modem_preset) {
+        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
+            bw = (myRegion->wideLora) ? 812.5 : 500;
+            cr = 5;
+            sf = 7;
+            break;
         case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
             bw = (myRegion->wideLora) ? 812.5 : 250;
             cr = 5;
