@@ -186,7 +186,7 @@ meshtastic_MeshPacket *PositionModule::allocReply()
         p.longitude_i = localPosition.longitude_i;
     }
     p.precision_bits = precision;
-    p.time = localPosition.time;
+    p.time = getValidTime(RTCQualityNTP) > 0 ? getValidTime(RTCQualityNTP) : localPosition.time;
 
     if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE) {
         if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL)
