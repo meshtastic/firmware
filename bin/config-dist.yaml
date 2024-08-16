@@ -145,6 +145,7 @@ Input:
 Logging:
   LogLevel: info # debug, info, warn, error
 #  TraceFile: /var/log/meshtasticd.json
+#  AsciiLogs: true     # default if not specified is !isatty() on stdout
 
 Webserver:
 #  Port: 443 # Port for Webserver & Webservices

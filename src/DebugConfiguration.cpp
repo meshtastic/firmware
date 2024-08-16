@@ -26,6 +26,10 @@ SOFTWARE.*/
 
 #include "DebugConfiguration.h"
 
+#ifdef ARCH_PORTDUINO
+#include "platform/portduino/PortduinoGlue.h"
+#endif
+
 /// A C wrapper for LOG_DEBUG that can be used from arduino C libs that don't know about C++ or meshtastic
 extern "C" void logLegacy(const char *level, const char *fmt, ...)
 {
@@ -139,6 +143,11 @@ bool Syslog::vlogf(uint16_t pri, const char *appName, const char *fmt, va_list a
 inline bool Syslog::_sendLog(uint16_t pri, const char *appName, const char *message)
 {
     int result;
+#ifdef ARCH_PORTDUINO
+    bool utf = !settingsMap[ascii_logs];
+#else
+    bool utf = true;
+#endif
 
     if (!this->_enabled)
         return false;
@@ -169,7 +178,12 @@ inline bool Syslog::_sendLog(uint16_t pri, const char *appName, const char *mess
     this->_client->print(this->_deviceHostname);
     this->_client->print(' ');
     this->_client->print(appName);
-    this->_client->print(F(" - - - \xEF\xBB\xBF"));
+    this->_client->print(F(" - - - "));
+    if (utf) {
+        this->_client->print(F("\xEF\xBB\xBF"));
+    } else {
+        this->_client->print(F(" "));
+    }
     this->_client->print(F("["));
     this->_client->print(int(millis() / 1000));
     this->_client->print(F("]: "));
