@@ -31,6 +31,10 @@ void BME280Sensor::setup() {}
 
 bool BME280Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+    measurement->variant.environment_metrics.has_temperature = true;
+    measurement->variant.environment_metrics.has_relative_humidity = true;
+    measurement->variant.environment_metrics.has_barometric_pressure = true;
+
     LOG_DEBUG("BME280Sensor::getMetrics\n");
     bme280.takeForcedMeasurement();
     measurement->variant.environment_metrics.temperature = bme280.readTemperature();
