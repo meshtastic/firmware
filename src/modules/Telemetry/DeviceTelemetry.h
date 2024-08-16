@@ -44,7 +44,7 @@ class DeviceTelemetryModule : private concurrency::OSThread, public ProtobufModu
     meshtastic_Telemetry getDeviceTelemetry();
     void sendLocalStatsToPhone();
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000;           // Send to phone every minute
-    uint32_t sendStatsToPhoneIntervalMs = 10 * SECONDS_IN_MINUTE * 1000; // Send stats to phone every 10 minutes
+    uint32_t sendStatsToPhoneIntervalMs = 15 * SECONDS_IN_MINUTE * 1000; // Send stats to phone every 15 minutes
     uint32_t lastSentStatsToPhone = 0;
     uint32_t lastSentToMesh = 0;
 
