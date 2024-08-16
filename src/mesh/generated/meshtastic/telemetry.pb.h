@@ -211,6 +211,26 @@ typedef struct _meshtastic_AirQualityMetrics {
     uint32_t particles_100um;
 } meshtastic_AirQualityMetrics;
 
+/* Local device mesh statistics */
+typedef struct _meshtastic_LocalStats {
+    /* How long the device has been running since the last reboot (in seconds) */
+    uint32_t uptime_seconds;
+    /* Utilization for the current channel, including well formed TX, RX and malformed RX (aka noise). */
+    float channel_utilization;
+    /* Percent of airtime for transmission used within the last hour. */
+    float air_util_tx;
+    /* Number of packets sent */
+    uint32_t num_packets_tx;
+    /* Number of packets received good */
+    uint32_t num_packets_rx;
+    /* Number of packets received that are malformed or violate the protocol */
+    uint32_t num_packets_rx_bad;
+    /* Number of nodes online (in the past 2 hours) */
+    uint16_t num_online_nodes;
+    /* Number of nodes total */
+    uint16_t num_total_nodes;
+} meshtastic_LocalStats;
+
 /* Types of Measurements the telemetry module is equipped to handle */
 typedef struct _meshtastic_Telemetry {
     /* Seconds since 1970 - or 0 for unknown/unset */
@@ -225,6 +245,8 @@ typedef struct _meshtastic_Telemetry {
         meshtastic_AirQualityMetrics air_quality_metrics;
         /* Power Metrics */
         meshtastic_PowerMetrics power_metrics;
+        /* Local device mesh statistics */
+        meshtastic_LocalStats local_stats;
     } variant;
 } meshtastic_Telemetry;
 
@@ -253,17 +275,20 @@ extern "C" {
 
 
 
+
 /* Initializer values for message structs */
 #define meshtastic_DeviceMetrics_init_default    {false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_EnvironmentMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_PowerMetrics_init_default     {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_AirQualityMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define meshtastic_LocalStats_init_default       {0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Telemetry_init_default        {0, 0, {meshtastic_DeviceMetrics_init_default}}
 #define meshtastic_Nau7802Config_init_default    {0, 0}
 #define meshtastic_DeviceMetrics_init_zero       {false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_EnvironmentMetrics_init_zero  {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_PowerMetrics_init_zero        {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_AirQualityMetrics_init_zero   {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define meshtastic_LocalStats_init_zero          {0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Telemetry_init_zero           {0, 0, {meshtastic_DeviceMetrics_init_zero}}
 #define meshtastic_Nau7802Config_init_zero       {0, 0}
 
@@ -308,11 +333,20 @@ extern "C" {
 #define meshtastic_AirQualityMetrics_particles_25um_tag 10
 #define meshtastic_AirQualityMetrics_particles_50um_tag 11
 #define meshtastic_AirQualityMetrics_particles_100um_tag 12
+#define meshtastic_LocalStats_uptime_seconds_tag 1
+#define meshtastic_LocalStats_channel_utilization_tag 2
+#define meshtastic_LocalStats_air_util_tx_tag    3
+#define meshtastic_LocalStats_num_packets_tx_tag 4
+#define meshtastic_LocalStats_num_packets_rx_tag 5
+#define meshtastic_LocalStats_num_packets_rx_bad_tag 6
+#define meshtastic_LocalStats_num_online_nodes_tag 7
+#define meshtastic_LocalStats_num_total_nodes_tag 8
 #define meshtastic_Telemetry_time_tag            1
 #define meshtastic_Telemetry_device_metrics_tag  2
 #define meshtastic_Telemetry_environment_metrics_tag 3
 #define meshtastic_Telemetry_air_quality_metrics_tag 4
 #define meshtastic_Telemetry_power_metrics_tag   5
+#define meshtastic_Telemetry_local_stats_tag     6
 #define meshtastic_Nau7802Config_zeroOffset_tag  1
 #define meshtastic_Nau7802Config_calibrationFactor_tag 2
 
@@ -373,18 +407,32 @@ X(a, STATIC,   OPTIONAL, UINT32,   particles_100um,  12)
 #define meshtastic_AirQualityMetrics_CALLBACK NULL
 #define meshtastic_AirQualityMetrics_DEFAULT NULL
 
+#define meshtastic_LocalStats_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, UINT32,   uptime_seconds,    1) \
+X(a, STATIC,   SINGULAR, FLOAT,    channel_utilization,   2) \
+X(a, STATIC,   SINGULAR, FLOAT,    air_util_tx,       3) \
+X(a, STATIC,   SINGULAR, UINT32,   num_packets_tx,    4) \
+X(a, STATIC,   SINGULAR, UINT32,   num_packets_rx,    5) \
+X(a, STATIC,   SINGULAR, UINT32,   num_packets_rx_bad,   6) \
+X(a, STATIC,   SINGULAR, UINT32,   num_online_nodes,   7) \
+X(a, STATIC,   SINGULAR, UINT32,   num_total_nodes,   8)
+#define meshtastic_LocalStats_CALLBACK NULL
+#define meshtastic_LocalStats_DEFAULT NULL
+
 #define meshtastic_Telemetry_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, FIXED32,  time,              1) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,device_metrics,variant.device_metrics),   2) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,environment_metrics,variant.environment_metrics),   3) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (variant,air_quality_metrics,variant.air_quality_metrics),   4) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (variant,power_metrics,variant.power_metrics),   5)
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,power_metrics,variant.power_metrics),   5) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (variant,local_stats,variant.local_stats),   6)
 #define meshtastic_Telemetry_CALLBACK NULL
 #define meshtastic_Telemetry_DEFAULT NULL
 #define meshtastic_Telemetry_variant_device_metrics_MSGTYPE meshtastic_DeviceMetrics
 #define meshtastic_Telemetry_variant_environment_metrics_MSGTYPE meshtastic_EnvironmentMetrics
 #define meshtastic_Telemetry_variant_air_quality_metrics_MSGTYPE meshtastic_AirQualityMetrics
 #define meshtastic_Telemetry_variant_power_metrics_MSGTYPE meshtastic_PowerMetrics
+#define meshtastic_Telemetry_variant_local_stats_MSGTYPE meshtastic_LocalStats
 
 #define meshtastic_Nau7802Config_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, INT32,    zeroOffset,        1) \
@@ -396,6 +444,7 @@ extern const pb_msgdesc_t meshtastic_DeviceMetrics_msg;
 extern const pb_msgdesc_t meshtastic_EnvironmentMetrics_msg;
 extern const pb_msgdesc_t meshtastic_PowerMetrics_msg;
 extern const pb_msgdesc_t meshtastic_AirQualityMetrics_msg;
+extern const pb_msgdesc_t meshtastic_LocalStats_msg;
 extern const pb_msgdesc_t meshtastic_Telemetry_msg;
 extern const pb_msgdesc_t meshtastic_Nau7802Config_msg;
 
@@ -404,6 +453,7 @@ extern const pb_msgdesc_t meshtastic_Nau7802Config_msg;
 #define meshtastic_EnvironmentMetrics_fields &meshtastic_EnvironmentMetrics_msg
 #define meshtastic_PowerMetrics_fields &meshtastic_PowerMetrics_msg
 #define meshtastic_AirQualityMetrics_fields &meshtastic_AirQualityMetrics_msg
+#define meshtastic_LocalStats_fields &meshtastic_LocalStats_msg
 #define meshtastic_Telemetry_fields &meshtastic_Telemetry_msg
 #define meshtastic_Nau7802Config_fields &meshtastic_Nau7802Config_msg
 
@@ -412,6 +462,7 @@ extern const pb_msgdesc_t meshtastic_Nau7802Config_msg;
 #define meshtastic_AirQualityMetrics_size        72
 #define meshtastic_DeviceMetrics_size            27
 #define meshtastic_EnvironmentMetrics_size       85
+#define meshtastic_LocalStats_size               42
 #define meshtastic_Nau7802Config_size            16
 #define meshtastic_PowerMetrics_size             30
 #define meshtastic_Telemetry_size                92
