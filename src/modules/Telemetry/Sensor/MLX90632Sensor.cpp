@@ -32,6 +32,7 @@ void MLX90632Sensor::setup() {}
 
 bool MLX90632Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+    measurement->variant.environment_metrics.has_temperature = true;
     measurement->variant.environment_metrics.temperature = mlx.getObjectTemp(); // Get the object temperature in Fahrenheit
 
     return true;

@@ -39,6 +39,9 @@ void SHT4XSensor::setup()
 
 bool SHT4XSensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+    measurement->variant.environment_metrics.has_temperature = true;
+    measurement->variant.environment_metrics.has_relative_humidity = true;
+
     sensors_event_t humidity, temp;
     sht4x.getEvent(&humidity, &temp);
     measurement->variant.environment_metrics.temperature = temp.temperature;
