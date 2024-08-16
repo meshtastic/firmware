@@ -82,6 +82,12 @@ class Router : protected concurrency::OSThread
      */
     virtual ErrorCode send(meshtastic_MeshPacket *p);
 
+// used for replay detection
+#if !MESHTASTIC_EXCLUDE_PKI
+    uint64_t PKINonces[100][2] = {0};
+    uint8_t noncePointer;
+#endif
+
   protected:
     friend class RoutingModule;
 

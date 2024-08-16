@@ -338,6 +338,18 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
                 p->public_key.size = 32;
                 // memcpy(bytes, ScratchEncrypted, rawSize); // TODO: Rename the bytes buffers
                 // chIndex = 8;
+                for (int i = 0; i < 100; i++) {
+                    if (p->id == router->PKINonces[i][0] && p->from == router->PKINonces[i][1]) {
+                        LOG_WARN("PKI Nonce re-used, possible replay attack");
+                        return false;
+                    }
+                }
+                router->PKINonces[router->noncePointer][0] = p->id;
+                router->PKINonces[router->noncePointer][1] = p->from;
+                router->noncePointer++;
+                if (router->noncePointer > 99)
+                    router->noncePointer = 0;
+
             } else {
                 return false;
             }
