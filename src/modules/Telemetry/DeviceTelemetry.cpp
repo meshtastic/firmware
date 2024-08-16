@@ -5,6 +5,7 @@
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RTC.h"
+#include "RadioLibInterface.h"
 #include "Router.h"
 #include "configuration.h"
 #include "main.h"
@@ -31,6 +32,10 @@ int32_t DeviceTelemetryModule::runOnce()
         // Just send to phone when it's not our time to send to mesh yet
         // Only send while queue is empty (phone assumed connected)
         sendTelemetry(NODENUM_BROADCAST, true);
+        if (lastSentStatsToPhone == 0 || (uptimeLastMs - lastSentStatsToPhone) >= sendStatsToPhoneIntervalMs) {
+            sendLocalStatsToPhone();
+            lastSentStatsToPhone = uptimeLastMs;
+        }
     }
     return sendToPhoneIntervalMs;
 }
@@ -96,6 +101,30 @@ meshtastic_Telemetry DeviceTelemetryModule::getDeviceTelemetry()
     t.variant.device_metrics.uptime_seconds = getUptimeSeconds();
 
     return t;
+}
+
+void DeviceTelemetryModule::sendLocalStatsToPhone()
+{
+    meshtastic_Telemetry telemetry = meshtastic_Telemetry_init_zero;
+    telemetry.which_variant = meshtastic_Telemetry_local_stats_tag;
+    telemetry.time = getTime();
+    telemetry.variant.local_stats.uptime_seconds = getUptimeSeconds();
+    telemetry.variant.local_stats.channel_utilization = airTime->channelUtilizationPercent();
+    telemetry.variant.local_stats.air_util_tx = airTime->utilizationTXPercent();
+    telemetry.variant.local_stats.num_online_nodes = numOnlineNodes;
+    telemetry.variant.local_stats.num_total_nodes = nodeDB->getNumMeshNodes();
+    if (RadioLibInterface::instance) {
+        telemetry.variant.local_stats.num_packets_tx = RadioLibInterface::instance->txGood;
+        telemetry.variant.local_stats.num_packets_rx = RadioLibInterface::instance->rxGood;
+        telemetry.variant.local_stats.num_packets_rx_bad = RadioLibInterface::instance->rxBad;
+    }
+
+    meshtastic_MeshPacket *p = allocDataProtobuf(telemetry);
+    p->to = NODENUM_BROADCAST;
+    p->decoded.want_response = false;
+    p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
+
+    service->sendToPhone(p);
 }
 
 bool DeviceTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
