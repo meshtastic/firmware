@@ -119,10 +119,11 @@ void DeviceTelemetryModule::sendLocalStatsToPhone()
         telemetry.variant.local_stats.num_packets_rx_bad = RadioLibInterface::instance->rxBad;
     }
 
-    LOG_DEBUG("(Sending local stats): uptime=%i, channel_utilization=%f, air_util_tx=%f, num_online_nodes=%i, num_total_nodes=%i\n",
-              telemetry.variant.local_stats.uptime_seconds, telemetry.variant.local_stats.channel_utilization,
-              telemetry.variant.local_stats.air_util_tx, telemetry.variant.local_stats.num_online_nodes,
-              telemetry.variant.local_stats.num_total_nodes);
+    LOG_DEBUG(
+        "(Sending local stats): uptime=%i, channel_utilization=%f, air_util_tx=%f, num_online_nodes=%i, num_total_nodes=%i\n",
+        telemetry.variant.local_stats.uptime_seconds, telemetry.variant.local_stats.channel_utilization,
+        telemetry.variant.local_stats.air_util_tx, telemetry.variant.local_stats.num_online_nodes,
+        telemetry.variant.local_stats.num_total_nodes);
 
     LOG_DEBUG("num_packets_tx=%i, num_packets_rx=%i, num_packets_rx_bad=%i\n", telemetry.variant.local_stats.num_packets_tx,
               telemetry.variant.local_stats.num_packets_rx, telemetry.variant.local_stats.num_packets_rx_bad);
