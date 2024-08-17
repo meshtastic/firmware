@@ -140,7 +140,8 @@ void PositionModule::trySetRtc(meshtastic_Position p, bool isLocal, bool forceUp
 
 bool PositionModule::hasQualityTimesource()
 {
-    bool setFromPhoneOrNtpToday = (millis() - lastSetFromPhoneNtpOrGps) <= (SEC_PER_DAY * 1000UL);
+    bool setFromPhoneOrNtpToday =
+        lastSetFromPhoneNtpOrGps == 0 ? false : (millis() - lastSetFromPhoneNtpOrGps) <= (SEC_PER_DAY * 1000UL);
     bool hasGpsOrRtc = (gps && gps->isConnected()) || (rtc_found.address != ScanI2C::ADDRESS_NONE.address);
     return hasGpsOrRtc || setFromPhoneOrNtpToday;
 }
