@@ -3,6 +3,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "RTC.h"
 #include <FSCommon.h>
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
 #include "BleOta.h"
@@ -277,6 +278,15 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             config.position.fixed_position = false;
             saveChanges(SEGMENT_DEVICESTATE | SEGMENT_CONFIG, false);
         }
+        break;
+    }
+    case meshtastic_AdminMessage_set_time_only_tag: {
+        LOG_INFO("Client is receiving a set_time_only command.\n");
+        struct timeval tv;
+        tv.tv_sec = r->set_time_only;
+        tv.tv_usec = 0;
+
+        perhapsSetRTC(RTCQualityFromNet, &tv, false);
         break;
     }
     case meshtastic_AdminMessage_enter_dfu_mode_request_tag: {
