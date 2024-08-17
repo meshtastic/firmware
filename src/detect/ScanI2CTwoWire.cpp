@@ -267,8 +267,19 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     type = BMP_085;
                     break;
                 default:
-                    LOG_INFO("BMP-280 sensor found at address 0x%x\n", (uint8_t)addr.address);
-                    type = BMP_280;
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1); // GET_ID
+                    switch(registerValue) {
+                    case 0x50: // BMP-388 should be 0x50
+                        LOG_INFO("BMP-388 sensor found at address 0x%x\n", (uint8_t)addr.address);
+                        type = BMP_3XX;
+                        break;
+                    case 0x58: // BMP-280 should be 0x58
+                    default:
+                        LOG_INFO("BMP-280 sensor found at address 0x%x\n", (uint8_t)addr.address);
+                        type = BMP_280;
+                        break;
+                    }
+                        break;
                 }
                 break;
 #ifndef HAS_NCP5623
