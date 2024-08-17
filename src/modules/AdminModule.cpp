@@ -597,6 +597,10 @@ void AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
     case meshtastic_ModuleConfig_neighbor_info_tag:
         LOG_INFO("Setting module config: Neighbor Info\n");
         moduleConfig.has_neighbor_info = true;
+        if (moduleConfig.neighbor_info.update_interval < min_neighbor_info_broadcast_secs) {
+            LOG_DEBUG("Tried to set update_interval too low, setting to %d\n", default_neighbor_info_broadcast_secs);
+            moduleConfig.neighbor_info.update_interval = default_neighbor_info_broadcast_secs;
+        }
         moduleConfig.neighbor_info = c.payload_variant.neighbor_info;
         break;
     case meshtastic_ModuleConfig_detection_sensor_tag:
