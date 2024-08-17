@@ -187,6 +187,8 @@ typedef enum _meshtastic_HardwareModel {
     /* RadioMaster 900 Bandit, https://www.radiomasterrc.com/products/bandit-expresslrs-rf-module
  SSD1306 OLED and No GPS */
     meshtastic_HardwareModel_RADIOMASTER_900_BANDIT = 74,
+    /* Minewsemi ME25LS01 (ME25LE01_V1.0). NRF52840 w/ LR1110 radio, buttons and leds and pins. */
+    meshtastic_HardwareModel_ME25LS01_4Y10TD = 75,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -502,11 +504,20 @@ typedef struct _meshtastic_User {
     meshtastic_User_public_key_t public_key;
 } meshtastic_User;
 
-/* A message used in our Dynamic Source Routing protocol (RFC 4728 based) */
+/* A message used in a traceroute */
 typedef struct _meshtastic_RouteDiscovery {
-    /* The list of nodenums this packet has visited so far */
+    /* The list of nodenums this packet has visited so far to the destination. */
     pb_size_t route_count;
     uint32_t route[8];
+    /* The list of SNRs (in dB, scaled by 4) in the route towards the destination. */
+    pb_size_t snr_towards_count;
+    int8_t snr_towards[8];
+    /* The list of nodenums the packet has visited on the way back from the destination. */
+    pb_size_t route_back_count;
+    uint32_t route_back[8];
+    /* The list of SNRs (in dB, scaled by 4) in the route back from the destination. */
+    pb_size_t snr_back_count;
+    int8_t snr_back[8];
 } meshtastic_RouteDiscovery;
 
 /* A Routing control Data packet handled by the routing module */
@@ -1054,7 +1065,7 @@ extern "C" {
 /* Initializer values for message structs */
 #define meshtastic_Position_init_default         {false, 0, false, 0, false, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, false, 0, false, 0, 0, 0, 0, 0, false, 0, false, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_User_init_default             {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}}
-#define meshtastic_RouteDiscovery_init_default   {0, {0, 0, 0, 0, 0, 0, 0, 0}}
+#define meshtastic_RouteDiscovery_init_default   {0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define meshtastic_Routing_init_default          {0, {meshtastic_RouteDiscovery_init_default}}
 #define meshtastic_Data_init_default             {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Waypoint_init_default         {0, false, 0, false, 0, 0, 0, "", "", 0}
@@ -1079,7 +1090,7 @@ extern "C" {
 #define meshtastic_ChunkedPayloadResponse_init_default {0, 0, {0}}
 #define meshtastic_Position_init_zero            {false, 0, false, 0, false, 0, 0, _meshtastic_Position_LocSource_MIN, _meshtastic_Position_AltSource_MIN, 0, 0, false, 0, false, 0, 0, 0, 0, 0, false, 0, false, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_User_init_zero                {"", "", "", {0}, _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}}
-#define meshtastic_RouteDiscovery_init_zero      {0, {0, 0, 0, 0, 0, 0, 0, 0}}
+#define meshtastic_RouteDiscovery_init_zero      {0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}, 0, {0, 0, 0, 0, 0, 0, 0, 0}}
 #define meshtastic_Routing_init_zero             {0, {meshtastic_RouteDiscovery_init_zero}}
 #define meshtastic_Data_init_zero                {_meshtastic_PortNum_MIN, {0, {0}}, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Waypoint_init_zero            {0, false, 0, false, 0, 0, 0, "", "", 0}
@@ -1136,6 +1147,9 @@ extern "C" {
 #define meshtastic_User_role_tag                 7
 #define meshtastic_User_public_key_tag           8
 #define meshtastic_RouteDiscovery_route_tag      1
+#define meshtastic_RouteDiscovery_snr_towards_tag 2
+#define meshtastic_RouteDiscovery_route_back_tag 3
+#define meshtastic_RouteDiscovery_snr_back_tag   4
 #define meshtastic_Routing_route_request_tag     1
 #define meshtastic_Routing_route_reply_tag       2
 #define meshtastic_Routing_error_reason_tag      3
@@ -1298,7 +1312,10 @@ X(a, STATIC,   SINGULAR, BYTES,    public_key,        8)
 #define meshtastic_User_DEFAULT NULL
 
 #define meshtastic_RouteDiscovery_FIELDLIST(X, a) \
-X(a, STATIC,   REPEATED, FIXED32,  route,             1)
+X(a, STATIC,   REPEATED, FIXED32,  route,             1) \
+X(a, STATIC,   REPEATED, INT32,    snr_towards,       2) \
+X(a, STATIC,   REPEATED, FIXED32,  route_back,        3) \
+X(a, STATIC,   REPEATED, INT32,    snr_back,          4)
 #define meshtastic_RouteDiscovery_CALLBACK NULL
 #define meshtastic_RouteDiscovery_DEFAULT NULL
 
@@ -1612,8 +1629,8 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_NodeRemoteHardwarePin_size    29
 #define meshtastic_Position_size                 144
 #define meshtastic_QueueStatus_size              23
-#define meshtastic_RouteDiscovery_size           40
-#define meshtastic_Routing_size                  42
+#define meshtastic_RouteDiscovery_size           256
+#define meshtastic_Routing_size                  259
 #define meshtastic_ToRadio_size                  504
 #define meshtastic_User_size                     113
 #define meshtastic_Waypoint_size                 165
