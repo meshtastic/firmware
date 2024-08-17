@@ -10,6 +10,10 @@
 
 BMP3XXSensor::BMP3XXSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_BMP3XX, "BMP3XX"){}
 
+BMP3XXSensor bmp3xxSensor;
+
+void BMP3XXSensor::setup(){};
+
 int32_t BMP3XXSensor::runOnce()
 {
     LOG_INFO("Init sensor: %s\n", sensorName);

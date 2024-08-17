@@ -21,10 +21,13 @@ protected:
 
 public:
   BMP3XXSensor();
+  virtual void setup() override;
   virtual int32_t runOnce() override;
   virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
   virtual float getAltitudeAMSL();
 };
+
+extern BMP3XXSensor bmp3xxSensor;
 
 #endif
 
