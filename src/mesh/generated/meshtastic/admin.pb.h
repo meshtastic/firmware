@@ -166,6 +166,9 @@ typedef struct _meshtastic_AdminMessage {
         meshtastic_Position set_fixed_position;
         /* Clear fixed position coordinates and then set position.fixed_position = false */
         bool remove_fixed_position;
+        /* Set time only on the node
+     Convenience method to set the time on the node (as Net quality) without any other position data */
+        uint32_t set_time_only;
         /* Begins an edit transaction for config, module config, owner, and channel settings changes
      This will delay the standard *implicit* save to the file system and subsequent reboot behavior until committed (commit_edit_settings) */
         bool begin_edit_settings;
@@ -261,6 +264,7 @@ extern "C" {
 #define meshtastic_AdminMessage_remove_favorite_node_tag 40
 #define meshtastic_AdminMessage_set_fixed_position_tag 41
 #define meshtastic_AdminMessage_remove_fixed_position_tag 42
+#define meshtastic_AdminMessage_set_time_only_tag 43
 #define meshtastic_AdminMessage_begin_edit_settings_tag 64
 #define meshtastic_AdminMessage_commit_edit_settings_tag 65
 #define meshtastic_AdminMessage_factory_reset_device_tag 94
@@ -307,6 +311,7 @@ X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,set_favorite_node,set_favori
 X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,remove_favorite_node,remove_favorite_node),  40) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_fixed_position,set_fixed_position),  41) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,remove_fixed_position,remove_fixed_position),  42) \
+X(a, STATIC,   ONEOF,    FIXED32,  (payload_variant,set_time_only,set_time_only),  43) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,begin_edit_settings,begin_edit_settings),  64) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,commit_edit_settings,commit_edit_settings),  65) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,factory_reset_device,factory_reset_device),  94) \
