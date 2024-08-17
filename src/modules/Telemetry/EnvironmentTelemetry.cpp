@@ -41,7 +41,6 @@
 BMP085Sensor bmp085Sensor;
 BMP280Sensor bmp280Sensor;
 BME280Sensor bme280Sensor;
-BMP3XXSensor bmp3xxSensor;
 BME680Sensor bme680Sensor;
 MCP9808Sensor mcp9808Sensor;
 SHTC3Sensor shtc3Sensor;
@@ -56,6 +55,7 @@ AHT10Sensor aht10Sensor;
 MLX90632Sensor mlx90632Sensor;
 DFRobotLarkSensor dfRobotLarkSensor;
 NAU7802Sensor nau7802Sensor;
+extern BMP3XXSensor bmp3xxSensor;
 #ifdef T1000X_SENSOR_EN
 T1000xSensor t1000xSensor;
 #endif
