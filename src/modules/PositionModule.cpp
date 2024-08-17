@@ -90,7 +90,6 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
         // will always be an equivalent or lesser RTCQuality (RTCQualityNTP or RTCQualityNet).
         force = true;
 #endif
-
         // Set from phone RTC Quality to RTCQualityNTP since it should be approximately so
         trySetRtc(p, isLocal, force);
     }
@@ -126,12 +125,24 @@ void PositionModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic
 
 void PositionModule::trySetRtc(meshtastic_Position p, bool isLocal, bool forceUpdate)
 {
+    if (hasQualityTimesource() && !isLocal) {
+        LOG_DEBUG("Ignoring time from mesh because we have a GPS, RTC, or Phone/NTP time source in the past day\n");
+        return;
+    }
     struct timeval tv;
     uint32_t secs = p.time;
 
     tv.tv_sec = secs;
     tv.tv_usec = 0;
+
     perhapsSetRTC(isLocal ? RTCQualityNTP : RTCQualityFromNet, &tv, forceUpdate);
+}
+
+bool PositionModule::hasQualityTimesource()
+{
+    bool setFromPhoneOrNtpToday = (millis() - lastSetFromPhoneNtpOrGps) <= (SEC_PER_DAY * 1000UL);
+    bool hasGpsOrRtc = (gps && gps->isConnected()) || (rtc_found.address != ScanI2C::ADDRESS_NONE.address);
+    return hasGpsOrRtc || setFromPhoneOrNtpToday;
 }
 
 meshtastic_MeshPacket *PositionModule::allocReply()
@@ -175,7 +186,7 @@ meshtastic_MeshPacket *PositionModule::allocReply()
         p.longitude_i = localPosition.longitude_i;
     }
     p.precision_bits = precision;
-    p.time = localPosition.time;
+    p.time = getValidTime(RTCQualityNTP) > 0 ? getValidTime(RTCQualityNTP) : localPosition.time;
 
     if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE) {
         if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL)

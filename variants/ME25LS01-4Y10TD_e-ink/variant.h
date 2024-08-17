@@ -149,7 +149,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define VBAT_AR_INTERNAL AR_INTERNAL_3_0
 
 // Buzzer
-#define BUZZER_EN_PIN -1
+#define PIN_BUZZER (0 + 25)
 
 #ifdef __cplusplus
 }
