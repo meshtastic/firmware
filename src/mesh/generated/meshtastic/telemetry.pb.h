@@ -63,7 +63,13 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* DFRobot Lark Weather station (temperature, humidity, pressure, wind speed and direction) */
     meshtastic_TelemetrySensorType_DFROBOT_LARK = 24,
     /* NAU7802 Scale Chip or compatible */
-    meshtastic_TelemetrySensorType_NAU7802 = 25
+    meshtastic_TelemetrySensorType_NAU7802 = 25,
+    /* BMP3XX High accuracy temperature and pressure */
+    meshtastic_TelemetrySensorType_BMP3XX = 26,
+    /* ICM-20948 9-Axis digital motion processor */
+    meshtastic_TelemetrySensorType_ICM20948 = 27,
+    /* MAX17048 1S lipo battery sensor (voltage, state of charge, time to go) */
+    meshtastic_TelemetrySensorType_MAX17048 = 28
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -197,8 +203,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_NAU7802
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_NAU7802+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_MAX17048
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_MAX17048+1))
 
 
 
