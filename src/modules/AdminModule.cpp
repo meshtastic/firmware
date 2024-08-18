@@ -536,6 +536,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         config.security = c.payload_variant.security;
         owner.public_key.size = config.security.public_key.size;
         memcpy(owner.public_key.bytes, config.security.public_key.bytes, config.security.public_key.size);
+        crypto->setDHPrivateKey(config.security.private_key.bytes);
         if (config.security.debug_log_api_enabled == c.payload_variant.security.debug_log_api_enabled &&
             config.security.serial_enabled == c.payload_variant.security.serial_enabled)
             requiresReboot = false;
