@@ -418,6 +418,8 @@ meshtastic_MeshPacket *EnvironmentTelemetryModule::allocReply()
 bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 {
     meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
+    m.which_variant = meshtastic_Telemetry_environment_metrics_tag;
+    m.time = getTime();
 #ifdef T1000X_SENSOR_EN
     if (t1000xSensor.getMetrics(&m)) {
 #else

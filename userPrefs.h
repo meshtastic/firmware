@@ -17,7 +17,10 @@
     }
 */
 // #define CHANNEL_0_NAME_USERPREFS "DEFCONnect"
-// #define CHANNEL_0_PRECISION_USERPREFS 13
+// #define CHANNEL_0_PRECISION_USERPREFS 14
+
+// #define CONFIG_OWNER_LONG_NAME_USERPREFS "My Long Name"
+// #define CONFIG_OWNER_SHORT_NAME_USERPREFS "MLN"
 
 // #define SPLASH_TITLE_USERPREFS "DEFCONtastic"
 // #define icon_width 34
