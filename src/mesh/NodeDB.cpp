@@ -207,7 +207,7 @@ NodeDB::NodeDB()
 
 #ifdef USE_PERSISTENT_MSG
     initSavedMessages();
-    // clearSavedMessages();
+    clearSavedMessages();
 
     saveMessagesToDiskPeriodic = new Periodic("SaveMessagesToDisk", saveMessagesToDisk);
 #endif
@@ -853,7 +853,7 @@ bool NodeDB::messageIsDirectMessage(const meshtastic_MeshPacket &mp)
 void NodeDB::addMessage(const meshtastic_MeshPacket &mp)
 {
     auto *msg = new meshtastic_Message();
-    msg->from = mp.from;
+    msg->from = getFrom(&mp);
     msg->from_self = mp.from == getNodeNum();
     snprintf(msg->content, sizeof(msg->content), "%s", mp.decoded.payload.bytes);
     msg->rx_time = mp.rx_time;
