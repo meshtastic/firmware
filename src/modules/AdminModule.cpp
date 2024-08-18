@@ -693,7 +693,7 @@ void AdminModule::handleGetConfig(const meshtastic_MeshPacket &req, const uint32
         case meshtastic_AdminMessage_ConfigType_SECURITY_CONFIG:
             LOG_INFO("Getting config: Security\n");
             res.get_config_response.which_payload_variant = meshtastic_Config_security_tag;
-            res.get_config_response.payload_variant.bluetooth = config.security;
+            res.get_config_response.payload_variant.security = config.security;
             break;
         }
         // NOTE: The phone app needs to know the ls_secs value so it can properly expect sleep behavior.
