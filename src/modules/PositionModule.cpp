@@ -298,7 +298,7 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
         precision = channels.getByIndex(channel).settings.module_settings.position_precision;
     } else if (channels.getByIndex(channel).role == meshtastic_Channel_Role_PRIMARY) {
         // backwards compatibility for Primary channels created before position_precision was set by default
-        precision = 14;
+        precision = 13;
     } else {
         precision = 0;
     }
