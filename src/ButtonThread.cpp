@@ -224,7 +224,6 @@ int32_t ButtonThread::runOnce()
         btnEvent = BUTTON_EVENT_NONE;
     }
 
-    runASAP = false;
     return 50;
 }
 
