@@ -73,6 +73,7 @@ static const uint8_t ext_chrg_detect_value = EXT_CHRG_DETECT_VALUE;
 INA260Sensor ina260Sensor;
 INA219Sensor ina219Sensor;
 INA3221Sensor ina3221Sensor;
+extern MAX17048Sensor max17048Sensor;
 #endif
 
 #if HAS_RAKPROT && !defined(ARCH_PORTDUINO)
@@ -141,6 +142,7 @@ static HasBatteryLevel *batteryLevel; // Default to NULL for no battery level se
  */
 class AnalogBatteryLevel : public HasBatteryLevel
 {
+    public:
     /**
      * Battery state of charge, from 0 to 100 or -1 for unknown
      */
@@ -555,7 +557,12 @@ bool Power::analogInit()
  */
 bool Power::setup()
 {
-    bool found = axpChipInit() || analogInit();
+    // initialise one power sensor only
+    bool found = axpChipInit();
+    if (!found)
+        found = lipoInit();
+    if (!found)
+        found = analogInit();
 
 #ifdef NRF_APM
     found = true;
@@ -1046,4 +1053,86 @@ bool Power::axpChipInit()
 #else
     return false;
 #endif
+}
+
+/**
+ * Wrapper class for an I2C MAX17048 Lipo battery level sensor. If there is no 
+ * I2C sensor present, the class falls back to analog battery sensing
+ */
+class LipoBatteryLevel : public HasBatteryLevel
+{
+public:
+    /**
+     * Init the I2C MAX17048 Lipo battery level sensor
+     */
+    bool Init()
+    {
+        return max17048Sensor.runOnce() > 0;
+    }
+
+    /**
+     * Battery state of charge, from 0 to 100 or -1 for unknown
+     */
+    virtual int getBatteryPercent() override
+    {
+        if (max17048Sensor.isRunning()) 
+            return max17048Sensor.getBusBatteryPercent();
+        return analogLevel.getBatteryPercent();
+    }
+
+    /**
+     * The raw voltage of the battery in millivolts, or NAN if unknown
+     */
+    virtual uint16_t getBattVoltage() override
+    { 
+        if (max17048Sensor.isRunning()) 
+            return max17048Sensor.getBusVoltageMv();
+        return analogLevel.getBattVoltage();
+    }
+
+    /**
+     * return true if there is a battery installed in this unit
+     */
+    virtual bool isBatteryConnect() override
+    { 
+        if (max17048Sensor.isRunning()) 
+            return max17048Sensor.isBatteryConnected();
+        return analogLevel.isBatteryConnect();
+    }
+
+    /**
+     * return true if there is an external power source detected
+     */
+    virtual bool isVbusIn() override 
+    { 
+        if (max17048Sensor.isRunning()) 
+            return max17048Sensor.isExternallyPowered();
+        return analogLevel.isVbusIn();
+    }
+
+    /**
+     * return true if the battery is currently charging
+     */
+    virtual bool isCharging() override
+    { 
+        if (max17048Sensor.isRunning()) 
+            return max17048Sensor.isBatteryCharging();
+        return analogLevel.isCharging();
+    }
+};
+
+LipoBatteryLevel lipoLevel;
+
+/**
+ * Init the I2C MAX17048 Lipo battery level sensor
+ */
+bool Power::lipoInit()
+{
+    bool result = lipoLevel.Init();
+    if (result) 
+    {
+        batteryLevel = &lipoLevel;
+        return true;
+    }
+    return false;
 }
