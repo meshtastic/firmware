@@ -5,6 +5,7 @@
 #include "Observer.h"
 #include "PointerQueue.h"
 #include "airtime.h"
+#include "error.h"
 
 #define MAX_TX_QUEUE 16 // max number of packets which can be waiting for transmission
 
