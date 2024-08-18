@@ -88,7 +88,7 @@ class CryptoEngine
      * a 32 bit sending node number (stored in little endian order)
      * a 32 bit block counter (starts at zero)
      */
-    void initNonce(uint32_t fromNode, uint64_t packetId);
+    void initNonce(uint32_t fromNode, uint64_t packetId, uint32_t extraNonce = 0);
 };
 
 extern CryptoEngine *crypto;

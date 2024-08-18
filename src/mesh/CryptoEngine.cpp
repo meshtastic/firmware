@@ -41,7 +41,11 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, uint64_
                                      uint8_t *bytesOut)
 {
     uint8_t *auth;
+    uint32_t *extraNonce;
     auth = bytesOut + numBytes;
+    extraNonce = (uint32_t *)(auth + 8);
+    *extraNonce = random();
+    LOG_INFO("Random nonce value: %d\n", *extraNonce);
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(toNode);
     if (node->num < 1 || node->user.public_key.size == 0) {
         LOG_DEBUG("Node %d or their public_key not found\n", toNode);
@@ -50,10 +54,10 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, uint64_
     if (!crypto->setDHKey(toNode)) {
         return false;
     }
-    initNonce(fromNode, packetNum);
+    initNonce(fromNode, packetNum, *extraNonce);
 
     // Calculate the shared secret with the destination node and encrypt
-    printBytes("Attempting encrypt using nonce: ", nonce, 16);
+    printBytes("Attempting encrypt using nonce: ", nonce, 13);
     printBytes("Attempting encrypt using shared_key: ", shared_key, 32);
     aes_ccm_ae(shared_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut, auth);
     return true;
@@ -68,7 +72,10 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, uint64_
 bool CryptoEngine::decryptCurve25519(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes, uint8_t *bytesOut)
 {
     uint8_t *auth; // set to last 8 bytes of text?
-    auth = bytes + numBytes - 8;
+    uint32_t *extraNonce;
+    auth = bytes + numBytes - 12;
+    extraNonce = (uint32_t *)(auth + 8);
+    LOG_INFO("Random nonce value: %d\n", *extraNonce);
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(fromNode);
 
     if (node == nullptr || node->num < 1 || node->user.public_key.size == 0) {
@@ -80,10 +87,10 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, uint64_t packetNum, size
     if (!crypto->setDHKey(fromNode)) {
         return false;
     }
-    initNonce(fromNode, packetNum);
-    printBytes("Attempting decrypt using nonce: ", nonce, 16);
+    initNonce(fromNode, packetNum, *extraNonce);
+    printBytes("Attempting decrypt using nonce: ", nonce, 13);
     printBytes("Attempting decrypt using shared_key: ", shared_key, 32);
-    return aes_ccm_ad(shared_key, 32, nonce, 8, bytes, numBytes - 8, nullptr, 0, auth, bytesOut);
+    return aes_ccm_ad(shared_key, 32, nonce, 8, bytes, numBytes - 12, nullptr, 0, auth, bytesOut);
 }
 
 void CryptoEngine::setDHPrivateKey(uint8_t *_private_key)
@@ -232,13 +239,15 @@ void CryptoEngine::encryptAESCtr(CryptoKey _key, uint8_t *_nonce, size_t numByte
 /**
  * Init our 128 bit nonce for a new packet
  */
-void CryptoEngine::initNonce(uint32_t fromNode, uint64_t packetId)
+void CryptoEngine::initNonce(uint32_t fromNode, uint64_t packetId, uint32_t extraNonce)
 {
     memset(nonce, 0, sizeof(nonce));
 
     // use memcpy to avoid breaking strict-aliasing
     memcpy(nonce, &packetId, sizeof(uint64_t));
     memcpy(nonce + sizeof(uint64_t), &fromNode, sizeof(uint32_t));
+    if (extraNonce)
+        memcpy(nonce + sizeof(uint32_t), &extraNonce, sizeof(uint32_t));
 }
 #ifndef HAS_CUSTOM_CRYPTO_ENGINE
 CryptoEngine *crypto = new CryptoEngine;
