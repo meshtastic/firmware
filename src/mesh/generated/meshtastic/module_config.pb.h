@@ -341,7 +341,7 @@ typedef struct _meshtastic_ModuleConfig_CannedMessageConfig {
     /* Enable/disable CannedMessageModule. */
     bool enabled;
     /* Input event origin accepted by the canned message module.
- Can be e.g. "rotEnc1", "upDownEnc1" or keyword "_any" */
+ Can be e.g. "rotEnc1", "upDownEnc1", "scanAndSelect", "cardkb", "serialkb", or keyword "_any" */
     char allow_input_source[16];
     /* CannedMessageModule also sends a bell character with the messages.
  ExternalNotificationModule can benefit from this feature. */
