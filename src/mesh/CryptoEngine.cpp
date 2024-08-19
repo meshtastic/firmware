@@ -42,9 +42,10 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, uint64_
 {
     uint8_t *auth;
     uint32_t *extraNonce;
+    long extraNonceTmp = random();
     auth = bytesOut + numBytes;
     extraNonce = (uint32_t *)(auth + 8);
-    *extraNonce = random();
+    *extraNonce = extraNonceTmp;
     LOG_INFO("Random nonce value: %d\n", *extraNonce);
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(toNode);
     if (node->num < 1 || node->user.public_key.size == 0) {
@@ -59,7 +60,9 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, uint64_
     // Calculate the shared secret with the destination node and encrypt
     printBytes("Attempting encrypt using nonce: ", nonce, 13);
     printBytes("Attempting encrypt using shared_key: ", shared_key, 32);
-    aes_ccm_ae(shared_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut, auth);
+    aes_ccm_ae(shared_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut,
+               auth); // this can write up to 15 bytes longer than numbytes past bytesOut
+    *extraNonce = extraNonceTmp;
     return true;
 }
 
