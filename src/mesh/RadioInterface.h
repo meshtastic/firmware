@@ -5,6 +5,7 @@
 #include "Observer.h"
 #include "PointerQueue.h"
 #include "airtime.h"
+#include "error.h"
 
 #define MAX_TX_QUEUE 16 // max number of packets which can be waiting for transmission
 
@@ -71,17 +72,19 @@ class RadioInterface
       - roundtrip air propagation time (assuming max. 30km between nodes);
       - Tx/Rx turnaround time (maximum of SX126x and SX127x);
       - MAC processing time (measured on T-beam) */
-    uint32_t slotTimeMsec = 8.5 * pow(2, sf) / bw + 0.2 + 0.4 + 7;
+    uint32_t slotTimeMsec = computeSlotTimeMsec(bw, sf);
     uint16_t preambleLength = 16;      // 8 is default, but we use longer to increase the amount of sleep time when receiving
     uint32_t preambleTimeMsec = 165;   // calculated on startup, this is the default for LongFast
     uint32_t maxPacketTimeMsec = 3246; // calculated on startup, this is the default for LongFast
     const uint32_t PROCESSING_TIME_MSEC =
         4500;                // time to construct, process and construct a packet again (empirically determined)
     const uint8_t CWmin = 2; // minimum CWsize
-    const uint8_t CWmax = 8; // maximum CWsize
+    const uint8_t CWmax = 7; // maximum CWsize
 
     meshtastic_MeshPacket *sendingPacket = NULL; // The packet we are currently sending
     uint32_t lastTxStart = 0L;
+
+    uint32_t computeSlotTimeMsec(float bw, float sf) { return 8.5 * pow(2, sf) / bw + 0.2 + 0.4 + 7; }
 
     /**
      * A temporary buffer used for sending/receiving packets, sized to hold the biggest buffer we might need

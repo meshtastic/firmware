@@ -26,6 +26,8 @@ void MCP9808Sensor::setup()
 
 bool MCP9808Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+    measurement->variant.environment_metrics.has_temperature = true;
+
     LOG_DEBUG("MCP9808Sensor::getMetrics\n");
     measurement->variant.environment_metrics.temperature = mcp9808.readTempC();
     return true;
