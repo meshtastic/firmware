@@ -140,7 +140,8 @@ void PositionModule::trySetRtc(meshtastic_Position p, bool isLocal, bool forceUp
 
 bool PositionModule::hasQualityTimesource()
 {
-    bool setFromPhoneOrNtpToday = (millis() - lastSetFromPhoneNtpOrGps) <= (SEC_PER_DAY * 1000UL);
+    bool setFromPhoneOrNtpToday =
+        lastSetFromPhoneNtpOrGps == 0 ? false : (millis() - lastSetFromPhoneNtpOrGps) <= (SEC_PER_DAY * 1000UL);
     bool hasGpsOrRtc = (gps && gps->isConnected()) || (rtc_found.address != ScanI2C::ADDRESS_NONE.address);
     return hasGpsOrRtc || setFromPhoneOrNtpToday;
 }
@@ -297,7 +298,8 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
     if (channels.getByIndex(channel).settings.has_module_settings) {
         precision = channels.getByIndex(channel).settings.module_settings.position_precision;
     } else if (channels.getByIndex(channel).role == meshtastic_Channel_Role_PRIMARY) {
-        precision = 32;
+        // backwards compatibility for Primary channels created before position_precision was set by default
+        precision = 13;
     } else {
         precision = 0;
     }
