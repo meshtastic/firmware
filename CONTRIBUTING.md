@@ -10,7 +10,7 @@ Before you begin, please:
 
 2. **Check out the firmware build guide**: For specific instructions on setting up your development environment and building the firmware, refer to our [Firmware Build Guide](https://meshtastic.org/docs/development/firmware/build/).
 
-3. Read our [Code of Conduct](CODE_OF_CONDUCT.md)
+3. Read our [Code of Conduct](https://meshtastic.org/docs/legal/conduct/)
 
 4. Join our [Discord community](https://discord.com/invite/ktMAKGBnBs) to connect with other contributors and get help
 
