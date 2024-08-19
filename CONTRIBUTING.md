@@ -12,7 +12,7 @@ Before you begin, please:
 
 3. Read our [Code of Conduct](https://meshtastic.org/docs/legal/conduct/)
 
-4. Join our [Discord community](https://discord.com/invite/ktMAKGBnBs) to connect with other contributors and get help
+4. Join our [Discord community](https://discord.com/invite/ktMAKGBnBs) to connect with developers and other contributors to get help.
 
 ## Getting Help and Discussing Ideas
 
@@ -20,7 +20,7 @@ We encourage open communication and discussion before diving into code changes:
 
 1. **Use GitHub Discussions**: For new ideas, questions, or to discuss potential changes, start a conversation in our [GitHub Discussions](https://github.com/meshtastic/firmware/discussions) first. This helps us collaborate and avoid duplicate work.
 
-2. **Join our Discord**: For real-time chat and quick questions, join our [Discord server](https://discord.com/invite/ktMAKGBnBs). It's a great place to get help and connect with the community.
+2. **Join our Discord**: For real-time chat and quick questions, join our [Discord server](https://discord.com/invite/ktMAKGBnBs). It's a great place to get help and connect with other developers and the community.
 
 3. **Reporting Issues**: If you've identified a bug, please use our bug report template when creating a new issue in the [issue tracker](https://github.com/meshtastic/firmware/issues). Ensure you've searched existing issues to avoid duplicates.
 
@@ -30,7 +30,7 @@ We encourage open communication and discussion before diving into code changes:
 2. Create a new branch for your feature or bug fix
 3. Make your changes
 4. Test your changes thoroughly
-5. Create a pull request with a clear description of your changes
+5. Create a pull request with a clear description, using the provided template, of your changes
 
 ## Coding Standards
 
