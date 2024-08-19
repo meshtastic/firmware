@@ -6,7 +6,7 @@ We're excited that you're interested in contributing to the Meshtastic firmware!
 
 Before you begin, please:
 
-1. **Read our documentation**: Our [official documentation](https://meshtastic.org/docs/) is a crucial resource. It contains essential information about the project, including setup guides, feature explanations, and contribution guidelines.
+1. **Read our documentation**: Our [official documentation](https://meshtastic.org/docs/) is a crucial resource. It contains essential information about the project.
 
 2. **Check out the firmware build guide**: For specific instructions on setting up your development environment and building the firmware, refer to our [Firmware Build Guide](https://meshtastic.org/docs/development/firmware/build/).
 
