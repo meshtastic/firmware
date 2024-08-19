@@ -25,10 +25,10 @@ void OPT3001Sensor::setup()
 {
     OPT3001_Config newConfig;
 
-    newConfig.RangeNumber = B1100;
-    newConfig.ConvertionTime = B0;
-    newConfig.Latch = B1;
-    newConfig.ModeOfConversionOperation = B11;
+    newConfig.RangeNumber = 0b1100;
+    newConfig.ConvertionTime = 0b0;
+    newConfig.Latch = 0b1;
+    newConfig.ModeOfConversionOperation = 0b11;
 
     OPT3001_ErrorCode errorConfig = opt3001.writeConfig(newConfig);
     if (errorConfig != NO_ERROR) {
