@@ -960,7 +960,7 @@ AdminModule::AdminModule() : ProtobufModule("Admin", meshtastic_PortNum_ADMIN_AP
 
 void AdminModule::setPassKey(meshtastic_AdminMessage *res)
 {
-    if (millis() / 1000 > session_time + 150) {
+    if (session_time == 0 || millis() / 1000 > session_time + 150) {
         for (int i = 0; i < 8; i++) {
             session_passkey[i] = random();
         }
