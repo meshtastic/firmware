@@ -35,6 +35,12 @@ void DFRobotLarkSensor::setup() {}
 
 bool DFRobotLarkSensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+    measurement->variant.environment_metrics.has_temperature = true;
+    measurement->variant.environment_metrics.has_relative_humidity = true;
+    measurement->variant.environment_metrics.has_wind_speed = true;
+    measurement->variant.environment_metrics.has_wind_direction = true;
+    measurement->variant.environment_metrics.has_barometric_pressure = true;
+
     measurement->variant.environment_metrics.temperature = lark.getValue("Temp").toFloat();
     measurement->variant.environment_metrics.relative_humidity = lark.getValue("Humi").toFloat();
     measurement->variant.environment_metrics.wind_speed = lark.getValue("Speed").toFloat();

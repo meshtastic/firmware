@@ -42,6 +42,9 @@
 #ifndef DEFAULT_VREF
 #define DEFAULT_VREF 1100
 #endif
+#ifndef HAS_CUSTOM_CRYPTO_ENGINE
+#define HAS_CUSTOM_CRYPTO_ENGINE 1
+#endif
 
 #if defined(HAS_AXP192) || defined(HAS_AXP2101)
 #define HAS_PMU

@@ -231,7 +231,7 @@ void printInfo()
 {
     LOG_INFO("S:B:%d,%s\n", HW_VENDOR, optstr(APP_VERSION));
 }
-
+#ifndef PIO_UNIT_TESTING
 void setup()
 {
     concurrency::hasBeenSetup = true;
@@ -298,19 +298,9 @@ void setup()
     digitalWrite(VEXT_ENABLE, 0); // turn on the display power
 #endif
 
-#if defined(VGNSS_CTRL_V03)
-    pinMode(VGNSS_CTRL_V03, OUTPUT);
-    digitalWrite(VGNSS_CTRL_V03, LOW);
-#endif
-
 #if defined(VTFT_CTRL_V03)
     pinMode(VTFT_CTRL_V03, OUTPUT);
     digitalWrite(VTFT_CTRL_V03, LOW);
-#endif
-
-#if defined(VGNSS_CTRL)
-    pinMode(VGNSS_CTRL, OUTPUT);
-    digitalWrite(VGNSS_CTRL, LOW);
 #endif
 
 #if defined(VTFT_CTRL)
@@ -1090,7 +1080,7 @@ void setup()
     powerFSMthread = new PowerFSMThread();
     setCPUFast(false); // 80MHz is fine for our slow peripherals
 }
-
+#endif
 uint32_t rebootAtMsec;   // If not zero we will reboot at this time (used to reboot shortly after the update completes)
 uint32_t shutdownAtMsec; // If not zero we will shutdown at this time (used to shutdown from python or mobile client)
 
@@ -1113,7 +1103,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     deviceMetadata.hasRemoteHardware = moduleConfig.remote_hardware.enabled;
     return deviceMetadata;
 }
-
+#ifndef PIO_UNIT_TESTING
 void loop()
 {
     runASAP = false;
@@ -1159,3 +1149,4 @@ void loop()
     }
     // if (didWake) LOG_DEBUG("wake!\n");
 }
+#endif

@@ -67,6 +67,9 @@ bool INA3221Sensor::getEnvironmentMetrics(meshtastic_Telemetry *measurement)
 {
     struct _INA3221Measurement m = getMeasurement(ENV_CH);
 
+    measurement->variant.environment_metrics.has_voltage = true;
+    measurement->variant.environment_metrics.has_current = true;
+
     measurement->variant.environment_metrics.voltage = m.voltage;
     measurement->variant.environment_metrics.current = m.current;
 
@@ -76,6 +79,13 @@ bool INA3221Sensor::getEnvironmentMetrics(meshtastic_Telemetry *measurement)
 bool INA3221Sensor::getPowerMetrics(meshtastic_Telemetry *measurement)
 {
     struct _INA3221Measurements m = getMeasurements();
+
+    measurement->variant.power_metrics.has_ch1_voltage = true;
+    measurement->variant.power_metrics.has_ch1_current = true;
+    measurement->variant.power_metrics.has_ch2_voltage = true;
+    measurement->variant.power_metrics.has_ch2_current = true;
+    measurement->variant.power_metrics.has_ch3_voltage = true;
+    measurement->variant.power_metrics.has_ch3_current = true;
 
     measurement->variant.power_metrics.ch1_voltage = m.measurements[INA3221_CH1].voltage;
     measurement->variant.power_metrics.ch1_current = m.measurements[INA3221_CH1].current;
