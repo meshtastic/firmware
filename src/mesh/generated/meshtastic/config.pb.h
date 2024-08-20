@@ -554,6 +554,11 @@ typedef struct _meshtastic_Config_SecurityConfig {
     bool admin_channel_enabled;
 } meshtastic_Config_SecurityConfig;
 
+/* Blank config request, strictly for getting the session key */
+typedef struct _meshtastic_Config_SessionkeyConfig {
+    char dummy_field;
+} meshtastic_Config_SessionkeyConfig;
+
 typedef struct _meshtastic_Config {
     pb_size_t which_payload_variant;
     union {
@@ -565,6 +570,7 @@ typedef struct _meshtastic_Config {
         meshtastic_Config_LoRaConfig lora;
         meshtastic_Config_BluetoothConfig bluetooth;
         meshtastic_Config_SecurityConfig security;
+        meshtastic_Config_SessionkeyConfig sessionkey;
     } payload_variant;
 } meshtastic_Config;
 
@@ -649,6 +655,7 @@ extern "C" {
 
 
 
+
 /* Initializer values for message structs */
 #define meshtastic_Config_init_default           {0, {meshtastic_Config_DeviceConfig_init_default}}
 #define meshtastic_Config_DeviceConfig_init_default {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0}
@@ -660,6 +667,7 @@ extern "C" {
 #define meshtastic_Config_LoRaConfig_init_default {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0}
 #define meshtastic_Config_BluetoothConfig_init_default {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0, 0}
 #define meshtastic_Config_SecurityConfig_init_default {{0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
+#define meshtastic_Config_SessionkeyConfig_init_default {0}
 #define meshtastic_Config_init_zero              {0, {meshtastic_Config_DeviceConfig_init_zero}}
 #define meshtastic_Config_DeviceConfig_init_zero {_meshtastic_Config_DeviceConfig_Role_MIN, 0, 0, 0, 0, _meshtastic_Config_DeviceConfig_RebroadcastMode_MIN, 0, 0, 0, 0, "", 0}
 #define meshtastic_Config_PositionConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, _meshtastic_Config_PositionConfig_GpsMode_MIN}
@@ -670,6 +678,7 @@ extern "C" {
 #define meshtastic_Config_LoRaConfig_init_zero   {0, _meshtastic_Config_LoRaConfig_ModemPreset_MIN, 0, 0, 0, 0, _meshtastic_Config_LoRaConfig_RegionCode_MIN, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, 0}
 #define meshtastic_Config_BluetoothConfig_init_zero {0, _meshtastic_Config_BluetoothConfig_PairingMode_MIN, 0, 0}
 #define meshtastic_Config_SecurityConfig_init_zero {{0, {0}}, {0, {0}}, {0, {0}}, 0, 0, 0, 0, 0}
+#define meshtastic_Config_SessionkeyConfig_init_zero {0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define meshtastic_Config_DeviceConfig_role_tag  1
@@ -766,6 +775,7 @@ extern "C" {
 #define meshtastic_Config_lora_tag               6
 #define meshtastic_Config_bluetooth_tag          7
 #define meshtastic_Config_security_tag           8
+#define meshtastic_Config_sessionkey_tag         9
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_Config_FIELDLIST(X, a) \
@@ -776,7 +786,8 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,network,payload_variant.netw
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,display,payload_variant.display),   5) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,lora,payload_variant.lora),   6) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,bluetooth,payload_variant.bluetooth),   7) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,security,payload_variant.security),   8)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,security,payload_variant.security),   8) \
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,sessionkey,payload_variant.sessionkey),   9)
 #define meshtastic_Config_CALLBACK NULL
 #define meshtastic_Config_DEFAULT NULL
 #define meshtastic_Config_payload_variant_device_MSGTYPE meshtastic_Config_DeviceConfig
@@ -787,6 +798,7 @@ X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,security,payload_variant.sec
 #define meshtastic_Config_payload_variant_lora_MSGTYPE meshtastic_Config_LoRaConfig
 #define meshtastic_Config_payload_variant_bluetooth_MSGTYPE meshtastic_Config_BluetoothConfig
 #define meshtastic_Config_payload_variant_security_MSGTYPE meshtastic_Config_SecurityConfig
+#define meshtastic_Config_payload_variant_sessionkey_MSGTYPE meshtastic_Config_SessionkeyConfig
 
 #define meshtastic_Config_DeviceConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UENUM,    role,              1) \
@@ -911,6 +923,11 @@ X(a, STATIC,   SINGULAR, BOOL,     admin_channel_enabled,   8)
 #define meshtastic_Config_SecurityConfig_CALLBACK NULL
 #define meshtastic_Config_SecurityConfig_DEFAULT NULL
 
+#define meshtastic_Config_SessionkeyConfig_FIELDLIST(X, a) \
+
+#define meshtastic_Config_SessionkeyConfig_CALLBACK NULL
+#define meshtastic_Config_SessionkeyConfig_DEFAULT NULL
+
 extern const pb_msgdesc_t meshtastic_Config_msg;
 extern const pb_msgdesc_t meshtastic_Config_DeviceConfig_msg;
 extern const pb_msgdesc_t meshtastic_Config_PositionConfig_msg;
@@ -921,6 +938,7 @@ extern const pb_msgdesc_t meshtastic_Config_DisplayConfig_msg;
 extern const pb_msgdesc_t meshtastic_Config_LoRaConfig_msg;
 extern const pb_msgdesc_t meshtastic_Config_BluetoothConfig_msg;
 extern const pb_msgdesc_t meshtastic_Config_SecurityConfig_msg;
+extern const pb_msgdesc_t meshtastic_Config_SessionkeyConfig_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_Config_fields &meshtastic_Config_msg
@@ -933,6 +951,7 @@ extern const pb_msgdesc_t meshtastic_Config_SecurityConfig_msg;
 #define meshtastic_Config_LoRaConfig_fields &meshtastic_Config_LoRaConfig_msg
 #define meshtastic_Config_BluetoothConfig_fields &meshtastic_Config_BluetoothConfig_msg
 #define meshtastic_Config_SecurityConfig_fields &meshtastic_Config_SecurityConfig_msg
+#define meshtastic_Config_SessionkeyConfig_fields &meshtastic_Config_SessionkeyConfig_msg
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_CONFIG_PB_H_MAX_SIZE meshtastic_Config_size
@@ -945,6 +964,7 @@ extern const pb_msgdesc_t meshtastic_Config_SecurityConfig_msg;
 #define meshtastic_Config_PositionConfig_size    62
 #define meshtastic_Config_PowerConfig_size       52
 #define meshtastic_Config_SecurityConfig_size    112
+#define meshtastic_Config_SessionkeyConfig_size  0
 #define meshtastic_Config_size                   199
 
 #ifdef __cplusplus
