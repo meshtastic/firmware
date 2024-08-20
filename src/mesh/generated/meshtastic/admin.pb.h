@@ -32,7 +32,9 @@ typedef enum _meshtastic_AdminMessage_ConfigType {
     /* TODO: REPLACE */
     meshtastic_AdminMessage_ConfigType_BLUETOOTH_CONFIG = 6,
     /* TODO: REPLACE */
-    meshtastic_AdminMessage_ConfigType_SECURITY_CONFIG = 7
+    meshtastic_AdminMessage_ConfigType_SECURITY_CONFIG = 7,
+    /*  */
+    meshtastic_AdminMessage_ConfigType_SESSIONKEY_CONFIG = 8
 } meshtastic_AdminMessage_ConfigType;
 
 /* TODO: REPLACE */
@@ -204,8 +206,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_AdminMessage_ConfigType_MIN meshtastic_AdminMessage_ConfigType_DEVICE_CONFIG
-#define _meshtastic_AdminMessage_ConfigType_MAX meshtastic_AdminMessage_ConfigType_SECURITY_CONFIG
-#define _meshtastic_AdminMessage_ConfigType_ARRAYSIZE ((meshtastic_AdminMessage_ConfigType)(meshtastic_AdminMessage_ConfigType_SECURITY_CONFIG+1))
+#define _meshtastic_AdminMessage_ConfigType_MAX meshtastic_AdminMessage_ConfigType_SESSIONKEY_CONFIG
+#define _meshtastic_AdminMessage_ConfigType_ARRAYSIZE ((meshtastic_AdminMessage_ConfigType)(meshtastic_AdminMessage_ConfigType_SESSIONKEY_CONFIG+1))
 
 #define _meshtastic_AdminMessage_ModuleConfigType_MIN meshtastic_AdminMessage_ModuleConfigType_MQTT_CONFIG
 #define _meshtastic_AdminMessage_ModuleConfigType_MAX meshtastic_AdminMessage_ModuleConfigType_PAXCOUNTER_CONFIG
