@@ -112,6 +112,10 @@ AccelerometerThread *accelerometerThread = nullptr;
 AudioThread *audioThread = nullptr;
 #endif
 
+#if defined(TCXO_OPTIONAL)
+float tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE; // if TCXO is optional, put this here so it can be changed further down.
+#endif
+
 using namespace concurrency;
 
 // We always create a screen object, but we only init it if we find the hardware
@@ -227,7 +231,7 @@ void printInfo()
 {
     LOG_INFO("S:B:%d,%s\n", HW_VENDOR, optstr(APP_VERSION));
 }
-
+#ifndef PIO_UNIT_TESTING
 void setup()
 {
     concurrency::hasBeenSetup = true;
@@ -294,19 +298,9 @@ void setup()
     digitalWrite(VEXT_ENABLE, 0); // turn on the display power
 #endif
 
-#if defined(VGNSS_CTRL_V03)
-    pinMode(VGNSS_CTRL_V03, OUTPUT);
-    digitalWrite(VGNSS_CTRL_V03, LOW);
-#endif
-
 #if defined(VTFT_CTRL_V03)
     pinMode(VTFT_CTRL_V03, OUTPUT);
     digitalWrite(VTFT_CTRL_V03, LOW);
-#endif
-
-#if defined(VGNSS_CTRL)
-    pinMode(VGNSS_CTRL, OUTPUT);
-    digitalWrite(VGNSS_CTRL, LOW);
 #endif
 
 #if defined(VTFT_CTRL)
@@ -900,7 +894,7 @@ void setup()
     }
 #endif
 
-#if defined(USE_SX1262) && !defined(ARCH_PORTDUINO)
+#if defined(USE_SX1262) && !defined(ARCH_PORTDUINO) && !defined(TCXO_OPTIONAL)
     if (!rIf) {
         rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
@@ -909,6 +903,40 @@ void setup()
             rIf = NULL;
         } else {
             LOG_INFO("SX1262 Radio init succeeded, using SX1262 radio\n");
+            radioType = SX1262_RADIO;
+        }
+    }
+#endif
+
+#if defined(USE_SX1262) && !defined(ARCH_PORTDUINO) && defined(TCXO_OPTIONAL)
+    if (!rIf) {
+        // Try using the specified TCXO voltage
+        rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
+        if (!rIf->init()) {
+            LOG_WARN("Failed to find SX1262 radio with TCXO using DIO3 reference voltage at %f V\n", tcxoVoltage);
+            delete rIf;
+            rIf = NULL;
+            tcxoVoltage = 0; // if it fails, set the TCXO voltage to zero for the next attempt
+        } else {
+            LOG_INFO("SX1262 Radio init succeeded, using ");
+            LOG_WARN("SX1262 Radio with TCXO");
+            LOG_INFO(", reference voltage at %f V\n", tcxoVoltage);
+            radioType = SX1262_RADIO;
+        }
+    }
+
+    if (!rIf) {
+        // If specified TCXO voltage fails, attempt to use DIO3 as a reference instea
+        rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
+        if (!rIf->init()) {
+            LOG_WARN("Failed to find SX1262 radio with XTAL using DIO3 reference voltage at %f V\n", tcxoVoltage);
+            delete rIf;
+            rIf = NULL;
+            tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE; // if it fails, set the TCXO voltage back for the next radio search
+        } else {
+            LOG_INFO("SX1262 Radio init succeeded, using ");
+            LOG_WARN("SX1262 Radio with XTAL");
+            LOG_INFO(", reference voltage at %f V\n", tcxoVoltage);
             radioType = SX1262_RADIO;
         }
     }
@@ -1052,7 +1080,7 @@ void setup()
     powerFSMthread = new PowerFSMThread();
     setCPUFast(false); // 80MHz is fine for our slow peripherals
 }
-
+#endif
 uint32_t rebootAtMsec;   // If not zero we will reboot at this time (used to reboot shortly after the update completes)
 uint32_t shutdownAtMsec; // If not zero we will shutdown at this time (used to shutdown from python or mobile client)
 
@@ -1075,7 +1103,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     deviceMetadata.hasRemoteHardware = moduleConfig.remote_hardware.enabled;
     return deviceMetadata;
 }
-
+#ifndef PIO_UNIT_TESTING
 void loop()
 {
     runASAP = false;
@@ -1121,3 +1149,4 @@ void loop()
     }
     // if (didWake) LOG_DEBUG("wake!\n");
 }
+#endif
