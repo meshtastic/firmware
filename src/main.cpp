@@ -112,6 +112,10 @@ AccelerometerThread *accelerometerThread = nullptr;
 AudioThread *audioThread = nullptr;
 #endif
 
+#if defined(TCXO_OPTIONAL)
+float tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE; // if TCXO is optional, put this here so it can be changed further down.
+#endif
+
 using namespace concurrency;
 
 // We always create a screen object, but we only init it if we find the hardware
@@ -890,7 +894,7 @@ void setup()
     }
 #endif
 
-#if defined(USE_SX1262) && !defined(ARCH_PORTDUINO)
+#if defined(USE_SX1262) && !defined(ARCH_PORTDUINO) && !defined(TCXO_OPTIONAL)
     if (!rIf) {
         rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
@@ -901,6 +905,40 @@ void setup()
             LOG_INFO("SX1262 Radio init succeeded, using SX1262 radio\n");
             radioType = SX1262_RADIO;
         }
+    }
+#endif
+
+#if defined(USE_SX1262) && !defined(ARCH_PORTDUINO) && defined(TCXO_OPTIONAL)
+    if (!rIf) {
+        // Try using the specified TCXO voltage
+            rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
+            if (!rIf->init()) {
+                LOG_WARN("Failed to find SX1262 radio with TCXO using DIO3 reference voltage at %f V\n", tcxoVoltage);
+                delete rIf;
+                rIf = NULL;
+                tcxoVoltage = 0; // if it fails, set the TCXO voltage to zero for the next attempt
+            } else {
+                LOG_INFO("SX1262 Radio init succeeded, using ");
+                LOG_WARN("SX1262 Radio with TCXO");
+                LOG_INFO(", reference voltage at %f V\n", tcxoVoltage);
+                radioType = SX1262_RADIO;
+            }
+    }
+
+    if (!rIf) {
+        // If specified TCXO voltage fails, attempt to use DIO3 as a reference instea
+            rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
+            if (!rIf->init()) {
+                LOG_WARN("Failed to find SX1262 radio with XTAL using DIO3 reference voltage at %f V\n", tcxoVoltage);
+                delete rIf;
+                rIf = NULL;
+                tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE; // if it fails, set the TCXO voltage back for the next radio search
+            } else {
+                LOG_INFO("SX1262 Radio init succeeded, using ");
+                LOG_WARN("SX1262 Radio with XTAL");
+                LOG_INFO(", reference voltage at %f V\n", tcxoVoltage);
+                radioType = SX1262_RADIO;
+            }
     }
 #endif
 
