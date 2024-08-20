@@ -44,3 +44,14 @@ jobs:
           .pio/build/native/program & sleep 10 # 5 seconds was not enough
           echo "Simulator started, launching python test..."
           python3 -c 'from meshtastic.test import testSimulator; testSimulator()'
+
+      - name: PlatformIO Tests
+        run: platformio test -e native --junit-output-path reports/testreport.xml
+
+      - name: Test Report
+        uses: dorny/test-reporter@v1.9.1
+        if: success() || failure() # run this step even if previous step failed
+        with:
+          name: PlatformIO Tests
+          path: reports/testreport.xml
+          reporter: java-junit
