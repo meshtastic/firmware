@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-static const uint8_t LED_BUILTIN = -1;
+static const uint8_t LED_BUILTIN = 45;
 #define BUILTIN_LED LED_BUILTIN // backward compatibility
 #define LED_BUILTIN LED_BUILTIN
 
