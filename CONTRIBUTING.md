@@ -26,7 +26,7 @@ We encourage open communication and discussion before diving into code changes:
 
 ## Making Contributions
 
-> [!IMPORTANT] "Sign our CLA agreement"
+> [!IMPORTANT]
 > Before making any contributions, you must sign our Contributor License Agreement (CLA). You can do this by visiting https://cla-assistant.io/meshtastic/firmware. Be sure to use the GitHub account you will use to submit your contributions when signing.
 
 1. Fork the repository
