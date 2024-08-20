@@ -131,7 +131,8 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 // #define SX126X_MAX_POWER 8 set this if using a high-power board!
 
 /*
-On the SX1262, DIO3 sets the voltage for an external TCXO, if one is present. If one is not present, use TCXO_OPTIONAL to try both settings.
+On the SX1262, DIO3 sets the voltage for an external TCXO, if one is present. If one is not present, use TCXO_OPTIONAL to try both
+settings.
 
 | Mfr        | Module           | TCXO | RF Switch | Notes                                        |
 | ---------- | ---------------- | ---- | --------- | -------------------------------------------- |
@@ -149,7 +150,7 @@ On the SX1262, DIO3 sets the voltage for an external TCXO, if one is present. If
 */
 
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
-#define TCXO_OPTIONAL // make it so that the firmware can try both TCXO and XTAL
+#define TCXO_OPTIONAL     // make it so that the firmware can try both TCXO and XTAL
 extern float tcxoVoltage; // make this available everywhere
 
 #ifdef __cplusplus
