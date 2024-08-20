@@ -3,8 +3,8 @@
 
 #include <stdint.h>
 
-static const uint8_t LED_BUILTIN = -1; // Board has no built-in LED, despite what schematic shows
-#define BUILTIN_LED LED_BUILTIN        // backward compatibility
+static const uint8_t LED_BUILTIN = 45; // LED is not populated on earliest board variant
+#define BUILTIN_LED LED_BUILTIN        // Backward compatibility
 #define LED_BUILTIN LED_BUILTIN
 
 static const uint8_t TX = 43;
