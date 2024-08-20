@@ -27,6 +27,8 @@ void SHT31Sensor::setup()
 
 bool SHT31Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+    measurement->variant.environment_metrics.has_temperature = true;
+    measurement->variant.environment_metrics.has_relative_humidity = true;
     measurement->variant.environment_metrics.temperature = sht31.readTemperature();
     measurement->variant.environment_metrics.relative_humidity = sht31.readHumidity();
 

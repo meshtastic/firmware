@@ -152,7 +152,8 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                     LOG_INFO("Ignoring downlink message we originally sent.\n");
             } else {
                 // Find channel by channel_id and check downlink_enabled
-                if (strcmp(e.channel_id, channels.getGlobalId(ch.index)) == 0 && e.packet && ch.settings.downlink_enabled) {
+                if ((strcmp(e.channel_id, "PKI") == 0 && e.packet) ||
+                    (strcmp(e.channel_id, channels.getGlobalId(ch.index)) == 0 && e.packet && ch.settings.downlink_enabled)) {
                     LOG_INFO("Received MQTT topic %s, len=%u\n", topic, length);
                     meshtastic_MeshPacket *p = packetPool.allocCopy(*e.packet);
                     p->via_mqtt = true; // Mark that the packet was received via MQTT
@@ -161,8 +162,16 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                         p->channel = ch.index;
                     }
 
-                    // ignore messages if we don't have the channel key
-                    if (router && perhapsDecode(p))
+                    // PKI messages get accepted even if we can't decrypt
+                    if (router && p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag &&
+                        strcmp(e.channel_id, "PKI") == 0) {
+                        meshtastic_NodeInfoLite *tx = nodeDB->getMeshNode(getFrom(p));
+                        meshtastic_NodeInfoLite *rx = nodeDB->getMeshNode(p->to);
+                        // Only accept PKI messages if we have both the sender and receiver in our nodeDB, as then it's likely
+                        // they discovered each other via a channel we have downlink enabled for
+                        if (tx && tx->has_user && rx && rx->has_user)
+                            router->enqueueReceivedMessage(p);
+                    } else if (router && perhapsDecode(p)) // ignore messages if we don't have the channel key
                         router->enqueueReceivedMessage(p);
                     else
                         packetPool.release(p);
@@ -361,10 +370,12 @@ void MQTT::reconnect()
 void MQTT::sendSubscriptions()
 {
 #if HAS_NETWORKING
+    bool hasDownlink = false;
     size_t numChan = channels.getNumChannels();
     for (size_t i = 0; i < numChan; i++) {
         const auto &ch = channels.getByIndex(i);
         if (ch.settings.downlink_enabled) {
+            hasDownlink = true;
             std::string topic = cryptTopic + channels.getGlobalId(i) + "/#";
             LOG_INFO("Subscribing to %s\n", topic.c_str());
             pubSub.subscribe(topic.c_str(), 1); // FIXME, is QOS 1 right?
@@ -377,6 +388,13 @@ void MQTT::sendSubscriptions()
 #endif // ARCH_NRF52
         }
     }
+#if !MESHTASTIC_EXCLUDE_PKI
+    if (hasDownlink) {
+        std::string topic = cryptTopic + "PKI/#";
+        LOG_INFO("Subscribing to %s\n", topic.c_str());
+        pubSub.subscribe(topic.c_str(), 1);
+    }
+#endif
 #endif
 }
 
@@ -452,8 +470,12 @@ void MQTT::publishQueuedMessages()
         meshtastic_ServiceEnvelope *env = mqttQueue.dequeuePtr(0);
         static uint8_t bytes[meshtastic_MeshPacket_size + 64];
         size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, env);
-
-        std::string topic = cryptTopic + env->channel_id + "/" + owner.id;
+        std::string topic;
+        if (env->packet->pki_encrypted) {
+            topic = cryptTopic + "PKI/" + owner.id;
+        } else {
+            topic = cryptTopic + env->channel_id + "/" + owner.id;
+        }
         LOG_INFO("publish %s, %u bytes from queue\n", topic.c_str(), numBytes);
 
         publish(topic.c_str(), bytes, numBytes, false);
@@ -463,7 +485,12 @@ void MQTT::publishQueuedMessages()
             // handle json topic
             auto jsonString = MeshPacketSerializer::JsonSerialize(env->packet);
             if (jsonString.length() != 0) {
-                std::string topicJson = jsonTopic + env->channel_id + "/" + owner.id;
+                std::string topicJson;
+                if (env->packet->pki_encrypted) {
+                    topicJson = jsonTopic + "PKI/" + owner.id;
+                } else {
+                    topicJson = jsonTopic + env->channel_id + "/" + owner.id;
+                }
                 LOG_INFO("JSON publish message to %s, %u bytes: %s\n", topicJson.c_str(), jsonString.length(),
                          jsonString.c_str());
                 publish(topicJson.c_str(), jsonString.c_str(), false);
@@ -478,7 +505,13 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
 {
     if (mp.via_mqtt)
         return; // Don't send messages that came from MQTT back into MQTT
-
+    bool uplinkEnabled = false;
+    for (int i = 0; i <= 7; i++) {
+        if (channels.getByIndex(i).settings.uplink_enabled)
+            uplinkEnabled = true;
+    }
+    if (!uplinkEnabled)
+        return; // no channels have an uplink enabled
     auto &ch = channels.getByIndex(chIndex);
 
     if (mp_decoded.which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
@@ -493,7 +526,7 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
         return;
     }
 
-    if (ch.settings.uplink_enabled) {
+    if (ch.settings.uplink_enabled || mp.pki_encrypted) {
         const char *channelId = channels.getGlobalId(chIndex); // FIXME, for now we just use the human name for the channel
 
         meshtastic_ServiceEnvelope *env = mqttPool.allocZeroed();
@@ -513,8 +546,12 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
             // FIXME - this size calculation is super sloppy, but it will go away once we dynamically alloc meshpackets
             static uint8_t bytes[meshtastic_MeshPacket_size + 64];
             size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, env);
-
-            std::string topic = cryptTopic + channelId + "/" + owner.id;
+            std::string topic;
+            if (mp.pki_encrypted) {
+                topic = cryptTopic + "PKI/" + owner.id;
+            } else {
+                topic = cryptTopic + channelId + "/" + owner.id;
+            }
             LOG_DEBUG("MQTT Publish %s, %u bytes\n", topic.c_str(), numBytes);
 
             publish(topic.c_str(), bytes, numBytes, false);
@@ -524,7 +561,12 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
                 // handle json topic
                 auto jsonString = MeshPacketSerializer::JsonSerialize((meshtastic_MeshPacket *)&mp_decoded);
                 if (jsonString.length() != 0) {
-                    std::string topicJson = jsonTopic + channelId + "/" + owner.id;
+                    std::string topicJson;
+                    if (mp.pki_encrypted) {
+                        topicJson = jsonTopic + "PKI/" + owner.id;
+                    } else {
+                        topicJson = jsonTopic + channelId + "/" + owner.id;
+                    }
                     LOG_INFO("JSON publish message to %s, %u bytes: %s\n", topicJson.c_str(), jsonString.length(),
                              jsonString.c_str());
                     publish(topicJson.c_str(), jsonString.c_str(), false);
