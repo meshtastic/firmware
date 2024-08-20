@@ -127,7 +127,6 @@ NodeDB::NodeDB()
     if (!config.has_security) {
         config.has_security = true;
         config.security.serial_enabled = config.device.serial_enabled;
-        config.security.bluetooth_logging_enabled = config.bluetooth.device_logging_enabled;
         config.security.is_managed = config.device.is_managed;
     }
 #if !(MESHTASTIC_EXCLUDE_PKI)
