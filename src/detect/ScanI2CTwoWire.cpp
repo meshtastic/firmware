@@ -315,7 +315,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
             case SHT31_4x_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x89), 2);
-                if (registerValue == 0x11a2 || registerValue == 0x11da) {
+                if (registerValue == 0x11a2 || registerValue == 0x11da || registerValue == 0xe9c) {
                     type = SHT4X;
                     LOG_INFO("SHT4X sensor found\n");
                 } else if (getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x7E), 2) == 0x5449) {

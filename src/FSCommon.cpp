@@ -249,6 +249,7 @@ void listDir(const char *dirname, uint8_t levels, bool del)
                     file.close();
                 }
 #else
+                LOG_DEBUG(" %s (directory)\n", file.name());
                 listDir(file.name(), levels - 1, del);
                 file.close();
 #endif
@@ -275,7 +276,7 @@ void listDir(const char *dirname, uint8_t levels, bool del)
                 file.close();
             }
 #else
-            LOG_DEBUG(" %s (%i Bytes)\n", file.name(), file.size());
+            LOG_DEBUG("   %s (%i Bytes)\n", file.name(), file.size());
             file.close();
 #endif
         }

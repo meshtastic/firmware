@@ -38,6 +38,7 @@ void OPT3001Sensor::setup()
 
 bool OPT3001Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+    measurement->variant.environment_metrics.has_lux = true;
     OPT3001 result = opt3001.readResult();
 
     measurement->variant.environment_metrics.lux = result.lux;
