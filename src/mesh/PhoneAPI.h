@@ -66,6 +66,9 @@ class PhoneAPI
     // Keep MqttClientProxyMessage packet just as packetForPhone
     meshtastic_MqttClientProxyMessage *mqttClientProxyMessageForPhone = NULL;
 
+    // Keep ClientNotification packet just as packetForPhone
+    meshtastic_ClientNotification *clientNotification = NULL;
+
     /// We temporarily keep the nodeInfo here between the call to available and getFromRadio
     meshtastic_NodeInfo nodeInfoForPhone = meshtastic_NodeInfo_init_default;
 

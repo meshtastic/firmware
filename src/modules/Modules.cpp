@@ -1,5 +1,6 @@
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_INPUTBROKER
+#include "input/ExpressLRSFiveWay.h"
 #include "input/InputBroker.h"
 #include "input/RotaryEncoderInterruptImpl1.h"
 #include "input/ScanAndSelect.h"
@@ -175,6 +176,9 @@ void setupModules()
 #if HAS_TRACKBALL && !MESHTASTIC_EXCLUDE_INPUTBROKER
         trackballInterruptImpl1 = new TrackballInterruptImpl1();
         trackballInterruptImpl1->init();
+#endif
+#ifdef INPUTBROKER_EXPRESSLRSFIVEWAY_TYPE
+        expressLRSFiveWayInput = new ExpressLRSFiveWay();
 #endif
 #if HAS_SCREEN && !MESHTASTIC_EXCLUDE_CANNEDMESSAGES
         cannedMessageModule = new CannedMessageModule();

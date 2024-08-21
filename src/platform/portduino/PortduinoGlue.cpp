@@ -100,6 +100,7 @@ void portduinoSetup()
     settingsStrings[spidev] = "";
     settingsStrings[displayspidev] = "";
     settingsMap[spiSpeed] = 2000000;
+    settingsMap[ascii_logs] = !isatty(1);
 
     YAML::Node yamlConfig;
 
@@ -153,6 +154,10 @@ void portduinoSetup()
                 settingsMap[logoutputlevel] = level_error;
             }
             settingsStrings[traceFilename] = yamlConfig["Logging"]["TraceFile"].as<std::string>("");
+            if (yamlConfig["Logging"]["AsciiLogs"]) {
+                // Default is !isatty(1) but can be set explicitly in config.yaml
+                settingsMap[ascii_logs] = yamlConfig["Logging"]["AsciiLogs"].as<bool>();
+            }
         }
         if (yamlConfig["Lora"]) {
             settingsMap[use_sx1262] = false;

@@ -6,6 +6,7 @@
 #include <time.h>
 
 static RTCQuality currentQuality = RTCQualityNone;
+uint32_t lastSetFromPhoneNtpOrGps = 0;
 
 RTCQuality getRTCQuality()
 {
@@ -121,6 +122,9 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
     if (shouldSet) {
         currentQuality = q;
         lastSetMsec = now;
+        if (currentQuality >= RTCQualityNTP) {
+            lastSetFromPhoneNtpOrGps = now;
+        }
 
         // This delta value works on all platforms
         timeStartMsec = now;

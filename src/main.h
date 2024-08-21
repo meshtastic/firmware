@@ -65,12 +65,6 @@ extern bool isVibrating;
 
 extern int TCPPort; // set by Portduino
 
-// extern Observable<meshtastic::PowerStatus> newPowerStatus; //TODO: move this to main-esp32.cpp somehow or a helper class
-
-// extern meshtastic::PowerStatus *powerStatus;
-// extern meshtastic::GPSStatus *gpsStatus;
-// extern meshtastic::NodeStatusHandler *nodeStatusHandler;
-
 // Return a human readable string of the form "Meshtastic_ab13"
 const char *getDeviceName();
 
@@ -91,5 +85,5 @@ void nrf52Setup(), esp32Setup(), nrf52Loop(), esp32Loop(), rp2040Setup(), clearB
 
 meshtastic_DeviceMetadata getDeviceMetadata();
 
-// FIXME, we default to 4MHz SPI, SPI mode 0, check if the datasheet says it can really do that
+// We default to 4MHz SPI, SPI mode 0
 extern SPISettings spiSettings;

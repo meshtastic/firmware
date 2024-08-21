@@ -54,6 +54,13 @@ bool BME680Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     if (bme680.getData(BSEC_OUTPUT_RAW_PRESSURE).signal == 0)
         return false;
+
+    measurement->variant.environment_metrics.has_temperature = true;
+    measurement->variant.environment_metrics.has_relative_humidity = true;
+    measurement->variant.environment_metrics.has_barometric_pressure = true;
+    measurement->variant.environment_metrics.has_gas_resistance = true;
+    measurement->variant.environment_metrics.has_iaq = true;
+
     measurement->variant.environment_metrics.temperature = bme680.getData(BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE).signal;
     measurement->variant.environment_metrics.relative_humidity =
         bme680.getData(BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY).signal;

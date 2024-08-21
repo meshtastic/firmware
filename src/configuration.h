@@ -193,6 +193,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define DEFAULT_SHUTDOWN_SECONDS 2
 #endif
 
+#ifndef MINIMUM_SAFE_FREE_HEAP
+#define MINIMUM_SAFE_FREE_HEAP 1500
+#endif
+
 /* Step #3: mop up with disabled values for HAS_ options not handled by the above two */
 
 #ifndef HAS_WIFI
@@ -259,6 +263,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_MQTT 1
 #define MESHTASTIC_EXCLUDE_POWERMON 1
 #define MESHTASTIC_EXCLUDE_I2C 1
+#define MESHTASTIC_EXCLUDE_PKI 1
 #define MESHTASTIC_EXCLUDE_POWER_FSM 1
 #define MESHTASTIC_EXCLUDE_TZ 1
 #endif
@@ -283,6 +288,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MESHTASTIC_EXCLUDE_INPUTBROKER 1
 #define MESHTASTIC_EXCLUDE_SERIAL 1
 #define MESHTASTIC_EXCLUDE_POWERSTRESS 1
+#define MESHTASTIC_EXCLUDE_ADMIN 1
 #endif
 
 // // Turn off wifi even if HW supports wifi (webserver relies on wifi and is also disabled)
