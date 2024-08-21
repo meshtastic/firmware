@@ -38,8 +38,8 @@
 #define ADC_CHANNEL ADC1_GPIO1_CHANNEL
 #define ADC_ATTENUATION ADC_ATTEN_DB_2_5 // lower dB for high resistance voltage divider
 #define ADC_MULTIPLIER 4.9 * 1.045
-#define ADC_CTRL 2 // active HIGH, powers the voltage divider. Only on 1.1
-#define ADC_CTRL_ENABLED HIGH
+#define ADC_CTRL 2     // active HIGH, powers the voltage divider. Only on 1.1
+#define ADC_USE_PULLUP // Use internal pullup/pulldown instead of actively driving the output
 
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN

@@ -29,6 +29,7 @@
 #define BAT_MEASURE_ADC_UNIT 2          // Use ADC2
 #define ADC_ATTENUATION ADC_ATTEN_DB_12 // Voltage divider output is quite high
 #define HAS_32768HZ
+#define ADC_CTRL_ENABLED LOW
 
 // LoRa
 #define USE_SX1262
