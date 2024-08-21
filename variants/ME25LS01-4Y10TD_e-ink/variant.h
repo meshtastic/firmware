@@ -110,8 +110,8 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define PIN_EINK_BUSY (0 + 19) // EPD_BUSY
 #define PIN_EINK_DC (0 + 24)   // EPD_D/C
 #define PIN_EINK_RES (0 + 23)  // EPD_RESET
-#define PIN_EINK_SCLK PIN_SPI1_SCK  // EPD_SCLK
-#define PIN_EINK_MOSI PIN_SPI1_MOSI // EPD_MOSI
+#define PIN_EINK_SCLK PIN_SPI1_SCK
+#define PIN_EINK_MOSI PIN_SPI1_MOSI
 
 // supported modules list
 #define USE_LR1110
