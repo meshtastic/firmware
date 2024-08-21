@@ -123,6 +123,7 @@ AudioThread *audioThread = nullptr;
 void tft_task_handler(void *);
 
 DeviceScreen *deviceScreen = nullptr;
+#endif
 
 #if defined(TCXO_OPTIONAL)
 float tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE; // if TCXO is optional, put this here so it can be changed further down.
@@ -1215,6 +1216,7 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     deviceMetadata.hasRemoteHardware = moduleConfig.remote_hardware.enabled;
     return deviceMetadata;
 }
+
 #ifndef PIO_UNIT_TESTING
 void loop()
 {
@@ -1261,6 +1263,7 @@ void loop()
     }
     // if (didWake) LOG_DEBUG("wake!\n");
 }
+#endif
 
 #if HAS_TFT
 void tft_task_handler(void *param = nullptr)
