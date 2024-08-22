@@ -581,10 +581,6 @@ void TFTDisplay::sendCommand(uint8_t com)
         tft->powerSaveOff();
 #endif
 
-#ifdef VTFT_CTRL_V03
-        digitalWrite(VTFT_CTRL_V03, LOW);
-#endif
-
 #ifdef VTFT_CTRL
         digitalWrite(VTFT_CTRL, LOW);
 #endif
@@ -610,9 +606,6 @@ void TFTDisplay::sendCommand(uint8_t com)
         tft->powerSaveOn();
 #endif
 
-#ifdef VTFT_CTRL_V03
-        digitalWrite(VTFT_CTRL_V03, HIGH);
-#endif
 #ifdef VTFT_CTRL
         digitalWrite(VTFT_CTRL, HIGH);
 #endif

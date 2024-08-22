@@ -31,7 +31,8 @@
 // GPS UC6580:          GPS V_DET(8), VDD_IO(7), DCDC_IN(21), pulls up RESETN(17), D_SEL(33) and BOOT_MODE(34) through 10kR
 // GPS LNA SW7125DE:    VCC(4), pulls up SHDN(5) through 10kR
 // LED:                 VDD, LEDA (through diode)
-#define VEXT_ENABLE_V05 3 // active HIGH - powers the GPS, GPS LNA and OLED VDD/anode
+#define VEXT_ENABLE 3 // active HIGH - powers the GPS, GPS LNA and OLED VDD/anode
+#define VEXT_ON_VALUE HIGH
 #define BUTTON_PIN 0
 
 #define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage

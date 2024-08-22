@@ -278,25 +278,9 @@ void setup()
     digitalWrite(LORA_TCXO_GPIO, HIGH);
 #endif
 
-#if defined(VEXT_ENABLE_V03)
-    pinMode(VEXT_ENABLE_V03, OUTPUT);
-    digitalWrite(VEXT_ENABLE_V03, 0); // turn on the display power and antenna boost
-    LOG_DEBUG("HELTEC Detect Tracker V1.0\n");
-#elif defined(VEXT_ENABLE_V05)
-    pinMode(VEXT_ENABLE_V05, OUTPUT);
-    digitalWrite(VEXT_ENABLE_V05, 1); // turn on the lora antenna boost
-    LOG_DEBUG("HELTEC Detect Tracker V1.1\n");
-#elif defined(VEXT_ENABLE) && defined(VEXT_ON_VALUE)
+#if defined(VEXT_ENABLE)
     pinMode(VEXT_ENABLE, OUTPUT);
     digitalWrite(VEXT_ENABLE, VEXT_ON_VALUE); // turn on the display power
-#elif defined(VEXT_ENABLE)
-    pinMode(VEXT_ENABLE, OUTPUT);
-    digitalWrite(VEXT_ENABLE, 0); // turn on the display power
-#endif
-
-#if defined(VTFT_CTRL_V03)
-    pinMode(VTFT_CTRL_V03, OUTPUT);
-    digitalWrite(VTFT_CTRL_V03, LOW);
 #endif
 
 #if defined(VTFT_CTRL)
