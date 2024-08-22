@@ -3,6 +3,9 @@
 const char *DisplayFormatters::getModemPresetDisplayName(meshtastic_Config_LoRaConfig_ModemPreset preset, bool useShortName)
 {
     switch (preset) {
+    case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
+        return useShortName ? "ShortT" : "ShortTurbo";
+        break;
     case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
         return useShortName ? "ShortS" : "ShortSlow";
         break;
