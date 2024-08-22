@@ -2,6 +2,7 @@
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "Default.h"
 #include "GPS.h"
+#include "GpioLogic.h"
 #include "NodeDB.h"
 #include "PowerMon.h"
 #include "RTC.h"
@@ -875,16 +876,8 @@ void GPS::writePinEN(bool on)
     if (HW_VENDOR == meshtastic_HardwareModel_RAK4631 && (rotaryEncoderInterruptImpl1 || upDownInterruptImpl1))
         return;
 
-    // Abort: if pin unset
-    if (!en_gpio)
-        return;
-
-    // Determine new value for the pin
-    bool val = GPS_EN_ACTIVE ? on : !on;
-
     // Write and log
-    pinMode(en_gpio, OUTPUT);
-    digitalWrite(en_gpio, val);
+    enablePin->set(on);
 #ifdef GPS_EXTRAVERBOSE
     LOG_DEBUG("Pin EN %s\n", val == HIGH ? "HIGH" : "LOW");
 #endif
@@ -1421,7 +1414,21 @@ GPS *GPS::createGps()
     GPS *new_gps = new GPS;
     new_gps->rx_gpio = _rx_gpio;
     new_gps->tx_gpio = _tx_gpio;
-    new_gps->en_gpio = _en_gpio;
+
+    if (_en_gpio) {
+        GpioPin *p = new GpioHwPin(_en_gpio);
+
+        if (!GPS_EN_ACTIVE) { // Need to invert the pin before hardware
+            auto virtPin = new GpioVirtPin();
+            new GpioNotTransformer(
+                virtPin, p); // We just leave this created object on the heap so it can stay watching virtPin and driving en_gpio
+            p = virtPin;
+        }
+        new_gps->enablePin = p;
+    } else {
+        // Just use a simulated pin
+        new_gps->enablePin = new GpioVirtPin();
+    }
 
 #ifdef PIN_GPS_PPS
     // pulse per second

@@ -29,7 +29,7 @@ class GpioHwPin : public GpioPin
   public:
     explicit GpioHwPin(uint32_t num) : num(num) {}
 
-    void set(bool value) { digitalWrite(num, value); }
+    void set(bool value);
 };
 
 class GpioTransformer;
