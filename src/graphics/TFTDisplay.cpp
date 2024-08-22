@@ -95,14 +95,8 @@ class LGFX : public lgfx::LGFX_Device
         {
             auto cfg = _light_instance.config(); // Gets a structure for backlight settings.
 
-#ifdef ST7735_BL_V03
-            cfg.pin_bl = ST7735_BL_V03;
-#elif defined(ST7735_BL_V05)
-            cfg.pin_bl = ST7735_BL_V05;
-#else
             cfg.pin_bl = ST7735_BL; // Pin number to which the backlight is connected
-#endif
-            cfg.invert = true; // true to invert the brightness of the backlight
+            cfg.invert = true;      // true to invert the brightness of the backlight
             // cfg.freq = 44100;    // PWM frequency of backlight
             // cfg.pwm_channel = 1; // PWM channel number to use
 
@@ -581,11 +575,9 @@ void TFTDisplay::sendCommand(uint8_t com)
         display(true);
         if (settingsMap[displayBacklight] > 0)
             digitalWrite(settingsMap[displayBacklight], TFT_BACKLIGHT_ON);
-#elif defined(ST7735_BL_V03)
-        digitalWrite(ST7735_BL_V03, TFT_BACKLIGHT_ON);
-#elif defined(ST7735_BL_V05)
-        pinMode(ST7735_BL_V05, OUTPUT);
-        digitalWrite(ST7735_BL_V05, TFT_BACKLIGHT_ON);
+#elif defined(ST7735_BL)
+        pinMode(ST7735_BL, OUTPUT);
+        digitalWrite(ST7735_BL, TFT_BACKLIGHT_ON);
 #elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE)
         tft->wakeup();
         tft->powerSaveOff();
@@ -614,11 +606,9 @@ void TFTDisplay::sendCommand(uint8_t com)
         tft->clear();
         if (settingsMap[displayBacklight] > 0)
             digitalWrite(settingsMap[displayBacklight], !TFT_BACKLIGHT_ON);
-#elif defined(ST7735_BL_V03)
-        digitalWrite(ST7735_BL_V03, !TFT_BACKLIGHT_ON);
-#elif defined(ST7735_BL_V05)
-        pinMode(ST7735_BL_V05, OUTPUT);
-        digitalWrite(ST7735_BL_V05, !TFT_BACKLIGHT_ON);
+#elif defined(ST7735_BL)
+        pinMode(ST7735_BL, OUTPUT);
+        digitalWrite(ST7735_BL, !TFT_BACKLIGHT_ON);
 #elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE)
         tft->sleep();
         tft->powerSaveOn();
@@ -720,11 +710,9 @@ bool TFTDisplay::connect()
     LOG_INFO("Power to TFT Backlight\n");
 #endif
 
-#ifdef ST7735_BL_V03
-    digitalWrite(ST7735_BL_V03, TFT_BACKLIGHT_ON);
-#elif defined(ST7735_BL_V05)
-    pinMode(ST7735_BL_V05, OUTPUT);
-    digitalWrite(ST7735_BL_V05, TFT_BACKLIGHT_ON);
+#ifdef ST7735_BL
+    pinMode(ST7735_BL, OUTPUT);
+    digitalWrite(ST7735_BL, TFT_BACKLIGHT_ON);
 #endif
 #ifdef UNPHONE
     unphone.backlight(true); // using unPhone library
