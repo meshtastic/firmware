@@ -376,12 +376,12 @@ void MQTT::sendSubscriptions()
         const auto &ch = channels.getByIndex(i);
         if (ch.settings.downlink_enabled) {
             hasDownlink = true;
-            std::string topic = cryptTopic + channels.getGlobalId(i) + "/#";
+            std::string topic = cryptTopic + channels.getGlobalId(i) + "/+";
             LOG_INFO("Subscribing to %s\n", topic.c_str());
             pubSub.subscribe(topic.c_str(), 1); // FIXME, is QOS 1 right?
 #ifndef ARCH_NRF52                              // JSON is not supported on nRF52, see issue #2804
             if (moduleConfig.mqtt.json_enabled == true) {
-                std::string topicDecoded = jsonTopic + channels.getGlobalId(i) + "/#";
+                std::string topicDecoded = jsonTopic + channels.getGlobalId(i) + "/+";
                 LOG_INFO("Subscribing to %s\n", topicDecoded.c_str());
                 pubSub.subscribe(topicDecoded.c_str(), 1); // FIXME, is QOS 1 right?
             }
@@ -390,7 +390,7 @@ void MQTT::sendSubscriptions()
     }
 #if !MESHTASTIC_EXCLUDE_PKI
     if (hasDownlink) {
-        std::string topic = cryptTopic + "PKI/#";
+        std::string topic = cryptTopic + "PKI/+";
         LOG_INFO("Subscribing to %s\n", topic.c_str());
         pubSub.subscribe(topic.c_str(), 1);
     }
