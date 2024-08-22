@@ -516,6 +516,21 @@ extern unPhone unphone;
 TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY geometry, HW_I2C i2cBus)
 {
     LOG_DEBUG("TFTDisplay!\n");
+
+#ifdef TFT_BL
+    GpioPin *p = new GpioHwPin(TFT_BL);
+
+    if (!TFT_BACKLIGHT_ON) { // Need to invert the pin before hardware
+        auto virtPin = new GpioVirtPin();
+        new GpioNotTransformer(
+            virtPin, p); // We just leave this created object on the heap so it can stay watching virtPin and driving en_gpio
+        p = virtPin;
+    }
+#else
+    GpioPin *p = new GpioVirtPin(); // Just simulate a pin
+#endif
+    backlightEnable = p;
+
 #if ARCH_PORTDUINO
     if (settingsMap[displayRotate]) {
         setGeometry(GEOMETRY_RAWMODE, settingsMap[configNames::displayHeight], settingsMap[configNames::displayWidth]);
@@ -569,13 +584,11 @@ void TFTDisplay::sendCommand(uint8_t com)
     // handle display on/off directly
     switch (com) {
     case DISPLAYON: {
+        backlightEnable->set(true);
 #if ARCH_PORTDUINO
         display(true);
         if (settingsMap[displayBacklight] > 0)
             digitalWrite(settingsMap[displayBacklight], TFT_BACKLIGHT_ON);
-#elif defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
-        pinMode(TFT_BL, OUTPUT);
-        digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
 #elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE)
         tft->wakeup();
         tft->powerSaveOff();
@@ -594,13 +607,11 @@ void TFTDisplay::sendCommand(uint8_t com)
         break;
     }
     case DISPLAYOFF: {
+        backlightEnable->set(false);
 #if ARCH_PORTDUINO
         tft->clear();
         if (settingsMap[displayBacklight] > 0)
             digitalWrite(settingsMap[displayBacklight], !TFT_BACKLIGHT_ON);
-#elif defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
-        pinMode(TFT_BL, OUTPUT);
-        digitalWrite(TFT_BL, !TFT_BACKLIGHT_ON);
 #elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE)
         tft->sleep();
         tft->powerSaveOn();
@@ -689,13 +700,8 @@ bool TFTDisplay::connect()
     tft = new LGFX;
 #endif
 
-#ifdef TFT_BL
-    pinMode(TFT_BL, OUTPUT);
-    digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
-    // pinMode(PIN_3V3_EN, OUTPUT);
-    // digitalWrite(PIN_3V3_EN, HIGH);
+    backlightEnable->set(true);
     LOG_INFO("Power to TFT Backlight\n");
-#endif
 
 #ifdef UNPHONE
     unphone.backlight(true); // using unPhone library
