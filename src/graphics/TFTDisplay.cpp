@@ -192,6 +192,7 @@ class LGFX : public lgfx::LGFX_Device
             _panel_instance.config(cfg);
         }
 
+#ifdef ST7789_BL
         // Set the backlight control. (delete if not necessary)
         {
             auto cfg = _light_instance.config(); // Gets a structure for backlight settings.
@@ -203,6 +204,7 @@ class LGFX : public lgfx::LGFX_Device
             _light_instance.config(cfg);
             _panel_instance.setLight(&_light_instance); // Set the backlight on the panel.
         }
+#endif
 
 #if HAS_TOUCHSCREEN
         // Configure settings for touch screen control.
@@ -312,6 +314,7 @@ class LGFX : public lgfx::LGFX_Device
             _panel_instance.config(cfg);
         }
 
+#ifdef TFT_BL
         // Set the backlight control
         {
             auto cfg = _light_instance.config(); // Gets a structure for backlight settings.
@@ -324,6 +327,7 @@ class LGFX : public lgfx::LGFX_Device
             _light_instance.config(cfg);
             _panel_instance.setLight(&_light_instance); // Set the backlight on the panel.
         }
+#endif
 
         setPanel(&_panel_instance);
     }
