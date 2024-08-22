@@ -123,10 +123,6 @@ static void rak14014_tpIntHandle(void)
 #elif defined(ST7789_CS)
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
 
-#if defined(ST7789_BACKLIGHT_EN) && !defined(TFT_BL)
-#define TFT_BL ST7789_BACKLIGHT_EN
-#endif
-
 class LGFX : public lgfx::LGFX_Device
 {
     lgfx::Panel_ST7789 _panel_instance;
