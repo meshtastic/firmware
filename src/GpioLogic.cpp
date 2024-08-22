@@ -10,6 +10,12 @@ void GpioVirtPin::set(bool value)
     }
 }
 
+void GpioHwPin::set(bool value)
+{
+    pinMode(num, OUTPUT);
+    digitalWrite(num, value);
+}
+
 GpioTransformer::GpioTransformer(GpioPin *outPin) : outPin(outPin) {}
 
 void GpioTransformer::set(bool value)
