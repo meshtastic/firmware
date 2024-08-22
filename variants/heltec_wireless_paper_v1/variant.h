@@ -22,6 +22,7 @@
 
 // Power
 #define VEXT_ENABLE 45 // Active low, powers the E-Ink display
+#define VEXT_ON_VALUE LOW
 #define ADC_CTRL 19
 #define BATTERY_PIN 20
 #define ADC_CHANNEL ADC2_GPIO20_CHANNEL
