@@ -16,7 +16,7 @@
 #define ST7789_CS 38
 #define ST7789_RS 40
 #define ST7789_BL 21
-// P#define ST7735_BL 21 /* V1.1 PCB marking */
+// P#define TFT_BL 21 /* V1.1 PCB marking */
 
 #define ST7789_RESET -1
 #define ST7789_MISO -1
@@ -41,7 +41,7 @@
 // #define ST7735_RESET 39
 // #define ST7735_MISO -1
 // #define ST7735_BUSY -1
-#define ST7735_BL 21 /* V1.1 PCB marking */
+#define TFT_BL 21 /* V1.1 PCB marking */
 // #define ST7735_SPI_HOST SPI3_HOST
 // #define SPI_FREQUENCY 40000000
 // #define SPI_READ_FREQUENCY 16000000
