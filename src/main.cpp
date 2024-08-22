@@ -111,6 +111,10 @@ AccelerometerThread *accelerometerThread = nullptr;
 #include "AudioThread.h"
 AudioThread *audioThread = nullptr;
 #endif
+
+
+
+
 #if defined(M5STACK_COREBASIC)
 #include <M5Unified.h>
 #endif

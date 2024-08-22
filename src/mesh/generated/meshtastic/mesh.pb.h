@@ -187,8 +187,10 @@ typedef enum _meshtastic_HardwareModel {
     /* RadioMaster 900 Bandit, https://www.radiomasterrc.com/products/bandit-expresslrs-rf-module
  SSD1306 OLED and No GPS */
     meshtastic_HardwareModel_RADIOMASTER_900_BANDIT = 74,
+
+    
     /* M5 esp32 based MCU modules with enclosure, TFT and LORA Shields. All Variants (Basic, Core, Fire, Core2, Paper) https://m5stack.com/ */
-    meshtastic_HardwareModel_M5STACK_COREBASIC=75,
+    meshtastic_HardwareModel_M5STACK_COREBASIC=76,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
