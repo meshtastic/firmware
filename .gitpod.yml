@@ -1,2 +1,2 @@
 tasks:
-  - init: pip install platformio
+  - init: pip install platformio && pip install --upgrade pip
