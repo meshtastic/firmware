@@ -556,13 +556,8 @@ void NodeDB::cleanupMeshDB()
     for (int i = 0; i < numMeshNodes; i++) {
         if (meshNodes->at(i).has_user) {
             if (meshNodes->at(i).user.public_key.size > 0) {
-                for (int j = 0; j < numMeshNodes; j++) {
-                    if (meshNodes->at(i).user.public_key.bytes[j] != 0) {
-                        break;
-                    }
-                    if (j == 31) {
-                        meshNodes->at(i).user.public_key.size = 0;
-                    }
+                if (memfll(meshNodes->at(i).user.public_key.bytes, 0, meshNodes->at(i).user.public_key.size)) {
+                    meshNodes->at(i).user.public_key.size = 0;
                 }
             }
             meshNodes->at(newPos++) = meshNodes->at(i);
