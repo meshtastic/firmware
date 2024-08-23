@@ -1,12 +1,15 @@
-#include "PowerTelemetry.h"
+#include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "Default.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "PowerTelemetry.h"
 #include "RTC.h"
 #include "Router.h"
-#include "configuration.h"
 #include "main.h"
 #include "power.h"
 #include "sleep.h"
@@ -162,7 +165,7 @@ bool PowerTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &m
 
 bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 {
-    meshtastic_Telemetry m;
+    meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
     bool valid = false;
     m.time = getTime();
     m.which_variant = meshtastic_Telemetry_power_metrics_tag;
@@ -218,3 +221,5 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     }
     return valid;
 }
+
+#endif

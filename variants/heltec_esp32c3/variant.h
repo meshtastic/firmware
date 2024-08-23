@@ -1,23 +1,15 @@
-#define I2C_SDA 1
-#define I2C_SCL 0
-
 #define BUTTON_PIN 9
-#define BUTTON_NEED_PULLUP
 
-// LED flashes brighter
+// LED pin on HT-DEV-ESP_V2 and HT-DEV-ESP_V3
 // https://resource.heltec.cn/download/HT-CT62/HT-CT62_Reference_Design.pdf
-#define LED_PIN 18 // LED
-#define LED_INVERTED 1
+// https://resource.heltec.cn/download/HT-DEV-ESP/HT-DEV-ESP_V3_Sch.pdf
+#define LED_PIN 2 // LED
+#define LED_INVERTED 0
 
-#define HAS_SCREEN 1
+#define HAS_SCREEN 0
 #define HAS_GPS 0
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
-
-#undef LORA_SCK
-#undef LORA_MISO
-#undef LORA_MOSI
-#undef LORA_CS
 
 #define USE_SX1262
 #define LORA_SCK 10

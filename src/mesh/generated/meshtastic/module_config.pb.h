@@ -188,6 +188,10 @@ typedef struct _meshtastic_ModuleConfig_PaxcounterConfig {
     /* Enable the Paxcounter Module */
     bool enabled;
     uint32_t paxcounter_update_interval;
+    /* WiFi RSSI threshold. Defaults to -80 */
+    int32_t wifi_threshold;
+    /* BLE RSSI threshold. Defaults to -80 */
+    int32_t ble_threshold;
 } meshtastic_ModuleConfig_PaxcounterConfig;
 
 /* Serial Config */
@@ -467,7 +471,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_NeighborInfoConfig_init_default {0, 0}
 #define meshtastic_ModuleConfig_DetectionSensorConfig_init_default {0, 0, 0, 0, "", 0, 0, 0}
 #define meshtastic_ModuleConfig_AudioConfig_init_default {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
-#define meshtastic_ModuleConfig_PaxcounterConfig_init_default {0, 0}
+#define meshtastic_ModuleConfig_PaxcounterConfig_init_default {0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_default {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_default {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_default {0, 0, 0, 0, 0}
@@ -483,7 +487,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_NeighborInfoConfig_init_zero {0, 0}
 #define meshtastic_ModuleConfig_DetectionSensorConfig_init_zero {0, 0, 0, 0, "", 0, 0, 0}
 #define meshtastic_ModuleConfig_AudioConfig_init_zero {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
-#define meshtastic_ModuleConfig_PaxcounterConfig_init_zero {0, 0}
+#define meshtastic_ModuleConfig_PaxcounterConfig_init_zero {0, 0, 0, 0}
 #define meshtastic_ModuleConfig_SerialConfig_init_zero {0, 0, 0, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Baud_MIN, 0, _meshtastic_ModuleConfig_SerialConfig_Serial_Mode_MIN, 0}
 #define meshtastic_ModuleConfig_ExternalNotificationConfig_init_zero {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_StoreForwardConfig_init_zero {0, 0, 0, 0, 0}
@@ -526,6 +530,8 @@ extern "C" {
 #define meshtastic_ModuleConfig_AudioConfig_i2s_sck_tag 7
 #define meshtastic_ModuleConfig_PaxcounterConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_PaxcounterConfig_paxcounter_update_interval_tag 2
+#define meshtastic_ModuleConfig_PaxcounterConfig_wifi_threshold_tag 3
+#define meshtastic_ModuleConfig_PaxcounterConfig_ble_threshold_tag 4
 #define meshtastic_ModuleConfig_SerialConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_SerialConfig_echo_tag 2
 #define meshtastic_ModuleConfig_SerialConfig_rxd_tag 3
@@ -695,7 +701,9 @@ X(a, STATIC,   SINGULAR, UINT32,   i2s_sck,           7)
 
 #define meshtastic_ModuleConfig_PaxcounterConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
-X(a, STATIC,   SINGULAR, UINT32,   paxcounter_update_interval,   2)
+X(a, STATIC,   SINGULAR, UINT32,   paxcounter_update_interval,   2) \
+X(a, STATIC,   SINGULAR, INT32,    wifi_threshold,    3) \
+X(a, STATIC,   SINGULAR, INT32,    ble_threshold,     4)
 #define meshtastic_ModuleConfig_PaxcounterConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_PaxcounterConfig_DEFAULT NULL
 
@@ -836,7 +844,7 @@ extern const pb_msgdesc_t meshtastic_RemoteHardwarePin_msg;
 #define meshtastic_ModuleConfig_MQTTConfig_size  254
 #define meshtastic_ModuleConfig_MapReportSettings_size 12
 #define meshtastic_ModuleConfig_NeighborInfoConfig_size 8
-#define meshtastic_ModuleConfig_PaxcounterConfig_size 8
+#define meshtastic_ModuleConfig_PaxcounterConfig_size 30
 #define meshtastic_ModuleConfig_RangeTestConfig_size 10
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_size 96
 #define meshtastic_ModuleConfig_SerialConfig_size 28

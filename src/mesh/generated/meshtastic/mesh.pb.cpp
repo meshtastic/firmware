@@ -66,6 +66,15 @@ PB_BIND(meshtastic_Heartbeat, meshtastic_Heartbeat, AUTO)
 PB_BIND(meshtastic_NodeRemoteHardwarePin, meshtastic_NodeRemoteHardwarePin, AUTO)
 
 
+PB_BIND(meshtastic_ChunkedPayload, meshtastic_ChunkedPayload, AUTO)
+
+
+PB_BIND(meshtastic_resend_chunks, meshtastic_resend_chunks, AUTO)
+
+
+PB_BIND(meshtastic_ChunkedPayloadResponse, meshtastic_ChunkedPayloadResponse, AUTO)
+
+
 
 
 

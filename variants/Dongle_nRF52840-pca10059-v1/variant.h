@@ -43,16 +43,12 @@ extern "C" {
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LEDs
-#define PIN_LED1 (0 + 12) // Blue LED        P1.12
-#define PIN_LED2 (0 + 6)  // Built in Green  P0.06
-
-// Green Built in LED1
-// #define PIN_LED1 (0 + 6)          // LED1            P1.15
-
-// RGB NeoPixel LED2
-// #define PIN_LED1 (0 + 8) Red
-// #define PIN_LED1 (32 + 9) Green
-// #define PIN_LED1 (0 + 12) Blue
+#define PIN_LED1 (0 + 6)      // Built in Green   P0.06
+#define PIN_LED2 (0 + 6)      // Just here for completeness
+#define RGBLED_RED (0 + 8)    // Red of RGB     P0.08
+#define RGBLED_GREEN (32 + 9) // Green of RGB  P1.09
+#define RGBLED_BLUE (0 + 12)  // Blue of RGB   P0.12
+#define RGBLED_CA             // comment out this line if you have a common cathode type, as defined use common anode logic
 
 #define LED_BUILTIN PIN_LED1
 #define LED_CONN PIN_LED2

@@ -1,3 +1,7 @@
+#include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
 #pragma once
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "NodeDB.h"
@@ -33,6 +37,10 @@ class EnvironmentTelemetryModule : private concurrency::OSThread, public Protobu
      */
     bool sendTelemetry(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
 
+    virtual AdminMessageHandleResult handleAdminMessageForModule(const meshtastic_MeshPacket &mp,
+                                                                 meshtastic_AdminMessage *request,
+                                                                 meshtastic_AdminMessage *response) override;
+
   private:
     float CelsiusToFahrenheit(float c);
     bool firstTime = 1;
@@ -42,3 +50,5 @@ class EnvironmentTelemetryModule : private concurrency::OSThread, public Protobu
     uint32_t lastSentToPhone = 0;
     uint32_t sensor_read_error_count = 0;
 };
+
+#endif

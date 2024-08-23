@@ -10,6 +10,7 @@ void initVariant()
     unphone.printWakeupReason(); // what woke us up? (stored, not printed :|)
     unphone.checkPowerSwitch();  // if power switch is off, shutdown
     unphone.backlight(false);    // setup backlight and make sure its off
+    unphone.expanderPower(true); // enable power to expander / hat / sheild
 
     for (int i = 0; i < 3; i++) { // buzz a bit
         unphone.vibe(true);

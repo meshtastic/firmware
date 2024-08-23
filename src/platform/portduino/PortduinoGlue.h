@@ -11,8 +11,10 @@ enum configNames {
     rxen,
     dio2_as_rf_switch,
     dio3_tcxo_voltage,
+    ch341Quirk,
     use_rf95,
     use_sx1280,
+    use_sx1268,
     user,
     gpiochip,
     spidev,
@@ -21,6 +23,7 @@ enum configNames {
     touchscreenModule,
     touchscreenCS,
     touchscreenIRQ,
+    touchscreenI2CAddr,
     touchscreenBusFrequency,
     touchscreenRotate,
     touchscreenspidev,
@@ -55,5 +58,3 @@ enum { level_error, level_warn, level_info, level_debug };
 extern std::map<configNames, int> settingsMap;
 extern std::map<configNames, std::string> settingsStrings;
 int initGPIOPin(int pinNum, std::string gpioChipname);
-extern HardwareSPI *DisplaySPI;
-extern HardwareSPI *LoraSPI;

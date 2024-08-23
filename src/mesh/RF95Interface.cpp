@@ -8,12 +8,57 @@
 #include "PortduinoGlue.h"
 #endif
 
-#define MAX_POWER 20
+#ifndef RF95_MAX_POWER
+#define RF95_MAX_POWER 20
+#endif
+
 // if we use 20 we are limited to 1% duty cycle or hw might overheat.  For continuous operation set a limit of 17
 // In theory up to 27 dBm is possible, but the modules installed in most radios can cope with a max of 20.  So BIG WARNING
 // if you set power to something higher than 17 or 20 you might fry your board.
 
 #define POWER_DEFAULT 17 // How much power to use if the user hasn't set a power level
+#ifdef RADIOMASTER_900_BANDIT_NANO
+// Structure to hold DAC and DB values
+typedef struct {
+    uint8_t dac;
+    uint8_t db;
+} DACDB;
+
+// Interpolation function
+DACDB interpolate(uint8_t dbm, uint8_t dbm1, uint8_t dbm2, DACDB val1, DACDB val2) {
+    DACDB result;
+    double fraction = (double)(dbm - dbm1) / (dbm2 - dbm1);
+    result.dac = (uint8_t)(val1.dac + fraction * (val2.dac - val1.dac));
+    result.db = (uint8_t)(val1.db + fraction * (val2.db - val1.db));
+    return result;
+}
+
+// Function to find the correct DAC and DB values based on dBm using interpolation
+DACDB getDACandDB(uint8_t dbm) {
+    // Predefined values
+    static const struct {
+        uint8_t dbm;
+        DACDB values;
+    } dbmToDACDB[] = {
+        {20, {168, 2}},  // 100mW
+        {24, {148, 6}},  // 250mW
+        {27, {128, 9}},  // 500mW
+        {30, {90, 12}}   // 1000mW
+    };
+    const int numValues = sizeof(dbmToDACDB) / sizeof(dbmToDACDB[0]);
+
+    // Find the interval dbm falls within and interpolate
+    for (int i = 0; i < numValues - 1; i++) {
+        if (dbm >= dbmToDACDB[i].dbm && dbm <= dbmToDACDB[i + 1].dbm) {
+            return interpolate(dbm, dbmToDACDB[i].dbm, dbmToDACDB[i + 1].dbm, dbmToDACDB[i].values, dbmToDACDB[i + 1].values);
+        }
+    }
+
+    // Return a default value if no match is found and default to 100mW
+    DACDB defaultValue = {168, 2};
+    return defaultValue;
+}
+#endif
 
 RF95Interface::RF95Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                              RADIOLIB_PIN_TYPE busy)
@@ -49,9 +94,16 @@ bool RF95Interface::init()
 {
     RadioLibInterface::init();
 
-    if (power > MAX_POWER) // This chip has lower power limits than some
-        power = MAX_POWER;
+#ifdef RADIOMASTER_900_BANDIT_NANO
+    // DAC and DB values based on dBm using interpolation
+    DACDB dacDbValues = getDACandDB(power);
+    int8_t powerDAC = dacDbValues.dac;
+    power = dacDbValues.db;
+#endif
 
+    if (power > RF95_MAX_POWER) // This chip has lower power limits than some
+        power = RF95_MAX_POWER;
+    
     limitPower();
 
     iface = lora = new RadioLibRF95(&module);
@@ -59,6 +111,19 @@ bool RF95Interface::init()
 #ifdef RF95_TCXO
     pinMode(RF95_TCXO, OUTPUT);
     digitalWrite(RF95_TCXO, 1);
+#endif
+
+    // enable PA
+#ifdef RF95_PA_EN
+#if defined(RF95_PA_DAC_EN)
+    #ifdef RADIOMASTER_900_BANDIT_NANO
+        // Use calculated DAC value
+        dacWrite(RF95_PA_EN, powerDAC);
+    #else
+        // Use Value set in /*/variant.h
+        dacWrite(RF95_PA_EN, RF95_PA_LEVEL);
+    #endif
+#endif
 #endif
 
     /*
@@ -69,6 +134,11 @@ bool RF95Interface::init()
 #ifdef RF95_TXEN
     pinMode(RF95_TXEN, OUTPUT);
     digitalWrite(RF95_TXEN, 0);
+#endif
+
+#ifdef RF95_FAN_EN
+    pinMode(RF95_FAN_EN, OUTPUT);
+    digitalWrite(RF95_FAN_EN, 1);
 #endif
 
 #ifdef RF95_RXEN
@@ -92,6 +162,9 @@ bool RF95Interface::init()
     LOG_INFO("Frequency set to %f\n", getFreq());
     LOG_INFO("Bandwidth set to %f\n", bw);
     LOG_INFO("Power output set to %d\n", power);
+#ifdef RADIOMASTER_900_BANDIT_NANO
+    LOG_INFO("DAC output set to %d\n", powerDAC);
+#endif
 
     if (res == RADIOLIB_ERR_NONE)
         res = lora->setCRC(RADIOLIB_SX126X_LORA_CRC_ON);
@@ -146,10 +219,14 @@ bool RF95Interface::reconfigure()
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
-    if (power > MAX_POWER) // This chip has lower power limits than some
-        power = MAX_POWER;
+    if (power > RF95_MAX_POWER) // This chip has lower power limits than some
+        power = RF95_MAX_POWER;
 
+#ifdef USE_RF95_RFO
+    err = lora->setOutputPower(power, true);
+#else
     err = lora->setOutputPower(power);
+#endif
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
@@ -234,6 +311,10 @@ bool RF95Interface::sleep()
     // put chipset into sleep mode
     setStandby(); // First cancel any active receiving/sending
     lora->sleep();
+
+#ifdef RF95_FAN_EN
+    digitalWrite(RF95_FAN_EN, 0);
+#endif
 
     return true;
 }

@@ -1,8 +1,11 @@
-#include "BME680Sensor.h"
+#include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "BME680Sensor.h"
 #include "FSCommon.h"
 #include "TelemetrySensor.h"
-#include "configuration.h"
 
 BME680Sensor::BME680Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_BME680, "BME680") {}
 
@@ -25,7 +28,7 @@ int32_t BME680Sensor::runOnce()
 
     if (bme680.status == BSEC_OK) {
         status = 1;
-        if (!bme680.setConfig(bsec_config_iaq)) {
+        if (!bme680.setConfig(bsec_config)) {
             checkStatus("setConfig");
             status = 0;
         }
@@ -54,7 +57,7 @@ bool BME680Sensor::getMetrics(meshtastic_Telemetry *measurement)
     measurement->variant.environment_metrics.temperature = bme680.getData(BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE).signal;
     measurement->variant.environment_metrics.relative_humidity =
         bme680.getData(BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY).signal;
-    measurement->variant.environment_metrics.barometric_pressure = bme680.getData(BSEC_OUTPUT_RAW_PRESSURE).signal / 100.0F;
+    measurement->variant.environment_metrics.barometric_pressure = bme680.getData(BSEC_OUTPUT_RAW_PRESSURE).signal;
     measurement->variant.environment_metrics.gas_resistance = bme680.getData(BSEC_OUTPUT_RAW_GAS).signal / 1000.0;
     // Check if we need to save state to filesystem (every STATE_SAVE_PERIOD ms)
     measurement->variant.environment_metrics.iaq = bme680.getData(BSEC_OUTPUT_IAQ).signal;
@@ -134,3 +137,5 @@ void BME680Sensor::checkStatus(String functionName)
     else if (bme680.sensor.status > BME68X_OK)
         LOG_WARN("%s BME68X code: %s\n", functionName.c_str(), String(bme680.sensor.status).c_str());
 }
+
+#endif

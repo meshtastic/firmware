@@ -215,6 +215,18 @@ void NRF52Bluetooth::shutdown()
     Bluefruit.Advertising.stop();
 }
 
+void NRF52Bluetooth::startDisabled()
+{
+    // Setup Bluetooth
+    nrf52Bluetooth->setup();
+
+    // Shutdown bluetooth for minimum power draw
+    Bluefruit.Advertising.stop();
+    Bluefruit.setTxPower(-40); // Minimum power
+
+    LOG_INFO("Disabling NRF52 Bluetooth. (Workaround: tx power min, advertising stopped)\n");
+}
+
 bool NRF52Bluetooth::isConnected()
 {
     return Bluefruit.connected(connectionHandle);
@@ -287,7 +299,7 @@ void NRF52Bluetooth::setup()
     LOG_INFO("Advertising\n");
 }
 
-void NRF52Bluetooth::resumeAdverising()
+void NRF52Bluetooth::resumeAdvertising()
 {
     Bluefruit.Advertising.restartOnDisconnect(true);
     Bluefruit.Advertising.setInterval(32, 244); // in unit of 0.625 ms

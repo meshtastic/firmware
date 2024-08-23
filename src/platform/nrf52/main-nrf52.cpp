@@ -68,28 +68,47 @@ static const bool useSoftDevice = true; // Set to false for easier debugging
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
 void setBluetoothEnable(bool enable)
 {
-    if (enable && config.bluetooth.enabled) {
-        if (!useSoftDevice) {
+    // For debugging use: don't use bluetooth
+    if (!useSoftDevice) {
+        if (enable)
             LOG_INFO("DISABLING NRF52 BLUETOOTH WHILE DEBUGGING\n");
-        } else {
-            if (!nrf52Bluetooth) {
-                LOG_DEBUG("Initializing NRF52 Bluetooth\n");
-                nrf52Bluetooth = new NRF52Bluetooth();
-                nrf52Bluetooth->setup();
-
-                // We delay brownout init until after BLE because BLE starts soft device
-                initBrownout();
-            } else {
-                nrf52Bluetooth->resumeAdverising();
-            }
-        }
-    } else {
-        if (nrf52Bluetooth) {
-            nrf52Bluetooth->shutdown();
-        }
+        return;
     }
+
+    // If user disabled bluetooth: init then disable advertising & reduce power
+    // Workaround. Avoid issue where device hangs several days after boot..
+    // Allegedly, no significant increase in power consumption
+    if (!config.bluetooth.enabled) {
+        static bool initialized = false;
+        if (!initialized) {
+            nrf52Bluetooth = new NRF52Bluetooth();
+            nrf52Bluetooth->startDisabled();
+            initBrownout();
+            initialized = true;
+        }
+        return;
+    }
+
+    if (enable) {
+        // If not yet set-up
+        if (!nrf52Bluetooth) {
+            LOG_DEBUG("Initializing NRF52 Bluetooth\n");
+            nrf52Bluetooth = new NRF52Bluetooth();
+            nrf52Bluetooth->setup();
+
+            // We delay brownout init until after BLE because BLE starts soft device
+            initBrownout();
+        }
+        // Already setup, apparently
+        else
+            nrf52Bluetooth->resumeAdvertising();
+    }
+    // Disable (if previously set-up)
+    else if (nrf52Bluetooth)
+        nrf52Bluetooth->shutdown();
 }
 #else
+#warning NRF52 "Bluetooth disable" workaround does not apply to builds with MESHTASTIC_EXCLUDE_BLUETOOTH
 void setBluetoothEnable(bool enable) {}
 #endif
 /**

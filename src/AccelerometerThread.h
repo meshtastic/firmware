@@ -1,6 +1,10 @@
+#pragma once
+#include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
 #include "PowerFSM.h"
 #include "concurrency/OSThread.h"
-#include "configuration.h"
 #include "main.h"
 #include "power.h"
 
@@ -10,14 +14,15 @@
 #include <Arduino.h>
 #include <SensorBMA423.hpp>
 #include <Wire.h>
-
-SensorBMA423 bmaSensor;
-bool BMA_IRQ = false;
+#ifdef RAK_4631
+#include "Fusion/Fusion.h"
+#include <Rak_BMX160.h>
+#endif
 
 #define ACCELEROMETER_CHECK_INTERVAL_MS 100
 #define ACCELEROMETER_CLICK_THRESHOLD 40
 
-int readRegister(uint8_t address, uint8_t reg, uint8_t *data, uint8_t len)
+static inline int readRegister(uint8_t address, uint8_t reg, uint8_t *data, uint8_t len)
 {
     Wire.beginTransmission(address);
     Wire.write(reg);
@@ -30,7 +35,7 @@ int readRegister(uint8_t address, uint8_t reg, uint8_t *data, uint8_t len)
     return 0; // Pass
 }
 
-int writeRegister(uint8_t address, uint8_t reg, uint8_t *data, uint8_t len)
+static inline int writeRegister(uint8_t address, uint8_t reg, uint8_t *data, uint8_t len)
 {
     Wire.beginTransmission(address);
     Wire.write(reg);
@@ -38,8 +43,6 @@ int writeRegister(uint8_t address, uint8_t reg, uint8_t *data, uint8_t len)
     return (0 != Wire.endTransmission());
 }
 
-namespace concurrency
-{
 class AccelerometerThread : public concurrency::OSThread
 {
   public:
@@ -50,14 +53,122 @@ class AccelerometerThread : public concurrency::OSThread
             disable();
             return;
         }
-
+        acceleremoter_type = type;
+#ifndef RAK_4631
         if (!config.display.wake_on_tap_or_motion && !config.device.double_tap_as_button_press) {
             LOG_DEBUG("AccelerometerThread disabling due to no interested configurations\n");
             disable();
             return;
         }
+#endif
+        init();
+    }
 
-        acceleremoter_type = type;
+    void start()
+    {
+        init();
+        setIntervalFromNow(0);
+    };
+
+  protected:
+    int32_t runOnce() override
+    {
+        canSleep = true; // Assume we should not keep the board awake
+
+        if (acceleremoter_type == ScanI2C::DeviceType::MPU6050 && mpu.getMotionInterruptStatus()) {
+            wakeScreen();
+        } else if (acceleremoter_type == ScanI2C::DeviceType::LIS3DH && lis.getClick() > 0) {
+            uint8_t click = lis.getClick();
+            if (!config.device.double_tap_as_button_press) {
+                wakeScreen();
+            }
+
+            if (config.device.double_tap_as_button_press && (click & 0x20)) {
+                buttonPress();
+                return 500;
+            }
+        } else if (acceleremoter_type == ScanI2C::DeviceType::BMA423 && bmaSensor.readIrqStatus() != DEV_WIRE_NONE) {
+            if (bmaSensor.isTilt() || bmaSensor.isDoubleTap()) {
+                wakeScreen();
+                return 500;
+            }
+#ifdef RAK_4631
+        } else if (acceleremoter_type == ScanI2C::DeviceType::BMX160) {
+            sBmx160SensorData_t magAccel;
+            sBmx160SensorData_t gAccel;
+
+            /* Get a new sensor event */
+            bmx160.getAllData(&magAccel, NULL, &gAccel);
+
+            // expirimental calibrate routine. Limited to between 10 and 30 seconds after boot
+            if (millis() > 10 * 1000 && millis() < 30 * 1000) {
+                if (magAccel.x > highestX)
+                    highestX = magAccel.x;
+                if (magAccel.x < lowestX)
+                    lowestX = magAccel.x;
+                if (magAccel.y > highestY)
+                    highestY = magAccel.y;
+                if (magAccel.y < lowestY)
+                    lowestY = magAccel.y;
+                if (magAccel.z > highestZ)
+                    highestZ = magAccel.z;
+                if (magAccel.z < lowestZ)
+                    lowestZ = magAccel.z;
+            }
+
+            int highestRealX = highestX - (highestX + lowestX) / 2;
+
+            magAccel.x -= (highestX + lowestX) / 2;
+            magAccel.y -= (highestY + lowestY) / 2;
+            magAccel.z -= (highestZ + lowestZ) / 2;
+            FusionVector ga, ma;
+            ga.axis.x = -gAccel.x; // default location for the BMX160 is on the rear of the board
+            ga.axis.y = -gAccel.y;
+            ga.axis.z = gAccel.z;
+            ma.axis.x = -magAccel.x;
+            ma.axis.y = -magAccel.y;
+            ma.axis.z = magAccel.z * 3;
+
+            // If we're set to one of the inverted positions
+            if (config.display.compass_orientation > meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270) {
+                ma = FusionAxesSwap(ma, FusionAxesAlignmentNXNYPZ);
+                ga = FusionAxesSwap(ga, FusionAxesAlignmentNXNYPZ);
+            }
+
+            float heading = FusionCompassCalculateHeading(FusionConventionNed, ga, ma);
+
+            switch (config.display.compass_orientation) {
+            case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_0_INVERTED:
+            case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_0:
+                break;
+            case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_90:
+            case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_90_INVERTED:
+                heading += 90;
+                break;
+            case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_180:
+            case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_180_INVERTED:
+                heading += 180;
+                break;
+            case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270:
+            case meshtastic_Config_DisplayConfig_CompassOrientation_DEGREES_270_INVERTED:
+                heading += 270;
+                break;
+            }
+
+            screen->setHeading(heading);
+
+#endif
+        } else if (acceleremoter_type == ScanI2C::DeviceType::LSM6DS3 && lsm.shake()) {
+            wakeScreen();
+            return 500;
+        }
+
+        return ACCELEROMETER_CHECK_INTERVAL_MS;
+    }
+
+  private:
+    void init()
+    {
         LOG_DEBUG("AccelerometerThread initializing\n");
 
         if (acceleremoter_type == ScanI2C::DeviceType::MPU6050 && mpu.begin(accelerometer_found.address)) {
@@ -109,6 +220,11 @@ class AccelerometerThread : public concurrency::OSThread
             bmaSensor.enableTiltIRQ();
             // It corresponds to isDoubleClick interrupt
             bmaSensor.enableWakeupIRQ();
+#ifdef RAK_4631
+        } else if (acceleremoter_type == ScanI2C::DeviceType::BMX160 && bmx160.begin()) {
+            bmx160.ODR_Config(BMX160_ACCEL_ODR_100HZ, BMX160_GYRO_ODR_100HZ); // set output data rate
+
+#endif
         } else if (acceleremoter_type == ScanI2C::DeviceType::LSM6DS3 && lsm.begin_I2C(accelerometer_found.address)) {
             LOG_DEBUG("LSM6DS3 initializing\n");
             // Default threshold of 2G, less sensitive options are 4, 8 or 16G
@@ -120,38 +236,6 @@ class AccelerometerThread : public concurrency::OSThread
             // Duration is number of occurances needed to trigger, higher threshold is less sensitive
         }
     }
-
-  protected:
-    int32_t runOnce() override
-    {
-        canSleep = true; // Assume we should not keep the board awake
-
-        if (acceleremoter_type == ScanI2C::DeviceType::MPU6050 && mpu.getMotionInterruptStatus()) {
-            wakeScreen();
-        } else if (acceleremoter_type == ScanI2C::DeviceType::LIS3DH && lis.getClick() > 0) {
-            uint8_t click = lis.getClick();
-            if (!config.device.double_tap_as_button_press) {
-                wakeScreen();
-            }
-
-            if (config.device.double_tap_as_button_press && (click & 0x20)) {
-                buttonPress();
-                return 500;
-            }
-        } else if (acceleremoter_type == ScanI2C::DeviceType::BMA423 && bmaSensor.readIrqStatus() != DEV_WIRE_NONE) {
-            if (bmaSensor.isTilt() || bmaSensor.isDoubleTap()) {
-                wakeScreen();
-                return 500;
-            }
-        } else if (acceleremoter_type == ScanI2C::DeviceType::LSM6DS3 && lsm.shake()) {
-            wakeScreen();
-            return 500;
-        }
-
-        return ACCELEROMETER_CHECK_INTERVAL_MS;
-    }
-
-  private:
     void wakeScreen()
     {
         if (powerFSM.getState() == &stateDARK) {
@@ -170,6 +254,12 @@ class AccelerometerThread : public concurrency::OSThread
     Adafruit_MPU6050 mpu;
     Adafruit_LIS3DH lis;
     Adafruit_LSM6DS3TRC lsm;
+    SensorBMA423 bmaSensor;
+#ifdef RAK_4631
+    RAK_BMX160 bmx160;
+    float highestX = 0, lowestX = 0, highestY = 0, lowestY = 0, highestZ = 0, lowestZ = 0;
+#endif
+    bool BMA_IRQ = false;
 };
 
-} // namespace concurrency
+#endif

@@ -21,12 +21,20 @@
 class LockingArduinoHal : public ArduinoHal
 {
   public:
-    LockingArduinoHal(SPIClass &spi, SPISettings spiSettings) : ArduinoHal(spi, spiSettings){};
+    LockingArduinoHal(SPIClass &spi, SPISettings spiSettings, RADIOLIB_PIN_TYPE _busy = RADIOLIB_NC)
+        : ArduinoHal(spi, spiSettings)
+    {
+#if ARCH_PORTDUINO
+        busy = _busy;
+#endif
+    };
 
     void spiBeginTransaction() override;
     void spiEndTransaction() override;
 #if ARCH_PORTDUINO
+    RADIOLIB_PIN_TYPE busy;
     void spiTransfer(uint8_t *out, size_t len, uint8_t *in) override;
+
 #endif
 };
 

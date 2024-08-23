@@ -108,8 +108,9 @@ class MeshService
     void reloadOwner(bool shouldSave = true);
 
     /// Called when the user wakes up our GUI, normally sends our latest location to the mesh (if we have it), otherwise at least
-    /// sends our owner
-    void sendNetworkPing(NodeNum dest, bool wantReplies = false);
+    /// sends our nodeinfo
+    /// returns true if we sent a position
+    bool trySendPosition(NodeNum dest, bool wantReplies = false);
 
     /// Send a packet into the mesh - note p must have been allocated from packetPool.  We will return it to that pool after
     /// sending. This is the ONLY function you should use for sending messages into the mesh, because it also updates the nodedb

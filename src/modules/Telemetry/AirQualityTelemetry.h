@@ -1,3 +1,7 @@
+#include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
 #pragma once
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "Adafruit_PM25AQI.h"
@@ -35,3 +39,5 @@ class AirQualityTelemetryModule : private concurrency::OSThread, public Protobuf
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute
     uint32_t lastSentToMesh = 0;
 };
+
+#endif

@@ -1,12 +1,17 @@
 #include "configuration.h"
 #include "main.h"
 #if ARCH_PORTDUINO
-#include "mesh_bus_spi.h"
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
 #ifndef TFT_BACKLIGHT_ON
 #define TFT_BACKLIGHT_ON HIGH
+#endif
+
+#ifdef GPIO_EXTENDER
+#include <SparkFunSX1509.h>
+#include <Wire.h>
+extern SX1509 gpioExtender;
 #endif
 
 #ifndef TFT_MESH
@@ -112,8 +117,16 @@ class LGFX : public lgfx::LGFX_Device
 static LGFX *tft = nullptr;
 
 #elif defined(RAK14014)
+#include <RAK14014_FT6336U.h>
 #include <TFT_eSPI.h>
 TFT_eSPI *tft = nullptr;
+FT6336U ft6336u;
+
+static uint8_t _rak14014_touch_int = false; // TP interrupt generation flag.
+static void rak14014_tpIntHandle(void)
+{
+    _rak14014_touch_int = true;
+}
 
 #elif defined(ST7789_CS)
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
@@ -340,7 +353,7 @@ static TFT_eSPI *tft = nullptr; // Invoke library, pins defined in User_Setup.h
 class LGFX : public lgfx::LGFX_Device
 {
     lgfx::Panel_LCD *_panel_instance;
-    lgfx::Mesh_Bus_SPI _bus_instance;
+    lgfx::Bus_SPI _bus_instance;
 
     lgfx::ITouch *_touch_instance;
 
@@ -357,7 +370,7 @@ class LGFX : public lgfx::LGFX_Device
             _panel_instance = new lgfx::Panel_ILI9341;
         auto buscfg = _bus_instance.config();
         buscfg.spi_mode = 0;
-        _bus_instance.spi_device(DisplaySPI, settingsStrings[displayspidev]);
+        buscfg.spi_host = settingsMap[displayspidev];
 
         buscfg.pin_dc = settingsMap[displayDC]; // Set SPI DC pin number (-1 = disable)
 
@@ -383,6 +396,8 @@ class LGFX : public lgfx::LGFX_Device
                 _touch_instance = new lgfx::Touch_XPT2046;
             } else if (settingsMap[touchscreenModule] == stmpe610) {
                 _touch_instance = new lgfx::Touch_STMPE610;
+            } else if (settingsMap[touchscreenModule] == ft5x06) {
+                _touch_instance = new lgfx::Touch_FT5x06;
             }
             auto touch_cfg = _touch_instance->config();
 
@@ -394,6 +409,11 @@ class LGFX : public lgfx::LGFX_Device
             touch_cfg.pin_int = settingsMap[touchscreenIRQ];
             touch_cfg.bus_shared = true;
             touch_cfg.offset_rotation = 1;
+            if (settingsMap[touchscreenI2CAddr] != -1) {
+                touch_cfg.i2c_addr = settingsMap[touchscreenI2CAddr];
+            } else {
+                touch_cfg.spi_host = settingsMap[touchscreenspidev];
+            }
 
             _touch_instance->config(touch_cfg);
             _panel_instance->setTouch(_touch_instance);
@@ -584,7 +604,7 @@ void TFTDisplay::sendCommand(uint8_t com)
         unphone.backlight(true); // using unPhone library
 #endif
 #ifdef RAK14014
-#elif !defined(M5STACK)
+#elif !defined(M5STACK) && !defined(ST7789_CS) // T-Deck gets brightness set in Screen.cpp in the handleSetOn function
         tft->setBrightness(172);
 #endif
         break;
@@ -628,6 +648,16 @@ void TFTDisplay::sendCommand(uint8_t com)
     // Drop all other commands to device (we just update the buffer)
 }
 
+void TFTDisplay::setDisplayBrightness(uint8_t _brightness)
+{
+#ifdef RAK14014
+    // todo
+#else
+    tft->setBrightness(_brightness);
+    LOG_DEBUG("Brightness is set to value: %i \n", _brightness);
+#endif
+}
+
 void TFTDisplay::flipScreenVertically()
 {
 #if defined(T_WATCH_S3)
@@ -639,6 +669,7 @@ void TFTDisplay::flipScreenVertically()
 bool TFTDisplay::hasTouch(void)
 {
 #ifdef RAK14014
+    return true;
 #elif !defined(M5STACK)
     return tft->touch() != nullptr;
 #else
@@ -649,6 +680,15 @@ bool TFTDisplay::hasTouch(void)
 bool TFTDisplay::getTouch(int16_t *x, int16_t *y)
 {
 #ifdef RAK14014
+    if (_rak14014_touch_int) {
+        _rak14014_touch_int = false;
+        /* The X and Y axes have to be switched */
+        *y = ft6336u.read_touch1_x();
+        *x = TFT_HEIGHT - ft6336u.read_touch1_y();
+        return true;
+    } else {
+        return false;
+    }
 #elif !defined(M5STACK)
     return tft->getTouch(x, y);
 #else
@@ -698,7 +738,10 @@ bool TFTDisplay::connect()
 #elif defined(RAK14014)
     tft->setRotation(1);
     tft->setSwapBytes(true);
-//    tft->fillScreen(TFT_BLACK);
+    //    tft->fillScreen(TFT_BLACK);
+    ft6336u.begin();
+    pinMode(SCREEN_TOUCH_INT, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(SCREEN_TOUCH_INT), rak14014_tpIntHandle, FALLING);
 #elif defined(T_DECK) || defined(PICOMPUTER_S3) || defined(CHATTER_2)
     tft->setRotation(1); // T-Deck has the TFT in landscape
 #elif defined(T_WATCH_S3)

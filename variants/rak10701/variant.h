@@ -307,10 +307,10 @@ SO GPIO 39/TXEN MAY NOT BE DEFINED FOR SUCCESSFUL OPERATION OF THE SX1262 - TG
 #define SCREEN_ROTATE
 #define SCREEN_TRANSITION_FRAMERATE 5
 
-#define HAS_TOUCHSCREEN 0
-#define SCREEN_TOUCH_INT 10 // From tp.h on the tracker open source code.
-#define TOUCH_I2C_PORT 0
-#define TOUCH_SLAVE_ADDRESS 0x5D // GT911
+#define HAS_TOUCHSCREEN 1
+#define SCREEN_TOUCH_INT WB_IO6
+
+#define CANNED_MESSAGE_MODULE_ENABLE 1
 
 /*----------------------------------------------------------------------------
  *        Arduino objects - C++ only
