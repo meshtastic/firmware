@@ -35,6 +35,7 @@ runs:
         python -m pip install --upgrade pip
         pip install -U --no-build-isolation --no-cache-dir "setuptools<72"
         pip install -U platformio adafruit-nrfutil --no-build-isolation
+        pip install -U poetry --no-build-isolation
         pip install -U meshtastic --pre --no-build-isolation
 
     - name: Upgrade platformio
