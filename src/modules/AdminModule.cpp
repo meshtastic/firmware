@@ -238,6 +238,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->set_favorite_node);
         if (node != NULL) {
             node->is_favorite = true;
+            saveChanges(SEGMENT_DEVICESTATE, false);
         }
         break;
     }
@@ -246,6 +247,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->remove_favorite_node);
         if (node != NULL) {
             node->is_favorite = false;
+            saveChanges(SEGMENT_DEVICESTATE, false);
         }
         break;
     }
