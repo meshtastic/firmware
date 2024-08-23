@@ -177,6 +177,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 /* Step #1: offer chance for variant-specific defines */
 #include "variant.h"
 
+#if defined(VEXT_ENABLE) && !defined(VEXT_ON_VALUE)
+// Older variant.h files might not be defining this value, so stay with the old default
+#define VEXT_ON_VALUE LOW
+#endif
+
 #ifndef GPS_BAUDRATE
 #define GPS_BAUDRATE 9600
 #endif
