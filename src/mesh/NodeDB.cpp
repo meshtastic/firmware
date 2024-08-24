@@ -1027,9 +1027,10 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
 #endif
 
     // Both of info->user and p start as filled with zero so I think this is okay
-    bool changed = memcmp(&info->user, &p, sizeof(info->user)) || (info->channel != channelIndex);
+    auto lite = TypeConversions::ConvertToUserLite(p);
+    bool changed = memcmp(&info->user, &lite, sizeof(info->user)) || (info->channel != channelIndex);
 
-    info->user = TypeConversions::ConvertToUserLite(p);
+    info->user = lite;
     if (info->user.public_key.size == 32) {
         printBytes("Saved Pubkey: ", info->user.public_key.bytes, 32);
     }
