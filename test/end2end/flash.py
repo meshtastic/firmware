@@ -1,5 +1,8 @@
-import usb.core
+# trunk-ignore-all(bandit/B404)
 import subprocess
+
+import usb.core
+
 
 def find_usb_device(vendor_id, product_id):
     # Find USB devices
@@ -10,11 +13,21 @@ def find_usb_device(vendor_id, product_id):
             return cfg
     return None
 
+
 # Flash esp32 target
 def flash_esp32(pio_env, port):
     # Flash the ESP32 target
-    subprocess.run(["platformio", "run", "-e", pio_env, "-t", "upload", "-p", port])
+    # trunk-ignore(bandit/B603)
+    # trunk-ignore(bandit/B607)
+    subprocess.run(
+        ["platformio", "run", "-e", pio_env, "-t", "upload", "--upload-port", port]
+    )
+
 
 def flash_nrf52(pio_env, port):
     # Flash the nrf52 target
-    subprocess.run(["platformio", "run", "-e", pio_env, "-t", "upload", "-p", port])
+    # trunk-ignore(bandit/B603)
+    # trunk-ignore(bandit/B607)
+    subprocess.run(
+        ["platformio", "run", "-e", pio_env, "-t", "upload", "--upload-port", port]
+    )
