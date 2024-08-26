@@ -14,8 +14,9 @@ typedef uint32_t PacketId; // A packet sequence number
     1 // Reserved to only deliver packets over high speed (non-lora) transports, such as MQTT or BLE mesh (not yet implemented)
 #define ERRNO_OK 0
 #define ERRNO_NO_INTERFACES 33
-#define ERRNO_UNKNOWN 32  // pick something that doesn't conflict with RH_ROUTER_ERROR_UNABLE_TO_DELIVER
-#define ERRNO_DISABLED 34 // the interface is disabled
+#define ERRNO_UNKNOWN 32                   // pick something that doesn't conflict with RH_ROUTER_ERROR_UNABLE_TO_DELIVER
+#define ERRNO_DISABLED 34                  // the interface is disabled
+#define ID_COUNTER_MASK (UINT32_MAX >> 22) // mask to select the counter portion of the ID
 
 /*
  * Source of a received message
