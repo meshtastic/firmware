@@ -66,3 +66,6 @@ class ButtonThread : public concurrency::OSThread
 };
 
 extern ButtonThread *buttonThread;
+#if defined(M5STACK_CORE2)
+void ScreenTouch();
+#endif

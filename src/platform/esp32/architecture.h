@@ -166,6 +166,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_NODE_T114
 #elif defined(M5STACK_COREBASIC)
 #define HW_VENDOR meshtastic_HardwareModel_M5STACK_COREBASIC
+#elif defined(M5STACK_CORE2)
+#define HW_VENDOR meshtastic_HardwareModel_M5STACK_CORE2
 #endif
 
 // -----------------------------------------------------------------------------

@@ -200,6 +200,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_RP2040_FEATHER_RFM95 = 76,
     /* M5 esp32 based MCU modules with enclosure, TFT and LORA Shields. All Variants (Basic, Core, Fire, Core2, Paper) https://m5stack.com/ */
     meshtastic_HardwareModel_M5STACK_COREBASIC=77,
+    /* M5 esp32 based MCU modules with enclosure, TFT and LORA Shields. All Variants (Basic, Core, Fire, Core2, Paper) https://m5stack.com/ */
+    meshtastic_HardwareModel_M5STACK_CORE2=78,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */

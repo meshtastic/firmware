@@ -62,7 +62,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #if ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
-#if defined(M5STACK_COREBASIC)  
+#if defined(M5STACK_COREBASIC)   || defined(M5STACK_CORE2)
 #include "M5Unified.h"
 extern  DataInfo DataRegion;
 #endif
@@ -952,7 +952,7 @@ bool deltaToTimestamp(uint32_t secondsAgo, uint8_t *hours, uint8_t *minutes, int
     validCached = true;
     return validCached;
 }
-#if defined(M5STACK_COREBASIC)
+#if defined(M5STACK_COREBASIC) || defined(M5STACK_CORE2) 
 static void drawLoraMessage(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y){
     display->clear();
     display->drawString(x + 0, y + 0, myRegion->name);
@@ -990,7 +990,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
     display->setFont(FONT_SMALL);
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
         display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-#if defined(M5STACK_COREBASIC)  
+#if defined(M5STACK_COREBASIC)   || defined(M5STACK_CORE2) 
     display->setColor(OLEDDISPLAY_COLOR::BLACK);
 #else
     display->setColor(BLACK);
@@ -1028,7 +1028,7 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
         }
     }
 
-#if defined(M5STACK_COREBASIC)  
+#if defined(M5STACK_COREBASIC)  || defined(M5STACK_CORE2)  
     display->setColor(OLEDDISPLAY_COLOR::WHITE);
 #else
     display->setColor(WHITE);
@@ -1105,7 +1105,7 @@ void Screen::drawColumns(OLEDDisplay *display, int16_t x, int16_t y, const char 
     int xo = x, yo = y;
     while (*f) {
         display->drawString(xo, yo, *f);
-#if defined(M5STACK_COREBASIC)  
+#if defined(M5STACK_COREBASIC)  || defined(M5STACK_CORE2) 
         if ((display->getColor() == OLEDDISPLAY_COLOR::BLACK) && config.display.heading_bold)
             display->drawString(xo + 1, yo, *f);
         display->setColor(OLEDDISPLAY_COLOR::WHITE);
@@ -1522,7 +1522,7 @@ static void drawNodeInfo(OLEDDisplay *display, OLEDDisplayUiState *state, int16_
     display->drawCircle(compassX, compassY, compassDiam / 2);
 
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
-#if defined(M5STACK_COREBASIC)  
+#if defined(M5STACK_COREBASIC)  || defined(M5STACK_CORE2) 
         display->setColor(OLEDDISPLAY_COLOR::BLACK);
 #else
         display->setColor(BLACK);
@@ -1644,6 +1644,10 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             pinMode(TFT_BL, OUTPUT);
             digitalWrite(TFT_BL, HIGH);
 #endif
+#if  defined(M5STACK_CORE2) 
+            M5.Power.Axp192.setDCDC3(1000);
+            M5.Display.setBrightness(130); 
+#endif
             enabled = true;
             setInterval(0); // Draw ASAP
             runASAP = true;
@@ -1658,6 +1662,8 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #if defined(M5STACK_COREBASIC)
             pinMode(TFT_BL, OUTPUT);
             digitalWrite(TFT_BL, LOW);
+#elif defined(M5STACK_CORE2) 
+            M5.Power.Axp192.setDCDC3(0);
 #endif
 #ifdef USE_ST7789
             SPI1.end();
@@ -2150,11 +2156,11 @@ void Screen::setFrames(FrameFocus focus)
     fsi.positions.textMessage = numframes;
     if (devicestate.has_rx_text_message && shouldDrawMessage(&devicestate.rx_text_message)) {
         normalFrames[numframes++] = drawTextMessageFrame;
-#if defined(M5STACK_COREBASIC)  
+#if defined(M5STACK_COREBASIC)   || defined(M5STACK_CORE2) 
         M5.Speaker.tone(3000, 400);
 #endif
     }
-#if defined(M5STACK_COREBASIC)  
+#if defined(M5STACK_COREBASIC)   || defined(M5STACK_CORE2) 
     normalFrames[numframes++] = drawLoraMessage;
 #endif
 
@@ -2418,7 +2424,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
 
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
         display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-#if defined(M5STACK_COREBASIC)  
+#if defined(M5STACK_COREBASIC)  || defined(M5STACK_CORE2) 
         display->setColor(OLEDDISPLAY_COLOR::BLACK);
 #else
         display->setColor(BLACK);
@@ -2463,7 +2469,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
         }
     }
 #endif
-#if defined(M5STACK_COREBASIC)  
+#if defined(M5STACK_COREBASIC)  || defined(M5STACK_CORE2) 
         display->setColor(OLEDDISPLAY_COLOR::WHITE);
 #else
         display->setColor(WHITE);
@@ -2538,7 +2544,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
 
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
         display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-#if defined(M5STACK_COREBASIC)  
+#if defined(M5STACK_COREBASIC)  || defined(M5STACK_CORE2) 
         display->setColor(OLEDDISPLAY_COLOR::BLACK);
 #else
         display->setColor(BLACK);
@@ -2562,7 +2568,7 @@ void DebugInfo::drawFrameWiFi(OLEDDisplay *display, OLEDDisplayUiState *state, i
         }
     }
 
-#if defined(M5STACK_COREBASIC)  
+#if defined(M5STACK_COREBASIC)  || defined(M5STACK_CORE2) 
         display->setColor(OLEDDISPLAY_COLOR::WHITE);
 #else
         display->setColor(WHITE);
@@ -2626,7 +2632,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
 
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
         display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
-#if defined(M5STACK_COREBASIC)  
+#if defined(M5STACK_COREBASIC)  || defined(M5STACK_CORE2) 
         display->setColor(OLEDDISPLAY_COLOR::BLACK);
 #else
         display->setColor(BLACK);
@@ -2669,7 +2675,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
     // minutes %= 60;
     // hours %= 24;
 
-#if defined(M5STACK_COREBASIC)  
+#if defined(M5STACK_COREBASIC)   || defined(M5STACK_CORE2) 
     display->setColor(OLEDDISPLAY_COLOR::WHITE);
 #else
     display->setColor(WHITE);

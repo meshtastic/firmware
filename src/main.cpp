@@ -115,7 +115,7 @@ AudioThread *audioThread = nullptr;
 #if defined(TCXO_OPTIONAL)
 float tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE; // if TCXO is optional, put this here so it can be changed further down.
 #endif
-#if defined(M5STACK_COREBASIC)
+#if defined(M5STACK_COREBASIC)  || defined(M5STACK_CORE2)
 #include <M5Unified.h>
 #endif
 
@@ -667,7 +667,6 @@ void setup()
     // I2C trigger by sending 'go' command
     drv.setMode(DRV2605_MODE_INTTRIG);
 #endif
-
     // Init our SPI controller (must be before screen and lora)
     initSPI();
 #ifdef ARCH_RP2040
@@ -754,12 +753,10 @@ void setup()
     if (!pmu_found)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_NO_AXP192); // Record a hardware fault for missing hardware
 #endif
-#if defined(M5STACK_COREBASIC) 
+#if defined(M5STACK_COREBASIC) || defined(M5STACK_CORE2)
     M5.begin();
     M5.Speaker.tone(2000, 600);
     M5.Display.init();
-    M5.Display.clearDisplay(); 
-    M5.Display.display(); 
     M5.Display.fillScreen(TFT_BLACK);
 #endif
 #if !MESHTASTIC_EXCLUDE_I2C
@@ -1158,5 +1155,8 @@ void loop()
         mainDelay.delay(delayMsec);
     }
     // if (didWake) LOG_DEBUG("wake!\n");
+#if defined(M5STACK_CORE2)
+    ScreenTouch();
+#endif
 }
 #endif

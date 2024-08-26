@@ -42,7 +42,7 @@ extern bool isUSBPowered;
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 extern ATECCX08A atecc;
 #endif
-#if defined(M5STACK_COREBASIC)  
+#if defined(M5STACK_COREBASIC)   || defined(M5STACK_CORE2) 
 struct DataInfo {
     int lora_channel_num;
     double lora_freq;
