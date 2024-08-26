@@ -127,7 +127,6 @@ NodeDB::NodeDB()
     if (!config.has_security) {
         config.has_security = true;
         config.security.serial_enabled = config.device.serial_enabled;
-        config.security.bluetooth_logging_enabled = config.bluetooth.device_logging_enabled;
         config.security.is_managed = config.device.is_managed;
     }
 #if !(MESHTASTIC_EXCLUDE_PKI)
@@ -556,13 +555,8 @@ void NodeDB::cleanupMeshDB()
     for (int i = 0; i < numMeshNodes; i++) {
         if (meshNodes->at(i).has_user) {
             if (meshNodes->at(i).user.public_key.size > 0) {
-                for (int j = 0; j < numMeshNodes; j++) {
-                    if (meshNodes->at(i).user.public_key.bytes[j] != 0) {
-                        break;
-                    }
-                    if (j == 31) {
-                        meshNodes->at(i).user.public_key.size = 0;
-                    }
+                if (memfll(meshNodes->at(i).user.public_key.bytes, 0, meshNodes->at(i).user.public_key.size)) {
+                    meshNodes->at(i).user.public_key.size = 0;
                 }
             }
             meshNodes->at(newPos++) = meshNodes->at(i);
@@ -1033,9 +1027,10 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
 #endif
 
     // Both of info->user and p start as filled with zero so I think this is okay
-    bool changed = memcmp(&info->user, &p, sizeof(info->user)) || (info->channel != channelIndex);
+    auto lite = TypeConversions::ConvertToUserLite(p);
+    bool changed = memcmp(&info->user, &lite, sizeof(info->user)) || (info->channel != channelIndex);
 
-    info->user = TypeConversions::ConvertToUserLite(p);
+    info->user = lite;
     if (info->user.public_key.size == 32) {
         printBytes("Saved Pubkey: ", info->user.public_key.bytes, 32);
     }

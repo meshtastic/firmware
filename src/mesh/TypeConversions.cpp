@@ -16,8 +16,14 @@ meshtastic_NodeInfo TypeConversions::ConvertToNodeInfo(const meshtastic_NodeInfo
 
     if (lite->has_position) {
         info.has_position = true;
+        if (lite->position.latitude_i != 0)
+            info.position.has_latitude_i = true;
         info.position.latitude_i = lite->position.latitude_i;
+        if (lite->position.longitude_i != 0)
+            info.position.has_longitude_i = true;
         info.position.longitude_i = lite->position.longitude_i;
+        if (lite->position.altitude != 0)
+            info.position.has_altitude = true;
         info.position.altitude = lite->position.altitude;
         info.position.location_source = lite->position.location_source;
         info.position.time = lite->position.time;
@@ -48,8 +54,14 @@ meshtastic_PositionLite TypeConversions::ConvertToPositionLite(meshtastic_Positi
 meshtastic_Position TypeConversions::ConvertToPosition(meshtastic_PositionLite lite)
 {
     meshtastic_Position position = meshtastic_Position_init_default;
+    if (lite.latitude_i != 0)
+        position.has_latitude_i = true;
     position.latitude_i = lite.latitude_i;
+    if (lite.longitude_i != 0)
+        position.has_longitude_i = true;
     position.longitude_i = lite.longitude_i;
+    if (lite.altitude != 0)
+        position.has_altitude = true;
     position.altitude = lite.altitude;
     position.location_source = lite.location_source;
     position.time = lite.time;
