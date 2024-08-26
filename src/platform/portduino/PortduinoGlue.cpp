@@ -1,6 +1,7 @@
 #include "CryptoEngine.h"
 #include "PortduinoGPIO.h"
 #include "SPIChip.h"
+#include "RTC.h"
 #include "mesh/RF95Interface.h"
 #include "sleep.h"
 #include "target_specific.h"
@@ -370,6 +371,12 @@ void portduinoSetup()
             exit(EXIT_FAILURE);
         }
     }
+
+    struct timeval tv;
+    tv.tv_sec = time(NULL);
+    tv.tv_usec = 0;
+    perhapsSetRTC(RTCQualityNTP, &tv);
+
     return;
 }
 
