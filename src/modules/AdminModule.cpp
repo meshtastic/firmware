@@ -75,7 +75,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     // and only allowing responses from that remote.
     if (!((mp.from == 0 && !config.security.is_managed) || messageIsResponse(r) ||
           (strcasecmp(ch->settings.name, Channels::adminChannel) == 0 && config.security.admin_channel_enabled) ||
-          (mp.pki_encrypted && memcmp(mp.public_key.bytes, config.security.admin_key.bytes, 32) == 0))) {
+          (mp.pki_encrypted && memcmp(mp.public_key.bytes, config.security.admin_key[0].bytes, 32) == 0))) {
         LOG_INFO("Ignoring admin payload %i\n", r->which_payload_variant);
         return handled;
     }
