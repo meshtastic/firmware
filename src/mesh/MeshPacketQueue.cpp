@@ -20,8 +20,9 @@ bool CompareMeshPacketFunc(const meshtastic_MeshPacket *p1, const meshtastic_Mes
     // If priorities differ, use that
     // for equal priorities, order by id (older packets have higher priority - this will briefly be wrong when IDs roll over but
     // no big deal)
-    return (p1p != p2p) ? (p1p < p2p)         // prefer bigger priorities
-                        : (p1->id >= p2->id); // prefer smaller packet ids
+    return (p1p != p2p)
+               ? (p1p < p2p)                                                 // prefer bigger priorities
+               : ((p1->id & ID_COUNTER_MASK) >= (p2->id & ID_COUNTER_MASK)); // Mask to counter portion, prefer smaller packet ids
 }
 
 MeshPacketQueue::MeshPacketQueue(size_t _maxLen) : maxLen(_maxLen) {}
