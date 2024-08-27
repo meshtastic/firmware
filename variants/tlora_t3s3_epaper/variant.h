@@ -19,8 +19,8 @@
 #define I2C_SCL SCL
 
 // external qwiic connector
-#define GPS_RX_PIN 44
-#define GPS_TX_PIN 43
+// #define GPS_RX_PIN 44
+// #define GPS_TX_PIN 43
 
 #define LED_PIN 37
 #define BUTTON_PIN 0
