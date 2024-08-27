@@ -1,7 +1,7 @@
 #include "CryptoEngine.h"
 #include "PortduinoGPIO.h"
-#include "SPIChip.h"
 #include "RTC.h"
+#include "SPIChip.h"
 #include "mesh/RF95Interface.h"
 #include "sleep.h"
 #include "target_specific.h"
