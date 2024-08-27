@@ -109,7 +109,7 @@ PacketId generatePacketId()
 
     rollingPacketId++;
 
-    rollingPacketId &= UINT32_MAX >> 22;                                   // Mask out the top 22 bits
+    rollingPacketId &= ID_COUNTER_MASK;                                    // Mask out the top 22 bits
     PacketId id = rollingPacketId | random(UINT32_MAX & 0x7fffffff) << 10; // top 22 bits
     LOG_DEBUG("Partially randomized packet id %u\n", id);
     return id;
