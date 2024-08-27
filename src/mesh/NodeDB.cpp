@@ -620,7 +620,7 @@ void NodeDB::pickNewNodeNum()
 
     meshtastic_NodeInfoLite *found;
     while ((nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED) ||
-           ((found = getMeshNode(nodeNum)) && memcmp(found->user.macaddr, owner.macaddr, sizeof(owner.macaddr)) != 0)) {
+           ((found = getMeshNode(nodeNum)) && memcmp(found->user.macaddr, ourMacAddr, sizeof(ourMacAddr)) != 0)) {
         NodeNum candidate = random(NUM_RESERVED, LONG_MAX); // try a new random choice
         LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, so trying for 0x%x\n", nodeNum, candidate);
         nodeNum = candidate;
