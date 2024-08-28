@@ -25,6 +25,8 @@ extern SX1509 gpioExtender;
 #define TFT_INVERT true
 #endif
 
+GpioPin *TFTDisplay::backlightEnable;
+
 class LGFX : public lgfx::LGFX_Device
 {
     lgfx::Panel_ST7735S _panel_instance;
@@ -584,6 +586,7 @@ void TFTDisplay::sendCommand(uint8_t com)
     // handle display on/off directly
     switch (com) {
     case DISPLAYON: {
+        // LOG_DEBUG("Display on\n");
         backlightEnable->set(true);
 #if ARCH_PORTDUINO
         display(true);
@@ -607,6 +610,7 @@ void TFTDisplay::sendCommand(uint8_t com)
         break;
     }
     case DISPLAYOFF: {
+        // LOG_DEBUG("Display off\n");
         backlightEnable->set(false);
 #if ARCH_PORTDUINO
         tft->clear();

@@ -43,8 +43,10 @@ class TFTDisplay : public OLEDDisplay
     /**
      * This is normally managed entirely by TFTDisplay, but some rare applications (heltec tracker) might need to replace the
      * default GPIO behavior with something a bit more complex.
+     *
+     * We (cruftily) make it static so that variant.cpp can access it without needing a ptr to the TFTDisplay instance.
      */
-    GpioPin *backlightEnable;
+    static GpioPin *backlightEnable;
 
   protected:
     // the header size of the buffer used, e.g. for the SPI command header
