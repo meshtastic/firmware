@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef OLED_PL
+#include "graphics/fonts/OLEDDisplayFontsPL.h"
+#endif
+
 #ifdef OLED_RU
 #include "graphics/fonts/OLEDDisplayFontsRU.h"
 #endif
@@ -15,6 +19,9 @@
 #define FONT_MEDIUM ArialMT_Plain_24 // Height: 28
 #define FONT_LARGE ArialMT_Plain_24  // Height: 28
 #else
+#ifdef OLED_PL
+#define FONT_SMALL ArialMT_Plain_10_PL
+#else
 #ifdef OLED_RU
 #define FONT_SMALL ArialMT_Plain_10_RU
 #else
@@ -22,6 +29,7 @@
 #define FONT_SMALL ArialMT_Plain_10_UA
 #else
 #define FONT_SMALL ArialMT_Plain_10 // Height: 13
+#endif
 #endif
 #endif
 #define FONT_MEDIUM ArialMT_Plain_16 // Height: 19
