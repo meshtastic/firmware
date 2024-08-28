@@ -76,6 +76,13 @@ std::string MeshPacketSerializer::JsonSerialize(const meshtastic_MeshPacket *mp,
                     msgPayload["wind_direction"] = new JSONValue((uint)decoded->variant.environment_metrics.wind_direction);
                     msgPayload["wind_gust"] = new JSONValue(decoded->variant.environment_metrics.wind_gust);
                     msgPayload["wind_lull"] = new JSONValue(decoded->variant.environment_metrics.wind_lull);
+                } else if (decoded->which_variant == meshtastic_Telemetry_air_quality_metrics_tag) {
+                    msgPayload["pm10"] = new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm10_standard);
+                    msgPayload["pm25"] = new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm25_standard);
+                    msgPayload["pm100"] = new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm100_standard);
+                    msgPayload["pm10_e"] = new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm10_environmental);
+                    msgPayload["pm25_e"] = new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm25_environmental);
+                    msgPayload["pm100_e"] = new JSONValue((unsigned int)decoded->variant.air_quality_metrics.pm100_environmental);
                 } else if (decoded->which_variant == meshtastic_Telemetry_power_metrics_tag) {
                     msgPayload["voltage_ch1"] = new JSONValue(decoded->variant.power_metrics.ch1_voltage);
                     msgPayload["current_ch1"] = new JSONValue(decoded->variant.power_metrics.ch1_current);
