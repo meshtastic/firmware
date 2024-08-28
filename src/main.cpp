@@ -224,6 +224,11 @@ __attribute__((weak, noinline)) bool loopCanSleep()
     return true;
 }
 
+// Weak empty variant initialization function.
+// May be redefined by variant files.
+void lateInitVariant() __attribute__((weak));
+void lateInitVariant() {}
+
 /**
  * Print info as a structured log message (for automated log processing)
  */
@@ -1002,6 +1007,8 @@ void setup()
             rebootAtMsec = millis() + 5000;
         }
     }
+
+    lateInitVariant(); // Do board specific init (see extra_variants/README.md for documentation)
 
 #if !MESHTASTIC_EXCLUDE_MQTT
     mqttInit();
