@@ -1415,19 +1415,18 @@ GPS *GPS::createGps()
     new_gps->rx_gpio = _rx_gpio;
     new_gps->tx_gpio = _tx_gpio;
 
+    GpioVirtPin *virtPin = new GpioVirtPin();
+    new_gps->enablePin = virtPin; // Always at least populate a virtual pin
     if (_en_gpio) {
         GpioPin *p = new GpioHwPin(_en_gpio);
 
         if (!GPS_EN_ACTIVE) { // Need to invert the pin before hardware
-            auto virtPin = new GpioVirtPin();
             new GpioNotTransformer(
                 virtPin, p); // We just leave this created object on the heap so it can stay watching virtPin and driving en_gpio
-            p = virtPin;
+        } else {
+            new GpioUnaryTransformer(
+                virtPin, p); // We just leave this created object on the heap so it can stay watching virtPin and driving en_gpio
         }
-        new_gps->enablePin = p;
-    } else {
-        // Just use a simulated pin
-        new_gps->enablePin = new GpioVirtPin();
     }
 
 #ifdef PIN_GPS_PPS
