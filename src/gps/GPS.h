@@ -157,7 +157,7 @@ class GPS : private concurrency::OSThread
      *
      * Normally set by GPS::createGPS()
      */
-    GpioVirtPin *enablePin;
+    GpioVirtPin *enablePin = NULL;
 
     GPS() : concurrency::OSThread("GPS") {}
 
