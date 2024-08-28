@@ -395,6 +395,12 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.has_store_forward = true;
     moduleConfig.has_telemetry = true;
     moduleConfig.has_external_notification = true;
+#if defined(PIN_BUZZER)
+    moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.output_buzzer = PIN_BUZZER;
+    moduleConfig.external_notification.alert_message_buzzer = true;
+    moduleConfig.external_notification.nag_timeout = 60;
+#endif
 #if defined(RAK4630) || defined(RAK11310)
     // Default to RAK led pin 2 (blue)
     moduleConfig.external_notification.enabled = true;
