@@ -12,6 +12,7 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     libssl-dev \
     libulfius-dev \
     libyaml-cpp-dev \
+    pipx \
     pkg-config \
     python3 \
     python3-pip \
@@ -21,4 +22,4 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     zip \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install --no-cache-dir -U platformio==6.1.15
+RUN pipx install platformio==6.1.15
