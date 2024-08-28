@@ -25,8 +25,6 @@ extern SX1509 gpioExtender;
 #define TFT_INVERT true
 #endif
 
-GpioPin *TFTDisplay::backlightEnable;
-
 class LGFX : public lgfx::LGFX_Device
 {
     lgfx::Panel_ST7735S _panel_instance;
@@ -514,6 +512,8 @@ static LGFX *tft = nullptr;
 #include "unPhone.h"
 extern unPhone unphone;
 #endif
+
+GpioPin *TFTDisplay::backlightEnable = NULL;
 
 TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY geometry, HW_I2C i2cBus)
 {
