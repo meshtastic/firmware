@@ -67,6 +67,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_TRACKER_T1000_E
 #elif defined(ME25LS01_4Y10TD)
 #define HW_VENDOR meshtastic_HardwareModel_ME25LS01_4Y10TD
+#elif defined(MS24SF1)
+#define HW_VENDOR meshtastic_HardwareModel_MS24SF1
 #elif defined(PRIVATE_HW) || defined(FEATHER_DIY)
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #else
