@@ -93,7 +93,6 @@ static const uint8_t MOSI = PIN_SPI_MOSI;
 static const uint8_t MISO = PIN_SPI_MISO;
 static const uint8_t SCK = PIN_SPI_SCK;
 
-
 // MINEWSEMI nRF52840+SX1262 MS24SF1 (NRF82540 with integrated SX1262)
 #define USE_SX1262
 #define SX126X_CS (0 + 22)    // LORA_CS     P0.22
@@ -105,8 +104,6 @@ static const uint8_t SCK = PIN_SPI_SCK;
 
 // DIO2 controlls an antenna switch and the TCXO voltage is controlled by DIO3
 #define SX126X_DIO2_AS_RF_SWITCH
-// #define SX126X_DIO3_TCXO_VOLTAGE 1.8
-
 
 #define HAS_GPS 0
 
