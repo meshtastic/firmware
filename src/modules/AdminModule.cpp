@@ -537,7 +537,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
     case meshtastic_Config_security_tag:
         LOG_INFO("Setting config: Security\n");
         config.security = c.payload_variant.security;
-
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
         // We check for a potentially valid private key, and a blank public key, and regen the public key if needed.
         if (config.security.private_key.size == 32 && !memfll(config.security.private_key.bytes, 0, 32) &&
             (config.security.public_key.size == 0 || memfll(config.security.public_key.bytes, 0, 32))) {
@@ -545,6 +545,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
                 config.security.public_key.size = 32;
             }
         }
+#endif
         owner.public_key.size = config.security.public_key.size;
         memcpy(owner.public_key.bytes, config.security.public_key.bytes, config.security.public_key.size);
 #if !MESHTASTIC_EXCLUDE_PKI
