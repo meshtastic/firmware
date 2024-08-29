@@ -258,6 +258,12 @@ void setup()
 #ifdef DEBUG_PORT
     consoleInit(); // Set serial baud rate and init our mesh console
 #endif
+#if ARCH_PORTDUINO
+    struct timeval tv;
+    tv.tv_sec = time(NULL);
+    tv.tv_usec = 0;
+    perhapsSetRTC(RTCQualityNTP, &tv);
+#endif
     powerMonInit();
 
     serialSinceMsec = millis();
