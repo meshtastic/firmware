@@ -527,9 +527,7 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
     }
 
     if (ch.settings.uplink_enabled || mp.pki_encrypted) {
-        const char *channelId = "PKI";
-        if (!mp.pki_encrypted)
-            const char *channelId = channels.getGlobalId(chIndex); // FIXME, for now we just use the human name for the channel
+        const char *channelId = mp.pki_encrypted ? "PKI" : channels.getGlobalId(chIndex);
 
         meshtastic_ServiceEnvelope *env = mqttPool.allocZeroed();
         env->channel_id = (char *)channelId;
