@@ -42,7 +42,6 @@ extern bool isUSBPowered;
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 extern ATECCX08A atecc;
 #endif
-#if defined(M5STACK_COREBASIC)   || defined(M5STACK_CORE2) 
 struct DataInfo {
     int lora_channel_num;
     double lora_freq;
@@ -52,7 +51,6 @@ struct DataInfo {
     int  lora_sf;
     int lora_cr;
 };
-#endif
 #ifdef T_WATCH_S3
 #include <Adafruit_DRV2605.h>
 extern Adafruit_DRV2605 drv;

@@ -13,7 +13,7 @@
 #ifdef ARCH_PORTDUINO
 #include "platform/portduino/PortduinoGlue.h"
 #endif
-#if  defined(M5STACK_COREBASIC)  || defined(M5STACK_CORE2)
+#if  defined(M5STACK_CORE2)
 #include <M5Unified.h>
 #endif
 #define DEBUG_BUTTONS 0
@@ -126,9 +126,6 @@ int32_t ButtonThread::runOnce()
         switch (btnEvent) {
         case BUTTON_EVENT_PRESSED: {
             LOG_BUTTON("press!\n");
-#if  defined(M5STACK_COREBASIC) 
-            M5.Speaker.tone(1000, 100);
-#endif
 #ifdef BUTTON_PIN
             if (((config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN) !=
                  moduleConfig.canned_message.inputbroker_pin_press) ||
@@ -149,9 +146,6 @@ int32_t ButtonThread::runOnce()
 
         case BUTTON_EVENT_DOUBLE_PRESSED: {
             LOG_BUTTON("Double press!\n");
-#if  defined(M5STACK_COREBASIC) 
-            M5.Speaker.tone(2000, 100);
-#endif
             service->refreshLocalMeshNode();
             auto sentPosition = service->trySendPosition(NODENUM_BROADCAST, true);
             if (screen) {
@@ -193,9 +187,6 @@ int32_t ButtonThread::runOnce()
 
         case BUTTON_EVENT_LONG_PRESSED: {
             LOG_BUTTON("Long press!\n");
-#if  defined(M5STACK_COREBASIC) 
-            M5.Speaker.tone(3000, 300);
-#endif
             powerFSM.trigger(EVENT_PRESS);
             if (screen) {
                 screen->startAlert("Shutting down...");
@@ -208,9 +199,6 @@ int32_t ButtonThread::runOnce()
         // may wake the board immediatedly.
         case BUTTON_EVENT_LONG_RELEASED: {
             LOG_INFO("Shutdown from long press\n");
-#if  defined(M5STACK_COREBASIC) 
-            M5.Speaker.tone(4000, 300);
-#endif
             playShutdownMelody();
             delay(3000);
             power->shutdown();

@@ -761,9 +761,6 @@ void setup()
 #endif
 #if defined(M5STACK_COREBASIC) || defined(M5STACK_CORE2)
     M5.begin();
-    M5.Speaker.tone(2000, 600);
-    M5.Display.init();
-    M5.Display.fillScreen(TFT_BLACK);
 #endif
 #if !MESHTASTIC_EXCLUDE_I2C
 // Don't call screen setup until after nodedb is setup (because we need
