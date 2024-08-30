@@ -252,6 +252,8 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         return meshtastic_Routing_Error_BAD_REQUEST;
     }
 
+    fixPriority(p); // Before encryption, fix the priority if it's unset
+
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it

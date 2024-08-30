@@ -11,6 +11,7 @@
 #include <Curve25519.h>
 #include <SHA256.h>
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
+
 /**
  * Create a public/private key pair with Curve25519.
  *
@@ -23,6 +24,30 @@ void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey)
     Curve25519::dh1(public_key, private_key);
     memcpy(pubKey, public_key, sizeof(public_key));
     memcpy(privKey, private_key, sizeof(private_key));
+}
+
+/**
+ * regenerate a public key with Curve25519.
+ *
+ * @param pubKey The destination for the public key.
+ * @param privKey The source for the private key.
+ */
+bool CryptoEngine::regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey)
+{
+    if (!memfll(privKey, 0, sizeof(private_key))) {
+        Curve25519::eval(pubKey, privKey, 0);
+        if (Curve25519::isWeakPoint(pubKey)) {
+            LOG_ERROR("PKI key generation failed. Specified private key results in a weak\n");
+            memset(pubKey, 0, 32);
+            return false;
+        }
+        memcpy(private_key, privKey, sizeof(private_key));
+        memcpy(public_key, pubKey, sizeof(public_key));
+    } else {
+        LOG_WARN("X25519 key generation failed due to blank private key\n");
+        return false;
+    }
+    return true;
 }
 #endif
 void CryptoEngine::clearKeys()

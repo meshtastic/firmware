@@ -1,6 +1,5 @@
 #include "CryptoEngine.h"
 #include "PortduinoGPIO.h"
-#include "RTC.h"
 #include "SPIChip.h"
 #include "mesh/RF95Interface.h"
 #include "sleep.h"
@@ -8,7 +7,6 @@
 
 #include <Utility.h>
 #include <assert.h>
-#include <time.h>
 
 #include "PortduinoGlue.h"
 #include "linux/gpio/LinuxGPIOPin.h"
@@ -371,11 +369,6 @@ void portduinoSetup()
             exit(EXIT_FAILURE);
         }
     }
-
-    struct timeval tv;
-    tv.tv_sec = time(NULL);
-    tv.tv_usec = 0;
-    perhapsSetRTC(RTCQualityNTP, &tv);
 
     return;
 }
