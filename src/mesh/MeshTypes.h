@@ -49,3 +49,6 @@ extern Allocator<meshtastic_MeshPacket> &packetPool;
  * the local node. If from is zero this function returns our node number instead
  */
 NodeNum getFrom(const meshtastic_MeshPacket *p);
+
+/* Some clients might not properly set priority, therefore we fix it here. */
+void fixPriority(meshtastic_MeshPacket *p);
