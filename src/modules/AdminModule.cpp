@@ -288,7 +288,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         tv.tv_sec = r->set_time_only;
         tv.tv_usec = 0;
 
-        perhapsSetRTC(RTCQualityFromNet, &tv, false);
+        perhapsSetRTC(RTCQualityNTP, &tv, false);
         break;
     }
     case meshtastic_AdminMessage_enter_dfu_mode_request_tag: {
