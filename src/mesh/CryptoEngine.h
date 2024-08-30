@@ -21,6 +21,7 @@ struct CryptoKey {
  */
 
 #define MAX_BLOCKSIZE 256
+#define TEST_CURVE25519_FIELD_OPS // Exposes Curve25519::isWeakPoint() for testing keys
 
 class CryptoEngine
 {
@@ -33,6 +34,8 @@ class CryptoEngine
 #if !(MESHTASTIC_EXCLUDE_PKI)
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
     virtual void generateKeyPair(uint8_t *pubKey, uint8_t *privKey);
+    virtual bool regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey);
+
 #endif
     void clearKeys();
     void setDHPrivateKey(uint8_t *_private_key);
