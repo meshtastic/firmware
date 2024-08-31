@@ -246,11 +246,12 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     // Display pressure
     if (lastMeasurement.variant.environment_metrics.has_barometric_pressure) {
         display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Press: " + String(lastMeasurement.variant.environment_metrics.barometric_pressure, 0) + "hPA");
+                            "Pressure: " + String(lastMeasurement.variant.environment_metrics.barometric_pressure, 0) + "hPA");
     }
 
     // Display voltage
-    if (lastMeasurement.variant.environment_metrics.has_voltage) {
+    if (lastMeasurement.variant.environment_metrics.has_voltage ||
+            lastMeasurement.variant.environment_metrics.has_current) {
         display->drawString(x, y += _fontHeight(FONT_SMALL),
                             "Volt/Cur: " + String(lastMeasurement.variant.environment_metrics.voltage, 0) + "V / " +
                                 String(lastMeasurement.variant.environment_metrics.current, 0) + "mA");
