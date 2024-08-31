@@ -19,7 +19,7 @@
     "mcu": "esp32s3",
     "variant": "CDEBYTE_EoRa-S3"
   },
-  "connectivity": ["wifi"],
+  "connectivity": ["wifi", "bluetooth"],
   "debug": {
     "openocd_target": "esp32s3.cfg"
   },

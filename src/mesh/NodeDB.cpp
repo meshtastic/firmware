@@ -139,14 +139,24 @@ NodeDB::NodeDB()
         crypto->setDHPrivateKey(config.security.private_key.bytes);
     } else {
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
-        LOG_INFO("Generating new PKI keys\n");
-        crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-        config.security.public_key.size = 32;
-        config.security.private_key.size = 32;
-
-        printBytes("New Pubkey", config.security.public_key.bytes, 32);
-        owner.public_key.size = 32;
-        memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
+        bool keygenSuccess = false;
+        if (config.security.private_key.size == 32) {
+            LOG_INFO("Calculating PKI Public Key\n");
+            if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
+                keygenSuccess = true;
+            }
+        } else {
+            LOG_INFO("Generating new PKI keys\n");
+            crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
+            keygenSuccess = true;
+        }
+        if (keygenSuccess) {
+            config.security.public_key.size = 32;
+            config.security.private_key.size = 32;
+            printBytes("New Pubkey", config.security.public_key.bytes, 32);
+            owner.public_key.size = 32;
+            memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
+        }
 #else
         LOG_INFO("No PKI keys set, and generation disabled!\n");
 #endif
@@ -307,7 +317,7 @@ void NodeDB::installDefaultConfig()
 #else
     config.device.disable_triple_click = true;
 #endif
-#if !HAS_GPS || defined(T_DECK)
+#if !HAS_GPS || defined(T_DECK) || defined(TLORA_T3S3_EPAPER)
     config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT;
 #elif !defined(GPS_RX_PIN)
     if (config.position.rx_gpio == 0)
