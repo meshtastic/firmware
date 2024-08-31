@@ -7,7 +7,6 @@
 
 #include <Utility.h>
 #include <assert.h>
-#include <time.h>
 
 #include "PortduinoGlue.h"
 #include "linux/gpio/LinuxGPIOPin.h"
@@ -374,6 +373,7 @@ void portduinoSetup()
             exit(EXIT_FAILURE);
         }
     }
+
     return;
 }
 
