@@ -120,7 +120,7 @@ int32_t NeighborInfoModule::runOnce()
     if (airTime->isTxAllowedChannelUtil(true) && airTime->isTxAllowedAirUtil()) {
         sendNeighborInfo(NODENUM_BROADCAST, false);
     }
-    return Default::getConfiguredOrDefault(moduleConfig.neighbor_info.update_interval, default_neighbor_info_broadcast_secs);
+    return Default::getConfiguredOrDefaultMs(moduleConfig.neighbor_info.update_interval, default_neighbor_info_broadcast_secs);
 }
 
 /*

@@ -19,6 +19,7 @@
 #include "error.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
+#include "meshUtils.h"
 #include "modules/NeighborInfoModule.h"
 #include <ErriezCRC32.h>
 #include <algorithm>
@@ -123,7 +124,47 @@ NodeDB::NodeDB()
 
     // Include our owner in the node db under our nodenum
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
-    info->user = owner;
+    if (!config.has_security) {
+        config.has_security = true;
+        config.security.serial_enabled = config.device.serial_enabled;
+        config.security.is_managed = config.device.is_managed;
+    }
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    // Calculate Curve25519 public and private keys
+    printBytes("Old Pubkey", config.security.public_key.bytes, 32);
+    if (config.security.private_key.size == 32 && config.security.public_key.size == 32) {
+        LOG_INFO("Using saved PKI keys\n");
+        owner.public_key.size = config.security.public_key.size;
+        memcpy(owner.public_key.bytes, config.security.public_key.bytes, config.security.public_key.size);
+        crypto->setDHPrivateKey(config.security.private_key.bytes);
+    } else {
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
+        bool keygenSuccess = false;
+        if (config.security.private_key.size == 32) {
+            LOG_INFO("Calculating PKI Public Key\n");
+            if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
+                keygenSuccess = true;
+            }
+        } else {
+            LOG_INFO("Generating new PKI keys\n");
+            crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
+            keygenSuccess = true;
+        }
+        if (keygenSuccess) {
+            config.security.public_key.size = 32;
+            config.security.private_key.size = 32;
+            printBytes("New Pubkey", config.security.public_key.bytes, 32);
+            owner.public_key.size = 32;
+            memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
+        }
+#else
+        LOG_INFO("No PKI keys set, and generation disabled!\n");
+#endif
+    }
+
+#endif
+
+    info->user = TypeConversions::ConvertToUserLite(owner);
     info->has_user = true;
 
 #ifdef ARCH_ESP32
@@ -237,6 +278,7 @@ void NodeDB::installDefaultConfig()
     config.has_power = true;
     config.has_network = true;
     config.has_bluetooth = (HAS_BLUETOOTH ? true : false);
+    config.has_security = true;
     config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
 
     config.lora.sx126x_rx_boosted_gain = true;
@@ -259,6 +301,14 @@ void NodeDB::installDefaultConfig()
 #else
     config.lora.ignore_mqtt = false;
 #endif
+#ifdef ADMIN_KEY_USERPREFS
+    memcpy(config.security.admin_key[0].bytes, admin_key_userprefs, 32);
+    config.security.admin_key[0].size = 32;
+#else
+    config.security.admin_key[0].size = 0;
+#endif
+    config.security.public_key.size = 0;
+    config.security.private_key.size = 0;
 #ifdef PIN_GPS_EN
     config.position.gps_en_gpio = PIN_GPS_EN;
 #endif
@@ -267,7 +317,7 @@ void NodeDB::installDefaultConfig()
 #else
     config.device.disable_triple_click = true;
 #endif
-#if !HAS_GPS || defined(T_DECK)
+#if !HAS_GPS || defined(T_DECK) || defined(TLORA_T3S3_EPAPER)
     config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT;
 #elif !defined(GPS_RX_PIN)
     if (config.position.rx_gpio == 0)
@@ -282,7 +332,8 @@ void NodeDB::installDefaultConfig()
     config.position.broadcast_smart_minimum_interval_secs = 30;
     if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER)
         config.device.node_info_broadcast_secs = default_node_info_broadcast_secs;
-    config.device.serial_enabled = true;
+    config.security.serial_enabled = true;
+    config.security.admin_channel_enabled = false;
     resetRadioConfig();
     strncpy(config.network.ntp_server, "meshtastic.pool.ntp.org", 32);
     // FIXME: Default to bluetooth capability of platform as default
@@ -354,6 +405,13 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.has_store_forward = true;
     moduleConfig.has_telemetry = true;
     moduleConfig.has_external_notification = true;
+#if defined(PIN_BUZZER)
+    moduleConfig.external_notification.enabled = true;
+    moduleConfig.external_notification.output_buzzer = PIN_BUZZER;
+    moduleConfig.external_notification.use_pwm = true;
+    moduleConfig.external_notification.alert_message_buzzer = true;
+    moduleConfig.external_notification.nag_timeout = 60;
+#endif
 #if defined(RAK4630) || defined(RAK11310)
     // Default to RAK led pin 2 (blue)
     moduleConfig.external_notification.enabled = true;
@@ -363,6 +421,7 @@ void NodeDB::installDefaultModuleConfig()
     moduleConfig.external_notification.output_ms = 1000;
     moduleConfig.external_notification.nag_timeout = 60;
 #endif
+
 #ifdef HAS_I2S
     // Don't worry about the other settings for T-Watch, we'll also use the DRV2056 behavior for notifications
     moduleConfig.external_notification.enabled = true;
@@ -512,10 +571,16 @@ void NodeDB::cleanupMeshDB()
 {
     int newPos = 0, removed = 0;
     for (int i = 0; i < numMeshNodes; i++) {
-        if (meshNodes->at(i).has_user)
+        if (meshNodes->at(i).has_user) {
+            if (meshNodes->at(i).user.public_key.size > 0) {
+                if (memfll(meshNodes->at(i).user.public_key.bytes, 0, meshNodes->at(i).user.public_key.size)) {
+                    meshNodes->at(i).user.public_key.size = 0;
+                }
+            }
             meshNodes->at(newPos++) = meshNodes->at(i);
-        else
+        } else {
             removed++;
+        }
     }
     numMeshNodes -= removed;
     std::fill(devicestate.node_db_lite.begin() + numMeshNodes, devicestate.node_db_lite.begin() + numMeshNodes + removed,
@@ -573,7 +638,7 @@ void NodeDB::pickNewNodeNum()
 
     meshtastic_NodeInfoLite *found;
     while ((nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED) ||
-           ((found = getMeshNode(nodeNum)) && memcmp(found->user.macaddr, owner.macaddr, sizeof(owner.macaddr)) != 0)) {
+           ((found = getMeshNode(nodeNum)) && memcmp(found->user.macaddr, ourMacAddr, sizeof(ourMacAddr)) != 0)) {
         NodeNum candidate = random(NUM_RESERVED, LONG_MAX); // try a new random choice
         LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, so trying for 0x%x\n", nodeNum, candidate);
         nodeNum = candidate;
@@ -778,6 +843,7 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
         config.has_power = true;
         config.has_network = true;
         config.has_bluetooth = true;
+        config.has_security = true;
 
         success &= saveProto(configFileName, meshtastic_LocalConfig_size, &meshtastic_LocalConfig_msg, &config);
     }
@@ -957,23 +1023,39 @@ void NodeDB::updateTelemetry(uint32_t nodeId, const meshtastic_Telemetry &t, RxS
 
 /** Update user info and channel for this node based on received user data
  */
-bool NodeDB::updateUser(uint32_t nodeId, const meshtastic_User &p, uint8_t channelIndex)
+bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelIndex)
 {
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(nodeId);
     if (!info) {
         return false;
     }
 
-    LOG_DEBUG("old user %s/%s/%s, channel=%d\n", info->user.id, info->user.long_name, info->user.short_name, info->channel);
+    LOG_DEBUG("old user %s/%s, channel=%d\n", info->user.long_name, info->user.short_name, info->channel);
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    if (p.public_key.size > 0) {
+        printBytes("Incoming Pubkey: ", p.public_key.bytes, 32);
+        if (info->user.public_key.size > 0) { // if we have a key for this user already, don't overwrite with a new one
+            LOG_INFO("Public Key set for node, not updateing!\n");
+            // we copy the key into the incoming packet, to prevent overwrite
+            memcpy(p.public_key.bytes, info->user.public_key.bytes, 32);
+        } else {
+            LOG_INFO("Updating Node Pubkey!\n");
+        }
+    }
+#endif
 
     // Both of info->user and p start as filled with zero so I think this is okay
-    bool changed = memcmp(&info->user, &p, sizeof(info->user)) || (info->channel != channelIndex);
+    auto lite = TypeConversions::ConvertToUserLite(p);
+    bool changed = memcmp(&info->user, &lite, sizeof(info->user)) || (info->channel != channelIndex);
 
-    info->user = p;
+    info->user = lite;
+    if (info->user.public_key.size == 32) {
+        printBytes("Saved Pubkey: ", info->user.public_key.bytes, 32);
+    }
     if (nodeId != getNodeNum())
         info->channel = channelIndex; // Set channel we need to use to reach this node (but don't set our own channel)
-    LOG_DEBUG("updating changed=%d user %s/%s/%s, channel=%d\n", changed, info->user.id, info->user.long_name,
-              info->user.short_name, info->channel);
+    LOG_DEBUG("updating changed=%d user %s/%s, channel=%d\n", changed, info->user.long_name, info->user.short_name,
+              info->channel);
     info->has_user = true;
 
     if (changed) {
@@ -1042,19 +1124,32 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
     meshtastic_NodeInfoLite *lite = getMeshNode(n);
 
     if (!lite) {
-        if ((numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < meshtastic_NodeInfoLite_size * 3)) {
+        if ((numMeshNodes >= MAX_NUM_NODES) || (memGet.getFreeHeap() < MINIMUM_SAFE_FREE_HEAP)) {
             if (screen)
                 screen->print("Warn: node database full!\nErasing oldest entry\n");
             LOG_WARN("Node database full with %i nodes and %i bytes free! Erasing oldest entry\n", numMeshNodes,
                      memGet.getFreeHeap());
             // look for oldest node and erase it
             uint32_t oldest = UINT32_MAX;
+            uint32_t oldestBoring = UINT32_MAX;
             int oldestIndex = -1;
+            int oldestBoringIndex = -1;
             for (int i = 1; i < numMeshNodes; i++) {
+                // Simply the oldest non-favorite node
                 if (!meshNodes->at(i).is_favorite && meshNodes->at(i).last_heard < oldest) {
                     oldest = meshNodes->at(i).last_heard;
                     oldestIndex = i;
                 }
+                // The oldest "boring" node
+                if (!meshNodes->at(i).is_favorite && meshNodes->at(i).user.public_key.size == 0 &&
+                    meshNodes->at(i).last_heard < oldestBoring) {
+                    oldestBoring = meshNodes->at(i).last_heard;
+                    oldestBoringIndex = i;
+                }
+            }
+            // if we found a "boring" node, evict it
+            if (oldestBoringIndex != -1) {
+                oldestIndex = oldestBoringIndex;
             }
             // Shove the remaining nodes down the chain
             for (int i = oldestIndex; i < numMeshNodes - 1; i++) {
@@ -1068,6 +1163,7 @@ meshtastic_NodeInfoLite *NodeDB::getOrCreateMeshNode(NodeNum n)
         // everything is missing except the nodenum
         memset(lite, 0, sizeof(*lite));
         lite->num = n;
+        LOG_INFO("Adding node to database with %i nodes and %i bytes free!\n", numMeshNodes, memGet.getFreeHeap());
     }
 
     return lite;

@@ -113,7 +113,7 @@ typedef enum _meshtastic_PortNum {
  ENCODING: Protobuf (?) */
     meshtastic_PortNum_SIMULATOR_APP = 69,
     /* Provides a traceroute functionality to show the route a packet towards
- a certain destination would take on the mesh.
+ a certain destination would take on the mesh. Contains a RouteDiscovery message as payload.
  ENCODING: Protobuf */
     meshtastic_PortNum_TRACEROUTE_APP = 70,
     /* Aggregates edge info for the network by sending out a list of each node's neighbors
