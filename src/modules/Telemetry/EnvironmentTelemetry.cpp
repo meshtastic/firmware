@@ -30,6 +30,7 @@
 #include "Sensor/NAU7802Sensor.h"
 #include "Sensor/OPT3001Sensor.h"
 #include "Sensor/RCWL9620Sensor.h"
+#include "Sensor/SCD4XSensor.h"
 #include "Sensor/SHT31Sensor.h"
 #include "Sensor/SHT4XSensor.h"
 #include "Sensor/SHTC3Sensor.h"
@@ -54,6 +55,7 @@ AHT10Sensor aht10Sensor;
 MLX90632Sensor mlx90632Sensor;
 DFRobotLarkSensor dfRobotLarkSensor;
 NAU7802Sensor nau7802Sensor;
+SCD4XSensor scd4xSensor;
 #ifdef T1000X_SENSOR_EN
 T1000xSensor t1000xSensor;
 #endif
@@ -139,6 +141,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = mlx90632Sensor.runOnce();
             if (nau7802Sensor.hasSensor())
                 result = nau7802Sensor.runOnce();
+            if (scd4xSensor.hasSensor())
+                result = scd4xSensor.runOnce();
 #endif
         }
         return result;
@@ -252,6 +256,10 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     if (lastMeasurement.variant.environment_metrics.weight != 0)
         display->drawString(x, y += _fontHeight(FONT_SMALL),
                             "Weight: " + String(lastMeasurement.variant.environment_metrics.weight, 0) + "kg");
+
+    if (lastMeasurement.variant.environment_metrics.co2 != 0)
+        display->drawString(x, y += _fontHeight(FONT_SMALL),
+                            "CO2: " + String(lastMeasurement.variant.environment_metrics.co2) + " ppm");
 }
 
 bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
@@ -268,9 +276,9 @@ bool EnvironmentTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPac
         LOG_INFO("(Received from %s): voltage=%f, IAQ=%d, distance=%f, lux=%f\n", sender, t->variant.environment_metrics.voltage,
                  t->variant.environment_metrics.iaq, t->variant.environment_metrics.distance, t->variant.environment_metrics.lux);
 
-        LOG_INFO("(Received from %s): wind speed=%fm/s, direction=%d degrees, weight=%fkg\n", sender,
+        LOG_INFO("(Received from %s): wind speed=%fm/s, direction=%d degrees, weight=%fkg, co2=%d ppm\n", sender,
                  t->variant.environment_metrics.wind_speed, t->variant.environment_metrics.wind_direction,
-                 t->variant.environment_metrics.weight);
+                 t->variant.environment_metrics.weight, t->variant.environment_metrics.co2);
 
 #endif
         // release previous packet before occupying a new spot
@@ -383,6 +391,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
             m->variant.environment_metrics.relative_humidity = m_ahtx.variant.environment_metrics.relative_humidity;
         }
     }
+    if (scd4xSensor.hasSensor()) {
+        valid = valid && scd4xSensor.getMetrics(m);
+        hasSensor = true;
+    }
 
 #endif
     return valid && hasSensor;
@@ -433,8 +445,8 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         LOG_INFO("(Sending): voltage=%f, IAQ=%d, distance=%f, lux=%f\n", m.variant.environment_metrics.voltage,
                  m.variant.environment_metrics.iaq, m.variant.environment_metrics.distance, m.variant.environment_metrics.lux);
 
-        LOG_INFO("(Sending): wind speed=%fm/s, direction=%d degrees, weight=%fkg\n", m.variant.environment_metrics.wind_speed,
-                 m.variant.environment_metrics.wind_direction, m.variant.environment_metrics.weight);
+        LOG_INFO("(Sending): wind speed=%fm/s, direction=%d degrees, weight=%fkg, co2=%d ppm\n", m.variant.environment_metrics.wind_speed,
+                 m.variant.environment_metrics.wind_direction, m.variant.environment_metrics.weight, m.variant.environment_metrics.co2);
 
         sensor_read_error_count = 0;
 
@@ -565,6 +577,11 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
     }
     if (aht10Sensor.hasSensor()) {
         result = aht10Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (scd4xSensor.hasSensor()) {
+        result = scd4xSensor.handleAdminMessage(mp, request, response);
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }

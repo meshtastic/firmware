@@ -71,7 +71,9 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* MAX17048 1S lipo battery sensor (voltage, state of charge, time to go) */
     meshtastic_TelemetrySensorType_MAX17048 = 28,
     /* Custom I2C sensor implementation based on https://github.com/meshtastic/i2c-sensor */
-    meshtastic_TelemetrySensorType_CUSTOM_SENSOR = 29
+    meshtastic_TelemetrySensorType_CUSTOM_SENSOR = 29,
+    /* SCD40/SCD41 CO2 sensor */
+    meshtastic_TelemetrySensorType_SCD4X = 30
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -114,8 +116,8 @@ typedef struct _meshtastic_EnvironmentMetrics {
     /* Current measured (To be depreciated in favor of PowerMetrics in Meshtastic 3.x) */
     bool has_current;
     float current;
-    /* relative scale IAQ value as measured by Bosch BME680 . value 0-500.
- Belongs to Air Quality but is not particle but VOC measurement. Other VOC values can also be put in here. */
+    /* relative scale IAQ value as measured by Bosch BME680. value 0-500.
+    Belongs to Air Quality but is not particle but VOC measurement. Other VOC values can also be put in here. */
     bool has_iaq;
     uint16_t iaq;
     /* RCWL9620 Doppler Radar Distance Sensor, used for water level detection. Float value in mm. */
@@ -134,7 +136,7 @@ typedef struct _meshtastic_EnvironmentMetrics {
     bool has_uv_lux;
     float uv_lux;
     /* Wind direction in degrees
- 0 degrees = North, 90 = East, etc... */
+    0 degrees = North, 90 = East, etc... */
     bool has_wind_direction;
     uint16_t wind_direction;
     /* Wind speed in m/s */
@@ -149,6 +151,9 @@ typedef struct _meshtastic_EnvironmentMetrics {
     /* Wind lull in m/s */
     bool has_wind_lull;
     float wind_lull;
+    /* CO2 measured in ppm */
+    bool has_co2;
+    uint16_t co2;
 } meshtastic_EnvironmentMetrics;
 
 /* Power Metrics (voltage / current / etc) */
@@ -267,8 +272,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_CUSTOM_SENSOR
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_CUSTOM_SENSOR+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_SCD4X
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_SCD4X+1))
 
 
 
@@ -280,14 +285,14 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_DeviceMetrics_init_default    {false, 0, false, 0, false, 0, false, 0, false, 0}
-#define meshtastic_EnvironmentMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define meshtastic_EnvironmentMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_PowerMetrics_init_default     {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_AirQualityMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_LocalStats_init_default       {0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_Telemetry_init_default        {0, 0, {meshtastic_DeviceMetrics_init_default}}
 #define meshtastic_Nau7802Config_init_default    {0, 0}
 #define meshtastic_DeviceMetrics_init_zero       {false, 0, false, 0, false, 0, false, 0, false, 0}
-#define meshtastic_EnvironmentMetrics_init_zero  {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define meshtastic_EnvironmentMetrics_init_zero  {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_PowerMetrics_init_zero        {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_AirQualityMetrics_init_zero   {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_LocalStats_init_zero          {0, 0, 0, 0, 0, 0, 0, 0}
@@ -317,6 +322,7 @@ extern "C" {
 #define meshtastic_EnvironmentMetrics_weight_tag 15
 #define meshtastic_EnvironmentMetrics_wind_gust_tag 16
 #define meshtastic_EnvironmentMetrics_wind_lull_tag 17
+#define meshtastic_EnvironmentMetrics_co2_tag 18
 #define meshtastic_PowerMetrics_ch1_voltage_tag  1
 #define meshtastic_PowerMetrics_ch1_current_tag  2
 #define meshtastic_PowerMetrics_ch2_voltage_tag  3
@@ -379,7 +385,8 @@ X(a, STATIC,   OPTIONAL, UINT32,   wind_direction,   13) \
 X(a, STATIC,   OPTIONAL, FLOAT,    wind_speed,       14) \
 X(a, STATIC,   OPTIONAL, FLOAT,    weight,           15) \
 X(a, STATIC,   OPTIONAL, FLOAT,    wind_gust,        16) \
-X(a, STATIC,   OPTIONAL, FLOAT,    wind_lull,        17)
+X(a, STATIC,   OPTIONAL, FLOAT,    wind_lull,        17) \
+X(a, STATIC,   OPTIONAL, UINT32,   co2,              18)
 #define meshtastic_EnvironmentMetrics_CALLBACK NULL
 #define meshtastic_EnvironmentMetrics_DEFAULT NULL
 
