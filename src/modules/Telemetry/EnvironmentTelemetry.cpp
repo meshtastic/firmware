@@ -195,13 +195,15 @@ uint32_t GetTimeSinceMeshPacket(const meshtastic_MeshPacket *mp)
 
 void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    // Display "Environment"
     display->setTextAlignment(TEXT_ALIGN_LEFT);
+    display->setFont(FONT_MEDIUM);
+    display->drawString(x, y, "Environment");
     display->setFont(FONT_SMALL);
 
     if (lastMeasurementPacket == nullptr) {
-        // If there's no valid packet, display "Environment"
-        display->drawString(x, y, "Environment");
-        display->drawString(x, y += _fontHeight(FONT_SMALL), "No measurement");
+        // If there's no valid packet, display "no measurement"
+        display->drawString(x, y += _fontHeight(FONT_MEDIUM), "No measurement");
         return;
     }
 
@@ -212,44 +214,60 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
 
     auto &p = lastMeasurementPacket->decoded;
     if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &lastMeasurement)) {
-        display->drawString(x, y, "Measurement Error");
+        display->drawString(x, y += _fontHeight(FONT_MEDIUM), "Measurement error");
         LOG_ERROR("Unable to decode last packet");
         return;
     }
 
-    // Display "Env. From: ..." on its own
-    display->drawString(x, y, "Env. From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
+    // Display "From: ..." on its own
+    display->drawString(x, y += _fontHeight(FONT_MEDIUM), "From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
 
-    String last_temp = String(lastMeasurement.variant.environment_metrics.temperature, 0) + "°C";
-    if (moduleConfig.telemetry.environment_display_fahrenheit) {
-        last_temp = String(CelsiusToFahrenheit(lastMeasurement.variant.environment_metrics.temperature), 0) + "°F";
+    // Get temperature
+    String temp_humidity = "Temp: ";
+    if (lastMeasurement.variant.environment_metrics.has_temperature) {
+        if (moduleConfig.telemetry.environment_display_fahrenheit) {
+            temp_humidity += String(CelsiusToFahrenheit(lastMeasurement.variant.environment_metrics.temperature), 0) + "°F";
+        } else {
+            temp_humidity += String(lastMeasurement.variant.environment_metrics.temperature, 0) + "°C";
+        }
     }
 
-    // Continue with the remaining details
-    display->drawString(x, y += _fontHeight(FONT_SMALL),
-                        "Temp/Hum: " + last_temp + " / " +
-                            String(lastMeasurement.variant.environment_metrics.relative_humidity, 0) + "%");
+    // Get humidity
+    if (lastMeasurement.variant.environment_metrics.has_relative_humidity) {
+        temp_humidity += " Hum: " + String(lastMeasurement.variant.environment_metrics.relative_humidity, 0) + "%";
+    }
 
-    if (lastMeasurement.variant.environment_metrics.barometric_pressure != 0) {
+    // Display temp/humidity
+    if (lastMeasurement.variant.environment_metrics.has_temperature ||
+        lastMeasurement.variant.environment_metrics.has_relative_humidity) {
+        display->drawString(x, y += _fontHeight(FONT_SMALL),temp_humidity);
+    }
+
+    // Display pressure
+    if (lastMeasurement.variant.environment_metrics.has_barometric_pressure) {
         display->drawString(x, y += _fontHeight(FONT_SMALL),
                             "Press: " + String(lastMeasurement.variant.environment_metrics.barometric_pressure, 0) + "hPA");
     }
 
-    if (lastMeasurement.variant.environment_metrics.voltage != 0) {
+    // Display voltage
+    if (lastMeasurement.variant.environment_metrics.has_voltage) {
         display->drawString(x, y += _fontHeight(FONT_SMALL),
                             "Volt/Cur: " + String(lastMeasurement.variant.environment_metrics.voltage, 0) + "V / " +
                                 String(lastMeasurement.variant.environment_metrics.current, 0) + "mA");
     }
 
-    if (lastMeasurement.variant.environment_metrics.iaq != 0) {
+    // Display iaq
+    if (lastMeasurement.variant.environment_metrics.has_iaq != 0) {
         display->drawString(x, y += _fontHeight(FONT_SMALL), "IAQ: " + String(lastMeasurement.variant.environment_metrics.iaq));
     }
 
-    if (lastMeasurement.variant.environment_metrics.distance != 0)
+    // Display distance
+    if (lastMeasurement.variant.environment_metrics.has_distance != 0)
         display->drawString(x, y += _fontHeight(FONT_SMALL),
                             "Water Level: " + String(lastMeasurement.variant.environment_metrics.distance, 0) + "mm");
 
-    if (lastMeasurement.variant.environment_metrics.weight != 0)
+    // Display weight
+    if (lastMeasurement.variant.environment_metrics.has_weight != 0)
         display->drawString(x, y += _fontHeight(FONT_SMALL),
                             "Weight: " + String(lastMeasurement.variant.environment_metrics.weight, 0) + "kg");
 }
