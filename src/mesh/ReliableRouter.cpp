@@ -112,7 +112,7 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                 sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, p->hop_start, p->hop_limit);
             } else if (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag && p->channel == 0 &&
                        (nodeDB->getMeshNode(p->from) == nullptr || nodeDB->getMeshNode(p->from)->user.public_key.size == 0)) {
-                // This looks like it might be a PKI packet from an unknown node, so send PKI_UNKNOWN_PUBKEY
+                LOG_INFO("This looks like it might be a PKI packet from an unknown node, so send PKI_UNKNOWN_PUBKEY\n");
                 sendAckNak(meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY, getFrom(p), p->id, channels.getPrimaryIndex(),
                            p->hop_start, p->hop_limit);
             } else {
