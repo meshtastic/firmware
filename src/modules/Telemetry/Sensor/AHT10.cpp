@@ -32,6 +32,9 @@ bool AHT10Sensor::getMetrics(meshtastic_Telemetry *measurement)
     sensors_event_t humidity, temp;
     aht10.getEvent(&humidity, &temp);
 
+    measurement->variant.environment_metrics.has_temperature = true;
+    measurement->variant.environment_metrics.has_relative_humidity = true;
+
     measurement->variant.environment_metrics.temperature = temp.temperature;
     measurement->variant.environment_metrics.relative_humidity = humidity.relative_humidity;
 

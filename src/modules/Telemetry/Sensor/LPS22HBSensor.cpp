@@ -27,6 +27,9 @@ void LPS22HBSensor::setup()
 
 bool LPS22HBSensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+    measurement->variant.environment_metrics.has_temperature = true;
+    measurement->variant.environment_metrics.has_barometric_pressure = true;
+
     sensors_event_t temp;
     sensors_event_t pressure;
     lps22hb.getEvent(&pressure, &temp);
