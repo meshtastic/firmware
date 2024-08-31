@@ -7,27 +7,51 @@
 
 #define SEAL_LEVEL_HPA 1013.2f
 
-#include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "TelemetrySensor.h"
+#include <mutex>
+#include <typeinfo>
 #include <Adafruit_BMP3XX.h>
+#include "TelemetrySensor.h"
+
+// Singleton wrapper for the Adafruit_BMP3XX class
+class BMP3XXSingleton : public Adafruit_BMP3XX
+{
+private:
+    static BMP3XXSingleton * pinstance_;
+    static std::mutex mutex_;
+
+protected:
+    BMP3XXSingleton();
+    ~BMP3XXSingleton();
+
+public:
+    // Create a singleton instance (with lock for thread safety)
+    static BMP3XXSingleton *GetInstance();
+
+    // Singletons should not be cloneable.
+    BMP3XXSingleton(BMP3XXSingleton &other) = delete;
+
+    // Singletons should not be assignable.
+    void operator=(const BMP3XXSingleton &) = delete;
+
+    // Performs a full reading of all sensors in the BMP3XX. Assigns
+    // the internal temperature, pressure and altitudeAmsl variables
+    bool performReading();
+
+    // Altitude in metres above mean sea level, assigned after calling performReading()
+    double altitudeAmslMetres = 0.0f;
+};
 
 class BMP3XXSensor : public TelemetrySensor
 {
 protected:
-  Adafruit_BMP3XX bmp3xx;
-  float pressureHPa = 0.0f;
-  float temperatureCelcius = 0.0f;
-  float altitudeAmslMetres = 0.0f;
+    BMP3XXSingleton *bmp3xx = nullptr;
+    virtual void setup() override;
 
 public:
-  BMP3XXSensor();
-  virtual void setup() override;
-  virtual int32_t runOnce() override;
-  virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
-  virtual float getAltitudeAMSL();
+    BMP3XXSensor();
+    virtual int32_t runOnce() override;
+    virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
 };
-
-extern BMP3XXSensor bmp3xxSensor;
 
 #endif
 
