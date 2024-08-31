@@ -604,7 +604,7 @@ class LGFX : public lgfx::LGFX_Device
             cfg.x_max = 479;
             cfg.y_min = 0;
             cfg.y_max = 479;
-            cfg.pin_int = SCREEN_TOUCH_INT;
+            cfg.pin_int = -1; // don't use SCREEN_TOUCH_INT;
             cfg.pin_rst = SCREEN_TOUCH_RST;
             cfg.bus_shared = true;
             cfg.offset_rotation = TFT_OFFSET_ROTATION;
