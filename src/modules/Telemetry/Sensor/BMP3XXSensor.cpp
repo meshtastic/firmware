@@ -65,21 +65,18 @@ bool BMP3XXSensor::getMetrics(meshtastic_Telemetry *measurement)
 // Get a singleton wrapper for an Adafruit_bmp3xx
 BMP3XXSingleton *BMP3XXSingleton::GetInstance()
 {
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (pinstance_ == nullptr)
+    if (pinstance == nullptr)
     {
-        pinstance_ = new BMP3XXSingleton();
+        pinstance = new BMP3XXSingleton();
     }
-    return pinstance_;
+    return pinstance;
 }
 
 BMP3XXSingleton::BMP3XXSingleton(){}
 
 BMP3XXSingleton::~BMP3XXSingleton(){}
 
-BMP3XXSingleton* BMP3XXSingleton::pinstance_{nullptr};
-
-std::mutex BMP3XXSingleton::mutex_;
+BMP3XXSingleton* BMP3XXSingleton::pinstance{nullptr};
 
 bool BMP3XXSingleton::performReading()
 {

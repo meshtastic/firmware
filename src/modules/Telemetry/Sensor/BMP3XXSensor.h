@@ -7,7 +7,6 @@
 
 #define SEAL_LEVEL_HPA 1013.2f
 
-#include <mutex>
 #include <typeinfo>
 #include <Adafruit_BMP3XX.h>
 #include "TelemetrySensor.h"
@@ -16,15 +15,14 @@
 class BMP3XXSingleton : public Adafruit_BMP3XX
 {
 private:
-    static BMP3XXSingleton * pinstance_;
-    static std::mutex mutex_;
+    static BMP3XXSingleton * pinstance;
 
 protected:
     BMP3XXSingleton();
     ~BMP3XXSingleton();
 
 public:
-    // Create a singleton instance (with lock for thread safety)
+    // Create a singleton instance (not thread safe)
     static BMP3XXSingleton *GetInstance();
 
     // Singletons should not be cloneable.
