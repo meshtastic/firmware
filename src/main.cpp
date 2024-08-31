@@ -278,7 +278,6 @@ void setup()
     unphone.printStore();
 #endif
 
-=======
 #if ARCH_PORTDUINO
     struct timeval tv;
     tv.tv_sec = time(NULL);
