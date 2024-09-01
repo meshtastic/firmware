@@ -259,6 +259,9 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.config.which_payload_variant = meshtastic_Config_security_tag;
             fromRadioScratch.config.payload_variant.security = config.security;
             break;
+        case meshtastic_Config_sessionkey_tag:
+            fromRadioScratch.config.which_payload_variant = meshtastic_Config_sessionkey_tag;
+            break;
         default:
             LOG_ERROR("Unknown config type %d\n", config_state);
         }
