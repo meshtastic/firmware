@@ -129,6 +129,10 @@ void PositionModule::trySetRtc(meshtastic_Position p, bool isLocal, bool forceUp
         LOG_DEBUG("Ignoring time from mesh because we have a GPS, RTC, or Phone/NTP time source in the past day\n");
         return;
     }
+    if (!isLocal && p.location_source < meshtastic_Position_LocSource_LOC_INTERNAL) {
+        LOG_DEBUG("Ignoring time from mesh because it has a unknown or manual source\n");
+        return;
+    }
     struct timeval tv;
     uint32_t secs = p.time;
 
@@ -190,6 +194,10 @@ meshtastic_MeshPacket *PositionModule::allocReply()
     p.has_latitude_i = true;
     p.has_longitude_i = true;
     p.time = getValidTime(RTCQualityNTP) > 0 ? getValidTime(RTCQualityNTP) : localPosition.time;
+
+    if (config.position.fixed_position) {
+        p.location_source = meshtastic_Position_LocSource_LOC_MANUAL;
+    }
 
     if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE) {
         if (pos_flags & meshtastic_Config_PositionConfig_PositionFlags_ALTITUDE_MSL) {
