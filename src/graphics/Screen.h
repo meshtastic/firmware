@@ -309,7 +309,7 @@ class Screen : public concurrency::OSThread
     static char customFontTableLookup(const uint8_t ch)
     {
         // UTF-8 to font table index converter
-        // Code form http://playground.arduino.cc/Main/Utf8ascii
+        // Code from http://playground.arduino.cc/Main/Utf8ascii
         static uint8_t LASTCHAR;
         static bool SKIPREST; // Only display a single unconvertable-character symbol per sequence of unconvertable characters
 
@@ -322,13 +322,19 @@ class Screen : public concurrency::OSThread
         uint8_t last = LASTCHAR; // get last char
         LASTCHAR = ch;
 
-#if defined(OLED_PL)
-
-        switch (last) { // conversion depending on first UTF8-character
+        switch(last) {
         case 0xC2: {
             SKIPREST = false;
             return (uint8_t)ch;
         }
+        }
+
+        // We want to strip out prefix chars for two-byte char formats
+        if (ch == 0xC2)
+            return (uint8_t)0;
+
+#if defined(OLED_PL)
+
         case 0xC3: {
 
             if (ch == 147)
@@ -365,11 +371,6 @@ class Screen : public concurrency::OSThread
 
 #if defined(OLED_UA) || defined(OLED_RU)
 
-        switch (last) { // conversion depending on first UTF8-character
-        case 0xC2: {
-            SKIPREST = false;
-            return (uint8_t)ch;
-        }
         case 0xC3: {
             SKIPREST = false;
             return (uint8_t)(ch | 0xC0);
