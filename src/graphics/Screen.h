@@ -322,7 +322,7 @@ class Screen : public concurrency::OSThread
         uint8_t last = LASTCHAR; // get last char
         LASTCHAR = ch;
 
-        switch(last) {
+        switch (last) {
         case 0xC2: {
             SKIPREST = false;
             return (uint8_t)ch;
@@ -335,7 +335,7 @@ class Screen : public concurrency::OSThread
 
 #if defined(OLED_PL)
 
-        switch(last) {
+        switch (last) {
         case 0xC3: {
 
             if (ch == 147)
@@ -372,7 +372,7 @@ class Screen : public concurrency::OSThread
 
 #if defined(OLED_UA) || defined(OLED_RU)
 
-        switch(last) {
+        switch (last) {
         case 0xC3: {
             SKIPREST = false;
             return (uint8_t)(ch | 0xC0);
