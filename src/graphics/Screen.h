@@ -335,6 +335,7 @@ class Screen : public concurrency::OSThread
 
 #if defined(OLED_PL)
 
+        switch(last) {
         case 0xC3: {
 
             if (ch == 147)
@@ -371,6 +372,7 @@ class Screen : public concurrency::OSThread
 
 #if defined(OLED_UA) || defined(OLED_RU)
 
+        switch(last) {
         case 0xC3: {
             SKIPREST = false;
             return (uint8_t)(ch | 0xC0);
