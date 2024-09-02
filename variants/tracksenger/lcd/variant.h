@@ -16,13 +16,13 @@
 #define ST7789_CS 38
 #define ST7789_RS 40
 #define ST7789_BL 21
-// P#define ST7735_BL_V05 21 /* V1.1 PCB marking */
+// P#define TFT_BL 21 /* V1.1 PCB marking */
 
 #define ST7789_RESET -1
 #define ST7789_MISO -1
 #define ST7789_BUSY -1
 #define ST7789_SPI_HOST SPI3_HOST
-#define ST7789_BACKLIGHT_EN 21
+#define TFT_BL 21
 #define SPI_FREQUENCY 40000000
 #define SPI_READ_FREQUENCY 16000000
 #define TFT_HEIGHT 320
@@ -41,7 +41,7 @@
 // #define ST7735_RESET 39
 // #define ST7735_MISO -1
 // #define ST7735_BUSY -1
-#define ST7735_BL_V05 21 /* V1.1 PCB marking */
+#define TFT_BL 21 /* V1.1 PCB marking */
 // #define ST7735_SPI_HOST SPI3_HOST
 // #define SPI_FREQUENCY 40000000
 // #define SPI_READ_FREQUENCY 16000000
@@ -53,7 +53,8 @@
 #define SCREEN_TRANSITION_FRAMERATE 3 // fps
 // #define DISPLAY_FORCE_SMALL_FONTS
 
-#define VEXT_ENABLE_V05 3 // active HIGH, powers the lora antenna boost
+#define VEXT_ENABLE 3 // active HIGH, powers the lora antenna boost
+#define VEXT_ON_VALUE HIGH
 #define BUTTON_PIN 0
 
 #define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage

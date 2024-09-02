@@ -49,7 +49,7 @@ extern "C" {
 // #define ST7789_BL (32+6)
 #define TFT_BACKLIGHT_ON LOW
 #define ST7789_SPI_HOST SPI1_HOST
-// #define ST7789_BACKLIGHT_EN (32+6)
+// #define TFT_BL (32+6)
 #define SPI_FREQUENCY 40000000
 #define SPI_READ_FREQUENCY 16000000
 #define TFT_HEIGHT 135
