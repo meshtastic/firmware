@@ -165,6 +165,9 @@ meshtastic_QueueStatus Router::getQueueStatus()
 
 ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
 {
+    if (p->to == 0) {
+        LOG_ERROR("Packet received with to: of 0!\n");
+    }
     // No need to deliver externally if the destination is the local node
     if (p->to == nodeDB->getNodeNum()) {
         printPacket("Enqueued local", p);

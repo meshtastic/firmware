@@ -44,11 +44,19 @@ void fixPriority(meshtastic_MeshPacket *p)
         p->priority = (p->want_ack ? meshtastic_MeshPacket_Priority_RELIABLE : meshtastic_MeshPacket_Priority_DEFAULT);
         if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
             // if acks/naks give very high priority
-            if (p->decoded.portnum == meshtastic_PortNum_ROUTING_APP)
+            if (p->decoded.portnum == meshtastic_PortNum_ROUTING_APP) {
                 p->priority = meshtastic_MeshPacket_Priority_ACK;
-            // if text give high priority
-            else if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP)
+                // if text or admin, give high priority
+            } else if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP ||
+                       p->decoded.portnum == meshtastic_PortNum_ADMIN_APP) {
                 p->priority = meshtastic_MeshPacket_Priority_HIGH;
+                // if it is a response, give higher priority to let it arrive early and stop the request being relayed
+            } else if (p->decoded.request_id != 0) {
+                p->priority = meshtastic_MeshPacket_Priority_RESPONSE;
+                // Also if we want a response, give a bit higher priority
+            } else if (p->decoded.want_response) {
+                p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+            }
         }
     }
 }
