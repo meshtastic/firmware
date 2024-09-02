@@ -136,6 +136,30 @@ using namespace meshtastic;
  */
 static HasBatteryLevel *batteryLevel; // Default to NULL for no battery level sensor
 
+static void adcEnable()
+{
+#ifdef ADC_CTRL // enable adc voltage divider when we need to read
+#ifdef ADC_USE_PULLUP
+    pinMode(ADC_CTRL, INPUT_PULLUP);
+#else
+    pinMode(ADC_CTRL, OUTPUT);
+    digitalWrite(ADC_CTRL, ADC_CTRL_ENABLED);
+#endif
+    delay(10);
+#endif
+}
+
+static void adcDisable()
+{
+#ifdef ADC_CTRL // disable adc voltage divider when we need to read
+#ifdef ADC_USE_PULLUP
+    pinMode(ADC_CTRL, INPUT_PULLDOWN);
+#else
+    digitalWrite(ADC_CTRL, !ADC_CTRL_ENABLED);
+#endif
+#endif
+}
+
 /**
  * A simple battery level sensor that assumes the battery voltage is attached via a voltage-divider to an analog input
  */
@@ -226,25 +250,19 @@ class AnalogBatteryLevel : public HasBatteryLevel
             uint32_t raw = 0;
             float scaled = 0;
 
+            adcEnable();
 #ifdef ARCH_ESP32 // ADC block for espressif platforms
             raw = espAdcRead();
             scaled = esp_adc_cal_raw_to_voltage(raw, adc_characs);
             scaled *= operativeAdcMultiplier;
-#else           // block for all other platforms
-#ifdef ADC_CTRL // enable adc voltage divider when we need to read
-            pinMode(ADC_CTRL, OUTPUT);
-            digitalWrite(ADC_CTRL, ADC_CTRL_ENABLED);
-            delay(10);
-#endif
+#else // block for all other platforms
             for (uint32_t i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
                 raw += analogRead(BATTERY_PIN);
             }
             raw = raw / BATTERY_SENSE_SAMPLES;
             scaled = operativeAdcMultiplier * ((1000 * AREF_VOLTAGE) / pow(2, BATTERY_SENSE_RESOLUTION_BITS)) * raw;
-#ifdef ADC_CTRL // disable adc voltage divider when we need to read
-            digitalWrite(ADC_CTRL, !ADC_CTRL_ENABLED);
 #endif
-#endif
+            adcDisable();
 
             if (!initial_read_done) {
                 // Flush the smoothing filter with an ADC reading, if the reading is plausibly correct
@@ -275,11 +293,6 @@ class AnalogBatteryLevel : public HasBatteryLevel
         uint8_t raw_c = 0; // raw reading counter
 
 #ifndef BAT_MEASURE_ADC_UNIT // ADC1
-#ifdef ADC_CTRL              // enable adc voltage divider when we need to read
-        pinMode(ADC_CTRL, OUTPUT);
-        digitalWrite(ADC_CTRL, ADC_CTRL_ENABLED);
-        delay(10);
-#endif
         for (int i = 0; i < BATTERY_SENSE_SAMPLES; i++) {
             int val_ = adc1_get_raw(adc_channel);
             if (val_ >= 0) { // save only valid readings
@@ -288,18 +301,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
             }
             // delayMicroseconds(100);
         }
-#ifdef ADC_CTRL // disable adc voltage divider when we need to read
-        digitalWrite(ADC_CTRL, !ADC_CTRL_ENABLED);
-#endif
-#else // ADC2
-#ifdef ADC_CTRL
-#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0)
-        pinMode(ADC_CTRL, OUTPUT);
-        digitalWrite(ADC_CTRL, LOW); // ACTIVE LOW
-        delay(10);
-#endif
-#endif // End ADC_CTRL
-
+#else                            // ADC2
 #ifdef CONFIG_IDF_TARGET_ESP32S3 // ESP32S3
         // ADC2 wifi bug workaround not required, breaks compile
         // On ESP32S3, ADC2 can take turns with Wifi (?)
@@ -333,12 +335,6 @@ class AnalogBatteryLevel : public HasBatteryLevel
             raw_c++;
         }
 #endif // BAT_MEASURE_ADC_UNIT
-
-#ifdef ADC_CTRL
-#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0)
-        digitalWrite(ADC_CTRL, HIGH);
-#endif
-#endif // End ADC_CTRL
 
 #endif // End BAT_MEASURE_ADC_UNIT
         return (raw / (raw_c < 1 ? 1 : raw_c));
