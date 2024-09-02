@@ -148,15 +148,6 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
             "Ch 3 Volts: " + String(lastMeasurement.variant.power_metrics.ch3_voltage, 0) + "V / Curr: " +
             String(lastMeasurement.variant.power_metrics.ch3_current, 0) + "mA");
     }
-
-    // TODO TODO TODO
-    if (max17048Sensor.hasSensor()) {
-        String str = (max17048Sensor.isBatteryConnected() ? "Battery" : "No battery");
-        str += (max17048Sensor.isExternallyPowered() ? " - bus" : " - no bus");
-        str += (max17048Sensor.isBatteryCharging() ? " - charging" : "- no charge");
-        display->drawString(x, y += _fontHeight(FONT_SMALL), str);
-    }
-
 }
 
 bool PowerTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
