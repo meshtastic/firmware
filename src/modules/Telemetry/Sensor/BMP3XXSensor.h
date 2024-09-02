@@ -7,21 +7,21 @@
 
 #define SEAL_LEVEL_HPA 1013.2f
 
-#include <typeinfo>
-#include <Adafruit_BMP3XX.h>
 #include "TelemetrySensor.h"
+#include <Adafruit_BMP3XX.h>
+#include <typeinfo>
 
 // Singleton wrapper for the Adafruit_BMP3XX class
 class BMP3XXSingleton : public Adafruit_BMP3XX
 {
-private:
-    static BMP3XXSingleton * pinstance;
+  private:
+    static BMP3XXSingleton *pinstance;
 
-protected:
+  protected:
     BMP3XXSingleton();
     ~BMP3XXSingleton();
 
-public:
+  public:
     // Create a singleton instance (not thread safe)
     static BMP3XXSingleton *GetInstance();
 
@@ -41,11 +41,11 @@ public:
 
 class BMP3XXSensor : public TelemetrySensor
 {
-protected:
+  protected:
     BMP3XXSingleton *bmp3xx = nullptr;
     virtual void setup() override;
 
-public:
+  public:
     BMP3XXSensor();
     virtual int32_t runOnce() override;
     virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
