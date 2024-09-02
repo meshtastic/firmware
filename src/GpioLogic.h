@@ -29,7 +29,7 @@ class GpioHwPin : public GpioPin
   public:
     explicit GpioHwPin(uint32_t num) : num(num) {}
 
-    void set(bool value) { digitalWrite(num, value); }
+    void set(bool value);
 };
 
 class GpioTransformer;
@@ -42,7 +42,7 @@ class GpioBinaryTransformer;
 class GpioVirtPin : public GpioPin
 {
     friend class GpioBinaryTransformer;
-    friend class GpioNotTransformer;
+    friend class GpioUnaryTransformer;
 
   public:
     enum PinState { On = true, Off = false, Unset = 2 };
@@ -79,12 +79,31 @@ class GpioTransformer
 };
 
 /**
- * A transformer that performs a unary NOT operation from an input.
+ * A transformer that just drives a hw pin based on a virtual pin.
  */
-class GpioNotTransformer : public GpioTransformer
+class GpioUnaryTransformer : public GpioTransformer
 {
   public:
-    GpioNotTransformer(GpioVirtPin *inPin, GpioPin *outPin);
+    GpioUnaryTransformer(GpioVirtPin *inPin, GpioPin *outPin);
+
+  protected:
+    friend class GpioVirtPin;
+
+    /**
+     * Update the output pin based on the current state of the input pin.
+     */
+    virtual void update();
+
+    GpioVirtPin *inPin;
+};
+
+/**
+ * A transformer that performs a unary NOT operation from an input.
+ */
+class GpioNotTransformer : public GpioUnaryTransformer
+{
+  public:
+    GpioNotTransformer(GpioVirtPin *inPin, GpioPin *outPin) : GpioUnaryTransformer(inPin, outPin) {}
 
   protected:
     friend class GpioVirtPin;
@@ -93,9 +112,6 @@ class GpioNotTransformer : public GpioTransformer
      * Update the output pin based on the current state of the input pin.
      */
     void update();
-
-  private:
-    GpioVirtPin *inPin;
 };
 
 /**
