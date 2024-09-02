@@ -350,6 +350,9 @@ typedef enum _meshtastic_MeshPacket_Priority {
     /* If priority is unset but the message is marked as want_ack,
  assume it is important and use a slightly higher priority */
     meshtastic_MeshPacket_Priority_RELIABLE = 70,
+    /* If priority is unset but the packet is a response to a request, we want it to get there relatively quickly.
+ Furthermore, responses stop relaying packets directed to a node early. */
+    meshtastic_MeshPacket_Priority_RESPONSE = 80,
     /* Higher priority for specific message types (portnums) to distinguish between other reliable packets. */
     meshtastic_MeshPacket_Priority_HIGH = 100,
     /* Ack/naks are sent with very high priority to ensure that retransmission
