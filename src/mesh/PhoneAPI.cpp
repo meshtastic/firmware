@@ -43,7 +43,6 @@ void PhoneAPI::handleStartConfig()
         onConnectionChanged(true);
         observe(&service->fromNumChanged);
 #ifdef FSCom
-#ifdef FSCom
         observe(&xModem.packetReady);
 #endif
     }
@@ -65,7 +64,6 @@ void PhoneAPI::close()
         state = STATE_SEND_NOTHING;
 
         unobserve(&service->fromNumChanged);
-#ifdef FSCom
 #ifdef FSCom
         unobserve(&xModem.packetReady);
 #endif

@@ -53,6 +53,15 @@ void OSFS::writeNBytes(uint16_t address, unsigned int num, const byte *input)
 }
 #endif
 
+bool lfs_assert_failed =
+    false; // Note: we use this global on all platforms, though it can only be set true on nrf52 (in our modified lfs_util.h)
+
+extern "C" void lfs_assert(const char *reason)
+{
+    LOG_ERROR("LFS assert: %s\n", reason);
+    lfs_assert_failed = true;
+}
+
 /**
  * @brief Copies a file from one location to another.
  *

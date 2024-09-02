@@ -16,11 +16,11 @@
 // #include "debug.h"
 #include "FSCommon.h"
 #include "Led.h"
-#include "gps/RTC.h"
 #include "SPILock.h"
 #include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
 #include "detect/ScanI2C.h"
+#include "gps/RTC.h"
 
 #if !MESHTASTIC_EXCLUDE_I2C
 #include "detect/ScanI2CTwoWire.h"

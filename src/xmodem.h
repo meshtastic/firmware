@@ -61,7 +61,7 @@ class XModemAdapter
 
     uint16_t packetno = 0;
 
-#if defined(ARCH_NRF52)
+#if defined(ARCH_NRF52) || defined(ARCH_STM32WL)
     File file = File(FSCom);
 #else
     File file;
