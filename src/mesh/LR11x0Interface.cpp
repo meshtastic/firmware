@@ -100,7 +100,13 @@ template <typename T> bool LR11x0Interface<T>::init()
     // FIXME: May want to set depending on a definition, currently all LR1110 variant files use the DC-DC regulator option
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setRegulatorDCDC();
-
+#ifdef TRACKER_T1000_E
+#ifdef LR11X0_DIO_RF_SWITCH_CONFIG
+    res = lora.setDioAsRfSwitch(LR11X0_DIO_RF_SWITCH_CONFIG);
+#else
+    res = lora.setDioAsRfSwitch(0x03, 0x0, 0x01, 0x03, 0x02, 0x0, 0x0, 0x0);
+#endif
+#endif
     if (res == RADIOLIB_ERR_NONE) {
         if (config.lora.sx126x_rx_boosted_gain) { // the name is unfortunate but historically accurate
             res = lora.setRxBoostedGainMode(true);
@@ -184,6 +190,7 @@ template <typename T> void LR11x0Interface<T>::setStandby()
     activeReceiveStart = 0;
     disableInterrupt();
     completeSending(); // If we were sending, not anymore
+    RadioLibInterface::setStandby();
 }
 
 /**
@@ -223,7 +230,7 @@ template <typename T> void LR11x0Interface<T>::startReceive()
         0); // only RX_DONE IRQ is needed, we'll check for PREAMBLE_DETECTED and HEADER_VALID in isActivelyReceiving
     assert(err == RADIOLIB_ERR_NONE);
 
-    isReceiving = true;
+    RadioLibInterface::startReceive();
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
@@ -278,17 +285,15 @@ template <typename T> bool LR11x0Interface<T>::isActivelyReceiving()
 
 template <typename T> bool LR11x0Interface<T>::sleep()
 {
-    // Not keeping config is busted - next time nrf52 board boots lora sending fails  tcxo related? - see datasheet
     // \todo Display actual typename of the adapter, not just `LR11x0`
-    LOG_DEBUG("LR11x0 entering sleep mode (FIXME, don't keep config)\n");
+    LOG_DEBUG("LR11x0 entering sleep mode\n");
     setStandby(); // Stop any pending operations
 
     // turn off TCXO if it was powered
-    // FIXME - this isn't correct
-    // lora.setTCXO(0);
+    lora.setTCXO(0);
 
     // put chipset into sleep mode (we've already disabled interrupts by now)
-    bool keepConfig = true;
+    bool keepConfig = false;
     lora.sleep(keepConfig, 0); // Note: we do not keep the config, full reinit will be needed
 
 #ifdef LR11X0_POWER_EN

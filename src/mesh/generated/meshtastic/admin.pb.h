@@ -30,7 +30,11 @@ typedef enum _meshtastic_AdminMessage_ConfigType {
     /* TODO: REPLACE */
     meshtastic_AdminMessage_ConfigType_LORA_CONFIG = 5,
     /* TODO: REPLACE */
-    meshtastic_AdminMessage_ConfigType_BLUETOOTH_CONFIG = 6
+    meshtastic_AdminMessage_ConfigType_BLUETOOTH_CONFIG = 6,
+    /* TODO: REPLACE */
+    meshtastic_AdminMessage_ConfigType_SECURITY_CONFIG = 7,
+    /*  */
+    meshtastic_AdminMessage_ConfigType_SESSIONKEY_CONFIG = 8
 } meshtastic_AdminMessage_ConfigType;
 
 /* TODO: REPLACE */
@@ -85,6 +89,7 @@ typedef struct _meshtastic_NodeRemoteHardwarePinsResponse {
     meshtastic_NodeRemoteHardwarePin node_remote_hardware_pins[16];
 } meshtastic_NodeRemoteHardwarePinsResponse;
 
+typedef PB_BYTES_ARRAY_T(8) meshtastic_AdminMessage_session_passkey_t;
 /* This message is handled by the Admin module and is responsible for all settings/channel read/write operations.
  This message is used to do settings operations to both remote AND local nodes.
  (Prior to 1.2 these operations were done via special ToRadio operations) */
@@ -163,11 +168,16 @@ typedef struct _meshtastic_AdminMessage {
         meshtastic_Position set_fixed_position;
         /* Clear fixed position coordinates and then set position.fixed_position = false */
         bool remove_fixed_position;
+        /* Set time only on the node
+     Convenience method to set the time on the node (as Net quality) without any other position data */
+        uint32_t set_time_only;
         /* Begins an edit transaction for config, module config, owner, and channel settings changes
      This will delay the standard *implicit* save to the file system and subsequent reboot behavior until committed (commit_edit_settings) */
         bool begin_edit_settings;
         /* Commits an open transaction for any edits made to config, module config, owner, and channel settings */
         bool commit_edit_settings;
+        /* Tell the node to factory reset config everything; all device state and configuration will be returned to factory defaults and BLE bonds will be cleared. */
+        int32_t factory_reset_device;
         /* Tell the node to reboot into the OTA Firmware in this many seconds (or <0 to cancel reboot)
      Only Implemented for ESP32 Devices. This needs to be issued to send a new main firmware via bluetooth. */
         int32_t reboot_ota_seconds;
@@ -178,11 +188,15 @@ typedef struct _meshtastic_AdminMessage {
         int32_t reboot_seconds;
         /* Tell the node to shutdown in this many seconds (or <0 to cancel shutdown) */
         int32_t shutdown_seconds;
-        /* Tell the node to factory reset, all device settings will be returned to factory defaults. */
-        int32_t factory_reset;
+        /* Tell the node to factory reset config; all device state and configuration will be returned to factory defaults; BLE bonds will be preserved. */
+        int32_t factory_reset_config;
         /* Tell the node to reset the nodedb. */
         int32_t nodedb_reset;
     };
+    /* The node generates this key and sends it with any get_x_response packets.
+ The client MUST include the same key with any set_x commands. Key expires after 300 seconds.
+ Prevents replay attacks for admin messages. */
+    meshtastic_AdminMessage_session_passkey_t session_passkey;
 } meshtastic_AdminMessage;
 
 
@@ -192,8 +206,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_AdminMessage_ConfigType_MIN meshtastic_AdminMessage_ConfigType_DEVICE_CONFIG
-#define _meshtastic_AdminMessage_ConfigType_MAX meshtastic_AdminMessage_ConfigType_BLUETOOTH_CONFIG
-#define _meshtastic_AdminMessage_ConfigType_ARRAYSIZE ((meshtastic_AdminMessage_ConfigType)(meshtastic_AdminMessage_ConfigType_BLUETOOTH_CONFIG+1))
+#define _meshtastic_AdminMessage_ConfigType_MAX meshtastic_AdminMessage_ConfigType_SESSIONKEY_CONFIG
+#define _meshtastic_AdminMessage_ConfigType_ARRAYSIZE ((meshtastic_AdminMessage_ConfigType)(meshtastic_AdminMessage_ConfigType_SESSIONKEY_CONFIG+1))
 
 #define _meshtastic_AdminMessage_ModuleConfigType_MIN meshtastic_AdminMessage_ModuleConfigType_MQTT_CONFIG
 #define _meshtastic_AdminMessage_ModuleConfigType_MAX meshtastic_AdminMessage_ModuleConfigType_PAXCOUNTER_CONFIG
@@ -206,10 +220,10 @@ extern "C" {
 
 
 /* Initializer values for message structs */
-#define meshtastic_AdminMessage_init_default     {0, {0}}
+#define meshtastic_AdminMessage_init_default     {0, {0}, {0, {0}}}
 #define meshtastic_HamParameters_init_default    {"", 0, 0, ""}
 #define meshtastic_NodeRemoteHardwarePinsResponse_init_default {0, {meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default}}
-#define meshtastic_AdminMessage_init_zero        {0, {0}}
+#define meshtastic_AdminMessage_init_zero        {0, {0}, {0, {0}}}
 #define meshtastic_HamParameters_init_zero       {"", 0, 0, ""}
 #define meshtastic_NodeRemoteHardwarePinsResponse_init_zero {0, {meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero}}
 
@@ -252,14 +266,17 @@ extern "C" {
 #define meshtastic_AdminMessage_remove_favorite_node_tag 40
 #define meshtastic_AdminMessage_set_fixed_position_tag 41
 #define meshtastic_AdminMessage_remove_fixed_position_tag 42
+#define meshtastic_AdminMessage_set_time_only_tag 43
 #define meshtastic_AdminMessage_begin_edit_settings_tag 64
 #define meshtastic_AdminMessage_commit_edit_settings_tag 65
+#define meshtastic_AdminMessage_factory_reset_device_tag 94
 #define meshtastic_AdminMessage_reboot_ota_seconds_tag 95
 #define meshtastic_AdminMessage_exit_simulator_tag 96
 #define meshtastic_AdminMessage_reboot_seconds_tag 97
 #define meshtastic_AdminMessage_shutdown_seconds_tag 98
-#define meshtastic_AdminMessage_factory_reset_tag 99
+#define meshtastic_AdminMessage_factory_reset_config_tag 99
 #define meshtastic_AdminMessage_nodedb_reset_tag 100
+#define meshtastic_AdminMessage_session_passkey_tag 101
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_AdminMessage_FIELDLIST(X, a) \
@@ -296,14 +313,17 @@ X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,set_favorite_node,set_favori
 X(a, STATIC,   ONEOF,    UINT32,   (payload_variant,remove_favorite_node,remove_favorite_node),  40) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,set_fixed_position,set_fixed_position),  41) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,remove_fixed_position,remove_fixed_position),  42) \
+X(a, STATIC,   ONEOF,    FIXED32,  (payload_variant,set_time_only,set_time_only),  43) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,begin_edit_settings,begin_edit_settings),  64) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,commit_edit_settings,commit_edit_settings),  65) \
+X(a, STATIC,   ONEOF,    INT32,    (payload_variant,factory_reset_device,factory_reset_device),  94) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,reboot_ota_seconds,reboot_ota_seconds),  95) \
 X(a, STATIC,   ONEOF,    BOOL,     (payload_variant,exit_simulator,exit_simulator),  96) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,reboot_seconds,reboot_seconds),  97) \
 X(a, STATIC,   ONEOF,    INT32,    (payload_variant,shutdown_seconds,shutdown_seconds),  98) \
-X(a, STATIC,   ONEOF,    INT32,    (payload_variant,factory_reset,factory_reset),  99) \
-X(a, STATIC,   ONEOF,    INT32,    (payload_variant,nodedb_reset,nodedb_reset), 100)
+X(a, STATIC,   ONEOF,    INT32,    (payload_variant,factory_reset_config,factory_reset_config),  99) \
+X(a, STATIC,   ONEOF,    INT32,    (payload_variant,nodedb_reset,nodedb_reset), 100) \
+X(a, STATIC,   SINGULAR, BYTES,    session_passkey, 101)
 #define meshtastic_AdminMessage_CALLBACK NULL
 #define meshtastic_AdminMessage_DEFAULT NULL
 #define meshtastic_AdminMessage_payload_variant_get_channel_response_MSGTYPE meshtastic_Channel
@@ -345,7 +365,7 @@ extern const pb_msgdesc_t meshtastic_NodeRemoteHardwarePinsResponse_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define MESHTASTIC_MESHTASTIC_ADMIN_PB_H_MAX_SIZE meshtastic_AdminMessage_size
-#define meshtastic_AdminMessage_size             500
+#define meshtastic_AdminMessage_size             511
 #define meshtastic_HamParameters_size            31
 #define meshtastic_NodeRemoteHardwarePinsResponse_size 496
 

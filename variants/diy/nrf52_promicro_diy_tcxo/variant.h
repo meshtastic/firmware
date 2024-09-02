@@ -115,6 +115,8 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 // LORA MODULES
 #define USE_LLCC68
 #define USE_SX1262
+// #define USE_RF95
+#define USE_SX1268
 
 // LORA CONFIG
 #define SX126X_CS (32 + 13)      // P1.13 FIXME - we really should define LORA_CS instead
@@ -126,22 +128,30 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 #define SX126X_RXEN (0 + 17)     // P0.17
 #define SX126X_TXEN RADIOLIB_NC  // Assuming that DIO2 is connected to TXEN pin. If not, TXEN must be connected.
 
+// #define SX126X_MAX_POWER 8 set this if using a high-power board!
+
 /*
-On the SX1262, DIO3 sets the voltage for an external TCXO, if one is present. If one is not present, then this should not be used.
+On the SX1262, DIO3 sets the voltage for an external TCXO, if one is present. If one is not present, use TCXO_OPTIONAL to try both
+settings.
 
-Ebyte
-e22-900mm22s has no TCXO
-e22-900m22s has TCXO
-e220-900mm22s has no TCXO, works with/without this definition, looks like DIO3 not connected at all
-
-AI-thinker
-RA-01SH does not have TCXO
-
-Waveshare
-Core1262 has TCXO
+| Mfr        | Module           | TCXO | RF Switch | Notes                                        |
+| ---------- | ---------------- | ---- | --------- | -------------------------------------------- |
+| Ebyte      | E22-900M22S      | Yes  | Ext       |                                              |
+| Ebyte      | E22-900MM22S     | No   | Ext       |                                              |
+| Ebyte      | E22-900M30S      | Yes  | Ext       |                                              |
+| Ebyte      | E22-900M33S      | Yes  | Ext       | MAX_POWER must be set to 8 for this          |
+| Ebyte      | E220-900M22S     | No   | Ext       | LLCC68, looks like DIO3 not connected at all |
+| AI-Thinker | RA-01SH          | No   | Int       |                                              |
+| Heltec     | HT-RA62          | Yes  | Int       |                                              |
+| NiceRF     | Lora1262         | yes  | Int       |                                              |
+| Waveshare  | Core1262-HF      | yes  | Ext       |                                              |
+| Waveshare  | LoRa Node Module | yes  | Int       |                                              |
 
 */
+
 #define SX126X_DIO3_TCXO_VOLTAGE 1.8
+#define TCXO_OPTIONAL     // make it so that the firmware can try both TCXO and XTAL
+extern float tcxoVoltage; // make this available everywhere
 
 #ifdef __cplusplus
 }

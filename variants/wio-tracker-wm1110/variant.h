@@ -43,6 +43,9 @@ extern "C" {
 
 #define WIRE_INTERFACES_COUNT 1
 
+// We rely on the nrf52840 USB controller to tell us if we are hooked to a power supply
+#define NRF_APM
+
 #define PIN_3V3_EN (32 + 1) // P1.01, Power to Sensors
 
 #define PIN_WIRE_SDA (0 + 5) // P0.05
@@ -76,9 +79,9 @@ extern "C" {
 #define PIN_SPI_SCK (32 + 13)  // P1.13 45
 #define PIN_SPI_NSS (32 + 12)  // P1.12 44
 
-#define LORA_RESET (0 + 18) // P0.18 18 // RST
-#define LORA_DIO1 (0 + 2)   // P0.02 2 // IRQ
-#define LORA_DIO2 (32 + 11) // P1.11 43 // BUSY
+#define LORA_RESET (32 + 10) // P1.10 10 // RST
+#define LORA_DIO1 (0 + 2)    // P0.02 2 // IRQ
+#define LORA_DIO2 (32 + 11)  // P1.11 43 // BUSY
 #define LORA_SCK PIN_SPI_SCK
 #define LORA_MISO PIN_SPI_MISO
 #define LORA_MOSI PIN_SPI_MOSI

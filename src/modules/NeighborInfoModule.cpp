@@ -39,11 +39,12 @@ NeighborInfoModule::NeighborInfoModule()
       concurrency::OSThread("NeighborInfoModule")
 {
     ourPortNum = meshtastic_PortNum_NEIGHBORINFO_APP;
+    nodeStatusObserver.observe(&nodeStatus->onNewStatus);
 
     if (moduleConfig.neighbor_info.enabled) {
         isPromiscuous = true; // Update neighbors from all packets
-        setIntervalFromNow(
-            Default::getConfiguredOrDefaultMs(moduleConfig.neighbor_info.update_interval, default_broadcast_interval_secs));
+        setIntervalFromNow(Default::getConfiguredOrDefaultMs(moduleConfig.neighbor_info.update_interval,
+                                                             default_telemetry_broadcast_interval_secs));
     } else {
         LOG_DEBUG("NeighborInfoModule is disabled\n");
         disable();
@@ -106,8 +107,9 @@ void NeighborInfoModule::sendNeighborInfo(NodeNum dest, bool wantReplies)
     // because we want to get neighbors for the next cycle
     p->to = dest;
     p->decoded.want_response = wantReplies;
+    p->priority = meshtastic_MeshPacket_Priority_BACKGROUND;
     printNeighborInfo("SENDING", &neighborInfo);
-    service.sendToMesh(p, RX_SRC_LOCAL, true);
+    service->sendToMesh(p, RX_SRC_LOCAL, true);
 }
 
 /*
@@ -119,7 +121,7 @@ int32_t NeighborInfoModule::runOnce()
     if (airTime->isTxAllowedChannelUtil(true) && airTime->isTxAllowedAirUtil()) {
         sendNeighborInfo(NODENUM_BROADCAST, false);
     }
-    return Default::getConfiguredOrDefaultMs(moduleConfig.neighbor_info.update_interval, default_broadcast_interval_secs);
+    return Default::getConfiguredOrDefaultMs(moduleConfig.neighbor_info.update_interval, default_neighbor_info_broadcast_secs);
 }
 
 /*

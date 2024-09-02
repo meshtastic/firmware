@@ -1,9 +1,10 @@
-#ifndef SYSLOG_H
-#define SYSLOG_H
+#pragma once
+
+#include "configuration.h"
 
 // DEBUG LED
-#ifndef LED_INVERTED
-#define LED_INVERTED 0 // define as 1 if LED is active low (on)
+#ifndef LED_STATE_ON
+#define LED_STATE_ON 1
 #endif
 
 // -----------------------------------------------------------------------------
@@ -25,6 +26,14 @@
 
 #include "SerialConsole.h"
 
+// If defined we will include support for ARM ICE "semihosting" for a virtual
+// console over the JTAG port (to replace the normal serial port)
+// Note: Normally this flag is passed into the gcc commandline by platformio.ini.
+// for an example see env:rak4631_dap.
+// #ifndef USE_SEMIHOSTING
+// #define USE_SEMIHOSTING
+// #endif
+
 #define DEBUG_PORT (*console) // Serial debug port
 
 #ifdef USE_SEGGER
@@ -36,7 +45,7 @@
 #define LOG_CRIT(...) SEGGER_RTT_printf(0, __VA_ARGS__)
 #define LOG_TRACE(...) SEGGER_RTT_printf(0, __VA_ARGS__)
 #else
-#if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
+#if defined(DEBUG_PORT) && !defined(DEBUG_MUTE) && !defined(PIO_UNIT_TESTING)
 #define LOG_DEBUG(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_DEBUG, __VA_ARGS__)
 #define LOG_INFO(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_INFO, __VA_ARGS__)
 #define LOG_WARN(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_WARN, __VA_ARGS__)
@@ -52,6 +61,9 @@
 #define LOG_TRACE(...)
 #endif
 #endif
+
+/// A C wrapper for LOG_DEBUG that can be used from arduino C libs that don't know about C++ or meshtastic
+extern "C" void logLegacy(const char *level, const char *fmt, ...);
 
 #define SYSLOG_NILVALUE "-"
 
@@ -117,7 +129,7 @@
 #include <WiFi.h>
 #endif // HAS_WIFI
 
-#if HAS_WIFI || HAS_ETHERNET
+#if HAS_NETWORKING
 
 class Syslog
 {
@@ -153,5 +165,3 @@ class Syslog
 };
 
 #endif // HAS_ETHERNET || HAS_WIFI
-
-#endif // SYSLOG_H

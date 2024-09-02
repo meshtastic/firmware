@@ -10,7 +10,7 @@
 // #define GPS_TX_PIN 32 (now used by SX1262 BUSY as GPS works with just RX)
 
 // Green LED
-#define LED_INVERTED 0
+#define LED_STATE_ON 1 // State when LED is lit
 #define LED_PIN 10
 
 #include "pcf8563.h"

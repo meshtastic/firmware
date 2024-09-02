@@ -58,8 +58,8 @@ int32_t DetectionSensorModule::runOnce()
     // of heartbeat. We only do this if the minimum broadcast interval is greater than zero, otherwise we'll only broadcast state
     // change detections.
     else if (moduleConfig.detection_sensor.state_broadcast_secs > 0 &&
-             (millis() - lastSentToMesh) >=
-                 Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs)) {
+             (millis() - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs,
+                                                                              default_telemetry_broadcast_interval_secs)) {
         sendCurrentStateMessage();
         return DELAYED_INTERVAL;
     }
@@ -82,7 +82,7 @@ void DetectionSensorModule::sendDetectionMessage()
     }
     LOG_INFO("Sending message id=%d, dest=%x, msg=%.*s\n", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
     lastSentToMesh = millis();
-    service.sendToMesh(p);
+    service->sendToMesh(p);
     delete[] message;
 }
 
@@ -97,7 +97,7 @@ void DetectionSensorModule::sendCurrentStateMessage()
     memcpy(p->decoded.payload.bytes, message, p->decoded.payload.size);
     LOG_INFO("Sending message id=%d, dest=%x, msg=%.*s\n", p->id, p->to, p->decoded.payload.size, p->decoded.payload.bytes);
     lastSentToMesh = millis();
-    service.sendToMesh(p);
+    service->sendToMesh(p);
     delete[] message;
 }
 

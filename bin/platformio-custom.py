@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # trunk-ignore-all(ruff/F821)
 # trunk-ignore-all(flake8/F821): For SConstruct imports
 import sys
@@ -77,6 +78,11 @@ if platform.name == "espressif32":
     else:
         # For newer ESP32 targets, using newlib nano works better.
         env.Append(LINKFLAGS=["--specs=nano.specs", "-u", "_printf_float"])
+
+if platform.name == "nordicnrf52":
+    env.AddPostAction("$BUILD_DIR/${PROGNAME}.hex",
+                      env.VerboseAction(f"{sys.executable} ./bin/uf2conv.py $BUILD_DIR/firmware.hex -c -f 0xADA52840 -o $BUILD_DIR/firmware.uf2",
+                                        "Generating UF2 file"))
 
 Import("projenv")
 

@@ -26,6 +26,9 @@ void SHTC3Sensor::setup()
 
 bool SHTC3Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+    measurement->variant.environment_metrics.has_temperature = true;
+    measurement->variant.environment_metrics.has_relative_humidity = true;
+
     sensors_event_t humidity, temp;
     shtc3.getEvent(&humidity, &temp);
 

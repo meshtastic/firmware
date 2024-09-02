@@ -27,10 +27,6 @@ RangeTestModule::RangeTestModule() : concurrency::OSThread("RangeTestModule") {}
 
 uint32_t packetSequence = 0;
 
-#define SEC_PER_DAY 86400
-#define SEC_PER_HOUR 3600
-#define SEC_PER_MIN 60
-
 int32_t RangeTestModule::runOnce()
 {
 #if defined(ARCH_ESP32) || defined(ARCH_NRF52)
@@ -124,7 +120,7 @@ void RangeTestModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
     p->decoded.payload.size = strlen(heartbeatString); // You must specify how many bytes are in the reply
     memcpy(p->decoded.payload.bytes, heartbeatString, p->decoded.payload.size);
 
-    service.sendToMesh(p);
+    service->sendToMesh(p);
 
     // TODO: Handle this better. We want to keep the phone awake otherwise it stops sending.
     powerFSM.trigger(EVENT_CONTACT_FROM_PHONE);

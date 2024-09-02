@@ -9,8 +9,10 @@
  */
 #include "PowerFSM.h"
 #include "Default.h"
+#include "Led.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PowerMon.h"
 #include "configuration.h"
 #include "graphics/Screen.h"
 #include "main.h"
@@ -20,12 +22,15 @@
 #ifndef SLEEP_TIME
 #define SLEEP_TIME 30
 #endif
-
+#if EXCLUDE_POWER_FSM
+FakeFsm powerFSM;
+void PowerFSM_setup(){};
+#else
 /// Should we behave as if we have AC power now?
 static bool isPowered()
 {
 // Circumvent the battery sensing logic and assumes constant power if no battery pin or power mgmt IC
-#if !defined(BATTERY_PIN) && !defined(HAS_AXP192) && !defined(HAS_AXP2101)
+#if !defined(BATTERY_PIN) && !defined(HAS_AXP192) && !defined(HAS_AXP2101) && !defined(NRF_APM)
     return true;
 #endif
 
@@ -87,14 +92,16 @@ static void lsIdle()
             // Briefly come out of sleep long enough to blink the led once every few seconds
             uint32_t sleepTime = SLEEP_TIME;
 
-            setLed(false); // Never leave led on while in light sleep
+            powerMon->setState(meshtastic_PowerMon_State_CPU_LightSleep);
+            ledBlink.set(false); // Never leave led on while in light sleep
             esp_sleep_source_t wakeCause2 = doLightSleep(sleepTime * 1000LL);
+            powerMon->clearState(meshtastic_PowerMon_State_CPU_LightSleep);
 
             switch (wakeCause2) {
             case ESP_SLEEP_WAKEUP_TIMER:
                 // Normal case: timer expired, we should just go back to sleep ASAP
 
-                setLed(true);                   // briefly turn on led
+                ledBlink.set(true);             // briefly turn on led
                 wakeCause2 = doLightSleep(100); // leave led on for 1ms
 
                 secsSlept += sleepTime;
@@ -129,7 +136,7 @@ static void lsIdle()
         }
     } else {
         // Time to stop sleeping!
-        setLed(false);
+        ledBlink.set(false);
         LOG_INFO("Reached ls_secs, servicing loop()\n");
         powerFSM.trigger(EVENT_WAKE_TIMER);
     }
@@ -392,3 +399,4 @@ void PowerFSM_setup()
 
     powerFSM.run_machine(); // run one iteration of the state machine, so we run our on enter tasks for the initial DARK state
 }
+#endif

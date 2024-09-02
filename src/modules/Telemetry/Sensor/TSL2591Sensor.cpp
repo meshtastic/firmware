@@ -29,6 +29,7 @@ void TSL2591Sensor::setup()
 
 bool TSL2591Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+    measurement->variant.environment_metrics.has_lux = true;
     uint32_t lum = tsl.getFullLuminosity();
     uint16_t ir, full;
     ir = lum >> 16;

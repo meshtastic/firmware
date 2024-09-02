@@ -1,14 +1,12 @@
 #define LED_PIN 18
+#define BUTTON_PIN 0
 
-// Enable bus for external periherals
+// I2C
 #define I2C_SDA SDA
 #define I2C_SCL SCL
 
+// Display (E-Ink)
 #define USE_EINK
-
-/*
- * eink display pins
- */
 #define PIN_EINK_CS 4
 #define PIN_EINK_BUSY 7
 #define PIN_EINK_DC 5
@@ -16,32 +14,31 @@
 #define PIN_EINK_SCLK 3
 #define PIN_EINK_MOSI 2
 
-/*
- * SPI interfaces
- */
+// SPI
 #define SPI_INTERFACES_COUNT 2
+#define PIN_SPI_MISO 11
+#define PIN_SPI_MOSI 10
+#define PIN_SPI_SCK 9
 
-#define PIN_SPI_MISO 10 // MISO      P0.17
-#define PIN_SPI_MOSI 11 // MOSI      P0.15
-#define PIN_SPI_SCK 9   // SCK       P0.13
-
-#define VEXT_ENABLE 45 // active low, powers the oled display and the lora antenna boost
-#define BUTTON_PIN 0
-
+// Power
+#define VEXT_ENABLE 45 // Active low, powers the E-Ink display
+#define VEXT_ON_VALUE LOW
 #define ADC_CTRL 19
 #define BATTERY_PIN 20
 #define ADC_CHANNEL ADC2_GPIO20_CHANNEL
 #define ADC_MULTIPLIER 2                // Voltage divider is roughly 1:1
 #define BAT_MEASURE_ADC_UNIT 2          // Use ADC2
-#define ADC_ATTENUATION ADC_ATTEN_DB_11 // Voltage divider output is quite high
+#define ADC_ATTENUATION ADC_ATTEN_DB_12 // Voltage divider output is quite high
+#define HAS_32768HZ
+#define ADC_CTRL_ENABLED LOW
 
+// LoRa
 #define USE_SX1262
 
-#define LORA_DIO0 -1 // a No connect on the SX1262 module
+#define LORA_DIO0 RADIOLIB_NC // a No connect on the SX1262 module
 #define LORA_RESET 12
 #define LORA_DIO1 14 // SX1262 IRQ
 #define LORA_DIO2 13 // SX1262 BUSY
-#define LORA_DIO3    // Not connected on PCB, but internally on the TTGO SX1262, if DIO3 is high the TXCO is enabled
 
 #define LORA_SCK 9
 #define LORA_MISO 11

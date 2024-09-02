@@ -251,5 +251,4 @@ void XModemAdapter::handlePacket(meshtastic_XModem xmodemPacket)
         break;
     }
 }
-
 #endif

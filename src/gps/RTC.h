@@ -24,6 +24,8 @@ enum RTCQuality {
 
 RTCQuality getRTCQuality();
 
+extern uint32_t lastSetFromPhoneNtpOrGps;
+
 /// If we haven't yet set our RTC this boot, set it from a GPS derived time
 bool perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate = false);
 bool perhapsSetRTC(RTCQuality q, struct tm &t);
