@@ -2568,7 +2568,7 @@ void DebugInfo::drawFrameSettings(OLEDDisplay *display, OLEDDisplayUiState *stat
         int batV = powerStatus->getBatteryVoltageMv() / 1000;
         int batCv = (powerStatus->getBatteryVoltageMv() % 1000) / 10;
 
-        snprintf(batStr, sizeof(batStr), "B %01d.%02dV %3d%% %c%c", batV, batCv, powerStatus->getBatteryChargePercent(),
+        snprintf(batStr, sizeof(batStr), "B %01d.%02d V %3d%% %c%c", batV, batCv, powerStatus->getBatteryChargePercent(),
                  powerStatus->getIsCharging() ? '+' : ' ', powerStatus->getHasUSB() ? 'U' : ' ');
 
         // Line 1

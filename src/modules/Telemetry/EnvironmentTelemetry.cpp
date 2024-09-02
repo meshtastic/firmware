@@ -37,6 +37,7 @@
 #include "Sensor/T1000xSensor.h"
 #include "Sensor/TSL2591Sensor.h"
 #include "Sensor/VEML7700Sensor.h"
+#include "Sensor/MAX17048Sensor.h"
 
 BMP085Sensor bmp085Sensor;
 BMP280Sensor bmp280Sensor;
@@ -56,6 +57,7 @@ MLX90632Sensor mlx90632Sensor;
 DFRobotLarkSensor dfRobotLarkSensor;
 NAU7802Sensor nau7802Sensor;
 BMP3XXSensor bmp3xxSensor;
+MAX17048Sensor max17048Sensor;
 #ifdef T1000X_SENSOR_EN
 T1000xSensor t1000xSensor;
 #endif
@@ -143,6 +145,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = mlx90632Sensor.runOnce();
             if (nau7802Sensor.hasSensor())
                 result = nau7802Sensor.runOnce();
+            if (max17048Sensor.hasSensor())
+                result = max17048Sensor.runOnce();
 #endif
         }
         return result;
@@ -397,6 +401,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
             m->variant.environment_metrics.relative_humidity = m_ahtx.variant.environment_metrics.relative_humidity;
         }
     }
+    if (max17048Sensor.hasSensor()) {
+        valid = valid && max17048Sensor.getMetrics(m);
+        hasSensor = true;
+    }
 
 #endif
     return valid && hasSensor;
@@ -584,6 +592,11 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
     }
     if (aht10Sensor.hasSensor()) {
         result = aht10Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (max17048Sensor.hasSensor()) {
+        result = max17048Sensor.handleAdminMessage(mp, request, response);
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }

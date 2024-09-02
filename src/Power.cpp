@@ -73,6 +73,7 @@ static const uint8_t ext_chrg_detect_value = EXT_CHRG_DETECT_VALUE;
 INA260Sensor ina260Sensor;
 INA219Sensor ina219Sensor;
 INA3221Sensor ina3221Sensor;
+extern MAX17048Sensor max17048Sensor;
 #endif
 
 #if HAS_RAKPROT && !defined(ARCH_PORTDUINO)
@@ -165,6 +166,7 @@ static void adcDisable()
  */
 class AnalogBatteryLevel : public HasBatteryLevel
 {
+    public:
     /**
      * Battery state of charge, from 0 to 100 or -1 for unknown
      */
@@ -551,7 +553,12 @@ bool Power::analogInit()
  */
 bool Power::setup()
 {
-    bool found = axpChipInit() || analogInit();
+    // initialise one power sensor only
+    bool found = axpChipInit();
+    if (!found)
+        found = lipoInit();
+    if (!found)
+        found = analogInit();
 
 #ifdef NRF_APM
     found = true;
@@ -598,12 +605,13 @@ void Power::readPowerStatus()
         isCharging = batteryLevel->isCharging() ? OptTrue : OptFalse;
         if (hasBattery) {
             batteryVoltageMv = batteryLevel->getBattVoltage();
-            // If the AXP192 returns a valid battery percentage, use it
-            if (batteryLevel->getBatteryPercent() >= 0) {
-                batteryChargePercent = batteryLevel->getBatteryPercent();
+            // If the battery sensor returns a valid battery percentage, use it
+            int percent = batteryLevel->getBatteryPercent();
+            if (percent >= 0) {
+                batteryChargePercent = percent;
             } else {
                 // If the AXP192 returns a percentage less than 0, the feature is either not supported or there is an error
-                // In that case, we compute an estimate of the charge percent based on open circuite voltage table defined
+                // In that case, we compute an estimate of the charge percent based on open circuit voltage table defined
                 // in power.h
                 batteryChargePercent = clamp((int)(((batteryVoltageMv - (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS)) * 1e2) /
                                                    ((OCV[0] * NUM_CELLS) - (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS))),
@@ -1042,4 +1050,86 @@ bool Power::axpChipInit()
 #else
     return false;
 #endif
+}
+
+/**
+ * Wrapper class for an I2C MAX17048 Lipo battery sensor. If there is no
+ * I2C sensor present, the class falls back to analog battery sensing
+ */
+class LipoBatteryLevel : public HasBatteryLevel
+{
+public:
+    /**
+     * Init the I2C MAX17048 Lipo battery level sensor
+     */
+    bool Init()
+    {
+        return max17048Sensor.runOnce() > 0;
+    }
+
+    /**
+     * Battery state of charge, from 0 to 100 or -1 for unknown
+     */
+    virtual int getBatteryPercent() override
+    {
+        if (max17048Sensor.isRunning())
+            return max17048Sensor.getBusBatteryPercent();
+        return analogLevel.getBatteryPercent();
+    }
+
+    /**
+     * The raw voltage of the battery in millivolts, or NAN if unknown
+     */
+    virtual uint16_t getBattVoltage() override
+    {
+        if (max17048Sensor.isRunning())
+            return max17048Sensor.getBusVoltageMv();
+        return analogLevel.getBattVoltage();
+    }
+
+    /**
+     * return true if there is a battery installed in this unit
+     */
+    virtual bool isBatteryConnect() override
+    {
+        if (max17048Sensor.isRunning())
+            return max17048Sensor.isBatteryConnected();
+        return analogLevel.isBatteryConnect();
+    }
+
+    /**
+     * return true if there is an external power source detected
+     */
+    virtual bool isVbusIn() override
+    {
+        if (max17048Sensor.isRunning())
+            return max17048Sensor.isExternallyPowered();
+        return analogLevel.isVbusIn();
+    }
+
+    /**
+     * return true if the battery is currently charging
+     */
+    virtual bool isCharging() override
+    {
+        if (max17048Sensor.isRunning())
+            return max17048Sensor.isBatteryCharging();
+        return analogLevel.isCharging();
+    }
+};
+
+LipoBatteryLevel lipoLevel;
+
+/**
+ * Init the I2C MAX17048 Lipo battery level sensor
+ */
+bool Power::lipoInit()
+{
+    bool result = lipoLevel.Init();
+    if (result)
+    {
+        batteryLevel = &lipoLevel;
+        return true;
+    }
+    return false;
 }
