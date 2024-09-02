@@ -131,19 +131,32 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
     }
 
     display->setFont(FONT_SMALL);
-    String last_temp = String(lastMeasurement.variant.environment_metrics.temperature, 0) + "°C";
     display->drawString(x, y += _fontHeight(FONT_MEDIUM) - 2, "From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
-    if (lastMeasurement.variant.power_metrics.ch1_voltage != 0) {
+
+    if (lastMeasurement.variant.power_metrics.has_ch1_voltage || lastMeasurement.variant.power_metrics.has_ch1_current) {
         display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Ch 1 Volt/Cur: " + String(lastMeasurement.variant.power_metrics.ch1_voltage, 0) + "V / " +
-                                String(lastMeasurement.variant.power_metrics.ch1_current, 0) + "mA");
-        display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Ch 2 Volt/Cur: " + String(lastMeasurement.variant.power_metrics.ch2_voltage, 0) + "V / " +
-                                String(lastMeasurement.variant.power_metrics.ch2_current, 0) + "mA");
-        display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Ch 3 Volt/Cur: " + String(lastMeasurement.variant.power_metrics.ch3_voltage, 0) + "V / " +
-                                String(lastMeasurement.variant.power_metrics.ch3_current, 0) + "mA");
+            "Ch 1 Volts: " + String(lastMeasurement.variant.power_metrics.ch1_voltage, 0) + "V / Curr: " +
+            String(lastMeasurement.variant.power_metrics.ch1_current, 0) + "mA");
     }
+    if (lastMeasurement.variant.power_metrics.has_ch2_voltage || lastMeasurement.variant.power_metrics.has_ch2_current) {
+        display->drawString(x, y += _fontHeight(FONT_SMALL),
+            "Ch 2 Volts: " + String(lastMeasurement.variant.power_metrics.ch2_voltage, 0) + "V / Curr: " +
+            String(lastMeasurement.variant.power_metrics.ch2_current, 0) + "mA");
+    }
+    if (lastMeasurement.variant.power_metrics.has_ch3_voltage || lastMeasurement.variant.power_metrics.has_ch3_current) {
+        display->drawString(x, y += _fontHeight(FONT_SMALL),
+            "Ch 3 Volts: " + String(lastMeasurement.variant.power_metrics.ch3_voltage, 0) + "V / Curr: " +
+            String(lastMeasurement.variant.power_metrics.ch3_current, 0) + "mA");
+    }
+
+    // TODO TODO TODO
+    if (max17048Sensor.hasSensor()) {
+        String str = (max17048Sensor.isBatteryConnected() ? "Battery" : "No battery");
+        str += (max17048Sensor.isExternallyPowered() ? " - bus" : " - no bus");
+        str += (max17048Sensor.isBatteryCharging() ? " - charging" : "- no charge");
+        display->drawString(x, y += _fontHeight(FONT_SMALL), str);
+    }
+
 }
 
 bool PowerTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
@@ -152,8 +165,8 @@ bool PowerTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &m
 #ifdef DEBUG_PORT
         const char *sender = getSenderShortName(mp);
 
-        LOG_INFO("(Received from %s): ch1_voltage=%f, ch1_current=%f, ch2_voltage=%f, ch2_current=%f, "
-                 "ch3_voltage=%f, ch3_current=%f\n",
+        LOG_INFO("(Received from %s): ch1_voltage=%.1f, ch1_current=%.1f, ch2_voltage=%.1f, ch2_current=%.1f, "
+                 "ch3_voltage=%.1f, ch3_current=%.1f\n",
                  sender, t->variant.power_metrics.ch1_voltage, t->variant.power_metrics.ch1_current,
                  t->variant.power_metrics.ch2_voltage, t->variant.power_metrics.ch2_current, t->variant.power_metrics.ch3_voltage,
                  t->variant.power_metrics.ch3_current);
@@ -173,13 +186,8 @@ bool PowerTelemetryModule::getPowerTelemetry(meshtastic_Telemetry *m)
     bool valid = false;
     m->time = getTime();
     m->which_variant = meshtastic_Telemetry_power_metrics_tag;
+    m->variant.power_metrics = meshtastic_PowerMetrics_init_zero;
 
-    m->variant.power_metrics.ch1_voltage = 0;
-    m->variant.power_metrics.ch1_current = 0;
-    m->variant.power_metrics.ch2_voltage = 0;
-    m->variant.power_metrics.ch2_current = 0;
-    m->variant.power_metrics.ch3_voltage = 0;
-    m->variant.power_metrics.ch3_current = 0;
 #if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
     if (ina219Sensor.hasSensor())
         valid = ina219Sensor.getMetrics(m);

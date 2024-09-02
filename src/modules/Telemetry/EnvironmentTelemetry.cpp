@@ -55,7 +55,7 @@ AHT10Sensor aht10Sensor;
 MLX90632Sensor mlx90632Sensor;
 DFRobotLarkSensor dfRobotLarkSensor;
 NAU7802Sensor nau7802Sensor;
-extern MAX17048Sensor max17048Sensor;
+MAX17048Sensor max17048Sensor;
 #ifdef T1000X_SENSOR_EN
 T1000xSensor t1000xSensor;
 #endif

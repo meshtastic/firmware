@@ -609,12 +609,13 @@ void Power::readPowerStatus()
         isCharging = batteryLevel->isCharging() ? OptTrue : OptFalse;
         if (hasBattery) {
             batteryVoltageMv = batteryLevel->getBattVoltage();
-            // If the AXP192 returns a valid battery percentage, use it
-            if (batteryLevel->getBatteryPercent() >= 0) {
-                batteryChargePercent = batteryLevel->getBatteryPercent();
+            // If the battery sensor returns a valid battery percentage, use it
+            int percent = batteryLevel->getBatteryPercent();
+            if (percent >= 0) {
+                batteryChargePercent = percent;
             } else {
                 // If the AXP192 returns a percentage less than 0, the feature is either not supported or there is an error
-                // In that case, we compute an estimate of the charge percent based on open circuite voltage table defined
+                // In that case, we compute an estimate of the charge percent based on open circuit voltage table defined
                 // in power.h
                 batteryChargePercent = clamp((int)(((batteryVoltageMv - (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS)) * 1e2) /
                                                    ((OCV[0] * NUM_CELLS) - (OCV[NUM_OCV_POINTS - 1] * NUM_CELLS))),
@@ -1056,7 +1057,7 @@ bool Power::axpChipInit()
 }
 
 /**
- * Wrapper class for an I2C MAX17048 Lipo battery level sensor. If there is no 
+ * Wrapper class for an I2C MAX17048 Lipo battery sensor. If there is no
  * I2C sensor present, the class falls back to analog battery sensing
  */
 class LipoBatteryLevel : public HasBatteryLevel
