@@ -69,7 +69,9 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* ICM-20948 9-Axis digital motion processor */
     meshtastic_TelemetrySensorType_ICM20948 = 27,
     /* MAX17048 1S lipo battery sensor (voltage, state of charge, time to go) */
-    meshtastic_TelemetrySensorType_MAX17048 = 28
+    meshtastic_TelemetrySensorType_MAX17048 = 28,
+    /* Custom I2C sensor implementation based on https://github.com/meshtastic/i2c-sensor */
+    meshtastic_TelemetrySensorType_CUSTOM_SENSOR = 29
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -265,8 +267,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_MAX17048
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_MAX17048+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_CUSTOM_SENSOR
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_CUSTOM_SENSOR+1))
 
 
 

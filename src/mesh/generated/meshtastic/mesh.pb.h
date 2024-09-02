@@ -199,9 +199,9 @@ typedef enum _meshtastic_HardwareModel {
   ^^^ short A0 to switch to I2C address 0x3C */
     meshtastic_HardwareModel_RP2040_FEATHER_RFM95 = 76,
     /* M5 esp32 based MCU modules with enclosure, TFT and LORA Shields. All Variants (Basic, Core, Fire, Core2, Paper) https://m5stack.com/ */
-    meshtastic_HardwareModel_M5STACK_COREBASIC=77,
-    /* M5 esp32 based MCU modules with enclosure, TFT and LORA Shields. All Variants (Basic, Core, Fire, Core2, Paper) https://m5stack.com/ */
-    meshtastic_HardwareModel_M5STACK_CORE2=78,
+
+    meshtastic_HardwareModel_M5STACK_COREBASIC = 77,
+    meshtastic_HardwareModel_M5STACK_CORE2 = 78,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
@@ -353,6 +353,11 @@ typedef enum _meshtastic_MeshPacket_Priority {
     /* If priority is unset but the message is marked as want_ack,
  assume it is important and use a slightly higher priority */
     meshtastic_MeshPacket_Priority_RELIABLE = 70,
+    /* If priority is unset but the packet is a response to a request, we want it to get there relatively quickly.
+ Furthermore, responses stop relaying packets directed to a node early. */
+    meshtastic_MeshPacket_Priority_RESPONSE = 80,
+    /* Higher priority for specific message types (portnums) to distinguish between other reliable packets. */
+    meshtastic_MeshPacket_Priority_HIGH = 100,
     /* Ack/naks are sent with very high priority to ensure that retransmission
  stops as soon as possible */
     meshtastic_MeshPacket_Priority_ACK = 120,
