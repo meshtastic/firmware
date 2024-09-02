@@ -10,6 +10,13 @@ void GpioVirtPin::set(bool value)
     }
 }
 
+void GpioHwPin::set(bool value)
+{
+    // if (num == 3) LOG_DEBUG("Setting pin %d to %d\n", num, value);
+    pinMode(num, OUTPUT);
+    digitalWrite(num, value);
+}
+
 GpioTransformer::GpioTransformer(GpioPin *outPin) : outPin(outPin) {}
 
 void GpioTransformer::set(bool value)
@@ -17,7 +24,7 @@ void GpioTransformer::set(bool value)
     outPin->set(value);
 }
 
-GpioNotTransformer::GpioNotTransformer(GpioVirtPin *inPin, GpioPin *outPin) : GpioTransformer(outPin), inPin(inPin)
+GpioUnaryTransformer::GpioUnaryTransformer(GpioVirtPin *inPin, GpioPin *outPin) : GpioTransformer(outPin), inPin(inPin)
 {
     assert(!inPin->dependentPin); // We only allow one dependent pin
     inPin->dependentPin = this;
@@ -25,6 +32,18 @@ GpioNotTransformer::GpioNotTransformer(GpioVirtPin *inPin, GpioPin *outPin) : Gp
     // Don't update at construction time, because various GpioPins might be global constructor based not yet initied because
     // order of operations for global constructors is not defined.
     // update();
+}
+
+/**
+ * Update the output pin based on the current state of the input pin.
+ */
+void GpioUnaryTransformer::update()
+{
+    auto p = inPin->get();
+    if (p == GpioVirtPin::PinState::Unset)
+        return; // Not yet fully initialized
+
+    set(p);
 }
 
 /**
@@ -69,6 +88,7 @@ void GpioBinaryTransformer::update()
             newValue = (GpioVirtPin::PinState)(p1 && p2);
             break;
         case Or:
+            // LOG_DEBUG("Doing GPIO OR\n");
             newValue = (GpioVirtPin::PinState)(p1 || p2);
             break;
         case Xor:

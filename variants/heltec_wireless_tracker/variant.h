@@ -1,5 +1,6 @@
 #define LED_PIN 18
 
+#define _VARIANT_HELTEC_WIRELESS_TRACKER
 #define HELTEC_TRACKER_V1_X
 
 // I2C
@@ -15,7 +16,7 @@
 #define ST7735_RESET 39
 #define ST7735_MISO -1
 #define ST7735_BUSY -1
-#define ST7735_BL_V05 21 /* V1.1 PCB marking */
+#define TFT_BL 21 /* V1.1 PCB marking */
 #define ST7735_SPI_HOST SPI3_HOST
 #define SPI_FREQUENCY 40000000
 #define SPI_READ_FREQUENCY 16000000
@@ -31,15 +32,17 @@
 // GPS UC6580:          GPS V_DET(8), VDD_IO(7), DCDC_IN(21), pulls up RESETN(17), D_SEL(33) and BOOT_MODE(34) through 10kR
 // GPS LNA SW7125DE:    VCC(4), pulls up SHDN(5) through 10kR
 // LED:                 VDD, LEDA (through diode)
-#define VEXT_ENABLE_V05 3 // active HIGH - powers the GPS, GPS LNA and OLED VDD/anode
+
+#define VEXT_ENABLE 3 // active HIGH - powers the GPS, GPS LNA and OLED
+#define VEXT_ON_VALUE HIGH
 #define BUTTON_PIN 0
 
 #define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define ADC_CHANNEL ADC1_GPIO1_CHANNEL
 #define ADC_ATTENUATION ADC_ATTEN_DB_2_5 // lower dB for high resistance voltage divider
 #define ADC_MULTIPLIER 4.9 * 1.045
-#define ADC_CTRL 2 // active HIGH, powers the voltage divider. Only on 1.1
-#define ADC_CTRL_ENABLED HIGH
+#define ADC_CTRL 2     // active HIGH, powers the voltage divider. Only on 1.1
+#define ADC_USE_PULLUP // Use internal pullup/pulldown instead of actively driving the output
 
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
