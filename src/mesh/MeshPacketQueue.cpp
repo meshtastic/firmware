@@ -1,4 +1,5 @@
 #include "MeshPacketQueue.h"
+#include "NodeDB.h"
 #include "configuration.h"
 #include <assert.h>
 
@@ -17,8 +18,8 @@ bool CompareMeshPacketFunc(const meshtastic_MeshPacket *p1, const meshtastic_Mes
     assert(p1 && p2);
     auto p1p = getPriority(p1), p2p = getPriority(p2);
     // If priorities differ, use that
-    // for equal priorities, order stays as enqueued
-    return (p1p > p2p); // prefer bigger priorities
+    // for equal priorities, prefer packets already on mesh.
+    return (p1p != p2p) ? (p1p > p2p) : (getFrom(p1) != nodeDB->getNodeNum() && getFrom(p2) == nodeDB->getNodeNum());
 }
 
 MeshPacketQueue::MeshPacketQueue(size_t _maxLen) : maxLen(_maxLen) {}
