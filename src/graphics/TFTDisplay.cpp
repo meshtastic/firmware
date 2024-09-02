@@ -21,10 +21,6 @@ extern SX1509 gpioExtender;
 #if defined(ST7735S)
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
 
-#if defined(ST7735_BACKLIGHT_EN) && !defined(TFT_BL)
-#define TFT_BL ST7735_BACKLIGHT_EN
-#endif
-
 #ifndef TFT_INVERT
 #define TFT_INVERT true
 #endif
@@ -91,24 +87,20 @@ class LGFX : public lgfx::LGFX_Device
             _panel_instance.config(cfg);
         }
 
+#ifdef TFT_BL
         // Set the backlight control
         {
             auto cfg = _light_instance.config(); // Gets a structure for backlight settings.
 
-#ifdef ST7735_BL_V03
-            cfg.pin_bl = ST7735_BL_V03;
-#elif defined(ST7735_BL_V05)
-            cfg.pin_bl = ST7735_BL_V05;
-#else
-            cfg.pin_bl = ST7735_BL; // Pin number to which the backlight is connected
-#endif
-            cfg.invert = true; // true to invert the brightness of the backlight
+            cfg.pin_bl = TFT_BL; // Pin number to which the backlight is connected
+            cfg.invert = true;   // true to invert the brightness of the backlight
             // cfg.freq = 44100;    // PWM frequency of backlight
             // cfg.pwm_channel = 1; // PWM channel number to use
 
             _light_instance.config(cfg);
             _panel_instance.setLight(&_light_instance); // Set the backlight on the panel.
         }
+#endif
 
         setPanel(&_panel_instance);
     }
@@ -130,10 +122,6 @@ static void rak14014_tpIntHandle(void)
 
 #elif defined(ST7789_CS)
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
-
-#if defined(ST7789_BACKLIGHT_EN) && !defined(TFT_BL)
-#define TFT_BL ST7789_BACKLIGHT_EN
-#endif
 
 class LGFX : public lgfx::LGFX_Device
 {
@@ -204,6 +192,7 @@ class LGFX : public lgfx::LGFX_Device
             _panel_instance.config(cfg);
         }
 
+#ifdef ST7789_BL
         // Set the backlight control. (delete if not necessary)
         {
             auto cfg = _light_instance.config(); // Gets a structure for backlight settings.
@@ -215,6 +204,7 @@ class LGFX : public lgfx::LGFX_Device
             _light_instance.config(cfg);
             _panel_instance.setLight(&_light_instance); // Set the backlight on the panel.
         }
+#endif
 
 #if HAS_TOUCHSCREEN
         // Configure settings for touch screen control.
@@ -324,6 +314,7 @@ class LGFX : public lgfx::LGFX_Device
             _panel_instance.config(cfg);
         }
 
+#ifdef TFT_BL
         // Set the backlight control
         {
             auto cfg = _light_instance.config(); // Gets a structure for backlight settings.
@@ -336,6 +327,7 @@ class LGFX : public lgfx::LGFX_Device
             _light_instance.config(cfg);
             _panel_instance.setLight(&_light_instance); // Set the backlight on the panel.
         }
+#endif
 
         setPanel(&_panel_instance);
     }
@@ -532,9 +524,26 @@ static LGFX *tft = nullptr;
 extern unPhone unphone;
 #endif
 
+GpioPin *TFTDisplay::backlightEnable = NULL;
+
 TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY geometry, HW_I2C i2cBus)
 {
     LOG_DEBUG("TFTDisplay!\n");
+
+#ifdef TFT_BL
+    GpioPin *p = new GpioHwPin(TFT_BL);
+
+    if (!TFT_BACKLIGHT_ON) { // Need to invert the pin before hardware
+        auto virtPin = new GpioVirtPin();
+        new GpioNotTransformer(
+            virtPin, p); // We just leave this created object on the heap so it can stay watching virtPin and driving en_gpio
+        p = virtPin;
+    }
+#else
+    GpioPin *p = new GpioVirtPin(); // Just simulate a pin
+#endif
+    backlightEnable = p;
+
 #if ARCH_PORTDUINO
     if (settingsMap[displayRotate]) {
         setGeometry(GEOMETRY_RAWMODE, settingsMap[configNames::displayHeight], settingsMap[configNames::displayWidth]);
@@ -588,24 +597,15 @@ void TFTDisplay::sendCommand(uint8_t com)
     // handle display on/off directly
     switch (com) {
     case DISPLAYON: {
+        // LOG_DEBUG("Display on\n");
+        backlightEnable->set(true);
 #if ARCH_PORTDUINO
         display(true);
         if (settingsMap[displayBacklight] > 0)
             digitalWrite(settingsMap[displayBacklight], TFT_BACKLIGHT_ON);
-#elif defined(ST7735_BL_V03)
-        digitalWrite(ST7735_BL_V03, TFT_BACKLIGHT_ON);
-#elif defined(ST7735_BL_V05)
-        pinMode(ST7735_BL_V05, OUTPUT);
-        digitalWrite(ST7735_BL_V05, TFT_BACKLIGHT_ON);
 #elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE)
         tft->wakeup();
         tft->powerSaveOff();
-#elif defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
-        digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
-#endif
-
-#ifdef VTFT_CTRL_V03
-        digitalWrite(VTFT_CTRL_V03, LOW);
 #endif
 
 #ifdef VTFT_CTRL
@@ -621,25 +621,17 @@ void TFTDisplay::sendCommand(uint8_t com)
         break;
     }
     case DISPLAYOFF: {
+        // LOG_DEBUG("Display off\n");
+        backlightEnable->set(false);
 #if ARCH_PORTDUINO
         tft->clear();
         if (settingsMap[displayBacklight] > 0)
             digitalWrite(settingsMap[displayBacklight], !TFT_BACKLIGHT_ON);
-#elif defined(ST7735_BL_V03)
-        digitalWrite(ST7735_BL_V03, !TFT_BACKLIGHT_ON);
-#elif defined(ST7735_BL_V05)
-        pinMode(ST7735_BL_V05, OUTPUT);
-        digitalWrite(ST7735_BL_V05, !TFT_BACKLIGHT_ON);
 #elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE)
         tft->sleep();
         tft->powerSaveOn();
-#elif defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
-        digitalWrite(TFT_BL, !TFT_BACKLIGHT_ON);
 #endif
 
-#ifdef VTFT_CTRL_V03
-        digitalWrite(VTFT_CTRL_V03, HIGH);
-#endif
 #ifdef VTFT_CTRL
         digitalWrite(VTFT_CTRL, HIGH);
 #endif
@@ -723,20 +715,9 @@ bool TFTDisplay::connect()
     tft = new LGFX;
 #endif
 
-#ifdef TFT_BL
-    pinMode(TFT_BL, OUTPUT);
-    digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
-    // pinMode(PIN_3V3_EN, OUTPUT);
-    // digitalWrite(PIN_3V3_EN, HIGH);
+    backlightEnable->set(true);
     LOG_INFO("Power to TFT Backlight\n");
-#endif
 
-#ifdef ST7735_BL_V03
-    digitalWrite(ST7735_BL_V03, TFT_BACKLIGHT_ON);
-#elif defined(ST7735_BL_V05)
-    pinMode(ST7735_BL_V05, OUTPUT);
-    digitalWrite(ST7735_BL_V05, TFT_BACKLIGHT_ON);
-#endif
 #ifdef UNPHONE
     unphone.backlight(true); // using unPhone library
     LOG_INFO("Power to TFT Backlight\n");

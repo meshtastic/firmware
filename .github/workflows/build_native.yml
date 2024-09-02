@@ -10,7 +10,7 @@ jobs:
   build-native:
     runs-on: ubuntu-latest
     steps:
-      - name: Install libbluetooth
+      - name: Install libs needed for native build
         shell: bash
         run: |
           sudo apt-get update --fix-missing
