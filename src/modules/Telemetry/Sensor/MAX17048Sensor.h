@@ -16,14 +16,13 @@
 // threshold to determine if the board has bus power
 #define MAX17048_BUS_POWER_VOLTS 4.195f
 
+#include <queue>
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include <Adafruit_MAX1704X.h>
 #include "meshUtils.h"
 #include "TelemetrySensor.h"
 #include "VoltageSensor.h"
 
-#include<bits/stdc++.h>
- 
 struct MAX17048ChargeSample{         
   float cellPercent;      
   float chargeRate;  

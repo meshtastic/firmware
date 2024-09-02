@@ -39,7 +39,7 @@ bool MAX17048Sensor::getMetrics(meshtastic_Telemetry *measurement)
 
     float rate = max17048.chargeRate();     // charge/discharge rate in percent/hr
     float soc = max17048.cellPercent();     // state of charge in percent 0 to 100
-    soc = clamp(round(soc),0.0f,100.0f);    // clamp soc between 0 and 100%
+    soc = clamp(soc,0.0f,100.0f);    // clamp soc between 0 and 100%
     float ttg = (100.0f - soc) / rate;      // calculate hours to charge/discharge
 
     LOG_DEBUG("MAX17048Sensor::getMetrics volts: %.3fV soc: %.1f%% ttg: %.1f hours\n", volts, soc, ttg);
@@ -52,7 +52,7 @@ bool MAX17048Sensor::getMetrics(meshtastic_Telemetry *measurement)
     {
         measurement->variant.device_metrics.has_battery_level = true;
         measurement->variant.device_metrics.has_voltage = true;
-        measurement->variant.device_metrics.battery_level = (uint32_t)round(soc);
+        measurement->variant.device_metrics.battery_level = static_cast<uint32_t>(round(soc));
         measurement->variant.device_metrics.voltage = volts;
     }
     return true;
@@ -66,29 +66,30 @@ uint16_t MAX17048Sensor::getBusVoltageMv()
         LOG_DEBUG("MAX17048Sensor::getMetrics battery is disconnected\n");
         return 0;
     }
-
     LOG_DEBUG("MAX17048Sensor::getBusVoltageMv %.3fmV\n", volts);
     return (uint16_t)(volts * 1000.0f);
 }
 
+// state of charge in percent 0 to 100
 uint8_t MAX17048Sensor::getBusBatteryPercent()
 {
-    float soc = max17048.cellPercent();     // state of charge in percent 0 to 100
-    soc = clamp(round(soc),0.0f,100.0f);    // clamp soc between 0 and 100%
+    float soc = max17048.cellPercent();
     LOG_DEBUG("MAX17048Sensor::getBusBatteryPercent %.1f%%\n", soc);
-    return static_cast<uint8_t>(soc);
+    return clamp(static_cast<uint8_t>(round(soc)),static_cast<uint8_t>(0),static_cast<uint8_t>(100));
 }
 
+// calculate seconds to charge/discharge
 uint16_t MAX17048Sensor::getTimeToGoSecs()
 {
     float rate = max17048.chargeRate();             // charge/discharge rate in percent/hr
     float soc = max17048.cellPercent();             // state of charge in percent 0 to 100
-    soc = clamp(round(soc),0.0f,100.0f);            // clamp soc between 0 and 100%
+    soc = clamp(soc,0.0f,100.0f);                   // clamp soc between 0 and 100%
     float ttg = ((100.0f - soc) / rate) * 3600.0f;  // calculate seconds to charge/discharge
     LOG_DEBUG("MAX17048Sensor::getTimeToGoSecs %.0f seconds\n", ttg);
     return (uint16_t)ttg;
 }
 
+// returns true if the baattery is currently on charge
 bool MAX17048Sensor::isBatteryCharging()
 {
     float volts = max17048.cellVoltage();
@@ -128,6 +129,7 @@ bool MAX17048Sensor::isBatteryCharging()
     return chargeState == MAX17048ChargeState::IMPORT;
 }
 
+// returns true if the baattery is currently connected
 bool MAX17048Sensor::isBatteryConnected()
 {
     float volts = max17048.cellVoltage();
@@ -141,6 +143,7 @@ bool MAX17048Sensor::isBatteryConnected()
     return true;
 }
 
+// returns true if there is bus or external power connected
 bool MAX17048Sensor::isExternallyPowered()
 {
     float volts = max17048.cellVoltage();
