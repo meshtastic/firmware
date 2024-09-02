@@ -54,7 +54,7 @@
 #define ST7735_RESET 15
 #define ST7735_MISO -1
 #define ST7735_BUSY -1
-#define ST7735_BL 32
+#define TFT_BL 32
 #define ST7735_SPI_HOST HSPI_HOST // SPI2_HOST for S3, auto may work too
 #define SPI_FREQUENCY 40000000
 #define SPI_READ_FREQUENCY 16000000

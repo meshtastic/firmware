@@ -1,5 +1,6 @@
 #pragma once
 
+#include <GpioLogic.h>
 #include <OLEDDisplay.h>
 
 /**
@@ -38,6 +39,14 @@ class TFTDisplay : public OLEDDisplay
      *
      */
     void setDetected(uint8_t detected);
+
+    /**
+     * This is normally managed entirely by TFTDisplay, but some rare applications (heltec tracker) might need to replace the
+     * default GPIO behavior with something a bit more complex.
+     *
+     * We (cruftily) make it static so that variant.cpp can access it without needing a ptr to the TFTDisplay instance.
+     */
+    static GpioPin *backlightEnable;
 
   protected:
     // the header size of the buffer used, e.g. for the SPI command header
