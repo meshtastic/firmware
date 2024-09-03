@@ -73,7 +73,7 @@ static const uint8_t ext_chrg_detect_value = EXT_CHRG_DETECT_VALUE;
 INA260Sensor ina260Sensor;
 INA219Sensor ina219Sensor;
 INA3221Sensor ina3221Sensor;
-extern MAX17048Sensor max17048Sensor;
+MAX17048Sensor max17048Sensor;
 #endif
 
 #if HAS_RAKPROT && !defined(ARCH_PORTDUINO)
@@ -1058,6 +1058,7 @@ bool Power::axpChipInit()
  */
 class LipoBatteryLevel : public HasBatteryLevel
 {
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO)
 public:
     /**
      * Init the I2C MAX17048 Lipo battery level sensor
@@ -1116,6 +1117,11 @@ public:
             return max17048Sensor.isBatteryCharging();
         return analogLevel.isCharging();
     }
+#else
+public:
+    // Not implemented - return false to default to analog power level
+    bool Init() { return false; }
+#endif
 };
 
 LipoBatteryLevel lipoLevel;

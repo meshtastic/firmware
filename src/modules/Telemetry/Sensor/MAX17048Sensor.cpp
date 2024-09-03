@@ -20,7 +20,11 @@ int32_t MAX17048Sensor::runOnce()
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
 
-    status = max17048.begin(nodeTelemetrySensorsMap[sensorType].second);
+    // Get a singleton instance and initialise the max17048
+    if (max17048 == nullptr) {
+        max17048 = MAX17048Singleton::GetInstance();
+    }
+    status = max17048->runOnce(nodeTelemetrySensorsMap[sensorType].second);
     return initI2CSensor();
 }
 
@@ -30,16 +34,16 @@ bool MAX17048Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
     LOG_DEBUG("MAX17048Sensor::getMetrics id: %i\n", measurement->which_variant);
 
-    float volts = max17048.cellVoltage();
+    float volts = max17048->cellVoltage();
     if (isnan(volts))
     {
         LOG_DEBUG("MAX17048Sensor::getMetrics battery is disconnected\n");
         return true;
     }
 
-    float rate = max17048.chargeRate();     // charge/discharge rate in percent/hr
-    float soc = max17048.cellPercent();     // state of charge in percent 0 to 100
-    soc = clamp(soc,0.0f,100.0f);    // clamp soc between 0 and 100%
+    float rate = max17048->chargeRate();    // charge/discharge rate in percent/hr
+    float soc = max17048->cellPercent();    // state of charge in percent 0 to 100
+    soc = clamp(soc,0.0f,100.0f);           // clamp soc between 0 and 100%
     float ttg = (100.0f - soc) / rate;      // calculate hours to charge/discharge
 
     LOG_DEBUG("MAX17048Sensor::getMetrics volts: %.3fV soc: %.1f%% ttg: %.1f hours\n", volts, soc, ttg);
@@ -60,7 +64,7 @@ bool MAX17048Sensor::getMetrics(meshtastic_Telemetry *measurement)
 
 uint16_t MAX17048Sensor::getBusVoltageMv()
 {
-    float volts = max17048.cellVoltage();
+    float volts = max17048->cellVoltage();
     if (isnan(volts))
     {
         LOG_DEBUG("MAX17048Sensor::getMetrics battery is disconnected\n");
@@ -70,29 +74,75 @@ uint16_t MAX17048Sensor::getBusVoltageMv()
     return (uint16_t)(volts * 1000.0f);
 }
 
-// state of charge in percent 0 to 100
 uint8_t MAX17048Sensor::getBusBatteryPercent()
 {
-    float soc = max17048.cellPercent();
+    float soc = max17048->cellPercent();
     LOG_DEBUG("MAX17048Sensor::getBusBatteryPercent %.1f%%\n", soc);
     return clamp(static_cast<uint8_t>(round(soc)),static_cast<uint8_t>(0),static_cast<uint8_t>(100));
 }
 
-// calculate seconds to charge/discharge
 uint16_t MAX17048Sensor::getTimeToGoSecs()
 {
-    float rate = max17048.chargeRate();             // charge/discharge rate in percent/hr
-    float soc = max17048.cellPercent();             // state of charge in percent 0 to 100
+    float rate = max17048->chargeRate();            // charge/discharge rate in percent/hr
+    float soc = max17048->cellPercent();            // state of charge in percent 0 to 100
     soc = clamp(soc,0.0f,100.0f);                   // clamp soc between 0 and 100%
     float ttg = ((100.0f - soc) / rate) * 3600.0f;  // calculate seconds to charge/discharge
     LOG_DEBUG("MAX17048Sensor::getTimeToGoSecs %.0f seconds\n", ttg);
     return (uint16_t)ttg;
 }
 
-// returns true if the baattery is currently on charge
 bool MAX17048Sensor::isBatteryCharging()
 {
-    float volts = max17048.cellVoltage();
+    return max17048->isBatteryCharging();
+}
+
+bool MAX17048Sensor::isBatteryConnected()
+{
+    float volts = max17048->cellVoltage();
+    if (isnan(volts))
+    {
+        LOG_DEBUG("MAX17048Sensor::isBatteryConnected battery is disconnected\n");
+        return false;
+    }
+
+    // if a valid voltage is returned, then battery must be connected
+    return true;
+}
+
+bool MAX17048Sensor::isExternallyPowered()
+{
+    float volts = max17048->cellVoltage();
+    if (isnan(volts))
+    {
+        LOG_DEBUG("MAX17048Sensor::isExternallyPowered battery is disconnected\n");
+        return false;
+    }
+    // if the bus voltage is over MAX17048_BUS_POWER_VOLTS, then the battery is charging
+    return volts >= MAX17048_BUS_POWER_VOLTS;
+}
+
+MAX17048Singleton *MAX17048Singleton::GetInstance()
+{
+    if (pinstance == nullptr) {
+        pinstance = new MAX17048Singleton();
+    }
+    return pinstance;
+}
+
+MAX17048Singleton::MAX17048Singleton() {}
+
+MAX17048Singleton::~MAX17048Singleton() {}
+
+MAX17048Singleton *MAX17048Singleton::pinstance{nullptr};
+
+bool MAX17048Singleton::runOnce(TwoWire *theWire)
+{
+    return begin(theWire);
+}
+
+bool MAX17048Singleton::isBatteryCharging()
+{
+    float volts = cellVoltage();
     if (isnan(volts))
     {
         LOG_DEBUG("MAX17048Sensor::isCharging battery is disconnected\n");
@@ -100,15 +150,15 @@ bool MAX17048Sensor::isBatteryCharging()
     }
 
     MAX17048ChargeSample sample;
-    sample.chargeRate = max17048.chargeRate();   // charge/discharge rate in percent/hr
-    sample.cellPercent = max17048.cellPercent(); // state of charge in percent 0 to 100
-    chargeSamples.push(sample);                  // save a sample into a fifo buffer
+    sample.chargeRate = chargeRate();   // charge/discharge rate in percent/hr
+    sample.cellPercent = cellPercent(); // state of charge in percent 0 to 100
+    chargeSamples.push(sample);         // save a sample into a fifo buffer
 
-    // keep the fifo buffer trimmed
+    // Keep the fifo buffer trimmed
     while (chargeSamples.size() > MAX17048_CHARGING_SAMPLES)
         chargeSamples.pop();
 
-    // based on the past n samples, is the lipo charging, discharging or idle
+    // Based on the past n samples, is the lipo charging, discharging or idle
     if (chargeSamples.front().chargeRate > MAX17048_CHARGING_MINIMUM_RATE &&
         chargeSamples.back().chargeRate > MAX17048_CHARGING_MINIMUM_RATE)
     {
@@ -127,33 +177,6 @@ bool MAX17048Sensor::isBatteryCharging()
     LOG_DEBUG("MAX17048Sensor::isCharging %s volts: %.3f soc: %.3f rate: %.3f\n",
         chargeLabels[chargeState], volts, sample.cellPercent, sample.chargeRate);
     return chargeState == MAX17048ChargeState::IMPORT;
-}
-
-// returns true if the baattery is currently connected
-bool MAX17048Sensor::isBatteryConnected()
-{
-    float volts = max17048.cellVoltage();
-    if (isnan(volts))
-    {
-        LOG_DEBUG("MAX17048Sensor::isBatteryConnected battery is disconnected\n");
-        return false;
-    }
-
-    // if a valid voltage is returned, then battery must be connected
-    return true;
-}
-
-// returns true if there is bus or external power connected
-bool MAX17048Sensor::isExternallyPowered()
-{
-    float volts = max17048.cellVoltage();
-    if (isnan(volts))
-    {
-        LOG_DEBUG("MAX17048Sensor::isExternallyPowered battery is disconnected\n");
-        return false;
-    }
-    // if the bus voltage is over MAX17048_BUS_POWER_VOLTS, then the battery is charging
-    return volts >= MAX17048_BUS_POWER_VOLTS;
 }
 
 #endif
