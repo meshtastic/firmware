@@ -12,6 +12,9 @@
 #define SX126X_MAX_POWER 22
 #endif
 
+#define RADIOLIB_SX126X_IRQ_RX_DEFAULT                                                                                           \
+    RADIOLIB_SX126X_IRQ_RX_DONE | RADIOLIB_SX126X_IRQ_TIMEOUT | RADIOLIB_SX126X_IRQ_CRC_ERR | RADIOLIB_SX126X_IRQ_HEADER_ERR
+
 template <typename T>
 SX126xInterface<T>::SX126xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                                     RADIOLIB_PIN_TYPE busy)
@@ -301,7 +304,7 @@ template <typename T> bool SX126xInterface<T>::isActivelyReceiving()
     // The IRQ status will be cleared when we start our read operation. Check if we've started a header, but haven't yet
     // received and handled the interrupt for reading the packet/handling errors.
 
-    uint16_t irq = lora.getIrqStatus();
+    uint16_t irq = lora.getIrqFlags();
     bool detected = (irq & (RADIOLIB_SX126X_IRQ_HEADER_VALID | RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED));
     // Handle false detections
     if (detected) {

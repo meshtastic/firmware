@@ -12,6 +12,10 @@
 #define SX128X_MAX_POWER 13
 #endif
 
+#define RADIOLIB_SX128X_IRQ_RX_DEFAULT                                                                                           \
+    RADIOLIB_SX128X_IRQ_RX_DONE | RADIOLIB_SX128X_IRQ_RX_TX_TIMEOUT | RADIOLIB_SX128X_IRQ_CRC_ERROR |                            \
+        RADIOLIB_SX128X_IRQ_HEADER_ERROR
+
 template <typename T>
 SX128xInterface<T>::SX128xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                                     RADIOLIB_PIN_TYPE busy)
