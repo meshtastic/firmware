@@ -12,10 +12,6 @@
 #define SX128X_MAX_POWER 13
 #endif
 
-#define RADIOLIB_SX128X_IRQ_RX_DEFAULT                                                                                           \
-    RADIOLIB_SX128X_IRQ_RX_DONE | RADIOLIB_SX128X_IRQ_RX_TX_TIMEOUT | RADIOLIB_SX128X_IRQ_CRC_ERROR |                            \
-        RADIOLIB_SX128X_IRQ_HEADER_ERROR
-
 template <typename T>
 SX128xInterface<T>::SX128xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                                     RADIOLIB_PIN_TYPE busy)
@@ -260,9 +256,8 @@ template <typename T> void SX128xInterface<T>::startReceive()
 #endif
 
     // We use the PREAMBLE_DETECTED and HEADER_VALID IRQ flag to detect whether we are actively receiving
-    int err =
-        lora.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF, RADIOLIB_SX128X_IRQ_RX_DEFAULT | RADIOLIB_SX128X_IRQ_PREAMBLE_DETECTED |
-                                                              RADIOLIB_SX128X_IRQ_HEADER_VALID);
+    int err = lora.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF,
+                                RADIOLIB_IRQ_RX_DEFAULT_FLAGS | RADIOLIB_IRQ_PREAMBLE_DETECTED | RADIOLIB_IRQ_HEADER_VALID);
 
     if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("Radiolib error %d when attempting SX128X startReceive!\n", err);
