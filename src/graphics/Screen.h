@@ -309,7 +309,7 @@ class Screen : public concurrency::OSThread
     static char customFontTableLookup(const uint8_t ch)
     {
         // UTF-8 to font table index converter
-        // Code form http://playground.arduino.cc/Main/Utf8ascii
+        // Code from http://playground.arduino.cc/Main/Utf8ascii
         static uint8_t LASTCHAR;
         static bool SKIPREST; // Only display a single unconvertable-character symbol per sequence of unconvertable characters
 
@@ -322,11 +322,57 @@ class Screen : public concurrency::OSThread
         uint8_t last = LASTCHAR; // get last char
         LASTCHAR = ch;
 
-        switch (last) { // conversion depending on first UTF8-character
+        switch (last) {
         case 0xC2: {
             SKIPREST = false;
             return (uint8_t)ch;
         }
+        }
+
+        // We want to strip out prefix chars for two-byte char formats
+        if (ch == 0xC2)
+            return (uint8_t)0;
+
+#if defined(OLED_PL)
+
+        switch (last) {
+        case 0xC3: {
+
+            if (ch == 147)
+                return (uint8_t)(ch); // Ó
+            else if (ch == 179)
+                return (uint8_t)(148); // ó
+            else
+                return (uint8_t)(ch | 0xC0);
+            break;
+        }
+
+        case 0xC4: {
+            SKIPREST = false;
+            return (uint8_t)(ch);
+        }
+
+        case 0xC5: {
+            SKIPREST = false;
+            if (ch == 132)
+                return (uint8_t)(136); // ń
+            else if (ch == 186)
+                return (uint8_t)(137); // ź
+            else
+                return (uint8_t)(ch);
+            break;
+        }
+        }
+
+        // We want to strip out prefix chars for two-byte char formats
+        if (ch == 0xC2 || ch == 0xC3 || ch == 0xC4 || ch == 0xC5)
+            return (uint8_t)0;
+
+#endif
+
+#if defined(OLED_UA) || defined(OLED_RU)
+
+        switch (last) {
         case 0xC3: {
             SKIPREST = false;
             return (uint8_t)(ch | 0xC0);
@@ -375,6 +421,8 @@ class Screen : public concurrency::OSThread
         // We want to strip out prefix chars for two-byte char formats
         if (ch == 0xC2 || ch == 0xC3 || ch == 0x82 || ch == 0xD0 || ch == 0xD1)
             return (uint8_t)0;
+
+#endif
 
         // If we already returned an unconvertable-character symbol for this unconvertable-character sequence, return NULs for the
         // rest of it

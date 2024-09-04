@@ -109,7 +109,7 @@ PacketId generatePacketId()
 
     rollingPacketId++;
 
-    rollingPacketId &= UINT32_MAX >> 22;                                   // Mask out the top 22 bits
+    rollingPacketId &= ID_COUNTER_MASK;                                    // Mask out the top 22 bits
     PacketId id = rollingPacketId | random(UINT32_MAX & 0x7fffffff) << 10; // top 22 bits
     LOG_DEBUG("Partially randomized packet id %u\n", id);
     return id;
@@ -165,6 +165,9 @@ meshtastic_QueueStatus Router::getQueueStatus()
 
 ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
 {
+    if (p->to == 0) {
+        LOG_ERROR("Packet received with to: of 0!\n");
+    }
     // No need to deliver externally if the destination is the local node
     if (p->to == nodeDB->getNodeNum()) {
         printPacket("Enqueued local", p);
@@ -251,6 +254,8 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
           p->which_payload_variant == meshtastic_MeshPacket_decoded_tag)) {
         return meshtastic_Routing_Error_BAD_REQUEST;
     }
+
+    fixPriority(p); // Before encryption, fix the priority if it's unset
 
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {

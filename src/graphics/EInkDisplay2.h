@@ -68,7 +68,7 @@ class EInkDisplay : public OLEDDisplay
 
     // If display uses HSPI
 #if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_VISION_MASTER_E213) ||               \
-    defined(HELTEC_VISION_MASTER_E290)
+    defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER)
     SPIClass *hspi = NULL;
 #endif
 
