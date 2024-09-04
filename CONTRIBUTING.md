@@ -40,7 +40,7 @@ We encourage open communication and discussion before diving into code changes:
 To ensure consistent code formatting across the project:
 
 1. Install the [Trunk](https://marketplace.visualstudio.com/items?itemName=Trunk.io) extension for Visual Studio Code.
-2. Before submitting your changes, run trunk fmt to automatically format your code according to our standards.
+2. Before submitting your changes, run `trunk fmt` to automatically format your code according to our standards.
 
 Adhering to these formatting guidelines helps maintain code consistency and makes the review process smoother.
 
