@@ -1,6 +1,7 @@
 #include "configuration.h"
 #if ARCH_PORTDUINO
 #include "LinuxInput.h"
+#include "modules/CannedMessageModule.h"
 #include "platform/portduino/PortduinoGlue.h"
 #include <assert.h>
 #include <ctype.h>
@@ -147,11 +148,11 @@ int32_t LinuxInput::runOnce()
                     case KEY_LEFT: // Left
                         e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT;
                         break;
-                        e.kbchar = 0xb4;
+                        e.kbchar = CANNED_MESSAGE_KEY_LEFT;
                     case KEY_RIGHT: // Right
                         e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
                         break;
-                        e.kbchar = 0xb7;
+                        e.kbchar = CANNED_MESSAGE_KEY_RIGHT;
                     case KEY_ENTER: // Enter
                         e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
                         break;
