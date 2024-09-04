@@ -1,4 +1,5 @@
 #include "PowerFSM.h"
+#include "PowerMon.h"
 #include "configuration.h"
 #include "esp_task_wdt.h"
 #include "main.h"
@@ -34,6 +35,7 @@ void setBluetoothEnable(bool enable)
             nimbleBluetooth = new NimbleBluetooth();
         }
         if (enable && !nimbleBluetooth->isActive()) {
+            powerMon->setState(meshtastic_PowerMon_State_BT_On);
             nimbleBluetooth->setup();
         }
         // For ESP32, no way to recover from bluetooth shutdown without reboot
@@ -195,16 +197,16 @@ void cpuDeepSleep(uint32_t msecToWake)
     button(s), maybe we should not include any other GPIOs...
     */
 #if SOC_RTCIO_HOLD_SUPPORTED
-    static const uint8_t rtcGpios[] = {/* 0, */ 2,
-    /* 4, */
-#ifndef USE_JTAG
-                                       13,
-    /* 14, */ /* 15, */
+    static const uint8_t rtcGpios[] = {
+#ifndef HELTEC_VISION_MASTER_E213
+        // For this variant, >20mA leaks through the display if pin 2 held
+        // Todo: check if it's safe to remove this pin for all variants
+        2,
 #endif
-                                       /* 25, */ /* 26, */ /* 27, */
-                                       /* 32, */ /* 33, */ 34, 35,
-                                       /* 36, */ 37
-                                       /* 38, 39 */};
+#ifndef USE_JTAG
+        13,
+#endif
+        34, 35, 37};
 
     for (int i = 0; i < sizeof(rtcGpios); i++)
         rtc_gpio_isolate((gpio_num_t)rtcGpios[i]);
@@ -226,6 +228,9 @@ void cpuDeepSleep(uint32_t msecToWake)
     // FIXME change polarity in hw so we can wake on ANY_HIGH instead - that would allow us to use all three buttons (instead
     // of just the first) gpio_pullup_en((gpio_num_t)BUTTON_PIN);
 
+#ifdef ESP32S3_WAKE_TYPE
+    esp_sleep_enable_ext1_wakeup(gpioMask, ESP32S3_WAKE_TYPE);
+#else
 #if SOC_PM_SUPPORT_EXT_WAKEUP
 #ifdef CONFIG_IDF_TARGET_ESP32
     // ESP_EXT1_WAKEUP_ALL_LOW has been deprecated since esp-idf v5.4 for any other target.
@@ -234,6 +239,8 @@ void cpuDeepSleep(uint32_t msecToWake)
     esp_sleep_enable_ext1_wakeup(gpioMask, ESP_EXT1_WAKEUP_ANY_LOW);
 #endif
 #endif
+
+#endif // #end ESP32S3_WAKE_TYPE
 #endif
 
     // We want RTC peripherals to stay on

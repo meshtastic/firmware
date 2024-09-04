@@ -157,7 +157,7 @@ bool EInkDisplay::connect()
     }
 
 #elif defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_VISION_MASTER_E213) ||             \
-    defined(HELTEC_VISION_MASTER_E290)
+    defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER)
     {
         // Start HSPI
         hspi = new SPIClass(HSPI);
@@ -174,13 +174,13 @@ bool EInkDisplay::connect()
         adafruitDisplay->init();
         adafruitDisplay->setRotation(3);
     }
-#elif defined(PCA10059)
+#elif defined(PCA10059) || defined(ME25LS01)
     {
         auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);
         adafruitDisplay = new GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT>(*lowLevel);
-        adafruitDisplay->init(115200, true, 10, false, SPI1, SPISettings(4000000, MSBFIRST, SPI_MODE0));
-        adafruitDisplay->setRotation(3);
-        adafruitDisplay->setPartialWindow(0, 0, displayWidth, displayHeight);
+        adafruitDisplay->init(115200, true, 40, false, SPI1, SPISettings(4000000, MSBFIRST, SPI_MODE0));
+        adafruitDisplay->setRotation(0);
+        adafruitDisplay->setPartialWindow(0, 0, EINK_WIDTH, EINK_HEIGHT);
     }
 #elif defined(M5_COREINK)
     auto lowLevel = new EINK_DISPLAY_MODEL(PIN_EINK_CS, PIN_EINK_DC, PIN_EINK_RES, PIN_EINK_BUSY);

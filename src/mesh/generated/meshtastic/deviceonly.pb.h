@@ -9,6 +9,7 @@
 #include "meshtastic/localonly.pb.h"
 #include "meshtastic/mesh.pb.h"
 #include "meshtastic/telemetry.pb.h"
+#include "meshtastic/config.pb.h"
 
 #if PB_PROTO_HEADER_VERSION != 40
 #error Regenerate this file with the current version of nanopb generator.
@@ -45,12 +46,37 @@ typedef struct _meshtastic_PositionLite {
     meshtastic_Position_LocSource location_source;
 } meshtastic_PositionLite;
 
+typedef PB_BYTES_ARRAY_T(32) meshtastic_UserLite_public_key_t;
+typedef struct _meshtastic_UserLite {
+    /* This is the addr of the radio. */
+    pb_byte_t macaddr[6];
+    /* A full name for this user, i.e. "Kevin Hester" */
+    char long_name[40];
+    /* A VERY short name, ideally two characters.
+ Suitable for a tiny OLED screen */
+    char short_name[5];
+    /* TBEAM, HELTEC, etc...
+ Starting in 1.2.11 moved to hw_model enum in the NodeInfo object.
+ Apps will still need the string here for older builds
+ (so OTA update can find the right image), but if the enum is available it will be used instead. */
+    meshtastic_HardwareModel hw_model;
+    /* In some regions Ham radio operators have different bandwidth limitations than others.
+ If this user is a licensed operator, set this flag.
+ Also, "long_name" should be their licence number. */
+    bool is_licensed;
+    /* Indicates that the user's role in the mesh */
+    meshtastic_Config_DeviceConfig_Role role;
+    /* The public key of the user's device.
+ This is sent out to other nodes on the mesh to allow them to compute a shared secret key. */
+    meshtastic_UserLite_public_key_t public_key;
+} meshtastic_UserLite;
+
 typedef struct _meshtastic_NodeInfoLite {
     /* The node number */
     uint32_t num;
     /* The user info for this node */
     bool has_user;
-    meshtastic_User user;
+    meshtastic_UserLite user;
     /* This position data. Note: before 1.2.14 we would also store the last time we've heard from this node in position.time, that is no longer true.
  Position.time now indicates the last time we received a POSITION from that node. */
     bool has_position;
@@ -164,6 +190,9 @@ extern "C" {
 
 #define meshtastic_PositionLite_location_source_ENUMTYPE meshtastic_Position_LocSource
 
+#define meshtastic_UserLite_hw_model_ENUMTYPE meshtastic_HardwareModel
+#define meshtastic_UserLite_role_ENUMTYPE meshtastic_Config_DeviceConfig_Role
+
 
 
 
@@ -172,12 +201,14 @@ extern "C" {
 
 /* Initializer values for message structs */
 #define meshtastic_PositionLite_init_default     {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN}
-#define meshtastic_NodeInfoLite_init_default     {0, false, meshtastic_User_init_default, false, meshtastic_PositionLite_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, 0, 0}
+#define meshtastic_UserLite_init_default         {{0}, "", "", _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}}
+#define meshtastic_NodeInfoLite_init_default     {0, false, meshtastic_UserLite_init_default, false, meshtastic_PositionLite_init_default, 0, 0, false, meshtastic_DeviceMetrics_init_default, 0, 0, 0, 0}
 #define meshtastic_DeviceState_init_default      {false, meshtastic_MyNodeInfo_init_default, false, meshtastic_User_init_default, 0, {meshtastic_MeshPacket_init_default}, false, meshtastic_MeshPacket_init_default, 0, 0, 0, false, meshtastic_MeshPacket_init_default, 0, {meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default, meshtastic_NodeRemoteHardwarePin_init_default}, {0}}
 #define meshtastic_ChannelFile_init_default      {0, {meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default, meshtastic_Channel_init_default}, 0}
 #define meshtastic_OEMStore_init_default         {0, 0, {0, {0}}, _meshtastic_ScreenFonts_MIN, "", {0, {0}}, false, meshtastic_LocalConfig_init_default, false, meshtastic_LocalModuleConfig_init_default}
 #define meshtastic_PositionLite_init_zero        {0, 0, 0, 0, _meshtastic_Position_LocSource_MIN}
-#define meshtastic_NodeInfoLite_init_zero        {0, false, meshtastic_User_init_zero, false, meshtastic_PositionLite_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, 0, 0}
+#define meshtastic_UserLite_init_zero            {{0}, "", "", _meshtastic_HardwareModel_MIN, 0, _meshtastic_Config_DeviceConfig_Role_MIN, {0, {0}}}
+#define meshtastic_NodeInfoLite_init_zero        {0, false, meshtastic_UserLite_init_zero, false, meshtastic_PositionLite_init_zero, 0, 0, false, meshtastic_DeviceMetrics_init_zero, 0, 0, 0, 0}
 #define meshtastic_DeviceState_init_zero         {false, meshtastic_MyNodeInfo_init_zero, false, meshtastic_User_init_zero, 0, {meshtastic_MeshPacket_init_zero}, false, meshtastic_MeshPacket_init_zero, 0, 0, 0, false, meshtastic_MeshPacket_init_zero, 0, {meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero, meshtastic_NodeRemoteHardwarePin_init_zero}, {0}}
 #define meshtastic_ChannelFile_init_zero         {0, {meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero, meshtastic_Channel_init_zero}, 0}
 #define meshtastic_OEMStore_init_zero            {0, 0, {0, {0}}, _meshtastic_ScreenFonts_MIN, "", {0, {0}}, false, meshtastic_LocalConfig_init_zero, false, meshtastic_LocalModuleConfig_init_zero}
@@ -188,6 +219,13 @@ extern "C" {
 #define meshtastic_PositionLite_altitude_tag     3
 #define meshtastic_PositionLite_time_tag         4
 #define meshtastic_PositionLite_location_source_tag 5
+#define meshtastic_UserLite_macaddr_tag          1
+#define meshtastic_UserLite_long_name_tag        2
+#define meshtastic_UserLite_short_name_tag       3
+#define meshtastic_UserLite_hw_model_tag         4
+#define meshtastic_UserLite_is_licensed_tag      5
+#define meshtastic_UserLite_role_tag             6
+#define meshtastic_UserLite_public_key_tag       7
 #define meshtastic_NodeInfoLite_num_tag          1
 #define meshtastic_NodeInfoLite_user_tag         2
 #define meshtastic_NodeInfoLite_position_tag     3
@@ -229,6 +267,17 @@ X(a, STATIC,   SINGULAR, UENUM,    location_source,   5)
 #define meshtastic_PositionLite_CALLBACK NULL
 #define meshtastic_PositionLite_DEFAULT NULL
 
+#define meshtastic_UserLite_FIELDLIST(X, a) \
+X(a, STATIC,   SINGULAR, FIXED_LENGTH_BYTES, macaddr,           1) \
+X(a, STATIC,   SINGULAR, STRING,   long_name,         2) \
+X(a, STATIC,   SINGULAR, STRING,   short_name,        3) \
+X(a, STATIC,   SINGULAR, UENUM,    hw_model,          4) \
+X(a, STATIC,   SINGULAR, BOOL,     is_licensed,       5) \
+X(a, STATIC,   SINGULAR, UENUM,    role,              6) \
+X(a, STATIC,   SINGULAR, BYTES,    public_key,        7)
+#define meshtastic_UserLite_CALLBACK NULL
+#define meshtastic_UserLite_DEFAULT NULL
+
 #define meshtastic_NodeInfoLite_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, UINT32,   num,               1) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  user,              2) \
@@ -242,7 +291,7 @@ X(a, STATIC,   SINGULAR, UINT32,   hops_away,         9) \
 X(a, STATIC,   SINGULAR, BOOL,     is_favorite,      10)
 #define meshtastic_NodeInfoLite_CALLBACK NULL
 #define meshtastic_NodeInfoLite_DEFAULT NULL
-#define meshtastic_NodeInfoLite_user_MSGTYPE meshtastic_User
+#define meshtastic_NodeInfoLite_user_MSGTYPE meshtastic_UserLite
 #define meshtastic_NodeInfoLite_position_MSGTYPE meshtastic_PositionLite
 #define meshtastic_NodeInfoLite_device_metrics_MSGTYPE meshtastic_DeviceMetrics
 
@@ -290,6 +339,7 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  oem_local_module_config,   8)
 #define meshtastic_OEMStore_oem_local_module_config_MSGTYPE meshtastic_LocalModuleConfig
 
 extern const pb_msgdesc_t meshtastic_PositionLite_msg;
+extern const pb_msgdesc_t meshtastic_UserLite_msg;
 extern const pb_msgdesc_t meshtastic_NodeInfoLite_msg;
 extern const pb_msgdesc_t meshtastic_DeviceState_msg;
 extern const pb_msgdesc_t meshtastic_ChannelFile_msg;
@@ -297,6 +347,7 @@ extern const pb_msgdesc_t meshtastic_OEMStore_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define meshtastic_PositionLite_fields &meshtastic_PositionLite_msg
+#define meshtastic_UserLite_fields &meshtastic_UserLite_msg
 #define meshtastic_NodeInfoLite_fields &meshtastic_NodeInfoLite_msg
 #define meshtastic_DeviceState_fields &meshtastic_DeviceState_msg
 #define meshtastic_ChannelFile_fields &meshtastic_ChannelFile_msg
@@ -306,9 +357,10 @@ extern const pb_msgdesc_t meshtastic_OEMStore_msg;
 /* meshtastic_DeviceState_size depends on runtime parameters */
 #define MESHTASTIC_MESHTASTIC_DEVICEONLY_PB_H_MAX_SIZE meshtastic_OEMStore_size
 #define meshtastic_ChannelFile_size              718
-#define meshtastic_NodeInfoLite_size             166
-#define meshtastic_OEMStore_size                 3388
+#define meshtastic_NodeInfoLite_size             183
+#define meshtastic_OEMStore_size                 3497
 #define meshtastic_PositionLite_size             28
+#define meshtastic_UserLite_size                 96
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -11,7 +11,7 @@ rm -f $OUTDIR/firmware*
 rm -r $OUTDIR/* || true
 
 # Important to pull latest version of libs into all device flavors, otherwise some devices might be stale
-platformio pkg update
+platformio pkg update -e $1
 
 echo "Building for $1 with $PLATFORMIO_BUILD_FLAGS"
 rm -f .pio/build/$1/firmware.*
@@ -45,4 +45,9 @@ else
 	cp bin/device-install.* $OUTDIR
 	cp bin/device-update.* $OUTDIR
 	cp bin/*.uf2 $OUTDIR
+fi
+
+if (echo $1 | grep -q "rak4631"); then
+	echo "Copying hex file"
+	cp .pio/build/$1/firmware.hex $OUTDIR/$basename.hex
 fi

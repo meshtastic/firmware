@@ -38,8 +38,9 @@ size_t RedirectablePrint::write(uint8_t c)
 #ifdef USE_SEGGER
     SEGGER_RTT_PutChar(SEGGER_STDOUT_CH, c);
 #endif
-
-    if (!config.has_lora || config.device.serial_enabled)
+    // Account for legacy config transition
+    bool serialEnabled = config.has_security ? config.security.serial_enabled : config.device.serial_enabled;
+    if (!config.has_lora || serialEnabled)
         dest->write(c);
 
     return 1; // We always claim one was written, rather than trusting what the
@@ -49,7 +50,17 @@ size_t RedirectablePrint::write(uint8_t c)
 size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_list arg)
 {
     va_list copy;
+#if ENABLE_JSON_LOGGING || ARCH_PORTDUINO
+    static char printBuf[512];
+#else
     static char printBuf[160];
+#endif
+
+#ifdef ARCH_PORTDUINO
+    bool color = !settingsMap[ascii_logs];
+#else
+    bool color = true;
+#endif
 
     va_copy(copy, arg);
     size_t len = vsnprintf(printBuf, sizeof(printBuf), format, copy);
@@ -66,7 +77,7 @@ size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_l
         if (!std::isprint(static_cast<unsigned char>(printBuf[f])) && printBuf[f] != '\n')
             printBuf[f] = '#';
     }
-    if (logLevel != nullptr) {
+    if (color && logLevel != nullptr) {
         if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0)
             Print::write("\u001b[34m", 6);
         if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_INFO) == 0)
@@ -77,7 +88,9 @@ size_t RedirectablePrint::vprintf(const char *logLevel, const char *format, va_l
             Print::write("\u001b[31m", 6);
     }
     len = Print::write(printBuf, len);
-    Print::write("\u001b[0m", 5);
+    if (color && logLevel != nullptr) {
+        Print::write("\u001b[0m", 5);
+    }
     return len;
 }
 
@@ -87,17 +100,27 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
 
     // Cope with 0 len format strings, but look for new line terminator
     bool hasNewline = *format && format[strlen(format) - 1] == '\n';
+#ifdef ARCH_PORTDUINO
+    bool color = !settingsMap[ascii_logs];
+#else
+    bool color = true;
+#endif
 
     // If we are the first message on a report, include the header
     if (!isContinuationMessage) {
-        if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0)
-            Print::write("\u001b[34m", 6);
-        if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_INFO) == 0)
-            Print::write("\u001b[32m", 6);
-        if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_WARN) == 0)
-            Print::write("\u001b[33m", 6);
-        if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_ERROR) == 0)
-            Print::write("\u001b[31m", 6);
+        if (color) {
+            if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0)
+                Print::write("\u001b[34m", 6);
+            if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_INFO) == 0)
+                Print::write("\u001b[32m", 6);
+            if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_WARN) == 0)
+                Print::write("\u001b[33m", 6);
+            if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_ERROR) == 0)
+                Print::write("\u001b[31m", 6);
+            if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_TRACE) == 0)
+                Print::write("\u001b[35m", 6);
+        }
+
         uint32_t rtc_sec = getValidTime(RTCQuality::RTCQualityDevice, true); // display local time on logfile
         if (rtc_sec > 0) {
             long hms = rtc_sec % SEC_PER_DAY;
@@ -111,17 +134,33 @@ void RedirectablePrint::log_to_serial(const char *logLevel, const char *format, 
             int min = (hms % SEC_PER_HOUR) / SEC_PER_MIN;
             int sec = (hms % SEC_PER_HOUR) % SEC_PER_MIN; // or hms % SEC_PER_MIN
 #ifdef ARCH_PORTDUINO
-            ::printf("%s \u001b[0m| %02d:%02d:%02d %u ", logLevel, hour, min, sec, millis() / 1000);
+            ::printf("%s ", logLevel);
+            if (color) {
+                ::printf("\u001b[0m");
+            }
+            ::printf("| %02d:%02d:%02d %u ", hour, min, sec, millis() / 1000);
 #else
-            printf("%s \u001b[0m| %02d:%02d:%02d %u ", logLevel, hour, min, sec, millis() / 1000);
+            printf("%s ", logLevel);
+            if (color) {
+                printf("\u001b[0m");
+            }
+            printf("| %02d:%02d:%02d %u ", hour, min, sec, millis() / 1000);
 #endif
-        } else
+        } else {
 #ifdef ARCH_PORTDUINO
-            ::printf("%s \u001b[0m| ??:??:?? %u ", logLevel, millis() / 1000);
+            ::printf("%s ", logLevel);
+            if (color) {
+                ::printf("\u001b[0m");
+            }
+            ::printf("| ??:??:?? %u ", millis() / 1000);
 #else
-            printf("%s \u001b[0m| ??:??:?? %u ", logLevel, millis() / 1000);
+            printf("%s ", logLevel);
+            if (color) {
+                printf("\u001b[0m");
+            }
+            printf("| ??:??:?? %u ", millis() / 1000);
 #endif
-
+        }
         auto thread = concurrency::OSThread::currentThread;
         if (thread) {
             print("[");
@@ -174,7 +213,7 @@ void RedirectablePrint::log_to_syslog(const char *logLevel, const char *format, 
 void RedirectablePrint::log_to_ble(const char *logLevel, const char *format, va_list arg)
 {
 #if !MESHTASTIC_EXCLUDE_BLUETOOTH
-    if (config.bluetooth.device_logging_enabled && !pauseBluetoothLogging) {
+    if (config.security.debug_log_api_enabled && !pauseBluetoothLogging) {
         bool isBleConnected = false;
 #ifdef ARCH_ESP32
         isBleConnected = nimbleBluetooth && nimbleBluetooth->isActive() && nimbleBluetooth->isConnected();
@@ -244,7 +283,21 @@ meshtastic_LogRecord_Level RedirectablePrint::getLogLevel(const char *logLevel)
 
 void RedirectablePrint::log(const char *logLevel, const char *format, ...)
 {
-#ifdef ARCH_PORTDUINO
+#if ARCH_PORTDUINO
+    // level trace is special, two possible ways to handle it.
+    if (strcmp(logLevel, MESHTASTIC_LOG_LEVEL_TRACE) == 0) {
+        if (settingsStrings[traceFilename] != "") {
+            va_list arg;
+            va_start(arg, format);
+            try {
+                traceFile << va_arg(arg, char *) << std::endl;
+            } catch (const std::ios_base::failure &e) {
+            }
+            va_end(arg);
+        }
+        if (settingsMap[logoutputlevel] < level_trace && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_TRACE) == 0)
+            return;
+    }
     if (settingsMap[logoutputlevel] < level_debug && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0)
         return;
     else if (settingsMap[logoutputlevel] < level_info && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_INFO) == 0)

@@ -53,8 +53,10 @@ const RegionInfo regions[] = {
 
     /*
         https://lora-alliance.org/wp-content/uploads/2020/11/lorawan_regional_parameters_v1.0.3reva_0.pdf
+        https://www.arib.or.jp/english/html/overview/doc/5-STD-T108v1_5-E1.pdf
+        https://qiita.com/ammo0613/items/d952154f1195b64dc29f
      */
-    RDEF(JP, 920.8f, 927.8f, 100, 0, 16, true, false, false),
+    RDEF(JP, 920.5f, 923.5f, 100, 0, 13, true, false, false),
 
     /*
         https://www.iot.org.au/wp/wp-content/uploads/2016/12/IoTSpectrumFactSheet.pdf
@@ -177,9 +179,6 @@ The band is from 902 to 928 MHz. It mentions channel number and its respective c
 separated by 2.16 MHz with respect to the adjacent channels. Channel zero starts at 903.08 MHz center frequency.
 */
 
-// 1kb was too small
-#define RADIO_STACK_SIZE 4096
-
 /**
  * Calculate airtime per
  * https://www.rs-online.com/designspark/rel-assets/ds-assets/uploads/knowledge-items/application-notes-for-the-internet-of-things/LoRa%20Design%20Guide.pdf
@@ -286,6 +285,9 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
         if (s.want_response)
             out += DEBUG_PORT.mt_sprintf(" WANTRESP");
 
+        if (p->pki_encrypted)
+            out += DEBUG_PORT.mt_sprintf(" PKI");
+
         if (s.source != 0)
             out += DEBUG_PORT.mt_sprintf(" source=%08x", s.source);
 
@@ -337,7 +339,7 @@ bool RadioInterface::init()
 {
     LOG_INFO("Starting meshradio init...\n");
 
-    configChangedObserver.observe(&service.configChanged);
+    configChangedObserver.observe(&service->configChanged);
     preflightSleepObserver.observe(&preflightSleep);
     notifyDeepSleepObserver.observe(&notifyDeepSleep);
 
@@ -412,67 +414,93 @@ void RadioInterface::applyModemConfig()
     // Set up default configuration
     // No Sync Words in LORA mode
     meshtastic_Config_LoRaConfig &loraConfig = config.lora;
-    if (loraConfig.use_preset) {
+    bool validConfig = false; // We need to check for a valid configuration
+    while (!validConfig) {
+        if (loraConfig.use_preset) {
 
-        switch (loraConfig.modem_preset) {
-        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
-            bw = (myRegion->wideLora) ? 812.5 : 250;
-            cr = 5;
-            sf = 7;
-            break;
-        case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
-            bw = (myRegion->wideLora) ? 812.5 : 250;
-            cr = 5;
-            sf = 8;
-            break;
-        case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
-            bw = (myRegion->wideLora) ? 812.5 : 250;
-            cr = 5;
-            sf = 9;
-            break;
-        case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
-            bw = (myRegion->wideLora) ? 812.5 : 250;
-            cr = 5;
-            sf = 10;
-            break;
-        default: // Config_LoRaConfig_ModemPreset_LONG_FAST is default. Gracefully use this is preset is something illegal.
-            bw = (myRegion->wideLora) ? 812.5 : 250;
-            cr = 5;
-            sf = 11;
-            break;
-        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
-            bw = (myRegion->wideLora) ? 406.25 : 125;
-            cr = 8;
-            sf = 11;
-            break;
-        case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
-            bw = (myRegion->wideLora) ? 406.25 : 125;
-            cr = 8;
-            sf = 12;
-            break;
-        case meshtastic_Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW:
-            bw = (myRegion->wideLora) ? 203.125 : 62.5;
-            cr = 8;
-            sf = 12;
-            break;
+            switch (loraConfig.modem_preset) {
+            case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
+                bw = (myRegion->wideLora) ? 812.5 : 500;
+                cr = 5;
+                sf = 7;
+                break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST:
+                bw = (myRegion->wideLora) ? 812.5 : 250;
+                cr = 5;
+                sf = 7;
+                break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_SLOW:
+                bw = (myRegion->wideLora) ? 812.5 : 250;
+                cr = 5;
+                sf = 8;
+                break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_FAST:
+                bw = (myRegion->wideLora) ? 812.5 : 250;
+                cr = 5;
+                sf = 9;
+                break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_MEDIUM_SLOW:
+                bw = (myRegion->wideLora) ? 812.5 : 250;
+                cr = 5;
+                sf = 10;
+                break;
+            default: // Config_LoRaConfig_ModemPreset_LONG_FAST is default. Gracefully use this is preset is something illegal.
+                bw = (myRegion->wideLora) ? 812.5 : 250;
+                cr = 5;
+                sf = 11;
+                break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_LONG_MODERATE:
+                bw = (myRegion->wideLora) ? 406.25 : 125;
+                cr = 8;
+                sf = 11;
+                break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_LONG_SLOW:
+                bw = (myRegion->wideLora) ? 406.25 : 125;
+                cr = 8;
+                sf = 12;
+                break;
+            case meshtastic_Config_LoRaConfig_ModemPreset_VERY_LONG_SLOW:
+                bw = (myRegion->wideLora) ? 203.125 : 62.5;
+                cr = 8;
+                sf = 12;
+                break;
+            }
+        } else {
+            sf = loraConfig.spread_factor;
+            cr = loraConfig.coding_rate;
+            bw = loraConfig.bandwidth;
+
+            if (bw == 31) // This parameter is not an integer
+                bw = 31.25;
+            if (bw == 62) // Fix for 62.5Khz bandwidth
+                bw = 62.5;
+            if (bw == 200)
+                bw = 203.125;
+            if (bw == 400)
+                bw = 406.25;
+            if (bw == 800)
+                bw = 812.5;
+            if (bw == 1600)
+                bw = 1625.0;
         }
-    } else {
-        sf = loraConfig.spread_factor;
-        cr = loraConfig.coding_rate;
-        bw = loraConfig.bandwidth;
 
-        if (bw == 31) // This parameter is not an integer
-            bw = 31.25;
-        if (bw == 62) // Fix for 62.5Khz bandwidth
-            bw = 62.5;
-        if (bw == 200)
-            bw = 203.125;
-        if (bw == 400)
-            bw = 406.25;
-        if (bw == 800)
-            bw = 812.5;
-        if (bw == 1600)
-            bw = 1625.0;
+        if ((myRegion->freqEnd - myRegion->freqStart) < bw / 1000) {
+            static const char *err_string =
+                "Regional frequency range is smaller than bandwidth. Falling back to default preset.\n";
+            LOG_ERROR(err_string);
+            RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
+
+            meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+            cn->level = meshtastic_LogRecord_Level_ERROR;
+            sprintf(cn->message, err_string);
+            service->sendClientNotification(cn);
+
+            // Set to default modem preset
+            loraConfig.use_preset = true;
+            loraConfig.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
+        } else {
+            validConfig = true;
+        }
     }
 
     power = loraConfig.tx_power;
@@ -515,6 +543,7 @@ void RadioInterface::applyModemConfig()
     saveChannelNum(channel_num);
     saveFreq(freq + loraConfig.frequency_offset);
 
+    slotTimeMsec = computeSlotTimeMsec(bw, sf);
     preambleTimeMsec = getPacketTime((uint32_t)0);
     maxPacketTimeMsec = getPacketTime(meshtastic_Constants_DATA_PAYLOAD_LEN + sizeof(PacketHeader));
 

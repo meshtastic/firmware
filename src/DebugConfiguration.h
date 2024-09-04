@@ -3,8 +3,8 @@
 #include "configuration.h"
 
 // DEBUG LED
-#ifndef LED_INVERTED
-#define LED_INVERTED 0 // define as 1 if LED is active low (on)
+#ifndef LED_STATE_ON
+#define LED_STATE_ON 1
 #endif
 
 // -----------------------------------------------------------------------------
@@ -45,7 +45,7 @@
 #define LOG_CRIT(...) SEGGER_RTT_printf(0, __VA_ARGS__)
 #define LOG_TRACE(...) SEGGER_RTT_printf(0, __VA_ARGS__)
 #else
-#if defined(DEBUG_PORT) && !defined(DEBUG_MUTE)
+#if defined(DEBUG_PORT) && !defined(DEBUG_MUTE) && !defined(PIO_UNIT_TESTING)
 #define LOG_DEBUG(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_DEBUG, __VA_ARGS__)
 #define LOG_INFO(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_INFO, __VA_ARGS__)
 #define LOG_WARN(...) DEBUG_PORT.log(MESHTASTIC_LOG_LEVEL_WARN, __VA_ARGS__)
@@ -61,6 +61,9 @@
 #define LOG_TRACE(...)
 #endif
 #endif
+
+/// A C wrapper for LOG_DEBUG that can be used from arduino C libs that don't know about C++ or meshtastic
+extern "C" void logLegacy(const char *level, const char *fmt, ...);
 
 #define SYSLOG_NILVALUE "-"
 

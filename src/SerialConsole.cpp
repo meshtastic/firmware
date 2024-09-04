@@ -83,7 +83,7 @@ bool SerialConsole::checkIsConnected()
 bool SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
 {
     // only talk to the API once the configuration has been loaded and we're sure the serial port is not disabled.
-    if (config.has_lora && config.device.serial_enabled) {
+    if (config.has_lora && config.security.serial_enabled) {
         // Switch to protobufs for log messages
         usingProtobufs = true;
         canWrite = true;
@@ -96,7 +96,7 @@ bool SerialConsole::handleToRadio(const uint8_t *buf, size_t len)
 
 void SerialConsole::log_to_serial(const char *logLevel, const char *format, va_list arg)
 {
-    if (usingProtobufs) {
+    if (usingProtobufs && config.security.debug_log_api_enabled) {
         meshtastic_LogRecord_Level ll = meshtastic_LogRecord_Level_UNSET; // default to unset
         switch (logLevel[0]) {
         case 'D':

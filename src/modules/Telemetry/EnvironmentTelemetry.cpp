@@ -23,6 +23,7 @@
 #include "Sensor/BME680Sensor.h"
 #include "Sensor/BMP085Sensor.h"
 #include "Sensor/BMP280Sensor.h"
+#include "Sensor/BMP3XXSensor.h"
 #include "Sensor/DFRobotLarkSensor.h"
 #include "Sensor/LPS22HBSensor.h"
 #include "Sensor/MCP9808Sensor.h"
@@ -33,9 +34,7 @@
 #include "Sensor/SHT31Sensor.h"
 #include "Sensor/SHT4XSensor.h"
 #include "Sensor/SHTC3Sensor.h"
-#ifdef T1000X_SENSOR_EN
 #include "Sensor/T1000xSensor.h"
-#endif
 #include "Sensor/TSL2591Sensor.h"
 #include "Sensor/VEML7700Sensor.h"
 
@@ -56,6 +55,7 @@ AHT10Sensor aht10Sensor;
 MLX90632Sensor mlx90632Sensor;
 DFRobotLarkSensor dfRobotLarkSensor;
 NAU7802Sensor nau7802Sensor;
+BMP3XXSensor bmp3xxSensor;
 #ifdef T1000X_SENSOR_EN
 T1000xSensor t1000xSensor;
 #endif
@@ -98,7 +98,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
             LOG_INFO("Environment Telemetry: Initializing\n");
             // it's possible to have this module enabled, only for displaying values on the screen.
             // therefore, we should only enable the sensor loop if measurement is also enabled
-#ifdef T1000X_SENSOR_EN // add by WayenWeng
+#ifdef T1000X_SENSOR_EN
             result = t1000xSensor.runOnce();
 #else
             if (dfRobotLarkSensor.hasSensor())
@@ -109,6 +109,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = bmp280Sensor.runOnce();
             if (bme280Sensor.hasSensor())
                 result = bme280Sensor.runOnce();
+            if (bmp3xxSensor.hasSensor())
+                result = bmp3xxSensor.runOnce();
             if (bme680Sensor.hasSensor())
                 result = bme680Sensor.runOnce();
             if (mcp9808Sensor.hasSensor())
@@ -163,7 +165,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
             sendTelemetry();
             lastSentToMesh = now;
         } else if (((lastSentToPhone == 0) || ((now - lastSentToPhone) >= sendToPhoneIntervalMs)) &&
-                   (service.isToPhoneQueueEmpty())) {
+                   (service->isToPhoneQueueEmpty())) {
             // Just send to phone when it's not our time to send to mesh yet
             // Only send while queue is empty (phone assumed connected)
             sendTelemetry(NODENUM_BROADCAST, true);
@@ -291,6 +293,7 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     bool hasSensor = false;
     m->time = getTime();
     m->which_variant = meshtastic_Telemetry_environment_metrics_tag;
+    m->variant.environment_metrics = meshtastic_EnvironmentMetrics_init_zero;
 
 #ifdef T1000X_SENSOR_EN // add by WayenWeng
     valid = valid && t1000xSensor.getMetrics(m);
@@ -326,6 +329,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
     }
     if (bme280Sensor.hasSensor()) {
         valid = valid && bme280Sensor.getMetrics(m);
+        hasSensor = true;
+    }
+    if (bmp3xxSensor.hasSensor()) {
+        valid = valid && bmp3xxSensor.getMetrics(m);
         hasSensor = true;
     }
     if (bme680Sensor.hasSensor()) {
@@ -373,13 +380,19 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         hasSensor = true;
     }
     if (aht10Sensor.hasSensor()) {
-        if (!bmp280Sensor.hasSensor()) {
+        if (!bmp280Sensor.hasSensor() && !bmp3xxSensor.hasSensor()) {
             valid = valid && aht10Sensor.getMetrics(m);
             hasSensor = true;
-        } else {
+        } else if (bmp280Sensor.hasSensor()) {
             // prefer bmp280 temp if both sensors are present, fetch only humidity
             meshtastic_Telemetry m_ahtx = meshtastic_Telemetry_init_zero;
             LOG_INFO("AHTX0+BMP280 module detected: using temp from BMP280 and humy from AHTX0\n");
+            aht10Sensor.getMetrics(&m_ahtx);
+            m->variant.environment_metrics.relative_humidity = m_ahtx.variant.environment_metrics.relative_humidity;
+        } else {
+            // prefer bmp3xx temp if both sensors are present, fetch only humidity
+            meshtastic_Telemetry m_ahtx = meshtastic_Telemetry_init_zero;
+            LOG_INFO("AHTX0+BMP3XX module detected: using temp from BMP3XX and humy from AHTX0\n");
             aht10Sensor.getMetrics(&m_ahtx);
             m->variant.environment_metrics.relative_humidity = m_ahtx.variant.environment_metrics.relative_humidity;
         }
@@ -420,7 +433,13 @@ meshtastic_MeshPacket *EnvironmentTelemetryModule::allocReply()
 bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 {
     meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
+    m.which_variant = meshtastic_Telemetry_environment_metrics_tag;
+    m.time = getTime();
+#ifdef T1000X_SENSOR_EN
+    if (t1000xSensor.getMetrics(&m)) {
+#else
     if (getEnvironmentTelemetry(&m)) {
+#endif
         LOG_INFO("(Sending): barometric_pressure=%f, current=%f, gas_resistance=%f, relative_humidity=%f, temperature=%f\n",
                  m.variant.environment_metrics.barometric_pressure, m.variant.environment_metrics.current,
                  m.variant.environment_metrics.gas_resistance, m.variant.environment_metrics.relative_humidity,
@@ -447,10 +466,10 @@ bool EnvironmentTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
         lastMeasurementPacket = packetPool.allocCopy(*p);
         if (phoneOnly) {
             LOG_INFO("Sending packet to phone\n");
-            service.sendToPhone(p);
+            service->sendToPhone(p);
         } else {
             LOG_INFO("Sending packet to mesh\n");
-            service.sendToMesh(p, RX_SRC_LOCAL, true);
+            service->sendToMesh(p, RX_SRC_LOCAL, true);
 
             if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
                 LOG_DEBUG("Starting next execution in 5 seconds and then going to sleep.\n");
@@ -500,6 +519,11 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
     }
     if (bme280Sensor.hasSensor()) {
         result = bme280Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (bmp3xxSensor.hasSensor()) {
+        result = bmp3xxSensor.handleAdminMessage(mp, request, response);
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }

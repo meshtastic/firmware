@@ -55,7 +55,7 @@ meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, Nod
     p->decoded.request_id = idFrom;
     p->channel = chIndex;
     if (err != meshtastic_Routing_Error_NONE)
-        LOG_ERROR("Alloc an err=%d,to=0x%x,idFrom=0x%x,id=0x%x\n", err, to, idFrom, p->id);
+        LOG_WARN("Alloc an err=%d,to=0x%x,idFrom=0x%x,id=0x%x\n", err, to, idFrom, p->id);
 
     return p;
 }
@@ -170,7 +170,7 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
     if (isDecoded && mp.decoded.want_response && toUs) {
         if (currentReply) {
             printPacket("Sending response", currentReply);
-            service.sendToMesh(currentReply);
+            service->sendToMesh(currentReply);
             currentReply = NULL;
         } else if (mp.from != ourNodeNum && !ignoreRequest) {
             // Note: if the message started with the local node or a module asked to ignore the request, we don't want to send a

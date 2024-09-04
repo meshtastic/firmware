@@ -9,6 +9,7 @@
 #include <stdio.h>
 // #include <Adafruit_USBD_Device.h>
 #include "NodeDB.h"
+#include "PowerMon.h"
 #include "error.h"
 #include "main.h"
 
@@ -91,6 +92,8 @@ void setBluetoothEnable(bool enable)
     }
 
     if (enable) {
+        powerMon->setState(meshtastic_PowerMon_State_BT_On);
+
         // If not yet set-up
         if (!nrf52Bluetooth) {
             LOG_DEBUG("Initializing NRF52 Bluetooth\n");
@@ -105,8 +108,10 @@ void setBluetoothEnable(bool enable)
             nrf52Bluetooth->resumeAdvertising();
     }
     // Disable (if previously set-up)
-    else if (nrf52Bluetooth)
+    else if (nrf52Bluetooth) {
+        powerMon->clearState(meshtastic_PowerMon_State_BT_On);
         nrf52Bluetooth->shutdown();
+    }
 }
 #else
 #warning NRF52 "Bluetooth disable" workaround does not apply to builds with MESHTASTIC_EXCLUDE_BLUETOOTH
@@ -246,6 +251,12 @@ void cpuDeepSleep(uint32_t msecToWake)
     nrf_gpio_cfg_default(WB_I2C1_SCL);
     nrf_gpio_cfg_default(WB_I2C1_SDA);
 #endif
+#endif
+
+#ifdef HELTEC_MESH_NODE_T114
+    nrf_gpio_cfg_default(PIN_GPS_PPS);
+    detachInterrupt(PIN_GPS_PPS);
+    detachInterrupt(PIN_BUTTON1);
 #endif
     // Sleepy trackers or sensors can low power "sleep"
     // Don't enter this if we're sleeping portMAX_DELAY, since that's a shutdown event

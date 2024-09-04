@@ -49,7 +49,7 @@ extern "C" {
 // #define ST7789_BL (32+6)
 #define TFT_BACKLIGHT_ON LOW
 #define ST7789_SPI_HOST SPI1_HOST
-// #define ST7789_BACKLIGHT_EN (32+6)
+// #define TFT_BL (32+6)
 #define SPI_FREQUENCY 40000000
 #define SPI_READ_FREQUENCY 16000000
 #define TFT_HEIGHT 135
@@ -80,7 +80,6 @@ extern "C" {
 #define LED_CONN PIN_GREEN
 
 #define LED_STATE_ON 0 // State when LED is lit
-#define LED_INVERTED 1
 
 /*
  * Buttons
@@ -126,8 +125,8 @@ No longer populated on PCB
 #define LORA_CS (0 + 24)
 #define SX126X_DIO1 (0 + 20)
 // Note DIO2 is attached internally to the module to an analog switch for TX/RX switching
-// #define SX1262_DIO3 \
-//    (0 + 21) // This is used as an *output* from the sx1262 and connected internally to power the tcxo, do not drive from the
+// #define SX1262_DIO3 (0 + 21)
+// This is used as an *output* from the sx1262 and connected internally to power the tcxo, do not drive from the
 //    main
 // CPU?
 #define SX126X_BUSY (0 + 17)
@@ -147,7 +146,7 @@ No longer populated on PCB
 
 #define GPS_L76K
 
-#define PIN_GPS_RESET (32 + 6) // An output to reset L76K GPS. As per datasheet, low for > 100ms will reset the L76K
+// #define PIN_GPS_RESET (32 + 6) // An output to reset L76K GPS. As per datasheet, low for > 100ms will reset the L76K
 #define GPS_RESET_MODE LOW
 #define PIN_GPS_EN (21)
 #define GPS_EN_ACTIVE HIGH

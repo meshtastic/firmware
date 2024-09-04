@@ -53,6 +53,9 @@ float VEML7700Sensor::getResolution(void)
 
 bool VEML7700Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+    measurement->variant.environment_metrics.has_lux = true;
+    measurement->variant.environment_metrics.has_white_lux = true;
+
     int16_t white;
     measurement->variant.environment_metrics.lux = veml7700.readLux(VEML_LUX_AUTO);
     white = veml7700.readWhite(true);

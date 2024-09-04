@@ -230,7 +230,7 @@ int handleAPIv1ToRadio(const struct _u_request *req, struct _u_response *res, vo
     ulfius_add_header_to_response(res, "Access-Control-Allow-Origin", "*");
     ulfius_add_header_to_response(res, "Access-Control-Allow-Methods", "PUT, OPTIONS");
     ulfius_add_header_to_response(res, "X-Protobuf-Schema",
-                                  "https://raw.githubusercontent.com/meshtastic/protobufs/master/mesh.proto");
+                                  "https://raw.githubusercontent.com/meshtastic/protobufs/master/meshtastic/mesh.proto");
 
     if (req->http_verb == "OPTIONS") {
         ulfius_set_response_properties(res, U_OPT_STATUS, 204);
@@ -267,7 +267,7 @@ int handleAPIv1FromRadio(const struct _u_request *req, struct _u_response *res, 
     ulfius_add_header_to_response(res, "Access-Control-Allow-Origin", "*");
     ulfius_add_header_to_response(res, "Access-Control-Allow-Methods", "GET");
     ulfius_add_header_to_response(res, "X-Protobuf-Schema",
-                                  "https://raw.githubusercontent.com/meshtastic/protobufs/master/mesh.proto");
+                                  "https://raw.githubusercontent.com/meshtastic/protobufs/master/meshtastic/mesh.proto");
 
     uint8_t txBuf[MAX_STREAM_BUF_SIZE];
     uint32_t len = 1;

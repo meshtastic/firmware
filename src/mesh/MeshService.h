@@ -21,6 +21,7 @@
 
 extern Allocator<meshtastic_QueueStatus> &queueStatusPool;
 extern Allocator<meshtastic_MqttClientProxyMessage> &mqttClientProxyMessagePool;
+extern Allocator<meshtastic_ClientNotification> &clientNotificationPool;
 
 /**
  * Top level app for this service.  keeps the mesh, the radio config and the queue of received packets.
@@ -43,6 +44,9 @@ class MeshService
 
     // keep list of MqttClientProxyMessages to be send to the client for delivery
     PointerQueue<meshtastic_MqttClientProxyMessage> toPhoneMqttProxyQueue;
+
+    // keep list of ClientNotifications to be send to the client (phone)
+    PointerQueue<meshtastic_ClientNotification> toPhoneClientNotificationQueue;
 
     // This holds the last QueueStatus send
     meshtastic_QueueStatus lastQueueStatus;
@@ -97,6 +101,9 @@ class MeshService
     // Release MqttClientProxyMessage packet to pool
     void releaseMqttClientProxyMessageToPool(meshtastic_MqttClientProxyMessage *p) { mqttClientProxyMessagePool.release(p); }
 
+    /// Release the next ClientNotification packet to pool.
+    void releaseClientNotificationToPool(meshtastic_ClientNotification *p) { clientNotificationPool.release(p); }
+
     /**
      *  Given a ToRadio buffer parse it and properly handle it (setup radio, owner or send packet into the mesh)
      * Called by PhoneAPI.handleToRadio.  Note: p is a scratch buffer, this function is allowed to write to it but it can not keep
@@ -134,6 +141,9 @@ class MeshService
     /// Send an MQTT message to the phone for client proxying
     void sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage *m);
 
+    /// Send a ClientNotification to the phone
+    void sendClientNotification(meshtastic_ClientNotification *cn);
+
     bool isToPhoneQueueEmpty();
 
     ErrorCode sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, ErrorCode res, uint32_t mesh_packet_id);
@@ -150,4 +160,4 @@ class MeshService
     friend class RoutingModule;
 };
 
-extern MeshService service;
+extern MeshService *service;
