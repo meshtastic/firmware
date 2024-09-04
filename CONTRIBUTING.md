@@ -33,7 +33,7 @@ We encourage open communication and discussion before diving into code changes:
 2. Create a new branch for your feature or bug fix
 3. Make your changes
 4. Test your changes thoroughly
-5. Create a pull request with a clear description, using the provided template, of your changes. Be sure to  enable "Allow edits from maintainers".
+5. Create a pull request with a clear description, using the provided template, of your changes. Be sure to enable "Allow edits from maintainers".
 
 ## Coding Standards
 
