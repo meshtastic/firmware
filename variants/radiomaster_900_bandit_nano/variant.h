@@ -41,16 +41,13 @@
 
 /*
   Five way button when using ADC.
-  2.632V, 2.177V, 1.598V, 1.055V, 0V
-
-  Possible ADC Values:
-  { UP, DOWN, LEFT, RIGHT, ENTER, IDLE }
-  3227, 0 ,1961, 2668, 1290, 4095
+  https://github.com/ExpressLRS/targets/blob/f3215b5ec891108db1a13523e4163950cfcadaac/TX/Radiomaster%20Bandit.json#L41
 */
-#define BUTTON_PIN 39
-#define BUTTON_NEED_PULLUP
+#define INPUTBROKER_EXPRESSLRSFIVEWAY_TYPE
+#define PIN_JOYSTICK 39
+#define JOYSTICK_ADC_VALS /*UP*/ 3227, /*DOWN*/ 0, /*LEFT*/ 1961, /*RIGHT*/ 2668, /*OK*/ 1290, /*IDLE*/ 4095
 
-#define SCREEN_ROTATE
+#define DISPLAY_FLIP_SCREEN
 
 /*
   No External notification.

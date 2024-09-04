@@ -50,11 +50,23 @@ template <typename T> bool LR11x0Interface<T>::init()
 
     limitPower();
 
+#ifdef TRACKER_T1000_E // Tracker T1000E uses DIO5, DIO6, DIO7, DIO8 for RF switching
+
+    static const uint32_t rfswitch_dio_pins[] = {RADIOLIB_LR11X0_DIO5, RADIOLIB_LR11X0_DIO6, RADIOLIB_LR11X0_DIO7,
+                                                 RADIOLIB_LR11X0_DIO8, RADIOLIB_NC};
+
+    static const Module::RfSwitchMode_t rfswitch_table[] = {
+        // mode             DIO5  DIO6  DIO7  DIO8
+        {LR11x0::MODE_STBY, {LOW, LOW, LOW, LOW}},  {LR11x0::MODE_RX, {HIGH, LOW, LOW, HIGH}},
+        {LR11x0::MODE_TX, {HIGH, HIGH, LOW, HIGH}}, {LR11x0::MODE_TX_HP, {LOW, HIGH, LOW, HIGH}},
+        {LR11x0::MODE_TX_HF, {LOW, LOW, LOW, LOW}}, {LR11x0::MODE_GNSS, {LOW, LOW, HIGH, LOW}},
+        {LR11x0::MODE_WIFI, {LOW, LOW, LOW, LOW}},  END_OF_MODE_TABLE,
+    };
+
+#else
+
     // set RF switch configuration for Wio WM1110
     // Wio WM1110 uses DIO5 and DIO6 for RF switching
-    // NOTE: other boards may be different. If you are
-    // using a different board, you may need to wrap
-    // this in a conditional.
 
     static const uint32_t rfswitch_dio_pins[] = {RADIOLIB_LR11X0_DIO5, RADIOLIB_LR11X0_DIO6, RADIOLIB_NC, RADIOLIB_NC,
                                                  RADIOLIB_NC};
@@ -66,6 +78,8 @@ template <typename T> bool LR11x0Interface<T>::init()
         {LR11x0::MODE_TX_HF, {LOW, LOW}}, {LR11x0::MODE_GNSS, {LOW, LOW}},
         {LR11x0::MODE_WIFI, {LOW, LOW}},  END_OF_MODE_TABLE,
     };
+
+#endif
 
 // We need to do this before begin() call
 #ifdef LR11X0_DIO_AS_RF_SWITCH
@@ -100,7 +114,6 @@ template <typename T> bool LR11x0Interface<T>::init()
     // FIXME: May want to set depending on a definition, currently all LR1110 variant files use the DC-DC regulator option
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setRegulatorDCDC();
-
     if (res == RADIOLIB_ERR_NONE) {
         if (config.lora.sx126x_rx_boosted_gain) { // the name is unfortunate but historically accurate
             res = lora.setRxBoostedGainMode(true);
@@ -184,6 +197,7 @@ template <typename T> void LR11x0Interface<T>::setStandby()
     activeReceiveStart = 0;
     disableInterrupt();
     completeSending(); // If we were sending, not anymore
+    RadioLibInterface::setStandby();
 }
 
 /**
@@ -218,12 +232,10 @@ template <typename T> void LR11x0Interface<T>::startReceive()
 
     // We use a 16 bit preamble so this should save some power by letting radio sit in standby mostly.
     // Furthermore, we need the PREAMBLE_DETECTED and HEADER_VALID IRQ flag to detect whether we are actively receiving
-    int err = lora.startReceive(
-        RADIOLIB_LR11X0_RX_TIMEOUT_INF, RADIOLIB_LR11X0_IRQ_RX_DONE,
-        0); // only RX_DONE IRQ is needed, we'll check for PREAMBLE_DETECTED and HEADER_VALID in isActivelyReceiving
+    int err = lora.startReceive(RADIOLIB_LR11X0_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
     assert(err == RADIOLIB_ERR_NONE);
 
-    isReceiving = true;
+    RadioLibInterface::startReceive();
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
@@ -278,17 +290,15 @@ template <typename T> bool LR11x0Interface<T>::isActivelyReceiving()
 
 template <typename T> bool LR11x0Interface<T>::sleep()
 {
-    // Not keeping config is busted - next time nrf52 board boots lora sending fails  tcxo related? - see datasheet
     // \todo Display actual typename of the adapter, not just `LR11x0`
-    LOG_DEBUG("LR11x0 entering sleep mode (FIXME, don't keep config)\n");
+    LOG_DEBUG("LR11x0 entering sleep mode\n");
     setStandby(); // Stop any pending operations
 
     // turn off TCXO if it was powered
-    // FIXME - this isn't correct
-    // lora.setTCXO(0);
+    lora.setTCXO(0);
 
     // put chipset into sleep mode (we've already disabled interrupts by now)
-    bool keepConfig = true;
+    bool keepConfig = false;
     lora.sleep(keepConfig, 0); // Note: we do not keep the config, full reinit will be needed
 
 #ifdef LR11X0_POWER_EN

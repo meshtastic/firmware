@@ -1,7 +1,8 @@
 #include "ScanI2CTwoWire.h"
 
+#if !MESHTASTIC_EXCLUDE_I2C
+
 #include "concurrency/LockGuard.h"
-#include "configuration.h"
 #if defined(ARCH_PORTDUINO)
 #include "linux/LinuxHardwareI2C.h"
 #endif
@@ -267,8 +268,19 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                     type = BMP_085;
                     break;
                 default:
-                    LOG_INFO("BMP-280 sensor found at address 0x%x\n", (uint8_t)addr.address);
-                    type = BMP_280;
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1); // GET_ID
+                    switch (registerValue) {
+                    case 0x50: // BMP-388 should be 0x50
+                        LOG_INFO("BMP-388 sensor found at address 0x%x\n", (uint8_t)addr.address);
+                        type = BMP_3XX;
+                        break;
+                    case 0x58: // BMP-280 should be 0x58
+                    default:
+                        LOG_INFO("BMP-280 sensor found at address 0x%x\n", (uint8_t)addr.address);
+                        type = BMP_280;
+                        break;
+                    }
+                    break;
                 }
                 break;
 #ifndef HAS_NCP5623
@@ -315,7 +327,7 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
             case SHT31_4x_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x89), 2);
-                if (registerValue == 0x11a2) {
+                if (registerValue == 0x11a2 || registerValue == 0x11da || registerValue == 0xe9c) {
                     type = SHT4X;
                     LOG_INFO("SHT4X sensor found\n");
                 } else if (getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x7E), 2) == 0x5449) {
@@ -404,3 +416,4 @@ size_t ScanI2CTwoWire::countDevices() const
 {
     return foundDevices.size();
 }
+#endif
