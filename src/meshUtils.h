@@ -1,4 +1,6 @@
 #pragma once
+#include "DebugConfiguration.h"
+#include <stdint.h>
 
 /// C++ v17+ clamp function, limits a given value to a range defined by lo and hi
 template <class T> constexpr const T &clamp(const T &v, const T &lo, const T &hi)
@@ -11,3 +13,8 @@ template <class T> constexpr const T &clamp(const T &v, const T &lo, const T &hi
 #include <string.h>
 char *strnstr(const char *s, const char *find, size_t slen);
 #endif
+
+void printBytes(const char *label, const uint8_t *p, size_t numbytes);
+
+// is the memory region filled with a single character?
+bool memfll(const uint8_t *mem, uint8_t find, size_t numbytes);

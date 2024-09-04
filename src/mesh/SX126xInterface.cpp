@@ -40,7 +40,7 @@ template <typename T> bool SX126xInterface<T>::init()
         0; // "TCXO reference voltage to be set on DIO3. Defaults to 1.6 V, set to 0 to skip." per
            // https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/SX126x/SX126x.h#L471C26-L471C104
     // (DIO3 is free to be used as an IRQ)
-#else
+#elif !defined(TCXO_OPTIONAL)
     float tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE;
     // (DIO3 is not free to be used as an IRQ)
 #endif
@@ -231,6 +231,7 @@ template <typename T> void SX126xInterface<T>::setStandby()
     activeReceiveStart = 0;
     disableInterrupt();
     completeSending(); // If we were sending, not anymore
+    RadioLibInterface::setStandby();
 }
 
 /**
@@ -263,14 +264,12 @@ template <typename T> void SX126xInterface<T>::startReceive()
 
     // We use a 16 bit preamble so this should save some power by letting radio sit in standby mostly.
     // Furthermore, we need the PREAMBLE_DETECTED and HEADER_VALID IRQ flag to detect whether we are actively receiving
-    int err = lora.startReceiveDutyCycleAuto(preambleLength, 8,
-                                             RADIOLIB_SX126X_IRQ_RX_DEFAULT | RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED |
-                                                 RADIOLIB_SX126X_IRQ_HEADER_VALID);
+    int err = lora.startReceiveDutyCycleAuto(preambleLength, 8, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | RADIOLIB_IRQ_PREAMBLE_DETECTED);
     if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("Radiolib error %d when attempting SX126X startReceiveDutyCycleAuto!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
 
-    isReceiving = true;
+    RadioLibInterface::startReceive();
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
@@ -300,7 +299,7 @@ template <typename T> bool SX126xInterface<T>::isActivelyReceiving()
     // The IRQ status will be cleared when we start our read operation. Check if we've started a header, but haven't yet
     // received and handled the interrupt for reading the packet/handling errors.
 
-    uint16_t irq = lora.getIrqStatus();
+    uint16_t irq = lora.getIrqFlags();
     bool detected = (irq & (RADIOLIB_SX126X_IRQ_HEADER_VALID | RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED));
     // Handle false detections
     if (detected) {

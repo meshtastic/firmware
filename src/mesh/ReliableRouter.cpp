@@ -1,8 +1,10 @@
 #include "ReliableRouter.h"
+#include "Default.h"
 #include "MeshModule.h"
 #include "MeshTypes.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
+#include "modules/NodeInfoModule.h"
 
 // ReliableRouter::ReliableRouter() {}
 
@@ -17,7 +19,7 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
         // message will rebroadcast.  But asking for hop_limit 0 in that context means the client app has no preference on hop
         // counts and we want this message to get through the whole mesh, so use the default.
         if (p->hop_limit == 0) {
-            p->hop_limit = (config.lora.hop_limit >= HOP_MAX) ? HOP_MAX : config.lora.hop_limit;
+            p->hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
         }
 
         auto copy = packetPool.allocCopy(*p);
@@ -108,13 +110,24 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                 LOG_DEBUG("Some other module has replied to this message, no need for a 2nd ack\n");
             } else if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
                 sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, p->hop_start, p->hop_limit);
+            } else if (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag && p->channel == 0 &&
+                       (nodeDB->getMeshNode(p->from) == nullptr || nodeDB->getMeshNode(p->from)->user.public_key.size == 0)) {
+                LOG_INFO("This looks like it might be a PKI packet from an unknown node, so send PKI_UNKNOWN_PUBKEY\n");
+                sendAckNak(meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY, getFrom(p), p->id, channels.getPrimaryIndex(),
+                           p->hop_start, p->hop_limit);
             } else {
                 // Send a 'NO_CHANNEL' error on the primary channel if want_ack packet destined for us cannot be decoded
                 sendAckNak(meshtastic_Routing_Error_NO_CHANNEL, getFrom(p), p->id, channels.getPrimaryIndex(), p->hop_start,
                            p->hop_limit);
             }
         }
-
+        if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && c &&
+            c->error_reason == meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY) {
+            if (owner.public_key.size == 32) {
+                LOG_INFO("This seems like a remote PKI decrypt failure, so send a NodeInfo");
+                nodeInfoModule->sendOurNodeInfo(p->from, false, p->channel, true);
+            }
+        }
         // We consider an ack to be either a !routing packet with a request ID or a routing packet with !error
         PacketId ackId = ((c && c->error_reason == meshtastic_Routing_Error_NONE) || !c) ? p->decoded.request_id : 0;
 

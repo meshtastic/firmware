@@ -11,12 +11,17 @@
 
 class EnvironmentTelemetryModule : private concurrency::OSThread, public ProtobufModule<meshtastic_Telemetry>
 {
+    CallbackObserver<EnvironmentTelemetryModule, const meshtastic::Status *> nodeStatusObserver =
+        CallbackObserver<EnvironmentTelemetryModule, const meshtastic::Status *>(this,
+                                                                                 &EnvironmentTelemetryModule::handleStatusUpdate);
+
   public:
     EnvironmentTelemetryModule()
         : concurrency::OSThread("EnvironmentTelemetryModule"),
           ProtobufModule("EnvironmentTelemetry", meshtastic_PortNum_TELEMETRY_APP, &meshtastic_Telemetry_msg)
     {
         lastMeasurementPacket = nullptr;
+        nodeStatusObserver.observe(&nodeStatus->onNewStatus);
         setIntervalFromNow(10 * 1000);
     }
     virtual bool wantUIFrame() override;
@@ -32,6 +37,11 @@ class EnvironmentTelemetryModule : private concurrency::OSThread, public Protobu
     */
     virtual bool handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *p) override;
     virtual int32_t runOnce() override;
+    /** Called to get current Environment telemetry data
+    @return true if it contains valid data
+    */
+    bool getEnvironmentTelemetry(meshtastic_Telemetry *m);
+    virtual meshtastic_MeshPacket *allocReply() override;
     /**
      * Send our Telemetry into the mesh
      */

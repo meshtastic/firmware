@@ -42,6 +42,9 @@
 #ifndef DEFAULT_VREF
 #define DEFAULT_VREF 1100
 #endif
+#ifndef HAS_CUSTOM_CRYPTO_ENGINE
+#define HAS_CUSTOM_CRYPTO_ENGINE 1
+#endif
 
 #if defined(HAS_AXP192) || defined(HAS_AXP2101)
 #define HAS_PMU
@@ -101,6 +104,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_STATION_G1
 #elif defined(DR_DEV)
 #define HW_VENDOR meshtastic_HardwareModel_DR_DEV
+#elif defined(HELTEC_HRU_3601)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_HRU_3601
 #elif defined(HELTEC_V3)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_V3
 #elif defined(HELTEC_WSL_V3)
@@ -116,6 +121,8 @@
 #elif defined(HELTEC_WIRELESS_PAPER)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_PAPER
 #elif defined(TLORA_T3S3_V1)
+#define HW_VENDOR meshtastic_HardwareModel_TLORA_T3_S3
+#elif defined(TLORA_T3S3_EPAPER)
 #define HW_VENDOR meshtastic_HardwareModel_TLORA_T3_S3
 #elif defined(CDEBYTE_EORA_S3)
 #define HW_VENDOR meshtastic_HardwareModel_CDEBYTE_EORA_S3
@@ -147,8 +154,18 @@
 #define HW_VENDOR meshtastic_HardwareModel_WIPHONE
 #elif defined(RADIOMASTER_900_BANDIT_NANO)
 #define HW_VENDOR meshtastic_HardwareModel_RADIOMASTER_900_BANDIT_NANO
+#elif defined(RADIOMASTER_900_BANDIT)
+#define HW_VENDOR meshtastic_HardwareModel_RADIOMASTER_900_BANDIT
 #elif defined(HELTEC_CAPSULE_SENSOR_V3)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_CAPSULE_SENSOR_V3
+#elif defined(HELTEC_VISION_MASTER_T190)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_VISION_MASTER_T190
+#elif defined(HELTEC_VISION_MASTER_E213)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_VISION_MASTER_E213
+#elif defined(HELTEC_VISION_MASTER_E290)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_VISION_MASTER_E290
+#elif defined(HELTEC_MESH_NODE_T114)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_NODE_T114
 #endif
 
 // -----------------------------------------------------------------------------

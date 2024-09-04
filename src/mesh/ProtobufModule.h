@@ -13,6 +13,7 @@ template <class T> class ProtobufModule : protected SinglePortModule
     const pb_msgdesc_t *fields;
 
   public:
+    uint8_t numOnlineNodes = 0;
     /** Constructor
      * name is for debugging output
      */
@@ -37,7 +38,7 @@ template <class T> class ProtobufModule : protected SinglePortModule
     /**
      * Return a mesh packet which has been preinited with a particular protobuf data payload and port number.
      * You can then send this packet (after customizing any of the payload fields you might need) with
-     * service.sendToMesh()
+     * service->sendToMesh()
      */
     meshtastic_MeshPacket *allocDataProtobuf(const T &payload)
     {
@@ -59,6 +60,14 @@ template <class T> class ProtobufModule : protected SinglePortModule
         auto node = nodeDB->getMeshNode(getFrom(&mp));
         const char *sender = (node) ? node->user.short_name : "???";
         return sender;
+    }
+
+    int handleStatusUpdate(const meshtastic::Status *arg)
+    {
+        if (arg->getStatusType() == STATUS_TYPE_NODE) {
+            numOnlineNodes = nodeStatus->getNumOnline();
+        }
+        return 0;
     }
 
   private:

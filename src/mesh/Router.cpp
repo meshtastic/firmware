@@ -2,23 +2,25 @@
 #include "Channels.h"
 #include "CryptoEngine.h"
 #include "MeshRadio.h"
+#include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
 #include "configuration.h"
 #include "main.h"
 #include "mesh-pb-constants.h"
+#include "meshUtils.h"
 #include "modules/RoutingModule.h"
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
-/**
- * Router todo
- *
- * DONE: Implement basic interface and use it elsewhere in app
- * Add naive flooding mixin (& drop duplicate rx broadcasts), add tools for sending broadcasts with incrementing sequence #s
- * Add an optional adjacent node only 'send with ack' mixin.  If we timeout waiting for the ack, call handleAckTimeout(packet)
- *
- **/
+#include "Default.h"
+#if ARCH_PORTDUINO
+#include "platform/portduino/PortduinoGlue.h"
+#endif
+#if ENABLE_JSON_LOGGING || ARCH_PORTDUINO
+#include "serialization/MeshPacketSerializer.h"
+#endif
+#include "../userPrefs.h"
 
 #define MAX_RX_FROMRADIO                                                                                                         \
     4 // max number of packets destined to our queue, we dispatch packets quickly so it doesn't need to be big
@@ -35,6 +37,7 @@ static MemoryDynamic<meshtastic_MeshPacket> staticPool;
 Allocator<meshtastic_MeshPacket> &packetPool = staticPool;
 
 static uint8_t bytes[MAX_RHPACKETLEN];
+static uint8_t ScratchEncrypted[MAX_RHPACKETLEN];
 
 /**
  * Constructor
@@ -92,22 +95,23 @@ void Router::enqueueReceivedMessage(meshtastic_MeshPacket *p)
 // FIXME, move this someplace better
 PacketId generatePacketId()
 {
-    static uint32_t i; // Note: trying to keep this in noinit didn't help for working across reboots
+    static uint32_t rollingPacketId; // Note: trying to keep this in noinit didn't help for working across reboots
     static bool didInit = false;
-
-    uint32_t numPacketId = UINT32_MAX;
 
     if (!didInit) {
         didInit = true;
 
         // pick a random initial sequence number at boot (to prevent repeated reboots always starting at 0)
         // Note: we mask the high order bit to ensure that we never pass a 'negative' number to random
-        i = random(numPacketId & 0x7fffffff);
-        LOG_DEBUG("Initial packet id %u, numPacketId %u\n", i, numPacketId);
+        rollingPacketId = random(UINT32_MAX & 0x7fffffff);
+        LOG_DEBUG("Initial packet id %u\n", rollingPacketId);
     }
 
-    i++;
-    PacketId id = (i % numPacketId) + 1; // return number between 1 and numPacketId (ie - never zero)
+    rollingPacketId++;
+
+    rollingPacketId &= ID_COUNTER_MASK;                                    // Mask out the top 22 bits
+    PacketId id = rollingPacketId | random(UINT32_MAX & 0x7fffffff) << 10; // top 22 bits
+    LOG_DEBUG("Partially randomized packet id %u\n", id);
     return id;
 }
 
@@ -118,7 +122,7 @@ meshtastic_MeshPacket *Router::allocForSending()
     p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // Assume payload is decoded at start.
     p->from = nodeDB->getNodeNum();
     p->to = NODENUM_BROADCAST;
-    p->hop_limit = (config.lora.hop_limit >= HOP_MAX) ? HOP_MAX : config.lora.hop_limit;
+    p->hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
     p->id = generatePacketId();
     p->rx_time =
         getValidTime(RTCQualityFromNet); // Just in case we process the packet locally - make sure it has a valid timestamp
@@ -161,6 +165,9 @@ meshtastic_QueueStatus Router::getQueueStatus()
 
 ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
 {
+    if (p->to == 0) {
+        LOG_ERROR("Packet received with to: of 0!\n");
+    }
     // No need to deliver externally if the destination is the local node
     if (p->to == nodeDB->getNodeNum()) {
         printPacket("Enqueued local", p);
@@ -187,14 +194,6 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
     }
 }
 
-void printBytes(const char *label, const uint8_t *p, size_t numbytes)
-{
-    LOG_DEBUG("%s: ", label);
-    for (size_t i = 0; i < numbytes; i++)
-        LOG_DEBUG("%02x ", p[i]);
-    LOG_DEBUG("\n");
-}
-
 /**
  * Send a packet on a suitable interface.  This routine will
  * later free() the packet to pool.  This routine is not allowed to stall.
@@ -215,6 +214,13 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 #ifdef DEBUG_PORT
             uint8_t silentMinutes = airTime->getSilentMinutes(hourlyTxPercent, myRegion->dutyCycle);
             LOG_WARN("Duty cycle limit exceeded. Aborting send for now, you can send again in %d minutes.\n", silentMinutes);
+            meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+            cn->has_reply_id = true;
+            cn->reply_id = p->id;
+            cn->level = meshtastic_LogRecord_Level_WARNING;
+            cn->time = getValidTime(RTCQualityFromNet);
+            sprintf(cn->message, "Duty cycle limit exceeded. You can send again in %d minutes.", silentMinutes);
+            service->sendClientNotification(cn);
 #endif
             meshtastic_Routing_Error err = meshtastic_Routing_Error_DUTY_CYCLE_LIMIT;
             if (getFrom(p) == nodeDB->getNodeNum()) { // only send NAK to API, not to the mesh
@@ -245,8 +251,12 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
 
     // If the packet hasn't yet been encrypted, do so now (it might already be encrypted if we are just forwarding it)
 
-    assert(p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag ||
-           p->which_payload_variant == meshtastic_MeshPacket_decoded_tag); // I _think_ all packets should have a payload by now
+    if (!(p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag ||
+          p->which_payload_variant == meshtastic_MeshPacket_decoded_tag)) {
+        return meshtastic_Routing_Error_BAD_REQUEST;
+    }
+
+    fixPriority(p); // Before encryption, fix the priority if it's unset
 
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
@@ -304,63 +314,105 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag)
         return true; // If packet was already decoded just return
 
-    // assert(p->which_payloadVariant == MeshPacket_encrypted_tag);
+    size_t rawSize = p->encrypted.size;
+    if (rawSize > sizeof(bytes)) {
+        LOG_ERROR("Packet too large to attempt decryption! (rawSize=%d > 256)\n", rawSize);
+        return false;
+    }
+    bool decrypted = false;
+    ChannelIndex chIndex = 0;
+    memcpy(bytes, p->encrypted.bytes,
+           rawSize); // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf
+    memcpy(ScratchEncrypted, p->encrypted.bytes, rawSize);
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    // Attempt PKI decryption first
+    if (p->channel == 0 && p->to == nodeDB->getNodeNum() && p->to > 0 && p->to != NODENUM_BROADCAST &&
+        nodeDB->getMeshNode(p->from) != nullptr && nodeDB->getMeshNode(p->from)->user.public_key.size > 0 &&
+        nodeDB->getMeshNode(p->to)->user.public_key.size > 0 && rawSize > 12) {
+        LOG_DEBUG("Attempting PKI decryption\n");
 
-    // Try to find a channel that works with this hash
-    for (ChannelIndex chIndex = 0; chIndex < channels.getNumChannels(); chIndex++) {
-        // Try to use this hash/channel pair
-        if (channels.decryptForHash(chIndex, p->channel)) {
-            // Try to decrypt the packet if we can
-            size_t rawSize = p->encrypted.size;
-            if (rawSize > sizeof(bytes)) {
-                LOG_ERROR("Packet too large to attempt decription! (rawSize=%d > 256)\n", rawSize);
-                return false;
-            }
-            memcpy(bytes, p->encrypted.bytes,
-                   rawSize); // we have to copy into a scratch buffer, because these bytes are a union with the decoded protobuf
-            crypto->decrypt(p->from, p->id, rawSize, bytes);
-
-            // printBytes("plaintext", bytes, p->encrypted.size);
-
-            // Take those raw bytes and convert them back into a well structured protobuf we can understand
+        if (crypto->decryptCurve25519(p->from, p->id, rawSize, ScratchEncrypted, bytes)) {
+            LOG_INFO("PKI Decryption worked!\n");
             memset(&p->decoded, 0, sizeof(p->decoded));
-            if (!pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &p->decoded)) {
-                LOG_ERROR("Invalid protobufs in received mesh packet (bad psk?)!\n");
-            } else if (p->decoded.portnum == meshtastic_PortNum_UNKNOWN_APP) {
-                LOG_ERROR("Invalid portnum (bad psk?)!\n");
+            rawSize -= 12;
+            if (pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &p->decoded) &&
+                p->decoded.portnum != meshtastic_PortNum_UNKNOWN_APP) {
+                decrypted = true;
+                LOG_INFO("Packet decrypted using PKI!\n");
+                p->pki_encrypted = true;
+                memcpy(&p->public_key.bytes, nodeDB->getMeshNode(p->from)->user.public_key.bytes, 32);
+                p->public_key.size = 32;
+                // memcpy(bytes, ScratchEncrypted, rawSize); // TODO: Rename the bytes buffers
+                // chIndex = 8;
             } else {
-                // parsing was successful
-                p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
-                p->channel = chIndex;                                         // change to store the index instead of the hash
-
-                /* Not actually ever used.
-                // Decompress if needed. jm
-                if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP) {
-                    // Decompress the payload
-                    char compressed_in[meshtastic_Constants_DATA_PAYLOAD_LEN] = {};
-                    char decompressed_out[meshtastic_Constants_DATA_PAYLOAD_LEN] = {};
-                    int decompressed_len;
-
-                    memcpy(compressed_in, p->decoded.payload.bytes, p->decoded.payload.size);
-
-                    decompressed_len = unishox2_decompress_simple(compressed_in, p->decoded.payload.size, decompressed_out);
-
-                    // LOG_DEBUG("\n\n**\n\nDecompressed length - %d \n", decompressed_len);
-
-                    memcpy(p->decoded.payload.bytes, decompressed_out, decompressed_len);
-
-                    // Switch the port from PortNum_TEXT_MESSAGE_COMPRESSED_APP to PortNum_TEXT_MESSAGE_APP
-                    p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
-                } */
-
-                printPacket("decoded message", p);
-                return true;
+                return false;
             }
         }
     }
+#endif
 
-    LOG_WARN("No suitable channel found for decoding, hash was 0x%x!\n", p->channel);
-    return false;
+    // assert(p->which_payloadVariant == MeshPacket_encrypted_tag);
+    if (!decrypted) {
+        // Try to find a channel that works with this hash
+        for (chIndex = 0; chIndex < channels.getNumChannels(); chIndex++) {
+            // Try to use this hash/channel pair
+            if (channels.decryptForHash(chIndex, p->channel)) {
+                // Try to decrypt the packet if we can
+                crypto->decrypt(p->from, p->id, rawSize, bytes);
+
+                // printBytes("plaintext", bytes, p->encrypted.size);
+
+                // Take those raw bytes and convert them back into a well structured protobuf we can understand
+                memset(&p->decoded, 0, sizeof(p->decoded));
+                if (!pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &p->decoded)) {
+                    LOG_ERROR("Invalid protobufs in received mesh packet id=0x%08x (bad psk?)!\n", p->id);
+                } else if (p->decoded.portnum == meshtastic_PortNum_UNKNOWN_APP) {
+                    LOG_ERROR("Invalid portnum (bad psk?)!\n");
+                } else {
+                    decrypted = true;
+                    break;
+                }
+            }
+        }
+    }
+    if (decrypted) {
+        // parsing was successful
+        p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
+        p->channel = chIndex;                                         // change to store the index instead of the hash
+
+        /* Not actually ever used.
+        // Decompress if needed. jm
+        if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_COMPRESSED_APP) {
+            // Decompress the payload
+            char compressed_in[meshtastic_Constants_DATA_PAYLOAD_LEN] = {};
+            char decompressed_out[meshtastic_Constants_DATA_PAYLOAD_LEN] = {};
+            int decompressed_len;
+
+            memcpy(compressed_in, p->decoded.payload.bytes, p->decoded.payload.size);
+
+            decompressed_len = unishox2_decompress_simple(compressed_in, p->decoded.payload.size, decompressed_out);
+
+            // LOG_DEBUG("\n\n**\n\nDecompressed length - %d \n", decompressed_len);
+
+            memcpy(p->decoded.payload.bytes, decompressed_out, decompressed_len);
+
+            // Switch the port from PortNum_TEXT_MESSAGE_COMPRESSED_APP to PortNum_TEXT_MESSAGE_APP
+            p->decoded.portnum = meshtastic_PortNum_TEXT_MESSAGE_APP;
+        } */
+
+        printPacket("decoded message", p);
+#if ENABLE_JSON_LOGGING
+        LOG_TRACE("%s\n", MeshPacketSerializer::JsonSerialize(p, false).c_str());
+#elif ARCH_PORTDUINO
+        if (settingsStrings[traceFilename] != "" || settingsMap[logoutputlevel] == level_trace) {
+            LOG_TRACE("%s\n", MeshPacketSerializer::JsonSerialize(p, false).c_str());
+        }
+#endif
+        return true;
+    } else {
+        LOG_WARN("No suitable channel found for decoding, hash was 0x%x!\n", p->channel);
+        return false;
+    }
 }
 
 /** Return 0 for success or a Routing_Errror code for failure
@@ -369,12 +421,13 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 {
     concurrency::LockGuard g(cryptLock);
 
+    int16_t hash;
+
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded);
 
         /* Not actually used, so save the cycles
-        // Only allow encryption on the text message app.
         //  TODO: Allow modules to opt into compression.
         if (p->decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) {
 
@@ -415,17 +468,61 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
         // printBytes("plaintext", bytes, numbytes);
 
         ChannelIndex chIndex = p->channel; // keep as a local because we are about to change it
-        auto hash = channels.setActiveByIndex(chIndex);
-        if (hash < 0)
-            // No suitable channel could be found for sending
-            return meshtastic_Routing_Error_NO_CHANNEL;
+
+#if !(MESHTASTIC_EXCLUDE_PKI)
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
+        if (!owner.is_licensed && config.security.private_key.size == 32 && p->to != NODENUM_BROADCAST && node != nullptr &&
+            node->user.public_key.size > 0 && p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP &&
+            p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP && p->decoded.portnum != meshtastic_PortNum_ROUTING_APP &&
+            p->decoded.portnum != meshtastic_PortNum_POSITION_APP) {
+            LOG_DEBUG("Using PKI!\n");
+            if (numbytes + 12 > MAX_RHPACKETLEN)
+                return meshtastic_Routing_Error_TOO_LARGE;
+            if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, 32) &&
+                memcmp(p->public_key.bytes, node->user.public_key.bytes, 32) != 0) {
+                LOG_WARN("Client public key for client differs from requested! Requested 0x%02x, but stored key begins 0x%02x\n",
+                         *p->public_key.bytes, *node->user.public_key.bytes);
+                return meshtastic_Routing_Error_PKI_FAILED;
+            }
+            crypto->encryptCurve25519(p->to, getFrom(p), p->id, numbytes, bytes, ScratchEncrypted);
+            numbytes += 12;
+            memcpy(p->encrypted.bytes, ScratchEncrypted, numbytes);
+            p->channel = 0;
+            p->pki_encrypted = true;
+        } else {
+            if (p->pki_encrypted == true) {
+                // Client specifically requested PKI encryption
+                return meshtastic_Routing_Error_PKI_FAILED;
+            }
+            hash = channels.setActiveByIndex(chIndex);
+
+            // Now that we are encrypting the packet channel should be the hash (no longer the index)
+            p->channel = hash;
+            if (hash < 0) {
+                // No suitable channel could be found for sending
+                return meshtastic_Routing_Error_NO_CHANNEL;
+            }
+            crypto->encryptPacket(getFrom(p), p->id, numbytes, bytes);
+            memcpy(p->encrypted.bytes, bytes, numbytes);
+        }
+#else
+        if (p->pki_encrypted == true) {
+            // Client specifically requested PKI encryption
+            return meshtastic_Routing_Error_PKI_FAILED;
+        }
+        hash = channels.setActiveByIndex(chIndex);
 
         // Now that we are encrypting the packet channel should be the hash (no longer the index)
         p->channel = hash;
-        crypto->encrypt(getFrom(p), p->id, numbytes, bytes);
+        if (hash < 0) {
+            // No suitable channel could be found for sending
+            return meshtastic_Routing_Error_NO_CHANNEL;
+        }
+        crypto->encryptPacket(getFrom(p), p->id, numbytes, bytes);
+        memcpy(p->encrypted.bytes, bytes, numbytes);
+#endif
 
         // Copy back into the packet and set the variant type
-        memcpy(p->encrypted.bytes, bytes, numbytes);
         p->encrypted.size = numbytes;
         p->which_payload_variant = meshtastic_MeshPacket_encrypted_tag;
     }
@@ -469,6 +566,20 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             cancelSending(p->from, p->id);
             skipHandle = true;
         }
+
+#if EVENT_MODE
+        if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
+            (p->decoded.portnum == meshtastic_PortNum_ATAK_FORWARDER || p->decoded.portnum == meshtastic_PortNum_ATAK_PLUGIN ||
+             p->decoded.portnum == meshtastic_PortNum_PAXCOUNTER_APP || p->decoded.portnum == meshtastic_PortNum_IP_TUNNEL_APP ||
+             p->decoded.portnum == meshtastic_PortNum_AUDIO_APP || p->decoded.portnum == meshtastic_PortNum_PRIVATE_APP ||
+             p->decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP ||
+             p->decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
+             p->decoded.portnum == meshtastic_PortNum_REMOTE_HARDWARE_APP)) {
+            LOG_DEBUG("Ignoring packet on blacklisted portnum during event\n");
+            cancelSending(p->from, p->id);
+            skipHandle = true;
+        }
+#endif
     } else {
         printPacket("packet decoding failed or skipped (no PSK?)", p);
     }
@@ -489,19 +600,38 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 
 void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 {
+#if ENABLE_JSON_LOGGING
+    // Even ignored packets get logged in the trace
+    p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
+    LOG_TRACE("%s\n", MeshPacketSerializer::JsonSerializeEncrypted(p).c_str());
+#elif ARCH_PORTDUINO
+    // Even ignored packets get logged in the trace
+    if (settingsStrings[traceFilename] != "" || settingsMap[logoutputlevel] == level_trace) {
+        p->rx_time = getValidTime(RTCQualityFromNet); // store the arrival timestamp for the phone
+        LOG_TRACE("%s\n", MeshPacketSerializer::JsonSerializeEncrypted(p).c_str());
+    }
+#endif
     // assert(radioConfig.has_preferences);
-    bool ignore = is_in_repeated(config.lora.ignore_incoming, p->from) || (config.lora.ignore_mqtt && p->via_mqtt);
+    if (is_in_repeated(config.lora.ignore_incoming, p->from)) {
+        LOG_DEBUG("Ignoring incoming message, 0x%x is in our ignore list\n", p->from);
+        packetPool.release(p);
+        return;
+    }
 
-    if (ignore) {
-        LOG_DEBUG("Ignoring incoming message, 0x%x is in our ignore list or came via MQTT\n", p->from);
-    } else if (ignore |= shouldFilterReceived(p)) {
-        LOG_DEBUG("Incoming message was filtered 0x%x\n", p->from);
+    if (config.lora.ignore_mqtt && p->via_mqtt) {
+        LOG_DEBUG("Message came in via MQTT from 0x%x\n", p->from);
+        packetPool.release(p);
+        return;
+    }
+
+    if (shouldFilterReceived(p)) {
+        LOG_DEBUG("Incoming message was filtered from 0x%x\n", p->from);
+        packetPool.release(p);
+        return;
     }
 
     // Note: we avoid calling shouldFilterReceived if we are supposed to ignore certain nodes - because some overrides might
     // cache/learn of the existence of nodes (i.e. FloodRouter) that they should not
-    if (!ignore)
-        handleReceived(p);
-
+    handleReceived(p);
     packetPool.release(p);
 }

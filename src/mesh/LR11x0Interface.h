@@ -25,7 +25,7 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     /// Prepare hardware for sleep.  Call this _only_ for deep sleep, not needed for light sleep.
     virtual bool sleep() override;
 
-    bool isIRQPending() override { return lora.getIrqStatus() != 0; }
+    bool isIRQPending() override { return lora.getIrqFlags() != 0; }
 
   protected:
     /**

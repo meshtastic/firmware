@@ -1,4 +1,5 @@
 #include "configuration.h"
+#include "hardware/xosc.h"
 #include <hardware/clocks.h>
 #include <hardware/pll.h>
 #include <pico/stdlib.h>
@@ -12,7 +13,11 @@ void setBluetoothEnable(bool enable)
 
 void cpuDeepSleep(uint32_t msecs)
 {
-    // not needed
+    /* Disable both PLL to avoid power dissipation */
+    pll_deinit(pll_sys);
+    pll_deinit(pll_usb);
+    /* Set RP2040 in dormant mode. Will not wake up. */
+    xosc_dormant();
 }
 
 void updateBatteryLevel(uint8_t level)
