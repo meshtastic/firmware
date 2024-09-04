@@ -256,9 +256,7 @@ template <typename T> void SX128xInterface<T>::startReceive()
 #endif
 
     // We use the PREAMBLE_DETECTED and HEADER_VALID IRQ flag to detect whether we are actively receiving
-    int err =
-        lora.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF, RADIOLIB_SX128X_IRQ_RX_DEFAULT | RADIOLIB_SX128X_IRQ_PREAMBLE_DETECTED |
-                                                              RADIOLIB_SX128X_IRQ_HEADER_VALID);
+    int err = lora.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | RADIOLIB_IRQ_PREAMBLE_DETECTED);
 
     if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("Radiolib error %d when attempting SX128X startReceive!\n", err);
