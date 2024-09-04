@@ -34,13 +34,17 @@
 #define ST7789_SCK 18
 #define ST7789_CS 5
 #define ST7789_RS 26
-#define ST7789_BL -1 // EXTENDER_PIN(9)
+// I don't have a 'wiphone' but this I think should not be defined this way (don't set TFT_BL if we don't have a hw way to control
+// it)
+// #define ST7789_BL -1 // EXTENDER_PIN(9)
 
 #define ST7789_RESET -1
 #define ST7789_MISO 19
 #define ST7789_BUSY -1
 #define ST7789_SPI_HOST SPI3_HOST
-#define ST7789_BACKLIGHT_EN -1 // EXTENDER_PIN(9)
+// I don't have a 'wiphone' but this I think should not be defined this way (don't set TFT_BL if we don't have a hw way to control
+// it)
+// #define TFT_BL -1 // EXTENDER_PIN(9)
 #define SPI_FREQUENCY 40000000
 #define SPI_READ_FREQUENCY 16000000
 #define TFT_HEIGHT 240

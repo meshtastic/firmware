@@ -166,7 +166,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 // ST7565 SPI
 #define ST7735_RESET (11) // Output
 #define ST7735_CS (12)
-#define ST7735_BACKLIGHT_EN (13)
+#define TFT_BL (13)
 #define ST7735_RS (9)
 #define ST7735_SDA (39) // actually spi MOSI
 #define ST7735_SCK (37) // actually spi clk
