@@ -33,10 +33,15 @@ We encourage open communication and discussion before diving into code changes:
 2. Create a new branch for your feature or bug fix
 3. Make your changes
 4. Test your changes thoroughly
-5. Create a pull request with a clear description, using the provided template, of your changes
+5. Create a pull request with a clear description, using the provided template, of your changes. Be sure to  enable "Allow edits from maintainers".
 
 ## Coding Standards
 
-[Placeholder for coding standards]
+To ensure consistent code formatting across the project:
+
+1. Install the [Trunk](https://marketplace.visualstudio.com/items?itemName=Trunk.io) extension for Visual Studio Code.
+2. Before submitting your changes, run trunk fmt to automatically format your code according to our standards.
+
+Adhering to these formatting guidelines helps maintain code consistency and makes the review process smoother.
 
 Thank you for contributing to Meshtastic!
