@@ -4,6 +4,7 @@
 #include "MeshService.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
+#include "modules/NodeInfoModule.h"
 
 PacketAPI *packetAPI = nullptr;
 
@@ -54,7 +55,14 @@ bool PacketAPI::receivePacket(void)
             break;
         }
         case meshtastic_ToRadio_heartbeat_tag:
-            LOG_DEBUG("Got client heartbeat\n");
+            if (mr->heartbeat.dummy_field == 1) {
+                if (nodeInfoModule) {
+                    LOG_INFO("Broadcasting nodeinfo ping\n");
+                    nodeInfoModule->sendOurNodeInfo(NODENUM_BROADCAST, true, 0, true);
+                }
+            } else {
+                LOG_DEBUG("Got client heartbeat\n");
+            }
             break;
         default:
             LOG_ERROR("Error: unhandled meshtastic_ToRadio variant: %d\n", mr->which_payload_variant);
