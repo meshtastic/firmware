@@ -167,6 +167,7 @@
 #elif defined(HELTEC_MESH_NODE_T114)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_NODE_T114
 #endif
+
 // -----------------------------------------------------------------------------
 // LoRa SPI
 // -----------------------------------------------------------------------------
