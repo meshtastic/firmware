@@ -507,18 +507,28 @@ bool GPS::setup()
             delay(250);
         } else if (gnssModel == GNSS_MODEL_AG3335) {
 
-            _serial_gps->write("$PAIR066,1,0,1,0,0,1*3B"); // Enable GPS+GALILEO+NAVIC
+            _serial_gps->write("$PAIR066,1,0,1,0,0,1*3B");
+            delay(250); // Enable GPS+GALILEO+NAVIC
 
-            // Configure NMEA (sentences will output once per fix)
-            _serial_gps->write("$PAIR062,0,0*3F"); // GGA ON
-            _serial_gps->write("$PAIR062,1,0*3F"); // GLL OFF
-            _serial_gps->write("$PAIR062,2,1*3D"); // GSA ON
-            _serial_gps->write("$PAIR062,3,0*3D"); // GSV OFF
-            _serial_gps->write("$PAIR062,4,0*3B"); // RMC ON
-            _serial_gps->write("$PAIR062,5,0*3B"); // VTG OFF
-            _serial_gps->write("$PAIR062,6,1*39"); // ZDA ON
+            // Configure NMEA
+            _serial_gps->write("$PAIR062,0,1*3F");
+            delay(250); // GGA ON
+            _serial_gps->write("$PAIR062,1,0*3F");
+            delay(250); // GLL OFF
+            _serial_gps->write("$PAIR062,2,0*3C");
+            delay(250); // GSA OFF
+            _serial_gps->write("$PAIR062,3,0*3D");
+            delay(250); // GSV OFF
+            _serial_gps->write("$PAIR062,4,1*3B");
+            delay(250); // RMC ON
+            _serial_gps->write("$PAIR062,5,0*3B");
+            delay(250); // VTG OFF
+            _serial_gps->write("$PAIR062,6,0*38");
+            delay(250); // ZDA ON
 
-            delay(250);
+            _serial_gps->write("$PAIR080,1*2F");
+            delay(250); // Fitness mode!
+
             _serial_gps->write("$PAIR513*3D"); // save configuration
 
         } else if (gnssModel == GNSS_MODEL_UBLOX) {
