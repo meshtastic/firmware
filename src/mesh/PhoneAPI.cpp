@@ -194,6 +194,8 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         auto us = nodeDB->readNextMeshNode(readIndex);
         if (us) {
             nodeInfoForPhone = TypeConversions::ConvertToNodeInfo(us);
+            nodeInfoForPhone.hops_away = 0;
+            nodeInfoForPhone.is_favorite = true;
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_node_info_tag;
             fromRadioScratch.node_info = nodeInfoForPhone;
             // Should allow us to resume sending NodeInfo in STATE_SEND_OTHER_NODEINFOS

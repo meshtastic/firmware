@@ -68,7 +68,7 @@ void printBytes(const char *label, const uint8_t *p, size_t numbytes)
 
 bool memfll(const uint8_t *mem, uint8_t find, size_t numbytes)
 {
-    for (int i = 0; i < numbytes; i++) {
+    for (uint8_t i = 0; i < numbytes; i++) {
         if (mem[i] != find)
             return false;
     }
