@@ -166,8 +166,9 @@
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_VISION_MASTER_E290
 #elif defined(HELTEC_MESH_NODE_T114)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_NODE_T114
+#elif defined(ASPEC)
+#define HW_VENDOR meshtastic_HardwareModel_ASPEC
 #endif
-
 // -----------------------------------------------------------------------------
 // LoRa SPI
 // -----------------------------------------------------------------------------
