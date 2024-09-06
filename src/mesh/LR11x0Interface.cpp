@@ -104,6 +104,13 @@ template <typename T> bool LR11x0Interface<T>::init()
     if (res == RADIOLIB_ERR_CHIP_NOT_FOUND)
         return false;
 
+    LR11x0VersionInfo_t version;
+    res = lora.getVersionInfo(&version);
+    if (res == RADIOLIB_ERR_NONE)
+        LOG_DEBUG("LR11x0 Device %d, HW %d, FW %d.%d, WiFi %d.%d, GNSS %d.%d\n", version.device, version.hardware,
+                  version.fwMajor, version.fwMinor, version.fwMajorWiFi, version.fwMinorWiFi, version.fwGNSS,
+                  version.almanacGNSS);
+
     LOG_INFO("Frequency set to %f\n", getFreq());
     LOG_INFO("Bandwidth set to %f\n", bw);
     LOG_INFO("Power output set to %d\n", power);

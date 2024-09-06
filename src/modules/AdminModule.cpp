@@ -406,7 +406,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         LOG_INFO("Setting config: Device\n");
         config.has_device = true;
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-        if (config.device.double_tap_as_button_press == false && c.payload_variant.device.double_tap_as_button_press == true) {
+        if (config.device.double_tap_as_button_press == false && c.payload_variant.device.double_tap_as_button_press == true &&
+            accelerometerThread->enabled == false) {
             accelerometerThread->start();
         }
 #endif
@@ -484,7 +485,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             requiresReboot = false;
         }
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-        if (config.display.wake_on_tap_or_motion == false && c.payload_variant.display.wake_on_tap_or_motion == true) {
+        if (config.display.wake_on_tap_or_motion == false && c.payload_variant.display.wake_on_tap_or_motion == true &&
+            accelerometerThread->enabled == false) {
             accelerometerThread->start();
         }
 #endif
