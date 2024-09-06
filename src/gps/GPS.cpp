@@ -1253,9 +1253,6 @@ GnssModel_t GPS::probe(int serialSpeed)
         LOG_INFO("Aioha AG3335 detected, using AG3335 Module\n");
         return GNSS_MODEL_AG3335;
     }
-    // Get version information for Airoha AG3335
-    clearBuffer();
-    _serial_gps->write("$PMTK605*31\r\n");
 
     // Get version information
     clearBuffer();
