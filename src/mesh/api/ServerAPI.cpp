@@ -5,7 +5,7 @@
 template <typename T>
 ServerAPI<T>::ServerAPI(T &_client) : StreamAPI(&client), concurrency::OSThread("ServerAPI"), client(_client)
 {
-    LOG_INFO("Incoming wifi connection\n");
+    LOG_INFO("Incoming API connection\n");
 }
 
 template <typename T> ServerAPI<T>::~ServerAPI()
@@ -49,6 +49,16 @@ template <class T, class U> int32_t APIServerPort<T, U>::runOnce()
     if (client) {
         // Close any previous connection (see FIXME in header file)
         if (openAPI) {
+#if RAK_4631
+            // RAK13800 Ethernet requests periodically take more time
+            // This backoff addresses most cases keeping max wait < 1s
+            // Reconnections are delayed by full wait time
+            if (waitTime < 400) {
+                waitTime *= 2;
+                LOG_INFO("Previous TCP connection still open, trying again in %dms\n", waitTime);
+                return waitTime;
+            }
+#endif
             LOG_INFO("Force closing previous TCP connection\n");
             delete openAPI;
         }
@@ -56,5 +66,8 @@ template <class T, class U> int32_t APIServerPort<T, U>::runOnce()
         openAPI = new T(client);
     }
 
+#if RAK_4631
+    waitTime = 100;
+#endif
     return 100; // only check occasionally for incoming connections
 }
