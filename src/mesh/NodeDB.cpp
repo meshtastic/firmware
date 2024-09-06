@@ -362,10 +362,12 @@ void NodeDB::installDefaultConfig()
 #ifdef DISPLAY_FLIP_SCREEN
     config.display.flip_screen = true;
 #endif
+#ifdef RAK4630
+    config.display.wake_on_tap_or_motion = true;
+#endif
 #ifdef T_WATCH_S3
     config.display.screen_on_secs = 30;
     config.display.wake_on_tap_or_motion = true;
-    moduleConfig.external_notification.enabled = true;
 #endif
 #ifdef HELTEC_VISION_MASTER_E290
     // Orient so that LoRa antenna faces up
