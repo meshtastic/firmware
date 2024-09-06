@@ -24,10 +24,12 @@ jobs:
           repository: ${{github.event.pull_request.head.repo.full_name}}
     
       - name: Create virtualenv
+        shell: bash
         run: |
           python3 -m venv ".venv"
         
       - name: Activate virtualenv
+        shell: bash
         run: |
           . .venv/bin/activate
           echo PATH=$PATH >> $GITHUB_ENV

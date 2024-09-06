@@ -30,10 +30,12 @@ runs:
     #     key: ${{ runner.os }}-pip
     
     - name: Create virtualenv
+      shell: bash
       run: |
         python3 -m venv ".venv"
 
     - name: Activate virtualenv
+      shell: bash
       run: |
         . .venv/bin/activate
         echo PATH=$PATH >> $GITHUB_ENV
