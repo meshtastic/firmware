@@ -520,10 +520,11 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
             return;
         }
 
-        if (mp_decoded.decoded.has_ok_to_mqtt && !mp_decoded.decoded.ok_to_mqtt &&
+        // check for the lowest bit of the data bitfield set false, and the use of one of the default keys.
+        if (mp_decoded.decoded.has_bitfield && !(mp_decoded.decoded.bitfield | 1) &&
             (ch.settings.psk.size < 2 || (ch.settings.psk.size == 16 && memcmp(ch.settings.psk.bytes, defaultpsk, 16)) ||
              (ch.settings.psk.size == 32 && memcmp(ch.settings.psk.bytes, eventpsk, 32)))) {
-            LOG_INFO("MQTT onSend - Not forwarding packet with ok_to_mqtt set false\n");
+            LOG_INFO("MQTT onSend - Not forwarding packet due to DontMqttMeBro flag\n");
             return;
         }
 

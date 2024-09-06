@@ -424,8 +424,8 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
-        p->decoded.has_ok_to_mqtt = true;
-        p->decoded.ok_to_mqtt = config.lora.config_ok_to_mqtt;
+        p->decoded.has_bitfield = true;
+        p->decoded.bitfield |= config.lora.config_ok_to_mqtt;
 
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded);
 

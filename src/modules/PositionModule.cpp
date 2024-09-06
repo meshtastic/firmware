@@ -118,8 +118,8 @@ void PositionModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic
         p->latitude_i += (1 << (31 - precision));
         p->longitude_i += (1 << (31 - precision));
 
-        mp.decoded.has_ok_to_mqtt = true;
-        mp.decoded.ok_to_mqtt = config.lora.config_ok_to_mqtt;
+        mp.decoded.has_bitfield = true;
+        mp.decoded.bitfield |= config.lora.config_ok_to_mqtt;
         mp.decoded.payload.size =
             pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes), &meshtastic_Position_msg, p);
     }
@@ -272,8 +272,8 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
     LOG_INFO("Sending TAK PLI packet\n");
     meshtastic_MeshPacket *mp = allocDataPacket();
     mp->decoded.portnum = meshtastic_PortNum_ATAK_PLUGIN;
-    mp->decoded.has_ok_to_mqtt = true;
-    mp->decoded.ok_to_mqtt = config.lora.config_ok_to_mqtt;
+    mp->decoded.has_bitfield = true;
+    mp->decoded.bitfield |= config.lora.config_ok_to_mqtt;
 
     meshtastic_TAKPacket takPacket = {.is_compressed = true,
                                       .has_contact = true,

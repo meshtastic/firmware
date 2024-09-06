@@ -260,8 +260,8 @@ meshtastic_MeshPacket *StoreForwardModule::preparePayload(NodeNum dest, uint32_t
                     } else {
                         sf.rr = meshtastic_StoreAndForward_RequestResponse_ROUTER_TEXT_DIRECT;
                     }
-                    p->decoded.has_ok_to_mqtt = true;
-                    p->decoded.ok_to_mqtt = config.lora.config_ok_to_mqtt;
+                    p->decoded.has_bitfield = true;
+                    p->decoded.bitfield |= config.lora.config_ok_to_mqtt;
                     p->decoded.payload.size = pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes),
                                                                  &meshtastic_StoreAndForward_msg, &sf);
                 }
