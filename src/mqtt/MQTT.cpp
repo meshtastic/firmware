@@ -514,19 +514,20 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
         return; // no channels have an uplink enabled
     auto &ch = channels.getByIndex(chIndex);
 
-    if (mp_decoded.which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
-        LOG_CRIT("MQTT::onSend(): mp_decoded isn't actually decoded\n");
-        return;
-    }
+    if (!mp.pki_encrypted) {
+        if (mp_decoded.which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
+            LOG_CRIT("MQTT::onSend(): mp_decoded isn't actually decoded\n");
+            return;
+        }
 
-    if (strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0 &&
-        (mp_decoded.decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
-         mp_decoded.decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP)) {
-        LOG_DEBUG("MQTT onSend - Ignoring range test or detection sensor message on public mqtt\n");
-        return;
+        if (strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0 &&
+            (mp_decoded.decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
+             mp_decoded.decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP)) {
+            LOG_DEBUG("MQTT onSend - Ignoring range test or detection sensor message on public mqtt\n");
+            return;
+        }
     }
-
-    if (ch.settings.uplink_enabled || mp.pki_encrypted) {
+    if (mp.pki_encrypted || ch.settings.uplink_enabled) {
         const char *channelId = mp.pki_encrypted ? "PKI" : channels.getGlobalId(chIndex);
 
         meshtastic_ServiceEnvelope *env = mqttPool.allocZeroed();
@@ -537,7 +538,8 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
         if (moduleConfig.mqtt.encryption_enabled) {
             env->packet = (meshtastic_MeshPacket *)&mp;
             LOG_DEBUG("encrypted message\n");
-        } else {
+        } else if (mp_decoded.which_payload_variant ==
+                   meshtastic_MeshPacket_decoded_tag) { // Don't upload a still-encrypted PKI packet
             env->packet = (meshtastic_MeshPacket *)&mp_decoded;
             LOG_DEBUG("portnum %i message\n", env->packet->decoded.portnum);
         }
