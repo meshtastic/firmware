@@ -31,7 +31,7 @@ runs:
     
     - name: Create virtualenv
       run: |
-        python3 -m venv ".env"
+        python3 -m venv ".venv"
 
     - name: Activate virtualenv
       run: |
