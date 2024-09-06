@@ -580,9 +580,9 @@ typedef struct _meshtastic_Data {
     /* Defaults to false. If true, then what is in the payload should be treated as an emoji like giving
  a message a heart or poop emoji. */
     uint32_t emoji;
-    /* Defaults to false. Indicates the user approves the packet being uploaded to MQTT. */
-    bool has_ok_to_mqtt;
-    bool ok_to_mqtt;
+    /* Bitfield for extra flags. First use is to indicate that user approves the packet being uploaded to MQTT. */
+    bool has_bitfield;
+    uint8_t bitfield;
 } meshtastic_Data;
 
 /* Waypoint message, used to share arbitrary locations across the mesh */
@@ -1179,7 +1179,7 @@ extern "C" {
 #define meshtastic_Data_request_id_tag           6
 #define meshtastic_Data_reply_id_tag             7
 #define meshtastic_Data_emoji_tag                8
-#define meshtastic_Data_ok_to_mqtt_tag           9
+#define meshtastic_Data_bitfield_tag             9
 #define meshtastic_Waypoint_id_tag               1
 #define meshtastic_Waypoint_latitude_i_tag       2
 #define meshtastic_Waypoint_longitude_i_tag      3
@@ -1356,7 +1356,7 @@ X(a, STATIC,   SINGULAR, FIXED32,  source,            5) \
 X(a, STATIC,   SINGULAR, FIXED32,  request_id,        6) \
 X(a, STATIC,   SINGULAR, FIXED32,  reply_id,          7) \
 X(a, STATIC,   SINGULAR, FIXED32,  emoji,             8) \
-X(a, STATIC,   OPTIONAL, BOOL,     ok_to_mqtt,        9)
+X(a, STATIC,   OPTIONAL, UINT32,   bitfield,          9)
 #define meshtastic_Data_CALLBACK NULL
 #define meshtastic_Data_DEFAULT NULL
 
@@ -1634,13 +1634,13 @@ extern const pb_msgdesc_t meshtastic_ChunkedPayloadResponse_msg;
 #define meshtastic_ChunkedPayload_size           245
 #define meshtastic_ClientNotification_size       415
 #define meshtastic_Compressed_size               243
-#define meshtastic_Data_size                     272
+#define meshtastic_Data_size                     273
 #define meshtastic_DeviceMetadata_size           46
 #define meshtastic_FileInfo_size                 236
 #define meshtastic_FromRadio_size                510
 #define meshtastic_Heartbeat_size                0
 #define meshtastic_LogRecord_size                426
-#define meshtastic_MeshPacket_size               366
+#define meshtastic_MeshPacket_size               367
 #define meshtastic_MqttClientProxyMessage_size   501
 #define meshtastic_MyNodeInfo_size               18
 #define meshtastic_NeighborInfo_size             258
