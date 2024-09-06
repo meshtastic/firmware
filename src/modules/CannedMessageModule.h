@@ -43,20 +43,6 @@ struct Letter {
 #define CANNED_MESSAGE_MODULE_ENABLE 0
 #endif
 
-#define CANNED_MESSAGE_KEY_BRIGHTNESS_UP 0x11
-#define CANNED_MESSAGE_KEY_BRIGHTNESS_DOWN 0x12
-#define CANNED_MESSAGE_KEY_REBOOT 0x90
-#define CANNED_MESSAGE_KEY_SHUTDOWN 0x9b
-#define CANNED_MESSAGE_KEY_GPS_TOGGLE 0x9e
-#define CANNED_MESSAGE_KEY_MUTE_TOGGLE 0xac
-#define CANNED_MESSAGE_KEY_SEND_PING 0xaf
-#define CANNED_MESSAGE_KEY_LEFT 0xb4
-#define CANNED_MESSAGE_KEY_UP 0xb5
-#define CANNED_MESSAGE_KEY_DOWN 0xb6
-#define CANNED_MESSAGE_KEY_RIGHT 0xb7
-#define CANNED_MESSAGE_KEY_FN_SYMBOL_ON 0xf1
-#define CANNED_MESSAGE_KEY_FN_SYMBOL_OFF 0xf2
-
 class CannedMessageModule : public SinglePortModule, public Observable<const UIFrameEvent *>, private concurrency::OSThread
 {
     CallbackObserver<CannedMessageModule, const InputEvent *> inputObserver =

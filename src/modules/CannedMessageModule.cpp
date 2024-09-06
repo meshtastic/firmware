@@ -190,17 +190,17 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
 #if defined(T_WATCH_S3) || defined(RAK14014)
         if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
-            this->payload = CANNED_MESSAGE_KEY_LEFT;
+            this->payload = INPUT_BROKER_MSG_LEFT;
         } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
-            this->payload = CANNED_MESSAGE_KEY_RIGHT;
+            this->payload = INPUT_BROKER_MSG_RIGHT;
         }
 #else
         // tweak for left/right events generated via trackball/touch with empty kbchar
         if (!event->kbchar) {
             if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
-                this->payload = CANNED_MESSAGE_KEY_LEFT;
+                this->payload = INPUT_BROKER_MSG_LEFT;
             } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
-                this->payload = CANNED_MESSAGE_KEY_RIGHT;
+                this->payload = INPUT_BROKER_MSG_RIGHT;
             }
         } else {
             // pass the pressed key
@@ -222,26 +222,26 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
         // Run modifier key code below, (doesnt inturrupt typing or reset to start screen page)
         switch (event->kbchar) {
-        case CANNED_MESSAGE_KEY_BRIGHTNESS_UP: // make screen brighter
+        case INPUT_BROKER_MSG_BRIGHTNESS_UP: // make screen brighter
             if (screen)
                 screen->increaseBrightness();
             LOG_DEBUG("increasing Screen Brightness\n");
             break;
-        case CANNED_MESSAGE_KEY_BRIGHTNESS_DOWN: // make screen dimmer
+        case INPUT_BROKER_MSG_BRIGHTNESS_DOWN: // make screen dimmer
             if (screen)
                 screen->decreaseBrightness();
             LOG_DEBUG("Decreasing Screen Brightness\n");
             break;
-        case CANNED_MESSAGE_KEY_FN_SYMBOL_ON: // draw modifier (function) symbal
+        case INPUT_BROKER_MSG_FN_SYMBOL_ON: // draw modifier (function) symbal
             if (screen)
                 screen->setFunctionSymbal("Fn");
             break;
-        case CANNED_MESSAGE_KEY_FN_SYMBOL_OFF: // remove modifier (function) symbal
+        case INPUT_BROKER_MSG_FN_SYMBOL_OFF: // remove modifier (function) symbal
             if (screen)
                 screen->removeFunctionSymbal("Fn");
             break;
         // mute (switch off/toggle) external notifications on fn+m
-        case CANNED_MESSAGE_KEY_MUTE_TOGGLE:
+        case INPUT_BROKER_MSG_MUTE_TOGGLE:
             if (moduleConfig.external_notification.enabled == true) {
                 if (externalNotificationModule->getMute()) {
                     externalNotificationModule->setMute(false);
@@ -257,7 +257,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
                 }
             }
             break;
-        case CANNED_MESSAGE_KEY_GPS_TOGGLE: // toggle GPS like triple press does
+        case INPUT_BROKER_MSG_GPS_TOGGLE: // toggle GPS like triple press does
 #if !MESHTASTIC_EXCLUDE_GPS
             if (gps != nullptr) {
                 gps->toggleGpsMode();
@@ -267,7 +267,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             showTemporaryMessage("GPS Toggled");
 #endif
             break;
-        case CANNED_MESSAGE_KEY_SEND_PING: // fn+space send network ping like double press does
+        case INPUT_BROKER_MSG_SEND_PING: // fn+space send network ping like double press does
             service->refreshLocalMeshNode();
             if (service->trySendPosition(NODENUM_BROADCAST, true)) {
                 showTemporaryMessage("Position \nUpdate Sent");
@@ -283,7 +283,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             validEvent = true;
             break;
         }
-        if (screen && (event->kbchar != CANNED_MESSAGE_KEY_FN_SYMBOL_ON)) {
+        if (screen && (event->kbchar != INPUT_BROKER_MSG_FN_SYMBOL_ON)) {
             screen->removeFunctionSymbal("Fn"); // remove modifier (function) symbal
         }
     }
@@ -505,7 +505,7 @@ int32_t CannedMessageModule::runOnce()
         }
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT || this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
         switch (this->payload) {
-        case CANNED_MESSAGE_KEY_LEFT:
+        case INPUT_BROKER_MSG_LEFT:
             if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
                 size_t numMeshNodes = nodeDB->getNumMeshNodes();
                 if (this->dest == NODENUM_BROADCAST) {
@@ -540,7 +540,7 @@ int32_t CannedMessageModule::runOnce()
                 }
             }
             break;
-        case CANNED_MESSAGE_KEY_RIGHT:
+        case INPUT_BROKER_MSG_RIGHT:
             if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
                 size_t numMeshNodes = nodeDB->getNumMeshNodes();
                 if (this->dest == NODENUM_BROADCAST) {
@@ -602,19 +602,19 @@ int32_t CannedMessageModule::runOnce()
                     this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
                 }
                 break;
-            case CANNED_MESSAGE_KEY_LEFT:
-            case CANNED_MESSAGE_KEY_RIGHT:
+            case INPUT_BROKER_MSG_LEFT:
+            case INPUT_BROKER_MSG_RIGHT:
                 // already handled above
                 break;
                 // handle fn+s for shutdown
-            case CANNED_MESSAGE_KEY_SHUTDOWN:
+            case INPUT_BROKER_MSG_SHUTDOWN:
                 if (screen)
                     screen->startAlert("Shutting down...");
                 shutdownAtMsec = millis() + DEFAULT_SHUTDOWN_SECONDS * 1000;
                 runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
                 break;
             // and fn+r for reboot
-            case CANNED_MESSAGE_KEY_REBOOT:
+            case INPUT_BROKER_MSG_REBOOT:
                 if (screen)
                     screen->startAlert("Rebooting...");
                 rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;

@@ -2,7 +2,6 @@
 #include "configuration.h"
 #include "detect/ScanI2C.h"
 #include "detect/ScanI2CTwoWire.h"
-#include "modules/CannedMessageModule.h"
 
 extern ScanI2C::DeviceAddress cardkb_found;
 extern uint8_t kb_model;
@@ -95,7 +94,7 @@ int32_t KbI2cBase::runOnce()
                 case 'e': // sym e
                     if (is_sym) {
                         e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP;
-                        e.kbchar = CANNED_MESSAGE_KEY_UP;
+                        e.kbchar = INPUT_BROKER_MSG_UP;
                         is_sym = false; // reset sym state after second keypress
                     } else {
                         e.inputEvent = ANYKEY;
@@ -105,7 +104,7 @@ int32_t KbI2cBase::runOnce()
                 case 'x': // sym x
                     if (is_sym) {
                         e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN;
-                        e.kbchar = CANNED_MESSAGE_KEY_DOWN;
+                        e.kbchar = INPUT_BROKER_MSG_DOWN;
                         is_sym = false; // reset sym state after second keypress
                     } else {
                         e.inputEvent = ANYKEY;
@@ -135,8 +134,8 @@ int32_t KbI2cBase::runOnce()
                 case 0x13: // Code scanner says the SYM key is 0x13
                     is_sym = !is_sym;
                     e.inputEvent = ANYKEY;
-                    e.kbchar = is_sym ? CANNED_MESSAGE_KEY_FN_SYMBOL_ON   // send 0xf1 to tell CannedMessages to display that
-                                      : CANNED_MESSAGE_KEY_FN_SYMBOL_OFF; // the modifier key is active
+                    e.kbchar = is_sym ? INPUT_BROKER_MSG_FN_SYMBOL_ON   // send 0xf1 to tell CannedMessages to display that
+                                      : INPUT_BROKER_MSG_FN_SYMBOL_OFF; // the modifier key is active
                     break;
                 case 0x0a: // apparently Enter on Q10 is a line feed instead of carriage return
                     e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
@@ -215,7 +214,7 @@ int32_t KbI2cBase::runOnce()
                 if (is_sym) {
                     is_sym = false;
                     e.inputEvent = ANYKEY;
-                    e.kbchar = CANNED_MESSAGE_KEY_MUTE_TOGGLE; // mute notifications
+                    e.kbchar = INPUT_BROKER_MSG_MUTE_TOGGLE; // mute notifications
                 } else {
                     e.inputEvent = ANYKEY;
                     e.kbchar = c;
@@ -225,7 +224,7 @@ int32_t KbI2cBase::runOnce()
                 if (is_sym) {
                     is_sym = false;
                     e.inputEvent = ANYKEY;
-                    e.kbchar = CANNED_MESSAGE_KEY_BRIGHTNESS_UP; // Increase Brightness code
+                    e.kbchar = INPUT_BROKER_MSG_BRIGHTNESS_UP; // Increase Brightness code
                 } else {
                     e.inputEvent = ANYKEY;
                     e.kbchar = c;
@@ -235,7 +234,7 @@ int32_t KbI2cBase::runOnce()
                 if (is_sym) {
                     is_sym = false;
                     e.inputEvent = ANYKEY;
-                    e.kbchar = CANNED_MESSAGE_KEY_BRIGHTNESS_DOWN; // Decrease Brightness code
+                    e.kbchar = INPUT_BROKER_MSG_BRIGHTNESS_DOWN; // Decrease Brightness code
                 } else {
                     e.inputEvent = ANYKEY;
                     e.kbchar = c;
@@ -245,7 +244,7 @@ int32_t KbI2cBase::runOnce()
                 if (is_sym) {
                     is_sym = false;
                     e.inputEvent = ANYKEY;
-                    e.kbchar = CANNED_MESSAGE_KEY_SEND_PING; // (fn + space)
+                    e.kbchar = INPUT_BROKER_MSG_SEND_PING; // (fn + space)
                 } else {
                     e.inputEvent = ANYKEY;
                     e.kbchar = c;
@@ -255,7 +254,7 @@ int32_t KbI2cBase::runOnce()
                 if (is_sym) {
                     is_sym = false;
                     e.inputEvent = ANYKEY;
-                    e.kbchar = CANNED_MESSAGE_KEY_GPS_TOGGLE;
+                    e.kbchar = INPUT_BROKER_MSG_GPS_TOGGLE;
                 } else {
                     e.inputEvent = ANYKEY;
                     e.kbchar = c;
@@ -270,33 +269,33 @@ int32_t KbI2cBase::runOnce()
                 break;
             case 0xb5: // Up
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP;
-                e.kbchar = CANNED_MESSAGE_KEY_UP;
+                e.kbchar = INPUT_BROKER_MSG_UP;
                 break;
             case 0xb6: // Down
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN;
-                e.kbchar = CANNED_MESSAGE_KEY_DOWN;
+                e.kbchar = INPUT_BROKER_MSG_DOWN;
                 break;
             case 0xb4: // Left
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT;
-                e.kbchar = CANNED_MESSAGE_KEY_LEFT;
+                e.kbchar = INPUT_BROKER_MSG_LEFT;
                 break;
             case 0xb7: // Right
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
-                e.kbchar = CANNED_MESSAGE_KEY_RIGHT;
+                e.kbchar = INPUT_BROKER_MSG_RIGHT;
                 break;
             case 0xc: // Modifier key: 0xc is alt+c (Other options could be: 0xea = shift+mic button or 0x4 shift+$(speaker))
                 // toggle moddifiers button.
                 is_sym = !is_sym;
                 e.inputEvent = ANYKEY;
-                e.kbchar = is_sym ? CANNED_MESSAGE_KEY_FN_SYMBOL_ON   // send 0xf1 to tell CannedMessages to display that the
-                                  : CANNED_MESSAGE_KEY_FN_SYMBOL_OFF; // modifier key is active
+                e.kbchar = is_sym ? INPUT_BROKER_MSG_FN_SYMBOL_ON   // send 0xf1 to tell CannedMessages to display that the
+                                  : INPUT_BROKER_MSG_FN_SYMBOL_OFF; // modifier key is active
                 break;
-            case 0x90: // fn+r      CANNED_MESSAGE_KEY_REBOOT
+            case 0x90: // fn+r      INPUT_BROKER_MSG_REBOOT
             case 0x91: // fn+t
-            case 0x9b: // fn+s      CANNED_MESSAGE_KEY_SHUTDOWN
-            case 0xac: // fn+m      CANNED_MESSAGE_KEY_MUTE_TOGGLE
-            case 0x9e: // fn+g      CANNED_MESSAGE_KEY_GPS_TOGGLE
-            case 0xaf: // fn+space  CANNED_MESSAGE_KEY_SEND_PING
+            case 0x9b: // fn+s      INPUT_BROKER_MSG_SHUTDOWN
+            case 0xac: // fn+m      INPUT_BROKER_MSG_MUTE_TOGGLE
+            case 0x9e: // fn+g      INPUT_BROKER_MSG_GPS_TOGGLE
+            case 0xaf: // fn+space  INPUT_BROKER_MSG_SEND_PING
                 // just pass those unmodified
                 e.inputEvent = ANYKEY;
                 e.kbchar = c;
