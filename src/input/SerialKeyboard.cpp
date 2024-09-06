@@ -1,6 +1,5 @@
 #include "SerialKeyboard.h"
 #include "configuration.h"
-#include "modules/CannedMessageModule.h"
 
 #ifdef INPUTBROKER_SERIAL_TYPE
 #define CANNED_MESSAGE_MODULE_ENABLE 1 // in case it's not set in the variant file
@@ -88,7 +87,7 @@ int32_t SerialKeyboard::runOnce()
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP;
             } else if (!(shiftRegister2 & (1 << 2))) {
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
-                e.kbchar = CANNED_MESSAGE_KEY_RIGHT;
+                e.kbchar = INPUT_BROKER_MSG_RIGHT;
             } else if (!(shiftRegister2 & (1 << 1))) {
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
             } else if (!(shiftRegister2 & (1 << 0))) {
