@@ -44,7 +44,8 @@ template <class T> class ProtobufModule : protected SinglePortModule
     {
         // Update our local node info with our position (even if we don't decide to update anyone else)
         meshtastic_MeshPacket *p = allocDataPacket();
-
+        p->decoded.has_ok_to_mqtt = true;
+        p->decoded.ok_to_mqtt = config.lora.config_ok_to_mqtt;
         p->decoded.payload.size =
             pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), fields, &payload);
         // LOG_DEBUG("did encode\n");

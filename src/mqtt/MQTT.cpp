@@ -520,6 +520,13 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
             return;
         }
 
+        if (mp_decoded.decoded.has_ok_to_mqtt && !mp_decoded.decoded.ok_to_mqtt &&
+            (ch.settings.psk.size < 2 || (ch.settings.psk.size == 16 && memcmp(ch.settings.psk.bytes, defaultpsk, 16)) ||
+             (ch.settings.psk.size == 32 && memcmp(ch.settings.psk.bytes, eventpsk, 32)))) {
+            LOG_INFO("MQTT onSend - Not forwarding packet with ok_to_mqtt set false\n");
+            return;
+        }
+
         if (strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0 &&
             (mp_decoded.decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
              mp_decoded.decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP)) {

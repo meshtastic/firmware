@@ -285,6 +285,7 @@ void NodeDB::installDefaultConfig()
     config.lora.tx_enabled =
         true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
     config.lora.override_duty_cycle = false;
+    config.lora.config_ok_to_mqtt = false;
 #ifdef CONFIG_LORA_REGION_USERPREFS
     config.lora.region = CONFIG_LORA_REGION_USERPREFS;
 #else
