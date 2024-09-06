@@ -262,6 +262,7 @@ void setup()
 
 #ifdef DEBUG_PORT
     consoleInit(); // Set serial baud rate and init our mesh console
+    delay(2000);   // TODO: remove me
 #endif
 #if ARCH_PORTDUINO
     struct timeval tv;
