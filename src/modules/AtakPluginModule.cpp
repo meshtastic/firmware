@@ -116,8 +116,6 @@ void AtakPluginModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtast
                 LOG_DEBUG("Compressed chat to_callsign: %d bytes\n", length);
             }
         }
-        mp.decoded.has_bitfield = true;
-        mp.decoded.bitfield |= config.lora.config_ok_to_mqtt;
         mp.decoded.payload.size = pb_encode_to_bytes(mp.decoded.payload.bytes, sizeof(mp.decoded.payload.bytes),
                                                      meshtastic_TAKPacket_fields, &compressed);
         LOG_DEBUG("Final payload: %d bytes\n", mp.decoded.payload.size);

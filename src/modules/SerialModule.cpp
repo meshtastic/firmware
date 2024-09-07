@@ -235,8 +235,6 @@ void SerialModule::sendTelemetry(meshtastic_Telemetry m)
         pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Telemetry_msg, &m);
     p->to = NODENUM_BROADCAST;
     p->decoded.want_response = false;
-    p->decoded.has_bitfield = true;
-    p->decoded.bitfield |= config.lora.config_ok_to_mqtt;
     p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
     service->sendToMesh(p, RX_SRC_LOCAL, true);
 }
