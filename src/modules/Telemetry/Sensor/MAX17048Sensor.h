@@ -5,9 +5,11 @@
 
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR || !MESHTASTIC_EXCLUDE_POWER_TELEMETRY || !MESHTASTIC_EXCLUDE_POWERMON
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR ||                                \
+    !MESHTASTIC_EXCLUDE_POWER_TELEMETRY || !MESHTASTIC_EXCLUDE_POWERMON
 
-// Samples to store in a buffer to determine if the battery is charging or discharging
+// Samples to store in a buffer to determine if the battery is charging or
+// discharging
 #define MAX17048_CHARGING_SAMPLES 3
 
 // Threshold to determine if the battery is on charge, in percent/hour
@@ -16,88 +18,82 @@
 // Threshold to determine if the board has bus power
 #define MAX17048_BUS_POWER_VOLTS 4.195f
 
-#include <queue>
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include <Adafruit_MAX1704X.h>
-#include "meshUtils.h"
 #include "TelemetrySensor.h"
 #include "VoltageSensor.h"
+#include "meshUtils.h"
+#include <Adafruit_MAX1704X.h>
+#include <queue>
 
-struct MAX17048ChargeSample{         
-  float cellPercent;      
-  float chargeRate;  
-};       
-
-enum MAX17048ChargeState {
-  IDLE,
-  EXPORT,
-  IMPORT
+struct MAX17048ChargeSample {
+  float cellPercent;
+  float chargeRate;
 };
+
+enum MAX17048ChargeState { IDLE, EXPORT, IMPORT };
 
 // Singleton wrapper for the Adafruit_MAX17048 class
-class MAX17048Singleton : public Adafruit_MAX17048
-{
-  private:
-    static MAX17048Singleton *pinstance;
-    std::queue<MAX17048ChargeSample> chargeSamples;
-    MAX17048ChargeState chargeState = IDLE;
-    const String chargeLabels[3] = { F("idle"), F("export"), F("import") };
+class MAX17048Singleton : public Adafruit_MAX17048 {
+private:
+  static MAX17048Singleton *pinstance;
+  std::queue<MAX17048ChargeSample> chargeSamples;
+  MAX17048ChargeState chargeState = IDLE;
+  const String chargeLabels[3] = {F("idle"), F("export"), F("import")};
 
-  protected:
-    MAX17048Singleton();
-    ~MAX17048Singleton();
+protected:
+  MAX17048Singleton();
+  ~MAX17048Singleton();
 
-  public:
-    // Create a singleton instance (not thread safe)
-    static MAX17048Singleton *GetInstance();
+public:
+  // Create a singleton instance (not thread safe)
+  static MAX17048Singleton *GetInstance();
 
-    // Singletons should not be cloneable.
-    MAX17048Singleton(MAX17048Singleton &other) = delete;
+  // Singletons should not be cloneable.
+  MAX17048Singleton(MAX17048Singleton &other) = delete;
 
-    // Singletons should not be assignable.
-    void operator=(const MAX17048Singleton &) = delete;
+  // Singletons should not be assignable.
+  void operator=(const MAX17048Singleton &) = delete;
 
-    // Initialise the sensor (not thread safe)
-    bool runOnce(TwoWire *theWire = &Wire);
+  // Initialise the sensor (not thread safe)
+  bool runOnce(TwoWire *theWire = &Wire);
 
-    // Returns true if the battery is currently on charge (not thread safe)
-    bool isBatteryCharging();
+  // Returns true if the battery is currently on charge (not thread safe)
+  bool isBatteryCharging();
 };
 
-class MAX17048Sensor : public TelemetrySensor, VoltageSensor
-{
-  private:
-    MAX17048Singleton *max17048 = nullptr;
+class MAX17048Sensor : public TelemetrySensor, VoltageSensor {
+private:
+  MAX17048Singleton *max17048 = nullptr;
 
-  protected:
-    virtual void setup() override;
+protected:
+  virtual void setup() override;
 
-  public:
-    MAX17048Sensor();
+public:
+  MAX17048Sensor();
 
-    // Initialise the sensor
-    virtual int32_t runOnce() override;
+  // Initialise the sensor
+  virtual int32_t runOnce() override;
 
-    // Get the current bus voltage and state of charge
-    virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
+  // Get the current bus voltage and state of charge
+  virtual bool getMetrics(meshtastic_Telemetry *measurement) override;
 
-    // Get the current bus voltage
-    virtual uint16_t getBusVoltageMv() override;
+  // Get the current bus voltage
+  virtual uint16_t getBusVoltageMv() override;
 
-    // Get the state of charge in percent 0 to 100
-    virtual uint8_t getBusBatteryPercent();
+  // Get the state of charge in percent 0 to 100
+  virtual uint8_t getBusBatteryPercent();
 
-    // Calculate the seconds to charge/discharge
-    virtual uint16_t getTimeToGoSecs();
+  // Calculate the seconds to charge/discharge
+  virtual uint16_t getTimeToGoSecs();
 
-    // Returns true if the battery is currently charging
-    virtual bool isBatteryCharging();
+  // Returns true if the battery is currently charging
+  virtual bool isBatteryCharging();
 
-    // Returns true if the battery is currently connected
-    virtual bool isBatteryConnected();  
+  // Returns true if the battery is currently connected
+  virtual bool isBatteryConnected();
 
-    // Returns true if there is bus or external power connected
-    virtual bool isExternallyPowered();
+  // Returns true if there is bus or external power connected
+  virtual bool isExternallyPowered();
 };
 
 #endif
