@@ -146,7 +146,11 @@ bool PositionModule::hasQualityTimesource()
 {
     bool setFromPhoneOrNtpToday =
         lastSetFromPhoneNtpOrGps == 0 ? false : (millis() - lastSetFromPhoneNtpOrGps) <= (SEC_PER_DAY * 1000UL);
+#if MESHTASTIC_EXCLUDE_GPS
+    bool hasGpsOrRtc = (rtc_found.address != ScanI2C::ADDRESS_NONE.address);
+#else
     bool hasGpsOrRtc = (gps && gps->isConnected()) || (rtc_found.address != ScanI2C::ADDRESS_NONE.address);
+#endif
     return hasGpsOrRtc || setFromPhoneOrNtpToday;
 }
 
