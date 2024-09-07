@@ -521,7 +521,8 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
         }
 
         // check for the lowest bit of the data bitfield set false, and the use of one of the default keys.
-        if (mp_decoded.from != nodeDB->getNodeNum() && mp_decoded.decoded.has_bitfield && !(mp_decoded.decoded.bitfield & 1) &&
+        if (mp_decoded.from != nodeDB->getNodeNum() && mp_decoded.decoded.has_bitfield &&
+            !(mp_decoded.decoded.bitfield & BITFIELD_OK_TO_MQTT_MASK) &&
             (ch.settings.psk.size < 2 || (ch.settings.psk.size == 16 && memcmp(ch.settings.psk.bytes, defaultpsk, 16)) ||
              (ch.settings.psk.size == 32 && memcmp(ch.settings.psk.bytes, eventpsk, 32)))) {
             LOG_INFO("MQTT onSend - Not forwarding packet due to DontMqttMeBro flag\n");
