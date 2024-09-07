@@ -166,7 +166,7 @@ static void adcDisable()
  */
 class AnalogBatteryLevel : public HasBatteryLevel
 {
-  public:
+    public:
     /**
      * Battery state of charge, from 0 to 100 or -1 for unknown
      */
@@ -1059,11 +1059,14 @@ bool Power::axpChipInit()
 class LipoBatteryLevel : public HasBatteryLevel
 {
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO)
-  public:
+public:
     /**
      * Init the I2C MAX17048 Lipo battery level sensor
      */
-    bool Init() { return max17048Sensor.runOnce() > 0; }
+    bool Init()
+    {
+        return max17048Sensor.runOnce() > 0;
+    }
 
     /**
      * Battery state of charge, from 0 to 100 or -1 for unknown
@@ -1115,7 +1118,7 @@ class LipoBatteryLevel : public HasBatteryLevel
         return analogLevel.isCharging();
     }
 #else
-  public:
+public:
     // Not implemented - return false to default to analog power level
     bool Init() { return false; }
 #endif
@@ -1129,7 +1132,8 @@ LipoBatteryLevel lipoLevel;
 bool Power::lipoInit()
 {
     bool result = lipoLevel.Init();
-    if (result) {
+    if (result)
+    {
         batteryLevel = &lipoLevel;
         return true;
     }
