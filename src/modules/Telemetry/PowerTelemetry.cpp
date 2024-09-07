@@ -136,18 +136,18 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
     // Display current and voltage based on ...power_metrics.has_[channel/voltage/current]... flags
     if (lastMeasurement.variant.power_metrics.has_ch1_voltage || lastMeasurement.variant.power_metrics.has_ch1_current) {
         display->drawString(x, y += _fontHeight(FONT_SMALL),
-            "Ch1 Volt: " + String(lastMeasurement.variant.power_metrics.ch1_voltage, 2) + "V / Curr: " +
-            String(lastMeasurement.variant.power_metrics.ch1_current, 0) + "mA");
+                            "Ch1 Volt: " + String(lastMeasurement.variant.power_metrics.ch1_voltage, 2) +
+                                "V / Curr: " + String(lastMeasurement.variant.power_metrics.ch1_current, 0) + "mA");
     }
     if (lastMeasurement.variant.power_metrics.has_ch2_voltage || lastMeasurement.variant.power_metrics.has_ch2_current) {
         display->drawString(x, y += _fontHeight(FONT_SMALL),
-            "Ch2 Volt: " + String(lastMeasurement.variant.power_metrics.ch2_voltage, 2) + "V / Curr: " +
-            String(lastMeasurement.variant.power_metrics.ch2_current, 0) + "mA");
+                            "Ch2 Volt: " + String(lastMeasurement.variant.power_metrics.ch2_voltage, 2) +
+                                "V / Curr: " + String(lastMeasurement.variant.power_metrics.ch2_current, 0) + "mA");
     }
     if (lastMeasurement.variant.power_metrics.has_ch3_voltage || lastMeasurement.variant.power_metrics.has_ch3_current) {
         display->drawString(x, y += _fontHeight(FONT_SMALL),
-            "Ch3 Volt: " + String(lastMeasurement.variant.power_metrics.ch3_voltage, 2) + "V / Curr: " +
-            String(lastMeasurement.variant.power_metrics.ch3_current, 0) + "mA");
+                            "Ch3 Volt: " + String(lastMeasurement.variant.power_metrics.ch3_voltage, 2) +
+                                "V / Curr: " + String(lastMeasurement.variant.power_metrics.ch3_current, 0) + "mA");
     }
 }
 
