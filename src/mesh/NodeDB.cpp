@@ -369,6 +369,9 @@ void NodeDB::installDefaultConfig()
 #ifdef DISPLAY_FLIP_SCREEN
     config.display.flip_screen = true;
 #endif
+#ifdef RAK4630
+    config.display.wake_on_tap_or_motion = true;
+#endif
 #ifdef T_WATCH_S3
     config.display.screen_on_secs = 30;
     config.display.wake_on_tap_or_motion = true;
