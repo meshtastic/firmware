@@ -26,6 +26,7 @@
 #include "Sensor/BMP3XXSensor.h"
 #include "Sensor/DFRobotLarkSensor.h"
 #include "Sensor/LPS22HBSensor.h"
+#include "Sensor/MAX17048Sensor.h"
 #include "Sensor/MCP9808Sensor.h"
 #include "Sensor/MLX90632Sensor.h"
 #include "Sensor/NAU7802Sensor.h"
@@ -37,7 +38,6 @@
 #include "Sensor/T1000xSensor.h"
 #include "Sensor/TSL2591Sensor.h"
 #include "Sensor/VEML7700Sensor.h"
-#include "Sensor/MAX17048Sensor.h"
 
 BMP085Sensor bmp085Sensor;
 BMP280Sensor bmp280Sensor;

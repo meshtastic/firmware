@@ -1063,68 +1063,74 @@ bool Power::axpChipInit()
  */
 class LipoBatteryLevel : public HasBatteryLevel
 {
-    private:
-        MAX17048Singleton *max17048 = nullptr;
+  private:
+    MAX17048Singleton *max17048 = nullptr;
 
-    public:
-        /**
-         * Init the I2C MAX17048 Lipo battery level sensor
-         */
-        bool Init() {
-            if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MAX17048].first == 0)
-                return false;
+  public:
+    /**
+     * Init the I2C MAX17048 Lipo battery level sensor
+     */
+    bool Init()
+    {
+        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MAX17048].first == 0)
+            return false;
 
-            if (max17048 == nullptr) {
-                max17048 = MAX17048Singleton::GetInstance();
-            }
-
-            return  max17048->runOnce(nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MAX17048].second);
+        if (max17048 == nullptr) {
+            max17048 = MAX17048Singleton::GetInstance();
         }
 
-        /**
-         * Battery state of charge, from 0 to 100 or -1 for unknown
-         */
-        virtual int getBatteryPercent() override
-        {
-             if (max17048 == nullptr) return 0;
-            return max17048->getBusBatteryPercent();
-        }
+        return max17048->runOnce(nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MAX17048].second);
+    }
 
-        /**
-         * The raw voltage of the battery in millivolts, or NAN if unknown
-         */
-        virtual uint16_t getBattVoltage() override
-        {
-            if (max17048 == nullptr) return 0;
-            return max17048->getBusVoltageMv();
-        }
+    /**
+     * Battery state of charge, from 0 to 100 or -1 for unknown
+     */
+    virtual int getBatteryPercent() override
+    {
+        if (max17048 == nullptr)
+            return 0;
+        return max17048->getBusBatteryPercent();
+    }
 
-        /**
-         * return true if there is a battery installed in this unit
-         */
-        virtual bool isBatteryConnect() override
-        {
-            if (max17048 == nullptr) return false;
-            return max17048->isBatteryConnected();
-        }
+    /**
+     * The raw voltage of the battery in millivolts, or NAN if unknown
+     */
+    virtual uint16_t getBattVoltage() override
+    {
+        if (max17048 == nullptr)
+            return 0;
+        return max17048->getBusVoltageMv();
+    }
 
-        /**
-         * return true if there is an external power source detected
-         */
-        virtual bool isVbusIn() override
-        {
-            if (max17048 == nullptr) return false;
-            return max17048->isExternallyPowered();
-        }
+    /**
+     * return true if there is a battery installed in this unit
+     */
+    virtual bool isBatteryConnect() override
+    {
+        if (max17048 == nullptr)
+            return false;
+        return max17048->isBatteryConnected();
+    }
 
-        /**
-         * return true if the battery is currently charging
-         */
-        virtual bool isCharging() override
-        {
-            if (max17048 == nullptr) return false;
-            return max17048->isBatteryCharging();
-        }
+    /**
+     * return true if there is an external power source detected
+     */
+    virtual bool isVbusIn() override
+    {
+        if (max17048 == nullptr)
+            return false;
+        return max17048->isExternallyPowered();
+    }
+
+    /**
+     * return true if the battery is currently charging
+     */
+    virtual bool isCharging() override
+    {
+        if (max17048 == nullptr)
+            return false;
+        return max17048->isBatteryCharging();
+    }
 };
 
 LipoBatteryLevel lipoLevel;
@@ -1146,5 +1152,8 @@ bool Power::lipoInit()
 /**
  * The I2C MAX17048 Lipo battery level sensor is unavailable - default to AnalogBatteryLevel
  */
-bool Power::lipoInit() { return false; }
+bool Power::lipoInit()
+{
+    return false;
+}
 #endif

@@ -20,8 +20,8 @@
 #include "VoltageSensor.h"
 #endif
 
-#include <Adafruit_MAX1704X.h>
 #include "meshUtils.h"
+#include <Adafruit_MAX1704X.h>
 #include <queue>
 
 struct MAX17048ChargeSample {
@@ -74,7 +74,6 @@ class MAX17048Singleton : public Adafruit_MAX17048
 
     // Returns true if there is bus or external power connected
     bool isExternallyPowered();
-
 };
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR || !MESHTASTIC_EXCLUDE_POWER_TELEMETRY || USE_POWERMON

@@ -137,10 +137,10 @@ uint8_t MAX17048Singleton::getBusBatteryPercent()
 
 uint16_t MAX17048Singleton::getTimeToGoSecs()
 {
-    float rate = chargeRate();                      // charge/discharge rate in percent/hr
-    float soc = cellPercent();                      // state of charge in percent 0 to 100
-    soc = clamp(soc, 0.0f, 100.0f);                 // clamp soc between 0 and 100%
-    float ttg = ((100.0f - soc) / rate) * 3600.0f;  // calculate seconds to charge/discharge
+    float rate = chargeRate();                     // charge/discharge rate in percent/hr
+    float soc = cellPercent();                     // state of charge in percent 0 to 100
+    soc = clamp(soc, 0.0f, 100.0f);                // clamp soc between 0 and 100%
+    float ttg = ((100.0f - soc) / rate) * 3600.0f; // calculate seconds to charge/discharge
     LOG_DEBUG("MAX17048Sensor::getTimeToGoSecs %.0f seconds\n", ttg);
     return (uint16_t)ttg;
 }
