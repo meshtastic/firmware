@@ -26,7 +26,6 @@
 #include "Sensor/BMP3XXSensor.h"
 #include "Sensor/DFRobotLarkSensor.h"
 #include "Sensor/LPS22HBSensor.h"
-#include "Sensor/MAX17048Sensor.h"
 #include "Sensor/MCP9808Sensor.h"
 #include "Sensor/MLX90632Sensor.h"
 #include "Sensor/NAU7802Sensor.h"
@@ -38,6 +37,7 @@
 #include "Sensor/T1000xSensor.h"
 #include "Sensor/TSL2591Sensor.h"
 #include "Sensor/VEML7700Sensor.h"
+#include "Sensor/MAX17048Sensor.h"
 
 BMP085Sensor bmp085Sensor;
 BMP280Sensor bmp280Sensor;
@@ -57,6 +57,7 @@ MLX90632Sensor mlx90632Sensor;
 DFRobotLarkSensor dfRobotLarkSensor;
 NAU7802Sensor nau7802Sensor;
 BMP3XXSensor bmp3xxSensor;
+MAX17048Sensor max17048Sensor;
 #ifdef T1000X_SENSOR_EN
 T1000xSensor t1000xSensor;
 #endif
@@ -83,7 +84,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
     */
 
     // moduleConfig.telemetry.environment_measurement_enabled = 1;
-    //  moduleConfig.telemetry.environment_screen_enabled = 1;
+    // moduleConfig.telemetry.environment_screen_enabled = 1;
     // moduleConfig.telemetry.environment_update_interval = 15;
 
     if (!(moduleConfig.telemetry.environment_measurement_enabled || moduleConfig.telemetry.environment_screen_enabled)) {

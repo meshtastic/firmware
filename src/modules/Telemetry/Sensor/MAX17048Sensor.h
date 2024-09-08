@@ -5,10 +5,7 @@
 
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR || !MESHTASTIC_EXCLUDE_POWER_TELEMETRY || !MESHTASTIC_EXCLUDE_POWERMON
-
-// Samples to store in a buffer to determine if the battery is charging or
-// discharging
+// Samples to store in a buffer to determine if the battery is charging or discharging
 #define MAX17048_CHARGING_SAMPLES 3
 
 // Threshold to determine if the battery is on charge, in percent/hour
@@ -17,11 +14,14 @@
 // Threshold to determine if the board has bus power
 #define MAX17048_BUS_POWER_VOLTS 4.195f
 
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR || !MESHTASTIC_EXCLUDE_POWER_TELEMETRY || USE_POWERMON
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
 #include "VoltageSensor.h"
-#include "meshUtils.h"
+#endif
+
 #include <Adafruit_MAX1704X.h>
+#include "meshUtils.h"
 #include <queue>
 
 struct MAX17048ChargeSample {
@@ -55,11 +55,29 @@ class MAX17048Singleton : public Adafruit_MAX17048
     void operator=(const MAX17048Singleton &) = delete;
 
     // Initialise the sensor (not thread safe)
-    bool runOnce(TwoWire *theWire = &Wire);
+    virtual bool runOnce(TwoWire *theWire = &Wire);
+
+    // Get the current bus voltage
+    uint16_t getBusVoltageMv();
+
+    // Get the state of charge in percent 0 to 100
+    uint8_t getBusBatteryPercent();
+
+    // Calculate the seconds to charge/discharge
+    uint16_t getTimeToGoSecs();
 
     // Returns true if the battery is currently on charge (not thread safe)
     bool isBatteryCharging();
+
+    // Returns true if a batery is actually connected
+    bool isBatteryConnected();
+
+    // Returns true if there is bus or external power connected
+    bool isExternallyPowered();
+
 };
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR || !MESHTASTIC_EXCLUDE_POWER_TELEMETRY || USE_POWERMON
 
 class MAX17048Sensor : public TelemetrySensor, VoltageSensor
 {
@@ -80,21 +98,6 @@ class MAX17048Sensor : public TelemetrySensor, VoltageSensor
 
     // Get the current bus voltage
     virtual uint16_t getBusVoltageMv() override;
-
-    // Get the state of charge in percent 0 to 100
-    virtual uint8_t getBusBatteryPercent();
-
-    // Calculate the seconds to charge/discharge
-    virtual uint16_t getTimeToGoSecs();
-
-    // Returns true if the battery is currently charging
-    virtual bool isBatteryCharging();
-
-    // Returns true if the battery is currently connected
-    virtual bool isBatteryConnected();
-
-    // Returns true if there is bus or external power connected
-    virtual bool isExternallyPowered();
 };
 
 #endif

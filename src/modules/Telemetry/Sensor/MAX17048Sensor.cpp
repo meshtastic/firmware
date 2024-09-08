@@ -1,8 +1,8 @@
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR || !MESHTASTIC_EXCLUDE_POWER_TELEMETRY || !MESHTASTIC_EXCLUDE_POWERMON
-
 #include "MAX17048Sensor.h"
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR || !MESHTASTIC_EXCLUDE_POWER_TELEMETRY || USE_POWERMON
 
 MAX17048Sensor::MAX17048Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_MAX17048, "MAX17048") {}
 
@@ -35,7 +35,7 @@ bool MAX17048Sensor::getMetrics(meshtastic_Telemetry *measurement)
     float volts = max17048->cellVoltage();
     if (isnan(volts)) {
         LOG_DEBUG("MAX17048Sensor::getMetrics battery is disconnected\n");
-        return true;
+        return false;
     }
 
     float rate = max17048->chargeRate(); // charge/discharge rate in percent/hr
@@ -58,60 +58,10 @@ bool MAX17048Sensor::getMetrics(meshtastic_Telemetry *measurement)
 
 uint16_t MAX17048Sensor::getBusVoltageMv()
 {
-    float volts = max17048->cellVoltage();
-    if (isnan(volts)) {
-        LOG_DEBUG("MAX17048Sensor::getMetrics battery is disconnected\n");
-        return 0;
-    }
-    LOG_DEBUG("MAX17048Sensor::getBusVoltageMv %.3fmV\n", volts);
-    return (uint16_t)(volts * 1000.0f);
-}
+    return max17048->getBusVoltageMv();
+};
 
-uint8_t MAX17048Sensor::getBusBatteryPercent()
-{
-    float soc = max17048->cellPercent();
-    LOG_DEBUG("MAX17048Sensor::getBusBatteryPercent %.1f%%\n", soc);
-    return clamp(static_cast<uint8_t>(round(soc)), static_cast<uint8_t>(0), static_cast<uint8_t>(100));
-}
-
-uint16_t MAX17048Sensor::getTimeToGoSecs()
-{
-    float rate = max17048->chargeRate();           // charge/discharge rate in percent/hr
-    float soc = max17048->cellPercent();           // state of charge in percent 0 to 100
-    soc = clamp(soc, 0.0f, 100.0f);                // clamp soc between 0 and 100%
-    float ttg = ((100.0f - soc) / rate) * 3600.0f; // calculate seconds to charge/discharge
-    LOG_DEBUG("MAX17048Sensor::getTimeToGoSecs %.0f seconds\n", ttg);
-    return (uint16_t)ttg;
-}
-
-bool MAX17048Sensor::isBatteryCharging()
-{
-    return max17048->isBatteryCharging();
-}
-
-bool MAX17048Sensor::isBatteryConnected()
-{
-    float volts = max17048->cellVoltage();
-    if (isnan(volts)) {
-        LOG_DEBUG("MAX17048Sensor::isBatteryConnected battery is disconnected\n");
-        return false;
-    }
-
-    // if a valid voltage is returned, then battery must be connected
-    return true;
-}
-
-bool MAX17048Sensor::isExternallyPowered()
-{
-    float volts = max17048->cellVoltage();
-    if (isnan(volts)) {
-        LOG_DEBUG("MAX17048Sensor::isExternallyPowered battery is disconnected\n");
-        return false;
-    }
-    // if the bus voltage is over MAX17048_BUS_POWER_VOLTS, then the battery is
-    // charging
-    return volts >= MAX17048_BUS_POWER_VOLTS;
-}
+#endif
 
 MAX17048Singleton *MAX17048Singleton::GetInstance()
 {
@@ -136,7 +86,7 @@ bool MAX17048Singleton::isBatteryCharging()
 {
     float volts = cellVoltage();
     if (isnan(volts)) {
-        LOG_DEBUG("MAX17048Sensor::isCharging battery is disconnected\n");
+        LOG_DEBUG("MAX17048Sensor::isBatteryCharging battery is disconnected\n");
         return 0;
     }
 
@@ -162,9 +112,59 @@ bool MAX17048Singleton::isBatteryCharging()
         chargeState = MAX17048ChargeState::IDLE;
     }
 
-    LOG_DEBUG("MAX17048Sensor::isCharging %s volts: %.3f soc: %.3f rate: %.3f\n", chargeLabels[chargeState], volts,
+    LOG_DEBUG("MAX17048Sensor::isBatteryCharging %s volts: %.3f soc: %.3f rate: %.3f\n", chargeLabels[chargeState], volts,
               sample.cellPercent, sample.chargeRate);
     return chargeState == MAX17048ChargeState::IMPORT;
 }
 
-#endif
+uint16_t MAX17048Singleton::getBusVoltageMv()
+{
+    float volts = cellVoltage();
+    if (isnan(volts)) {
+        LOG_DEBUG("MAX17048Sensor::getBusVoltageMv battery is disconnected\n");
+        return 0;
+    }
+    LOG_DEBUG("MAX17048Sensor::getBusVoltageMv %.3fmV\n", volts);
+    return (uint16_t)(volts * 1000.0f);
+}
+
+uint8_t MAX17048Singleton::getBusBatteryPercent()
+{
+    float soc = cellPercent();
+    LOG_DEBUG("MAX17048Sensor::getBusBatteryPercent %.1f%%\n", soc);
+    return clamp(static_cast<uint8_t>(round(soc)), static_cast<uint8_t>(0), static_cast<uint8_t>(100));
+}
+
+uint16_t MAX17048Singleton::getTimeToGoSecs()
+{
+    float rate = chargeRate();                      // charge/discharge rate in percent/hr
+    float soc = cellPercent();                      // state of charge in percent 0 to 100
+    soc = clamp(soc, 0.0f, 100.0f);                 // clamp soc between 0 and 100%
+    float ttg = ((100.0f - soc) / rate) * 3600.0f;  // calculate seconds to charge/discharge
+    LOG_DEBUG("MAX17048Sensor::getTimeToGoSecs %.0f seconds\n", ttg);
+    return (uint16_t)ttg;
+}
+
+bool MAX17048Singleton::isBatteryConnected()
+{
+    float volts = cellVoltage();
+    if (isnan(volts)) {
+        LOG_DEBUG("MAX17048Sensor::isBatteryConnected battery is disconnected\n");
+        return false;
+    }
+
+    // if a valid voltage is returned, then battery must be connected
+    return true;
+}
+
+bool MAX17048Singleton::isExternallyPowered()
+{
+    float volts = cellVoltage();
+    if (isnan(volts)) {
+        LOG_DEBUG("MAX17048Sensor::isExternallyPowered battery is disconnected\n");
+        return false;
+    }
+    // if the bus voltage is over MAX17048_BUS_POWER_VOLTS, then the battery is
+    // charging
+    return volts >= MAX17048_BUS_POWER_VOLTS;
+}
