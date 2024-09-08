@@ -297,7 +297,6 @@ class GPS : private concurrency::OSThread
     virtual int32_t runOnce() override;
 
     // Get GNSS model
-    String getNMEA();
     GnssModel_t probe(int serialSpeed);
 
     // delay counter to allow more sats before fixed position stops GPS thread
