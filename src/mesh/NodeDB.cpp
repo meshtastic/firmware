@@ -285,6 +285,7 @@ void NodeDB::installDefaultConfig()
     config.lora.tx_enabled =
         true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
     config.lora.override_duty_cycle = false;
+    config.lora.config_ok_to_mqtt = false;
 #ifdef CONFIG_LORA_REGION_USERPREFS
     config.lora.region = CONFIG_LORA_REGION_USERPREFS;
 #else
@@ -361,6 +362,9 @@ void NodeDB::installDefaultConfig()
 
 #ifdef DISPLAY_FLIP_SCREEN
     config.display.flip_screen = true;
+#endif
+#ifdef RAK4630
+    config.display.wake_on_tap_or_motion = true;
 #endif
 #ifdef T_WATCH_S3
     config.display.screen_on_secs = 30;

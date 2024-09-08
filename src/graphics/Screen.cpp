@@ -1768,6 +1768,11 @@ void Screen::forceDisplay(bool forceUiUpdate)
 #ifdef USE_EINK
     // If requested, make sure queued commands are run, and UI has rendered a new frame
     if (forceUiUpdate) {
+        // Force a display refresh, in addition to the UI update
+        // Changing the GPS status bar icon apparently doesn't register as a change in image
+        // (False negative of the image hashing algorithm used to skip identical frames)
+        EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST);
+
         // No delay between UI frame rendering
         setFastFramerate();
 
