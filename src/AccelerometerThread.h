@@ -205,11 +205,7 @@ class AccelerometerThread : public concurrency::OSThread
             stk8baxx.STK8xxx_Anymotion_init();
             pinMode(STK8XXX_INT, INPUT_PULLUP);
             attachInterrupt(
-                digitalPinToInterrupt(STK8XXX_INT),
-                [] {
-                    STK_IRQ = true;
-                },
-                RISING);
+                digitalPinToInterrupt(STK8XXX_INT), [] { STK_IRQ = true; }, RISING);
 #endif
         } else if (acceleremoter_type == ScanI2C::DeviceType::LIS3DH && lis.begin(accelerometer_found.address)) {
             LOG_DEBUG("LIS3DH initializing\n");
