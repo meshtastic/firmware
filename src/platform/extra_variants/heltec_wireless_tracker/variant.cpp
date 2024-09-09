@@ -12,7 +12,12 @@ void lateInitVariant()
     // LOG_DEBUG("Heltec tracker initVariant\n");
 #ifdef VEXT_ENABLE
     GpioPin *hwEnable = new GpioHwPin(VEXT_ENABLE);
+
+#ifdef MESHTASTIC_EXCLUDE_GPS
+    GpioVirtPin *virtGpsEnable = new GpioVirtPin();
+#else
     GpioVirtPin *virtGpsEnable = gps ? gps->enablePin : new GpioVirtPin();
+#endif
 
     // On this board we are actually using the backlightEnable signal to already be controlling a physical enable to the
     // display controller.  But we'd _ALSO_ like to have that signal drive a virtual GPIO.  So nest it as needed.
