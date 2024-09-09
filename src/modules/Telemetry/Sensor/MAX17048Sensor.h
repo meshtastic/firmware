@@ -3,7 +3,7 @@
 #ifndef MAX17048_SENSOR_H
 #define MAX17048_SENSOR_H
 
-#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO)
+#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 
 #include "configuration.h"
 
@@ -70,7 +70,7 @@ class MAX17048Singleton : public Adafruit_MAX17048
     // Returns true if the battery is currently on charge (not thread safe)
     bool isBatteryCharging();
 
-    // Returns true if a batery is actually connected
+    // Returns true if a battery is actually connected
     bool isBatteryConnected();
 
     // Returns true if there is bus or external power connected

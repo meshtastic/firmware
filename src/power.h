@@ -43,10 +43,13 @@ extern RTC_NOINIT_ATTR uint64_t RTC_reg_b;
 #include "modules/Telemetry/Sensor/INA219Sensor.h"
 #include "modules/Telemetry/Sensor/INA260Sensor.h"
 #include "modules/Telemetry/Sensor/INA3221Sensor.h"
-#include "modules/Telemetry/Sensor/MAX17048Sensor.h"
 extern INA260Sensor ina260Sensor;
 extern INA219Sensor ina219Sensor;
 extern INA3221Sensor ina3221Sensor;
+#endif
+
+#if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#include "modules/Telemetry/Sensor/MAX17048Sensor.h"
 extern MAX17048Sensor max17048Sensor;
 #endif
 
@@ -84,7 +87,7 @@ class Power : private concurrency::OSThread
     bool axpChipInit();
     /// Setup a simple ADC input based battery sensor
     bool analogInit();
-    /// Setup a MAX17048 Lipo battery level sensor
+    /// Setup a Lipo battery level sensor
     bool lipoInit();
 
   private:

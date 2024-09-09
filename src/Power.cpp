@@ -75,7 +75,7 @@ INA219Sensor ina219Sensor;
 INA3221Sensor ina3221Sensor;
 #endif
 
-#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO)
+#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 #include "modules/Telemetry/Sensor/MAX17048Sensor.h"
 #include <utility>
 extern std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1];
@@ -1060,7 +1060,7 @@ bool Power::axpChipInit()
 #endif
 }
 
-#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO)
+#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 
 /**
  * Wrapper class for an I2C MAX17048 Lipo battery sensor. If there is no

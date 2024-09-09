@@ -1,6 +1,6 @@
 #include "MAX17048Sensor.h"
 
-#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO)
+#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 
 MAX17048Singleton *MAX17048Singleton::GetInstance()
 {
