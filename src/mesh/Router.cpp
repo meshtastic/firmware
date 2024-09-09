@@ -378,6 +378,8 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
         // parsing was successful
         p->which_payload_variant = meshtastic_MeshPacket_decoded_tag; // change type to decoded
         p->channel = chIndex;                                         // change to store the index instead of the hash
+        if (p->decoded.has_bitfield)
+            p->decoded.want_response |= p->decoded.bitfield & BITFIELD_WANT_RESPONSE_MASK;
 
         /* Not actually ever used.
         // Decompress if needed. jm
@@ -424,6 +426,12 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+        if (p->from == nodeDB->getNodeNum()) {
+            p->decoded.has_bitfield = true;
+            p->decoded.bitfield |= (config.lora.config_ok_to_mqtt << BITFIELD_OK_TO_MQTT_SHIFT);
+            p->decoded.bitfield |= (p->decoded.want_response << BITFIELD_WANT_RESPONSE_SHIFT);
+        }
+
         size_t numbytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_Data_msg, &p->decoded);
 
         /* Not actually used, so save the cycles
