@@ -1,3 +1,4 @@
+#ifndef NRF52_USE_JSON
 #include "MeshPacketSerializer.h"
 #include "JSON.h"
 #include "NodeDB.h"
@@ -354,3 +355,4 @@ std::string MeshPacketSerializer::JsonSerializeEncrypted(const meshtastic_MeshPa
     delete value;
     return jsonStr;
 }
+#endif
