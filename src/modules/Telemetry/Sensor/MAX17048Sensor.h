@@ -3,9 +3,9 @@
 #ifndef MAX17048_SENSOR_H
 #define MAX17048_SENSOR_H
 
-#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
-
 #include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
 
 // Samples to store in a buffer to determine if the battery is charging or discharging
 #define MAX17048_CHARGING_SAMPLES 3
@@ -19,7 +19,6 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
 #include "VoltageSensor.h"
-#endif
 
 #include "meshUtils.h"
 #include <Adafruit_MAX1704X.h>
@@ -99,6 +98,8 @@ class MAX17048Sensor : public TelemetrySensor, VoltageSensor
     // Get the current bus voltage
     virtual uint16_t getBusVoltageMv() override;
 };
+
+#endif
 
 #endif
 
