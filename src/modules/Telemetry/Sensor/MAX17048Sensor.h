@@ -3,6 +3,8 @@
 #ifndef MAX17048_SENSOR_H
 #define MAX17048_SENSOR_H
 
+#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO)
+
 #include "configuration.h"
 
 // Samples to store in a buffer to determine if the battery is charging or discharging
@@ -14,7 +16,6 @@
 // Threshold to determine if the board has bus power
 #define MAX17048_BUS_POWER_VOLTS 4.195f
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR || !MESHTASTIC_EXCLUDE_POWER_TELEMETRY || USE_POWERMON
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "TelemetrySensor.h"
 #include "VoltageSensor.h"
@@ -76,7 +77,7 @@ class MAX17048Singleton : public Adafruit_MAX17048
     bool isExternallyPowered();
 };
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR || !MESHTASTIC_EXCLUDE_POWER_TELEMETRY || USE_POWERMON
+#if (HAS_TELEMETRY && (!MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR || !MESHTASTIC_EXCLUDE_POWER_TELEMETRY))
 
 class MAX17048Sensor : public TelemetrySensor, VoltageSensor
 {

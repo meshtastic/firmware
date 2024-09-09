@@ -1,67 +1,6 @@
-#include "configuration.h"
-
 #include "MAX17048Sensor.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR || !MESHTASTIC_EXCLUDE_POWER_TELEMETRY || USE_POWERMON
-
-MAX17048Sensor::MAX17048Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_MAX17048, "MAX17048") {}
-
-int32_t MAX17048Sensor::runOnce()
-{
-    if (isInitialized()) {
-        LOG_INFO("Init sensor: %s is already initialised\n", sensorName);
-        return true;
-    }
-
-    LOG_INFO("Init sensor: %s\n", sensorName);
-    if (!hasSensor()) {
-        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
-    }
-
-    // Get a singleton instance and initialise the max17048
-    if (max17048 == nullptr) {
-        max17048 = MAX17048Singleton::GetInstance();
-    }
-    status = max17048->runOnce(nodeTelemetrySensorsMap[sensorType].second);
-    return initI2CSensor();
-}
-
-void MAX17048Sensor::setup() {}
-
-bool MAX17048Sensor::getMetrics(meshtastic_Telemetry *measurement)
-{
-    LOG_DEBUG("MAX17048Sensor::getMetrics id: %i\n", measurement->which_variant);
-
-    float volts = max17048->cellVoltage();
-    if (isnan(volts)) {
-        LOG_DEBUG("MAX17048Sensor::getMetrics battery is disconnected\n");
-        return false;
-    }
-
-    float rate = max17048->chargeRate(); // charge/discharge rate in percent/hr
-    float soc = max17048->cellPercent(); // state of charge in percent 0 to 100
-    soc = clamp(soc, 0.0f, 100.0f);      // clamp soc between 0 and 100%
-    float ttg = (100.0f - soc) / rate;   // calculate hours to charge/discharge
-
-    LOG_DEBUG("MAX17048Sensor::getMetrics volts: %.3fV soc: %.1f%% ttg: %.1f hours\n", volts, soc, ttg);
-    if ((int)measurement->which_variant == meshtastic_Telemetry_power_metrics_tag) {
-        measurement->variant.power_metrics.has_ch1_voltage = true;
-        measurement->variant.power_metrics.ch1_voltage = volts;
-    } else if ((int)measurement->which_variant == meshtastic_Telemetry_device_metrics_tag) {
-        measurement->variant.device_metrics.has_battery_level = true;
-        measurement->variant.device_metrics.has_voltage = true;
-        measurement->variant.device_metrics.battery_level = static_cast<uint32_t>(round(soc));
-        measurement->variant.device_metrics.voltage = volts;
-    }
-    return true;
-}
-
-uint16_t MAX17048Sensor::getBusVoltageMv()
-{
-    return max17048->getBusVoltageMv();
-};
-
-#endif
+#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO)
 
 MAX17048Singleton *MAX17048Singleton::GetInstance()
 {
@@ -168,3 +107,66 @@ bool MAX17048Singleton::isExternallyPowered()
     // charging
     return volts >= MAX17048_BUS_POWER_VOLTS;
 }
+
+#if (HAS_TELEMETRY && (!MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR || !MESHTASTIC_EXCLUDE_POWER_TELEMETRY))
+
+MAX17048Sensor::MAX17048Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_MAX17048, "MAX17048") {}
+
+int32_t MAX17048Sensor::runOnce()
+{
+    if (isInitialized()) {
+        LOG_INFO("Init sensor: %s is already initialised\n", sensorName);
+        return true;
+    }
+
+    LOG_INFO("Init sensor: %s\n", sensorName);
+    if (!hasSensor()) {
+        return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
+    }
+
+    // Get a singleton instance and initialise the max17048
+    if (max17048 == nullptr) {
+        max17048 = MAX17048Singleton::GetInstance();
+    }
+    status = max17048->runOnce(nodeTelemetrySensorsMap[sensorType].second);
+    return initI2CSensor();
+}
+
+void MAX17048Sensor::setup() {}
+
+bool MAX17048Sensor::getMetrics(meshtastic_Telemetry *measurement)
+{
+    LOG_DEBUG("MAX17048Sensor::getMetrics id: %i\n", measurement->which_variant);
+
+    float volts = max17048->cellVoltage();
+    if (isnan(volts)) {
+        LOG_DEBUG("MAX17048Sensor::getMetrics battery is disconnected\n");
+        return false;
+    }
+
+    float rate = max17048->chargeRate(); // charge/discharge rate in percent/hr
+    float soc = max17048->cellPercent(); // state of charge in percent 0 to 100
+    soc = clamp(soc, 0.0f, 100.0f);      // clamp soc between 0 and 100%
+    float ttg = (100.0f - soc) / rate;   // calculate hours to charge/discharge
+
+    LOG_DEBUG("MAX17048Sensor::getMetrics volts: %.3fV soc: %.1f%% ttg: %.1f hours\n", volts, soc, ttg);
+    if ((int)measurement->which_variant == meshtastic_Telemetry_power_metrics_tag) {
+        measurement->variant.power_metrics.has_ch1_voltage = true;
+        measurement->variant.power_metrics.ch1_voltage = volts;
+    } else if ((int)measurement->which_variant == meshtastic_Telemetry_device_metrics_tag) {
+        measurement->variant.device_metrics.has_battery_level = true;
+        measurement->variant.device_metrics.has_voltage = true;
+        measurement->variant.device_metrics.battery_level = static_cast<uint32_t>(round(soc));
+        measurement->variant.device_metrics.voltage = volts;
+    }
+    return true;
+}
+
+uint16_t MAX17048Sensor::getBusVoltageMv()
+{
+    return max17048->getBusVoltageMv();
+};
+
+#endif
+
+#endif

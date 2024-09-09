@@ -32,10 +32,6 @@
 #endif
 #endif
 
-#if !MESHTASTIC_EXCLUDE_I2C
-#include "modules/Telemetry/Sensor/MAX17048Sensor.h"
-#endif
-
 #ifndef DELAY_FOREVER
 #define DELAY_FOREVER portMAX_DELAY
 #endif
@@ -77,6 +73,15 @@ static const uint8_t ext_chrg_detect_value = EXT_CHRG_DETECT_VALUE;
 INA260Sensor ina260Sensor;
 INA219Sensor ina219Sensor;
 INA3221Sensor ina3221Sensor;
+#endif
+
+#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO)
+#include "modules/Telemetry/Sensor/MAX17048Sensor.h"
+#include <utility>
+extern std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1];
+#if HAS_TELEMETRY && (!MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR || !MESHTASTIC_EXCLUDE_POWER_TELEMETRY)
+MAX17048Sensor max17048Sensor;
+#endif
 #endif
 
 #if HAS_RAKPROT && !defined(ARCH_PORTDUINO)
@@ -1055,7 +1060,7 @@ bool Power::axpChipInit()
 #endif
 }
 
-#if !MESHTASTIC_EXCLUDE_I2C
+#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO)
 
 /**
  * Wrapper class for an I2C MAX17048 Lipo battery sensor. If there is no
