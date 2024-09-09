@@ -9,7 +9,7 @@ CardKbI2cImpl::CardKbI2cImpl() : KbI2cBase("cardKB") {}
 
 void CardKbI2cImpl::init()
 {
-#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO)
+#ifndef ARCH_PORTDUINO
     if (cardkb_found.address == 0x00) {
         LOG_DEBUG("Rescanning for I2C keyboard\n");
         uint8_t i2caddr_scan[] = {CARDKB_ADDR, TDECK_KB_ADDR, BBQ10_KB_ADDR};
