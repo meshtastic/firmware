@@ -27,7 +27,7 @@ bool MAX17048Singleton::isBatteryCharging()
 {
     float volts = cellVoltage();
     if (isnan(volts)) {
-        LOG_DEBUG("MAX17048Sensor::isBatteryCharging battery is disconnected\n");
+        LOG_DEBUG("MAX17048Sensor::isBatteryCharging is not connected\n");
         return 0;
     }
 
@@ -62,7 +62,7 @@ uint16_t MAX17048Singleton::getBusVoltageMv()
 {
     float volts = cellVoltage();
     if (isnan(volts)) {
-        LOG_DEBUG("MAX17048Sensor::getBusVoltageMv battery is disconnected\n");
+        LOG_DEBUG("MAX17048Sensor::getBusVoltageMv is not connected\n");
         return 0;
     }
     LOG_DEBUG("MAX17048Sensor::getBusVoltageMv %.3fmV\n", volts);
@@ -90,7 +90,7 @@ bool MAX17048Singleton::isBatteryConnected()
 {
     float volts = cellVoltage();
     if (isnan(volts)) {
-        LOG_DEBUG("MAX17048Sensor::isBatteryConnected battery is disconnected\n");
+        LOG_DEBUG("MAX17048Sensor::isBatteryConnected is not connected\n");
         return false;
     }
 
@@ -102,13 +102,12 @@ bool MAX17048Singleton::isExternallyPowered()
 {
     float volts = cellVoltage();
     if (isnan(volts)) {
-        LOG_DEBUG("MAX17048Sensor::isExternallyPowered battery is not connected\n");
+        LOG_DEBUG("MAX17048Sensor::isExternallyPowered is not connected\n");
         return false;
     }
     // if the bus voltage is over MAX17048_BUS_POWER_VOLTS, then the external power
     // is assumed to be connected
-    LOG_DEBUG("MAX17048Sensor::isExternallyPowered battery %s connected\n",
-        volts >= MAX17048_BUS_POWER_VOLTS ? "is" : "is not");
+    LOG_DEBUG("MAX17048Sensor::isExternallyPowered %s connected\n", volts >= MAX17048_BUS_POWER_VOLTS ? "is" : "is not");
     return volts >= MAX17048_BUS_POWER_VOLTS;
 }
 
@@ -144,7 +143,7 @@ bool MAX17048Sensor::getMetrics(meshtastic_Telemetry *measurement)
 
     float volts = max17048->cellVoltage();
     if (isnan(volts)) {
-        LOG_DEBUG("MAX17048Sensor::getMetrics battery is disconnected\n");
+        LOG_DEBUG("MAX17048Sensor::getMetrics battery is not connected\n");
         return false;
     }
 
