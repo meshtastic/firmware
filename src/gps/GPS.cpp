@@ -1019,7 +1019,7 @@ void GPS::down()
     LOG_DEBUG("%us until next search\n", sleepTime / 1000);
 
     // If update interval less than 10 seconds, no attempt to sleep
-    if (updateInterval <= 10 * 1000UL)
+    if (updateInterval <= 10 * 1000UL || sleepTime == 0)
         setPowerState(GPS_IDLE);
 
     else {
