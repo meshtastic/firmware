@@ -18,7 +18,9 @@ MAX17048Singleton *MAX17048Singleton::pinstance{nullptr};
 
 bool MAX17048Singleton::runOnce(TwoWire *theWire)
 {
-    return begin(theWire);
+    initialized = begin(theWire);
+    LOG_DEBUG("MAX17048Sensor::runOnce %s\n", initialized ? "began ok" : "begin failed");
+    return initialized;
 }
 
 bool MAX17048Singleton::isBatteryCharging()
@@ -100,11 +102,13 @@ bool MAX17048Singleton::isExternallyPowered()
 {
     float volts = cellVoltage();
     if (isnan(volts)) {
-        LOG_DEBUG("MAX17048Sensor::isExternallyPowered battery is disconnected\n");
+        LOG_DEBUG("MAX17048Sensor::isExternallyPowered battery is not connected\n");
         return false;
     }
-    // if the bus voltage is over MAX17048_BUS_POWER_VOLTS, then the battery is
-    // charging
+    // if the bus voltage is over MAX17048_BUS_POWER_VOLTS, then the external power
+    // is assumed to be connected
+    LOG_DEBUG("MAX17048Sensor::isExternallyPowered battery %s connected\n",
+        volts >= MAX17048_BUS_POWER_VOLTS ? "is" : "is not");
     return volts >= MAX17048_BUS_POWER_VOLTS;
 }
 

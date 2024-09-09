@@ -36,6 +36,7 @@ class MAX17048Singleton : public Adafruit_MAX17048
 {
   private:
     static MAX17048Singleton *pinstance;
+    bool initialized = false;
     std::queue<MAX17048ChargeSample> chargeSamples;
     MAX17048ChargeState chargeState = IDLE;
     const String chargeLabels[3] = {F("idle"), F("export"), F("import")};
@@ -65,6 +66,9 @@ class MAX17048Singleton : public Adafruit_MAX17048
 
     // Calculate the seconds to charge/discharge
     uint16_t getTimeToGoSecs();
+
+    // Returns true if the battery sensor has started
+    inline virtual bool isInitialised() { return initialized; };
 
     // Returns true if the battery is currently on charge (not thread safe)
     bool isBatteryCharging();
