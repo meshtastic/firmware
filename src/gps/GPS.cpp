@@ -166,18 +166,21 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
             b = _serial_gps->read();
 
 #ifdef GPS_DEBUG
-            LOG_DEBUG("%02X", (char *)buffer);
+            LOG_DEBUG("%c", (b >= 32 && b <= 126) ? b : '.');
 #endif
             buffer[bytesRead] = b;
             bytesRead++;
             if ((bytesRead == 767) || (b == '\r')) {
                 if (strnstr((char *)buffer, message, bytesRead) != nullptr) {
 #ifdef GPS_DEBUG
-                    LOG_DEBUG("\r");
+                    LOG_DEBUG("\r\nFound: %s\r\n", message); // Log the found message
 #endif
                     return GNSS_RESPONSE_OK;
                 } else {
                     bytesRead = 0;
+#ifdef GPS_DEBUG
+                    LOG_DEBUG("\r\n");
+#endif
                 }
             }
         }
