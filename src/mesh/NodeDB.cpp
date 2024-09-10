@@ -637,6 +637,7 @@ void NodeDB::pickNewNodeNum()
 {
     NodeNum nodeNum = myNodeInfo.my_node_num;
     getMacAddr(ourMacAddr); // Make sure ourMacAddr is set
+    LOG_WARN("0x%x%x%x%x%x%x\n", ourMacAddr[0], ourMacAddr[1], ourMacAddr[2], ourMacAddr[3], ourMacAddr[4], ourMacAddr[5]);
     if (nodeNum == 0) {
         // Pick an initial nodenum based on the macaddr
         nodeNum = (ourMacAddr[2] << 24) | (ourMacAddr[3] << 16) | (ourMacAddr[4] << 8) | ourMacAddr[5];
@@ -646,7 +647,8 @@ void NodeDB::pickNewNodeNum()
     while ((nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED) ||
            ((found = getMeshNode(nodeNum)) && memcmp(found->user.macaddr, ourMacAddr, sizeof(ourMacAddr)) != 0)) {
         NodeNum candidate = random(NUM_RESERVED, LONG_MAX); // try a new random choice
-        LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, so trying for 0x%x\n", nodeNum, candidate);
+        LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, by MAC ending in 0x%x%x, so trying for 0x%x\n", nodeNum,
+                 found->user.macaddr[4], found->user.macaddr[5], candidate);
         nodeNum = candidate;
     }
     LOG_DEBUG("Using nodenum 0x%x \n", nodeNum);
