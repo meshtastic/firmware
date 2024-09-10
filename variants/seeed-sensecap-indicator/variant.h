@@ -19,21 +19,20 @@
 #define ST7701_BL 45
 #define ST7701_SPI_HOST SPI2_HOST
 #define ST7701_BACKLIGHT_EN 45
-#define SPI_FREQUENCY 20000000
-#define SPI_READ_FREQUENCY 16000000
+#define SPI_FREQUENCY 12000000
 #define TFT_HEIGHT 480
 #define TFT_WIDTH 480
 #define TFT_OFFSET_X 0
 #define TFT_OFFSET_Y 0
-#define TFT_OFFSET_ROTATION 1
+#define TFT_OFFSET_ROTATION 0
 #define TFT_BL 45
 #define SCREEN_ROTATE
 #define SCREEN_TRANSITION_FRAMERATE 5 // fps
 
-#define HAS_TOUCHSCREEN 3
+#define HAS_TOUCHSCREEN 1
 #define SCREEN_TOUCH_INT (6 | IO_EXPANDER)
 #define SCREEN_TOUCH_RST (7 | IO_EXPANDER)
-#define TOUCH_I2C_PORT 1
+#define TOUCH_I2C_PORT 0
 #define TOUCH_SLAVE_ADDRESS 0x48
 
 // Buzzer
@@ -43,10 +42,8 @@
 #undef GPS_RX_PIN
 #undef GPS_TX_PIN
 
-// disabled until IO_EXPANDER interrupts supported
-#define HAS_RADIO 0
-// #define USE_SX1262
-// #define USE_SX1268
+#define USE_SX1262
+#define USE_SX1268
 
 #define LORA_SCK 41
 #define LORA_MISO 47
@@ -64,4 +61,3 @@
 #define SX126X_BUSY LORA_DIO2
 #define SX126X_RESET LORA_RESET
 #define SX126X_DIO2_AS_RF_SWITCH
-// #define SX126X_DIO3_TCXO_VOLTAGE 1.8
