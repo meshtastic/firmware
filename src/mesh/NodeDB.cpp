@@ -644,13 +644,20 @@ void NodeDB::pickNewNodeNum()
     }
 
     meshtastic_NodeInfoLite *found;
-    while ((nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED) ||
-           ((found = getMeshNode(nodeNum)) && memcmp(found->user.macaddr, ourMacAddr, sizeof(ourMacAddr)) != 0)) {
-        NodeNum candidate = random(NUM_RESERVED, LONG_MAX); // try a new random choice
-        LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, by MAC ending in 0x%x%x%x%x%x%x, so trying for 0x%x\n", nodeNum,
-                 found->user.macaddr[0], found->user.macaddr[1], found->user.macaddr[2], found->user.macaddr[3], found->user.macaddr[4],
-                 found->user.macaddr[5], candidate);
-        nodeNum = candidate;
+    if (found = getMeshNode(nodeNum)) {
+        if (memfll(found->user.macaddr, 0, sizeof(ourMacAddr))) {
+            LOG_ERROR("Found our nodenum in the NodeDB, but with a MAC Address of 0.\n");
+        } else {
+            while ((nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED) ||
+                   ((found = getMeshNode(nodeNum)) && memcmp(found->user.macaddr, ourMacAddr, sizeof(ourMacAddr)) != 0)) {
+                NodeNum candidate = random(NUM_RESERVED, LONG_MAX); // try a new random choice
+                LOG_WARN(
+                    "NOTE! Our desired nodenum 0x%x is invalid or in use, by MAC ending in 0x%x%x%x%x%x%x, so trying for 0x%x\n",
+                    nodeNum, found->user.macaddr[0], found->user.macaddr[1], found->user.macaddr[2], found->user.macaddr[3],
+                    found->user.macaddr[4], found->user.macaddr[5], candidate);
+                nodeNum = candidate;
+            }
+        }
     }
     LOG_DEBUG("Using nodenum 0x%x \n", nodeNum);
 
