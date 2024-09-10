@@ -43,7 +43,10 @@ void readFromRTC()
         t.tm_sec = rtc.getSecond();
         tv.tv_sec = gm_mktime(&t);
         tv.tv_usec = 0;
-        LOG_DEBUG("Read RTC time from RV3028 as %ld\n", tv.tv_sec);
+
+        uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
+        LOG_DEBUG("Read RTC time from RV3028 getTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)\n", t.tm_year + 1900, t.tm_mon + 1,
+                  t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
         timeStartMsec = now;
         zeroOffsetSecs = tv.tv_sec;
         if (currentQuality == RTCQualityNone) {
@@ -71,7 +74,10 @@ void readFromRTC()
         t.tm_sec = tc.second;
         tv.tv_sec = gm_mktime(&t);
         tv.tv_usec = 0;
-        LOG_DEBUG("Read RTC time from PCF8563 as %ld\n", tv.tv_sec);
+
+        uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
+        LOG_DEBUG("Read RTC time from PCF8563 getDateTime as %02d-%02d-%02d %02d:%02d:%02d (%ld)\n", t.tm_year + 1900,
+                  t.tm_mon + 1, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec, printableEpoch);
         timeStartMsec = now;
         zeroOffsetSecs = tv.tv_sec;
         if (currentQuality == RTCQualityNone) {
@@ -81,7 +87,8 @@ void readFromRTC()
 #else
     if (!gettimeofday(&tv, NULL)) {
         uint32_t now = millis();
-        LOG_DEBUG("Read RTC time as %ld\n", tv.tv_sec);
+        uint32_t printableEpoch = tv.tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
+        LOG_DEBUG("Read RTC time as %ld\n", printableEpoch);
         timeStartMsec = now;
         zeroOffsetSecs = tv.tv_sec;
     }
@@ -101,6 +108,7 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
 {
     static uint32_t lastSetMsec = 0;
     uint32_t now = millis();
+    uint32_t printableEpoch = tv->tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
 
     bool shouldSet;
     if (forceUpdate) {
@@ -113,7 +121,7 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
     } else if (q >= RTCQualityNTP && (now - lastSetMsec) > (12 * 60 * 60 * 1000UL)) {
         // Every 12 hrs we will slam in a new GPS or Phone GPS / NTP time, to correct for local RTC clock drift
         shouldSet = true;
-        LOG_DEBUG("Reapplying external time to correct clock drift %ld secs\n", tv->tv_sec);
+        LOG_DEBUG("Reapplying external time to correct clock drift %ld secs\n", printableEpoch);
     } else {
         shouldSet = false;
         LOG_DEBUG("Current RTC quality: %s. Ignoring time of RTC quality of %s\n", RtcName(currentQuality), RtcName(q));
@@ -140,8 +148,8 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
 #endif
             tm *t = gmtime(&tv->tv_sec);
             rtc.setTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_wday, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
-            LOG_DEBUG("RV3028_RTC setTime %02d-%02d-%02d %02d:%02d:%02d %ld\n", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
-                      t->tm_hour, t->tm_min, t->tm_sec, tv->tv_sec);
+            LOG_DEBUG("RV3028_RTC setTime %02d-%02d-%02d %02d:%02d:%02d (%ld)\n", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
+                      t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
         }
 #elif defined(PCF8563_RTC)
         if (rtc_found.address == PCF8563_RTC) {
@@ -154,8 +162,8 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
 #endif
             tm *t = gmtime(&tv->tv_sec);
             rtc.setDateTime(t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
-            LOG_DEBUG("PCF8563_RTC setDateTime %02d-%02d-%02d %02d:%02d:%02d %ld\n", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
-                      t->tm_hour, t->tm_min, t->tm_sec, tv->tv_sec);
+            LOG_DEBUG("PCF8563_RTC setDateTime %02d-%02d-%02d %02d:%02d:%02d (%ld)\n", t->tm_year + 1900, t->tm_mon + 1,
+                      t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, printableEpoch);
         }
 #elif defined(ARCH_ESP32)
         settimeofday(tv, NULL);
