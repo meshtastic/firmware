@@ -569,6 +569,7 @@ void setup()
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::SHT4X, meshtastic_TelemetrySensorType_SHT4X)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::AHT10, meshtastic_TelemetrySensorType_AHT10)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::DFROBOT_LARK, meshtastic_TelemetrySensorType_DFROBOT_LARK)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::CUSTOM_SENSOR, meshtastic_TelemetrySensorType_CUSTOM_SENSOR)
 
     i2cScanner.reset();
 #endif

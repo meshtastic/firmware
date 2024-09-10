@@ -24,6 +24,7 @@
 #include "Sensor/BMP085Sensor.h"
 #include "Sensor/BMP280Sensor.h"
 #include "Sensor/BMP3XXSensor.h"
+#include "Sensor/CustomI2CSensor.h"
 #include "Sensor/DFRobotLarkSensor.h"
 #include "Sensor/LPS22HBSensor.h"
 #include "Sensor/MCP9808Sensor.h"
@@ -56,6 +57,7 @@ MLX90632Sensor mlx90632Sensor;
 DFRobotLarkSensor dfRobotLarkSensor;
 NAU7802Sensor nau7802Sensor;
 BMP3XXSensor bmp3xxSensor;
+CustomI2CSensor customI2CSensor;
 #ifdef T1000X_SENSOR_EN
 T1000xSensor t1000xSensor;
 #endif
@@ -82,7 +84,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
     */
 
     // moduleConfig.telemetry.environment_measurement_enabled = 1;
-    //  moduleConfig.telemetry.environment_screen_enabled = 1;
+    // moduleConfig.telemetry.environment_screen_enabled = 1;
     // moduleConfig.telemetry.environment_update_interval = 15;
 
     if (!(moduleConfig.telemetry.environment_measurement_enabled || moduleConfig.telemetry.environment_screen_enabled)) {
@@ -143,6 +145,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = mlx90632Sensor.runOnce();
             if (nau7802Sensor.hasSensor())
                 result = nau7802Sensor.runOnce();
+            if (customI2CSensor.hasSensor())
+                result = customI2CSensor.runOnce();
 #endif
         }
         return result;
@@ -396,6 +400,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
             aht10Sensor.getMetrics(&m_ahtx);
             m->variant.environment_metrics.relative_humidity = m_ahtx.variant.environment_metrics.relative_humidity;
         }
+    }
+    if (customI2CSensor.hasSensor()) {
+        valid = valid && customI2CSensor.getMetrics(m);
+        hasSensor = true;
     }
 
 #endif
