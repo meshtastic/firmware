@@ -62,7 +62,8 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     void sendLostAndFoundText();
     bool hasQualityTimesource();
 
-    const uint32_t minimumTimeThreshold = Default::getConfiguredOrDefaultMs(config.position.broadcast_smart_minimum_interval_secs, 30);
+    const uint32_t minimumTimeThreshold =
+        Default::getConfiguredOrDefaultMs(config.position.broadcast_smart_minimum_interval_secs, 30);
 };
 
 struct SmartPosition {
