@@ -4,3 +4,6 @@
 [submodule "meshtestic"]
 	path = meshtestic
 	url = https://github.com/meshtastic/meshTestic
+[submodule "nrf52_factory_erase"]
+	path = nrf52_factory_erase
+	url = https://github.com/markbirss/nrf52_factory_erase
