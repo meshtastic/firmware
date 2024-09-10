@@ -78,7 +78,7 @@ meshtastic_UserLite TypeConversions::ConvertToUserLite(meshtastic_User user)
     lite.hw_model = user.hw_model;
     lite.role = user.role;
     lite.is_licensed = user.is_licensed;
-    memccpy(lite.macaddr, user.macaddr, sizeof(user.macaddr), sizeof(lite.macaddr));
+    memcpy(lite.macaddr, user.macaddr, sizeof(lite.macaddr));
     memcpy(lite.public_key.bytes, user.public_key.bytes, sizeof(lite.public_key.bytes));
     lite.public_key.size = user.public_key.size;
     return lite;
