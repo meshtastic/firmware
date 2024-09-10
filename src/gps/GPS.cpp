@@ -505,18 +505,18 @@ bool GPS::setup()
             delay(250);
             _serial_gps->write("$CFGMSG,6,1,0\r\n");
             delay(250);
-        } else if (gnssModel == GNSS_MODEL_AG3335) {
+        } else if (gnssModel == GNSS_MODEL_AG3335 || gnssModel == GNSS_MODEL_AG3352) {
 
             _serial_gps->write("$PAIR066,1,0,1,0,0,1*3B\r\n"); // Enable GPS+GALILEO+NAVIC
 
             // Configure NMEA (sentences will output once per fix)
-            _serial_gps->write("$PAIR062,0,0*3F\r\n"); // GGA ON
+            _serial_gps->write("$PAIR062,0,1*3F\r\n"); // GGA ON
             _serial_gps->write("$PAIR062,1,0*3F\r\n"); // GLL OFF
-            _serial_gps->write("$PAIR062,2,1*3D\r\n"); // GSA ON
+            _serial_gps->write("$PAIR062,2,0*3C\r\n"); // GSA OFF
             _serial_gps->write("$PAIR062,3,0*3D\r\n"); // GSV OFF
-            _serial_gps->write("$PAIR062,4,0*3B\r\n"); // RMC ON
+            _serial_gps->write("$PAIR062,4,1*3B\r\n"); // RMC ON
             _serial_gps->write("$PAIR062,5,0*3B\r\n"); // VTG OFF
-            _serial_gps->write("$PAIR062,6,1*39\r\n"); // ZDA ON
+            _serial_gps->write("$PAIR062,6,0*38\r\n"); // ZDA ON
 
             delay(250);
             _serial_gps->write("$PAIR513*3D\r\n"); // save configuration
@@ -1019,7 +1019,7 @@ void GPS::down()
     LOG_DEBUG("%us until next search\n", sleepTime / 1000);
 
     // If update interval less than 10 seconds, no attempt to sleep
-    if (updateInterval <= 10 * 1000UL)
+    if (updateInterval <= 10 * 1000UL || sleepTime == 0)
         setPowerState(GPS_IDLE);
 
     else {
@@ -1204,9 +1204,6 @@ GnssModel_t GPS::probe(int serialSpeed)
         _serial_gps->updateBaudRate(serialSpeed);
     }
 #endif
-#ifdef GNSS_AIROHA
-    return GNSS_MODEL_AG3335;
-#endif
 
     memset(&info, 0, sizeof(struct uBloxGnssModelInfo));
     uint8_t buffer[768] = {0};
@@ -1225,7 +1222,12 @@ GnssModel_t GPS::probe(int serialSpeed)
     PROBE_SIMPLE("ATGM332D", "$PCAS06,1*1A", "$GPTXT,01,01,02,HW=ATGM332D", GNSS_MODEL_ATGM336H, 500);
 
     /* Airoha (Mediatek) AG3335A/M/S, A3352Q, Quectel L89 2.0, SimCom SIM65M */
-    PROBE_SIMPLE("AG3335", "PAIR020*38", "$PAIR020,AG3335", GNSS_MODEL_AG3335, 500);
+    _serial_gps->write("$PAIR062,2,0*3C\r\n"); // GSA OFF to reduce volume
+    _serial_gps->write("$PAIR062,3,0*3D\r\n"); // GSV OFF to reduce volume
+    _serial_gps->write("$PAIR513*3D\r\n");     // save configuration
+    PROBE_SIMPLE("AG3335", "$PAIR021*39", "$PAIR021,AG3335", GNSS_MODEL_AG3335, 500);
+    PROBE_SIMPLE("AG3352", "$PAIR021*39", "$PAIR021,AG3352", GNSS_MODEL_AG3352, 500);
+    PROBE_SIMPLE("LC86", "$PQTMVERNO*58", "$PQTMVERNO,LC86", GNSS_MODEL_AG3352, 500);
 
     PROBE_SIMPLE("L76K", "$PCAS06,0*1B", "$GPTXT,01,01,02,SW=", GNSS_MODEL_MTK, 500);
 
