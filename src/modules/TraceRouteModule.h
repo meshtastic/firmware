@@ -1,6 +1,8 @@
 #pragma once
 #include "ProtobufModule.h"
 
+#define ROUTE_SIZE sizeof(((meshtastic_RouteDiscovery *)0)->route) / sizeof(((meshtastic_RouteDiscovery *)0)->route[0])
+
 /**
  * A module that traces the route to a certain destination node
  */
