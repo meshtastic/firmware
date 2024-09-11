@@ -213,6 +213,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_commit_edit_settings_tag: {
+        disableBluetooth();
         LOG_INFO("Committing transaction for edited settings\n");
         hasOpenEditTransaction = false;
         saveChanges(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
@@ -563,12 +564,16 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 
         break;
     }
+    if (requiresReboot) {
+        disableBluetooth();
+    }
 
     saveChanges(changes, requiresReboot);
 }
 
 void AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
 {
+    disableBluetooth();
     switch (c.which_payload_variant) {
     case meshtastic_ModuleConfig_mqtt_tag:
         LOG_INFO("Setting module config: MQTT\n");
@@ -640,7 +645,6 @@ void AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         moduleConfig.paxcounter = c.payload_variant.paxcounter;
         break;
     }
-
     saveChanges(SEGMENT_MODULECONFIG);
 }
 
