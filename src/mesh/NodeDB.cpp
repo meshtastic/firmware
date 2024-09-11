@@ -725,7 +725,7 @@ void NodeDB::loadFromDisk()
     //} else {
     if (devicestate.version < DEVICESTATE_MIN_VER) {
         LOG_WARN("Devicestate %d is old, discarding\n", devicestate.version);
-        factoryReset();
+        installDefaultDeviceState();
     } else {
         LOG_INFO("Loaded saved devicestate version %d, with nodecount: %d\n", devicestate.version,
                  devicestate.node_db_lite.size());
