@@ -60,3 +60,5 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
 };
 
 extern AdminModule *adminModule;
+
+void disableBluetooth();

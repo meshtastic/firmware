@@ -186,18 +186,22 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_factory_reset_config_tag: {
+        disableBluetooth();
         LOG_INFO("Initiating factory config reset\n");
         nodeDB->factoryReset();
+        LOG_INFO("Factory config reset finished, rebooting soon.\n");
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
     case meshtastic_AdminMessage_factory_reset_device_tag: {
+        disableBluetooth();
         LOG_INFO("Initiating full factory reset\n");
         nodeDB->factoryReset(true);
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
     case meshtastic_AdminMessage_nodedb_reset_tag: {
+        disableBluetooth();
         LOG_INFO("Initiating node-db reset\n");
         nodeDB->resetNodes();
         reboot(DEFAULT_REBOOT_SECONDS);
@@ -1030,4 +1034,15 @@ bool AdminModule::messageIsRequest(meshtastic_AdminMessage *r)
         return true;
     else
         return false;
+}
+
+void disableBluetooth()
+{
+#if HAS_BLUETOOTH
+#ifdef ARCH_ESP32
+    nimbleBluetooth->deinit();
+#elif defined(ARCH_NRF52)
+    nrf52Bluetooth->shutdown();
+#endif
+#endif
 }
