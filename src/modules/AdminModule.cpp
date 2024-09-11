@@ -1040,9 +1040,11 @@ void disableBluetooth()
 {
 #if HAS_BLUETOOTH
 #ifdef ARCH_ESP32
-    nimbleBluetooth->deinit();
+    if (nimbleBluetooth)
+        nimbleBluetooth->deinit();
 #elif defined(ARCH_NRF52)
-    nrf52Bluetooth->shutdown();
+    if (nrf52Bluetooth)
+        nrf52Bluetooth->shutdown();
 #endif
 #endif
 }
