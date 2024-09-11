@@ -322,7 +322,6 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
         config.security.private_key.size = 0;
     }
     config.security.public_key.size = 0;
-    config.security.private_key.size = 0;
 #ifdef PIN_GPS_EN
     config.position.gps_en_gpio = PIN_GPS_EN;
 #endif
