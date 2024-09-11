@@ -245,7 +245,7 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
 #endif
     // second, install default state (this will deal with the duplicate mac address issue)
     installDefaultDeviceState();
-    installDefaultConfig();
+    installDefaultConfig(!eraseBleBonds); // Also preserve the private key if we're not erasing BLE bonds
     installDefaultModuleConfig();
     installDefaultChannels();
     // third, write everything to disk
@@ -268,8 +268,13 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
     return true;
 }
 
-void NodeDB::installDefaultConfig()
+void NodeDB::installDefaultConfig(bool preserveKey = false)
 {
+    uint8_t private_key_temp[32];
+    bool shouldPreserveKey = preserveKey && config.has_security && config.security.private_key.size > 0;
+    if (shouldPreserveKey) {
+        memcpy(config.security.private_key.bytes, &private_key_temp, config.security.public_key.size);
+    }
     LOG_INFO("Installing default LocalConfig\n");
     memset(&config, 0, sizeof(meshtastic_LocalConfig));
     config.version = DEVICESTATE_CUR_VER;
@@ -310,6 +315,11 @@ void NodeDB::installDefaultConfig()
 #else
     config.security.admin_key[0].size = 0;
 #endif
+    if (shouldPreserveKey) {
+        memcpy(config.security.private_key.bytes, &private_key_temp, config.security.public_key.size);
+    } else {
+        config.security.private_key.size = 0;
+    }
     config.security.public_key.size = 0;
     config.security.private_key.size = 0;
 #ifdef PIN_GPS_EN
@@ -730,7 +740,7 @@ void NodeDB::loadFromDisk()
     } else {
         if (config.version < DEVICESTATE_MIN_VER) {
             LOG_WARN("config %d is old, discarding\n", config.version);
-            installDefaultConfig();
+            installDefaultConfig(true);
         } else {
             LOG_INFO("Loaded saved config version %d\n", config.version);
         }
