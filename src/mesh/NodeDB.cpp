@@ -1053,7 +1053,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
     if (p.public_key.size > 0) {
         printBytes("Incoming Pubkey: ", p.public_key.bytes, 32);
         if (info->user.public_key.size > 0) { // if we have a key for this user already, don't overwrite with a new one
-            LOG_INFO("Public Key set for node, not updateing!\n");
+            LOG_INFO("Public Key set for node, not updating!\n");
             // we copy the key into the incoming packet, to prevent overwrite
             memcpy(p.public_key.bytes, info->user.public_key.bytes, 32);
         } else {
