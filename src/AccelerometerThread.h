@@ -11,6 +11,9 @@
 #include <Adafruit_LIS3DH.h>
 #include <Adafruit_LSM6DS3TRC.h>
 #include <Adafruit_MPU6050.h>
+#ifdef STK8XXX_INT
+#include <stk8baxx.h>
+#endif
 #include <Arduino.h>
 #include <SensorBMA423.hpp>
 #include <Wire.h>
@@ -23,6 +26,8 @@
 
 #define ACCELEROMETER_CHECK_INTERVAL_MS 100
 #define ACCELEROMETER_CLICK_THRESHOLD 40
+
+volatile static bool STK_IRQ;
 
 static inline int readRegister(uint8_t address, uint8_t reg, uint8_t *data, uint8_t len)
 {
@@ -79,6 +84,11 @@ class AccelerometerThread : public concurrency::OSThread
 
         if (acceleremoter_type == ScanI2C::DeviceType::MPU6050 && mpu.getMotionInterruptStatus()) {
             wakeScreen();
+        } else if (acceleremoter_type == ScanI2C::DeviceType::STK8BAXX && STK_IRQ) {
+            STK_IRQ = false;
+            if (config.display.wake_on_tap_or_motion) {
+                wakeScreen();
+            }
         } else if (acceleremoter_type == ScanI2C::DeviceType::LIS3DH && lis.getClick() > 0) {
             uint8_t click = lis.getClick();
             if (!config.device.double_tap_as_button_press) {
@@ -188,6 +198,15 @@ class AccelerometerThread : public concurrency::OSThread
             mpu.setMotionDetectionDuration(20);
             mpu.setInterruptPinLatch(true); // Keep it latched.  Will turn off when reinitialized.
             mpu.setInterruptPinPolarity(true);
+#ifdef STK8XXX_INT
+        } else if (acceleremoter_type == ScanI2C::DeviceType::STK8BAXX && stk8baxx.STK8xxx_Initialization(STK8xxx_VAL_RANGE_2G)) {
+            STK_IRQ = false;
+            LOG_DEBUG("STX8BAxx initialized\n");
+            stk8baxx.STK8xxx_Anymotion_init();
+            pinMode(STK8XXX_INT, INPUT_PULLUP);
+            attachInterrupt(
+                digitalPinToInterrupt(STK8XXX_INT), [] { STK_IRQ = true; }, RISING);
+#endif
         } else if (acceleremoter_type == ScanI2C::DeviceType::LIS3DH && lis.begin(accelerometer_found.address)) {
             LOG_DEBUG("LIS3DH initializing\n");
             lis.setRange(LIS3DH_RANGE_2_G);
@@ -262,6 +281,9 @@ class AccelerometerThread : public concurrency::OSThread
     ScanI2C::DeviceType acceleremoter_type;
     Adafruit_MPU6050 mpu;
     Adafruit_LIS3DH lis;
+#ifdef STK8XXX_INT
+    STK8xxx stk8baxx;
+#endif
     Adafruit_LSM6DS3TRC lsm;
     SensorBMA423 bmaSensor;
     bool BMA_IRQ = false;
