@@ -558,11 +558,11 @@ class LGFX : public lgfx::LGFX_Device
             cfg.pin_d14 = GPIO_NUM_1; // R3
             cfg.pin_d15 = GPIO_NUM_0; // R4
 
-            cfg.pin_henable = GPIO_NUM_18; // ???
+            cfg.pin_henable = GPIO_NUM_18;
             cfg.pin_vsync = GPIO_NUM_17;
             cfg.pin_hsync = GPIO_NUM_16;
             cfg.pin_pclk = GPIO_NUM_21;
-            cfg.freq_write = 12000000; // 40000000
+            cfg.freq_write = 12000000;
 
             cfg.hsync_polarity = 0;
             cfg.hsync_front_porch = 10;
@@ -575,8 +575,8 @@ class LGFX : public lgfx::LGFX_Device
             cfg.vsync_back_porch = 20;
 
             cfg.pclk_active_neg = 0;
-            cfg.de_idle_high = 1;   // ???
-            cfg.pclk_idle_high = 0; // ???
+            cfg.de_idle_high = 1;
+            cfg.pclk_idle_high = 0;
 #endif
             _bus_instance.config(cfg);
         }
