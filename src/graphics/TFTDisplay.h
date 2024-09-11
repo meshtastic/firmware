@@ -48,6 +48,8 @@ class TFTDisplay : public OLEDDisplay
      */
     static GpioPin *backlightEnable;
 
+    uint16_t *linePixelBuffer;
+
   protected:
     // the header size of the buffer used, e.g. for the SPI command header
     virtual int getBufferOffset(void) override { return 0; }
