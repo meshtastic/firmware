@@ -121,6 +121,8 @@ NodeDB::NodeDB()
     owner.hw_model = HW_VENDOR;
     // Ensure user (nodeinfo) role is set to whatever we're configured to
     owner.role = config.device.role;
+    // Ensure macaddr is set to our macaddr as it will be copied in our info below
+    memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
 
     // Include our owner in the node db under our nodenum
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
@@ -285,6 +287,7 @@ void NodeDB::installDefaultConfig()
     config.lora.tx_enabled =
         true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
     config.lora.override_duty_cycle = false;
+    config.lora.config_ok_to_mqtt = false;
 #ifdef CONFIG_LORA_REGION_USERPREFS
     config.lora.region = CONFIG_LORA_REGION_USERPREFS;
 #else
@@ -643,7 +646,9 @@ void NodeDB::pickNewNodeNum()
     while ((nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED) ||
            ((found = getMeshNode(nodeNum)) && memcmp(found->user.macaddr, ourMacAddr, sizeof(ourMacAddr)) != 0)) {
         NodeNum candidate = random(NUM_RESERVED, LONG_MAX); // try a new random choice
-        LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, so trying for 0x%x\n", nodeNum, candidate);
+        LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, by MAC ending in 0x%02x%02x vs our 0x%02x%02x, so "
+                 "trying for 0x%x\n",
+                 nodeNum, found->user.macaddr[4], found->user.macaddr[5], ourMacAddr[4], ourMacAddr[5], candidate);
         nodeNum = candidate;
     }
     LOG_DEBUG("Using nodenum 0x%x \n", nodeNum);
