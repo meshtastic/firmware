@@ -129,8 +129,8 @@ void PositionModule::trySetRtc(meshtastic_Position p, bool isLocal, bool forceUp
         LOG_DEBUG("Ignoring time from mesh because we have a GPS, RTC, or Phone/NTP time source in the past day\n");
         return;
     }
-    if (!isLocal && p.location_source < meshtastic_Position_LocSource_LOC_INTERNAL) {
-        LOG_DEBUG("Ignoring time from mesh because it has a unknown or manual source\n");
+    if (!isLocal && p.location_source < meshtastic_Position_LocSource_LOC_INTERNAL && hasQualityTimesource()) {
+        LOG_DEBUG("Ignoring mesh time because it has a unknown or manual source, and we already have a quality time\n");
         return;
     }
     struct timeval tv;
