@@ -316,8 +316,9 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.security.admin_key[0].size = 0;
 #endif
     if (shouldPreserveKey) {
-        memcpy(config.security.private_key.bytes, private_key_temp, config.security.public_key.size);
         config.security.private_key.size = 32;
+        memcpy(config.security.private_key.bytes, private_key_temp, config.security.public_key.size);
+        printBytes("Restored key", config.security.private_key.bytes, config.security.public_key.size);
     } else {
         config.security.private_key.size = 0;
     }
