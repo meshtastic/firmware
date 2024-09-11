@@ -273,7 +273,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     uint8_t private_key_temp[32];
     bool shouldPreserveKey = preserveKey && config.has_security && config.security.private_key.size > 0;
     if (shouldPreserveKey) {
-        memcpy(config.security.private_key.bytes, &private_key_temp, config.security.public_key.size);
+        memcpy(private_key_temp, config.security.private_key.bytes, config.security.public_key.size);
     }
     LOG_INFO("Installing default LocalConfig\n");
     memset(&config, 0, sizeof(meshtastic_LocalConfig));
@@ -316,7 +316,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     config.security.admin_key[0].size = 0;
 #endif
     if (shouldPreserveKey) {
-        memcpy(config.security.private_key.bytes, &private_key_temp, config.security.public_key.size);
+        memcpy(config.security.private_key.bytes, private_key_temp, config.security.public_key.size);
+        config.security.private_key.size = 32;
     } else {
         config.security.private_key.size = 0;
     }
