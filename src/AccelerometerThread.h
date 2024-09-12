@@ -95,7 +95,7 @@ class AccelerometerThread : public concurrency::OSThread
                 return 500;
             }
 #if defined(RAK_4631)
-#if !defined (MESHTASTIC_EXCLUDE_SCREEN)
+#if !defined(MESHTASTIC_EXCLUDE_SCREEN)
         } else if (acceleremoter_type == ScanI2C::DeviceType::BMX160) {
             sBmx160SensorData_t magAccel;
             sBmx160SensorData_t gAccel;
