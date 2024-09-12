@@ -54,7 +54,8 @@ class ScanI2C
         BMX160,
         DFROBOT_LARK,
         NAU7802,
-        FT6336U
+        FT6336U,
+        STK8BAXX
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;

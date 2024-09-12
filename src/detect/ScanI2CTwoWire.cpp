@@ -313,17 +313,34 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
             case MCP9808_ADDR:
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x07), 2);
-                if (registerValue == 0x0400) {
-                    type = MCP9808;
-                    LOG_INFO("MCP9808 sensor found\n");
-                } else {
-                    type = LIS3DH;
-                    LOG_INFO("LIS3DH accelerometer found\n");
+                // We need to check for STK8BAXX first, since register 0x07 is new data flag for the z-axis and can produce some
+                // weird result. and register 0x00 doesn't seems to be colliding with MCP9808 and LIS3DH chips.
+                {
+                    // Check register 0x00 for 0x8700 response to ID STK8BA53 chip.
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 2);
+                    if (registerValue == 0x8700) {
+                        type = STK8BAXX;
+                        LOG_INFO("STK8BAXX accelerometer found\n");
+                        break;
+                    }
+
+                    // Check register 0x07 for 0x0400 response to ID MCP9808 chip.
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x07), 2);
+                    if (registerValue == 0x0400) {
+                        type = MCP9808;
+                        LOG_INFO("MCP9808 sensor found\n");
+                        break;
+                    }
+
+                    // Check register 0x0F for 0x3300 response to ID LIS3DH chip.
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0F), 2);
+                    if (registerValue == 0x3300) {
+                        type = LIS3DH;
+                        LOG_INFO("LIS3DH accelerometer found\n");
+                    }
+
+                    break;
                 }
-
-                break;
-
             case SHT31_4x_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x89), 2);
                 if (registerValue == 0x11a2 || registerValue == 0x11da || registerValue == 0xe9c) {
