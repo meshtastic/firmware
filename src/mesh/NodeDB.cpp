@@ -245,7 +245,7 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
 #endif
     // second, install default state (this will deal with the duplicate mac address issue)
     installDefaultDeviceState();
-    installDefaultConfig();
+    installDefaultConfig(!eraseBleBonds); // Also preserve the private key if we're not erasing BLE bonds
     installDefaultModuleConfig();
     installDefaultChannels();
     // third, write everything to disk
@@ -268,8 +268,13 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
     return true;
 }
 
-void NodeDB::installDefaultConfig()
+void NodeDB::installDefaultConfig(bool preserveKey = false)
 {
+    uint8_t private_key_temp[32];
+    bool shouldPreserveKey = preserveKey && config.has_security && config.security.private_key.size > 0;
+    if (shouldPreserveKey) {
+        memcpy(private_key_temp, config.security.private_key.bytes, config.security.private_key.size);
+    }
     LOG_INFO("Installing default LocalConfig\n");
     memset(&config, 0, sizeof(meshtastic_LocalConfig));
     config.version = DEVICESTATE_CUR_VER;
@@ -310,8 +315,14 @@ void NodeDB::installDefaultConfig()
 #else
     config.security.admin_key[0].size = 0;
 #endif
+    if (shouldPreserveKey) {
+        config.security.private_key.size = 32;
+        memcpy(config.security.private_key.bytes, private_key_temp, config.security.private_key.size);
+        printBytes("Restored key", config.security.private_key.bytes, config.security.private_key.size);
+    } else {
+        config.security.private_key.size = 0;
+    }
     config.security.public_key.size = 0;
-    config.security.private_key.size = 0;
 #ifdef PIN_GPS_EN
     config.position.gps_en_gpio = PIN_GPS_EN;
 #endif
@@ -714,7 +725,7 @@ void NodeDB::loadFromDisk()
     //} else {
     if (devicestate.version < DEVICESTATE_MIN_VER) {
         LOG_WARN("Devicestate %d is old, discarding\n", devicestate.version);
-        factoryReset();
+        installDefaultDeviceState();
     } else {
         LOG_INFO("Loaded saved devicestate version %d, with nodecount: %d\n", devicestate.version,
                  devicestate.node_db_lite.size());
@@ -730,7 +741,7 @@ void NodeDB::loadFromDisk()
     } else {
         if (config.version < DEVICESTATE_MIN_VER) {
             LOG_WARN("config %d is old, discarding\n", config.version);
-            installDefaultConfig();
+            installDefaultConfig(true);
         } else {
             LOG_INFO("Loaded saved config version %d\n", config.version);
         }
@@ -1043,7 +1054,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
     if (p.public_key.size > 0) {
         printBytes("Incoming Pubkey: ", p.public_key.bytes, 32);
         if (info->user.public_key.size > 0) { // if we have a key for this user already, don't overwrite with a new one
-            LOG_INFO("Public Key set for node, not updateing!\n");
+            LOG_INFO("Public Key set for node, not updating!\n");
             // we copy the key into the incoming packet, to prevent overwrite
             memcpy(p.public_key.bytes, info->user.public_key.bytes, 32);
         } else {

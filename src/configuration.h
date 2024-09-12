@@ -144,6 +144,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // ACCELEROMETER
 // -----------------------------------------------------------------------------
 #define MPU6050_ADDR 0x68
+#define STK8BXX_ADR 0x18
 #define LIS3DH_ADR 0x18
 #define BMA423_ADDR 0x19
 #define LSM6DS3_ADDR 0x6A
