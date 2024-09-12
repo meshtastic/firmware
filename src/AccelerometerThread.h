@@ -94,8 +94,9 @@ class AccelerometerThread : public concurrency::OSThread
                 wakeScreen();
                 return 500;
             }
-#ifdef RAK_4631
-        } else if (acceleremoter_type == ScanI2C::DeviceType::BMX160) {
+#if defined(RAK_4631)
+#if !defined (MESHTASTIC_EXCLUDE_SCREEN)
+		} else if (acceleremoter_type == ScanI2C::DeviceType::BMX160) {
             sBmx160SensorData_t magAccel;
             sBmx160SensorData_t gAccel;
 
@@ -165,7 +166,7 @@ class AccelerometerThread : public concurrency::OSThread
             }
 
             screen->setHeading(heading);
-
+#endif
 #endif
         } else if (acceleremoter_type == ScanI2C::DeviceType::LSM6DS3 && lsm.shake()) {
             wakeScreen();
@@ -230,9 +231,10 @@ class AccelerometerThread : public concurrency::OSThread
             // It corresponds to isDoubleClick interrupt
             bmaSensor.enableWakeupIRQ();
 #ifdef RAK_4631
-        } else if (acceleremoter_type == ScanI2C::DeviceType::BMX160 && bmx160.begin()) {
+#if !defined(MESHTASTIC_EXCLUDE_SCREEN)
+		} else if (acceleremoter_type == ScanI2C::DeviceType::BMX160 && bmx160.begin()) {
             bmx160.ODR_Config(BMX160_ACCEL_ODR_100HZ, BMX160_GYRO_ODR_100HZ); // set output data rate
-
+#endif
 #endif
         } else if (acceleremoter_type == ScanI2C::DeviceType::LSM6DS3 && lsm.begin_I2C(accelerometer_found.address)) {
             LOG_DEBUG("LSM6DS3 initializing\n");
@@ -265,8 +267,8 @@ class AccelerometerThread : public concurrency::OSThread
     Adafruit_LSM6DS3TRC lsm;
     SensorBMA423 bmaSensor;
     bool BMA_IRQ = false;
-#ifdef RAK_4631
-    bool showingScreen = false;
+#if defined(RAK_4631) && !defined(MESHTASTIC_EXCLUDE_SCREEN)
+	bool showingScreen = false;
     RAK_BMX160 bmx160;
     float highestX = 0, lowestX = 0, highestY = 0, lowestY = 0, highestZ = 0, lowestZ = 0;
 
