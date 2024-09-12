@@ -313,17 +313,34 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
             case MCP9808_ADDR:
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x07), 2);
-                if (registerValue == 0x0400) {
-                    type = MCP9808;
-                    LOG_INFO("MCP9808 sensor found\n");
-                } else {
-                    type = LIS3DH;
-                    LOG_INFO("LIS3DH accelerometer found\n");
+                // We need to check for STK8BAXX first, since register 0x07 is new data flag for the z-axis and can produce some
+                // weird result. and register 0x00 doesn't seems to be colliding with MCP9808 and LIS3DH chips.
+                {
+                    // Check register 0x00 for 0x8700 response to ID STK8BA53 chip.
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 2);
+                    if (registerValue == 0x8700) {
+                        type = STK8BAXX;
+                        LOG_INFO("STK8BAXX accelerometer found\n");
+                        break;
+                    }
+
+                    // Check register 0x07 for 0x0400 response to ID MCP9808 chip.
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x07), 2);
+                    if (registerValue == 0x0400) {
+                        type = MCP9808;
+                        LOG_INFO("MCP9808 sensor found\n");
+                        break;
+                    }
+
+                    // Check register 0x0F for 0x3300 response to ID LIS3DH chip.
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0F), 2);
+                    if (registerValue == 0x3300) {
+                        type = LIS3DH;
+                        LOG_INFO("LIS3DH accelerometer found\n");
+                    }
+
+                    break;
                 }
-
-                break;
-
             case SHT31_4x_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x89), 2);
                 if (registerValue == 0x11a2 || registerValue == 0x11da || registerValue == 0xe9c) {
@@ -371,12 +388,14 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(BMX160_ADDR, BMX160, "BMX160 accelerometer found\n");
                 SCAN_SIMPLE_CASE(BMA423_ADDR, BMA423, "BMA423 accelerometer found\n");
                 SCAN_SIMPLE_CASE(LSM6DS3_ADDR, LSM6DS3, "LSM6DS3 accelerometer found at address 0x%x\n", (uint8_t)addr.address);
+                SCAN_SIMPLE_CASE(TCA9535_ADDR, TCA9535, "TCA9535 I2C expander found\n");
                 SCAN_SIMPLE_CASE(TCA9555_ADDR, TCA9555, "TCA9555 I2C expander found\n");
                 SCAN_SIMPLE_CASE(VEML7700_ADDR, VEML7700, "VEML7700 light sensor found\n");
                 SCAN_SIMPLE_CASE(TSL25911_ADDR, TSL2591, "TSL2591 light sensor found\n");
                 SCAN_SIMPLE_CASE(OPT3001_ADDR, OPT3001, "OPT3001 light sensor found\n");
                 SCAN_SIMPLE_CASE(MLX90632_ADDR, MLX90632, "MLX90632 IR temp sensor found\n");
                 SCAN_SIMPLE_CASE(NAU7802_ADDR, NAU7802, "NAU7802 based scale found\n");
+                SCAN_SIMPLE_CASE(FT6336U_ADDR, FT6336U, "FT6336U touchscreen found\n");
 
             default:
                 LOG_INFO("Device found at address 0x%x was not able to be enumerated\n", addr.address);
