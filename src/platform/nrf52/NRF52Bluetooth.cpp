@@ -310,7 +310,9 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
 {
     LOG_INFO("BLE pairing process started with passkey %.3s %.3s\n", passkey, passkey + 3);
     powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
-    screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
+#if !defined(MESHTASTIC_EXCLUDE_SCREEN)
+	screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void
+					   {
         char btPIN[16] = "888888";
         snprintf(btPIN, sizeof(btPIN), "%06u", configuredPasskey);
         int x_offset = display->width() / 2;
@@ -333,9 +335,9 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
         String deviceName = "Name: ";
         deviceName.concat(getDeviceName());
         y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_LARGE - 6 : y_offset + FONT_HEIGHT_LARGE + 5;
-        display->drawString(x_offset + x, y_offset + y, deviceName);
-    });
-    if (match_request) {
+        display->drawString(x_offset + x, y_offset + y, deviceName); });
+#endif
+	if (match_request) {
         uint32_t start_time = millis();
         while (millis() < start_time + 30000) {
             if (!Bluefruit.connected(conn_handle))
