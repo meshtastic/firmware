@@ -45,7 +45,7 @@ template <class T, class U> void APIServerPort<T, U>::init()
 
 template <class T, class U> int32_t APIServerPort<T, U>::runOnce()
 {
-    auto client = U::available();
+    auto client = U::accept();
     if (client) {
         // Close any previous connection (see FIXME in header file)
         if (openAPI) {
