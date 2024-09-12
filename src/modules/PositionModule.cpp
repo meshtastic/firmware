@@ -273,7 +273,7 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
 
     meshtastic_TAKPacket takPacket = {.is_compressed = true,
                                       .has_contact = true,
-                                      .contact = {0},
+                                      .contact = meshtastic_Contact_init_default,
                                       .has_group = true,
                                       .group = {meshtastic_MemberRole_TeamMember, meshtastic_Team_Cyan},
                                       .has_status = true,
@@ -282,13 +282,13 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
                                               .battery = powerStatus->getBatteryChargePercent(),
                                           },
                                       .which_payload_variant = meshtastic_TAKPacket_pli_tag,
-                                      {.pli = {
-                                           .latitude_i = localPosition.latitude_i,
-                                           .longitude_i = localPosition.longitude_i,
-                                           .altitude = localPosition.altitude_hae,
-                                           .speed = localPosition.ground_speed,
-                                           .course = static_cast<uint16_t>(localPosition.ground_track),
-                                       }}};
+                                      .payload_variant = {.pli = {
+                                                              .latitude_i = localPosition.latitude_i,
+                                                              .longitude_i = localPosition.longitude_i,
+                                                              .altitude = localPosition.altitude_hae,
+                                                              .speed = localPosition.ground_speed,
+                                                              .course = static_cast<uint16_t>(localPosition.ground_track),
+                                                          }}};
 
     auto length = unishox2_compress_lines(owner.long_name, strlen(owner.long_name), takPacket.contact.device_callsign,
                                           sizeof(takPacket.contact.device_callsign) - 1, USX_PSET_DFLT, NULL);
