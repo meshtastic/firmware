@@ -764,10 +764,11 @@ void setup()
 
     screen->print("Started...\n");
 
-#ifdef SX126X_ANT_SW
-    // make analog PA vs not PA switch on SX126x eval board work properly
+// FIXME: move to SX126XInterface.cpp
+// Typically, the RF switch on SX126x boards is controlled by two signals, which are negations of each other (switched RFIO paths). The negation is usually dealt in hardware, or (suboptimal design) TXEN and RXEN are the two inputs to the RF switch. On some boards, there is no hardware negation between CTRL and ¬CTRL, but CTRL is internally connected to DIO2, and DIO2's switching is done by the SX126X itself. One solution would be to set that pin as SX126X_TXEN or SX126X_RXEN, but they may already be used for another purpose, such as controlling another PA/LNA. Keeping ¬CTRL high seems to work, as long CTRL=1, ¬CTRL=0 has the opposite and stable RF path effect as CTRL=1 and ¬CTRL=1, this depends on the RF switch, but for the cases where this works, this pin can be used. Better hardware design, which is done most the time, prevents this issue.
+#ifdef SX126X_ANT_SW // Add RADIOLIB_NC check, and beforehand define as such if it is undefined.
+    digitalWrite(SX126X_ANT_SW, HIGH);
     pinMode(SX126X_ANT_SW, OUTPUT);
-    digitalWrite(SX126X_ANT_SW, 1);
 #endif
 
 #ifdef PIN_PWR_DELAY_MS
