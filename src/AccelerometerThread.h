@@ -96,7 +96,7 @@ class AccelerometerThread : public concurrency::OSThread
             }
 #if defined(RAK_4631)
 #if !defined (MESHTASTIC_EXCLUDE_SCREEN)
-		} else if (acceleremoter_type == ScanI2C::DeviceType::BMX160) {
+        } else if (acceleremoter_type == ScanI2C::DeviceType::BMX160) {
             sBmx160SensorData_t magAccel;
             sBmx160SensorData_t gAccel;
 
@@ -232,7 +232,7 @@ class AccelerometerThread : public concurrency::OSThread
             bmaSensor.enableWakeupIRQ();
 #ifdef RAK_4631
 #if !defined(MESHTASTIC_EXCLUDE_SCREEN)
-		} else if (acceleremoter_type == ScanI2C::DeviceType::BMX160 && bmx160.begin()) {
+        } else if (acceleremoter_type == ScanI2C::DeviceType::BMX160 && bmx160.begin()) {
             bmx160.ODR_Config(BMX160_ACCEL_ODR_100HZ, BMX160_GYRO_ODR_100HZ); // set output data rate
 #endif
 #endif
@@ -268,7 +268,7 @@ class AccelerometerThread : public concurrency::OSThread
     SensorBMA423 bmaSensor;
     bool BMA_IRQ = false;
 #if defined(RAK_4631) && !defined(MESHTASTIC_EXCLUDE_SCREEN)
-	bool showingScreen = false;
+    bool showingScreen = false;
     RAK_BMX160 bmx160;
     float highestX = 0, lowestX = 0, highestY = 0, lowestY = 0, highestZ = 0, lowestZ = 0;
 
