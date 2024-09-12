@@ -25,9 +25,16 @@ SX126xInterface<T>::SX126xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs
 /// \return true if initialisation succeeded.
 template <typename T> bool SX126xInterface<T>::init()
 {
-#ifdef SX126X_POWER_EN
-    pinMode(SX126X_POWER_EN, OUTPUT);
+
+// Typically, the RF switch on SX126x boards is controlled by two signals, which are negations of each other (switched RFIO paths). The negation is usually performed in hardware, or (suboptimal design) TXEN and RXEN are the two inputs to this style of RF switch. On some boards, there is no hardware negation between CTRL and ¬CTRL, but CTRL is internally connected to DIO2, and DIO2's switching is done by the SX126X itself, so the MCU can't control ¬CTRL at exactly the same time. One solution would be to set ¬CTRL as SX126X_TXEN or SX126X_RXEN, but they may already be used for another purpose, such as controlling another PA/LNA. Keeping ¬CTRL high seems to work, as long CTRL=1, ¬CTRL=1 has the opposite and stable RF path effect as CTRL=0 and ¬CTRL=1, this depends on the RF switch, but it seems this usually works. Better hardware design, which is done most the time, means this workaround is not necessary.
+#ifdef SX126X_ANT_SW // Perhaps add RADIOLIB_NC check, and beforehand define as such if it is undefined, but it is not commonly used and not part of the 'default' set of pin definitions.
+    digitalWrite(SX126X_ANT_SW, HIGH);
+    pinMode(SX126X_ANT_SW, OUTPUT);
+#endif
+  
+#ifdef SX126X_POWER_EN // Perhaps add RADIOLIB_NC check, and beforehand define as such if it is undefined, but it is not commonly used and not part of the 'default' set of pin definitions.
     digitalWrite(SX126X_POWER_EN, HIGH);
+    pinMode(SX126X_POWER_EN, OUTPUT);
 #endif
 
 #if ARCH_PORTDUINO
