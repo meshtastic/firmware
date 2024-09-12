@@ -378,8 +378,9 @@ void MQTT::sendSubscriptions()
             hasDownlink = true;
             std::string topic = cryptTopic + channels.getGlobalId(i) + "/+";
             LOG_INFO("Subscribing to %s\n", topic.c_str());
-            pubSub.subscribe(topic.c_str(), 1);        // FIXME, is QOS 1 right?
-#if !defined(ARCH_NRF52) || defined(NRF52_USE_JSON) // JSON is not supported on nRF52, see issue #2804 ### Fixed by using ArduinoJSON ###
+            pubSub.subscribe(topic.c_str(), 1); // FIXME, is QOS 1 right?
+#if !defined(ARCH_NRF52) ||                                                                                                      \
+    defined(NRF52_USE_JSON) // JSON is not supported on nRF52, see issue #2804 ### Fixed by using ArduinoJSON ###
             if (moduleConfig.mqtt.json_enabled == true) {
                 std::string topicDecoded = jsonTopic + channels.getGlobalId(i) + "/+";
                 LOG_INFO("Subscribing to %s\n", topicDecoded.c_str());
@@ -480,7 +481,8 @@ void MQTT::publishQueuedMessages()
 
         publish(topic.c_str(), bytes, numBytes, false);
 
-#if !defined(ARCH_NRF52) || defined(NRF52_USE_JSON) // JSON is not supported on nRF52, see issue #2804 ### Fixed by using ArduinoJson ###
+#if !defined(ARCH_NRF52) ||                                                                                                      \
+    defined(NRF52_USE_JSON) // JSON is not supported on nRF52, see issue #2804 ### Fixed by using ArduinoJson ###
         if (moduleConfig.mqtt.json_enabled) {
             // handle json topic
             auto jsonString = MeshPacketSerializer::JsonSerialize(env->packet);
@@ -562,7 +564,8 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
 
             publish(topic.c_str(), bytes, numBytes, false);
 
-#if !defined(ARCH_NRF52) || defined(NRF52_USE_JSON) // JSON is not supported on nRF52, see issue #2804 ### Fixed by using ArduinoJson ###
+#if !defined(ARCH_NRF52) ||                                                                                                      \
+    defined(NRF52_USE_JSON) // JSON is not supported on nRF52, see issue #2804 ### Fixed by using ArduinoJson ###
             if (moduleConfig.mqtt.json_enabled) {
                 // handle json topic
                 auto jsonString = MeshPacketSerializer::JsonSerialize((meshtastic_MeshPacket *)&mp_decoded);
