@@ -186,18 +186,22 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_factory_reset_config_tag: {
+        disableBluetooth();
         LOG_INFO("Initiating factory config reset\n");
         nodeDB->factoryReset();
+        LOG_INFO("Factory config reset finished, rebooting soon.\n");
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
     case meshtastic_AdminMessage_factory_reset_device_tag: {
+        disableBluetooth();
         LOG_INFO("Initiating full factory reset\n");
         nodeDB->factoryReset(true);
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
     case meshtastic_AdminMessage_nodedb_reset_tag: {
+        disableBluetooth();
         LOG_INFO("Initiating node-db reset\n");
         nodeDB->resetNodes();
         reboot(DEFAULT_REBOOT_SECONDS);
@@ -209,6 +213,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_commit_edit_settings_tag: {
+        disableBluetooth();
         LOG_INFO("Committing transaction for edited settings\n");
         hasOpenEditTransaction = false;
         saveChanges(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
@@ -406,7 +411,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         LOG_INFO("Setting config: Device\n");
         config.has_device = true;
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-        if (config.device.double_tap_as_button_press == false && c.payload_variant.device.double_tap_as_button_press == true) {
+        if (config.device.double_tap_as_button_press == false && c.payload_variant.device.double_tap_as_button_press == true &&
+            accelerometerThread->enabled == false) {
             accelerometerThread->start();
         }
 #endif
@@ -484,7 +490,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             requiresReboot = false;
         }
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-        if (config.display.wake_on_tap_or_motion == false && c.payload_variant.display.wake_on_tap_or_motion == true) {
+        if (config.display.wake_on_tap_or_motion == false && c.payload_variant.display.wake_on_tap_or_motion == true &&
+            accelerometerThread->enabled == false) {
             accelerometerThread->start();
         }
 #endif
@@ -557,12 +564,16 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 
         break;
     }
+    if (requiresReboot) {
+        disableBluetooth();
+    }
 
     saveChanges(changes, requiresReboot);
 }
 
 void AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
 {
+    disableBluetooth();
     switch (c.which_payload_variant) {
     case meshtastic_ModuleConfig_mqtt_tag:
         LOG_INFO("Setting module config: MQTT\n");
@@ -634,7 +645,6 @@ void AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         moduleConfig.paxcounter = c.payload_variant.paxcounter;
         break;
     }
-
     saveChanges(SEGMENT_MODULECONFIG);
 }
 
@@ -1028,4 +1038,17 @@ bool AdminModule::messageIsRequest(meshtastic_AdminMessage *r)
         return true;
     else
         return false;
+}
+
+void disableBluetooth()
+{
+#if HAS_BLUETOOTH
+#ifdef ARCH_ESP32
+    if (nimbleBluetooth)
+        nimbleBluetooth->deinit();
+#elif defined(ARCH_NRF52)
+    if (nrf52Bluetooth)
+        nrf52Bluetooth->shutdown();
+#endif
+#endif
 }

@@ -166,18 +166,21 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
             b = _serial_gps->read();
 
 #ifdef GPS_DEBUG
-            LOG_DEBUG("%02X", (char *)buffer);
+            LOG_DEBUG("%c", (b >= 32 && b <= 126) ? b : '.');
 #endif
             buffer[bytesRead] = b;
             bytesRead++;
             if ((bytesRead == 767) || (b == '\r')) {
                 if (strnstr((char *)buffer, message, bytesRead) != nullptr) {
 #ifdef GPS_DEBUG
-                    LOG_DEBUG("\r");
+                    LOG_DEBUG("\r\nFound: %s\r\n", message); // Log the found message
 #endif
                     return GNSS_RESPONSE_OK;
                 } else {
                     bytesRead = 0;
+#ifdef GPS_DEBUG
+                    LOG_DEBUG("\r\n");
+#endif
                 }
             }
         }
@@ -505,21 +508,21 @@ bool GPS::setup()
             delay(250);
             _serial_gps->write("$CFGMSG,6,1,0\r\n");
             delay(250);
-        } else if (gnssModel == GNSS_MODEL_AG3335) {
+        } else if (gnssModel == GNSS_MODEL_AG3335 || gnssModel == GNSS_MODEL_AG3352) {
 
-            _serial_gps->write("$PAIR066,1,0,1,0,0,1*3B"); // Enable GPS+GALILEO+NAVIC
+            _serial_gps->write("$PAIR066,1,0,1,0,0,1*3B\r\n"); // Enable GPS+GALILEO+NAVIC
 
             // Configure NMEA (sentences will output once per fix)
-            _serial_gps->write("$PAIR062,0,0*3F"); // GGA ON
-            _serial_gps->write("$PAIR062,1,0*3F"); // GLL OFF
-            _serial_gps->write("$PAIR062,2,1*3D"); // GSA ON
-            _serial_gps->write("$PAIR062,3,0*3D"); // GSV OFF
-            _serial_gps->write("$PAIR062,4,0*3B"); // RMC ON
-            _serial_gps->write("$PAIR062,5,0*3B"); // VTG OFF
-            _serial_gps->write("$PAIR062,6,1*39"); // ZDA ON
+            _serial_gps->write("$PAIR062,0,1*3F\r\n"); // GGA ON
+            _serial_gps->write("$PAIR062,1,0*3F\r\n"); // GLL OFF
+            _serial_gps->write("$PAIR062,2,0*3C\r\n"); // GSA OFF
+            _serial_gps->write("$PAIR062,3,0*3D\r\n"); // GSV OFF
+            _serial_gps->write("$PAIR062,4,1*3B\r\n"); // RMC ON
+            _serial_gps->write("$PAIR062,5,0*3B\r\n"); // VTG OFF
+            _serial_gps->write("$PAIR062,6,0*38\r\n"); // ZDA ON
 
             delay(250);
-            _serial_gps->write("$PAIR513*3D"); // save configuration
+            _serial_gps->write("$PAIR513*3D\r\n"); // save configuration
 
         } else if (gnssModel == GNSS_MODEL_UBLOX) {
             // Configure GNSS system to GPS+SBAS+GLONASS (Module may restart after this command)
@@ -1019,7 +1022,7 @@ void GPS::down()
     LOG_DEBUG("%us until next search\n", sleepTime / 1000);
 
     // If update interval less than 10 seconds, no attempt to sleep
-    if (updateInterval <= 10 * 1000UL)
+    if (updateInterval <= 10 * 1000UL || sleepTime == 0)
         setPowerState(GPS_IDLE);
 
     else {
@@ -1184,6 +1187,15 @@ int GPS::prepareDeepSleep(void *unused)
     return 0;
 }
 
+#define PROBE_SIMPLE(CHIP, TOWRITE, RESPONSE, DRIVER, TIMEOUT, ...)                                                              \
+    LOG_DEBUG("Trying " TOWRITE " (" CHIP ") ...\n");                                                                            \
+    clearBuffer();                                                                                                               \
+    _serial_gps->write(TOWRITE "\r\n");                                                                                          \
+    if (getACK(RESPONSE, TIMEOUT) == GNSS_RESPONSE_OK) {                                                                         \
+        LOG_INFO(CHIP " detected, using " #DRIVER " Module\n");                                                                  \
+        return DRIVER;                                                                                                           \
+    }
+
 GnssModel_t GPS::probe(int serialSpeed)
 {
 #if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)
@@ -1195,14 +1207,7 @@ GnssModel_t GPS::probe(int serialSpeed)
         _serial_gps->updateBaudRate(serialSpeed);
     }
 #endif
-#ifdef GNSS_AIROHA
-    return GNSS_MODEL_AG3335;
-#endif
-#ifdef GPS_DEBUG
-    for (int i = 0; i < 20; i++) {
-        getACK("$GP", 200);
-    }
-#endif
+
     memset(&info, 0, sizeof(struct uBloxGnssModelInfo));
     uint8_t buffer[768] = {0};
     delay(100);
@@ -1211,70 +1216,29 @@ GnssModel_t GPS::probe(int serialSpeed)
     _serial_gps->write("$PCAS03,0,0,0,0,0,0,0,0,0,0,,,0,0*02\r\n");
     delay(20);
 
-    // get version information from Unicore UFirebirdII Series
-    // Works for: UC6580, UM620, UM621, UM670A, UM680A, or UM681A
-    _serial_gps->write("$PDTINFO\r\n");
-    delay(750);
-    if (getACK("UC6580", 500) == GNSS_RESPONSE_OK) {
-        LOG_INFO("UC6580 detected, using UC6580 Module\n");
-        return GNSS_MODEL_UC6580;
-    }
-
-    clearBuffer();
-    _serial_gps->write("$PDTINFO\r\n");
-    delay(750);
-    if (getACK("UM600", 500) == GNSS_RESPONSE_OK) {
-        LOG_INFO("UM600 detected, using UC6580 Module\n");
-        return GNSS_MODEL_UC6580;
-    }
-
-    // Get version information for ATGM336H
-    clearBuffer();
-    _serial_gps->write("$PCAS06,1*1A\r\n");
-    if (getACK("$GPTXT,01,01,02,HW=ATGM336H", 500) == GNSS_RESPONSE_OK) {
-        LOG_INFO("ATGM336H GNSS init succeeded, using ATGM336H Module\n");
-        return GNSS_MODEL_ATGM336H;
-    }
-
+    // Unicore UFirebirdII Series: UC6580, UM620, UM621, UM670A, UM680A, or UM681A
+    PROBE_SIMPLE("UC6580", "$PDTINFO", "UC6580", GNSS_MODEL_UC6580, 500);
+    PROBE_SIMPLE("UM600", "$PDTINFO", "UM600", GNSS_MODEL_UC6580, 500);
+    PROBE_SIMPLE("ATGM336H", "$PCAS06,1*1A", "$GPTXT,01,01,02,HW=ATGM336H", GNSS_MODEL_ATGM336H, 500);
     /* ATGM332D series (-11(GPS), -21(BDS), -31(GPS+BDS), -51(GPS+GLONASS), -71-0(GPS+BDS+GLONASS))
     based on AT6558 */
-    clearBuffer();
-    _serial_gps->write("$PCAS06,1*1A\r\n");
-    if (getACK("$GPTXT,01,01,02,HW=ATGM332D", 500) == GNSS_RESPONSE_OK) {
-        LOG_INFO("ATGM332D detected, using ATGM336H Module\n");
-        return GNSS_MODEL_ATGM336H;
-    }
+    PROBE_SIMPLE("ATGM332D", "$PCAS06,1*1A", "$GPTXT,01,01,02,HW=ATGM332D", GNSS_MODEL_ATGM336H, 500);
 
     /* Airoha (Mediatek) AG3335A/M/S, A3352Q, Quectel L89 2.0, SimCom SIM65M */
-    clearBuffer();
-    _serial_gps->write("PAIR020*38\r\n");
-    if (getACK("$PAIR020,AG3335", 500) == GNSS_RESPONSE_OK) {
-        LOG_INFO("Aioha AG3335 detected, using AG3335 Module\n");
-        return GNSS_MODEL_AG3335;
-    }
-    // Get version information for Airoha AG3335
-    clearBuffer();
-    _serial_gps->write("$PMTK605*31\r\n");
+    _serial_gps->write("$PAIR062,2,0*3C\r\n"); // GSA OFF to reduce volume
+    _serial_gps->write("$PAIR062,3,0*3D\r\n"); // GSV OFF to reduce volume
+    _serial_gps->write("$PAIR513*3D\r\n");     // save configuration
+    PROBE_SIMPLE("AG3335", "$PAIR021*39", "$PAIR021,AG3335", GNSS_MODEL_AG3335, 500);
+    PROBE_SIMPLE("AG3352", "$PAIR021*39", "$PAIR021,AG3352", GNSS_MODEL_AG3352, 500);
+    PROBE_SIMPLE("LC86", "$PQTMVERNO*58", "$PQTMVERNO,LC86", GNSS_MODEL_AG3352, 500);
 
-    // Get version information
-    clearBuffer();
-    _serial_gps->write("$PCAS06,0*1B\r\n");
-    if (getACK("$GPTXT,01,01,02,SW=", 500) == GNSS_RESPONSE_OK) {
-        LOG_INFO("L76K GNSS init succeeded, using L76K GNSS Module\n");
-        return GNSS_MODEL_MTK;
-    }
+    PROBE_SIMPLE("L76K", "$PCAS06,0*1B", "$GPTXT,01,01,02,SW=", GNSS_MODEL_MTK, 500);
 
     // Close all NMEA sentences, valid for L76B MTK platform (Waveshare Pico GPS)
     _serial_gps->write("$PMTK514,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*2E\r\n");
     delay(20);
 
-    // Get version information
-    clearBuffer();
-    _serial_gps->write("$PMTK605*31\r\n");
-    if (getACK("Quectel-L76B", 500) == GNSS_RESPONSE_OK) {
-        LOG_INFO("L76B GNSS init succeeded, using L76B GNSS Module\n");
-        return GNSS_MODEL_MTK_L76B;
-    }
+    PROBE_SIMPLE("L76B", "$PMTK605*31", "Quectel-L76B", GNSS_MODEL_MTK_L76B, 500);
 
     uint8_t cfg_rate[] = {0xB5, 0x62, 0x06, 0x08, 0x00, 0x00, 0x00, 0x00};
     UBXChecksum(cfg_rate, sizeof(cfg_rate));

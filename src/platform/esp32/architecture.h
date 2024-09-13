@@ -166,10 +166,15 @@
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_VISION_MASTER_E290
 #elif defined(HELTEC_MESH_NODE_T114)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_NODE_T114
+
 #elif defined(M5STACK_COREBASIC)
 #define HW_VENDOR meshtastic_HardwareModel_M5STACK_COREBASIC
 #elif defined(M5STACK_CORE2)
 #define HW_VENDOR meshtastic_HardwareModel_M5STACK_CORE2
+
+#elif defined(SENSECAP_INDICATOR)
+#define HW_VENDOR meshtastic_HardwareModel_SENSECAP_INDICATOR
+
 #endif
 
 // -----------------------------------------------------------------------------

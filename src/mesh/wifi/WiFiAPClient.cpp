@@ -15,9 +15,7 @@
 #include <WiFiUdp.h>
 #ifdef ARCH_ESP32
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
-#if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "mesh/http/WebServer.h"
-#endif
 #endif
 #include <ESPmDNS.h>
 #include <esp_wifi.h>
@@ -58,7 +56,7 @@ static void onNetworkConnected()
 {
     if (!APStartupComplete) {
         // Start web server
-        LOG_INFO("Starting network services\n");
+        LOG_INFO("Starting WiFi network services\n");
 
 #ifdef ARCH_ESP32
         // start mdns
