@@ -144,6 +144,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // ACCELEROMETER
 // -----------------------------------------------------------------------------
 #define MPU6050_ADDR 0x68
+#define STK8BXX_ADR 0x18
 #define LIS3DH_ADR 0x18
 #define BMA423_ADDR 0x19
 #define LSM6DS3_ADDR 0x6A
@@ -162,6 +163,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // -----------------------------------------------------------------------------
 // IO Expander
 // -----------------------------------------------------------------------------
+#define TCA9535_ADDR 0x20
 #define TCA9555_ADDR 0x26
 
 // -----------------------------------------------------------------------------
@@ -170,6 +172,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef GPS_THREAD_INTERVAL
 #define GPS_THREAD_INTERVAL 200
 #endif
+
+// -----------------------------------------------------------------------------
+// Touchscreen
+// -----------------------------------------------------------------------------
+#define FT6336U_ADDR 0x48
 
 // convert 24-bit color to 16-bit (56K)
 #define COLOR565(r, g, b) (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | ((b & 0xF8) >> 3))
