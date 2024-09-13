@@ -394,9 +394,9 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(NAU7802_ADDR, NAU7802, "NAU7802 based scale found\n");
                 SCAN_SIMPLE_CASE(FT6336U_ADDR, FT6336U, "FT6336U touchscreen found\n");
 
-           case ICM20948_ADDR:      // same as BMX160_ADDR
-           case ICM20948_ADDR_ALT:  // same as MPU6050_ADDR
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1); // get ID
+            case ICM20948_ADDR:     // same as BMX160_ADDR
+            case ICM20948_ADDR_ALT: // same as MPU6050_ADDR
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1);
                 if (registerValue == 0xEA) {
                     type = ICM20948;
                     LOG_INFO("ICM20948 9-dof motion processor found\n");

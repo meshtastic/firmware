@@ -12,14 +12,15 @@
 
 #include <Adafruit_LSM6DS3TRC.h>
 
-class LSM6DS3Sensor : public MotionSensor {
+class LSM6DS3Sensor : public MotionSensor
+{
   private:
     Adafruit_LSM6DS3TRC sensor;
 
   public:
-      LSM6DS3Sensor(ScanI2C::DeviceAddress address);
-      virtual bool init() override;
-      virtual int32_t runOnce() override;
+    LSM6DS3Sensor(ScanI2C::DeviceAddress address);
+    virtual bool init() override;
+    virtual int32_t runOnce() override;
 };
 
 #endif

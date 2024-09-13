@@ -4,7 +4,7 @@
 
 #include "MotionSensor.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR 
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
 #ifdef STK8XXX_INT
 
@@ -16,14 +16,14 @@ class STK8XXXSensor : public MotionSensor
     STK8xxx sensor;
 
   public:
-      STK8XXXSensor(ScanI2C::DeviceAddress address);
-      virtual bool init() override;
-      virtual int32_t runOnce() override;
+    STK8XXXSensor(ScanI2C::DeviceAddress address);
+    virtual bool init() override;
+    virtual int32_t runOnce() override;
 };
 #else
 
 // Stub
-class STK8XXXSensor: public MotionSensor
+class STK8XXXSensor : public MotionSensor
 {
   public:
     STK8XXXSensor(ScanI2C::DeviceAddress address);

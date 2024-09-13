@@ -29,8 +29,7 @@ ScanI2C::I2CPort MotionSensor::devicePort()
 #if !MESHTASTIC_EXCLUDE_POWER_FSM
 void MotionSensor::wakeScreen()
 {
-    if (powerFSM.getState() == &stateDARK)
-    {
+    if (powerFSM.getState() == &stateDARK) {
         LOG_DEBUG("Accelerometer::wakeScreen detected\n");
         powerFSM.trigger(EVENT_INPUT);
     }
@@ -42,10 +41,19 @@ void MotionSensor::buttonPress()
     powerFSM.trigger(EVENT_PRESS);
 }
 #else
-void MotionSensor::wakeScreen() { ; }
-void MotionSensor::buttonPress() { ; }
+void MotionSensor::wakeScreen()
+{
+    ;
+}
+void MotionSensor::buttonPress()
+{
+    ;
+}
 #endif
 
-void MotionSensor::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) { ; }
+void MotionSensor::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
+{
+    ;
+}
 
 #endif

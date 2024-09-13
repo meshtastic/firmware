@@ -4,16 +4,14 @@
 
 using namespace MotionSensorI2C;
 
-BMA423Sensor::BMA423Sensor(ScanI2C::DeviceAddress address) 
-: MotionSensor::MotionSensor(ScanI2C::DeviceType::BMA423, address)
-{}
+BMA423Sensor::BMA423Sensor(ScanI2C::DeviceAddress address) : MotionSensor::MotionSensor(ScanI2C::DeviceType::BMA423, address) {}
 
 bool BMA423Sensor::init()
 {
-   if (sensor.begin(deviceAddress(), &MotionSensorI2C::readRegister, &MotionSensorI2C::writeRegister)) {
-        sensor.configAccelerometer(sensor.RANGE_2G, sensor.ODR_100HZ, sensor.BW_NORMAL_AVG4,sensor.PERF_CONTINUOUS_MODE);
+    if (sensor.begin(deviceAddress(), &MotionSensorI2C::readRegister, &MotionSensorI2C::writeRegister)) {
+        sensor.configAccelerometer(sensor.RANGE_2G, sensor.ODR_100HZ, sensor.BW_NORMAL_AVG4, sensor.PERF_CONTINUOUS_MODE);
         sensor.enableAccelerometer();
-        sensor.configInterrupt(BMA4_LEVEL_TRIGGER, BMA4_ACTIVE_HIGH, BMA4_PUSH_PULL, BMA4_OUTPUT_ENABLE,BMA4_INPUT_DISABLE);
+        sensor.configInterrupt(BMA4_LEVEL_TRIGGER, BMA4_ACTIVE_HIGH, BMA4_PUSH_PULL, BMA4_OUTPUT_ENABLE, BMA4_INPUT_DISABLE);
 
 #ifdef BMA423_INT
         pinMode(BMA4XX_INT, INPUT);

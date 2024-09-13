@@ -4,12 +4,12 @@
 
 #include "MotionSensor.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR 
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
 #include <SensorBMA423.hpp>
 #include <Wire.h>
 
-class BMA423Sensor: public MotionSensor
+class BMA423Sensor : public MotionSensor
 {
   private:
     SensorBMA423 sensor;

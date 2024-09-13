@@ -2,11 +2,12 @@
 
 #if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
-LSM6DS3Sensor::LSM6DS3Sensor(ScanI2C::DeviceAddress address) 
-: MotionSensor::MotionSensor(ScanI2C::DeviceType::LSM6DS3, address)
-{}
+LSM6DS3Sensor::LSM6DS3Sensor(ScanI2C::DeviceAddress address) : MotionSensor::MotionSensor(ScanI2C::DeviceType::LSM6DS3, address)
+{
+}
 
-bool LSM6DS3Sensor::init() {
+bool LSM6DS3Sensor::init()
+{
     if (sensor.begin_I2C(deviceAddress())) {
 
         // Default threshold of 2G, less sensitive options are 4, 8 or 16G
@@ -17,7 +18,7 @@ bool LSM6DS3Sensor::init() {
 
         LOG_DEBUG("LSM6DS3Sensor::init ok\n");
         return true;
-    } 
+    }
     LOG_DEBUG("LSM6DS3Sensor::init failed\n");
     return false;
 }

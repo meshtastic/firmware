@@ -33,20 +33,20 @@
 
 class ICM20948Sensor : public MotionSensor
 {
-private:
-  ICM_20948_I2C sensor;
+  private:
+    ICM_20948_I2C sensor;
 
-protected:
-  virtual bool initSensor();
+  protected:
+    virtual bool initSensor();
 
-public:
-  ICM20948Sensor(ScanI2C::DeviceAddress address);
-  
-  // Initialise the motion sensor
-  virtual bool init() override;
+  public:
+    ICM20948Sensor(ScanI2C::DeviceAddress address);
 
-  // Called each time our sensor gets a chance to run
-  virtual int32_t runOnce() override;
+    // Initialise the motion sensor
+    virtual bool init() override;
+
+    // Called each time our sensor gets a chance to run
+    virtual int32_t runOnce() override;
 };
 
 #endif

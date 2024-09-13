@@ -5,7 +5,7 @@
 
 #include "MotionSensor.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR 
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
 #ifdef RAK_4631
 
@@ -17,7 +17,7 @@
 // screen is defined in main.cpp
 extern graphics::Screen *screen;
 
-class BMX160Sensor: public MotionSensor
+class BMX160Sensor : public MotionSensor
 {
   private:
     RAK_BMX160 sensor;
@@ -33,7 +33,7 @@ class BMX160Sensor: public MotionSensor
 #else
 
 // Stub
-class BMX160Sensor: public MotionSensor
+class BMX160Sensor : public MotionSensor
 {
   public:
     BMX160Sensor(ScanI2C::DeviceAddress address);
