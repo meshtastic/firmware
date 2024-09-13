@@ -23,6 +23,7 @@
 #include "Sensor/BME680Sensor.h"
 #include "Sensor/BMP085Sensor.h"
 #include "Sensor/BMP280Sensor.h"
+#include "Sensor/BMP3XXSensor.h"
 #include "Sensor/DFRobotLarkSensor.h"
 #include "Sensor/LPS22HBSensor.h"
 #include "Sensor/MCP9808Sensor.h"
@@ -54,6 +55,7 @@ AHT10Sensor aht10Sensor;
 MLX90632Sensor mlx90632Sensor;
 DFRobotLarkSensor dfRobotLarkSensor;
 NAU7802Sensor nau7802Sensor;
+BMP3XXSensor bmp3xxSensor;
 #ifdef T1000X_SENSOR_EN
 T1000xSensor t1000xSensor;
 #endif
@@ -107,6 +109,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = bmp280Sensor.runOnce();
             if (bme280Sensor.hasSensor())
                 result = bme280Sensor.runOnce();
+            if (bmp3xxSensor.hasSensor())
+                result = bmp3xxSensor.runOnce();
             if (bme680Sensor.hasSensor())
                 result = bme680Sensor.runOnce();
             if (mcp9808Sensor.hasSensor())
@@ -327,6 +331,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         valid = valid && bme280Sensor.getMetrics(m);
         hasSensor = true;
     }
+    if (bmp3xxSensor.hasSensor()) {
+        valid = valid && bmp3xxSensor.getMetrics(m);
+        hasSensor = true;
+    }
     if (bme680Sensor.hasSensor()) {
         valid = valid && bme680Sensor.getMetrics(m);
         hasSensor = true;
@@ -372,13 +380,19 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         hasSensor = true;
     }
     if (aht10Sensor.hasSensor()) {
-        if (!bmp280Sensor.hasSensor()) {
+        if (!bmp280Sensor.hasSensor() && !bmp3xxSensor.hasSensor()) {
             valid = valid && aht10Sensor.getMetrics(m);
             hasSensor = true;
-        } else {
+        } else if (bmp280Sensor.hasSensor()) {
             // prefer bmp280 temp if both sensors are present, fetch only humidity
             meshtastic_Telemetry m_ahtx = meshtastic_Telemetry_init_zero;
             LOG_INFO("AHTX0+BMP280 module detected: using temp from BMP280 and humy from AHTX0\n");
+            aht10Sensor.getMetrics(&m_ahtx);
+            m->variant.environment_metrics.relative_humidity = m_ahtx.variant.environment_metrics.relative_humidity;
+        } else {
+            // prefer bmp3xx temp if both sensors are present, fetch only humidity
+            meshtastic_Telemetry m_ahtx = meshtastic_Telemetry_init_zero;
+            LOG_INFO("AHTX0+BMP3XX module detected: using temp from BMP3XX and humy from AHTX0\n");
             aht10Sensor.getMetrics(&m_ahtx);
             m->variant.environment_metrics.relative_humidity = m_ahtx.variant.environment_metrics.relative_humidity;
         }
@@ -505,6 +519,11 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
     }
     if (bme280Sensor.hasSensor()) {
         result = bme280Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (bmp3xxSensor.hasSensor()) {
+        result = bmp3xxSensor.handleAdminMessage(mp, request, response);
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }

@@ -224,6 +224,11 @@ __attribute__((weak, noinline)) bool loopCanSleep()
     return true;
 }
 
+// Weak empty variant initialization function.
+// May be redefined by variant files.
+void lateInitVariant() __attribute__((weak));
+void lateInitVariant() {}
+
 /**
  * Print info as a structured log message (for automated log processing)
  */
@@ -284,29 +289,9 @@ void setup()
     digitalWrite(LORA_TCXO_GPIO, HIGH);
 #endif
 
-#if defined(VEXT_ENABLE_V03)
-    pinMode(VEXT_ENABLE_V03, OUTPUT);
-    pinMode(ST7735_BL_V03, OUTPUT);
-    digitalWrite(VEXT_ENABLE_V03, 0); // turn on the display power and antenna boost
-    digitalWrite(ST7735_BL_V03, 1);   // display backligth on
-    LOG_DEBUG("HELTEC Detect Tracker V1.0\n");
-#elif defined(VEXT_ENABLE_V05)
-    pinMode(VEXT_ENABLE_V05, OUTPUT);
-    pinMode(ST7735_BL_V05, OUTPUT);
-    digitalWrite(VEXT_ENABLE_V05, 1); // turn on the lora antenna boost
-    digitalWrite(ST7735_BL_V05, 1);   // turn on display backligth
-    LOG_DEBUG("HELTEC Detect Tracker V1.1\n");
-#elif defined(VEXT_ENABLE) && defined(VEXT_ON_VALUE)
+#if defined(VEXT_ENABLE)
     pinMode(VEXT_ENABLE, OUTPUT);
     digitalWrite(VEXT_ENABLE, VEXT_ON_VALUE); // turn on the display power
-#elif defined(VEXT_ENABLE)
-    pinMode(VEXT_ENABLE, OUTPUT);
-    digitalWrite(VEXT_ENABLE, 0); // turn on the display power
-#endif
-
-#if defined(VTFT_CTRL_V03)
-    pinMode(VTFT_CTRL_V03, OUTPUT);
-    digitalWrite(VTFT_CTRL_V03, LOW);
 #endif
 
 #if defined(VTFT_CTRL)
@@ -562,6 +547,7 @@ void setup()
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::BME_680, meshtastic_TelemetrySensorType_BME680)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::BME_280, meshtastic_TelemetrySensorType_BME280)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::BMP_280, meshtastic_TelemetrySensorType_BMP280)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::BMP_3XX, meshtastic_TelemetrySensorType_BMP3XX)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::BMP_085, meshtastic_TelemetrySensorType_BMP085)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::INA260, meshtastic_TelemetrySensorType_INA260)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::INA219, meshtastic_TelemetrySensorType_INA219)
@@ -649,8 +635,6 @@ void setup()
 #if !MESHTASTIC_EXCLUDE_I2C
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
-        config.display.wake_on_tap_or_motion = true;
-        moduleConfig.external_notification.enabled = true;
         accelerometerThread = new AccelerometerThread(acc_info.type);
     }
 #endif
@@ -761,8 +745,8 @@ void setup()
 #if !MESHTASTIC_EXCLUDE_I2C
 // Don't call screen setup until after nodedb is setup (because we need
 // the current region name)
-#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(HX8357_CS) ||            \
-    defined(USE_ST7789)
+#if defined(ST7701_CS) || defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS) ||            \
+    defined(HX8357_CS) || defined(USE_ST7789)
     screen->setup();
 #elif defined(ARCH_PORTDUINO)
     if (screen_found.port != ScanI2C::I2CPort::NO_I2C || settingsMap[displayPanel]) {
@@ -1028,6 +1012,8 @@ void setup()
             rebootAtMsec = millis() + 5000;
         }
     }
+
+    lateInitVariant(); // Do board specific init (see extra_variants/README.md for documentation)
 
 #if !MESHTASTIC_EXCLUDE_MQTT
     mqttInit();

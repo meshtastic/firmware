@@ -182,7 +182,8 @@ class NodeDB
     void cleanupMeshDB();
 
     /// Reinit device state from scratch (not loading from disk)
-    void installDefaultDeviceState(), installDefaultChannels(), installDefaultConfig(), installDefaultModuleConfig();
+    void installDefaultDeviceState(), installDefaultChannels(), installDefaultConfig(bool preserveKey),
+        installDefaultModuleConfig();
 
     /// write to flash
     /// @return true if the save was successful

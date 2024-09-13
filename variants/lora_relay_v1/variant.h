@@ -144,7 +144,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 
 #define ST7735_RESET (11) // Output
 #define ST7735_CS (12)
-#define ST7735_BACKLIGHT_EN (13)
+#define TFT_BL (13)
 #define ST7735_RS (9)
 
 // #define LORA_DISABLE_SENDING // The board can brownout during lora TX if you don't have a battery connected.  Disable sending

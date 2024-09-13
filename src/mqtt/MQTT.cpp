@@ -514,19 +514,29 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
         return; // no channels have an uplink enabled
     auto &ch = channels.getByIndex(chIndex);
 
-    if (mp_decoded.which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
-        LOG_CRIT("MQTT::onSend(): mp_decoded isn't actually decoded\n");
-        return;
-    }
+    if (!mp.pki_encrypted) {
+        if (mp_decoded.which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
+            LOG_CRIT("MQTT::onSend(): mp_decoded isn't actually decoded\n");
+            return;
+        }
 
-    if (strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0 &&
-        (mp_decoded.decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
-         mp_decoded.decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP)) {
-        LOG_DEBUG("MQTT onSend - Ignoring range test or detection sensor message on public mqtt\n");
-        return;
-    }
+        // check for the lowest bit of the data bitfield set false, and the use of one of the default keys.
+        if (mp_decoded.from != nodeDB->getNodeNum() && mp_decoded.decoded.has_bitfield &&
+            !(mp_decoded.decoded.bitfield & BITFIELD_OK_TO_MQTT_MASK) &&
+            (ch.settings.psk.size < 2 || (ch.settings.psk.size == 16 && memcmp(ch.settings.psk.bytes, defaultpsk, 16)) ||
+             (ch.settings.psk.size == 32 && memcmp(ch.settings.psk.bytes, eventpsk, 32)))) {
+            LOG_INFO("MQTT onSend - Not forwarding packet due to DontMqttMeBro flag\n");
+            return;
+        }
 
-    if (ch.settings.uplink_enabled || mp.pki_encrypted) {
+        if (strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0 &&
+            (mp_decoded.decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
+             mp_decoded.decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP)) {
+            LOG_DEBUG("MQTT onSend - Ignoring range test or detection sensor message on public mqtt\n");
+            return;
+        }
+    }
+    if (mp.pki_encrypted || ch.settings.uplink_enabled) {
         const char *channelId = mp.pki_encrypted ? "PKI" : channels.getGlobalId(chIndex);
 
         meshtastic_ServiceEnvelope *env = mqttPool.allocZeroed();
@@ -537,7 +547,8 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
         if (moduleConfig.mqtt.encryption_enabled) {
             env->packet = (meshtastic_MeshPacket *)&mp;
             LOG_DEBUG("encrypted message\n");
-        } else {
+        } else if (mp_decoded.which_payload_variant ==
+                   meshtastic_MeshPacket_decoded_tag) { // Don't upload a still-encrypted PKI packet
             env->packet = (meshtastic_MeshPacket *)&mp_decoded;
             LOG_DEBUG("portnum %i message\n", env->packet->decoded.portnum);
         }

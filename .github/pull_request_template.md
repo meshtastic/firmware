@@ -1,9 +1,9 @@
+### ❌ (Please delete all these tips and replace them with your text) ❌
+
 ## Thank you for sending in a pull request, here's some tips to get started!
 
-(Please delete all these tips and replace with your text)
-
 - Before starting on some new big chunk of code, it it is optional but highly recommended to open an issue first
-  to say "hey, I think this idea X should be implemented and I'm starting work on it. My general plan is Y, any feedback
+  to say "Hey, I think this idea X should be implemented and I'm starting work on it. My general plan is Y, any feedback
   is appreciated." This will allow other devs to potentially save you time by not accidentially duplicating work etc...
 - Please do not check in files that don't have real changes
 - Please do not reformat lines that you didn't have to change the code on
@@ -12,3 +12,4 @@
 - If your PR fixes a bug, mention "fixes #bugnum" somewhere in your pull request description.
 - If your other co-developers have comments on your PR please tweak as needed.
 - Please also enable "Allow edits by maintainers".
+- If your PR gets accepted you can request a "Contributor" role in the Meshtastic Discord

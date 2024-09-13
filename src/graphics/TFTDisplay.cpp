@@ -21,10 +21,6 @@ extern SX1509 gpioExtender;
 #if defined(ST7735S)
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
 
-#if defined(ST7735_BACKLIGHT_EN) && !defined(TFT_BL)
-#define TFT_BL ST7735_BACKLIGHT_EN
-#endif
-
 #ifndef TFT_INVERT
 #define TFT_INVERT true
 #endif
@@ -91,24 +87,20 @@ class LGFX : public lgfx::LGFX_Device
             _panel_instance.config(cfg);
         }
 
+#ifdef TFT_BL
         // Set the backlight control
         {
             auto cfg = _light_instance.config(); // Gets a structure for backlight settings.
 
-#ifdef ST7735_BL_V03
-            cfg.pin_bl = ST7735_BL_V03;
-#elif defined(ST7735_BL_V05)
-            cfg.pin_bl = ST7735_BL_V05;
-#else
-            cfg.pin_bl = ST7735_BL; // Pin number to which the backlight is connected
-#endif
-            cfg.invert = true; // true to invert the brightness of the backlight
+            cfg.pin_bl = TFT_BL; // Pin number to which the backlight is connected
+            cfg.invert = true;   // true to invert the brightness of the backlight
             // cfg.freq = 44100;    // PWM frequency of backlight
             // cfg.pwm_channel = 1; // PWM channel number to use
 
             _light_instance.config(cfg);
             _panel_instance.setLight(&_light_instance); // Set the backlight on the panel.
         }
+#endif
 
         setPanel(&_panel_instance);
     }
@@ -130,10 +122,6 @@ static void rak14014_tpIntHandle(void)
 
 #elif defined(ST7789_CS)
 #include <LovyanGFX.hpp> // Graphics and font library for ST7735 driver chip
-
-#if defined(ST7789_BACKLIGHT_EN) && !defined(TFT_BL)
-#define TFT_BL ST7789_BACKLIGHT_EN
-#endif
 
 class LGFX : public lgfx::LGFX_Device
 {
@@ -204,6 +192,7 @@ class LGFX : public lgfx::LGFX_Device
             _panel_instance.config(cfg);
         }
 
+#ifdef ST7789_BL
         // Set the backlight control. (delete if not necessary)
         {
             auto cfg = _light_instance.config(); // Gets a structure for backlight settings.
@@ -215,6 +204,7 @@ class LGFX : public lgfx::LGFX_Device
             _light_instance.config(cfg);
             _panel_instance.setLight(&_light_instance); // Set the backlight on the panel.
         }
+#endif
 
 #if HAS_TOUCHSCREEN
         // Configure settings for touch screen control.
@@ -324,6 +314,7 @@ class LGFX : public lgfx::LGFX_Device
             _panel_instance.config(cfg);
         }
 
+#ifdef TFT_BL
         // Set the backlight control
         {
             auto cfg = _light_instance.config(); // Gets a structure for backlight settings.
@@ -336,6 +327,7 @@ class LGFX : public lgfx::LGFX_Device
             _light_instance.config(cfg);
             _panel_instance.setLight(&_light_instance); // Set the backlight on the panel.
         }
+#endif
 
         setPanel(&_panel_instance);
     }
@@ -508,10 +500,126 @@ class LGFX : public lgfx::LGFX_Device
 
 static LGFX *tft = nullptr;
 
+#elif defined(ST7701_CS)
+#include <LovyanGFX.hpp> // Graphics and font library for ST7701 driver chip
+#include <lgfx/v1/platforms/esp32s3/Bus_RGB.hpp>
+#include <lgfx/v1/platforms/esp32s3/Panel_RGB.hpp>
+
+class LGFX : public lgfx::LGFX_Device
+{
+    lgfx::Panel_ST7701 _panel_instance;
+    lgfx::Bus_RGB _bus_instance;
+    lgfx::Light_PWM _light_instance;
+    lgfx::Touch_FT5x06 _touch_instance;
+
+  public:
+    LGFX(void)
+    {
+        {
+            auto cfg = _panel_instance.config();
+            cfg.memory_width = 800;
+            cfg.memory_height = 480;
+            cfg.panel_width = TFT_WIDTH;
+            cfg.panel_height = TFT_HEIGHT;
+            cfg.offset_x = TFT_OFFSET_X;
+            cfg.offset_y = TFT_OFFSET_Y;
+            _panel_instance.config(cfg);
+        }
+
+        {
+            auto cfg = _panel_instance.config_detail();
+            cfg.pin_cs = ST7701_CS;
+            cfg.pin_sclk = ST7701_SCK;
+            cfg.pin_mosi = ST7701_SDA;
+            // cfg.use_psram = 1;
+            _panel_instance.config_detail(cfg);
+        }
+
+        {
+            auto cfg = _bus_instance.config();
+            cfg.panel = &_panel_instance;
+#ifdef SENSECAP_INDICATOR
+            cfg.pin_d0 = GPIO_NUM_15; // B0
+            cfg.pin_d1 = GPIO_NUM_14; // B1
+            cfg.pin_d2 = GPIO_NUM_13; // B2
+            cfg.pin_d3 = GPIO_NUM_12; // B3
+            cfg.pin_d4 = GPIO_NUM_11; // B4
+
+            cfg.pin_d5 = GPIO_NUM_10; // G0
+            cfg.pin_d6 = GPIO_NUM_9;  // G1
+            cfg.pin_d7 = GPIO_NUM_8;  // G2
+            cfg.pin_d8 = GPIO_NUM_7;  // G3
+            cfg.pin_d9 = GPIO_NUM_6;  // G4
+            cfg.pin_d10 = GPIO_NUM_5; // G5
+
+            cfg.pin_d11 = GPIO_NUM_4; // R0
+            cfg.pin_d12 = GPIO_NUM_3; // R1
+            cfg.pin_d13 = GPIO_NUM_2; // R2
+            cfg.pin_d14 = GPIO_NUM_1; // R3
+            cfg.pin_d15 = GPIO_NUM_0; // R4
+
+            cfg.pin_henable = GPIO_NUM_18;
+            cfg.pin_vsync = GPIO_NUM_17;
+            cfg.pin_hsync = GPIO_NUM_16;
+            cfg.pin_pclk = GPIO_NUM_21;
+            cfg.freq_write = 12000000;
+
+            cfg.hsync_polarity = 0;
+            cfg.hsync_front_porch = 10;
+            cfg.hsync_pulse_width = 8;
+            cfg.hsync_back_porch = 50;
+
+            cfg.vsync_polarity = 0;
+            cfg.vsync_front_porch = 10;
+            cfg.vsync_pulse_width = 8;
+            cfg.vsync_back_porch = 20;
+
+            cfg.pclk_active_neg = 0;
+            cfg.de_idle_high = 1;
+            cfg.pclk_idle_high = 0;
+#endif
+            _bus_instance.config(cfg);
+        }
+        _panel_instance.setBus(&_bus_instance);
+
+        {
+            auto cfg = _light_instance.config();
+            cfg.pin_bl = ST7701_BL;
+            _light_instance.config(cfg);
+        }
+        _panel_instance.light(&_light_instance);
+
+        {
+            auto cfg = _touch_instance.config();
+            cfg.pin_cs = -1;
+            cfg.x_min = 0;
+            cfg.x_max = 479;
+            cfg.y_min = 0;
+            cfg.y_max = 479;
+            cfg.pin_int = -1; // don't use SCREEN_TOUCH_INT;
+            cfg.pin_rst = SCREEN_TOUCH_RST;
+            cfg.bus_shared = true;
+            cfg.offset_rotation = TFT_OFFSET_ROTATION;
+
+            cfg.i2c_port = TOUCH_I2C_PORT;
+            cfg.i2c_addr = TOUCH_SLAVE_ADDRESS;
+            cfg.pin_sda = I2C_SDA;
+            cfg.pin_scl = I2C_SCL;
+            cfg.freq = 400000;
+            _touch_instance.config(cfg);
+            _panel_instance.setTouch(&_touch_instance);
+        }
+
+        setPanel(&_panel_instance);
+    }
+};
+
+static LGFX *tft = nullptr;
+
 #endif
 
-#if defined(ST7735_CS) || defined(ST7789_CS) || defined(ILI9341_DRIVER) || defined(RAK14014) || defined(HX8357_CS) ||            \
-    (ARCH_PORTDUINO && HAS_SCREEN != 0)
+#if defined(ST7701_CS) || defined(ST7735_CS) || defined(ST7789_CS) || defined(ILI9341_DRIVER) || defined(RAK14014) ||            \
+    defined(HX8357_CS) || (ARCH_PORTDUINO && HAS_SCREEN != 0)
 #include "SPILock.h"
 #include "TFTDisplay.h"
 #include <SPI.h>
@@ -521,9 +629,26 @@ static LGFX *tft = nullptr;
 extern unPhone unphone;
 #endif
 
+GpioPin *TFTDisplay::backlightEnable = NULL;
+
 TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY geometry, HW_I2C i2cBus)
 {
     LOG_DEBUG("TFTDisplay!\n");
+
+#ifdef TFT_BL
+    GpioPin *p = new GpioHwPin(TFT_BL);
+
+    if (!TFT_BACKLIGHT_ON) { // Need to invert the pin before hardware
+        auto virtPin = new GpioVirtPin();
+        new GpioNotTransformer(
+            virtPin, p); // We just leave this created object on the heap so it can stay watching virtPin and driving en_gpio
+        p = virtPin;
+    }
+#else
+    GpioPin *p = new GpioVirtPin(); // Just simulate a pin
+#endif
+    backlightEnable = p;
+
 #if ARCH_PORTDUINO
     if (settingsMap[displayRotate]) {
         setGeometry(GEOMETRY_RAWMODE, settingsMap[configNames::displayHeight], settingsMap[configNames::displayWidth]);
@@ -577,24 +702,15 @@ void TFTDisplay::sendCommand(uint8_t com)
     // handle display on/off directly
     switch (com) {
     case DISPLAYON: {
+        // LOG_DEBUG("Display on\n");
+        backlightEnable->set(true);
 #if ARCH_PORTDUINO
         display(true);
         if (settingsMap[displayBacklight] > 0)
             digitalWrite(settingsMap[displayBacklight], TFT_BACKLIGHT_ON);
-#elif defined(ST7735_BL_V03)
-        digitalWrite(ST7735_BL_V03, TFT_BACKLIGHT_ON);
-#elif defined(ST7735_BL_V05)
-        pinMode(ST7735_BL_V05, OUTPUT);
-        digitalWrite(ST7735_BL_V05, TFT_BACKLIGHT_ON);
 #elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE)
         tft->wakeup();
         tft->powerSaveOff();
-#elif defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
-        digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
-#endif
-
-#ifdef VTFT_CTRL_V03
-        digitalWrite(VTFT_CTRL_V03, LOW);
 #endif
 
 #ifdef VTFT_CTRL
@@ -610,25 +726,17 @@ void TFTDisplay::sendCommand(uint8_t com)
         break;
     }
     case DISPLAYOFF: {
+        // LOG_DEBUG("Display off\n");
+        backlightEnable->set(false);
 #if ARCH_PORTDUINO
         tft->clear();
         if (settingsMap[displayBacklight] > 0)
             digitalWrite(settingsMap[displayBacklight], !TFT_BACKLIGHT_ON);
-#elif defined(ST7735_BL_V03)
-        digitalWrite(ST7735_BL_V03, !TFT_BACKLIGHT_ON);
-#elif defined(ST7735_BL_V05)
-        pinMode(ST7735_BL_V05, OUTPUT);
-        digitalWrite(ST7735_BL_V05, !TFT_BACKLIGHT_ON);
 #elif !defined(RAK14014) && !defined(M5STACK) && !defined(UNPHONE)
         tft->sleep();
         tft->powerSaveOn();
-#elif defined(TFT_BL) && defined(TFT_BACKLIGHT_ON)
-        digitalWrite(TFT_BL, !TFT_BACKLIGHT_ON);
 #endif
 
-#ifdef VTFT_CTRL_V03
-        digitalWrite(VTFT_CTRL_V03, HIGH);
-#endif
 #ifdef VTFT_CTRL
         digitalWrite(VTFT_CTRL, HIGH);
 #endif
@@ -712,23 +820,11 @@ bool TFTDisplay::connect()
     tft = new LGFX;
 #endif
 
-#ifdef TFT_BL
-    pinMode(TFT_BL, OUTPUT);
-    digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
-    // pinMode(PIN_3V3_EN, OUTPUT);
-    // digitalWrite(PIN_3V3_EN, HIGH);
+    backlightEnable->set(true);
     LOG_INFO("Power to TFT Backlight\n");
-#endif
 
-#ifdef ST7735_BL_V03
-    digitalWrite(ST7735_BL_V03, TFT_BACKLIGHT_ON);
-#elif defined(ST7735_BL_V05)
-    pinMode(ST7735_BL_V05, OUTPUT);
-    digitalWrite(ST7735_BL_V05, TFT_BACKLIGHT_ON);
-#endif
 #ifdef UNPHONE
     unphone.backlight(true); // using unPhone library
-    LOG_INFO("Power to TFT Backlight\n");
 #endif
 
     tft->init();
@@ -744,7 +840,7 @@ bool TFTDisplay::connect()
     attachInterrupt(digitalPinToInterrupt(SCREEN_TOUCH_INT), rak14014_tpIntHandle, FALLING);
 #elif defined(T_DECK) || defined(PICOMPUTER_S3) || defined(CHATTER_2)
     tft->setRotation(1); // T-Deck has the TFT in landscape
-#elif defined(T_WATCH_S3)
+#elif defined(T_WATCH_S3) || defined(SENSECAP_INDICATOR)
     tft->setRotation(2); // T-Watch S3 left-handed orientation
 #else
     tft->setRotation(3); // Orient horizontal and wide underneath the silkscreen name label

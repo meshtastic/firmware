@@ -87,7 +87,7 @@ int32_t SerialKeyboard::runOnce()
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP;
             } else if (!(shiftRegister2 & (1 << 2))) {
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
-                e.kbchar = 0xb7;
+                e.kbchar = INPUT_BROKER_MSG_RIGHT;
             } else if (!(shiftRegister2 & (1 << 1))) {
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
             } else if (!(shiftRegister2 & (1 << 0))) {
