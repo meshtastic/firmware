@@ -19,7 +19,7 @@ static BLEBas blebas; // BAS (Battery Service) helper class instance
 #ifndef BLE_DFU_SECURE
 static BLEDfu bledfu; // DFU software update helper service
 #else
-static BLEDfuSecure bledfusecure; // DFU software update helper service
+static BLEDfuSecure bledfusecure;                                             // DFU software update helper service
 #endif
 
 // This scratch buffer is used for various bluetooth reads/writes - but it is safe because only one bt operation can be in
@@ -114,8 +114,8 @@ void startAdv(void)
      */
     Bluefruit.Advertising.restartOnDisconnect(true);
     Bluefruit.Advertising.setInterval(32, 244); // in unit of 0.625 ms
-    Bluefruit.Advertising.setFastTimeout(30);    // number of seconds in fast mode
-    Bluefruit.Advertising.start(0);                // 0 = Don't stop advertising after n seconds.  FIXME, we should stop advertising after X
+    Bluefruit.Advertising.setFastTimeout(30);   // number of seconds in fast mode
+    Bluefruit.Advertising.start(0); // 0 = Don't stop advertising after n seconds.  FIXME, we should stop advertising after X
 }
 // Just ack that the caller is allowed to read
 static void authorizeRead(uint16_t conn_hdl)
@@ -172,7 +172,7 @@ void setupMeshService(void)
     fromRadio.setMaxLen(sizeof(fromRadioBytes));
     fromRadio.setReadAuthorizeCallback(
         onFromRadioAuthorize,
-        false);                                                     // We don't call this callback via the adafruit queue, because we can safely run in the BLE context
+        false); // We don't call this callback via the adafruit queue, because we can safely run in the BLE context
     fromRadio.setBuffer(fromRadioBytes, sizeof(fromRadioBytes)); // we preallocate our fromradio buffer so we won't waste space
     // for two copies
     fromRadio.begin();
@@ -262,7 +262,7 @@ void NRF52Bluetooth::setup()
     bledfu.begin(); // Install the DFU helper
 #else
     bledfusecure.setPermission(SECMODE_ENC_WITH_MITM, SECMODE_ENC_WITH_MITM); // add by WayenWeng
-    bledfusecure.begin();                                                      // Install the DFU helper
+    bledfusecure.begin();                                                     // Install the DFU helper
 #endif
     // Configure and Start the Device Information Service
     LOG_INFO("Configuring the Device Information Service\n");
@@ -286,7 +286,7 @@ void NRF52Bluetooth::resumeAdvertising()
 {
     Bluefruit.Advertising.restartOnDisconnect(true);
     Bluefruit.Advertising.setInterval(32, 244); // in unit of 0.625 ms
-    Bluefruit.Advertising.setFastTimeout(30);    // number of seconds in fast mode
+    Bluefruit.Advertising.setFastTimeout(30);   // number of seconds in fast mode
     Bluefruit.Advertising.start(0);
 }
 /// Given a level between 0-100, update the BLE attribute
