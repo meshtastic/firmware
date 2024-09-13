@@ -1506,17 +1506,16 @@ bool GPS::factoryReset()
 
 /**
  * Perform any processing that should be done only while the GPS is awake and looking for a fix.
- * Override this method to check for new locations
+ * Override this method to check for new time
  *
- * @return true if we've acquired a new location
+ * @return true if we've acquired a new time
  */
 bool GPS::lookForTime()
 {
-
-#ifdef GNSS_AIROHA
     uint8_t fix = reader.fixQuality();
-    uint32_t now = millis();
-    if (fix > 0) {
+    if (fix > 0 && fix < 6) {
+#ifdef GNSS_AIROHA
+        uint32_t now = millis();
         if (lastFixStartMsec > 0) {
             if ((now - lastFixStartMsec) < GPS_FIX_HOLD_TIME) {
                 return false;
@@ -1527,10 +1526,11 @@ bool GPS::lookForTime()
             lastFixStartMsec = now;
             return false;
         }
+#endif
     } else {
         return false;
     }
-#endif
+
     auto ti = reader.time;
     auto d = reader.date;
     if (ti.isValid() && d.isValid()) { // Note: we don't check for updated, because we'll only be called if needed
@@ -1565,11 +1565,15 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
  */
 bool GPS::lookForLocation()
 {
+    // By default, TinyGPS++ does not parse GPGSA lines, which give us
+    //   the 2D/3D fixType (see NMEAGPS.h)
+    // At a minimum, use the fixQuality indicator in GPGGA (FIXME?)
+    fixQual = reader.fixQuality();
+
 #ifdef GNSS_AIROHA
     if ((config.position.gps_update_interval * 1000) >= (GPS_FIX_HOLD_TIME * 2)) {
-        uint8_t fix = reader.fixQuality();
         uint32_t now = millis();
-        if (fix > 0) {
+        if (fixQual > 0 && fixQual < 6) {
             if (lastFixStartMsec > 0) {
                 if ((now - lastFixStartMsec) < GPS_FIX_HOLD_TIME) {
                     return false;
@@ -1585,10 +1589,6 @@ bool GPS::lookForLocation()
         }
     }
 #endif
-    // By default, TinyGPS++ does not parse GPGSA lines, which give us
-    //   the 2D/3D fixType (see NMEAGPS.h)
-    // At a minimum, use the fixQuality indicator in GPGGA (FIXME?)
-    fixQual = reader.fixQuality();
 
 #ifndef TINYGPS_OPTION_NO_STATISTICS
     if (reader.failedChecksum() > lastChecksumFailCount) {
