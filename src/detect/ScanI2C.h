@@ -42,6 +42,7 @@ class ScanI2C
         BMA423,
         BQ24295,
         LSM6DS3,
+        TCA9535,
         TCA9555,
         VEML7700,
         RCWL9620,
@@ -52,7 +53,9 @@ class ScanI2C
         AHT10,
         BMX160,
         DFROBOT_LARK,
-        NAU7802
+        NAU7802,
+        FT6336U,
+        STK8BAXX
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;
