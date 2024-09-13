@@ -54,7 +54,7 @@ class ScanI2C
         BMX160,
         DFROBOT_LARK,
         NAU7802,
-        MAX17048
+        MAX17048,
         FT6336U,
         STK8BAXX
     } DeviceType;
