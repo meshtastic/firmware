@@ -57,7 +57,7 @@ extern AudioThread *audioThread;
 extern graphics::Screen *screen;
 
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-#include "AccelerometerThread.h"
+#include "motion/AccelerometerThread.h"
 extern AccelerometerThread *accelerometerThread;
 #endif
 

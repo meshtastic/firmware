@@ -55,6 +55,7 @@ class ScanI2C
         DFROBOT_LARK,
         NAU7802,
         FT6336U,
+        ICM20948,
         STK8BAXX
     } DeviceType;
 
