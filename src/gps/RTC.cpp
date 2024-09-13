@@ -115,7 +115,7 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
         return false;
     }
 #endif
-    
+
     bool shouldSet;
     if (forceUpdate) {
         shouldSet = true;
