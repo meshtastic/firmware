@@ -124,7 +124,7 @@ void DeviceTelemetryModule::sendLocalStatsToPhone()
     telemetry.variant.local_stats.num_total_nodes = nodeDB->getNumMeshNodes();
     if (RadioLibInterface::instance) {
         telemetry.variant.local_stats.num_packets_tx = RadioLibInterface::instance->txGood;
-        telemetry.variant.local_stats.num_packets_rx = RadioLibInterface::instance->rxGood;
+        telemetry.variant.local_stats.num_packets_rx = RadioLibInterface::instance->rxGood + RadioLibInterface::instance->rxBad;
         telemetry.variant.local_stats.num_packets_rx_bad = RadioLibInterface::instance->rxBad;
     }
 
