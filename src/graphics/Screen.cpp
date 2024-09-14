@@ -1303,7 +1303,11 @@ void Screen::drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t com
     display->drawLine(leftArrow.x, leftArrow.y, tail.x, tail.y);
     display->drawLine(rightArrow.x, rightArrow.y, tail.x, tail.y);
     */
+#ifdef USE_EINK
+    display->drawTriangle(tip.x, tip.y, rightArrow.x, rightArrow.y, tail.x, tail.y);
+#else
     display->fillTriangle(tip.x, tip.y, rightArrow.x, rightArrow.y, tail.x, tail.y);
+#endif
     display->drawTriangle(tip.x, tip.y, leftArrow.x, leftArrow.y, tail.x, tail.y);
 }
 
@@ -1343,9 +1347,9 @@ void Screen::drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t co
     if (config.display.compass_north_top)
         myHeading = -0;
     /* N sign points currently not deleted*/
-    Point N1(-0.04f, 0.65f), N2(0.04f, 0.65f);  //N sign points (N1-N4)
+    Point N1(-0.04f, 0.65f), N2(0.04f, 0.65f); // N sign points (N1-N4)
     Point N3(-0.04f, 0.55f), N4(0.04f, 0.55f);
-    Point NC1(0.00f, 0.50f);                     //north circle center point
+    Point NC1(0.00f, 0.50f); // north circle center point
     Point *rosePoints[] = {&N1, &N2, &N3, &N4, &NC1};
 
     uint16_t compassDiam = Screen::getCompassDiam(SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -1356,13 +1360,13 @@ void Screen::drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t co
         rosePoints[i]->scale(compassDiam);
         rosePoints[i]->translate(compassX, compassY);
     }
-    
+
     /* changed the N sign to a small circle on the compass circle.
     display->drawLine(N1.x, N1.y, N3.x, N3.y);
     display->drawLine(N2.x, N2.y, N4.x, N4.y);
     display->drawLine(N1.x, N1.y, N4.x, N4.y);
     */
-    display->drawCircle(NC1.x, NC1.y, 4);               // North sign circle, 4px radius is sufficient for all displays.
+    display->drawCircle(NC1.x, NC1.y, 4); // North sign circle, 4px radius is sufficient for all displays.
 }
 
 uint16_t Screen::getCompassDiam(uint32_t displayWidth, uint32_t displayHeight)
