@@ -7,10 +7,12 @@
 
 #include "../configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
 #include "../PowerFSM.h"
 #include "../detect/ScanI2C.h"
+#include "../graphics/Screen.h"
+#include "../graphics/ScreenFonts.h"
 #include "../power.h"
 
 // Base class for motion processing
@@ -43,8 +45,8 @@ class MotionSensor
     // Register a button press when a double-tap is detected
     virtual void buttonPress();
 
-    // draw an OLED frame (currently only implemented for RAK4631 BMX160 sensor)
-    virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+    // draw an OLED frame (currently only used by the RAK4631 BMX160 sensor)
+    static void drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
 
   private:
     ScanI2C::FoundDevice _device;

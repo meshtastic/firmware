@@ -1,6 +1,6 @@
 #include "ICM20948Sensor.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
 #ifdef ICM_20948_INT_PIN
 
@@ -29,7 +29,11 @@ bool ICM20948Sensor::initSensor()
 #endif
 
     // Initialize the ICM-20948
+#ifdef Wire1
     sensor.begin(devicePort() == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire, deviceAddress() == ICM20948_ADDR ? 1 : 0);
+#else
+    sensor.begin(Wire, deviceAddress() == ICM20948_ADDR ? 1 : 0);
+#endif
     if (sensor.status != ICM_20948_Stat_Ok) {
         LOG_DEBUG("ICM20948Sensor::init begin - %s\n", sensor.statusString());
         return false;

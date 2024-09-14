@@ -12,9 +12,6 @@
 #include "Router.h"
 #include "configuration.h"
 #include "main.h"
-#ifdef ARCH_NRF52
-#include "main.h"
-#endif
 #ifdef ARCH_PORTDUINO
 #include "unistd.h"
 #endif
@@ -32,10 +29,6 @@
 
 #if MESHTASTIC_EXCLUDE_GPS
 #include "modules/PositionModule.h"
-#endif
-
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-#include "AccelerometerThread.h"
 #endif
 
 AdminModule *adminModule;

@@ -5,17 +5,12 @@
 
 #include "MotionSensor.h"
 
-#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
 #ifdef RAK_4631
 
 #include "Fusion/Fusion.h"
-#include "graphics/Screen.h"
-#include "graphics/ScreenFonts.h"
 #include <Rak_BMX160.h>
-
-// screen is defined in main.cpp
-extern graphics::Screen *screen;
 
 class BMX160Sensor : public MotionSensor
 {
