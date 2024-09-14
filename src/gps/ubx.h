@@ -1,3 +1,10 @@
+#define SEND_UBX_PACKET(TYPE, ID, DATA, ERRMSG, TIMEOUT)                                                                         \
+    msglen = makeUBXPacket(TYPE, ID, sizeof(DATA), DATA);                                                                        \
+    _serial_gps->write(UBXscratch, msglen);                                                                                      \
+    if (getACK(TYPE, ID, TIMEOUT) != GNSS_RESPONSE_OK) {                                                                         \
+        LOG_WARN(#ERRMSG);                                                                                                       \
+    }
+
 // Power Management
 
 uint8_t GPS::_message_PMREQ[] PROGMEM = {
@@ -460,3 +467,4 @@ b5 62 06 8a 0e 00 00 01 00 00 20 00 31 10 00 05 00 31 10 00 46 87
 BBR layer config message:
 b5 62 06 8a 0e 00 00 02 00 00 20 00 31 10 00 05 00 31 10 00 47 94
 */
+
