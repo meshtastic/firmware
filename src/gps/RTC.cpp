@@ -109,6 +109,12 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
     static uint32_t lastSetMsec = 0;
     uint32_t now = millis();
     uint32_t printableEpoch = tv->tv_sec; // Print lib only supports 32 bit but time_t can be 64 bit on some platforms
+#ifdef BUILD_EPOCH
+    if (tv->tv_sec < BUILD_EPOCH) {
+        LOG_WARN("Ignoring time (%ld) before build epoch (%ld)!\n", printableEpoch, BUILD_EPOCH);
+        return false;
+    }
+#endif
 
     bool shouldSet;
     if (forceUpdate) {
