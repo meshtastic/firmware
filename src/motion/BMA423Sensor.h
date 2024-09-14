@@ -16,7 +16,7 @@ class BMA423Sensor : public MotionSensor
     volatile bool BMA_IRQ = false;
 
   public:
-    BMA423Sensor(ScanI2C::DeviceAddress address);
+    explicit BMA423Sensor(ScanI2C::DeviceAddress address);
     virtual bool init() override;
     virtual int32_t runOnce() override;
 };

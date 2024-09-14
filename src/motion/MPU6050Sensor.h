@@ -14,7 +14,7 @@ class MPU6050Sensor : public MotionSensor
     Adafruit_MPU6050 sensor;
 
   public:
-    MPU6050Sensor(ScanI2C::DeviceAddress address);
+    explicit MPU6050Sensor(ScanI2C::DeviceAddress address);
     virtual bool init() override;
     virtual int32_t runOnce() override;
 };

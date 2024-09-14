@@ -16,7 +16,7 @@ class STK8XXXSensor : public MotionSensor
     STK8xxx sensor;
 
   public:
-    STK8XXXSensor(ScanI2C::DeviceAddress address);
+    explicit STK8XXXSensor(ScanI2C::DeviceAddress address);
     virtual bool init() override;
     virtual int32_t runOnce() override;
 };

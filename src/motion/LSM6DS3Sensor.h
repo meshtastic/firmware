@@ -18,7 +18,7 @@ class LSM6DS3Sensor : public MotionSensor
     Adafruit_LSM6DS3TRC sensor;
 
   public:
-    LSM6DS3Sensor(ScanI2C::DeviceAddress address);
+    explicit LSM6DS3Sensor(ScanI2C::DeviceAddress address);
     virtual bool init() override;
     virtual int32_t runOnce() override;
 };

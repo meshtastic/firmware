@@ -20,7 +20,7 @@ class BMX160Sensor : public MotionSensor
     float highestX = 0, lowestX = 0, highestY = 0, lowestY = 0, highestZ = 0, lowestZ = 0;
 
   public:
-    BMX160Sensor(ScanI2C::DeviceAddress address);
+    explicit BMX160Sensor(ScanI2C::DeviceAddress address);
     virtual bool init() override;
     virtual int32_t runOnce() override;
 };

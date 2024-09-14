@@ -29,6 +29,7 @@ ScanI2C::I2CPort MotionSensor::devicePort()
     return _device.address.port;
 }
 
+#ifdef RAK_4631
 void MotionSensor::drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     // int x_offset = display->width() / 2;
@@ -50,6 +51,7 @@ void MotionSensor::drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState
     display->drawCircle(compassX, compassY, compassDiam / 2);
     screen->drawCompassNorth(display, compassX, compassY, screen->getHeading() * PI / 180);
 }
+#endif
 
 #if !MESHTASTIC_EXCLUDE_POWER_FSM
 void MotionSensor::wakeScreen()

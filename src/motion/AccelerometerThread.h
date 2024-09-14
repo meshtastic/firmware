@@ -95,6 +95,33 @@ class AccelerometerThread : public concurrency::OSThread
                 sensor = nullptr;
         }
     }
+
+    // Copy constructor (only needed to avoid cppcheck warnings)
+    AccelerometerThread(const AccelerometerThread &other) : OSThread::OSThread("AccelerometerThread")
+    {
+        // very shallow copy (does not copy OSThread state)
+        if (this != &other) {
+            this->sensor = other.sensor;
+        }
+    }
+
+    // Destructor (only needed to avoid cppcheck warnings)
+    ~AccelerometerThread()
+    {
+        if (sensor != nullptr) {
+            delete sensor;
+        }
+    }
+
+    // Copy assignment (only needed to avoid cppcheck warnings)
+    AccelerometerThread &operator=(const AccelerometerThread &other)
+    {
+        // very shallow copy (does not copy OSThread state)
+        if (this != &other) {
+            this->sensor = other.sensor;
+        }
+        return *this;
+    }
 };
 
 #endif

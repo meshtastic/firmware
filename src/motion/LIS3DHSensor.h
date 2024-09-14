@@ -14,7 +14,7 @@ class LIS3DHSensor : public MotionSensor
     Adafruit_LIS3DH sensor;
 
   public:
-    LIS3DHSensor(ScanI2C::DeviceAddress address);
+    explicit LIS3DHSensor(ScanI2C::DeviceAddress address);
     virtual bool init() override;
     virtual int32_t runOnce() override;
 };

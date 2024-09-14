@@ -19,7 +19,7 @@
 class MotionSensor
 {
   public:
-    MotionSensor(ScanI2C::DeviceType device, ScanI2C::DeviceAddress address);
+    explicit MotionSensor(ScanI2C::DeviceType device, ScanI2C::DeviceAddress address);
 
     // Get the device type
     ScanI2C::DeviceType deviceType();
@@ -45,8 +45,10 @@ class MotionSensor
     // Register a button press when a double-tap is detected
     virtual void buttonPress();
 
+#ifdef RAK_4631
     // draw an OLED frame (currently only used by the RAK4631 BMX160 sensor)
     static void drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+#endif
 
   private:
     ScanI2C::FoundDevice _device;

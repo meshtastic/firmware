@@ -40,7 +40,7 @@ class ICM20948Sensor : public MotionSensor
     virtual bool initSensor();
 
   public:
-    ICM20948Sensor(ScanI2C::DeviceAddress address);
+    explicit ICM20948Sensor(ScanI2C::DeviceAddress address);
 
     // Initialise the motion sensor
     virtual bool init() override;
