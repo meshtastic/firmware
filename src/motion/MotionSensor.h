@@ -20,7 +20,7 @@ class MotionSensor
 {
   public:
     explicit MotionSensor(ScanI2C::DeviceType device, ScanI2C::DeviceAddress address);
-    virtual ~MotionSensor() {};
+    virtual ~MotionSensor(){};
 
     // Get the device type
     ScanI2C::DeviceType deviceType();
@@ -40,7 +40,6 @@ class MotionSensor
     inline virtual int32_t runOnce() { return MOTION_SENSOR_CHECK_INTERVAL_MS; };
 
   protected:
-
     // Turn on the screen when a tap or motion is detected
     virtual void wakeScreen();
 

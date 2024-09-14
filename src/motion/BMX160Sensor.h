@@ -31,7 +31,7 @@ class BMX160Sensor : public MotionSensor
 class BMX160Sensor : public MotionSensor
 {
   public:
-    BMX160Sensor(ScanI2C::DeviceAddress address);
+    explicit BMX160Sensor(ScanI2C::DeviceAddress address);
 };
 
 #endif

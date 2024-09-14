@@ -20,13 +20,14 @@ class STK8XXXSensor : public MotionSensor
     virtual bool init() override;
     virtual int32_t runOnce() override;
 };
+
 #else
 
 // Stub
 class STK8XXXSensor : public MotionSensor
 {
   public:
-    STK8XXXSensor(ScanI2C::DeviceAddress address);
+    explicit STK8XXXSensor(ScanI2C::DeviceAddress address);
 };
 
 #endif

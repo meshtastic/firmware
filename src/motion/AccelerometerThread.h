@@ -21,11 +21,12 @@ class AccelerometerThread : public concurrency::OSThread
   private:
     MotionSensor *sensor = nullptr;
     ScanI2C::FoundDevice device = ScanI2C::DEVICE_NONE;
+    bool isInitialised = false;
 
   public:
-    explicit AccelerometerThread(ScanI2C::FoundDevice device) : OSThread("AccelerometerThread")
+    explicit AccelerometerThread(ScanI2C::FoundDevice found) : OSThread("AccelerometerThread")
     {
-        if (device.address.port == ScanI2C::I2CPort::NO_I2C) {
+        if (found.address.port == ScanI2C::I2CPort::NO_I2C) {
             LOG_DEBUG("AccelerometerThread disabling due to no sensors found\n");
             disable();
             return;
@@ -38,7 +39,7 @@ class AccelerometerThread : public concurrency::OSThread
             return;
         }
 #endif
-        device = ScanI2C::FoundDevice(device.type, ScanI2C::DeviceAddress(device.address.port, device.address.address));
+        device = ScanI2C::FoundDevice(found.type, ScanI2C::DeviceAddress(found.address.port, found.address.address));
         init();
     }
 
@@ -54,7 +55,7 @@ class AccelerometerThread : public concurrency::OSThread
         // Assume we should not keep the board awake
         canSleep = true;
 
-        if (sensor != nullptr)
+        if (isInitialised)
             return sensor->runOnce();
         else
             return MOTION_SENSOR_CHECK_INTERVAL_MS;
@@ -63,51 +64,48 @@ class AccelerometerThread : public concurrency::OSThread
   private:
     void init()
     {
-        if (sensor == nullptr) {
-            switch (device.type) {
-            case ScanI2C::DeviceType::BMA423:
-                sensor = new BMA423Sensor(device.address);
-                break;
-            case ScanI2C::DeviceType::MPU6050:
-                sensor = new MPU6050Sensor(device.address);
-                break;
-            case ScanI2C::DeviceType::BMX160:
-                sensor = new BMX160Sensor(device.address);
-                break;
-            case ScanI2C::DeviceType::LIS3DH:
-                sensor = new LIS3DHSensor(device.address);
-                break;
-            case ScanI2C::DeviceType::LSM6DS3:
-                sensor = new LSM6DS3Sensor(device.address);
-                break;
-            case ScanI2C::DeviceType::STK8BAXX:
-                sensor = new STK8XXXSensor(device.address);
-                break;
-            case ScanI2C::DeviceType::ICM20948:
-                sensor = new ICM20948Sensor(device.address);
-                break;
-            default:
-                disable();
-                return;
-            }
+        if (isInitialised)
+            return;
+
+        switch (device.type) {
+        case ScanI2C::DeviceType::BMA423:
+            sensor = new BMA423Sensor(device.address);
+            break;
+        case ScanI2C::DeviceType::MPU6050:
+            sensor = new MPU6050Sensor(device.address);
+            break;
+        case ScanI2C::DeviceType::BMX160:
+            sensor = new BMX160Sensor(device.address);
+            break;
+        case ScanI2C::DeviceType::LIS3DH:
+            sensor = new LIS3DHSensor(device.address);
+            break;
+        case ScanI2C::DeviceType::LSM6DS3:
+            sensor = new LSM6DS3Sensor(device.address);
+            break;
+        case ScanI2C::DeviceType::STK8BAXX:
+            sensor = new STK8XXXSensor(device.address);
+            break;
+        case ScanI2C::DeviceType::ICM20948:
+            sensor = new ICM20948Sensor(device.address);
+            break;
+        default:
+            disable();
+            return;
         }
 
-        bool result = sensor->init();
-        LOG_DEBUG("AccelerometerThread::init %s\n", result ? "ok" : "failed");
-        if (!result)
-            sensor = nullptr;
+        isInitialised = sensor->init();
+        if (!isInitialised) {
+            clean();
+        }
+        LOG_DEBUG("AccelerometerThread::init %s\n", isInitialised ? "ok" : "failed");
     }
 
     // Copy constructor (included to avoid cppcheck warnings)
     AccelerometerThread(const AccelerometerThread &other) : OSThread::OSThread("AccelerometerThread") { this->copy(other); }
 
     // Destructor (included to avoid cppcheck warnings)
-    ~AccelerometerThread()
-    {
-        if (sensor != nullptr) {
-            delete sensor;
-        }
-    }
+    virtual ~AccelerometerThread() { clean(); }
 
     // Copy assignment (included to avoid cppcheck warnings)
     AccelerometerThread &operator=(const AccelerometerThread &other)
@@ -121,8 +119,18 @@ class AccelerometerThread : public concurrency::OSThread
     void copy(const AccelerometerThread &other)
     {
         if (this != &other) {
+            clean();
             this->device = ScanI2C::FoundDevice(other.device.type,
                                                 ScanI2C::DeviceAddress(other.device.address.port, other.device.address.address));
+        }
+    }
+
+    // Cleanup resources
+    void clean()
+    {
+        isInitialised = false;
+        if (sensor != nullptr) {
+            delete sensor;
             sensor = nullptr;
         }
     }
