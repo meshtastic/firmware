@@ -1539,7 +1539,7 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
 */
         struct tm t;
-        t.tm_sec = ti.second() + round(ti.age()/1000);
+        t.tm_sec = ti.second() + round(ti.age() / 1000);
         t.tm_min = ti.minute();
         t.tm_hour = ti.hour();
         t.tm_mday = d.day();
