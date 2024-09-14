@@ -606,6 +606,9 @@ void setup()
 
     // Hello
     printInfo();
+#ifdef BUILD_EPOCH
+    LOG_INFO("Build timestamp: %ld\n", BUILD_EPOCH);
+#endif
 
 #ifdef ARCH_ESP32
     esp32Setup();

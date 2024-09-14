@@ -1540,7 +1540,7 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
 (midnight UTC/GMT), not counting leap seconds (in ISO 8601: 1970-01-01T00:00:00Z).
 */
         struct tm t;
-        t.tm_sec = ti.second();
+        t.tm_sec = ti.second() + round(ti.age() / 1000);
         t.tm_min = ti.minute();
         t.tm_hour = ti.hour();
         t.tm_mday = d.day();
@@ -1548,8 +1548,8 @@ The Unix epoch (or Unix time or POSIX time or Unix timestamp) is the number of s
         t.tm_year = d.year() - 1900;
         t.tm_isdst = false;
         if (t.tm_mon > -1) {
-            LOG_DEBUG("NMEA GPS time %02d-%02d-%02d %02d:%02d:%02d\n", d.year(), d.month(), t.tm_mday, t.tm_hour, t.tm_min,
-                      t.tm_sec);
+            LOG_DEBUG("NMEA GPS time %02d-%02d-%02d %02d:%02d:%02d age %d\n", d.year(), d.month(), t.tm_mday, t.tm_hour, t.tm_min,
+                      t.tm_sec, ti.age());
             perhapsSetRTC(RTCQualityGPS, t);
             return true;
         } else
