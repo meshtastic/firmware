@@ -12,6 +12,17 @@ bool TraceRouteModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, m
 void TraceRouteModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r)
 {
     auto &incoming = p.decoded;
+    uint32_t now = millis();
+    if (incoming.request_id && lastTraceRouteBackMs && (now - lastTraceRouteBackMs) < (60 * 1000)) {
+        // We have already traced the route back recently, ignore this one
+        ignoreRequest = true;
+        return;
+    }
+    if (!incoming.request_id && lastTraceRouteTowardMs && (now - lastTraceRouteTowardMs) < (60 * 1000)) {
+        // We have already traced the route to the destination recently, ignore this one
+        ignoreRequest = true;
+        return;
+    }
 
     // Insert unknown hops if necessary
     insertUnknownHops(p, r, !incoming.request_id);
