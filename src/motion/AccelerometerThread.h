@@ -20,6 +20,7 @@ class AccelerometerThread : public concurrency::OSThread
 {
   private:
     MotionSensor *sensor = nullptr;
+    ScanI2C::FoundDevice device = ScanI2C::DEVICE_NONE;
 
   public:
     explicit AccelerometerThread(ScanI2C::FoundDevice device) : OSThread("AccelerometerThread")
@@ -37,33 +38,7 @@ class AccelerometerThread : public concurrency::OSThread
             return;
         }
 #endif
-
-        switch (device.type) {
-        case ScanI2C::DeviceType::BMA423:
-            sensor = new BMA423Sensor(device.address);
-            break;
-        case ScanI2C::DeviceType::MPU6050:
-            sensor = new MPU6050Sensor(device.address);
-            break;
-        case ScanI2C::DeviceType::BMX160:
-            sensor = new BMX160Sensor(device.address);
-            break;
-        case ScanI2C::DeviceType::LIS3DH:
-            sensor = new LIS3DHSensor(device.address);
-            break;
-        case ScanI2C::DeviceType::LSM6DS3:
-            sensor = new LSM6DS3Sensor(device.address);
-            break;
-        case ScanI2C::DeviceType::STK8BAXX:
-            sensor = new STK8XXXSensor(device.address);
-            break;
-        case ScanI2C::DeviceType::ICM20948:
-            sensor = new ICM20948Sensor(device.address);
-            break;
-        default:
-            disable();
-            return;
-        }
+        device = ScanI2C::FoundDevice(device.type, ScanI2C::DeviceAddress(device.address.port, device.address.address));
         init();
     }
 
@@ -88,24 +63,45 @@ class AccelerometerThread : public concurrency::OSThread
   private:
     void init()
     {
-        if (sensor != nullptr) {
-            bool result = sensor->init();
-            LOG_DEBUG("AccelerometerThread::init %s\n", result ? "ok" : "failed");
-            if (!result)
-                sensor = nullptr;
+        if (sensor == nullptr) {
+            switch (device.type) {
+            case ScanI2C::DeviceType::BMA423:
+                sensor = new BMA423Sensor(device.address);
+                break;
+            case ScanI2C::DeviceType::MPU6050:
+                sensor = new MPU6050Sensor(device.address);
+                break;
+            case ScanI2C::DeviceType::BMX160:
+                sensor = new BMX160Sensor(device.address);
+                break;
+            case ScanI2C::DeviceType::LIS3DH:
+                sensor = new LIS3DHSensor(device.address);
+                break;
+            case ScanI2C::DeviceType::LSM6DS3:
+                sensor = new LSM6DS3Sensor(device.address);
+                break;
+            case ScanI2C::DeviceType::STK8BAXX:
+                sensor = new STK8XXXSensor(device.address);
+                break;
+            case ScanI2C::DeviceType::ICM20948:
+                sensor = new ICM20948Sensor(device.address);
+                break;
+            default:
+                disable();
+                return;
+            }
         }
+
+        bool result = sensor->init();
+        LOG_DEBUG("AccelerometerThread::init %s\n", result ? "ok" : "failed");
+        if (!result)
+            sensor = nullptr;
     }
 
-    // Copy constructor (only needed to avoid cppcheck warnings)
-    AccelerometerThread(const AccelerometerThread &other) : OSThread::OSThread("AccelerometerThread")
-    {
-        // very shallow copy (does not copy OSThread state)
-        if (this != &other) {
-            this->sensor = other.sensor;
-        }
-    }
+    // Copy constructor (included to avoid cppcheck warnings)
+    AccelerometerThread(const AccelerometerThread &other) : OSThread::OSThread("AccelerometerThread") { this->copy(other); }
 
-    // Destructor (only needed to avoid cppcheck warnings)
+    // Destructor (included to avoid cppcheck warnings)
     ~AccelerometerThread()
     {
         if (sensor != nullptr) {
@@ -113,14 +109,22 @@ class AccelerometerThread : public concurrency::OSThread
         }
     }
 
-    // Copy assignment (only needed to avoid cppcheck warnings)
+    // Copy assignment (included to avoid cppcheck warnings)
     AccelerometerThread &operator=(const AccelerometerThread &other)
     {
-        // very shallow copy (does not copy OSThread state)
-        if (this != &other) {
-            this->sensor = other.sensor;
-        }
+        this->copy(other);
         return *this;
+    }
+
+    // Take a very shallow copy (does not copy OSThread state nor the sensor object)
+    // If for some reason this is ever used, make sure to call init() after any copy
+    void copy(const AccelerometerThread &other)
+    {
+        if (this != &other) {
+            this->device = ScanI2C::FoundDevice(other.device.type,
+                                                ScanI2C::DeviceAddress(other.device.address.port, other.device.address.address));
+            sensor = nullptr;
+        }
     }
 };
 
