@@ -138,6 +138,8 @@ typedef struct _meshtastic_ModuleConfig_NeighborInfoConfig {
     /* Interval in seconds of how often we should try to send our
  Neighbor Info to the mesh */
     uint32_t update_interval;
+    /* Multiplier for neighbor removal interval */
+    uint32_t neighbor_removal_interval_multiplier;
 } meshtastic_ModuleConfig_NeighborInfoConfig;
 
 /* Detection Sensor Module Config */
@@ -488,7 +490,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_MQTTConfig_init_zero {0, "", "", "", 0, 0, 0, "", 0, 0, false, meshtastic_ModuleConfig_MapReportSettings_init_zero}
 #define meshtastic_ModuleConfig_MapReportSettings_init_zero {0, 0}
 #define meshtastic_ModuleConfig_RemoteHardwareConfig_init_zero {0, 0, 0, {meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero, meshtastic_RemoteHardwarePin_init_zero}}
-#define meshtastic_ModuleConfig_NeighborInfoConfig_init_zero {0, 0}
+#define meshtastic_ModuleConfig_NeighborInfoConfig_init_zero {0, 0, 0}
 #define meshtastic_ModuleConfig_DetectionSensorConfig_init_zero {0, 0, 0, 0, "", 0, 0, 0}
 #define meshtastic_ModuleConfig_AudioConfig_init_zero {0, 0, _meshtastic_ModuleConfig_AudioConfig_Audio_Baud_MIN, 0, 0, 0, 0}
 #define meshtastic_ModuleConfig_PaxcounterConfig_init_zero {0, 0, 0, 0}
@@ -517,6 +519,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_MQTTConfig_map_report_settings_tag 11
 #define meshtastic_ModuleConfig_NeighborInfoConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_NeighborInfoConfig_update_interval_tag 2
+#define meshtastic_ModuleConfig_NeighborInfoConfig_removal_interval_multiplier_tag 2
 #define meshtastic_ModuleConfig_DetectionSensorConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_DetectionSensorConfig_minimum_broadcast_secs_tag 2
 #define meshtastic_ModuleConfig_DetectionSensorConfig_state_broadcast_secs_tag 3
@@ -677,9 +680,11 @@ X(a, STATIC,   REPEATED, MESSAGE,  available_pins,    3)
 
 #define meshtastic_ModuleConfig_NeighborInfoConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
-X(a, STATIC,   SINGULAR, UINT32,   update_interval,   2)
+X(a, STATIC,   SINGULAR, UINT32,   update_interval,   2) \
+X(a, STATIC,   SINGULAR, UINT32,   removal_interval_multiplier,   1)
 #define meshtastic_ModuleConfig_NeighborInfoConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_NeighborInfoConfig_DEFAULT NULL
+
 
 #define meshtastic_ModuleConfig_DetectionSensorConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \

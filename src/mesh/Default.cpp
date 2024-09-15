@@ -21,6 +21,13 @@ uint32_t Default::getConfiguredOrDefault(uint32_t configured, uint32_t defaultVa
         return configured;
     return defaultValue;
 }
+    // Returns the configured neighbor removal interval multiplier or a default value.
+uint32_t Default::getConfiguredOrDefaultNeighborRemovalMultiplier(uint32_t configuredMultiplier, uint32_t defaultMultiplier)
+{
+    if (configuredMultiplier > 0)
+        return configuredMultiplier;
+    return defaultMultiplier;
+}
 /**
  * Calculates the scaled value of the configured or default value in ms based on the number of online nodes.
  *

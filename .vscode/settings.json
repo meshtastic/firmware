@@ -7,5 +7,9 @@
   "cmake.configureOnOpen": false,
   "[cpp]": {
     "editor.defaultFormatter": "trunk.io"
-  }
+  },
+  "files.associations": {
+    "random": "cpp"
+  },
+  "C_Cpp.errorSquiggles": "disabled"
 }

@@ -59,6 +59,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 /// Convert a preprocessor name into a quoted string and if that string is empty use "unset"
 #define optstr(s) (xstr(s)[0] ? xstr(s) : "unset")
 
+// Define the default neighbor removal interval multiplier
+#ifndef DEFAULT_NEIGHBOR_REMOVAL_INTERVAL_MULTIPLIER
+#define DEFAULT_NEIGHBOR_REMOVAL_INTERVAL_MULTIPLIER 2
+#endif
+
 // Nop definition for these attributes that are specific to ESP32
 #ifndef EXT_RAM_ATTR
 #define EXT_RAM_ATTR

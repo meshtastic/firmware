@@ -81,21 +81,27 @@ uint32_t NeighborInfoModule::collectNeighborInfo(meshtastic_NeighborInfo *neighb
 /*
   Remove neighbors from the database that we haven't heard from in a while
 */
-void NeighborInfoModule::cleanUpNeighbors()
-{
+void NeighborInfoModule::cleanUpNeighbors() {
     uint32_t now = getTime();
     NodeNum my_node_id = nodeDB->getNodeNum();
+
+    // Retrieve the removal interval multiplier from the module's configuration
+    uint32_t removalMultiplier = Default::getConfiguredOrDefaultNeighborRemovalMultiplier(
+        moduleConfig.neighbor_info.neighbor_removal_interval_multiplier, // Access the new field
+        DEFAULT_NEIGHBOR_REMOVAL_INTERVAL_MULTIPLIER // Use the default value defined in configuration.h
+    );
+
     for (auto it = neighbors.rbegin(); it != neighbors.rend();) {
-        // We will remove a neighbor if we haven't heard from them in twice the broadcast interval
-        if ((now - it->last_rx_time > it->node_broadcast_interval_secs * 2) && (it->node_id != my_node_id)) {
+        if ((now - it->last_rx_time > it->node_broadcast_interval_secs * removalMultiplier) && (it->node_id != my_node_id)) {
             LOG_DEBUG("Removing neighbor with node ID 0x%x\n", it->node_id);
             it = std::vector<meshtastic_Neighbor>::reverse_iterator(
-                neighbors.erase(std::next(it).base())); // Erase the element and update the iterator
+                neighbors.erase(std::next(it).base()));
         } else {
             ++it;
         }
     }
 }
+
 
 /* Send neighbor info to the mesh */
 void NeighborInfoModule::sendNeighborInfo(NodeNum dest, bool wantReplies)
