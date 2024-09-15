@@ -519,7 +519,7 @@ extern "C" {
 #define meshtastic_ModuleConfig_MQTTConfig_map_report_settings_tag 11
 #define meshtastic_ModuleConfig_NeighborInfoConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_NeighborInfoConfig_update_interval_tag 2
-#define meshtastic_ModuleConfig_NeighborInfoConfig_removal_interval_multiplier_tag 2
+#define meshtastic_ModuleConfig_NeighborInfoConfig_neighbor_removal_interval_multiplier_tag 2
 #define meshtastic_ModuleConfig_DetectionSensorConfig_enabled_tag 1
 #define meshtastic_ModuleConfig_DetectionSensorConfig_minimum_broadcast_secs_tag 2
 #define meshtastic_ModuleConfig_DetectionSensorConfig_state_broadcast_secs_tag 3
@@ -681,7 +681,7 @@ X(a, STATIC,   REPEATED, MESSAGE,  available_pins,    3)
 #define meshtastic_ModuleConfig_NeighborInfoConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
 X(a, STATIC,   SINGULAR, UINT32,   update_interval,   2) \
-X(a, STATIC,   SINGULAR, UINT32,   removal_interval_multiplier,   1)
+X(a, STATIC,   SINGULAR, UINT32,   neighbor_removal_interval_multiplier,   1)
 #define meshtastic_ModuleConfig_NeighborInfoConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_NeighborInfoConfig_DEFAULT NULL
 
