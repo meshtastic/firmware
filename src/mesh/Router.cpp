@@ -185,9 +185,12 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
             handleReceived(p, src);
         }
 
-        if (!p->channel) { // don't override if a channel was requested
-            p->channel = nodeDB->getMeshNodeChannel(p->to);
-            LOG_DEBUG("localSend to channel %d\n", p->channel);
+        if (!p->channel && !p->pki_encrypted) { // don't override if a channel was requested
+            meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
+            if (node && node->user.public_key.size == 0) {
+                p->channel = node->channel;
+                LOG_DEBUG("localSend to channel %d\n", p->channel);
+            }
         }
 
         return send(p);
