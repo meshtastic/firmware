@@ -47,6 +47,8 @@ RemoteHardwareModule::RemoteHardwareModule()
     : ProtobufModule("remotehardware", meshtastic_PortNum_REMOTE_HARDWARE_APP, &meshtastic_HardwareMessage_msg),
       concurrency::OSThread("RemoteHardwareModule")
 {
+    // restrict to the gpio channel for rx
+    boundChannel = Channels::gpioChannel;
 }
 
 bool RemoteHardwareModule::handleReceivedProtobuf(const meshtastic_MeshPacket &req, meshtastic_HardwareMessage *pptr)
