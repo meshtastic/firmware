@@ -87,15 +87,15 @@ void NeighborInfoModule::cleanUpNeighbors() {
 
     // Retrieve the removal interval multiplier from the module's configuration
     uint32_t removalMultiplier = Default::getConfiguredOrDefaultNeighborRemovalMultiplier(
-        moduleConfig.neighbor_info.neighbor_removal_interval_multiplier, // Access the new field
-        DEFAULT_NEIGHBOR_REMOVAL_INTERVAL_MULTIPLIER // Use the default value defined in configuration.h
+        moduleConfig.neighbor_info.neighbor_removal_interval_multiplier, 
+        DEFAULT_NEIGHBOR_REMOVAL_INTERVAL_MULTIPLIER
     );
 
     for (auto it = neighbors.rbegin(); it != neighbors.rend();) {
         if ((now - it->last_rx_time > it->node_broadcast_interval_secs * removalMultiplier) && (it->node_id != my_node_id)) {
             LOG_DEBUG("Removing neighbor with node ID 0x%x\n", it->node_id);
             it = std::vector<meshtastic_Neighbor>::reverse_iterator(
-                neighbors.erase(std::next(it).base()));
+                neighbors.erase(std::next(it).base())); // Erase the element and update the iterator
         } else {
             ++it;
         }
