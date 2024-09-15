@@ -681,7 +681,7 @@ X(a, STATIC,   REPEATED, MESSAGE,  available_pins,    3)
 #define meshtastic_ModuleConfig_NeighborInfoConfig_FIELDLIST(X, a) \
 X(a, STATIC,   SINGULAR, BOOL,     enabled,           1) \
 X(a, STATIC,   SINGULAR, UINT32,   update_interval,   2) \
-X(a, STATIC,   SINGULAR, UINT32,   neighbor_removal_interval_multiplier,   1)
+X(a, STATIC,   SINGULAR, UINT32,   neighbor_removal_interval_multiplier,   2)
 #define meshtastic_ModuleConfig_NeighborInfoConfig_CALLBACK NULL
 #define meshtastic_ModuleConfig_NeighborInfoConfig_DEFAULT NULL
 
