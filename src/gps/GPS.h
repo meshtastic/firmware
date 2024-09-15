@@ -30,7 +30,8 @@ typedef enum {
     GNSS_MODEL_UC6580,
     GNSS_MODEL_UNKNOWN,
     GNSS_MODEL_MTK_L76B,
-    GNSS_MODEL_AG3335
+    GNSS_MODEL_AG3335,
+    GNSS_MODEL_AG3352
 } GnssModel_t;
 
 typedef enum {
@@ -297,7 +298,6 @@ class GPS : private concurrency::OSThread
     virtual int32_t runOnce() override;
 
     // Get GNSS model
-    String getNMEA();
     GnssModel_t probe(int serialSpeed);
 
     // delay counter to allow more sats before fixed position stops GPS thread

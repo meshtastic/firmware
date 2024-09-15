@@ -38,7 +38,7 @@ static int32_t reconnectETH()
         Ethernet.maintain();
         if (!ethStartupComplete) {
             // Start web server
-            LOG_INFO("... Starting network services\n");
+            LOG_INFO("Starting Ethernet network services\n");
 
 #ifndef DISABLE_NTP
             LOG_INFO("Starting NTP time client\n");
@@ -131,7 +131,8 @@ bool initEthernet()
             status = Ethernet.begin(mac);
         } else if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_STATIC) {
             LOG_INFO("starting Ethernet Static\n");
-            Ethernet.begin(mac, config.network.ipv4_config.ip, config.network.ipv4_config.dns, config.network.ipv4_config.subnet);
+            Ethernet.begin(mac, config.network.ipv4_config.ip, config.network.ipv4_config.dns, config.network.ipv4_config.gateway,
+                           config.network.ipv4_config.subnet);
             status = 1;
         } else {
             LOG_INFO("Ethernet Disabled\n");
