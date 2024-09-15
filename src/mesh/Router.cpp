@@ -478,10 +478,20 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 
 #if !(MESHTASTIC_EXCLUDE_PKI)
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(p->to);
-        if (!owner.is_licensed && config.security.private_key.size == 32 && p->to != NODENUM_BROADCAST && node != nullptr &&
-            node->user.public_key.size > 0 && p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP &&
-            p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP && p->decoded.portnum != meshtastic_PortNum_ROUTING_APP &&
-            p->decoded.portnum != meshtastic_PortNum_POSITION_APP) {
+        // We may want to retool things so we can send a PKC packet when the client specifies a key and nodenum, even if the node
+        // is not in the local nodedb
+        if (
+            // Don't use PKC with Ham mode
+            !owner.is_licensed &&
+            // Don't use PKC if it's not explicitly requested and a non-primary channel is requested
+            !(p->pki_encrypted != true && p->channel > 0) &&
+            // Check for valid keys and single node destination
+            config.security.private_key.size == 32 && p->to != NODENUM_BROADCAST && node != nullptr &&
+            // Check for a known public key for the destination
+            (node->user.public_key.size == 32) &&
+            // Some portnums either make no sense to send with PKC
+            p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP && p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP &&
+            p->decoded.portnum != meshtastic_PortNum_ROUTING_APP && p->decoded.portnum != meshtastic_PortNum_POSITION_APP) {
             LOG_DEBUG("Using PKI!\n");
             if (numbytes + 12 > MAX_RHPACKETLEN)
                 return meshtastic_Routing_Error_TOO_LARGE;
