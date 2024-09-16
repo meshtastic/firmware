@@ -544,7 +544,7 @@ bool GPS::setup()
             SEND_UBX_PACKET(0x06, 0x11, _message_CFG_RXM_ECO, "Unable to enable powersaving ECO mode for Neo-6.\n", 500);
             SEND_UBX_PACKET(0x06, 0x3B, _message_CFG_PM2, "Unable to enable powersaving details for GPS.\n", 500);
             SEND_UBX_PACKET(0x06, 0x01, _message_AID, "Unable to disable UBX-AID.\n", 500);
-            
+
             msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
             _serial_gps->write(UBXscratch, msglen);
             if (getACK(0x06, 0x09, 2000) != GNSS_RESPONSE_OK) {
@@ -625,19 +625,21 @@ bool GPS::setup()
             delay(1000);
             // First disable all NMEA messages in RAM layer
             clearBuffer();
-            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_NMEA_RAM, "Unable to disable NMEA messages for M10 GPS RAM.\n", 300);
+            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_NMEA_RAM, "Unable to disable NMEA messages for M10 RAM.\n", 300);
             delay(250);
             // Next disable unwanted NMEA messages in BBR layer
             clearBuffer();
-            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_NMEA_BBR, "Unable to disable NMEA messages for M10 GPS BBR.\n", 300);
+            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_NMEA_BBR, "Unable to disable NMEA messages for M10 BBR.\n", 300);
             delay(250);
             // Disable Info txt messages in RAM layer
             clearBuffer();
-            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_TXT_INFO_RAM, "Unable to disable Info messages for M10 GPS RAM.\n", 300);
+            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_TXT_INFO_RAM,
+                            "Unable to disable Info messages for M10 GPS RAM.\n", 300);
             delay(250);
             // Next disable Info txt messages in BBR layer
             clearBuffer();
-            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_TXT_INFO_BBR, "Unable to disable Info messages for M10 GPS BBR.\n", 300);
+            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_TXT_INFO_BBR,
+                            "Unable to disable Info messages for M10 GPS BBR.\n", 300);
 
             // Do M10 configuration for Power Management.
             SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_PM_RAM, "Unable to enable powersaving for M10 GPS RAM.\n", 300);
@@ -658,7 +660,7 @@ bool GPS::setup()
             delay(250);
             // Next enable wanted NMEA messages in RAM layer
             SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_ENABLE_NMEA_RAM, "Unable to enable messages for M10 GPS RAM.\n", 500);
-            
+
             // As the M10 has no flash, the best we can do to preserve the config is to set it in RAM and BBR.
             // BBR will survive a restart, and power off for a while, but modules with small backup
             // batteries or super caps will not retain the config for a long power off time.
@@ -1232,15 +1234,15 @@ GnssModel_t GPS::probe(int serialSpeed)
                 }
             }
         }
-        if (strncmp(info.hwVersion, "00040007", 8) != 0) {
+        if (strncmp(info.hwVersion, "00040007", 8) == 0) {
             return GNSS_MODEL_UBLOX6;
-        } else if (strncmp(info.hwVersion, "00070000", 8) != 0) {
+        } else if (strncmp(info.hwVersion, "00070000", 8) == 0) {
             return GNSS_MODEL_UBLOX7;
-        } else if (strncmp(info.hwVersion, "00080000", 8) != 0) {
+        } else if (strncmp(info.hwVersion, "00080000", 8) == 0) {
             return GNSS_MODEL_UBLOX8;
-        } else if (strncmp(info.hwVersion, "00190000", 8) != 0) {
+        } else if (strncmp(info.hwVersion, "00190000", 8) == 0) {
             return GNSS_MODEL_UBLOX9;
-        } else if (strncmp(info.hwVersion, "000A0000", 8) != 0) {
+        } else if (strncmp(info.hwVersion, "000A0000", 8) == 0) {
             return GNSS_MODEL_UBLOX10;
         }
     }
