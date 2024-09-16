@@ -623,33 +623,31 @@ bool GPS::setup()
             }
         } else if (gnssModel == GNSS_MODEL_UBLOX10) {
             delay(1000);
-            // First disable all NMEA messages in RAM layer
             clearBuffer();
-            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_NMEA_RAM, "Unable to disable NMEA messages for M10 RAM.\n", 300);
-            delay(250);
-            // Next disable unwanted NMEA messages in BBR layer
+            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_NMEA_RAM, "Unable to disable NMEA messages in M10 RAM.\n", 300);
+            delay(750);
             clearBuffer();
-            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_NMEA_BBR, "Unable to disable NMEA messages for M10 BBR.\n", 300);
-            delay(250);
-            // Disable Info txt messages in RAM layer
+            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_NMEA_BBR, "Unable to disable NMEA messages in M10 BBR.\n", 300);
+            delay(750);
             clearBuffer();
             SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_TXT_INFO_RAM,
                             "Unable to disable Info messages for M10 GPS RAM.\n", 300);
-            delay(250);
+            delay(750);
             // Next disable Info txt messages in BBR layer
             clearBuffer();
             SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_TXT_INFO_BBR,
                             "Unable to disable Info messages for M10 GPS BBR.\n", 300);
-
+            delay(750);
             // Do M10 configuration for Power Management.
             SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_PM_RAM, "Unable to enable powersaving for M10 GPS RAM.\n", 300);
+            delay(750);
             SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_PM_BBR, "Unable to enable powersaving for M10 GPS BBR.\n", 300);
-            delay(250);
+            delay(750);
             SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_ITFM_RAM, "Unable to enable Jamming detection M10 GPS RAM.\n", 300);
+            delay(750);
             SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_ITFM_BBR, "Unable to enable Jamming detection M10 GPS BBR.\n", 300);
-
+            delay(750);
             // Here is where the init commands should go to do further M10 initialization.
-            delay(250);
             SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_SBAS_RAM, "Unable to disable SBAS M10 GPS RAM.\n", 300);
             delay(750); // will cause a receiver restart so wait a bit
             SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_SBAS_BBR, "Unable to disable SBAS M10 GPS BBR.\n", 300);
@@ -657,9 +655,10 @@ bool GPS::setup()
 
             // Done with initialization, Now enable wanted NMEA messages in BBR layer so they will survive a periodic sleep.
             SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_ENABLE_NMEA_BBR, "Unable to enable messages for M10 GPS BBR.\n", 300);
-            delay(250);
+            delay(750);
             // Next enable wanted NMEA messages in RAM layer
             SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_ENABLE_NMEA_RAM, "Unable to enable messages for M10 GPS RAM.\n", 500);
+            delay(750);
 
             // As the M10 has no flash, the best we can do to preserve the config is to set it in RAM and BBR.
             // BBR will survive a restart, and power off for a while, but modules with small backup
