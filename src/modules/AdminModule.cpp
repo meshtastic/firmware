@@ -257,34 +257,26 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_set_fixed_position_tag: {
-        if (fromOthers) {
-            LOG_INFO("Ignoring set_fixed_position command from another node.\n");
-        } else {
-            LOG_INFO("Client is receiving a set_fixed_position command.\n");
-            meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
-            node->has_position = true;
-            node->position = TypeConversions::ConvertToPositionLite(r->set_fixed_position);
-            nodeDB->setLocalPosition(r->set_fixed_position);
-            config.position.fixed_position = true;
-            saveChanges(SEGMENT_DEVICESTATE | SEGMENT_CONFIG, false);
+        LOG_INFO("Client is receiving a set_fixed_position command.\n");
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
+        node->has_position = true;
+        node->position = TypeConversions::ConvertToPositionLite(r->set_fixed_position);
+        nodeDB->setLocalPosition(r->set_fixed_position);
+        config.position.fixed_position = true;
+        saveChanges(SEGMENT_DEVICESTATE | SEGMENT_CONFIG, false);
 #if !MESHTASTIC_EXCLUDE_GPS
-            if (gps != nullptr)
-                gps->enable();
-            // Send our new fixed position to the mesh for good measure
-            positionModule->sendOurPosition();
+        if (gps != nullptr)
+            gps->enable();
+        // Send our new fixed position to the mesh for good measure
+        positionModule->sendOurPosition();
 #endif
-        }
         break;
     }
     case meshtastic_AdminMessage_remove_fixed_position_tag: {
-        if (fromOthers) {
-            LOG_INFO("Ignoring remove_fixed_position command from another node.\n");
-        } else {
-            LOG_INFO("Client is receiving a remove_fixed_position command.\n");
-            nodeDB->clearLocalPosition();
-            config.position.fixed_position = false;
-            saveChanges(SEGMENT_DEVICESTATE | SEGMENT_CONFIG, false);
-        }
+        LOG_INFO("Client is receiving a remove_fixed_position command.\n");
+        nodeDB->clearLocalPosition();
+        config.position.fixed_position = false;
+        saveChanges(SEGMENT_DEVICESTATE | SEGMENT_CONFIG, false);
         break;
     }
     case meshtastic_AdminMessage_set_time_only_tag: {
