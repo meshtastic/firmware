@@ -97,7 +97,7 @@ static const uint8_t MISO = PIN_SPI_MISO;
 static const uint8_t SCK = PIN_SPI_SCK;
 
 // EPD SPI
-#define PIN_SPI1_MISO (-1)     // Not Used for EPD
+#define PIN_SPI1_MISO (32 + 2) // Not Used for EPD but needs to be defined
 #define PIN_SPI1_MOSI (0 + 10) // EPD_MOSI  P0.10
 #define PIN_SPI1_SCK (0 + 9)   // EPD_SCLK  P0.09
 
