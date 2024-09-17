@@ -44,7 +44,7 @@ class AirQualityTelemetryModule : private concurrency::OSThread, public Protobuf
   private:
     Adafruit_PM25AQI aqi;
     PM25_AQI_Data data = {0};
-    bool firstTime = 1;
+    bool firstTime = true;
     meshtastic_MeshPacket *lastMeasurementPacket;
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute
     uint32_t lastSentToMesh = 0;
