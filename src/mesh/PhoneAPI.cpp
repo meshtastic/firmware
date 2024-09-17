@@ -194,7 +194,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         auto us = nodeDB->readNextMeshNode(readIndex);
         if (us) {
             nodeInfoForPhone = TypeConversions::ConvertToNodeInfo(us);
-            nodeInfoForPhone.hops_away = 0;
+            nodeInfoForPhone.has_hops_away = false;
             nodeInfoForPhone.is_favorite = true;
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_node_info_tag;
             fromRadioScratch.node_info = nodeInfoForPhone;
