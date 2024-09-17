@@ -764,12 +764,6 @@ void setup()
 
     screen->print("Started...\n");
 
-#ifdef SX126X_ANT_SW
-    // make analog PA vs not PA switch on SX126x eval board work properly
-    pinMode(SX126X_ANT_SW, OUTPUT);
-    digitalWrite(SX126X_ANT_SW, 1);
-#endif
-
 #ifdef PIN_PWR_DELAY_MS
     // This may be required to give the peripherals time to power up.
     delay(PIN_PWR_DELAY_MS);
