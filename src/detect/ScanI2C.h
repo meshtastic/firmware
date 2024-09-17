@@ -36,6 +36,7 @@ class ScanI2C
         QMC6310,
         QMI8658,
         QMC5883L,
+        HMC5883L,
         PMSA0031,
         MPU6050,
         LIS3DH,
