@@ -381,7 +381,7 @@ void setup()
     Wire1.begin();
 #elif defined(I2C_SDA1) && !defined(ARCH_RP2040)
     Wire1.begin(I2C_SDA1, I2C_SCL1);
-#elif defined(NRF52840_XXAA) && (WIRE_INTERFACES_COUNT == 2)
+#elif WIRE_INTERFACES_COUNT == 2
     Wire1.begin();
 #endif
 
