@@ -347,8 +347,11 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
                 // memcpy(bytes, ScratchEncrypted, rawSize); // TODO: Rename the bytes buffers
                 // chIndex = 8;
             } else {
+                LOG_ERROR("PKC Decrypted, but pb_decode failed!\n");
                 return false;
             }
+        } else {
+            LOG_WARN("PKC decrypt attempted but failed!\n");
         }
     }
 #endif
