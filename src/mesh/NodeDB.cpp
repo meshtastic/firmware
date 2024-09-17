@@ -1112,8 +1112,10 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         info->via_mqtt = mp.via_mqtt; // Store if we received this packet via MQTT
 
         // If hopStart was set and there wasn't someone messing with the limit in the middle, add hopsAway
-        if (mp.hop_start != 0 && mp.hop_limit <= mp.hop_start)
+        if (mp.hop_start != 0 && mp.hop_limit <= mp.hop_start) {
+            info->has_hops_away = true;
             info->hops_away = mp.hop_start - mp.hop_limit;
+        }
     }
 }
 
