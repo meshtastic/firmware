@@ -316,7 +316,11 @@ typedef enum _meshtastic_Routing_Error {
     /* The client specified a PKI transport, but the node was unable to send the packet using PKI (and did not send the message at all) */
     meshtastic_Routing_Error_PKI_FAILED = 34,
     /* The receiving node does not have a Public Key to decode with */
-    meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY = 35
+    meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY = 35,
+    /* Admin packet otherwise checks out, but uses a bogus or expired session key */
+    meshtastic_Routing_Error_ADMIN_BAD_SESSION_KEY = 36,
+    /* Admin packet sent using PKC, but not from a public key on the admin key list */
+    meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED = 37
 } meshtastic_Routing_Error;
 
 /* The priority of this message for sending.
@@ -1026,8 +1030,8 @@ extern "C" {
 #define _meshtastic_Position_AltSource_ARRAYSIZE ((meshtastic_Position_AltSource)(meshtastic_Position_AltSource_ALT_BAROMETRIC+1))
 
 #define _meshtastic_Routing_Error_MIN meshtastic_Routing_Error_NONE
-#define _meshtastic_Routing_Error_MAX meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY
-#define _meshtastic_Routing_Error_ARRAYSIZE ((meshtastic_Routing_Error)(meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY+1))
+#define _meshtastic_Routing_Error_MAX meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED
+#define _meshtastic_Routing_Error_ARRAYSIZE ((meshtastic_Routing_Error)(meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED+1))
 
 #define _meshtastic_MeshPacket_Priority_MIN meshtastic_MeshPacket_Priority_UNSET
 #define _meshtastic_MeshPacket_Priority_MAX meshtastic_MeshPacket_Priority_MAX
