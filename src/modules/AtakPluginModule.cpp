@@ -55,7 +55,7 @@ meshtastic_TAKPacket AtakPluginModule::cloneTAKPacketData(meshtastic_TAKPacket *
     } else if (t->which_payload_variant == meshtastic_TAKPacket_detail_tag) {
         clone.which_payload_variant = meshtastic_TAKPacket_detail_tag;
         clone.payload_variant.detail.size = t->payload_variant.detail.size;
-        memcpy(clone.payload_variant.detail.bytes, clone.payload_variant.detail.bytes, t->payload_variant.detail.size);
+        memcpy(clone.payload_variant.detail.bytes, t->payload_variant.detail.size, t->payload_variant.detail.size);
     }
 
     return clone;
