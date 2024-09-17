@@ -393,6 +393,7 @@ void setup()
     // RAK-12039 set pin for Air quality sensor
     pinMode(AQ_SET_PIN, OUTPUT);
     digitalWrite(AQ_SET_PIN, HIGH);
+    delay(4000); // Detectable on I2C after ~3 seconds.
 #endif
 
 #ifdef T_DECK
