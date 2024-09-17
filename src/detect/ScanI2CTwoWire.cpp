@@ -162,13 +162,13 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
     Melopero_RV3028 rtc;
 #endif
 
-#if defined(I2C_SDA1) || (defined(NRF52840_XXAA) && (WIRE_INTERFACES_COUNT == 2))
+#if WIRE_INTERFACES_COUNT == 2
     if (port == I2CPort::WIRE1) {
         i2cBus = &Wire1;
     } else {
 #endif
         i2cBus = &Wire;
-#if defined(I2C_SDA1) || (defined(NRF52840_XXAA) && (WIRE_INTERFACES_COUNT == 2))
+#if WIRE_INTERFACES_COUNT == 2
     }
 #endif
 
@@ -423,7 +423,7 @@ TwoWire *ScanI2CTwoWire::fetchI2CBus(ScanI2C::DeviceAddress address) const
     if (address.port == ScanI2C::I2CPort::WIRE) {
         return &Wire;
     } else {
-#if defined(I2C_SDA1) || (defined(NRF52840_XXAA) && (WIRE_INTERFACES_COUNT == 2))
+#if WIRE_INTERFACES_COUNT == 2
         return &Wire1;
 #else
         return &Wire;
