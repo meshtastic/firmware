@@ -106,8 +106,8 @@ No longer populated on PCB
 
 // I2C bus 1
 // Available on header pins, for general use
-#define PIN_WIRE1_SDA (0 + 13) // P0.13
-#define PIN_WIRE1_SCL (0 + 16) // P0.16
+#define PIN_WIRE1_SDA (0 + 16) // P0.16
+#define PIN_WIRE1_SCL (0 + 13) // P0.13
 
 // QSPI Pins
 #define PIN_QSPI_SCK (32 + 14)
