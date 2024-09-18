@@ -177,10 +177,9 @@ External serial flash WP25R1635FZUIL0
 #define PIN_GPS_REINIT (32 + 5) // An output to reset L76K GPS. As per datasheet, low for > 100ms will reset the L76K
 
 #define PIN_GPS_STANDBY (32 + 2) // An output to wake GPS, low means allow sleep, high means force wake
-// Seems to be missing on this new board
-// #define PIN_GPS_PPS (32 + 4)  // Pulse per second input from the GPS
-#define GPS_TX_PIN (32 + 9) // This is for bits going TOWARDS the CPU
-#define GPS_RX_PIN (32 + 8) // This is for bits going TOWARDS the GPS
+#define PIN_GPS_PPS (32 + 4)     // Pulse per second input from the GPS
+#define GPS_TX_PIN (32 + 9)      // This is for bits going TOWARDS the CPU
+#define GPS_RX_PIN (32 + 8)      // This is for bits going TOWARDS the GPS
 
 #define GPS_THREAD_INTERVAL 50
 

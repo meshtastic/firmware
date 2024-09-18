@@ -253,9 +253,16 @@ void cpuDeepSleep(uint32_t msecToWake)
 #endif
 #endif
 
-#ifdef HELTEC_MESH_NODE_T114
+#ifdef PIN_GPS_PPS
     nrf_gpio_cfg_default(PIN_GPS_PPS);
     detachInterrupt(PIN_GPS_PPS);
+#ifdef TTGO_T_ECHO
+    pinMode(PIN_GPS_PPS, OUTPUT);
+    digitalWrite(PIN_GPS_PPS, LOW);
+#endif
+#endif
+
+#ifdef HELTEC_MESH_NODE_T114
     detachInterrupt(PIN_BUTTON1);
 #endif
     // Sleepy trackers or sensors can low power "sleep"
