@@ -84,7 +84,7 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, uint64_
 
     // Calculate the shared secret with the destination node and encrypt
     printBytes("Attempting encrypt using nonce: ", nonce, 13);
-    printBytes("Attempting encrypt using shared_key: ", shared_key, 32);
+    printBytes("Attempting encrypt using shared_key starting with: ", shared_key, 8);
     aes_ccm_ae(shared_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut,
                auth); // this can write up to 15 bytes longer than numbytes past bytesOut
     *extraNonce = extraNonceTmp;
@@ -117,7 +117,7 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, uint64_t packetNum, size
     }
     initNonce(fromNode, packetNum, *extraNonce);
     printBytes("Attempting decrypt using nonce: ", nonce, 13);
-    printBytes("Attempting decrypt using shared_key: ", shared_key, 32);
+    printBytes("Attempting decrypt using shared_key starting with: ", shared_key, 8);
     return aes_ccm_ad(shared_key, 32, nonce, 8, bytes, numBytes - 12, nullptr, 0, auth, bytesOut);
 }
 
@@ -137,11 +137,12 @@ bool CryptoEngine::setDHKey(uint32_t nodeNum)
         LOG_DEBUG("Node %d or their public_key not found\n", nodeNum);
         return false;
     }
-
+    printBytes("Generating DH with remote pubkey: ", node->user.public_key.bytes, 32);
+    printBytes("And local pubkey: ", config.security.public_key.bytes, 32);
     if (!setDHPublicKey(node->user.public_key.bytes))
         return false;
 
-    printBytes("DH Output: ", shared_key, 32);
+    // printBytes("DH Output: ", shared_key, 32);
 
     /**
      * D.J. Bernstein reccomends hashing the shared key. We want to do this because there are

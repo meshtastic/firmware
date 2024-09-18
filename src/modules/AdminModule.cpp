@@ -73,12 +73,38 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     meshtastic_Channel *ch = &channels.getByIndex(mp.channel);
     // Could tighten this up further by tracking the last public_key we went an AdminMessage request to
     // and only allowing responses from that remote.
-    if (!((mp.from == 0 && !config.security.is_managed) || messageIsResponse(r) ||
-          (strcasecmp(ch->settings.name, Channels::adminChannel) == 0 && config.security.admin_channel_enabled) ||
-          (mp.pki_encrypted && memcmp(mp.public_key.bytes, config.security.admin_key[0].bytes, 32) == 0))) {
-        LOG_INFO("Ignoring admin payload %i\n", r->which_payload_variant);
+    if (messageIsResponse(r)) {
+        LOG_DEBUG("Allowing admin response message\n");
+    } else if (mp.from == 0) {
+        if (config.security.is_managed) {
+            LOG_INFO("Ignoring local admin payload because is_managed.\n");
+            return handled;
+        }
+    } else if (strcasecmp(ch->settings.name, Channels::adminChannel) == 0) {
+        if (!config.security.admin_channel_enabled) {
+            LOG_INFO("Ignoring admin channel, as legacy admin is disabled.\n");
+            myReply = allocErrorResponse(meshtastic_Routing_Error_NOT_AUTHORIZED, &mp);
+            return handled;
+        }
+    } else if (mp.pki_encrypted) {
+        if ((config.security.admin_key[0].size == 32 &&
+             memcmp(mp.public_key.bytes, config.security.admin_key[0].bytes, 32) == 0) ||
+            (config.security.admin_key[1].size == 32 &&
+             memcmp(mp.public_key.bytes, config.security.admin_key[1].bytes, 32) == 0) ||
+            (config.security.admin_key[2].size == 32 &&
+             memcmp(mp.public_key.bytes, config.security.admin_key[2].bytes, 32) == 0)) {
+            LOG_INFO("PKC admin payload with authorized sender key.\n");
+        } else {
+            myReply = allocErrorResponse(meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED, &mp);
+            LOG_INFO("Received PKC admin payload, but the sender public key does not match the admin authorized key!\n");
+            return handled;
+        }
+    } else {
+        LOG_INFO("Ignoring unauthorized admin payload %i\n", r->which_payload_variant);
+        myReply = allocErrorResponse(meshtastic_Routing_Error_NOT_AUTHORIZED, &mp);
         return handled;
     }
+
     LOG_INFO("Handling admin payload %i\n", r->which_payload_variant);
 
     // all of the get and set messages, including those for other modules, flow through here first.
@@ -86,6 +112,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     if (mp.from != 0 && !messageIsRequest(r) && !messageIsResponse(r)) {
         if (!checkPassKey(r)) {
             LOG_WARN("Admin message without session_key!\n");
+            myReply = allocErrorResponse(meshtastic_Routing_Error_ADMIN_BAD_SESSION_KEY, &mp);
             return handled;
         }
     }
@@ -257,34 +284,26 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_set_fixed_position_tag: {
-        if (fromOthers) {
-            LOG_INFO("Ignoring set_fixed_position command from another node.\n");
-        } else {
-            LOG_INFO("Client is receiving a set_fixed_position command.\n");
-            meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
-            node->has_position = true;
-            node->position = TypeConversions::ConvertToPositionLite(r->set_fixed_position);
-            nodeDB->setLocalPosition(r->set_fixed_position);
-            config.position.fixed_position = true;
-            saveChanges(SEGMENT_DEVICESTATE | SEGMENT_CONFIG, false);
+        LOG_INFO("Client is receiving a set_fixed_position command.\n");
+        meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
+        node->has_position = true;
+        node->position = TypeConversions::ConvertToPositionLite(r->set_fixed_position);
+        nodeDB->setLocalPosition(r->set_fixed_position);
+        config.position.fixed_position = true;
+        saveChanges(SEGMENT_DEVICESTATE | SEGMENT_CONFIG, false);
 #if !MESHTASTIC_EXCLUDE_GPS
-            if (gps != nullptr)
-                gps->enable();
-            // Send our new fixed position to the mesh for good measure
-            positionModule->sendOurPosition();
+        if (gps != nullptr)
+            gps->enable();
+        // Send our new fixed position to the mesh for good measure
+        positionModule->sendOurPosition();
 #endif
-        }
         break;
     }
     case meshtastic_AdminMessage_remove_fixed_position_tag: {
-        if (fromOthers) {
-            LOG_INFO("Ignoring remove_fixed_position command from another node.\n");
-        } else {
-            LOG_INFO("Client is receiving a remove_fixed_position command.\n");
-            nodeDB->clearLocalPosition();
-            config.position.fixed_position = false;
-            saveChanges(SEGMENT_DEVICESTATE | SEGMENT_CONFIG, false);
-        }
+        LOG_INFO("Client is receiving a remove_fixed_position command.\n");
+        nodeDB->clearLocalPosition();
+        config.position.fixed_position = false;
+        saveChanges(SEGMENT_DEVICESTATE | SEGMENT_CONFIG, false);
         break;
     }
     case meshtastic_AdminMessage_set_time_only_tag: {
