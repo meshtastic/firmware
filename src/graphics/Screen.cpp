@@ -1285,8 +1285,8 @@ static int8_t prevFrame = -1;
 // Draw the arrow pointing to a node's location
 void Screen::drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t compassY, uint16_t compassDiam, float headingRadian)
 {
-    Point tip(0.0f, 0.5f), tail(0.0f, -0.5f); // pointing up initially
-    float arrowOffsetX = 0.2f, arrowOffsetY = 0.2f;
+    Point tip(0.0f, 0.5f), tail(0.0f, -0.35f); // pointing up initially
+    float arrowOffsetX = 0.14f, arrowOffsetY = 1.0f;
     Point leftArrow(tip.x - arrowOffsetX, tip.y - arrowOffsetY), rightArrow(tip.x + arrowOffsetX, tip.y - arrowOffsetY);
 
     Point *arrowPoints[] = {&tip, &tail, &leftArrow, &rightArrow};
@@ -1296,9 +1296,19 @@ void Screen::drawNodeHeading(OLEDDisplay *display, int16_t compassX, int16_t com
         arrowPoints[i]->scale(compassDiam * 0.6);
         arrowPoints[i]->translate(compassX, compassY);
     }
+    /* Old arrow
     display->drawLine(tip.x, tip.y, tail.x, tail.y);
     display->drawLine(leftArrow.x, leftArrow.y, tip.x, tip.y);
     display->drawLine(rightArrow.x, rightArrow.y, tip.x, tip.y);
+    display->drawLine(leftArrow.x, leftArrow.y, tail.x, tail.y);
+    display->drawLine(rightArrow.x, rightArrow.y, tail.x, tail.y);
+    */
+#ifdef USE_EINK
+    display->drawTriangle(tip.x, tip.y, rightArrow.x, rightArrow.y, tail.x, tail.y);
+#else
+    display->fillTriangle(tip.x, tip.y, rightArrow.x, rightArrow.y, tail.x, tail.y);
+#endif
+    display->drawTriangle(tip.x, tip.y, leftArrow.x, leftArrow.y, tail.x, tail.y);
 }
 
 // Get a string representation of the time passed since something happened
@@ -1336,22 +1346,27 @@ void Screen::drawCompassNorth(OLEDDisplay *display, int16_t compassX, int16_t co
     // If north is supposed to be at the top of the compass we want rotation to be +0
     if (config.display.compass_north_top)
         myHeading = -0;
-
-    Point N1(-0.04f, 0.65f), N2(0.04f, 0.65f);
+    /* N sign points currently not deleted*/
+    Point N1(-0.04f, 0.65f), N2(0.04f, 0.65f); // N sign points (N1-N4)
     Point N3(-0.04f, 0.55f), N4(0.04f, 0.55f);
-    Point *rosePoints[] = {&N1, &N2, &N3, &N4};
+    Point NC1(0.00f, 0.50f); // north circle center point
+    Point *rosePoints[] = {&N1, &N2, &N3, &N4, &NC1};
 
     uint16_t compassDiam = Screen::getCompassDiam(SCREEN_WIDTH, SCREEN_HEIGHT);
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 5; i++) {
         // North on compass will be negative of heading
         rosePoints[i]->rotate(-myHeading);
         rosePoints[i]->scale(compassDiam);
         rosePoints[i]->translate(compassX, compassY);
     }
+
+    /* changed the N sign to a small circle on the compass circle.
     display->drawLine(N1.x, N1.y, N3.x, N3.y);
     display->drawLine(N2.x, N2.y, N4.x, N4.y);
     display->drawLine(N1.x, N1.y, N4.x, N4.y);
+    */
+    display->drawCircle(NC1.x, NC1.y, 4); // North sign circle, 4px radius is sufficient for all displays.
 }
 
 uint16_t Screen::getCompassDiam(uint32_t displayWidth, uint32_t displayHeight)
