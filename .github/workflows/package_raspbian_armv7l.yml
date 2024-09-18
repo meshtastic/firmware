@@ -13,7 +13,7 @@ jobs:
     uses: ./.github/workflows/build_raspbian_armv7l.yml
 
   package-raspbian_armv7l:
-    runs-on: [linux]
+    runs-on: ubuntu-latest
     needs: build-raspbian_armv7l
     steps:
       - name: Checkout code
