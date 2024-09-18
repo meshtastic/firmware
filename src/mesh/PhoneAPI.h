@@ -2,8 +2,10 @@
 
 #include "Observer.h"
 #include "mesh-pb-constants.h"
+#include "meshtastic/portnums.pb.h"
 #include <iterator>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 // Make sure that we never let our packets grow too large for one BLE packet
@@ -47,6 +49,9 @@ class PhoneAPI
     State state = STATE_SEND_NOTHING;
 
     uint8_t config_state = 0;
+
+    // Hashmap of timestamps for last time we received a packet on the API per portnum
+    std::unordered_map<meshtastic_PortNum, uint32_t> lastPortNumToRadio;
 
     /**
      * Each packet sent to the phone has an incrementing count
@@ -98,6 +103,11 @@ class PhoneAPI
      * @return true true if a packet was queued for sending (so that caller can yield)
      */
     virtual bool handleToRadio(const uint8_t *buf, size_t len);
+
+    /**
+     * Send a (client)notification to the phone
+     */
+    virtual void sendNotification(meshtastic_LogRecord_Level level, uint32_t replyId, const char *message);
 
     /**
      * Get the next packet we want to send to the phone
