@@ -411,7 +411,7 @@ void setup()
 #endif
 
 #ifdef AQ_SET_PIN
-    // RAK-12039 set pin for Air quality sensor
+    // RAK-12039 set pin for Air quality sensor. Detectable on I2C after ~3 seconds, so we need to rescan later
     pinMode(AQ_SET_PIN, OUTPUT);
     digitalWrite(AQ_SET_PIN, HIGH);
 #endif
@@ -1205,6 +1205,9 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     deviceMetadata.position_flags = config.position.position_flags;
     deviceMetadata.hw_model = HW_VENDOR;
     deviceMetadata.hasRemoteHardware = moduleConfig.remote_hardware.enabled;
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    deviceMetadata.hasPKC = true;
+#endif
     return deviceMetadata;
 }
 
