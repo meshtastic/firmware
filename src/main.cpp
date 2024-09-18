@@ -1091,6 +1091,9 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     deviceMetadata.position_flags = config.position.position_flags;
     deviceMetadata.hw_model = HW_VENDOR;
     deviceMetadata.hasRemoteHardware = moduleConfig.remote_hardware.enabled;
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    deviceMetadata.hasPKC = true;
+#endif
     return deviceMetadata;
 }
 #ifndef PIO_UNIT_TESTING
