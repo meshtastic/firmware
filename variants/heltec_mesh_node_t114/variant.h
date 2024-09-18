@@ -67,19 +67,16 @@ extern "C" {
 #define NUM_ANALOG_OUTPUTS (0)
 
 // LEDs
-#define PIN_LED1 (32 + 3) // 13 red (confirmed on 1.0 board)
-// Unused(by firmware) LEDs:
-#define PIN_LED2 (1 + 1)  // 14 blue
-#define PIN_LED3 (1 + 11) // 15 green
-
-#define LED_RED PIN_LED3
-#define LED_BLUE PIN_LED1
-#define LED_GREEN PIN_LED2
-
-#define LED_BUILTIN LED_BLUE
-#define LED_CONN PIN_GREEN
-
+#define PIN_LED1 (32 + 3) // green (confirmed on 1.0 board)
+#define LED_BLUE PIN_LED1 // fake for bluefruit library
+#define LED_GREEN PIN_LED1
+#define LED_BUILTIN LED_GREEN
 #define LED_STATE_ON 0 // State when LED is lit
+
+#define HAS_NEOPIXEL                         // Enable the use of neopixels
+#define NEOPIXEL_COUNT 2                     // How many neopixels are connected
+#define NEOPIXEL_DATA 14                     // gpio pin used to send data to the neopixels
+#define NEOPIXEL_TYPE (NEO_GRB + NEO_KHZ800) // type of neopixels in use
 
 /*
  * Buttons

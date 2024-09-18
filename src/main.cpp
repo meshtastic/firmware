@@ -563,6 +563,7 @@ void setup()
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::QMC6310, meshtastic_TelemetrySensorType_QMC6310)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::QMI8658, meshtastic_TelemetrySensorType_QMI8658)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::QMC5883L, meshtastic_TelemetrySensorType_QMC5883L)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::HMC5883L, meshtastic_TelemetrySensorType_QMC5883L)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::PMSA0031, meshtastic_TelemetrySensorType_PMSA003I)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::RCWL9620, meshtastic_TelemetrySensorType_RCWL9620)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::VEML7700, meshtastic_TelemetrySensorType_VEML7700)
@@ -589,6 +590,9 @@ void setup()
 
     // Hello
     printInfo();
+#ifdef BUILD_EPOCH
+    LOG_INFO("Build timestamp: %ld\n", BUILD_EPOCH);
+#endif
 
 #ifdef ARCH_ESP32
     esp32Setup();
@@ -763,12 +767,6 @@ void setup()
 #endif
 
     screen->print("Started...\n");
-
-#ifdef SX126X_ANT_SW
-    // make analog PA vs not PA switch on SX126x eval board work properly
-    pinMode(SX126X_ANT_SW, OUTPUT);
-    digitalWrite(SX126X_ANT_SW, 1);
-#endif
 
 #ifdef PIN_PWR_DELAY_MS
     // This may be required to give the peripherals time to power up.
@@ -1097,6 +1095,9 @@ extern meshtastic_DeviceMetadata getDeviceMetadata()
     deviceMetadata.position_flags = config.position.position_flags;
     deviceMetadata.hw_model = HW_VENDOR;
     deviceMetadata.hasRemoteHardware = moduleConfig.remote_hardware.enabled;
+#if !(MESHTASTIC_EXCLUDE_PKI)
+    deviceMetadata.hasPKC = true;
+#endif
     return deviceMetadata;
 }
 #ifndef PIO_UNIT_TESTING

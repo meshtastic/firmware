@@ -654,8 +654,8 @@ void NodeDB::pickNewNodeNum()
     }
 
     meshtastic_NodeInfoLite *found;
-    while ((nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED) ||
-           ((found = getMeshNode(nodeNum)) && memcmp(found->user.macaddr, ourMacAddr, sizeof(ourMacAddr)) != 0)) {
+    while (((found = getMeshNode(nodeNum)) && memcmp(found->user.macaddr, ourMacAddr, sizeof(ourMacAddr)) != 0) ||
+           (nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED)) {
         NodeNum candidate = random(NUM_RESERVED, LONG_MAX); // try a new random choice
         LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, by MAC ending in 0x%02x%02x vs our 0x%02x%02x, so "
                  "trying for 0x%x\n",
@@ -1112,8 +1112,10 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         info->via_mqtt = mp.via_mqtt; // Store if we received this packet via MQTT
 
         // If hopStart was set and there wasn't someone messing with the limit in the middle, add hopsAway
-        if (mp.hop_start != 0 && mp.hop_limit <= mp.hop_start)
+        if (mp.hop_start != 0 && mp.hop_limit <= mp.hop_start) {
+            info->has_hops_away = true;
             info->hops_away = mp.hop_start - mp.hop_limit;
+        }
     }
 }
 
