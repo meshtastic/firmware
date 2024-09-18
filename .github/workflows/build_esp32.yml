@@ -9,7 +9,7 @@ on:
 
 jobs:
   build-esp32:
-    runs-on: [linux, x64]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Build base
