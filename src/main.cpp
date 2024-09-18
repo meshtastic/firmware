@@ -1266,7 +1266,7 @@ void tft_task_handler(void *param = nullptr)
             spiLock->unlock();
         }
 #ifdef HAS_FREE_RTOS
-        vTaskDelay((TickType_t)10);
+        vTaskDelay(5 / portTICK_PERIOD_MS);
 #else
         delay(5);
 #endif
