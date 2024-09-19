@@ -234,9 +234,9 @@ class AccelerometerThread : public concurrency::OSThread
 
 #ifdef T_WATCH_S3
             // Need to raise the wrist function, need to set the correct axis
-            bmaSensor.setReampAxes(bmaSensor.REMAP_TOP_LAYER_RIGHT_CORNER);
+            bmaSensor.setRemapAxes(bmaSensor.REMAP_TOP_LAYER_RIGHT_CORNER);
 #else
-            bmaSensor.setReampAxes(bmaSensor.REMAP_BOTTOM_LAYER_BOTTOM_LEFT_CORNER);
+            bmaSensor.setRemapAxes(bmaSensor.REMAP_BOTTOM_LAYER_BOTTOM_LEFT_CORNER);
 #endif
             // bmaSensor.enableFeature(bmaSensor.FEATURE_STEP_CNTR, true);
             bmaSensor.enableFeature(bmaSensor.FEATURE_TILT, true);
