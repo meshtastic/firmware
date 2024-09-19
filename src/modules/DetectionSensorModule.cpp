@@ -49,16 +49,10 @@ int32_t DetectionSensorModule::runOnce()
 
     // LOG_DEBUG("Detection Sensor Module: Current pin state: %i\n", digitalRead(moduleConfig.detection_sensor.monitor_pin));
 
-    if ((millis() - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs)) {
-        if (hasDetectionEvent()) {
-            wasDetected = true;
-            sendDetectionMessage();
-            return DELAYED_INTERVAL;
-        } else if (wasDetected) {
-            wasDetected = false;
-            sendCurrentStateMessage();
-            return DELAYED_INTERVAL;
-        }
+    if ((millis() - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs) &&
+        hasDetectionEvent()) {
+        sendDetectionMessage();
+        return DELAYED_INTERVAL;
     }
     // Even if we haven't detected an event, broadcast our current state to the mesh on the scheduled interval as a sort
     // of heartbeat. We only do this if the minimum broadcast interval is greater than zero, otherwise we'll only broadcast state
