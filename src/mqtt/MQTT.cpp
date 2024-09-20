@@ -164,6 +164,16 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                         return;
                     }
                     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+                        if (moduleConfig.mqtt.encryption_enabled) {
+                            LOG_INFO("Ignoring decoded message on MQTT, encryption is enabled.\n");
+                            packetPool.release(p);
+                            return;
+                        }
+                        if (p->decoded.portnum == meshtastic_PortNum_ADMIN_APP) {
+                            LOG_INFO("Ignoring decoded admin packet.\n");
+                            packetPool.release(p);
+                            return;
+                        }
                         p->channel = ch.index;
                     }
 
