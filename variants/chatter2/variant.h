@@ -66,6 +66,7 @@
 #define SCREEN_ROTATE
 #define SCREEN_TRANSITION_FRAMERATE 5 // fps
 #define DISPLAY_FORCE_SMALL_FONTS
+#define TFT_BACKLIGHT_ON LOW
 
 // Battery
 
