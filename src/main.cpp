@@ -1173,7 +1173,7 @@ void setup()
 
 #if HAS_TFT
 #ifdef HAS_FREE_RTOS
-    xTaskCreatePinnedToCore(tft_task_handler, "tft", 8192, NULL, 5, NULL, 0);
+    xTaskCreatePinnedToCore(tft_task_handler, "tft", 8192, NULL, 1, NULL, 0);
 #endif
 #else
     setCPUFast(false); // 80MHz is fine for our slow peripherals
