@@ -1670,6 +1670,11 @@ void Screen::setup()
     static_cast<SH1106Wire *>(dispdev)->setSubtype(7);
 #endif
 
+#if defined(USE_ST7789) && defined(TFT_MESH)
+    // Heltec T114 and T190: honor a custom text color, if defined in variant.h
+    static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
+#endif
+
     // Initialising the UI will init the display too.
     ui->init();
 
@@ -1726,6 +1731,8 @@ void Screen::setup()
 #if defined(ST7701_CS) || defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ST7701_CS) || defined(ST7789_CS) ||           \
     defined(RAK14014) || defined(HX8357_CS)
         static_cast<TFTDisplay *>(dispdev)->flipScreenVertically();
+#elif defined(USE_ST7789)
+        static_cast<ST7789Spi *>(dispdev)->flipScreenVertically();
 #else
         dispdev->flipScreenVertically();
 #endif
