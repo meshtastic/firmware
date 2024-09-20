@@ -124,8 +124,11 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
     } else if (q > currentQuality) {
         shouldSet = true;
         LOG_DEBUG("Upgrading time to quality %s\n", RtcName(q));
-    } else if (q >= RTCQualityNTP && (now - lastSetMsec) > (12 * 60 * 60 * 1000UL)) {
-        // Every 12 hrs we will slam in a new GPS or Phone GPS / NTP time, to correct for local RTC clock drift
+    } else if (q == RTCQualityGPS) {
+        shouldSet = true;
+        LOG_DEBUG("Reapplying GPS time: %ld secs\n", printableEpoch);
+    } else if (q == RTCQualityNTP && (now - lastSetMsec) > (12 * 60 * 60 * 1000UL)) {
+        // Every 12 hrs we will slam in a new NTP or Phone GPS / NTP time, to correct for local RTC clock drift
         shouldSet = true;
         LOG_DEBUG("Reapplying external time to correct clock drift %ld secs\n", printableEpoch);
     } else {
