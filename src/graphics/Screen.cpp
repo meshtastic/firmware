@@ -1670,11 +1670,9 @@ void Screen::setup()
     static_cast<SH1106Wire *>(dispdev)->setSubtype(7);
 #endif
 
-#ifdef USE_ST7789
-// Heltec T114 and T190: honor a custom text color, if defined in variant.h
-#ifdef TFT_MESH
+#if defined(USE_ST7789) && defined(TFT_MESH)
+    // Heltec T114 and T190: honor a custom text color, if defined in variant.h
     static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
-#endif
 #endif
 
     // Initialising the UI will init the display too.
