@@ -390,7 +390,7 @@ void setup()
 #endif
 
 #ifdef AQ_SET_PIN
-    // RAK-12039 set pin for Air quality sensor
+    // RAK-12039 set pin for Air quality sensor. Detectable on I2C after ~3 seconds, so we need to rescan later
     pinMode(AQ_SET_PIN, OUTPUT);
     digitalWrite(AQ_SET_PIN, HIGH);
 #endif

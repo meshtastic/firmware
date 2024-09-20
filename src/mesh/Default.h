@@ -3,6 +3,8 @@
 #include <cstdint>
 #define ONE_DAY 24 * 60 * 60
 #define ONE_MINUTE_MS 60 * 1000
+#define THIRTY_SECONDS_MS 30 * 1000
+#define FIVE_SECONDS_MS 5 * 1000
 
 #define default_gps_update_interval IF_ROUTER(ONE_DAY, 2 * 60)
 #define default_telemetry_broadcast_interval_secs IF_ROUTER(ONE_DAY / 2, 30 * 60)
