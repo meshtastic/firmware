@@ -158,6 +158,11 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                     meshtastic_MeshPacket *p = packetPool.allocCopy(*e.packet);
                     p->via_mqtt = true; // Mark that the packet was received via MQTT
 
+                    if (p->from == 0 || p->from == nodeDB->getNodeNum()) {
+                        LOG_INFO("Ignoring downlink message we originally sent.\n");
+                        packetPool.release(p);
+                        return;
+                    }
                     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
                         p->channel = ch.index;
                     }
