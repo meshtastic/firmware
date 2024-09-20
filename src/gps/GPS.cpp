@@ -26,6 +26,8 @@
 
 #if defined(NRF52840_XXAA) || defined(NRF52833_XXAA) || defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
 HardwareSerial *GPS::_serial_gps = &Serial1;
+#elif defined(ARCH_RP2040)
+SerialUART *GPS::_serial_gps = &Serial1;
 #else
 HardwareSerial *GPS::_serial_gps = NULL;
 #endif
@@ -1198,8 +1200,12 @@ int GPS::prepareDeepSleep(void *unused)
 
 GnssModel_t GPS::probe(int serialSpeed)
 {
-#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)
+#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32WL)
     _serial_gps->end();
+    _serial_gps->begin(serialSpeed);
+#elif defined(ARCH_RP2040)
+    _serial_gps->end();
+    _serial_gps->setFIFOSize(256);
     _serial_gps->begin(serialSpeed);
 #else
     if (_serial_gps->baudRate() != serialSpeed) {
@@ -1265,8 +1271,12 @@ GnssModel_t GPS::probe(int serialSpeed)
         _serial_gps->write(_message_prt, sizeof(_message_prt));
         delay(500);
         serialSpeed = 9600;
-#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_RP2040) || defined(ARCH_STM32WL)
+#if defined(ARCH_NRF52) || defined(ARCH_PORTDUINO) || defined(ARCH_STM32WL)
         _serial_gps->end();
+        _serial_gps->begin(serialSpeed);
+#elif defined(ARCH_RP2040)
+        _serial_gps->end();
+        _serial_gps->setFIFOSize(256);
         _serial_gps->begin(serialSpeed);
 #else
         _serial_gps->updateBaudRate(serialSpeed);
@@ -1428,6 +1438,9 @@ GPS *GPS::createGps()
         LOG_DEBUG("Using GPIO%d for GPS RX\n", new_gps->rx_gpio);
         LOG_DEBUG("Using GPIO%d for GPS TX\n", new_gps->tx_gpio);
         _serial_gps->begin(GPS_BAUDRATE, SERIAL_8N1, new_gps->rx_gpio, new_gps->tx_gpio);
+#elif defined(ARCH_RP2040)
+        _serial_gps->setFIFOSize(256);
+        _serial_gps->begin(GPS_BAUDRATE);
 #else
         _serial_gps->begin(GPS_BAUDRATE);
 #endif
