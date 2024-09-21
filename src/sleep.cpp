@@ -271,13 +271,6 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
         digitalWrite(LORA_CS, HIGH);
         gpio_hold_en((gpio_num_t)LORA_CS);
     }
-
-#if defined(I2C_SDA)
-    Wire.end();
-    pinMode(I2C_SDA, ANALOG);
-    pinMode(I2C_SCL, ANALOG);
-#endif
-
 #endif
 
 #ifdef HAS_PMU
@@ -313,6 +306,14 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
             PMU->shutdown();
         }
     }
+#endif
+
+#if defined(ARCH_ESP32) && defined(I2C_SDA)
+    // Added by https://github.com/meshtastic/firmware/pull/4418
+    // Possibly to support Heltec Capsule Sensor?
+    Wire.end();
+    pinMode(I2C_SDA, ANALOG);
+    pinMode(I2C_SCL, ANALOG);
 #endif
 
     console->flush();
