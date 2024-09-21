@@ -1,16 +1,22 @@
-#define I2C_SDA 4 // I2C pins for this board
-#define I2C_SCL 15
+#define I2C_SDA 8 // I2C pins for this board
+#define I2C_SCL 9
 
-#define RESET_OLED 16 // If defined, this pin will be used to reset the display controller
-
-#define VEXT_ENABLE 21 // active low, powers the oled display and the lora antenna boost
-#define LED_PIN 2      // If defined we will blink this LED
-#define BUTTON_PIN 0   // If defined, this will be used for user button presses
-#define BUTTON_NEED_PULLUP
+#define VEXT_ENABLE 21    // active low, powers the oled display and the lora antenna boost
+#define LED_PIN 7         // If defined we will blink this LED
 #define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Module.
 
-#define USE_RF95
-#define LORA_DIO0 26 // a No connect on the SX1262 module
-#define LORA_RESET 14
-#define LORA_DIO1 33 // Must be manually wired: https://www.thethingsnetwork.org/forum/t/big-esp32-sx127x-topic-part-3/18436
-#define LORA_DIO2 32 // Not really used
+#define USE_SX1262
+#define LORA_SCK 6
+#define LORA_MISO 1
+#define LORA_MOSI 0
+#define LORA_CS 18
+#define LORA_RESET 21
+#define SX126X_CS LORA_CS
+#define SX126X_DIO1 23
+#define SX126X_DIO2 20
+#define SX126X_BUSY 22
+#define SX126X_RESET LORA_RESET
+#define SX126X_RXEN 15
+#define SX126X_TXEN 14
+#define SX126X_DIO2_AS_RF_SWITCH
+#define SX126X_DIO3_TCXO_VOLTAGE 1.8
