@@ -251,12 +251,6 @@ jobs:
           merge-multiple: true
           path: ./output
 
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: meshtasticd_${{ steps.version.outputs.version }}_*.deb
-          merge-multiple: true
-          path: ./output
-
       - name: Display structure of downloaded files
         run: ls -R
 
@@ -314,6 +308,12 @@ jobs:
           asset_name: debug-elfs-${{ steps.version.outputs.version }}.zip
           asset_content_type: application/zip
 
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: meshtasticd_${{ steps.version.outputs.version }}_*.deb
+          merge-multiple: true
+          path: ./output
+
       - name: Add raspbian aarch64 .deb
         uses: actions/upload-release-asset@v1
         env:
@@ -351,5 +351,6 @@ jobs:
       - name: Create version.properties pull request
         uses: peter-evans/create-pull-request@v6
         with:
+          title: Bump version.properties
           add-paths: |
             version.properties
