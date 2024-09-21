@@ -22,5 +22,5 @@ updates:
     directory: /.github/workflows
     schedule:
       interval: daily
-      time: "05:00"  # trunk-ignore(yamllint/quoted-strings): required by dependabot syntax check
+      time: "05:00" # trunk-ignore(yamllint/quoted-strings): required by dependabot syntax check
       timezone: US/Pacific
