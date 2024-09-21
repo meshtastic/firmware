@@ -4,7 +4,7 @@ on:
     branches:
       - master
     paths:
-      - meshtastic/**
+      - protobufs/**
 
 jobs:
   update-protobufs:
@@ -33,4 +33,4 @@ jobs:
           author_name: CI Bot
           author_email: meshtastic-ci-bot@users.noreply.github.com
           default_author: github_actor
-          message: Update classes from protobugs
+          message: Update classes from protobufs
