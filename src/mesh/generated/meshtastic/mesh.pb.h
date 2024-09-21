@@ -71,6 +71,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_RAK2560 = 22,
     /* Heltec HRU-3601: https://heltec.org/project/hru-3601/ */
     meshtastic_HardwareModel_HELTEC_HRU_3601 = 23,
+    /* Heltec Wireless Bridge */
+    meshtastic_HardwareModel_HELTEC_WIRELESS_BRIDGE = 24,
     /* B&Q Consulting Station Edition G1: https://uniteng.com/wiki/doku.php?id=meshtastic:station */
     meshtastic_HardwareModel_STATION_G1 = 25,
     /* RAK11310 (RP2040 + SX1262) */
