@@ -27,6 +27,10 @@ inputs:
     description: A newline separated list of paths to store as artifacts
     required: false
     default: ""
+  include-web-ui:
+    description: Include the web UI in the build
+    required: false
+    default: "false"
 
 runs:
   using: composite
@@ -38,6 +42,7 @@ runs:
       uses: ./.github/actions/setup-base
 
     - name: Pull web ui
+      if: ${{ inputs.include-web-ui == "true" }}
       uses: dsaltares/fetch-gh-release-asset@master
       with:
         repo: meshtastic/web
@@ -46,6 +51,7 @@ runs:
         token: ${{ inputs.github_token }}
 
     - name: Unpack web ui
+      if: ${{ inputs.include-web-ui == "true" }}
       shell: bash
       run: |
         tar -xf build.tar -C data/static

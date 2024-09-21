@@ -13,9 +13,7 @@ jobs:
   build-esp32-c3:
     runs-on: ubuntu-latest
     steps:
-      - name: Build base
-        id: base
-        uses: ./.github/actions/setup-base
+      - uses: actions/checkout@v4
 
       - name: Build ESP32-C3
         id: build
