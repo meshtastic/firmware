@@ -26,7 +26,7 @@ jobs:
           ./bin/regen-protos.sh
 
       - name: Create pull request
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v7
         with:
           title: Update protobufs and classes
           add-paths: |
