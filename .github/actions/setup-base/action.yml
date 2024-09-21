@@ -11,6 +11,23 @@ runs:
         ref: ${{github.event.pull_request.head.ref}}
         repository: ${{github.event.pull_request.head.repo.full_name}}
 
+    - name: Testing userPrefs.h
+      shell: bash
+      run: |
+        echo $USER_PREFS
+      env:
+        USER_PREFS: ${{ inputs.USER_PREFS }}
+      if: ${{ env.USER_PREFS != '' }}
+
+    - name: Getting custom userPrefs.h
+      uses: mobiledevops/secret-to-file-action@v1
+      env:
+        USER_PREFS: ${{ inputs.USER_PREFS }}
+      if: ${{ inputs.USER_PREFS != '' }}
+      with:
+        base64-encoded-secret: ${{ inputs.USER_PREFS }}
+        filename: "userPrefs.h"
+      
     - name: Install dependencies
       shell: bash
       run: |
@@ -29,6 +46,18 @@ runs:
     #     path: ~/.cache/pip
     #     key: ${{ runner.os }}-pip
     
+    - name: Create virtualenv
+      shell: bash
+      run: |
+        python3 -m venv ".venv"
+
+    - name: Activate virtualenv
+      shell: bash
+      run: |
+        . .venv/bin/activate
+        echo PATH=$PATH >> $GITHUB_ENV
+        echo VIRTUAL_ENV=$VIRTUAL_ENV >> $GITHUB_ENV
+
     - name: Create virtualenv
       shell: bash
       run: |

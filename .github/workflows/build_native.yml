@@ -22,7 +22,16 @@ jobs:
           submodules: recursive
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
-    
+
+      - name: Getting custom userPrefs.h
+        uses: mobiledevops/secret-to-file-action@v1
+        env:
+          USER_PREFS: ${{ inputs.USER_PREFS }}
+        if: ${{ inputs.USER_PREFS != '' }}
+        with:
+          base64-encoded-secret: ${{ inputs.USER_PREFS }}
+          filename: "userPrefs.h"
+
       - name: Create virtualenv
         shell: bash
         run: |
