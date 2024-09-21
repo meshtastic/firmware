@@ -136,6 +136,7 @@ using namespace meshtastic;
  */
 static HasBatteryLevel *batteryLevel; // Default to NULL for no battery level sensor
 
+// warning: 'void adcEnable()' defined but not used [-Wunused-function]
 static void adcEnable()
 {
 #ifdef ADC_CTRL // enable adc voltage divider when we need to read
@@ -149,6 +150,7 @@ static void adcEnable()
 #endif
 }
 
+// warning: 'void adcDisable()' defined but not used [-Wunused-function]
 static void adcDisable()
 {
 #ifdef ADC_CTRL // disable adc voltage divider when we need to read
