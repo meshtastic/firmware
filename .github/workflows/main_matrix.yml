@@ -349,7 +349,7 @@ jobs:
           bin/bump_version.py
 
       - name: Create version.properties pull request
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v7
         with:
           title: Bump version.properties
           add-paths: |
