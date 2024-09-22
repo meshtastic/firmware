@@ -2745,12 +2745,23 @@ int Screen::handleInputEvent(const InputEvent *event)
     }
 #endif
 
-    if (showingNormalScreen && moduleFrames.size() == 0) {
-        // LOG_DEBUG("Screen::handleInputEvent from %s\n", event->source);
-        if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
-            showPrevFrame();
-        } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
-            showNextFrame();
+    // Use left or right input from a keyboard to move between frames,
+    // so long as a mesh module isn't using these events for some other purpose
+    if (showingNormalScreen) {
+
+        // Ask any MeshModules if they're handling keyboard input right now
+        bool inputIntercepted = false;
+        for (MeshModule *module : moduleFrames) {
+            if (module->interceptingKeyboardInput())
+                inputIntercepted = true;
+        }
+
+        // If no modules are using the input, move between frames
+        if (!inputIntercepted) {
+            if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT))
+                showPrevFrame();
+            else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT))
+                showNextFrame();
         }
     }
 

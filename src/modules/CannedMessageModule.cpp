@@ -934,6 +934,19 @@ void CannedMessageModule::drawEnterIcon(OLEDDisplay *display, int x, int y, floa
 
 #endif
 
+// Indicate to screen class that module is handling keyboard input specially (at certain times)
+// This prevents the left & right keys being used for nav. between screen frames during text entry.
+bool CannedMessageModule::interceptingKeyboardInput()
+{
+    switch (runState) {
+    case CANNED_MESSAGE_RUN_STATE_DISABLED:
+    case CANNED_MESSAGE_RUN_STATE_INACTIVE:
+        return false;
+    default:
+        return true;
+    }
+}
+
 void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     char buffer[50];
