@@ -928,6 +928,47 @@ bool Power::axpChipInit()
             PMU->disablePowerOutput(XPOWERS_DLDO1); // Invalid power channel, it does not exist
             PMU->disablePowerOutput(XPOWERS_DLDO2); // Invalid power channel, it does not exist
             PMU->disablePowerOutput(XPOWERS_VBACKUP);
+
+            } else if (HW_VENDOR == meshtastic_HardwareModel_M5STACK_CORES3) {
+            // M5Stack CoreS3
+
+            // TF Card
+            PMU->setPowerChannelVoltage(XPOWERS_ALDO4, 3300);
+            PMU->enablePowerOutput(XPOWERS_ALDO4);
+
+            // GC0308 camera
+            PMU->setPowerChannelVoltage(XPOWERS_ALDO3, 3300);
+            PMU->enablePowerOutput(XPOWERS_ALDO3);
+
+            // m.2 interface
+            PMU->setPowerChannelVoltage(XPOWERS_DCDC3, 3300);
+            PMU->enablePowerOutput(XPOWERS_DCDC3);
+
+            // ES7210 dual microphone inputs
+            PMU->setPowerChannelVoltage(XPOWERS_ALDO2, 3300);
+            PMU->enablePowerOutput(XPOWERS_ALDO2);
+
+            // VDD 1v8 AW88298
+            PMU->setPowerChannelVoltage(XPOWERS_ALDO1, 1800);
+            PMU->enablePowerOutput(XPOWERS_ALDO1);
+
+            // sdcard power channel
+            PMU->setPowerChannelVoltage(XPOWERS_BLDO1, 3300);
+            PMU->enablePowerOutput(XPOWERS_BLDO1);
+
+            // PMU->setPowerChannelVoltage(XPOWERS_DCDC4, 3300);
+            // PMU->enablePowerOutput(XPOWERS_DCDC4);
+
+            // LCD Backlight
+            //PMU->setPowerChannelVoltage(XPOWERS_DLDO1, 3300);
+            //PMU->enablePowerOutput(XPOWERS_DLDO1); 
+
+            // not use channel
+            PMU->disablePowerOutput(XPOWERS_DCDC2); // not elicited
+            PMU->disablePowerOutput(XPOWERS_DCDC5); // not elicited
+            PMU->disablePowerOutput(XPOWERS_DLDO1); // Invalid power channel, it does not exist
+            PMU->disablePowerOutput(XPOWERS_DLDO2); // Invalid power channel, it does not exist
+            PMU->disablePowerOutput(XPOWERS_VBACKUP);
         }
 
         // disable all axp chip interrupt
