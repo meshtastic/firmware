@@ -35,8 +35,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: actions/checkout@v4
-
     - name: Build base
       id: base
       uses: ./.github/actions/setup-base

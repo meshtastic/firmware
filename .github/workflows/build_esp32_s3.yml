@@ -11,6 +11,8 @@ jobs:
   build-esp32-s3:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: Build ESP32-S3
         id: build
         uses: ./.github/actions/build-variant
