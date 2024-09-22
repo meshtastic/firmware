@@ -5,7 +5,7 @@ on:
     branches:
       - master
     paths:
-      - protobufs/**
+      - .gitmodules
   # On workflow dispatch, update the protobufs submodule and create a new PR
   workflow_dispatch:
 
