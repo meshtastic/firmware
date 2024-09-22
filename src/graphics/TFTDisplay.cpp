@@ -360,6 +360,8 @@ class LGFX : public lgfx::LGFX_Device
             _panel_instance = new lgfx::Panel_ST7735S;
         else if (settingsMap[displayPanel] == ili9341)
             _panel_instance = new lgfx::Panel_ILI9341;
+        else if (settingsMap[displayPanel] == ili9342)
+            _panel_instance = new lgfx::Panel_ILI9342;
         auto buscfg = _bus_instance.config();
         buscfg.spi_mode = 0;
         buscfg.spi_host = settingsMap[displayspidev];
