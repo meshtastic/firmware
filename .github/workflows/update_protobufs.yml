@@ -1,11 +1,9 @@
 name: Update protobufs and regenerate classes
 on:
   # On pull requests to master where the protobufs submodule has been updated, update the classes
-  pull_request:
+  pull_request_target:
     branches:
       - master
-    paths:
-      - .gitmodules
   # On workflow dispatch, update the protobufs submodule and create a new PR
   workflow_dispatch:
 
@@ -36,19 +34,19 @@ jobs:
 
       # If running on an existing PR, update the classes and commit the changes to the PR branch
       - name: Download nanopb
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request_target'
         run: |
           wget https://jpa.kapsi.fi/nanopb/download/nanopb-0.4.8-linux-x86.tar.gz
           tar xvzf nanopb-0.4.8-linux-x86.tar.gz
           mv nanopb-0.4.8-linux-x86 nanopb-0.4.8
 
       - name: Re-generate protocol buffers
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request_target'
         run: |
           ./bin/regen-protos.sh
 
       - name: Commit changes
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request_target'
         uses: EndBug/add-and-commit@v9
         with:
           add: src/mesh
