@@ -114,7 +114,7 @@ void RangeTestModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 
     packetSequence++;
 
-    static char heartbeatString[MAX_RHPACKETLEN];
+    static char heartbeatString[MAX_LORA_PAYLOAD_LEN + 1];
     snprintf(heartbeatString, sizeof(heartbeatString), "seq %u", packetSequence);
 
     p->decoded.payload.size = strlen(heartbeatString); // You must specify how many bytes are in the reply
