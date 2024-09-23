@@ -2444,7 +2444,7 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     if (moduleConfig.store_forward.enabled) {
 #ifdef ARCH_ESP32
         if (!Throttle::isWithinTimespanMs(storeForwardModule->lastHeartbeat,
-                                        (storeForwardModule->heartbeatInterval * 1200))) { // no heartbeat, overlap a bit
+                                          (storeForwardModule->heartbeatInterval * 1200))) { // no heartbeat, overlap a bit
 #if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) || defined(ST7789_CS) ||           \
      defined(USE_ST7789) || defined(HX8357_CS)) &&                                                                               \
     !defined(DISPLAY_FORCE_SMALL_FONTS)

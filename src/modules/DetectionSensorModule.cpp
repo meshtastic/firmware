@@ -51,7 +51,7 @@ int32_t DetectionSensorModule::runOnce()
     // LOG_DEBUG("Detection Sensor Module: Current pin state: %i\n", digitalRead(moduleConfig.detection_sensor.monitor_pin));
 
     if (!Throttle::isWithinTimespanMs(lastSentToMesh,
-                                    Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs)) &&
+                                      Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs)) &&
         hasDetectionEvent()) {
         sendDetectionMessage();
         return DELAYED_INTERVAL;
@@ -61,8 +61,8 @@ int32_t DetectionSensorModule::runOnce()
     // change detections.
     else if (moduleConfig.detection_sensor.state_broadcast_secs > 0 &&
              !Throttle::isWithinTimespanMs(lastSentToMesh,
-                                         Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs,
-                                                                           default_telemetry_broadcast_interval_secs))) {
+                                           Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs,
+                                                                             default_telemetry_broadcast_interval_secs))) {
         sendCurrentStateMessage();
         return DELAYED_INTERVAL;
     }
