@@ -6,6 +6,7 @@
 #include "NodeDB.h"
 #include "PowerMon.h"
 #include "RTC.h"
+#include "Throttle.h"
 
 #include "main.h" // pmu_found
 #include "sleep.h"
@@ -207,7 +208,7 @@ GPS_RESPONSE GPS::getACKCas(uint8_t class_id, uint8_t msg_id, uint32_t waitMilli
     // ACK-NACK| 0xBA | 0xCE | 0x04 | 0x00 | 0x05 | 0x00 | 0xXX | 0xXX | 0x00 | 0x00 | 0xXX | 0xXX | 0xXX | 0xXX |
     // ACK-ACK | 0xBA | 0xCE | 0x04 | 0x00 | 0x05 | 0x01 | 0xXX | 0xXX | 0x00 | 0x00 | 0xXX | 0xXX | 0xXX | 0xXX |
 
-    while (millis() - startTime < waitMillis) {
+    while (Throttle::isWithinTimespanMs(startTime, waitMillis)) {
         if (_serial_gps->available()) {
             buffer[bufferPos++] = _serial_gps->read();
 
@@ -276,7 +277,7 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
         buf[9] += buf[8];
     }
 
-    while (millis() - startTime < waitMillis) {
+    while (Throttle::isWithinTimespanMs(startTime, waitMillis)) {
         if (ack > 9) {
 #ifdef GPS_DEBUG
             LOG_DEBUG("\n");
@@ -333,7 +334,7 @@ int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
     uint32_t startTime = millis();
     uint16_t needRead;
 
-    while (millis() - startTime < waitMillis) {
+    while (Throttle::isWithinTimespanMs(startTime, waitMillis)) {
         if (_serial_gps->available()) {
             int c = _serial_gps->read();
             switch (ubxFrameCounter) {
@@ -1421,16 +1422,15 @@ bool GPS::lookForTime()
 
 #ifdef GNSS_AIROHA
     uint8_t fix = reader.fixQuality();
-    uint32_t now = millis();
     if (fix > 0) {
         if (lastFixStartMsec > 0) {
-            if ((now - lastFixStartMsec) < GPS_FIX_HOLD_TIME) {
+            if (Throttle::isWithinTimespanMs(lastFixStartMsec, GPS_FIX_HOLD_TIME)) {
                 return false;
             } else {
                 clearBuffer();
             }
         } else {
-            lastFixStartMsec = now;
+            lastFixStartMsec = millis();
             return false;
         }
     } else {
@@ -1474,16 +1474,15 @@ bool GPS::lookForLocation()
 #ifdef GNSS_AIROHA
     if ((config.position.gps_update_interval * 1000) >= (GPS_FIX_HOLD_TIME * 2)) {
         uint8_t fix = reader.fixQuality();
-        uint32_t now = millis();
         if (fix > 0) {
             if (lastFixStartMsec > 0) {
-                if ((now - lastFixStartMsec) < GPS_FIX_HOLD_TIME) {
+                if (Throttle::isWithinTimespanMs(lastFixStartMsec, GPS_FIX_HOLD_TIME)) {
                     return false;
                 } else {
                     clearBuffer();
                 }
             } else {
-                lastFixStartMsec = now;
+                lastFixStartMsec = millis();
                 return false;
             }
         } else {

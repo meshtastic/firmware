@@ -27,6 +27,7 @@
 #endif
 
 #include "graphics/ScreenFonts.h"
+#include <Throttle.h>
 
 // Remove Canned message screen if no action is taken for some milliseconds
 #define INACTIVATE_AFTER_MS 20000
@@ -422,7 +423,7 @@ int32_t CannedMessageModule::runOnce()
 
         this->notifyObservers(&e);
     } else if (((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)) &&
-               ((millis() - this->lastTouchMillis) > INACTIVATE_AFTER_MS)) {
+               !Throttle::isWithinTimespanMs(this->lastTouchMillis, INACTIVATE_AFTER_MS)) {
         // Reset module
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
         this->currentMessageIndex = -1;

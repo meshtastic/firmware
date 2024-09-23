@@ -18,6 +18,7 @@
 #include "Led.h"
 #include "RTC.h"
 #include "SPILock.h"
+#include "Throttle.h"
 #include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
 #include "detect/ScanI2C.h"
@@ -1237,7 +1238,7 @@ void loop()
 
 #ifdef DEBUG_STACK
     static uint32_t lastPrint = 0;
-    if (millis() - lastPrint > 10 * 1000L) {
+    if (!Throttle::isWithinTimespanMs(lastPrint, 10 * 1000L)) {
         lastPrint = millis();
         meshtastic::printThreadInfo("main");
     }
