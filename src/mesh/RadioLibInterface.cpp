@@ -3,6 +3,7 @@
 #include "NodeDB.h"
 #include "PowerMon.h"
 #include "SPILock.h"
+#include "Throttle.h"
 #include "configuration.h"
 #include "error.h"
 #include "main.h"
@@ -41,7 +42,7 @@ void LockingArduinoHal::spiTransfer(uint8_t *out, size_t len, uint8_t *in)
 
             uint32_t start = millis();
             while (digitalRead(busy)) {
-                if (millis() - start >= 2000) {
+                if (!Throttle::isWithinTimespanMs(start, 2000)) {
                     LOG_ERROR("GPIO mid-transfer timeout, is it connected?");
                     return;
                 }
@@ -114,7 +115,7 @@ bool RadioLibInterface::canSendImmediately()
         }
         // If we've been trying to send the same packet more than one minute and we haven't gotten a
         // TX IRQ from the radio, the radio is probably broken.
-        if (busyTx && (millis() - lastTxStart > 60000)) {
+        if (busyTx && !Throttle::isWithinTimespanMs(lastTxStart, 60000)) {
             LOG_ERROR("Hardware Failure! busyTx for more than 60s\n");
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_TRANSMIT_FAILED);
             // reboot in 5 seconds when this condition occurs.
