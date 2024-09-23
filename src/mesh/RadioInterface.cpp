@@ -151,7 +151,7 @@ const RegionInfo regions[] = {
 const RegionInfo *myRegion;
 bool RadioInterface::uses_default_frequency_slot = true;
 
-static uint8_t bytes[MAX_RHPACKETLEN];
+static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1];
 
 void initRegion()
 {
@@ -326,7 +326,7 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
 
 RadioInterface::RadioInterface()
 {
-    assert(sizeof(PacketHeader) == 16); // make sure the compiler did what we expected
+    assert(sizeof(PacketHeader) == MESHTASTIC_HEADER_LENGTH); // make sure the compiler did what we expected
 }
 
 bool RadioInterface::reconfigure()
