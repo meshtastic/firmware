@@ -162,6 +162,8 @@ class PhoneAPI
 
     void releaseMqttClientProxyPhonePacket();
 
+    void releaseClientNotification();
+
     /**
      * Handle a packet that the phone wants us to send.  We can write to it but can not keep a reference to it
      * @return true true if a packet was queued for sending

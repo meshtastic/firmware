@@ -62,9 +62,11 @@ void PhoneAPI::handleStartConfig()
 
 void PhoneAPI::close()
 {
+    LOG_INFO("PhoneAPI::close()\n");
+
     if (state != STATE_SEND_NOTHING) {
         state = STATE_SEND_NOTHING;
-
+        resetReadIndex();
         unobserve(&service->fromNumChanged);
 #ifdef FSCom
         unobserve(&xModem.packetReady);
@@ -72,8 +74,17 @@ void PhoneAPI::close()
         releasePhonePacket(); // Don't leak phone packets on shutdown
         releaseQueueStatusPhonePacket();
         releaseMqttClientProxyPhonePacket();
-
+        releaseClientNotification();
         onConnectionChanged(false);
+        fromRadioScratch = {};
+        toRadioScratch = {};
+        nodeInfoForPhone = {};
+        packetForPhone = NULL;
+        filesManifest.clear();
+        fromRadioNum = 0;
+        config_nonce = 0;
+        config_state = 0;
+        pauseBluetoothLogging = false;
     }
 }
 
@@ -405,6 +416,10 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_xmodemPacket_tag;
             fromRadioScratch.xmodemPacket = xmodemPacketForPhone;
             xmodemPacketForPhone = meshtastic_XModem_init_zero;
+        } else if (clientNotification) {
+            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_clientNotification_tag;
+            fromRadioScratch.clientNotification = *clientNotification;
+            releaseClientNotification();
         } else if (packetForPhone) {
             printPacket("phone downloaded packet", packetForPhone);
 
@@ -444,13 +459,6 @@ void PhoneAPI::sendConfigComplete()
     pauseBluetoothLogging = false;
 }
 
-void PhoneAPI::handleDisconnect()
-{
-    filesManifest.clear();
-    pauseBluetoothLogging = false;
-    LOG_INFO("PhoneAPI disconnect\n");
-}
-
 void PhoneAPI::releasePhonePacket()
 {
     if (packetForPhone) {
@@ -472,6 +480,14 @@ void PhoneAPI::releaseMqttClientProxyPhonePacket()
     if (mqttClientProxyMessageForPhone) {
         service->releaseMqttClientProxyMessageToPool(mqttClientProxyMessageForPhone);
         mqttClientProxyMessageForPhone = NULL;
+    }
+}
+
+void PhoneAPI::releaseClientNotification()
+{
+    if (clientNotification) {
+        service->releaseClientNotificationToPool(clientNotification);
+        clientNotification = NULL;
     }
 }
 
@@ -509,7 +525,9 @@ bool PhoneAPI::available()
             queueStatusPacketForPhone = service->getQueueStatusForPhone();
         if (!mqttClientProxyMessageForPhone)
             mqttClientProxyMessageForPhone = service->getMqttClientProxyMessageForPhone();
-        bool hasPacket = !!queueStatusPacketForPhone || !!mqttClientProxyMessageForPhone;
+        if (!clientNotification)
+            clientNotification = service->getClientNotificationForPhone();
+        bool hasPacket = !!queueStatusPacketForPhone || !!mqttClientProxyMessageForPhone || !!clientNotification;
         if (hasPacket)
             return true;
 
@@ -552,7 +570,6 @@ void PhoneAPI::sendNotification(meshtastic_LogRecord_Level level, uint32_t reply
     cn->time = getValidTime(RTCQualityFromNet);
     strncpy(cn->message, message, sizeof(cn->message));
     service->sendClientNotification(cn);
-    delete cn;
 }
 
 /**
