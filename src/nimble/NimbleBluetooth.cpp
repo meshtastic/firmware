@@ -124,7 +124,14 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         }
     }
 
-    virtual void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc) { LOG_INFO("BLE disconnect\n"); }
+    virtual void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc)
+    {
+        LOG_INFO("BLE disconnect\n");
+
+        if (bluetoothPhoneAPI) {
+            bluetoothPhoneAPI->close();
+        }
+    }
 };
 
 static NimbleBluetoothToRadioCallback *toRadioCallbacks;
