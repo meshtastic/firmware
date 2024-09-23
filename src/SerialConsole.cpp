@@ -74,7 +74,6 @@ void SerialConsole::flush()
 // For the serial port we can't really detect if any client is on the other side, so instead just look for recent messages
 bool SerialConsole::checkIsConnected()
 {
-    uint32_t now = millis();
     return Throttle::isWithinTimespanMs(lastContactMsec, SERIAL_CONNECTION_TIMEOUT);
 }
 
