@@ -110,13 +110,28 @@ class AccelerometerThread : public concurrency::OSThread
     }
 
     // Copy constructor (not implemented / included to avoid cppcheck warnings)
-    AccelerometerThread(const AccelerometerThread &other) : OSThread::OSThread("AccelerometerThread") {}
+    AccelerometerThread(const AccelerometerThread &other) : OSThread::OSThread("AccelerometerThread") { this->copy(other); }
 
     // Destructor (included to avoid cppcheck warnings)
     virtual ~AccelerometerThread() { clean(); }
 
     // Copy assignment (not implemented / included to avoid cppcheck warnings)
-    AccelerometerThread &operator=(const AccelerometerThread &other) { return *this; }
+    AccelerometerThread &operator=(const AccelerometerThread &other)
+    {
+        this->copy(other);
+        return *this;
+    }
+
+    // Take a very shallow copy (does not copy OSThread state nor the sensor object)
+    // If for some reason this is ever used, make sure to call init() after any copy
+    void copy(const AccelerometerThread &other)
+    {
+        if (this != &other) {
+            clean();
+            this->device = ScanI2C::FoundDevice(other.device.type,
+                                                ScanI2C::DeviceAddress(other.device.address.port, other.device.address.address));
+        }
+    }
 
     // Cleanup resources
     void clean()
