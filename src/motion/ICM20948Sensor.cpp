@@ -64,8 +64,6 @@ int32_t ICM20948Sensor::runOnce()
 
 #endif
 
-#endif
-
 // ----------------------------------------------------------------------
 // ICM20948Singleton
 // ----------------------------------------------------------------------
@@ -184,3 +182,5 @@ bool ICM20948Singleton::setWakeOnMotion()
     clearInterrupts();
     return true;
 }
+
+#endif
