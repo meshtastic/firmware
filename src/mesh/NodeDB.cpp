@@ -657,9 +657,10 @@ void NodeDB::pickNewNodeNum()
     while (((found = getMeshNode(nodeNum)) && memcmp(found->user.macaddr, ourMacAddr, sizeof(ourMacAddr)) != 0) ||
            (nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED)) {
         NodeNum candidate = random(NUM_RESERVED, LONG_MAX); // try a new random choice
-        LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, by MAC ending in 0x%02x%02x vs our 0x%02x%02x, so "
-                 "trying for 0x%x\n",
-                 nodeNum, found->user.macaddr[4], found->user.macaddr[5], ourMacAddr[4], ourMacAddr[5], candidate);
+        if (found)
+            LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, by MAC ending in 0x%02x%02x vs our 0x%02x%02x, so "
+                     "trying for 0x%x\n",
+                     nodeNum, found->user.macaddr[4], found->user.macaddr[5], ourMacAddr[4], ourMacAddr[5], candidate);
         nodeNum = candidate;
     }
     LOG_DEBUG("Using nodenum 0x%x \n", nodeNum);
