@@ -246,7 +246,7 @@ class AnalogBatteryLevel : public HasBatteryLevel
             config.power.adc_multiplier_override > 0 ? config.power.adc_multiplier_override : ADC_MULTIPLIER;
         // Do not call analogRead() often.
         const uint32_t min_read_interval = 5000;
-        if (Throttle::isWithinTimespanMs(last_read_time_ms, min_read_interval)) {
+        if (!Throttle::isWithinTimespanMs(last_read_time_ms, min_read_interval)) {
             last_read_time_ms = millis();
 
             uint32_t raw = 0;
