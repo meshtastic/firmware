@@ -295,9 +295,8 @@ template <typename T> bool SX128xInterface<T>::isActivelyReceiving()
 
     // Handle false detections
     if (detected) {
-        uint32_t now = millis();
         if (!activeReceiveStart) {
-            activeReceiveStart = now;
+            activeReceiveStart = millis();
         } else if (!Throttle::isWithinTimespanMs(activeReceiveStart, 2 * preambleTimeMsec) &&
                    !(irq & RADIOLIB_SX128X_IRQ_HEADER_VALID)) {
             // The HEADER_VALID flag should be set by now if it was really a packet, so ignore PREAMBLE_DETECTED flag

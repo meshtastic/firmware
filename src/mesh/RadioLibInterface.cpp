@@ -42,7 +42,7 @@ void LockingArduinoHal::spiTransfer(uint8_t *out, size_t len, uint8_t *in)
 
             uint32_t start = millis();
             while (digitalRead(busy)) {
-                if (!Throttle::isWithinTimespanMs(start, 2000) {
+                if (!Throttle::isWithinTimespanMs(start, 2000)) {
                     LOG_ERROR("GPIO mid-transfer timeout, is it connected?");
                     return;
                 }

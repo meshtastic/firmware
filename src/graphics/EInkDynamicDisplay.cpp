@@ -232,10 +232,8 @@ void EInkDynamicDisplay::checkForPromotion()
 // Is it too soon for another frame of this type?
 void EInkDynamicDisplay::checkRateLimiting()
 {
-    uint32_t now = millis();
-
     // Sanity check: millis() overflow - just let the update run..
-    if (previousRunMs > now)
+    if (previousRunMs > millis())
         return;
 
     // Skip update: too soon for BACKGROUND

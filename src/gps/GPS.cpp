@@ -1421,7 +1421,6 @@ bool GPS::lookForTime()
 
 #ifdef GNSS_AIROHA
     uint8_t fix = reader.fixQuality();
-    uint32_t now = millis();
     if (fix > 0) {
         if (lastFixStartMsec > 0) {
             if (Throttle::isWithinTimespanMs(lastFixStartMsec, GPS_FIX_HOLD_TIME)) {
@@ -1430,7 +1429,7 @@ bool GPS::lookForTime()
                 clearBuffer();
             }
         } else {
-            lastFixStartMsec = now;
+            lastFixStartMsec = millis();
             return false;
         }
     } else {
@@ -1474,7 +1473,6 @@ bool GPS::lookForLocation()
 #ifdef GNSS_AIROHA
     if ((config.position.gps_update_interval * 1000) >= (GPS_FIX_HOLD_TIME * 2)) {
         uint8_t fix = reader.fixQuality();
-        uint32_t now = millis();
         if (fix > 0) {
             if (lastFixStartMsec > 0) {
                 if (Throttle::isWithinTimespanMs(lastFixStartMsec, GPS_FIX_HOLD_TIME)) {
@@ -1483,7 +1481,7 @@ bool GPS::lookForLocation()
                     clearBuffer();
                 }
             } else {
-                lastFixStartMsec = now;
+                lastFixStartMsec = millis();
                 return false;
             }
         } else {

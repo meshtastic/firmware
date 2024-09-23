@@ -119,11 +119,10 @@ bool RemoteHardwareModule::handleReceivedProtobuf(const meshtastic_MeshPacket &r
 int32_t RemoteHardwareModule::runOnce()
 {
     if (moduleConfig.remote_hardware.enabled && watchGpios) {
-        uint32_t now = millis();
 
         if (!Throttle::isWithinTimespanMs(lastWatchMsec, WATCH_INTERVAL_MSEC)) {
             uint64_t curVal = digitalReads(watchGpios);
-            lastWatchMsec = now;
+            lastWatchMsec = millis();
 
             if (curVal != previousWatch) {
                 previousWatch = curVal;

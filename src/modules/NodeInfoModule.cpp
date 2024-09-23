@@ -68,7 +68,6 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
         LOG_DEBUG("Skip sending NodeInfo due to > 40 percent channel util.\n");
         return NULL;
     }
-    uint32_t now = millis();
     // If we sent our NodeInfo less than 5 min. ago, don't send it again as it may be still underway.
     if (!shorterTimeout && lastSentToMesh && Throttle::isWithinTimespanMs(lastSentToMesh, 5 * 60 * 1000)) {
         LOG_DEBUG("Skip sending NodeInfo since we just sent it less than 5 minutes ago.\n");
@@ -83,7 +82,7 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
         meshtastic_User &u = owner;
 
         LOG_INFO("sending owner %s/%s/%s\n", u.id, u.long_name, u.short_name);
-        lastSentToMesh = now;
+        lastSentToMesh = millis();
         return allocDataProtobuf(u);
     }
 }

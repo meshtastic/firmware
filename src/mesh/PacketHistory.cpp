@@ -23,12 +23,10 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
         return false; // Not a floodable message ID, so we don't care
     }
 
-    uint32_t now = millis();
-
     PacketRecord r;
     r.id = p->id;
     r.sender = getFrom(p);
-    r.rxTimeMsec = now;
+    r.rxTimeMsec = millis();
 
     auto found = recentPackets.find(r);
     bool seenRecently = (found != recentPackets.end()); // found not equal to .end() means packet was seen recently
@@ -66,8 +64,6 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
  */
 void PacketHistory::clearExpiredRecentPackets()
 {
-    uint32_t now = millis();
-
     LOG_DEBUG("recentPackets size=%ld\n", recentPackets.size());
 
     for (auto it = recentPackets.begin(); it != recentPackets.end();) {

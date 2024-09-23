@@ -1,4 +1,3 @@
-
 #include "ExpressLRSFiveWay.h"
 #include "Throttle.h"
 
@@ -77,11 +76,10 @@ void ExpressLRSFiveWay::update(int *keyValue, bool *keyLongPressed)
     *keyValue = NO_PRESS;
 
     int newKey = readKey();
-    uint32_t now = millis();
     if (keyInProcess == NO_PRESS) {
         // New key down
         if (newKey != NO_PRESS) {
-            keyDownStart = now;
+            keyDownStart = millis();
             // DBGLN("down=%u", newKey);
         }
     } else {

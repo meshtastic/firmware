@@ -157,12 +157,12 @@ int32_t EnvironmentTelemetryModule::runOnce()
         }
 
         uint32_t now = millis();
-        if ((lastSentToMesh == 0) ||
-            (!Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
+        if (((lastSentToMesh == 0) ||
+             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
                                                                moduleConfig.telemetry.environment_update_interval,
                                                                default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
-                airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
-                airTime->isTxAllowedAirUtil()) {
+            airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
+            airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
             lastSentToMesh = now;
         } else if (((lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs)) &&

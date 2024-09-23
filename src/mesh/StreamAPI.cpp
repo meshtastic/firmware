@@ -21,7 +21,6 @@ int32_t StreamAPI::runOncePart()
  */
 int32_t StreamAPI::readStream()
 {
-    uint32_t now = millis();
     if (!stream->available()) {
         // Nothing available this time, if the computer has talked to us recently, poll often, otherwise let CPU sleep a long time
         bool recentRx = Throttle::isWithinTimespanMs(lastRxMsec, 2000);
@@ -72,7 +71,7 @@ int32_t StreamAPI::readStream()
         }
 
         // we had bytes available this time, so assume we might have them next time also
-        lastRxMsec = now;
+        lastRxMsec = millis();
         return 0;
     }
 }
