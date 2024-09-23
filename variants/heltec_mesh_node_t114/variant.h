@@ -139,7 +139,7 @@ No longer populated on PCB
 #define SX126X_RESET (0 + 25)
 // Not really an E22 but TTGO seems to be trying to clone that
 #define SX126X_DIO2_AS_RF_SWITCH
-#define SX126X_DIO3_TCXO_VOLTAGE 1.8
+#define SX126X_DIO3_TCXO_VOLTAGE 3.3
 
 #define PIN_SPI1_MISO                                                                                                            \
     ST7789_MISO // FIXME not really needed, but for now the SPI code requires something to be defined, pick an used GPIO
