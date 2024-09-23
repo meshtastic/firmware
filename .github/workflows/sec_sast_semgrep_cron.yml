@@ -12,7 +12,7 @@ jobs:
   semgrep-full:
     runs-on: ubuntu-latest
     container:
-      image: returntocorp/semgrep
+      image: semgrep/semgrep
 
     steps:
       # step 1

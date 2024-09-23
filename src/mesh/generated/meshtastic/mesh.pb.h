@@ -71,6 +71,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_RAK2560 = 22,
     /* Heltec HRU-3601: https://heltec.org/project/hru-3601/ */
     meshtastic_HardwareModel_HELTEC_HRU_3601 = 23,
+    /* Heltec Wireless Bridge */
+    meshtastic_HardwareModel_HELTEC_WIRELESS_BRIDGE = 24,
     /* B&Q Consulting Station Edition G1: https://uniteng.com/wiki/doku.php?id=meshtastic:station */
     meshtastic_HardwareModel_STATION_G1 = 25,
     /* RAK11310 (RP2040 + SX1262) */
@@ -199,6 +201,8 @@ typedef enum _meshtastic_HardwareModel {
     /* M5 esp32 based MCU modules with enclosure, TFT and LORA Shields. All Variants (Basic, Core, Fire, Core2, Paper) https://m5stack.com/ */
     meshtastic_HardwareModel_M5STACK_COREBASIC = 77,
     meshtastic_HardwareModel_M5STACK_CORE2 = 78,
+    /* Pico2 with Waveshare Hat, same as Pico */
+    meshtastic_HardwareModel_RPI_PICO2 = 79,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */

@@ -33,7 +33,7 @@ int32_t KbI2cBase::runOnce()
     if (!i2cBus) {
         switch (cardkb_found.port) {
         case ScanI2C::WIRE1:
-#ifdef I2C_SDA1
+#if WIRE_INTERFACES_COUNT == 2
             LOG_DEBUG("Using I2C Bus 1 (the second one)\n");
             i2cBus = &Wire1;
             if (cardkb_found.address == BBQ10_KB_ADDR) {

@@ -2,6 +2,7 @@
 #include "configuration.h"
 #include "detect/ScanI2C.h"
 #include "main.h"
+#include <Throttle.h>
 #include <sys/time.h>
 #include <time.h>
 
@@ -29,7 +30,7 @@ void readFromRTC()
     if (rtc_found.address == RV3028_RTC) {
         uint32_t now = millis();
         Melopero_RV3028 rtc;
-#ifdef I2C_SDA1
+#if WIRE_INTERFACES_COUNT == 2
         rtc.initI2C(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
 #else
         rtc.initI2C();
@@ -58,7 +59,7 @@ void readFromRTC()
         uint32_t now = millis();
         PCF8563_Class rtc;
 
-#ifdef I2C_SDA1
+#if WIRE_INTERFACES_COUNT == 2
         rtc.begin(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
 #else
         rtc.begin();
@@ -127,7 +128,7 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
     } else if (q == RTCQualityGPS) {
         shouldSet = true;
         LOG_DEBUG("Reapplying GPS time: %ld secs\n", printableEpoch);
-    } else if (q == RTCQualityNTP && (now - lastSetMsec) > (12 * 60 * 60 * 1000UL)) {
+    } else if (q == RTCQualityNTP && !Throttle::isWithinTimespanMs(lastSetMsec, (12 * 60 * 60 * 1000UL))) {
         // Every 12 hrs we will slam in a new NTP or Phone GPS / NTP time, to correct for local RTC clock drift
         shouldSet = true;
         LOG_DEBUG("Reapplying external time to correct clock drift %ld secs\n", printableEpoch);
@@ -150,7 +151,7 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
 #ifdef RV3028_RTC
         if (rtc_found.address == RV3028_RTC) {
             Melopero_RV3028 rtc;
-#ifdef I2C_SDA1
+#if WIRE_INTERFACES_COUNT == 2
             rtc.initI2C(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
 #else
             rtc.initI2C();
@@ -164,7 +165,7 @@ bool perhapsSetRTC(RTCQuality q, const struct timeval *tv, bool forceUpdate)
         if (rtc_found.address == PCF8563_RTC) {
             PCF8563_Class rtc;
 
-#ifdef I2C_SDA1
+#if WIRE_INTERFACES_COUNT == 2
             rtc.begin(rtc_found.port == ScanI2C::I2CPort::WIRE1 ? Wire1 : Wire);
 #else
             rtc.begin();
