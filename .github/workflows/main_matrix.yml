@@ -386,3 +386,30 @@ jobs:
           title: Bump version.properties
           add-paths: |
             version.properties
+
+      - name: Checkout meshtastic/meshtastic.github.io
+        uses: actions/checkout@v4
+        with:
+          repository: meshtastic/meshtastic.github.io
+          token: ${{ secrets.ARTIFACTS_TOKEN }}
+          path: meshtastic.github.io
+
+      - name: Display structure of downloaded files
+        run: ls -R
+
+      - name: Extract firmware.zip
+        run: |
+          unzip ./firmware-${{ steps.version.outputs.version }}.zip -d meshtastic.github.io/firmware-${{ steps.version.outputs.version }}
+
+      - name: Display structure of downloaded files
+        run: ls -R
+
+      - name: Commit and push changes
+        run: |
+          cd meshtastic.github.io
+          find . -type f -name 'meshtasticd_*' -exec rm -f {} +
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Add firmware version ${{ steps.version.outputs.version }}"
+          git push
