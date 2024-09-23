@@ -5,6 +5,7 @@
 #include "Router.h"
 #include "configuration.h"
 #include "main.h"
+#include <Throttle.h>
 
 #define NUM_GPIOS 64
 
@@ -120,7 +121,7 @@ int32_t RemoteHardwareModule::runOnce()
     if (moduleConfig.remote_hardware.enabled && watchGpios) {
         uint32_t now = millis();
 
-        if (now - lastWatchMsec >= WATCH_INTERVAL_MSEC) {
+        if (!Throttle::isWithinTimespanMs(lastWatchMsec, WATCH_INTERVAL_MSEC)) {
             uint64_t curVal = digitalReads(watchGpios);
             lastWatchMsec = now;
 

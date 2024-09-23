@@ -75,7 +75,7 @@ void SerialConsole::flush()
 bool SerialConsole::checkIsConnected()
 {
     uint32_t now = millis();
-    return (now - lastContactMsec) < SERIAL_CONNECTION_TIMEOUT;
+    return Throttle::isWithinTimespanMs(lastContactMsec, SERIAL_CONNECTION_TIMEOUT);
 }
 
 /**

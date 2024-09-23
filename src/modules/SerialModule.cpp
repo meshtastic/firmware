@@ -99,7 +99,7 @@ SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
 bool SerialModule::checkIsConnected()
 {
     uint32_t now = millis();
-    return (now - lastContactMsec) < SERIAL_CONNECTION_TIMEOUT;
+    return Throttle::isWithinTimespanMs(lastContactMsec, SERIAL_CONNECTION_TIMEOUT);
 }
 
 int32_t SerialModule::runOnce()

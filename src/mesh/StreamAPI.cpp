@@ -1,6 +1,7 @@
 #include "StreamAPI.h"
 #include "PowerFSM.h"
 #include "RTC.h"
+#include "Throttle.h"
 #include "configuration.h"
 
 #define START1 0x94
@@ -23,7 +24,7 @@ int32_t StreamAPI::readStream()
     uint32_t now = millis();
     if (!stream->available()) {
         // Nothing available this time, if the computer has talked to us recently, poll often, otherwise let CPU sleep a long time
-        bool recentRx = (now - lastRxMsec) < 2000;
+        bool recentRx = Throttle::isWithinTimespanMs(lastRxMsec, 2000);
         return recentRx ? 5 : 250;
     } else {
         while (stream->available()) { // Currently we never want to block

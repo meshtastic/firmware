@@ -6,6 +6,7 @@
 #include "NodeDB.h"
 #include "PowerMon.h"
 #include "RTC.h"
+#include "Throttle.h"
 
 #include "main.h" // pmu_found
 #include "sleep.h"
@@ -19,7 +20,6 @@
 #include "meshUtils.h"
 #include <ctime>
 #endif
-#include <Throttle.h>
 
 #ifndef GPS_RESET_MODE
 #define GPS_RESET_MODE HIGH
@@ -1424,7 +1424,7 @@ bool GPS::lookForTime()
     uint32_t now = millis();
     if (fix > 0) {
         if (lastFixStartMsec > 0) {
-            if ((now - lastFixStartMsec) < GPS_FIX_HOLD_TIME) {
+            if (Throttle::isWithinTimespanMs(lastFixStartMsec, GPS_FIX_HOLD_TIME)) {
                 return false;
             } else {
                 clearBuffer();
@@ -1477,7 +1477,7 @@ bool GPS::lookForLocation()
         uint32_t now = millis();
         if (fix > 0) {
             if (lastFixStartMsec > 0) {
-                if ((now - lastFixStartMsec) < GPS_FIX_HOLD_TIME) {
+                if (Throttle::isWithinTimespanMs(lastFixStartMsec, GPS_FIX_HOLD_TIME)) {
                     return false;
                 } else {
                     clearBuffer();

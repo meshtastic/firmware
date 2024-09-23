@@ -12,6 +12,7 @@
 #include "Router.h"
 #include "detect/ScanI2CTwoWire.h"
 #include "main.h"
+#include <Throttle.h>
 
 int32_t AirQualityTelemetryModule::runOnce()
 {
@@ -61,12 +62,12 @@ int32_t AirQualityTelemetryModule::runOnce()
             return disable();
 
         uint32_t now = millis();
-        if (((lastSentToMesh == 0) ||
-             ((now - lastSentToMesh) >= Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.air_quality_interval,
-                                                                                default_telemetry_broadcast_interval_secs,
-                                                                                numOnlineNodes))) &&
-            airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
-            airTime->isTxAllowedAirUtil()) {
+        if ((lastSentToMesh == 0) ||
+            (!Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
+                                                               moduleConfig.telemetry.air_quality_interval,
+                                                               default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
+                airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
+                airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
             lastSentToMesh = now;
         } else if (service->isToPhoneQueueEmpty()) {

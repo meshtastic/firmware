@@ -22,6 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "Screen.h"
 #include "../userPrefs.h"
 #include "PowerMon.h"
+#include "Throttle.h"
 #include "configuration.h"
 #if HAS_SCREEN
 #include <OLEDDisplay.h>

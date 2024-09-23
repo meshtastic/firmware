@@ -1,3 +1,4 @@
+#include "Throttle.h"
 #include "configuration.h"
 
 #if defined(USE_EINK) && defined(USE_EINK_DYNAMICDISPLAY)
@@ -239,7 +240,7 @@ void EInkDynamicDisplay::checkRateLimiting()
 
     // Skip update: too soon for BACKGROUND
     if (frameFlags == BACKGROUND) {
-        if (now - previousRunMs < EINK_LIMIT_RATE_BACKGROUND_SEC * 1000) {
+        if (Throttle::isWithinTimespanMs(previousRunMs, EINK_LIMIT_RATE_BACKGROUND_SEC * 1000)) {
             refresh = SKIPPED;
             reason = EXCEEDED_RATELIMIT_FULL;
             return;
@@ -252,7 +253,7 @@ void EInkDynamicDisplay::checkRateLimiting()
 
     // Skip update: too soon for RESPONSIVE
     if (frameFlags & RESPONSIVE) {
-        if (now - previousRunMs < EINK_LIMIT_RATE_RESPONSIVE_SEC * 1000) {
+        if (Throttle::isWithinTimespanMs(previousRunMs, EINK_LIMIT_RATE_RESPONSIVE_SEC * 1000)) {
             refresh = SKIPPED;
             reason = EXCEEDED_RATELIMIT_FAST;
             LOG_DEBUG("refresh=SKIPPED, reason=EXCEEDED_RATELIMIT_FAST, frameFlags=0x%x\n", frameFlags);

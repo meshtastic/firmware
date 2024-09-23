@@ -1,5 +1,6 @@
 
 #include "ExpressLRSFiveWay.h"
+#include "Throttle.h"
 
 #ifdef INPUTBROKER_EXPRESSLRSFIVEWAY_TYPE
 
@@ -88,7 +89,7 @@ void ExpressLRSFiveWay::update(int *keyValue, bool *keyLongPressed)
         if (newKey == NO_PRESS) {
             // DBGLN("up=%u", keyInProcess);
             if (!isLongPressed) {
-                if ((now - keyDownStart) > KEY_DEBOUNCE_MS) {
+                if (!Throttle::isWithinTimespanMs(keyDownStart, KEY_DEBOUNCE_MS)) {
                     *keyValue = keyInProcess;
                     *keyLongPressed = false;
                 }
@@ -101,7 +102,7 @@ void ExpressLRSFiveWay::update(int *keyValue, bool *keyLongPressed)
         }
         // else still pressing, waiting for long if not already signaled
         else if (!isLongPressed) {
-            if ((now - keyDownStart) > KEY_LONG_PRESS_MS) {
+            if (!Throttle::isWithinTimespanMs(keyDownStart, KEY_LONG_PRESS_MS)) {
                 *keyValue = keyInProcess;
                 *keyLongPressed = true;
                 isLongPressed = true;
