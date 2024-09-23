@@ -25,6 +25,7 @@
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
+#include "Throttle.h"
 #include <RTC.h>
 
 PhoneAPI::PhoneAPI()
@@ -561,12 +562,12 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
 {
     printPacket("PACKET FROM PHONE", &p);
     if (p.decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP && lastPortNumToRadio[p.decoded.portnum] &&
-        (millis() - lastPortNumToRadio[p.decoded.portnum]) < (THIRTY_SECONDS_MS)) {
+        Throttle::isWithinTimespanMs(lastPortNumToRadio[p.decoded.portnum], THIRTY_SECONDS_MS)) {
         LOG_WARN("Rate limiting portnum %d\n", p.decoded.portnum);
         sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "TraceRoute can only be sent once every 30 seconds");
         return false;
     } else if (p.decoded.portnum == meshtastic_PortNum_POSITION_APP && lastPortNumToRadio[p.decoded.portnum] &&
-               (millis() - lastPortNumToRadio[p.decoded.portnum]) < (FIVE_SECONDS_MS)) {
+               Throttle::isWithinTimespanMs(lastPortNumToRadio[p.decoded.portnum], FIVE_SECONDS_MS)) {
         LOG_WARN("Rate limiting portnum %d\n", p.decoded.portnum);
         sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Position can only be sent once every 5 seconds");
         return false;

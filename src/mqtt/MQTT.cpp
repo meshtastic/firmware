@@ -21,6 +21,7 @@
 #include "Default.h"
 #include "serialization/JSON.h"
 #include "serialization/MeshPacketSerializer.h"
+#include <Throttle.h>
 #include <assert.h>
 
 const int reconnectMax = 5;
@@ -610,7 +611,7 @@ void MQTT::perhapsReportToMap()
     if (!moduleConfig.mqtt.map_reporting_enabled || !(moduleConfig.mqtt.proxy_to_client_enabled || isConnectedDirectly()))
         return;
 
-    if (millis() - last_report_to_map < map_publish_interval_msecs) {
+    if (Throttle::isWithinTimespanMs(last_report_to_map, map_publish_interval_msecs)) {
         return;
     } else {
         if (map_position_precision == 0 || (localPosition.latitude_i == 0 && localPosition.longitude_i == 0)) {

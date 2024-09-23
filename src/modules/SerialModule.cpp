@@ -7,6 +7,7 @@
 #include "Router.h"
 #include "configuration.h"
 #include <Arduino.h>
+#include <Throttle.h>
 
 /*
     SerialModule
@@ -97,8 +98,7 @@ SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
  */
 bool SerialModule::checkIsConnected()
 {
-    uint32_t now = millis();
-    return (now - lastContactMsec) < SERIAL_CONNECTION_TIMEOUT;
+    return Throttle::isWithinTimespanMs(lastContactMsec, SERIAL_CONNECTION_TIMEOUT);
 }
 
 int32_t SerialModule::runOnce()
@@ -182,13 +182,13 @@ int32_t SerialModule::runOnce()
                 return runOncePart();
             } else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA) && HAS_GPS) {
                 // in NMEA mode send out GGA every 2 seconds, Don't read from Port
-                if (millis() - lastNmeaTime > 2000) {
+                if (!Throttle::isWithinTimespanMs(lastNmeaTime, 2000)) {
                     lastNmeaTime = millis();
                     printGGA(outbuf, sizeof(outbuf), localPosition);
                     serialPrint->printf("%s", outbuf);
                 }
             } else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO) && HAS_GPS) {
-                if (millis() - lastNmeaTime > 10000) {
+                if (!Throttle::isWithinTimespanMs(lastNmeaTime, 10000)) {
                     lastNmeaTime = millis();
                     uint32_t readIndex = 0;
                     const meshtastic_NodeInfoLite *tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
@@ -500,7 +500,7 @@ void SerialModule::processWXSerial()
         LOG_INFO("WS85 : %i %.1fg%.1f %.1fv %.1fv\n", atoi(windDir), strtof(windVel, nullptr), strtof(windGust, nullptr),
                  batVoltageF, capVoltageF);
     }
-    if (gotwind && millis() - lastAveraged > averageIntervalMillis) {
+    if (gotwind && !Throttle::isWithinTimespanMs(lastAveraged, averageIntervalMillis)) {
         // calulate averages and send to the mesh
         float velAvg = 1.0 * velSum / velCount;
 
