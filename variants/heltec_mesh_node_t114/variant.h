@@ -92,13 +92,22 @@ No longer populated on PCB
 #define PIN_SERIAL2_TX (0 + 10)
 //  #define PIN_SERIAL2_EN (0 + 17)
 
-/**
-    Wire Interfaces
-    */
-#define WIRE_INTERFACES_COUNT 1
+/*
+ * I2C
+ */
 
-#define PIN_WIRE_SDA (26)
-#define PIN_WIRE_SCL (27)
+#define WIRE_INTERFACES_COUNT 2
+
+// I2C bus 0
+// Routed to footprint for PCF8563TS RTC
+// Not populated on T114 V1, maybe in future?
+#define PIN_WIRE_SDA (0 + 26) // P0.26
+#define PIN_WIRE_SCL (0 + 27) // P0.27
+
+// I2C bus 1
+// Available on header pins, for general use
+#define PIN_WIRE1_SDA (0 + 16) // P0.16
+#define PIN_WIRE1_SCL (0 + 13) // P0.13
 
 // QSPI Pins
 #define PIN_QSPI_SCK (32 + 14)
