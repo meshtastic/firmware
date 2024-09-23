@@ -127,7 +127,7 @@ uint32_t StoreForwardModule::getNumAvailablePackets(NodeNum dest, uint32_t last_
 {
     uint32_t count = 0;
     if (lastRequest.find(dest) == lastRequest.end()) {
-        lastRequest[dest] = 0;
+        lastRequest.emplace(dest, 0);
     }
     for (uint32_t i = lastRequest[dest]; i < this->packetHistoryTotalCount; i++) {
         if (this->packetHistory[i].time && (this->packetHistory[i].time > last_time)) {
