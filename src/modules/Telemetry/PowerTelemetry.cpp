@@ -70,20 +70,19 @@ int32_t PowerTelemetryModule::runOnce()
         if (!moduleConfig.telemetry.power_measurement_enabled)
             return disable();
 
-        uint32_t now = millis();
         if (((lastSentToMesh == 0) ||
              !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
                                                                moduleConfig.telemetry.power_update_interval,
                                                                default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
-            lastSentToMesh = now;
+            lastSentToMesh = millis();
         } else if (((lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs)) &&
                    (service->isToPhoneQueueEmpty())) {
             // Just send to phone when it's not our time to send to mesh yet
             // Only send while queue is empty (phone assumed connected)
             sendTelemetry(NODENUM_BROADCAST, true);
-            lastSentToPhone = now;
+            lastSentToPhone = millis();
         }
     }
     return min(sendToPhoneIntervalMs, result);
