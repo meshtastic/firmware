@@ -1,4 +1,5 @@
 #include "SX128xInterface.h"
+#include "Throttle.h"
 #include "configuration.h"
 #include "error.h"
 #include "mesh/NodeDB.h"
@@ -294,15 +295,15 @@ template <typename T> bool SX128xInterface<T>::isActivelyReceiving()
 
     // Handle false detections
     if (detected) {
-        uint32_t now = millis();
         if (!activeReceiveStart) {
-            activeReceiveStart = now;
-        } else if ((now - activeReceiveStart > 2 * preambleTimeMsec) && !(irq & RADIOLIB_SX128X_IRQ_HEADER_VALID)) {
+            activeReceiveStart = millis();
+        } else if (!Throttle::isWithinTimespanMs(activeReceiveStart, 2 * preambleTimeMsec) &&
+                   !(irq & RADIOLIB_SX128X_IRQ_HEADER_VALID)) {
             // The HEADER_VALID flag should be set by now if it was really a packet, so ignore PREAMBLE_DETECTED flag
             activeReceiveStart = 0;
             LOG_DEBUG("Ignore false preamble detection.\n");
             return false;
-        } else if (now - activeReceiveStart > maxPacketTimeMsec) {
+        } else if (Throttle::isWithinTimespanMs(activeReceiveStart, maxPacketTimeMsec)) {
             // We should have gotten an RX_DONE IRQ by now if it was really a packet, so ignore HEADER_VALID flag
             activeReceiveStart = 0;
             LOG_DEBUG("Ignore false header detection.\n");
