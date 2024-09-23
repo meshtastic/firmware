@@ -1,10 +1,5 @@
 name: Update protobufs and regenerate classes
-on:
-  pull_request:
-    branches:
-      - master
-    paths:
-      - protobufs/**
+on: workflow_dispatch
 
 jobs:
   update-protobufs:
@@ -16,6 +11,10 @@ jobs:
         with:
           submodules: true
 
+      - name: Update submodule
+        run: |
+          git submodule update --remote protobufs
+
       - name: Download nanopb
         run: |
           wget https://jpa.kapsi.fi/nanopb/download/nanopb-0.4.8-linux-x86.tar.gz
@@ -26,11 +25,10 @@ jobs:
         run: |
           ./bin/regen-protos.sh
 
-      - name: Commit changes
-        uses: EndBug/add-and-commit@v9
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v7
         with:
-          add: src/mesh
-          author_name: CI Bot
-          author_email: meshtastic-ci-bot@users.noreply.github.com
-          default_author: github_actor
-          message: Update classes from protobufs
+          title: Update protobufs and classes
+          add-paths: |
+            protobufs
+            src/mesh
