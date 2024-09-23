@@ -326,7 +326,7 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
 
 RadioInterface::RadioInterface()
 {
-    assert(sizeof(PacketHeader) == 16); // make sure the compiler did what we expected
+    assert(sizeof(PacketHeader) == MESHTASTIC_HEADER_LENGTH); // make sure the compiler did what we expected
 }
 
 bool RadioInterface::reconfigure()
