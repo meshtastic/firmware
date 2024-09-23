@@ -1,6 +1,6 @@
 #include "ICM20948Sensor.h"
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(ARCH_NRF52) && !MESHTASTIC_EXCLUDE_I2C
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
 
 // Flag when an interrupt has been detected
 volatile static bool ICM20948_IRQ = false;
@@ -69,8 +69,6 @@ int32_t ICM20948Sensor::runOnce()
 // ----------------------------------------------------------------------
 // ICM20948Singleton
 // ----------------------------------------------------------------------
-
-#ifndef ARCH_NRF52
 
 // Get a singleton wrapper for an Sparkfun ICM_20948_I2C
 ICM20948Singleton *ICM20948Singleton::GetInstance()
@@ -186,5 +184,3 @@ bool ICM20948Singleton::setWakeOnMotion()
     clearInterrupts();
     return true;
 }
-
-#endif
