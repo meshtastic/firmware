@@ -296,6 +296,7 @@ int32_t KbI2cBase::runOnce()
             case 0xac: // fn+m      INPUT_BROKER_MSG_MUTE_TOGGLE
             case 0x9e: // fn+g      INPUT_BROKER_MSG_GPS_TOGGLE
             case 0xaf: // fn+space  INPUT_BROKER_MSG_SEND_PING
+            case 0x8b: // fn+del    INPUT_BROKEN_MSG_DISMISS_FRAME
                 // just pass those unmodified
                 e.inputEvent = ANYKEY;
                 e.kbchar = c;

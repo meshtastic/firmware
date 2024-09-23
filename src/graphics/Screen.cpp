@@ -47,6 +47,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "modules/AdminModule.h"
 #include "modules/ExternalNotificationModule.h"
 #include "modules/TextMessageModule.h"
+#include "modules/WaypointModule.h"
 #include "sleep.h"
 #include "target_specific.h"
 
@@ -2110,8 +2111,13 @@ void Screen::setFrames(FrameFocus focus)
         // Check if the module being drawn has requested focus
         // We will honor this request later, if setFrames was triggered by a UIFrameEvent
         MeshModule *m = *i;
-        if (m->isRequestingFocus())
+        if (m->isRequestingFocus()) {
             fsi.positions.focusedModule = numframes;
+        }
+
+        // Identify the position of specific modules, if we need to know this later
+        if (m == waypointModule)
+            fsi.positions.waypoint = numframes;
 
         numframes++;
     }
@@ -2130,8 +2136,8 @@ void Screen::setFrames(FrameFocus focus)
 #endif
 
     // If we have a text message - show it next, unless it's a phone message and we aren't using any special modules
-    fsi.positions.textMessage = numframes;
     if (devicestate.has_rx_text_message && shouldDrawMessage(&devicestate.rx_text_message)) {
+        fsi.positions.textMessage = numframes;
         normalFrames[numframes++] = drawTextMessageFrame;
     }
 
@@ -2231,6 +2237,31 @@ void Screen::setFrameImmediateDraw(FrameCallback *drawFrames)
     ui->disableAllIndicators();
     ui->setFrames(drawFrames, 1);
     setFastFramerate();
+}
+
+// Dismisses the currently displayed screen frame, if possible
+// Relevant for text message, waypoint, others in future?
+// Triggered with a CardKB keycombo
+void Screen::dismissCurrentFrame()
+{
+    uint8_t currentFrame = ui->getUiState()->currentFrame;
+    bool dismissed = false;
+
+    if (currentFrame == framesetInfo.positions.textMessage && devicestate.has_rx_text_message) {
+        LOG_INFO("Dismissing Text Message\n");
+        devicestate.has_rx_text_message = false;
+        dismissed = true;
+    }
+
+    else if (currentFrame == framesetInfo.positions.waypoint && devicestate.has_rx_waypoint) {
+        LOG_DEBUG("Dismissing Waypoint\n");
+        devicestate.has_rx_waypoint = false;
+        dismissed = true;
+    }
+
+    // If we did make changes to dismiss, we now need to regenerate the frameset
+    if (dismissed)
+        setFrames();
 }
 
 void Screen::handleStartFirmwareUpdateScreen()

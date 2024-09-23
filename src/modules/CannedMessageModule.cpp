@@ -275,6 +275,13 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
                 showTemporaryMessage("Node Info \nUpdate Sent");
             }
             break;
+        case INPUT_BROKER_MSG_DISMISS_FRAME: // fn+del: dismiss screen frames like text or waypoint
+            // Avoid opening the canned message screen frame
+            // We're only handling the keypress here by convention, this has nothing to do with canned messages
+            this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+            // Attempt to close whatever frame is currently shown on display
+            screen->dismissCurrentFrame();
+            return 0;
         default:
             // pass the pressed key
             // LOG_DEBUG("Canned message ANYKEY (%x)\n", event->kbchar);
