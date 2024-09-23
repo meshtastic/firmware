@@ -22,6 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "Screen.h"
 #include "../userPrefs.h"
 #include "PowerMon.h"
+#include "Throttle.h"
 #include "configuration.h"
 #if HAS_SCREEN
 #include <OLEDDisplay.h>
@@ -117,6 +118,7 @@ static bool heartbeat = false;
 #define SCREEN_HEIGHT display->getHeight()
 
 #include "graphics/ScreenFonts.h"
+#include <Throttle.h>
 
 #define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
 
@@ -1670,6 +1672,11 @@ void Screen::setup()
     static_cast<SH1106Wire *>(dispdev)->setSubtype(7);
 #endif
 
+#if defined(USE_ST7789) && defined(TFT_MESH)
+    // Heltec T114 and T190: honor a custom text color, if defined in variant.h
+    static_cast<ST7789Spi *>(dispdev)->setRGB(TFT_MESH);
+#endif
+
     // Initialising the UI will init the display too.
     ui->init();
 
@@ -1726,6 +1733,8 @@ void Screen::setup()
 #if defined(ST7701_CS) || defined(ST7735_CS) || defined(ILI9341_DRIVER) || defined(ST7701_CS) || defined(ST7789_CS) ||           \
     defined(RAK14014) || defined(HX8357_CS)
         static_cast<TFTDisplay *>(dispdev)->flipScreenVertically();
+#elif defined(USE_ST7789)
+        static_cast<ST7789Spi *>(dispdev)->flipScreenVertically();
 #else
         dispdev->flipScreenVertically();
 #endif
@@ -1942,7 +1951,7 @@ int32_t Screen::runOnce()
     if (showingNormalScreen) {
         // standard screen loop handling here
         if (config.display.auto_screen_carousel_secs > 0 &&
-            (millis() - lastScreenTransition) > (config.display.auto_screen_carousel_secs * 1000)) {
+            !Throttle::isWithinTimespanMs(lastScreenTransition, config.display.auto_screen_carousel_secs * 1000)) {
 
 // If an E-Ink display struggles with fast refresh, force carousel to use full refresh instead
 // Carousel is potentially a major source of E-Ink display wear
@@ -2435,8 +2444,8 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     // Draw our hardware ID to assist with bluetooth pairing. Either prefix with Info or S&F Logo
     if (moduleConfig.store_forward.enabled) {
 #ifdef ARCH_ESP32
-        if (millis() - storeForwardModule->lastHeartbeat >
-            (storeForwardModule->heartbeatInterval * 1200)) { // no heartbeat, overlap a bit
+        if (!Throttle::isWithinTimespanMs(storeForwardModule->lastHeartbeat,
+                                          (storeForwardModule->heartbeatInterval * 1200))) { // no heartbeat, overlap a bit
 #if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) || defined(ST7789_CS) ||           \
      defined(USE_ST7789) || defined(HX8357_CS)) &&                                                                               \
     !defined(DISPLAY_FORCE_SMALL_FONTS)

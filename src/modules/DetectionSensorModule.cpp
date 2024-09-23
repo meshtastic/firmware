@@ -5,6 +5,7 @@
 #include "PowerFSM.h"
 #include "configuration.h"
 #include "main.h"
+#include <Throttle.h>
 DetectionSensorModule *detectionSensorModule;
 
 #define GPIO_POLLING_INTERVAL 100

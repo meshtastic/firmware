@@ -251,12 +251,6 @@ jobs:
           merge-multiple: true
           path: ./output
 
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: meshtasticd_${{ steps.version.outputs.version }}_*.deb
-          merge-multiple: true
-          path: ./output
-
       - name: Display structure of downloaded files
         run: ls -R
 
@@ -314,6 +308,12 @@ jobs:
           asset_name: debug-elfs-${{ steps.version.outputs.version }}.zip
           asset_content_type: application/zip
 
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: meshtasticd_${{ steps.version.outputs.version }}_*.deb
+          merge-multiple: true
+          path: ./output
+
       - name: Add raspbian aarch64 .deb
         uses: actions/upload-release-asset@v1
         env:
@@ -349,7 +349,35 @@ jobs:
           bin/bump_version.py
 
       - name: Create version.properties pull request
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v7
         with:
+          title: Bump version.properties
           add-paths: |
             version.properties
+
+      - name: Checkout meshtastic/meshtastic.github.io
+        uses: actions/checkout@v4
+        with:
+          repository: meshtastic/meshtastic.github.io
+          token: ${{ secrets.ARTIFACTS_TOKEN }}
+          path: meshtastic.github.io
+
+      - name: Display structure of downloaded files
+        run: ls -R
+
+      - name: Extract firmware.zip
+        run: |
+          unzip ./firmware-${{ steps.version.outputs.version }}.zip -d meshtastic.github.io/firmware-${{ steps.version.outputs.version }}
+
+      - name: Display structure of downloaded files
+        run: ls -R
+
+      - name: Commit and push changes
+        run: |
+          cd meshtastic.github.io
+          find . -type f -name 'meshtasticd_*' -exec rm -f {} +
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Add firmware version ${{ steps.version.outputs.version }}"
+          git push

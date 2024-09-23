@@ -12,6 +12,7 @@
 #include "Router.h"
 #include "detect/ScanI2CTwoWire.h"
 #include "main.h"
+#include <Throttle.h>
 
 int32_t AirQualityTelemetryModule::runOnce()
 {
@@ -60,15 +61,14 @@ int32_t AirQualityTelemetryModule::runOnce()
         if (!moduleConfig.telemetry.air_quality_enabled)
             return disable();
 
-        uint32_t now = millis();
         if (((lastSentToMesh == 0) ||
-             ((now - lastSentToMesh) >= Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.air_quality_interval,
-                                                                                default_telemetry_broadcast_interval_secs,
-                                                                                numOnlineNodes))) &&
+             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
+                                                               moduleConfig.telemetry.air_quality_interval,
+                                                               default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
             airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
-            lastSentToMesh = now;
+            lastSentToMesh = millis();
         } else if (service->isToPhoneQueueEmpty()) {
             // Just send to phone when it's not our time to send to mesh yet
             // Only send while queue is empty (phone assumed connected)
