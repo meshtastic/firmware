@@ -525,7 +525,9 @@ bool PhoneAPI::available()
             queueStatusPacketForPhone = service->getQueueStatusForPhone();
         if (!mqttClientProxyMessageForPhone)
             mqttClientProxyMessageForPhone = service->getMqttClientProxyMessageForPhone();
-        bool hasPacket = !!queueStatusPacketForPhone || !!mqttClientProxyMessageForPhone;
+        if (!clientNotification)
+            clientNotification = service->getClientNotificationForPhone();
+        bool hasPacket = !!queueStatusPacketForPhone || !!mqttClientProxyMessageForPhone || !!clientNotification;
         if (hasPacket)
             return true;
 
