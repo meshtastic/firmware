@@ -150,6 +150,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define BMA423_ADDR 0x19
 #define LSM6DS3_ADDR 0x6A
 #define BMX160_ADDR 0x69
+#define ICM20948_ADDR 0x69
+#define ICM20948_ADDR_ALT 0x68
 
 // -----------------------------------------------------------------------------
 // LED
