@@ -28,6 +28,7 @@
 
 esp_sleep_source_t wakeCause; // the reason we booted this time
 #endif
+#include "Throttle.h"
 
 #ifndef INCLUDE_vTaskSuspend
 #define INCLUDE_vTaskSuspend 0
@@ -168,7 +169,7 @@ static void waitEnterSleep(bool skipPreflight = false)
         while (!doPreflightSleep()) {
             delay(100); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
 
-            if (millis() - now > 30 * 1000) { // If we wait too long just report an error and go to sleep
+            if (!Throttle::isWithinTimespanMs(now, THIRTY_SECONDS_MS)) { // If we wait too long just report an error and go to sleep
                 RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_SLEEP_ENTER_WAIT);
                 assert(0); // FIXME - for now we just restart, need to fix bug #167
                 break;

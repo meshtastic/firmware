@@ -117,6 +117,7 @@ static bool heartbeat = false;
 #define SCREEN_HEIGHT display->getHeight()
 
 #include "graphics/ScreenFonts.h"
+#include <Throttle.h>
 
 #define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
 
@@ -1949,7 +1950,7 @@ int32_t Screen::runOnce()
     if (showingNormalScreen) {
         // standard screen loop handling here
         if (config.display.auto_screen_carousel_secs > 0 &&
-            (millis() - lastScreenTransition) > (config.display.auto_screen_carousel_secs * 1000)) {
+            !Throttle::isWithinTimespanMs(lastScreenTransition, config.display.auto_screen_carousel_secs * 1000)) {
 
 // If an E-Ink display struggles with fast refresh, force carousel to use full refresh instead
 // Carousel is potentially a major source of E-Ink display wear
@@ -2442,8 +2443,8 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     // Draw our hardware ID to assist with bluetooth pairing. Either prefix with Info or S&F Logo
     if (moduleConfig.store_forward.enabled) {
 #ifdef ARCH_ESP32
-        if (millis() - storeForwardModule->lastHeartbeat >
-            (storeForwardModule->heartbeatInterval * 1200)) { // no heartbeat, overlap a bit
+        if (!Throttle::isWithinTimespanMs(storeForwardModule->lastHeartbeat,
+                                        (storeForwardModule->heartbeatInterval * 1200))) { // no heartbeat, overlap a bit
 #if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) || defined(ST7789_CS) ||           \
      defined(USE_ST7789) || defined(HX8357_CS)) &&                                                                               \
     !defined(DISPLAY_FORCE_SMALL_FONTS)

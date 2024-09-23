@@ -19,6 +19,7 @@
 #include "configuration.h"
 #include "gps/GeoCoord.h"
 #include <Arduino.h>
+#include <Throttle.h>
 
 RangeTestModule *rangeTestModule;
 RangeTestModuleRadio *rangeTestModuleRadio;
@@ -79,7 +80,7 @@ int32_t RangeTestModule::runOnce()
                 }
 
                 // If we have been running for more than 8 hours, turn module back off
-                if (millis() - started > 28800000) {
+                if (!Throttle::isWithinTimespanMs(started, 28800000)) {
                     LOG_INFO("Range Test Module - Disabling after 8 hours\n");
                     return disable();
                 } else {

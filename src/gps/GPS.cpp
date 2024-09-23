@@ -19,6 +19,7 @@
 #include "meshUtils.h"
 #include <ctime>
 #endif
+#include <Throttle.h>
 
 #ifndef GPS_RESET_MODE
 #define GPS_RESET_MODE HIGH
@@ -206,7 +207,7 @@ GPS_RESPONSE GPS::getACKCas(uint8_t class_id, uint8_t msg_id, uint32_t waitMilli
     // ACK-NACK| 0xBA | 0xCE | 0x04 | 0x00 | 0x05 | 0x00 | 0xXX | 0xXX | 0x00 | 0x00 | 0xXX | 0xXX | 0xXX | 0xXX |
     // ACK-ACK | 0xBA | 0xCE | 0x04 | 0x00 | 0x05 | 0x01 | 0xXX | 0xXX | 0x00 | 0x00 | 0xXX | 0xXX | 0xXX | 0xXX |
 
-    while (millis() - startTime < waitMillis) {
+    while (Throttle::isWithinTimespanMs(startTime, waitMillis)) {
         if (_serial_gps->available()) {
             buffer[bufferPos++] = _serial_gps->read();
 
@@ -275,7 +276,7 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
         buf[9] += buf[8];
     }
 
-    while (millis() - startTime < waitMillis) {
+    while (Throttle::isWithinTimespanMs(startTime, waitMillis)) {
         if (ack > 9) {
 #ifdef GPS_DEBUG
             LOG_DEBUG("\n");
@@ -332,7 +333,7 @@ int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
     uint32_t startTime = millis();
     uint16_t needRead;
 
-    while (millis() - startTime < waitMillis) {
+    while (Throttle::isWithinTimespanMs(startTime, waitMillis)) {
         if (_serial_gps->available()) {
             int c = _serial_gps->read();
             switch (ubxFrameCounter) {
