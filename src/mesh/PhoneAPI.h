@@ -147,11 +147,6 @@ class PhoneAPI
      */
     virtual void onNowHasData(uint32_t fromRadioNum) {}
 
-    /**
-     * Subclasses can use this to find out when a client drops the link
-     */
-    virtual void handleDisconnect();
-
     /// begin a new connection
     void handleStartConfig();
 
