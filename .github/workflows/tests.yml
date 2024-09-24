@@ -98,7 +98,7 @@ jobs:
       - name: Install dependencies, setup devices and run
         shell: bash
         run: |
-          cd meshtastic/
+          cd meshtestic/
           pnpm install
           pnpm run setup
           pnpm run test
