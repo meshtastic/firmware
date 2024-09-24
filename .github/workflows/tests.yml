@@ -66,10 +66,10 @@ jobs:
       #   with:
       #     python-version: '3.10'
     
+      # pipx install "setuptools<72"
       - name: Upgrade python tools
         shell: bash
         run: |
-          pipx install "setuptools<72"
           pipx install platformio adafruit-nrfutil
           pipx install poetry
           pipx install meshtastic --pre
