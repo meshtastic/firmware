@@ -69,10 +69,10 @@ jobs:
       - name: Upgrade python tools
         shell: bash
         run: |
-          pipx install -U --no-cache-dir "setuptools<72"
-          pipx install -U platformio adafruit-nrfutil
-          pipx install -U poetry
-          pipx install -U meshtastic --pre
+          pipx install "setuptools<72"
+          pipx install platformio adafruit-nrfutil
+          pipx install poetry
+          pipx install meshtastic --pre
 
       - name: Upgrade platformio
         shell: bash
