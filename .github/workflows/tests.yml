@@ -7,7 +7,7 @@ on:
 
 jobs:
   test-simulator:
-    runs-on: ubuntu-latest
+    runs-on: test-runner
     steps:
       - name: Install libbluetooth
         shell: bash
