@@ -15,6 +15,7 @@
 #include "meshtastic/atak.pb.h"
 #include "sleep.h"
 #include "target_specific.h"
+#include "meshUtils.h"
 
 extern "C" {
 #include <Throttle.h>
@@ -347,8 +348,8 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
 
     service->sendToMesh(p, RX_SRC_LOCAL, true);
 
-    if ((config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
-         config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) &&
+    if (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
+                  meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) &&
         config.power.is_power_saving) {
         LOG_DEBUG("Starting next execution in 5 seconds and then going to sleep.\n");
         sleepOnNextExecution = true;
