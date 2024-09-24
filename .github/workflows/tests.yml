@@ -69,10 +69,10 @@ jobs:
       - name: Upgrade python tools
         shell: bash
         run: |
-          pip3 install -U --no-build-isolation --no-cache-dir "setuptools<72"
-          pip3 install -U platformio adafruit-nrfutil --no-build-isolation
-          pip3 install -U poetry --no-build-isolation
-          pip3 install -U meshtastic --pre --no-build-isolation
+          pipx install -U --no-cache-dir "setuptools<72"
+          pipx install -U platformio adafruit-nrfutil
+          pipx install -U poetry
+          pipx install -U meshtastic --pre
 
       - name: Upgrade platformio
         shell: bash
