@@ -102,7 +102,7 @@ bool MAX17048Singleton::isExternallyPowered()
 {
     float volts = cellVoltage();
     if (isnan(volts)) {
-        // if the battery is not connected then there must be external power 
+        // if the battery is not connected then there must be external power
         LOG_DEBUG("MAX17048Sensor::isExternallyPowered battery is\n");
         return true;
     }
