@@ -70,10 +70,16 @@ jobs:
       - name: Upgrade python tools
         shell: bash
         run: |
-          pipx install platformio adafruit-nrfutil
+          pipx install adafruit-nrfutil
           pipx install poetry
           pipx install meshtastic --pip-args=--pre
 
+      - name: Install PlatformIO from script
+        shell: bash
+        run: |    
+          curl -fsSL -o get-platformio.py https://raw.githubusercontent.com/platformio/platformio-core-installer/master/get-platformio.py
+          python3 get-platformio.py
+      
       - name: Upgrade platformio
         shell: bash
         run: |
