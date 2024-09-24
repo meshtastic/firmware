@@ -83,6 +83,7 @@ jobs:
       - name: Upgrade platformio
         shell: bash
         run: |
+          export PATH=$PATH:$HOME/.local/bin
           pio upgrade
 
       - name: Setup Node
