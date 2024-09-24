@@ -72,7 +72,7 @@ jobs:
         run: |
           pipx install platformio adafruit-nrfutil
           pipx install poetry
-          pipx install meshtastic --pre
+          pipx install meshtastic --pip-args=--pre
 
       - name: Upgrade platformio
         shell: bash
