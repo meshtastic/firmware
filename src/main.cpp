@@ -627,8 +627,8 @@ void setup()
 
     // only play start melody when role is not tracker or sensor
     if (config.power.is_power_saving == true &&
-        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER, meshtastic_Config_DeviceConfig_Role_TAK_TRACKER,
-                   meshtastic_Config_DeviceConfig_Role_SENSOR))
+        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
+                  meshtastic_Config_DeviceConfig_Role_TAK_TRACKER, meshtastic_Config_DeviceConfig_Role_SENSOR))
         LOG_DEBUG("Tracker/Sensor: Skipping start melody\n");
     else
         playStartMelody();
