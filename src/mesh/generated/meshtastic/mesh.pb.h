@@ -203,6 +203,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_M5STACK_CORE2 = 78,
     /* Pico2 with Waveshare Hat, same as Pico */
     meshtastic_HardwareModel_RPI_PICO2 = 79,
+    /*seeed stdio esp32 s3 dk*/
+    meshtastic_HardwareModel_SEEED_XIAO_S3 = 80,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
