@@ -51,6 +51,7 @@ jobs:
       matrix: ${{ fromJson(needs.setup.outputs.check) }}
 
     runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_dispatch' }}
     steps:
       - uses: actions/checkout@v4
       - name: Build base
@@ -156,10 +157,10 @@ jobs:
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v3
         with:
           path: ./
-          merge-multiple: true
+          #merge-multiple: true
 
       - name: Display structure of downloaded files
         run: ls -R
