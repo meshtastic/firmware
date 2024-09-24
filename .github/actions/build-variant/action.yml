@@ -88,8 +88,3 @@ runs:
         overwrite: true
         path: |
           ${{ inputs.artifact-paths }}
-
-    - name: Clean up resources
-      shell: bash
-      run: |
-        rm -rf .
