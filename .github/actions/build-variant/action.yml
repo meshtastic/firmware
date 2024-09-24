@@ -12,7 +12,7 @@ inputs:
     description: Path to the build script
     required: true
   remove-debug-flags:
-    description: A newline separated list of files to remove debug flags from
+    description: A space separated list of files to remove debug flags from
     required: false
     default: ""
   ota-firmware-source:
