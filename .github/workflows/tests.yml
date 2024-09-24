@@ -7,7 +7,7 @@ on:
 
 jobs:
   test-simulator:
-    runs-on: test-runner
+    runs-on: ubuntu-latest
     steps:
       - name: Install libbluetooth
         shell: bash
@@ -57,7 +57,7 @@ jobs:
           reporter: java-junit
 
   hardware-tests:
-    runs-on: ubuntu-latest
+    runs-on: test-runner
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
