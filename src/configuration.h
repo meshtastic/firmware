@@ -122,6 +122,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define INA_ADDR_ALTERNATE 0x41
 #define INA_ADDR_WAVESHARE_UPS 0x43
 #define INA3221_ADDR 0x42
+#define MAX1704X_ADDR 0x36
 #define QMC6310_ADDR 0x1C
 #define QMI8658_ADDR 0x6B
 #define QMC5883L_ADDR 0x0D
