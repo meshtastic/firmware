@@ -12,10 +12,10 @@
 #include "gps/GeoCoord.h"
 #include "main.h"
 #include "mesh/compression/unishox2.h"
+#include "meshUtils.h"
 #include "meshtastic/atak.pb.h"
 #include "sleep.h"
 #include "target_specific.h"
-#include "meshUtils.h"
 
 extern "C" {
 #include <Throttle.h>
