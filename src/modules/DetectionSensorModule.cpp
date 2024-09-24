@@ -58,7 +58,8 @@ int32_t DetectionSensorModule::runOnce()
     // moduleConfig.detection_sensor.minimum_broadcast_secs = 30;
     // moduleConfig.detection_sensor.state_broadcast_secs = 120;
     // moduleConfig.detection_sensor.detection_trigger_type =
-    // meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_LOGIC_HIGH; strcpy(moduleConfig.detection_sensor.name, "Motion");
+    //          meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_LOGIC_HIGH;
+    // strcpy(moduleConfig.detection_sensor.name, "Motion");
 
     if (moduleConfig.detection_sensor.enabled == false)
         return disable();
