@@ -156,10 +156,10 @@ jobs:
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v3
         with:
           path: ./
-          merge-multiple: true
+          #merge-multiple: true
 
       - name: Display structure of downloaded files
         run: ls -R
