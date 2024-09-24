@@ -11,9 +11,6 @@
 #include "airtime.h"
 #include "buzz.h"
 
-#include "error.h"
-#include "power.h"
-// #include "debug.h"
 #include "FSCommon.h"
 #include "Led.h"
 #include "RTC.h"
@@ -22,6 +19,8 @@
 #include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
 #include "detect/ScanI2C.h"
+#include "error.h"
+#include "power.h"
 
 #if !MESHTASTIC_EXCLUDE_I2C
 #include "detect/ScanI2CTwoWire.h"
@@ -39,7 +38,6 @@
 #include "target_specific.h"
 #include <memory>
 #include <utility>
-// #include <driver/rtc_io.h>
 
 #ifdef ARCH_ESP32
 #include "freertosinc.h"
@@ -1221,10 +1219,6 @@ void loop()
 {
     runASAP = false;
 
-    // axpDebugOutput.loop();
-
-    // heap_caps_check_integrity_all(true); // FIXME - disable this expensive check
-
 #ifdef ARCH_ESP32
     esp32Loop();
 #endif
@@ -1232,9 +1226,6 @@ void loop()
     nrf52Loop();
 #endif
     powerCommandsCheck();
-
-    // For debugging
-    // if (rIf) ((RadioLibInterface *)rIf)->isActivelyReceiving();
 
 #ifdef DEBUG_STACK
     static uint32_t lastPrint = 0;
@@ -1244,23 +1235,14 @@ void loop()
     }
 #endif
 
-    // TODO: This should go into a thread handled by FreeRTOS.
-    // handleWebResponse();
-
     service->loop();
 
     long delayMsec = mainController.runOrDelay();
 
-    /* if (mainController.nextThread && delayMsec)
-        LOG_DEBUG("Next %s in %ld\n", mainController.nextThread->ThreadName.c_str(),
-                  mainController.nextThread->tillRun(millis())); */
-
     // We want to sleep as long as possible here - because it saves power
     if (!runASAP && loopCanSleep()) {
-        // if(delayMsec > 100) LOG_DEBUG("sleeping %ld\n", delayMsec);
         mainDelay.delay(delayMsec);
     }
-    // if (didWake) LOG_DEBUG("wake!\n");
 }
 #endif
 
