@@ -95,11 +95,10 @@ jobs:
         with:
           version: latest
 
-      - name: Install Dependencies
-        run: pnpm install
-
-      - name: Setup devices
-        run: pnpm run setup
-
-      - name: Execute end to end tests on connected hardware
-        run: pnpm run test
+      - name: Install dependencies, setup devices and run
+        shell: bash
+        run: |
+          cd meshtastic/
+          pnpm install
+          pnpm run setup
+          pnpm run test
