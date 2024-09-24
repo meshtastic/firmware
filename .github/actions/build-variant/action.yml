@@ -12,7 +12,7 @@ inputs:
     description: Path to the build script
     required: true
   remove-debug-flags:
-    description: A newline separated list of files to remove debug flags from
+    description: A space separated list of files to remove debug flags from
     required: false
     default: ""
   ota-firmware-source:
@@ -59,8 +59,8 @@ runs:
       shell: bash
       if: inputs.remove-debug-flags != ''
       run: |
-        for PATH in ${{ inputs.remove-debug-flags }}; do
-          sed -i '/DDEBUG_HEAP/d' ${PATH}
+        for INI_FILE in ${{ inputs.remove-debug-flags }}; do
+          sed -i '/DDEBUG_HEAP/d' ${INI_FILE}
         done
 
     - name: Build ${{ inputs.board }}
@@ -88,8 +88,3 @@ runs:
         overwrite: true
         path: |
           ${{ inputs.artifact-paths }}
-
-    - name: Clean up resources
-      shell: bash
-      run: |
-        rm -rf .
