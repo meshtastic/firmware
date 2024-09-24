@@ -624,7 +624,13 @@ void setup()
     buttonThread = new ButtonThread();
 #endif
 
-    playStartMelody();
+    // only play start melody when role is not tracker or sensor
+    if (config.power.is_power_saving == true && (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
+                                                 config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER ||
+                                                 config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR))
+        LOG_DEBUG("Tracker/Sensor: Skipping start melody\n");
+    else
+        playStartMelody();
 
     // fixed screen override?
     if (config.display.oled != meshtastic_Config_DisplayConfig_OledType_OLED_AUTO)
