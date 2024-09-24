@@ -215,7 +215,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef WIRE_INTERFACES_COUNT
 // Officially an NRF52 macro
 // Repurposed cross-platform to identify devices using Wire1
-#if defined(I2C_SDA1) || defined(PIN_WIRE_SDA)
+#if defined(I2C_SDA1) || defined(PIN_WIRE1_SDA)
 #define WIRE_INTERFACES_COUNT 2
 #elif HAS_WIRE
 #define WIRE_INTERFACES_COUNT 1
