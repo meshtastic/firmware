@@ -57,7 +57,8 @@ class ScanI2C
         DFROBOT_LARK,
         NAU7802,
         FT6336U,
-        STK8BAXX
+        STK8BAXX,
+        ICM20948
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;
@@ -68,8 +69,9 @@ class ScanI2C
     } I2CPort;
 
     typedef struct DeviceAddress {
-        I2CPort port;
-        uint8_t address;
+        // set default values for ADDRESS_NONE
+        I2CPort port = I2CPort::NO_I2C;
+        uint8_t address = 0;
 
         explicit DeviceAddress(I2CPort port, uint8_t address);
         DeviceAddress();
