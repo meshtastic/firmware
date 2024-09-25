@@ -11,14 +11,15 @@
 #include "main.h"
 #include <OLEDDisplay.h>
 #include <OLEDDisplayUi.h>
+#include <meshUtils.h>
 
 #define MAGIC_USB_BATTERY_LEVEL 101
 
 int32_t DeviceTelemetryModule::runOnce()
 {
     refreshUptime();
-    bool isImpoliteRole = config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR ||
-                          config.device.role == meshtastic_Config_DeviceConfig_Role_ROUTER;
+    bool isImpoliteRole =
+        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_SENSOR, meshtastic_Config_DeviceConfig_Role_ROUTER);
     if (((lastSentToMesh == 0) ||
          ((uptimeLastMs - lastSentToMesh) >=
           Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.device_update_interval,
