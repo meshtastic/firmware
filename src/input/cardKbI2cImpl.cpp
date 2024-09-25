@@ -16,7 +16,7 @@ void CardKbI2cImpl::init()
         uint8_t i2caddr_asize = 3;
         auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
 
-#if defined(I2C_SDA1)
+#if WIRE_INTERFACES_COUNT == 2
         i2cScanner->scanPort(ScanI2C::I2CPort::WIRE1, i2caddr_scan, i2caddr_asize);
 #endif
         i2cScanner->scanPort(ScanI2C::I2CPort::WIRE, i2caddr_scan, i2caddr_asize);

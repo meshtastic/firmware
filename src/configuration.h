@@ -210,6 +210,16 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MINIMUM_SAFE_FREE_HEAP 1500
 #endif
 
+#ifndef WIRE_INTERFACES_COUNT
+// Officially an NRF52 macro
+// Repurposed cross-platform to identify devices using Wire1
+#if defined(I2C_SDA1) || defined(PIN_WIRE1_SDA)
+#define WIRE_INTERFACES_COUNT 2
+#elif HAS_WIRE
+#define WIRE_INTERFACES_COUNT 1
+#endif
+#endif
+
 /* Step #3: mop up with disabled values for HAS_ options not handled by the above two */
 
 #ifndef HAS_WIFI

@@ -71,6 +71,8 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_RAK2560 = 22,
     /* Heltec HRU-3601: https://heltec.org/project/hru-3601/ */
     meshtastic_HardwareModel_HELTEC_HRU_3601 = 23,
+    /* Heltec Wireless Bridge */
+    meshtastic_HardwareModel_HELTEC_WIRELESS_BRIDGE = 24,
     /* B&Q Consulting Station Edition G1: https://uniteng.com/wiki/doku.php?id=meshtastic:station */
     meshtastic_HardwareModel_STATION_G1 = 25,
     /* RAK11310 (RP2040 + SX1262) */
@@ -107,7 +109,7 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_NRF52840_PCA10059 = 40,
     /* Custom Disaster Radio esp32 v3 device https://github.com/sudomesh/disaster-radio/tree/master/hardware/board_esp32_v3 */
     meshtastic_HardwareModel_DR_DEV = 41,
-    /* M5 esp32 based MCU modules with enclosure, TFT and LORA Shields. All Variants (Basic, Core, Fire, Core2, Paper) https://m5stack.com/ */
+    /* M5 esp32 based MCU modules with enclosure, TFT and LORA Shields. All Variants (Basic, Core, Fire, Core2, CoreS3, Paper) https://m5stack.com/ */
     meshtastic_HardwareModel_M5STACK = 42,
     /* New Heltec LoRA32 with ESP32-S3 CPU */
     meshtastic_HardwareModel_HELTEC_V3 = 43,
@@ -196,9 +198,13 @@ typedef enum _meshtastic_HardwareModel {
  https://www.adafruit.com/product/938
   ^^^ short A0 to switch to I2C address 0x3C */
     meshtastic_HardwareModel_RP2040_FEATHER_RFM95 = 76,
-    /* M5 esp32 based MCU modules with enclosure, TFT and LORA Shields. All Variants (Basic, Core, Fire, Core2, Paper) https://m5stack.com/ */
+    /* M5 esp32 based MCU modules with enclosure, TFT and LORA Shields. All Variants (Basic, Core, Fire, Core2, CoreS3, Paper) https://m5stack.com/ */
     meshtastic_HardwareModel_M5STACK_COREBASIC = 77,
     meshtastic_HardwareModel_M5STACK_CORE2 = 78,
+    /* Pico2 with Waveshare Hat, same as Pico */
+    meshtastic_HardwareModel_RPI_PICO2 = 79,
+    /* M5 esp32 based MCU modules with enclosure, TFT and LORA Shields. All Variants (Basic, Core, Fire, Core2, CoreS3, Paper) https://m5stack.com/ */
+    meshtastic_HardwareModel_M5STACK_CORES3 = 80,
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */

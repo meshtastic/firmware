@@ -162,13 +162,13 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
     Melopero_RV3028 rtc;
 #endif
 
-#ifdef I2C_SDA1
+#if WIRE_INTERFACES_COUNT == 2
     if (port == I2CPort::WIRE1) {
         i2cBus = &Wire1;
     } else {
 #endif
         i2cBus = &Wire;
-#ifdef I2C_SDA1
+#if WIRE_INTERFACES_COUNT == 2
     }
 #endif
 
@@ -334,11 +334,10 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
 
                     // Check register 0x0F for 0x3300 response to ID LIS3DH chip.
                     registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0F), 2);
-                    if (registerValue == 0x3300) {
+                    if (registerValue == 0x3300 || registerValue == 0x3333) { // RAK4631 WisBlock has LIS3DH register at 0x3333
                         type = LIS3DH;
                         LOG_INFO("LIS3DH accelerometer found\n");
                     }
-
                     break;
                 }
             case SHT31_4x_ADDR:
@@ -423,7 +422,7 @@ TwoWire *ScanI2CTwoWire::fetchI2CBus(ScanI2C::DeviceAddress address) const
     if (address.port == ScanI2C::I2CPort::WIRE) {
         return &Wire;
     } else {
-#ifdef I2C_SDA1
+#if WIRE_INTERFACES_COUNT == 2
         return &Wire1;
 #else
         return &Wire;
