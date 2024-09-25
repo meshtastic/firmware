@@ -22,6 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "Screen.h"
 #include "../userPrefs.h"
 #include "PowerMon.h"
+#include "Throttle.h"
 #include "configuration.h"
 #if HAS_SCREEN
 #include <OLEDDisplay.h>
@@ -47,6 +48,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "modules/AdminModule.h"
 #include "modules/ExternalNotificationModule.h"
 #include "modules/TextMessageModule.h"
+#include "modules/WaypointModule.h"
 #include "sleep.h"
 #include "target_specific.h"
 
@@ -117,6 +119,7 @@ static bool heartbeat = false;
 #define SCREEN_HEIGHT display->getHeight()
 
 #include "graphics/ScreenFonts.h"
+#include <Throttle.h>
 
 #define getStringCenteredX(s) ((SCREEN_WIDTH - display->getStringWidth(s)) / 2)
 
@@ -1949,7 +1952,7 @@ int32_t Screen::runOnce()
     if (showingNormalScreen) {
         // standard screen loop handling here
         if (config.display.auto_screen_carousel_secs > 0 &&
-            (millis() - lastScreenTransition) > (config.display.auto_screen_carousel_secs * 1000)) {
+            !Throttle::isWithinTimespanMs(lastScreenTransition, config.display.auto_screen_carousel_secs * 1000)) {
 
 // If an E-Ink display struggles with fast refresh, force carousel to use full refresh instead
 // Carousel is potentially a major source of E-Ink display wear
@@ -2110,8 +2113,13 @@ void Screen::setFrames(FrameFocus focus)
         // Check if the module being drawn has requested focus
         // We will honor this request later, if setFrames was triggered by a UIFrameEvent
         MeshModule *m = *i;
-        if (m->isRequestingFocus())
+        if (m->isRequestingFocus()) {
             fsi.positions.focusedModule = numframes;
+        }
+
+        // Identify the position of specific modules, if we need to know this later
+        if (m == waypointModule)
+            fsi.positions.waypoint = numframes;
 
         numframes++;
     }
@@ -2130,8 +2138,8 @@ void Screen::setFrames(FrameFocus focus)
 #endif
 
     // If we have a text message - show it next, unless it's a phone message and we aren't using any special modules
-    fsi.positions.textMessage = numframes;
     if (devicestate.has_rx_text_message && shouldDrawMessage(&devicestate.rx_text_message)) {
+        fsi.positions.textMessage = numframes;
         normalFrames[numframes++] = drawTextMessageFrame;
     }
 
@@ -2231,6 +2239,31 @@ void Screen::setFrameImmediateDraw(FrameCallback *drawFrames)
     ui->disableAllIndicators();
     ui->setFrames(drawFrames, 1);
     setFastFramerate();
+}
+
+// Dismisses the currently displayed screen frame, if possible
+// Relevant for text message, waypoint, others in future?
+// Triggered with a CardKB keycombo
+void Screen::dismissCurrentFrame()
+{
+    uint8_t currentFrame = ui->getUiState()->currentFrame;
+    bool dismissed = false;
+
+    if (currentFrame == framesetInfo.positions.textMessage && devicestate.has_rx_text_message) {
+        LOG_INFO("Dismissing Text Message\n");
+        devicestate.has_rx_text_message = false;
+        dismissed = true;
+    }
+
+    else if (currentFrame == framesetInfo.positions.waypoint && devicestate.has_rx_waypoint) {
+        LOG_DEBUG("Dismissing Waypoint\n");
+        devicestate.has_rx_waypoint = false;
+        dismissed = true;
+    }
+
+    // If we did make changes to dismiss, we now need to regenerate the frameset
+    if (dismissed)
+        setFrames();
 }
 
 void Screen::handleStartFirmwareUpdateScreen()
@@ -2442,8 +2475,8 @@ void DebugInfo::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16
     // Draw our hardware ID to assist with bluetooth pairing. Either prefix with Info or S&F Logo
     if (moduleConfig.store_forward.enabled) {
 #ifdef ARCH_ESP32
-        if (millis() - storeForwardModule->lastHeartbeat >
-            (storeForwardModule->heartbeatInterval * 1200)) { // no heartbeat, overlap a bit
+        if (!Throttle::isWithinTimespanMs(storeForwardModule->lastHeartbeat,
+                                          (storeForwardModule->heartbeatInterval * 1200))) { // no heartbeat, overlap a bit
 #if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7701_CS) || defined(ST7735_CS) || defined(ST7789_CS) ||           \
      defined(USE_ST7789) || defined(HX8357_CS)) &&                                                                               \
     !defined(DISPLAY_FORCE_SMALL_FONTS)
@@ -2745,12 +2778,23 @@ int Screen::handleInputEvent(const InputEvent *event)
     }
 #endif
 
-    if (showingNormalScreen && moduleFrames.size() == 0) {
-        // LOG_DEBUG("Screen::handleInputEvent from %s\n", event->source);
-        if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
-            showPrevFrame();
-        } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
-            showNextFrame();
+    // Use left or right input from a keyboard to move between frames,
+    // so long as a mesh module isn't using these events for some other purpose
+    if (showingNormalScreen) {
+
+        // Ask any MeshModules if they're handling keyboard input right now
+        bool inputIntercepted = false;
+        for (MeshModule *module : moduleFrames) {
+            if (module->interceptingKeyboardInput())
+                inputIntercepted = true;
+        }
+
+        // If no modules are using the input, move between frames
+        if (!inputIntercepted) {
+            if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT))
+                showPrevFrame();
+            else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT))
+                showNextFrame();
         }
     }
 

@@ -26,7 +26,11 @@ struct uBloxGnssModelInfo {
 typedef enum {
     GNSS_MODEL_ATGM336H,
     GNSS_MODEL_MTK,
-    GNSS_MODEL_UBLOX,
+    GNSS_MODEL_UBLOX6,
+    GNSS_MODEL_UBLOX7,
+    GNSS_MODEL_UBLOX8,
+    GNSS_MODEL_UBLOX9,
+    GNSS_MODEL_UBLOX10,
     GNSS_MODEL_UC6580,
     GNSS_MODEL_UNKNOWN,
     GNSS_MODEL_MTK_L76B,
@@ -130,6 +134,7 @@ class GPS : private concurrency::OSThread
     static const uint8_t _message_GGA[];
     static const uint8_t _message_PMS[];
     static const uint8_t _message_SAVE[];
+    static const uint8_t _message_SAVE_10[];
 
     // VALSET Commands for M10
     static const uint8_t _message_VALSET_PM[];

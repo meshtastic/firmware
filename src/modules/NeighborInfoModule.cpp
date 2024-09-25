@@ -3,6 +3,7 @@
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "RTC.h"
+#include <Throttle.h>
 
 NeighborInfoModule *neighborInfoModule;
 
@@ -83,11 +84,11 @@ uint32_t NeighborInfoModule::collectNeighborInfo(meshtastic_NeighborInfo *neighb
 */
 void NeighborInfoModule::cleanUpNeighbors()
 {
-    uint32_t now = getTime();
     NodeNum my_node_id = nodeDB->getNodeNum();
     for (auto it = neighbors.rbegin(); it != neighbors.rend();) {
         // We will remove a neighbor if we haven't heard from them in twice the broadcast interval
-        if ((now - it->last_rx_time > it->node_broadcast_interval_secs * 2) && (it->node_id != my_node_id)) {
+        if (!Throttle::isWithinTimespanMs(it->last_rx_time, it->node_broadcast_interval_secs * 2) &&
+            (it->node_id != my_node_id)) {
             LOG_DEBUG("Removing neighbor with node ID 0x%x\n", it->node_id);
             it = std::vector<meshtastic_Neighbor>::reverse_iterator(
                 neighbors.erase(std::next(it).base())); // Erase the element and update the iterator

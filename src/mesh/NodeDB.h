@@ -2,6 +2,7 @@
 
 #include "Observer.h"
 #include <Arduino.h>
+#include <algorithm>
 #include <assert.h>
 #include <vector>
 

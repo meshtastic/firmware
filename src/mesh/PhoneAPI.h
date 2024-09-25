@@ -147,17 +147,14 @@ class PhoneAPI
      */
     virtual void onNowHasData(uint32_t fromRadioNum) {}
 
-    /**
-     * Subclasses can use this to find out when a client drops the link
-     */
-    virtual void handleDisconnect();
-
   private:
     void releasePhonePacket();
 
     void releaseQueueStatusPhonePacket();
 
     void releaseMqttClientProxyPhonePacket();
+
+    void releaseClientNotification();
 
     /// begin a new connection
     void handleStartConfig();

@@ -19,6 +19,7 @@
 #include "configuration.h"
 #include "gps/GeoCoord.h"
 #include <Arduino.h>
+#include <Throttle.h>
 
 RangeTestModule *rangeTestModule;
 RangeTestModuleRadio *rangeTestModuleRadio;
@@ -79,7 +80,7 @@ int32_t RangeTestModule::runOnce()
                 }
 
                 // If we have been running for more than 8 hours, turn module back off
-                if (millis() - started > 28800000) {
+                if (!Throttle::isWithinTimespanMs(started, 28800000)) {
                     LOG_INFO("Range Test Module - Disabling after 8 hours\n");
                     return disable();
                 } else {
@@ -114,7 +115,7 @@ void RangeTestModuleRadio::sendPayload(NodeNum dest, bool wantReplies)
 
     packetSequence++;
 
-    static char heartbeatString[MAX_RHPACKETLEN];
+    static char heartbeatString[MAX_LORA_PAYLOAD_LEN + 1];
     snprintf(heartbeatString, sizeof(heartbeatString), "seq %u", packetSequence);
 
     p->decoded.payload.size = strlen(heartbeatString); // You must specify how many bytes are in the reply

@@ -76,6 +76,8 @@
 #ifdef HELTEC_V2_1
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_V2_1
 #endif
+#elif defined(HELTEC_WIRELESS_BRIDGE)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_BRIDGE
 #elif defined(ARDUINO_HELTEC_WIFI_LORA_32)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_V1
 #elif defined(TLORA_V1)
@@ -168,6 +170,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_NODE_T114
 #elif defined(SENSECAP_INDICATOR)
 #define HW_VENDOR meshtastic_HardwareModel_SENSECAP_INDICATOR
+#elif defined(SEEED_XIAO_S3)
+#define HW_VENDOR meshtastic_HardwareModel_SEEED_XIAO_S3
 #endif
 
 // -----------------------------------------------------------------------------
