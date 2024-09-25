@@ -272,7 +272,8 @@ template <typename T> bool LR11x0Interface<T>::isActivelyReceiving()
 {
     // The IRQ status will be cleared when we start our read operation. Check if we've started a header, but haven't yet
     // received and handled the interrupt for reading the packet/handling errors.
-    return receiveDetected(lora.getIrqStatus(), RADIOLIB_LR11X0_IRQ_SYNC_WORD_HEADER_VALID, RADIOLIB_LR11X0_IRQ_PREAMBLE_DETECTED);
+    return receiveDetected(lora.getIrqStatus(), RADIOLIB_LR11X0_IRQ_SYNC_WORD_HEADER_VALID,
+                           RADIOLIB_LR11X0_IRQ_PREAMBLE_DETECTED);
 }
 
 template <typename T> bool LR11x0Interface<T>::sleep()
