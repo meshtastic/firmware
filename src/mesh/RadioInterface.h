@@ -9,7 +9,9 @@
 
 #define MAX_TX_QUEUE 16 // max number of packets which can be waiting for transmission
 
-#define MAX_RHPACKETLEN 256
+#define MAX_LORA_PAYLOAD_LEN 255 // max length of 255 per Semtech's datasheets on SX12xx
+#define MESHTASTIC_HEADER_LENGTH 16
+#define MESHTASTIC_PKC_OVERHEAD 12
 
 #define PACKET_FLAGS_HOP_LIMIT_MASK 0x07
 #define PACKET_FLAGS_WANT_ACK_MASK 0x08
@@ -89,7 +91,7 @@ class RadioInterface
     /**
      * A temporary buffer used for sending/receiving packets, sized to hold the biggest buffer we might need
      * */
-    uint8_t radiobuf[MAX_RHPACKETLEN];
+    uint8_t radiobuf[MAX_LORA_PAYLOAD_LEN + 1];
 
     /**
      * Enqueue a received packet for the registered receiver

@@ -1,4 +1,4 @@
-name: "Update protobufs and regenerate classes"
+name: Update protobufs and regenerate classes
 on: workflow_dispatch
 
 jobs:
