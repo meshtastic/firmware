@@ -46,7 +46,7 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           board: ${{ inputs.board }}
-          remove-debug-flags: |
+          remove-debug-flags: >-
             ./arch/esp32/esp32.ini
             ./arch/esp32/esp32s2.ini
             ./arch/esp32/esp32s3.ini
