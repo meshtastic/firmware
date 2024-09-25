@@ -76,6 +76,8 @@
 #ifdef HELTEC_V2_1
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_V2_1
 #endif
+#elif defined(HELTEC_WIRELESS_BRIDGE)
+#define HW_VENDOR meshtastic_HardwareModel_HELTEC_WIRELESS_BRIDGE
 #elif defined(ARDUINO_HELTEC_WIFI_LORA_32)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_V1
 #elif defined(TLORA_V1)

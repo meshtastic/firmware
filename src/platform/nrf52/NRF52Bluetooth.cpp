@@ -55,7 +55,6 @@ static BluetoothPhoneAPI *bluetoothPhoneAPI;
 
 void onConnect(uint16_t conn_handle)
 {
-
     // Get the reference to current connection
     BLEConnection *connection = Bluefruit.Connection(conn_handle);
     connectionHandle = conn_handle;
@@ -70,8 +69,10 @@ void onConnect(uint16_t conn_handle)
  */
 void onDisconnect(uint16_t conn_handle, uint8_t reason)
 {
-    // FIXME - we currently assume only one active connection
     LOG_INFO("BLE Disconnected, reason = 0x%x\n", reason);
+    if (bluetoothPhoneAPI) {
+        bluetoothPhoneAPI->close();
+    }
 }
 void onCccd(uint16_t conn_hdl, BLECharacteristic *chr, uint16_t cccd_value)
 {

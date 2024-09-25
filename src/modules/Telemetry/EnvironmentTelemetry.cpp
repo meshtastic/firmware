@@ -64,6 +64,7 @@ T1000xSensor t1000xSensor;
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
 #include "graphics/ScreenFonts.h"
+#include <Throttle.h>
 
 int32_t EnvironmentTelemetryModule::runOnce()
 {
@@ -155,21 +156,20 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = bme680Sensor.runTrigger();
         }
 
-        uint32_t now = millis();
         if (((lastSentToMesh == 0) ||
-             ((now - lastSentToMesh) >=
-              Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.environment_update_interval,
-                                                      default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
+             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
+                                                               moduleConfig.telemetry.environment_update_interval,
+                                                               default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
             airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
-            lastSentToMesh = now;
-        } else if (((lastSentToPhone == 0) || ((now - lastSentToPhone) >= sendToPhoneIntervalMs)) &&
+            lastSentToMesh = millis();
+        } else if (((lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs)) &&
                    (service->isToPhoneQueueEmpty())) {
             // Just send to phone when it's not our time to send to mesh yet
             // Only send while queue is empty (phone assumed connected)
             sendTelemetry(NODENUM_BROADCAST, true);
-            lastSentToPhone = now;
+            lastSentToPhone = millis();
         }
     }
     return min(sendToPhoneIntervalMs, result);

@@ -1,4 +1,4 @@
-name: "Update protobufs and regenerate classes"
+name: Update protobufs and regenerate classes
 on: workflow_dispatch
 
 jobs:
@@ -26,8 +26,9 @@ jobs:
           ./bin/regen-protos.sh
 
       - name: Create pull request
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v7
         with:
+          title: Update protobufs and classes
           add-paths: |
             protobufs
             src/mesh

@@ -36,8 +36,8 @@ static MemoryDynamic<meshtastic_MeshPacket> staticPool;
 
 Allocator<meshtastic_MeshPacket> &packetPool = staticPool;
 
-static uint8_t bytes[MAX_RHPACKETLEN];
-static uint8_t ScratchEncrypted[MAX_RHPACKETLEN];
+static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1];
+static uint8_t ScratchEncrypted[MAX_LORA_PAYLOAD_LEN + 1];
 
 /**
  * Constructor
@@ -330,13 +330,13 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
     // Attempt PKI decryption first
     if (p->channel == 0 && p->to == nodeDB->getNodeNum() && p->to > 0 && p->to != NODENUM_BROADCAST &&
         nodeDB->getMeshNode(p->from) != nullptr && nodeDB->getMeshNode(p->from)->user.public_key.size > 0 &&
-        nodeDB->getMeshNode(p->to)->user.public_key.size > 0 && rawSize > 12) {
+        nodeDB->getMeshNode(p->to)->user.public_key.size > 0 && rawSize > MESHTASTIC_PKC_OVERHEAD) {
         LOG_DEBUG("Attempting PKI decryption\n");
 
         if (crypto->decryptCurve25519(p->from, p->id, rawSize, ScratchEncrypted, bytes)) {
             LOG_INFO("PKI Decryption worked!\n");
             memset(&p->decoded, 0, sizeof(p->decoded));
-            rawSize -= 12;
+            rawSize -= MESHTASTIC_PKC_OVERHEAD;
             if (pb_decode_from_bytes(bytes, rawSize, &meshtastic_Data_msg, &p->decoded) &&
                 p->decoded.portnum != meshtastic_PortNum_UNKNOWN_APP) {
                 decrypted = true;
@@ -475,7 +475,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             }
         } */
 
-        if (numbytes > MAX_RHPACKETLEN)
+        if (numbytes + MESHTASTIC_HEADER_LENGTH > MAX_LORA_PAYLOAD_LEN)
             return meshtastic_Routing_Error_TOO_LARGE;
 
         // printBytes("plaintext", bytes, numbytes);
@@ -499,7 +499,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
             p->decoded.portnum != meshtastic_PortNum_TRACEROUTE_APP && p->decoded.portnum != meshtastic_PortNum_NODEINFO_APP &&
             p->decoded.portnum != meshtastic_PortNum_ROUTING_APP && p->decoded.portnum != meshtastic_PortNum_POSITION_APP) {
             LOG_DEBUG("Using PKI!\n");
-            if (numbytes + 12 > MAX_RHPACKETLEN)
+            if (numbytes + MESHTASTIC_HEADER_LENGTH + MESHTASTIC_PKC_OVERHEAD > MAX_LORA_PAYLOAD_LEN)
                 return meshtastic_Routing_Error_TOO_LARGE;
             if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, 32) &&
                 memcmp(p->public_key.bytes, node->user.public_key.bytes, 32) != 0) {
@@ -508,7 +508,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                 return meshtastic_Routing_Error_PKI_FAILED;
             }
             crypto->encryptCurve25519(p->to, getFrom(p), p->id, numbytes, bytes, ScratchEncrypted);
-            numbytes += 12;
+            numbytes += MESHTASTIC_PKC_OVERHEAD;
             memcpy(p->encrypted.bytes, ScratchEncrypted, numbytes);
             p->channel = 0;
             p->pki_encrypted = true;
