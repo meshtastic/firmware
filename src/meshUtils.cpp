@@ -81,3 +81,18 @@ bool memfll(const uint8_t *mem, uint8_t find, size_t numbytes)
     }
     return true;
 }
+
+bool isOneOf(int item, int count, ...)
+{
+    va_list args;
+    va_start(args, count);
+    bool found = false;
+    for (int i = 0; i < count; ++i) {
+        if (item == va_arg(args, int)) {
+            found = true;
+            break;
+        }
+    }
+    va_end(args);
+    return found;
+}
