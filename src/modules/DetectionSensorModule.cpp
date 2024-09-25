@@ -108,5 +108,5 @@ bool DetectionSensorModule::hasDetectionEvent()
 {
     bool currentState = digitalRead(moduleConfig.detection_sensor.monitor_pin);
     // LOG_DEBUG("Detection Sensor Module: Current state: %i\n", currentState);
-    return moduleConfig.detection_sensor.detection_triggered_high ? currentState : !currentState;
+    return moduleConfig.detection_sensor.detection_trigger_type ? currentState : !currentState;
 }
