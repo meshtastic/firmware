@@ -181,8 +181,8 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                     // PKI messages get accepted even if we can't decrypt
                     if (router && p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag &&
                         strcmp(e.channel_id, "PKI") == 0) {
-                        meshtastic_NodeInfoLite *tx = nodeDB->getMeshNode(getFrom(p));
-                        meshtastic_NodeInfoLite *rx = nodeDB->getMeshNode(p->to);
+                        const meshtastic_NodeInfoLite *tx = nodeDB->getMeshNode(getFrom(p));
+                        const meshtastic_NodeInfoLite *rx = nodeDB->getMeshNode(p->to);
                         // Only accept PKI messages to us, or if we have both the sender and receiver in our nodeDB, as then it's
                         // likely they discovered each other via a channel we have downlink enabled for
                         if (p->to == nodeDB->getNodeNum() || (tx && tx->has_user && rx && rx->has_user))
