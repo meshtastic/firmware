@@ -290,10 +290,7 @@ template <typename T> bool SX128xInterface<T>::isChannelActive()
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */
 template <typename T> bool SX128xInterface<T>::isActivelyReceiving()
 {
-    uint16_t irq = lora.getIrqStatus();
-    bool detected = receiveDetected(irq, RADIOLIB_SX128X_IRQ_HEADER_VALID, RADIOLIB_SX128X_IRQ_PREAMBLE_DETECTED);
-
-    return detected;
+    return receiveDetected(lora.getIrqStatus(), RADIOLIB_SX128X_IRQ_HEADER_VALID, RADIOLIB_SX128X_IRQ_PREAMBLE_DETECTED);
 }
 
 template <typename T> bool SX128xInterface<T>::sleep()

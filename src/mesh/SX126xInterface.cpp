@@ -316,9 +316,7 @@ template <typename T> bool SX126xInterface<T>::isActivelyReceiving()
 {
     // The IRQ status will be cleared when we start our read operation. Check if we've started a header, but haven't yet
     // received and handled the interrupt for reading the packet/handling errors.
-
-    uint16_t irq = lora.getIrqFlags();
-    return receiveDetected(RADIOLIB_SX126X_IRQ_HEADER_VALID, RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED);
+    return receiveDetected(lora.getIrqFlags(), RADIOLIB_SX126X_IRQ_HEADER_VALID, RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED);
 }
 
 template <typename T> bool SX126xInterface<T>::sleep()

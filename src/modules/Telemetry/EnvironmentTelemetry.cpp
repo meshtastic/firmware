@@ -158,7 +158,6 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = bme680Sensor.runTrigger();
         }
 
-        uint32_t now = millis();
         if (((lastSentToMesh == 0) ||
              !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
                                                                moduleConfig.telemetry.environment_update_interval,
