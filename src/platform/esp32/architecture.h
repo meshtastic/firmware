@@ -170,6 +170,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_MESH_NODE_T114
 #elif defined(SENSECAP_INDICATOR)
 #define HW_VENDOR meshtastic_HardwareModel_SENSECAP_INDICATOR
+#elif defined(SEEED_XIAO_S3)
+#define HW_VENDOR meshtastic_HardwareModel_SEEED_XIAO_S3
 #endif
 
 // -----------------------------------------------------------------------------
