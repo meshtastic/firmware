@@ -86,7 +86,8 @@ int32_t DetectionSensorModule::runOnce()
 
     // LOG_DEBUG("Detection Sensor Module: Current pin state: %i\n", digitalRead(moduleConfig.detection_sensor.monitor_pin));
 
-    if ((millis() - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs)) {
+    if (!Throttle::isWithinTimespanMs(lastSentToMesh,
+                                      Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs))) {
         bool isDetected = hasDetectionEvent();
         DetectionSensorTriggerVerdict verdict =
             handlers[moduleConfig.detection_sensor.detection_trigger_type](wasDetected, isDetected);
@@ -106,8 +107,9 @@ int32_t DetectionSensorModule::runOnce()
     // of heartbeat. We only do this if the minimum broadcast interval is greater than zero, otherwise we'll only broadcast state
     // change detections.
     if (moduleConfig.detection_sensor.state_broadcast_secs > 0 &&
-        (millis() - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs,
-                                                                         default_telemetry_broadcast_interval_secs)) {
+        !Throttle::isWithinTimespanMs(lastSentToMesh,
+                                      Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs,
+                                                                        default_telemetry_broadcast_interval_secs))) {
         sendCurrentStateMessage(hasDetectionEvent());
         return DELAYED_INTERVAL;
     }
