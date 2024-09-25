@@ -147,6 +147,8 @@ using namespace meshtastic;
  */
 static HasBatteryLevel *batteryLevel; // Default to NULL for no battery level sensor
 
+#ifdef BATTERY_PIN
+
 static void adcEnable()
 {
 #ifdef ADC_CTRL // enable adc voltage divider when we need to read
@@ -170,6 +172,8 @@ static void adcDisable()
 #endif
 #endif
 }
+
+#endif
 
 /**
  * A simple battery level sensor that assumes the battery voltage is attached via a voltage-divider to an analog input
