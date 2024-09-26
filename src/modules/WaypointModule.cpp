@@ -170,16 +170,16 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
         else
             strncpy(distStr, "? km", sizeof(distStr));
     }
-    
+
     // Draw compass circle
     display->drawCircle(compassX, compassY, compassDiam / 2);
-    
+
     // Undo color-inversion, if set prior to drawing header
     // Unsure of expected behavior? For now: copy drawNodeInfo
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
         display->setColor(BLACK);
     }
-    
+
     // Must be after distStr is populated
     screen->drawColumns(display, x, y, fields);
 }
