@@ -2201,7 +2201,7 @@ void Screen::setFrames(FrameFocus focus)
 
     case FOCUS_PRESERVE:
         // If we can identify which type of frame "originalPosition" was, can move directly to it in the new frameset
-        FramesetInfo &oldFsi = this->framesetInfo;
+        const FramesetInfo &oldFsi = this->framesetInfo;
         if (originalPosition == oldFsi.positions.log)
             ui->switchToFrame(fsi.positions.log);
         else if (originalPosition == oldFsi.positions.settings)
