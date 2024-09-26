@@ -114,11 +114,8 @@ void test_PKC_Decrypt(void)
     uint8_t public_key[32];
     uint8_t expected_shared[32];
     uint8_t expected_decrypted[32];
-
     uint8_t radioBytes[128] __attribute__((__aligned__));
-    ;
     uint8_t decrypted[128] __attribute__((__aligned__));
-    ;
     uint8_t expected_nonce[16];
 
     uint32_t fromNode;
@@ -132,8 +129,6 @@ void test_PKC_Decrypt(void)
     crypto->setDHPrivateKey(private_key);
     TEST_ASSERT(crypto->setDHPublicKey(public_key));
     crypto->hash(crypto->shared_key, 32);
-    TEST_ASSERT_EQUAL_MEMORY(expected_shared, crypto->shared_key, 8);
-
     crypto->decryptCurve25519(fromNode, 0x13b2d662, 22, radioBytes + 16, decrypted);
     TEST_ASSERT_EQUAL_MEMORY(expected_shared, crypto->shared_key, 8);
     TEST_ASSERT_EQUAL_MEMORY(expected_nonce, crypto->nonce, 13);
@@ -141,14 +136,6 @@ void test_PKC_Decrypt(void)
     TEST_ASSERT_EQUAL_MEMORY(expected_decrypted, decrypted, 10);
 }
 
-// Test PKC Decrypt
-// Pick a device, modify it to output the raw bytes before and after decrypt
-// Use the Pi 5. with -e, and generate new
-// send various messages from other devices
-// regenerate keys and repeat
-// load the local private key, the remote public key, and the packet bytes
-// use the new setDHPublicKey and setDHPrivateKey
-// may need to create new encrypt/decryptCurve25519 function to take a key rather than a fromNode
 void test_AES_CTR(void)
 {
     uint8_t expected[32];
