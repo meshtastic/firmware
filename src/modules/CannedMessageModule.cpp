@@ -78,16 +78,16 @@ int CannedMessageModule::splitConfiguredMessages()
     int messageIndex = 0;
     int i = 0;
 
-    String messages = cannedMessageModuleConfig.messages;
+    String canned_messages = cannedMessageModuleConfig.messages;
 
 #if defined(T_WATCH_S3) || defined(RAK14014)
-    String separator = messages.length() ? "|" : "";
+    String separator = canned_messages.length() ? "|" : "";
 
-    messages = "[---- Free Text ----]" + separator + messages;
+    canned_messages = "[---- Free Text ----]" + separator + canned_messages;
 #endif
 
     // collect all the message parts
-    strncpy(this->messageStore, messages.c_str(), sizeof(this->messageStore));
+    strncpy(this->messageStore, canned_messages.c_str(), sizeof(this->messageStore));
 
     // The first message points to the beginning of the store.
     this->messages[messageIndex++] = this->messageStore;

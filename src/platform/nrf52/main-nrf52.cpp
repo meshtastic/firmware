@@ -12,6 +12,7 @@
 #include "PowerMon.h"
 #include "error.h"
 #include "main.h"
+#include "meshUtils.h"
 
 #ifdef BQ25703A_ADDR
 #include "BQ25713.h"
@@ -157,6 +158,7 @@ void nrf52Loop()
 
 #ifdef USE_SEMIHOSTING
 #include <SemihostingStream.h>
+#include <meshUtils.h>
 
 /**
  * Note: this variable is in BSS and therfore false by default.  But the gdbinit
@@ -261,10 +263,9 @@ void cpuDeepSleep(uint32_t msecToWake)
     // Sleepy trackers or sensors can low power "sleep"
     // Don't enter this if we're sleeping portMAX_DELAY, since that's a shutdown event
     if (msecToWake != portMAX_DELAY &&
-        (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
-         config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER ||
-         config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR) &&
-        config.power.is_power_saving == true) {
+        (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
+                   meshtastic_Config_DeviceConfig_Role_TAK_TRACKER, meshtastic_Config_DeviceConfig_Role_SENSOR) &&
+         config.power.is_power_saving == true)) {
         sd_power_mode_set(NRF_POWER_MODE_LOWPWR);
         delay(msecToWake);
         NVIC_SystemReset();

@@ -32,6 +32,7 @@
 #include "graphics/Screen.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/config.pb.h"
+#include "meshUtils.h"
 #include "modules/Modules.h"
 #include "shutdown.h"
 #include "sleep.h"
@@ -627,9 +628,9 @@ void setup()
 #endif
 
     // only play start melody when role is not tracker or sensor
-    if (config.power.is_power_saving == true && (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
-                                                 config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER ||
-                                                 config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR))
+    if (config.power.is_power_saving == true &&
+        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
+                  meshtastic_Config_DeviceConfig_Role_TAK_TRACKER, meshtastic_Config_DeviceConfig_Role_SENSOR))
         LOG_DEBUG("Tracker/Sensor: Skipping start melody\n");
     else
         playStartMelody();
@@ -971,7 +972,7 @@ void setup()
 
 #if defined(USE_LR1110)
     if (!rIf) {
-        rIf = new LR1110Interface(RadioLibHAL, LR1110_SPI_NSS_PIN, LR1110_IRQ_PIN, LR1110_NRESER_PIN, LR1110_BUSY_PIN);
+        rIf = new LR1110Interface(RadioLibHAL, LR1110_SPI_NSS_PIN, LR1110_IRQ_PIN, LR1110_NRESET_PIN, LR1110_BUSY_PIN);
         if (!rIf->init()) {
             LOG_WARN("Failed to find LR1110 radio\n");
             delete rIf;
@@ -984,7 +985,7 @@ void setup()
 
 #if defined(USE_LR1120)
     if (!rIf) {
-        rIf = new LR1120Interface(RadioLibHAL, LR1120_SPI_NSS_PIN, LR1120_IRQ_PIN, LR1120_NRESER_PIN, LR1120_BUSY_PIN);
+        rIf = new LR1120Interface(RadioLibHAL, LR1120_SPI_NSS_PIN, LR1120_IRQ_PIN, LR1120_NRESET_PIN, LR1120_BUSY_PIN);
         if (!rIf->init()) {
             LOG_WARN("Failed to find LR1120 radio\n");
             delete rIf;

@@ -11,7 +11,7 @@ bool TraceRouteModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, m
 
 void TraceRouteModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r)
 {
-    auto &incoming = p.decoded;
+    const meshtastic_Data &incoming = p.decoded;
 
     // Insert unknown hops if necessary
     insertUnknownHops(p, r, !incoming.request_id);

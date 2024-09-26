@@ -167,12 +167,12 @@ bool CryptoEngine::setDHKey(uint32_t nodeNum)
 void CryptoEngine::hash(uint8_t *bytes, size_t numBytes)
 {
     SHA256 hash;
-    size_t posn, len;
+    size_t posn;
     uint8_t size = numBytes;
     uint8_t inc = 16;
     hash.reset();
     for (posn = 0; posn < size; posn += inc) {
-        len = size - posn;
+        size_t len = size - posn;
         if (len > inc)
             len = inc;
         hash.update(bytes + posn, len);
