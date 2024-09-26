@@ -98,7 +98,57 @@ void test_DH25519(void)
     HexToBytes(private_key, "18630f93598637c35da623a74559cf944374a559114c7937811041fc8605564a");
     crypto->setDHPrivateKey(private_key);
     TEST_ASSERT(!crypto->setDHPublicKey(public_key)); // Weak public key results in 0 shared key
+
+    HexToBytes(public_key, "f7e13a1a067d2f4e1061bf9936fde5be6b0c2494a8f809cbac7f290ef719e91c");
+    HexToBytes(private_key, "10300724f3bea134eb1575245ef26ff9b8ccd59849cd98ce1a59002fe1d5986c");
+    HexToBytes(expected_shared, "24becd5dfed9e9289ba2e15b82b0d54f8e9aacb72f5e4248c58d8d74b451ce76");
+    crypto->setDHPrivateKey(private_key);
+    TEST_ASSERT(crypto->setDHPublicKey(public_key));
+    crypto->hash(crypto->shared_key, 32);
+    TEST_ASSERT_EQUAL_MEMORY(expected_shared, crypto->shared_key, 32);
 }
+
+void test_PKC_Decrypt(void)
+{
+    uint8_t private_key[32];
+    uint8_t public_key[32];
+    uint8_t expected_shared[32];
+    uint8_t expected_decrypted[32];
+
+    uint8_t radioBytes[128] __attribute__((__aligned__));
+    ;
+    uint8_t decrypted[128] __attribute__((__aligned__));
+    ;
+    uint8_t expected_nonce[16];
+
+    uint32_t fromNode;
+    HexToBytes(public_key, "db18fc50eea47f00251cb784819a3cf5fc361882597f589f0d7ff820e8064457");
+    HexToBytes(private_key, "a00330633e63522f8a4d81ec6d9d1e6617f6c8ffd3a4c698229537d44e522277");
+    HexToBytes(expected_shared, "777b1545c9d6f9a2");
+    HexToBytes(expected_decrypted, "08011204746573744800");
+    HexToBytes(radioBytes, "8c646d7a2909000062d6b2136b00000040df24abfcc30a17a3d9046726099e796a1c036a792b");
+    HexToBytes(expected_nonce, "62d6b213036a792b2909000000");
+    fromNode = 0x0929;
+    crypto->setDHPrivateKey(private_key);
+    TEST_ASSERT(crypto->setDHPublicKey(public_key));
+    crypto->hash(crypto->shared_key, 32);
+    TEST_ASSERT_EQUAL_MEMORY(expected_shared, crypto->shared_key, 8);
+
+    crypto->decryptCurve25519(fromNode, 0x13b2d662, 22, radioBytes + 16, decrypted);
+    TEST_ASSERT_EQUAL_MEMORY(expected_shared, crypto->shared_key, 8);
+    TEST_ASSERT_EQUAL_MEMORY(expected_nonce, crypto->nonce, 13);
+
+    TEST_ASSERT_EQUAL_MEMORY(expected_decrypted, decrypted, 10);
+}
+
+// Test PKC Decrypt
+// Pick a device, modify it to output the raw bytes before and after decrypt
+// Use the Pi 5. with -e, and generate new
+// send various messages from other devices
+// regenerate keys and repeat
+// load the local private key, the remote public key, and the packet bytes
+// use the new setDHPublicKey and setDHPrivateKey
+// may need to create new encrypt/decryptCurve25519 function to take a key rather than a fromNode
 void test_AES_CTR(void)
 {
     uint8_t expected[32];
@@ -137,6 +187,7 @@ void setup()
     RUN_TEST(test_ECB_AES256);
     RUN_TEST(test_DH25519);
     RUN_TEST(test_AES_CTR);
+    RUN_TEST(test_PKC_Decrypt);
 }
 
 void loop()

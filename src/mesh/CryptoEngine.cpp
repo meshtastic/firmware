@@ -104,6 +104,7 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, uint64_t packetNum, size
     auth = bytes + numBytes - 12;
     extraNonce = (uint32_t *)(auth + 8);
     LOG_INFO("Random nonce value: %d\n", *extraNonce);
+#ifndef PIO_UNIT_TESTING
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(fromNode);
 
     if (node == nullptr || node->num < 1 || node->user.public_key.size == 0) {
@@ -115,6 +116,7 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, uint64_t packetNum, size
     if (!crypto->setDHKey(fromNode)) {
         return false;
     }
+#endif
     initNonce(fromNode, packetNum, *extraNonce);
     printBytes("Attempting decrypt using nonce: ", nonce, 13);
     printBytes("Attempting decrypt using shared_key starting with: ", shared_key, 8);
