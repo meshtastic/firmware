@@ -1001,7 +1001,7 @@ void setup()
 
 #if defined(USE_LR1121)
     if (!rIf) {
-        rIf = new LR1121Interface(RadioLibHAL, LR1121_SPI_NSS_PIN, LR1121_IRQ_PIN, LR1121_NRESER_PIN, LR1121_BUSY_PIN);
+        rIf = new LR1121Interface(RadioLibHAL, LR1121_SPI_NSS_PIN, LR1121_IRQ_PIN, LR1121_NRESET_PIN, LR1121_BUSY_PIN);
         if (!rIf->init()) {
             LOG_WARN("Failed to find LR1121 radio\n");
             delete rIf;
