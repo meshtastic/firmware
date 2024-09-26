@@ -34,8 +34,8 @@
 #include "modules/PositionModule.h"
 #endif
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-#include "AccelerometerThread.h"
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
+#include "motion/AccelerometerThread.h"
 #endif
 
 AdminModule *adminModule;
@@ -1026,7 +1026,7 @@ bool AdminModule::checkPassKey(meshtastic_AdminMessage *res)
             memcmp(res->session_passkey.bytes, session_passkey, 8) == 0);
 }
 
-bool AdminModule::messageIsResponse(meshtastic_AdminMessage *r)
+bool AdminModule::messageIsResponse(const meshtastic_AdminMessage *r)
 {
     if (r->which_payload_variant == meshtastic_AdminMessage_get_channel_response_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_owner_response_tag ||
@@ -1043,7 +1043,7 @@ bool AdminModule::messageIsResponse(meshtastic_AdminMessage *r)
         return false;
 }
 
-bool AdminModule::messageIsRequest(meshtastic_AdminMessage *r)
+bool AdminModule::messageIsRequest(const meshtastic_AdminMessage *r)
 {
     if (r->which_payload_variant == meshtastic_AdminMessage_get_channel_request_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_owner_request_tag ||
