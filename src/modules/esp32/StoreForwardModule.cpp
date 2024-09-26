@@ -17,6 +17,7 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include "Router.h"
+#include "Throttle.h"
 #include "airtime.h"
 #include "configuration.h"
 #include "memGet.h"
@@ -28,6 +29,9 @@
 #include <map>
 
 StoreForwardModule *storeForwardModule;
+
+uint32_t lastHeartbeat = 0;
+uint32_t heartbeatInterval = 60; // Default to 60 seconds, adjust as needed
 
 int32_t StoreForwardModule::runOnce()
 {
@@ -42,7 +46,7 @@ int32_t StoreForwardModule::runOnce()
                     this->busy = false;
                 }
             }
-        } else if (this->heartbeat && (millis() - lastHeartbeat > (heartbeatInterval * 1000)) &&
+        } else if (this->heartbeat && (!Throttle::isWithinTimespanMs(lastHeartbeat, heartbeatInterval * 1000)) &&
                    airTime->isTxAllowedChannelUtil(true)) {
             lastHeartbeat = millis();
             LOG_INFO("*** Sending heartbeat\n");
@@ -127,7 +131,7 @@ uint32_t StoreForwardModule::getNumAvailablePackets(NodeNum dest, uint32_t last_
 {
     uint32_t count = 0;
     if (lastRequest.find(dest) == lastRequest.end()) {
-        lastRequest[dest] = 0;
+        lastRequest.emplace(dest, 0);
     }
     for (uint32_t i = lastRequest[dest]; i < this->packetHistoryTotalCount; i++) {
         if (this->packetHistory[i].time && (this->packetHistory[i].time > last_time)) {

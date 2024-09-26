@@ -6,6 +6,8 @@
 #include "PortduinoGlue.h"
 #endif
 
+#include "Throttle.h"
+
 // Particular boards might define a different max power based on what their hardware can do, default to max power output if not
 // specified (may be dangerous if using external PA and SX126x power config forgotten)
 #ifndef SX126X_MAX_POWER
@@ -25,9 +27,25 @@ SX126xInterface<T>::SX126xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs
 /// \return true if initialisation succeeded.
 template <typename T> bool SX126xInterface<T>::init()
 {
-#ifdef SX126X_POWER_EN
-    pinMode(SX126X_POWER_EN, OUTPUT);
+
+// Typically, the RF switch on SX126x boards is controlled by two signals, which are negations of each other (switched RFIO
+// paths). The negation is usually performed in hardware, or (suboptimal design) TXEN and RXEN are the two inputs to this style of
+// RF switch. On some boards, there is no hardware negation between CTRL and ¬CTRL, but CTRL is internally connected to DIO2, and
+// DIO2's switching is done by the SX126X itself, so the MCU can't control ¬CTRL at exactly the same time. One solution would be
+// to set ¬CTRL as SX126X_TXEN or SX126X_RXEN, but they may already be used for another purpose, such as controlling another
+// PA/LNA. Keeping ¬CTRL high seems to work, as long CTRL=1, ¬CTRL=1 has the opposite and stable RF path effect as CTRL=0 and
+// ¬CTRL=1, this depends on the RF switch, but it seems this usually works. Better hardware design, which is done most the time,
+// means this workaround is not necessary.
+#ifdef SX126X_ANT_SW // Perhaps add RADIOLIB_NC check, and beforehand define as such if it is undefined, but it is not commonly
+                     // used and not part of the 'default' set of pin definitions.
+    digitalWrite(SX126X_ANT_SW, HIGH);
+    pinMode(SX126X_ANT_SW, OUTPUT);
+#endif
+
+#ifdef SX126X_POWER_EN // Perhaps add RADIOLIB_NC check, and beforehand define as such if it is undefined, but it is not commonly
+                       // used and not part of the 'default' set of pin definitions.
     digitalWrite(SX126X_POWER_EN, HIGH);
+    pinMode(SX126X_POWER_EN, OUTPUT);
 #endif
 
 #if ARCH_PORTDUINO
@@ -264,9 +282,7 @@ template <typename T> void SX126xInterface<T>::startReceive()
 
     // We use a 16 bit preamble so this should save some power by letting radio sit in standby mostly.
     // Furthermore, we need the PREAMBLE_DETECTED and HEADER_VALID IRQ flag to detect whether we are actively receiving
-    int err = lora.startReceiveDutyCycleAuto(preambleLength, 8,
-                                             RADIOLIB_SX126X_IRQ_RX_DEFAULT | RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED |
-                                                 RADIOLIB_SX126X_IRQ_HEADER_VALID);
+    int err = lora.startReceiveDutyCycleAuto(preambleLength, 8, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | RADIOLIB_IRQ_PREAMBLE_DETECTED);
     if (err != RADIOLIB_ERR_NONE)
         LOG_ERROR("Radiolib error %d when attempting SX126X startReceiveDutyCycleAuto!\n", err);
     assert(err == RADIOLIB_ERR_NONE);
@@ -300,29 +316,7 @@ template <typename T> bool SX126xInterface<T>::isActivelyReceiving()
 {
     // The IRQ status will be cleared when we start our read operation. Check if we've started a header, but haven't yet
     // received and handled the interrupt for reading the packet/handling errors.
-
-    uint16_t irq = lora.getIrqStatus();
-    bool detected = (irq & (RADIOLIB_SX126X_IRQ_HEADER_VALID | RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED));
-    // Handle false detections
-    if (detected) {
-        uint32_t now = millis();
-        if (!activeReceiveStart) {
-            activeReceiveStart = now;
-        } else if ((now - activeReceiveStart > 2 * preambleTimeMsec) && !(irq & RADIOLIB_SX126X_IRQ_HEADER_VALID)) {
-            // The HEADER_VALID flag should be set by now if it was really a packet, so ignore PREAMBLE_DETECTED flag
-            activeReceiveStart = 0;
-            LOG_DEBUG("Ignore false preamble detection.\n");
-            return false;
-        } else if (now - activeReceiveStart > maxPacketTimeMsec) {
-            // We should have gotten an RX_DONE IRQ by now if it was really a packet, so ignore HEADER_VALID flag
-            activeReceiveStart = 0;
-            LOG_DEBUG("Ignore false header detection.\n");
-            return false;
-        }
-    }
-
-    // if (detected) LOG_DEBUG("rx detected\n");
-    return detected;
+    return receiveDetected(lora.getIrqFlags(), RADIOLIB_SX126X_IRQ_HEADER_VALID, RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED);
 }
 
 template <typename T> bool SX126xInterface<T>::sleep()

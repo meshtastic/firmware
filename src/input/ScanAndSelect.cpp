@@ -6,6 +6,7 @@
 
 #include "ScanAndSelect.h"
 #include "modules/CannedMessageModule.h"
+#include <Throttle.h>
 
 // Config
 static const char name[] = "scanAndSelect"; // should match "allow input source" string
@@ -75,7 +76,7 @@ int32_t ScanAndSelectInput::runOnce()
         else {
             // Duration enough for long press
             // Long press not yet fired (prevent repeat firing while held)
-            if (!longPressFired && now - downSinceMs > durationLongMs) {
+            if (!longPressFired && Throttle::isWithinTimespanMs(downSinceMs, durationLongMs)) {
                 longPressFired = true;
                 longPress();
             }
@@ -91,7 +92,7 @@ int32_t ScanAndSelectInput::runOnce()
         // Long press event didn't already fire
         if (held && !longPressFired) {
             // Duration enough for short press
-            if (now - downSinceMs > durationShortMs) {
+            if (!Throttle::isWithinTimespanMs(downSinceMs, durationShortMs)) {
                 shortPress();
             }
         }

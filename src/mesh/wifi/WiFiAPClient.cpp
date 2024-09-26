@@ -15,9 +15,7 @@
 #include <WiFiUdp.h>
 #ifdef ARCH_ESP32
 #if !MESHTASTIC_EXCLUDE_WEBSERVER
-#if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "mesh/http/WebServer.h"
-#endif
 #endif
 #include <ESPmDNS.h>
 #include <esp_wifi.h>
@@ -25,6 +23,7 @@ static void WiFiEvent(WiFiEvent_t event);
 #endif
 
 #ifndef DISABLE_NTP
+#include "Throttle.h"
 #include <NTPClient.h>
 #endif
 
@@ -58,7 +57,7 @@ static void onNetworkConnected()
 {
     if (!APStartupComplete) {
         // Start web server
-        LOG_INFO("Starting network services\n");
+        LOG_INFO("Starting WiFi network services\n");
 
 #ifdef ARCH_ESP32
         // start mdns
@@ -144,7 +143,7 @@ static int32_t reconnectWiFi()
     }
 
 #ifndef DISABLE_NTP
-    if (WiFi.isConnected() && (((millis() - lastrun_ntp) > 43200000) || (lastrun_ntp == 0))) { // every 12 hours
+    if (WiFi.isConnected() && (!Throttle::isWithinTimespanMs(lastrun_ntp, 43200000) || (lastrun_ntp == 0))) { // every 12 hours
         LOG_DEBUG("Updating NTP time from %s\n", config.network.ntp_server);
         if (timeClient.update()) {
             LOG_DEBUG("NTP Request Success - Setting RTCQualityNTP if needed\n");

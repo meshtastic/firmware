@@ -1,7 +1,9 @@
 #include "LR11x0Interface.h"
+#include "Throttle.h"
 #include "configuration.h"
 #include "error.h"
 #include "mesh/NodeDB.h"
+
 #ifdef ARCH_PORTDUINO
 #include "PortduinoGlue.h"
 #endif
@@ -50,11 +52,23 @@ template <typename T> bool LR11x0Interface<T>::init()
 
     limitPower();
 
+#ifdef TRACKER_T1000_E // Tracker T1000E uses DIO5, DIO6, DIO7, DIO8 for RF switching
+
+    static const uint32_t rfswitch_dio_pins[] = {RADIOLIB_LR11X0_DIO5, RADIOLIB_LR11X0_DIO6, RADIOLIB_LR11X0_DIO7,
+                                                 RADIOLIB_LR11X0_DIO8, RADIOLIB_NC};
+
+    static const Module::RfSwitchMode_t rfswitch_table[] = {
+        // mode             DIO5  DIO6  DIO7  DIO8
+        {LR11x0::MODE_STBY, {LOW, LOW, LOW, LOW}},  {LR11x0::MODE_RX, {HIGH, LOW, LOW, HIGH}},
+        {LR11x0::MODE_TX, {HIGH, HIGH, LOW, HIGH}}, {LR11x0::MODE_TX_HP, {LOW, HIGH, LOW, HIGH}},
+        {LR11x0::MODE_TX_HF, {LOW, LOW, LOW, LOW}}, {LR11x0::MODE_GNSS, {LOW, LOW, HIGH, LOW}},
+        {LR11x0::MODE_WIFI, {LOW, LOW, LOW, LOW}},  END_OF_MODE_TABLE,
+    };
+
+#else
+
     // set RF switch configuration for Wio WM1110
     // Wio WM1110 uses DIO5 and DIO6 for RF switching
-    // NOTE: other boards may be different. If you are
-    // using a different board, you may need to wrap
-    // this in a conditional.
 
     static const uint32_t rfswitch_dio_pins[] = {RADIOLIB_LR11X0_DIO5, RADIOLIB_LR11X0_DIO6, RADIOLIB_NC, RADIOLIB_NC,
                                                  RADIOLIB_NC};
@@ -66,6 +80,8 @@ template <typename T> bool LR11x0Interface<T>::init()
         {LR11x0::MODE_TX_HF, {LOW, LOW}}, {LR11x0::MODE_GNSS, {LOW, LOW}},
         {LR11x0::MODE_WIFI, {LOW, LOW}},  END_OF_MODE_TABLE,
     };
+
+#endif
 
 // We need to do this before begin() call
 #ifdef LR11X0_DIO_AS_RF_SWITCH
@@ -90,6 +106,13 @@ template <typename T> bool LR11x0Interface<T>::init()
     if (res == RADIOLIB_ERR_CHIP_NOT_FOUND)
         return false;
 
+    LR11x0VersionInfo_t version;
+    res = lora.getVersionInfo(&version);
+    if (res == RADIOLIB_ERR_NONE)
+        LOG_DEBUG("LR11x0 Device %d, HW %d, FW %d.%d, WiFi %d.%d, GNSS %d.%d\n", version.device, version.hardware,
+                  version.fwMajor, version.fwMinor, version.fwMajorWiFi, version.fwMinorWiFi, version.fwGNSS,
+                  version.almanacGNSS);
+
     LOG_INFO("Frequency set to %f\n", getFreq());
     LOG_INFO("Bandwidth set to %f\n", bw);
     LOG_INFO("Power output set to %d\n", power);
@@ -100,13 +123,6 @@ template <typename T> bool LR11x0Interface<T>::init()
     // FIXME: May want to set depending on a definition, currently all LR1110 variant files use the DC-DC regulator option
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setRegulatorDCDC();
-#ifdef TRACKER_T1000_E
-#ifdef LR11X0_DIO_RF_SWITCH_CONFIG
-    res = lora.setDioAsRfSwitch(LR11X0_DIO_RF_SWITCH_CONFIG);
-#else
-    res = lora.setDioAsRfSwitch(0x03, 0x0, 0x01, 0x03, 0x02, 0x0, 0x0, 0x0);
-#endif
-#endif
     if (res == RADIOLIB_ERR_NONE) {
         if (config.lora.sx126x_rx_boosted_gain) { // the name is unfortunate but historically accurate
             res = lora.setRxBoostedGainMode(true);
@@ -225,9 +241,7 @@ template <typename T> void LR11x0Interface<T>::startReceive()
 
     // We use a 16 bit preamble so this should save some power by letting radio sit in standby mostly.
     // Furthermore, we need the PREAMBLE_DETECTED and HEADER_VALID IRQ flag to detect whether we are actively receiving
-    int err = lora.startReceive(
-        RADIOLIB_LR11X0_RX_TIMEOUT_INF, RADIOLIB_LR11X0_IRQ_RX_DONE,
-        0); // only RX_DONE IRQ is needed, we'll check for PREAMBLE_DETECTED and HEADER_VALID in isActivelyReceiving
+    int err = lora.startReceive(RADIOLIB_LR11X0_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS, RADIOLIB_IRQ_RX_DEFAULT_MASK, 0);
     assert(err == RADIOLIB_ERR_NONE);
 
     RadioLibInterface::startReceive();
@@ -258,29 +272,8 @@ template <typename T> bool LR11x0Interface<T>::isActivelyReceiving()
 {
     // The IRQ status will be cleared when we start our read operation. Check if we've started a header, but haven't yet
     // received and handled the interrupt for reading the packet/handling errors.
-
-    uint16_t irq = lora.getIrqStatus();
-    bool detected = (irq & (RADIOLIB_LR11X0_IRQ_SYNC_WORD_HEADER_VALID | RADIOLIB_LR11X0_IRQ_PREAMBLE_DETECTED));
-    // Handle false detections
-    if (detected) {
-        uint32_t now = millis();
-        if (!activeReceiveStart) {
-            activeReceiveStart = now;
-        } else if ((now - activeReceiveStart > 2 * preambleTimeMsec) && !(irq & RADIOLIB_LR11X0_IRQ_SYNC_WORD_HEADER_VALID)) {
-            // The HEADER_VALID flag should be set by now if it was really a packet, so ignore PREAMBLE_DETECTED flag
-            activeReceiveStart = 0;
-            LOG_DEBUG("Ignore false preamble detection.\n");
-            return false;
-        } else if (now - activeReceiveStart > maxPacketTimeMsec) {
-            // We should have gotten an RX_DONE IRQ by now if it was really a packet, so ignore HEADER_VALID flag
-            activeReceiveStart = 0;
-            LOG_DEBUG("Ignore false header detection.\n");
-            return false;
-        }
-    }
-
-    // if (detected) LOG_DEBUG("rx detected\n");
-    return detected;
+    return receiveDetected(lora.getIrqStatus(), RADIOLIB_LR11X0_IRQ_SYNC_WORD_HEADER_VALID,
+                           RADIOLIB_LR11X0_IRQ_PREAMBLE_DETECTED);
 }
 
 template <typename T> bool LR11x0Interface<T>::sleep()

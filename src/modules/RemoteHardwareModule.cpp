@@ -5,6 +5,7 @@
 #include "Router.h"
 #include "configuration.h"
 #include "main.h"
+#include <Throttle.h>
 
 #define NUM_GPIOS 64
 
@@ -47,6 +48,8 @@ RemoteHardwareModule::RemoteHardwareModule()
     : ProtobufModule("remotehardware", meshtastic_PortNum_REMOTE_HARDWARE_APP, &meshtastic_HardwareMessage_msg),
       concurrency::OSThread("RemoteHardwareModule")
 {
+    // restrict to the gpio channel for rx
+    boundChannel = Channels::gpioChannel;
 }
 
 bool RemoteHardwareModule::handleReceivedProtobuf(const meshtastic_MeshPacket &req, meshtastic_HardwareMessage *pptr)
@@ -116,11 +119,10 @@ bool RemoteHardwareModule::handleReceivedProtobuf(const meshtastic_MeshPacket &r
 int32_t RemoteHardwareModule::runOnce()
 {
     if (moduleConfig.remote_hardware.enabled && watchGpios) {
-        uint32_t now = millis();
 
-        if (now - lastWatchMsec >= WATCH_INTERVAL_MSEC) {
+        if (!Throttle::isWithinTimespanMs(lastWatchMsec, WATCH_INTERVAL_MSEC)) {
             uint64_t curVal = digitalReads(watchGpios);
-            lastWatchMsec = now;
+            lastWatchMsec = millis();
 
             if (curVal != previousWatch) {
                 previousWatch = curVal;

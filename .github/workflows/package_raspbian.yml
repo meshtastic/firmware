@@ -13,7 +13,7 @@ jobs:
     uses: ./.github/workflows/build_raspbian.yml
 
   package-raspbian:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: build-raspbian
     steps:
       - name: Checkout code
