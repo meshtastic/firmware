@@ -45,8 +45,12 @@ template <class T, class U> void APIServerPort<T, U>::init()
 
 template <class T, class U> int32_t APIServerPort<T, U>::runOnce()
 {
+#ifdef ARCH_ESP32
 #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
     auto client = U::accept();
+#else
+    auto client = U::available();
+#endif
 #else
     auto client = U::available();
 #endif
