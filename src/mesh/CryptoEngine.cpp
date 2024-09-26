@@ -70,8 +70,8 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, uint64_
     long extraNonceTmp = random();
     auth = bytesOut + numBytes;
     extraNonce = (uint32_t *)(auth + 8);
-    *extraNonce = extraNonceTmp;
-    LOG_INFO("Random nonce value: %d\n", *extraNonce);
+    memcpy(extraNonce, &extraNonceTmp, 4); // do not use dereference on potential non aligned pointers : *extraNonce = extraNonceTmp;
+    LOG_INFO("Random nonce value: %d\n", extraNonceTmp);
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(toNode);
     if (node->num < 1 || node->user.public_key.size == 0) {
         LOG_DEBUG("Node %d or their public_key not found\n", toNode);
@@ -80,14 +80,14 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, uint64_
     if (!crypto->setDHKey(toNode)) {
         return false;
     }
-    initNonce(fromNode, packetNum, *extraNonce);
+    initNonce(fromNode, packetNum, extraNonceTmp);
 
     // Calculate the shared secret with the destination node and encrypt
     printBytes("Attempting encrypt using nonce: ", nonce, 13);
     printBytes("Attempting encrypt using shared_key starting with: ", shared_key, 8);
     aes_ccm_ae(shared_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut,
                auth); // this can write up to 15 bytes longer than numbytes past bytesOut
-    *extraNonce = extraNonceTmp;
+    memcpy(extraNonce, &extraNonceTmp, 4); // do not use dereference on potential non aligned pointers : *extraNonce = extraNonceTmp;
     return true;
 }
 
@@ -100,13 +100,13 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, uint64_
 bool CryptoEngine::decryptCurve25519(uint32_t fromNode, uint64_t packetNum, size_t numBytes, uint8_t *bytes, uint8_t *bytesOut)
 {
     uint8_t *auth; // set to last 8 bytes of text?
-    uint32_t *extraNonce;
+    uint32_t extraNonce; // pointer was not really used
     auth = bytes + numBytes - 12;
-    extraNonce = (uint32_t *)(auth + 8);
-    LOG_INFO("Random nonce value: %d\n", *extraNonce);
 #ifndef PIO_UNIT_TESTING
+    memcpy(&extraNonce, auth +8, 4); // do not use dereference on potential non aligned pointers : (uint32_t *)(auth + 8);
+    LOG_INFO("Random nonce value: %d\n", extraNonce);
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(fromNode);
-
+    
     if (node == nullptr || node->num < 1 || node->user.public_key.size == 0) {
         LOG_DEBUG("Node or its public key not found in database\n");
         return false;
@@ -117,7 +117,7 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, uint64_t packetNum, size
         return false;
     }
 #endif
-    initNonce(fromNode, packetNum, *extraNonce);
+    initNonce(fromNode, packetNum, extraNonce);
     printBytes("Attempting decrypt using nonce: ", nonce, 13);
     printBytes("Attempting decrypt using shared_key starting with: ", shared_key, 8);
     return aes_ccm_ad(shared_key, 32, nonce, 8, bytes, numBytes - 12, nullptr, 0, auth, bytesOut);
