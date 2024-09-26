@@ -55,8 +55,8 @@ class AdminModule : public ProtobufModule<meshtastic_AdminMessage>, public Obser
     void setPassKey(meshtastic_AdminMessage *res);
     bool checkPassKey(meshtastic_AdminMessage *res);
 
-    bool messageIsResponse(meshtastic_AdminMessage *r);
-    bool messageIsRequest(meshtastic_AdminMessage *r);
+    bool messageIsResponse(const meshtastic_AdminMessage *r);
+    bool messageIsRequest(const meshtastic_AdminMessage *r);
 };
 
 extern AdminModule *adminModule;
