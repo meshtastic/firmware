@@ -32,7 +32,7 @@ jobs:
         name: Checkout base
       - id: jsonStep
         run: |
-          TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}})
+          TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} quick)
           echo "$TARGETS"
           echo "${{matrix.arch}}=$(jq -cn --argjson environments "$TARGETS" '{board: $environments}')" >> $GITHUB_OUTPUT
     outputs:
@@ -125,6 +125,7 @@ jobs:
 
   after-checks:
     runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_dispatch' }}
     needs: [check]
     steps:
       - name: Checkout code
@@ -157,10 +158,10 @@ jobs:
           ref: ${{github.event.pull_request.head.ref}}
           repository: ${{github.event.pull_request.head.repo.full_name}}
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           path: ./
-          #merge-multiple: true
+          merge-multiple: true
 
       - name: Display structure of downloaded files
         run: ls -R
@@ -232,7 +233,7 @@ jobs:
   release-artifacts:
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'workflow_dispatch' }}
-    needs: [gather-artifacts, after-checks]
+    needs: [gather-artifacts]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
