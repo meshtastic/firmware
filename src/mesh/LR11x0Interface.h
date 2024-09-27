@@ -1,5 +1,5 @@
 #pragma once
-
+#ifndef RADIOLIB_EXCLUDE_LR11X0
 #include "RadioLibInterface.h"
 
 /**
@@ -66,3 +66,4 @@ template <class T> class LR11x0Interface : public RadioLibInterface
 
     virtual void setStandby() override;
 };
+#endif
