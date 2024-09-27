@@ -95,7 +95,7 @@ static void aes_ccm_encr(size_t L, const uint8_t *in, size_t len, uint8_t *out, 
             *out++ ^= *in++;
     }
 }
-static void aes_ccm_encr_auth(size_t M, uint8_t *x, uint8_t *a, uint8_t *auth)
+static void aes_ccm_encr_auth(size_t M, const uint8_t *x, uint8_t *a, uint8_t *auth)
 {
     size_t i;
     uint8_t tmp[AES_BLOCK_SIZE];

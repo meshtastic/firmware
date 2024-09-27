@@ -6,6 +6,7 @@ import configparser
 import json
 import os
 import sys
+import random
 
 rootdir = "variants/"
 
@@ -39,5 +40,7 @@ for subdir, dirs, files in os.walk(rootdir):
                             "check" in options
                         ):
                             outlist.append(section)
-
-print(json.dumps(outlist))
+if ("quick" in options) & (len(outlist) > 3):
+    print(json.dumps(random.sample(outlist, 3)))
+else:
+    print(json.dumps(outlist))
