@@ -8,6 +8,7 @@
 #include "FSCommon.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PacketHistory.h"
 #include "PhoneAPI.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
@@ -108,8 +109,6 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 {
     powerFSM.trigger(EVENT_CONTACT_FROM_PHONE); // As long as the phone keeps talking to us, don't let the radio go to sleep
     lastContactMsec = millis();
-
-    // return (lastContactMsec != 0) &&
 
     memset(&toRadioScratch, 0, sizeof(toRadioScratch));
     if (pb_decode_from_bytes(buf, bufLength, &meshtastic_ToRadio_msg, &toRadioScratch)) {
@@ -578,6 +577,12 @@ void PhoneAPI::sendNotification(meshtastic_LogRecord_Level level, uint32_t reply
 bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
 {
     printPacket("PACKET FROM PHONE", &p);
+
+    if (wasSeenRently(p)) {
+        LOG_DEBUG("Ignoring packet from phone, already seen recently\n");
+        return false;
+    }
+
     if (p.decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP && lastPortNumToRadio[p.decoded.portnum] &&
         Throttle::isWithinTimespanMs(lastPortNumToRadio[p.decoded.portnum], THIRTY_SECONDS_MS)) {
         LOG_WARN("Rate limiting portnum %d\n", p.decoded.portnum);
