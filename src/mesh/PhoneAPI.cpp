@@ -578,7 +578,7 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
 {
     printPacket("PACKET FROM PHONE", &p);
 
-    if (wasSeenRently(p)) {
+    if (wasSeenRently(p, true)) {
         LOG_DEBUG("Ignoring packet from phone, already seen recently\n");
         return false;
     }

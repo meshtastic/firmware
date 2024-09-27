@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Observer.h"
+#include "PacketHistory.h"
 #include "mesh-pb-constants.h"
 #include "meshtastic/portnums.pb.h"
 #include <iterator>
@@ -30,7 +31,8 @@
  * for that connection)
  */
 class PhoneAPI
-    : public Observer<uint32_t> // FIXME, we shouldn't be inheriting from Observer, instead use CallbackObserver as a member
+    : public Observer<uint32_t>,
+      protected PacketHistory // FIXME, we shouldn't be inheriting from Observer, instead use CallbackObserver as a member
 {
     enum State {
         STATE_SEND_NOTHING, // Initial state, don't send anything until the client starts asking for config
