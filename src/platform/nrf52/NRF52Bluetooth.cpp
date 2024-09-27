@@ -148,6 +148,7 @@ void onToRadioWrite(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *data, ui
 {
     LOG_INFO("toRadioWriteCb data %p, len %u\n", data, len);
     if (memcmp(lastToRadio, data, len) != 0) {
+        LOG_DEBUG("New ToRadio packet\n");
         memcpy(lastToRadio, data, len);
         bluetoothPhoneAPI->handleToRadio(data, len);
     } else {
