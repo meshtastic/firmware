@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build Raspberry Pi 2040
+      - name: Build STM32WL
         id: build
         uses: ./.github/actions/build-variant
         with:
