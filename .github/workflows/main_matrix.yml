@@ -71,13 +71,15 @@ jobs:
       check: ${{ steps.jsonStep.outputs.check }}
 
   check:
-    needs: setup
+    needs: [ setup, setup-quick ]
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.setup.outputs.check) }}
 
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'workflow_dispatch' }}
+    if: |
+      always()
+      && ${{ github.event_name != 'workflow_dispatch' }}
     steps:
       - uses: actions/checkout@v4
       - name: Build base
@@ -87,7 +89,8 @@ jobs:
         run: bin/check-all.sh ${{ matrix.board }}
 
   build-esp32:
-    needs: setup
+    needs: [ setup, setup-quick ]
+    if: always()
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.setup.outputs.esp32) }}
@@ -96,7 +99,8 @@ jobs:
       board: ${{ matrix.board }}
 
   build-esp32-s3:
-    needs: setup
+    needs: [ setup, setup-quick ]
+    if: always()
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.setup.outputs.esp32s3) }}
@@ -105,7 +109,8 @@ jobs:
       board: ${{ matrix.board }}
 
   build-esp32-c3:
-    needs: setup
+    needs: [ setup, setup-quick ]
+    if: always()
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.setup.outputs.esp32c3) }}
@@ -114,7 +119,8 @@ jobs:
       board: ${{ matrix.board }}
 
   build-nrf52:
-    needs: setup
+    needs: [ setup, setup-quick ]
+    if: always()
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.setup.outputs.nrf52840) }}
@@ -123,7 +129,8 @@ jobs:
       board: ${{ matrix.board }}
 
   build-rpi2040:
-    needs: setup
+    needs: [ setup, setup-quick ]
+    if: always()
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.setup.outputs.rp2040) }}
@@ -132,7 +139,8 @@ jobs:
       board: ${{ matrix.board }}
 
   build-stm32:
-    needs: setup
+    needs: [ setup, setup-quick ]
+    if: always()
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.setup.outputs.stm32) }}
