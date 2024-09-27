@@ -580,9 +580,9 @@ void PhoneAPI::sendNotification(meshtastic_LogRecord_Level level, uint32_t reply
 bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
 {
     printPacket("PACKET FROM PHONE", &p);
-    #if ENABLE_JSON_LOGGING || ARCH_PORTDUINO
-    LOG_DEBUG("%s\n", MeshPacketSerializer::JsonSerialize(p, false).c_str());
-    #endif
+#if ENABLE_JSON_LOGGING || ARCH_PORTDUINO
+    LOG_DEBUG("%s\n", MeshPacketSerializer::JsonSerialize(&p, false).c_str());
+#endif
     if (p.decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP && lastPortNumToRadio[p.decoded.portnum] &&
         Throttle::isWithinTimespanMs(lastPortNumToRadio[p.decoded.portnum], THIRTY_SECONDS_MS)) {
         LOG_WARN("Rate limiting portnum %d\n", p.decoded.portnum);
