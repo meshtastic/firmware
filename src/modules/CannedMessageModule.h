@@ -113,6 +113,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
     int handleInputEvent(const InputEvent *event);
     virtual bool wantUIFrame() override { return this->shouldDraw(); }
     virtual Observable<const UIFrameEvent *> *getUIFrameObservable() override { return this; }
+    virtual bool interceptingKeyboardInput() override;
 #if !HAS_TFT
     virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;
 #endif

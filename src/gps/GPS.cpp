@@ -7,6 +7,7 @@
 #include "PowerMon.h"
 #include "RTC.h"
 #include "Throttle.h"
+#include "meshUtils.h"
 
 #include "main.h" // pmu_found
 #include "sleep.h"
@@ -405,9 +406,9 @@ int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
 
 bool GPS::setup()
 {
-    int msglen = 0;
 
     if (!didSerialInit) {
+        int msglen = 0;
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
 
             // if GPS_BAUDRATE is specified in variant (i.e. not 9600), skip to the specified rate.
@@ -512,7 +513,7 @@ bool GPS::setup()
             delay(250);
             _serial_gps->write("$CFGMSG,6,1,0\r\n");
             delay(250);
-        } else if (gnssModel == GNSS_MODEL_AG3335 || gnssModel == GNSS_MODEL_AG3352) {
+        } else if (IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352)) {
 
             _serial_gps->write("$PAIR066,1,0,1,0,0,1*3B\r\n"); // Enable GPS+GALILEO+NAVIC
 
@@ -554,7 +555,7 @@ bool GPS::setup()
             } else {
                 LOG_INFO("GNSS module configuration saved!\n");
             }
-        } else if (gnssModel == GNSS_MODEL_UBLOX7 || gnssModel == GNSS_MODEL_UBLOX8 || gnssModel == GNSS_MODEL_UBLOX9) {
+        } else if (IS_ONE_OF(gnssModel, GNSS_MODEL_UBLOX7, GNSS_MODEL_UBLOX8, GNSS_MODEL_UBLOX9)) {
             if (gnssModel == GNSS_MODEL_UBLOX7) {
                 LOG_DEBUG("Setting GPS+SBAS\n");
                 msglen = makeUBXPacket(0x06, 0x3e, sizeof(_message_GNSS_7), _message_GNSS_7);
@@ -665,7 +666,7 @@ bool GPS::setup()
             // As the M10 has no flash, the best we can do to preserve the config is to set it in RAM and BBR.
             // BBR will survive a restart, and power off for a while, but modules with small backup
             // batteries or super caps will not retain the config for a long power off time.
-            msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
+            msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE_10), _message_SAVE_10);
             _serial_gps->write(UBXscratch, msglen);
             if (getACK(0x06, 0x09, 2000) != GNSS_RESPONSE_OK) {
                 LOG_WARN("Unable to save GNSS module configuration.\n");
@@ -827,8 +828,7 @@ void GPS::setPowerPMU(bool on)
 void GPS::setPowerUBLOX(bool on, uint32_t sleepMs)
 {
     // Abort: if not UBLOX hardware
-    if (!(gnssModel == GNSS_MODEL_UBLOX6 || gnssModel == GNSS_MODEL_UBLOX7 || gnssModel == GNSS_MODEL_UBLOX8 ||
-          gnssModel == GNSS_MODEL_UBLOX9 || gnssModel == GNSS_MODEL_UBLOX10))
+    if (!IS_ONE_OF(gnssModel, GNSS_MODEL_UBLOX6, GNSS_MODEL_UBLOX7, GNSS_MODEL_UBLOX8, GNSS_MODEL_UBLOX9, GNSS_MODEL_UBLOX10))
         return;
 
     // If waking
@@ -911,8 +911,7 @@ void GPS::down()
         // If not, fallback to GPS_HARDSLEEP instead
         bool softsleepSupported = false;
         // U-blox is supported via PMREQ
-        if (gnssModel == GNSS_MODEL_UBLOX6 || gnssModel == GNSS_MODEL_UBLOX7 || gnssModel == GNSS_MODEL_UBLOX8 ||
-            gnssModel == GNSS_MODEL_UBLOX9 || gnssModel == GNSS_MODEL_UBLOX10)
+        if (IS_ONE_OF(gnssModel, GNSS_MODEL_UBLOX6, GNSS_MODEL_UBLOX7, GNSS_MODEL_UBLOX8, GNSS_MODEL_UBLOX9, GNSS_MODEL_UBLOX10))
             softsleepSupported = true;
 #ifdef PIN_GPS_STANDBY // L76B, L76K and clones have a standby pin
         softsleepSupported = true;
@@ -988,8 +987,8 @@ int32_t GPS::runOnce()
         setConnected();
     } else {
         if ((config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) &&
-            (gnssModel == GNSS_MODEL_UBLOX6 || gnssModel == GNSS_MODEL_UBLOX7 || gnssModel == GNSS_MODEL_UBLOX8 ||
-             gnssModel == GNSS_MODEL_UBLOX9 || gnssModel == GNSS_MODEL_UBLOX10)) {
+            IS_ONE_OF(gnssModel, GNSS_MODEL_UBLOX6, GNSS_MODEL_UBLOX7, GNSS_MODEL_UBLOX8, GNSS_MODEL_UBLOX9,
+                      GNSS_MODEL_UBLOX10)) {
             // reset the GPS on next bootup
             if (devicestate.did_gps_reset && scheduling.elapsedSearchMs() > 60 * 1000UL && !hasFlow()) {
                 LOG_DEBUG("GPS is not communicating, trying factory reset on next bootup.\n");
