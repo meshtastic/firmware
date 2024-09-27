@@ -147,11 +147,11 @@ static uint8_t lastToRadio[MAX_TO_FROM_RADIO_SIZE];
 void onToRadioWrite(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *data, uint16_t len)
 {
     LOG_INFO("toRadioWriteCb data %p, len %u\n", data, len);
-    if (memcmp(lastToRadio, data, len) == 0) {
-        LOG_DEBUG("Dropping duplicate ToRadio packet we just saw\n");
-    } else {
+    if (memcmp(lastToRadio, data, len) != 0) {
         memcpy(lastToRadio, data, len);
         bluetoothPhoneAPI->handleToRadio(data, len);
+    } else {
+        LOG_DEBUG("Dropping duplicate ToRadio packet we just saw\n");
     }
 }
 
