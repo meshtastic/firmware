@@ -571,6 +571,23 @@ void PhoneAPI::sendNotification(meshtastic_LogRecord_Level level, uint32_t reply
     service->sendClientNotification(cn);
 }
 
+bool PhoneAPI::wasSeenRecently(uint32_t id)
+{
+    for (int i = 0; i < 20; i++) {
+        if (recentToRadioPacketIds[i] == id) {
+            return true;
+        }
+        if (recentToRadioPacketIds[i] == 0) {
+            recentToRadioPacketIds[i] = id;
+            return false;
+        }
+    }
+    // If the array is full, shift all elements to the left and add the new id at the end
+    memmove(recentToRadioPacketIds, recentToRadioPacketIds + 1, (19) * sizeof(uint32_t));
+    recentToRadioPacketIds[19] = id;
+    return false;
+}
+
 /**
  * Handle a packet that the phone wants us to send.  It is our responsibility to free the packet to the pool
  */
@@ -578,7 +595,7 @@ bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
 {
     printPacket("PACKET FROM PHONE", &p);
 
-    if (wasSeenRently(p, true)) {
+    if (wasSeenRecently(p.id)) {
         LOG_DEBUG("Ignoring packet from phone, already seen recently\n");
         return false;
     }

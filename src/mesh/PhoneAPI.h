@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Observer.h"
-#include "PacketHistory.h"
 #include "mesh-pb-constants.h"
 #include "meshtastic/portnums.pb.h"
 #include <iterator>
@@ -31,8 +30,7 @@
  * for that connection)
  */
 class PhoneAPI
-    : public Observer<uint32_t>,
-      protected PacketHistory // FIXME, we shouldn't be inheriting from Observer, instead use CallbackObserver as a member
+    : public Observer<uint32_t> // FIXME, we shouldn't be inheriting from Observer, instead use CallbackObserver as a member
 {
     enum State {
         STATE_SEND_NOTHING, // Initial state, don't send anything until the client starts asking for config
@@ -54,6 +52,7 @@ class PhoneAPI
 
     // Hashmap of timestamps for last time we received a packet on the API per portnum
     std::unordered_map<meshtastic_PortNum, uint32_t> lastPortNumToRadio;
+    uint32_t recentToRadioPacketIds[20]; // Last 20 ToRadio MeshPacket IDs we have seen
 
     /**
      * Each packet sent to the phone has an incrementing count
@@ -160,6 +159,8 @@ class PhoneAPI
 
     /// begin a new connection
     void handleStartConfig();
+
+    bool wasSeenRecently(uint32_t packetId);
 
     /**
      * Handle a packet that the phone wants us to send.  We can write to it but can not keep a reference to it
