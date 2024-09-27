@@ -1,4 +1,5 @@
 #pragma once
+#ifndef RADIOLIB_EXCLUDE_SX127X
 #include <RadioLib.h>
 
 /*!
@@ -69,3 +70,4 @@ class RadioLibRF95 : public SX1278
     // use the previous value
     float currentLimit = 100;
 };
+#endif

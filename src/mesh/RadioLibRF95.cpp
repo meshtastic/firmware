@@ -1,3 +1,4 @@
+#ifndef RADIOLIB_EXCLUDE_SX127X
 #include "RadioLibRF95.h"
 #include "configuration.h"
 
@@ -82,3 +83,4 @@ uint8_t RadioLibRF95::readReg(uint8_t addr)
     Module *mod = this->getMod();
     return mod->SPIreadRegister(addr);
 }
+#endif

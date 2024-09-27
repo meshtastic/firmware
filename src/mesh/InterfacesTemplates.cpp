@@ -11,10 +11,14 @@
 template class SX126xInterface<SX1262>;
 template class SX126xInterface<SX1268>;
 template class SX126xInterface<LLCC68>;
+#ifndef RADIOLIB_EXCLUDE_SX128X
 template class SX128xInterface<SX1280>;
+#endif
+#ifndef RADIOLIB_EXCLUDE_LR11X0
 template class LR11x0Interface<LR1110>;
 template class LR11x0Interface<LR1120>;
 template class LR11x0Interface<LR1121>;
+#endif
 #ifdef ARCH_STM32WL
 template class SX126xInterface<STM32WLx>;
 #endif

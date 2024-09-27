@@ -1,3 +1,4 @@
+#ifndef RADIOLIB_EXCLUDE_SX127X
 #include "RF95Interface.h"
 #include "MeshRadio.h" // kinda yucky, but we need to know which region we are in
 #include "RadioLibRF95.h"
@@ -336,3 +337,4 @@ bool RF95Interface::sleep()
 
     return true;
 }
+#endif
