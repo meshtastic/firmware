@@ -40,7 +40,7 @@ for subdir, dirs, files in os.walk(rootdir):
                             "check" in options
                         ):
                             outlist.append(section)
-if ("quick" in options):
+if ("quick" in options) & (len(outlist) > 3):
     print(json.dumps(random.sample(outlist, 3)))
 else:
     print(json.dumps(outlist))
