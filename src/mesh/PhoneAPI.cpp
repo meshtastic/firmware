@@ -580,15 +580,16 @@ void PhoneAPI::sendNotification(meshtastic_LogRecord_Level level, uint32_t reply
 bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
 {
     printPacket("PACKET FROM PHONE", &p);
-#if ENABLE_JSON_LOGGING || ARCH_PORTDUINO
-    LOG_DEBUG("%s\n", MeshPacketSerializer::JsonSerialize(&p, false).c_str());
-#endif
-    if (p.decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP && lastPortNumToRadio[p.decoded.portnum] &&
+// #if ENABLE_JSON_LOGGING || ARCH_PORTDUINO
+    const meshtastic_MeshPacket *packet = &p;
+    LOG_DEBUG("%s\n", MeshPacketSerializer::JsonSerialize(packet, false).c_str());
+// #endif
+    if (p.decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP && lastPortNumToRadio[p.decoded.portnum] > 0 &&
         Throttle::isWithinTimespanMs(lastPortNumToRadio[p.decoded.portnum], THIRTY_SECONDS_MS)) {
         LOG_WARN("Rate limiting portnum %d\n", p.decoded.portnum);
         sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "TraceRoute can only be sent once every 30 seconds");
         return false;
-    } else if (p.decoded.portnum == meshtastic_PortNum_POSITION_APP && lastPortNumToRadio[p.decoded.portnum] &&
+    } else if (p.decoded.portnum == meshtastic_PortNum_POSITION_APP && lastPortNumToRadio[p.decoded.portnum] > 0 &&
                Throttle::isWithinTimespanMs(lastPortNumToRadio[p.decoded.portnum], FIVE_SECONDS_MS)) {
         LOG_WARN("Rate limiting portnum %d\n", p.decoded.portnum);
         sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Position can only be sent once every 5 seconds");
