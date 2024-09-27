@@ -32,6 +32,7 @@
 PhoneAPI::PhoneAPI()
 {
     lastContactMsec = millis();
+    std::fill(std::begin(recentToRadioPacketIds), std::end(recentToRadioPacketIds), 0);
 }
 
 PhoneAPI::~PhoneAPI()
