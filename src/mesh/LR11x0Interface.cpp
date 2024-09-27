@@ -83,23 +83,6 @@ template <typename T> bool LR11x0Interface<T>::init()
 
 #endif
 
-// We need to do this before begin() call
-#ifdef LR11X0_DIO_AS_RF_SWITCH
-    LOG_DEBUG("Setting DIO RF switch\n");
-    bool dioAsRfSwitch = true;
-#elif defined(ARCH_PORTDUINO)
-    bool dioAsRfSwitch = false;
-    if (settingsMap[dio2_as_rf_switch]) {
-        LOG_DEBUG("Setting DIO RF switch\n");
-        dioAsRfSwitch = true;
-    }
-#else
-    bool dioAsRfSwitch = false;
-#endif
-
-    if (dioAsRfSwitch)
-        lora.setRfSwitchTable(rfswitch_dio_pins, rfswitch_table);
-
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
     // \todo Display actual typename of the adapter, not just `LR11x0`
     LOG_INFO("LR11x0 init result %d\n", res);
@@ -123,6 +106,22 @@ template <typename T> bool LR11x0Interface<T>::init()
     // FIXME: May want to set depending on a definition, currently all LR1110 variant files use the DC-DC regulator option
     if (res == RADIOLIB_ERR_NONE)
         res = lora.setRegulatorDCDC();
+
+#ifdef LR11X0_DIO_AS_RF_SWITCH
+    LOG_DEBUG("Setting DIO RF switch\n");
+    bool dioAsRfSwitch = true;
+#elif defined(ARCH_PORTDUINO)
+    bool dioAsRfSwitch = false;
+    if (settingsMap[dio2_as_rf_switch]) {
+        LOG_DEBUG("Setting DIO RF switch\n");
+        dioAsRfSwitch = true;
+    }
+#else
+    bool dioAsRfSwitch = false;
+#endif
+    if (dioAsRfSwitch)
+        lora.setRfSwitchTable(rfswitch_dio_pins, rfswitch_table);
+
     if (res == RADIOLIB_ERR_NONE) {
         if (config.lora.sx126x_rx_boosted_gain) { // the name is unfortunate but historically accurate
             res = lora.setRxBoostedGainMode(true);
