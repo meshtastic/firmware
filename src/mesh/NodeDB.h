@@ -8,6 +8,7 @@
 
 #include "MeshTypes.h"
 #include "NodeStatus.h"
+#include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/mesh.pb.h" // For CriticalErrorCode
 
