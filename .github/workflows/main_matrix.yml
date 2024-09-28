@@ -27,7 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [esp32, esp32s3, esp32c3, nrf52840, rp2040, stm32, check]
+        arch: [esp32, esp32s3, esp32c3, esp32c6, nrf52840, rp2040, stm32, check]
     runs-on: ubuntu-latest
     steps:
       - id: checkout
@@ -46,6 +46,7 @@ jobs:
       esp32: ${{ steps.jsonStep.outputs.esp32 }}
       esp32s3: ${{ steps.jsonStep.outputs.esp32s3 }}
       esp32c3: ${{ steps.jsonStep.outputs.esp32c3 }}
+      esp32c6: ${{ steps.jsonStep.outputs.esp32c6 }}
       nrf52840: ${{ steps.jsonStep.outputs.nrf52840 }}
       rp2040: ${{ steps.jsonStep.outputs.rp2040 }}
       stm32: ${{ steps.jsonStep.outputs.stm32 }}
@@ -91,6 +92,15 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.setup.outputs.esp32c3) }}
     uses: ./.github/workflows/build_esp32_c3.yml
+    with:
+      board: ${{ matrix.board }}
+      
+  build-esp32-c6:
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.esp32c6) }}
+    uses: ./.github/workflows/build_esp32_c6.yml
     with:
       board: ${{ matrix.board }}
 
@@ -151,6 +161,7 @@ jobs:
         build-esp32,
         build-esp32-s3,
         build-esp32-c3,
+        build-esp32-c6,
         build-nrf52,
         build-rpi2040,
         build-stm32,
