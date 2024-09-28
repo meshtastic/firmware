@@ -62,7 +62,8 @@ const char *getGPSPowerStateString(GPSPowerState state)
     case GPS_OFF:
         return "OFF";
     default:
-        assert(false); // Unhandled enum value..
+        assert(false);  // Unhandled enum value..
+        return "FALSE"; // to make new ESP-IDF happy
     }
 }
 
@@ -332,7 +333,7 @@ int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
 {
     uint16_t ubxFrameCounter = 0;
     uint32_t startTime = millis();
-    uint16_t needRead;
+    uint16_t needRead = 0;
 
     while (Throttle::isWithinTimespanMs(startTime, waitMillis)) {
         if (_serial_gps->available()) {
