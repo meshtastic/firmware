@@ -1,9 +1,8 @@
 #define I2C_SDA 8 // I2C pins for this board
 #define I2C_SCL 9
 
-#define VEXT_ENABLE 21    // active low, powers the oled display and the lora antenna boost
-#define LED_PIN 7         // If defined we will blink this LED
-#define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Module.
+#define LED_PIN 7      // If defined we will blink this LED
+#define LED_STATE_ON 0 // State when LED is lit
 
 #define USE_SX1262
 #define LORA_SCK 6
