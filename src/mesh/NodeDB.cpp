@@ -32,12 +32,13 @@
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
-#include "modules/esp32/StoreForwardModule.h"
+#include "modules/StoreForwardModule.h"
 #include <Preferences.h>
 #include <nvs_flash.h>
 #endif
 
 #ifdef ARCH_PORTDUINO
+#include "modules/StoreForwardModule.h"
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
@@ -49,7 +50,7 @@
 NodeDB *nodeDB = nullptr;
 
 // we have plenty of ram so statically alloc this tempbuf (for now)
-EXT_RAM_ATTR meshtastic_DeviceState devicestate;
+EXT_RAM_BSS_ATTR meshtastic_DeviceState devicestate;
 meshtastic_MyNodeInfo &myNodeInfo = devicestate.my_node;
 meshtastic_LocalConfig config;
 meshtastic_LocalModuleConfig moduleConfig;
