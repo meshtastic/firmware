@@ -50,7 +50,7 @@
 NodeDB *nodeDB = nullptr;
 
 // we have plenty of ram so statically alloc this tempbuf (for now)
-EXT_RAM_ATTR meshtastic_DeviceState devicestate;
+EXT_RAM_BSS_ATTR meshtastic_DeviceState devicestate;
 meshtastic_MyNodeInfo &myNodeInfo = devicestate.my_node;
 meshtastic_LocalConfig config;
 meshtastic_LocalModuleConfig moduleConfig;
