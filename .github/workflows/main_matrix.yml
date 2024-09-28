@@ -46,7 +46,7 @@ jobs:
       esp32: ${{ steps.jsonStep.outputs.esp32 }}
       esp32s3: ${{ steps.jsonStep.outputs.esp32s3 }}
       esp32c3: ${{ steps.jsonStep.outputs.esp32c3 }}
-      esp32c3: ${{ steps.jsonStep.outputs.esp32c6 }}
+      esp32c6: ${{ steps.jsonStep.outputs.esp32c6 }}
       nrf52840: ${{ steps.jsonStep.outputs.nrf52840 }}
       rp2040: ${{ steps.jsonStep.outputs.rp2040 }}
       stm32: ${{ steps.jsonStep.outputs.stm32 }}
