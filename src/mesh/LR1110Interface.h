@@ -1,5 +1,5 @@
 #pragma once
-
+#ifndef RADIOLIB_EXCLUDE_LR111X
 #include "LR11x0Interface.h"
 
 /**
@@ -11,3 +11,4 @@ class LR1110Interface : public LR11x0Interface<LR1110>
     LR1110Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, RADIOLIB_PIN_TYPE irq, RADIOLIB_PIN_TYPE rst,
                     RADIOLIB_PIN_TYPE busy);
 };
+#endif
