@@ -57,6 +57,8 @@ uint32_t MemGet::getFreePsram()
 {
 #ifdef ARCH_ESP32
     return ESP.getFreePsram();
+#elif defined(ARCH_PORTDUINO)
+    return 4194252;
 #else
     return 0;
 #endif
@@ -71,6 +73,8 @@ uint32_t MemGet::getPsramSize()
 {
 #ifdef ARCH_ESP32
     return ESP.getPsramSize();
+#elif defined(ARCH_PORTDUINO)
+    return 4194252;
 #else
     return 0;
 #endif

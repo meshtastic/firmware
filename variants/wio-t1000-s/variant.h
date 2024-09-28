@@ -103,7 +103,6 @@ extern "C" {
 
 #define LR11X0_DIO3_TCXO_VOLTAGE 1.6
 #define LR11X0_DIO_AS_RF_SWITCH
-#define LR11X0_DIO_RF_SWITCH_CONFIG 0x0f, 0x0, 0x09, 0x0B, 0x0A, 0x0, 0x4, 0x0
 
 #define HAS_GPS 1
 #define GNSS_AIROHA

@@ -69,6 +69,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef RTC_DATA_ATTR
 #define RTC_DATA_ATTR
 #endif
+#ifndef EXT_RAM_BSS_ATTR
+#define EXT_RAM_BSS_ATTR EXT_RAM_ATTR
+#endif
 
 // -----------------------------------------------------------------------------
 // Regulatory overrides

@@ -47,6 +47,9 @@
 #endif
 #if ARCH_PORTDUINO
 #include "input/LinuxInputImpl.h"
+#if !MESHTASTIC_EXCLUDE_STOREFORWARD
+#include "modules/StoreForwardModule.h"
+#endif
 #endif
 #if HAS_TELEMETRY
 #include "modules/Telemetry/DeviceTelemetry.h"
@@ -67,7 +70,7 @@
 #include "modules/esp32/PaxcounterModule.h"
 #endif
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
-#include "modules/esp32/StoreForwardModule.h"
+#include "modules/StoreForwardModule.h"
 #endif
 #endif
 #if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040) || defined(ARCH_PORTDUINO)
