@@ -323,15 +323,19 @@ void setup()
 #ifdef BUTTON_PIN
 #ifdef ARCH_ESP32
 
-    // If the button is connected to GPIO 12, don't enable the ability to use
-    // meshtasticAdmin on the device.
-    pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT);
-
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+#ifdef BUTTON_NEED_PULLUP
+    pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT_PULLUP);
+#else
+    pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT); // default to BUTTON_PIN
+#endif
+#else
+    pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT); // default to BUTTON_PIN
 #ifdef BUTTON_NEED_PULLUP
     gpio_pullup_en((gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
     delay(10);
 #endif
-
+#endif
 #endif
 #endif
 

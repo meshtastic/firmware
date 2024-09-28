@@ -90,6 +90,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_TLORA_V2_1_1P6
 #elif defined(TLORA_V2_1_18)
 #define HW_VENDOR meshtastic_HardwareModel_TLORA_V2_1_1P8
+#elif defined(TLORA_C6)
+#define HW_VENDOR meshtastic_HardwareModel_TLORA_C6
 #elif defined(T_DECK)
 #define HW_VENDOR meshtastic_HardwareModel_T_DECK
 #elif defined(T_WATCH_S3)
