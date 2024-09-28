@@ -58,10 +58,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #ifdef ARCH_ESP32
 #include "esp_task_wdt.h"
-#include "modules/esp32/StoreForwardModule.h"
+#include "modules/StoreForwardModule.h"
 #endif
 
 #if ARCH_PORTDUINO
+#include "modules/StoreForwardModule.h"
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
