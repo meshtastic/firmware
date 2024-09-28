@@ -103,21 +103,19 @@ template <typename T> bool SX126xInterface<T>::init()
     LOG_DEBUG("Current limit set to %f\n", currentLimit);
     LOG_DEBUG("Current limit set result %d\n", res);
 
-#ifdef SX126X_DIO2_AS_RF_SWITCH
-    LOG_DEBUG("Setting DIO2 as RF switch\n");
-    bool dio2AsRfSwitch = true;
-#elif defined(ARCH_PORTDUINO)
-    bool dio2AsRfSwitch = false;
-    if (settingsMap[dio2_as_rf_switch]) {
-        LOG_DEBUG("Setting DIO2 as RF switch\n");
-        dio2AsRfSwitch = true;
-    }
-#else
-    LOG_DEBUG("Setting DIO2 as not RF switch\n");
-    bool dio2AsRfSwitch = false;
-#endif
     if (res == RADIOLIB_ERR_NONE) {
+#ifdef SX126X_DIO2_AS_RF_SWITCH
+        bool dio2AsRfSwitch = true;
+#elif defined(ARCH_PORTDUINO)
+        bool dio2AsRfSwitch = false;
+        if (settingsMap[dio2_as_rf_switch]) {
+            dio2AsRfSwitch = true;
+        }
+#else
+        bool dio2AsRfSwitch = false;
+#endif
         res = lora.setDio2AsRfSwitch(dio2AsRfSwitch);
+        LOG_DEBUG("Set DIO2 as %sRF switch, result: %d\n", dio2AsRfSwitch ? "" : "not ", res);
     }
 
     // If a pin isn't defined, we set it to RADIOLIB_NC, it is safe to always do external RF switching with RADIOLIB_NC as it has
