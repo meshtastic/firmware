@@ -52,6 +52,10 @@ template <typename T> bool SX126xInterface<T>::init()
     float tcxoVoltage = 0;
     if (settingsMap[dio3_tcxo_voltage])
         tcxoVoltage = 1.8;
+    if (settingsMap[sx126x_ant_sw] != RADIOLIB_NC) {
+        digitalWrite(settingsMap[sx126x_ant_sw], HIGH);
+        pinMode(settingsMap[sx126x_ant_sw], OUTPUT);
+    }
 // FIXME: correct logic to default to not using TCXO if no voltage is specified for SX126X_DIO3_TCXO_VOLTAGE
 #elif !defined(SX126X_DIO3_TCXO_VOLTAGE)
     float tcxoVoltage =
