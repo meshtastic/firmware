@@ -32,12 +32,13 @@
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
-#include "modules/esp32/StoreForwardModule.h"
+#include "modules/StoreForwardModule.h"
 #include <Preferences.h>
 #include <nvs_flash.h>
 #endif
 
 #ifdef ARCH_PORTDUINO
+#include "modules/StoreForwardModule.h"
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
