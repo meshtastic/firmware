@@ -1,6 +1,8 @@
 #include "SerialConsole.h"
+#include "Default.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
+#include "Throttle.h"
 #include "configuration.h"
 #include "time.h"
 
@@ -44,10 +46,11 @@ SerialConsole::SerialConsole() : StreamAPI(&Port), RedirectablePrint(&Port), con
     Port.setRX(SERIAL2_RX);
 #endif
     Port.begin(SERIAL_BAUD);
-#if defined(ARCH_NRF52) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3) || defined(ARCH_RP2040)
+#if defined(ARCH_NRF52) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3) || defined(ARCH_RP2040) ||   \
+    defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C6)
     time_t timeout = millis();
     while (!Port) {
-        if ((millis() - timeout) < 5000) {
+        if (Throttle::isWithinTimespanMs(timeout, FIVE_SECONDS_MS)) {
             delay(100);
         } else {
             break;
@@ -72,8 +75,7 @@ void SerialConsole::flush()
 // For the serial port we can't really detect if any client is on the other side, so instead just look for recent messages
 bool SerialConsole::checkIsConnected()
 {
-    uint32_t now = millis();
-    return (now - lastContactMsec) < SERIAL_CONNECTION_TIMEOUT;
+    return Throttle::isWithinTimespanMs(lastContactMsec, SERIAL_CONNECTION_TIMEOUT);
 }
 
 /**

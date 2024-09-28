@@ -49,8 +49,7 @@ jobs:
         if: github.event_name == 'pull_request_target'
         uses: EndBug/add-and-commit@v9
         with:
-          add: src/mesh
-          author_name: CI Bot
-          author_email: meshtastic-ci-bot@users.noreply.github.com
-          default_author: github_actor
-          message: Update classes from protobufs
+          title: Update protobufs and classes
+          add-paths: |
+            protobufs
+            src/mesh

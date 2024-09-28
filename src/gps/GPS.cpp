@@ -6,6 +6,8 @@
 #include "NodeDB.h"
 #include "PowerMon.h"
 #include "RTC.h"
+#include "Throttle.h"
+#include "meshUtils.h"
 
 #include "main.h" // pmu_found
 #include "sleep.h"
@@ -60,7 +62,8 @@ const char *getGPSPowerStateString(GPSPowerState state)
     case GPS_OFF:
         return "OFF";
     default:
-        assert(false); // Unhandled enum value..
+        assert(false);  // Unhandled enum value..
+        return "FALSE"; // to make new ESP-IDF happy
     }
 }
 
@@ -206,7 +209,7 @@ GPS_RESPONSE GPS::getACKCas(uint8_t class_id, uint8_t msg_id, uint32_t waitMilli
     // ACK-NACK| 0xBA | 0xCE | 0x04 | 0x00 | 0x05 | 0x00 | 0xXX | 0xXX | 0x00 | 0x00 | 0xXX | 0xXX | 0xXX | 0xXX |
     // ACK-ACK | 0xBA | 0xCE | 0x04 | 0x00 | 0x05 | 0x01 | 0xXX | 0xXX | 0x00 | 0x00 | 0xXX | 0xXX | 0xXX | 0xXX |
 
-    while (millis() - startTime < waitMillis) {
+    while (Throttle::isWithinTimespanMs(startTime, waitMillis)) {
         if (_serial_gps->available()) {
             buffer[bufferPos++] = _serial_gps->read();
 
@@ -275,7 +278,7 @@ GPS_RESPONSE GPS::getACK(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis)
         buf[9] += buf[8];
     }
 
-    while (millis() - startTime < waitMillis) {
+    while (Throttle::isWithinTimespanMs(startTime, waitMillis)) {
         if (ack > 9) {
 #ifdef GPS_DEBUG
             LOG_DEBUG("\n");
@@ -330,9 +333,9 @@ int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
 {
     uint16_t ubxFrameCounter = 0;
     uint32_t startTime = millis();
-    uint16_t needRead;
+    uint16_t needRead = 0;
 
-    while (millis() - startTime < waitMillis) {
+    while (Throttle::isWithinTimespanMs(startTime, waitMillis)) {
         if (_serial_gps->available()) {
             int c = _serial_gps->read();
             switch (ubxFrameCounter) {
@@ -403,9 +406,9 @@ int GPS::getACK(uint8_t *buffer, uint16_t size, uint8_t requestedClass, uint8_t 
 
 bool GPS::setup()
 {
-    int msglen = 0;
 
     if (!didSerialInit) {
+        int msglen = 0;
         if (tx_gpio && gnssModel == GNSS_MODEL_UNKNOWN) {
 
             // if GPS_BAUDRATE is specified in variant (i.e. not 9600), skip to the specified rate.
@@ -510,7 +513,7 @@ bool GPS::setup()
             delay(250);
             _serial_gps->write("$CFGMSG,6,1,0\r\n");
             delay(250);
-        } else if (gnssModel == GNSS_MODEL_AG3335 || gnssModel == GNSS_MODEL_AG3352) {
+        } else if (IS_ONE_OF(gnssModel, GNSS_MODEL_AG3335, GNSS_MODEL_AG3352)) {
 
             _serial_gps->write("$PAIR066,1,0,1,0,0,1*3B\r\n"); // Enable GPS+GALILEO+NAVIC
 
@@ -552,7 +555,7 @@ bool GPS::setup()
             } else {
                 LOG_INFO("GNSS module configuration saved!\n");
             }
-        } else if (gnssModel == GNSS_MODEL_UBLOX7 || gnssModel == GNSS_MODEL_UBLOX8 || gnssModel == GNSS_MODEL_UBLOX9) {
+        } else if (IS_ONE_OF(gnssModel, GNSS_MODEL_UBLOX7, GNSS_MODEL_UBLOX8, GNSS_MODEL_UBLOX9)) {
             if (gnssModel == GNSS_MODEL_UBLOX7) {
                 LOG_DEBUG("Setting GPS+SBAS\n");
                 msglen = makeUBXPacket(0x06, 0x3e, sizeof(_message_GNSS_7), _message_GNSS_7);
@@ -663,7 +666,7 @@ bool GPS::setup()
             // As the M10 has no flash, the best we can do to preserve the config is to set it in RAM and BBR.
             // BBR will survive a restart, and power off for a while, but modules with small backup
             // batteries or super caps will not retain the config for a long power off time.
-            msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
+            msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE_10), _message_SAVE_10);
             _serial_gps->write(UBXscratch, msglen);
             if (getACK(0x06, 0x09, 2000) != GNSS_RESPONSE_OK) {
                 LOG_WARN("Unable to save GNSS module configuration.\n");
@@ -825,8 +828,7 @@ void GPS::setPowerPMU(bool on)
 void GPS::setPowerUBLOX(bool on, uint32_t sleepMs)
 {
     // Abort: if not UBLOX hardware
-    if (!(gnssModel == GNSS_MODEL_UBLOX6 || gnssModel == GNSS_MODEL_UBLOX7 || gnssModel == GNSS_MODEL_UBLOX8 ||
-          gnssModel == GNSS_MODEL_UBLOX9 || gnssModel == GNSS_MODEL_UBLOX10))
+    if (!IS_ONE_OF(gnssModel, GNSS_MODEL_UBLOX6, GNSS_MODEL_UBLOX7, GNSS_MODEL_UBLOX8, GNSS_MODEL_UBLOX9, GNSS_MODEL_UBLOX10))
         return;
 
     // If waking
@@ -909,27 +911,28 @@ void GPS::down()
         // If not, fallback to GPS_HARDSLEEP instead
         bool softsleepSupported = false;
         // U-blox is supported via PMREQ
-        if (gnssModel == GNSS_MODEL_UBLOX6 || gnssModel == GNSS_MODEL_UBLOX7 || gnssModel == GNSS_MODEL_UBLOX8 ||
-            gnssModel == GNSS_MODEL_UBLOX9 || gnssModel == GNSS_MODEL_UBLOX10)
+        if (IS_ONE_OF(gnssModel, GNSS_MODEL_UBLOX6, GNSS_MODEL_UBLOX7, GNSS_MODEL_UBLOX8, GNSS_MODEL_UBLOX9, GNSS_MODEL_UBLOX10))
             softsleepSupported = true;
 #ifdef PIN_GPS_STANDBY // L76B, L76K and clones have a standby pin
         softsleepSupported = true;
 #endif
 
-        // How long does gps_update_interval need to be, for GPS_HARDSLEEP to become more efficient than GPS_SOFTSLEEP?
-        // Heuristic equation. A compromise manually fitted to power observations from U-blox NEO-6M and M10050
-        // https://www.desmos.com/calculator/6gvjghoumr
-        // This is not particularly accurate, but probably an impromevement over a single, fixed threshold
-        uint32_t hardsleepThreshold = (2750 * pow(predictedSearchDuration / 1000, 1.22));
-        LOG_DEBUG("gps_update_interval >= %us needed to justify hardsleep\n", hardsleepThreshold / 1000);
+        if (softsleepSupported) {
+            // How long does gps_update_interval need to be, for GPS_HARDSLEEP to become more efficient than GPS_SOFTSLEEP?
+            // Heuristic equation. A compromise manually fitted to power observations from U-blox NEO-6M and M10050
+            // https://www.desmos.com/calculator/6gvjghoumr
+            // This is not particularly accurate, but probably an impromevement over a single, fixed threshold
+            uint32_t hardsleepThreshold = (2750 * pow(predictedSearchDuration / 1000, 1.22));
+            LOG_DEBUG("gps_update_interval >= %us needed to justify hardsleep\n", hardsleepThreshold / 1000);
 
-        // If update interval too short: softsleep (if supported by hardware)
-        if (softsleepSupported && updateInterval < hardsleepThreshold)
-            setPowerState(GPS_SOFTSLEEP, sleepTime);
-
+            // If update interval too short: softsleep (if supported by hardware)
+            if (updateInterval < hardsleepThreshold) {
+                setPowerState(GPS_SOFTSLEEP, sleepTime);
+                return;
+            }
+        }
         // If update interval long enough (or softsleep unsupported): hardsleep instead
-        else
-            setPowerState(GPS_HARDSLEEP, sleepTime);
+        setPowerState(GPS_HARDSLEEP, sleepTime);
     }
 }
 
@@ -986,8 +989,8 @@ int32_t GPS::runOnce()
         setConnected();
     } else {
         if ((config.position.gps_mode == meshtastic_Config_PositionConfig_GpsMode_ENABLED) &&
-            (gnssModel == GNSS_MODEL_UBLOX6 || gnssModel == GNSS_MODEL_UBLOX7 || gnssModel == GNSS_MODEL_UBLOX8 ||
-             gnssModel == GNSS_MODEL_UBLOX9 || gnssModel == GNSS_MODEL_UBLOX10)) {
+            IS_ONE_OF(gnssModel, GNSS_MODEL_UBLOX6, GNSS_MODEL_UBLOX7, GNSS_MODEL_UBLOX8, GNSS_MODEL_UBLOX9,
+                      GNSS_MODEL_UBLOX10)) {
             // reset the GPS on next bootup
             if (devicestate.did_gps_reset && scheduling.elapsedSearchMs() > 60 * 1000UL && !hasFlow()) {
                 LOG_DEBUG("GPS is not communicating, trying factory reset on next bootup.\n");
@@ -1420,16 +1423,15 @@ bool GPS::lookForTime()
 
 #ifdef GNSS_AIROHA
     uint8_t fix = reader.fixQuality();
-    uint32_t now = millis();
     if (fix > 0) {
         if (lastFixStartMsec > 0) {
-            if ((now - lastFixStartMsec) < GPS_FIX_HOLD_TIME) {
+            if (Throttle::isWithinTimespanMs(lastFixStartMsec, GPS_FIX_HOLD_TIME)) {
                 return false;
             } else {
                 clearBuffer();
             }
         } else {
-            lastFixStartMsec = now;
+            lastFixStartMsec = millis();
             return false;
         }
     } else {
@@ -1473,16 +1475,15 @@ bool GPS::lookForLocation()
 #ifdef GNSS_AIROHA
     if ((config.position.gps_update_interval * 1000) >= (GPS_FIX_HOLD_TIME * 2)) {
         uint8_t fix = reader.fixQuality();
-        uint32_t now = millis();
         if (fix > 0) {
             if (lastFixStartMsec > 0) {
-                if ((now - lastFixStartMsec) < GPS_FIX_HOLD_TIME) {
+                if (Throttle::isWithinTimespanMs(lastFixStartMsec, GPS_FIX_HOLD_TIME)) {
                     return false;
                 } else {
                     clearBuffer();
                 }
             } else {
-                lastFixStartMsec = now;
+                lastFixStartMsec = millis();
                 return false;
             }
         } else {

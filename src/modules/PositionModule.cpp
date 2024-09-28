@@ -12,6 +12,7 @@
 #include "gps/GeoCoord.h"
 #include "main.h"
 #include "mesh/compression/unishox2.h"
+#include "meshUtils.h"
 #include "meshtastic/atak.pb.h"
 #include "sleep.h"
 #include "target_specific.h"
@@ -145,7 +146,7 @@ void PositionModule::trySetRtc(meshtastic_Position p, bool isLocal, bool forceUp
 bool PositionModule::hasQualityTimesource()
 {
     bool setFromPhoneOrNtpToday =
-        lastSetFromPhoneNtpOrGps == 0 ? false : (millis() - lastSetFromPhoneNtpOrGps) <= (SEC_PER_DAY * 1000UL);
+        lastSetFromPhoneNtpOrGps == 0 ? false : Throttle::isWithinTimespanMs(lastSetFromPhoneNtpOrGps, SEC_PER_DAY * 1000UL);
 #if MESHTASTIC_EXCLUDE_GPS
     bool hasGpsOrRtc = (rtc_found.address != ScanI2C::ADDRESS_NONE.address);
 #else
@@ -273,7 +274,7 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
 
     meshtastic_TAKPacket takPacket = {.is_compressed = true,
                                       .has_contact = true,
-                                      .contact = {0},
+                                      .contact = meshtastic_Contact_init_default,
                                       .has_group = true,
                                       .group = {meshtastic_MemberRole_TeamMember, meshtastic_Team_Cyan},
                                       .has_status = true,
@@ -282,13 +283,13 @@ meshtastic_MeshPacket *PositionModule::allocAtakPli()
                                               .battery = powerStatus->getBatteryChargePercent(),
                                           },
                                       .which_payload_variant = meshtastic_TAKPacket_pli_tag,
-                                      {.pli = {
-                                           .latitude_i = localPosition.latitude_i,
-                                           .longitude_i = localPosition.longitude_i,
-                                           .altitude = localPosition.altitude_hae,
-                                           .speed = localPosition.ground_speed,
-                                           .course = static_cast<uint16_t>(localPosition.ground_track),
-                                       }}};
+                                      .payload_variant = {.pli = {
+                                                              .latitude_i = localPosition.latitude_i,
+                                                              .longitude_i = localPosition.longitude_i,
+                                                              .altitude = localPosition.altitude_hae,
+                                                              .speed = localPosition.ground_speed,
+                                                              .course = static_cast<uint16_t>(localPosition.ground_track),
+                                                          }}};
 
     auto length = unishox2_compress_lines(owner.long_name, strlen(owner.long_name), takPacket.contact.device_callsign,
                                           sizeof(takPacket.contact.device_callsign) - 1, USX_PSET_DFLT, NULL);
@@ -347,8 +348,8 @@ void PositionModule::sendOurPosition(NodeNum dest, bool wantReplies, uint8_t cha
 
     service->sendToMesh(p, RX_SRC_LOCAL, true);
 
-    if ((config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
-         config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) &&
+    if (IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
+                  meshtastic_Config_DeviceConfig_Role_TAK_TRACKER) &&
         config.power.is_power_saving) {
         LOG_DEBUG("Starting next execution in 5 seconds and then going to sleep.\n");
         sleepOnNextExecution = true;

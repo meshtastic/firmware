@@ -370,8 +370,8 @@ void setupSDCard()
     }
 
     uint64_t cardSize = SD.cardSize() / (1024 * 1024);
-    LOG_DEBUG("SD Card Size: %lluMB\n", cardSize);
-    LOG_DEBUG("Total space: %llu MB\n", SD.totalBytes() / (1024 * 1024));
-    LOG_DEBUG("Used space: %llu MB\n", SD.usedBytes() / (1024 * 1024));
+    LOG_DEBUG("SD Card Size: %lu MB\n", (uint32_t)cardSize);
+    LOG_DEBUG("Total space: %lu MB\n", (uint32_t)(SD.totalBytes() / (1024 * 1024)));
+    LOG_DEBUG("Used space: %lu MB\n", (uint32_t)(SD.usedBytes() / (1024 * 1024)));
 #endif
 }

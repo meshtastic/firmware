@@ -1,5 +1,6 @@
 #include "SerialKeyboard.h"
 #include "configuration.h"
+#include <Throttle.h>
 
 #ifdef INPUTBROKER_SERIAL_TYPE
 #define CANNED_MESSAGE_MODULE_ENABLE 1 // in case it's not set in the variant file
@@ -73,7 +74,7 @@ int32_t SerialKeyboard::runOnce()
         // Serial.print ("X");
         // Serial.println (shiftRegister2, BIN);
 
-        if (millis() - lastPressTime > 500) {
+        if (!Throttle::isWithinTimespanMs(lastPressTime, 500)) {
             quickPress = 0;
         }
 

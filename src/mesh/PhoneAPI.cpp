@@ -8,6 +8,7 @@
 #include "FSCommon.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PacketHistory.h"
 #include "PhoneAPI.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
@@ -25,11 +26,13 @@
 #if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
 #endif
+#include "Throttle.h"
 #include <RTC.h>
 
 PhoneAPI::PhoneAPI()
 {
     lastContactMsec = millis();
+    std::fill(std::begin(recentToRadioPacketIds), std::end(recentToRadioPacketIds), 0);
 }
 
 PhoneAPI::~PhoneAPI()
@@ -61,9 +64,11 @@ void PhoneAPI::handleStartConfig()
 
 void PhoneAPI::close()
 {
+    LOG_INFO("PhoneAPI::close()\n");
+
     if (state != STATE_SEND_NOTHING) {
         state = STATE_SEND_NOTHING;
-
+        resetReadIndex();
         unobserve(&service->fromNumChanged);
 #ifdef FSCom
         unobserve(&xModem.packetReady);
@@ -71,8 +76,17 @@ void PhoneAPI::close()
         releasePhonePacket(); // Don't leak phone packets on shutdown
         releaseQueueStatusPhonePacket();
         releaseMqttClientProxyPhonePacket();
-
+        releaseClientNotification();
         onConnectionChanged(false);
+        fromRadioScratch = {};
+        toRadioScratch = {};
+        nodeInfoForPhone = {};
+        packetForPhone = NULL;
+        filesManifest.clear();
+        fromRadioNum = 0;
+        config_nonce = 0;
+        config_state = 0;
+        pauseBluetoothLogging = false;
     }
 }
 
@@ -96,8 +110,6 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 {
     powerFSM.trigger(EVENT_CONTACT_FROM_PHONE); // As long as the phone keeps talking to us, don't let the radio go to sleep
     lastContactMsec = millis();
-
-    // return (lastContactMsec != 0) &&
 
     memset(&toRadioScratch, 0, sizeof(toRadioScratch));
     if (pb_decode_from_bytes(buf, bufLength, &meshtastic_ToRadio_msg, &toRadioScratch)) {
@@ -404,6 +416,10 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
             fromRadioScratch.which_payload_variant = meshtastic_FromRadio_xmodemPacket_tag;
             fromRadioScratch.xmodemPacket = xmodemPacketForPhone;
             xmodemPacketForPhone = meshtastic_XModem_init_zero;
+        } else if (clientNotification) {
+            fromRadioScratch.which_payload_variant = meshtastic_FromRadio_clientNotification_tag;
+            fromRadioScratch.clientNotification = *clientNotification;
+            releaseClientNotification();
         } else if (packetForPhone) {
             printPacket("phone downloaded packet", packetForPhone);
 
@@ -443,13 +459,6 @@ void PhoneAPI::sendConfigComplete()
     pauseBluetoothLogging = false;
 }
 
-void PhoneAPI::handleDisconnect()
-{
-    filesManifest.clear();
-    pauseBluetoothLogging = false;
-    LOG_INFO("PhoneAPI disconnect\n");
-}
-
 void PhoneAPI::releasePhonePacket()
 {
     if (packetForPhone) {
@@ -471,6 +480,14 @@ void PhoneAPI::releaseMqttClientProxyPhonePacket()
     if (mqttClientProxyMessageForPhone) {
         service->releaseMqttClientProxyMessageToPool(mqttClientProxyMessageForPhone);
         mqttClientProxyMessageForPhone = NULL;
+    }
+}
+
+void PhoneAPI::releaseClientNotification()
+{
+    if (clientNotification) {
+        service->releaseClientNotificationToPool(clientNotification);
+        clientNotification = NULL;
     }
 }
 
@@ -508,7 +525,9 @@ bool PhoneAPI::available()
             queueStatusPacketForPhone = service->getQueueStatusForPhone();
         if (!mqttClientProxyMessageForPhone)
             mqttClientProxyMessageForPhone = service->getMqttClientProxyMessageForPhone();
-        bool hasPacket = !!queueStatusPacketForPhone || !!mqttClientProxyMessageForPhone;
+        if (!clientNotification)
+            clientNotification = service->getClientNotificationForPhone();
+        bool hasPacket = !!queueStatusPacketForPhone || !!mqttClientProxyMessageForPhone || !!clientNotification;
         if (hasPacket)
             return true;
 
@@ -551,7 +570,23 @@ void PhoneAPI::sendNotification(meshtastic_LogRecord_Level level, uint32_t reply
     cn->time = getValidTime(RTCQualityFromNet);
     strncpy(cn->message, message, sizeof(cn->message));
     service->sendClientNotification(cn);
-    delete cn;
+}
+
+bool PhoneAPI::wasSeenRecently(uint32_t id)
+{
+    for (int i = 0; i < 20; i++) {
+        if (recentToRadioPacketIds[i] == id) {
+            return true;
+        }
+        if (recentToRadioPacketIds[i] == 0) {
+            recentToRadioPacketIds[i] = id;
+            return false;
+        }
+    }
+    // If the array is full, shift all elements to the left and add the new id at the end
+    memmove(recentToRadioPacketIds, recentToRadioPacketIds + 1, (19) * sizeof(uint32_t));
+    recentToRadioPacketIds[19] = id;
+    return false;
 }
 
 /**
@@ -560,15 +595,22 @@ void PhoneAPI::sendNotification(meshtastic_LogRecord_Level level, uint32_t reply
 bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
 {
     printPacket("PACKET FROM PHONE", &p);
+
+    if (p.id > 0 && wasSeenRecently(p.id)) {
+        LOG_DEBUG("Ignoring packet from phone, already seen recently\n");
+        return false;
+    }
+
     if (p.decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP && lastPortNumToRadio[p.decoded.portnum] &&
-        (millis() - lastPortNumToRadio[p.decoded.portnum]) < (THIRTY_SECONDS_MS)) {
+        Throttle::isWithinTimespanMs(lastPortNumToRadio[p.decoded.portnum], THIRTY_SECONDS_MS)) {
         LOG_WARN("Rate limiting portnum %d\n", p.decoded.portnum);
         sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "TraceRoute can only be sent once every 30 seconds");
         return false;
     } else if (p.decoded.portnum == meshtastic_PortNum_POSITION_APP && lastPortNumToRadio[p.decoded.portnum] &&
-               (millis() - lastPortNumToRadio[p.decoded.portnum]) < (FIVE_SECONDS_MS)) {
+               Throttle::isWithinTimespanMs(lastPortNumToRadio[p.decoded.portnum], FIVE_SECONDS_MS)) {
         LOG_WARN("Rate limiting portnum %d\n", p.decoded.portnum);
-        sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Position can only be sent once every 5 seconds");
+        // FIXME: Figure out why this continues to happen
+        // sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Position can only be sent once every 5 seconds");
         return false;
     }
     lastPortNumToRadio[p.decoded.portnum] = millis();
