@@ -916,20 +916,22 @@ void GPS::down()
         softsleepSupported = true;
 #endif
 
-        // How long does gps_update_interval need to be, for GPS_HARDSLEEP to become more efficient than GPS_SOFTSLEEP?
-        // Heuristic equation. A compromise manually fitted to power observations from U-blox NEO-6M and M10050
-        // https://www.desmos.com/calculator/6gvjghoumr
-        // This is not particularly accurate, but probably an impromevement over a single, fixed threshold
-        uint32_t hardsleepThreshold = (2750 * pow(predictedSearchDuration / 1000, 1.22));
-        LOG_DEBUG("gps_update_interval >= %us needed to justify hardsleep\n", hardsleepThreshold / 1000);
+        if (softsleepSupported) {
+            // How long does gps_update_interval need to be, for GPS_HARDSLEEP to become more efficient than GPS_SOFTSLEEP?
+            // Heuristic equation. A compromise manually fitted to power observations from U-blox NEO-6M and M10050
+            // https://www.desmos.com/calculator/6gvjghoumr
+            // This is not particularly accurate, but probably an impromevement over a single, fixed threshold
+            uint32_t hardsleepThreshold = (2750 * pow(predictedSearchDuration / 1000, 1.22));
+            LOG_DEBUG("gps_update_interval >= %us needed to justify hardsleep\n", hardsleepThreshold / 1000);
 
-        // If update interval too short: softsleep (if supported by hardware)
-        if (softsleepSupported && updateInterval < hardsleepThreshold)
-            setPowerState(GPS_SOFTSLEEP, sleepTime);
-
+            // If update interval too short: softsleep (if supported by hardware)
+            if (updateInterval < hardsleepThreshold) {
+                setPowerState(GPS_SOFTSLEEP, sleepTime);
+                return;
+            }
+        }
         // If update interval long enough (or softsleep unsupported): hardsleep instead
-        else
-            setPowerState(GPS_HARDSLEEP, sleepTime);
+        setPowerState(GPS_HARDSLEEP, sleepTime);
     }
 }
 
