@@ -35,7 +35,7 @@ jobs:
         name: Checkout base
       - id: jsonStep
         run: |
-          if [[ "${{ github.ref }}" == "refs/heads/master" ]]; then
+          if [[ "${{ github.ref_name }}" == "master" ]]; then
             TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}})
           else  
             TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} quick)
