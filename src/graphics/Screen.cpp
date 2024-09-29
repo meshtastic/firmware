@@ -1884,7 +1884,6 @@ int32_t Screen::runOnce()
             handleSetOn(false);
             break;
         case Cmd::ON_PRESS:
-            // Don't advance the screen if we just wanted to switch off the nag notification
             handleOnPress();
             break;
         case Cmd::SHOW_PREV_FRAME:
