@@ -1,6 +1,6 @@
 name: CI
 concurrency:
-  group: ${{ github.head_ref || github.run_id }}
+  group: ci-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 #concurrency:
 #  group: ${{ github.ref }}
@@ -35,12 +35,12 @@ jobs:
         name: Checkout base
       - id: jsonStep
         run: |
-          if [[ "${{ github.ref }}" == "refs/heads/master" ]]; then
+          if [[ "${{ github.head_ref }}" == "master" ]]; then
             TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}})
           else  
             TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} quick)
           fi
-          echo "$TARGETS"
+          echo "Name: ${{ github.ref_name }} Base: ${{ github.base_ref }} Head: ${{ github.head_ref }} Ref: ${{ github.ref }} Targets: $TARGETS"
           echo "${{matrix.arch}}=$(jq -cn --argjson environments "$TARGETS" '{board: $environments}')" >> $GITHUB_OUTPUT
     outputs:
       esp32: ${{ steps.jsonStep.outputs.esp32 }}
