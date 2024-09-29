@@ -583,7 +583,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 
         break;
     }
-    if (requiresReboot) {
+    if (requiresReboot && !hasOpenEditTransaction) {
         disableBluetooth();
     }
 
