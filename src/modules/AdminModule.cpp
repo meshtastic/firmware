@@ -592,7 +592,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 
 void AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
 {
-    disableBluetooth();
+    if (!hasOpenEditTransaction)
+        disableBluetooth();
     switch (c.which_payload_variant) {
     case meshtastic_ModuleConfig_mqtt_tag:
         LOG_INFO("Setting module config: MQTT\n");
@@ -966,7 +967,7 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
     } else {
         LOG_INFO("Delaying save of changes to disk until the open transaction is committed\n");
     }
-    if (shouldReboot) {
+    if (shouldReboot && !hasOpenEditTransaction) {
         reboot(DEFAULT_REBOOT_SECONDS);
     }
 }
