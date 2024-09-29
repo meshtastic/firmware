@@ -30,9 +30,6 @@
 
 StoreForwardModule *storeForwardModule;
 
-uint32_t lastHeartbeat = 0;
-uint32_t heartbeatInterval = 60; // Default to 60 seconds, adjust as needed
-
 int32_t StoreForwardModule::runOnce()
 {
 #if defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
