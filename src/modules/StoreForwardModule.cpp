@@ -17,6 +17,7 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include "Router.h"
+#include "Throttle.h"
 #include "airtime.h"
 #include "configuration.h"
 #include "memGet.h"
@@ -29,9 +30,12 @@
 
 StoreForwardModule *storeForwardModule;
 
+uint32_t lastHeartbeat = 0;
+uint32_t heartbeatInterval = 60; // Default to 60 seconds, adjust as needed
+
 int32_t StoreForwardModule::runOnce()
 {
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
     if (moduleConfig.store_forward.enabled && is_server) {
         // Send out the message queue.
         if (this->busy) {
@@ -42,7 +46,7 @@ int32_t StoreForwardModule::runOnce()
                     this->busy = false;
                 }
             }
-        } else if (this->heartbeat && (millis() - lastHeartbeat > (heartbeatInterval * 1000)) &&
+        } else if (this->heartbeat && (!Throttle::isWithinTimespanMs(lastHeartbeat, heartbeatInterval * 1000)) &&
                    airTime->isTxAllowedChannelUtil(true)) {
             lastHeartbeat = millis();
             LOG_INFO("*** Sending heartbeat\n");
@@ -78,8 +82,12 @@ void StoreForwardModule::populatePSRAM()
     uint32_t numberOfPackets =
         (this->records ? this->records : (((memGet.getFreePsram() / 3) * 2) / sizeof(PacketHistoryStruct)));
     this->records = numberOfPackets;
-
+#if defined(ARCH_ESP32)
     this->packetHistory = static_cast<PacketHistoryStruct *>(ps_calloc(numberOfPackets, sizeof(PacketHistoryStruct)));
+#elif defined(ARCH_PORTDUINO)
+    this->packetHistory = static_cast<PacketHistoryStruct *>(calloc(numberOfPackets, sizeof(PacketHistoryStruct)));
+
+#endif
 
     LOG_DEBUG("*** After PSRAM initialization: heap %d/%d PSRAM %d/%d\n", memGet.getFreeHeap(), memGet.getHeapSize(),
               memGet.getFreePsram(), memGet.getPsramSize());
@@ -127,7 +135,7 @@ uint32_t StoreForwardModule::getNumAvailablePackets(NodeNum dest, uint32_t last_
 {
     uint32_t count = 0;
     if (lastRequest.find(dest) == lastRequest.end()) {
-        lastRequest[dest] = 0;
+        lastRequest.emplace(dest, 0);
     }
     for (uint32_t i = lastRequest[dest]; i < this->packetHistoryTotalCount; i++) {
         if (this->packetHistory[i].time && (this->packetHistory[i].time > last_time)) {
@@ -372,7 +380,7 @@ void StoreForwardModule::statsSend(uint32_t to)
  */
 ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
     if (moduleConfig.store_forward.enabled) {
 
         if ((mp.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) && is_server) {
@@ -555,7 +563,7 @@ StoreForwardModule::StoreForwardModule()
       ProtobufModule("StoreForward", meshtastic_PortNum_STORE_FORWARD_APP, &meshtastic_StoreAndForward_msg)
 {
 
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
 
     isPromiscuous = true; // Brown chicken brown cow
 

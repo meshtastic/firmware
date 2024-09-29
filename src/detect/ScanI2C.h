@@ -29,6 +29,7 @@ class ScanI2C
         INA260,
         INA219,
         INA3221,
+        MAX17048,
         MCP9808,
         SHT31,
         SHT4X,
@@ -37,12 +38,14 @@ class ScanI2C
         QMC6310,
         QMI8658,
         QMC5883L,
+        HMC5883L,
         PMSA0031,
         MPU6050,
         LIS3DH,
         BMA423,
         BQ24295,
         LSM6DS3,
+        TCA9535,
         TCA9555,
         VEML7700,
         RCWL9620,
@@ -53,7 +56,10 @@ class ScanI2C
         AHT10,
         BMX160,
         DFROBOT_LARK,
-        NAU7802
+        NAU7802,
+        FT6336U,
+        STK8BAXX,
+        ICM20948
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;
@@ -64,8 +70,9 @@ class ScanI2C
     } I2CPort;
 
     typedef struct DeviceAddress {
-        I2CPort port;
-        uint8_t address;
+        // set default values for ADDRESS_NONE
+        I2CPort port = I2CPort::NO_I2C;
+        uint8_t address = 0;
 
         explicit DeviceAddress(I2CPort port, uint8_t address);
         DeviceAddress();

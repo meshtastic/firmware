@@ -64,6 +64,7 @@ T1000xSensor t1000xSensor;
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
 #include "graphics/ScreenFonts.h"
+#include <Throttle.h>
 
 int32_t EnvironmentTelemetryModule::runOnce()
 {
@@ -82,7 +83,7 @@ int32_t EnvironmentTelemetryModule::runOnce()
     */
 
     // moduleConfig.telemetry.environment_measurement_enabled = 1;
-    //  moduleConfig.telemetry.environment_screen_enabled = 1;
+    // moduleConfig.telemetry.environment_screen_enabled = 1;
     // moduleConfig.telemetry.environment_update_interval = 15;
 
     if (!(moduleConfig.telemetry.environment_measurement_enabled || moduleConfig.telemetry.environment_screen_enabled)) {
@@ -143,6 +144,8 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = mlx90632Sensor.runOnce();
             if (nau7802Sensor.hasSensor())
                 result = nau7802Sensor.runOnce();
+            if (max17048Sensor.hasSensor())
+                result = max17048Sensor.runOnce();
 #endif
         }
         return result;
@@ -155,21 +158,20 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = bme680Sensor.runTrigger();
         }
 
-        uint32_t now = millis();
         if (((lastSentToMesh == 0) ||
-             ((now - lastSentToMesh) >=
-              Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.environment_update_interval,
-                                                      default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
+             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
+                                                               moduleConfig.telemetry.environment_update_interval,
+                                                               default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
             airTime->isTxAllowedChannelUtil(config.device.role != meshtastic_Config_DeviceConfig_Role_SENSOR) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
-            lastSentToMesh = now;
-        } else if (((lastSentToPhone == 0) || ((now - lastSentToPhone) >= sendToPhoneIntervalMs)) &&
+            lastSentToMesh = millis();
+        } else if (((lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs)) &&
                    (service->isToPhoneQueueEmpty())) {
             // Just send to phone when it's not our time to send to mesh yet
             // Only send while queue is empty (phone assumed connected)
             sendTelemetry(NODENUM_BROADCAST, true);
-            lastSentToPhone = now;
+            lastSentToPhone = millis();
         }
     }
     return min(sendToPhoneIntervalMs, result);
@@ -214,7 +216,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
     uint32_t agoSecs = GetTimeSinceMeshPacket(lastMeasurementPacket);
     const char *lastSender = getSenderShortName(*lastMeasurementPacket);
 
-    auto &p = lastMeasurementPacket->decoded;
+    const meshtastic_Data &p = lastMeasurementPacket->decoded;
     if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &lastMeasurement)) {
         display->drawString(x, y, "Measurement Error");
         LOG_ERROR("Unable to decode last packet");
@@ -396,6 +398,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
             aht10Sensor.getMetrics(&m_ahtx);
             m->variant.environment_metrics.relative_humidity = m_ahtx.variant.environment_metrics.relative_humidity;
         }
+    }
+    if (max17048Sensor.hasSensor()) {
+        valid = valid && max17048Sensor.getMetrics(m);
+        hasSensor = true;
     }
 
 #endif
@@ -584,6 +590,11 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
     }
     if (aht10Sensor.hasSensor()) {
         result = aht10Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (max17048Sensor.hasSensor()) {
+        result = max17048Sensor.handleAdminMessage(mp, request, response);
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }

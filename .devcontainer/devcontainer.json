@@ -13,16 +13,13 @@
   },
   "customizations": {
     "vscode": {
-      "extensions": [
-        "ms-vscode.cpptools",
-        "platformio.platformio-ide",
-      ]
+      "extensions": ["ms-vscode.cpptools", "platformio.platformio-ide"]
     }
   },
 
   // Use 'forwardPorts' to make a list of ports inside the container available locally.
-  "forwardPorts": [ 4403 ],
+  "forwardPorts": [4403],
 
   // Run commands to prepare the container for use
-  "postCreateCommand": ".devcontainer/setup.sh",
+  "postCreateCommand": ".devcontainer/setup.sh"
 }

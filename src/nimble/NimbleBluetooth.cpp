@@ -44,6 +44,9 @@ static BluetoothPhoneAPI *bluetoothPhoneAPI;
  * Subclasses can use this as a hook to provide custom notifications for their transport (i.e. bluetooth notifies)
  */
 
+// Last ToRadio value received from the phone
+static uint8_t lastToRadio[MAX_TO_FROM_RADIO_SIZE];
+
 class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
 {
     virtual void onWrite(NimBLECharacteristic *pCharacteristic)
@@ -51,7 +54,13 @@ class NimbleBluetoothToRadioCallback : public NimBLECharacteristicCallbacks
         LOG_INFO("To Radio onwrite\n");
         auto val = pCharacteristic->getValue();
 
-        bluetoothPhoneAPI->handleToRadio(val.data(), val.length());
+        if (memcmp(lastToRadio, val.data(), val.length()) != 0) {
+            LOG_DEBUG("New ToRadio packet\n");
+            memcpy(lastToRadio, val.data(), val.length());
+            bluetoothPhoneAPI->handleToRadio(val.data(), val.length());
+        } else {
+            LOG_DEBUG("Dropping duplicate ToRadio packet we just saw\n");
+        }
     }
 };
 
@@ -124,7 +133,14 @@ class NimbleBluetoothServerCallback : public NimBLEServerCallbacks
         }
     }
 
-    virtual void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc) { LOG_INFO("BLE disconnect\n"); }
+    virtual void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc)
+    {
+        LOG_INFO("BLE disconnect\n");
+
+        if (bluetoothPhoneAPI) {
+            bluetoothPhoneAPI->close();
+        }
+    }
 };
 
 static NimbleBluetoothToRadioCallback *toRadioCallbacks;

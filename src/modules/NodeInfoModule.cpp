@@ -6,6 +6,7 @@
 #include "Router.h"
 #include "configuration.h"
 #include "main.h"
+#include <Throttle.h>
 
 NodeInfoModule *nodeInfoModule;
 
@@ -67,13 +68,12 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
         LOG_DEBUG("Skip sending NodeInfo due to > 40 percent channel util.\n");
         return NULL;
     }
-    uint32_t now = millis();
     // If we sent our NodeInfo less than 5 min. ago, don't send it again as it may be still underway.
-    if (!shorterTimeout && lastSentToMesh && (now - lastSentToMesh) < (5 * 60 * 1000)) {
+    if (!shorterTimeout && lastSentToMesh && Throttle::isWithinTimespanMs(lastSentToMesh, 5 * 60 * 1000)) {
         LOG_DEBUG("Skip sending NodeInfo since we just sent it less than 5 minutes ago.\n");
         ignoreRequest = true; // Mark it as ignored for MeshModule
         return NULL;
-    } else if (shorterTimeout && lastSentToMesh && (now - lastSentToMesh) < (60 * 1000)) {
+    } else if (shorterTimeout && lastSentToMesh && Throttle::isWithinTimespanMs(lastSentToMesh, 60 * 1000)) {
         LOG_DEBUG("Skip sending actively requested NodeInfo since we just sent it less than 60 seconds ago.\n");
         ignoreRequest = true; // Mark it as ignored for MeshModule
         return NULL;
@@ -82,7 +82,7 @@ meshtastic_MeshPacket *NodeInfoModule::allocReply()
         meshtastic_User &u = owner;
 
         LOG_INFO("sending owner %s/%s/%s\n", u.id, u.long_name, u.short_name);
-        lastSentToMesh = now;
+        lastSentToMesh = millis();
         return allocDataProtobuf(u);
     }
 }
