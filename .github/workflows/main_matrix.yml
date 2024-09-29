@@ -235,17 +235,11 @@ jobs:
           path: ./*.elf
           retention-days: 30
 
-      - name: Create request artifacts
-        continue-on-error: true # FIXME: Why are we getting 502, but things still work?
-        if: ${{ github.event_name == 'pull_request_target' || github.event_name == 'pull_request' }}
-        uses: gavv/pull-request-artifacts@v2.1.0
+      - uses: PicoCentauri/comment-artifact@main
         with:
-          commit: ${{ (github.event.pull_request_target || github.event.pull_request).head.sha }}
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          artifacts-token: ${{ secrets.ARTIFACTS_TOKEN }}
-          artifacts-repo: meshtastic/artifacts
-          artifacts-branch: device
-          artifacts: ./firmware-${{ steps.version.outputs.version }}.zip
+          name: firmware-${{ steps.version.outputs.version }}
+          description: "Download firmware-${{ steps.version.outputs.version }}.zip. This artifact will be available for 90 days from creation"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
   release-artifacts:
     runs-on: ubuntu-latest
