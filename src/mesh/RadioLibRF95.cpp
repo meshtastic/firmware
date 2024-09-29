@@ -1,4 +1,4 @@
-#ifndef RADIOLIB_EXCLUDE_SX127X
+#if RADIOLIB_EXCLUDE_SX127X != 1
 #include "RadioLibRF95.h"
 #include "configuration.h"
 

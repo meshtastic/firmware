@@ -1,5 +1,5 @@
 #pragma once
-#ifndef RADIOLIB_EXCLUDE_SX127X
+#if RADIOLIB_EXCLUDE_SX127X != 1
 #include "MeshRadio.h" // kinda yucky, but we need to know which region we are in
 #include "RadioLibInterface.h"
 #include "RadioLibRF95.h"

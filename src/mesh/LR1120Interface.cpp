@@ -1,4 +1,4 @@
-#ifndef RADIOLIB_EXCLUDE_LR111X
+#if RADIOLIB_EXCLUDE_LR11X0 != 1
 
 #include "LR1120Interface.h"
 #include "configuration.h"

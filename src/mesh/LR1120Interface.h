@@ -1,5 +1,5 @@
 #pragma once
-#ifndef RADIOLIB_EXCLUDE_LR111X
+#if RADIOLIB_EXCLUDE_LR11X0 != 1
 
 #include "LR11x0Interface.h"
 /**

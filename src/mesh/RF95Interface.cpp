@@ -1,4 +1,4 @@
-#ifndef RADIOLIB_EXCLUDE_SX127X
+#if RADIOLIB_EXCLUDE_SX127X != 1
 #include "RF95Interface.h"
 #include "MeshRadio.h" // kinda yucky, but we need to know which region we are in
 #include "RadioLibRF95.h"

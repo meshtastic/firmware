@@ -1,5 +1,5 @@
 #pragma once
-#ifndef RADIOLIB_EXCLUDE_SX127X
+#if RADIOLIB_EXCLUDE_SX127X != 1
 #include <RadioLib.h>
 
 /*!

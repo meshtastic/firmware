@@ -1,4 +1,5 @@
 #pragma once
+#if RADIOLIB_EXCLUDE_SX126X != 1
 
 #include "RadioLibInterface.h"
 
@@ -68,3 +69,4 @@ template <class T> class SX126xInterface : public RadioLibInterface
 
     virtual void setStandby() override;
 };
+#endif

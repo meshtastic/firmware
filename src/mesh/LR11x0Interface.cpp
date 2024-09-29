@@ -1,4 +1,4 @@
-#ifndef RADIOLIB_EXCLUDE_LR11X0
+#if RADIOLIB_EXCLUDE_LR11X0 != 1
 #include "LR11x0Interface.h"
 #include "Throttle.h"
 #include "configuration.h"

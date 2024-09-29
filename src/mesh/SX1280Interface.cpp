@@ -1,4 +1,4 @@
-#ifndef RADIOLIB_EXCLUDE_SX128X
+#if RADIOLIB_EXCLUDE_SX128X != 1
 #include "SX1280Interface.h"
 #include "configuration.h"
 #include "error.h"
