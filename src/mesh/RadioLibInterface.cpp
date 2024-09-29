@@ -167,7 +167,7 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
         }
 
     } else {
-        LOG_WARN("send - lora tx disable because RegionCode_Unset\n");
+        LOG_WARN("send - lora tx disabled because RegionCode_Unset\n");
         packetPool.release(p);
         return ERRNO_DISABLED;
     }
@@ -378,6 +378,14 @@ void RadioLibInterface::handleReceiveInterrupt()
     size_t length = iface->getPacketLength();
 
     xmitMsec = getPacketTime(length);
+
+#ifndef DISABLE_WELCOME_UNSET
+    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+        LOG_WARN("recv - lora rx disabled because RegionCode_Unset\n");
+        airTime->logAirtime(RX_ALL_LOG, xmitMsec);
+        return;
+    }
+#endif
 
     int state = iface->readData(radiobuf, length);
     if (state != RADIOLIB_ERR_NONE) {

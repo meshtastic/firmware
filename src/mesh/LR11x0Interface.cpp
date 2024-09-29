@@ -19,8 +19,14 @@ static const Module::RfSwitchMode_t rfswitch_table[] = {
 
 // Particular boards might define a different max power based on what their hardware can do, default to max power output if not
 // specified (may be dangerous if using external PA and LR11x0 power config forgotten)
-#ifndef LR11X0_MAX_POWER
-#define LR11X0_MAX_POWER 22
+#ifndef LR1110_MAX_POWER
+#define LR1110_MAX_POWER 22
+#endif
+
+// the 2.4G part maxes at 13dBm
+
+#ifndef LR1120_MAX_POWER
+#define LR1120_MAX_POWER 13
 #endif
 
 template <typename T>
@@ -56,8 +62,12 @@ template <typename T> bool LR11x0Interface<T>::init()
 
     RadioLibInterface::init();
 
-    if (power > LR11X0_MAX_POWER) // Clamp power to maximum defined level
-        power = LR11X0_MAX_POWER;
+    if (power > LR1110_MAX_POWER) // Clamp power to maximum defined level
+        power = LR1110_MAX_POWER;
+
+    if ((power > LR1120_MAX_POWER) &&
+        (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) // clamp again if wide freq range
+        power = LR1120_MAX_POWER;
 
     limitPower();
 
@@ -152,8 +162,10 @@ template <typename T> bool LR11x0Interface<T>::reconfigure()
     if (err != RADIOLIB_ERR_NONE)
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
-    if (power > LR11X0_MAX_POWER) // This chip has lower power limits than some
-        power = LR11X0_MAX_POWER;
+    if (power > LR1110_MAX_POWER) // This chip has lower power limits than some
+        power = LR1110_MAX_POWER;
+    if ((power > LR1120_MAX_POWER) && (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) // 2.4G power limit
+        power = LR1120_MAX_POWER;
 
     err = lora.setOutputPower(power);
     assert(err == RADIOLIB_ERR_NONE);

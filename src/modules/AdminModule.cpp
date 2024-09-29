@@ -432,6 +432,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
         if (config.device.double_tap_as_button_press == false && c.payload_variant.device.double_tap_as_button_press == true &&
             accelerometerThread->enabled == false) {
+            config.device.double_tap_as_button_press = c.payload_variant.device.double_tap_as_button_press;
+            accelerometerThread->enabled = true;
             accelerometerThread->start();
         }
 #endif
@@ -511,6 +513,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
         if (config.display.wake_on_tap_or_motion == false && c.payload_variant.display.wake_on_tap_or_motion == true &&
             accelerometerThread->enabled == false) {
+            config.display.wake_on_tap_or_motion = c.payload_variant.display.wake_on_tap_or_motion;
+            accelerometerThread->enabled = true;
             accelerometerThread->start();
         }
 #endif
@@ -583,7 +587,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 
         break;
     }
-    if (requiresReboot) {
+    if (requiresReboot && !hasOpenEditTransaction) {
         disableBluetooth();
     }
 
@@ -592,7 +596,8 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 
 void AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
 {
-    disableBluetooth();
+    if (!hasOpenEditTransaction)
+        disableBluetooth();
     switch (c.which_payload_variant) {
     case meshtastic_ModuleConfig_mqtt_tag:
         LOG_INFO("Setting module config: MQTT\n");
@@ -970,7 +975,7 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
     } else {
         LOG_INFO("Delaying save of changes to disk until the open transaction is committed\n");
     }
-    if (shouldReboot) {
+    if (shouldReboot && !hasOpenEditTransaction) {
         reboot(DEFAULT_REBOOT_SECONDS);
     }
 }

@@ -73,6 +73,7 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #include "LLCC68Interface.h"
 #include "LR1110Interface.h"
 #include "LR1120Interface.h"
+#include "LR1121Interface.h"
 #include "RF95Interface.h"
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
@@ -987,7 +988,7 @@ void setup()
 #endif
 
 #if defined(RF95_IRQ)
-    if (!rIf) {
+    if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         rIf = new RF95Interface(RadioLibHAL, LORA_CS, RF95_IRQ, RF95_RESET, RF95_DIO1);
         if (!rIf->init()) {
             LOG_WARN("Failed to find RF95 radio\n");
@@ -1001,7 +1002,7 @@ void setup()
 #endif
 
 #if defined(USE_SX1262) && !defined(ARCH_PORTDUINO) && !defined(TCXO_OPTIONAL)
-    if (!rIf) {
+    if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
             LOG_WARN("Failed to find SX1262 radio\n");
@@ -1015,7 +1016,7 @@ void setup()
 #endif
 
 #if defined(USE_SX1262) && !defined(ARCH_PORTDUINO) && defined(TCXO_OPTIONAL)
-    if (!rIf) {
+    if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         // Try using the specified TCXO voltage
         rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
@@ -1031,7 +1032,7 @@ void setup()
         }
     }
 
-    if (!rIf) {
+    if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         // If specified TCXO voltage fails, attempt to use DIO3 as a reference instea
         rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
@@ -1049,7 +1050,7 @@ void setup()
 #endif
 
 #if defined(USE_SX1268)
-    if (!rIf) {
+    if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         rIf = new SX1268Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
             LOG_WARN("Failed to find SX1268 radio\n");
@@ -1063,7 +1064,7 @@ void setup()
 #endif
 
 #if defined(USE_LLCC68)
-    if (!rIf) {
+    if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         rIf = new LLCC68Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
             LOG_WARN("Failed to find LLCC68 radio\n");
@@ -1077,7 +1078,7 @@ void setup()
 #endif
 
 #if defined(USE_LR1110)
-    if (!rIf) {
+    if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         rIf = new LR1110Interface(RadioLibHAL, LR1110_SPI_NSS_PIN, LR1110_IRQ_PIN, LR1110_NRESET_PIN, LR1110_BUSY_PIN);
         if (!rIf->init()) {
             LOG_WARN("Failed to find LR1110 radio\n");
@@ -1085,6 +1086,7 @@ void setup()
             rIf = NULL;
         } else {
             LOG_INFO("LR1110 Radio init succeeded, using LR1110 radio\n");
+            radioType = LR1110_RADIO;
         }
     }
 #endif
@@ -1098,6 +1100,21 @@ void setup()
             rIf = NULL;
         } else {
             LOG_INFO("LR1120 Radio init succeeded, using LR1120 radio\n");
+            radioType = LR1120_RADIO;
+        }
+    }
+#endif
+
+#if defined(USE_LR1121)
+    if (!rIf) {
+        rIf = new LR1121Interface(RadioLibHAL, LR1121_SPI_NSS_PIN, LR1121_IRQ_PIN, LR1121_NRESET_PIN, LR1121_BUSY_PIN);
+        if (!rIf->init()) {
+            LOG_WARN("Failed to find LR1121 radio\n");
+            delete rIf;
+            rIf = NULL;
+        } else {
+            LOG_INFO("LR1121 Radio init succeeded, using LR1121 radio\n");
+            radioType = LR1121_RADIO;
         }
     }
 #endif
