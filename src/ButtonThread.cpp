@@ -127,7 +127,7 @@ int32_t ButtonThread::runOnce()
             // If a nag notification is running, stop it and prevent other actions
             if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) {
                 externalNotificationModule->stopNow();
-                return;
+                return 50;
             }
 #ifdef BUTTON_PIN
             if (((config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN) !=
