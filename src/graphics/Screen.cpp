@@ -1884,13 +1884,8 @@ int32_t Screen::runOnce()
             handleSetOn(false);
             break;
         case Cmd::ON_PRESS:
-            // If a nag notification is running, stop it
-            if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) {
-                externalNotificationModule->stopNow();
-            } else {
-                // Don't advance the screen if we just wanted to switch off the nag notification
-                handleOnPress();
-            }
+            // Don't advance the screen if we just wanted to switch off the nag notification
+            handleOnPress();
             break;
         case Cmd::SHOW_PREV_FRAME:
             handleShowPrevFrame();
