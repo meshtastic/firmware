@@ -88,10 +88,7 @@ runs:
     - name: Store binaries as an artifact
       uses: actions/upload-artifact@v4
       with:
-        name: firmware-${{ inputs.board }}-${{ steps.version.outputs.version }}.zip
+        name: firmware-${{ inputs.arch }}-${{ inputs.board }}-${{ steps.version.outputs.version }}.zip
         overwrite: true
         path: |
           ${{ inputs.artifact-paths }}
-
-    - name: Log release filename to processor specific file
-      run: echo "firmware-${{ inputs.board }}-${{ steps.version.outputs.version }}.zip" >> ${{ inputs.arch }}.txt
