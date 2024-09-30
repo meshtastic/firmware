@@ -1,5 +1,5 @@
 #pragma once
-
+#if RADIOLIB_EXCLUDE_SX127X != 1
 #include "MeshRadio.h" // kinda yucky, but we need to know which region we are in
 #include "RadioLibInterface.h"
 #include "RadioLibRF95.h"
@@ -69,3 +69,4 @@ class RF95Interface : public RadioLibInterface
     /** Some boards require GPIO control of tx vs rx paths */
     void setTransmitEnable(bool txon);
 };
+#endif
