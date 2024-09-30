@@ -885,7 +885,7 @@ void setup()
     }
 #endif
 
-#if defined(RF95_IRQ)
+#if defined(RF95_IRQ) && RADIOLIB_EXCLUDE_SX127X != 1
     if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         rIf = new RF95Interface(RadioLibHAL, LORA_CS, RF95_IRQ, RF95_RESET, RF95_DIO1);
         if (!rIf->init()) {
@@ -899,7 +899,7 @@ void setup()
     }
 #endif
 
-#if defined(USE_SX1262) && !defined(ARCH_PORTDUINO) && !defined(TCXO_OPTIONAL)
+#if defined(USE_SX1262) && !defined(ARCH_PORTDUINO) && !defined(TCXO_OPTIONAL) && RADIOLIB_EXCLUDE_SX126X != 1
     if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
@@ -975,7 +975,7 @@ void setup()
     }
 #endif
 
-#if defined(USE_LR1110)
+#if defined(USE_LR1110) && RADIOLIB_EXCLUDE_LR11X0 != 1
     if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         rIf = new LR1110Interface(RadioLibHAL, LR1110_SPI_NSS_PIN, LR1110_IRQ_PIN, LR1110_NRESET_PIN, LR1110_BUSY_PIN);
         if (!rIf->init()) {
@@ -989,7 +989,7 @@ void setup()
     }
 #endif
 
-#if defined(USE_LR1120)
+#if defined(USE_LR1120) && RADIOLIB_EXCLUDE_LR11X0 != 1
     if (!rIf) {
         rIf = new LR1120Interface(RadioLibHAL, LR1120_SPI_NSS_PIN, LR1120_IRQ_PIN, LR1120_NRESET_PIN, LR1120_BUSY_PIN);
         if (!rIf->init()) {
@@ -1003,7 +1003,7 @@ void setup()
     }
 #endif
 
-#if defined(USE_LR1121)
+#if defined(USE_LR1121) && RADIOLIB_EXCLUDE_LR11X0 != 1
     if (!rIf) {
         rIf = new LR1121Interface(RadioLibHAL, LR1121_SPI_NSS_PIN, LR1121_IRQ_PIN, LR1121_NRESET_PIN, LR1121_BUSY_PIN);
         if (!rIf->init()) {
@@ -1017,7 +1017,7 @@ void setup()
     }
 #endif
 
-#if defined(USE_SX1280)
+#if defined(USE_SX1280) && RADIOLIB_EXCLUDE_SX128X != 1
     if (!rIf) {
         rIf = new SX1280Interface(RadioLibHAL, SX128X_CS, SX128X_DIO1, SX128X_RESET, SX128X_BUSY);
         if (!rIf->init()) {
@@ -1032,7 +1032,6 @@ void setup()
 #endif
 
     // check if the radio chip matches the selected region
-
     if ((config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && (!rIf->wideLora())) {
         LOG_WARN("Radio chip does not support 2.4GHz LoRa. Reverting to unset.\n");
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
