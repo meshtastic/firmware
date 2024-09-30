@@ -133,7 +133,7 @@ NodeDB::NodeDB()
         config.security.is_managed = config.device.is_managed;
     }
 
-#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
     bool keygenSuccess = false;
     if (config.security.private_key.size == 32) {
         if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
