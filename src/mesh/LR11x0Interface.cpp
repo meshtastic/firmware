@@ -1,3 +1,4 @@
+#if RADIOLIB_EXCLUDE_LR11X0 != 1
 #include "LR11x0Interface.h"
 #include "Throttle.h"
 #include "configuration.h"
@@ -285,3 +286,4 @@ template <typename T> bool LR11x0Interface<T>::sleep()
 
     return true;
 }
+#endif
