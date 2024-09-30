@@ -1,8 +1,10 @@
+const char *failMessage = "Unable to %s\n";
+
 #define SEND_UBX_PACKET(TYPE, ID, DATA, ERRMSG, TIMEOUT)                                                                         \
     msglen = makeUBXPacket(TYPE, ID, sizeof(DATA), DATA);                                                                        \
     _serial_gps->write(UBXscratch, msglen);                                                                                      \
     if (getACK(TYPE, ID, TIMEOUT) != GNSS_RESPONSE_OK) {                                                                         \
-        LOG_WARN(#ERRMSG);                                                                                                       \
+        LOG_WARN(failMessage, #ERRMSG);                                                                                          \
     }
 
 // Power Management

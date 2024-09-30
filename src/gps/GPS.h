@@ -156,6 +156,8 @@ class GPS : private concurrency::OSThread
     static const uint8_t _message_CAS_CFG_NAVX_CONF[];
     static const uint8_t _message_CAS_CFG_RATE_1HZ[];
 
+    const char *ACK_SUCCESS_MESSAGE = "Get ack success!\n";
+
     meshtastic_Position p = meshtastic_Position_init_default;
 
     /** This is normally bound to config.position.gps_en_gpio but some rare boards (like heltec tracker) need more advanced

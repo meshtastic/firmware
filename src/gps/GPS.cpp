@@ -530,23 +530,23 @@ bool GPS::setup()
             _serial_gps->write("$PAIR513*3D\r\n"); // save configuration
         } else if (gnssModel == GNSS_MODEL_UBLOX6) {
             clearBuffer();
-            SEND_UBX_PACKET(0x06, 0x02, _message_DISABLE_TXT_INFO, "Unable to disable text info messages.\n", 500);
-            SEND_UBX_PACKET(0x06, 0x39, _message_JAM_6_7, "Unable to enable interference resistance.\n", 500);
-            SEND_UBX_PACKET(0x06, 0x23, _message_NAVX5, "Unable to configure NAVX5 settings.\n", 500);
+            SEND_UBX_PACKET(0x06, 0x02, _message_DISABLE_TXT_INFO, "disable text info messages", 500);
+            SEND_UBX_PACKET(0x06, 0x39, _message_JAM_6_7, "enable interference resistance", 500);
+            SEND_UBX_PACKET(0x06, 0x23, _message_NAVX5, "configure NAVX5 settings", 500);
 
             // Turn off unwanted NMEA messages, set update rate
-            SEND_UBX_PACKET(0x06, 0x08, _message_1HZ, "Unable to set GPS update rate.\n", 500);
-            SEND_UBX_PACKET(0x06, 0x01, _message_GLL, "Unable to disable NMEA GLL.\n", 500);
-            SEND_UBX_PACKET(0x06, 0x01, _message_GSA, "Unable to Enable NMEA GSA.\n", 500);
-            SEND_UBX_PACKET(0x06, 0x01, _message_GSV, "Unable to disable NMEA GSV.\n", 500);
-            SEND_UBX_PACKET(0x06, 0x01, _message_VTG, "Unable to disable NMEA VTG.\n", 500);
-            SEND_UBX_PACKET(0x06, 0x01, _message_RMC, "Unable to enable NMEA RMC.\n", 500);
-            SEND_UBX_PACKET(0x06, 0x01, _message_GGA, "Unable to enable NMEA GGA.\n", 500);
+            SEND_UBX_PACKET(0x06, 0x08, _message_1HZ, "set GPS update rate", 500);
+            SEND_UBX_PACKET(0x06, 0x01, _message_GLL, "disable NMEA GLL", 500);
+            SEND_UBX_PACKET(0x06, 0x01, _message_GSA, "enable NMEA GSA", 500);
+            SEND_UBX_PACKET(0x06, 0x01, _message_GSV, "disable NMEA GSV", 500);
+            SEND_UBX_PACKET(0x06, 0x01, _message_VTG, "disable NMEA VTG", 500);
+            SEND_UBX_PACKET(0x06, 0x01, _message_RMC, "enable NMEA RMC", 500);
+            SEND_UBX_PACKET(0x06, 0x01, _message_GGA, "enable NMEA GGA", 500);
 
             clearBuffer();
-            SEND_UBX_PACKET(0x06, 0x11, _message_CFG_RXM_ECO, "Unable to enable powersaving ECO mode for Neo-6.\n", 500);
-            SEND_UBX_PACKET(0x06, 0x3B, _message_CFG_PM2, "Unable to enable powersaving details for GPS.\n", 500);
-            SEND_UBX_PACKET(0x06, 0x01, _message_AID, "Unable to disable UBX-AID.\n", 500);
+            SEND_UBX_PACKET(0x06, 0x11, _message_CFG_RXM_ECO, "enable powersaving ECO mode for Neo-6", 500);
+            SEND_UBX_PACKET(0x06, 0x3B, _message_CFG_PM2, "enable powersaving details for GPS", 500);
+            SEND_UBX_PACKET(0x06, 0x01, _message_AID, "disable UBX-AID", 500);
 
             msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
             _serial_gps->write(UBXscratch, msglen);
@@ -567,7 +567,7 @@ bool GPS::setup()
 
             if (getACK(0x06, 0x3e, 800) == GNSS_RESPONSE_NAK) {
                 // It's not critical if the module doesn't acknowledge this configuration.
-                LOG_INFO("Unable to reconfigure GNSS - defaults maintained. Is this module GPS-only?\n");
+                LOG_INFO("reconfigure GNSS - defaults maintained. Is this module GPS-only?\n");
             } else {
                 if (gnssModel == GNSS_MODEL_UBLOX7) {
                     LOG_INFO("GNSS configured for GPS+SBAS.\n");
@@ -581,40 +581,40 @@ bool GPS::setup()
 
             // Disable Text Info messages //6,7,8,9
             clearBuffer();
-            SEND_UBX_PACKET(0x06, 0x02, _message_DISABLE_TXT_INFO, "Unable to disable text info messages.\n", 500);
+            SEND_UBX_PACKET(0x06, 0x02, _message_DISABLE_TXT_INFO, "disable text info messages", 500);
 
             if (gnssModel == GNSS_MODEL_UBLOX8) { // 8
                 clearBuffer();
-                SEND_UBX_PACKET(0x06, 0x39, _message_JAM_8, "Unable to enable interference resistance.\n", 500);
+                SEND_UBX_PACKET(0x06, 0x39, _message_JAM_8, "enable interference resistance", 500);
 
                 clearBuffer();
-                SEND_UBX_PACKET(0x06, 0x23, _message_NAVX5_8, "Unable to configure NAVX5_8 settings.\n", 500);
+                SEND_UBX_PACKET(0x06, 0x23, _message_NAVX5_8, "configure NAVX5_8 settings", 500);
             } else { // 6,7,9
-                SEND_UBX_PACKET(0x06, 0x39, _message_JAM_6_7, "Unable to enable interference resistance.\n", 500);
-                SEND_UBX_PACKET(0x06, 0x23, _message_NAVX5, "Unable to configure NAVX5 settings.\n", 500);
+                SEND_UBX_PACKET(0x06, 0x39, _message_JAM_6_7, "enable interference resistance", 500);
+                SEND_UBX_PACKET(0x06, 0x23, _message_NAVX5, "configure NAVX5 settings", 500);
             }
             // Turn off unwanted NMEA messages, set update rate
-            SEND_UBX_PACKET(0x06, 0x08, _message_1HZ, "Unable to set GPS update rate.\n", 500);
-            SEND_UBX_PACKET(0x06, 0x01, _message_GLL, "Unable to disable NMEA GLL.\n", 500);
-            SEND_UBX_PACKET(0x06, 0x01, _message_GSA, "Unable to Enable NMEA GSA.\n", 500);
-            SEND_UBX_PACKET(0x06, 0x01, _message_GSV, "Unable to disable NMEA GSV.\n", 500);
-            SEND_UBX_PACKET(0x06, 0x01, _message_VTG, "Unable to disable NMEA VTG.\n", 500);
-            SEND_UBX_PACKET(0x06, 0x01, _message_RMC, "Unable to enable NMEA RMC.\n", 500);
-            SEND_UBX_PACKET(0x06, 0x01, _message_GGA, "Unable to enable NMEA GGA.\n", 500);
+            SEND_UBX_PACKET(0x06, 0x08, _message_1HZ, "set GPS update rate", 500);
+            SEND_UBX_PACKET(0x06, 0x01, _message_GLL, "disable NMEA GLL", 500);
+            SEND_UBX_PACKET(0x06, 0x01, _message_GSA, "enable NMEA GSA", 500);
+            SEND_UBX_PACKET(0x06, 0x01, _message_GSV, "disable NMEA GSV", 500);
+            SEND_UBX_PACKET(0x06, 0x01, _message_VTG, "disable NMEA VTG", 500);
+            SEND_UBX_PACKET(0x06, 0x01, _message_RMC, "enable NMEA RMC", 500);
+            SEND_UBX_PACKET(0x06, 0x01, _message_GGA, "enable NMEA GGA", 500);
 
             if (uBloxProtocolVersion >= 18) {
                 clearBuffer();
-                SEND_UBX_PACKET(0x06, 0x86, _message_PMS, "Unable to enable powersaving for GPS.\n", 500);
-                SEND_UBX_PACKET(0x06, 0x3B, _message_CFG_PM2, "Unable to enable powersaving details for GPS.\n", 500);
+                SEND_UBX_PACKET(0x06, 0x86, _message_PMS, "enable powersaving for GPS", 500);
+                SEND_UBX_PACKET(0x06, 0x3B, _message_CFG_PM2, "enable powersaving details for GPS", 500);
 
                 // For M8 we want to enable NMEA vserion 4.10 so we can see the additional sats.
                 if (gnssModel == GNSS_MODEL_UBLOX8) {
                     clearBuffer();
-                    SEND_UBX_PACKET(0x06, 0x17, _message_NMEA, "Unable to enable NMEA 4.10.\n", 500);
+                    SEND_UBX_PACKET(0x06, 0x17, _message_NMEA, "enable NMEA 4.10", 500);
                 }
             } else {
-                SEND_UBX_PACKET(0x06, 0x11, _message_CFG_RXM_PSM, "Unable to enable powersaving mode for GPS.\n", 500);
-                SEND_UBX_PACKET(0x06, 0x3B, _message_CFG_PM2, "Unable to enable powersaving details for GPS.\n", 500);
+                SEND_UBX_PACKET(0x06, 0x11, _message_CFG_RXM_PSM, "enable powersaving mode for GPS", 500);
+                SEND_UBX_PACKET(0x06, 0x3B, _message_CFG_PM2, "enable powersaving details for GPS", 500);
             }
 
             msglen = makeUBXPacket(0x06, 0x09, sizeof(_message_SAVE), _message_SAVE);
@@ -627,40 +627,38 @@ bool GPS::setup()
         } else if (gnssModel == GNSS_MODEL_UBLOX10) {
             delay(1000);
             clearBuffer();
-            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_NMEA_RAM, "Unable to disable NMEA messages in M10 RAM.\n", 300);
+            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_NMEA_RAM, "disable NMEA messages in M10 RAM", 300);
             delay(750);
             clearBuffer();
-            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_NMEA_BBR, "Unable to disable NMEA messages in M10 BBR.\n", 300);
+            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_NMEA_BBR, "disable NMEA messages in M10 BBR", 300);
             delay(750);
             clearBuffer();
-            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_TXT_INFO_RAM,
-                            "Unable to disable Info messages for M10 GPS RAM.\n", 300);
+            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_TXT_INFO_RAM, "disable Info messages for M10 GPS RAM", 300);
             delay(750);
             // Next disable Info txt messages in BBR layer
             clearBuffer();
-            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_TXT_INFO_BBR,
-                            "Unable to disable Info messages for M10 GPS BBR.\n", 300);
+            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_TXT_INFO_BBR, "disable Info messages for M10 GPS BBR", 300);
             delay(750);
             // Do M10 configuration for Power Management.
-            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_PM_RAM, "Unable to enable powersaving for M10 GPS RAM.\n", 300);
+            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_PM_RAM, "enable powersaving for M10 GPS RAM", 300);
             delay(750);
-            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_PM_BBR, "Unable to enable powersaving for M10 GPS BBR.\n", 300);
+            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_PM_BBR, "enable powersaving for M10 GPS BBR", 300);
             delay(750);
-            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_ITFM_RAM, "Unable to enable Jamming detection M10 GPS RAM.\n", 300);
+            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_ITFM_RAM, "enable Jamming detection M10 GPS RAM", 300);
             delay(750);
-            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_ITFM_BBR, "Unable to enable Jamming detection M10 GPS BBR.\n", 300);
+            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_ITFM_BBR, "enable Jamming detection M10 GPS BBR", 300);
             delay(750);
             // Here is where the init commands should go to do further M10 initialization.
-            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_SBAS_RAM, "Unable to disable SBAS M10 GPS RAM.\n", 300);
+            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_SBAS_RAM, "disable SBAS M10 GPS RAM", 300);
             delay(750); // will cause a receiver restart so wait a bit
-            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_SBAS_BBR, "Unable to disable SBAS M10 GPS BBR.\n", 300);
+            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_SBAS_BBR, "disable SBAS M10 GPS BBR", 300);
             delay(750); // will cause a receiver restart so wait a bit
 
             // Done with initialization, Now enable wanted NMEA messages in BBR layer so they will survive a periodic sleep.
-            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_ENABLE_NMEA_BBR, "Unable to enable messages for M10 GPS BBR.\n", 300);
+            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_ENABLE_NMEA_BBR, "enable messages for M10 GPS BBR", 300);
             delay(750);
             // Next enable wanted NMEA messages in RAM layer
-            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_ENABLE_NMEA_RAM, "Unable to enable messages for M10 GPS RAM.\n", 500);
+            SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_ENABLE_NMEA_RAM, "enable messages for M10 GPS RAM", 500);
             delay(750);
 
             // As the M10 has no flash, the best we can do to preserve the config is to set it in RAM and BBR.
@@ -1073,12 +1071,15 @@ int GPS::prepareDeepSleep(void *unused)
     return 0;
 }
 
+const char *PROBE_MESSAGE = "Trying %s (%s)...\n";
+const char *DETECTED_MESSAGE = "%s detected, using %s Module\n";
+
 #define PROBE_SIMPLE(CHIP, TOWRITE, RESPONSE, DRIVER, TIMEOUT, ...)                                                              \
-    LOG_DEBUG("Trying " TOWRITE " (" CHIP ") ...\n");                                                                            \
+    LOG_DEBUG(PROBE_MESSAGE, TOWRITE, CHIP);                                                                                     \
     clearBuffer();                                                                                                               \
     _serial_gps->write(TOWRITE "\r\n");                                                                                          \
     if (getACK(RESPONSE, TIMEOUT) == GNSS_RESPONSE_OK) {                                                                         \
-        LOG_INFO(CHIP " detected, using " #DRIVER " Module\n");                                                                  \
+        LOG_INFO(DETECTED_MESSAGE, CHIP, #DRIVER);                                                                               \
         return DRIVER;                                                                                                           \
     }
 
@@ -1367,21 +1368,21 @@ bool GPS::factoryReset()
                                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x1C, 0xA2};
         _serial_gps->write(_message_reset1, sizeof(_message_reset1));
         if (getACK(0x05, 0x01, 10000)) {
-            LOG_INFO("Get ack success!\n");
+            LOG_INFO(ACK_SUCCESS_MESSAGE);
         }
         delay(100);
         byte _message_reset2[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00,
                                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x1B, 0xA1};
         _serial_gps->write(_message_reset2, sizeof(_message_reset2));
         if (getACK(0x05, 0x01, 10000)) {
-            LOG_INFO("Get ack success!\n");
+            LOG_INFO(ACK_SUCCESS_MESSAGE);
         }
         delay(100);
         byte _message_reset3[] = {0xB5, 0x62, 0x06, 0x09, 0x0D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                                   0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x03, 0x1D, 0xB3};
         _serial_gps->write(_message_reset3, sizeof(_message_reset3));
         if (getACK(0x05, 0x01, 10000)) {
-            LOG_INFO("Get ack success!\n");
+            LOG_INFO(ACK_SUCCESS_MESSAGE);
         }
         // Reset device ram to COLDSTART state
         // byte _message_CFG_RST_COLDSTART[] = {0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0xFF, 0xB9, 0x00, 0x00, 0xC6, 0x8B};
