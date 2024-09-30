@@ -36,7 +36,7 @@ jobs:
       - id: jsonStep
         run: |
           if [[ "${{ github.head_ref }}" == "" ]]; then
-            TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}})
+            TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} quick quick2)
           else  
             TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} quick)
           fi
@@ -158,7 +158,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [esp32, esp32s3, esp32c3, esp32c6, nrf52840, rp2040, stm32, check]
+        arch: [esp32, esp32s3, esp32c3, esp32c6, nrf52840, rp2040, stm32]
     runs-on: ubuntu-latest
     needs: [
         build-esp32,
@@ -193,7 +193,7 @@ jobs:
         id: version
 
       - name: Move files up
-        run: mv -b -t ./ ./release/meshtasticd_linux_* ./bin/config-dist.yaml ./bin/device-*.sh ./bin/device-*.bat
+        run: mv -b -t ./ ./bin/device-*.sh ./bin/device-*.bat
 
       - name: Repackage in single firmware zip
         uses: actions/upload-artifact@v4
@@ -207,8 +207,6 @@ jobs:
             ./firmware-*-ota.zip
             ./device-*.sh
             ./device-*.bat
-            ./meshtasticd_linux_*
-            ./config-dist.yaml
             ./littlefs-*.bin
             ./bleota*bin
             ./Meshtastic_nRF52_factory_erase*.uf2
