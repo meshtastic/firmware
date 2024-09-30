@@ -46,6 +46,20 @@ typedef struct {
 } PacketHeader;
 
 /**
+ * This structure represent the structured buffer : a PacketHeader then the payload. The whole is
+ * MAX_LORA_PAYLOAD_LEN + 1 length
+ * It makes the use of its data easier, and avoids manipulating pointers (and potential non aligned accesses)
+ */
+typedef struct {
+    /** The header, as defined just before */
+    PacketHeader header;
+
+    /** The payload, of maximum length minus the header, aligned just to be sure */
+    uint8_t payload[MAX_LORA_PAYLOAD_LEN + 1 - sizeof(PacketHeader)] __attribute__ ((__aligned__));
+
+} RadioBuffer;
+
+/**
  * Basic operations all radio chipsets must implement.
  *
  * This defines the SOLE API for talking to radios (because soon we will have alternate radio implementations)
@@ -91,8 +105,7 @@ class RadioInterface
     /**
      * A temporary buffer used for sending/receiving packets, sized to hold the biggest buffer we might need
      * */
-    uint8_t radiobuf[MAX_LORA_PAYLOAD_LEN + 1];
-
+    RadioBuffer radioBuffer __attribute__ ((__aligned__));
     /**
      * Enqueue a received packet for the registered receiver
      */
