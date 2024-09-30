@@ -31,6 +31,10 @@ inputs:
     description: Include the web UI in the build
     required: false
     default: "false"
+  arch:
+    description: Processor arch name
+    required: true
+    default: "esp32"
 
 runs:
   using: composite
@@ -88,3 +92,6 @@ runs:
         overwrite: true
         path: |
           ${{ inputs.artifact-paths }}
+
+    - name: Log release filename to processor specific file
+      run: echo "firmware-${{ inputs.board }}-${{ steps.version.outputs.version }}.zip" >> ${{ inputs.arch }}.txt
