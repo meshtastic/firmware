@@ -387,7 +387,7 @@ void RadioLibInterface::handleReceiveInterrupt()
     }
 #endif
 
-    int state = iface->readData((uint8_t*)&radioBuffer, length);
+    int state = iface->readData((uint8_t *)&radioBuffer, length);
     if (state != RADIOLIB_ERR_NONE) {
         LOG_ERROR("ignoring received packet due to error=%d\n", state);
         rxBad++;
@@ -473,7 +473,7 @@ void RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 
         size_t numbytes = beginSending(txp);
 
-        int res = iface->startTransmit((uint8_t*)&radioBuffer, numbytes);
+        int res = iface->startTransmit((uint8_t *)&radioBuffer, numbytes);
         if (res != RADIOLIB_ERR_NONE) {
             LOG_ERROR("startTransmit failed, error=%d\n", res);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_RADIO_SPI_BUG);
