@@ -1,3 +1,4 @@
+#if RADIOLIB_EXCLUDE_LR11X0 != 1
 #include "LR1121Interface.h"
 #include "configuration.h"
 #include "error.h"
@@ -12,3 +13,4 @@ bool LR1121Interface::wideLora()
 {
     return true;
 }
+#endif

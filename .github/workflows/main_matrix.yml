@@ -235,7 +235,7 @@ jobs:
           path: ./*.elf
           retention-days: 30
 
-      - uses: PicoCentauri/comment-artifact@main
+      - uses: scruplelesswizard/comment-artifact@main
         with:
           name: firmware-${{ steps.version.outputs.version }}
           description: "Download firmware-${{ steps.version.outputs.version }}.zip. This artifact will be available for 90 days from creation"
