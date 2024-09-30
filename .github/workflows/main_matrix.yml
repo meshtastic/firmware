@@ -155,6 +155,10 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [esp32, esp32s3, esp32c3, esp32c6, nrf52840, rp2040, stm32, check]
     runs-on: ubuntu-latest
     needs: [
         build-esp32,
@@ -178,6 +182,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: ./
+          pattern: firmware-${{matrix.arch}}-*
           merge-multiple: true
 
       - name: Display structure of downloaded files
@@ -193,7 +198,7 @@ jobs:
       - name: Repackage in single firmware zip
         uses: actions/upload-artifact@v4
         with:
-          name: firmware-${{ steps.version.outputs.version }}
+          name: firmware-${{matrix.arch}}-${{ steps.version.outputs.version }}
           overwrite: true
           path: |
             ./firmware-*.bin
@@ -211,7 +216,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: firmware-${{ steps.version.outputs.version }}
+          name: firmware-${{matrix.arch}}-${{ steps.version.outputs.version }}
           merge-multiple: true
           path: ./output
 
@@ -225,20 +230,20 @@ jobs:
           chmod +x ./output/device-update.sh
 
       - name: Zip firmware
-        run: zip -j -9 -r ./firmware-${{ steps.version.outputs.version }}.zip ./output
+        run: zip -j -9 -r ./firmware-${{matrix.arch}}-${{ steps.version.outputs.version }}.zip ./output
 
       - name: Repackage in single elfs zip
         uses: actions/upload-artifact@v4
         with:
-          name: debug-elfs-${{ steps.version.outputs.version }}.zip
+          name: debug-elfs-${{matrix.arch}}-${{ steps.version.outputs.version }}.zip
           overwrite: true
           path: ./*.elf
           retention-days: 30
 
       - uses: scruplelesswizard/comment-artifact@main
         with:
-          name: firmware-${{ steps.version.outputs.version }}
-          description: "Download firmware-${{ steps.version.outputs.version }}.zip. This artifact will be available for 90 days from creation"
+          name: firmware-${{matrix.arch}}-${{ steps.version.outputs.version }}
+          description: "Download firmware-${{matrix.arch}}-${{ steps.version.outputs.version }}.zip. This artifact will be available for 90 days from creation"
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
   release-artifacts:
@@ -260,7 +265,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: firmware-${{ steps.version.outputs.version }}
+          pattern: firmware-*
           merge-multiple: true
           path: ./output
 
