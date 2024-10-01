@@ -34,7 +34,7 @@ inputs:
   arch:
     description: Processor arch name
     required: true
-    default: "esp32"
+    default: esp32
 
 runs:
   using: composite

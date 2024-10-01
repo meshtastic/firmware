@@ -279,8 +279,6 @@ jobs:
         package-raspbian-armv7l,
         #package-native,
       ]
-
-    needs: [gather-artifacts]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
