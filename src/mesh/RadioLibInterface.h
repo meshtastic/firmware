@@ -196,4 +196,6 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * Subclasses must override, implement and then call into this base class implementation
      */
     virtual void setStandby();
+
+    const char *radioLibErr = "RadioLib err=\n";
 };
