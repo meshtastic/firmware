@@ -101,7 +101,7 @@ void TraceRouteModule::appendMyIDandSNR(meshtastic_RouteDiscovery *updated, floa
         route[*route_count] = myNodeInfo.my_node_num;
         *route_count += 1;
     } else {
-        LOG_WARN("Route exceeded maximum hop limit, are you bridging networks?\n");
+        LOG_WARN("Route exceeded maximum hop limit!\n"); // Are you bridging networks?
     }
 }
 
