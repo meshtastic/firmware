@@ -132,39 +132,31 @@ NodeDB::NodeDB()
         config.security.serial_enabled = config.device.serial_enabled;
         config.security.is_managed = config.device.is_managed;
     }
-#if !(MESHTASTIC_EXCLUDE_PKI)
+
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    bool keygenSuccess = false;
+    if (config.security.private_key.size == 32) {
+        if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
+            keygenSuccess = true;
+        }
+    } else {
+        LOG_INFO("Generating new PKI keys\n");
+        crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
+        keygenSuccess = true;
+    }
+    if (keygenSuccess) {
+        config.security.public_key.size = 32;
+        config.security.private_key.size = 32;
+        owner.public_key.size = 32;
+        memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
+    }
+#elif !(MESHTASTIC_EXCLUDE_PKI)
     // Calculate Curve25519 public and private keys
-    printBytes("Old Pubkey", config.security.public_key.bytes, 32);
     if (config.security.private_key.size == 32 && config.security.public_key.size == 32) {
-        LOG_INFO("Using saved PKI keys\n");
         owner.public_key.size = config.security.public_key.size;
         memcpy(owner.public_key.bytes, config.security.public_key.bytes, config.security.public_key.size);
         crypto->setDHPrivateKey(config.security.private_key.bytes);
-    } else {
-#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
-        bool keygenSuccess = false;
-        if (config.security.private_key.size == 32) {
-            LOG_INFO("Calculating PKI Public Key\n");
-            if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-                keygenSuccess = true;
-            }
-        } else {
-            LOG_INFO("Generating new PKI keys\n");
-            crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-            keygenSuccess = true;
-        }
-        if (keygenSuccess) {
-            config.security.public_key.size = 32;
-            config.security.private_key.size = 32;
-            printBytes("New Pubkey", config.security.public_key.bytes, 32);
-            owner.public_key.size = 32;
-            memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
-        }
-#else
-        LOG_INFO("No PKI keys set, and generation disabled!\n");
-#endif
     }
-
 #endif
 
     info->user = TypeConversions::ConvertToUserLite(owner);

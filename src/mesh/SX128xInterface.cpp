@@ -1,3 +1,4 @@
+#if RADIOLIB_EXCLUDE_SX128X != 1
 #include "SX128xInterface.h"
 #include "Throttle.h"
 #include "configuration.h"
@@ -314,3 +315,4 @@ template <typename T> bool SX128xInterface<T>::sleep()
 
     return true;
 }
+#endif

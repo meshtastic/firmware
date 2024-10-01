@@ -25,3 +25,4 @@ jobs:
             release/*.uf2
             release/*.elf
             release/*.zip
+          arch: nrf52840
