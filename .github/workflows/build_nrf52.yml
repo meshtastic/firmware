@@ -13,6 +13,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Build base
+        id: base
+        uses: ./.github/actions/setup-base
+        with:
+          USER_PREFS: ${{ secrets.USER_PREFS }}
+
       - name: Build NRF52
         id: build
         uses: ./.github/actions/build-variant

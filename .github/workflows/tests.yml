@@ -23,7 +23,7 @@ jobs:
       - name: Upgrade python tools
         shell: bash
         run: |
-          python -m pip install --upgrade pip
+          python3 -m pip install --upgrade pip
           pip install -U platformio adafruit-nrfutil
           pip install -U meshtastic --pre
 
@@ -76,10 +76,10 @@ jobs:
 
       - name: Install PlatformIO from script
         shell: bash
-        run: |
+        run: |    
           curl -fsSL -o get-platformio.py https://raw.githubusercontent.com/platformio/platformio-core-installer/master/get-platformio.py
           python3 get-platformio.py
-
+      
       - name: Upgrade platformio
         shell: bash
         run: |
