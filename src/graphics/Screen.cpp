@@ -48,6 +48,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "modules/AdminModule.h"
 #include "modules/ExternalNotificationModule.h"
 #include "modules/TextMessageModule.h"
+#include "modules/WaypointModule.h"
 #include "sleep.h"
 #include "target_specific.h"
 
@@ -57,10 +58,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #ifdef ARCH_ESP32
 #include "esp_task_wdt.h"
-#include "modules/esp32/StoreForwardModule.h"
+#include "modules/StoreForwardModule.h"
 #endif
 
 #if ARCH_PORTDUINO
+#include "modules/StoreForwardModule.h"
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
@@ -1006,55 +1008,55 @@ static void drawTextMessageFrame(OLEDDisplay *display, OLEDDisplayUiState *state
 
     display->setColor(WHITE);
 #ifndef EXCLUDE_EMOJI
-    if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\U0001F44D") == 0) {
+    if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F44D") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - thumbs_width) / 2,
                          y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - thumbs_height) / 2 + 2 + 5, thumbs_width, thumbs_height,
                          thumbup);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\U0001F44E") == 0) {
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F44E") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - thumbs_width) / 2,
                          y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - thumbs_height) / 2 + 2 + 5, thumbs_width, thumbs_height,
                          thumbdown);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"❓") == 0) {
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "❓") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - question_width) / 2,
                          y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - question_height) / 2 + 2 + 5, question_width, question_height,
                          question);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"‼️") == 0) {
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "‼️") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - bang_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - bang_height) / 2 + 2 + 5,
                          bang_width, bang_height, bang);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\U0001F4A9") == 0) {
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F4A9") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - poo_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - poo_height) / 2 + 2 + 5,
                          poo_width, poo_height, poo);
     } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\xf0\x9f\xa4\xa3") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - haha_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - haha_height) / 2 + 2 + 5,
                          haha_width, haha_height, haha);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\U0001F44B") == 0) {
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F44B") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - wave_icon_width) / 2,
                          y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - wave_icon_height) / 2 + 2 + 5, wave_icon_width,
                          wave_icon_height, wave_icon);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\U0001F920") == 0) {
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F920") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - cowboy_width) / 2,
                          y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - cowboy_height) / 2 + 2 + 5, cowboy_width, cowboy_height,
                          cowboy);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\U0001F42D") == 0) {
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\U0001F42D") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - deadmau5_width) / 2,
                          y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - deadmau5_height) / 2 + 2 + 5, deadmau5_width, deadmau5_height,
                          deadmau5);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\xE2\x98\x80\xEF\xB8\x8F") == 0) {
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\xE2\x98\x80\xEF\xB8\x8F") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - sun_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - sun_height) / 2 + 2 + 5,
                          sun_width, sun_height, sun);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\u2614") == 0) {
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\u2614") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - rain_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - rain_height) / 2 + 2 + 10,
                          rain_width, rain_height, rain);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"☁️") == 0) {
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "☁️") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - cloud_width) / 2,
                          y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - cloud_height) / 2 + 2 + 5, cloud_width, cloud_height, cloud);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"🌫️") == 0) {
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "🌫️") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - fog_width) / 2, y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - fog_height) / 2 + 2 + 5,
                          fog_width, fog_height, fog);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"\xf0\x9f\x98\x88") == 0) {
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "\xf0\x9f\x98\x88") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - devil_width) / 2,
                          y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - devil_height) / 2 + 2 + 5, devil_width, devil_height, devil);
-    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), u8"♥️") == 0) {
+    } else if (strcmp(reinterpret_cast<const char *>(mp.decoded.payload.bytes), "♥️") == 0) {
         display->drawXbm(x + (SCREEN_WIDTH - heart_width) / 2,
                          y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - heart_height) / 2 + 2 + 5, heart_width, heart_height, heart);
     } else {
@@ -1882,13 +1884,7 @@ int32_t Screen::runOnce()
             handleSetOn(false);
             break;
         case Cmd::ON_PRESS:
-            // If a nag notification is running, stop it
-            if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) {
-                externalNotificationModule->stopNow();
-            } else {
-                // Don't advance the screen if we just wanted to switch off the nag notification
-                handleOnPress();
-            }
+            handleOnPress();
             break;
         case Cmd::SHOW_PREV_FRAME:
             handleShowPrevFrame();
@@ -2112,8 +2108,13 @@ void Screen::setFrames(FrameFocus focus)
         // Check if the module being drawn has requested focus
         // We will honor this request later, if setFrames was triggered by a UIFrameEvent
         MeshModule *m = *i;
-        if (m->isRequestingFocus())
+        if (m->isRequestingFocus()) {
             fsi.positions.focusedModule = numframes;
+        }
+
+        // Identify the position of specific modules, if we need to know this later
+        if (m == waypointModule)
+            fsi.positions.waypoint = numframes;
 
         numframes++;
     }
@@ -2132,8 +2133,8 @@ void Screen::setFrames(FrameFocus focus)
 #endif
 
     // If we have a text message - show it next, unless it's a phone message and we aren't using any special modules
-    fsi.positions.textMessage = numframes;
     if (devicestate.has_rx_text_message && shouldDrawMessage(&devicestate.rx_text_message)) {
+        fsi.positions.textMessage = numframes;
         normalFrames[numframes++] = drawTextMessageFrame;
     }
 
@@ -2195,7 +2196,7 @@ void Screen::setFrames(FrameFocus focus)
 
     case FOCUS_PRESERVE:
         // If we can identify which type of frame "originalPosition" was, can move directly to it in the new frameset
-        FramesetInfo &oldFsi = this->framesetInfo;
+        const FramesetInfo &oldFsi = this->framesetInfo;
         if (originalPosition == oldFsi.positions.log)
             ui->switchToFrame(fsi.positions.log);
         else if (originalPosition == oldFsi.positions.settings)
@@ -2233,6 +2234,31 @@ void Screen::setFrameImmediateDraw(FrameCallback *drawFrames)
     ui->disableAllIndicators();
     ui->setFrames(drawFrames, 1);
     setFastFramerate();
+}
+
+// Dismisses the currently displayed screen frame, if possible
+// Relevant for text message, waypoint, others in future?
+// Triggered with a CardKB keycombo
+void Screen::dismissCurrentFrame()
+{
+    uint8_t currentFrame = ui->getUiState()->currentFrame;
+    bool dismissed = false;
+
+    if (currentFrame == framesetInfo.positions.textMessage && devicestate.has_rx_text_message) {
+        LOG_INFO("Dismissing Text Message\n");
+        devicestate.has_rx_text_message = false;
+        dismissed = true;
+    }
+
+    else if (currentFrame == framesetInfo.positions.waypoint && devicestate.has_rx_waypoint) {
+        LOG_DEBUG("Dismissing Waypoint\n");
+        devicestate.has_rx_waypoint = false;
+        dismissed = true;
+    }
+
+    // If we did make changes to dismiss, we now need to regenerate the frameset
+    if (dismissed)
+        setFrames();
 }
 
 void Screen::handleStartFirmwareUpdateScreen()
@@ -2747,12 +2773,23 @@ int Screen::handleInputEvent(const InputEvent *event)
     }
 #endif
 
-    if (showingNormalScreen && moduleFrames.size() == 0) {
-        // LOG_DEBUG("Screen::handleInputEvent from %s\n", event->source);
-        if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
-            showPrevFrame();
-        } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
-            showNextFrame();
+    // Use left or right input from a keyboard to move between frames,
+    // so long as a mesh module isn't using these events for some other purpose
+    if (showingNormalScreen) {
+
+        // Ask any MeshModules if they're handling keyboard input right now
+        bool inputIntercepted = false;
+        for (MeshModule *module : moduleFrames) {
+            if (module->interceptingKeyboardInput())
+                inputIntercepted = true;
+        }
+
+        // If no modules are using the input, move between frames
+        if (!inputIntercepted) {
+            if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT))
+                showPrevFrame();
+            else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT))
+                showNextFrame();
         }
     }
 

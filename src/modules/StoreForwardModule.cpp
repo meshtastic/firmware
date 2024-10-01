@@ -30,12 +30,9 @@
 
 StoreForwardModule *storeForwardModule;
 
-uint32_t lastHeartbeat = 0;
-uint32_t heartbeatInterval = 60; // Default to 60 seconds, adjust as needed
-
 int32_t StoreForwardModule::runOnce()
 {
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
     if (moduleConfig.store_forward.enabled && is_server) {
         // Send out the message queue.
         if (this->busy) {
@@ -82,8 +79,12 @@ void StoreForwardModule::populatePSRAM()
     uint32_t numberOfPackets =
         (this->records ? this->records : (((memGet.getFreePsram() / 3) * 2) / sizeof(PacketHistoryStruct)));
     this->records = numberOfPackets;
-
+#if defined(ARCH_ESP32)
     this->packetHistory = static_cast<PacketHistoryStruct *>(ps_calloc(numberOfPackets, sizeof(PacketHistoryStruct)));
+#elif defined(ARCH_PORTDUINO)
+    this->packetHistory = static_cast<PacketHistoryStruct *>(calloc(numberOfPackets, sizeof(PacketHistoryStruct)));
+
+#endif
 
     LOG_DEBUG("*** After PSRAM initialization: heap %d/%d PSRAM %d/%d\n", memGet.getFreeHeap(), memGet.getHeapSize(),
               memGet.getFreePsram(), memGet.getPsramSize());
@@ -376,7 +377,7 @@ void StoreForwardModule::statsSend(uint32_t to)
  */
 ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
     if (moduleConfig.store_forward.enabled) {
 
         if ((mp.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) && is_server) {
@@ -559,7 +560,7 @@ StoreForwardModule::StoreForwardModule()
       ProtobufModule("StoreForward", meshtastic_PortNum_STORE_FORWARD_APP, &meshtastic_StoreAndForward_msg)
 {
 
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
 
     isPromiscuous = true; // Brown chicken brown cow
 

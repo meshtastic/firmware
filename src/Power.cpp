@@ -77,6 +77,15 @@ INA219Sensor ina219Sensor;
 INA3221Sensor ina3221Sensor;
 #endif
 
+#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+#include "modules/Telemetry/Sensor/MAX17048Sensor.h"
+#include <utility>
+extern std::pair<uint8_t, TwoWire *> nodeTelemetrySensorsMap[_meshtastic_TelemetrySensorType_MAX + 1];
+#if HAS_TELEMETRY && (!MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR || !MESHTASTIC_EXCLUDE_POWER_TELEMETRY)
+MAX17048Sensor max17048Sensor;
+#endif
+#endif
+
 #if HAS_RAKPROT && !defined(ARCH_PORTDUINO)
 RAK9154Sensor rak9154Sensor;
 #endif
@@ -138,6 +147,8 @@ using namespace meshtastic;
  */
 static HasBatteryLevel *batteryLevel; // Default to NULL for no battery level sensor
 
+#ifdef BATTERY_PIN
+
 static void adcEnable()
 {
 #ifdef ADC_CTRL // enable adc voltage divider when we need to read
@@ -162,11 +173,14 @@ static void adcDisable()
 #endif
 }
 
+#endif
+
 /**
  * A simple battery level sensor that assumes the battery voltage is attached via a voltage-divider to an analog input
  */
 class AnalogBatteryLevel : public HasBatteryLevel
 {
+  public:
     /**
      * Battery state of charge, from 0 to 100 or -1 for unknown
      */
@@ -553,7 +567,12 @@ bool Power::analogInit()
  */
 bool Power::setup()
 {
-    bool found = axpChipInit() || analogInit();
+    // initialise one power sensor (only)
+    bool found = axpChipInit();
+    if (!found)
+        found = lipoInit();
+    if (!found)
+        found = analogInit();
 
 #ifdef NRF_APM
     found = true;
@@ -1045,3 +1064,81 @@ bool Power::axpChipInit()
     return false;
 #endif
 }
+
+#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
+
+/**
+ * Wrapper class for an I2C MAX17048 Lipo battery sensor.
+ */
+class LipoBatteryLevel : public HasBatteryLevel
+{
+  private:
+    MAX17048Singleton *max17048 = nullptr;
+
+  public:
+    /**
+     * Init the I2C MAX17048 Lipo battery level sensor
+     */
+    bool runOnce()
+    {
+        if (max17048 == nullptr) {
+            max17048 = MAX17048Singleton::GetInstance();
+        }
+
+        // try to start if the sensor has been detected
+        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MAX17048].first != 0) {
+            return max17048->runOnce(nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MAX17048].second);
+        }
+        return false;
+    }
+
+    /**
+     * Battery state of charge, from 0 to 100 or -1 for unknown
+     */
+    virtual int getBatteryPercent() override { return max17048->getBusBatteryPercent(); }
+
+    /**
+     * The raw voltage of the battery in millivolts, or NAN if unknown
+     */
+    virtual uint16_t getBattVoltage() override { return max17048->getBusVoltageMv(); }
+
+    /**
+     * return true if there is a battery installed in this unit
+     */
+    virtual bool isBatteryConnect() override { return max17048->isBatteryConnected(); }
+
+    /**
+     * return true if there is an external power source detected
+     */
+    virtual bool isVbusIn() override { return max17048->isExternallyPowered(); }
+
+    /**
+     * return true if the battery is currently charging
+     */
+    virtual bool isCharging() override { return max17048->isBatteryCharging(); }
+};
+
+LipoBatteryLevel lipoLevel;
+
+/**
+ * Init the Lipo battery level sensor
+ */
+bool Power::lipoInit()
+{
+    bool result = lipoLevel.runOnce();
+    LOG_DEBUG("Power::lipoInit lipo sensor is %s\n", result ? "ready" : "not ready yet");
+    if (!result)
+        return false;
+    batteryLevel = &lipoLevel;
+    return true;
+}
+
+#else
+/**
+ * The Lipo battery level sensor is unavailable - default to AnalogBatteryLevel
+ */
+bool Power::lipoInit()
+{
+    return false;
+}
+#endif

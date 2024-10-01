@@ -1,3 +1,4 @@
+#if RADIOLIB_EXCLUDE_SX126X != 1
 #include "SX126xInterface.h"
 #include "configuration.h"
 #include "error.h"
@@ -52,6 +53,10 @@ template <typename T> bool SX126xInterface<T>::init()
     float tcxoVoltage = 0;
     if (settingsMap[dio3_tcxo_voltage])
         tcxoVoltage = 1.8;
+    if (settingsMap[sx126x_ant_sw] != RADIOLIB_NC) {
+        digitalWrite(settingsMap[sx126x_ant_sw], HIGH);
+        pinMode(settingsMap[sx126x_ant_sw], OUTPUT);
+    }
 // FIXME: correct logic to default to not using TCXO if no voltage is specified for SX126X_DIO3_TCXO_VOLTAGE
 #elif !defined(SX126X_DIO3_TCXO_VOLTAGE)
     float tcxoVoltage =
@@ -99,21 +104,19 @@ template <typename T> bool SX126xInterface<T>::init()
     LOG_DEBUG("Current limit set to %f\n", currentLimit);
     LOG_DEBUG("Current limit set result %d\n", res);
 
-#ifdef SX126X_DIO2_AS_RF_SWITCH
-    LOG_DEBUG("Setting DIO2 as RF switch\n");
-    bool dio2AsRfSwitch = true;
-#elif defined(ARCH_PORTDUINO)
-    bool dio2AsRfSwitch = false;
-    if (settingsMap[dio2_as_rf_switch]) {
-        LOG_DEBUG("Setting DIO2 as RF switch\n");
-        dio2AsRfSwitch = true;
-    }
-#else
-    LOG_DEBUG("Setting DIO2 as not RF switch\n");
-    bool dio2AsRfSwitch = false;
-#endif
     if (res == RADIOLIB_ERR_NONE) {
+#ifdef SX126X_DIO2_AS_RF_SWITCH
+        bool dio2AsRfSwitch = true;
+#elif defined(ARCH_PORTDUINO)
+        bool dio2AsRfSwitch = false;
+        if (settingsMap[dio2_as_rf_switch]) {
+            dio2AsRfSwitch = true;
+        }
+#else
+        bool dio2AsRfSwitch = false;
+#endif
         res = lora.setDio2AsRfSwitch(dio2AsRfSwitch);
+        LOG_DEBUG("Set DIO2 as %sRF switch, result: %d\n", dio2AsRfSwitch ? "" : "not ", res);
     }
 
     // If a pin isn't defined, we set it to RADIOLIB_NC, it is safe to always do external RF switching with RADIOLIB_NC as it has
@@ -316,29 +319,7 @@ template <typename T> bool SX126xInterface<T>::isActivelyReceiving()
 {
     // The IRQ status will be cleared when we start our read operation. Check if we've started a header, but haven't yet
     // received and handled the interrupt for reading the packet/handling errors.
-
-    uint16_t irq = lora.getIrqFlags();
-    bool detected = (irq & (RADIOLIB_SX126X_IRQ_HEADER_VALID | RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED));
-    // Handle false detections
-    if (detected) {
-        if (!activeReceiveStart) {
-            activeReceiveStart = millis();
-        } else if (!Throttle::isWithinTimespanMs(activeReceiveStart, 2 * preambleTimeMsec) &&
-                   !(irq & RADIOLIB_SX126X_IRQ_HEADER_VALID)) {
-            // The HEADER_VALID flag should be set by now if it was really a packet, so ignore PREAMBLE_DETECTED flag
-            activeReceiveStart = 0;
-            LOG_DEBUG("Ignore false preamble detection.\n");
-            return false;
-        } else if (!Throttle::isWithinTimespanMs(activeReceiveStart, maxPacketTimeMsec)) {
-            // We should have gotten an RX_DONE IRQ by now if it was really a packet, so ignore HEADER_VALID flag
-            activeReceiveStart = 0;
-            LOG_DEBUG("Ignore false header detection.\n");
-            return false;
-        }
-    }
-
-    // if (detected) LOG_DEBUG("rx detected\n");
-    return detected;
+    return receiveDetected(lora.getIrqFlags(), RADIOLIB_SX126X_IRQ_HEADER_VALID, RADIOLIB_SX126X_IRQ_PREAMBLE_DETECTED);
 }
 
 template <typename T> bool SX126xInterface<T>::sleep()
@@ -362,3 +343,4 @@ template <typename T> bool SX126xInterface<T>::sleep()
 
     return true;
 }
+#endif

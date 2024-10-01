@@ -9,7 +9,9 @@
 #if HAS_WIFI
 #include <WiFiClient.h>
 #if !defined(ARCH_PORTDUINO)
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR < 3
 #include <WiFiClientSecure.h>
+#endif
 #endif
 #endif
 #if HAS_ETHERNET
@@ -33,7 +35,9 @@ class MQTT : private concurrency::OSThread
 #if HAS_WIFI
     WiFiClient mqttClient;
 #if !defined(ARCH_PORTDUINO)
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR < 3
     WiFiClientSecure wifiSecureClient;
+#endif
 #endif
 #endif
 #if HAS_ETHERNET

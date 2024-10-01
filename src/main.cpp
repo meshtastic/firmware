@@ -32,6 +32,7 @@
 #include "graphics/Screen.h"
 #include "main.h"
 #include "mesh/generated/meshtastic/config.pb.h"
+#include "meshUtils.h"
 #include "modules/Modules.h"
 #include "shutdown.h"
 #include "sleep.h"
@@ -71,6 +72,7 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #include "LLCC68Interface.h"
 #include "LR1110Interface.h"
 #include "LR1120Interface.h"
+#include "LR1121Interface.h"
 #include "RF95Interface.h"
 #include "SX1262Interface.h"
 #include "SX1268Interface.h"
@@ -101,8 +103,8 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #include "AmbientLightingThread.h"
 #include "PowerFSMThread.h"
 
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-#include "AccelerometerThread.h"
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
+#include "motion/AccelerometerThread.h"
 AccelerometerThread *accelerometerThread = nullptr;
 #endif
 
@@ -321,15 +323,19 @@ void setup()
 #ifdef BUTTON_PIN
 #ifdef ARCH_ESP32
 
-    // If the button is connected to GPIO 12, don't enable the ability to use
-    // meshtasticAdmin on the device.
-    pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT);
-
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+#ifdef BUTTON_NEED_PULLUP
+    pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT_PULLUP);
+#else
+    pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT); // default to BUTTON_PIN
+#endif
+#else
+    pinMode(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN, INPUT); // default to BUTTON_PIN
 #ifdef BUTTON_NEED_PULLUP
     gpio_pullup_en((gpio_num_t)(config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
     delay(10);
 #endif
-
+#endif
 #endif
 #endif
 
@@ -555,6 +561,7 @@ void setup()
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::INA260, meshtastic_TelemetrySensorType_INA260)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::INA219, meshtastic_TelemetrySensorType_INA219)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::INA3221, meshtastic_TelemetrySensorType_INA3221)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::MAX17048, meshtastic_TelemetrySensorType_MAX17048)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::MCP9808, meshtastic_TelemetrySensorType_MCP9808)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::MCP9808, meshtastic_TelemetrySensorType_MCP9808)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::SHT31, meshtastic_TelemetrySensorType_SHT31)
@@ -573,6 +580,7 @@ void setup()
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::SHT4X, meshtastic_TelemetrySensorType_SHT4X)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::AHT10, meshtastic_TelemetrySensorType_AHT10)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::DFROBOT_LARK, meshtastic_TelemetrySensorType_DFROBOT_LARK)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::ICM20948, meshtastic_TelemetrySensorType_ICM20948)
 
     i2cScanner.reset();
 #endif
@@ -625,9 +633,9 @@ void setup()
 #endif
 
     // only play start melody when role is not tracker or sensor
-    if (config.power.is_power_saving == true && (config.device.role == meshtastic_Config_DeviceConfig_Role_TRACKER ||
-                                                 config.device.role == meshtastic_Config_DeviceConfig_Role_TAK_TRACKER ||
-                                                 config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR))
+    if (config.power.is_power_saving == true &&
+        IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_TRACKER,
+                  meshtastic_Config_DeviceConfig_Role_TAK_TRACKER, meshtastic_Config_DeviceConfig_Role_SENSOR))
         LOG_DEBUG("Tracker/Sensor: Skipping start melody\n");
     else
         playStartMelody();
@@ -646,7 +654,7 @@ void setup()
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
     if (acc_info.type != ScanI2C::DeviceType::NONE) {
         accelerometerThread = new AccelerometerThread(acc_info.type);
     }
@@ -877,8 +885,8 @@ void setup()
     }
 #endif
 
-#if defined(RF95_IRQ)
-    if (!rIf) {
+#if defined(RF95_IRQ) && RADIOLIB_EXCLUDE_SX127X != 1
+    if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         rIf = new RF95Interface(RadioLibHAL, LORA_CS, RF95_IRQ, RF95_RESET, RF95_DIO1);
         if (!rIf->init()) {
             LOG_WARN("Failed to find RF95 radio\n");
@@ -891,8 +899,8 @@ void setup()
     }
 #endif
 
-#if defined(USE_SX1262) && !defined(ARCH_PORTDUINO) && !defined(TCXO_OPTIONAL)
-    if (!rIf) {
+#if defined(USE_SX1262) && !defined(ARCH_PORTDUINO) && !defined(TCXO_OPTIONAL) && RADIOLIB_EXCLUDE_SX126X != 1
+    if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
             LOG_WARN("Failed to find SX1262 radio\n");
@@ -906,7 +914,7 @@ void setup()
 #endif
 
 #if defined(USE_SX1262) && !defined(ARCH_PORTDUINO) && defined(TCXO_OPTIONAL)
-    if (!rIf) {
+    if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         // Try using the specified TCXO voltage
         rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
@@ -922,7 +930,7 @@ void setup()
         }
     }
 
-    if (!rIf) {
+    if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         // If specified TCXO voltage fails, attempt to use DIO3 as a reference instea
         rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
@@ -940,7 +948,7 @@ void setup()
 #endif
 
 #if defined(USE_SX1268)
-    if (!rIf) {
+    if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         rIf = new SX1268Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
             LOG_WARN("Failed to find SX1268 radio\n");
@@ -954,7 +962,7 @@ void setup()
 #endif
 
 #if defined(USE_LLCC68)
-    if (!rIf) {
+    if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         rIf = new LLCC68Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
             LOG_WARN("Failed to find LLCC68 radio\n");
@@ -967,33 +975,49 @@ void setup()
     }
 #endif
 
-#if defined(USE_LR1110)
-    if (!rIf) {
-        rIf = new LR1110Interface(RadioLibHAL, LR1110_SPI_NSS_PIN, LR1110_IRQ_PIN, LR1110_NRESER_PIN, LR1110_BUSY_PIN);
+#if defined(USE_LR1110) && RADIOLIB_EXCLUDE_LR11X0 != 1
+    if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
+        rIf = new LR1110Interface(RadioLibHAL, LR1110_SPI_NSS_PIN, LR1110_IRQ_PIN, LR1110_NRESET_PIN, LR1110_BUSY_PIN);
         if (!rIf->init()) {
             LOG_WARN("Failed to find LR1110 radio\n");
             delete rIf;
             rIf = NULL;
         } else {
             LOG_INFO("LR1110 Radio init succeeded, using LR1110 radio\n");
+            radioType = LR1110_RADIO;
         }
     }
 #endif
 
-#if defined(USE_LR1120)
+#if defined(USE_LR1120) && RADIOLIB_EXCLUDE_LR11X0 != 1
     if (!rIf) {
-        rIf = new LR1120Interface(RadioLibHAL, LR1120_SPI_NSS_PIN, LR1120_IRQ_PIN, LR1120_NRESER_PIN, LR1120_BUSY_PIN);
+        rIf = new LR1120Interface(RadioLibHAL, LR1120_SPI_NSS_PIN, LR1120_IRQ_PIN, LR1120_NRESET_PIN, LR1120_BUSY_PIN);
         if (!rIf->init()) {
             LOG_WARN("Failed to find LR1120 radio\n");
             delete rIf;
             rIf = NULL;
         } else {
             LOG_INFO("LR1120 Radio init succeeded, using LR1120 radio\n");
+            radioType = LR1120_RADIO;
         }
     }
 #endif
 
-#if defined(USE_SX1280)
+#if defined(USE_LR1121) && RADIOLIB_EXCLUDE_LR11X0 != 1
+    if (!rIf) {
+        rIf = new LR1121Interface(RadioLibHAL, LR1121_SPI_NSS_PIN, LR1121_IRQ_PIN, LR1121_NRESET_PIN, LR1121_BUSY_PIN);
+        if (!rIf->init()) {
+            LOG_WARN("Failed to find LR1121 radio\n");
+            delete rIf;
+            rIf = NULL;
+        } else {
+            LOG_INFO("LR1121 Radio init succeeded, using LR1121 radio\n");
+            radioType = LR1121_RADIO;
+        }
+    }
+#endif
+
+#if defined(USE_SX1280) && RADIOLIB_EXCLUDE_SX128X != 1
     if (!rIf) {
         rIf = new SX1280Interface(RadioLibHAL, SX128X_CS, SX128X_DIO1, SX128X_RESET, SX128X_BUSY);
         if (!rIf->init()) {
@@ -1008,7 +1032,6 @@ void setup()
 #endif
 
     // check if the radio chip matches the selected region
-
     if ((config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && (!rIf->wideLora())) {
         LOG_WARN("Radio chip does not support 2.4GHz LoRa. Reverting to unset.\n");
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;

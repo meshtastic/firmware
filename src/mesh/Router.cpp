@@ -36,8 +36,8 @@ static MemoryDynamic<meshtastic_MeshPacket> staticPool;
 
 Allocator<meshtastic_MeshPacket> &packetPool = staticPool;
 
-static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1];
-static uint8_t ScratchEncrypted[MAX_LORA_PAYLOAD_LEN + 1];
+static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1] __attribute__((__aligned__));
+static uint8_t ScratchEncrypted[MAX_LORA_PAYLOAD_LEN + 1] __attribute__((__aligned__));
 
 /**
  * Constructor

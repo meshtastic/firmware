@@ -129,6 +129,28 @@ bool RadioLibInterface::canSendImmediately()
         return true;
 }
 
+bool RadioLibInterface::receiveDetected(uint16_t irq, ulong syncWordHeaderValidFlag, ulong preambleDetectedFlag)
+{
+    bool detected = (irq & (syncWordHeaderValidFlag | preambleDetectedFlag));
+    // Handle false detections
+    if (detected) {
+        if (!activeReceiveStart) {
+            activeReceiveStart = millis();
+        } else if (!Throttle::isWithinTimespanMs(activeReceiveStart, 2 * preambleTimeMsec) && !(irq & syncWordHeaderValidFlag)) {
+            // The HEADER_VALID flag should be set by now if it was really a packet, so ignore PREAMBLE_DETECTED flag
+            activeReceiveStart = 0;
+            LOG_DEBUG("Ignore false preamble detection.\n");
+            return false;
+        } else if (!Throttle::isWithinTimespanMs(activeReceiveStart, maxPacketTimeMsec)) {
+            // We should have gotten an RX_DONE IRQ by now if it was really a packet, so ignore HEADER_VALID flag
+            activeReceiveStart = 0;
+            LOG_DEBUG("Ignore false header detection.\n");
+            return false;
+        }
+    }
+    return detected;
+}
+
 /// Send a packet (possibly by enquing in a private fifo).  This routine will
 /// later free() the packet to pool.  This routine is not allowed to stall because it is called from
 /// bluetooth comms code.  If the txmit queue is empty it might return an error
@@ -145,7 +167,7 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
         }
 
     } else {
-        LOG_WARN("send - lora tx disable because RegionCode_Unset\n");
+        LOG_WARN("send - lora tx disabled because RegionCode_Unset\n");
         packetPool.release(p);
         return ERRNO_DISABLED;
     }
@@ -357,7 +379,15 @@ void RadioLibInterface::handleReceiveInterrupt()
 
     xmitMsec = getPacketTime(length);
 
-    int state = iface->readData(radiobuf, length);
+#ifndef DISABLE_WELCOME_UNSET
+    if (config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_UNSET) {
+        LOG_WARN("recv - lora rx disabled because RegionCode_Unset\n");
+        airTime->logAirtime(RX_ALL_LOG, xmitMsec);
+        return;
+    }
+#endif
+
+    int state = iface->readData((uint8_t *)&radioBuffer, length);
     if (state != RADIOLIB_ERR_NONE) {
         LOG_ERROR("ignoring received packet due to error=%d\n", state);
         rxBad++;
@@ -367,7 +397,6 @@ void RadioLibInterface::handleReceiveInterrupt()
     } else {
         // Skip the 4 headers that are at the beginning of the rxBuf
         int32_t payloadLen = length - sizeof(PacketHeader);
-        const uint8_t *payload = radiobuf + sizeof(PacketHeader);
 
         // check for short packets
         if (payloadLen < 0) {
@@ -375,10 +404,9 @@ void RadioLibInterface::handleReceiveInterrupt()
             rxBad++;
             airTime->logAirtime(RX_ALL_LOG, xmitMsec);
         } else {
-            const PacketHeader *h = (PacketHeader *)radiobuf;
             rxGood++;
             // altered packet with "from == 0" can do Remote Node Administration without permission
-            if (h->from == 0) {
+            if (radioBuffer.header.from == 0) {
                 LOG_WARN("ignoring received packet without sender\n");
                 return;
             }
@@ -388,22 +416,22 @@ void RadioLibInterface::handleReceiveInterrupt()
             // nodes.
             meshtastic_MeshPacket *mp = packetPool.allocZeroed();
 
-            mp->from = h->from;
-            mp->to = h->to;
-            mp->id = h->id;
-            mp->channel = h->channel;
+            mp->from = radioBuffer.header.from;
+            mp->to = radioBuffer.header.to;
+            mp->id = radioBuffer.header.id;
+            mp->channel = radioBuffer.header.channel;
             assert(HOP_MAX <= PACKET_FLAGS_HOP_LIMIT_MASK); // If hopmax changes, carefully check this code
-            mp->hop_limit = h->flags & PACKET_FLAGS_HOP_LIMIT_MASK;
-            mp->hop_start = (h->flags & PACKET_FLAGS_HOP_START_MASK) >> PACKET_FLAGS_HOP_START_SHIFT;
-            mp->want_ack = !!(h->flags & PACKET_FLAGS_WANT_ACK_MASK);
-            mp->via_mqtt = !!(h->flags & PACKET_FLAGS_VIA_MQTT_MASK);
+            mp->hop_limit = radioBuffer.header.flags & PACKET_FLAGS_HOP_LIMIT_MASK;
+            mp->hop_start = (radioBuffer.header.flags & PACKET_FLAGS_HOP_START_MASK) >> PACKET_FLAGS_HOP_START_SHIFT;
+            mp->want_ack = !!(radioBuffer.header.flags & PACKET_FLAGS_WANT_ACK_MASK);
+            mp->via_mqtt = !!(radioBuffer.header.flags & PACKET_FLAGS_VIA_MQTT_MASK);
 
             addReceiveMetadata(mp);
 
             mp->which_payload_variant =
                 meshtastic_MeshPacket_encrypted_tag; // Mark that the payload is still encrypted at this point
             assert(((uint32_t)payloadLen) <= sizeof(mp->encrypted.bytes));
-            memcpy(mp->encrypted.bytes, payload, payloadLen);
+            memcpy(mp->encrypted.bytes, radioBuffer.payload, payloadLen);
             mp->encrypted.size = payloadLen;
 
             printPacket("Lora RX", mp);
@@ -445,7 +473,7 @@ void RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 
         size_t numbytes = beginSending(txp);
 
-        int res = iface->startTransmit(radiobuf, numbytes);
+        int res = iface->startTransmit((uint8_t *)&radioBuffer, numbytes);
         if (res != RADIOLIB_ERR_NONE) {
             LOG_ERROR("startTransmit failed, error=%d\n", res);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_RADIO_SPI_BUG);
