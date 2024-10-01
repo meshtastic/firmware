@@ -302,7 +302,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #else
     config.lora.ignore_mqtt = false;
 #endif
-#ifdef USERPREFS_ADMIN_KEY
+#ifdef USERPREFS_USE_ADMIN_KEY
     memcpy(config.security.admin_key[0].bytes, USERPREFS_ADMIN_KEY, 32);
     config.security.admin_key[0].size = 32;
 #else
