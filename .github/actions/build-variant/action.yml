@@ -31,6 +31,10 @@ inputs:
     description: Include the web UI in the build
     required: false
     default: "false"
+  arch:
+    description: Processor arch name
+    required: true
+    default: "esp32"
 
 runs:
   using: composite
@@ -84,7 +88,7 @@ runs:
     - name: Store binaries as an artifact
       uses: actions/upload-artifact@v4
       with:
-        name: firmware-${{ inputs.board }}-${{ steps.version.outputs.version }}.zip
+        name: firmware-${{ inputs.arch }}-${{ inputs.board }}-${{ steps.version.outputs.version }}.zip
         overwrite: true
         path: |
           ${{ inputs.artifact-paths }}
