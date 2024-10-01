@@ -163,8 +163,8 @@ static void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDispl
 
     display->setFont(FONT_MEDIUM);
     display->setTextAlignment(TEXT_ALIGN_LEFT);
-#ifdef SPLASH_TITLE_USERPREFS
-    const char *title = SPLASH_TITLE_USERPREFS;
+#ifdef USERPREFS_SPLASH_TITLE
+    const char *title = USERPREFS_SPLASH_TITLE;
 #else
     const char *title = "meshtastic.org";
 #endif

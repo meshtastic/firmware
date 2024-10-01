@@ -286,24 +286,24 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
         true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
     config.lora.override_duty_cycle = false;
     config.lora.config_ok_to_mqtt = false;
-#ifdef CONFIG_LORA_REGION_USERPREFS
-    config.lora.region = CONFIG_LORA_REGION_USERPREFS;
+#ifdef USERPREFS_CONFIG_LORA_REGION
+    config.lora.region = USERPREFS_CONFIG_LORA_REGION;
 #else
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
 #endif
-#ifdef LORACONFIG_MODEM_PRESET_USERPREFS
-    config.lora.modem_preset = LORACONFIG_MODEM_PRESET_USERPREFS;
+#ifdef USERPREFS_LORACONFIG_MODEM_PRESET
+    config.lora.modem_preset = USERPREFS_LORACONFIG_MODEM_PRESET;
 #else
     config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
 #endif
     config.lora.hop_limit = HOP_RELIABLE;
-#ifdef CONFIG_LORA_IGNORE_MQTT_USERPREFS
-    config.lora.ignore_mqtt = CONFIG_LORA_IGNORE_MQTT_USERPREFS;
+#ifdef USERPREFS_CONFIG_LORA_IGNORE_MQTT
+    config.lora.ignore_mqtt = USERPREFS_CONFIG_LORA_IGNORE_MQTT;
 #else
     config.lora.ignore_mqtt = false;
 #endif
-#ifdef ADMIN_KEY_USERPREFS
-    memcpy(config.security.admin_key[0].bytes, admin_key_userprefs, 32);
+#ifdef USERPREFS_ADMIN_KEY
+    memcpy(config.security.admin_key[0].bytes, USERPREFS_ADMIN_KEY, 32);
     config.security.admin_key[0].size = 32;
 #else
     config.security.admin_key[0].size = 0;
@@ -617,13 +617,13 @@ void NodeDB::installDefaultDeviceState()
 
     // Set default owner name
     pickNewNodeNum(); // based on macaddr now
-#ifdef CONFIG_OWNER_LONG_NAME_USERPREFS
-    snprintf(owner.long_name, sizeof(owner.long_name), CONFIG_OWNER_LONG_NAME_USERPREFS);
+#ifdef USERPREFS_CONFIG_OWNER_LONG_NAME
+    snprintf(owner.long_name, sizeof(owner.long_name), USERPREFS_CONFIG_OWNER_LONG_NAME);
 #else
     snprintf(owner.long_name, sizeof(owner.long_name), "Meshtastic %02x%02x", ourMacAddr[4], ourMacAddr[5]);
 #endif
-#ifdef CONFIG_OWNER_SHORT_NAME_USERPREFS
-    snprintf(owner.short_name, sizeof(owner.short_name), CONFIG_OWNER_SHORT_NAME_USERPREFS);
+#ifdef USERPREFS_CONFIG_OWNER_SHORT_NAME
+    snprintf(owner.short_name, sizeof(owner.short_name), USERPREFS_CONFIG_OWNER_SHORT_NAME);
 #else
     snprintf(owner.short_name, sizeof(owner.short_name), "%02x%02x", ourMacAddr[4], ourMacAddr[5]);
 #endif
