@@ -236,6 +236,7 @@ jobs:
           retention-days: 30
 
       - uses: scruplelesswizard/comment-artifact@main
+        if: ${{ github.event_name == 'pull_request' }}
         with:
           name: firmware-${{ steps.version.outputs.version }}
           description: "Download firmware-${{ steps.version.outputs.version }}.zip. This artifact will be available for 90 days from creation"
