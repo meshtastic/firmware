@@ -998,7 +998,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             int16_t rssiY = 130;
 
             // If dislay is *slighly* too small for the original consants, squish up a bit
-            if (display->getHeight() < rssiY) {
+            if (display->getHeight() < rssiY + FONT_HEIGHT_SMALL) {
                 snrY = display->getHeight() - ((1.5) * FONT_HEIGHT_SMALL);
                 rssiY = display->getHeight() - ((2.5) * FONT_HEIGHT_SMALL);
             }
