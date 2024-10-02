@@ -32,12 +32,13 @@
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
-#include "modules/esp32/StoreForwardModule.h"
+#include "modules/StoreForwardModule.h"
 #include <Preferences.h>
 #include <nvs_flash.h>
 #endif
 
 #ifdef ARCH_PORTDUINO
+#include "modules/StoreForwardModule.h"
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
@@ -49,7 +50,7 @@
 NodeDB *nodeDB = nullptr;
 
 // we have plenty of ram so statically alloc this tempbuf (for now)
-EXT_RAM_ATTR meshtastic_DeviceState devicestate;
+EXT_RAM_BSS_ATTR meshtastic_DeviceState devicestate;
 meshtastic_MyNodeInfo &myNodeInfo = devicestate.my_node;
 meshtastic_LocalConfig config;
 meshtastic_LocalModuleConfig moduleConfig;
@@ -121,6 +122,8 @@ NodeDB::NodeDB()
     owner.hw_model = HW_VENDOR;
     // Ensure user (nodeinfo) role is set to whatever we're configured to
     owner.role = config.device.role;
+    // Ensure macaddr is set to our macaddr as it will be copied in our info below
+    memcpy(owner.macaddr, ourMacAddr, sizeof(owner.macaddr));
 
     // Include our owner in the node db under our nodenum
     meshtastic_NodeInfoLite *info = getOrCreateMeshNode(getNodeNum());
@@ -129,39 +132,31 @@ NodeDB::NodeDB()
         config.security.serial_enabled = config.device.serial_enabled;
         config.security.is_managed = config.device.is_managed;
     }
-#if !(MESHTASTIC_EXCLUDE_PKI)
+
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    bool keygenSuccess = false;
+    if (config.security.private_key.size == 32) {
+        if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
+            keygenSuccess = true;
+        }
+    } else {
+        LOG_INFO("Generating new PKI keys\n");
+        crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
+        keygenSuccess = true;
+    }
+    if (keygenSuccess) {
+        config.security.public_key.size = 32;
+        config.security.private_key.size = 32;
+        owner.public_key.size = 32;
+        memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
+    }
+#elif !(MESHTASTIC_EXCLUDE_PKI)
     // Calculate Curve25519 public and private keys
-    printBytes("Old Pubkey", config.security.public_key.bytes, 32);
     if (config.security.private_key.size == 32 && config.security.public_key.size == 32) {
-        LOG_INFO("Using saved PKI keys\n");
         owner.public_key.size = config.security.public_key.size;
         memcpy(owner.public_key.bytes, config.security.public_key.bytes, config.security.public_key.size);
         crypto->setDHPrivateKey(config.security.private_key.bytes);
-    } else {
-#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
-        bool keygenSuccess = false;
-        if (config.security.private_key.size == 32) {
-            LOG_INFO("Calculating PKI Public Key\n");
-            if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-                keygenSuccess = true;
-            }
-        } else {
-            LOG_INFO("Generating new PKI keys\n");
-            crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-            keygenSuccess = true;
-        }
-        if (keygenSuccess) {
-            config.security.public_key.size = 32;
-            config.security.private_key.size = 32;
-            printBytes("New Pubkey", config.security.public_key.bytes, 32);
-            owner.public_key.size = 32;
-            memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
-        }
-#else
-        LOG_INFO("No PKI keys set, and generation disabled!\n");
-#endif
     }
-
 #endif
 
     info->user = TypeConversions::ConvertToUserLite(owner);
@@ -243,7 +238,7 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
 #endif
     // second, install default state (this will deal with the duplicate mac address issue)
     installDefaultDeviceState();
-    installDefaultConfig();
+    installDefaultConfig(!eraseBleBonds); // Also preserve the private key if we're not erasing BLE bonds
     installDefaultModuleConfig();
     installDefaultChannels();
     // third, write everything to disk
@@ -266,8 +261,13 @@ bool NodeDB::factoryReset(bool eraseBleBonds)
     return true;
 }
 
-void NodeDB::installDefaultConfig()
+void NodeDB::installDefaultConfig(bool preserveKey = false)
 {
+    uint8_t private_key_temp[32];
+    bool shouldPreserveKey = preserveKey && config.has_security && config.security.private_key.size > 0;
+    if (shouldPreserveKey) {
+        memcpy(private_key_temp, config.security.private_key.bytes, config.security.private_key.size);
+    }
     LOG_INFO("Installing default LocalConfig\n");
     memset(&config, 0, sizeof(meshtastic_LocalConfig));
     config.version = DEVICESTATE_CUR_VER;
@@ -285,30 +285,37 @@ void NodeDB::installDefaultConfig()
     config.lora.tx_enabled =
         true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
     config.lora.override_duty_cycle = false;
-#ifdef CONFIG_LORA_REGION_USERPREFS
-    config.lora.region = CONFIG_LORA_REGION_USERPREFS;
+    config.lora.config_ok_to_mqtt = false;
+#ifdef USERPREFS_CONFIG_LORA_REGION
+    config.lora.region = USERPREFS_CONFIG_LORA_REGION;
 #else
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
 #endif
-#ifdef LORACONFIG_MODEM_PRESET_USERPREFS
-    config.lora.modem_preset = LORACONFIG_MODEM_PRESET_USERPREFS;
+#ifdef USERPREFS_LORACONFIG_MODEM_PRESET
+    config.lora.modem_preset = USERPREFS_LORACONFIG_MODEM_PRESET;
 #else
     config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
 #endif
     config.lora.hop_limit = HOP_RELIABLE;
-#ifdef CONFIG_LORA_IGNORE_MQTT_USERPREFS
-    config.lora.ignore_mqtt = CONFIG_LORA_IGNORE_MQTT_USERPREFS;
+#ifdef USERPREFS_CONFIG_LORA_IGNORE_MQTT
+    config.lora.ignore_mqtt = USERPREFS_CONFIG_LORA_IGNORE_MQTT;
 #else
     config.lora.ignore_mqtt = false;
 #endif
-#ifdef ADMIN_KEY_USERPREFS
-    memcpy(config.security.admin_key[0].bytes, admin_key_userprefs, 32);
+#ifdef USERPREFS_USE_ADMIN_KEY
+    memcpy(config.security.admin_key[0].bytes, USERPREFS_ADMIN_KEY, 32);
     config.security.admin_key[0].size = 32;
 #else
     config.security.admin_key[0].size = 0;
 #endif
+    if (shouldPreserveKey) {
+        config.security.private_key.size = 32;
+        memcpy(config.security.private_key.bytes, private_key_temp, config.security.private_key.size);
+        printBytes("Restored key", config.security.private_key.bytes, config.security.private_key.size);
+    } else {
+        config.security.private_key.size = 0;
+    }
     config.security.public_key.size = 0;
-    config.security.private_key.size = 0;
 #ifdef PIN_GPS_EN
     config.position.gps_en_gpio = PIN_GPS_EN;
 #endif
@@ -458,7 +465,7 @@ void NodeDB::installDefaultModuleConfig()
 
     moduleConfig.has_detection_sensor = true;
     moduleConfig.detection_sensor.enabled = false;
-    moduleConfig.detection_sensor.detection_triggered_high = true;
+    moduleConfig.detection_sensor.detection_trigger_type = meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_LOGIC_HIGH;
     moduleConfig.detection_sensor.minimum_broadcast_secs = 45;
 
     moduleConfig.has_ambient_lighting = true;
@@ -610,13 +617,13 @@ void NodeDB::installDefaultDeviceState()
 
     // Set default owner name
     pickNewNodeNum(); // based on macaddr now
-#ifdef CONFIG_OWNER_LONG_NAME_USERPREFS
-    snprintf(owner.long_name, sizeof(owner.long_name), CONFIG_OWNER_LONG_NAME_USERPREFS);
+#ifdef USERPREFS_CONFIG_OWNER_LONG_NAME
+    snprintf(owner.long_name, sizeof(owner.long_name), USERPREFS_CONFIG_OWNER_LONG_NAME);
 #else
     snprintf(owner.long_name, sizeof(owner.long_name), "Meshtastic %02x%02x", ourMacAddr[4], ourMacAddr[5]);
 #endif
-#ifdef CONFIG_OWNER_SHORT_NAME_USERPREFS
-    snprintf(owner.short_name, sizeof(owner.short_name), CONFIG_OWNER_SHORT_NAME_USERPREFS);
+#ifdef USERPREFS_CONFIG_OWNER_SHORT_NAME
+    snprintf(owner.short_name, sizeof(owner.short_name), USERPREFS_CONFIG_OWNER_SHORT_NAME);
 #else
     snprintf(owner.short_name, sizeof(owner.short_name), "%02x%02x", ourMacAddr[4], ourMacAddr[5]);
 #endif
@@ -640,10 +647,13 @@ void NodeDB::pickNewNodeNum()
     }
 
     meshtastic_NodeInfoLite *found;
-    while ((nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED) ||
-           ((found = getMeshNode(nodeNum)) && memcmp(found->user.macaddr, ourMacAddr, sizeof(ourMacAddr)) != 0)) {
+    while (((found = getMeshNode(nodeNum)) && memcmp(found->user.macaddr, ourMacAddr, sizeof(ourMacAddr)) != 0) ||
+           (nodeNum == NODENUM_BROADCAST || nodeNum < NUM_RESERVED)) {
         NodeNum candidate = random(NUM_RESERVED, LONG_MAX); // try a new random choice
-        LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, so trying for 0x%x\n", nodeNum, candidate);
+        if (found)
+            LOG_WARN("NOTE! Our desired nodenum 0x%x is invalid or in use, by MAC ending in 0x%02x%02x vs our 0x%02x%02x, so "
+                     "trying for 0x%x\n",
+                     nodeNum, found->user.macaddr[4], found->user.macaddr[5], ourMacAddr[4], ourMacAddr[5], candidate);
         nodeNum = candidate;
     }
     LOG_DEBUG("Using nodenum 0x%x \n", nodeNum);
@@ -709,7 +719,7 @@ void NodeDB::loadFromDisk()
     //} else {
     if (devicestate.version < DEVICESTATE_MIN_VER) {
         LOG_WARN("Devicestate %d is old, discarding\n", devicestate.version);
-        factoryReset();
+        installDefaultDeviceState();
     } else {
         LOG_INFO("Loaded saved devicestate version %d, with nodecount: %d\n", devicestate.version,
                  devicestate.node_db_lite.size());
@@ -725,7 +735,7 @@ void NodeDB::loadFromDisk()
     } else {
         if (config.version < DEVICESTATE_MIN_VER) {
             LOG_WARN("config %d is old, discarding\n", config.version);
-            installDefaultConfig();
+            installDefaultConfig(true);
         } else {
             LOG_INFO("Loaded saved config version %d\n", config.version);
         }
@@ -1038,7 +1048,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
     if (p.public_key.size > 0) {
         printBytes("Incoming Pubkey: ", p.public_key.bytes, 32);
         if (info->user.public_key.size > 0) { // if we have a key for this user already, don't overwrite with a new one
-            LOG_INFO("Public Key set for node, not updateing!\n");
+            LOG_INFO("Public Key set for node, not updating!\n");
             // we copy the key into the incoming packet, to prevent overwrite
             memcpy(p.public_key.bytes, info->user.public_key.bytes, 32);
         } else {
@@ -1069,7 +1079,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         // We just changed something about the user, store our DB
         Throttle::execute(
             &lastNodeDbSave, ONE_MINUTE_MS, []() { nodeDB->saveToDisk(SEGMENT_DEVICESTATE); },
-            []() { LOG_DEBUG("Deferring NodeDB saveToDisk for now, since we saved less than a minute ago\n"); });
+            []() { LOG_DEBUG("Deferring NodeDB saveToDisk for now\n"); }); // since we saved less than a minute ago
     }
 
     return changed;
@@ -1096,8 +1106,10 @@ void NodeDB::updateFrom(const meshtastic_MeshPacket &mp)
         info->via_mqtt = mp.via_mqtt; // Store if we received this packet via MQTT
 
         // If hopStart was set and there wasn't someone messing with the limit in the middle, add hopsAway
-        if (mp.hop_start != 0 && mp.hop_limit <= mp.hop_start)
+        if (mp.hop_start != 0 && mp.hop_limit <= mp.hop_start) {
+            info->has_hops_away = true;
             info->hops_away = mp.hop_start - mp.hop_limit;
+        }
     }
 }
 

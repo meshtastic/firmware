@@ -1,4 +1,5 @@
 #pragma once
+#if RADIOLIB_EXCLUDE_SX126X != 1
 
 #include "RadioLibInterface.h"
 
@@ -67,7 +68,5 @@ template <class T> class SX126xInterface : public RadioLibInterface
     virtual void addReceiveMetadata(meshtastic_MeshPacket *mp) override;
 
     virtual void setStandby() override;
-
-  private:
-    uint32_t activeReceiveStart = 0;
 };
+#endif

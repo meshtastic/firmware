@@ -5,6 +5,7 @@
 #endif
 
 #include "ButtonThread.h"
+#include "Default.h"
 #include "Led.h"
 #include "MeshRadio.h"
 #include "MeshService.h"
@@ -17,6 +18,7 @@
 #include "target_specific.h"
 
 #ifdef ARCH_ESP32
+// "esp_pm_config_esp32_t is deprecated, please include esp_pm.h and use esp_pm_config_t instead"
 #include "esp32/pm.h"
 #include "esp_pm.h"
 #if HAS_WIFI
@@ -28,6 +30,7 @@
 
 esp_sleep_source_t wakeCause; // the reason we booted this time
 #endif
+#include "Throttle.h"
 
 #ifndef INCLUDE_vTaskSuspend
 #define INCLUDE_vTaskSuspend 0
@@ -168,7 +171,8 @@ static void waitEnterSleep(bool skipPreflight = false)
         while (!doPreflightSleep()) {
             delay(100); // Kinda yucky - wait until radio says say we can shutdown (finished in process sends/receives)
 
-            if (millis() - now > 30 * 1000) { // If we wait too long just report an error and go to sleep
+            if (!Throttle::isWithinTimespanMs(now,
+                                              THIRTY_SECONDS_MS)) { // If we wait too long just report an error and go to sleep
                 RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_SLEEP_ENTER_WAIT);
                 assert(0); // FIXME - for now we just restart, need to fix bug #167
                 break;
@@ -271,13 +275,6 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
         digitalWrite(LORA_CS, HIGH);
         gpio_hold_en((gpio_num_t)LORA_CS);
     }
-
-#if defined(I2C_SDA)
-    Wire.end();
-    pinMode(I2C_SDA, ANALOG);
-    pinMode(I2C_SCL, ANALOG);
-#endif
-
 #endif
 
 #ifdef HAS_PMU
@@ -313,6 +310,14 @@ void doDeepSleep(uint32_t msecToWake, bool skipPreflight = false)
             PMU->shutdown();
         }
     }
+#endif
+
+#if defined(ARCH_ESP32) && defined(I2C_SDA)
+    // Added by https://github.com/meshtastic/firmware/pull/4418
+    // Possibly to support Heltec Capsule Sensor?
+    Wire.end();
+    pinMode(I2C_SDA, ANALOG);
+    pinMode(I2C_SCL, ANALOG);
 #endif
 
     console->flush();
@@ -446,12 +451,17 @@ esp_sleep_wakeup_cause_t doLightSleep(uint64_t sleepMsec) // FIXME, use a more r
  */
 void enableModemSleep()
 {
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+    static esp_pm_config_t esp32_config; // filled with zeros because bss
+#else
     static esp_pm_config_esp32_t esp32_config; // filled with zeros because bss
-
+#endif
 #if CONFIG_IDF_TARGET_ESP32S3
     esp32_config.max_freq_mhz = CONFIG_ESP32S3_DEFAULT_CPU_FREQ_MHZ;
 #elif CONFIG_IDF_TARGET_ESP32S2
     esp32_config.max_freq_mhz = CONFIG_ESP32S2_DEFAULT_CPU_FREQ_MHZ;
+#elif CONFIG_IDF_TARGET_ESP32C6
+    esp32_config.max_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ;
 #elif CONFIG_IDF_TARGET_ESP32C3
     esp32_config.max_freq_mhz = CONFIG_ESP32C3_DEFAULT_CPU_FREQ_MHZ;
 #else

@@ -7,6 +7,7 @@
 #include "Router.h"
 #include "configuration.h"
 #include <Arduino.h>
+#include <Throttle.h>
 
 /*
     SerialModule
@@ -62,6 +63,9 @@ SerialModuleRadio *serialModuleRadio;
 #if defined(TTGO_T_ECHO) || defined(CANARYONE)
 SerialModule::SerialModule() : StreamAPI(&Serial), concurrency::OSThread("SerialModule") {}
 static Print *serialPrint = &Serial;
+#elif defined(CONFIG_IDF_TARGET_ESP32C6)
+SerialModule::SerialModule() : StreamAPI(&Serial1), concurrency::OSThread("SerialModule") {}
+static Print *serialPrint = &Serial1;
 #else
 SerialModule::SerialModule() : StreamAPI(&Serial2), concurrency::OSThread("SerialModule") {}
 static Print *serialPrint = &Serial2;
@@ -97,8 +101,7 @@ SerialModuleRadio::SerialModuleRadio() : MeshModule("SerialModuleRadio")
  */
 bool SerialModule::checkIsConnected()
 {
-    uint32_t now = millis();
-    return (now - lastContactMsec) < SERIAL_CONNECTION_TIMEOUT;
+    return Throttle::isWithinTimespanMs(lastContactMsec, SERIAL_CONNECTION_TIMEOUT);
 }
 
 int32_t SerialModule::runOnce()
@@ -137,7 +140,16 @@ int32_t SerialModule::runOnce()
                 // Give it a chance to flush out 💩
                 delay(10);
             }
-#ifdef ARCH_ESP32
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+            if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
+                Serial1.setRxBufferSize(RX_BUFFER);
+                Serial1.begin(baud, SERIAL_8N1, moduleConfig.serial.rxd, moduleConfig.serial.txd);
+            } else {
+                Serial.begin(baud);
+                Serial.setTimeout(moduleConfig.serial.timeout > 0 ? moduleConfig.serial.timeout : TIMEOUT);
+            }
+
+#elif defined(ARCH_ESP32)
 
             if (moduleConfig.serial.rxd && moduleConfig.serial.txd) {
                 Serial2.setRxBufferSize(RX_BUFFER);
@@ -182,13 +194,13 @@ int32_t SerialModule::runOnce()
                 return runOncePart();
             } else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_NMEA) && HAS_GPS) {
                 // in NMEA mode send out GGA every 2 seconds, Don't read from Port
-                if (millis() - lastNmeaTime > 2000) {
+                if (!Throttle::isWithinTimespanMs(lastNmeaTime, 2000)) {
                     lastNmeaTime = millis();
                     printGGA(outbuf, sizeof(outbuf), localPosition);
                     serialPrint->printf("%s", outbuf);
                 }
             } else if ((moduleConfig.serial.mode == meshtastic_ModuleConfig_SerialConfig_Serial_Mode_CALTOPO) && HAS_GPS) {
-                if (millis() - lastNmeaTime > 10000) {
+                if (!Throttle::isWithinTimespanMs(lastNmeaTime, 10000)) {
                     lastNmeaTime = millis();
                     uint32_t readIndex = 0;
                     const meshtastic_NodeInfoLite *tempNodeInfo = nodeDB->readNextMeshNode(readIndex);
@@ -205,8 +217,13 @@ int32_t SerialModule::runOnce()
                 processWXSerial();
 
             } else {
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+                while (Serial1.available()) {
+                    serialPayloadSize = Serial1.readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
+#else
                 while (Serial2.available()) {
                     serialPayloadSize = Serial2.readBytes(serialBytes, meshtastic_Constants_DATA_PAYLOAD_LEN);
+#endif
                     serialModuleRadio->sendPayload();
                 }
             }
@@ -392,7 +409,7 @@ uint32_t SerialModule::getBaudRate()
  */
 void SerialModule::processWXSerial()
 {
-#if !defined(TTGO_T_ECHO) && !defined(CANARYONE)
+#if !defined(TTGO_T_ECHO) && !defined(CANARYONE) && !defined(CONFIG_IDF_TARGET_ESP32C6)
     static unsigned int lastAveraged = 0;
     static unsigned int averageIntervalMillis = 300000; // 5 minutes hard coded.
     static double dir_sum_sin = 0;
@@ -500,7 +517,7 @@ void SerialModule::processWXSerial()
         LOG_INFO("WS85 : %i %.1fg%.1f %.1fv %.1fv\n", atoi(windDir), strtof(windVel, nullptr), strtof(windGust, nullptr),
                  batVoltageF, capVoltageF);
     }
-    if (gotwind && millis() - lastAveraged > averageIntervalMillis) {
+    if (gotwind && !Throttle::isWithinTimespanMs(lastAveraged, averageIntervalMillis)) {
         // calulate averages and send to the mesh
         float velAvg = 1.0 * velSum / velCount;
 

@@ -1,5 +1,5 @@
 #pragma once
-
+#if RADIOLIB_EXCLUDE_LR11X0 != 1
 #include "RadioLibInterface.h"
 
 /**
@@ -65,7 +65,5 @@ template <class T> class LR11x0Interface : public RadioLibInterface
     virtual void addReceiveMetadata(meshtastic_MeshPacket *mp) override;
 
     virtual void setStandby() override;
-
-  private:
-    uint32_t activeReceiveStart = 0;
 };
+#endif

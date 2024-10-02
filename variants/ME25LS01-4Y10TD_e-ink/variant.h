@@ -97,7 +97,7 @@ static const uint8_t MISO = PIN_SPI_MISO;
 static const uint8_t SCK = PIN_SPI_SCK;
 
 // EPD SPI
-#define PIN_SPI1_MISO (-1)     // Not Used for EPD
+#define PIN_SPI1_MISO (32 + 2) // Not Used for EPD but needs to be defined
 #define PIN_SPI1_MOSI (0 + 10) // EPD_MOSI  P0.10
 #define PIN_SPI1_SCK (0 + 9)   // EPD_SCLK  P0.09
 
@@ -117,7 +117,7 @@ static const uint8_t SCK = PIN_SPI_SCK;
 #define USE_LR1110
 
 #define LR1110_IRQ_PIN LORA_DIO1
-#define LR1110_NRESER_PIN LORA_RESET
+#define LR1110_NRESET_PIN LORA_RESET
 #define LR1110_BUSY_PIN LORA_DIO2
 #define LR1110_SPI_NSS_PIN LORA_CS
 #define LR1110_SPI_SCK_PIN LORA_SCK
@@ -126,7 +126,6 @@ static const uint8_t SCK = PIN_SPI_SCK;
 
 #define LR11X0_DIO3_TCXO_VOLTAGE 1.6
 #define LR11X0_DIO_AS_RF_SWITCH
-#define LR11X0_DIO_RF_SWITCH_CONFIG 0x0f, 0x0, 0x09, 0x0B, 0x0A, 0x0, 0x4, 0x0
 
 #define HAS_GPS 0
 
