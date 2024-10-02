@@ -535,6 +535,21 @@ void setup()
     rgb_found = i2cScanner->find(ScanI2C::DeviceType::NCP5623);
 #endif
 
+#ifdef HAS_TPS65233
+    // TPS65233 is a power management IC for satellite modems, used in the Dreamcatcher
+    // We are switching it off here since we don't use an LNB.
+    if (i2cScanner->exists(ScanI2C::DeviceType::TPS65233)) {
+        Wire.beginTransmission(TPS65233_ADDR);
+        Wire.write(0);   // Register 0
+        Wire.write(128); // Turn off the LNB power, keep I2C Control enabled
+        Wire.endTransmission();
+        Wire.beginTransmission(TPS65233_ADDR);
+        Wire.write(1); // Register 1
+        Wire.write(0); // Turn off Tone Generator 22kHz
+        Wire.endTransmission();
+    }
+#endif
+
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
     auto acc_info = i2cScanner->firstAccelerometer();
     accelerometer_found = acc_info.type != ScanI2C::DeviceType::NONE ? acc_info.address : accelerometer_found;
