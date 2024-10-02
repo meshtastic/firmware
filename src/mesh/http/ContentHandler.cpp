@@ -776,7 +776,7 @@ void handleRestart(HTTPRequest *req, HTTPResponse *res)
     res->println("<h1>Meshtastic</h1>\n");
     res->println("Restarting");
 
-    LOG_DEBUG("***** Restarted on HTTP(s) Request *****\n");
+    LOG_DEBUG("Restarted on HTTP(s) Request\n");
     webServerThread->requestRestart = (millis() / 1000) + 5;
 }
 

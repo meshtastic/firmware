@@ -203,17 +203,17 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
 
     err = lora.setSyncWord(syncWord);
     if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("Radiolib error %d when attempting SX126X setSyncWord!\n", err);
+        LOG_ERROR("SX126X setSyncWord %s%d\n", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setCurrentLimit(currentLimit);
     if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("Radiolib error %d when attempting SX126X setCurrentLimit!\n", err);
+        LOG_ERROR("SX126X setCurrentLimit %s%d\n", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setPreambleLength(preambleLength);
     if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("Radiolib error %d when attempting SX126X setPreambleLength!\n", err);
+        LOG_ERROR("SX126X setPreambleLength %s%d\n", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setFrequency(getFreq());
@@ -225,7 +225,7 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
 
     err = lora.setOutputPower(power);
     if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("Radiolib error %d when attempting SX126X setOutputPower!\n", err);
+        LOG_ERROR("SX126X setOutputPower %s%d\n", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     startReceive(); // restart receiving
@@ -245,7 +245,7 @@ template <typename T> void SX126xInterface<T>::setStandby()
     int err = lora.standby();
 
     if (err != RADIOLIB_ERR_NONE)
-        LOG_DEBUG("SX126x standby failed with error %d\n", err);
+        LOG_DEBUG("SX126x standby %s%d\n", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = false; // If we were receiving, not any more
@@ -287,7 +287,7 @@ template <typename T> void SX126xInterface<T>::startReceive()
     // Furthermore, we need the PREAMBLE_DETECTED and HEADER_VALID IRQ flag to detect whether we are actively receiving
     int err = lora.startReceiveDutyCycleAuto(preambleLength, 8, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | RADIOLIB_IRQ_PREAMBLE_DETECTED);
     if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("Radiolib error %d when attempting SX126X startReceiveDutyCycleAuto!\n", err);
+        LOG_ERROR("SX126X startReceiveDutyCycleAuto %s%d\n", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     RadioLibInterface::startReceive();
@@ -308,7 +308,7 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
     if (result == RADIOLIB_LORA_DETECTED)
         return true;
     if (result != RADIOLIB_CHANNEL_FREE)
-        LOG_ERROR("Radiolib error %d when attempting SX126X scanChannel!\n", result);
+        LOG_ERROR("SX126X scanChannel %s%d\n", radioLibErr, result);
     assert(result != RADIOLIB_ERR_WRONG_MODEM);
 
     return false;
@@ -326,8 +326,8 @@ template <typename T> bool SX126xInterface<T>::sleep()
 {
     // Not keeping config is busted - next time nrf52 board boots lora sending fails  tcxo related? - see datasheet
     // \todo Display actual typename of the adapter, not just `SX126x`
-    LOG_DEBUG("SX126x entering sleep mode (FIXME, don't keep config)\n");
-    setStandby(); // Stop any pending operations
+    LOG_DEBUG("SX126x entering sleep mode\n"); // (FIXME, don't keep config)
+    setStandby();                              // Stop any pending operations
 
     // turn off TCXO if it was powered
     // FIXME - this isn't correct

@@ -66,7 +66,6 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, uint64_
                                      uint8_t *bytesOut)
 {
     uint8_t *auth;
-    uint32_t *extraNonce;
     long extraNonceTmp = random();
     auth = bytesOut + numBytes;
     memcpy((uint8_t *)(auth + 8), &extraNonceTmp,

@@ -205,7 +205,7 @@ jobs:
             ./littlefs-*.bin
             ./bleota*bin
             ./Meshtastic_nRF52_factory_erase*.uf2
-          retention-days: 90
+          retention-days: 30
 
       - uses: actions/download-artifact@v4
         with:

@@ -466,7 +466,7 @@ void RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 {
     printPacket("Starting low level send", txp);
     if (disabled || !config.lora.tx_enabled) {
-        LOG_WARN("startSend is dropping tx packet because we are disabled\n");
+        LOG_WARN("Drop Tx packet because LoRa Tx disabled\n");
         packetPool.release(txp);
     } else {
         configHardwareForSend(); // must be after setStandby
