@@ -254,6 +254,8 @@ void Channels::initDefaults()
     {
         initDefaultChannel(i);
     }
+#else
+    initDefaultChannel(0);
 #endif
 }
 
