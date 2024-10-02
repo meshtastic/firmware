@@ -58,7 +58,8 @@ class ScanI2C
         NAU7802,
         FT6336U,
         STK8BAXX,
-        ICM20948
+        ICM20948,
+        SCD4X
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;
