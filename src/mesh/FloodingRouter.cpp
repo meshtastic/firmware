@@ -22,10 +22,12 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 {
     if (wasSeenRecently(p)) { // Note: this will also add a recent packet record
         printPacket("Ignoring dupe incoming msg", p);
+        rxDupe++;
         if (config.device.role != meshtastic_Config_DeviceConfig_Role_ROUTER &&
             config.device.role != meshtastic_Config_DeviceConfig_Role_REPEATER) {
             // cancel rebroadcast of this message *if* there was already one, unless we're a router/repeater!
-            Router::cancelSending(p->from, p->id);
+            if (Router::cancelSending(p->from, p->id))
+                txRelayCanceled++;
         }
         return true;
     }
