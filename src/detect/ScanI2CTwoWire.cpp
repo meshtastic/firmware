@@ -356,7 +356,18 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
                 SCAN_SIMPLE_CASE(SHTC3_ADDR, SHTC3, "SHTC3 sensor found\n")
-                SCAN_SIMPLE_CASE(RCWL9620_ADDR, RCWL9620, "RCWL9620 sensor found\n")
+            case RCWL9620_ADDR:
+                // get MAX30102 PARTID
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFF), 1);
+                if (registerValue == 0x15) {
+                    type = MAX30102;
+                    LOG_INFO("MAX30102 Health sensor found\n");
+                    break;
+                } else {
+                    type = RCWL9620;
+                    LOG_INFO("RCWL9620 sensor found\n");
+                }
+                break;
 
             case LPS22HB_ADDR_ALT:
                 SCAN_SIMPLE_CASE(LPS22HB_ADDR, LPS22HB, "LPS22HB sensor found\n")
