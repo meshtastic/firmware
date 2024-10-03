@@ -244,9 +244,9 @@ class LGFX : public lgfx::LGFX_Device
 
 static LGFX *tft = nullptr;
 
-#elif defined(ILI9341_DRIVER)
+#elif defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER)
 
-#include <LovyanGFX.hpp> // Graphics and font library for ILI9341 driver chip
+#include <LovyanGFX.hpp> // Graphics and font library for ILI9341/ILI9342 driver chip
 
 #if defined(ILI9341_BACKLIGHT_EN) && !defined(TFT_BL)
 #define TFT_BL ILI9341_BACKLIGHT_EN
@@ -254,7 +254,11 @@ static LGFX *tft = nullptr;
 
 class LGFX : public lgfx::LGFX_Device
 {
+#if defined(ILI9341_DRIVER)
     lgfx::Panel_ILI9341 _panel_instance;
+#elif defined(ILI9342_DRIVER)
+    lgfx::Panel_ILI9342 _panel_instance;
+#endif
     lgfx::Bus_SPI _bus_instance;
     lgfx::Light_PWM _light_instance;
 
@@ -265,7 +269,11 @@ class LGFX : public lgfx::LGFX_Device
             auto cfg = _bus_instance.config();
 
             // configure SPI
+#if defined(ILI9341_DRIVER)
             cfg.spi_host = ILI9341_SPI_HOST; // ESP32-S2,S3,C3 : SPI2_HOST or SPI3_HOST / ESP32 : VSPI_HOST or HSPI_HOST
+#elif defined(ILI9342_DRIVER)
+            cfg.spi_host = ILI9342_SPI_HOST; // ESP32-S2,S3,C3 : SPI2_HOST or SPI3_HOST / ESP32 : VSPI_HOST or HSPI_HOST
+#endif
             cfg.spi_mode = 0;
             cfg.freq_write = SPI_FREQUENCY; // SPI clock for transmission (up to 80MHz, rounded to the value obtained by dividing
                                             // 80MHz by an integer)
