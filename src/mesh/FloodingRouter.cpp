@@ -36,12 +36,12 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
 void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c)
 {
     bool isAckorReply = (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) && (p->decoded.request_id != 0);
-    if (isAckorReply && p->to != getNodeNum() && p->to != NODENUM_BROADCAST) {
+    if (isAckorReply && !isToUs(p) && p->to != NODENUM_BROADCAST) {
         // do not flood direct message that is ACKed or replied to
         LOG_DEBUG("Rxd an ACK/reply not for me, cancel rebroadcast.\n");
         Router::cancelSending(p->to, p->decoded.request_id); // cancel rebroadcast for this DM
     }
-    if ((p->to != getNodeNum()) && (p->hop_limit > 0) && (getFrom(p) != getNodeNum())) {
+    if (!isToUs(p) && (p->hop_limit > 0) && !isFromUs(p)) {
         if (p->id != 0) {
             if (config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE) {
                 meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
