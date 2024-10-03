@@ -710,10 +710,11 @@ void setup()
     if (*config.device.tzdef) {
         setenv("TZ", config.device.tzdef, 1);
     } else {
-        if (strncmp(USERPREFS_TZ_STRING, "tzplaceholder", 13) == 0) {
+        if (strncmp((const char *)USERPREFS_TZ_STRING, "tzplaceholder", 13) == 0) {
             setenv("TZ", "GMT0", 1);
         } else {
-            setenv("TZ", USERPREFS_TZ_STRING, 1);
+            LOG_DEBUG((const char *)USERPREFS_TZ_STRING);
+            setenv("TZ", (const char *)USERPREFS_TZ_STRING, 1);
         }
     }
     tzset();

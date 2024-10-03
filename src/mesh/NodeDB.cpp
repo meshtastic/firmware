@@ -308,6 +308,11 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #else
     config.security.admin_key[0].size = 0;
 #endif
+    if (strncmp((const char *)USERPREFS_TZ_STRING, "tzplaceholder", 13) == 0) {
+        strcpy(config.device.tzdef, "GMT0");
+    } else {
+        strncpy(config.device.tzdef, (const char *)USERPREFS_TZ_STRING, 64);
+    }
     if (shouldPreserveKey) {
         config.security.private_key.size = 32;
         memcpy(config.security.private_key.bytes, private_key_temp, config.security.private_key.size);
