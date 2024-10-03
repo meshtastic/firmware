@@ -1,4 +1,4 @@
-#ifndef HAS_USERPREFS_SPLASH
+#ifndef USERPREFS_HAS_SPLASH
 #define icon_width 50
 #define icon_height 28
 static uint8_t icon_bits[] = {

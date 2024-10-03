@@ -11,7 +11,7 @@ bool TraceRouteModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, m
 
 void TraceRouteModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r)
 {
-    auto &incoming = p.decoded;
+    const meshtastic_Data &incoming = p.decoded;
 
     // Insert unknown hops if necessary
     insertUnknownHops(p, r, !incoming.request_id);
@@ -101,7 +101,7 @@ void TraceRouteModule::appendMyIDandSNR(meshtastic_RouteDiscovery *updated, floa
         route[*route_count] = myNodeInfo.my_node_num;
         *route_count += 1;
     } else {
-        LOG_WARN("Route exceeded maximum hop limit, are you bridging networks?\n");
+        LOG_WARN("Route exceeded maximum hop limit!\n"); // Are you bridging networks?
     }
 }
 

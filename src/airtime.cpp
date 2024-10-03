@@ -13,17 +13,17 @@ void AirTime::logAirtime(reportTypes reportType, uint32_t airtime_ms)
 {
 
     if (reportType == TX_LOG) {
-        LOG_DEBUG("AirTime - Packet transmitted : %ums\n", airtime_ms);
+        LOG_DEBUG("Packet transmitted : %ums\n", airtime_ms);
         this->airtimes.periodTX[0] = this->airtimes.periodTX[0] + airtime_ms;
         air_period_tx[0] = air_period_tx[0] + airtime_ms;
 
         this->utilizationTX[this->getPeriodUtilHour()] = this->utilizationTX[this->getPeriodUtilHour()] + airtime_ms;
     } else if (reportType == RX_LOG) {
-        LOG_DEBUG("AirTime - Packet received : %ums\n", airtime_ms);
+        LOG_DEBUG("Packet received : %ums\n", airtime_ms);
         this->airtimes.periodRX[0] = this->airtimes.periodRX[0] + airtime_ms;
         air_period_rx[0] = air_period_rx[0] + airtime_ms;
     } else if (reportType == RX_ALL_LOG) {
-        LOG_DEBUG("AirTime - Packet received (noise?) : %ums\n", airtime_ms);
+        LOG_DEBUG("Packet received (noise?) : %ums\n", airtime_ms);
         this->airtimes.periodRX_ALL[0] = this->airtimes.periodRX_ALL[0] + airtime_ms;
     }
 

@@ -52,6 +52,7 @@ class PhoneAPI
 
     // Hashmap of timestamps for last time we received a packet on the API per portnum
     std::unordered_map<meshtastic_PortNum, uint32_t> lastPortNumToRadio;
+    uint32_t recentToRadioPacketIds[20]; // Last 20 ToRadio MeshPacket IDs we have seen
 
     /**
      * Each packet sent to the phone has an incrementing count
@@ -147,11 +148,6 @@ class PhoneAPI
      */
     virtual void onNowHasData(uint32_t fromRadioNum) {}
 
-    /**
-     * Subclasses can use this to find out when a client drops the link
-     */
-    virtual void handleDisconnect();
-
   private:
     void releasePhonePacket();
 
@@ -159,8 +155,12 @@ class PhoneAPI
 
     void releaseMqttClientProxyPhonePacket();
 
+    void releaseClientNotification();
+
     /// begin a new connection
     void handleStartConfig();
+
+    bool wasSeenRecently(uint32_t packetId);
 
     /**
      * Handle a packet that the phone wants us to send.  We can write to it but can not keep a reference to it

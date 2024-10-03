@@ -67,7 +67,4 @@ template <class T> class SX128xInterface : public RadioLibInterface
     virtual void addReceiveMetadata(meshtastic_MeshPacket *mp) override;
 
     virtual void setStandby() override;
-
-  private:
-    uint32_t activeReceiveStart = 0;
 };

@@ -108,7 +108,7 @@ template <class T> class ProtobufModule : protected SinglePortModule
         T *decoded = NULL;
         if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.decoded.portnum == ourPortNum) {
             memset(&scratch, 0, sizeof(scratch));
-            auto &p = mp.decoded;
+            const meshtastic_Data &p = mp.decoded;
             if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, fields, &scratch)) {
                 decoded = &scratch;
             } else {

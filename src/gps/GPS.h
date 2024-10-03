@@ -134,6 +134,7 @@ class GPS : private concurrency::OSThread
     static const uint8_t _message_GGA[];
     static const uint8_t _message_PMS[];
     static const uint8_t _message_SAVE[];
+    static const uint8_t _message_SAVE_10[];
 
     // VALSET Commands for M10
     static const uint8_t _message_VALSET_PM[];
@@ -154,6 +155,8 @@ class GPS : private concurrency::OSThread
     static const uint8_t _message_CAS_CFG_RST_FACTORY[];
     static const uint8_t _message_CAS_CFG_NAVX_CONF[];
     static const uint8_t _message_CAS_CFG_RATE_1HZ[];
+
+    const char *ACK_SUCCESS_MESSAGE = "Get ack success!\n";
 
     meshtastic_Position p = meshtastic_Position_init_default;
 

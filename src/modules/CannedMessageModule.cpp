@@ -27,6 +27,7 @@
 #endif
 
 #include "graphics/ScreenFonts.h"
+#include <Throttle.h>
 
 // Remove Canned message screen if no action is taken for some milliseconds
 #define INACTIVATE_AFTER_MS 20000
@@ -77,16 +78,16 @@ int CannedMessageModule::splitConfiguredMessages()
     int messageIndex = 0;
     int i = 0;
 
-    String messages = cannedMessageModuleConfig.messages;
+    String canned_messages = cannedMessageModuleConfig.messages;
 
 #if defined(T_WATCH_S3) || defined(RAK14014)
-    String separator = messages.length() ? "|" : "";
+    String separator = canned_messages.length() ? "|" : "";
 
-    messages = "[---- Free Text ----]" + separator + messages;
+    canned_messages = "[---- Free Text ----]" + separator + canned_messages;
 #endif
 
     // collect all the message parts
-    strncpy(this->messageStore, messages.c_str(), sizeof(this->messageStore));
+    strncpy(this->messageStore, canned_messages.c_str(), sizeof(this->messageStore));
 
     // The first message points to the beginning of the store.
     this->messages[messageIndex++] = this->messageStore;
@@ -275,6 +276,13 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
                 showTemporaryMessage("Node Info \nUpdate Sent");
             }
             break;
+        case INPUT_BROKER_MSG_DISMISS_FRAME: // fn+del: dismiss screen frames like text or waypoint
+            // Avoid opening the canned message screen frame
+            // We're only handling the keypress here by convention, this has nothing to do with canned messages
+            this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+            // Attempt to close whatever frame is currently shown on display
+            screen->dismissCurrentFrame();
+            return 0;
         default:
             // pass the pressed key
             // LOG_DEBUG("Canned message ANYKEY (%x)\n", event->kbchar);
@@ -422,7 +430,7 @@ int32_t CannedMessageModule::runOnce()
 
         this->notifyObservers(&e);
     } else if (((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)) &&
-               ((millis() - this->lastTouchMillis) > INACTIVATE_AFTER_MS)) {
+               !Throttle::isWithinTimespanMs(this->lastTouchMillis, INACTIVATE_AFTER_MS)) {
         // Reset module
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
         this->currentMessageIndex = -1;
@@ -934,6 +942,19 @@ void CannedMessageModule::drawEnterIcon(OLEDDisplay *display, int x, int y, floa
 
 #endif
 
+// Indicate to screen class that module is handling keyboard input specially (at certain times)
+// This prevents the left & right keys being used for nav. between screen frames during text entry.
+bool CannedMessageModule::interceptingKeyboardInput()
+{
+    switch (runState) {
+    case CANNED_MESSAGE_RUN_STATE_DISABLED:
+    case CANNED_MESSAGE_RUN_STATE_INACTIVE:
+        return false;
+    default:
+        return true;
+    }
+}
+
 void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     char buffer[50];
@@ -977,7 +998,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             int16_t rssiY = 130;
 
             // If dislay is *slighly* too small for the original consants, squish up a bit
-            if (display->getHeight() < rssiY) {
+            if (display->getHeight() < rssiY + FONT_HEIGHT_SMALL) {
                 snrY = display->getHeight() - ((1.5) * FONT_HEIGHT_SMALL);
                 rssiY = display->getHeight() - ((2.5) * FONT_HEIGHT_SMALL);
             }

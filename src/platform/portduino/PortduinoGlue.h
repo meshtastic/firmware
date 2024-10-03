@@ -8,6 +8,7 @@ enum configNames {
     irq,
     busy,
     reset,
+    sx126x_ant_sw,
     txen,
     rxen,
     dio2_as_rf_switch,

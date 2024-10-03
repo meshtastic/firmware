@@ -167,6 +167,10 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
     meshtastic_QueueStatus getQueueStatus();
 
   protected:
+    uint32_t activeReceiveStart = 0;
+
+    bool receiveDetected(uint16_t irq, ulong syncWordHeaderValidFlag, ulong preambleDetectedFlag);
+
     /** Do any hardware setup needed on entry into send configuration for the radio.
      * Subclasses can customize, but must also call this base method */
     virtual void configHardwareForSend();
@@ -192,4 +196,6 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      * Subclasses must override, implement and then call into this base class implementation
      */
     virtual void setStandby();
+
+    const char *radioLibErr = "RadioLib err=\n";
 };
