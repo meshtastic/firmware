@@ -73,7 +73,9 @@ typedef enum _meshtastic_TelemetrySensorType {
     /* Custom I2C sensor implementation based on https://github.com/meshtastic/i2c-sensor */
     meshtastic_TelemetrySensorType_CUSTOM_SENSOR = 29,
     /* MAX30102 Pulse Oximeter and Heart-Rate Sensor */
-    meshtastic_TelemetrySensorType_MAX30102 = 30
+    meshtastic_TelemetrySensorType_MAX30102 = 30,
+    /* MLX90614 non-contact IR temperature sensor. */
+    meshtastic_TelemetrySensorType_MLX90614 = 31
 } meshtastic_TelemetrySensorType;
 
 /* Struct definitions */
@@ -225,7 +227,7 @@ typedef struct _meshtastic_LocalStats {
     float air_util_tx;
     /* Number of packets sent */
     uint32_t num_packets_tx;
-    /* Number of packets received good */
+    /* Number of packets received (both good and bad) */
     uint32_t num_packets_rx;
     /* Number of packets received that are malformed or violate the protocol */
     uint32_t num_packets_rx_bad;
@@ -233,6 +235,14 @@ typedef struct _meshtastic_LocalStats {
     uint16_t num_online_nodes;
     /* Number of nodes total */
     uint16_t num_total_nodes;
+    /* Number of received packets that were duplicates (due to multiple nodes relaying).
+ If this number is high, there are nodes in the mesh relaying packets when it's unnecessary, for example due to the ROUTER/REPEATER role. */
+    uint32_t num_rx_dupe;
+    /* Number of packets we transmitted that were a relay for others (not originating from ourselves). */
+    uint32_t num_tx_relay;
+    /* Number of times we canceled a packet to be relayed, because someone else did it before us.
+ This will always be zero for ROUTERs/REPEATERs. If this number is high, some other node(s) is/are relaying faster than you. */
+    uint32_t num_tx_relay_canceled;
 } meshtastic_LocalStats;
 
 /* Health telemetry metrics */
@@ -284,8 +294,8 @@ extern "C" {
 
 /* Helper constants for enums */
 #define _meshtastic_TelemetrySensorType_MIN meshtastic_TelemetrySensorType_SENSOR_UNSET
-#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_MAX30102
-#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_MAX30102+1))
+#define _meshtastic_TelemetrySensorType_MAX meshtastic_TelemetrySensorType_MLX90614
+#define _meshtastic_TelemetrySensorType_ARRAYSIZE ((meshtastic_TelemetrySensorType)(meshtastic_TelemetrySensorType_MLX90614+1))
 
 
 
@@ -301,7 +311,7 @@ extern "C" {
 #define meshtastic_EnvironmentMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_PowerMetrics_init_default     {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_AirQualityMetrics_init_default {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
-#define meshtastic_LocalStats_init_default       {0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_LocalStats_init_default       {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_HealthMetrics_init_default    {false, 0, false, 0, false, 0}
 #define meshtastic_Telemetry_init_default        {0, 0, {meshtastic_DeviceMetrics_init_default}}
 #define meshtastic_Nau7802Config_init_default    {0, 0}
@@ -309,7 +319,7 @@ extern "C" {
 #define meshtastic_EnvironmentMetrics_init_zero  {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_PowerMetrics_init_zero        {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 #define meshtastic_AirQualityMetrics_init_zero   {false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
-#define meshtastic_LocalStats_init_zero          {0, 0, 0, 0, 0, 0, 0, 0}
+#define meshtastic_LocalStats_init_zero          {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 #define meshtastic_HealthMetrics_init_zero       {false, 0, false, 0, false, 0}
 #define meshtastic_Telemetry_init_zero           {0, 0, {meshtastic_DeviceMetrics_init_zero}}
 #define meshtastic_Nau7802Config_init_zero       {0, 0}
@@ -363,6 +373,9 @@ extern "C" {
 #define meshtastic_LocalStats_num_packets_rx_bad_tag 6
 #define meshtastic_LocalStats_num_online_nodes_tag 7
 #define meshtastic_LocalStats_num_total_nodes_tag 8
+#define meshtastic_LocalStats_num_rx_dupe_tag    9
+#define meshtastic_LocalStats_num_tx_relay_tag   10
+#define meshtastic_LocalStats_num_tx_relay_canceled_tag 11
 #define meshtastic_HealthMetrics_heart_bpm_tag   1
 #define meshtastic_HealthMetrics_spO2_tag        2
 #define meshtastic_HealthMetrics_temperature_tag 3
@@ -441,7 +454,10 @@ X(a, STATIC,   SINGULAR, UINT32,   num_packets_tx,    4) \
 X(a, STATIC,   SINGULAR, UINT32,   num_packets_rx,    5) \
 X(a, STATIC,   SINGULAR, UINT32,   num_packets_rx_bad,   6) \
 X(a, STATIC,   SINGULAR, UINT32,   num_online_nodes,   7) \
-X(a, STATIC,   SINGULAR, UINT32,   num_total_nodes,   8)
+X(a, STATIC,   SINGULAR, UINT32,   num_total_nodes,   8) \
+X(a, STATIC,   SINGULAR, UINT32,   num_rx_dupe,       9) \
+X(a, STATIC,   SINGULAR, UINT32,   num_tx_relay,     10) \
+X(a, STATIC,   SINGULAR, UINT32,   num_tx_relay_canceled,  11)
 #define meshtastic_LocalStats_CALLBACK NULL
 #define meshtastic_LocalStats_DEFAULT NULL
 
@@ -500,7 +516,7 @@ extern const pb_msgdesc_t meshtastic_Nau7802Config_msg;
 #define meshtastic_DeviceMetrics_size            27
 #define meshtastic_EnvironmentMetrics_size       85
 #define meshtastic_HealthMetrics_size            11
-#define meshtastic_LocalStats_size               42
+#define meshtastic_LocalStats_size               60
 #define meshtastic_Nau7802Config_size            16
 #define meshtastic_PowerMetrics_size             30
 #define meshtastic_Telemetry_size                92
