@@ -85,7 +85,6 @@ void Channels::initDefaultLoraConfig()
     loraConfig.tx_power = 0; // default
     loraConfig.channel_num = 0;
 
-
 #ifdef USERPREFS_LORACONFIG_MODEM_PRESET
     loraConfig.modem_preset = USERPREFS_LORACONFIG_MODEM_PRESET;
 #endif
@@ -101,7 +100,7 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
 {
     meshtastic_Channel &ch = getByIndex(chIndex);
     meshtastic_ChannelSettings &channelSettings = ch.settings;
-    
+
     uint8_t defaultpskIndex = 1;
     channelSettings.psk.bytes[0] = defaultpskIndex;
     channelSettings.psk.size = 1;
@@ -112,52 +111,51 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
     ch.has_settings = true;
     ch.role = chIndex == 0 ? meshtastic_Channel_Role_PRIMARY : meshtastic_Channel_Role_SECONDARY;
 
-    switch (chIndex)
-    {
-        case 0:
+    switch (chIndex) {
+    case 0:
 #ifdef USERPREFS_CHANNEL_0_PSK
-    static const uint8_t defaultpsk0[] = USERPREFS_CHANNEL_0_PSK;
-    memcpy(channelSettings.psk.bytes, defaultpsk0, sizeof(defaultpsk0));
-    channelSettings.psk.size = sizeof(defaultpsk0);
+        static const uint8_t defaultpsk0[] = USERPREFS_CHANNEL_0_PSK;
+        memcpy(channelSettings.psk.bytes, defaultpsk0, sizeof(defaultpsk0));
+        channelSettings.psk.size = sizeof(defaultpsk0);
 
 #endif
 #ifdef USERPREFS_CHANNEL_0_NAME
-    strcpy(channelSettings.name, USERPREFS_CHANNEL_0_NAME);
+        strcpy(channelSettings.name, USERPREFS_CHANNEL_0_NAME);
 #endif
 #ifdef USERPREFS_CHANNEL_0_PRECISION
-    channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_0_PRECISION;
+        channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_0_PRECISION;
 #endif
-            break;
-        case 1:
+        break;
+    case 1:
 #ifdef USERPREFS_CHANNEL_1_PSK
-    static const uint8_t defaultpsk1[] = USERPREFS_CHANNEL_1_PSK;
-    memcpy(channelSettings.psk.bytes, defaultpsk1, sizeof(defaultpsk1));
-    channelSettings.psk.size = sizeof(defaultpsk1);
+        static const uint8_t defaultpsk1[] = USERPREFS_CHANNEL_1_PSK;
+        memcpy(channelSettings.psk.bytes, defaultpsk1, sizeof(defaultpsk1));
+        channelSettings.psk.size = sizeof(defaultpsk1);
 
 #endif
 #ifdef USERPREFS_CHANNEL_1_NAME
-    strcpy(channelSettings.name, USERPREFS_CHANNEL_1_NAME);
+        strcpy(channelSettings.name, USERPREFS_CHANNEL_1_NAME);
 #endif
 #ifdef USERPREFS_CHANNEL_1_PRECISION
-    channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_1_PRECISION;
+        channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_1_PRECISION;
 #endif
-            break;
-        case 2:
+        break;
+    case 2:
 #ifdef USERPREFS_CHANNEL_2_PSK
-    static const uint8_t defaultpsk2[] = USERPREFS_CHANNEL_2_PSK;
-    memcpy(channelSettings.psk.bytes, defaultpsk2, sizeof(defaultpsk2));
-    channelSettings.psk.size = sizeof(defaultpsk2);
+        static const uint8_t defaultpsk2[] = USERPREFS_CHANNEL_2_PSK;
+        memcpy(channelSettings.psk.bytes, defaultpsk2, sizeof(defaultpsk2));
+        channelSettings.psk.size = sizeof(defaultpsk2);
 
 #endif
 #ifdef USERPREFS_CHANNEL_2_NAME
-    strcpy(channelSettings.name, USERPREFS_CHANNEL_2_NAME);
+        strcpy(channelSettings.name, USERPREFS_CHANNEL_2_NAME);
 #endif
 #ifdef USERPREFS_CHANNEL_2_PRECISION
-    channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_2_PRECISION;
+        channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_2_PRECISION;
 #endif
-            break;
-        default:
-            break;
+        break;
+    default:
+        break;
     }
 }
 
@@ -250,8 +248,7 @@ void Channels::initDefaults()
     initDefaultLoraConfig();
 
 #ifdef USERPREFS_CHANNELS_TO_WRITE
-    for (int i = 0; i < USERPREFS_CHANNELS_TO_WRITE; i++)
-    {
+    for (int i = 0; i < USERPREFS_CHANNELS_TO_WRITE; i++) {
         initDefaultChannel(i);
     }
 #else
