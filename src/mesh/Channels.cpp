@@ -99,26 +99,26 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
     ch.has_settings = true;
     ch.role = meshtastic_Channel_Role_PRIMARY;
 
-#ifdef LORACONFIG_MODEM_PRESET_USERPREFS
-    loraConfig.modem_preset = LORACONFIG_MODEM_PRESET_USERPREFS;
+#ifdef USERPREFS_LORACONFIG_MODEM_PRESET
+    loraConfig.modem_preset = USERPREFS_LORACONFIG_MODEM_PRESET;
 #endif
-#ifdef LORACONFIG_CHANNEL_NUM_USERPREFS
-    loraConfig.channel_num = LORACONFIG_CHANNEL_NUM_USERPREFS;
+#ifdef USERPREFS_LORACONFIG_CHANNEL_NUM
+    loraConfig.channel_num = USERPREFS_LORACONFIG_CHANNEL_NUM;
 #endif
 
     // Install custom defaults. Will eventually support setting multiple default channels
     if (chIndex == 0) {
-#ifdef CHANNEL_0_PSK_USERPREFS
-        static const uint8_t defaultpsk[] = CHANNEL_0_PSK_USERPREFS;
+#ifdef USERPREFS_CHANNEL_0_PSK
+        static const uint8_t defaultpsk[] = USERPREFS_CHANNEL_0_PSK;
         memcpy(channelSettings.psk.bytes, defaultpsk, sizeof(defaultpsk));
         channelSettings.psk.size = sizeof(defaultpsk);
 
 #endif
-#ifdef CHANNEL_0_NAME_USERPREFS
-        strcpy(channelSettings.name, CHANNEL_0_NAME_USERPREFS);
+#ifdef USERPREFS_CHANNEL_0_NAME
+        strcpy(channelSettings.name, USERPREFS_CHANNEL_0_NAME);
 #endif
-#ifdef CHANNEL_0_PRECISION_USERPREFS
-        channelSettings.module_settings.position_precision = CHANNEL_0_PRECISION_USERPREFS;
+#ifdef USERPREFS_CHANNEL_0_PRECISION
+        channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_0_PRECISION;
 #endif
     }
 }
@@ -273,7 +273,7 @@ void Channels::setChannel(const meshtastic_Channel &c)
 
 bool Channels::anyMqttEnabled()
 {
-#if EVENT_MODE
+#if USERPREFS_EVENT_MODE
     // Don't publish messages on the public MQTT broker if we are in event mode
     if (strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0) {
         return false;
