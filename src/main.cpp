@@ -1,3 +1,4 @@
+#include "../userPrefs.h"
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
@@ -709,7 +710,11 @@ void setup()
     if (*config.device.tzdef) {
         setenv("TZ", config.device.tzdef, 1);
     } else {
-        setenv("TZ", "GMT0", 1);
+        if (strncmp(USERPREFS_TZ_STRING, "tzplaceholder", 13) == 0) {
+            setenv("TZ", "GMT0", 1);
+        } else {
+            setenv("TZ", USERPREFS_TZ_STRING, 1);
+        }
     }
     tzset();
     LOG_DEBUG("Set Timezone to %s\n", getenv("TZ"));
