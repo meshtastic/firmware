@@ -10,8 +10,7 @@
 class HealthTelemetryModule : private concurrency::OSThread, public ProtobufModule<meshtastic_Telemetry>
 {
     CallbackObserver<HealthTelemetryModule, const meshtastic::Status *> nodeStatusObserver =
-        CallbackObserver<HealthTelemetryModule, const meshtastic::Status *>(this,
-                                                                                 &HealthTelemetryModule::handleStatusUpdate);
+        CallbackObserver<HealthTelemetryModule, const meshtastic::Status *>(this, &HealthTelemetryModule::handleStatusUpdate);
 
   public:
     HealthTelemetryModule()
@@ -38,7 +37,6 @@ class HealthTelemetryModule : private concurrency::OSThread, public ProtobufModu
      * Send our Telemetry into the mesh
      */
     bool sendTelemetry(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
-
 
   private:
     bool firstTime = 1;

@@ -19,9 +19,9 @@
 
 // Sensors
 // TODO
+#include "Sensor/BloodPressureSensor.h"
 #include "Sensor/HeartRateSensor.h"
 #include "Sensor/TemperatureSensor.h"
-#include "Sensor/BloodPressureSensor.h"
 
 HeartRateSensor heartRateSensor;
 TemperatureSensor temperatureSensor;
@@ -265,6 +265,6 @@ bool HealthTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     }
     return false;
 }
-}
+} // namespace concurrency
 
 #endif
