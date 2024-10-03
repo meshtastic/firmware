@@ -52,6 +52,7 @@ class ScanI2C
         TSL2591,
         OPT3001,
         MLX90632,
+        MLX90614,
         AHT10,
         BMX160,
         DFROBOT_LARK,
