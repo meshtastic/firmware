@@ -54,7 +54,7 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     // FIXME this can in fact happen with packets sent from EUD (src=RX_SRC_USER)
     // to set fixed location, EUD-GPS location or just the time (see also issue #900)
     bool isLocal = false;
-    if (nodeDB->getNodeNum() == getFrom(&mp)) {
+    if (isFromUs(&mp)) {
         isLocal = true;
         if (config.position.fixed_position) {
             LOG_DEBUG("Ignore incoming position update from myself except for time, because position.fixed_position is true\n");
@@ -110,7 +110,7 @@ bool PositionModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
 void PositionModule::alterReceivedProtobuf(meshtastic_MeshPacket &mp, meshtastic_Position *p)
 {
     // Phone position packets need to be truncated to the channel precision
-    if (nodeDB->getNodeNum() == getFrom(&mp) && (precision < 32 && precision > 0)) {
+    if (isFromUs(&mp) && (precision < 32 && precision > 0)) {
         LOG_DEBUG("Truncating phone position to channel precision %i\n", precision);
         p->latitude_i = p->latitude_i & (UINT32_MAX << (32 - precision));
         p->longitude_i = p->longitude_i & (UINT32_MAX << (32 - precision));

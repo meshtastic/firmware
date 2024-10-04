@@ -127,6 +127,11 @@ void DeviceTelemetryModule::sendLocalStatsToPhone()
         telemetry.variant.local_stats.num_packets_tx = RadioLibInterface::instance->txGood;
         telemetry.variant.local_stats.num_packets_rx = RadioLibInterface::instance->rxGood + RadioLibInterface::instance->rxBad;
         telemetry.variant.local_stats.num_packets_rx_bad = RadioLibInterface::instance->rxBad;
+        telemetry.variant.local_stats.num_tx_relay = RadioLibInterface::instance->txRelay;
+    }
+    if (router) {
+        telemetry.variant.local_stats.num_rx_dupe = router->rxDupe;
+        telemetry.variant.local_stats.num_tx_relay_canceled = router->txRelayCanceled;
     }
 
     LOG_INFO(
