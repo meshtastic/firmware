@@ -26,7 +26,7 @@ bool NodeInfoModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, mes
     }
 
     // if user has changed while packet was not for us, inform phone
-    if (hasChanged && !wasBroadcast && mp.to != nodeDB->getNodeNum())
+    if (hasChanged && !wasBroadcast && !isToUs(&mp))
         service->sendToPhone(packetPool.allocCopy(mp));
 
     // LOG_DEBUG("did handleReceived\n");

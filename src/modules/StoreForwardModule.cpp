@@ -333,7 +333,7 @@ void StoreForwardModule::sendErrorTextMessage(NodeNum dest, bool want_response)
     if (this->busy) {
         str = "S&F - Busy. Try again shortly.";
     } else {
-        str = "S&F - Not available on this channel.";
+        str = "S&F not permitted on the public channel.";
     }
     LOG_WARN("%s\n", str);
     memcpy(pr->decoded.payload.bytes, str, strlen(str));
@@ -382,8 +382,7 @@ ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &m
 
         if ((mp.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP) && is_server) {
             auto &p = mp.decoded;
-            if (mp.to == nodeDB->getNodeNum() && (p.payload.bytes[0] == 'S') && (p.payload.bytes[1] == 'F') &&
-                (p.payload.bytes[2] == 0x00)) {
+            if (isToUs(&mp) && (p.payload.bytes[0] == 'S') && (p.payload.bytes[1] == 'F') && (p.payload.bytes[2] == 0x00)) {
                 LOG_DEBUG("Legacy Request to send\n");
 
                 // Send the last 60 minutes of messages.
@@ -396,7 +395,7 @@ ProcessMessage StoreForwardModule::handleReceived(const meshtastic_MeshPacket &m
                 storeForwardModule->historyAdd(mp);
                 LOG_INFO("S&F stored. Message history contains %u records now.\n", this->packetHistoryTotalCount);
             }
-        } else if (getFrom(&mp) != nodeDB->getNodeNum() && mp.decoded.portnum == meshtastic_PortNum_STORE_FORWARD_APP) {
+        } else if (!isFromUs(&mp) && mp.decoded.portnum == meshtastic_PortNum_STORE_FORWARD_APP) {
             auto &p = mp.decoded;
             meshtastic_StoreAndForward scratch;
             meshtastic_StoreAndForward *decoded = NULL;
