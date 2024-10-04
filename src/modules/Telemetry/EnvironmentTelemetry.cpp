@@ -26,6 +26,7 @@
 #include "Sensor/BMP3XXSensor.h"
 #include "Sensor/DFRobotLarkSensor.h"
 #include "Sensor/LPS22HBSensor.h"
+#include "Sensor/MAX30102Sensor.h"
 #include "Sensor/MCP9808Sensor.h"
 #include "Sensor/MLX90614Sensor.h"
 #include "Sensor/MLX90632Sensor.h"
@@ -53,6 +54,7 @@ OPT3001Sensor opt3001Sensor;
 SHT4XSensor sht4xSensor;
 RCWL9620Sensor rcwl9620Sensor;
 AHT10Sensor aht10Sensor;
+MAX30102Sensor max30102Sensor;
 MLX90632Sensor mlx90632Sensor;
 MLX90614Sensor mlx90614Sensor;
 DFRobotLarkSensor dfRobotLarkSensor;
@@ -150,6 +152,9 @@ int32_t EnvironmentTelemetryModule::runOnce()
                 result = nau7802Sensor.runOnce();
             if (max17048Sensor.hasSensor())
                 result = max17048Sensor.runOnce();
+            if (max30102Sensor.hasSensor())
+                result = max30102Sensor.runOnce();
+
 #endif
         }
         return result;
@@ -373,6 +378,10 @@ bool EnvironmentTelemetryModule::getEnvironmentTelemetry(meshtastic_Telemetry *m
         valid = valid && opt3001Sensor.getMetrics(m);
         hasSensor = true;
     }
+    if (max30102Sensor.hasSensor()) {
+        valid = valid && max30102Sensor.getMetrics(m);
+        hasSensor = true;
+    }
     if (mlx90632Sensor.hasSensor()) {
         valid = valid && mlx90632Sensor.getMetrics(m);
         hasSensor = true;
@@ -578,6 +587,11 @@ AdminMessageHandleResult EnvironmentTelemetryModule::handleAdminMessageForModule
     }
     if (opt3001Sensor.hasSensor()) {
         result = opt3001Sensor.handleAdminMessage(mp, request, response);
+        if (result != AdminMessageHandleResult::NOT_HANDLED)
+            return result;
+    }
+    if (max30102Sensor.hasSensor()) {
+        result = max30102Sensor.handleAdminMessage(mp, request, response);
         if (result != AdminMessageHandleResult::NOT_HANDLED)
             return result;
     }
