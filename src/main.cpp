@@ -1,3 +1,4 @@
+#include "../userPrefs.h"
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
@@ -706,10 +707,16 @@ void setup()
 
     // setup TZ prior to time actions.
 #if !MESHTASTIC_EXCLUDE_TZ
-    if (*config.device.tzdef) {
+    LOG_DEBUG("Using compiled/slipstreamed %s\n", USERPREFS_TZ_STRING); // important, removing this clobbers our magic string
+    if (*config.device.tzdef && config.device.tzdef[0] != 0) {
+        LOG_DEBUG("Saved TZ: %s \n", config.device.tzdef);
         setenv("TZ", config.device.tzdef, 1);
     } else {
-        setenv("TZ", "GMT0", 1);
+        if (strncmp((const char *)USERPREFS_TZ_STRING, "tzpl", 4) == 0) {
+            setenv("TZ", "GMT0", 1);
+        } else {
+            setenv("TZ", (const char *)USERPREFS_TZ_STRING, 1);
+        }
     }
     tzset();
     LOG_DEBUG("Set Timezone to %s\n", getenv("TZ"));
