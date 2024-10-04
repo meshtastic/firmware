@@ -120,6 +120,8 @@ float tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE; // if TCXO is optional, put this h
 
 using namespace concurrency;
 
+volatile static const char slipstreamTZString[] = USERPREFS_TZ_STRING;
+
 // We always create a screen object, but we only init it if we find the hardware
 graphics::Screen *screen = nullptr;
 
@@ -707,15 +709,15 @@ void setup()
 
     // setup TZ prior to time actions.
 #if !MESHTASTIC_EXCLUDE_TZ
-    LOG_DEBUG("Using compiled/slipstreamed %s\n", USERPREFS_TZ_STRING); // important, removing this clobbers our magic string
+    LOG_DEBUG("Using compiled/slipstreamed %s\n", slipstreamTZString); // important, removing this clobbers our magic string
     if (*config.device.tzdef && config.device.tzdef[0] != 0) {
         LOG_DEBUG("Saved TZ: %s \n", config.device.tzdef);
         setenv("TZ", config.device.tzdef, 1);
     } else {
-        if (strncmp((const char *)USERPREFS_TZ_STRING, "tzpl", 4) == 0) {
+        if (strncmp((const char *)slipstreamTZString, "tzpl", 4) == 0) {
             setenv("TZ", "GMT0", 1);
         } else {
-            setenv("TZ", (const char *)USERPREFS_TZ_STRING, 1);
+            setenv("TZ", (const char *)slipstreamTZString, 1);
         }
     }
     tzset();
