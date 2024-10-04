@@ -1,6 +1,10 @@
 #ifndef _USERPREFS_
 #define _USERPREFS_
-volatile static const char USERPREFS_TZ_STRING[] = "tzplaceholder                                         ";
+
+// Slipstream values:
+
+#define USERPREFS_TZ_STRING "tzplaceholder                                         "
+
 // Uncomment and modify to set device defaults
 
 // #define USERPREFS_EVENT_MODE 1
