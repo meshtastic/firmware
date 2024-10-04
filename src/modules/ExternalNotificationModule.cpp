@@ -428,7 +428,7 @@ ProcessMessage ExternalNotificationModule::handleReceived(const meshtastic_MeshP
         drv.setWaveform(2, 0);
         drv.go();
 #endif
-        if (getFrom(&mp) != nodeDB->getNodeNum()) {
+        if (!isFromUs(&mp)) {
             // Check if the message contains a bell character. Don't do this loop for every pin, just once.
             auto &p = mp.decoded;
             bool containsBell = false;
