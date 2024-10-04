@@ -82,6 +82,10 @@ class Router : protected concurrency::OSThread
      */
     virtual ErrorCode send(meshtastic_MeshPacket *p);
 
+    /* Statistics for the amount of duplicate received packets and the amount of times we cancel a relay because someone did it
+        before us */
+    uint32_t rxDupe = 0, txRelayCanceled = 0;
+
   protected:
     friend class RoutingModule;
 

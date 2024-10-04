@@ -196,6 +196,18 @@ NodeNum getFrom(const meshtastic_MeshPacket *p)
     return (p->from == 0) ? nodeDB->getNodeNum() : p->from;
 }
 
+// Returns true if the packet originated from the local node
+bool isFromUs(const meshtastic_MeshPacket *p)
+{
+    return p->from == 0 || p->from == nodeDB->getNodeNum();
+}
+
+// Returns true if the packet is destined to us
+bool isToUs(const meshtastic_MeshPacket *p)
+{
+    return p->to == nodeDB->getNodeNum();
+}
+
 bool NodeDB::resetRadioConfig(bool factory_reset)
 {
     bool didFactoryReset = false;
