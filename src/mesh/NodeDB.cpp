@@ -196,6 +196,18 @@ NodeNum getFrom(const meshtastic_MeshPacket *p)
     return (p->from == 0) ? nodeDB->getNodeNum() : p->from;
 }
 
+// Returns true if the packet originated from the local node
+bool isFromUs(const meshtastic_MeshPacket *p)
+{
+    return p->from == 0 || p->from == nodeDB->getNodeNum();
+}
+
+// Returns true if the packet is destined to us
+bool isToUs(const meshtastic_MeshPacket *p)
+{
+    return p->to == nodeDB->getNodeNum();
+}
+
 bool NodeDB::resetRadioConfig(bool factory_reset)
 {
     bool didFactoryReset = false;
@@ -346,8 +358,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     // FIXME: Default to bluetooth capability of platform as default
     config.bluetooth.enabled = true;
     config.bluetooth.fixed_pin = defaultBLEPin;
-#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(HX8357_CS) ||            \
-    defined(USE_ST7789)
+#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7789_CS) ||       \
+    defined(HX8357_CS) || defined(USE_ST7789)
     bool hasScreen = true;
 #elif ARCH_PORTDUINO
     bool hasScreen = false;
