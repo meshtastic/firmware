@@ -102,9 +102,9 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, uint64_t packetNum, size
     uint8_t *auth;       // set to last 8 bytes of text?
     uint32_t extraNonce; // pointer was not really used
     auth = bytes + numBytes - 12;
-#ifndef PIO_UNIT_TESTING
     memcpy(&extraNonce, auth + 8,
            sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : (uint32_t *)(auth + 8);
+#ifndef PIO_UNIT_TESTING
     LOG_INFO("Random nonce value: %d\n", extraNonce);
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(fromNode);
 
