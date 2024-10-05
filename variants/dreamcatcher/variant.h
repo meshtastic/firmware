@@ -3,18 +3,13 @@
 #define I2C_SDA 16 // I2C pins for this board
 #define I2C_SCL 17
 
-// #define TPS_EXTM 45 not used
-
-#define GPS_RX_PIN 36
-#define GPS_TX_PIN 37
+#define I2C_SDA1 45
+#define I2C_SCL1 46
 
 #define LED_PIN 6
 #define LED_STATE_ON 1
 #define BUTTON_PIN 0
-#define PIN_BUZZER 48
 
-#define PIN_POWER_EN 7            // RF section power supply enable
-#define PERIPHERAL_WARMUP_MS 1000 // wait for TPS chip to initialize
 #define HAS_TPS65233
 
 // V1 of SubG Switch SMA 0 or F Selector 1
@@ -25,8 +20,54 @@
 #define RESET_OLED 8 // Emulate RF_SW_SUBG1, Use F Connector
 #define VTFT_CTRL 5  // Emulate RF_SW_SUBG2, for SMA swap the pin values
 
+#if OTHERNET_DC_REV == 2206
 #define USE_LR1120
+
+#define SPI_MISO 37
+#define SPI_MOSI 39
+#define SPI_SCK 38
+#define SDCARD_CS 40
+
+#define PIN_BUZZER 48
+
+#define GPS_RX_PIN 10
+#define GPS_TX_PIN 21
+
+#define PIN_POWER_EN 7            // RF section power supply enable
+#define PERIPHERAL_WARMUP_MS 1000 // wait for TPS chip to initialize
+#define TPS_EXTM 45               // connected, but not used
+#define BIAS_T_ENABLE 9           // needs to be low
+#define BIAS_T_VALUE 0
+#else // 2301
 #define USE_LR1121
+#define SPI_MISO 10
+#define SPI_MOSI 39
+#define SPI_SCK 38
+
+#define SDCARD_CS 40
+
+// This is only informational, we always use SD cards in 1 bit mode
+#define SPI_DATA1 15
+#define SPI_DATA2 18
+
+#define GPS_RX_PIN 36
+#define GPS_TX_PIN 37
+
+// dac / amp instead of buzzer
+#define HAS_I2S
+#define DAC_I2S_BCK 21
+#define DAC_I2S_WS 9
+#define DAC_I2S_DOUT 48
+
+#define BIAS_T_ENABLE 7 // needs to be low
+#define BIAS_T_VALUE 0
+#define BIAS_T_SUBGHZ 2 // also needs to be low, we hijack SENSOR_POWER_CTRL_PIN to emulate this
+#define SENSOR_POWER_CTRL_PIN BIAS_T_SUBGHZ
+#define SENSOR_POWER_ON 0
+#endif
+
+#define HAS_SDCARD // Have SPI interface SD card slot
+#define SDCARD_USE_SPI1
 
 #define LORA_RESET 3
 #define LORA_SCK 12
@@ -64,10 +105,3 @@
 
 #define LR11X0_RF_SWITCH_SUBGHZ 42
 #define LR11X0_RF_SWITCH_2_4GHZ 41
-
-#define HAS_SDCARD // Have SPI interface SD card slot
-#define SPI_MISO 10
-#define SPI_MOSI 39
-#define SPI_SCK 38
-#define SDCARD_CS 40
-#define SDCARD_USE_SPI1

@@ -298,6 +298,11 @@ void setup()
     digitalWrite(VEXT_ENABLE, VEXT_ON_VALUE); // turn on the display power
 #endif
 
+#if defined(BIAS_T_ENABLE)
+    pinMode(BIAS_T_ENABLE, OUTPUT);
+    digitalWrite(BIAS_T_ENABLE, BIAS_T_VALUE); // turn on 5V for GPS Antenna
+#endif
+
 #if defined(VTFT_CTRL)
     pinMode(VTFT_CTRL, OUTPUT);
     digitalWrite(VTFT_CTRL, LOW);
