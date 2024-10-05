@@ -26,7 +26,7 @@ jobs:
 
       - name: Commit userPrefs.json
         run: |
-          git config --global user.email "
+          git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
           git add userPrefs.json
           git commit -m "Update userPrefs.json"
