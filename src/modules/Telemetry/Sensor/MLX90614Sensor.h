@@ -5,6 +5,8 @@
 #include "TelemetrySensor.h"
 #include <Adafruit_MLX90614.h>
 
+#define MLX90614_EMISSIVITY 0.98 // human skin
+
 class MLX90614Sensor : public TelemetrySensor
 {
   private:
