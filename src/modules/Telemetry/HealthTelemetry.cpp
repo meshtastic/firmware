@@ -10,6 +10,7 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
+#include "UnitConversions.h"
 #include "main.h"
 #include "power.h"
 #include "sleep.h"
@@ -122,7 +123,7 @@ void HealthTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *
 
     String last_temp = String(lastMeasurement.variant.health_metrics.temperature, 0) + "°C";
     if (moduleConfig.telemetry.environment_display_fahrenheit) {
-        last_temp = String(CelsiusToFahrenheit(lastMeasurement.variant.health_metrics.temperature), 0) + "°F";
+        last_temp = String(UnitConversions::CelsiusToFahrenheit(lastMeasurement.variant.health_metrics.temperature), 0) + "°F";
     }
 
     // Continue with the remaining details
