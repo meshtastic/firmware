@@ -131,9 +131,9 @@ void HealthTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *
     display->drawString(x, y, "Health From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
 
     String last_temp = String(lastMeasurement.variant.health_metrics.temperature, 0) + "°C";
-    /*if (moduleConfig.telemetry.health_display_fahrenheit) {
+    if (moduleConfig.telemetry.environment_display_fahrenheit) {
         last_temp = String(CelsiusToFahrenheit(lastMeasurement.variant.health_metrics.temperature), 0) + "°F";
-    }*/
+    }
 
     // Continue with the remaining details
     display->drawString(x, y += _fontHeight(FONT_SMALL), "Temp: " + last_temp);
