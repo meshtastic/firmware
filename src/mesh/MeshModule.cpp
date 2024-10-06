@@ -240,7 +240,7 @@ std::vector<MeshModule *> MeshModule::GetMeshModulesWithUIFrames()
         for (auto i = modules->begin(); i != modules->end(); ++i) {
             auto &pi = **i;
             if (pi.wantUIFrame()) {
-                LOG_DEBUG("Module wants a UI Frame\n");
+                LOG_DEBUG("%s wants a UI Frame\n", pi.name);
                 modulesWithUIFrames.push_back(&pi);
             }
         }
@@ -255,7 +255,7 @@ void MeshModule::observeUIEvents(Observer<const UIFrameEvent *> *observer)
             auto &pi = **i;
             Observable<const UIFrameEvent *> *observable = pi.getUIFrameObservable();
             if (observable != NULL) {
-                LOG_DEBUG("Module wants a UI Frame\n");
+                LOG_DEBUG("%s wants a UI Frame\n", pi.name);
                 observer->observe(observable);
             }
         }
