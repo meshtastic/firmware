@@ -336,7 +336,9 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #else
     config.device.disable_triple_click = true;
 #endif
-#if !HAS_GPS || defined(T_DECK) || defined(TLORA_T3S3_EPAPER)
+#if defined(USERPREFS_CONFIG_GPS_MODE)
+    config.position.gps_mode = USERPREFS_CONFIG_GPS_MODE;
+#elif !HAS_GPS || defined(T_DECK) || defined(TLORA_T3S3_EPAPER)
     config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT;
 #elif !defined(GPS_RX_PIN)
     if (config.position.rx_gpio == 0)

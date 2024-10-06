@@ -13,6 +13,10 @@
 // #define USERPREFS_LORACONFIG_MODEM_PRESET meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST
 // #define USERPREFS_LORACONFIG_CHANNEL_NUM 31
 // #define USERPREFS_CONFIG_LORA_IGNORE_MQTT true
+
+// #define USERPREFS_CONFIG_GPS_MODE meshtastic_Config_PositionConfig_GpsMode_ENABLED
+
+// #define USERPREFS_CHANNELS_TO_WRITE 3
 /*
 #define USERPREFS_CHANNEL_0_PSK \
     {                                                                                                                            \
@@ -22,6 +26,24 @@
 */
 // #define USERPREFS_CHANNEL_0_NAME "DEFCONnect"
 // #define USERPREFS_CHANNEL_0_PRECISION 14
+/*
+#define USERPREFS_CHANNEL_1_PSK \
+    {                                                                                                                            \
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  \
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00                                               \
+    }
+*/
+// #define USERPREFS_CHANNEL_1_NAME "REPLACEME"
+// #define USERPREFS_CHANNEL_1_PRECISION 14
+/*
+#define USERPREFS_CHANNEL_2_PSK \
+    {                                                                                                                            \
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  \
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00                                              \
+    }
+*/
+// #define USERPREFS_CHANNEL_2_NAME "REPLACEME"
+// #define USERPREFS_CHANNEL_2_PRECISION 14
 
 // #define USERPREFS_CONFIG_OWNER_LONG_NAME "My Long Name"
 // #define USERPREFS_CONFIG_OWNER_SHORT_NAME "MLN"
