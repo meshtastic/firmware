@@ -80,12 +80,11 @@ int MeshService::handleFromRadio(const meshtastic_MeshPacket *mp)
     nodeDB->updateFrom(*mp); // update our DB state based off sniffing every RX packet from the radio
     if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
         mp->decoded.portnum == meshtastic_PortNum_TELEMETRY_APP && mp->decoded.request_id > 0) {
-        LOG_DEBUG(
-            "Received telemetry response. Skip sending our NodeInfo because this potentially a Repeater which will ignore our "
-            "request for its NodeInfo.\n");
+        LOG_DEBUG("Received telemetry response. Skip sending our NodeInfo.\n"); //  because this potentially a Repeater which will
+                                                                                //  ignore our request for its NodeInfo
     } else if (mp->which_payload_variant == meshtastic_MeshPacket_decoded_tag && !nodeDB->getMeshNode(mp->from)->has_user &&
                nodeInfoModule) {
-        LOG_INFO("Heard a node on channel %d we don't know, sending NodeInfo and asking for a response.\n", mp->channel);
+        LOG_INFO("Heard new node on channel %d, sending NodeInfo and asking for a response.\n", mp->channel);
         if (airTime->isTxAllowedChannelUtil(true)) {
             nodeInfoModule->sendOurNodeInfo(mp->from, true, mp->channel);
         } else {
@@ -223,7 +222,7 @@ ErrorCode MeshService::sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, 
     copied->mesh_packet_id = mesh_packet_id;
 
     if (toPhoneQueueStatusQueue.numFree() == 0) {
-        LOG_DEBUG("NOTE: tophone queue status queue is full, discarding oldest\n");
+        LOG_INFO("tophone queue status queue is full, discarding oldest\n");
         meshtastic_QueueStatus *d = toPhoneQueueStatusQueue.dequeuePtr(0);
         if (d)
             releaseQueueStatusToPool(d);
@@ -317,7 +316,7 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
 
 void MeshService::sendMqttMessageToClientProxy(meshtastic_MqttClientProxyMessage *m)
 {
-    LOG_DEBUG("Sending mqtt message on topic '%s' to client for proxying to server\n", m->topic);
+    LOG_DEBUG("Sending mqtt message on topic '%s' to client for proxy\n", m->topic);
     if (toPhoneMqttProxyQueue.numFree() == 0) {
         LOG_WARN("MqttClientProxyMessagePool queue is full, discarding oldest\n");
         meshtastic_MqttClientProxyMessage *d = toPhoneMqttProxyQueue.dequeuePtr(0);

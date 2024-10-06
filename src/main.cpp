@@ -1,3 +1,4 @@
+#include "../userPrefs.h"
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
@@ -118,6 +119,8 @@ float tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE; // if TCXO is optional, put this h
 #endif
 
 using namespace concurrency;
+
+volatile static const char slipstreamTZString[] = USERPREFS_TZ_STRING;
 
 // We always create a screen object, but we only init it if we find the hardware
 graphics::Screen *screen = nullptr;
@@ -706,10 +709,16 @@ void setup()
 
     // setup TZ prior to time actions.
 #if !MESHTASTIC_EXCLUDE_TZ
-    if (*config.device.tzdef) {
+    LOG_DEBUG("Using compiled/slipstreamed %s\n", slipstreamTZString); // important, removing this clobbers our magic string
+    if (*config.device.tzdef && config.device.tzdef[0] != 0) {
+        LOG_DEBUG("Saved TZ: %s \n", config.device.tzdef);
         setenv("TZ", config.device.tzdef, 1);
     } else {
-        setenv("TZ", "GMT0", 1);
+        if (strncmp((const char *)slipstreamTZString, "tzpl", 4) == 0) {
+            setenv("TZ", "GMT0", 1);
+        } else {
+            setenv("TZ", (const char *)slipstreamTZString, 1);
+        }
     }
     tzset();
     LOG_DEBUG("Set Timezone to %s\n", getenv("TZ"));
@@ -766,8 +775,8 @@ void setup()
 #if !MESHTASTIC_EXCLUDE_I2C
 // Don't call screen setup until after nodedb is setup (because we need
 // the current region name)
-#if defined(ST7701_CS) || defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS) ||            \
-    defined(HX8357_CS) || defined(USE_ST7789)
+#if defined(ST7701_CS) || defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||       \
+    defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789)
     screen->setup();
 #elif defined(ARCH_PORTDUINO)
     if (screen_found.port != ScanI2C::I2CPort::NO_I2C || settingsMap[displayPanel]) {
@@ -885,7 +894,7 @@ void setup()
     }
 #endif
 
-#if defined(RF95_IRQ)
+#if defined(RF95_IRQ) && RADIOLIB_EXCLUDE_SX127X != 1
     if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         rIf = new RF95Interface(RadioLibHAL, LORA_CS, RF95_IRQ, RF95_RESET, RF95_DIO1);
         if (!rIf->init()) {
@@ -899,7 +908,7 @@ void setup()
     }
 #endif
 
-#if defined(USE_SX1262) && !defined(ARCH_PORTDUINO) && !defined(TCXO_OPTIONAL)
+#if defined(USE_SX1262) && !defined(ARCH_PORTDUINO) && !defined(TCXO_OPTIONAL) && RADIOLIB_EXCLUDE_SX126X != 1
     if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         rIf = new SX1262Interface(RadioLibHAL, SX126X_CS, SX126X_DIO1, SX126X_RESET, SX126X_BUSY);
         if (!rIf->init()) {
@@ -975,7 +984,7 @@ void setup()
     }
 #endif
 
-#if defined(USE_LR1110)
+#if defined(USE_LR1110) && RADIOLIB_EXCLUDE_LR11X0 != 1
     if ((!rIf) && (config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24)) {
         rIf = new LR1110Interface(RadioLibHAL, LR1110_SPI_NSS_PIN, LR1110_IRQ_PIN, LR1110_NRESET_PIN, LR1110_BUSY_PIN);
         if (!rIf->init()) {
@@ -989,7 +998,7 @@ void setup()
     }
 #endif
 
-#if defined(USE_LR1120)
+#if defined(USE_LR1120) && RADIOLIB_EXCLUDE_LR11X0 != 1
     if (!rIf) {
         rIf = new LR1120Interface(RadioLibHAL, LR1120_SPI_NSS_PIN, LR1120_IRQ_PIN, LR1120_NRESET_PIN, LR1120_BUSY_PIN);
         if (!rIf->init()) {
@@ -1003,7 +1012,7 @@ void setup()
     }
 #endif
 
-#if defined(USE_LR1121)
+#if defined(USE_LR1121) && RADIOLIB_EXCLUDE_LR11X0 != 1
     if (!rIf) {
         rIf = new LR1121Interface(RadioLibHAL, LR1121_SPI_NSS_PIN, LR1121_IRQ_PIN, LR1121_NRESET_PIN, LR1121_BUSY_PIN);
         if (!rIf->init()) {
@@ -1017,7 +1026,7 @@ void setup()
     }
 #endif
 
-#if defined(USE_SX1280)
+#if defined(USE_SX1280) && RADIOLIB_EXCLUDE_SX128X != 1
     if (!rIf) {
         rIf = new SX1280Interface(RadioLibHAL, SX128X_CS, SX128X_DIO1, SX128X_RESET, SX128X_BUSY);
         if (!rIf->init()) {
@@ -1032,7 +1041,6 @@ void setup()
 #endif
 
     // check if the radio chip matches the selected region
-
     if ((config.lora.region == meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && (!rIf->wideLora())) {
         LOG_WARN("Radio chip does not support 2.4GHz LoRa. Reverting to unset.\n");
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;

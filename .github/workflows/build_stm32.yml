@@ -23,3 +23,5 @@ jobs:
           artifact-paths: |
             release/*.hex
             release/*.bin
+            release/*.elf
+          arch: stm32

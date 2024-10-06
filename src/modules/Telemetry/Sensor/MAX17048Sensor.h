@@ -40,6 +40,7 @@ class MAX17048Singleton : public Adafruit_MAX17048
     std::queue<MAX17048ChargeSample> chargeSamples;
     MAX17048ChargeState chargeState = IDLE;
     const String chargeLabels[3] = {F("idle"), F("export"), F("import")};
+    const char *sensorStr = "MAX17048Sensor";
 
   protected:
     MAX17048Singleton();

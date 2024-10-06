@@ -255,7 +255,7 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
             service->sendToMesh(p, RX_SRC_LOCAL, true);
 
             if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
-                LOG_DEBUG("Starting next execution in 5 seconds and then going to sleep.\n");
+                LOG_DEBUG("Starting next execution in 5s then going to sleep.\n");
                 sleepOnNextExecution = true;
                 setIntervalFromNow(5000);
             }

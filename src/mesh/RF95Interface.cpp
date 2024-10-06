@@ -1,3 +1,4 @@
+#if RADIOLIB_EXCLUDE_SX127X != 1
 #include "RF95Interface.h"
 #include "MeshRadio.h" // kinda yucky, but we need to know which region we are in
 #include "RadioLibRF95.h"
@@ -219,17 +220,17 @@ bool RF95Interface::reconfigure()
 
     err = lora->setSyncWord(syncWord);
     if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("Radiolib error %d when attempting RF95 setSyncWord!\n", err);
+        LOG_ERROR("RF95 setSyncWord %s%d\n", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora->setCurrentLimit(currentLimit);
     if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("Radiolib error %d when attempting RF95 setCurrentLimit!\n", err);
+        LOG_ERROR("RF95 setCurrentLimit %s%d\n", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora->setPreambleLength(preambleLength);
     if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("Radiolib error %d when attempting RF95 setPreambleLength!\n", err);
+        LOG_ERROR(" RF95 setPreambleLength %s%d\n", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora->setFrequency(getFreq());
@@ -265,7 +266,7 @@ void RF95Interface::setStandby()
 {
     int err = lora->standby();
     if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("Radiolib error %d when attempting RF95 standby!\n", err);
+        LOG_ERROR("RF95 standby %s%d\n", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = false; // If we were receiving, not any more
@@ -289,7 +290,7 @@ void RF95Interface::startReceive()
     setStandby();
     int err = lora->startReceive();
     if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("Radiolib error %d when attempting RF95 startReceive!\n", err);
+        LOG_ERROR("RF95 startReceive %s%d\n", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = true;
@@ -311,7 +312,7 @@ bool RF95Interface::isChannelActive()
         return true;
     }
     if (result != RADIOLIB_CHANNEL_FREE)
-        LOG_ERROR("Radiolib error %d when attempting RF95 isChannelActive!\n", result);
+        LOG_ERROR("RF95 isChannelActive %s%d\n", radioLibErr, result);
     assert(result != RADIOLIB_ERR_WRONG_MODEM);
 
     // LOG_DEBUG("Channel is free!\n");
@@ -336,3 +337,4 @@ bool RF95Interface::sleep()
 
     return true;
 }
+#endif

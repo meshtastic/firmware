@@ -1,4 +1,5 @@
 #pragma once
+#if RADIOLIB_EXCLUDE_LR11X0 != 1
 
 #include "LR11x0Interface.h"
 
@@ -12,3 +13,4 @@ class LR1121Interface : public LR11x0Interface<LR1121>
                     RADIOLIB_PIN_TYPE busy);
     bool wideLora() override;
 };
+#endif

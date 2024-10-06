@@ -141,7 +141,7 @@ typedef struct _meshtastic_TAKPacket {
         /* ATAK GeoChat message */
         meshtastic_GeoChat chat;
         /* Generic CoT detail XML
-     May be compressed / truncated by the sender */
+     May be compressed / truncated by the sender (EUD) */
         meshtastic_TAKPacket_detail_t detail;
     } payload_variant;
 } meshtastic_TAKPacket;
