@@ -32,18 +32,8 @@ MLX90614Sensor mlx90614Sensor;
 #endif
 #include <Throttle.h>
 
-/*namespace concurrency
-{
-HealthTelemetryModule::HealthTelemetryModule(ScanI2C::DeviceType type) : OSThread("HealthTelemetryModule")
-{
-    notifyDeepSleepObserver.observe(&notifyDeepSleep); // Let us know when shutdown() is issued.
-}
-} // namespace concurrency*/
-
 int32_t HealthTelemetryModule::runOnce()
 {
-    moduleConfig.telemetry.health_measurement_enabled = true; // XXX
-    moduleConfig.telemetry.health_update_interval = 30;       // XXX
     if (sleepOnNextExecution == true) {
         sleepOnNextExecution = false;
         uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.health_update_interval,
