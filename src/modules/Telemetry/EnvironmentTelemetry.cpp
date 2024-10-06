@@ -187,18 +187,6 @@ float EnvironmentTelemetryModule::CelsiusToFahrenheit(float c)
     return (c * 9) / 5 + 32;
 }
 
-uint32_t GetTimeSinceMeshPacket(const meshtastic_MeshPacket *mp)
-{
-    uint32_t now = getTime();
-
-    uint32_t last_seen = mp->rx_time;
-    int delta = (int)(now - last_seen);
-    if (delta < 0) // our clock must be slightly off still - not set from GPS yet
-        delta = 0;
-
-    return delta;
-}
-
 void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -213,7 +201,7 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
 
     // Decode the last measurement packet
     meshtastic_Telemetry lastMeasurement;
-    uint32_t agoSecs = GetTimeSinceMeshPacket(lastMeasurementPacket);
+    uint32_t agoSecs = service->GetTimeSinceMeshPacket(lastMeasurementPacket);
     const char *lastSender = getSenderShortName(*lastMeasurementPacket);
 
     const meshtastic_Data &p = lastMeasurementPacket->decoded;
