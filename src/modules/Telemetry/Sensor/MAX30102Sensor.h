@@ -6,6 +6,8 @@
 #include "TelemetrySensor.h"
 #include <MAX30105.h>
 
+#define MAX30102_BUFFER_LEN 100
+
 class MAX30102Sensor : public TelemetrySensor
 {
   private:
