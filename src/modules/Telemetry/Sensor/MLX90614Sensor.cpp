@@ -34,8 +34,8 @@ void MLX90614Sensor::setup() {}
 
 bool MLX90614Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    // measurement->variant.environment_metrics.temperature = mlx.readAmbientTempC();
-    // measurement->variant.environment_metrics.has_temperature = true;
+    measurement->variant.environment_metrics.temperature = mlx.readAmbientTempC();
+    measurement->variant.environment_metrics.has_temperature = true;
     measurement->variant.health_metrics.temperature = mlx.readObjectTempC();
     measurement->variant.health_metrics.has_temperature = true;
     return true;

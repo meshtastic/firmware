@@ -97,8 +97,6 @@ int32_t HealthTelemetryModule::runOnce()
     return min(sendToPhoneIntervalMs, result);
 }
 
-// Maybe implement a screen for health telemetry?
-/*
 bool HealthTelemetryModule::wantUIFrame()
 {
     return moduleConfig.telemetry.health_screen_enabled;
@@ -106,6 +104,7 @@ bool HealthTelemetryModule::wantUIFrame()
 
 void HealthTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
+    LOG_DEBUG("Drawing Health Telemetry Screen!");
     display->setTextAlignment(TEXT_ALIGN_LEFT);
     display->setFont(FONT_SMALL);
 
@@ -118,7 +117,7 @@ void HealthTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *
 
     // Decode the last measurement packet
     meshtastic_Telemetry lastMeasurement;
-    uint32_t agoSecs = GetTimeSinceMeshPacket(lastMeasurementPacket);
+    uint32_t agoSecs = service->GetTimeSinceMeshPacket(lastMeasurementPacket);
     const char *lastSender = getSenderShortName(*lastMeasurementPacket);
 
     const meshtastic_Data &p = lastMeasurementPacket->decoded;
@@ -132,20 +131,21 @@ void HealthTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *
     display->drawString(x, y, "Health From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
 
     String last_temp = String(lastMeasurement.variant.health_metrics.temperature, 0) + "°C";
-    if (moduleConfig.telemetry.health_display_fahrenheit) {
+    /*if (moduleConfig.telemetry.health_display_fahrenheit) {
         last_temp = String(CelsiusToFahrenheit(lastMeasurement.variant.health_metrics.temperature), 0) + "°F";
-    }
+    }*/
 
     // Continue with the remaining details
-    display->drawString(x, y += _fontHeight(FONT_SMALL),
-                        "Temp: " + last_temp);
-    display->drawString(x, y += _fontHeight(FONT_SMALL),
-                        "Heart Rate: " + String(lastMeasurement.variant.health_metrics.heart_rate, 0) + " bpm");
-    display->drawString(x, y += _fontHeight(FONT_SMALL),
-                        "Blood Pressure: " + String(lastMeasurement.variant.health_metrics.blood_pressure_systolic, 0) + "/" +
-                            String(lastMeasurement.variant.health_metrics.blood_pressure_diastolic, 0) + " mmHg");
+    display->drawString(x, y += _fontHeight(FONT_SMALL), "Temp: " + last_temp);
+    if (lastMeasurement.variant.health_metrics.has_heart_bpm) {
+        display->drawString(x, y += _fontHeight(FONT_SMALL),
+                            "Heart Rate: " + String(lastMeasurement.variant.health_metrics.heart_bpm, 0) + " bpm");
+    }
+    if (lastMeasurement.variant.health_metrics.has_spO2) {
+        display->drawString(x, y += _fontHeight(FONT_SMALL),
+                            "spO2: " + String(lastMeasurement.variant.health_metrics.spO2, 0) + " %");
+    }
 }
-*/
 
 bool HealthTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshtastic_Telemetry *t)
 {

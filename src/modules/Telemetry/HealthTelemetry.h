@@ -39,6 +39,8 @@ class HealthTelemetryModule : private concurrency::OSThread, public ProtobufModu
     bool sendTelemetry(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
 
   private:
+    bool wantUIFrame();
+    void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     bool firstTime = 1;
     meshtastic_MeshPacket *lastMeasurementPacket;
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute

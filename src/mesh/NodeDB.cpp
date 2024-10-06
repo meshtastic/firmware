@@ -536,6 +536,7 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
     }
     moduleConfig.telemetry.health_measurement_enabled = true; // XXX deleteme
     moduleConfig.telemetry.health_update_interval = 60;       // XXX deleteme
+    moduleConfig.telemetry.health_screen_enabled = true;      // XXX deleteme
 }
 
 void NodeDB::initModuleConfigIntervals()
