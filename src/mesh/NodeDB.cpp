@@ -532,7 +532,10 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
         moduleConfig.telemetry.device_update_interval = UINT32_MAX;
         moduleConfig.telemetry.environment_update_interval = UINT32_MAX;
         moduleConfig.telemetry.air_quality_interval = UINT32_MAX;
+        moduleConfig.telemetry.health_update_interval = UINT32_MAX;
     }
+    moduleConfig.telemetry.health_measurement_enabled = true; // XXX deleteme
+    moduleConfig.telemetry.health_update_interval = 60;       // XXX deleteme
 }
 
 void NodeDB::initModuleConfigIntervals()
@@ -542,6 +545,7 @@ void NodeDB::initModuleConfigIntervals()
     moduleConfig.telemetry.environment_update_interval = 0;
     moduleConfig.telemetry.air_quality_interval = 0;
     moduleConfig.telemetry.power_update_interval = 0;
+    moduleConfig.telemetry.health_update_interval = 0;
     moduleConfig.neighbor_info.update_interval = 0;
     moduleConfig.paxcounter.paxcounter_update_interval = 0;
 }

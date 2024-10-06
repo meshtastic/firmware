@@ -1,10 +1,10 @@
-#include "HealthTelemetry.h"
 #include "configuration.h"
 
-#if !MESHTASTIC_EXCLUDE_HEALTH_SENSOR
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
 
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "Default.h"
+#include "HealthTelemetry.h"
 #include "MeshService.h"
 #include "NodeDB.h"
 #include "PowerFSM.h"
@@ -18,30 +18,32 @@
 #include <OLEDDisplayUi.h>
 
 // Sensors
-// TODO
-#include "Sensor/BloodPressureSensor.h"
-#include "Sensor/HeartRateSensor.h"
-#include "Sensor/TemperatureSensor.h"
+#include "Sensor/MAX30102Sensor.h"
+#include "Sensor/MLX90614Sensor.h"
 
-HeartRateSensor heartRateSensor;
-TemperatureSensor temperatureSensor;
-BloodPressureSensor bloodPressureSensor;
+MAX30102Sensor max30102Sensor;
+MLX90614Sensor mlx90614Sensor;
 
 #define FAILED_STATE_SENSOR_READ_MULTIPLIER 10
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
+#if (HAS_SCREEN)
 #include "graphics/ScreenFonts.h"
+#endif
 #include <Throttle.h>
 
-namespace concurrency
+/*namespace concurrency
 {
 HealthTelemetryModule::HealthTelemetryModule(ScanI2C::DeviceType type) : OSThread("HealthTelemetryModule")
 {
     notifyDeepSleepObserver.observe(&notifyDeepSleep); // Let us know when shutdown() is issued.
 }
+} // namespace concurrency*/
 
 int32_t HealthTelemetryModule::runOnce()
 {
+    moduleConfig.telemetry.health_measurement_enabled = true; // XXX
+    moduleConfig.telemetry.health_update_interval = 30;       // XXX
     if (sleepOnNextExecution == true) {
         sleepOnNextExecution = false;
         uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.health_update_interval,
@@ -64,22 +66,16 @@ int32_t HealthTelemetryModule::runOnce()
         if (moduleConfig.telemetry.health_measurement_enabled) {
             LOG_INFO("Health Telemetry: Initializing\n");
             // Initialize sensors
-            // TODO
-            if (heartRateSensor.hasSensor())
-                result = heartRateSensor.runOnce();
-            if (temperatureSensor.hasSensor())
-                result = temperatureSensor.runOnce();
-            if (bloodPressureSensor.hasSensor())
-                result = bloodPressureSensor.runOnce();
+            if (mlx90614Sensor.hasSensor())
+                result = mlx90614Sensor.runOnce();
+            if (max30102Sensor.hasSensor())
+                result = max30102Sensor.runOnce();
         }
         return result;
     } else {
         // if we somehow got to a second run of this module with measurement disabled, then just wait forever
         if (!moduleConfig.telemetry.health_measurement_enabled) {
             return disable();
-        } else {
-            if (heartRateSensor.hasSensor())
-                result = heartRateSensor.runTrigger();
         }
 
         if (((lastSentToMesh == 0) ||
@@ -157,9 +153,9 @@ bool HealthTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
 #ifdef DEBUG_PORT
         const char *sender = getSenderShortName(mp);
 
-        LOG_INFO("(Received from %s): temperature=%f, heart_rate=%d, blood_pressure_systolic=%d, blood_pressure_diastolic=%d\n",
-                 sender, t->variant.health_metrics.temperature, t->variant.health_metrics.heart_rate,
-                 t->variant.health_metrics.blood_pressure_systolic, t->variant.health_metrics.blood_pressure_diastolic);
+        LOG_INFO("(Received from %s): temperature=%f, heart_bpm=%d, spO2=%d,\n", sender, t->variant.health_metrics.temperature,
+                 t->variant.health_metrics.heart_bpm, t->variant.health_metrics.spO2);
+
 #endif
         // release previous packet before occupying a new spot
         if (lastMeasurementPacket != nullptr)
@@ -179,17 +175,12 @@ bool HealthTelemetryModule::getHealthTelemetry(meshtastic_Telemetry *m)
     m->which_variant = meshtastic_Telemetry_health_metrics_tag;
     m->variant.health_metrics = meshtastic_HealthMetrics_init_zero;
 
-    // TODO
-    if (heartRateSensor.hasSensor()) {
-        valid = valid && heartRateSensor.getMetrics(m);
+    if (max30102Sensor.hasSensor()) {
+        valid = valid && max30102Sensor.getMetrics(m);
         hasSensor = true;
     }
-    if (temperatureSensor.hasSensor()) {
-        valid = valid && temperatureSensor.getMetrics(m);
-        hasSensor = true;
-    }
-    if (bloodPressureSensor.hasSensor()) {
-        valid = valid && bloodPressureSensor.getMetrics(m);
+    if (mlx90614Sensor.hasSensor()) {
+        valid = valid && mlx90614Sensor.getMetrics(m);
         hasSensor = true;
     }
 
@@ -230,9 +221,8 @@ bool HealthTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.which_variant = meshtastic_Telemetry_health_metrics_tag;
     m.time = getTime();
     if (getHealthTelemetry(&m)) {
-        LOG_INFO("(Sending): temperature=%f, heart_rate=%d, blood_pressure_systolic=%d, blood_pressure_diastolic=%d\n",
-                 m.variant.health_metrics.temperature, m.variant.health_metrics.heart_rate,
-                 m.variant.health_metrics.blood_pressure_systolic, m.variant.health_metrics.blood_pressure_diastolic);
+        LOG_INFO("(Sending): temperature=%f, heart_bpm=%d, spO2=%d\n", m.variant.health_metrics.temperature,
+                 m.variant.health_metrics.heart_bpm, m.variant.health_metrics.spO2);
 
         sensor_read_error_count = 0;
 
@@ -265,6 +255,5 @@ bool HealthTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     }
     return false;
 }
-} // namespace concurrency
 
 #endif

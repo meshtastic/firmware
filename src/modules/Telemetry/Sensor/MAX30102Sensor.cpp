@@ -32,8 +32,11 @@ void MAX30102Sensor::setup() {}
 
 bool MAX30102Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    measurement->variant.environment_metrics.temperature = max30102.readTemperature();
+    float temp = max30102.readTemperature();
+    measurement->variant.environment_metrics.temperature = temp;
     measurement->variant.environment_metrics.has_temperature = true;
+    measurement->variant.health_metrics.temperature = temp;
+    measurement->variant.health_metrics.has_temperature = true;
     return true;
 }
 
