@@ -26,7 +26,11 @@ struct uBloxGnssModelInfo {
 typedef enum {
     GNSS_MODEL_ATGM336H,
     GNSS_MODEL_MTK,
-    GNSS_MODEL_UBLOX,
+    GNSS_MODEL_UBLOX6,
+    GNSS_MODEL_UBLOX7,
+    GNSS_MODEL_UBLOX8,
+    GNSS_MODEL_UBLOX9,
+    GNSS_MODEL_UBLOX10,
     GNSS_MODEL_UC6580,
     GNSS_MODEL_UNKNOWN,
     GNSS_MODEL_MTK_L76B,
@@ -102,7 +106,7 @@ class GPS : private concurrency::OSThread
 
   public:
     /** If !NULL we will use this serial port to construct our GPS */
-#if defined(RPI_PICO_WAVESHARE)
+#if defined(ARCH_RP2040)
     static SerialUART *_serial_gps;
 #else
     static HardwareSerial *_serial_gps;
@@ -130,6 +134,7 @@ class GPS : private concurrency::OSThread
     static const uint8_t _message_GGA[];
     static const uint8_t _message_PMS[];
     static const uint8_t _message_SAVE[];
+    static const uint8_t _message_SAVE_10[];
 
     // VALSET Commands for M10
     static const uint8_t _message_VALSET_PM[];
@@ -150,6 +155,8 @@ class GPS : private concurrency::OSThread
     static const uint8_t _message_CAS_CFG_RST_FACTORY[];
     static const uint8_t _message_CAS_CFG_NAVX_CONF[];
     static const uint8_t _message_CAS_CFG_RATE_1HZ[];
+
+    const char *ACK_SUCCESS_MESSAGE = "Get ack success!\n";
 
     meshtastic_Position p = meshtastic_Position_init_default;
 

@@ -13,9 +13,9 @@
 #if defined(ARCH_PORTDUINO) && !HAS_RADIO
 #include "../platform/portduino/SimRadio.h"
 #endif
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
-#include "modules/esp32/StoreForwardModule.h"
+#include "modules/StoreForwardModule.h"
 #endif
 #endif
 
@@ -91,6 +91,9 @@ class MeshService
 
     /// Return the next MqttClientProxyMessage packet destined to the phone.
     meshtastic_MqttClientProxyMessage *getMqttClientProxyMessageForPhone() { return toPhoneMqttProxyQueue.dequeuePtr(0); }
+
+    /// Return the next ClientNotification packet destined to the phone.
+    meshtastic_ClientNotification *getClientNotificationForPhone() { return toPhoneClientNotificationQueue.dequeuePtr(0); }
 
     // search the queue for a request id and return the matching nodenum
     NodeNum getNodenumFromRequestId(uint32_t request_id);

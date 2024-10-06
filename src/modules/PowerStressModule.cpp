@@ -9,6 +9,7 @@
 #include "main.h"
 #include "sleep.h"
 #include "target_specific.h"
+#include <Throttle.h>
 
 extern void printInfo();
 
@@ -114,7 +115,7 @@ int32_t PowerStressModule::runOnce()
                 break;
             case meshtastic_PowerStressMessage_Opcode_CPU_FULLON: {
                 uint32_t start_msec = millis();
-                while ((millis() - start_msec) < (uint32_t)sleep_msec)
+                while (Throttle::isWithinTimespanMs(start_msec, sleep_msec))
                     ;           // Don't let CPU idle at all
                 sleep_msec = 0; // we already slept
                 break;

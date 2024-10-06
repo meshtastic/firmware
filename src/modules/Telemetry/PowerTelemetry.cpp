@@ -19,6 +19,7 @@
 #define DISPLAY_RECEIVEID_MEASUREMENTS_ON_SCREEN true
 
 #include "graphics/ScreenFonts.h"
+#include <Throttle.h>
 
 int32_t PowerTelemetryModule::runOnce()
 {
@@ -59,6 +60,8 @@ int32_t PowerTelemetryModule::runOnce()
                 result = ina260Sensor.runOnce();
             if (ina3221Sensor.hasSensor() && !ina3221Sensor.isInitialized())
                 result = ina3221Sensor.runOnce();
+            if (max17048Sensor.hasSensor() && !max17048Sensor.isInitialized())
+                result = max17048Sensor.runOnce();
         }
         return result;
 #else
@@ -69,20 +72,19 @@ int32_t PowerTelemetryModule::runOnce()
         if (!moduleConfig.telemetry.power_measurement_enabled)
             return disable();
 
-        uint32_t now = millis();
         if (((lastSentToMesh == 0) ||
-             ((now - lastSentToMesh) >= Default::getConfiguredOrDefaultMsScaled(moduleConfig.telemetry.power_update_interval,
-                                                                                default_telemetry_broadcast_interval_secs,
-                                                                                numOnlineNodes))) &&
+             !Throttle::isWithinTimespanMs(lastSentToMesh, Default::getConfiguredOrDefaultMsScaled(
+                                                               moduleConfig.telemetry.power_update_interval,
+                                                               default_telemetry_broadcast_interval_secs, numOnlineNodes))) &&
             airTime->isTxAllowedAirUtil()) {
             sendTelemetry();
-            lastSentToMesh = now;
-        } else if (((lastSentToPhone == 0) || ((now - lastSentToPhone) >= sendToPhoneIntervalMs)) &&
+            lastSentToMesh = millis();
+        } else if (((lastSentToPhone == 0) || !Throttle::isWithinTimespanMs(lastSentToPhone, sendToPhoneIntervalMs)) &&
                    (service->isToPhoneQueueEmpty())) {
             // Just send to phone when it's not our time to send to mesh yet
             // Only send while queue is empty (phone assumed connected)
             sendTelemetry(NODENUM_BROADCAST, true);
-            lastSentToPhone = now;
+            lastSentToPhone = millis();
         }
     }
     return min(sendToPhoneIntervalMs, result);
@@ -120,7 +122,7 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
     uint32_t agoSecs = GetTimeyWimeySinceMeshPacket(lastMeasurementPacket);
     const char *lastSender = getSenderShortName(*lastMeasurementPacket);
 
-    auto &p = lastMeasurementPacket->decoded;
+    const meshtastic_Data &p = lastMeasurementPacket->decoded;
     if (!pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &lastMeasurement)) {
         display->setFont(FONT_SMALL);
         display->drawString(x, y += _fontHeight(FONT_MEDIUM), "Measurement Error");
@@ -128,19 +130,23 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
         return;
     }
 
+    // Display current and voltage based on ...power_metrics.has_[channel/voltage/current]... flags
     display->setFont(FONT_SMALL);
-    String last_temp = String(lastMeasurement.variant.environment_metrics.temperature, 0) + "°C";
     display->drawString(x, y += _fontHeight(FONT_MEDIUM) - 2, "From: " + String(lastSender) + "(" + String(agoSecs) + "s)");
-    if (lastMeasurement.variant.power_metrics.ch1_voltage != 0) {
+    if (lastMeasurement.variant.power_metrics.has_ch1_voltage || lastMeasurement.variant.power_metrics.has_ch1_current) {
         display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Ch 1 Volt/Cur: " + String(lastMeasurement.variant.power_metrics.ch1_voltage, 0) + "V / " +
-                                String(lastMeasurement.variant.power_metrics.ch1_current, 0) + "mA");
+                            "Ch1 Volt: " + String(lastMeasurement.variant.power_metrics.ch1_voltage, 2) +
+                                "V / Curr: " + String(lastMeasurement.variant.power_metrics.ch1_current, 0) + "mA");
+    }
+    if (lastMeasurement.variant.power_metrics.has_ch2_voltage || lastMeasurement.variant.power_metrics.has_ch2_current) {
         display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Ch 2 Volt/Cur: " + String(lastMeasurement.variant.power_metrics.ch2_voltage, 0) + "V / " +
-                                String(lastMeasurement.variant.power_metrics.ch2_current, 0) + "mA");
+                            "Ch2 Volt: " + String(lastMeasurement.variant.power_metrics.ch2_voltage, 2) +
+                                "V / Curr: " + String(lastMeasurement.variant.power_metrics.ch2_current, 0) + "mA");
+    }
+    if (lastMeasurement.variant.power_metrics.has_ch3_voltage || lastMeasurement.variant.power_metrics.has_ch3_current) {
         display->drawString(x, y += _fontHeight(FONT_SMALL),
-                            "Ch 3 Volt/Cur: " + String(lastMeasurement.variant.power_metrics.ch3_voltage, 0) + "V / " +
-                                String(lastMeasurement.variant.power_metrics.ch3_current, 0) + "mA");
+                            "Ch3 Volt: " + String(lastMeasurement.variant.power_metrics.ch3_voltage, 2) +
+                                "V / Curr: " + String(lastMeasurement.variant.power_metrics.ch3_current, 0) + "mA");
     }
 }
 
@@ -150,8 +156,8 @@ bool PowerTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &m
 #ifdef DEBUG_PORT
         const char *sender = getSenderShortName(mp);
 
-        LOG_INFO("(Received from %s): ch1_voltage=%f, ch1_current=%f, ch2_voltage=%f, ch2_current=%f, "
-                 "ch3_voltage=%f, ch3_current=%f\n",
+        LOG_INFO("(Received from %s): ch1_voltage=%.1f, ch1_current=%.1f, ch2_voltage=%.1f, ch2_current=%.1f, "
+                 "ch3_voltage=%.1f, ch3_current=%.1f\n",
                  sender, t->variant.power_metrics.ch1_voltage, t->variant.power_metrics.ch1_current,
                  t->variant.power_metrics.ch2_voltage, t->variant.power_metrics.ch2_current, t->variant.power_metrics.ch3_voltage,
                  t->variant.power_metrics.ch3_current);
@@ -172,12 +178,7 @@ bool PowerTelemetryModule::getPowerTelemetry(meshtastic_Telemetry *m)
     m->time = getTime();
     m->which_variant = meshtastic_Telemetry_power_metrics_tag;
 
-    m->variant.power_metrics.ch1_voltage = 0;
-    m->variant.power_metrics.ch1_current = 0;
-    m->variant.power_metrics.ch2_voltage = 0;
-    m->variant.power_metrics.ch2_current = 0;
-    m->variant.power_metrics.ch3_voltage = 0;
-    m->variant.power_metrics.ch3_current = 0;
+    m->variant.power_metrics = meshtastic_PowerMetrics_init_zero;
 #if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
     if (ina219Sensor.hasSensor())
         valid = ina219Sensor.getMetrics(m);
@@ -185,6 +186,8 @@ bool PowerTelemetryModule::getPowerTelemetry(meshtastic_Telemetry *m)
         valid = ina260Sensor.getMetrics(m);
     if (ina3221Sensor.hasSensor())
         valid = ina3221Sensor.getMetrics(m);
+    if (max17048Sensor.hasSensor())
+        valid = max17048Sensor.getMetrics(m);
 #endif
 
     return valid;
@@ -252,7 +255,7 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
             service->sendToMesh(p, RX_SRC_LOCAL, true);
 
             if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
-                LOG_DEBUG("Starting next execution in 5 seconds and then going to sleep.\n");
+                LOG_DEBUG("Starting next execution in 5s then going to sleep.\n");
                 sleepOnNextExecution = true;
                 setIntervalFromNow(5000);
             }

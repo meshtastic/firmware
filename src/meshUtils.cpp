@@ -60,10 +60,16 @@ char *strnstr(const char *s, const char *find, size_t slen)
 
 void printBytes(const char *label, const uint8_t *p, size_t numbytes)
 {
-    LOG_DEBUG("%s: ", label);
-    for (size_t i = 0; i < numbytes; i++)
-        LOG_DEBUG("%02x ", p[i]);
-    LOG_DEBUG("\n");
+    int labelSize = strlen(label);
+    if (labelSize < 100 && numbytes < 64) {
+        char *messageBuffer = new char[labelSize + (numbytes * 3) + 2];
+        strncpy(messageBuffer, label, labelSize);
+        for (size_t i = 0; i < numbytes; i++)
+            snprintf(messageBuffer + labelSize + i * 3, 4, " %02x", p[i]);
+        strcpy(messageBuffer + labelSize + numbytes * 3, "\n");
+        LOG_DEBUG(messageBuffer);
+        delete[] messageBuffer;
+    }
 }
 
 bool memfll(const uint8_t *mem, uint8_t find, size_t numbytes)
@@ -73,4 +79,19 @@ bool memfll(const uint8_t *mem, uint8_t find, size_t numbytes)
             return false;
     }
     return true;
+}
+
+bool isOneOf(int item, int count, ...)
+{
+    va_list args;
+    va_start(args, count);
+    bool found = false;
+    for (int i = 0; i < count; ++i) {
+        if (item == va_arg(args, int)) {
+            found = true;
+            break;
+        }
+    }
+    va_end(args);
+    return found;
 }

@@ -33,7 +33,7 @@ int32_t KbI2cBase::runOnce()
     if (!i2cBus) {
         switch (cardkb_found.port) {
         case ScanI2C::WIRE1:
-#ifdef I2C_SDA1
+#if WIRE_INTERFACES_COUNT == 2
             LOG_DEBUG("Using I2C Bus 1 (the second one)\n");
             i2cBus = &Wire1;
             if (cardkb_found.address == BBQ10_KB_ADDR) {
@@ -296,6 +296,7 @@ int32_t KbI2cBase::runOnce()
             case 0xac: // fn+m      INPUT_BROKER_MSG_MUTE_TOGGLE
             case 0x9e: // fn+g      INPUT_BROKER_MSG_GPS_TOGGLE
             case 0xaf: // fn+space  INPUT_BROKER_MSG_SEND_PING
+            case 0x8b: // fn+del    INPUT_BROKEN_MSG_DISMISS_FRAME
                 // just pass those unmodified
                 e.inputEvent = ANYKEY;
                 e.kbchar = c;

@@ -7,6 +7,7 @@
 #include "NAU7802Sensor.h"
 #include "SafeFile.h"
 #include "TelemetrySensor.h"
+#include <Throttle.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
 
@@ -40,7 +41,7 @@ bool NAU7802Sensor::getMetrics(meshtastic_Telemetry *measurement)
     uint32_t start = millis();
     while (!nau7802.available()) {
         delay(100);
-        if (millis() - start > 1000) {
+        if (!Throttle::isWithinTimespanMs(start, 1000)) {
             nau7802.powerDown();
             return false;
         }

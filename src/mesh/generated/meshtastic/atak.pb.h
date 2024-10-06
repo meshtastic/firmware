@@ -120,6 +120,7 @@ typedef struct _meshtastic_PLI {
     uint16_t course;
 } meshtastic_PLI;
 
+typedef PB_BYTES_ARRAY_T(220) meshtastic_TAKPacket_detail_t;
 /* Packets for the official ATAK Plugin */
 typedef struct _meshtastic_TAKPacket {
     /* Are the payloads strings compressed for LoRA transport? */
@@ -139,6 +140,9 @@ typedef struct _meshtastic_TAKPacket {
         meshtastic_PLI pli;
         /* ATAK GeoChat message */
         meshtastic_GeoChat chat;
+        /* Generic CoT detail XML
+     May be compressed / truncated by the sender (EUD) */
+        meshtastic_TAKPacket_detail_t detail;
     } payload_variant;
 } meshtastic_TAKPacket;
 
@@ -199,6 +203,7 @@ extern "C" {
 #define meshtastic_TAKPacket_status_tag          4
 #define meshtastic_TAKPacket_pli_tag             5
 #define meshtastic_TAKPacket_chat_tag            6
+#define meshtastic_TAKPacket_detail_tag          7
 
 /* Struct field encoding specification for nanopb */
 #define meshtastic_TAKPacket_FIELDLIST(X, a) \
@@ -207,7 +212,8 @@ X(a, STATIC,   OPTIONAL, MESSAGE,  contact,           2) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  group,             3) \
 X(a, STATIC,   OPTIONAL, MESSAGE,  status,            4) \
 X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,pli,payload_variant.pli),   5) \
-X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,chat,payload_variant.chat),   6)
+X(a, STATIC,   ONEOF,    MESSAGE,  (payload_variant,chat,payload_variant.chat),   6) \
+X(a, STATIC,   ONEOF,    BYTES,    (payload_variant,detail,payload_variant.detail),   7)
 #define meshtastic_TAKPacket_CALLBACK NULL
 #define meshtastic_TAKPacket_DEFAULT NULL
 #define meshtastic_TAKPacket_contact_MSGTYPE meshtastic_Contact
