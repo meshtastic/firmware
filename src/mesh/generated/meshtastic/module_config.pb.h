@@ -342,9 +342,6 @@ typedef struct _meshtastic_ModuleConfig_TelemetryConfig {
     /* Interval in seconds of how often we should try to send our
  health metrics to the mesh */
     uint32_t health_update_interval;
-        /* Preferences for the (Health) Telemetry Module
- Enable/Disable the telemetry measurement module measurement collection */
-    bool health_screen_enabled;
 } meshtastic_ModuleConfig_TelemetryConfig;
 
 /* TODO: REPLACE */
