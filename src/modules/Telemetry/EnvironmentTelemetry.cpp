@@ -10,6 +10,7 @@
 #include "PowerFSM.h"
 #include "RTC.h"
 #include "Router.h"
+#include "UnitConversions.h"
 #include "main.h"
 #include "power.h"
 #include "sleep.h"
@@ -182,11 +183,6 @@ bool EnvironmentTelemetryModule::wantUIFrame()
     return moduleConfig.telemetry.environment_screen_enabled;
 }
 
-float EnvironmentTelemetryModule::CelsiusToFahrenheit(float c)
-{
-    return (c * 9) / 5 + 32;
-}
-
 void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -216,7 +212,8 @@ void EnvironmentTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiSt
 
     String last_temp = String(lastMeasurement.variant.environment_metrics.temperature, 0) + "°C";
     if (moduleConfig.telemetry.environment_display_fahrenheit) {
-        last_temp = String(CelsiusToFahrenheit(lastMeasurement.variant.environment_metrics.temperature), 0) + "°F";
+        last_temp =
+            String(UnitConversions::CelsiusToFahrenheit(lastMeasurement.variant.environment_metrics.temperature), 0) + "°F";
     }
 
     // Continue with the remaining details
