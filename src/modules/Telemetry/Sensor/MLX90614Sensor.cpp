@@ -15,8 +15,7 @@ int32_t MLX90614Sensor::runOnce()
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
 
-    if (mlx.begin(nodeTelemetrySensorsMap[sensorType].first, *nodeTelemetrySensorsMap[sensorType].second) ==
-        true) // MLX90614 init
+    if (mlx.begin(nodeTelemetrySensorsMap[sensorType].first, nodeTelemetrySensorsMap[sensorType].second) == true) // MLX90614 init
     {
         LOG_DEBUG("MLX90614 Init Succeed\n");
         status = true;
@@ -31,13 +30,11 @@ void MLX90614Sensor::setup() {}
 
 bool MLX90614Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
-    if (mlx.read()) {
-        measurement->variant.environment_metrics.has_temperature = true;
-        measurement->variant.environment_metrics.temperature = mlx.object(); // Get the object temperature
-        return true;
-    } else {
-        return false;
-    }
+    measurement->variant.environment_metrics.temperature = mlx.readAmbientTempC();
+    measurement->variant.environment_metrics.has_temperature = true;
+    measurement->variant.health_metrics.temperature = mlx.readObjectTempC();
+    measurement->variant.health_metrics.has_temperature = true;
+    return true;
 }
 
 #endif
