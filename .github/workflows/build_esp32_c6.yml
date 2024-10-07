@@ -34,3 +34,4 @@ jobs:
             release/*.bin
             release/*.elf
           arch: esp32c6
+          USER_PREFS: ${{ secrets.USER_PREFS }}

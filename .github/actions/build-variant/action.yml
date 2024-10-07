@@ -34,7 +34,11 @@ inputs:
   arch:
     description: Processor arch name
     required: true
-    default: "esp32"
+    default: esp32
+  USER_PREFS:
+    description: Custom userPrefs.h
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -42,6 +46,8 @@ runs:
     - name: Build base
       id: base
       uses: ./.github/actions/setup-base
+      with:
+        USER_PREFS: ${{ inputs.USER_PREFS }}
 
     - name: Pull web ui
       if: inputs.include-web-ui == 'true'

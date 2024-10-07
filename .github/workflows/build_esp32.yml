@@ -13,6 +13,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Build base
+        id: base
+        uses: ./.github/actions/setup-base
+        with:
+          USER_PREFS: ${{ secrets.USER_PREFS }}
+
+      - name: Pull web ui
+        uses: dsaltares/fetch-gh-release-asset@master
+        with:
+          repo: meshtastic/web
+          file: build.tar
+          target: build.tar
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Unpack web ui
+        run: |
+          tar -xf build.tar -C data/static
+          rm build.tar
+
+      - name: Remove debug flags for release
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          sed -i '/DDEBUG_HEAP/d' ./arch/esp32/esp32.ini
+          sed -i '/DDEBUG_HEAP/d' ./arch/esp32/esp32s2.ini
+          sed -i '/DDEBUG_HEAP/d' ./arch/esp32/esp32s3.ini
+          sed -i '/DDEBUG_HEAP/d' ./arch/esp32/esp32c3.ini
+
       - name: Build ESP32
         id: build
         uses: ./.github/actions/build-variant

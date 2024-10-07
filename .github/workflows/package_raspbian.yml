@@ -11,6 +11,8 @@ permissions:
 jobs:
   build-raspbian:
     uses: ./.github/workflows/build_raspbian.yml
+    with:
+      USER_PREFS: ${{ inputs.USER_PREFS }}
 
   package-raspbian:
     runs-on: ubuntu-22.04

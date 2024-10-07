@@ -24,3 +24,4 @@ jobs:
             release/*.uf2
             release/*.elf
           arch: rp2040
+          USER_PREFS: ${{ secrets.USER_PREFS }}
