@@ -137,6 +137,17 @@ const RegionInfo regions[] = {
     RDEF(SG_923, 917.0f, 925.0f, 100, 0, 20, true, false, false),
 
     /*
+        Philippines
+                433 - 434.7 MHz <10 mW erp, NTC approved device required
+                868 - 869.4 MHz <25 mW erp, NTC approved device required
+                915 - 918 MHz <250 mW EIRP, no external antennna allowed
+                https://github.com/meshtastic/firmware/issues/4948#issuecomment-2394926135
+    */
+
+    RDEF(PH_433, 433.0f, 434.7f, 100, 0, 10, true, false, false), RDEF(PH_868, 868.0f, 869.4f, 100, 0, 14, true, false, false),
+    RDEF(PH_915, 915.0f, 918.0f, 100, 0, 24, true, false, false),
+
+    /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
     */
     RDEF(LORA_24, 2400.0f, 2483.5f, 100, 0, 10, true, false, true),
