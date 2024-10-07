@@ -12,6 +12,7 @@
 #include "detect/ScanI2C.h"
 #include "input/ScanAndSelect.h"
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
+#include "modules/AdminModule.h"
 
 #include "main.h"                               // for cardkb_found
 #include "modules/ExternalNotificationModule.h" // for buzzer control
@@ -268,21 +269,21 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             showTemporaryMessage("GPS Toggled");
 #endif
             break;
-        case INPUT_BROKER_MSG_BLUETOOTH_TOGGLE: // toggle Bluetooth on/off
-            if (config.bluetooth.enabled == true) {
-                config.bluetooth.enabled = false;
-                LOG_INFO("User toggled Bluetooth. Now DISABLED.\n");
-                nodeDB->saveToDisk();
-                rebootAtMsec = millis() + 2000;
-                showTemporaryMessage("Bluetooth OFF\nReboot");
-            } else if (config.bluetooth.enabled == false) {
-                config.bluetooth.enabled = true;
-                LOG_INFO("User toggled Bluetooth. Now ENABLED\n");
-                nodeDB->saveToDisk();
-                rebootAtMsec = millis() + 2000;
-                showTemporaryMessage("Bluetooth ON\nReboot");
-            }
-            break;
+case INPUT_BROKER_MSG_BLUETOOTH_TOGGLE: // toggle Bluetooth on/off
+    if (config.bluetooth.enabled == true) {
+        config.bluetooth.enabled = false;
+        LOG_INFO("User toggled Bluetooth. Now DISABLED.\n");
+        nodeDB->saveToDisk();
+        disableBluetooth();
+        showTemporaryMessage("Bluetooth OFF");
+    } else if (config.bluetooth.enabled == false) {
+        config.bluetooth.enabled = true;
+        LOG_INFO("User toggled Bluetooth. Now ENABLED\n");
+        nodeDB->saveToDisk();
+        rebootAtMsec = millis() + 2000;
+        showTemporaryMessage("Bluetooth ON\nReboot");
+    }
+    break;
         case INPUT_BROKER_MSG_SEND_PING: // fn+space send network ping like double press does
             service->refreshLocalMeshNode();
             if (service->trySendPosition(NODENUM_BROADCAST, true)) {
