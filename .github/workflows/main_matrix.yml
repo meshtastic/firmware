@@ -154,7 +154,7 @@ jobs:
   package-native:
     uses: ./.github/workflows/package_amd64.yml
     with:
-     USER_PREFS: ${{ inputs.USER_PREFS }}
+      USER_PREFS: ${{ inputs.USER_PREFS }}
 
   after-checks:
     runs-on: ubuntu-latest
