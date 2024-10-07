@@ -317,8 +317,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #ifdef USERPREFS_USE_ADMIN_KEY
     memcpy(config.security.admin_key[0].bytes, USERPREFS_ADMIN_KEY, 32);
     config.security.admin_key[0].size = 32;
-#else
-    config.security.admin_key[0].size = 0;
+    config.security.admin_key_count = 1;
 #endif
     if (shouldPreserveKey) {
         config.security.private_key.size = 32;
@@ -626,6 +625,8 @@ void NodeDB::installDefaultDeviceState()
     // devicestate.node_db_lite_count = 0;
     devicestate.version = DEVICESTATE_CUR_VER;
     devicestate.receive_queue_count = 0; // Not yet implemented FIXME
+    devicestate.has_rx_waypoint = false;
+    devicestate.has_rx_text_message = false;
 
     generatePacketId(); // FIXME - ugly way to init current_packet_id;
 
