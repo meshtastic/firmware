@@ -143,18 +143,15 @@ jobs:
 
   package-raspbian:
     uses: ./.github/workflows/package_raspbian.yml
-    with:
-      USER_PREFS: ${{ inputs.USER_PREFS }}
+    secrets: inherit
 
   package-raspbian-armv7l:
     uses: ./.github/workflows/package_raspbian_armv7l.yml
-    with:
-      USER_PREFS: ${{ inputs.USER_PREFS }}
+    secrets: inherit
 
   package-native:
     uses: ./.github/workflows/package_amd64.yml
-    with:
-      USER_PREFS: ${{ inputs.USER_PREFS }}
+    secrets: inherit
 
   after-checks:
     runs-on: ubuntu-latest

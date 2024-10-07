@@ -11,8 +11,7 @@ permissions:
 jobs:
   build-native:
     uses: ./.github/workflows/build_native.yml
-    with:
-      USER_PREFS: ${{ secrets.USER_PREFS }}
+    secrets: inherit
 
   package-native:
     runs-on: ubuntu-22.04
