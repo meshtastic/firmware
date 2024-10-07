@@ -19,7 +19,10 @@
 #include "hardware/sync.h"
 // For scb_hw so we can enable deep sleep
 #include "hardware/structs/scb.h"
-
+// when using old SDK this macro is not defined
+#ifndef XOSC_HZ
+    #define XOSC_HZ 12000000u
+#endif
 // The difference between sleep and dormant is that ALL clocks are stopped in dormant mode,
 // until the source (either xosc or rosc) is started again by an external event.
 // In sleep mode some clocks can be left running controlled by the SLEEP_EN registers in the clocks
