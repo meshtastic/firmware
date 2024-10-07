@@ -94,18 +94,6 @@ bool PowerTelemetryModule::wantUIFrame()
     return moduleConfig.telemetry.power_screen_enabled;
 }
 
-uint32_t GetTimeyWimeySinceMeshPacket(const meshtastic_MeshPacket *mp)
-{
-    uint32_t now = getTime();
-
-    uint32_t last_seen = mp->rx_time;
-    int delta = (int)(now - last_seen);
-    if (delta < 0) // our clock must be slightly off still - not set from GPS yet
-        delta = 0;
-
-    return delta;
-}
-
 void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     display->setTextAlignment(TEXT_ALIGN_LEFT);
@@ -119,7 +107,7 @@ void PowerTelemetryModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *s
 
     meshtastic_Telemetry lastMeasurement;
 
-    uint32_t agoSecs = GetTimeyWimeySinceMeshPacket(lastMeasurementPacket);
+    uint32_t agoSecs = service->GetTimeSinceMeshPacket(lastMeasurementPacket);
     const char *lastSender = getSenderShortName(*lastMeasurementPacket);
 
     const meshtastic_Data &p = lastMeasurementPacket->decoded;
