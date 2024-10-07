@@ -6,6 +6,8 @@
 #include "../mesh/generated/meshtastic/telemetry.pb.h"
 #include "NodeDB.h"
 #include "ProtobufModule.h"
+#include <OLEDDisplay.h>
+#include <OLEDDisplayUi.h>
 
 class HealthTelemetryModule : private concurrency::OSThread, public ProtobufModule<meshtastic_Telemetry>
 {
@@ -21,6 +23,14 @@ class HealthTelemetryModule : private concurrency::OSThread, public ProtobufModu
         nodeStatusObserver.observe(&nodeStatus->onNewStatus);
         setIntervalFromNow(10 * 1000);
     }
+
+#if !HAS_SCREEN
+    void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
+#else
+    virtual void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) override;
+#endif
+
+    virtual bool wantUIFrame() override;
 
   protected:
     /** Called to handle a particular incoming message
@@ -39,8 +49,6 @@ class HealthTelemetryModule : private concurrency::OSThread, public ProtobufModu
     bool sendTelemetry(NodeNum dest = NODENUM_BROADCAST, bool wantReplies = false);
 
   private:
-    bool wantUIFrame();
-    void drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y);
     bool firstTime = 1;
     meshtastic_MeshPacket *lastMeasurementPacket;
     uint32_t sendToPhoneIntervalMs = SECONDS_IN_MINUTE * 1000; // Send to phone every minute
