@@ -628,6 +628,8 @@ void NodeDB::installDefaultDeviceState()
     // devicestate.node_db_lite_count = 0;
     devicestate.version = DEVICESTATE_CUR_VER;
     devicestate.receive_queue_count = 0; // Not yet implemented FIXME
+    devicestate.has_rx_waypoint = false;
+    devicestate.has_rx_text_message = false;
 
     generatePacketId(); // FIXME - ugly way to init current_packet_id;
 
