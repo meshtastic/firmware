@@ -317,8 +317,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #ifdef USERPREFS_USE_ADMIN_KEY
     memcpy(config.security.admin_key[0].bytes, USERPREFS_ADMIN_KEY, 32);
     config.security.admin_key[0].size = 32;
-#else
-    config.security.admin_key[0].size = 0;
+    config.security.admin_key_count = 1;
 #endif
     if (shouldPreserveKey) {
         config.security.private_key.size = 32;
