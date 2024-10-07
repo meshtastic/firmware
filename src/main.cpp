@@ -720,6 +720,7 @@ void setup()
             setenv("TZ", "GMT0", 1);
         } else {
             setenv("TZ", (const char *)slipstreamTZString, 1);
+            strcpy(config.device.tzdef, (const char *)slipstreamTZString);
         }
     }
     tzset();
