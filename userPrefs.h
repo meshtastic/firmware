@@ -1,31 +1,57 @@
 #ifndef _USERPREFS_
 #define _USERPREFS_
 
+// Slipstream values:
+
+#define USERPREFS_TZ_STRING "tzplaceholder                                         "
+
 // Uncomment and modify to set device defaults
 
-// #define EVENT_MODE 1
+// #define USERPREFS_EVENT_MODE 1
 
-// #define CONFIG_LORA_REGION_USERPREFS meshtastic_Config_LoRaConfig_RegionCode_US
-// #define LORACONFIG_MODEM_PRESET_USERPREFS meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST
-// #define LORACONFIG_CHANNEL_NUM_USERPREFS 31
-// #define CONFIG_LORA_IGNORE_MQTT_USERPREFS true
+// #define USERPREFS_CONFIG_LORA_REGION meshtastic_Config_LoRaConfig_RegionCode_US
+// #define USERPREFS_LORACONFIG_MODEM_PRESET meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST
+// #define USERPREFS_LORACONFIG_CHANNEL_NUM 31
+// #define USERPREFS_CONFIG_LORA_IGNORE_MQTT true
+
+// #define USERPREFS_CONFIG_GPS_MODE meshtastic_Config_PositionConfig_GpsMode_ENABLED
+
+// #define USERPREFS_CHANNELS_TO_WRITE 3
 /*
-#define CHANNEL_0_PSK_USERPREFS \
+#define USERPREFS_CHANNEL_0_PSK \
     {                                                                                                                            \
         0x38, 0x4b, 0xbc, 0xc0, 0x1d, 0xc0, 0x22, 0xd1, 0x81, 0xbf, 0x36, 0xb8, 0x61, 0x21, 0xe1, 0xfb, 0x96, 0xb7, 0x2e, 0x55,  \
             0xbf, 0x74, 0x22, 0x7e, 0x9d, 0x6a, 0xfb, 0x48, 0xd6, 0x4c, 0xb1, 0xa1                                               \
     }
 */
-// #define CHANNEL_0_NAME_USERPREFS "DEFCONnect"
-// #define CHANNEL_0_PRECISION_USERPREFS 14
+// #define USERPREFS_CHANNEL_0_NAME "DEFCONnect"
+// #define USERPREFS_CHANNEL_0_PRECISION 14
+/*
+#define USERPREFS_CHANNEL_1_PSK \
+    {                                                                                                                            \
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  \
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00                                               \
+    }
+*/
+// #define USERPREFS_CHANNEL_1_NAME "REPLACEME"
+// #define USERPREFS_CHANNEL_1_PRECISION 14
+/*
+#define USERPREFS_CHANNEL_2_PSK \
+    {                                                                                                                            \
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  \
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00                                              \
+    }
+*/
+// #define USERPREFS_CHANNEL_2_NAME "REPLACEME"
+// #define USERPREFS_CHANNEL_2_PRECISION 14
 
-// #define CONFIG_OWNER_LONG_NAME_USERPREFS "My Long Name"
-// #define CONFIG_OWNER_SHORT_NAME_USERPREFS "MLN"
+// #define USERPREFS_CONFIG_OWNER_LONG_NAME "My Long Name"
+// #define USERPREFS_CONFIG_OWNER_SHORT_NAME "MLN"
 
-// #define SPLASH_TITLE_USERPREFS "DEFCONtastic"
+// #define USERPREFS_SPLASH_TITLE "DEFCONtastic"
 // #define icon_width 34
 // #define icon_height 29
-// #define HAS_USERPREFS_SPLASH
+// #define USERPREFS_HAS_SPLASH
 /*
 static unsigned char icon_bits[] = {
     0x00, 0xC0, 0x0F, 0x00, 0x00, 0x00, 0xF0, 0x3F, 0x00, 0x00, 0x00, 0xF8, 0x7F, 0x00, 0x00, 0x00, 0xFC, 0xFF, 0x00, 0x00, 0x00,
@@ -37,8 +63,8 @@ static unsigned char icon_bits[] = {
     0x00, 0x00, 0x1C, 0x00, 0x70, 0x00, 0x00, 0x1C, 0x00, 0x70, 0x00, 0x00, 0x1C, 0x00, 0x70, 0x00, 0x00, 0x1C, 0x00};
 */
 /*
-#define ADMIN_KEY_USERPREFS 1
-static unsigned char admin_key_userprefs[] = {0xcd, 0xc0, 0xb4, 0x3c, 0x53, 0x24, 0xdf, 0x13, 0xca, 0x5a, 0xa6,
+#define USERPREFS_USE_ADMIN_KEY 1
+static unsigned char USERPREFS_ADMIN_KEY[] = {0xcd, 0xc0, 0xb4, 0x3c, 0x53, 0x24, 0xdf, 0x13, 0xca, 0x5a, 0xa6,
                                        0x0c, 0x0d, 0xec, 0x85, 0x5a, 0x4c, 0xf6, 0x1a, 0x96, 0x04, 0x1a,
                                        0x3e, 0xfc, 0xbb, 0x8e, 0x33, 0x71, 0xe5, 0xfc, 0xff, 0x3c};
 */

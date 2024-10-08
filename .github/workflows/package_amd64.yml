@@ -13,7 +13,7 @@ jobs:
     uses: ./.github/workflows/build_native.yml
 
   package-native:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: build-native
     steps:
       - name: Checkout code

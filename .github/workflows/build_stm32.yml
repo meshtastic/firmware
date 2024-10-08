@@ -12,22 +12,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build base
-        id: base
-        uses: ./.github/actions/setup-base
 
-      - name: Build STM32
-        run: bin/build-stm32.sh ${{ inputs.board }}
-
-      - name: Get release version string
-        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
-        id: version
-
-      - name: Store binaries as an artifact
-        uses: actions/upload-artifact@v4
+      - name: Build STM32WL
+        id: build
+        uses: ./.github/actions/build-variant
         with:
-          name: firmware-${{ inputs.board }}-${{ steps.version.outputs.version }}.zip
-          overwrite: true
-          path: |
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          board: ${{ inputs.board }}
+          build-script-path: bin/build-stm32.sh
+          artifact-paths: |
             release/*.hex
             release/*.bin
+            release/*.elf
+          arch: stm32

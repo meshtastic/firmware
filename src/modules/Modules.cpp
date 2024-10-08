@@ -49,6 +49,9 @@
 #endif
 #if ARCH_PORTDUINO
 #include "input/LinuxInputImpl.h"
+#if !MESHTASTIC_EXCLUDE_STOREFORWARD
+#include "modules/StoreForwardModule.h"
+#endif
 #endif
 #if HAS_TELEMETRY
 #include "modules/Telemetry/DeviceTelemetry.h"
@@ -57,6 +60,7 @@
 #include "main.h"
 #include "modules/Telemetry/AirQualityTelemetry.h"
 #include "modules/Telemetry/EnvironmentTelemetry.h"
+#include "modules/Telemetry/HealthTelemetry.h"
 #endif
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_POWER_TELEMETRY
 #include "modules/Telemetry/PowerTelemetry.h"
@@ -69,7 +73,7 @@
 #include "modules/esp32/PaxcounterModule.h"
 #endif
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
-#include "modules/esp32/StoreForwardModule.h"
+#include "modules/StoreForwardModule.h"
 #endif
 #endif
 #if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)
@@ -197,6 +201,10 @@ void setupModules()
         if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_PMSA003I].first > 0) {
             new AirQualityTelemetryModule();
         }
+        if (nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MAX30102].first > 0 ||
+            nodeTelemetrySensorsMap[meshtastic_TelemetrySensorType_MLX90614].first > 0) {
+            new HealthTelemetryModule();
+        }
 #endif
 #if HAS_TELEMETRY && !MESHTASTIC_EXCLUDE_POWER_TELEMETRY && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
         new PowerTelemetryModule();
@@ -212,11 +220,13 @@ void setupModules()
 #if defined(USE_SX1280) && !MESHTASTIC_EXCLUDE_AUDIO
         audioModule = new AudioModule();
 #endif
-#if !MESHTASTIC_EXCLUDE_STOREFORWARD
-        storeForwardModule = new StoreForwardModule();
-#endif
 #if !MESHTASTIC_EXCLUDE_PAXCOUNTER
         paxcounterModule = new PaxcounterModule();
+#endif
+#endif
+#if defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
+#if !MESHTASTIC_EXCLUDE_STOREFORWARD
+        storeForwardModule = new StoreForwardModule();
 #endif
 #endif
 #if defined(ARCH_ESP32) || defined(ARCH_NRF52) || defined(ARCH_RP2040)

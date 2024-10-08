@@ -21,6 +21,7 @@
 #include "Default.h"
 #include "serialization/JSON.h"
 #include "serialization/MeshPacketSerializer.h"
+#include <Throttle.h>
 #include <assert.h>
 
 const int reconnectMax = 5;
@@ -30,6 +31,9 @@ MQTT *mqtt;
 static MemoryDynamic<meshtastic_ServiceEnvelope> staticMqttPool;
 
 Allocator<meshtastic_ServiceEnvelope> &mqttPool = staticMqttPool;
+
+// FIXME - this size calculation is super sloppy, but it will go away once we dynamically alloc meshpackets
+static uint8_t bytes[meshtastic_MqttClientProxyMessage_size + 30]; // 12 for channel name and 16 for nodeid
 
 void MQTT::mqttCallback(char *topic, byte *payload, unsigned int length)
 {
@@ -146,7 +150,7 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                 // Generate an implicit ACK towards ourselves (handled and processed only locally!) for this message.
                 // We do this because packets are not rebroadcasted back into MQTT anymore and we assume that at least one node
                 // receives it when we get our own packet back. Then we'll stop our retransmissions.
-                if (e.packet && getFrom(e.packet) == nodeDB->getNodeNum())
+                if (e.packet && isFromUs(e.packet))
                     routingModule->sendAckNak(meshtastic_Routing_Error_NONE, getFrom(e.packet), e.packet->id, ch.index);
                 else
                     LOG_INFO("Ignoring downlink message we originally sent.\n");
@@ -158,18 +162,33 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                     meshtastic_MeshPacket *p = packetPool.allocCopy(*e.packet);
                     p->via_mqtt = true; // Mark that the packet was received via MQTT
 
+                    if (isFromUs(p)) {
+                        LOG_INFO("Ignoring downlink message we originally sent.\n");
+                        packetPool.release(p);
+                        return;
+                    }
                     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
+                        if (moduleConfig.mqtt.encryption_enabled) {
+                            LOG_INFO("Ignoring decoded message on MQTT, encryption is enabled.\n");
+                            packetPool.release(p);
+                            return;
+                        }
+                        if (p->decoded.portnum == meshtastic_PortNum_ADMIN_APP) {
+                            LOG_INFO("Ignoring decoded admin packet.\n");
+                            packetPool.release(p);
+                            return;
+                        }
                         p->channel = ch.index;
                     }
 
                     // PKI messages get accepted even if we can't decrypt
                     if (router && p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag &&
                         strcmp(e.channel_id, "PKI") == 0) {
-                        meshtastic_NodeInfoLite *tx = nodeDB->getMeshNode(getFrom(p));
-                        meshtastic_NodeInfoLite *rx = nodeDB->getMeshNode(p->to);
+                        const meshtastic_NodeInfoLite *tx = nodeDB->getMeshNode(getFrom(p));
+                        const meshtastic_NodeInfoLite *rx = nodeDB->getMeshNode(p->to);
                         // Only accept PKI messages to us, or if we have both the sender and receiver in our nodeDB, as then it's
                         // likely they discovered each other via a channel we have downlink enabled for
-                        if (p->to == nodeDB->getNodeNum() || (tx && tx->has_user && rx && rx->has_user))
+                        if (isToUs(p) || (tx && tx->has_user && rx && rx->has_user))
                             router->enqueueReceivedMessage(p);
                     } else if (router && perhapsDecode(p)) // ignore messages if we don't have the channel key
                         router->enqueueReceivedMessage(p);
@@ -310,6 +329,7 @@ void MQTT::reconnect()
             mqttPassword = moduleConfig.mqtt.password;
         }
 #if HAS_WIFI && !defined(ARCH_PORTDUINO)
+#if !defined(CONFIG_IDF_TARGET_ESP32C6) && !defined(RPI_PICO)
         if (moduleConfig.mqtt.tls_enabled) {
             // change default for encrypted to 8883
             try {
@@ -325,6 +345,9 @@ void MQTT::reconnect()
             LOG_INFO("Using non-TLS-encrypted session\n");
             pubSub.setClient(mqttClient);
         }
+#else
+        pubSub.setClient(mqttClient);
+#endif
 #elif HAS_NETWORKING
         pubSub.setClient(mqttClient);
 #endif
@@ -379,13 +402,14 @@ void MQTT::sendSubscriptions()
             std::string topic = cryptTopic + channels.getGlobalId(i) + "/+";
             LOG_INFO("Subscribing to %s\n", topic.c_str());
             pubSub.subscribe(topic.c_str(), 1); // FIXME, is QOS 1 right?
-#ifndef ARCH_NRF52                              // JSON is not supported on nRF52, see issue #2804
+#if !defined(ARCH_NRF52) ||                                                                                                      \
+    defined(NRF52_USE_JSON) // JSON is not supported on nRF52, see issue #2804 ### Fixed by using ArduinoJSON ###
             if (moduleConfig.mqtt.json_enabled == true) {
                 std::string topicDecoded = jsonTopic + channels.getGlobalId(i) + "/+";
                 LOG_INFO("Subscribing to %s\n", topicDecoded.c_str());
                 pubSub.subscribe(topicDecoded.c_str(), 1); // FIXME, is QOS 1 right?
             }
-#endif // ARCH_NRF52
+#endif // ARCH_NRF52 NRF52_USE_JSON
         }
     }
 #if !MESHTASTIC_EXCLUDE_PKI
@@ -466,9 +490,7 @@ void MQTT::publishQueuedMessages()
 {
     if (!mqttQueue.isEmpty()) {
         LOG_DEBUG("Publishing enqueued MQTT message\n");
-        // FIXME - this size calculation is super sloppy, but it will go away once we dynamically alloc meshpackets
         meshtastic_ServiceEnvelope *env = mqttQueue.dequeuePtr(0);
-        static uint8_t bytes[meshtastic_MeshPacket_size + 64];
         size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, env);
         std::string topic;
         if (env->packet->pki_encrypted) {
@@ -480,7 +502,8 @@ void MQTT::publishQueuedMessages()
 
         publish(topic.c_str(), bytes, numBytes, false);
 
-#ifndef ARCH_NRF52 // JSON is not supported on nRF52, see issue #2804
+#if !defined(ARCH_NRF52) ||                                                                                                      \
+    defined(NRF52_USE_JSON) // JSON is not supported on nRF52, see issue #2804 ### Fixed by using ArduinoJson ###
         if (moduleConfig.mqtt.json_enabled) {
             // handle json topic
             auto jsonString = MeshPacketSerializer::JsonSerialize(env->packet);
@@ -496,7 +519,7 @@ void MQTT::publishQueuedMessages()
                 publish(topicJson.c_str(), jsonString.c_str(), false);
             }
         }
-#endif // ARCH_NRF52
+#endif // ARCH_NRF52 NRF52_USE_JSON
         mqttPool.release(env);
     }
 }
@@ -514,19 +537,29 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
         return; // no channels have an uplink enabled
     auto &ch = channels.getByIndex(chIndex);
 
-    if (mp_decoded.which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
-        LOG_CRIT("MQTT::onSend(): mp_decoded isn't actually decoded\n");
-        return;
-    }
+    if (!mp.pki_encrypted) {
+        if (mp_decoded.which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
+            LOG_CRIT("MQTT::onSend(): mp_decoded isn't actually decoded\n");
+            return;
+        }
 
-    if (strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0 &&
-        (mp_decoded.decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
-         mp_decoded.decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP)) {
-        LOG_DEBUG("MQTT onSend - Ignoring range test or detection sensor message on public mqtt\n");
-        return;
-    }
+        // check for the lowest bit of the data bitfield set false, and the use of one of the default keys.
+        if (!isFromUs(&mp_decoded) && mp_decoded.decoded.has_bitfield &&
+            !(mp_decoded.decoded.bitfield & BITFIELD_OK_TO_MQTT_MASK) &&
+            (ch.settings.psk.size < 2 || (ch.settings.psk.size == 16 && memcmp(ch.settings.psk.bytes, defaultpsk, 16)) ||
+             (ch.settings.psk.size == 32 && memcmp(ch.settings.psk.bytes, eventpsk, 32)))) {
+            LOG_INFO("MQTT onSend - Not forwarding packet due to DontMqttMeBro flag\n");
+            return;
+        }
 
-    if (ch.settings.uplink_enabled || mp.pki_encrypted) {
+        if (strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0 &&
+            (mp_decoded.decoded.portnum == meshtastic_PortNum_RANGE_TEST_APP ||
+             mp_decoded.decoded.portnum == meshtastic_PortNum_DETECTION_SENSOR_APP)) {
+            LOG_DEBUG("MQTT onSend - Ignoring range test or detection sensor message on public mqtt\n");
+            return;
+        }
+    }
+    if (mp.pki_encrypted || ch.settings.uplink_enabled) {
         const char *channelId = mp.pki_encrypted ? "PKI" : channels.getGlobalId(chIndex);
 
         meshtastic_ServiceEnvelope *env = mqttPool.allocZeroed();
@@ -537,21 +570,21 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
         if (moduleConfig.mqtt.encryption_enabled) {
             env->packet = (meshtastic_MeshPacket *)&mp;
             LOG_DEBUG("encrypted message\n");
-        } else {
+        } else if (mp_decoded.which_payload_variant ==
+                   meshtastic_MeshPacket_decoded_tag) { // Don't upload a still-encrypted PKI packet
             env->packet = (meshtastic_MeshPacket *)&mp_decoded;
             LOG_DEBUG("portnum %i message\n", env->packet->decoded.portnum);
         }
 
         if (moduleConfig.mqtt.proxy_to_client_enabled || this->isConnectedDirectly()) {
-            // FIXME - this size calculation is super sloppy, but it will go away once we dynamically alloc meshpackets
-            static uint8_t bytes[meshtastic_MeshPacket_size + 64];
             size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, env);
             std::string topic = cryptTopic + channelId + "/" + owner.id;
             LOG_DEBUG("MQTT Publish %s, %u bytes\n", topic.c_str(), numBytes);
 
             publish(topic.c_str(), bytes, numBytes, false);
 
-#ifndef ARCH_NRF52 // JSON is not supported on nRF52, see issue #2804
+#if !defined(ARCH_NRF52) ||                                                                                                      \
+    defined(NRF52_USE_JSON) // JSON is not supported on nRF52, see issue #2804 ### Fixed by using ArduinoJson ###
             if (moduleConfig.mqtt.json_enabled) {
                 // handle json topic
                 auto jsonString = MeshPacketSerializer::JsonSerialize((meshtastic_MeshPacket *)&mp_decoded);
@@ -562,7 +595,7 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
                     publish(topicJson.c_str(), jsonString.c_str(), false);
                 }
             }
-#endif // ARCH_NRF52
+#endif // ARCH_NRF52 NRF52_USE_JSON
         } else {
             LOG_INFO("MQTT not connected, queueing packet\n");
             if (mqttQueue.numFree() == 0) {
@@ -584,7 +617,7 @@ void MQTT::perhapsReportToMap()
     if (!moduleConfig.mqtt.map_reporting_enabled || !(moduleConfig.mqtt.proxy_to_client_enabled || isConnectedDirectly()))
         return;
 
-    if (millis() - last_report_to_map < map_publish_interval_msecs) {
+    if (Throttle::isWithinTimespanMs(last_report_to_map, map_publish_interval_msecs)) {
         return;
     } else {
         if (map_position_precision == 0 || (localPosition.latitude_i == 0 && localPosition.longitude_i == 0)) {
@@ -639,8 +672,6 @@ void MQTT::perhapsReportToMap()
                                                       &meshtastic_MapReport_msg, &mapReport);
         se->packet = mp;
 
-        // FIXME - this size calculation is super sloppy, but it will go away once we dynamically alloc meshpackets
-        static uint8_t bytes[meshtastic_MeshPacket_size + 64];
         size_t numBytes = pb_encode_to_bytes(bytes, sizeof(bytes), &meshtastic_ServiceEnvelope_msg, se);
 
         LOG_INFO("MQTT Publish map report to %s\n", mapTopic.c_str());

@@ -1,3 +1,12 @@
+const char *failMessage = "Unable to %s\n";
+
+#define SEND_UBX_PACKET(TYPE, ID, DATA, ERRMSG, TIMEOUT)                                                                         \
+    msglen = makeUBXPacket(TYPE, ID, sizeof(DATA), DATA);                                                                        \
+    _serial_gps->write(UBXscratch, msglen);                                                                                      \
+    if (getACK(TYPE, ID, TIMEOUT) != GNSS_RESPONSE_OK) {                                                                         \
+        LOG_WARN(failMessage, #ERRMSG);                                                                                          \
+    }
+
 // Power Management
 
 uint8_t GPS::_message_PMREQ[] PROGMEM = {
@@ -316,6 +325,13 @@ const uint8_t GPS::_message_SAVE[] = {
     0x17                    // deviceMask: BBR, Flash, EEPROM, and SPI Flash
 };
 
+const uint8_t GPS::_message_SAVE_10[] = {
+    0x00, 0x00, 0x00, 0x00, // clearMask: no sections cleared
+    0xFF, 0xFF, 0x00, 0x00, // saveMask: save all sections
+    0x00, 0x00, 0x00, 0x00, // loadMask: no sections loaded
+    0x01                    // deviceMask: only save to BBR
+};
+
 // As the M10 has no flash, the best we can do to preserve the config is to set it in RAM and BBR.
 // BBR will survive a restart, and power off for a while, but modules with small backup
 // batteries or super caps will not retain the config for a long power off time.
@@ -335,36 +351,36 @@ const uint8_t GPS::_message_SAVE[] = {
 // has details on low-power modes
 
 /*
-CFG-PM2 has been replaced by many CFG-PM commands
-CFG-PMS has been removed
-
-CFG-PM-OPERATEMODE E1 (0 | 1 | 2) -> 1 (PSMOO), because sporadic position updates are required instead of continous tracking <10s
-(PSMCT) CFG-PM-POSUPDATEPERIOD U4 -> 0ms, no self-timed wakup because receiver power mode is controlled via "software standby
-mode" by legacy UBX-RXM-PMREQ request CFG-PM-ACQPERIOD U4 -> 0ms, because receiver power mode is controlled via "software standby
-mode" by legacy UBX-RXM-PMREQ request CFG-PM-ONTIME U4 -> 0ms, optional I guess CFG-PM-EXTINTBACKUP L -> 1, force receiver into
-BACKUP mode when EXTINT (should be connected to GPS_EN_PIN) pin is "low"
-
-This is required because the receiver never enters low power mode if microcontroller is in deep-sleep.
-Maybe the changing UART_RX levels trigger a wakeup but even with UBX-RXM-PMREQ[12] = 0x00 (all external wakeup sources disabled)
-the receivcer remains in aquisition state -> potentially a bug
-
-Workaround: Control the EXTINT pin by the GPS_EN_PIN signal
-
-As mentioned in the M10 operational issues down below, power save won't allow the use of BDS B1C.
-CFG-SIGNAL-BDS_B1C_ENA L -> 0
+OPERATEMODE E1 2 (0 | 1 | 2)
+POSUPDATEPERIOD U4 5
+ACQPERIOD U4 10
+GRIDOFFSET U4 0
+ONTIME U2 1
+MINACQTIME U1 0
+MAXACQTIME U1 0
+DONOTENTEROFF L 1
+WAITTIMEFIX  L 1
+UPDATEEPH L 1
+EXTINTWAKE L 0 no ext ints
+EXTINTBACKUP L 0 no ext ints
+EXTINTINACTIVE L 0 no ext ints
+EXTINTACTIVITY U4 0 no ext ints
+LIMITPEAKCURRENT L 1
 
 // Ram layer config message:
-// 01 01 00 00 01 00 D0 20 01 02 00 D0 40 00 00 00 00 03 00 D0 40 00 00 00 00 05 00 D0 30 00 00 0D 00 D0 10 01
+// b5 62 06 8a 26 00 00 01 00 00 01 00 d0 20 02 02 00 d0 40 05 00 00 00 05 00 d0 30 01 00 08 00 d0 10 01 09 00 d0 10 01 10 00 d0
+// 10 01 8b de
 
 // BBR layer config message:
-// 01 02 00 00 01 00 D0 20 01 02 00 D0 40 00 00 00 00 03 00 D0 40 00 00 00 00 05 00 D0 30 00 00 0D 00 D0 10 01
+// b5 62 06 8a 26 00 00 02 00 00 01 00 d0 20 02 02 00 d0 40 05 00 00 00 05 00 d0 30 01 00 08 00 d0 10 01 09 00 d0 10 01 10 00 d0
+// 10 01 8c 03
 */
-const uint8_t GPS::_message_VALSET_PM_RAM[] = {0x01, 0x01, 0x00, 0x00, 0x0F, 0x00, 0x31, 0x10, 0x00, 0x01, 0x00, 0xD0, 0x20, 0x01,
-                                               0x02, 0x00, 0xD0, 0x40, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0xD0, 0x40, 0x00, 0x00,
-                                               0x00, 0x00, 0x05, 0x00, 0xD0, 0x30, 0x00, 0x00, 0x0D, 0x00, 0xD0, 0x10, 0x01};
-const uint8_t GPS::_message_VALSET_PM_BBR[] = {0x01, 0x02, 0x00, 0x00, 0x0F, 0x00, 0x31, 0x10, 0x00, 0x01, 0x00, 0xD0, 0x20, 0x01,
-                                               0x02, 0x00, 0xD0, 0x40, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0xD0, 0x40, 0x00, 0x00,
-                                               0x00, 0x00, 0x05, 0x00, 0xD0, 0x30, 0x00, 0x00, 0x0D, 0x00, 0xD0, 0x10, 0x01};
+const uint8_t GPS::_message_VALSET_PM_RAM[] = {0x00, 0x01, 0x00, 0x00, 0x01, 0x00, 0xd0, 0x20, 0x02, 0x02, 0x00, 0xd0, 0x40,
+                                               0x05, 0x00, 0x00, 0x00, 0x05, 0x00, 0xd0, 0x30, 0x01, 0x00, 0x08, 0x00, 0xd0,
+                                               0x10, 0x01, 0x09, 0x00, 0xd0, 0x10, 0x01, 0x10, 0x00, 0xd0, 0x10, 0x01};
+const uint8_t GPS::_message_VALSET_PM_BBR[] = {0x00, 0x02, 0x00, 0x00, 0x01, 0x00, 0xd0, 0x20, 0x02, 0x02, 0x00, 0xd0, 0x40,
+                                               0x05, 0x00, 0x00, 0x00, 0x05, 0x00, 0xd0, 0x30, 0x01, 0x00, 0x08, 0x00, 0xd0,
+                                               0x10, 0x01, 0x09, 0x00, 0xd0, 0x10, 0x01, 0x10, 0x00, 0xd0, 0x10, 0x01};
 
 /*
 CFG-ITFM replaced by 5 valset messages which can be combined into one for RAM and one for BBR

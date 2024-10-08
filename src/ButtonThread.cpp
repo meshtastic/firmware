@@ -124,6 +124,11 @@ int32_t ButtonThread::runOnce()
         switch (btnEvent) {
         case BUTTON_EVENT_PRESSED: {
             LOG_BUTTON("press!\n");
+            // If a nag notification is running, stop it and prevent other actions
+            if (moduleConfig.external_notification.enabled && (externalNotificationModule->nagCycleCutoff != UINT32_MAX)) {
+                externalNotificationModule->stopNow();
+                return 50;
+            }
 #ifdef BUTTON_PIN
             if (((config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN) !=
                  moduleConfig.canned_message.inputbroker_pin_press) ||

@@ -244,9 +244,9 @@ class LGFX : public lgfx::LGFX_Device
 
 static LGFX *tft = nullptr;
 
-#elif defined(ILI9341_DRIVER)
+#elif defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER)
 
-#include <LovyanGFX.hpp> // Graphics and font library for ILI9341 driver chip
+#include <LovyanGFX.hpp> // Graphics and font library for ILI9341/ILI9342 driver chip
 
 #if defined(ILI9341_BACKLIGHT_EN) && !defined(TFT_BL)
 #define TFT_BL ILI9341_BACKLIGHT_EN
@@ -254,7 +254,11 @@ static LGFX *tft = nullptr;
 
 class LGFX : public lgfx::LGFX_Device
 {
+#if defined(ILI9341_DRIVER)
     lgfx::Panel_ILI9341 _panel_instance;
+#elif defined(ILI9342_DRIVER)
+    lgfx::Panel_ILI9342 _panel_instance;
+#endif
     lgfx::Bus_SPI _bus_instance;
     lgfx::Light_PWM _light_instance;
 
@@ -265,7 +269,11 @@ class LGFX : public lgfx::LGFX_Device
             auto cfg = _bus_instance.config();
 
             // configure SPI
+#if defined(ILI9341_DRIVER)
             cfg.spi_host = ILI9341_SPI_HOST; // ESP32-S2,S3,C3 : SPI2_HOST or SPI3_HOST / ESP32 : VSPI_HOST or HSPI_HOST
+#elif defined(ILI9342_DRIVER)
+            cfg.spi_host = ILI9342_SPI_HOST; // ESP32-S2,S3,C3 : SPI2_HOST or SPI3_HOST / ESP32 : VSPI_HOST or HSPI_HOST
+#endif
             cfg.spi_mode = 0;
             cfg.freq_write = SPI_FREQUENCY; // SPI clock for transmission (up to 80MHz, rounded to the value obtained by dividing
                                             // 80MHz by an integer)
@@ -336,7 +344,7 @@ class LGFX : public lgfx::LGFX_Device
 static LGFX *tft = nullptr;
 
 #elif defined(ST7735_CS)
-#include <TFT_eSPI.h> // Graphics and font library for ILI9341 driver chip
+#include <TFT_eSPI.h> // Graphics and font library for ILI9342 driver chip
 
 static TFT_eSPI *tft = nullptr; // Invoke library, pins defined in User_Setup.h
 #elif ARCH_PORTDUINO && HAS_SCREEN != 0
@@ -360,6 +368,8 @@ class LGFX : public lgfx::LGFX_Device
             _panel_instance = new lgfx::Panel_ST7735S;
         else if (settingsMap[displayPanel] == ili9341)
             _panel_instance = new lgfx::Panel_ILI9341;
+        else if (settingsMap[displayPanel] == ili9342)
+            _panel_instance = new lgfx::Panel_ILI9342;
         auto buscfg = _bus_instance.config();
         buscfg.spi_mode = 0;
         buscfg.spi_host = settingsMap[displayspidev];
@@ -500,10 +510,126 @@ class LGFX : public lgfx::LGFX_Device
 
 static LGFX *tft = nullptr;
 
+#elif defined(ST7701_CS)
+#include <LovyanGFX.hpp> // Graphics and font library for ST7701 driver chip
+#include <lgfx/v1/platforms/esp32s3/Bus_RGB.hpp>
+#include <lgfx/v1/platforms/esp32s3/Panel_RGB.hpp>
+
+class LGFX : public lgfx::LGFX_Device
+{
+    lgfx::Panel_ST7701 _panel_instance;
+    lgfx::Bus_RGB _bus_instance;
+    lgfx::Light_PWM _light_instance;
+    lgfx::Touch_FT5x06 _touch_instance;
+
+  public:
+    LGFX(void)
+    {
+        {
+            auto cfg = _panel_instance.config();
+            cfg.memory_width = 800;
+            cfg.memory_height = 480;
+            cfg.panel_width = TFT_WIDTH;
+            cfg.panel_height = TFT_HEIGHT;
+            cfg.offset_x = TFT_OFFSET_X;
+            cfg.offset_y = TFT_OFFSET_Y;
+            _panel_instance.config(cfg);
+        }
+
+        {
+            auto cfg = _panel_instance.config_detail();
+            cfg.pin_cs = ST7701_CS;
+            cfg.pin_sclk = ST7701_SCK;
+            cfg.pin_mosi = ST7701_SDA;
+            // cfg.use_psram = 1;
+            _panel_instance.config_detail(cfg);
+        }
+
+        {
+            auto cfg = _bus_instance.config();
+            cfg.panel = &_panel_instance;
+#ifdef SENSECAP_INDICATOR
+            cfg.pin_d0 = GPIO_NUM_15; // B0
+            cfg.pin_d1 = GPIO_NUM_14; // B1
+            cfg.pin_d2 = GPIO_NUM_13; // B2
+            cfg.pin_d3 = GPIO_NUM_12; // B3
+            cfg.pin_d4 = GPIO_NUM_11; // B4
+
+            cfg.pin_d5 = GPIO_NUM_10; // G0
+            cfg.pin_d6 = GPIO_NUM_9;  // G1
+            cfg.pin_d7 = GPIO_NUM_8;  // G2
+            cfg.pin_d8 = GPIO_NUM_7;  // G3
+            cfg.pin_d9 = GPIO_NUM_6;  // G4
+            cfg.pin_d10 = GPIO_NUM_5; // G5
+
+            cfg.pin_d11 = GPIO_NUM_4; // R0
+            cfg.pin_d12 = GPIO_NUM_3; // R1
+            cfg.pin_d13 = GPIO_NUM_2; // R2
+            cfg.pin_d14 = GPIO_NUM_1; // R3
+            cfg.pin_d15 = GPIO_NUM_0; // R4
+
+            cfg.pin_henable = GPIO_NUM_18;
+            cfg.pin_vsync = GPIO_NUM_17;
+            cfg.pin_hsync = GPIO_NUM_16;
+            cfg.pin_pclk = GPIO_NUM_21;
+            cfg.freq_write = 12000000;
+
+            cfg.hsync_polarity = 0;
+            cfg.hsync_front_porch = 10;
+            cfg.hsync_pulse_width = 8;
+            cfg.hsync_back_porch = 50;
+
+            cfg.vsync_polarity = 0;
+            cfg.vsync_front_porch = 10;
+            cfg.vsync_pulse_width = 8;
+            cfg.vsync_back_porch = 20;
+
+            cfg.pclk_active_neg = 0;
+            cfg.de_idle_high = 1;
+            cfg.pclk_idle_high = 0;
+#endif
+            _bus_instance.config(cfg);
+        }
+        _panel_instance.setBus(&_bus_instance);
+
+        {
+            auto cfg = _light_instance.config();
+            cfg.pin_bl = ST7701_BL;
+            _light_instance.config(cfg);
+        }
+        _panel_instance.light(&_light_instance);
+
+        {
+            auto cfg = _touch_instance.config();
+            cfg.pin_cs = -1;
+            cfg.x_min = 0;
+            cfg.x_max = 479;
+            cfg.y_min = 0;
+            cfg.y_max = 479;
+            cfg.pin_int = -1; // don't use SCREEN_TOUCH_INT;
+            cfg.pin_rst = SCREEN_TOUCH_RST;
+            cfg.bus_shared = true;
+            cfg.offset_rotation = TFT_OFFSET_ROTATION;
+
+            cfg.i2c_port = TOUCH_I2C_PORT;
+            cfg.i2c_addr = TOUCH_SLAVE_ADDRESS;
+            cfg.pin_sda = I2C_SDA;
+            cfg.pin_scl = I2C_SCL;
+            cfg.freq = 400000;
+            _touch_instance.config(cfg);
+            _panel_instance.setTouch(&_touch_instance);
+        }
+
+        setPanel(&_panel_instance);
+    }
+};
+
+static LGFX *tft = nullptr;
+
 #endif
 
-#if defined(ST7735_CS) || defined(ST7789_CS) || defined(ILI9341_DRIVER) || defined(RAK14014) || defined(HX8357_CS) ||            \
-    (ARCH_PORTDUINO && HAS_SCREEN != 0)
+#if defined(ST7701_CS) || defined(ST7735_CS) || defined(ST7789_CS) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||      \
+    defined(RAK14014) || defined(HX8357_CS) || (ARCH_PORTDUINO && HAS_SCREEN != 0)
 #include "SPILock.h"
 #include "TFTDisplay.h"
 #include <SPI.h>
@@ -709,7 +835,6 @@ bool TFTDisplay::connect()
 
 #ifdef UNPHONE
     unphone.backlight(true); // using unPhone library
-    LOG_INFO("Power to TFT Backlight\n");
 #endif
 
     tft->init();
@@ -725,7 +850,7 @@ bool TFTDisplay::connect()
     attachInterrupt(digitalPinToInterrupt(SCREEN_TOUCH_INT), rak14014_tpIntHandle, FALLING);
 #elif defined(T_DECK) || defined(PICOMPUTER_S3) || defined(CHATTER_2)
     tft->setRotation(1); // T-Deck has the TFT in landscape
-#elif defined(T_WATCH_S3)
+#elif defined(T_WATCH_S3) || defined(SENSECAP_INDICATOR)
     tft->setRotation(2); // T-Watch S3 left-handed orientation
 #else
     tft->setRotation(3); // Orient horizontal and wide underneath the silkscreen name label

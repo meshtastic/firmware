@@ -55,7 +55,6 @@ static BluetoothPhoneAPI *bluetoothPhoneAPI;
 
 void onConnect(uint16_t conn_handle)
 {
-
     // Get the reference to current connection
     BLEConnection *connection = Bluefruit.Connection(conn_handle);
     connectionHandle = conn_handle;
@@ -70,8 +69,10 @@ void onConnect(uint16_t conn_handle)
  */
 void onDisconnect(uint16_t conn_handle, uint8_t reason)
 {
-    // FIXME - we currently assume only one active connection
     LOG_INFO("BLE Disconnected, reason = 0x%x\n", reason);
+    if (bluetoothPhoneAPI) {
+        bluetoothPhoneAPI->close();
+    }
 }
 void onCccd(uint16_t conn_hdl, BLECharacteristic *chr, uint16_t cccd_value)
 {
@@ -140,10 +141,19 @@ void onFromRadioAuthorize(uint16_t conn_hdl, BLECharacteristic *chr, ble_gatts_e
     }
     authorizeRead(conn_hdl);
 }
+// Last ToRadio value received from the phone
+static uint8_t lastToRadio[MAX_TO_FROM_RADIO_SIZE];
+
 void onToRadioWrite(uint16_t conn_hdl, BLECharacteristic *chr, uint8_t *data, uint16_t len)
 {
     LOG_INFO("toRadioWriteCb data %p, len %u\n", data, len);
-    bluetoothPhoneAPI->handleToRadio(data, len);
+    if (memcmp(lastToRadio, data, len) != 0) {
+        LOG_DEBUG("New ToRadio packet\n");
+        memcpy(lastToRadio, data, len);
+        bluetoothPhoneAPI->handleToRadio(data, len);
+    } else {
+        LOG_DEBUG("Dropping duplicate ToRadio packet we just saw\n");
+    }
 }
 
 void setupMeshService(void)
@@ -310,6 +320,7 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
 {
     LOG_INFO("BLE pairing process started with passkey %.3s %.3s\n", passkey, passkey + 3);
     powerFSM.trigger(EVENT_BLUETOOTH_PAIR);
+#if !defined(MESHTASTIC_EXCLUDE_SCREEN)
     screen->startAlert([](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
         char btPIN[16] = "888888";
         snprintf(btPIN, sizeof(btPIN), "%06u", configuredPasskey);
@@ -335,6 +346,7 @@ bool NRF52Bluetooth::onPairingPasskey(uint16_t conn_handle, uint8_t const passke
         y_offset = display->height() == 64 ? y_offset + FONT_HEIGHT_LARGE - 6 : y_offset + FONT_HEIGHT_LARGE + 5;
         display->drawString(x_offset + x, y_offset + y, deviceName);
     });
+#endif
     if (match_request) {
         uint32_t start_time = millis();
         while (millis() < start_time + 30000) {

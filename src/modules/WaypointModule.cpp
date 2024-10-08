@@ -89,7 +89,7 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
         display->fillRect(0 + x, 0 + y, x + display->getWidth(), y + FONT_HEIGHT_SMALL);
 
     // Decode the waypoint
-    meshtastic_MeshPacket &mp = devicestate.rx_waypoint;
+    const meshtastic_MeshPacket &mp = devicestate.rx_waypoint;
     meshtastic_Waypoint wp;
     memset(&wp, 0, sizeof(wp));
     if (!pb_decode_from_bytes(mp.decoded.payload.bytes, mp.decoded.payload.size, &meshtastic_Waypoint_msg, &wp)) {
@@ -171,14 +171,14 @@ void WaypointModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, 
             strncpy(distStr, "? km", sizeof(distStr));
     }
 
+    // Draw compass circle
+    display->drawCircle(compassX, compassY, compassDiam / 2);
+
     // Undo color-inversion, if set prior to drawing header
     // Unsure of expected behavior? For now: copy drawNodeInfo
     if (config.display.displaymode == meshtastic_Config_DisplayConfig_DisplayMode_INVERTED) {
         display->setColor(BLACK);
     }
-
-    // Draw compass circle
-    display->drawCircle(compassX, compassY, compassDiam / 2);
 
     // Must be after distStr is populated
     screen->drawColumns(display, x, y, fields);

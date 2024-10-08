@@ -67,7 +67,7 @@ jobs:
       - name: Docker build and push tagged versions
         if: ${{ github.event_name == 'workflow_dispatch' }}
         continue-on-error: true # FIXME: Failing docker login auth
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
@@ -77,7 +77,7 @@ jobs:
       - name: Docker build and push
         if: ${{ github.ref == 'refs/heads/master' && github.event_name != 'pull_request_target' && github.event_name != 'pull_request' }}
         continue-on-error: true # FIXME: Failing docker login auth
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile

@@ -63,7 +63,7 @@ class PositionModule : public ProtobufModule<meshtastic_Position>, private concu
     bool hasQualityTimesource();
 
     const uint32_t minimumTimeThreshold =
-        Default::getConfiguredOrDefaultMsScaled(config.position.broadcast_smart_minimum_interval_secs, 30, numOnlineNodes);
+        Default::getConfiguredOrDefaultMs(config.position.broadcast_smart_minimum_interval_secs, 30);
 };
 
 struct SmartPosition {
