@@ -44,7 +44,7 @@ void powerCommandsCheck()
 
     if (shutdownAtMsec && millis() > shutdownAtMsec) {
         LOG_INFO("Shutting down from admin command\n");
-#if defined(ARCH_NRF52) || defined(ARCH_ESP32)
+#if defined(ARCH_NRF52) || defined(ARCH_ESP32) || defined(ARCH_RP2040)
         playShutdownMelody();
         power->shutdown();
 #elif defined(ARCH_PORTDUINO)
