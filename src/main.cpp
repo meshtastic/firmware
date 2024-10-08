@@ -725,8 +725,8 @@ void setup()
 #ifdef PORTDUINO
     if (settingsMap[displayPanel] != no_screen) {
         DisplayDriverConfig displayConfig;
-        static char *panels[] = {"NOSCREEN", "X11",     "ST7789",  "ST7735",  "ST7735S",
-                                 "ST7796",   "ILI9341", "ILI9486", "ILI9488", "HX8357D"};
+        static char *panels[] = {"NOSCREEN", "X11",     "ST7789",  "ST7735",  "ST7735S", "ST7796",
+                                 "ILI9341",  "ILI9342", "ILI9486", "ILI9488", "HX8357D"};
         static char *touch[] = {"NOTOUCH", "XPT2046", "STMPE610", "GT911", "FT5x06"};
 #ifdef USE_X11
         if (settingsMap[displayPanel] == x11) {
