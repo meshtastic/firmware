@@ -405,6 +405,9 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(NAU7802_ADDR, NAU7802, "NAU7802 based scale found\n");
                 SCAN_SIMPLE_CASE(FT6336U_ADDR, FT6336U, "FT6336U touchscreen found\n");
                 SCAN_SIMPLE_CASE(MAX1704X_ADDR, MAX17048, "MAX17048 lipo fuel gauge found\n");
+#ifdef HAS_TPS65233
+                SCAN_SIMPLE_CASE(TPS65233_ADDR, TPS65233, "TPS65233 BIAS-T found\n");
+#endif
                 SCAN_SIMPLE_CASE(MLX90614_ADDR_DEF, MLX90614, "MLX90614 IR temp sensor found\n");
 
             case ICM20948_ADDR:     // same as BMX160_ADDR
