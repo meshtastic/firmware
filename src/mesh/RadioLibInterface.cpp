@@ -186,7 +186,7 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
 #ifndef LORA_DISABLE_SENDING
     printPacket("enqueuing for send", p);
 
-    LOG_DEBUG("txGood=%d,rxGood=%d,rxBad=%d\n", txGood, rxGood, rxBad);
+    LOG_DEBUG("txGood=%d,txRelay=%d,rxGood=%d,rxBad=%d\n", txGood, txRelay, rxGood, rxBad);
     ErrorCode res = txQueue.enqueue(p) ? ERRNO_OK : ERRNO_UNKNOWN;
 
     if (res != ERRNO_OK) { // we weren't able to queue it, so we must drop it to prevent leaks
@@ -353,6 +353,8 @@ void RadioLibInterface::completeSending()
 
     if (p) {
         txGood++;
+        if (!isFromUs(p))
+            txRelay++;
         printPacket("Completed sending", p);
 
         // We are done sending that packet, release it

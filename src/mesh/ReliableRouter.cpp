@@ -78,7 +78,7 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
      * Resending real ACKs is omitted, as you might receive a packet multiple times due to flooding and
      * flooding this ACK back to the original sender already adds redundancy. */
     bool isRepeated = p->hop_start == 0 ? (p->hop_limit == HOP_RELIABLE) : (p->hop_start == p->hop_limit);
-    if (wasSeenRecently(p, false) && isRepeated && !MeshModule::currentReply && p->to != nodeDB->getNodeNum()) {
+    if (wasSeenRecently(p, false) && isRepeated && !MeshModule::currentReply && !isToUs(p)) {
         LOG_DEBUG("Resending implicit ack for a repeated floodmsg\n");
         meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p);
         tosend->hop_limit--; // bump down the hop count
@@ -102,9 +102,7 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
  */
 void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c)
 {
-    NodeNum ourNode = getNodeNum();
-
-    if (p->to == ourNode) { // ignore ack/nak/want_ack packets that are not address to us (we only handle 0 hop reliability)
+    if (isToUs(p)) { // ignore ack/nak/want_ack packets that are not address to us (we only handle 0 hop reliability)
         if (p->want_ack) {
             if (MeshModule::currentReply) {
                 LOG_DEBUG("Another module replied to this message, no need for 2nd ack\n");

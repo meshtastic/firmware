@@ -1,3 +1,4 @@
+#include "../userPrefs.h"
 #include "configuration.h"
 #if !MESHTASTIC_EXCLUDE_GPS
 #include "GPS.h"
@@ -118,6 +119,8 @@ float tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE; // if TCXO is optional, put this h
 #endif
 
 using namespace concurrency;
+
+volatile static const char slipstreamTZString[] = USERPREFS_TZ_STRING;
 
 // We always create a screen object, but we only init it if we find the hardware
 graphics::Screen *screen = nullptr;
@@ -577,10 +580,12 @@ void setup()
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::TSL2591, meshtastic_TelemetrySensorType_TSL25911FN)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::OPT3001, meshtastic_TelemetrySensorType_OPT3001)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::MLX90632, meshtastic_TelemetrySensorType_MLX90632)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::MLX90614, meshtastic_TelemetrySensorType_MLX90614)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::SHT4X, meshtastic_TelemetrySensorType_SHT4X)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::AHT10, meshtastic_TelemetrySensorType_AHT10)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::DFROBOT_LARK, meshtastic_TelemetrySensorType_DFROBOT_LARK)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::ICM20948, meshtastic_TelemetrySensorType_ICM20948)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::MAX30102, meshtastic_TelemetrySensorType_MAX30102)
 
     i2cScanner.reset();
 #endif
@@ -706,10 +711,17 @@ void setup()
 
     // setup TZ prior to time actions.
 #if !MESHTASTIC_EXCLUDE_TZ
-    if (*config.device.tzdef) {
+    LOG_DEBUG("Using compiled/slipstreamed %s\n", slipstreamTZString); // important, removing this clobbers our magic string
+    if (*config.device.tzdef && config.device.tzdef[0] != 0) {
+        LOG_DEBUG("Saved TZ: %s \n", config.device.tzdef);
         setenv("TZ", config.device.tzdef, 1);
     } else {
-        setenv("TZ", "GMT0", 1);
+        if (strncmp((const char *)slipstreamTZString, "tzpl", 4) == 0) {
+            setenv("TZ", "GMT0", 1);
+        } else {
+            setenv("TZ", (const char *)slipstreamTZString, 1);
+            strcpy(config.device.tzdef, (const char *)slipstreamTZString);
+        }
     }
     tzset();
     LOG_DEBUG("Set Timezone to %s\n", getenv("TZ"));
@@ -766,8 +778,8 @@ void setup()
 #if !MESHTASTIC_EXCLUDE_I2C
 // Don't call screen setup until after nodedb is setup (because we need
 // the current region name)
-#if defined(ST7701_CS) || defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS) ||            \
-    defined(HX8357_CS) || defined(USE_ST7789)
+#if defined(ST7701_CS) || defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) ||       \
+    defined(ST7789_CS) || defined(HX8357_CS) || defined(USE_ST7789)
     screen->setup();
 #elif defined(ARCH_PORTDUINO)
     if (screen_found.port != ScanI2C::I2CPort::NO_I2C || settingsMap[displayPanel]) {
