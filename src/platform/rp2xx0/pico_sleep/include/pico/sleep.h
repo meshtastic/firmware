@@ -7,8 +7,8 @@
 #ifndef _PICO_SLEEP_H_
 #define _PICO_SLEEP_H_
 
-#include "pico.h"
 #include "hardware/rtc.h"
+#include "pico.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,11 +30,7 @@ extern "C" {
  * \include hello_sleep.c
 
  */
-typedef enum {
-    DORMANT_SOURCE_NONE,
-    DORMANT_SOURCE_XOSC,
-    DORMANT_SOURCE_ROSC
-} dormant_source_t;
+typedef enum { DORMANT_SOURCE_NONE, DORMANT_SOURCE_XOSC, DORMANT_SOURCE_ROSC } dormant_source_t;
 
 /*! \brief Set all clock sources to the the dormant clock source to prepare for sleep.
  *  \ingroup hardware_sleep
@@ -46,14 +42,16 @@ void sleep_run_from_dormant_source(dormant_source_t dormant_source);
 /*! \brief Set the dormant clock source to be the crystal oscillator
  *  \ingroup hardware_sleep
  */
-static inline void sleep_run_from_xosc(void) {
+static inline void sleep_run_from_xosc(void)
+{
     sleep_run_from_dormant_source(DORMANT_SOURCE_XOSC);
 }
 
 /*! \brief Set the dormant clock source to be the ring oscillator
  *  \ingroup hardware_sleep
  */
-static inline void sleep_run_from_rosc(void) {
+static inline void sleep_run_from_rosc(void)
+{
     sleep_run_from_dormant_source(DORMANT_SOURCE_ROSC);
 }
 
@@ -85,7 +83,8 @@ void sleep_goto_dormant_until_pin(uint gpio_pin, bool edge, bool high);
  *
  * \param gpio_pin The pin to provide the wake up
  */
-static inline void sleep_goto_dormant_until_edge_high(uint gpio_pin) {
+static inline void sleep_goto_dormant_until_edge_high(uint gpio_pin)
+{
     sleep_goto_dormant_until_pin(gpio_pin, true, true);
 }
 
@@ -96,7 +95,8 @@ static inline void sleep_goto_dormant_until_edge_high(uint gpio_pin) {
  *
  * \param gpio_pin The pin to provide the wake up
  */
-static inline void sleep_goto_dormant_until_level_high(uint gpio_pin) {
+static inline void sleep_goto_dormant_until_level_high(uint gpio_pin)
+{
     sleep_goto_dormant_until_pin(gpio_pin, false, true);
 }
 
