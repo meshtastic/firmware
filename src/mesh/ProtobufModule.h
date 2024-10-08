@@ -13,6 +13,7 @@ template <class T> class ProtobufModule : protected SinglePortModule
     const pb_msgdesc_t *fields;
 
   public:
+    uint8_t numOnlineNodes = 0;
     /** Constructor
      * name is for debugging output
      */
@@ -37,7 +38,7 @@ template <class T> class ProtobufModule : protected SinglePortModule
     /**
      * Return a mesh packet which has been preinited with a particular protobuf data payload and port number.
      * You can then send this packet (after customizing any of the payload fields you might need) with
-     * service.sendToMesh()
+     * service->sendToMesh()
      */
     meshtastic_MeshPacket *allocDataProtobuf(const T &payload)
     {
@@ -56,9 +57,17 @@ template <class T> class ProtobufModule : protected SinglePortModule
      */
     const char *getSenderShortName(const meshtastic_MeshPacket &mp)
     {
-        auto node = nodeDB.getMeshNode(getFrom(&mp));
+        auto node = nodeDB->getMeshNode(getFrom(&mp));
         const char *sender = (node) ? node->user.short_name : "???";
         return sender;
+    }
+
+    int handleStatusUpdate(const meshtastic::Status *arg)
+    {
+        if (arg->getStatusType() == STATUS_TYPE_NODE) {
+            numOnlineNodes = nodeStatus->getNumOnline();
+        }
+        return 0;
     }
 
   private:
@@ -95,12 +104,11 @@ template <class T> class ProtobufModule : protected SinglePortModule
      */
     virtual void alterReceived(meshtastic_MeshPacket &mp) override
     {
-        auto &p = mp.decoded;
-
         T scratch;
         T *decoded = NULL;
         if (mp.which_payload_variant == meshtastic_MeshPacket_decoded_tag && mp.decoded.portnum == ourPortNum) {
             memset(&scratch, 0, sizeof(scratch));
+            const meshtastic_Data &p = mp.decoded;
             if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, fields, &scratch)) {
                 decoded = &scratch;
             } else {
@@ -108,8 +116,8 @@ template <class T> class ProtobufModule : protected SinglePortModule
                 // if we can't decode it, nobody can process it!
                 return;
             }
-        }
 
-        return alterReceivedProtobuf(mp, decoded);
+            return alterReceivedProtobuf(mp, decoded);
+        }
     }
 };

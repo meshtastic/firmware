@@ -1,3 +1,4 @@
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "NodeDB.h"
 #include "PowerFSM.h"
 #include "RadioLibInterface.h"
@@ -5,10 +6,12 @@
 #include "main.h"
 #include "mesh/http/ContentHelper.h"
 #include "mesh/http/WebServer.h"
+#if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
-#include "mqtt/JSON.h"
+#endif
+#include "Led.h"
 #include "power.h"
-#include "sleep.h"
+#include "serialization/JSON.h"
 #include <FSCommon.h>
 #include <HTTPBodyParser.hpp>
 #include <HTTPMultipartBodyParser.hpp>
@@ -158,7 +161,7 @@ void handleAPIv1FromRadio(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Content-Type", "application/x-protobuf");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "GET");
-    res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/protobufs/master/mesh.proto");
+    res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/protobufs/master/meshtastic/mesh.proto");
 
     uint8_t txBuf[MAX_STREAM_BUF_SIZE];
     uint32_t len = 1;
@@ -202,7 +205,7 @@ void handleAPIv1ToRadio(HTTPRequest *req, HTTPResponse *res)
     res->setHeader("Access-Control-Allow-Headers", "Content-Type");
     res->setHeader("Access-Control-Allow-Origin", "*");
     res->setHeader("Access-Control-Allow-Methods", "PUT, OPTIONS");
-    res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/protobufs/master/mesh.proto");
+    res->setHeader("X-Protobuf-Schema", "https://raw.githubusercontent.com/meshtastic/protobufs/master/meshtastic/mesh.proto");
 
     if (req->getMethod() == "OPTIONS") {
         res->setStatusCode(204); // Success with no content
@@ -773,7 +776,7 @@ void handleRestart(HTTPRequest *req, HTTPResponse *res)
     res->println("<h1>Meshtastic</h1>\n");
     res->println("Restarting");
 
-    LOG_DEBUG("***** Restarted on HTTP(s) Request *****\n");
+    LOG_DEBUG("Restarted on HTTP(s) Request\n");
     webServerThread->requestRestart = (millis() / 1000) + 5;
 }
 
@@ -795,9 +798,9 @@ void handleBlinkLED(HTTPRequest *req, HTTPResponse *res)
     if (blink_target == "LED") {
         uint8_t count = 10;
         while (count > 0) {
-            setLed(true);
+            ledBlink.set(true);
             delay(50);
-            setLed(false);
+            ledBlink.set(false);
             delay(50);
             count = count - 1;
         }
@@ -855,3 +858,4 @@ void handleScanNetworks(HTTPRequest *req, HTTPResponse *res)
     res->print(value->Stringify().c_str());
     delete value;
 }
+#endif

@@ -1,3 +1,12 @@
+const char *failMessage = "Unable to %s\n";
+
+#define SEND_UBX_PACKET(TYPE, ID, DATA, ERRMSG, TIMEOUT)                                                                         \
+    msglen = makeUBXPacket(TYPE, ID, sizeof(DATA), DATA);                                                                        \
+    _serial_gps->write(UBXscratch, msglen);                                                                                      \
+    if (getACK(TYPE, ID, TIMEOUT) != GNSS_RESPONSE_OK) {                                                                         \
+        LOG_WARN(failMessage, #ERRMSG);                                                                                          \
+    }
+
 // Power Management
 
 uint8_t GPS::_message_PMREQ[] PROGMEM = {
@@ -206,14 +215,14 @@ const uint8_t GPS::_message_GLL[] = {
     0x00        // Reserved
 };
 
-// Enable GSA. GSA - GPS DOP and active satellites, used for detailing the satellites used in the positioning and
+// Disable GSA. GSA - GPS DOP and active satellites, used for detailing the satellites used in the positioning and
 // the DOP (Dilution of Precision)
 const uint8_t GPS::_message_GSA[] = {
     0xF0, 0x02, // NMEA ID for GSA
     0x00,       // Rate for DDC
-    0x01,       // Rate for UART1
+    0x00,       // Rate for UART1
     0x00,       // Rate for UART2
-    0x01,       // Rate for USB usefull for native linux
+    0x00,       // Rate for USB usefull for native linux
     0x00,       // Rate for SPI
     0x00        // Reserved
 };
@@ -316,9 +325,18 @@ const uint8_t GPS::_message_SAVE[] = {
     0x17                    // deviceMask: BBR, Flash, EEPROM, and SPI Flash
 };
 
+const uint8_t GPS::_message_SAVE_10[] = {
+    0x00, 0x00, 0x00, 0x00, // clearMask: no sections cleared
+    0xFF, 0xFF, 0x00, 0x00, // saveMask: save all sections
+    0x00, 0x00, 0x00, 0x00, // loadMask: no sections loaded
+    0x01                    // deviceMask: only save to BBR
+};
+
 // As the M10 has no flash, the best we can do to preserve the config is to set it in RAM and BBR.
 // BBR will survive a restart, and power off for a while, but modules with small backup
 // batteries or super caps will not retain the config for a long power off time.
+// for all configurations using sleep / low power modes, V_BCKP needs to be hooked to permanent power for fast aquisition after
+// sleep
 
 // VALSET Commands for M10
 // Please refer to the M10 Protocol Specification:
@@ -327,25 +345,27 @@ const uint8_t GPS::_message_SAVE[] = {
 // and:
 // https://content.u-blox.com/sites/default/files/u-blox-M10-ROM-5.10_ReleaseNotes_UBX-22001426.pdf
 // for interesting insights.
+//
+// Integration manual:
+// https://content.u-blox.com/sites/default/files/documents/SAM-M10Q_IntegrationManual_UBX-22020019.pdf
+// has details on low-power modes
+
 /*
-CFG-PM2 has been replaced by many CFG-PM commands
 OPERATEMODE E1 2 (0 | 1 | 2)
-POSUPDATEPERIOD U4 1000ms for M10 must be >= 5s try 5
-ACQPERIOD U4 10 seems ok for M10 def ok
-GRIDOFFSET U4 0 seems ok for M10 def ok
-ONTIME U2 1 will try 1
-MINACQTIME U1 0 will try 0 def ok
-MAXACQTIME U1 stick with default of 0 def ok
-DONOTENTEROFF L 1 stay at 1
-WAITTIMEFIX  L 1 stay with 1
-UPDATEEPH L 1 changed to 1 for gps rework default is 1
+POSUPDATEPERIOD U4 5
+ACQPERIOD U4 10
+GRIDOFFSET U4 0
+ONTIME U2 1
+MINACQTIME U1 0
+MAXACQTIME U1 0
+DONOTENTEROFF L 1
+WAITTIMEFIX  L 1
+UPDATEEPH L 1
 EXTINTWAKE L 0 no ext ints
 EXTINTBACKUP L 0 no ext ints
 EXTINTINACTIVE L 0 no ext ints
 EXTINTACTIVITY U4 0 no ext ints
-LIMITPEAKCURRENT L 1 stay with 1
-*/
-// CFG-PMS has been removed
+LIMITPEAKCURRENT L 1
 
 // Ram layer config message:
 // b5 62 06 8a 26 00 00 01 00 00 01 00 d0 20 02 02 00 d0 40 05 00 00 00 05 00 d0 30 01 00 08 00 d0 10 01 09 00 d0 10 01 10 00 d0
@@ -354,7 +374,7 @@ LIMITPEAKCURRENT L 1 stay with 1
 // BBR layer config message:
 // b5 62 06 8a 26 00 00 02 00 00 01 00 d0 20 02 02 00 d0 40 05 00 00 00 05 00 d0 30 01 00 08 00 d0 10 01 09 00 d0 10 01 10 00 d0
 // 10 01 8c 03
-
+*/
 const uint8_t GPS::_message_VALSET_PM_RAM[] = {0x00, 0x01, 0x00, 0x00, 0x01, 0x00, 0xd0, 0x20, 0x02, 0x02, 0x00, 0xd0, 0x40,
                                                0x05, 0x00, 0x00, 0x00, 0x05, 0x00, 0xd0, 0x30, 0x01, 0x00, 0x08, 0x00, 0xd0,
                                                0x10, 0x01, 0x09, 0x00, 0xd0, 0x10, 0x01, 0x10, 0x00, 0xd0, 0x10, 0x01};
@@ -402,23 +422,28 @@ const uint8_t GPS::_message_VALSET_DISABLE_NMEA_BBR[] = {0x00, 0x02, 0x00, 0x00,
 // BBR layer config message:
 // b5 62 06 8a 09 00 00 02 00 00 07 00 92 20 06 5a 58
 
-// Turn NMEA GSA, GGA, RMC messages on:
-// Ram layer config message:
-// b5 62 06 8a 13 00 00 01 00 00 c0 00 91 20 01 bb 00 91 20 01 ac 00 91 20 01 e1 3b
-
-// BBR layer config message:
-// b5 62 06 8a 13 00 00 02 00 00 c0 00 91 20 01 bb 00 91 20 01 ac 00 91 20 01 e2 4d
+// Turn NMEA GGA, RMC messages on:
+// Layer config messages:
+// RAM:
+// b5 62 06 8a 0e 00 00 01 00 00 bb 00 91 20 01 ac 00 91 20 01 6a 8f
+// BBR:
+// b5 62 06 8a 0e 00 00 02 00 00 bb 00 91 20 01 ac 00 91 20 01 6b 9c
+// FLASH:
+// b5 62 06 8a 0e 00 00 04 00 00 bb 00 91 20 01 ac 00 91 20 01 6d b6
+// Doing this for the FLASH layer isn't really required since we save the config to flash later
 
 const uint8_t GPS::_message_VALSET_DISABLE_TXT_INFO_RAM[] = {0x00, 0x01, 0x00, 0x00, 0x07, 0x00, 0x92, 0x20, 0x03};
 const uint8_t GPS::_message_VALSET_DISABLE_TXT_INFO_BBR[] = {0x00, 0x02, 0x00, 0x00, 0x07, 0x00, 0x92, 0x20, 0x03};
-const uint8_t GPS::_message_VALSET_ENABLE_NMEA_RAM[] = {0x00, 0x01, 0x00, 0x00, 0xc0, 0x00, 0x91, 0x20, 0x01, 0xbb,
-                                                        0x00, 0x91, 0x20, 0x01, 0xac, 0x00, 0x91, 0x20, 0x01};
-const uint8_t GPS::_message_VALSET_ENABLE_NMEA_BBR[] = {0x00, 0x02, 0x00, 0x00, 0xc0, 0x00, 0x91, 0x20, 0x01, 0xbb,
-                                                        0x00, 0x91, 0x20, 0x01, 0xac, 0x00, 0x91, 0x20, 0x01};
+
+const uint8_t GPS::_message_VALSET_ENABLE_NMEA_RAM[] = {0x00, 0x01, 0x00, 0x00, 0xbb, 0x00, 0x91,
+                                                        0x20, 0x01, 0xac, 0x00, 0x91, 0x20, 0x01};
+const uint8_t GPS::_message_VALSET_ENABLE_NMEA_BBR[] = {0x00, 0x02, 0x00, 0x00, 0xbb, 0x00, 0x91,
+                                                        0x20, 0x01, 0xac, 0x00, 0x91, 0x20, 0x01};
 const uint8_t GPS::_message_VALSET_DISABLE_SBAS_RAM[] = {0x00, 0x01, 0x00, 0x00, 0x20, 0x00, 0x31,
                                                          0x10, 0x00, 0x05, 0x00, 0x31, 0x10, 0x00};
 const uint8_t GPS::_message_VALSET_DISABLE_SBAS_BBR[] = {0x00, 0x02, 0x00, 0x00, 0x20, 0x00, 0x31,
                                                          0x10, 0x00, 0x05, 0x00, 0x31, 0x10, 0x00};
+
 /*
 Operational issues with the M10:
 

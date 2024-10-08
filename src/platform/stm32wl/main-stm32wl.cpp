@@ -3,7 +3,7 @@
 #include <stm32wle5xx.h>
 #include <stm32wlxx_hal.h>
 
-void setBluetoothEnable(bool on) {}
+void setBluetoothEnable(bool enable) {}
 
 void playStartMelody() {}
 
@@ -26,11 +26,3 @@ void getMacAddr(uint8_t *dmac)
 }
 
 void cpuDeepSleep(uint32_t msecToWake) {}
-
-/* pacify libc_nano */
-extern "C" {
-int _gettimeofday(struct timeval *tv, void *tzvp)
-{
-    return -1;
-}
-}

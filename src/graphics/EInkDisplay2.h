@@ -1,14 +1,14 @@
 #pragma once
 
-#include <OLEDDisplay.h>
+#ifdef USE_EINK
 
-#if defined(HELTEC_WIRELESS_PAPER_V1_0)
-// Re-enable SPI after deep sleep: rtc_gpio_hold_dis()
-#include "driver/rtc_io.h"
-#endif
+#include "GxEPD2_BW.h"
+#include <OLEDDisplay.h>
 
 /**
  * An adapter class that allows using the GxEPD2 library as if it was an OLEDDisplay implementation.
+ *
+ * Note: EInkDynamicDisplay derives from this class.
  *
  * Remaining TODO:
  * optimize display() to only draw changed pixels (see other OLED subclasses for examples)
@@ -16,6 +16,7 @@
  * Use the fast NRF52 SPI API rather than the slow standard arduino version
  *
  * turn radio back on - currently with both on spi bus is fucked? or are we leaving chip select asserted?
+ * Suggestion: perhaps similar to HELTEC_WIRELESS_PAPER issue, which resolved with rtc_gpio_hold_dis()
  */
 class EInkDisplay : public OLEDDisplay
 {
@@ -37,7 +38,14 @@ class EInkDisplay : public OLEDDisplay
      *
      * @return true if we did draw the screen
      */
-    bool forceDisplay(uint32_t msecLimit = 1000);
+    virtual bool forceDisplay(uint32_t msecLimit = 1000);
+
+    /**
+     * Run any code needed to complete an update, after the physical refresh has completed.
+     * Split from forceDisplay(), to enable async refresh in derived EInkDynamicDisplay class.
+     *
+     */
+    virtual void endUpdate();
 
     /**
      * shim to make the abstraction happy
@@ -55,80 +63,18 @@ class EInkDisplay : public OLEDDisplay
     // Connect to the display
     virtual bool connect() override;
 
-#if defined(USE_EINK_DYNAMIC_PARTIAL)
-    // Full, partial, or skip: balance urgency with display health
+    // AdafruitGFX display object - instantiated in connect(), variant specific
+    GxEPD2_BW<EINK_DISPLAY_MODEL, EINK_DISPLAY_MODEL::HEIGHT> *adafruitDisplay = NULL;
 
-    // Use partial refresh if EITHER:
-    // * highPriority() was set
-    // * a highPriority() update was previously skipped, for rate-limiting - (EINK_HIGHPRIORITY_LIMIT_SECONDS)
-
-    // Use full refresh if EITHER:
-    // * lowPriority() was set
-    // * demandFullRefresh() was called - (single shot)
-    // * too many partial updates in a row: protect display - (EINK_PARTIAL_REPEAT_LIMIT)
-    // * no recent updates, and last update was partial: redraw for image quality (EINK_LOWPRIORITY_LIMIT_SECONDS)
-    // * (optional) too many "erasures" since full-refresh (black pixels cleared to white)
-
-    // Rate limit if:
-    // * lowPriority() - (EINK_LOWPRIORITY_LIMIT_SECONDS)
-    // * highPriority(), if multiple partials have run back-to-back - (EINK_HIGHPRIORITY_LIMIT_SECONDS)
-
-    // Skip update entirely if ALL criteria met:
-    // * new image matches old image
-    // * lowPriority()
-    // * no call to demandFullRefresh()
-    // * not redrawing for image quality
-    // * not refreshing for display health
-
-    // ------------------------------------
-
-    // To implement for your E-Ink display:
-    // * edit configForPartialRefresh()
-    // * edit configForFullRefresh()
-    // * add macros to variant.h, and adjust to taste:
-
-    /*
-        #define USE_EINK_DYNAMIC_PARTIAL
-        #define EINK_LOWPRIORITY_LIMIT_SECONDS 30
-        #define EINK_HIGHPRIORITY_LIMIT_SECONDS 1
-        #define EINK_PARTIAL_REPEAT_LIMIT 5
-        #define EINK_PARTIAL_ERASURE_LIMIT 300     // optional
-    */
-
-  public:
-    void highPriority();      // Suggest partial refresh
-    void lowPriority();       // Suggest full refresh
-    void demandFullRefresh(); // For next update: explicitly request full refresh
-
-  protected:
-    void configForPartialRefresh(); // Display specific code to select partial refresh mode
-    void configForFullRefresh();    // Display specific code to return to full refresh mode
-    bool newImageMatchesOld();      // Is the new update actually different to the last image?
-    bool determineRefreshMode();    // Called immediately before data written to display - choose refresh mode, or abort update
-#ifdef EINK_PARTIAL_ERASURE_LIMIT
-    int32_t countBlackPixels(); // Calculate the number of black pixels in the new image
-    bool tooManyErasures();     // Has too much "ghosting" (black pixels erased to white) accumulated since last full-refresh?
+    // If display uses HSPI
+#if defined(HELTEC_WIRELESS_PAPER) || defined(HELTEC_WIRELESS_PAPER_V1_0) || defined(HELTEC_VISION_MASTER_E213) ||               \
+    defined(HELTEC_VISION_MASTER_E290) || defined(TLORA_T3S3_EPAPER)
+    SPIClass *hspi = NULL;
 #endif
 
-    bool isHighPriority = true;            // Does the method calling update believe that this is urgent?
-    bool needsFull = false;                // Is a full refresh forced? (display health)
-    bool demandingFull = false;            // Was full refresh specifically requested? (splash screens, etc)
-    bool missedHighPriorityUpdate = false; // Was a high priority update skipped for rate-limiting?
-    uint16_t partialRefreshCount = 0;      // How many partials have occurred since last full refresh?
-    uint32_t lastUpdateMsec = 0;           // When did the last update occur?
-    uint32_t prevImageHash = 0;            // Used to check if update will change screen image (skippable or not)
-    int32_t prevBlackCount = 0;            // How many black pixels were in the previous image
-    uint32_t erasedSinceFull = 0;          // How many black pixels have been set back to white since last full-refresh? (roughly)
-
-    // Set in variant.h
-    const uint32_t lowPriorityLimitMsec = (uint32_t)1000 * EINK_LOWPRIORITY_LIMIT_SECONDS;   // Max rate for partial refreshes
-    const uint32_t highPriorityLimitMsec = (uint32_t)1000 * EINK_HIGHPRIORITY_LIMIT_SECONDS; // Max rate for full refreshes
-    const uint32_t partialRefreshLimit = EINK_PARTIAL_REPEAT_LIMIT; // Max consecutive partials, before full is triggered
-
-#else // !USE_EINK_DYNAMIC_PARTIAL
-    // Tolerate calls to these methods anywhere, just to be safe
-    void highPriority() {}
-    void lowPriority() {}
-    void demandFullRefresh() {}
-#endif
+  private:
+    // FIXME quick hack to limit drawing to a very slow rate
+    uint32_t lastDrawMsec = 0;
 };
+
+#endif

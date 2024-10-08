@@ -1,8 +1,10 @@
 #include "ReliableRouter.h"
+#include "Default.h"
 #include "MeshModule.h"
 #include "MeshTypes.h"
 #include "configuration.h"
 #include "mesh-pb-constants.h"
+#include "modules/NodeInfoModule.h"
 
 // ReliableRouter::ReliableRouter() {}
 
@@ -17,7 +19,7 @@ ErrorCode ReliableRouter::send(meshtastic_MeshPacket *p)
         // message will rebroadcast.  But asking for hop_limit 0 in that context means the client app has no preference on hop
         // counts and we want this message to get through the whole mesh, so use the default.
         if (p->hop_limit == 0) {
-            p->hop_limit = (config.lora.hop_limit >= HOP_MAX) ? HOP_MAX : config.lora.hop_limit;
+            p->hop_limit = Default::getConfiguredOrDefaultHopLimit(config.lora.hop_limit);
         }
 
         auto copy = packetPool.allocCopy(*p);
@@ -71,12 +73,12 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
         i->second.nextTxMsec += iface->getPacketTime(p);
     }
 
-    /* Resend implicit ACKs for repeated packets (assuming the original packet was sent with HOP_RELIABLE)
+    /* Resend implicit ACKs for repeated packets (hopStart equals hopLimit);
      * this way if an implicit ACK is dropped and a packet is resent we'll rebroadcast again.
      * Resending real ACKs is omitted, as you might receive a packet multiple times due to flooding and
      * flooding this ACK back to the original sender already adds redundancy. */
-    if (wasSeenRecently(p, false) && p->hop_limit == HOP_RELIABLE && !MeshModule::currentReply && p->to != nodeDB.getNodeNum()) {
-        // retransmission on broadcast has hop_limit still equal to HOP_RELIABLE
+    bool isRepeated = p->hop_start == 0 ? (p->hop_limit == HOP_RELIABLE) : (p->hop_start == p->hop_limit);
+    if (wasSeenRecently(p, false) && isRepeated && !MeshModule::currentReply && !isToUs(p)) {
         LOG_DEBUG("Resending implicit ack for a repeated floodmsg\n");
         meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p);
         tosend->hop_limit--; // bump down the hop count
@@ -100,20 +102,30 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
  */
 void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c)
 {
-    NodeNum ourNode = getNodeNum();
-
-    if (p->to == ourNode) { // ignore ack/nak/want_ack packets that are not address to us (we only handle 0 hop reliability)
+    if (isToUs(p)) { // ignore ack/nak/want_ack packets that are not address to us (we only handle 0 hop reliability)
         if (p->want_ack) {
             if (MeshModule::currentReply) {
-                LOG_DEBUG("Some other module has replied to this message, no need for a 2nd ack\n");
+                LOG_DEBUG("Another module replied to this message, no need for 2nd ack\n");
             } else if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
-                sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel);
+                sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, p->hop_start, p->hop_limit);
+            } else if (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag && p->channel == 0 &&
+                       (nodeDB->getMeshNode(p->from) == nullptr || nodeDB->getMeshNode(p->from)->user.public_key.size == 0)) {
+                LOG_INFO("PKI packet from unknown node, send PKI_UNKNOWN_PUBKEY\n");
+                sendAckNak(meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY, getFrom(p), p->id, channels.getPrimaryIndex(),
+                           p->hop_start, p->hop_limit);
             } else {
                 // Send a 'NO_CHANNEL' error on the primary channel if want_ack packet destined for us cannot be decoded
-                sendAckNak(meshtastic_Routing_Error_NO_CHANNEL, getFrom(p), p->id, channels.getPrimaryIndex());
+                sendAckNak(meshtastic_Routing_Error_NO_CHANNEL, getFrom(p), p->id, channels.getPrimaryIndex(), p->hop_start,
+                           p->hop_limit);
             }
         }
-
+        if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag && c &&
+            c->error_reason == meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY) {
+            if (owner.public_key.size == 32) {
+                LOG_INFO("PKI decrypt failure, send a NodeInfo");
+                nodeInfoModule->sendOurNodeInfo(p->from, false, p->channel, true);
+            }
+        }
         // We consider an ack to be either a !routing packet with a request ID or a routing packet with !error
         PacketId ackId = ((c && c->error_reason == meshtastic_Routing_Error_NONE) || !c) ? p->decoded.request_id : 0;
 
@@ -122,11 +134,10 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
 
         // We intentionally don't check wasSeenRecently, because it is harmless to delete non existent retransmission records
         if (ackId || nakId) {
+            LOG_DEBUG("Received a %s for 0x%x, stopping retransmissions\n", ackId ? "ACK" : "NAK", ackId);
             if (ackId) {
-                LOG_DEBUG("Received an ack for 0x%x, stopping retransmissions\n", ackId);
                 stopRetransmission(p->to, ackId);
             } else {
-                LOG_DEBUG("Received a nak for 0x%x, stopping retransmissions\n", nakId);
                 stopRetransmission(p->to, nakId);
             }
         }
@@ -166,8 +177,6 @@ bool ReliableRouter::stopRetransmission(GlobalPacketId key)
     auto old = findPendingPacket(key);
     if (old) {
         auto p = old->packet;
-        auto numErased = pending.erase(key);
-        assert(numErased == 1);
         /* Only when we already transmitted a packet via LoRa, we will cancel the packet in the Tx queue
           to avoid canceling a transmission if it was ACKed super fast via MQTT */
         if (old->numRetransmissions < NUM_RETRANSMISSIONS - 1) {
@@ -176,6 +185,8 @@ bool ReliableRouter::stopRetransmission(GlobalPacketId key)
             // now free the pooled copy for retransmission too
             packetPool.release(p);
         }
+        auto numErased = pending.erase(key);
+        assert(numErased == 1);
         return true;
     } else
         return false;

@@ -1,7 +1,7 @@
 #include "kbI2cBase.h"
-
 #include "configuration.h"
 #include "detect/ScanI2C.h"
+#include "detect/ScanI2CTwoWire.h"
 
 extern ScanI2C::DeviceAddress cardkb_found;
 extern uint8_t kb_model;
@@ -30,15 +30,10 @@ uint8_t read_from_14004(TwoWire *i2cBus, uint8_t reg, uint8_t *data, uint8_t len
 
 int32_t KbI2cBase::runOnce()
 {
-    if (cardkb_found.address == 0x00) {
-        // Input device is not detected.
-        return INT32_MAX;
-    }
-
     if (!i2cBus) {
         switch (cardkb_found.port) {
         case ScanI2C::WIRE1:
-#ifdef I2C_SDA1
+#if WIRE_INTERFACES_COUNT == 2
             LOG_DEBUG("Using I2C Bus 1 (the second one)\n");
             i2cBus = &Wire1;
             if (cardkb_found.address == BBQ10_KB_ADDR) {
@@ -99,7 +94,7 @@ int32_t KbI2cBase::runOnce()
                 case 'e': // sym e
                     if (is_sym) {
                         e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP;
-                        e.kbchar = 0xb5;
+                        e.kbchar = INPUT_BROKER_MSG_UP;
                         is_sym = false; // reset sym state after second keypress
                     } else {
                         e.inputEvent = ANYKEY;
@@ -109,7 +104,7 @@ int32_t KbI2cBase::runOnce()
                 case 'x': // sym x
                     if (is_sym) {
                         e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN;
-                        e.kbchar = 0xb6;
+                        e.kbchar = INPUT_BROKER_MSG_DOWN;
                         is_sym = false; // reset sym state after second keypress
                     } else {
                         e.inputEvent = ANYKEY;
@@ -138,6 +133,9 @@ int32_t KbI2cBase::runOnce()
                     break;
                 case 0x13: // Code scanner says the SYM key is 0x13
                     is_sym = !is_sym;
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = is_sym ? INPUT_BROKER_MSG_FN_SYMBOL_ON   // send 0xf1 to tell CannedMessages to display that
+                                      : INPUT_BROKER_MSG_FN_SYMBOL_OFF; // the modifier key is active
                     break;
                 case 0x0a: // apparently Enter on Q10 is a line feed instead of carriage return
                     e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
@@ -193,6 +191,75 @@ int32_t KbI2cBase::runOnce()
             e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
             e.source = this->_originName;
             switch (c) {
+            case 0x71: // This is the button q. If modifier and q pressed, it cancels the input
+                if (is_sym) {
+                    is_sym = false;
+                    e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL;
+                } else {
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = c;
+                }
+                break;
+            case 0x74: // letter t. if modifier and t pressed call 'tab'
+                if (is_sym) {
+                    is_sym = false;
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = 0x09; // TAB Scancode
+                } else {
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = c;
+                }
+                break;
+            case 0x6d: // letter m. Modifier makes it mute notifications
+                if (is_sym) {
+                    is_sym = false;
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = INPUT_BROKER_MSG_MUTE_TOGGLE; // mute notifications
+                } else {
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = c;
+                }
+                break;
+            case 0x6f: // letter o(+). Modifier makes screen increase in brightness
+                if (is_sym) {
+                    is_sym = false;
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = INPUT_BROKER_MSG_BRIGHTNESS_UP; // Increase Brightness code
+                } else {
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = c;
+                }
+                break;
+            case 0x69: // letter i(-).  Modifier makes screen decrease in brightness
+                if (is_sym) {
+                    is_sym = false;
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = INPUT_BROKER_MSG_BRIGHTNESS_DOWN; // Decrease Brightness code
+                } else {
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = c;
+                }
+                break;
+            case 0x20: // Space. Send network ping like double press does
+                if (is_sym) {
+                    is_sym = false;
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = INPUT_BROKER_MSG_SEND_PING; // (fn + space)
+                } else {
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = c;
+                }
+                break;
+            case 0x67: // letter g. toggle gps
+                if (is_sym) {
+                    is_sym = false;
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = INPUT_BROKER_MSG_GPS_TOGGLE;
+                } else {
+                    e.inputEvent = ANYKEY;
+                    e.kbchar = c;
+                }
+                break;
             case 0x1b: // ESC
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_CANCEL;
                 break;
@@ -202,19 +269,38 @@ int32_t KbI2cBase::runOnce()
                 break;
             case 0xb5: // Up
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_UP;
-                e.kbchar = 0xb5;
+                e.kbchar = INPUT_BROKER_MSG_UP;
                 break;
             case 0xb6: // Down
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_DOWN;
-                e.kbchar = 0xb6;
+                e.kbchar = INPUT_BROKER_MSG_DOWN;
                 break;
             case 0xb4: // Left
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT;
-                e.kbchar = 0xb4;
+                e.kbchar = INPUT_BROKER_MSG_LEFT;
                 break;
             case 0xb7: // Right
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT;
-                e.kbchar = 0xb7;
+                e.kbchar = INPUT_BROKER_MSG_RIGHT;
+                break;
+            case 0xc: // Modifier key: 0xc is alt+c (Other options could be: 0xea = shift+mic button or 0x4 shift+$(speaker))
+                // toggle moddifiers button.
+                is_sym = !is_sym;
+                e.inputEvent = ANYKEY;
+                e.kbchar = is_sym ? INPUT_BROKER_MSG_FN_SYMBOL_ON   // send 0xf1 to tell CannedMessages to display that the
+                                  : INPUT_BROKER_MSG_FN_SYMBOL_OFF; // modifier key is active
+                break;
+            case 0x90: // fn+r      INPUT_BROKER_MSG_REBOOT
+            case 0x91: // fn+t
+            case 0x9b: // fn+s      INPUT_BROKER_MSG_SHUTDOWN
+            case 0xac: // fn+m      INPUT_BROKER_MSG_MUTE_TOGGLE
+            case 0x9e: // fn+g      INPUT_BROKER_MSG_GPS_TOGGLE
+            case 0xaf: // fn+space  INPUT_BROKER_MSG_SEND_PING
+            case 0x8b: // fn+del    INPUT_BROKEN_MSG_DISMISS_FRAME
+            case 0xAA: // fn+b      INPUT_BROKER_MSG_BLUETOOTH_TOGGLE
+                // just pass those unmodified
+                e.inputEvent = ANYKEY;
+                e.kbchar = c;
                 break;
             case 0x0d: // Enter
                 e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_SELECT;
@@ -229,6 +315,7 @@ int32_t KbI2cBase::runOnce()
                 }
                 e.inputEvent = ANYKEY;
                 e.kbchar = c;
+                is_sym = false;
                 break;
             }
 

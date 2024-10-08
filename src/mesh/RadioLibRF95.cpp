@@ -1,3 +1,4 @@
+#if RADIOLIB_EXCLUDE_SX127X != 1
 #include "RadioLibRF95.h"
 #include "configuration.h"
 
@@ -42,7 +43,11 @@ int16_t RadioLibRF95::begin(float freq, float bw, uint8_t sf, uint8_t cr, uint8_
     state = setCodingRate(cr);
     RADIOLIB_ASSERT(state);
 
+#ifdef USE_RF95_RFO
+    state = setOutputPower(power, true);
+#else
     state = setOutputPower(power);
+#endif
     RADIOLIB_ASSERT(state);
 
     state = setGain(gain);
@@ -78,3 +83,4 @@ uint8_t RadioLibRF95::readReg(uint8_t addr)
     Module *mod = this->getMod();
     return mod->SPIreadRegister(addr);
 }
+#endif

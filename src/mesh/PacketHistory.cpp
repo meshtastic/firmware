@@ -2,6 +2,11 @@
 #include "configuration.h"
 #include "mesh-pb-constants.h"
 
+#ifdef ARCH_PORTDUINO
+#include "platform/portduino/PortduinoGlue.h"
+#endif
+#include "Throttle.h"
+
 PacketHistory::PacketHistory()
 {
     recentPackets.reserve(MAX_NUM_NODES); // Prealloc the worst case # of records - to prevent heap fragmentation
@@ -18,18 +23,17 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
         return false; // Not a floodable message ID, so we don't care
     }
 
-    uint32_t now = millis();
-
     PacketRecord r;
     r.id = p->id;
     r.sender = getFrom(p);
-    r.rxTimeMsec = now;
+    r.rxTimeMsec = millis();
 
     auto found = recentPackets.find(r);
     bool seenRecently = (found != recentPackets.end()); // found not equal to .end() means packet was seen recently
 
-    if (seenRecently && (now - found->rxTimeMsec) >= FLOOD_EXPIRE_TIME) { // Check whether found packet has already expired
-        recentPackets.erase(found);                                       // Erase and pretend packet has not been seen recently
+    if (seenRecently &&
+        !Throttle::isWithinTimespanMs(found->rxTimeMsec, FLOOD_EXPIRE_TIME)) { // Check whether found packet has already expired
+        recentPackets.erase(found); // Erase and pretend packet has not been seen recently
         found = recentPackets.end();
         seenRecently = false;
     }
@@ -60,12 +64,10 @@ bool PacketHistory::wasSeenRecently(const meshtastic_MeshPacket *p, bool withUpd
  */
 void PacketHistory::clearExpiredRecentPackets()
 {
-    uint32_t now = millis();
-
     LOG_DEBUG("recentPackets size=%ld\n", recentPackets.size());
 
     for (auto it = recentPackets.begin(); it != recentPackets.end();) {
-        if ((now - it->rxTimeMsec) >= FLOOD_EXPIRE_TIME) {
+        if (!Throttle::isWithinTimespanMs(it->rxTimeMsec, FLOOD_EXPIRE_TIME)) {
             it = recentPackets.erase(it); // erase returns iterator pointing to element immediately following the one erased
         } else {
             ++it;

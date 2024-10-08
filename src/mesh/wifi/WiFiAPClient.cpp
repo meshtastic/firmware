@@ -1,22 +1,29 @@
-#include "mesh/wifi/WiFiAPClient.h"
+#include "configuration.h"
+#if HAS_WIFI
 #include "NodeDB.h"
 #include "RTC.h"
 #include "concurrency/Periodic.h"
-#include "configuration.h"
+#include "mesh/wifi/WiFiAPClient.h"
+
 #include "main.h"
 #include "mesh/api/WiFiServerAPI.h"
+#if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
+#endif
 #include "target_specific.h"
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #ifdef ARCH_ESP32
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
 #include "mesh/http/WebServer.h"
+#endif
 #include <ESPmDNS.h>
 #include <esp_wifi.h>
 static void WiFiEvent(WiFiEvent_t event);
 #endif
 
 #ifndef DISABLE_NTP
+#include "Throttle.h"
 #include <NTPClient.h>
 #endif
 
@@ -50,7 +57,7 @@ static void onNetworkConnected()
 {
     if (!APStartupComplete) {
         // Start web server
-        LOG_INFO("Starting network services\n");
+        LOG_INFO("Starting WiFi network services\n");
 
 #ifdef ARCH_ESP32
         // start mdns
@@ -92,17 +99,18 @@ static void onNetworkConnected()
             syslog.enable();
         }
 
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_WEBSERVER
         initWebServer();
 #endif
         initApiServer();
-
         APStartupComplete = true;
     }
 
     // FIXME this is kinda yucky, instead we should just have an observable for 'wifireconnected'
+#ifndef MESHTASTIC_EXCLUDE_MQTT
     if (mqtt)
         mqtt->reconnect();
+#endif
 }
 
 static int32_t reconnectWiFi()
@@ -135,7 +143,7 @@ static int32_t reconnectWiFi()
     }
 
 #ifndef DISABLE_NTP
-    if (WiFi.isConnected() && (((millis() - lastrun_ntp) > 43200000) || (lastrun_ntp == 0))) { // every 12 hours
+    if (WiFi.isConnected() && (!Throttle::isWithinTimespanMs(lastrun_ntp, 43200000) || (lastrun_ntp == 0))) { // every 12 hours
         LOG_DEBUG("Updating NTP time from %s\n", config.network.ntp_server);
         if (timeClient.update()) {
             LOG_DEBUG("NTP Request Success - Setting RTCQualityNTP if needed\n");
@@ -146,7 +154,6 @@ static int32_t reconnectWiFi()
 
             perhapsSetRTC(RTCQualityNTP, &tv);
             lastrun_ntp = millis();
-
         } else {
             LOG_DEBUG("NTP Update failed\n");
         }
@@ -204,7 +211,9 @@ bool initWifi()
         const char *wifiPsw = config.network.wifi_psk;
 
 #ifndef ARCH_RP2040
-        createSSLCert();                        // For WebServer
+#if !MESHTASTIC_EXCLUDE_WEBSERVER
+        createSSLCert(); // For WebServer
+#endif
         esp_wifi_set_storage(WIFI_STORAGE_RAM); // Disable flash storage for WiFi credentials
 #endif
         if (!*wifiPsw) // Treat empty password as no password
@@ -217,10 +226,16 @@ bool initWifi()
 
             WiFi.mode(WIFI_STA);
             WiFi.setHostname(ourHost);
+
             if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_STATIC &&
                 config.network.ipv4_config.ip != 0) {
+#ifndef ARCH_RP2040
                 WiFi.config(config.network.ipv4_config.ip, config.network.ipv4_config.gateway, config.network.ipv4_config.subnet,
                             config.network.ipv4_config.dns);
+#else
+                WiFi.config(config.network.ipv4_config.ip, config.network.ipv4_config.dns, config.network.ipv4_config.gateway,
+                            config.network.ipv4_config.subnet);
+#endif
             }
 #ifndef ARCH_RP2040
             WiFi.onEvent(WiFiEvent);
@@ -295,7 +310,12 @@ static void WiFiEvent(WiFiEvent_t event)
         onNetworkConnected();
         break;
     case ARDUINO_EVENT_WIFI_STA_GOT_IP6:
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+        LOG_INFO("Obtained Local IP6 address: %s\n", WiFi.linkLocalIPv6().toString().c_str());
+        LOG_INFO("Obtained GlobalIP6 address: %s\n", WiFi.globalIPv6().toString().c_str());
+#else
         LOG_INFO("Obtained IP6 address: %s\n", WiFi.localIPv6().toString().c_str());
+#endif
         break;
     case ARDUINO_EVENT_WIFI_STA_LOST_IP:
         LOG_INFO("Lost IP address and IP address is reset to 0\n");
@@ -406,3 +426,4 @@ uint8_t getWifiDisconnectReason()
 {
     return wifiDisconnectReason;
 }
+#endif

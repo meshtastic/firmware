@@ -1,4 +1,3 @@
-
 #include "configuration.h"
 #if defined(ARCH_ESP32) && defined(USE_SX1280)
 #include "AudioModule.h"
@@ -7,14 +6,6 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include "Router.h"
-
-#ifdef OLED_RU
-#include "graphics/fonts/OLEDDisplayFontsRU.h"
-#endif
-
-#ifdef OLED_UA
-#include "graphics/fonts/OLEDDisplayFontsUA.h"
-#endif
 
 /*
     AudioModule
@@ -48,32 +39,7 @@ AudioModule *audioModule;
 #define YIELD_FROM_ISR(x) portYIELD_FROM_ISR(x)
 #endif
 
-#if (defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7735_CS) || defined(ST7789_CS)) &&                                \
-    !defined(DISPLAY_FORCE_SMALL_FONTS)
-
-// The screen is bigger so use bigger fonts
-#define FONT_SMALL ArialMT_Plain_16
-#define FONT_MEDIUM ArialMT_Plain_24
-#define FONT_LARGE ArialMT_Plain_24
-#else
-#ifdef OLED_RU
-#define FONT_SMALL ArialMT_Plain_10_RU
-#else
-#ifdef OLED_UA
-#define FONT_SMALL ArialMT_Plain_10_UA
-#else
-#define FONT_SMALL ArialMT_Plain_10
-#endif
-#endif
-#define FONT_MEDIUM ArialMT_Plain_16
-#define FONT_LARGE ArialMT_Plain_24
-#endif
-
-#define fontHeight(font) ((font)[1] + 1) // height is position 1
-
-#define FONT_HEIGHT_SMALL fontHeight(FONT_SMALL)
-#define FONT_HEIGHT_MEDIUM fontHeight(FONT_MEDIUM)
-#define FONT_HEIGHT_LARGE fontHeight(FONT_LARGE)
+#include "graphics/ScreenFonts.h"
 
 void run_codec2(void *parameter)
 {
@@ -224,13 +190,13 @@ int32_t AudioModule::runOnce()
 
             firstTime = false;
         } else {
-            UIFrameEvent e = {false, true};
+            UIFrameEvent e;
             // Check if PTT is pressed. TODO hook that into Onebutton/Interrupt drive.
             if (digitalRead(moduleConfig.audio.ptt_pin ? moduleConfig.audio.ptt_pin : PTT_PIN) == HIGH) {
                 if (radio_state == RadioState::rx) {
                     LOG_INFO("PTT pressed, switching to TX\n");
                     radio_state = RadioState::tx;
-                    e.frameChanged = true;
+                    e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
                     this->notifyObservers(&e);
                 }
             } else {
@@ -243,7 +209,7 @@ int32_t AudioModule::runOnce()
                     }
                     tx_encode_frame_index = sizeof(tx_header);
                     radio_state = RadioState::rx;
-                    e.frameChanged = true;
+                    e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
                     this->notifyObservers(&e);
                 }
             }
@@ -300,14 +266,14 @@ void AudioModule::sendPayload(NodeNum dest, bool wantReplies)
     p->decoded.payload.size = tx_encode_frame_index;
     memcpy(p->decoded.payload.bytes, tx_encode_frame, p->decoded.payload.size);
 
-    service.sendToMesh(p);
+    service->sendToMesh(p);
 }
 
 ProcessMessage AudioModule::handleReceived(const meshtastic_MeshPacket &mp)
 {
     if ((moduleConfig.audio.codec2_enabled) && (myRegion->audioPermitted)) {
         auto &p = mp.decoded;
-        if (getFrom(&mp) != nodeDB.getNodeNum()) {
+        if (!isFromUs(&mp)) {
             memcpy(rx_encode_frame, p.payload.bytes, p.payload.size);
             radio_state = RadioState::rx;
             rx_encode_frame_index = p.payload.size;

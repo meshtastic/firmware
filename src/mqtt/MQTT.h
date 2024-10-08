@@ -5,20 +5,20 @@
 #include "concurrency/OSThread.h"
 #include "mesh/Channels.h"
 #include "mesh/generated/meshtastic/mqtt.pb.h"
-#include "mqtt/JSON.h"
+#include "serialization/JSON.h"
 #if HAS_WIFI
 #include <WiFiClient.h>
-#define HAS_NETWORKING 1
 #if !defined(ARCH_PORTDUINO)
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR < 3
 #include <WiFiClientSecure.h>
+#endif
 #endif
 #endif
 #if HAS_ETHERNET
 #include <EthernetClient.h>
-#define HAS_NETWORKING 1
 #endif
 
-#ifdef HAS_NETWORKING
+#if HAS_NETWORKING
 #include <PubSubClient.h>
 #endif
 
@@ -35,7 +35,9 @@ class MQTT : private concurrency::OSThread
 #if HAS_WIFI
     WiFiClient mqttClient;
 #if !defined(ARCH_PORTDUINO)
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR < 3
     WiFiClientSecure wifiSecureClient;
+#endif
 #endif
 #endif
 #if HAS_ETHERNET
@@ -43,7 +45,7 @@ class MQTT : private concurrency::OSThread
 #endif
 
   public:
-#ifdef HAS_NETWORKING
+#if HAS_NETWORKING
     PubSubClient pubSub;
 #endif
     MQTT();
@@ -71,6 +73,10 @@ class MQTT : private concurrency::OSThread
 
     void onClientProxyReceive(meshtastic_MqttClientProxyMessage msg);
 
+    bool isEnabled() { return this->enabled; };
+
+    void start() { setIntervalFromNow(0); };
+
   protected:
     PointerQueue<meshtastic_ServiceEnvelope> mqttQueue;
 
@@ -79,10 +85,18 @@ class MQTT : private concurrency::OSThread
     virtual int32_t runOnce() override;
 
   private:
-    std::string statusTopic = "/2/stat/";
-    std::string cryptTopic = "/2/c/";   // msh/2/c/CHANNELID/NODEID
+    std::string cryptTopic = "/2/e/";   // msh/2/e/CHANNELID/NODEID
     std::string jsonTopic = "/2/json/"; // msh/2/json/CHANNELID/NODEID
-    /** return true if we have a channel that wants uplink/downlink
+    std::string mapTopic = "/2/map/";   // For protobuf-encoded MapReport messages
+
+    // For map reporting (only applies when enabled)
+    const uint32_t default_map_position_precision = 14;         // defaults to max. offset of ~1459m
+    const uint32_t default_map_publish_interval_secs = 60 * 15; // defaults to 15 minutes
+    uint32_t last_report_to_map = 0;
+    uint32_t map_position_precision = default_map_position_precision;
+    uint32_t map_publish_interval_msecs = default_map_publish_interval_secs * 1000;
+
+    /** return true if we have a channel that wants uplink/downlink or map reporting is enabled
      */
     bool wantsLink() const;
 
@@ -96,11 +110,12 @@ class MQTT : private concurrency::OSThread
     /// Called when a new publish arrives from the MQTT server
     void onReceive(char *topic, byte *payload, size_t length);
 
-    /// Called when a new publish arrives from the MQTT server
-    std::string meshPacketToJson(meshtastic_MeshPacket *mp);
-
-    void publishStatus();
     void publishQueuedMessages();
+
+    void publishNodeInfo();
+
+    // Check if we should report unencrypted information about our node for consumption by a map
+    void perhapsReportToMap();
 
     // returns true if this is a valid JSON envelope which we accept on downlink
     bool isValidJsonEnvelope(JSONObject &json);

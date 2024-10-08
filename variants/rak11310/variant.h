@@ -6,6 +6,7 @@
 
 #define LED_CONN PIN_LED2
 #define LED_PIN LED_BUILTIN
+#define ledOff(pin) pinMode(pin, INPUT)
 
 #define BUTTON_PIN 9
 #define BUTTON_NEED_PULLUP
@@ -14,7 +15,7 @@
 #define BATTERY_PIN 26
 #define BATTERY_SENSE_RESOLUTION_BITS ADC_RESOLUTION
 // ratio of voltage divider = 3.0 (R17=200k, R18=100k)
-#define ADC_MULTIPLIER 3.1 // 3.0 + a bit for being optimistic
+#define ADC_MULTIPLIER 1.84
 
 #define DETECTION_SENSOR_EN 28
 

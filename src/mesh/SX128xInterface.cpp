@@ -1,4 +1,6 @@
+#if RADIOLIB_EXCLUDE_SX128X != 1
 #include "SX128xInterface.h"
+#include "Throttle.h"
 #include "configuration.h"
 #include "error.h"
 #include "mesh/NodeDB.h"
@@ -17,7 +19,7 @@ SX128xInterface<T>::SX128xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs
                                     RADIOLIB_PIN_TYPE busy)
     : RadioLibInterface(hal, cs, irq, rst, busy, &lora), lora(&module)
 {
-    LOG_WARN("SX128xInterface(cs=%d, irq=%d, rst=%d, busy=%d)\n", cs, irq, rst, busy);
+    LOG_DEBUG("SX128xInterface(cs=%d, irq=%d, rst=%d, busy=%d)\n", cs, irq, rst, busy);
 }
 
 /// Initialise the Driver transport hardware and software.
@@ -71,7 +73,7 @@ template <typename T> bool SX128xInterface<T>::init()
     if ((config.lora.region != meshtastic_Config_LoRaConfig_RegionCode_LORA_24) && (res == RADIOLIB_ERR_INVALID_FREQUENCY)) {
         LOG_WARN("Radio chip only supports 2.4GHz LoRa. Adjusting Region and rebooting.\n");
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_LORA_24;
-        nodeDB.saveToDisk(SEGMENT_CONFIG);
+        nodeDB->saveToDisk(SEGMENT_CONFIG);
         delay(2000);
 #if defined(ARCH_ESP32)
         ESP.restart();
@@ -126,9 +128,13 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
         RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_INVALID_RADIO_SETTING);
 
     err = lora.setSyncWord(syncWord);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("SX128X setSyncWord %s%d\n", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setPreambleLength(preambleLength);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("SX128X setPreambleLength %s%d\n", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setFrequency(getFreq());
@@ -139,6 +145,8 @@ template <typename T> bool SX128xInterface<T>::reconfigure()
         power = SX128X_MAX_POWER;
 
     err = lora.setOutputPower(power);
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("SX128X setOutputPower %s%d\n", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     startReceive(); // restart receiving
@@ -162,10 +170,8 @@ template <typename T> void SX128xInterface<T>::setStandby()
 
     int err = lora.standby();
 
-    if (err != RADIOLIB_ERR_NONE) {
-        LOG_ERROR("SX128x standby failed with error %d\n", err);
-    }
-
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("SX128x standby %s%d\n", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 #if ARCH_PORTDUINO
     if (settingsMap[rxen] != RADIOLIB_NC) {
@@ -186,6 +192,7 @@ template <typename T> void SX128xInterface<T>::setStandby()
     activeReceiveStart = 0;
     disableInterrupt();
     completeSending(); // If we were sending, not anymore
+    RadioLibInterface::setStandby();
 }
 
 /**
@@ -251,13 +258,13 @@ template <typename T> void SX128xInterface<T>::startReceive()
 #endif
 
     // We use the PREAMBLE_DETECTED and HEADER_VALID IRQ flag to detect whether we are actively receiving
-    int err = lora.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF, RADIOLIB_SX128X_IRQ_RX_DEFAULT |
-                                                                    RADIOLIB_SX128X_IRQ_PREAMBLE_DETECTED |
-                                                                    RADIOLIB_SX128X_IRQ_HEADER_VALID);
+    int err = lora.startReceive(RADIOLIB_SX128X_RX_TIMEOUT_INF, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | RADIOLIB_IRQ_PREAMBLE_DETECTED);
 
+    if (err != RADIOLIB_ERR_NONE)
+        LOG_ERROR("SX128X startReceive %s%d\n", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
-    isReceiving = true;
+    RadioLibInterface::startReceive();
 
     // Must be done AFTER, starting transmit, because startTransmit clears (possibly stale) interrupt pending register bits
     enableInterrupt(isrRxLevel0);
@@ -274,7 +281,8 @@ template <typename T> bool SX128xInterface<T>::isChannelActive()
     result = lora.scanChannel();
     if (result == RADIOLIB_LORA_DETECTED)
         return true;
-
+    if (result != RADIOLIB_CHANNEL_FREE)
+        LOG_ERROR("SX128X scanChannel %s%d\n", radioLibErr, result);
     assert(result != RADIOLIB_ERR_WRONG_MODEM);
 
     return false;
@@ -283,36 +291,15 @@ template <typename T> bool SX128xInterface<T>::isChannelActive()
 /** Could we send right now (i.e. either not actively receiving or transmitting)? */
 template <typename T> bool SX128xInterface<T>::isActivelyReceiving()
 {
-    uint16_t irq = lora.getIrqStatus();
-    bool detected = (irq & (RADIOLIB_SX128X_IRQ_HEADER_VALID | RADIOLIB_SX128X_IRQ_PREAMBLE_DETECTED));
-
-    // Handle false detections
-    if (detected) {
-        uint32_t now = millis();
-        if (!activeReceiveStart) {
-            activeReceiveStart = now;
-        } else if ((now - activeReceiveStart > 2 * preambleTimeMsec) && !(irq & RADIOLIB_SX128X_IRQ_HEADER_VALID)) {
-            // The HEADER_VALID flag should be set by now if it was really a packet, so ignore PREAMBLE_DETECTED flag
-            activeReceiveStart = 0;
-            LOG_DEBUG("Ignore false preamble detection.\n");
-            return false;
-        } else if (now - activeReceiveStart > maxPacketTimeMsec) {
-            // We should have gotten an RX_DONE IRQ by now if it was really a packet, so ignore HEADER_VALID flag
-            activeReceiveStart = 0;
-            LOG_DEBUG("Ignore false header detection.\n");
-            return false;
-        }
-    }
-
-    return detected;
+    return receiveDetected(lora.getIrqStatus(), RADIOLIB_SX128X_IRQ_HEADER_VALID, RADIOLIB_SX128X_IRQ_PREAMBLE_DETECTED);
 }
 
 template <typename T> bool SX128xInterface<T>::sleep()
 {
     // Not keeping config is busted - next time nrf52 board boots lora sending fails  tcxo related? - see datasheet
     // \todo Display actual typename of the adapter, not just `SX128x`
-    LOG_DEBUG("SX128x entering sleep mode (FIXME, don't keep config)\n");
-    setStandby(); // Stop any pending operations
+    LOG_DEBUG("SX128x entering sleep mode\n"); // (FIXME, don't keep config)
+    setStandby();                              // Stop any pending operations
 
     // turn off TCXO if it was powered
     // FIXME - this isn't correct
@@ -328,3 +315,4 @@ template <typename T> bool SX128xInterface<T>::sleep()
 
     return true;
 }
+#endif

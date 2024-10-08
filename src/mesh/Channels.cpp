@@ -1,21 +1,26 @@
 #include "Channels.h"
+#include "../userPrefs.h"
 #include "CryptoEngine.h"
+#include "Default.h"
 #include "DisplayFormatters.h"
 #include "NodeDB.h"
+#include "RadioInterface.h"
 #include "configuration.h"
 
 #include <assert.h>
 
-/// 16 bytes of random PSK for our _public_ default channel that all devices power up on (AES128)
-static const uint8_t defaultpsk[] = {0xd4, 0xf1, 0xbb, 0x3a, 0x20, 0x29, 0x07, 0x59,
-                                     0xf0, 0xbc, 0xff, 0xab, 0xcf, 0x4e, 0x69, 0x01};
+#if !MESHTASTIC_EXCLUDE_MQTT
+#include "mqtt/MQTT.h"
+#endif
 
 Channels channels;
 
 const char *Channels::adminChannel = "admin";
 const char *Channels::gpioChannel = "gpio";
 const char *Channels::serialChannel = "serial";
+#if !MESHTASTIC_EXCLUDE_MQTT
 const char *Channels::mqttChannel = "mqtt";
+#endif
 
 uint8_t xorHash(const uint8_t *p, size_t len)
 {
@@ -71,6 +76,23 @@ meshtastic_Channel &Channels::fixupChannel(ChannelIndex chIndex)
     return ch;
 }
 
+void Channels::initDefaultLoraConfig()
+{
+    meshtastic_Config_LoRaConfig &loraConfig = config.lora;
+
+    loraConfig.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST; // Default to Long Range & Fast
+    loraConfig.use_preset = true;
+    loraConfig.tx_power = 0; // default
+    loraConfig.channel_num = 0;
+
+#ifdef USERPREFS_LORACONFIG_MODEM_PRESET
+    loraConfig.modem_preset = USERPREFS_LORACONFIG_MODEM_PRESET;
+#endif
+#ifdef USERPREFS_LORACONFIG_CHANNEL_NUM
+    loraConfig.channel_num = USERPREFS_LORACONFIG_CHANNEL_NUM;
+#endif
+}
+
 /**
  * Write a default channel to the specified channel index
  */
@@ -78,19 +100,63 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
 {
     meshtastic_Channel &ch = getByIndex(chIndex);
     meshtastic_ChannelSettings &channelSettings = ch.settings;
-    meshtastic_Config_LoRaConfig &loraConfig = config.lora;
 
-    loraConfig.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST; // Default to Long Range & Fast
-    loraConfig.use_preset = true;
-    loraConfig.tx_power = 0; // default
     uint8_t defaultpskIndex = 1;
     channelSettings.psk.bytes[0] = defaultpskIndex;
     channelSettings.psk.size = 1;
     strncpy(channelSettings.name, "", sizeof(channelSettings.name));
-    channelSettings.module_settings.position_precision = 32; // default to sending location on the primary channel
+    channelSettings.module_settings.position_precision = 13; // default to sending location on the primary channel
+    channelSettings.has_module_settings = true;
 
     ch.has_settings = true;
-    ch.role = meshtastic_Channel_Role_PRIMARY;
+    ch.role = chIndex == 0 ? meshtastic_Channel_Role_PRIMARY : meshtastic_Channel_Role_SECONDARY;
+
+    switch (chIndex) {
+    case 0:
+#ifdef USERPREFS_CHANNEL_0_PSK
+        static const uint8_t defaultpsk0[] = USERPREFS_CHANNEL_0_PSK;
+        memcpy(channelSettings.psk.bytes, defaultpsk0, sizeof(defaultpsk0));
+        channelSettings.psk.size = sizeof(defaultpsk0);
+
+#endif
+#ifdef USERPREFS_CHANNEL_0_NAME
+        strcpy(channelSettings.name, USERPREFS_CHANNEL_0_NAME);
+#endif
+#ifdef USERPREFS_CHANNEL_0_PRECISION
+        channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_0_PRECISION;
+#endif
+        break;
+    case 1:
+#ifdef USERPREFS_CHANNEL_1_PSK
+        static const uint8_t defaultpsk1[] = USERPREFS_CHANNEL_1_PSK;
+        memcpy(channelSettings.psk.bytes, defaultpsk1, sizeof(defaultpsk1));
+        channelSettings.psk.size = sizeof(defaultpsk1);
+
+#endif
+#ifdef USERPREFS_CHANNEL_1_NAME
+        strcpy(channelSettings.name, USERPREFS_CHANNEL_1_NAME);
+#endif
+#ifdef USERPREFS_CHANNEL_1_PRECISION
+        channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_1_PRECISION;
+#endif
+        break;
+    case 2:
+#ifdef USERPREFS_CHANNEL_2_PSK
+        static const uint8_t defaultpsk2[] = USERPREFS_CHANNEL_2_PSK;
+        memcpy(channelSettings.psk.bytes, defaultpsk2, sizeof(defaultpsk2));
+        channelSettings.psk.size = sizeof(defaultpsk2);
+
+#endif
+#ifdef USERPREFS_CHANNEL_2_NAME
+        strcpy(channelSettings.name, USERPREFS_CHANNEL_2_NAME);
+#endif
+#ifdef USERPREFS_CHANNEL_2_PRECISION
+        channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_2_PRECISION;
+#endif
+        break;
+    default:
+        break;
+    }
 }
 
 CryptoKey Channels::getKey(ChannelIndex chIndex)
@@ -179,7 +245,15 @@ void Channels::initDefaults()
     channelFile.channels_count = MAX_NUM_CHANNELS;
     for (int i = 0; i < channelFile.channels_count; i++)
         fixupChannel(i);
+    initDefaultLoraConfig();
+
+#ifdef USERPREFS_CHANNELS_TO_WRITE
+    for (int i = 0; i < USERPREFS_CHANNELS_TO_WRITE; i++) {
+        initDefaultChannel(i);
+    }
+#else
     initDefaultChannel(0);
+#endif
 }
 
 void Channels::onConfigChanged()
@@ -191,6 +265,12 @@ void Channels::onConfigChanged()
         if (ch.role == meshtastic_Channel_Role_PRIMARY)
             primaryIndex = i;
     }
+#if !MESHTASTIC_EXCLUDE_MQTT
+    if (channels.anyMqttEnabled() && mqtt && !mqtt->isEnabled()) {
+        LOG_DEBUG("MQTT is enabled on at least one channel, so set MQTT thread to run immediately\n");
+        mqtt->start();
+    }
+#endif
 }
 
 meshtastic_Channel &Channels::getByIndex(ChannelIndex chIndex)
@@ -235,6 +315,22 @@ void Channels::setChannel(const meshtastic_Channel &c)
     old = c; // slam in the new settings/role
 }
 
+bool Channels::anyMqttEnabled()
+{
+#if USERPREFS_EVENT_MODE
+    // Don't publish messages on the public MQTT broker if we are in event mode
+    if (strcmp(moduleConfig.mqtt.address, default_mqtt_address) == 0) {
+        return false;
+    }
+#endif
+    for (int i = 0; i < getNumChannels(); i++)
+        if (channelFile.channels[i].role != meshtastic_Channel_Role_DISABLED && channelFile.channels[i].has_settings &&
+            (channelFile.channels[i].settings.downlink_enabled || channelFile.channels[i].settings.uplink_enabled))
+            return true;
+
+    return false;
+}
+
 const char *Channels::getName(size_t chIndex)
 {
     // Convert the short "" representation for Default into a usable string
@@ -253,38 +349,30 @@ const char *Channels::getName(size_t chIndex)
     return channelName;
 }
 
-/**
-* Generate a short suffix used to disambiguate channels that might have the same "name" entered by the human but different PSKs.
-* The ideas is that the PSK changing should be visible to the user so that they see they probably messed up and that's why they
-their nodes
-* aren't talking to each other.
-*
-* This string is of the form "#name-X".
-*
-* Where X is either:
-* (for custom PSKS) a letter from A to Z (base26), and formed by xoring all the bytes of the PSK together,
-*
-* This function will also need to be implemented in GUI apps that talk to the radio.
-*
-* https://github.com/meshtastic/firmware/issues/269
-*/
-const char *Channels::getPrimaryName()
+bool Channels::isDefaultChannel(ChannelIndex chIndex)
 {
-    static char buf[32];
+    const auto &ch = getByIndex(chIndex);
+    if (ch.settings.psk.size == 1 && ch.settings.psk.bytes[0] == 1) {
+        const char *name = getName(chIndex);
+        const char *presetName = DisplayFormatters::getModemPresetDisplayName(config.lora.modem_preset, false);
+        // Check if the name is the default derived from the modem preset
+        if (strcmp(name, presetName) == 0)
+            return true;
+    }
+    return false;
+}
 
-    char suffix;
-    // auto channelSettings = getPrimary();
-    // if (channelSettings.psk.size != 1) {
-    // We have a standard PSK, so generate a letter based hash.
-    uint8_t code = getHash(primaryIndex);
-
-    suffix = 'A' + (code % 26);
-    /* } else {
-        suffix = '0' + channelSettings.psk.bytes[0];
-    } */
-
-    snprintf(buf, sizeof(buf), "#%s-%c", getName(primaryIndex), suffix);
-    return buf;
+bool Channels::hasDefaultChannel()
+{
+    // If we don't use a preset or the default frequency slot, or we override the frequency, we don't have a default channel
+    if (!config.lora.use_preset || !RadioInterface::uses_default_frequency_slot || config.lora.override_frequency)
+        return false;
+    // Check if any of the channels are using the default name and PSK
+    for (size_t i = 0; i < getNumChannels(); i++) {
+        if (isDefaultChannel(i))
+            return true;
+    }
+    return false;
 }
 
 /** Given a channel hash setup crypto for decoding that channel (or the primary channel if that channel is unsecured)

@@ -2,12 +2,17 @@
 #include "NodeDB.h"
 #include "RTC.h"
 #include "concurrency/Periodic.h"
+#include "configuration.h"
 #include "main.h"
 #include "mesh/api/ethServerAPI.h"
+#if !MESHTASTIC_EXCLUDE_MQTT
 #include "mqtt/MQTT.h"
+#endif
 #include "target_specific.h"
 #include <RAK13800_W5100S.h>
 #include <SPI.h>
+
+#if HAS_NETWORKING
 
 #ifndef DISABLE_NTP
 #include <NTPClient.h>
@@ -33,7 +38,7 @@ static int32_t reconnectETH()
         Ethernet.maintain();
         if (!ethStartupComplete) {
             // Start web server
-            LOG_INFO("... Starting network services\n");
+            LOG_INFO("Starting Ethernet network services\n");
 
 #ifndef DISABLE_NTP
             LOG_INFO("Starting NTP time client\n");
@@ -66,11 +71,12 @@ static int32_t reconnectETH()
 
             ethStartupComplete = true;
         }
-
+#if !MESHTASTIC_EXCLUDE_MQTT
         // FIXME this is kinda yucky, instead we should just have an observable for 'wifireconnected'
         if (mqtt && !moduleConfig.mqtt.proxy_to_client_enabled && !mqtt->isConnectedDirectly()) {
             mqtt->reconnect();
         }
+#endif
     }
 
 #ifndef DISABLE_NTP
@@ -125,7 +131,8 @@ bool initEthernet()
             status = Ethernet.begin(mac);
         } else if (config.network.address_mode == meshtastic_Config_NetworkConfig_AddressMode_STATIC) {
             LOG_INFO("starting Ethernet Static\n");
-            Ethernet.begin(mac, config.network.ipv4_config.ip, config.network.ipv4_config.dns, config.network.ipv4_config.subnet);
+            Ethernet.begin(mac, config.network.ipv4_config.ip, config.network.ipv4_config.dns, config.network.ipv4_config.gateway,
+                           config.network.ipv4_config.subnet);
             status = 1;
         } else {
             LOG_INFO("Ethernet Disabled\n");
@@ -179,3 +186,5 @@ bool isEthernetAvailable()
         return true;
     }
 }
+
+#endif

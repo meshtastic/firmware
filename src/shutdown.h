@@ -26,6 +26,9 @@ void powerCommandsCheck()
         SPI.end();
         Wire.end();
         Serial1.end();
+        if (screen)
+            delete screen;
+        LOG_DEBUG("final reboot!\n");
         reboot();
 #else
         rebootAtMsec = -1;
@@ -35,13 +38,13 @@ void powerCommandsCheck()
 
 #if defined(ARCH_ESP32) || defined(ARCH_NRF52)
     if (shutdownAtMsec) {
-        screen->startShutdownScreen();
+        screen->startAlert("Shutting down...");
     }
 #endif
 
     if (shutdownAtMsec && millis() > shutdownAtMsec) {
         LOG_INFO("Shutting down from admin command\n");
-#if defined(ARCH_NRF52) || defined(ARCH_ESP32)
+#if defined(ARCH_NRF52) || defined(ARCH_ESP32) || defined(ARCH_RP2040)
         playShutdownMelody();
         power->shutdown();
 #elif defined(ARCH_PORTDUINO)

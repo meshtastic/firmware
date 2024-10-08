@@ -1,7 +1,10 @@
-#include "SHTC3Sensor.h"
-#include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "TelemetrySensor.h"
 #include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
+#include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "SHTC3Sensor.h"
+#include "TelemetrySensor.h"
 #include <Adafruit_SHTC3.h>
 
 SHTC3Sensor::SHTC3Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SHTC3, "SHTC3") {}
@@ -23,6 +26,9 @@ void SHTC3Sensor::setup()
 
 bool SHTC3Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+    measurement->variant.environment_metrics.has_temperature = true;
+    measurement->variant.environment_metrics.has_relative_humidity = true;
+
     sensors_event_t humidity, temp;
     shtc3.getEvent(&humidity, &temp);
 
@@ -31,3 +37,5 @@ bool SHTC3Sensor::getMetrics(meshtastic_Telemetry *measurement)
 
     return true;
 }
+
+#endif

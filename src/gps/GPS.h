@@ -1,6 +1,9 @@
 #pragma once
+#include "configuration.h"
+#if !MESHTASTIC_EXCLUDE_GPS
 
 #include "GPSStatus.h"
+#include "GpioLogic.h"
 #include "Observer.h"
 #include "TinyGPS++.h"
 #include "concurrency/OSThread.h"
@@ -21,10 +24,18 @@ struct uBloxGnssModelInfo {
 };
 
 typedef enum {
+    GNSS_MODEL_ATGM336H,
     GNSS_MODEL_MTK,
-    GNSS_MODEL_UBLOX,
+    GNSS_MODEL_UBLOX6,
+    GNSS_MODEL_UBLOX7,
+    GNSS_MODEL_UBLOX8,
+    GNSS_MODEL_UBLOX9,
+    GNSS_MODEL_UBLOX10,
     GNSS_MODEL_UC6580,
     GNSS_MODEL_UNKNOWN,
+    GNSS_MODEL_MTK_L76B,
+    GNSS_MODEL_AG3335,
+    GNSS_MODEL_AG3352
 } GnssModel_t;
 
 typedef enum {
@@ -34,11 +45,19 @@ typedef enum {
     GNSS_RESPONSE_OK,
 } GPS_RESPONSE;
 
+enum GPSPowerState : uint8_t {
+    GPS_ACTIVE,    // Awake and want a position
+    GPS_IDLE,      // Awake, but not wanting another position yet
+    GPS_SOFTSLEEP, // Physically powered on, but soft-sleeping
+    GPS_HARDSLEEP, // Physically powered off, but scheduled to wake
+    GPS_OFF        // Powered off indefinitely
+};
+
 // Generate a string representation of DOP
 const char *getDOPString(uint32_t dop);
 
 /**
- * A gps class that only reads from the GPS periodically (and FIXME - eventually keeps the gps powered down except when reading)
+ * A gps class that only reads from the GPS periodically and keeps the gps powered down except when reading
  *
  * When new data is available it will notify observers.
  */
@@ -56,14 +75,10 @@ class GPS : private concurrency::OSThread
     uint8_t fixType = 0;      // fix type from GPGSA
 #endif
   private:
-    uint32_t lastWakeStartMsec = 0, lastSleepStartMsec = 0;
     const int serialSpeeds[6] = {9600, 4800, 38400, 57600, 115200, 9600};
-
+    uint32_t lastWakeStartMsec = 0, lastSleepStartMsec = 0, lastFixStartMsec = 0;
     uint32_t rx_gpio = 0;
     uint32_t tx_gpio = 0;
-    uint32_t en_gpio = 0;
-    int32_t averageLockTime = 0;
-    uint32_t GPSCycles = 0;
 
     int speedSelect = 0;
     int probeTries = 2;
@@ -74,8 +89,6 @@ class GPS : private concurrency::OSThread
      */
     bool hasValidLocation = false; // default to false, until we complete our first read
 
-    bool isAwake = false; // true if we want a location right now
-
     bool isInPowersave = false;
 
     bool shouldPublish = false; // If we've changed GPS state, this will force a publish the next loop()
@@ -85,15 +98,19 @@ class GPS : private concurrency::OSThread
     bool GPSInitFinished = false; // Init thread finished?
     bool GPSInitStarted = false;  // Init thread finished?
 
+    GPSPowerState powerState = GPS_OFF; // GPS_ACTIVE if we want a location right now
+
     uint8_t numSatellites = 0;
 
     CallbackObserver<GPS, void *> notifyDeepSleepObserver = CallbackObserver<GPS, void *>(this, &GPS::prepareDeepSleep);
-    CallbackObserver<GPS, void *> notifyGPSSleepObserver = CallbackObserver<GPS, void *>(this, &GPS::prepareDeepSleep);
 
   public:
     /** If !NULL we will use this serial port to construct our GPS */
+#if defined(ARCH_RP2040)
+    static SerialUART *_serial_gps;
+#else
     static HardwareSerial *_serial_gps;
-
+#endif
     static uint8_t _message_PMREQ[];
     static uint8_t _message_PMREQ_10[];
     static const uint8_t _message_CFG_RXM_PSM[];
@@ -117,6 +134,7 @@ class GPS : private concurrency::OSThread
     static const uint8_t _message_GGA[];
     static const uint8_t _message_PMS[];
     static const uint8_t _message_SAVE[];
+    static const uint8_t _message_SAVE_10[];
 
     // VALSET Commands for M10
     static const uint8_t _message_VALSET_PM[];
@@ -133,7 +151,21 @@ class GPS : private concurrency::OSThread
     static const uint8_t _message_VALSET_DISABLE_SBAS_RAM[];
     static const uint8_t _message_VALSET_DISABLE_SBAS_BBR[];
 
+    // CASIC commands for ATGM336H
+    static const uint8_t _message_CAS_CFG_RST_FACTORY[];
+    static const uint8_t _message_CAS_CFG_NAVX_CONF[];
+    static const uint8_t _message_CAS_CFG_RATE_1HZ[];
+
+    const char *ACK_SUCCESS_MESSAGE = "Get ack success!\n";
+
     meshtastic_Position p = meshtastic_Position_init_default;
+
+    /** This is normally bound to config.position.gps_en_gpio but some rare boards (like heltec tracker) need more advanced
+     * implementations. Those boards will set this public variable to a custom implementation.
+     *
+     * Normally set by GPS::createGPS()
+     */
+    GpioVirtPin *enablePin = NULL;
 
     GPS() : concurrency::OSThread("GPS") {}
 
@@ -156,7 +188,8 @@ class GPS : private concurrency::OSThread
     // toggle between enabled/disabled
     void toggleGpsMode();
 
-    void setGPSPower(bool on, bool standbyOnly, uint32_t sleepTime);
+    // Change the power state of the GPS - for power saving / shutdown
+    void setPowerState(GPSPowerState newState, uint32_t sleepMs = 0);
 
     /// Returns true if we have acquired GPS lock.
     virtual bool hasLock();
@@ -174,6 +207,7 @@ class GPS : private concurrency::OSThread
 
     // Create a ublox packet for editing in memory
     uint8_t makeUBXPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_size, const uint8_t *msg);
+    uint8_t makeCASPacket(uint8_t class_id, uint8_t msg_id, uint8_t payload_size, const uint8_t *msg);
 
     // scratch space for creating ublox packets
     uint8_t UBXscratch[250] = {0};
@@ -184,17 +218,19 @@ class GPS : private concurrency::OSThread
     GPS_RESPONSE getACK(uint8_t c, uint8_t i, uint32_t waitMillis);
     GPS_RESPONSE getACK(const char *message, uint32_t waitMillis);
 
-    /**
-     * Switch the GPS into a mode where we are actively looking for a lock, or alternatively switch GPS into a low power mode
-     *
-     * calls sleep/wake
-     */
-    void setAwake(bool on);
+    GPS_RESPONSE getACKCas(uint8_t class_id, uint8_t msg_id, uint32_t waitMillis);
+
     virtual bool factoryReset();
 
     // Creates an instance of the GPS class.
     // Returns the new instance or null if the GPS is not present.
     static GPS *createGps();
+
+    // Wake the GPS hardware - ready for an update
+    void up();
+
+    // Let the GPS hardware save power between updates
+    void down();
 
   protected:
     /**
@@ -218,7 +254,7 @@ class GPS : private concurrency::OSThread
      *
      * Return true if we received a valid message from the GPS
      */
-    virtual bool whileIdle();
+    virtual bool whileActive();
 
     /**
      * Perform any processing that should be done only while the GPS is awake and looking for a fix.
@@ -243,14 +279,23 @@ class GPS : private concurrency::OSThread
 
     // Calculate checksum
     void UBXChecksum(uint8_t *message, size_t length);
+    void CASChecksum(uint8_t *message, size_t length);
 
-    /** Get how long we should stay looking for each aquisition
+    /** Set power with EN pin, if relevant
      */
-    uint32_t getWakeTime() const;
+    void writePinEN(bool on);
 
-    /** Get how long we should sleep between aqusition attempts
+    /** Set the value of the STANDBY pin, if relevant
      */
-    uint32_t getSleepTime() const;
+    void writePinStandby(bool standby);
+
+    /** Set GPS power with PMU, if relevant
+     */
+    void setPowerPMU(bool on);
+
+    /** Set UBLOX power, if relevant
+     */
+    void setPowerUBLOX(bool on, uint32_t sleepMs = 0);
 
     /**
      * Tell users we have new GPS readings
@@ -260,14 +305,16 @@ class GPS : private concurrency::OSThread
     virtual int32_t runOnce() override;
 
     // Get GNSS model
-    String getNMEA();
     GnssModel_t probe(int serialSpeed);
 
     // delay counter to allow more sats before fixed position stops GPS thread
     uint8_t fixeddelayCtr = 0;
+
+    const char *powerStateToString();
 
   protected:
     GnssModel_t gnssModel = GNSS_MODEL_UNKNOWN;
 };
 
 extern GPS *gps;
+#endif // Exclude GPS

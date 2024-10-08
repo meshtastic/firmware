@@ -11,6 +11,7 @@
 
 #define PI 3.1415926535897932384626433832795
 #define OLC_CODE_LEN 11
+#define DEG_CONVERT (180 / PI)
 
 // Helper functions
 // Raises a number to an exponent, handling negative exponents.
@@ -116,6 +117,8 @@ class GeoCoord
     static float bearing(double lat1, double lon1, double lat2, double lon2);
     static float rangeRadiansToMeters(double range_radians);
     static float rangeMetersToRadians(double range_meters);
+    static unsigned int bearingToDegrees(const char *bearing);
+    static const char *degreesToBearing(unsigned int degrees);
 
     // Point to point conversions
     int32_t distanceTo(const GeoCoord &pointB);

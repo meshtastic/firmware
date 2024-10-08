@@ -1,7 +1,10 @@
-#include "BMP280Sensor.h"
-#include "../mesh/generated/meshtastic/telemetry.pb.h"
-#include "TelemetrySensor.h"
 #include "configuration.h"
+
+#if !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
+
+#include "../mesh/generated/meshtastic/telemetry.pb.h"
+#include "BMP280Sensor.h"
+#include "TelemetrySensor.h"
 #include <Adafruit_BMP280.h>
 #include <typeinfo>
 
@@ -28,6 +31,9 @@ void BMP280Sensor::setup() {}
 
 bool BMP280Sensor::getMetrics(meshtastic_Telemetry *measurement)
 {
+    measurement->variant.environment_metrics.has_temperature = true;
+    measurement->variant.environment_metrics.has_barometric_pressure = true;
+
     LOG_DEBUG("BMP280Sensor::getMetrics\n");
     bmp280.takeForcedMeasurement();
     measurement->variant.environment_metrics.temperature = bmp280.readTemperature();
@@ -35,3 +41,5 @@ bool BMP280Sensor::getMetrics(meshtastic_Telemetry *measurement)
 
     return true;
 }
+
+#endif

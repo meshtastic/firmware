@@ -1,0 +1,52 @@
+name: Build Raspbian Arm
+
+on: workflow_call
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-raspbian-armv7l:
+    runs-on: [self-hosted, linux, ARM]
+    steps:
+      - name: Install libbluetooth
+        shell: bash
+        run: |
+          apt-get update -y --fix-missing
+          apt-get install -y libbluetooth-dev libgpiod-dev libyaml-cpp-dev openssl libssl-dev libulfius-dev liborcania-dev
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{github.event.pull_request.head.ref}}
+          repository: ${{github.event.pull_request.head.repo.full_name}}
+
+      - name: Upgrade python tools
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install -U platformio adafruit-nrfutil
+          pip install -U meshtastic --pre
+
+      - name: Upgrade platformio
+        shell: bash
+        run: |
+          pio upgrade
+
+      - name: Build Raspbian
+        run: bin/build-native.sh
+
+      - name: Get release version string
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        id: version
+
+      - name: Store binaries as an artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-raspbian-armv7l-${{ steps.version.outputs.version }}.zip
+          overwrite: true
+          path: |
+            release/meshtasticd_linux_armv7l
+            bin/config-dist.yaml

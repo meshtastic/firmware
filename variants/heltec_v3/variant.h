@@ -1,5 +1,7 @@
 #define LED_PIN LED
 
+#define USE_SSD1306 // Heltec_v3 has a SSD1306 display
+
 #define RESET_OLED RST_OLED
 #define I2C_SDA SDA_OLED // I2C pins for this board
 #define I2C_SCL SCL_OLED
@@ -16,7 +18,7 @@
 #define BATTERY_PIN 1 // A battery voltage measurement pin, voltage divider connected here to measure battery voltage
 #define ADC_CHANNEL ADC1_GPIO1_CHANNEL
 #define ADC_ATTENUATION ADC_ATTEN_DB_2_5 // lower dB for high resistance voltage divider
-#define ADC_MULTIPLIER 4.9
+#define ADC_MULTIPLIER 4.9 * 1.045
 
 #define USE_SX1262
 
