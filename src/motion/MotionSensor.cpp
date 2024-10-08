@@ -29,7 +29,7 @@ ScanI2C::I2CPort MotionSensor::devicePort()
     return device.address.port;
 }
 
-#ifdef RAK_4631
+#if defined(RAK_4631) & !MESHTASTIC_EXCLUDE_SCREEN
 void MotionSensor::drawFrameCalibration(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     // int x_offset = display->width() / 2;
