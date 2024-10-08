@@ -148,6 +148,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_SENSELORA_S3
 #elif defined(HELTEC_HT62)
 #define HW_VENDOR meshtastic_HardwareModel_HELTEC_HT62
+#elif defined(LORA_TYPE)
+#define HW_VENDOR meshtastic_HardwareModel_LORA_TYPE
 #elif defined(CHATTER_2)
 #define HW_VENDOR meshtastic_HardwareModel_CHATTER_2
 #elif defined(STATION_G2)
