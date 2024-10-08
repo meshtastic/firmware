@@ -19,12 +19,9 @@
 #include "concurrency/OSThread.h"
 #include "concurrency/Periodic.h"
 #include "detect/ScanI2C.h"
-<<<<<<< HEAD
-#include "gps/RTC.h"
-=======
 #include "error.h"
+#include "gps/RTC.h"
 #include "power.h"
->>>>>>> master
 
 #if !MESHTASTIC_EXCLUDE_I2C
 #include "detect/ScanI2CTwoWire.h"
@@ -108,13 +105,8 @@ NRF52Bluetooth *nrf52Bluetooth = nullptr;
 #include "AmbientLightingThread.h"
 #include "PowerFSMThread.h"
 
-<<<<<<< HEAD
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !defined(ARCH_APOLLO3) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
-#include "AccelerometerThread.h"
-=======
-#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C
+#if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_APOLLO3)
 #include "motion/AccelerometerThread.h"
->>>>>>> master
 AccelerometerThread *accelerometerThread = nullptr;
 #endif
 
