@@ -62,7 +62,8 @@ uint32_t NeighborInfoModule::collectNeighborInfo(meshtastic_NeighborInfo *neighb
     NodeNum my_node_id = nodeDB->getNodeNum();
     neighborInfo->node_id = my_node_id;
     neighborInfo->last_sent_by_id = my_node_id;
-    neighborInfo->node_broadcast_interval_secs = moduleConfig.neighbor_info.update_interval;
+    neighborInfo->node_broadcast_interval_secs =
+        Default::getConfiguredOrDefault(moduleConfig.neighbor_info.update_interval, default_telemetry_broadcast_interval_secs);
 
     cleanUpNeighbors();
 
@@ -84,11 +85,12 @@ uint32_t NeighborInfoModule::collectNeighborInfo(meshtastic_NeighborInfo *neighb
 */
 void NeighborInfoModule::cleanUpNeighbors()
 {
+    uint32_t now = getTime();
     NodeNum my_node_id = nodeDB->getNodeNum();
     for (auto it = neighbors.rbegin(); it != neighbors.rend();) {
         // We will remove a neighbor if we haven't heard from them in twice the broadcast interval
-        if (!Throttle::isWithinTimespanMs(it->last_rx_time, it->node_broadcast_interval_secs * 2) &&
-            (it->node_id != my_node_id)) {
+        // cannot use isWithinTimespanMs() as it->last_rx_time is seconds since 1970
+        if ((now - it->last_rx_time > it->node_broadcast_interval_secs * 2) && (it->node_id != my_node_id)) {
             LOG_DEBUG("Removing neighbor with node ID 0x%x\n", it->node_id);
             it = std::vector<meshtastic_Neighbor>::reverse_iterator(
                 neighbors.erase(std::next(it).base())); // Erase the element and update the iterator

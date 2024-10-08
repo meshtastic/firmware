@@ -66,12 +66,10 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, uint64_
                                      uint8_t *bytesOut)
 {
     uint8_t *auth;
-    uint32_t *extraNonce;
     long extraNonceTmp = random();
     auth = bytesOut + numBytes;
-    extraNonce = (uint32_t *)(auth + 8);
-    memcpy(extraNonce, &extraNonceTmp,
-           4); // do not use dereference on potential non aligned pointers : *extraNonce = extraNonceTmp;
+    memcpy((uint8_t *)(auth + 8), &extraNonceTmp,
+           sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : *extraNonce = extraNonceTmp;
     LOG_INFO("Random nonce value: %d\n", extraNonceTmp);
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(toNode);
     if (node->num < 1 || node->user.public_key.size == 0) {
@@ -88,8 +86,8 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, uint64_
     printBytes("Attempting encrypt using shared_key starting with: ", shared_key, 8);
     aes_ccm_ae(shared_key, 32, nonce, 8, bytes, numBytes, nullptr, 0, bytesOut,
                auth); // this can write up to 15 bytes longer than numbytes past bytesOut
-    memcpy(extraNonce, &extraNonceTmp,
-           4); // do not use dereference on potential non aligned pointers : *extraNonce = extraNonceTmp;
+    memcpy((uint8_t *)(auth + 8), &extraNonceTmp,
+           sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : *extraNonce = extraNonceTmp;
     return true;
 }
 
@@ -104,8 +102,9 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, uint64_t packetNum, size
     uint8_t *auth;       // set to last 8 bytes of text?
     uint32_t extraNonce; // pointer was not really used
     auth = bytes + numBytes - 12;
+    memcpy(&extraNonce, auth + 8,
+           sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : (uint32_t *)(auth + 8);
 #ifndef PIO_UNIT_TESTING
-    memcpy(&extraNonce, auth + 8, 4); // do not use dereference on potential non aligned pointers : (uint32_t *)(auth + 8);
     LOG_INFO("Random nonce value: %d\n", extraNonce);
     meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(fromNode);
 

@@ -186,7 +186,7 @@ ErrorCode RadioLibInterface::send(meshtastic_MeshPacket *p)
 #ifndef LORA_DISABLE_SENDING
     printPacket("enqueuing for send", p);
 
-    LOG_DEBUG("txGood=%d,rxGood=%d,rxBad=%d\n", txGood, rxGood, rxBad);
+    LOG_DEBUG("txGood=%d,txRelay=%d,rxGood=%d,rxBad=%d\n", txGood, txRelay, rxGood, rxBad);
     ErrorCode res = txQueue.enqueue(p) ? ERRNO_OK : ERRNO_UNKNOWN;
 
     if (res != ERRNO_OK) { // we weren't able to queue it, so we must drop it to prevent leaks
@@ -353,6 +353,8 @@ void RadioLibInterface::completeSending()
 
     if (p) {
         txGood++;
+        if (!isFromUs(p))
+            txRelay++;
         printPacket("Completed sending", p);
 
         // We are done sending that packet, release it
@@ -387,7 +389,7 @@ void RadioLibInterface::handleReceiveInterrupt()
     }
 #endif
 
-    int state = iface->readData(radiobuf, length);
+    int state = iface->readData((uint8_t *)&radioBuffer, length);
     if (state != RADIOLIB_ERR_NONE) {
         LOG_ERROR("ignoring received packet due to error=%d\n", state);
         rxBad++;
@@ -397,7 +399,6 @@ void RadioLibInterface::handleReceiveInterrupt()
     } else {
         // Skip the 4 headers that are at the beginning of the rxBuf
         int32_t payloadLen = length - sizeof(PacketHeader);
-        const uint8_t *payload = radiobuf + sizeof(PacketHeader);
 
         // check for short packets
         if (payloadLen < 0) {
@@ -405,10 +406,9 @@ void RadioLibInterface::handleReceiveInterrupt()
             rxBad++;
             airTime->logAirtime(RX_ALL_LOG, xmitMsec);
         } else {
-            const PacketHeader *h = (PacketHeader *)radiobuf;
             rxGood++;
             // altered packet with "from == 0" can do Remote Node Administration without permission
-            if (h->from == 0) {
+            if (radioBuffer.header.from == 0) {
                 LOG_WARN("ignoring received packet without sender\n");
                 return;
             }
@@ -418,22 +418,22 @@ void RadioLibInterface::handleReceiveInterrupt()
             // nodes.
             meshtastic_MeshPacket *mp = packetPool.allocZeroed();
 
-            mp->from = h->from;
-            mp->to = h->to;
-            mp->id = h->id;
-            mp->channel = h->channel;
+            mp->from = radioBuffer.header.from;
+            mp->to = radioBuffer.header.to;
+            mp->id = radioBuffer.header.id;
+            mp->channel = radioBuffer.header.channel;
             assert(HOP_MAX <= PACKET_FLAGS_HOP_LIMIT_MASK); // If hopmax changes, carefully check this code
-            mp->hop_limit = h->flags & PACKET_FLAGS_HOP_LIMIT_MASK;
-            mp->hop_start = (h->flags & PACKET_FLAGS_HOP_START_MASK) >> PACKET_FLAGS_HOP_START_SHIFT;
-            mp->want_ack = !!(h->flags & PACKET_FLAGS_WANT_ACK_MASK);
-            mp->via_mqtt = !!(h->flags & PACKET_FLAGS_VIA_MQTT_MASK);
+            mp->hop_limit = radioBuffer.header.flags & PACKET_FLAGS_HOP_LIMIT_MASK;
+            mp->hop_start = (radioBuffer.header.flags & PACKET_FLAGS_HOP_START_MASK) >> PACKET_FLAGS_HOP_START_SHIFT;
+            mp->want_ack = !!(radioBuffer.header.flags & PACKET_FLAGS_WANT_ACK_MASK);
+            mp->via_mqtt = !!(radioBuffer.header.flags & PACKET_FLAGS_VIA_MQTT_MASK);
 
             addReceiveMetadata(mp);
 
             mp->which_payload_variant =
                 meshtastic_MeshPacket_encrypted_tag; // Mark that the payload is still encrypted at this point
             assert(((uint32_t)payloadLen) <= sizeof(mp->encrypted.bytes));
-            memcpy(mp->encrypted.bytes, payload, payloadLen);
+            memcpy(mp->encrypted.bytes, radioBuffer.payload, payloadLen);
             mp->encrypted.size = payloadLen;
 
             printPacket("Lora RX", mp);
@@ -468,14 +468,14 @@ void RadioLibInterface::startSend(meshtastic_MeshPacket *txp)
 {
     printPacket("Starting low level send", txp);
     if (disabled || !config.lora.tx_enabled) {
-        LOG_WARN("startSend is dropping tx packet because we are disabled\n");
+        LOG_WARN("Drop Tx packet because LoRa Tx disabled\n");
         packetPool.release(txp);
     } else {
         configHardwareForSend(); // must be after setStandby
 
         size_t numbytes = beginSending(txp);
 
-        int res = iface->startTransmit(radiobuf, numbytes);
+        int res = iface->startTransmit((uint8_t *)&radioBuffer, numbytes);
         if (res != RADIOLIB_ERR_NONE) {
             LOG_ERROR("startTransmit failed, error=%d\n", res);
             RECORD_CRITICALERROR(meshtastic_CriticalErrorCode_RADIO_SPI_BUG);

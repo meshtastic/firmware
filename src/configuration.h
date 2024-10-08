@@ -145,6 +145,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MLX90632_ADDR 0x3A
 #define DFROBOT_LARK_ADDR 0x42
 #define NAU7802_ADDR 0x2A
+#define MAX30102_ADDR 0x57
+#define MLX90614_ADDR_DEF 0x5A
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER
@@ -185,6 +187,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Touchscreen
 // -----------------------------------------------------------------------------
 #define FT6336U_ADDR 0x48
+
+// -----------------------------------------------------------------------------
+// BIAS-T Generator
+// -----------------------------------------------------------------------------
+#define TPS65233_ADDR 0x60
 
 // convert 24-bit color to 16-bit (56K)
 #define COLOR565(r, g, b) (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | ((b & 0xF8) >> 3))

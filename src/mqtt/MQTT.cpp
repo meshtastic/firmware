@@ -150,7 +150,7 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                 // Generate an implicit ACK towards ourselves (handled and processed only locally!) for this message.
                 // We do this because packets are not rebroadcasted back into MQTT anymore and we assume that at least one node
                 // receives it when we get our own packet back. Then we'll stop our retransmissions.
-                if (e.packet && getFrom(e.packet) == nodeDB->getNodeNum())
+                if (e.packet && isFromUs(e.packet))
                     routingModule->sendAckNak(meshtastic_Routing_Error_NONE, getFrom(e.packet), e.packet->id, ch.index);
                 else
                     LOG_INFO("Ignoring downlink message we originally sent.\n");
@@ -162,7 +162,7 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                     meshtastic_MeshPacket *p = packetPool.allocCopy(*e.packet);
                     p->via_mqtt = true; // Mark that the packet was received via MQTT
 
-                    if (p->from == 0 || p->from == nodeDB->getNodeNum()) {
+                    if (isFromUs(p)) {
                         LOG_INFO("Ignoring downlink message we originally sent.\n");
                         packetPool.release(p);
                         return;
@@ -188,7 +188,7 @@ void MQTT::onReceive(char *topic, byte *payload, size_t length)
                         const meshtastic_NodeInfoLite *rx = nodeDB->getMeshNode(p->to);
                         // Only accept PKI messages to us, or if we have both the sender and receiver in our nodeDB, as then it's
                         // likely they discovered each other via a channel we have downlink enabled for
-                        if (p->to == nodeDB->getNodeNum() || (tx && tx->has_user && rx && rx->has_user))
+                        if (isToUs(p) || (tx && tx->has_user && rx && rx->has_user))
                             router->enqueueReceivedMessage(p);
                     } else if (router && perhapsDecode(p)) // ignore messages if we don't have the channel key
                         router->enqueueReceivedMessage(p);
@@ -402,13 +402,14 @@ void MQTT::sendSubscriptions()
             std::string topic = cryptTopic + channels.getGlobalId(i) + "/+";
             LOG_INFO("Subscribing to %s\n", topic.c_str());
             pubSub.subscribe(topic.c_str(), 1); // FIXME, is QOS 1 right?
-#ifndef ARCH_NRF52                              // JSON is not supported on nRF52, see issue #2804
+#if !defined(ARCH_NRF52) ||                                                                                                      \
+    defined(NRF52_USE_JSON) // JSON is not supported on nRF52, see issue #2804 ### Fixed by using ArduinoJSON ###
             if (moduleConfig.mqtt.json_enabled == true) {
                 std::string topicDecoded = jsonTopic + channels.getGlobalId(i) + "/+";
                 LOG_INFO("Subscribing to %s\n", topicDecoded.c_str());
                 pubSub.subscribe(topicDecoded.c_str(), 1); // FIXME, is QOS 1 right?
             }
-#endif // ARCH_NRF52
+#endif // ARCH_NRF52 NRF52_USE_JSON
         }
     }
 #if !MESHTASTIC_EXCLUDE_PKI
@@ -501,7 +502,8 @@ void MQTT::publishQueuedMessages()
 
         publish(topic.c_str(), bytes, numBytes, false);
 
-#ifndef ARCH_NRF52 // JSON is not supported on nRF52, see issue #2804
+#if !defined(ARCH_NRF52) ||                                                                                                      \
+    defined(NRF52_USE_JSON) // JSON is not supported on nRF52, see issue #2804 ### Fixed by using ArduinoJson ###
         if (moduleConfig.mqtt.json_enabled) {
             // handle json topic
             auto jsonString = MeshPacketSerializer::JsonSerialize(env->packet);
@@ -517,7 +519,7 @@ void MQTT::publishQueuedMessages()
                 publish(topicJson.c_str(), jsonString.c_str(), false);
             }
         }
-#endif // ARCH_NRF52
+#endif // ARCH_NRF52 NRF52_USE_JSON
         mqttPool.release(env);
     }
 }
@@ -542,7 +544,7 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
         }
 
         // check for the lowest bit of the data bitfield set false, and the use of one of the default keys.
-        if (mp_decoded.from != nodeDB->getNodeNum() && mp_decoded.decoded.has_bitfield &&
+        if (!isFromUs(&mp_decoded) && mp_decoded.decoded.has_bitfield &&
             !(mp_decoded.decoded.bitfield & BITFIELD_OK_TO_MQTT_MASK) &&
             (ch.settings.psk.size < 2 || (ch.settings.psk.size == 16 && memcmp(ch.settings.psk.bytes, defaultpsk, 16)) ||
              (ch.settings.psk.size == 32 && memcmp(ch.settings.psk.bytes, eventpsk, 32)))) {
@@ -581,7 +583,8 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
 
             publish(topic.c_str(), bytes, numBytes, false);
 
-#ifndef ARCH_NRF52 // JSON is not supported on nRF52, see issue #2804
+#if !defined(ARCH_NRF52) ||                                                                                                      \
+    defined(NRF52_USE_JSON) // JSON is not supported on nRF52, see issue #2804 ### Fixed by using ArduinoJson ###
             if (moduleConfig.mqtt.json_enabled) {
                 // handle json topic
                 auto jsonString = MeshPacketSerializer::JsonSerialize((meshtastic_MeshPacket *)&mp_decoded);
@@ -592,7 +595,7 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
                     publish(topicJson.c_str(), jsonString.c_str(), false);
                 }
             }
-#endif // ARCH_NRF52
+#endif // ARCH_NRF52 NRF52_USE_JSON
         } else {
             LOG_INFO("MQTT not connected, queueing packet\n");
             if (mqttQueue.numFree() == 0) {

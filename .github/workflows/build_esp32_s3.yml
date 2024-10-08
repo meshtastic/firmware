@@ -31,3 +31,4 @@ jobs:
             release/*.bin
             release/*.elf
           include-web-ui: true
+          arch: esp32s3

@@ -1,3 +1,4 @@
+#if RADIOLIB_EXCLUDE_LR11X0 != 1
 #include "LR11x0Interface.h"
 #include "Throttle.h"
 #include "configuration.h"
@@ -70,6 +71,18 @@ template <typename T> bool LR11x0Interface<T>::init()
         power = LR1120_MAX_POWER;
 
     limitPower();
+
+#ifdef LR11X0_RF_SWITCH_SUBGHZ
+    pinMode(LR11X0_RF_SWITCH_SUBGHZ, OUTPUT);
+    digitalWrite(LR11X0_RF_SWITCH_SUBGHZ, getFreq() < 1e9 ? HIGH : LOW);
+    LOG_DEBUG("Setting RF0 switch to %s\n", getFreq() < 1e9 ? "SubGHz" : "2.4GHz");
+#endif
+
+#ifdef LR11X0_RF_SWITCH_2_4GHZ
+    pinMode(LR11X0_RF_SWITCH_2_4GHZ, OUTPUT);
+    digitalWrite(LR11X0_RF_SWITCH_2_4GHZ, getFreq() < 1e9 ? LOW : HIGH);
+    LOG_DEBUG("Setting RF1 switch to %s\n", getFreq() < 1e9 ? "SubGHz" : "2.4GHz");
+#endif
 
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage);
     // \todo Display actual typename of the adapter, not just `LR11x0`
@@ -285,3 +298,4 @@ template <typename T> bool LR11x0Interface<T>::sleep()
 
     return true;
 }
+#endif

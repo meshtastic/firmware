@@ -36,8 +36,8 @@ static MemoryDynamic<meshtastic_MeshPacket> staticPool;
 
 Allocator<meshtastic_MeshPacket> &packetPool = staticPool;
 
-static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1] __attribute__ ((__aligned__));
-static uint8_t ScratchEncrypted[MAX_LORA_PAYLOAD_LEN + 1] __attribute__ ((__aligned__));
+static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1] __attribute__((__aligned__));
+static uint8_t ScratchEncrypted[MAX_LORA_PAYLOAD_LEN + 1] __attribute__((__aligned__));
 
 /**
  * Constructor
@@ -169,7 +169,7 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
         LOG_ERROR("Packet received with to: of 0!\n");
     }
     // No need to deliver externally if the destination is the local node
-    if (p->to == nodeDB->getNodeNum()) {
+    if (isToUs(p)) {
         printPacket("Enqueued local", p);
         enqueueReceivedMessage(p);
         return ERRNO_OK;
@@ -204,7 +204,7 @@ ErrorCode Router::sendLocal(meshtastic_MeshPacket *p, RxSource src)
  */
 ErrorCode Router::send(meshtastic_MeshPacket *p)
 {
-    if (p->to == nodeDB->getNodeNum()) {
+    if (isToUs(p)) {
         LOG_ERROR("BUG! send() called with packet destined for local node!\n");
         packetPool.release(p);
         return meshtastic_Routing_Error_BAD_REQUEST;
@@ -226,7 +226,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
             service->sendClientNotification(cn);
 #endif
             meshtastic_Routing_Error err = meshtastic_Routing_Error_DUTY_CYCLE_LIMIT;
-            if (getFrom(p) == nodeDB->getNodeNum()) { // only send NAK to API, not to the mesh
+            if (isFromUs(p)) { // only send NAK to API, not to the mesh
                 abortSendAndNak(err, p);
             } else {
                 packetPool.release(p);
@@ -248,7 +248,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     p->from = getFrom(p);
 
     // If we are the original transmitter, set the hop limit with which we start
-    if (p->from == getNodeNum())
+    if (isFromUs(p))
         p->hop_start = p->hop_limit;
 
     // If the packet hasn't yet been encrypted, do so now (it might already be encrypted if we are just forwarding it)
@@ -273,7 +273,7 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
         }
 #if !MESHTASTIC_EXCLUDE_MQTT
         // Only publish to MQTT if we're the original transmitter of the packet
-        if (moduleConfig.mqtt.enabled && p->from == nodeDB->getNodeNum() && mqtt) {
+        if (moduleConfig.mqtt.enabled && isFromUs(p) && mqtt) {
             mqtt->onSend(*p, *p_decoded, chIndex);
         }
 #endif
@@ -328,9 +328,9 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
     memcpy(ScratchEncrypted, p->encrypted.bytes, rawSize);
 #if !(MESHTASTIC_EXCLUDE_PKI)
     // Attempt PKI decryption first
-    if (p->channel == 0 && p->to == nodeDB->getNodeNum() && p->to > 0 && p->to != NODENUM_BROADCAST &&
-        nodeDB->getMeshNode(p->from) != nullptr && nodeDB->getMeshNode(p->from)->user.public_key.size > 0 &&
-        nodeDB->getMeshNode(p->to)->user.public_key.size > 0 && rawSize > MESHTASTIC_PKC_OVERHEAD) {
+    if (p->channel == 0 && isToUs(p) && p->to > 0 && p->to != NODENUM_BROADCAST && nodeDB->getMeshNode(p->from) != nullptr &&
+        nodeDB->getMeshNode(p->from)->user.public_key.size > 0 && nodeDB->getMeshNode(p->to)->user.public_key.size > 0 &&
+        rawSize > MESHTASTIC_PKC_OVERHEAD) {
         LOG_DEBUG("Attempting PKI decryption\n");
 
         if (crypto->decryptCurve25519(p->from, p->id, rawSize, ScratchEncrypted, bytes)) {
@@ -432,7 +432,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
 
     // If the packet is not yet encrypted, do so now
     if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
-        if (p->from == nodeDB->getNodeNum()) {
+        if (isFromUs(p)) {
             p->decoded.has_bitfield = true;
             p->decoded.bitfield |= (config.lora.config_ok_to_mqtt << BITFIELD_OK_TO_MQTT_SHIFT);
             p->decoded.bitfield |= (p->decoded.want_response << BITFIELD_WANT_RESPONSE_SHIFT);
@@ -503,8 +503,8 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                 return meshtastic_Routing_Error_TOO_LARGE;
             if (p->pki_encrypted && !memfll(p->public_key.bytes, 0, 32) &&
                 memcmp(p->public_key.bytes, node->user.public_key.bytes, 32) != 0) {
-                LOG_WARN("Client public key for client differs from requested! Requested 0x%02x, but stored key begins 0x%02x\n",
-                         *p->public_key.bytes, *node->user.public_key.bytes);
+                LOG_WARN("Client public key differs from requested: 0x%02x, stored key begins 0x%02x\n", *p->public_key.bytes,
+                         *node->user.public_key.bytes);
                 return meshtastic_Routing_Error_PKI_FAILED;
             }
             crypto->encryptCurve25519(p->to, getFrom(p), p->id, numbytes, bytes, ScratchEncrypted);
@@ -590,7 +590,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
             skipHandle = true;
         }
 
-#if EVENT_MODE
+#if USERPREFS_EVENT_MODE
         if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag &&
             (p->decoded.portnum == meshtastic_PortNum_ATAK_FORWARDER || p->decoded.portnum == meshtastic_PortNum_ATAK_PLUGIN ||
              p->decoded.portnum == meshtastic_PortNum_PAXCOUNTER_APP || p->decoded.portnum == meshtastic_PortNum_IP_TUNNEL_APP ||
@@ -613,7 +613,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 
 #if !MESHTASTIC_EXCLUDE_MQTT
         // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the packet
-        if (decoded && moduleConfig.mqtt.enabled && getFrom(p) != nodeDB->getNodeNum() && mqtt)
+        if (decoded && moduleConfig.mqtt.enabled && !isFromUs(p) && mqtt)
             mqtt->onSend(*p_encrypted, *p, p->channel);
 #endif
     }

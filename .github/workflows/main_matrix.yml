@@ -1,10 +1,7 @@
 name: CI
 concurrency:
-  group: ${{ github.head_ref || github.run_id }}
+  group: ci-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
-#concurrency:
-#  group: ${{ github.ref }}
-#  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 on:
   # # Triggers the workflow on push but only for the master branch
   push:
@@ -35,12 +32,12 @@ jobs:
         name: Checkout base
       - id: jsonStep
         run: |
-          if [[ "${{ github.ref }}" == "refs/heads/master" ]]; then
+          if [[ "${{ github.head_ref }}" == "" ]]; then
             TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}})
           else  
             TARGETS=$(./bin/generate_ci_matrix.py ${{matrix.arch}} quick)
           fi
-          echo "$TARGETS"
+          echo "Name: ${{ github.ref_name }} Base: ${{ github.base_ref }} Head: ${{ github.head_ref }} Ref: ${{ github.ref }} Targets: $TARGETS"
           echo "${{matrix.arch}}=$(jq -cn --argjson environments "$TARGETS" '{board: $environments}')" >> $GITHUB_OUTPUT
     outputs:
       esp32: ${{ steps.jsonStep.outputs.esp32 }}
@@ -155,8 +152,13 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [esp32, esp32s3, esp32c3, esp32c6, nrf52840, rp2040, stm32]
     runs-on: ubuntu-latest
-    needs: [
+    needs:
+      [
         build-esp32,
         build-esp32-s3,
         build-esp32-c3,
@@ -164,9 +166,6 @@ jobs:
         build-nrf52,
         build-rpi2040,
         build-stm32,
-        package-raspbian,
-        package-raspbian-armv7l,
-        # package-native,
       ]
     steps:
       - name: Checkout code
@@ -178,6 +177,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: ./
+          pattern: firmware-${{matrix.arch}}-*
           merge-multiple: true
 
       - name: Display structure of downloaded files
@@ -188,12 +188,12 @@ jobs:
         id: version
 
       - name: Move files up
-        run: mv -b -t ./ ./release/meshtasticd_linux_* ./bin/config-dist.yaml ./bin/device-*.sh ./bin/device-*.bat
+        run: mv -b -t ./ ./bin/device-*.sh ./bin/device-*.bat
 
       - name: Repackage in single firmware zip
         uses: actions/upload-artifact@v4
         with:
-          name: firmware-${{ steps.version.outputs.version }}
+          name: firmware-${{matrix.arch}}-${{ steps.version.outputs.version }}
           overwrite: true
           path: |
             ./firmware-*.bin
@@ -202,16 +202,14 @@ jobs:
             ./firmware-*-ota.zip
             ./device-*.sh
             ./device-*.bat
-            ./meshtasticd_linux_*
-            ./config-dist.yaml
             ./littlefs-*.bin
             ./bleota*bin
             ./Meshtastic_nRF52_factory_erase*.uf2
-          retention-days: 90
+          retention-days: 30
 
       - uses: actions/download-artifact@v4
         with:
-          name: firmware-${{ steps.version.outputs.version }}
+          name: firmware-${{matrix.arch}}-${{ steps.version.outputs.version }}
           merge-multiple: true
           path: ./output
 
@@ -225,26 +223,34 @@ jobs:
           chmod +x ./output/device-update.sh
 
       - name: Zip firmware
-        run: zip -j -9 -r ./firmware-${{ steps.version.outputs.version }}.zip ./output
+        run: zip -j -9 -r ./firmware-${{matrix.arch}}-${{ steps.version.outputs.version }}.zip ./output
 
       - name: Repackage in single elfs zip
         uses: actions/upload-artifact@v4
         with:
-          name: debug-elfs-${{ steps.version.outputs.version }}.zip
+          name: debug-elfs-${{matrix.arch}}-${{ steps.version.outputs.version }}.zip
           overwrite: true
           path: ./*.elf
           retention-days: 30
 
-      - uses: PicoCentauri/comment-artifact@main
+      - uses: scruplelesswizard/comment-artifact@main
+        if: ${{ github.event_name == 'pull_request' }}
         with:
-          name: firmware-${{ steps.version.outputs.version }}
-          description: "Download firmware-${{ steps.version.outputs.version }}.zip. This artifact will be available for 90 days from creation"
+          name: firmware-${{matrix.arch}}-${{ steps.version.outputs.version }}
+          description: "Download firmware-${{matrix.arch}}-${{ steps.version.outputs.version }}.zip. This artifact will be available for 90 days from creation"
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
   release-artifacts:
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'workflow_dispatch' }}
-    needs: [gather-artifacts]
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    needs: [
+        gather-artifacts,
+        package-raspbian,
+        package-raspbian-armv7l,
+        # package-native,
+      ]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -257,36 +263,6 @@ jobs:
       - name: Get release version string
         run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
         id: version
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: firmware-${{ steps.version.outputs.version }}
-          merge-multiple: true
-          path: ./output
-
-      - name: Display structure of downloaded files
-        run: ls -R
-
-      - name: Device scripts permissions
-        run: |
-          chmod +x ./output/device-install.sh
-          chmod +x ./output/device-update.sh
-
-      - name: Zip firmware
-        run: zip -j -9 -r ./firmware-${{ steps.version.outputs.version }}.zip ./output -x meshtasticd_*
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: debug-elfs-${{ steps.version.outputs.version }}.zip
-          merge-multiple: true
-          path: ./elfs
-
-      - name: Zip Elfs
-        run: zip -j -9 -r ./debug-elfs-${{ steps.version.outputs.version }}.zip ./elfs
-
-      # For diagnostics
-      - name: Show artifacts
-        run: ls -lR
 
       - name: Create release
         uses: actions/create-release@v1
@@ -301,31 +277,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
-      - name: Add bins to release
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./firmware-${{ steps.version.outputs.version }}.zip
-          asset_name: firmware-${{ steps.version.outputs.version }}.zip
-          asset_content_type: application/zip
-
-      - name: Add debug elfs to release
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./debug-elfs-${{ steps.version.outputs.version }}.zip
-          asset_name: debug-elfs-${{ steps.version.outputs.version }}.zip
-          asset_content_type: application/zip
-
-      - uses: actions/download-artifact@v4
+      - name: Download deb files
+        uses: actions/download-artifact@v4
         with:
           pattern: meshtasticd_${{ steps.version.outputs.version }}_*.deb
           merge-multiple: true
           path: ./output
+
+      # For diagnostics
+      - name: Display structure of downloaded files
+        run: ls -lR
 
       - name: Add raspbian aarch64 .deb
         uses: actions/upload-release-asset@v1
@@ -368,29 +329,73 @@ jobs:
           add-paths: |
             version.properties
 
-      - name: Checkout meshtastic/meshtastic.github.io
+  release-firmware:
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [esp32, esp32s3, esp32c3, esp32c6, nrf52840, rp2040, stm32]
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    needs: [release-artifacts]
+    steps:
+      - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          repository: meshtastic/meshtastic.github.io
-          token: ${{ secrets.ARTIFACTS_TOKEN }}
-          path: meshtastic.github.io
+          python-version: 3.x
+
+      - name: Get release version string
+        run: echo "version=$(./bin/buildinfo.py long)" >> $GITHUB_OUTPUT
+        id: version
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: firmware-${{matrix.arch}}-${{ steps.version.outputs.version }}
+          merge-multiple: true
+          path: ./output
 
       - name: Display structure of downloaded files
-        run: ls -R
+        run: ls -lR
 
-      - name: Extract firmware.zip
+      - name: Device scripts permissions
         run: |
-          unzip ./firmware-${{ steps.version.outputs.version }}.zip -d meshtastic.github.io/firmware-${{ steps.version.outputs.version }}
+          chmod +x ./output/device-install.sh
+          chmod +x ./output/device-update.sh
 
+      - name: Zip firmware
+        run: zip -j -9 -r ./firmware-${{matrix.arch}}-${{ steps.version.outputs.version }}.zip ./output
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: debug-elfs-${{matrix.arch}}-${{ steps.version.outputs.version }}.zip
+          merge-multiple: true
+          path: ./elfs
+
+      - name: Zip firmware
+        run: zip -j -9 -r ./debug-elfs-${{matrix.arch}}-${{ steps.version.outputs.version }}.zip ./elfs
+
+      # For diagnostics
       - name: Display structure of downloaded files
-        run: ls -R
+        run: ls -lR
 
-      - name: Commit and push changes
-        run: |
-          cd meshtastic.github.io
-          find . -type f -name 'meshtasticd_*' -exec rm -f {} +
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add .
-          git commit -m "Add firmware version ${{ steps.version.outputs.version }}"
-          git push
+      - name: Add bins to release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{needs.release-artifacts.outputs.upload_url}}
+          asset_path: ./firmware-${{matrix.arch}}-${{ steps.version.outputs.version }}.zip
+          asset_name: firmware-${{matrix.arch}}-${{ steps.version.outputs.version }}.zip
+          asset_content_type: application/zip
+
+      - name: Add debug elfs to release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{needs.release-artifacts.outputs.upload_url}}
+          asset_path: ./debug-elfs-${{matrix.arch}}-${{ steps.version.outputs.version }}.zip
+          asset_name: debug-elfs-${{matrix.arch}}-${{ steps.version.outputs.version }}.zip
+          asset_content_type: application/zip
