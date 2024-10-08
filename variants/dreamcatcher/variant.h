@@ -30,8 +30,9 @@
 
 #define PIN_BUZZER 48
 
-#define GPS_RX_PIN 10
-#define GPS_TX_PIN 21
+// These can either be used for GPS or a serial link. Define through Protobufs
+// #define GPS_RX_PIN 10
+// #define GPS_TX_PIN 21
 
 #define PIN_POWER_EN 7            // RF section power supply enable
 #define PERIPHERAL_WARMUP_MS 1000 // wait for TPS chip to initialize
@@ -50,8 +51,9 @@
 #define SPI_DATA1 15
 #define SPI_DATA2 18
 
-#define GPS_RX_PIN 36
-#define GPS_TX_PIN 37
+// These can either be used for GPS or a serial link. Define through Protobufs
+// #define GPS_RX_PIN 36
+// #define GPS_TX_PIN 37
 
 // dac / amp instead of buzzer
 #define HAS_I2S
