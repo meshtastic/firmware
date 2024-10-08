@@ -224,6 +224,8 @@ void portduinoSetup()
                 settingsMap[displayPanel] = st7796;
             else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ILI9341")
                 settingsMap[displayPanel] = ili9341;
+            else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ILI9342")
+                settingsMap[displayPanel] = ili9342;
             else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ILI9486")
                 settingsMap[displayPanel] = ili9486;
             else if (yamlConfig["Display"]["Panel"].as<std::string>("") == "ILI9488")

@@ -19,7 +19,7 @@ bool CompareMeshPacketFunc(const meshtastic_MeshPacket *p1, const meshtastic_Mes
     auto p1p = getPriority(p1), p2p = getPriority(p2);
     // If priorities differ, use that
     // for equal priorities, prefer packets already on mesh.
-    return (p1p != p2p) ? (p1p > p2p) : (getFrom(p1) != nodeDB->getNodeNum() && getFrom(p2) == nodeDB->getNodeNum());
+    return (p1p != p2p) ? (p1p > p2p) : (!isFromUs(p1) && isFromUs(p2));
 }
 
 MeshPacketQueue::MeshPacketQueue(size_t _maxLen) : maxLen(_maxLen) {}
