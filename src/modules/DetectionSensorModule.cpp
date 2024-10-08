@@ -5,10 +5,46 @@
 #include "PowerFSM.h"
 #include "configuration.h"
 #include "main.h"
+#include <Throttle.h>
 DetectionSensorModule *detectionSensorModule;
 
 #define GPIO_POLLING_INTERVAL 100
 #define DELAYED_INTERVAL 1000
+
+typedef enum {
+    DetectionSensorVerdictDetected,
+    DetectionSensorVerdictSendState,
+    DetectionSensorVerdictNoop,
+} DetectionSensorTriggerVerdict;
+
+typedef DetectionSensorTriggerVerdict (*DetectionSensorTriggerHandler)(bool prev, bool current);
+
+static DetectionSensorTriggerVerdict detection_trigger_logic_level(bool prev, bool current)
+{
+    return current ? DetectionSensorVerdictDetected : DetectionSensorVerdictNoop;
+}
+
+static DetectionSensorTriggerVerdict detection_trigger_single_edge(bool prev, bool current)
+{
+    return (!prev && current) ? DetectionSensorVerdictDetected : DetectionSensorVerdictNoop;
+}
+
+static DetectionSensorTriggerVerdict detection_trigger_either_edge(bool prev, bool current)
+{
+    if (prev == current) {
+        return DetectionSensorVerdictNoop;
+    }
+    return current ? DetectionSensorVerdictDetected : DetectionSensorVerdictSendState;
+}
+
+const static DetectionSensorTriggerHandler handlers[_meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_MAX + 1] = {
+    [meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_LOGIC_LOW] = detection_trigger_logic_level,
+    [meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_LOGIC_HIGH] = detection_trigger_logic_level,
+    [meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_FALLING_EDGE] = detection_trigger_single_edge,
+    [meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_RISING_EDGE] = detection_trigger_single_edge,
+    [meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_EITHER_EDGE_ACTIVE_LOW] = detection_trigger_either_edge,
+    [meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_EITHER_EDGE_ACTIVE_HIGH] = detection_trigger_either_edge,
+};
 
 int32_t DetectionSensorModule::runOnce()
 {
@@ -21,7 +57,8 @@ int32_t DetectionSensorModule::runOnce()
     // moduleConfig.detection_sensor.monitor_pin = 21; // WisBlock RAK12013 Radar IO6
     // moduleConfig.detection_sensor.minimum_broadcast_secs = 30;
     // moduleConfig.detection_sensor.state_broadcast_secs = 120;
-    // moduleConfig.detection_sensor.detection_triggered_high = true;
+    // moduleConfig.detection_sensor.detection_trigger_type =
+    //          meshtastic_ModuleConfig_DetectionSensorConfig_TriggerType_LOGIC_HIGH;
     // strcpy(moduleConfig.detection_sensor.name, "Motion");
 
     if (moduleConfig.detection_sensor.enabled == false)
@@ -49,18 +86,31 @@ int32_t DetectionSensorModule::runOnce()
 
     // LOG_DEBUG("Detection Sensor Module: Current pin state: %i\n", digitalRead(moduleConfig.detection_sensor.monitor_pin));
 
-    if ((millis() - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs) &&
-        hasDetectionEvent()) {
-        sendDetectionMessage();
-        return DELAYED_INTERVAL;
+    if (!Throttle::isWithinTimespanMs(lastSentToMesh,
+                                      Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.minimum_broadcast_secs))) {
+        bool isDetected = hasDetectionEvent();
+        DetectionSensorTriggerVerdict verdict =
+            handlers[moduleConfig.detection_sensor.detection_trigger_type](wasDetected, isDetected);
+        wasDetected = isDetected;
+        switch (verdict) {
+        case DetectionSensorVerdictDetected:
+            sendDetectionMessage();
+            return DELAYED_INTERVAL;
+        case DetectionSensorVerdictSendState:
+            sendCurrentStateMessage(isDetected);
+            return DELAYED_INTERVAL;
+        case DetectionSensorVerdictNoop:
+            break;
+        }
     }
     // Even if we haven't detected an event, broadcast our current state to the mesh on the scheduled interval as a sort
     // of heartbeat. We only do this if the minimum broadcast interval is greater than zero, otherwise we'll only broadcast state
     // change detections.
-    else if (moduleConfig.detection_sensor.state_broadcast_secs > 0 &&
-             (millis() - lastSentToMesh) >= Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs,
-                                                                              default_telemetry_broadcast_interval_secs)) {
-        sendCurrentStateMessage();
+    if (moduleConfig.detection_sensor.state_broadcast_secs > 0 &&
+        !Throttle::isWithinTimespanMs(lastSentToMesh,
+                                      Default::getConfiguredOrDefaultMs(moduleConfig.detection_sensor.state_broadcast_secs,
+                                                                        default_telemetry_broadcast_interval_secs))) {
+        sendCurrentStateMessage(hasDetectionEvent());
         return DELAYED_INTERVAL;
     }
     return GPIO_POLLING_INTERVAL;
@@ -86,10 +136,10 @@ void DetectionSensorModule::sendDetectionMessage()
     delete[] message;
 }
 
-void DetectionSensorModule::sendCurrentStateMessage()
+void DetectionSensorModule::sendCurrentStateMessage(bool state)
 {
     char *message = new char[40];
-    sprintf(message, "%s state: %i", moduleConfig.detection_sensor.name, hasDetectionEvent());
+    sprintf(message, "%s state: %i", moduleConfig.detection_sensor.name, state);
 
     meshtastic_MeshPacket *p = allocDataPacket();
     p->want_ack = false;
@@ -105,5 +155,5 @@ bool DetectionSensorModule::hasDetectionEvent()
 {
     bool currentState = digitalRead(moduleConfig.detection_sensor.monitor_pin);
     // LOG_DEBUG("Detection Sensor Module: Current state: %i\n", currentState);
-    return moduleConfig.detection_sensor.detection_triggered_high ? currentState : !currentState;
+    return (moduleConfig.detection_sensor.detection_trigger_type & 1) ? currentState : !currentState;
 }

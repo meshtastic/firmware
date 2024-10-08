@@ -2,11 +2,13 @@
 
 #include "Observer.h"
 #include <Arduino.h>
+#include <algorithm>
 #include <assert.h>
 #include <vector>
 
 #include "MeshTypes.h"
 #include "NodeStatus.h"
+#include "configuration.h"
 #include "mesh-pb-constants.h"
 #include "mesh/generated/meshtastic/mesh.pb.h" // For CriticalErrorCode
 
@@ -182,7 +184,8 @@ class NodeDB
     void cleanupMeshDB();
 
     /// Reinit device state from scratch (not loading from disk)
-    void installDefaultDeviceState(), installDefaultChannels(), installDefaultConfig(), installDefaultModuleConfig();
+    void installDefaultDeviceState(), installDefaultChannels(), installDefaultConfig(bool preserveKey),
+        installDefaultModuleConfig();
 
     /// write to flash
     /// @return true if the save was successful

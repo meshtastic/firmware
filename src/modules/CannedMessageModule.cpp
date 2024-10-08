@@ -12,6 +12,7 @@
 #include "detect/ScanI2C.h"
 #include "input/ScanAndSelect.h"
 #include "mesh/generated/meshtastic/cannedmessages.pb.h"
+#include "modules/AdminModule.h"
 
 #include "main.h"                               // for cardkb_found
 #include "modules/ExternalNotificationModule.h" // for buzzer control
@@ -27,6 +28,7 @@
 #endif
 
 #include "graphics/ScreenFonts.h"
+#include <Throttle.h>
 
 // Remove Canned message screen if no action is taken for some milliseconds
 #define INACTIVATE_AFTER_MS 20000
@@ -77,16 +79,16 @@ int CannedMessageModule::splitConfiguredMessages()
     int messageIndex = 0;
     int i = 0;
 
-    String messages = cannedMessageModuleConfig.messages;
+    String canned_messages = cannedMessageModuleConfig.messages;
 
 #if defined(T_WATCH_S3) || defined(RAK14014)
-    String separator = messages.length() ? "|" : "";
+    String separator = canned_messages.length() ? "|" : "";
 
-    messages = "[---- Free Text ----]" + separator + messages;
+    canned_messages = "[---- Free Text ----]" + separator + canned_messages;
 #endif
 
     // collect all the message parts
-    strncpy(this->messageStore, messages.c_str(), sizeof(this->messageStore));
+    strncpy(this->messageStore, canned_messages.c_str(), sizeof(this->messageStore));
 
     // The first message points to the beginning of the store.
     this->messages[messageIndex++] = this->messageStore;
@@ -190,17 +192,17 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
 #if defined(T_WATCH_S3) || defined(RAK14014)
         if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
-            this->payload = 0xb4;
+            this->payload = INPUT_BROKER_MSG_LEFT;
         } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
-            this->payload = 0xb7;
+            this->payload = INPUT_BROKER_MSG_RIGHT;
         }
 #else
         // tweak for left/right events generated via trackball/touch with empty kbchar
         if (!event->kbchar) {
             if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_LEFT)) {
-                this->payload = 0xb4;
+                this->payload = INPUT_BROKER_MSG_LEFT;
             } else if (event->inputEvent == static_cast<char>(meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_RIGHT)) {
-                this->payload = 0xb7;
+                this->payload = INPUT_BROKER_MSG_RIGHT;
             }
         } else {
             // pass the pressed key
@@ -222,26 +224,26 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
 
         // Run modifier key code below, (doesnt inturrupt typing or reset to start screen page)
         switch (event->kbchar) {
-        case 0x11: // make screen brighter
+        case INPUT_BROKER_MSG_BRIGHTNESS_UP: // make screen brighter
             if (screen)
                 screen->increaseBrightness();
             LOG_DEBUG("increasing Screen Brightness\n");
             break;
-        case 0x12: // make screen dimmer
+        case INPUT_BROKER_MSG_BRIGHTNESS_DOWN: // make screen dimmer
             if (screen)
                 screen->decreaseBrightness();
             LOG_DEBUG("Decreasing Screen Brightness\n");
             break;
-        case 0xf1: // draw modifier (function) symbal
+        case INPUT_BROKER_MSG_FN_SYMBOL_ON: // draw modifier (function) symbal
             if (screen)
                 screen->setFunctionSymbal("Fn");
             break;
-        case 0xf2: // remove modifier (function) symbal
+        case INPUT_BROKER_MSG_FN_SYMBOL_OFF: // remove modifier (function) symbal
             if (screen)
                 screen->removeFunctionSymbal("Fn");
             break;
         // mute (switch off/toggle) external notifications on fn+m
-        case 0xac:
+        case INPUT_BROKER_MSG_MUTE_TOGGLE:
             if (moduleConfig.external_notification.enabled == true) {
                 if (externalNotificationModule->getMute()) {
                     externalNotificationModule->setMute(false);
@@ -257,7 +259,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
                 }
             }
             break;
-        case 0x9e: // toggle GPS like triple press does
+        case INPUT_BROKER_MSG_GPS_TOGGLE: // toggle GPS like triple press does
 #if !MESHTASTIC_EXCLUDE_GPS
             if (gps != nullptr) {
                 gps->toggleGpsMode();
@@ -267,7 +269,22 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             showTemporaryMessage("GPS Toggled");
 #endif
             break;
-        case 0xaf: // fn+space send network ping like double press does
+        case INPUT_BROKER_MSG_BLUETOOTH_TOGGLE: // toggle Bluetooth on/off
+            if (config.bluetooth.enabled == true) {
+                config.bluetooth.enabled = false;
+                LOG_INFO("User toggled Bluetooth");
+                nodeDB->saveToDisk();
+                disableBluetooth();
+                showTemporaryMessage("Bluetooth OFF");
+            } else if (config.bluetooth.enabled == false) {
+                config.bluetooth.enabled = true;
+                LOG_INFO("User toggled Bluetooth");
+                nodeDB->saveToDisk();
+                rebootAtMsec = millis() + 2000;
+                showTemporaryMessage("Bluetooth ON\nReboot");
+            }
+            break;
+        case INPUT_BROKER_MSG_SEND_PING: // fn+space send network ping like double press does
             service->refreshLocalMeshNode();
             if (service->trySendPosition(NODENUM_BROADCAST, true)) {
                 showTemporaryMessage("Position \nUpdate Sent");
@@ -275,6 +292,13 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
                 showTemporaryMessage("Node Info \nUpdate Sent");
             }
             break;
+        case INPUT_BROKER_MSG_DISMISS_FRAME: // fn+del: dismiss screen frames like text or waypoint
+            // Avoid opening the canned message screen frame
+            // We're only handling the keypress here by convention, this has nothing to do with canned messages
+            this->runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+            // Attempt to close whatever frame is currently shown on display
+            screen->dismissCurrentFrame();
+            return 0;
         default:
             // pass the pressed key
             // LOG_DEBUG("Canned message ANYKEY (%x)\n", event->kbchar);
@@ -283,7 +307,7 @@ int CannedMessageModule::handleInputEvent(const InputEvent *event)
             validEvent = true;
             break;
         }
-        if (screen && (event->kbchar != 0xf1)) {
+        if (screen && (event->kbchar != INPUT_BROKER_MSG_FN_SYMBOL_ON)) {
             screen->removeFunctionSymbal("Fn"); // remove modifier (function) symbal
         }
     }
@@ -422,7 +446,7 @@ int32_t CannedMessageModule::runOnce()
 
         this->notifyObservers(&e);
     } else if (((this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) || (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT)) &&
-               ((millis() - this->lastTouchMillis) > INACTIVATE_AFTER_MS)) {
+               !Throttle::isWithinTimespanMs(this->lastTouchMillis, INACTIVATE_AFTER_MS)) {
         // Reset module
         e.action = UIFrameEvent::Action::REGENERATE_FRAMESET; // We want to change the list of frames shown on-screen
         this->currentMessageIndex = -1;
@@ -505,7 +529,7 @@ int32_t CannedMessageModule::runOnce()
         }
     } else if (this->runState == CANNED_MESSAGE_RUN_STATE_FREETEXT || this->runState == CANNED_MESSAGE_RUN_STATE_ACTIVE) {
         switch (this->payload) {
-        case 0xb4: // left
+        case INPUT_BROKER_MSG_LEFT:
             if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
                 size_t numMeshNodes = nodeDB->getNumMeshNodes();
                 if (this->dest == NODENUM_BROADCAST) {
@@ -540,7 +564,7 @@ int32_t CannedMessageModule::runOnce()
                 }
             }
             break;
-        case 0xb7: // right
+        case INPUT_BROKER_MSG_RIGHT:
             if (this->destSelect == CANNED_MESSAGE_DESTINATION_TYPE_NODE) {
                 size_t numMeshNodes = nodeDB->getNumMeshNodes();
                 if (this->dest == NODENUM_BROADCAST) {
@@ -602,19 +626,19 @@ int32_t CannedMessageModule::runOnce()
                     this->destSelect = CANNED_MESSAGE_DESTINATION_TYPE_NODE;
                 }
                 break;
-            case 0xb4: // left
-            case 0xb7: // right
+            case INPUT_BROKER_MSG_LEFT:
+            case INPUT_BROKER_MSG_RIGHT:
                 // already handled above
                 break;
                 // handle fn+s for shutdown
-            case 0x9b:
+            case INPUT_BROKER_MSG_SHUTDOWN:
                 if (screen)
                     screen->startAlert("Shutting down...");
                 shutdownAtMsec = millis() + DEFAULT_SHUTDOWN_SECONDS * 1000;
                 runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
                 break;
             // and fn+r for reboot
-            case 0x90:
+            case INPUT_BROKER_MSG_REBOOT:
                 if (screen)
                     screen->startAlert("Rebooting...");
                 rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
@@ -934,6 +958,19 @@ void CannedMessageModule::drawEnterIcon(OLEDDisplay *display, int x, int y, floa
 
 #endif
 
+// Indicate to screen class that module is handling keyboard input specially (at certain times)
+// This prevents the left & right keys being used for nav. between screen frames during text entry.
+bool CannedMessageModule::interceptingKeyboardInput()
+{
+    switch (runState) {
+    case CANNED_MESSAGE_RUN_STATE_DISABLED:
+    case CANNED_MESSAGE_RUN_STATE_INACTIVE:
+        return false;
+    default:
+        return true;
+    }
+}
+
 void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
 {
     char buffer[50];
@@ -977,7 +1014,7 @@ void CannedMessageModule::drawFrame(OLEDDisplay *display, OLEDDisplayUiState *st
             int16_t rssiY = 130;
 
             // If dislay is *slighly* too small for the original consants, squish up a bit
-            if (display->getHeight() < rssiY) {
+            if (display->getHeight() < rssiY + FONT_HEIGHT_SMALL) {
                 snrY = display->getHeight() - ((1.5) * FONT_HEIGHT_SMALL);
                 rssiY = display->getHeight() - ((2.5) * FONT_HEIGHT_SMALL);
             }
@@ -1124,7 +1161,6 @@ void CannedMessageModule::loadProtoForModule()
         installDefaultCannedMessageModuleConfig();
     }
 }
-
 /**
  * @brief Save the module config to file.
  *

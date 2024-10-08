@@ -137,6 +137,17 @@ const RegionInfo regions[] = {
     RDEF(SG_923, 917.0f, 925.0f, 100, 0, 20, true, false, false),
 
     /*
+        Philippines
+                433 - 434.7 MHz <10 mW erp, NTC approved device required
+                868 - 869.4 MHz <25 mW erp, NTC approved device required
+                915 - 918 MHz <250 mW EIRP, no external antennna allowed
+                https://github.com/meshtastic/firmware/issues/4948#issuecomment-2394926135
+    */
+
+    RDEF(PH_433, 433.0f, 434.7f, 100, 0, 10, true, false, false), RDEF(PH_868, 868.0f, 869.4f, 100, 0, 14, true, false, false),
+    RDEF(PH_915, 915.0f, 918.0f, 100, 0, 24, true, false, false),
+
+    /*
        2.4 GHZ WLAN Band equivalent. Only for SX128x chips.
     */
     RDEF(LORA_24, 2400.0f, 2483.5f, 100, 0, 10, true, false, true),
@@ -151,7 +162,7 @@ const RegionInfo regions[] = {
 const RegionInfo *myRegion;
 bool RadioInterface::uses_default_frequency_slot = true;
 
-static uint8_t bytes[MAX_RHPACKETLEN];
+static uint8_t bytes[MAX_LORA_PAYLOAD_LEN + 1];
 
 void initRegion()
 {
@@ -202,8 +213,6 @@ uint32_t RadioInterface::getPacketTime(uint32_t pl)
 
     uint32_t msecs = tPacket * 1000;
 
-    LOG_DEBUG("(bw=%d, sf=%d, cr=4/%d) packet symLen=%d ms, payloadSize=%u, time %d ms\n", (int)bw, sf, cr, (int)(tSym * 1000),
-              pl, msecs);
     return msecs;
 }
 
@@ -326,7 +335,7 @@ void printPacket(const char *prefix, const meshtastic_MeshPacket *p)
 
 RadioInterface::RadioInterface()
 {
-    assert(sizeof(PacketHeader) == 16); // make sure the compiler did what we expected
+    assert(sizeof(PacketHeader) == MESHTASTIC_HEADER_LENGTH); // make sure the compiler did what we expected
 }
 
 bool RadioInterface::reconfigure()
@@ -420,7 +429,7 @@ void RadioInterface::applyModemConfig()
 
             switch (loraConfig.modem_preset) {
             case meshtastic_Config_LoRaConfig_ModemPreset_SHORT_TURBO:
-                bw = (myRegion->wideLora) ? 812.5 : 500;
+                bw = (myRegion->wideLora) ? 1625.0 : 500;
                 cr = 5;
                 sf = 7;
                 break;
@@ -550,11 +559,11 @@ void RadioInterface::applyModemConfig()
     LOG_INFO("Radio freq=%.3f, config.lora.frequency_offset=%.3f\n", freq, loraConfig.frequency_offset);
     LOG_INFO("Set radio: region=%s, name=%s, config=%u, ch=%d, power=%d\n", myRegion->name, channelName, loraConfig.modem_preset,
              channel_num, power);
-    LOG_INFO("Radio myRegion->freqStart -> myRegion->freqEnd: %f -> %f (%f MHz)\n", myRegion->freqStart, myRegion->freqEnd,
+    LOG_INFO("myRegion->freqStart -> myRegion->freqEnd: %f -> %f (%f MHz)\n", myRegion->freqStart, myRegion->freqEnd,
              myRegion->freqEnd - myRegion->freqStart);
-    LOG_INFO("Radio myRegion->numChannels: %d x %.3fkHz\n", numChannels, bw);
-    LOG_INFO("Radio channel_num: %d\n", channel_num + 1);
-    LOG_INFO("Radio frequency: %f\n", getFreq());
+    LOG_INFO("numChannels: %d x %.3fkHz\n", numChannels, bw);
+    LOG_INFO("channel_num: %d\n", channel_num + 1);
+    LOG_INFO("frequency: %f\n", getFreq());
     LOG_INFO("Slot time: %u msec\n", slotTimeMsec);
 }
 
@@ -595,25 +604,24 @@ size_t RadioInterface::beginSending(meshtastic_MeshPacket *p)
 
     lastTxStart = millis();
 
-    PacketHeader *h = (PacketHeader *)radiobuf;
-
-    h->from = p->from;
-    h->to = p->to;
-    h->id = p->id;
-    h->channel = p->channel;
-    h->next_hop = 0;   // *** For future use ***
-    h->relay_node = 0; // *** For future use ***
+    radioBuffer.header.from = p->from;
+    radioBuffer.header.to = p->to;
+    radioBuffer.header.id = p->id;
+    radioBuffer.header.channel = p->channel;
+    radioBuffer.header.next_hop = 0;   // *** For future use ***
+    radioBuffer.header.relay_node = 0; // *** For future use ***
     if (p->hop_limit > HOP_MAX) {
         LOG_WARN("hop limit %d is too high, setting to %d\n", p->hop_limit, HOP_RELIABLE);
         p->hop_limit = HOP_RELIABLE;
     }
-    h->flags = p->hop_limit | (p->want_ack ? PACKET_FLAGS_WANT_ACK_MASK : 0) | (p->via_mqtt ? PACKET_FLAGS_VIA_MQTT_MASK : 0);
-    h->flags |= (p->hop_start << PACKET_FLAGS_HOP_START_SHIFT) & PACKET_FLAGS_HOP_START_MASK;
+    radioBuffer.header.flags =
+        p->hop_limit | (p->want_ack ? PACKET_FLAGS_WANT_ACK_MASK : 0) | (p->via_mqtt ? PACKET_FLAGS_VIA_MQTT_MASK : 0);
+    radioBuffer.header.flags |= (p->hop_start << PACKET_FLAGS_HOP_START_SHIFT) & PACKET_FLAGS_HOP_START_MASK;
 
     // if the sender nodenum is zero, that means uninitialized
-    assert(h->from);
+    assert(radioBuffer.header.from);
 
-    memcpy(radiobuf + sizeof(PacketHeader), p->encrypted.bytes, p->encrypted.size);
+    memcpy(radioBuffer.payload, p->encrypted.bytes, p->encrypted.size);
 
     sendingPacket = p;
     return p->encrypted.size + sizeof(PacketHeader);

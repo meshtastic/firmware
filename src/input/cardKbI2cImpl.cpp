@@ -9,14 +9,14 @@ CardKbI2cImpl::CardKbI2cImpl() : KbI2cBase("cardKB") {}
 
 void CardKbI2cImpl::init()
 {
-#ifndef ARCH_PORTDUINO
+#if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO)
     if (cardkb_found.address == 0x00) {
         LOG_DEBUG("Rescanning for I2C keyboard\n");
         uint8_t i2caddr_scan[] = {CARDKB_ADDR, TDECK_KB_ADDR, BBQ10_KB_ADDR};
         uint8_t i2caddr_asize = 3;
         auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
 
-#if defined(I2C_SDA1)
+#if WIRE_INTERFACES_COUNT == 2
         i2cScanner->scanPort(ScanI2C::I2CPort::WIRE1, i2caddr_scan, i2caddr_asize);
 #endif
         i2cScanner->scanPort(ScanI2C::I2CPort::WIRE, i2caddr_scan, i2caddr_asize);

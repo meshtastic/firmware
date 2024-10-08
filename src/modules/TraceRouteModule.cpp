@@ -11,13 +11,13 @@ bool TraceRouteModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, m
 
 void TraceRouteModule::alterReceivedProtobuf(meshtastic_MeshPacket &p, meshtastic_RouteDiscovery *r)
 {
-    auto &incoming = p.decoded;
+    const meshtastic_Data &incoming = p.decoded;
 
     // Insert unknown hops if necessary
     insertUnknownHops(p, r, !incoming.request_id);
 
-    // Append ID and SNR. For the last hop (p.to == nodeDB->getNodeNum()), we only need to append the SNR
-    appendMyIDandSNR(r, p.rx_snr, !incoming.request_id, p.to == nodeDB->getNodeNum());
+    // Append ID and SNR. If the last hop is to us, we only need to append the SNR
+    appendMyIDandSNR(r, p.rx_snr, !incoming.request_id, isToUs(&p));
     if (!incoming.request_id)
         printRoute(r, p.from, p.to, true);
     else
@@ -53,7 +53,7 @@ void TraceRouteModule::insertUnknownHops(meshtastic_MeshPacket &p, meshtastic_Ro
         uint8_t hopsTaken = p.hop_start - p.hop_limit;
         int8_t diff = hopsTaken - *route_count;
         for (uint8_t i = 0; i < diff; i++) {
-            if (*route_count < sizeof(*route) / sizeof(route[0])) {
+            if (*route_count < ROUTE_SIZE) {
                 route[*route_count] = NODENUM_BROADCAST; // This will represent an unknown hop
                 *route_count += 1;
             }
@@ -61,7 +61,7 @@ void TraceRouteModule::insertUnknownHops(meshtastic_MeshPacket &p, meshtastic_Ro
         // Add unknown SNR values if necessary
         diff = *route_count - *snr_count;
         for (uint8_t i = 0; i < diff; i++) {
-            if (*snr_count < sizeof(*snr_list) / sizeof(snr_list[0])) {
+            if (*snr_count < ROUTE_SIZE) {
                 snr_list[*snr_count] = INT8_MIN; // This will represent an unknown SNR
                 *snr_count += 1;
             }
@@ -89,7 +89,7 @@ void TraceRouteModule::appendMyIDandSNR(meshtastic_RouteDiscovery *updated, floa
         snr_list = updated->snr_back;
     }
 
-    if (*snr_count < sizeof(*snr_list) / sizeof(snr_list[0])) {
+    if (*snr_count < ROUTE_SIZE) {
         snr_list[*snr_count] = (int8_t)(snr * 4); // Convert SNR to 1 byte
         *snr_count += 1;
     }
@@ -97,11 +97,11 @@ void TraceRouteModule::appendMyIDandSNR(meshtastic_RouteDiscovery *updated, floa
         return;
 
     // Length of route array can normally not be exceeded due to the max. hop_limit of 7
-    if (*route_count < sizeof(*route) / sizeof(route[0])) {
+    if (*route_count < ROUTE_SIZE) {
         route[*route_count] = myNodeInfo.my_node_num;
         *route_count += 1;
     } else {
-        LOG_WARN("Route exceeded maximum hop limit, are you bridging networks?\n");
+        LOG_WARN("Route exceeded maximum hop limit!\n"); // Are you bridging networks?
     }
 }
 

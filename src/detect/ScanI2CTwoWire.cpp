@@ -162,13 +162,13 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
     Melopero_RV3028 rtc;
 #endif
 
-#ifdef I2C_SDA1
+#if WIRE_INTERFACES_COUNT == 2
     if (port == I2CPort::WIRE1) {
         i2cBus = &Wire1;
     } else {
 #endif
         i2cBus = &Wire;
-#ifdef I2C_SDA1
+#if WIRE_INTERFACES_COUNT == 2
     }
 #endif
 
@@ -313,17 +313,33 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 }
                 break;
             case MCP9808_ADDR:
-                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x07), 2);
-                if (registerValue == 0x0400) {
-                    type = MCP9808;
-                    LOG_INFO("MCP9808 sensor found\n");
-                } else {
-                    type = LIS3DH;
-                    LOG_INFO("LIS3DH accelerometer found\n");
+                // We need to check for STK8BAXX first, since register 0x07 is new data flag for the z-axis and can produce some
+                // weird result. and register 0x00 doesn't seems to be colliding with MCP9808 and LIS3DH chips.
+                {
+                    // Check register 0x00 for 0x8700 response to ID STK8BA53 chip.
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 2);
+                    if (registerValue == 0x8700) {
+                        type = STK8BAXX;
+                        LOG_INFO("STK8BAXX accelerometer found\n");
+                        break;
+                    }
+
+                    // Check register 0x07 for 0x0400 response to ID MCP9808 chip.
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x07), 2);
+                    if (registerValue == 0x0400) {
+                        type = MCP9808;
+                        LOG_INFO("MCP9808 sensor found\n");
+                        break;
+                    }
+
+                    // Check register 0x0F for 0x3300 response to ID LIS3DH chip.
+                    registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x0F), 2);
+                    if (registerValue == 0x3300 || registerValue == 0x3333) { // RAK4631 WisBlock has LIS3DH register at 0x3333
+                        type = LIS3DH;
+                        LOG_INFO("LIS3DH accelerometer found\n");
+                    }
+                    break;
                 }
-
-                break;
-
             case SHT31_4x_ADDR:
                 registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x89), 2);
                 if (registerValue == 0x11a2 || registerValue == 0x11da || registerValue == 0xe9c) {
@@ -340,7 +356,18 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
                 SCAN_SIMPLE_CASE(SHTC3_ADDR, SHTC3, "SHTC3 sensor found\n")
-                SCAN_SIMPLE_CASE(RCWL9620_ADDR, RCWL9620, "RCWL9620 sensor found\n")
+            case RCWL9620_ADDR:
+                // get MAX30102 PARTID
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0xFF), 1);
+                if (registerValue == 0x15) {
+                    type = MAX30102;
+                    LOG_INFO("MAX30102 Health sensor found\n");
+                    break;
+                } else {
+                    type = RCWL9620;
+                    LOG_INFO("RCWL9620 sensor found\n");
+                }
+                break;
 
             case LPS22HB_ADDR_ALT:
                 SCAN_SIMPLE_CASE(LPS22HB_ADDR, LPS22HB, "LPS22HB sensor found\n")
@@ -365,18 +392,38 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 break;
 
                 SCAN_SIMPLE_CASE(QMC5883L_ADDR, QMC5883L, "QMC5883L Highrate 3-Axis magnetic sensor found\n")
-
+                SCAN_SIMPLE_CASE(HMC5883L_ADDR, HMC5883L, "HMC5883L 3-Axis digital compass found\n")
                 SCAN_SIMPLE_CASE(PMSA0031_ADDR, PMSA0031, "PMSA0031 air quality sensor found\n")
-                SCAN_SIMPLE_CASE(MPU6050_ADDR, MPU6050, "MPU6050 accelerometer found\n");
-                SCAN_SIMPLE_CASE(BMX160_ADDR, BMX160, "BMX160 accelerometer found\n");
                 SCAN_SIMPLE_CASE(BMA423_ADDR, BMA423, "BMA423 accelerometer found\n");
                 SCAN_SIMPLE_CASE(LSM6DS3_ADDR, LSM6DS3, "LSM6DS3 accelerometer found at address 0x%x\n", (uint8_t)addr.address);
+                SCAN_SIMPLE_CASE(TCA9535_ADDR, TCA9535, "TCA9535 I2C expander found\n");
                 SCAN_SIMPLE_CASE(TCA9555_ADDR, TCA9555, "TCA9555 I2C expander found\n");
                 SCAN_SIMPLE_CASE(VEML7700_ADDR, VEML7700, "VEML7700 light sensor found\n");
                 SCAN_SIMPLE_CASE(TSL25911_ADDR, TSL2591, "TSL2591 light sensor found\n");
                 SCAN_SIMPLE_CASE(OPT3001_ADDR, OPT3001, "OPT3001 light sensor found\n");
                 SCAN_SIMPLE_CASE(MLX90632_ADDR, MLX90632, "MLX90632 IR temp sensor found\n");
                 SCAN_SIMPLE_CASE(NAU7802_ADDR, NAU7802, "NAU7802 based scale found\n");
+                SCAN_SIMPLE_CASE(FT6336U_ADDR, FT6336U, "FT6336U touchscreen found\n");
+                SCAN_SIMPLE_CASE(MAX1704X_ADDR, MAX17048, "MAX17048 lipo fuel gauge found\n");
+                SCAN_SIMPLE_CASE(MLX90614_ADDR_DEF, MLX90614, "MLX90614 IR temp sensor found\n");
+
+            case ICM20948_ADDR:     // same as BMX160_ADDR
+            case ICM20948_ADDR_ALT: // same as MPU6050_ADDR
+                registerValue = getRegisterValue(ScanI2CTwoWire::RegisterLocation(addr, 0x00), 1);
+                if (registerValue == 0xEA) {
+                    type = ICM20948;
+                    LOG_INFO("ICM20948 9-dof motion processor found\n");
+                    break;
+                } else if (addr.address == BMX160_ADDR) {
+                    type = BMX160;
+                    LOG_INFO("BMX160 accelerometer found\n");
+                    break;
+                } else {
+                    type = MPU6050;
+                    LOG_INFO("MPU6050 accelerometer found\n");
+                    break;
+                }
+                break;
 
             default:
                 LOG_INFO("Device found at address 0x%x was not able to be enumerated\n", addr.address);
@@ -403,7 +450,7 @@ TwoWire *ScanI2CTwoWire::fetchI2CBus(ScanI2C::DeviceAddress address) const
     if (address.port == ScanI2C::I2CPort::WIRE) {
         return &Wire;
     } else {
-#ifdef I2C_SDA1
+#if WIRE_INTERFACES_COUNT == 2
         return &Wire1;
 #else
         return &Wire;
