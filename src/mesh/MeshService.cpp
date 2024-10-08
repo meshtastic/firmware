@@ -407,3 +407,15 @@ bool MeshService::isToPhoneQueueEmpty()
 {
     return toPhoneQueue.isEmpty();
 }
+
+uint32_t MeshService::GetTimeSinceMeshPacket(const meshtastic_MeshPacket *mp)
+{
+    uint32_t now = getTime();
+
+    uint32_t last_seen = mp->rx_time;
+    int delta = (int)(now - last_seen);
+    if (delta < 0) // our clock must be slightly off still - not set from GPS yet
+        delta = 0;
+
+    return delta;
+}

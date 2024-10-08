@@ -76,6 +76,23 @@ meshtastic_Channel &Channels::fixupChannel(ChannelIndex chIndex)
     return ch;
 }
 
+void Channels::initDefaultLoraConfig()
+{
+    meshtastic_Config_LoRaConfig &loraConfig = config.lora;
+
+    loraConfig.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST; // Default to Long Range & Fast
+    loraConfig.use_preset = true;
+    loraConfig.tx_power = 0; // default
+    loraConfig.channel_num = 0;
+
+#ifdef USERPREFS_LORACONFIG_MODEM_PRESET
+    loraConfig.modem_preset = USERPREFS_LORACONFIG_MODEM_PRESET;
+#endif
+#ifdef USERPREFS_LORACONFIG_CHANNEL_NUM
+    loraConfig.channel_num = USERPREFS_LORACONFIG_CHANNEL_NUM;
+#endif
+}
+
 /**
  * Write a default channel to the specified channel index
  */
@@ -83,12 +100,7 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
 {
     meshtastic_Channel &ch = getByIndex(chIndex);
     meshtastic_ChannelSettings &channelSettings = ch.settings;
-    meshtastic_Config_LoRaConfig &loraConfig = config.lora;
 
-    loraConfig.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST; // Default to Long Range & Fast
-    loraConfig.use_preset = true;
-    loraConfig.tx_power = 0; // default
-    loraConfig.channel_num = 0;
     uint8_t defaultpskIndex = 1;
     channelSettings.psk.bytes[0] = defaultpskIndex;
     channelSettings.psk.size = 1;
@@ -97,21 +109,14 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
     channelSettings.has_module_settings = true;
 
     ch.has_settings = true;
-    ch.role = meshtastic_Channel_Role_PRIMARY;
+    ch.role = chIndex == 0 ? meshtastic_Channel_Role_PRIMARY : meshtastic_Channel_Role_SECONDARY;
 
-#ifdef USERPREFS_LORACONFIG_MODEM_PRESET
-    loraConfig.modem_preset = USERPREFS_LORACONFIG_MODEM_PRESET;
-#endif
-#ifdef USERPREFS_LORACONFIG_CHANNEL_NUM
-    loraConfig.channel_num = USERPREFS_LORACONFIG_CHANNEL_NUM;
-#endif
-
-    // Install custom defaults. Will eventually support setting multiple default channels
-    if (chIndex == 0) {
+    switch (chIndex) {
+    case 0:
 #ifdef USERPREFS_CHANNEL_0_PSK
-        static const uint8_t defaultpsk[] = USERPREFS_CHANNEL_0_PSK;
-        memcpy(channelSettings.psk.bytes, defaultpsk, sizeof(defaultpsk));
-        channelSettings.psk.size = sizeof(defaultpsk);
+        static const uint8_t defaultpsk0[] = USERPREFS_CHANNEL_0_PSK;
+        memcpy(channelSettings.psk.bytes, defaultpsk0, sizeof(defaultpsk0));
+        channelSettings.psk.size = sizeof(defaultpsk0);
 
 #endif
 #ifdef USERPREFS_CHANNEL_0_NAME
@@ -120,6 +125,37 @@ void Channels::initDefaultChannel(ChannelIndex chIndex)
 #ifdef USERPREFS_CHANNEL_0_PRECISION
         channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_0_PRECISION;
 #endif
+        break;
+    case 1:
+#ifdef USERPREFS_CHANNEL_1_PSK
+        static const uint8_t defaultpsk1[] = USERPREFS_CHANNEL_1_PSK;
+        memcpy(channelSettings.psk.bytes, defaultpsk1, sizeof(defaultpsk1));
+        channelSettings.psk.size = sizeof(defaultpsk1);
+
+#endif
+#ifdef USERPREFS_CHANNEL_1_NAME
+        strcpy(channelSettings.name, USERPREFS_CHANNEL_1_NAME);
+#endif
+#ifdef USERPREFS_CHANNEL_1_PRECISION
+        channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_1_PRECISION;
+#endif
+        break;
+    case 2:
+#ifdef USERPREFS_CHANNEL_2_PSK
+        static const uint8_t defaultpsk2[] = USERPREFS_CHANNEL_2_PSK;
+        memcpy(channelSettings.psk.bytes, defaultpsk2, sizeof(defaultpsk2));
+        channelSettings.psk.size = sizeof(defaultpsk2);
+
+#endif
+#ifdef USERPREFS_CHANNEL_2_NAME
+        strcpy(channelSettings.name, USERPREFS_CHANNEL_2_NAME);
+#endif
+#ifdef USERPREFS_CHANNEL_2_PRECISION
+        channelSettings.module_settings.position_precision = USERPREFS_CHANNEL_2_PRECISION;
+#endif
+        break;
+    default:
+        break;
     }
 }
 
@@ -209,7 +245,15 @@ void Channels::initDefaults()
     channelFile.channels_count = MAX_NUM_CHANNELS;
     for (int i = 0; i < channelFile.channels_count; i++)
         fixupChannel(i);
+    initDefaultLoraConfig();
+
+#ifdef USERPREFS_CHANNELS_TO_WRITE
+    for (int i = 0; i < USERPREFS_CHANNELS_TO_WRITE; i++) {
+        initDefaultChannel(i);
+    }
+#else
     initDefaultChannel(0);
+#endif
 }
 
 void Channels::onConfigChanged()

@@ -317,8 +317,7 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #ifdef USERPREFS_USE_ADMIN_KEY
     memcpy(config.security.admin_key[0].bytes, USERPREFS_ADMIN_KEY, 32);
     config.security.admin_key[0].size = 32;
-#else
-    config.security.admin_key[0].size = 0;
+    config.security.admin_key_count = 1;
 #endif
     if (shouldPreserveKey) {
         config.security.private_key.size = 32;
@@ -336,7 +335,9 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #else
     config.device.disable_triple_click = true;
 #endif
-#if !HAS_GPS || defined(T_DECK) || defined(TLORA_T3S3_EPAPER)
+#if defined(USERPREFS_CONFIG_GPS_MODE)
+    config.position.gps_mode = USERPREFS_CONFIG_GPS_MODE;
+#elif !HAS_GPS || defined(T_DECK) || defined(TLORA_T3S3_EPAPER)
     config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT;
 #elif !defined(GPS_RX_PIN)
     if (config.position.rx_gpio == 0)
@@ -532,6 +533,7 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
         moduleConfig.telemetry.device_update_interval = UINT32_MAX;
         moduleConfig.telemetry.environment_update_interval = UINT32_MAX;
         moduleConfig.telemetry.air_quality_interval = UINT32_MAX;
+        moduleConfig.telemetry.health_update_interval = UINT32_MAX;
     }
 }
 
@@ -542,6 +544,7 @@ void NodeDB::initModuleConfigIntervals()
     moduleConfig.telemetry.environment_update_interval = 0;
     moduleConfig.telemetry.air_quality_interval = 0;
     moduleConfig.telemetry.power_update_interval = 0;
+    moduleConfig.telemetry.health_update_interval = 0;
     moduleConfig.neighbor_info.update_interval = 0;
     moduleConfig.paxcounter.paxcounter_update_interval = 0;
 }
@@ -624,6 +627,8 @@ void NodeDB::installDefaultDeviceState()
     // devicestate.node_db_lite_count = 0;
     devicestate.version = DEVICESTATE_CUR_VER;
     devicestate.receive_queue_count = 0; // Not yet implemented FIXME
+    devicestate.has_rx_waypoint = false;
+    devicestate.has_rx_text_message = false;
 
     generatePacketId(); // FIXME - ugly way to init current_packet_id;
 

@@ -600,10 +600,12 @@ void setup()
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::TSL2591, meshtastic_TelemetrySensorType_TSL25911FN)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::OPT3001, meshtastic_TelemetrySensorType_OPT3001)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::MLX90632, meshtastic_TelemetrySensorType_MLX90632)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::MLX90614, meshtastic_TelemetrySensorType_MLX90614)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::SHT4X, meshtastic_TelemetrySensorType_SHT4X)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::AHT10, meshtastic_TelemetrySensorType_AHT10)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::DFROBOT_LARK, meshtastic_TelemetrySensorType_DFROBOT_LARK)
     SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::ICM20948, meshtastic_TelemetrySensorType_ICM20948)
+    SCANNER_TO_SENSORS_MAP(ScanI2C::DeviceType::MAX30102, meshtastic_TelemetrySensorType_MAX30102)
 
     i2cScanner.reset();
 #endif
@@ -738,6 +740,7 @@ void setup()
             setenv("TZ", "GMT0", 1);
         } else {
             setenv("TZ", (const char *)slipstreamTZString, 1);
+            strcpy(config.device.tzdef, (const char *)slipstreamTZString);
         }
     }
     tzset();
