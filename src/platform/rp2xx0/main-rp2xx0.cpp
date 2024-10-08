@@ -2,9 +2,9 @@
 #include "hardware/xosc.h"
 #include <hardware/clocks.h>
 #include <hardware/pll.h>
+#include <pico/sleep.h>
 #include <pico/stdlib.h>
 #include <pico/unique_id.h>
-#include <pico/sleep.h>
 
 void setBluetoothEnable(bool enable)
 {
@@ -13,11 +13,13 @@ void setBluetoothEnable(bool enable)
 
 static bool awake;
 
-static void sleep_callback(void) {
+static void sleep_callback(void)
+{
     awake = true;
 }
 
-void epoch_to_datetime(time_t epoch, datetime_t *dt) {
+void epoch_to_datetime(time_t epoch, datetime_t *dt)
+{
     struct tm *tm_info;
 
     tm_info = gmtime(&epoch);
@@ -39,7 +41,7 @@ void debug_date(datetime_t t)
 void cpuDeepSleep(uint32_t msecs)
 {
 
-    time_t seconds = (time_t)(msecs/1000);
+    time_t seconds = (time_t)(msecs / 1000);
     datetime_t t_init, t_alarm;
 
     awake = false;
@@ -54,7 +56,7 @@ void cpuDeepSleep(uint32_t msecs)
     sleep_run_from_dormant_source(DORMANT_SOURCE_ROSC);
     sleep_goto_sleep_until(&t_alarm, &sleep_callback);
 
-       // Make sure we don't wake
+    // Make sure we don't wake
     while (!awake) {
         delay(1);
     }
