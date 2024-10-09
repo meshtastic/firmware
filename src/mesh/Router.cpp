@@ -613,7 +613,7 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
 
 #if !MESHTASTIC_EXCLUDE_MQTT
         // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the packet
-        if (decoded && moduleConfig.mqtt.enabled && !isFromUs(p) && mqtt)
+        if ((decoded || (p->channel == 0x00 && p->to != NODENUM_BROADCAST)) && moduleConfig.mqtt.enabled && !isFromUs(p) && mqtt)
             mqtt->onSend(*p_encrypted, *p, p->channel);
 #endif
     }
