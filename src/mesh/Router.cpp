@@ -636,19 +636,25 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 #endif
     // assert(radioConfig.has_preferences);
     if (is_in_repeated(config.lora.ignore_incoming, p->from)) {
-        LOG_DEBUG("Ignoring incoming message, 0x%x is in our ignore list\n", p->from);
+        LOG_DEBUG("Ignoring msg, 0x%x is in our ignore list\n", p->from);
+        packetPool.release(p);
+        return;
+    }
+
+    if (p->from == NODENUM_BROADCAST) {
+        LOG_DEBUG("Ignoring msg from broadcast address\n");
         packetPool.release(p);
         return;
     }
 
     if (config.lora.ignore_mqtt && p->via_mqtt) {
-        LOG_DEBUG("Message came in via MQTT from 0x%x\n", p->from);
+        LOG_DEBUG("Msg came in via MQTT from 0x%x\n", p->from);
         packetPool.release(p);
         return;
     }
 
     if (shouldFilterReceived(p)) {
-        LOG_DEBUG("Incoming message was filtered from 0x%x\n", p->from);
+        LOG_DEBUG("Incoming msg was filtered from 0x%x\n", p->from);
         packetPool.release(p);
         return;
     }
