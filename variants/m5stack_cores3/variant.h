@@ -1,3 +1,6 @@
+#define I2C_SDA 12
+#define I2C_SCL 11
+
 #undef LORA_SCK
 #undef LORA_MISO
 #undef LORA_MOSI
