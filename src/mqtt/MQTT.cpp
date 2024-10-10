@@ -537,7 +537,7 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
         return; // no channels have an uplink enabled
     auto &ch = channels.getByIndex(chIndex);
 
-    // mp_decoded will not be decoded when it's PKI encrypted
+    // mp_decoded will not be decoded when it's PKI encrypted and not directed to us
     if (mp_decoded.which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         // check for the lowest bit of the data bitfield set false, and the use of one of the default keys.
         if (!isFromUs(&mp_decoded) && strcmp(moduleConfig.mqtt.address, "127.0.0.1") != 0 && mp_decoded.decoded.has_bitfield &&
