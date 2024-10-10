@@ -62,15 +62,15 @@ bool OSThread::shouldRun(unsigned long time)
     bool r = Thread::shouldRun(time);
 
     if (showRun && r) {
-        LOG_DEBUG("Thread %s: run\n", ThreadName.c_str());
+        LOG_DEBUG("Thread %s: run", ThreadName.c_str());
     }
 
     if (showWaiting && enabled && !r) {
-        LOG_DEBUG("Thread %s: wait %lu\n", ThreadName.c_str(), interval);
+        LOG_DEBUG("Thread %s: wait %lu", ThreadName.c_str(), interval);
     }
 
     if (showDisabled && !enabled) {
-        LOG_DEBUG("Thread %s: disabled\n", ThreadName.c_str());
+        LOG_DEBUG("Thread %s: disabled", ThreadName.c_str());
     }
 
     return r;
@@ -86,9 +86,9 @@ void OSThread::run()
 #ifdef DEBUG_HEAP
     auto newHeap = memGet.getFreeHeap();
     if (newHeap < heap)
-        LOG_DEBUG("------ Thread %s leaked heap %d -> %d (%d) ------\n", ThreadName.c_str(), heap, newHeap, newHeap - heap);
+        LOG_DEBUG("------ Thread %s leaked heap %d -> %d (%d) ------", ThreadName.c_str(), heap, newHeap, newHeap - heap);
     if (heap < newHeap)
-        LOG_DEBUG("++++++ Thread %s freed heap %d -> %d (%d) ++++++\n", ThreadName.c_str(), heap, newHeap, newHeap - heap);
+        LOG_DEBUG("++++++ Thread %s freed heap %d -> %d (%d) ++++++", ThreadName.c_str(), heap, newHeap, newHeap - heap);
 #endif
 
     runned();
