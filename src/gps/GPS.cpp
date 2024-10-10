@@ -1212,19 +1212,19 @@ GnssModel_t GPS::probe(int serialSpeed)
             }
         }
         if (strncmp(info.hwVersion, "00040007", 8) == 0) {
-            LOG_INFO(DETECTED_MESSAGE, "U-blox 6", GNSS_MODEL_UBLOX6);
+            LOG_INFO(DETECTED_MESSAGE, "U-blox 6", "6");
             return GNSS_MODEL_UBLOX6;
         } else if (strncmp(info.hwVersion, "00070000", 8) == 0) {
-            LOG_INFO(DETECTED_MESSAGE, "U-blox 7", GNSS_MODEL_UBLOX7);
+            LOG_INFO(DETECTED_MESSAGE, "U-blox 7", "7");
             return GNSS_MODEL_UBLOX7;
         } else if (strncmp(info.hwVersion, "00080000", 8) == 0) {
-            LOG_INFO(DETECTED_MESSAGE, "U-blox 8", GNSS_MODEL_UBLOX8);
+            LOG_INFO(DETECTED_MESSAGE, "U-blox 8", "8");
             return GNSS_MODEL_UBLOX8;
         } else if (strncmp(info.hwVersion, "00190000", 8) == 0) {
-            LOG_INFO(DETECTED_MESSAGE, "U-blox 9", GNSS_MODEL_UBLOX9);
+            LOG_INFO(DETECTED_MESSAGE, "U-blox 9", "9");
             return GNSS_MODEL_UBLOX9;
         } else if (strncmp(info.hwVersion, "000A0000", 8) == 0) {
-            LOG_INFO(DETECTED_MESSAGE, "U-blox 10", GNSS_MODEL_UBLOX10);
+            LOG_INFO(DETECTED_MESSAGE, "U-blox 10", "9");
             return GNSS_MODEL_UBLOX10;
         }
     }
