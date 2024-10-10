@@ -297,17 +297,24 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
             }
             va_end(arg);
         }
-        if (settingsMap[logoutputlevel] < level_trace && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_TRACE) == 0)
+        if (settingsMap[logoutputlevel] < level_trace && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_TRACE) == 0) {
+            delete[] newFormat;
             return;
+        }
     }
-    if (settingsMap[logoutputlevel] < level_debug && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0)
+    if (settingsMap[logoutputlevel] < level_debug && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0) {
+        delete[] newFormat;
         return;
-    else if (settingsMap[logoutputlevel] < level_info && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_INFO) == 0)
+    } else if (settingsMap[logoutputlevel] < level_info && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_INFO) == 0) {
+        delete[] newFormat;
         return;
-    else if (settingsMap[logoutputlevel] < level_warn && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_WARN) == 0)
+    } else if (settingsMap[logoutputlevel] < level_warn && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_WARN) == 0) {
+        delete[] newFormat;
         return;
+    }
 #endif
     if (moduleConfig.serial.override_console_serial_port && strcmp(logLevel, MESHTASTIC_LOG_LEVEL_DEBUG) == 0) {
+        delete[] newFormat;
         return;
     }
 
