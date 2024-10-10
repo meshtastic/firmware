@@ -1606,7 +1606,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
 #endif
 
 #if defined(ST7789_CS) &&                                                                                                        \
-    !defined(M5STACK_CORE) // set display brightness when turning on screens. Just moved function from TFTDisplay to here.
+    !defined(M5STACK_COREBASIC) // set display brightness when turning on screens. Just moved function from TFTDisplay to here.
             static_cast<TFTDisplay *>(dispdev)->setDisplayBrightness(brightness);
 #endif
 
