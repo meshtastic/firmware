@@ -849,7 +849,7 @@ void GPS::setPowerUBLOX(bool on, uint32_t sleepMs)
         }
 
         // Determine hardware version
-        if (gnssModel == GNSS_MODEL_UBLOX10) {
+        if (gnssModel != GNSS_MODEL_UBLOX10) {
             // Encode the sleep time in millis into the packet
             for (int i = 0; i < 4; i++)
                 gps->_message_PMREQ[0 + i] = sleepMs >> (i * 8);
