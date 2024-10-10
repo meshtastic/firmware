@@ -102,8 +102,8 @@
 #define HW_VENDOR meshtastic_HardwareModel_PRIVATE_HW
 #elif defined(NANO_G1)
 #define HW_VENDOR meshtastic_HardwareModel_NANO_G1
-#elif defined(M5STACK_CORE)
-#define HW_VENDOR meshtastic_HardwareModel_M5STACK_CORE
+#elif defined(M5STACK_COREBASIC)
+#define HW_VENDOR meshtastic_HardwareModel_M5STACK_COREBASIC
 #elif defined(STATION_G1)
 #define HW_VENDOR meshtastic_HardwareModel_STATION_G1
 #elif defined(DR_DEV)
