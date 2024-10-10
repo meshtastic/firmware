@@ -333,7 +333,8 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
         rawSize > MESHTASTIC_PKC_OVERHEAD) {
         LOG_DEBUG("Attempting PKI decryption\n");
 
-        if (crypto->decryptCurve25519(p->from, p->id, rawSize, ScratchEncrypted, bytes)) {
+        if (crypto->decryptCurve25519(p->from, nodeDB->getMeshNode(p->from)->user.public_key, p->id, rawSize, ScratchEncrypted,
+                                      bytes)) {
             LOG_INFO("PKI Decryption worked!\n");
             memset(&p->decoded, 0, sizeof(p->decoded));
             rawSize -= MESHTASTIC_PKC_OVERHEAD;
@@ -507,7 +508,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                          *node->user.public_key.bytes);
                 return meshtastic_Routing_Error_PKI_FAILED;
             }
-            crypto->encryptCurve25519(p->to, getFrom(p), p->id, numbytes, bytes, ScratchEncrypted);
+            crypto->encryptCurve25519(p->to, getFrom(p), node->user.public_key, p->id, numbytes, bytes, ScratchEncrypted);
             numbytes += MESHTASTIC_PKC_OVERHEAD;
             memcpy(p->encrypted.bytes, ScratchEncrypted, numbytes);
             p->channel = 0;
