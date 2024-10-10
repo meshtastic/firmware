@@ -333,6 +333,7 @@ void RedirectablePrint::log(const char *logLevel, const char *format, ...)
 #endif
     }
 
+    delete[] newFormat;
     return;
 }
 
