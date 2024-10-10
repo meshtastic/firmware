@@ -1224,7 +1224,7 @@ GnssModel_t GPS::probe(int serialSpeed)
             LOG_INFO(DETECTED_MESSAGE, "U-blox 9", "9");
             return GNSS_MODEL_UBLOX9;
         } else if (strncmp(info.hwVersion, "000A0000", 8) == 0) {
-            LOG_INFO(DETECTED_MESSAGE, "U-blox 10", "9");
+            LOG_INFO(DETECTED_MESSAGE, "U-blox 10", "10");
             return GNSS_MODEL_UBLOX10;
         }
     }
