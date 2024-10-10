@@ -1206,7 +1206,8 @@ void recordCriticalError(meshtastic_CriticalErrorCode code, uint32_t address, co
 {
     // Print error to screen and serial port
     String lcd = String("Critical error ") + code + "!\n";
-    screen->print(lcd.c_str());
+    if (screen)
+        screen->print(lcd.c_str());
     if (filename) {
         LOG_ERROR("NOTE! Recording critical error %d at %s:%lu\n", code, filename, address);
     } else {
