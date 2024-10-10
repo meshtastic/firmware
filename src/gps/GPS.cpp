@@ -1228,7 +1228,7 @@ GnssModel_t GPS::probe(int serialSpeed)
             return GNSS_MODEL_UBLOX10;
         }
     }
-    LOG_WARN("Failed to find GNSS Module (baudrate %d)\n", serialSpeed);
+    LOG_WARN("Failed to find GNSS Module (baudrate %d)", serialSpeed);
     return GNSS_MODEL_UNKNOWN;
 }
 
