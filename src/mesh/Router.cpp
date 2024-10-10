@@ -613,8 +613,12 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
         MeshModule::callModules(*p, src);
 
 #if !MESHTASTIC_EXCLUDE_MQTT
+        // Mark as pki_encrypted if it is not yet decoded, hash matches and it's a DM not to us (because we would be able to
+        // decrypt it)
+        if (!decoded && p->channel == 0x00 && p->to != NODENUM_BROADCAST && !isToUs(p))
+            p_encrypted->pki_encrypted = true;
         // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the packet
-        if ((decoded || (p->channel == 0x00 && p->to != NODENUM_BROADCAST)) && moduleConfig.mqtt.enabled && !isFromUs(p) && mqtt)
+        if ((decoded || p_encrypted->pki_encrypted) && moduleConfig.mqtt.enabled && !isFromUs(p) && mqtt)
             mqtt->onSend(*p_encrypted, *p, p->channel);
 #endif
     }
