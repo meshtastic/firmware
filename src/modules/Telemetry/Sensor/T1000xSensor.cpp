@@ -40,7 +40,7 @@ T1000xSensor::T1000xSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SE
 
 int32_t T1000xSensor::runOnce()
 {
-    LOG_INFO("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }

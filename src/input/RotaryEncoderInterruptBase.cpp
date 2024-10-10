@@ -28,7 +28,7 @@ void RotaryEncoderInterruptBase::init(
 
     this->rotaryLevelA = digitalRead(this->_pinA);
     this->rotaryLevelB = digitalRead(this->_pinB);
-    LOG_INFO("Rotary initialized (%d, %d, %d)\n", this->_pinA, this->_pinB, pinPress);
+    LOG_INFO("Rotary initialized (%d, %d, %d)", this->_pinA, this->_pinB, pinPress);
 }
 
 int32_t RotaryEncoderInterruptBase::runOnce()
@@ -38,13 +38,13 @@ int32_t RotaryEncoderInterruptBase::runOnce()
     e.source = this->_originName;
 
     if (this->action == ROTARY_ACTION_PRESSED) {
-        LOG_DEBUG("Rotary event Press\n");
+        LOG_DEBUG("Rotary event Press");
         e.inputEvent = this->_eventPressed;
     } else if (this->action == ROTARY_ACTION_CW) {
-        LOG_DEBUG("Rotary event CW\n");
+        LOG_DEBUG("Rotary event CW");
         e.inputEvent = this->_eventCw;
     } else if (this->action == ROTARY_ACTION_CCW) {
-        LOG_DEBUG("Rotary event CCW\n");
+        LOG_DEBUG("Rotary event CCW");
         e.inputEvent = this->_eventCcw;
     }
 

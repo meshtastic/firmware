@@ -11,7 +11,7 @@ void CardKbI2cImpl::init()
 {
 #if !MESHTASTIC_EXCLUDE_I2C && !defined(ARCH_PORTDUINO)
     if (cardkb_found.address == 0x00) {
-        LOG_DEBUG("Rescanning for I2C keyboard\n");
+        LOG_DEBUG("Rescanning for I2C keyboard");
         uint8_t i2caddr_scan[] = {CARDKB_ADDR, TDECK_KB_ADDR, BBQ10_KB_ADDR};
         uint8_t i2caddr_asize = 3;
         auto i2cScanner = std::unique_ptr<ScanI2CTwoWire>(new ScanI2CTwoWire());
@@ -41,7 +41,7 @@ void CardKbI2cImpl::init()
                 break;
             default:
                 // use this as default since it's also just zero
-                LOG_WARN("kb_info.type is unknown(0x%02x), setting kb_model=0x00\n", kb_info.type);
+                LOG_WARN("kb_info.type is unknown(0x%02x), setting kb_model=0x00", kb_info.type);
                 kb_model = 0x00;
             }
         }

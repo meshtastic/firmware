@@ -15,9 +15,6 @@ class RedirectablePrint : public Print
 {
     Print *dest;
 
-    /// Used to allow multiple logDebug messages to appear on a single log line
-    bool isContinuationMessage = false;
-
 #ifdef HAS_FREE_RTOS
     SemaphoreHandle_t inDebugPrint = nullptr;
     StaticSemaphore_t _MutexStorageSpace;

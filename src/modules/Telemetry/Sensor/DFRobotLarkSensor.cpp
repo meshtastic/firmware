@@ -13,7 +13,7 @@ DFRobotLarkSensor::DFRobotLarkSensor() : TelemetrySensor(meshtastic_TelemetrySen
 
 int32_t DFRobotLarkSensor::runOnce()
 {
-    LOG_INFO("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
@@ -22,10 +22,10 @@ int32_t DFRobotLarkSensor::runOnce()
 
     if (lark.begin() == 0) // DFRobotLarkSensor init
     {
-        LOG_DEBUG("DFRobotLarkSensor Init Succeed\n");
+        LOG_DEBUG("DFRobotLarkSensor Init Succeed");
         status = true;
     } else {
-        LOG_ERROR("DFRobotLarkSensor Init Failed\n");
+        LOG_ERROR("DFRobotLarkSensor Init Failed");
         status = false;
     }
     return initI2CSensor();
@@ -47,11 +47,11 @@ bool DFRobotLarkSensor::getMetrics(meshtastic_Telemetry *measurement)
     measurement->variant.environment_metrics.wind_direction = GeoCoord::bearingToDegrees(lark.getValue("Dir").c_str());
     measurement->variant.environment_metrics.barometric_pressure = lark.getValue("Pressure").toFloat();
 
-    LOG_INFO("Temperature: %f\n", measurement->variant.environment_metrics.temperature);
-    LOG_INFO("Humidity: %f\n", measurement->variant.environment_metrics.relative_humidity);
-    LOG_INFO("Wind Speed: %f\n", measurement->variant.environment_metrics.wind_speed);
-    LOG_INFO("Wind Direction: %d\n", measurement->variant.environment_metrics.wind_direction);
-    LOG_INFO("Barometric Pressure: %f\n", measurement->variant.environment_metrics.barometric_pressure);
+    LOG_INFO("Temperature: %f", measurement->variant.environment_metrics.temperature);
+    LOG_INFO("Humidity: %f", measurement->variant.environment_metrics.relative_humidity);
+    LOG_INFO("Wind Speed: %f", measurement->variant.environment_metrics.wind_speed);
+    LOG_INFO("Wind Direction: %d", measurement->variant.environment_metrics.wind_direction);
+    LOG_INFO("Barometric Pressure: %f", measurement->variant.environment_metrics.barometric_pressure);
 
     return true;
 }

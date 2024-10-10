@@ -55,7 +55,7 @@ meshtastic_MeshPacket *MeshModule::allocAckNak(meshtastic_Routing_Error err, Nod
     p->decoded.request_id = idFrom;
     p->channel = chIndex;
     if (err != meshtastic_Routing_Error_NONE)
-        LOG_WARN("Alloc an err=%d,to=0x%x,idFrom=0x%x,id=0x%x\n", err, to, idFrom, p->id);
+        LOG_WARN("Alloc an err=%d,to=0x%x,idFrom=0x%x,id=0x%x", err, to, idFrom, p->id);
 
     return p;
 }
@@ -74,7 +74,7 @@ meshtastic_MeshPacket *MeshModule::allocErrorResponse(meshtastic_Routing_Error e
 
 void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
 {
-    // LOG_DEBUG("In call modules\n");
+    // LOG_DEBUG("In call modules");
     bool moduleFound = false;
 
     // We now allow **encrypted** packets to pass through the modules
@@ -104,7 +104,7 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
         assert(!pi.myReply); // If it is !null it means we have a bug, because it should have been sent the previous time
 
         if (wantsPacket) {
-            LOG_DEBUG("Module '%s' wantsPacket=%d\n", pi.name, wantsPacket);
+            LOG_DEBUG("Module '%s' wantsPacket=%d", pi.name, wantsPacket);
 
             moduleFound = true;
 
@@ -144,20 +144,20 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
                 if (isDecoded && mp.decoded.want_response && toUs && (!isFromUs(&mp) || isToUs(&mp)) && !currentReply) {
                     pi.sendResponse(mp);
                     ignoreRequest = ignoreRequest || pi.ignoreRequest; // If at least one module asks it, we may ignore a request
-                    LOG_INFO("Asked module '%s' to send a response\n", pi.name);
+                    LOG_INFO("Asked module '%s' to send a response", pi.name);
                 } else {
-                    LOG_DEBUG("Module '%s' considered\n", pi.name);
+                    LOG_DEBUG("Module '%s' considered", pi.name);
                 }
 
                 // If the requester didn't ask for a response we might need to discard unused replies to prevent memory leaks
                 if (pi.myReply) {
-                    LOG_DEBUG("Discarding an unneeded response\n");
+                    LOG_DEBUG("Discarding an unneeded response");
                     packetPool.release(pi.myReply);
                     pi.myReply = NULL;
                 }
 
                 if (handled == ProcessMessage::STOP) {
-                    LOG_DEBUG("Module '%s' handled and skipped other processing\n", pi.name);
+                    LOG_DEBUG("Module '%s' handled and skipped other processing", pi.name);
                     break;
                 }
             }
@@ -176,7 +176,7 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
             // no response reply
 
             // No one wanted to reply to this request, tell the requster that happened
-            LOG_DEBUG("No one responded, send a nak\n");
+            LOG_DEBUG("No one responded, send a nak");
 
             // SECURITY NOTE! I considered sending back a different error code if we didn't find the psk (i.e. !isDecoded)
             // but opted NOT TO.  Because it is not a good idea to let remote nodes 'probe' to find out which PSKs were "good" vs
@@ -187,8 +187,7 @@ void MeshModule::callModules(meshtastic_MeshPacket &mp, RxSource src)
     }
 
     if (!moduleFound && isDecoded) {
-        LOG_DEBUG("No modules interested in portnum=%d, src=%s\n", mp.decoded.portnum,
-                  (src == RX_SRC_LOCAL) ? "LOCAL" : "REMOTE");
+        LOG_DEBUG("No modules interested in portnum=%d, src=%s", mp.decoded.portnum, (src == RX_SRC_LOCAL) ? "LOCAL" : "REMOTE");
     }
 }
 
@@ -211,7 +210,7 @@ void MeshModule::sendResponse(const meshtastic_MeshPacket &req)
         currentReply = r;
     } else {
         // Ignore - this is now expected behavior for routing module (because it ignores some replies)
-        // LOG_WARN("Client requested response but this module did not provide\n");
+        // LOG_WARN("Client requested response but this module did not provide");
     }
 }
 
@@ -240,7 +239,7 @@ std::vector<MeshModule *> MeshModule::GetMeshModulesWithUIFrames()
         for (auto i = modules->begin(); i != modules->end(); ++i) {
             auto &pi = **i;
             if (pi.wantUIFrame()) {
-                LOG_DEBUG("%s wants a UI Frame\n", pi.name);
+                LOG_DEBUG("%s wants a UI Frame", pi.name);
                 modulesWithUIFrames.push_back(&pi);
             }
         }
@@ -255,7 +254,7 @@ void MeshModule::observeUIEvents(Observer<const UIFrameEvent *> *observer)
             auto &pi = **i;
             Observable<const UIFrameEvent *> *observable = pi.getUIFrameObservable();
             if (observable != NULL) {
-                LOG_DEBUG("%s wants a UI Frame\n", pi.name);
+                LOG_DEBUG("%s wants a UI Frame", pi.name);
                 observer->observe(observable);
             }
         }
@@ -273,7 +272,7 @@ AdminMessageHandleResult MeshModule::handleAdminMessageForAllModules(const mesht
             AdminMessageHandleResult h = pi.handleAdminMessageForModule(mp, request, response);
             if (h == AdminMessageHandleResult::HANDLED_WITH_RESPONSE) {
                 // In case we have a response it always has priority.
-                LOG_DEBUG("Reply prepared by module '%s' of variant: %d\n", pi.name, response->which_payload_variant);
+                LOG_DEBUG("Reply prepared by module '%s' of variant: %d", pi.name, response->which_payload_variant);
                 handled = h;
             } else if ((handled != AdminMessageHandleResult::HANDLED_WITH_RESPONSE) && (h == AdminMessageHandleResult::HANDLED)) {
                 // In case the message is handled it should be populated, but will not overwrite

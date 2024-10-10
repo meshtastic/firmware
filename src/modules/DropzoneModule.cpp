@@ -34,13 +34,13 @@ ProcessMessage DropzoneModule::handleReceived(const meshtastic_MeshPacket &mp)
     auto incomingMessage = reinterpret_cast<const char *>(p.payload.bytes);
     sprintf(matchCompare, "%s conditions", owner.short_name);
     if (strncasecmp(incomingMessage, matchCompare, strlen(matchCompare)) == 0) {
-        LOG_DEBUG("Received dropzone conditions request\n");
+        LOG_DEBUG("Received dropzone conditions request");
         startSendConditions = millis();
     }
 
     sprintf(matchCompare, "%s conditions", owner.long_name);
     if (strncasecmp(incomingMessage, matchCompare, strlen(matchCompare)) == 0) {
-        LOG_DEBUG("Received dropzone conditions request\n");
+        LOG_DEBUG("Received dropzone conditions request");
         startSendConditions = millis();
     }
     return ProcessMessage::CONTINUE;
@@ -82,10 +82,10 @@ meshtastic_MeshPacket *DropzoneModule::sendConditions()
         sprintf(replyStr, "%s @ %02d:%02d:%02dz\nWind %.2f kts @ %d°\nBaro %.2f inHg %.2f°C", dropzoneStatus, hour, min, sec,
                 windSpeed, windDirection, baro, temp);
     } else {
-        LOG_ERROR("No sensor found\n");
+        LOG_ERROR("No sensor found");
         sprintf(replyStr, "%s @ %02d:%02d:%02d\nNo sensor found", dropzoneStatus, hour, min, sec);
     }
-    LOG_DEBUG("Conditions reply: %s\n", replyStr);
+    LOG_DEBUG("Conditions reply: %s", replyStr);
     reply->decoded.payload.size = strlen(replyStr); // You must specify how many bytes are in the reply
     memcpy(reply->decoded.payload.bytes, replyStr, reply->decoded.payload.size);
 

@@ -233,7 +233,7 @@ void ExpressLRSFiveWay::sendAdhocPing()
 // Contained as one method for easier remapping of buttons by user
 void ExpressLRSFiveWay::shutdown()
 {
-    LOG_INFO("Shutdown from long press\n");
+    LOG_INFO("Shutdown from long press");
     powerFSM.trigger(EVENT_PRESS);
     screen->startAlert("Shutting down...");
     // Don't set alerting = true. We don't want to auto-dismiss this alert.

@@ -34,7 +34,7 @@ void epoch_to_datetime(time_t epoch, datetime_t *dt)
 
 void debug_date(datetime_t t)
 {
-    LOG_DEBUG("%d %d %d %d %d %d %d\n", t.year, t.month, t.day, t.hour, t.min, t.sec, t.dotw);
+    LOG_DEBUG("%d %d %d %d %d %d %d", t.year, t.month, t.day, t.hour, t.min, t.sec, t.dotw);
     uart_default_tx_wait_blocking();
 }
 
@@ -103,15 +103,15 @@ void rp2040Setup()
     uint f_clk_adc = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_ADC);
     uint f_clk_rtc = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_RTC);
 
-    LOG_INFO("Clock speed:\n");
-    LOG_INFO("pll_sys  = %dkHz\n", f_pll_sys);
-    LOG_INFO("pll_usb  = %dkHz\n", f_pll_usb);
-    LOG_INFO("rosc     = %dkHz\n", f_rosc);
-    LOG_INFO("clk_sys  = %dkHz\n", f_clk_sys);
-    LOG_INFO("clk_peri = %dkHz\n", f_clk_peri);
-    LOG_INFO("clk_usb  = %dkHz\n", f_clk_usb);
-    LOG_INFO("clk_adc  = %dkHz\n", f_clk_adc);
-    LOG_INFO("clk_rtc  = %dkHz\n", f_clk_rtc);
+    LOG_INFO("Clock speed:");
+    LOG_INFO("pll_sys  = %dkHz", f_pll_sys);
+    LOG_INFO("pll_usb  = %dkHz", f_pll_usb);
+    LOG_INFO("rosc     = %dkHz", f_rosc);
+    LOG_INFO("clk_sys  = %dkHz", f_clk_sys);
+    LOG_INFO("clk_peri = %dkHz", f_clk_peri);
+    LOG_INFO("clk_usb  = %dkHz", f_clk_usb);
+    LOG_INFO("clk_adc  = %dkHz", f_clk_adc);
+    LOG_INFO("clk_rtc  = %dkHz", f_clk_rtc);
 #endif
 }
 

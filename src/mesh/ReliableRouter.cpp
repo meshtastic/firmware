@@ -53,14 +53,14 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
         auto key = GlobalPacketId(getFrom(p), p->id);
         auto old = findPendingPacket(key);
         if (old) {
-            LOG_DEBUG("generating implicit ack\n");
+            LOG_DEBUG("generating implicit ack");
             // NOTE: we do NOT check p->wantAck here because p is the INCOMING rebroadcast and that packet is not expected to be
             // marked as wantAck
             sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, old->packet->channel);
 
             stopRetransmission(key);
         } else {
-            LOG_DEBUG("didn't find pending packet\n");
+            LOG_DEBUG("didn't find pending packet");
         }
     }
 
@@ -79,7 +79,7 @@ bool ReliableRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
      * flooding this ACK back to the original sender already adds redundancy. */
     bool isRepeated = p->hop_start == 0 ? (p->hop_limit == HOP_RELIABLE) : (p->hop_start == p->hop_limit);
     if (wasSeenRecently(p, false) && isRepeated && !MeshModule::currentReply && !isToUs(p)) {
-        LOG_DEBUG("Resending implicit ack for a repeated floodmsg\n");
+        LOG_DEBUG("Resending implicit ack for a repeated floodmsg");
         meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p);
         tosend->hop_limit--; // bump down the hop count
         Router::send(tosend);
@@ -105,12 +105,12 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
     if (isToUs(p)) { // ignore ack/nak/want_ack packets that are not address to us (we only handle 0 hop reliability)
         if (p->want_ack) {
             if (MeshModule::currentReply) {
-                LOG_DEBUG("Another module replied to this message, no need for 2nd ack\n");
+                LOG_DEBUG("Another module replied to this message, no need for 2nd ack");
             } else if (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
                 sendAckNak(meshtastic_Routing_Error_NONE, getFrom(p), p->id, p->channel, p->hop_start, p->hop_limit);
             } else if (p->which_payload_variant == meshtastic_MeshPacket_encrypted_tag && p->channel == 0 &&
                        (nodeDB->getMeshNode(p->from) == nullptr || nodeDB->getMeshNode(p->from)->user.public_key.size == 0)) {
-                LOG_INFO("PKI packet from unknown node, send PKI_UNKNOWN_PUBKEY\n");
+                LOG_INFO("PKI packet from unknown node, send PKI_UNKNOWN_PUBKEY");
                 sendAckNak(meshtastic_Routing_Error_PKI_UNKNOWN_PUBKEY, getFrom(p), p->id, channels.getPrimaryIndex(),
                            p->hop_start, p->hop_limit);
             } else {
@@ -134,7 +134,7 @@ void ReliableRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
 
         // We intentionally don't check wasSeenRecently, because it is harmless to delete non existent retransmission records
         if (ackId || nakId) {
-            LOG_DEBUG("Received a %s for 0x%x, stopping retransmissions\n", ackId ? "ACK" : "NAK", ackId);
+            LOG_DEBUG("Received a %s for 0x%x, stopping retransmissions", ackId ? "ACK" : "NAK", ackId);
             if (ackId) {
                 stopRetransmission(p->to, ackId);
             } else {
@@ -227,15 +227,15 @@ int32_t ReliableRouter::doRetransmissions()
         // FIXME, handle 51 day rolloever here!!!
         if (p.nextTxMsec <= now) {
             if (p.numRetransmissions == 0) {
-                LOG_DEBUG("Reliable send failed, returning a nak for fr=0x%x,to=0x%x,id=0x%x\n", p.packet->from, p.packet->to,
+                LOG_DEBUG("Reliable send failed, returning a nak for fr=0x%x,to=0x%x,id=0x%x", p.packet->from, p.packet->to,
                           p.packet->id);
                 sendAckNak(meshtastic_Routing_Error_MAX_RETRANSMIT, getFrom(p.packet), p.packet->id, p.packet->channel);
                 // Note: we don't stop retransmission here, instead the Nak packet gets processed in sniffReceived
                 stopRetransmission(it->first);
                 stillValid = false; // just deleted it
             } else {
-                LOG_DEBUG("Sending reliable retransmission fr=0x%x,to=0x%x,id=0x%x, tries left=%d\n", p.packet->from,
-                          p.packet->to, p.packet->id, p.numRetransmissions);
+                LOG_DEBUG("Sending reliable retransmission fr=0x%x,to=0x%x,id=0x%x, tries left=%d", p.packet->from, p.packet->to,
+                          p.packet->id, p.numRetransmissions);
 
                 // Note: we call the superclass version because we don't want to have our version of send() add a new
                 // retransmission record

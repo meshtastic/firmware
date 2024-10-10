@@ -74,15 +74,15 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     // Could tighten this up further by tracking the last public_key we went an AdminMessage request to
     // and only allowing responses from that remote.
     if (messageIsResponse(r)) {
-        LOG_DEBUG("Allowing admin response message\n");
+        LOG_DEBUG("Allowing admin response message");
     } else if (mp.from == 0) {
         if (config.security.is_managed) {
-            LOG_INFO("Ignoring local admin payload because is_managed.\n");
+            LOG_INFO("Ignoring local admin payload because is_managed.");
             return handled;
         }
     } else if (strcasecmp(ch->settings.name, Channels::adminChannel) == 0) {
         if (!config.security.admin_channel_enabled) {
-            LOG_INFO("Ignoring admin channel, as legacy admin is disabled.\n");
+            LOG_INFO("Ignoring admin channel, as legacy admin is disabled.");
             myReply = allocErrorResponse(meshtastic_Routing_Error_NOT_AUTHORIZED, &mp);
             return handled;
         }
@@ -93,25 +93,25 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
              memcmp(mp.public_key.bytes, config.security.admin_key[1].bytes, 32) == 0) ||
             (config.security.admin_key[2].size == 32 &&
              memcmp(mp.public_key.bytes, config.security.admin_key[2].bytes, 32) == 0)) {
-            LOG_INFO("PKC admin payload with authorized sender key.\n");
+            LOG_INFO("PKC admin payload with authorized sender key.");
         } else {
             myReply = allocErrorResponse(meshtastic_Routing_Error_ADMIN_PUBLIC_KEY_UNAUTHORIZED, &mp);
-            LOG_INFO("Received PKC admin payload, but the sender public key does not match the admin authorized key!\n");
+            LOG_INFO("Received PKC admin payload, but the sender public key does not match the admin authorized key!");
             return handled;
         }
     } else {
-        LOG_INFO("Ignoring unauthorized admin payload %i\n", r->which_payload_variant);
+        LOG_INFO("Ignoring unauthorized admin payload %i", r->which_payload_variant);
         myReply = allocErrorResponse(meshtastic_Routing_Error_NOT_AUTHORIZED, &mp);
         return handled;
     }
 
-    LOG_INFO("Handling admin payload %i\n", r->which_payload_variant);
+    LOG_INFO("Handling admin payload %i", r->which_payload_variant);
 
     // all of the get and set messages, including those for other modules, flow through here first.
     // any message that changes state, we want to check the passkey for
     if (mp.from != 0 && !messageIsRequest(r) && !messageIsResponse(r)) {
         if (!checkPassKey(r)) {
-            LOG_WARN("Admin message without session_key!\n");
+            LOG_WARN("Admin message without session_key!");
             myReply = allocErrorResponse(meshtastic_Routing_Error_ADMIN_BAD_SESSION_KEY, &mp);
             return handled;
         }
@@ -122,23 +122,23 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
      * Getters
      */
     case meshtastic_AdminMessage_get_owner_request_tag:
-        LOG_INFO("Client is getting owner\n");
+        LOG_INFO("Client is getting owner");
         handleGetOwner(mp);
         break;
 
     case meshtastic_AdminMessage_get_config_request_tag:
-        LOG_INFO("Client is getting config\n");
+        LOG_INFO("Client is getting config");
         handleGetConfig(mp, r->get_config_request);
         break;
 
     case meshtastic_AdminMessage_get_module_config_request_tag:
-        LOG_INFO("Client is getting module config\n");
+        LOG_INFO("Client is getting module config");
         handleGetModuleConfig(mp, r->get_module_config_request);
         break;
 
     case meshtastic_AdminMessage_get_channel_request_tag: {
         uint32_t i = r->get_channel_request - 1;
-        LOG_INFO("Client is getting channel %u\n", i);
+        LOG_INFO("Client is getting channel %u", i);
         if (i >= MAX_NUM_CHANNELS)
             myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
         else
@@ -150,29 +150,29 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
      * Setters
      */
     case meshtastic_AdminMessage_set_owner_tag:
-        LOG_INFO("Client is setting owner\n");
+        LOG_INFO("Client is setting owner");
         handleSetOwner(r->set_owner);
         break;
 
     case meshtastic_AdminMessage_set_config_tag:
-        LOG_INFO("Client is setting the config\n");
+        LOG_INFO("Client is setting the config");
         handleSetConfig(r->set_config);
         break;
 
     case meshtastic_AdminMessage_set_module_config_tag:
-        LOG_INFO("Client is setting the module config\n");
+        LOG_INFO("Client is setting the module config");
         handleSetModuleConfig(r->set_module_config);
         break;
 
     case meshtastic_AdminMessage_set_channel_tag:
-        LOG_INFO("Client is setting channel %d\n", r->set_channel.index);
+        LOG_INFO("Client is setting channel %d", r->set_channel.index);
         if (r->set_channel.index < 0 || r->set_channel.index >= (int)MAX_NUM_CHANNELS)
             myReply = allocErrorResponse(meshtastic_Routing_Error_BAD_REQUEST, &mp);
         else
             handleSetChannel(r->set_channel);
         break;
     case meshtastic_AdminMessage_set_ham_mode_tag:
-        LOG_INFO("Client is setting ham mode\n");
+        LOG_INFO("Client is setting ham mode");
         handleSetHamMode(r->set_ham_mode);
         break;
 
@@ -187,15 +187,15 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         int32_t s = r->reboot_ota_seconds;
 #if defined(ARCH_ESP32) && !MESHTASTIC_EXCLUDE_BLUETOOTH
         if (BleOta::getOtaAppVersion().isEmpty()) {
-            LOG_INFO("No OTA firmware available, scheduling regular reboot in %d seconds\n", s);
+            LOG_INFO("No OTA firmware available, scheduling regular reboot in %d seconds", s);
             screen->startAlert("Rebooting...");
         } else {
             screen->startFirmwareUpdateScreen();
             BleOta::switchToOtaApp();
-            LOG_INFO("Rebooting to OTA in %d seconds\n", s);
+            LOG_INFO("Rebooting to OTA in %d seconds", s);
         }
 #else
-        LOG_INFO("Not on ESP32, scheduling regular reboot in %d seconds\n", s);
+        LOG_INFO("Not on ESP32, scheduling regular reboot in %d seconds", s);
         screen->startAlert("Rebooting...");
 #endif
         rebootAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
@@ -203,56 +203,56 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     }
     case meshtastic_AdminMessage_shutdown_seconds_tag: {
         int32_t s = r->shutdown_seconds;
-        LOG_INFO("Shutdown in %d seconds\n", s);
+        LOG_INFO("Shutdown in %d seconds", s);
         shutdownAtMsec = (s < 0) ? 0 : (millis() + s * 1000);
         break;
     }
     case meshtastic_AdminMessage_get_device_metadata_request_tag: {
-        LOG_INFO("Client is getting device metadata\n");
+        LOG_INFO("Client is getting device metadata");
         handleGetDeviceMetadata(mp);
         break;
     }
     case meshtastic_AdminMessage_factory_reset_config_tag: {
         disableBluetooth();
-        LOG_INFO("Initiating factory config reset\n");
+        LOG_INFO("Initiating factory config reset");
         nodeDB->factoryReset();
-        LOG_INFO("Factory config reset finished, rebooting soon.\n");
+        LOG_INFO("Factory config reset finished, rebooting soon.");
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
     case meshtastic_AdminMessage_factory_reset_device_tag: {
         disableBluetooth();
-        LOG_INFO("Initiating full factory reset\n");
+        LOG_INFO("Initiating full factory reset");
         nodeDB->factoryReset(true);
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
     case meshtastic_AdminMessage_nodedb_reset_tag: {
         disableBluetooth();
-        LOG_INFO("Initiating node-db reset\n");
+        LOG_INFO("Initiating node-db reset");
         nodeDB->resetNodes();
         reboot(DEFAULT_REBOOT_SECONDS);
         break;
     }
     case meshtastic_AdminMessage_begin_edit_settings_tag: {
-        LOG_INFO("Beginning transaction for editing settings\n");
+        LOG_INFO("Beginning transaction for editing settings");
         hasOpenEditTransaction = true;
         break;
     }
     case meshtastic_AdminMessage_commit_edit_settings_tag: {
         disableBluetooth();
-        LOG_INFO("Committing transaction for edited settings\n");
+        LOG_INFO("Committing transaction for edited settings");
         hasOpenEditTransaction = false;
         saveChanges(SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
         break;
     }
     case meshtastic_AdminMessage_get_device_connection_status_request_tag: {
-        LOG_INFO("Client is getting device connection status\n");
+        LOG_INFO("Client is getting device connection status");
         handleGetDeviceConnectionStatus(mp);
         break;
     }
     case meshtastic_AdminMessage_get_module_config_response_tag: {
-        LOG_INFO("Client is receiving a get_module_config response.\n");
+        LOG_INFO("Client is receiving a get_module_config response.");
         if (fromOthers && r->get_module_config_response.which_payload_variant ==
                               meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG) {
             handleGetModuleConfigResponse(mp, r);
@@ -260,13 +260,13 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_remove_by_nodenum_tag: {
-        LOG_INFO("Client is receiving a remove_nodenum command.\n");
+        LOG_INFO("Client is receiving a remove_nodenum command.");
         nodeDB->removeNodeByNum(r->remove_by_nodenum);
         this->notifyObservers(r); // Observed by screen
         break;
     }
     case meshtastic_AdminMessage_set_favorite_node_tag: {
-        LOG_INFO("Client is receiving a set_favorite_node command.\n");
+        LOG_INFO("Client is receiving a set_favorite_node command.");
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->set_favorite_node);
         if (node != NULL) {
             node->is_favorite = true;
@@ -275,7 +275,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_remove_favorite_node_tag: {
-        LOG_INFO("Client is receiving a remove_favorite_node command.\n");
+        LOG_INFO("Client is receiving a remove_favorite_node command.");
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(r->remove_favorite_node);
         if (node != NULL) {
             node->is_favorite = false;
@@ -284,7 +284,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_set_fixed_position_tag: {
-        LOG_INFO("Client is receiving a set_fixed_position command.\n");
+        LOG_INFO("Client is receiving a set_fixed_position command.");
         meshtastic_NodeInfoLite *node = nodeDB->getMeshNode(nodeDB->getNodeNum());
         node->has_position = true;
         node->position = TypeConversions::ConvertToPositionLite(r->set_fixed_position);
@@ -300,14 +300,14 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_remove_fixed_position_tag: {
-        LOG_INFO("Client is receiving a remove_fixed_position command.\n");
+        LOG_INFO("Client is receiving a remove_fixed_position command.");
         nodeDB->clearLocalPosition();
         config.position.fixed_position = false;
         saveChanges(SEGMENT_DEVICESTATE | SEGMENT_CONFIG, false);
         break;
     }
     case meshtastic_AdminMessage_set_time_only_tag: {
-        LOG_INFO("Client is receiving a set_time_only command.\n");
+        LOG_INFO("Client is receiving a set_time_only command.");
         struct timeval tv;
         tv.tv_sec = r->set_time_only;
         tv.tv_usec = 0;
@@ -316,26 +316,26 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_enter_dfu_mode_request_tag: {
-        LOG_INFO("Client is requesting to enter DFU mode.\n");
+        LOG_INFO("Client is requesting to enter DFU mode.");
 #if defined(ARCH_NRF52) || defined(ARCH_RP2040)
         enterDfuMode();
 #endif
         break;
     }
     case meshtastic_AdminMessage_delete_file_request_tag: {
-        LOG_DEBUG("Client is requesting to delete file: %s\n", r->delete_file_request);
+        LOG_DEBUG("Client is requesting to delete file: %s", r->delete_file_request);
 #ifdef FSCom
         if (FSCom.remove(r->delete_file_request)) {
-            LOG_DEBUG("Successfully deleted file\n");
+            LOG_DEBUG("Successfully deleted file");
         } else {
-            LOG_DEBUG("Failed to delete file\n");
+            LOG_DEBUG("Failed to delete file");
         }
 #endif
         break;
     }
 #ifdef ARCH_PORTDUINO
     case meshtastic_AdminMessage_exit_simulator_tag:
-        LOG_INFO("Exiting simulator\n");
+        LOG_INFO("Exiting simulator");
         _exit(0);
         break;
 #endif
@@ -348,10 +348,10 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
             setPassKey(&res);
             myReply = allocDataProtobuf(res);
         } else if (mp.decoded.want_response) {
-            LOG_DEBUG("We did not responded to a request that wanted a respond. req.variant=%d\n", r->which_payload_variant);
+            LOG_DEBUG("We did not responded to a request that wanted a respond. req.variant=%d", r->which_payload_variant);
         } else if (handleResult != AdminMessageHandleResult::HANDLED) {
             // Probably a message sent by us or sent to our local node.  FIXME, we should avoid scanning these messages
-            LOG_INFO("Ignoring nonrelevant admin %d\n", r->which_payload_variant);
+            LOG_INFO("Ignoring nonrelevant admin %d", r->which_payload_variant);
         }
         break;
     }
@@ -369,7 +369,7 @@ void AdminModule::handleGetModuleConfigResponse(const meshtastic_MeshPacket &mp,
     // Skip if it's disabled or no pins are exposed
     if (!r->get_module_config_response.payload_variant.remote_hardware.enabled ||
         r->get_module_config_response.payload_variant.remote_hardware.available_pins_count == 0) {
-        LOG_DEBUG("Remote hardware module disabled or no available_pins. Skipping...\n");
+        LOG_DEBUG("Remote hardware module disabled or no available_pins. Skipping...");
         return;
     }
     for (uint8_t i = 0; i < devicestate.node_remote_hardware_pins_count; i++) {
@@ -427,7 +427,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 
     switch (c.which_payload_variant) {
     case meshtastic_Config_device_tag:
-        LOG_INFO("Setting config: Device\n");
+        LOG_INFO("Setting config: Device");
         config.has_device = true;
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_ENVIRONMENTAL_SENSOR
         if (config.device.double_tap_as_button_press == false && c.payload_variant.device.double_tap_as_button_press == true &&
@@ -455,7 +455,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         if (existingRole != c.payload_variant.device.role)
             nodeDB->installRoleDefaults(c.payload_variant.device.role);
         if (config.device.node_info_broadcast_secs < min_node_info_broadcast_secs) {
-            LOG_DEBUG("Tried to set node_info_broadcast_secs too low, setting to %d\n", min_node_info_broadcast_secs);
+            LOG_DEBUG("Tried to set node_info_broadcast_secs too low, setting to %d", min_node_info_broadcast_secs);
             config.device.node_info_broadcast_secs = min_node_info_broadcast_secs;
         }
         // Router Client is deprecated; Set it to client
@@ -476,14 +476,14 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
 #endif
         break;
     case meshtastic_Config_position_tag:
-        LOG_INFO("Setting config: Position\n");
+        LOG_INFO("Setting config: Position");
         config.has_position = true;
         config.position = c.payload_variant.position;
         // Save nodedb as well in case we got a fixed position packet
         saveChanges(SEGMENT_DEVICESTATE, false);
         break;
     case meshtastic_Config_power_tag:
-        LOG_INFO("Setting config: Power\n");
+        LOG_INFO("Setting config: Power");
         config.has_power = true;
         // Really just the adc override is the only thing that can change without a reboot
         if (config.power.device_battery_ina_address == c.payload_variant.power.device_battery_ina_address &&
@@ -498,12 +498,12 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         config.power = c.payload_variant.power;
         break;
     case meshtastic_Config_network_tag:
-        LOG_INFO("Setting config: WiFi\n");
+        LOG_INFO("Setting config: WiFi");
         config.has_network = true;
         config.network = c.payload_variant.network;
         break;
     case meshtastic_Config_display_tag:
-        LOG_INFO("Setting config: Display\n");
+        LOG_INFO("Setting config: Display");
         config.has_display = true;
         if (config.display.screen_on_secs == c.payload_variant.display.screen_on_secs &&
             config.display.flip_screen == c.payload_variant.display.flip_screen &&
@@ -521,7 +521,7 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         config.display = c.payload_variant.display;
         break;
     case meshtastic_Config_lora_tag:
-        LOG_INFO("Setting config: LoRa\n");
+        LOG_INFO("Setting config: LoRa");
         config.has_lora = true;
         // If no lora radio parameters change, don't need to reboot
         if (config.lora.use_preset == c.payload_variant.lora.use_preset && config.lora.region == c.payload_variant.lora.region &&
@@ -560,12 +560,12 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
         }
         break;
     case meshtastic_Config_bluetooth_tag:
-        LOG_INFO("Setting config: Bluetooth\n");
+        LOG_INFO("Setting config: Bluetooth");
         config.has_bluetooth = true;
         config.bluetooth = c.payload_variant.bluetooth;
         break;
     case meshtastic_Config_security_tag:
-        LOG_INFO("Setting config: Security\n");
+        LOG_INFO("Setting config: Security");
         config.security = c.payload_variant.security;
 #if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN) && !(MESHTASTIC_EXCLUDE_PKI)
         // We check for a potentially valid private key, and a blank public key, and regen the public key if needed.
@@ -600,71 +600,71 @@ void AdminModule::handleSetModuleConfig(const meshtastic_ModuleConfig &c)
         disableBluetooth();
     switch (c.which_payload_variant) {
     case meshtastic_ModuleConfig_mqtt_tag:
-        LOG_INFO("Setting module config: MQTT\n");
+        LOG_INFO("Setting module config: MQTT");
         moduleConfig.has_mqtt = true;
         moduleConfig.mqtt = c.payload_variant.mqtt;
         break;
     case meshtastic_ModuleConfig_serial_tag:
-        LOG_INFO("Setting module config: Serial\n");
+        LOG_INFO("Setting module config: Serial");
         moduleConfig.has_serial = true;
         moduleConfig.serial = c.payload_variant.serial;
         break;
     case meshtastic_ModuleConfig_external_notification_tag:
-        LOG_INFO("Setting module config: External Notification\n");
+        LOG_INFO("Setting module config: External Notification");
         moduleConfig.has_external_notification = true;
         moduleConfig.external_notification = c.payload_variant.external_notification;
         break;
     case meshtastic_ModuleConfig_store_forward_tag:
-        LOG_INFO("Setting module config: Store & Forward\n");
+        LOG_INFO("Setting module config: Store & Forward");
         moduleConfig.has_store_forward = true;
         moduleConfig.store_forward = c.payload_variant.store_forward;
         break;
     case meshtastic_ModuleConfig_range_test_tag:
-        LOG_INFO("Setting module config: Range Test\n");
+        LOG_INFO("Setting module config: Range Test");
         moduleConfig.has_range_test = true;
         moduleConfig.range_test = c.payload_variant.range_test;
         break;
     case meshtastic_ModuleConfig_telemetry_tag:
-        LOG_INFO("Setting module config: Telemetry\n");
+        LOG_INFO("Setting module config: Telemetry");
         moduleConfig.has_telemetry = true;
         moduleConfig.telemetry = c.payload_variant.telemetry;
         break;
     case meshtastic_ModuleConfig_canned_message_tag:
-        LOG_INFO("Setting module config: Canned Message\n");
+        LOG_INFO("Setting module config: Canned Message");
         moduleConfig.has_canned_message = true;
         moduleConfig.canned_message = c.payload_variant.canned_message;
         break;
     case meshtastic_ModuleConfig_audio_tag:
-        LOG_INFO("Setting module config: Audio\n");
+        LOG_INFO("Setting module config: Audio");
         moduleConfig.has_audio = true;
         moduleConfig.audio = c.payload_variant.audio;
         break;
     case meshtastic_ModuleConfig_remote_hardware_tag:
-        LOG_INFO("Setting module config: Remote Hardware\n");
+        LOG_INFO("Setting module config: Remote Hardware");
         moduleConfig.has_remote_hardware = true;
         moduleConfig.remote_hardware = c.payload_variant.remote_hardware;
         break;
     case meshtastic_ModuleConfig_neighbor_info_tag:
-        LOG_INFO("Setting module config: Neighbor Info\n");
+        LOG_INFO("Setting module config: Neighbor Info");
         moduleConfig.has_neighbor_info = true;
         if (moduleConfig.neighbor_info.update_interval < min_neighbor_info_broadcast_secs) {
-            LOG_DEBUG("Tried to set update_interval too low, setting to %d\n", default_neighbor_info_broadcast_secs);
+            LOG_DEBUG("Tried to set update_interval too low, setting to %d", default_neighbor_info_broadcast_secs);
             moduleConfig.neighbor_info.update_interval = default_neighbor_info_broadcast_secs;
         }
         moduleConfig.neighbor_info = c.payload_variant.neighbor_info;
         break;
     case meshtastic_ModuleConfig_detection_sensor_tag:
-        LOG_INFO("Setting module config: Detection Sensor\n");
+        LOG_INFO("Setting module config: Detection Sensor");
         moduleConfig.has_detection_sensor = true;
         moduleConfig.detection_sensor = c.payload_variant.detection_sensor;
         break;
     case meshtastic_ModuleConfig_ambient_lighting_tag:
-        LOG_INFO("Setting module config: Ambient Lighting\n");
+        LOG_INFO("Setting module config: Ambient Lighting");
         moduleConfig.has_ambient_lighting = true;
         moduleConfig.ambient_lighting = c.payload_variant.ambient_lighting;
         break;
     case meshtastic_ModuleConfig_paxcounter_tag:
-        LOG_INFO("Setting module config: Paxcounter\n");
+        LOG_INFO("Setting module config: Paxcounter");
         moduleConfig.has_paxcounter = true;
         moduleConfig.paxcounter = c.payload_variant.paxcounter;
         break;
@@ -703,49 +703,49 @@ void AdminModule::handleGetConfig(const meshtastic_MeshPacket &req, const uint32
     if (req.decoded.want_response) {
         switch (configType) {
         case meshtastic_AdminMessage_ConfigType_DEVICE_CONFIG:
-            LOG_INFO("Getting config: Device\n");
+            LOG_INFO("Getting config: Device");
             res.get_config_response.which_payload_variant = meshtastic_Config_device_tag;
             res.get_config_response.payload_variant.device = config.device;
             break;
         case meshtastic_AdminMessage_ConfigType_POSITION_CONFIG:
-            LOG_INFO("Getting config: Position\n");
+            LOG_INFO("Getting config: Position");
             res.get_config_response.which_payload_variant = meshtastic_Config_position_tag;
             res.get_config_response.payload_variant.position = config.position;
             break;
         case meshtastic_AdminMessage_ConfigType_POWER_CONFIG:
-            LOG_INFO("Getting config: Power\n");
+            LOG_INFO("Getting config: Power");
             res.get_config_response.which_payload_variant = meshtastic_Config_power_tag;
             res.get_config_response.payload_variant.power = config.power;
             break;
         case meshtastic_AdminMessage_ConfigType_NETWORK_CONFIG:
-            LOG_INFO("Getting config: Network\n");
+            LOG_INFO("Getting config: Network");
             res.get_config_response.which_payload_variant = meshtastic_Config_network_tag;
             res.get_config_response.payload_variant.network = config.network;
             writeSecret(res.get_config_response.payload_variant.network.wifi_psk,
                         sizeof(res.get_config_response.payload_variant.network.wifi_psk), config.network.wifi_psk);
             break;
         case meshtastic_AdminMessage_ConfigType_DISPLAY_CONFIG:
-            LOG_INFO("Getting config: Display\n");
+            LOG_INFO("Getting config: Display");
             res.get_config_response.which_payload_variant = meshtastic_Config_display_tag;
             res.get_config_response.payload_variant.display = config.display;
             break;
         case meshtastic_AdminMessage_ConfigType_LORA_CONFIG:
-            LOG_INFO("Getting config: LoRa\n");
+            LOG_INFO("Getting config: LoRa");
             res.get_config_response.which_payload_variant = meshtastic_Config_lora_tag;
             res.get_config_response.payload_variant.lora = config.lora;
             break;
         case meshtastic_AdminMessage_ConfigType_BLUETOOTH_CONFIG:
-            LOG_INFO("Getting config: Bluetooth\n");
+            LOG_INFO("Getting config: Bluetooth");
             res.get_config_response.which_payload_variant = meshtastic_Config_bluetooth_tag;
             res.get_config_response.payload_variant.bluetooth = config.bluetooth;
             break;
         case meshtastic_AdminMessage_ConfigType_SECURITY_CONFIG:
-            LOG_INFO("Getting config: Security\n");
+            LOG_INFO("Getting config: Security");
             res.get_config_response.which_payload_variant = meshtastic_Config_security_tag;
             res.get_config_response.payload_variant.security = config.security;
             break;
         case meshtastic_AdminMessage_ConfigType_SESSIONKEY_CONFIG:
-            LOG_INFO("Getting config: Sessionkey\n");
+            LOG_INFO("Getting config: Sessionkey");
             res.get_config_response.which_payload_variant = meshtastic_Config_sessionkey_tag;
             break;
         }
@@ -769,67 +769,67 @@ void AdminModule::handleGetModuleConfig(const meshtastic_MeshPacket &req, const 
     if (req.decoded.want_response) {
         switch (configType) {
         case meshtastic_AdminMessage_ModuleConfigType_MQTT_CONFIG:
-            LOG_INFO("Getting module config: MQTT\n");
+            LOG_INFO("Getting module config: MQTT");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_mqtt_tag;
             res.get_module_config_response.payload_variant.mqtt = moduleConfig.mqtt;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_SERIAL_CONFIG:
-            LOG_INFO("Getting module config: Serial\n");
+            LOG_INFO("Getting module config: Serial");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_serial_tag;
             res.get_module_config_response.payload_variant.serial = moduleConfig.serial;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_EXTNOTIF_CONFIG:
-            LOG_INFO("Getting module config: External Notification\n");
+            LOG_INFO("Getting module config: External Notification");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_external_notification_tag;
             res.get_module_config_response.payload_variant.external_notification = moduleConfig.external_notification;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_STOREFORWARD_CONFIG:
-            LOG_INFO("Getting module config: Store & Forward\n");
+            LOG_INFO("Getting module config: Store & Forward");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_store_forward_tag;
             res.get_module_config_response.payload_variant.store_forward = moduleConfig.store_forward;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_RANGETEST_CONFIG:
-            LOG_INFO("Getting module config: Range Test\n");
+            LOG_INFO("Getting module config: Range Test");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_range_test_tag;
             res.get_module_config_response.payload_variant.range_test = moduleConfig.range_test;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_TELEMETRY_CONFIG:
-            LOG_INFO("Getting module config: Telemetry\n");
+            LOG_INFO("Getting module config: Telemetry");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_telemetry_tag;
             res.get_module_config_response.payload_variant.telemetry = moduleConfig.telemetry;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_CANNEDMSG_CONFIG:
-            LOG_INFO("Getting module config: Canned Message\n");
+            LOG_INFO("Getting module config: Canned Message");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_canned_message_tag;
             res.get_module_config_response.payload_variant.canned_message = moduleConfig.canned_message;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_AUDIO_CONFIG:
-            LOG_INFO("Getting module config: Audio\n");
+            LOG_INFO("Getting module config: Audio");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_audio_tag;
             res.get_module_config_response.payload_variant.audio = moduleConfig.audio;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_REMOTEHARDWARE_CONFIG:
-            LOG_INFO("Getting module config: Remote Hardware\n");
+            LOG_INFO("Getting module config: Remote Hardware");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_remote_hardware_tag;
             res.get_module_config_response.payload_variant.remote_hardware = moduleConfig.remote_hardware;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_NEIGHBORINFO_CONFIG:
-            LOG_INFO("Getting module config: Neighbor Info\n");
+            LOG_INFO("Getting module config: Neighbor Info");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_neighbor_info_tag;
             res.get_module_config_response.payload_variant.neighbor_info = moduleConfig.neighbor_info;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_DETECTIONSENSOR_CONFIG:
-            LOG_INFO("Getting module config: Detection Sensor\n");
+            LOG_INFO("Getting module config: Detection Sensor");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_detection_sensor_tag;
             res.get_module_config_response.payload_variant.detection_sensor = moduleConfig.detection_sensor;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_AMBIENTLIGHTING_CONFIG:
-            LOG_INFO("Getting module config: Ambient Lighting\n");
+            LOG_INFO("Getting module config: Ambient Lighting");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_ambient_lighting_tag;
             res.get_module_config_response.payload_variant.ambient_lighting = moduleConfig.ambient_lighting;
             break;
         case meshtastic_AdminMessage_ModuleConfigType_PAXCOUNTER_CONFIG:
-            LOG_INFO("Getting module config: Paxcounter\n");
+            LOG_INFO("Getting module config: Paxcounter");
             res.get_module_config_response.which_payload_variant = meshtastic_ModuleConfig_paxcounter_tag;
             res.get_module_config_response.payload_variant.paxcounter = moduleConfig.paxcounter;
             break;
@@ -958,7 +958,7 @@ void AdminModule::handleGetChannel(const meshtastic_MeshPacket &req, uint32_t ch
 
 void AdminModule::reboot(int32_t seconds)
 {
-    LOG_INFO("Rebooting in %d seconds\n", seconds);
+    LOG_INFO("Rebooting in %d seconds", seconds);
     screen->startAlert("Rebooting...");
     rebootAtMsec = (seconds < 0) ? 0 : (millis() + seconds * 1000);
 }
@@ -966,10 +966,10 @@ void AdminModule::reboot(int32_t seconds)
 void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
 {
     if (!hasOpenEditTransaction) {
-        LOG_INFO("Saving changes to disk\n");
+        LOG_INFO("Saving changes to disk");
         service->reloadConfig(saveWhat); // Calls saveToDisk among other things
     } else {
-        LOG_INFO("Delaying save of changes to disk until the open transaction is committed\n");
+        LOG_INFO("Delaying save of changes to disk until the open transaction is committed");
     }
     if (shouldReboot && !hasOpenEditTransaction) {
         reboot(DEFAULT_REBOOT_SECONDS);

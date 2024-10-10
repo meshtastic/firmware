@@ -47,7 +47,7 @@ bool ScanAndSelectInput::init()
     // Connect our class to the canned message module
     inputBroker->registerSource(this);
 
-    LOG_INFO("Initialized 'Scan and Select' input for Canned Messages, using pin %d\n", pin);
+    LOG_INFO("Initialized 'Scan and Select' input for Canned Messages, using pin %d", pin);
     return true; // Init succeded
 }
 

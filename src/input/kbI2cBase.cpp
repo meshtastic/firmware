@@ -34,7 +34,7 @@ int32_t KbI2cBase::runOnce()
         switch (cardkb_found.port) {
         case ScanI2C::WIRE1:
 #if WIRE_INTERFACES_COUNT == 2
-            LOG_DEBUG("Using I2C Bus 1 (the second one)\n");
+            LOG_DEBUG("Using I2C Bus 1 (the second one)");
             i2cBus = &Wire1;
             if (cardkb_found.address == BBQ10_KB_ADDR) {
                 Q10keyboard.begin(BBQ10_KB_ADDR, &Wire1);
@@ -43,7 +43,7 @@ int32_t KbI2cBase::runOnce()
             break;
 #endif
         case ScanI2C::WIRE:
-            LOG_DEBUG("Using I2C Bus 0 (the first one)\n");
+            LOG_DEBUG("Using I2C Bus 0 (the first one)");
             i2cBus = &Wire;
             if (cardkb_found.address == BBQ10_KB_ADDR) {
                 Q10keyboard.begin(BBQ10_KB_ADDR, &Wire);
@@ -171,7 +171,7 @@ int32_t KbI2cBase::runOnce()
             }
         }
         if (PrintDataBuf != 0) {
-            LOG_DEBUG("RAK14004 key 0x%x pressed\n", PrintDataBuf);
+            LOG_DEBUG("RAK14004 key 0x%x pressed", PrintDataBuf);
             InputEvent e;
             e.inputEvent = MATRIXKEY;
             e.source = this->_originName;
@@ -326,7 +326,7 @@ int32_t KbI2cBase::runOnce()
         break;
     }
     default:
-        LOG_WARN("Unknown kb_model 0x%02x\n", kb_model);
+        LOG_WARN("Unknown kb_model 0x%02x", kb_model);
     }
     return 300;
 }

@@ -56,7 +56,7 @@ class NodeStatus : public Status
             numTotal = newStatus->getNumTotal();
         }
         if (isDirty || newStatus->forceUpdate) {
-            LOG_DEBUG("Node status update: %d online, %d total\n", numOnline, numTotal);
+            LOG_DEBUG("Node status update: %d online, %d total", numOnline, numTotal);
             onNewStatus.notifyObservers(this);
         }
         return 0;

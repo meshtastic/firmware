@@ -14,11 +14,11 @@ NOTE: For debugging only
 */
 void NeighborInfoModule::printNeighborInfo(const char *header, const meshtastic_NeighborInfo *np)
 {
-    LOG_DEBUG("%s NEIGHBORINFO PACKET from Node 0x%x to Node 0x%x (last sent by 0x%x)\n", header, np->node_id,
-              nodeDB->getNodeNum(), np->last_sent_by_id);
-    LOG_DEBUG("Packet contains %d neighbors\n", np->neighbors_count);
+    LOG_DEBUG("%s NEIGHBORINFO PACKET from Node 0x%x to Node 0x%x (last sent by 0x%x)", header, np->node_id, nodeDB->getNodeNum(),
+              np->last_sent_by_id);
+    LOG_DEBUG("Packet contains %d neighbors", np->neighbors_count);
     for (int i = 0; i < np->neighbors_count; i++) {
-        LOG_DEBUG("Neighbor %d: node_id=0x%x, snr=%.2f\n", i, np->neighbors[i].node_id, np->neighbors[i].snr);
+        LOG_DEBUG("Neighbor %d: node_id=0x%x, snr=%.2f", i, np->neighbors[i].node_id, np->neighbors[i].snr);
     }
 }
 
@@ -28,9 +28,9 @@ NOTE: for debugging only
 */
 void NeighborInfoModule::printNodeDBNeighbors()
 {
-    LOG_DEBUG("Our NodeDB contains %d neighbors\n", neighbors.size());
+    LOG_DEBUG("Our NodeDB contains %d neighbors", neighbors.size());
     for (size_t i = 0; i < neighbors.size(); i++) {
-        LOG_DEBUG("Node %d: node_id=0x%x, snr=%.2f\n", i, neighbors[i].node_id, neighbors[i].snr);
+        LOG_DEBUG("Node %d: node_id=0x%x, snr=%.2f", i, neighbors[i].node_id, neighbors[i].snr);
     }
 }
 
@@ -47,7 +47,7 @@ NeighborInfoModule::NeighborInfoModule()
         setIntervalFromNow(Default::getConfiguredOrDefaultMs(moduleConfig.neighbor_info.update_interval,
                                                              default_telemetry_broadcast_interval_secs));
     } else {
-        LOG_DEBUG("NeighborInfoModule is disabled\n");
+        LOG_DEBUG("NeighborInfoModule is disabled");
         disable();
     }
 }
@@ -91,7 +91,7 @@ void NeighborInfoModule::cleanUpNeighbors()
         // We will remove a neighbor if we haven't heard from them in twice the broadcast interval
         // cannot use isWithinTimespanMs() as it->last_rx_time is seconds since 1970
         if ((now - it->last_rx_time > it->node_broadcast_interval_secs * 2) && (it->node_id != my_node_id)) {
-            LOG_DEBUG("Removing neighbor with node ID 0x%x\n", it->node_id);
+            LOG_DEBUG("Removing neighbor with node ID 0x%x", it->node_id);
             it = std::vector<meshtastic_Neighbor>::reverse_iterator(
                 neighbors.erase(std::next(it).base())); // Erase the element and update the iterator
         } else {
@@ -205,7 +205,7 @@ meshtastic_Neighbor *NeighborInfoModule::getOrCreateNeighbor(NodeNum originalSen
         neighbors.push_back(new_nbr);
     } else {
         // If we have too many neighbors, replace the oldest one
-        LOG_WARN("Neighbor DB is full, replacing oldest neighbor\n");
+        LOG_WARN("Neighbor DB is full, replacing oldest neighbor");
         neighbors.erase(neighbors.begin());
         neighbors.push_back(new_nbr);
     }

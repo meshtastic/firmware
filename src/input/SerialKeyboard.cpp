@@ -52,7 +52,7 @@ int32_t SerialKeyboard::runOnce()
         digitalWrite(KB_LOAD, HIGH);
         digitalWrite(KB_CLK, LOW);
         prevKeys = 0b1111111111111111;
-        LOG_DEBUG("Serial Keyboard setup\n");
+        LOG_DEBUG("Serial Keyboard setup");
     }
 
     if (INPUTBROKER_SERIAL_TYPE == 1) { // Chatter V1.0 & V2.0 keypads

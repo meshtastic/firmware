@@ -197,5 +197,5 @@ class RadioLibInterface : public RadioInterface, protected concurrency::Notified
      */
     virtual void setStandby();
 
-    const char *radioLibErr = "RadioLib err=\n";
+    const char *radioLibErr = "RadioLib err=";
 };

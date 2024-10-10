@@ -40,7 +40,7 @@ void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
     bool isAckorReply = (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) && (p->decoded.request_id != 0);
     if (isAckorReply && !isToUs(p) && p->to != NODENUM_BROADCAST) {
         // do not flood direct message that is ACKed or replied to
-        LOG_DEBUG("Rxd an ACK/reply not for me, cancel rebroadcast.\n");
+        LOG_DEBUG("Rxd an ACK/reply not for me, cancel rebroadcast.");
         Router::cancelSending(p->to, p->decoded.request_id); // cancel rebroadcast for this DM
     }
     if (!isToUs(p) && (p->hop_limit > 0) && !isFromUs(p)) {
@@ -57,15 +57,15 @@ void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                 }
 #endif
 
-                LOG_INFO("Rebroadcasting received floodmsg\n");
+                LOG_INFO("Rebroadcasting received floodmsg");
                 // Note: we are careful to resend using the original senders node id
                 // We are careful not to call our hooked version of send() - because we don't want to check this again
                 Router::send(tosend);
             } else {
-                LOG_DEBUG("Not rebroadcasting. Role = Role_ClientMute\n");
+                LOG_DEBUG("Not rebroadcasting. Role = Role_ClientMute");
             }
         } else {
-            LOG_DEBUG("Ignoring 0 id broadcast\n");
+            LOG_DEBUG("Ignoring 0 id broadcast");
         }
     }
     // handle the packet as normal

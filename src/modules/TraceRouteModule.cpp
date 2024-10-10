@@ -101,14 +101,14 @@ void TraceRouteModule::appendMyIDandSNR(meshtastic_RouteDiscovery *updated, floa
         route[*route_count] = myNodeInfo.my_node_num;
         *route_count += 1;
     } else {
-        LOG_WARN("Route exceeded maximum hop limit!\n"); // Are you bridging networks?
+        LOG_WARN("Route exceeded maximum hop limit!"); // Are you bridging networks?
     }
 }
 
 void TraceRouteModule::printRoute(meshtastic_RouteDiscovery *r, uint32_t origin, uint32_t dest, bool isTowardsDestination)
 {
 #ifdef DEBUG_PORT
-    LOG_INFO("Route traced:\n");
+    LOG_INFO("Route traced:");
     LOG_INFO("0x%x --> ", origin);
     for (uint8_t i = 0; i < r->route_count; i++) {
         if (i < r->snr_towards_count && r->snr_towards[i] != INT8_MIN)
@@ -119,11 +119,11 @@ void TraceRouteModule::printRoute(meshtastic_RouteDiscovery *r, uint32_t origin,
     // If we are the destination, or it has already reached the destination, print it
     if (dest == nodeDB->getNodeNum() || !isTowardsDestination) {
         if (r->snr_towards_count > 0 && r->snr_towards[r->snr_towards_count - 1] != INT8_MIN)
-            LOG_INFO("0x%x (%.2fdB)\n", dest, (float)r->snr_towards[r->snr_towards_count - 1] / 4);
+            LOG_INFO("0x%x (%.2fdB)", dest, (float)r->snr_towards[r->snr_towards_count - 1] / 4);
         else
-            LOG_INFO("0x%x (?dB)\n", dest);
+            LOG_INFO("0x%x (?dB)", dest);
     } else
-        LOG_INFO("...\n");
+        LOG_INFO("...");
 
     // If there's a route back (or we are the destination as then the route is complete), print it
     if (r->route_back_count > 0 || origin == nodeDB->getNodeNum()) {
@@ -138,7 +138,7 @@ void TraceRouteModule::printRoute(meshtastic_RouteDiscovery *r, uint32_t origin,
             else
                 LOG_INFO("(?dB) 0x%x <-- ", r->route_back[i]);
         }
-        LOG_INFO("0x%x\n", dest);
+        LOG_INFO("0x%x", dest);
     }
 #endif
 }

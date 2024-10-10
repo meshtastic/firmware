@@ -30,7 +30,7 @@ void TrackballInterruptBase::init(uint8_t pinDown, uint8_t pinUp, uint8_t pinLef
     attachInterrupt(this->_pinLeft, onIntLeft, RISING);
     attachInterrupt(this->_pinRight, onIntRight, RISING);
 
-    LOG_DEBUG("Trackball GPIO initialized (%d, %d, %d, %d, %d)\n", this->_pinUp, this->_pinDown, this->_pinLeft, this->_pinRight,
+    LOG_DEBUG("Trackball GPIO initialized (%d, %d, %d, %d, %d)", this->_pinUp, this->_pinDown, this->_pinLeft, this->_pinRight,
               pinPress);
 
     this->setInterval(100);
@@ -42,19 +42,19 @@ int32_t TrackballInterruptBase::runOnce()
     e.inputEvent = meshtastic_ModuleConfig_CannedMessageConfig_InputEventChar_NONE;
 
     if (this->action == TB_ACTION_PRESSED) {
-        // LOG_DEBUG("Trackball event Press\n");
+        // LOG_DEBUG("Trackball event Press");
         e.inputEvent = this->_eventPressed;
     } else if (this->action == TB_ACTION_UP) {
-        // LOG_DEBUG("Trackball event UP\n");
+        // LOG_DEBUG("Trackball event UP");
         e.inputEvent = this->_eventUp;
     } else if (this->action == TB_ACTION_DOWN) {
-        // LOG_DEBUG("Trackball event DOWN\n");
+        // LOG_DEBUG("Trackball event DOWN");
         e.inputEvent = this->_eventDown;
     } else if (this->action == TB_ACTION_LEFT) {
-        // LOG_DEBUG("Trackball event LEFT\n");
+        // LOG_DEBUG("Trackball event LEFT");
         e.inputEvent = this->_eventLeft;
     } else if (this->action == TB_ACTION_RIGHT) {
-        // LOG_DEBUG("Trackball event RIGHT\n");
+        // LOG_DEBUG("Trackball event RIGHT");
         e.inputEvent = this->_eventRight;
     }
 

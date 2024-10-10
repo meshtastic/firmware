@@ -12,7 +12,7 @@ TSL2591Sensor::TSL2591Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_
 
 int32_t TSL2591Sensor::runOnce()
 {
-    LOG_INFO("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
@@ -36,7 +36,7 @@ bool TSL2591Sensor::getMetrics(meshtastic_Telemetry *measurement)
     full = lum & 0xFFFF;
 
     measurement->variant.environment_metrics.lux = tsl.calculateLux(full, ir);
-    LOG_INFO("Lux: %f\n", measurement->variant.environment_metrics.lux);
+    LOG_INFO("Lux: %f", measurement->variant.environment_metrics.lux);
 
     return true;
 }

@@ -11,7 +11,7 @@ INA3221Sensor::INA3221Sensor() : TelemetrySensor(meshtastic_TelemetrySensorType_
 
 int32_t INA3221Sensor::runOnce()
 {
-    LOG_INFO("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
