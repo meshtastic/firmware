@@ -573,6 +573,7 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
             env->packet = (meshtastic_MeshPacket *)&mp_decoded;
             LOG_DEBUG("portnum %i message\n", env->packet->decoded.portnum);
         } else {
+            LOG_DEBUG("nothing, pkt not decrypted\n");
             return; // Don't upload a still-encrypted PKI packet if not encryption_enabled
         }
 
