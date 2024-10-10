@@ -132,6 +132,7 @@ class CannedMessageModule : public SinglePortModule, public Observable<const UIF
 
     int currentMessageIndex = -1;
     cannedMessageModuleRunState runState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
+    cannedMessageModuleRunState restoreOldState = CANNED_MESSAGE_RUN_STATE_INACTIVE;
     char payload = 0x00;
     unsigned int cursor = 0;
     String freetext = ""; // Text Buffer for Freetext Editor
