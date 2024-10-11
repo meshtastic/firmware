@@ -52,6 +52,7 @@ class ScanI2C
         TSL2591,
         OPT3001,
         MLX90632,
+        MLX90614,
         AHT10,
         BMX160,
         DFROBOT_LARK,
@@ -59,7 +60,8 @@ class ScanI2C
         FT6336U,
         STK8BAXX,
         ICM20948,
-        SCD4X
+        SCD4X,
+        MAX30102
     } DeviceType;
 
     // typedef uint8_t DeviceAddress;

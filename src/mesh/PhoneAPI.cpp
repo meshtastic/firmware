@@ -8,6 +8,7 @@
 #include "FSCommon.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "PacketHistory.h"
 #include "PhoneAPI.h"
 #include "PowerFSM.h"
 #include "RadioInterface.h"
@@ -31,6 +32,7 @@
 PhoneAPI::PhoneAPI()
 {
     lastContactMsec = millis();
+    std::fill(std::begin(recentToRadioPacketIds), std::end(recentToRadioPacketIds), 0);
 }
 
 PhoneAPI::~PhoneAPI()
@@ -108,8 +110,6 @@ bool PhoneAPI::handleToRadio(const uint8_t *buf, size_t bufLength)
 {
     powerFSM.trigger(EVENT_CONTACT_FROM_PHONE); // As long as the phone keeps talking to us, don't let the radio go to sleep
     lastContactMsec = millis();
-
-    // return (lastContactMsec != 0) &&
 
     memset(&toRadioScratch, 0, sizeof(toRadioScratch));
     if (pb_decode_from_bytes(buf, bufLength, &meshtastic_ToRadio_msg, &toRadioScratch)) {
@@ -572,21 +572,49 @@ void PhoneAPI::sendNotification(meshtastic_LogRecord_Level level, uint32_t reply
     service->sendClientNotification(cn);
 }
 
+bool PhoneAPI::wasSeenRecently(uint32_t id)
+{
+    for (int i = 0; i < 20; i++) {
+        if (recentToRadioPacketIds[i] == id) {
+            return true;
+        }
+        if (recentToRadioPacketIds[i] == 0) {
+            recentToRadioPacketIds[i] = id;
+            return false;
+        }
+    }
+    // If the array is full, shift all elements to the left and add the new id at the end
+    memmove(recentToRadioPacketIds, recentToRadioPacketIds + 1, (19) * sizeof(uint32_t));
+    recentToRadioPacketIds[19] = id;
+    return false;
+}
+
 /**
  * Handle a packet that the phone wants us to send.  It is our responsibility to free the packet to the pool
  */
 bool PhoneAPI::handleToRadioPacket(meshtastic_MeshPacket &p)
 {
     printPacket("PACKET FROM PHONE", &p);
+
+    if (p.id > 0 && wasSeenRecently(p.id)) {
+        LOG_DEBUG("Ignoring packet from phone, already seen recently\n");
+        return false;
+    }
+
     if (p.decoded.portnum == meshtastic_PortNum_TRACEROUTE_APP && lastPortNumToRadio[p.decoded.portnum] &&
         Throttle::isWithinTimespanMs(lastPortNumToRadio[p.decoded.portnum], THIRTY_SECONDS_MS)) {
         LOG_WARN("Rate limiting portnum %d\n", p.decoded.portnum);
         sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "TraceRoute can only be sent once every 30 seconds");
+        meshtastic_QueueStatus qs = router->getQueueStatus();
+        service->sendQueueStatusToPhone(qs, 0, p.id);
         return false;
     } else if (p.decoded.portnum == meshtastic_PortNum_POSITION_APP && lastPortNumToRadio[p.decoded.portnum] &&
                Throttle::isWithinTimespanMs(lastPortNumToRadio[p.decoded.portnum], FIVE_SECONDS_MS)) {
         LOG_WARN("Rate limiting portnum %d\n", p.decoded.portnum);
-        sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Position can only be sent once every 5 seconds");
+        meshtastic_QueueStatus qs = router->getQueueStatus();
+        service->sendQueueStatusToPhone(qs, 0, p.id);
+        // FIXME: Figure out why this continues to happen
+        // sendNotification(meshtastic_LogRecord_Level_WARNING, p.id, "Position can only be sent once every 5 seconds");
         return false;
     }
     lastPortNumToRadio[p.decoded.portnum] = millis();

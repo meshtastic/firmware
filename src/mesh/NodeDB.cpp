@@ -32,12 +32,13 @@
 #if HAS_WIFI
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
-#include "modules/esp32/StoreForwardModule.h"
+#include "modules/StoreForwardModule.h"
 #include <Preferences.h>
 #include <nvs_flash.h>
 #endif
 
 #ifdef ARCH_PORTDUINO
+#include "modules/StoreForwardModule.h"
 #include "platform/portduino/PortduinoGlue.h"
 #endif
 
@@ -49,7 +50,7 @@
 NodeDB *nodeDB = nullptr;
 
 // we have plenty of ram so statically alloc this tempbuf (for now)
-EXT_RAM_ATTR meshtastic_DeviceState devicestate;
+EXT_RAM_BSS_ATTR meshtastic_DeviceState devicestate;
 meshtastic_MyNodeInfo &myNodeInfo = devicestate.my_node;
 meshtastic_LocalConfig config;
 meshtastic_LocalModuleConfig moduleConfig;
@@ -131,39 +132,31 @@ NodeDB::NodeDB()
         config.security.serial_enabled = config.device.serial_enabled;
         config.security.is_managed = config.device.is_managed;
     }
-#if !(MESHTASTIC_EXCLUDE_PKI)
+
+#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN || MESHTASTIC_EXCLUDE_PKI)
+    bool keygenSuccess = false;
+    if (config.security.private_key.size == 32) {
+        if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
+            keygenSuccess = true;
+        }
+    } else {
+        LOG_INFO("Generating new PKI keys\n");
+        crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
+        keygenSuccess = true;
+    }
+    if (keygenSuccess) {
+        config.security.public_key.size = 32;
+        config.security.private_key.size = 32;
+        owner.public_key.size = 32;
+        memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
+    }
+#elif !(MESHTASTIC_EXCLUDE_PKI)
     // Calculate Curve25519 public and private keys
-    printBytes("Old Pubkey", config.security.public_key.bytes, 32);
     if (config.security.private_key.size == 32 && config.security.public_key.size == 32) {
-        LOG_INFO("Using saved PKI keys\n");
         owner.public_key.size = config.security.public_key.size;
         memcpy(owner.public_key.bytes, config.security.public_key.bytes, config.security.public_key.size);
         crypto->setDHPrivateKey(config.security.private_key.bytes);
-    } else {
-#if !(MESHTASTIC_EXCLUDE_PKI_KEYGEN)
-        bool keygenSuccess = false;
-        if (config.security.private_key.size == 32) {
-            LOG_INFO("Calculating PKI Public Key\n");
-            if (crypto->regeneratePublicKey(config.security.public_key.bytes, config.security.private_key.bytes)) {
-                keygenSuccess = true;
-            }
-        } else {
-            LOG_INFO("Generating new PKI keys\n");
-            crypto->generateKeyPair(config.security.public_key.bytes, config.security.private_key.bytes);
-            keygenSuccess = true;
-        }
-        if (keygenSuccess) {
-            config.security.public_key.size = 32;
-            config.security.private_key.size = 32;
-            printBytes("New Pubkey", config.security.public_key.bytes, 32);
-            owner.public_key.size = 32;
-            memcpy(owner.public_key.bytes, config.security.public_key.bytes, 32);
-        }
-#else
-        LOG_INFO("No PKI keys set, and generation disabled!\n");
-#endif
     }
-
 #endif
 
     info->user = TypeConversions::ConvertToUserLite(owner);
@@ -201,6 +194,18 @@ NodeDB::NodeDB()
 NodeNum getFrom(const meshtastic_MeshPacket *p)
 {
     return (p->from == 0) ? nodeDB->getNodeNum() : p->from;
+}
+
+// Returns true if the packet originated from the local node
+bool isFromUs(const meshtastic_MeshPacket *p)
+{
+    return p->from == 0 || p->from == nodeDB->getNodeNum();
+}
+
+// Returns true if the packet is destined to us
+bool isToUs(const meshtastic_MeshPacket *p)
+{
+    return p->to == nodeDB->getNodeNum();
 }
 
 bool NodeDB::resetRadioConfig(bool factory_reset)
@@ -293,27 +298,26 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
         true; // FIXME: maybe false in the future, and setting region to enable it. (unset region forces it off)
     config.lora.override_duty_cycle = false;
     config.lora.config_ok_to_mqtt = false;
-#ifdef CONFIG_LORA_REGION_USERPREFS
-    config.lora.region = CONFIG_LORA_REGION_USERPREFS;
+#ifdef USERPREFS_CONFIG_LORA_REGION
+    config.lora.region = USERPREFS_CONFIG_LORA_REGION;
 #else
     config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
 #endif
-#ifdef LORACONFIG_MODEM_PRESET_USERPREFS
-    config.lora.modem_preset = LORACONFIG_MODEM_PRESET_USERPREFS;
+#ifdef USERPREFS_LORACONFIG_MODEM_PRESET
+    config.lora.modem_preset = USERPREFS_LORACONFIG_MODEM_PRESET;
 #else
     config.lora.modem_preset = meshtastic_Config_LoRaConfig_ModemPreset_LONG_FAST;
 #endif
     config.lora.hop_limit = HOP_RELIABLE;
-#ifdef CONFIG_LORA_IGNORE_MQTT_USERPREFS
-    config.lora.ignore_mqtt = CONFIG_LORA_IGNORE_MQTT_USERPREFS;
+#ifdef USERPREFS_CONFIG_LORA_IGNORE_MQTT
+    config.lora.ignore_mqtt = USERPREFS_CONFIG_LORA_IGNORE_MQTT;
 #else
     config.lora.ignore_mqtt = false;
 #endif
-#ifdef ADMIN_KEY_USERPREFS
-    memcpy(config.security.admin_key[0].bytes, admin_key_userprefs, 32);
+#ifdef USERPREFS_USE_ADMIN_KEY
+    memcpy(config.security.admin_key[0].bytes, USERPREFS_ADMIN_KEY, 32);
     config.security.admin_key[0].size = 32;
-#else
-    config.security.admin_key[0].size = 0;
+    config.security.admin_key_count = 1;
 #endif
     if (shouldPreserveKey) {
         config.security.private_key.size = 32;
@@ -331,7 +335,9 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
 #else
     config.device.disable_triple_click = true;
 #endif
-#if !HAS_GPS || defined(T_DECK) || defined(TLORA_T3S3_EPAPER)
+#if defined(USERPREFS_CONFIG_GPS_MODE)
+    config.position.gps_mode = USERPREFS_CONFIG_GPS_MODE;
+#elif !HAS_GPS || defined(T_DECK) || defined(TLORA_T3S3_EPAPER)
     config.position.gps_mode = meshtastic_Config_PositionConfig_GpsMode_NOT_PRESENT;
 #elif !defined(GPS_RX_PIN)
     if (config.position.rx_gpio == 0)
@@ -353,8 +359,8 @@ void NodeDB::installDefaultConfig(bool preserveKey = false)
     // FIXME: Default to bluetooth capability of platform as default
     config.bluetooth.enabled = true;
     config.bluetooth.fixed_pin = defaultBLEPin;
-#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ST7789_CS) || defined(HX8357_CS) ||            \
-    defined(USE_ST7789)
+#if defined(ST7735_CS) || defined(USE_EINK) || defined(ILI9341_DRIVER) || defined(ILI9342_DRIVER) || defined(ST7789_CS) ||       \
+    defined(HX8357_CS) || defined(USE_ST7789)
     bool hasScreen = true;
 #elif ARCH_PORTDUINO
     bool hasScreen = false;
@@ -527,6 +533,7 @@ void NodeDB::installRoleDefaults(meshtastic_Config_DeviceConfig_Role role)
         moduleConfig.telemetry.device_update_interval = UINT32_MAX;
         moduleConfig.telemetry.environment_update_interval = UINT32_MAX;
         moduleConfig.telemetry.air_quality_interval = UINT32_MAX;
+        moduleConfig.telemetry.health_update_interval = UINT32_MAX;
     }
 }
 
@@ -537,6 +544,7 @@ void NodeDB::initModuleConfigIntervals()
     moduleConfig.telemetry.environment_update_interval = 0;
     moduleConfig.telemetry.air_quality_interval = 0;
     moduleConfig.telemetry.power_update_interval = 0;
+    moduleConfig.telemetry.health_update_interval = 0;
     moduleConfig.neighbor_info.update_interval = 0;
     moduleConfig.paxcounter.paxcounter_update_interval = 0;
 }
@@ -619,18 +627,20 @@ void NodeDB::installDefaultDeviceState()
     // devicestate.node_db_lite_count = 0;
     devicestate.version = DEVICESTATE_CUR_VER;
     devicestate.receive_queue_count = 0; // Not yet implemented FIXME
+    devicestate.has_rx_waypoint = false;
+    devicestate.has_rx_text_message = false;
 
     generatePacketId(); // FIXME - ugly way to init current_packet_id;
 
     // Set default owner name
     pickNewNodeNum(); // based on macaddr now
-#ifdef CONFIG_OWNER_LONG_NAME_USERPREFS
-    snprintf(owner.long_name, sizeof(owner.long_name), CONFIG_OWNER_LONG_NAME_USERPREFS);
+#ifdef USERPREFS_CONFIG_OWNER_LONG_NAME
+    snprintf(owner.long_name, sizeof(owner.long_name), USERPREFS_CONFIG_OWNER_LONG_NAME);
 #else
     snprintf(owner.long_name, sizeof(owner.long_name), "Meshtastic %02x%02x", ourMacAddr[4], ourMacAddr[5]);
 #endif
-#ifdef CONFIG_OWNER_SHORT_NAME_USERPREFS
-    snprintf(owner.short_name, sizeof(owner.short_name), CONFIG_OWNER_SHORT_NAME_USERPREFS);
+#ifdef USERPREFS_CONFIG_OWNER_SHORT_NAME
+    snprintf(owner.short_name, sizeof(owner.short_name), USERPREFS_CONFIG_OWNER_SHORT_NAME);
 #else
     snprintf(owner.short_name, sizeof(owner.short_name), "%02x%02x", ourMacAddr[4], ourMacAddr[5]);
 #endif
@@ -1086,7 +1096,7 @@ bool NodeDB::updateUser(uint32_t nodeId, meshtastic_User &p, uint8_t channelInde
         // We just changed something about the user, store our DB
         Throttle::execute(
             &lastNodeDbSave, ONE_MINUTE_MS, []() { nodeDB->saveToDisk(SEGMENT_DEVICESTATE); },
-            []() { LOG_DEBUG("Deferring NodeDB saveToDisk for now, since we saved less than a minute ago\n"); });
+            []() { LOG_DEBUG("Deferring NodeDB saveToDisk for now\n"); }); // since we saved less than a minute ago
     }
 
     return changed;

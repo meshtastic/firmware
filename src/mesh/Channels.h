@@ -117,7 +117,12 @@ class Channels
     meshtastic_Channel &fixupChannel(ChannelIndex chIndex);
 
     /**
-     * Write a default channel to the specified channel index
+     * Writes the default lora config
+     */
+    void initDefaultLoraConfig();
+
+    /**
+     * Write default channels defined in UserPrefs
      */
     void initDefaultChannel(ChannelIndex chIndex);
 

@@ -69,6 +69,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef RTC_DATA_ATTR
 #define RTC_DATA_ATTR
 #endif
+#ifndef EXT_RAM_BSS_ATTR
+#define EXT_RAM_BSS_ATTR EXT_RAM_ATTR
+#endif
 
 // -----------------------------------------------------------------------------
 // Regulatory overrides
@@ -142,6 +145,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define DFROBOT_LARK_ADDR 0x42
 #define NAU7802_ADDR 0x2A
 #define SCD4X_ADDR 0x62
+#define MAX30102_ADDR 0x57
+#define MLX90614_ADDR 0x5A
 
 // -----------------------------------------------------------------------------
 // ACCELEROMETER

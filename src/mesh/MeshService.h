@@ -13,9 +13,9 @@
 #if defined(ARCH_PORTDUINO) && !HAS_RADIO
 #include "../platform/portduino/SimRadio.h"
 #endif
-#ifdef ARCH_ESP32
+#if defined(ARCH_ESP32) || defined(ARCH_PORTDUINO)
 #if !MESHTASTIC_EXCLUDE_STOREFORWARD
-#include "modules/esp32/StoreForwardModule.h"
+#include "modules/StoreForwardModule.h"
 #endif
 #endif
 
@@ -150,6 +150,8 @@ class MeshService
     bool isToPhoneQueueEmpty();
 
     ErrorCode sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, ErrorCode res, uint32_t mesh_packet_id);
+
+    uint32_t GetTimeSinceMeshPacket(const meshtastic_MeshPacket *mp);
 
   private:
 #if HAS_GPS

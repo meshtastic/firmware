@@ -1,3 +1,4 @@
+#if RADIOLIB_EXCLUDE_SX128X != 1
 #include "SX1280Interface.h"
 #include "configuration.h"
 #include "error.h"
@@ -7,3 +8,4 @@ SX1280Interface::SX1280Interface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs, R
     : SX128xInterface(hal, cs, irq, rst, busy)
 {
 }
+#endif

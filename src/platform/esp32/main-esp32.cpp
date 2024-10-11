@@ -13,6 +13,7 @@
 #include "mesh/wifi/WiFiAPClient.h"
 #endif
 
+#include "esp_mac.h"
 #include "meshUtils.h"
 #include "sleep.h"
 #include "soc/rtc.h"
@@ -147,9 +148,16 @@ void esp32Setup()
 // #define APP_WATCHDOG_SECS 45
 #define APP_WATCHDOG_SECS 90
 
+#ifdef CONFIG_IDF_TARGET_ESP32C6
+    esp_task_wdt_config_t *wdt_config = (esp_task_wdt_config_t *)malloc(sizeof(esp_task_wdt_config_t));
+    wdt_config->timeout_ms = APP_WATCHDOG_SECS * 1000;
+    wdt_config->trigger_panic = true;
+    res = esp_task_wdt_init(wdt_config);
+    assert(res == ESP_OK);
+#else
     res = esp_task_wdt_init(APP_WATCHDOG_SECS, true);
     assert(res == ESP_OK);
-
+#endif
     res = esp_task_wdt_add(NULL);
     assert(res == ESP_OK);
 
@@ -223,7 +231,7 @@ void cpuDeepSleep(uint32_t msecToWake)
         // to detect wake and in normal operation the external part drives them hard.
 #ifdef BUTTON_PIN
         // Only GPIOs which are have RTC functionality can be used in this bit map: 0,2,4,12-15,25-27,32-39.
-#if SOC_RTCIO_HOLD_SUPPORTED
+#if SOC_RTCIO_HOLD_SUPPORTED && SOC_PM_SUPPORT_EXT_WAKEUP
     uint64_t gpioMask = (1ULL << (config.device.button_gpio ? config.device.button_gpio : BUTTON_PIN));
 #endif
 
