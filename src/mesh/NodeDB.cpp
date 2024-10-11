@@ -568,6 +568,8 @@ void NodeDB::resetNodes()
     clearLocalPosition();
     numMeshNodes = 1;
     std::fill(devicestate.node_db_lite.begin() + 1, devicestate.node_db_lite.end(), meshtastic_NodeInfoLite());
+    devicestate.has_rx_text_message = false;
+    devicestate.has_rx_waypoint = false;
     saveDeviceStateToDisk();
     if (neighborInfoModule && moduleConfig.neighbor_info.enabled)
         neighborInfoModule->resetNeighbors();
@@ -1213,7 +1215,8 @@ void recordCriticalError(meshtastic_CriticalErrorCode code, uint32_t address, co
 {
     // Print error to screen and serial port
     String lcd = String("Critical error ") + code + "!\n";
-    screen->print(lcd.c_str());
+    if (screen)
+        screen->print(lcd.c_str());
     if (filename) {
         LOG_ERROR("NOTE! Recording critical error %d at %s:%lu\n", code, filename, address);
     } else {
