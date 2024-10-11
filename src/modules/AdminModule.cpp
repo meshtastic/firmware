@@ -178,6 +178,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     case meshtastic_AdminMessage_get_ui_config_request_tag: {
         LOG_INFO("Client is getting device-ui config\n");
         handleGetDeviceUIConfig(mp);
+        handled = true;
         break;
     }
 

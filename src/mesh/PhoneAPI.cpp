@@ -52,7 +52,7 @@ void PhoneAPI::handleStartConfig()
     }
 
     // even if we were already connected - restart our state machine
-    state = STATE_SEND_UIDATA;
+    state = STATE_SEND_MY_INFO;
     pauseBluetoothLogging = true;
     filesManifest = getFiles("/", 10);
     LOG_DEBUG("Got %d files in manifest", filesManifest.size());
@@ -188,12 +188,6 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
     case STATE_SEND_NOTHING:
         LOG_DEBUG("FromRadio=STATE_SEND_NOTHING");
         break;
-    case STATE_SEND_UIDATA:
-        LOG_INFO("getFromRadio=STATE_SEND_UIDATA\n");
-        fromRadioScratch.which_payload_variant = meshtastic_FromRadio_deviceuiConfig_tag;
-        fromRadioScratch.deviceuiConfig = uiconfig;
-        state = STATE_SEND_MY_INFO;
-        break;
     case STATE_SEND_MY_INFO:
         LOG_DEBUG("FromRadio=STATE_SEND_MY_INFO");
         // If the user has specified they don't want our node to share its location, make sure to tell the phone
@@ -201,9 +195,16 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_my_info_tag;
         strncpy(myNodeInfo.pio_env, optstr(APP_ENV), sizeof(myNodeInfo.pio_env));
         fromRadioScratch.my_info = myNodeInfo;
-        state = STATE_SEND_OWN_NODEINFO;
+        state = STATE_SEND_UIDATA;
 
         service->refreshLocalMeshNode(); // Update my NodeInfo because the client will be asking for it soon.
+        break;
+
+    case STATE_SEND_UIDATA:
+        LOG_INFO("getFromRadio=STATE_SEND_UIDATA\n");
+        fromRadioScratch.which_payload_variant = meshtastic_FromRadio_deviceuiConfig_tag;
+        fromRadioScratch.deviceuiConfig = uiconfig;
+        state = STATE_SEND_OWN_NODEINFO;
         break;
 
     case STATE_SEND_OWN_NODEINFO: {
@@ -522,8 +523,8 @@ bool PhoneAPI::available()
     switch (state) {
     case STATE_SEND_NOTHING:
         return false;
-    case STATE_SEND_UIDATA:
     case STATE_SEND_MY_INFO:
+    case STATE_SEND_UIDATA:
     case STATE_SEND_CHANNELS:
     case STATE_SEND_CONFIG:
     case STATE_SEND_MODULECONFIG:
