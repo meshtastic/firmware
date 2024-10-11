@@ -175,6 +175,11 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         LOG_INFO("Client is setting ham mode\n");
         handleSetHamMode(r->set_ham_mode);
         break;
+    case meshtastic_AdminMessage_get_ui_config_request_tag: {
+        LOG_INFO("Client is getting device-ui config\n");
+        handleGetDeviceUIConfig(mp);
+        break;
+    }
 
     /**
      * Other
@@ -232,6 +237,11 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         LOG_INFO("Initiating node-db reset\n");
         nodeDB->resetNodes();
         reboot(DEFAULT_REBOOT_SECONDS);
+        break;
+    }
+    case meshtastic_AdminMessage_store_ui_config_tag: {
+        LOG_INFO("Storing device-ui config\n");
+        handleStoreDeviceUIConfig(r->store_ui_config);
         break;
     }
     case meshtastic_AdminMessage_begin_edit_settings_tag: {
@@ -960,6 +970,14 @@ void AdminModule::handleGetChannel(const meshtastic_MeshPacket &req, uint32_t ch
     }
 }
 
+void AdminModule::handleGetDeviceUIConfig(const meshtastic_MeshPacket &req)
+{
+    meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
+    r.which_payload_variant = meshtastic_AdminMessage_get_ui_config_response_tag;
+    r.store_ui_config = uiconfig;
+    myReply = allocDataProtobuf(r);
+}
+
 void AdminModule::reboot(int32_t seconds)
 {
     LOG_INFO("Rebooting in %d seconds\n", seconds);
@@ -978,6 +996,11 @@ void AdminModule::saveChanges(int saveWhat, bool shouldReboot)
     if (shouldReboot && !hasOpenEditTransaction) {
         reboot(DEFAULT_REBOOT_SECONDS);
     }
+}
+
+void AdminModule::handleStoreDeviceUIConfig(const meshtastic_DeviceUIConfig &uicfg)
+{
+    nodeDB->saveProto("/prefs/uiconfig.proto", meshtastic_DeviceUIConfig_size, &meshtastic_DeviceUIConfig_msg, &uicfg);
 }
 
 void AdminModule::handleSetHamMode(const meshtastic_HamParameters &p)
@@ -1046,7 +1069,8 @@ bool AdminModule::messageIsResponse(const meshtastic_AdminMessage *r)
         r->which_payload_variant == meshtastic_AdminMessage_get_ringtone_response_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_device_connection_status_response_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_node_remote_hardware_pins_response_tag ||
-        r->which_payload_variant == meshtastic_NodeRemoteHardwarePinsResponse_node_remote_hardware_pins_tag)
+        r->which_payload_variant == meshtastic_NodeRemoteHardwarePinsResponse_node_remote_hardware_pins_tag ||
+        r->which_payload_variant == meshtastic_AdminMessage_get_ui_config_response_tag)
         return true;
     else
         return false;
@@ -1062,7 +1086,8 @@ bool AdminModule::messageIsRequest(const meshtastic_AdminMessage *r)
         r->which_payload_variant == meshtastic_AdminMessage_get_device_metadata_request_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_ringtone_request_tag ||
         r->which_payload_variant == meshtastic_AdminMessage_get_device_connection_status_request_tag ||
-        r->which_payload_variant == meshtastic_AdminMessage_get_node_remote_hardware_pins_request_tag)
+        r->which_payload_variant == meshtastic_AdminMessage_get_node_remote_hardware_pins_request_tag ||
+        r->which_payload_variant == meshtastic_AdminMessage_get_ui_config_request_tag)
         return true;
     else
         return false;
