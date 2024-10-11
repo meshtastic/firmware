@@ -671,7 +671,7 @@ void setup()
 
 #if defined(USE_SH1107)
     screen_model = meshtastic_Config_DisplayConfig_OledType_OLED_SH1107; // set dimension of 128x128
-    display_geometry = GEOMETRY_128_128;
+    screen_geometry = GEOMETRY_128_128;
 #endif
 
 #if defined(USE_SH1107_128_64)
