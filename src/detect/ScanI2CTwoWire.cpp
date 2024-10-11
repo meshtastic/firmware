@@ -407,6 +407,10 @@ void ScanI2CTwoWire::scanPort(I2CPort port, uint8_t *address, uint8_t asize)
                 SCAN_SIMPLE_CASE(MAX1704X_ADDR, MAX17048, "MAX17048 lipo fuel gauge found\n");
                 SCAN_SIMPLE_CASE(SCD4X_ADDR, SCD4X, "SCD4X CO2 sensor found\n");
                 SCAN_SIMPLE_CASE(MLX90614_ADDR, MLX90614, "MLX90614 IR temp sensor found\n");
+#ifdef HAS_TPS65233
+                SCAN_SIMPLE_CASE(TPS65233_ADDR, TPS65233, "TPS65233 BIAS-T found\n");
+#endif
+                SCAN_SIMPLE_CASE(MLX90614_ADDR_DEF, MLX90614, "MLX90614 IR temp sensor found\n");
 
             case ICM20948_ADDR:     // same as BMX160_ADDR
             case ICM20948_ADDR_ALT: // same as MPU6050_ADDR
