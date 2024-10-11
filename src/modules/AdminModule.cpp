@@ -243,6 +243,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
     case meshtastic_AdminMessage_store_ui_config_tag: {
         LOG_INFO("Storing device-ui config\n");
         handleStoreDeviceUIConfig(r->store_ui_config);
+        handled = true;
         break;
     }
     case meshtastic_AdminMessage_begin_edit_settings_tag: {
@@ -975,7 +976,7 @@ void AdminModule::handleGetDeviceUIConfig(const meshtastic_MeshPacket &req)
 {
     meshtastic_AdminMessage r = meshtastic_AdminMessage_init_default;
     r.which_payload_variant = meshtastic_AdminMessage_get_ui_config_response_tag;
-    r.store_ui_config = uiconfig;
+    r.get_ui_config_response = uiconfig;
     myReply = allocDataProtobuf(r);
 }
 
