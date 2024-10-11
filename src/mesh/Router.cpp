@@ -333,7 +333,8 @@ bool perhapsDecode(meshtastic_MeshPacket *p)
         rawSize > MESHTASTIC_PKC_OVERHEAD) {
         LOG_DEBUG("Attempting PKI decryption\n");
 
-        if (crypto->decryptCurve25519(p->from, p->id, rawSize, ScratchEncrypted, bytes)) {
+        if (crypto->decryptCurve25519(p->from, nodeDB->getMeshNode(p->from)->user.public_key, p->id, rawSize, ScratchEncrypted,
+                                      bytes)) {
             LOG_INFO("PKI Decryption worked!\n");
             memset(&p->decoded, 0, sizeof(p->decoded));
             rawSize -= MESHTASTIC_PKC_OVERHEAD;
@@ -507,7 +508,7 @@ meshtastic_Routing_Error perhapsEncode(meshtastic_MeshPacket *p)
                          *node->user.public_key.bytes);
                 return meshtastic_Routing_Error_PKI_FAILED;
             }
-            crypto->encryptCurve25519(p->to, getFrom(p), p->id, numbytes, bytes, ScratchEncrypted);
+            crypto->encryptCurve25519(p->to, getFrom(p), node->user.public_key, p->id, numbytes, bytes, ScratchEncrypted);
             numbytes += MESHTASTIC_PKC_OVERHEAD;
             memcpy(p->encrypted.bytes, ScratchEncrypted, numbytes);
             p->channel = 0;
@@ -612,8 +613,12 @@ void Router::handleReceived(meshtastic_MeshPacket *p, RxSource src)
         MeshModule::callModules(*p, src);
 
 #if !MESHTASTIC_EXCLUDE_MQTT
+        // Mark as pki_encrypted if it is not yet decoded and MQTT encryption is also enabled, hash matches and it's a DM not to
+        // us (because we would be able to decrypt it)
+        if (!decoded && moduleConfig.mqtt.encryption_enabled && p->channel == 0x00 && p->to != NODENUM_BROADCAST && !isToUs(p))
+            p_encrypted->pki_encrypted = true;
         // After potentially altering it, publish received message to MQTT if we're not the original transmitter of the packet
-        if (decoded && moduleConfig.mqtt.enabled && !isFromUs(p) && mqtt)
+        if ((decoded || p_encrypted->pki_encrypted) && moduleConfig.mqtt.enabled && !isFromUs(p) && mqtt)
             mqtt->onSend(*p_encrypted, *p, p->channel);
 #endif
     }
@@ -636,19 +641,25 @@ void Router::perhapsHandleReceived(meshtastic_MeshPacket *p)
 #endif
     // assert(radioConfig.has_preferences);
     if (is_in_repeated(config.lora.ignore_incoming, p->from)) {
-        LOG_DEBUG("Ignoring incoming message, 0x%x is in our ignore list\n", p->from);
+        LOG_DEBUG("Ignoring msg, 0x%x is in our ignore list\n", p->from);
+        packetPool.release(p);
+        return;
+    }
+
+    if (p->from == NODENUM_BROADCAST) {
+        LOG_DEBUG("Ignoring msg from broadcast address\n");
         packetPool.release(p);
         return;
     }
 
     if (config.lora.ignore_mqtt && p->via_mqtt) {
-        LOG_DEBUG("Message came in via MQTT from 0x%x\n", p->from);
+        LOG_DEBUG("Msg came in via MQTT from 0x%x\n", p->from);
         packetPool.release(p);
         return;
     }
 
     if (shouldFilterReceived(p)) {
-        LOG_DEBUG("Incoming message was filtered from 0x%x\n", p->from);
+        LOG_DEBUG("Incoming msg was filtered from 0x%x\n", p->from);
         packetPool.release(p);
         return;
     }

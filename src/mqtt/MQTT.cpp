@@ -402,13 +402,14 @@ void MQTT::sendSubscriptions()
             std::string topic = cryptTopic + channels.getGlobalId(i) + "/+";
             LOG_INFO("Subscribing to %s\n", topic.c_str());
             pubSub.subscribe(topic.c_str(), 1); // FIXME, is QOS 1 right?
-#ifndef ARCH_NRF52                              // JSON is not supported on nRF52, see issue #2804
+#if !defined(ARCH_NRF52) ||                                                                                                      \
+    defined(NRF52_USE_JSON) // JSON is not supported on nRF52, see issue #2804 ### Fixed by using ArduinoJSON ###
             if (moduleConfig.mqtt.json_enabled == true) {
                 std::string topicDecoded = jsonTopic + channels.getGlobalId(i) + "/+";
                 LOG_INFO("Subscribing to %s\n", topicDecoded.c_str());
                 pubSub.subscribe(topicDecoded.c_str(), 1); // FIXME, is QOS 1 right?
             }
-#endif // ARCH_NRF52
+#endif // ARCH_NRF52 NRF52_USE_JSON
         }
     }
 #if !MESHTASTIC_EXCLUDE_PKI
@@ -501,7 +502,8 @@ void MQTT::publishQueuedMessages()
 
         publish(topic.c_str(), bytes, numBytes, false);
 
-#ifndef ARCH_NRF52 // JSON is not supported on nRF52, see issue #2804
+#if !defined(ARCH_NRF52) ||                                                                                                      \
+    defined(NRF52_USE_JSON) // JSON is not supported on nRF52, see issue #2804 ### Fixed by using ArduinoJson ###
         if (moduleConfig.mqtt.json_enabled) {
             // handle json topic
             auto jsonString = MeshPacketSerializer::JsonSerialize(env->packet);
@@ -517,14 +519,14 @@ void MQTT::publishQueuedMessages()
                 publish(topicJson.c_str(), jsonString.c_str(), false);
             }
         }
-#endif // ARCH_NRF52
+#endif // ARCH_NRF52 NRF52_USE_JSON
         mqttPool.release(env);
     }
 }
 
-void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &mp_decoded, ChannelIndex chIndex)
+void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_MeshPacket &mp_decoded, ChannelIndex chIndex)
 {
-    if (mp.via_mqtt)
+    if (mp_encrypted.via_mqtt)
         return; // Don't send messages that came from MQTT back into MQTT
     bool uplinkEnabled = false;
     for (int i = 0; i <= 7; i++) {
@@ -535,14 +537,10 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
         return; // no channels have an uplink enabled
     auto &ch = channels.getByIndex(chIndex);
 
-    if (!mp.pki_encrypted) {
-        if (mp_decoded.which_payload_variant != meshtastic_MeshPacket_decoded_tag) {
-            LOG_CRIT("MQTT::onSend(): mp_decoded isn't actually decoded\n");
-            return;
-        }
-
+    // mp_decoded will not be decoded when it's PKI encrypted and not directed to us
+    if (mp_decoded.which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
         // check for the lowest bit of the data bitfield set false, and the use of one of the default keys.
-        if (!isFromUs(&mp_decoded) && mp_decoded.decoded.has_bitfield &&
+        if (!isFromUs(&mp_decoded) && strcmp(moduleConfig.mqtt.address, "127.0.0.1") != 0 && mp_decoded.decoded.has_bitfield &&
             !(mp_decoded.decoded.bitfield & BITFIELD_OK_TO_MQTT_MASK) &&
             (ch.settings.psk.size < 2 || (ch.settings.psk.size == 16 && memcmp(ch.settings.psk.bytes, defaultpsk, 16)) ||
              (ch.settings.psk.size == 32 && memcmp(ch.settings.psk.bytes, eventpsk, 32)))) {
@@ -557,8 +555,11 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
             return;
         }
     }
-    if (mp.pki_encrypted || ch.settings.uplink_enabled) {
-        const char *channelId = mp.pki_encrypted ? "PKI" : channels.getGlobalId(chIndex);
+    // Either encrypted packet (we couldn't decrypt) is marked as pki_encrypted, or we could decode the PKI encrypted packet
+    bool isPKIEncrypted = mp_encrypted.pki_encrypted || mp_decoded.pki_encrypted;
+    // If it was to a channel, check uplink enabled, else must be pki_encrypted
+    if ((ch.settings.uplink_enabled && !isPKIEncrypted) || isPKIEncrypted) {
+        const char *channelId = isPKIEncrypted ? "PKI" : channels.getGlobalId(chIndex);
 
         meshtastic_ServiceEnvelope *env = mqttPool.allocZeroed();
         env->channel_id = (char *)channelId;
@@ -566,12 +567,14 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
 
         LOG_DEBUG("MQTT onSend - Publishing ");
         if (moduleConfig.mqtt.encryption_enabled) {
-            env->packet = (meshtastic_MeshPacket *)&mp;
+            env->packet = (meshtastic_MeshPacket *)&mp_encrypted;
             LOG_DEBUG("encrypted message\n");
-        } else if (mp_decoded.which_payload_variant ==
-                   meshtastic_MeshPacket_decoded_tag) { // Don't upload a still-encrypted PKI packet
+        } else if (mp_decoded.which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
             env->packet = (meshtastic_MeshPacket *)&mp_decoded;
             LOG_DEBUG("portnum %i message\n", env->packet->decoded.portnum);
+        } else {
+            LOG_DEBUG("nothing, pkt not decrypted\n");
+            return; // Don't upload a still-encrypted PKI packet if not encryption_enabled
         }
 
         if (moduleConfig.mqtt.proxy_to_client_enabled || this->isConnectedDirectly()) {
@@ -581,7 +584,8 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
 
             publish(topic.c_str(), bytes, numBytes, false);
 
-#ifndef ARCH_NRF52 // JSON is not supported on nRF52, see issue #2804
+#if !defined(ARCH_NRF52) ||                                                                                                      \
+    defined(NRF52_USE_JSON) // JSON is not supported on nRF52, see issue #2804 ### Fixed by using ArduinoJson ###
             if (moduleConfig.mqtt.json_enabled) {
                 // handle json topic
                 auto jsonString = MeshPacketSerializer::JsonSerialize((meshtastic_MeshPacket *)&mp_decoded);
@@ -592,7 +596,7 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp, const meshtastic_MeshPacket &
                     publish(topicJson.c_str(), jsonString.c_str(), false);
                 }
             }
-#endif // ARCH_NRF52
+#endif // ARCH_NRF52 NRF52_USE_JSON
         } else {
             LOG_INFO("MQTT not connected, queueing packet\n");
             if (mqttQueue.numFree() == 0) {
