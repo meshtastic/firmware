@@ -68,7 +68,7 @@ void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
                 // We are careful not to call our hooked version of send() - because we don't want to check this again
                 Router::send(tosend);
             } else {
-                LOG_DEBUG("Not rebroadcasting. Role = Role_ClientMute\n");
+                LOG_DEBUG("Not rebroadcasting: Role = CLIENT_MUTE or Rebroadcast Mode = NONE\n");
             }
         } else {
             LOG_DEBUG("Ignoring 0 id broadcast\n");
