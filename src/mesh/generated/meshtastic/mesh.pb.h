@@ -212,6 +212,9 @@ typedef enum _meshtastic_HardwareModel {
     meshtastic_HardwareModel_MS24SF1 = 82,
     /* Lilygo TLora-C6 with the new ESP32-C6 MCU */
     meshtastic_HardwareModel_TLORA_C6 = 83,
+    /* Icarus custom PCB by Muhammad Shah based on ESP32-S3 and RA-01SH */
+    meshtastic_HardwareModel_ICARUS = 84,    
+
     /* ------------------------------------------------------------------------------------------------------------------------------------------
  Reserved ID For developing private Ports. These will show up in live traffic sparsely, so we can use a high number. Keep it within 8 bits.
  ------------------------------------------------------------------------------------------------------------------------------------------ */
