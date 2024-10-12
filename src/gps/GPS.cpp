@@ -8,6 +8,8 @@
 #include "RTC.h"
 #include "Throttle.h"
 #include "meshUtils.h"
+#include <fmt/core.h>
+#include <fmt/printf.h>
 
 #include "main.h" // pmu_found
 #include "sleep.h"
@@ -166,12 +168,15 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
     uint8_t b;
     int bytesRead = 0;
     uint32_t startTimeout = millis() + waitMillis;
+#ifdef GPS_DEBUG
+    std::string debugmsg = "";
+#endif
     while (millis() < startTimeout) {
         if (_serial_gps->available()) {
             b = _serial_gps->read();
 
 #ifdef GPS_DEBUG
-            LOG_DEBUG("%c", (b >= 32 && b <= 126) ? b : '.');
+            debugmsg += fmt::sprintf("%c", (b >= 32 && b <= 126) ? b : '.');
 #endif
             buffer[bytesRead] = b;
             bytesRead++;
@@ -184,15 +189,12 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
                 } else {
                     bytesRead = 0;
 #ifdef GPS_DEBUG
-                    LOG_DEBUG("");
+                    LOG_DEBUG(debugmsg.c_str());
 #endif
                 }
             }
         }
     }
-#ifdef GPS_DEBUG
-    LOG_DEBUG("");
-#endif
     return GNSS_RESPONSE_NONE;
 }
 

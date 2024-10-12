@@ -1,5 +1,7 @@
 #include "TraceRouteModule.h"
 #include "MeshService.h"
+#include <fmt/core.h>
+#include <fmt/printf.h>
 
 TraceRouteModule *traceRouteModule;
 
@@ -108,38 +110,40 @@ void TraceRouteModule::appendMyIDandSNR(meshtastic_RouteDiscovery *updated, floa
 void TraceRouteModule::printRoute(meshtastic_RouteDiscovery *r, uint32_t origin, uint32_t dest, bool isTowardsDestination)
 {
 #ifdef DEBUG_PORT
-    LOG_INFO("Route traced:");
-    LOG_INFO("0x%x --> ", origin);
+    std::string route = "Route traced:";
+    route += fmt::sprintf("0x%x --> ", origin);
     for (uint8_t i = 0; i < r->route_count; i++) {
         if (i < r->snr_towards_count && r->snr_towards[i] != INT8_MIN)
-            LOG_INFO("0x%x (%.2fdB) --> ", r->route[i], (float)r->snr_towards[i] / 4);
+            route += fmt::sprintf("0x%x (%.2fdB) --> ", r->route[i], (float)r->snr_towards[i] / 4);
         else
-            LOG_INFO("0x%x (?dB) --> ", r->route[i]);
+            route += fmt::sprintf("0x%x (?dB) --> ", r->route[i]);
     }
     // If we are the destination, or it has already reached the destination, print it
     if (dest == nodeDB->getNodeNum() || !isTowardsDestination) {
         if (r->snr_towards_count > 0 && r->snr_towards[r->snr_towards_count - 1] != INT8_MIN)
-            LOG_INFO("0x%x (%.2fdB)", dest, (float)r->snr_towards[r->snr_towards_count - 1] / 4);
+            route += fmt::sprintf("0x%x (%.2fdB)", dest, (float)r->snr_towards[r->snr_towards_count - 1] / 4);
+
         else
-            LOG_INFO("0x%x (?dB)", dest);
+            route += fmt::sprintf("0x%x (?dB)", dest);
     } else
-        LOG_INFO("...");
+        route += "...";
 
     // If there's a route back (or we are the destination as then the route is complete), print it
     if (r->route_back_count > 0 || origin == nodeDB->getNodeNum()) {
         if (r->snr_towards_count > 0 && origin == nodeDB->getNodeNum())
-            LOG_INFO("(%.2fdB) 0x%x <-- ", (float)r->snr_back[r->snr_back_count - 1] / 4, origin);
+            route += fmt::sprintf("(%.2fdB) 0x%x <-- ", (float)r->snr_back[r->snr_back_count - 1] / 4, origin);
         else
-            LOG_INFO("...");
+            route += "...";
 
         for (int8_t i = r->route_back_count - 1; i >= 0; i--) {
             if (i < r->snr_back_count && r->snr_back[i] != INT8_MIN)
-                LOG_INFO("(%.2fdB) 0x%x <-- ", (float)r->snr_back[i] / 4, r->route_back[i]);
+                route += fmt::sprintf("(%.2fdB) 0x%x <-- ", (float)r->snr_back[i] / 4, r->route_back[i]);
             else
-                LOG_INFO("(?dB) 0x%x <-- ", r->route_back[i]);
+                route += fmt::sprintf("(?dB) 0x%x <-- ", r->route_back[i]);
         }
-        LOG_INFO("0x%x", dest);
+        route += fmt::sprintf("0x%x", dest);
     }
+    LOG_INFO(route.c_str());
 #endif
 }
 
