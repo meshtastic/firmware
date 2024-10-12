@@ -451,6 +451,14 @@ void AdminModule::handleSetConfig(const meshtastic_Config &c)
             requiresReboot = false;
         }
         config.device = c.payload_variant.device;
+        if (config.device.rebroadcast_mode == meshtastic_Config_DeviceConfig_RebroadcastMode_NONE &&
+            IS_ONE_OF(config.device.role, meshtastic_Config_DeviceConfig_Role_ROUTER,
+                      meshtastic_Config_DeviceConfig_Role_REPEATER)) {
+            config.device.rebroadcast_mode = meshtastic_Config_DeviceConfig_RebroadcastMode_ALL;
+            const char *warning = "Rebroadcast mode can't be set to NONE for a router or repeater\n";
+            LOG_WARN(warning);
+            sendWarning(warning);
+        }
         // If we're setting router role for the first time, install its intervals
         if (existingRole != c.payload_variant.device.role)
             nodeDB->installRoleDefaults(c.payload_variant.device.role);
@@ -1062,6 +1070,15 @@ bool AdminModule::messageIsRequest(const meshtastic_AdminMessage *r)
         return true;
     else
         return false;
+}
+
+void AdminModule::sendWarning(const char *message)
+{
+    meshtastic_ClientNotification *cn = clientNotificationPool.allocZeroed();
+    cn->level = meshtastic_LogRecord_Level_WARNING;
+    cn->time = getValidTime(RTCQualityFromNet);
+    strncpy(cn->message, message, sizeof(cn->message));
+    service->sendClientNotification(cn);
 }
 
 void disableBluetooth()
