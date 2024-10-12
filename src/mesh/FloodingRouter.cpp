@@ -35,6 +35,12 @@ bool FloodingRouter::shouldFilterReceived(const meshtastic_MeshPacket *p)
     return Router::shouldFilterReceived(p);
 }
 
+bool FloodingRouter::isRebroadcaster()
+{
+    return config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE &&
+           config.device.rebroadcast_mode != meshtastic_Config_DeviceConfig_RebroadcastMode_NONE;
+}
+
 void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtastic_Routing *c)
 {
     bool isAckorReply = (p->which_payload_variant == meshtastic_MeshPacket_decoded_tag) && (p->decoded.request_id != 0);
@@ -45,7 +51,7 @@ void FloodingRouter::sniffReceived(const meshtastic_MeshPacket *p, const meshtas
     }
     if (!isToUs(p) && (p->hop_limit > 0) && !isFromUs(p)) {
         if (p->id != 0) {
-            if (config.device.role != meshtastic_Config_DeviceConfig_Role_CLIENT_MUTE) {
+            if (isRebroadcaster()) {
                 meshtastic_MeshPacket *tosend = packetPool.allocCopy(*p); // keep a copy because we will be sending it
 
                 tosend->hop_limit--; // bump down the hop count
