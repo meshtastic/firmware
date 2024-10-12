@@ -3,7 +3,6 @@
 #define I2C_SDA 8
 #define I2C_SCL 9
 
-// BME280
 #define I2C_SDA1 18
 #define I2C_SCL1 6
 
@@ -35,4 +34,8 @@
 #define SX126X_DIO2_AS_RF_SWITCH // use DIO2 as RF switch
 #define USE_SX1262
 
-
+// Battery
+#define BATTERY_PIN 1
+#define ADC_CHANNEL ADC1_GPIO1_CHANNEL
+#define BATTERY_SENSE_SAMPLES 15 // Set the number of samples, It has an effect of increasing sensitivity.
+#define ADC_MULTIPLIER 2
