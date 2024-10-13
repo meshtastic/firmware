@@ -8,8 +8,6 @@
 #include "RTC.h"
 #include "Throttle.h"
 #include "meshUtils.h"
-#include <fmt/core.h>
-#include <fmt/printf.h>
 
 #include "main.h" // pmu_found
 #include "sleep.h"
@@ -176,7 +174,7 @@ GPS_RESPONSE GPS::getACK(const char *message, uint32_t waitMillis)
             b = _serial_gps->read();
 
 #ifdef GPS_DEBUG
-            debugmsg += fmt::sprintf("%c", (b >= 32 && b <= 126) ? b : '.');
+            debugmsg += vformat("%c", (b >= 32 && b <= 126) ? b : '.');
 #endif
             buffer[bytesRead] = b;
             bytesRead++;

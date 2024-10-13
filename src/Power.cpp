@@ -19,8 +19,6 @@
 #include "main.h"
 #include "meshUtils.h"
 #include "sleep.h"
-#include <fmt/core.h>
-#include <fmt/printf.h>
 
 // Working USB detection for powered/charging states on the RAK platform
 #ifdef NRF_APM
@@ -666,7 +664,7 @@ void Power::readPowerStatus()
         for (int i = 0; i < MAX_THREADS; i++) {
             auto thread = concurrency::mainController.get(i);
             if ((thread != nullptr) && (thread->enabled)) {
-                threadlist += fmt::sprintf(" %s", thread->ThreadName.c_str());
+                threadlist += vformat(" %s", thread->ThreadName.c_str());
                 running++;
             }
         }

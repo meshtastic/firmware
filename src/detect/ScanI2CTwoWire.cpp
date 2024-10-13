@@ -1,6 +1,4 @@
 #include "ScanI2CTwoWire.h"
-#include <fmt/core.h>
-#include <fmt/printf.h>
 
 #if !MESHTASTIC_EXCLUDE_I2C
 
@@ -92,12 +90,12 @@ void ScanI2CTwoWire::printATECCInfo() const
 
     std::string atecc_numbers = "ATECC608B Serial Number: ";
     for (int i = 0; i < 9; i++) {
-        atecc_numbers += fmt::sprintf("%02x", atecc.serialNumber[i]);
+        atecc_numbers += vformat("%02x", atecc.serialNumber[i]);
     }
 
     atecc_numbers += ", Rev Number: ";
     for (int i = 0; i < 4; i++) {
-        atecc_numbers += fmt::sprintf("%02x", atecc.revisionNumber[i]);
+        atecc_numbers += vformat("%02x", atecc.revisionNumber[i]);
     }
     LOG_DEBUG(atecc_numbers.c_str());
 
@@ -111,7 +109,7 @@ void ScanI2CTwoWire::printATECCInfo() const
         } else {
             atecc_publickey += "ATECC608B Public Key: ";
             for (int i = 0; i < 64; i++) {
-                atecc_publickey += fmt::sprintf("%02x", atecc.publicKey64Bytes[i]);
+                atecc_publickey += vformat("%02x", atecc.publicKey64Bytes[i]);
             }
         }
         LOG_DEBUG(atecc_publickey.c_str());

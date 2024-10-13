@@ -1,7 +1,6 @@
 #include "TraceRouteModule.h"
 #include "MeshService.h"
-#include <fmt/core.h>
-#include <fmt/printf.h>
+#include "meshUtils.h"
 
 TraceRouteModule *traceRouteModule;
 
@@ -111,37 +110,37 @@ void TraceRouteModule::printRoute(meshtastic_RouteDiscovery *r, uint32_t origin,
 {
 #ifdef DEBUG_PORT
     std::string route = "Route traced:";
-    route += fmt::sprintf("0x%x --> ", origin);
+    route += vformat("0x%x --> ", origin);
     for (uint8_t i = 0; i < r->route_count; i++) {
         if (i < r->snr_towards_count && r->snr_towards[i] != INT8_MIN)
-            route += fmt::sprintf("0x%x (%.2fdB) --> ", r->route[i], (float)r->snr_towards[i] / 4);
+            route += vformat("0x%x (%.2fdB) --> ", r->route[i], (float)r->snr_towards[i] / 4);
         else
-            route += fmt::sprintf("0x%x (?dB) --> ", r->route[i]);
+            route += vformat("0x%x (?dB) --> ", r->route[i]);
     }
     // If we are the destination, or it has already reached the destination, print it
     if (dest == nodeDB->getNodeNum() || !isTowardsDestination) {
         if (r->snr_towards_count > 0 && r->snr_towards[r->snr_towards_count - 1] != INT8_MIN)
-            route += fmt::sprintf("0x%x (%.2fdB)", dest, (float)r->snr_towards[r->snr_towards_count - 1] / 4);
+            route += vformat("0x%x (%.2fdB)", dest, (float)r->snr_towards[r->snr_towards_count - 1] / 4);
 
         else
-            route += fmt::sprintf("0x%x (?dB)", dest);
+            route += vformat("0x%x (?dB)", dest);
     } else
         route += "...";
 
     // If there's a route back (or we are the destination as then the route is complete), print it
     if (r->route_back_count > 0 || origin == nodeDB->getNodeNum()) {
         if (r->snr_towards_count > 0 && origin == nodeDB->getNodeNum())
-            route += fmt::sprintf("(%.2fdB) 0x%x <-- ", (float)r->snr_back[r->snr_back_count - 1] / 4, origin);
+            route += vformat("(%.2fdB) 0x%x <-- ", (float)r->snr_back[r->snr_back_count - 1] / 4, origin);
         else
             route += "...";
 
         for (int8_t i = r->route_back_count - 1; i >= 0; i--) {
             if (i < r->snr_back_count && r->snr_back[i] != INT8_MIN)
-                route += fmt::sprintf("(%.2fdB) 0x%x <-- ", (float)r->snr_back[i] / 4, r->route_back[i]);
+                route += vformat("(%.2fdB) 0x%x <-- ", (float)r->snr_back[i] / 4, r->route_back[i]);
             else
-                route += fmt::sprintf("(?dB) 0x%x <-- ", r->route_back[i]);
+                route += vformat("(?dB) 0x%x <-- ", r->route_back[i]);
         }
-        route += fmt::sprintf("0x%x", dest);
+        route += vformat("0x%x", dest);
     }
     LOG_INFO(route.c_str());
 #endif
