@@ -71,8 +71,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define OLED_BLACK OLEDDISPLAY_COLOR::BLACK
 #define OLED_WHITE OLEDDISPLAY_COLOR::WHITE
 #else
-    #define OLED_BLACK BLACK
-    #define OLED_WHITE WHITE
+#define OLED_BLACK BLACK
+#define OLED_WHITE WHITE
 #endif
 
 using namespace meshtastic; /** @todo remove */
@@ -1635,7 +1635,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             pinMode(TFT_BL, OUTPUT);
             digitalWrite(TFT_BL, HIGH);
 #endif
-#if defined(M5STACK_CORE2) 
+#if defined(M5STACK_CORE2)
             M5.Power.Axp192.setDCDC3(1000);
             M5.Display.setBrightness(130);
 #endif
@@ -1654,7 +1654,7 @@ void Screen::handleSetOn(bool on, FrameCallback einkScreensaver)
             pinMode(TFT_BL, OUTPUT);
             digitalWrite(TFT_BL, LOW);
 #endif
-#if defined(M5STACK_CORE2) 
+#if defined(M5STACK_CORE2)
             M5.Power.Axp192.setDCDC3(0);
 #endif
 #ifdef USE_ST7789
