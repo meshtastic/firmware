@@ -19,6 +19,8 @@
 #include "main.h"
 #include "meshUtils.h"
 #include "sleep.h"
+#include <fmt/core.h>
+#include <fmt/printf.h>
 
 // Working USB detection for powered/charging states on the RAK platform
 #ifdef NRF_APM
@@ -659,16 +661,16 @@ void Power::readPowerStatus()
     newStatus.notifyObservers(&powerStatus2);
 #ifdef DEBUG_HEAP
     if (lastheap != memGet.getFreeHeap()) {
-        LOG_DEBUG("Threads running:");
+        std::string threadlist = "Threads running:";
         int running = 0;
         for (int i = 0; i < MAX_THREADS; i++) {
             auto thread = concurrency::mainController.get(i);
             if ((thread != nullptr) && (thread->enabled)) {
-                LOG_DEBUG(" %s", thread->ThreadName.c_str());
+                threadlist += fmt::sprintf(" %s", thread->ThreadName.c_str());
                 running++;
             }
         }
-        LOG_DEBUG("");
+        LOG_DEBUG(threadlist.c_str());
         LOG_DEBUG("Heap status: %d/%d bytes free (%d), running %d/%d threads", memGet.getFreeHeap(), memGet.getHeapSize(),
                   memGet.getFreeHeap() - lastheap, running, concurrency::mainController.size(false));
         lastheap = memGet.getFreeHeap();

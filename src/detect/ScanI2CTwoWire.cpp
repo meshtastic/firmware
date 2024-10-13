@@ -1,4 +1,6 @@
 #include "ScanI2CTwoWire.h"
+#include <fmt/core.h>
+#include <fmt/printf.h>
 
 #if !MESHTASTIC_EXCLUDE_I2C
 
@@ -88,31 +90,31 @@ void ScanI2CTwoWire::printATECCInfo() const
 #if !defined(ARCH_PORTDUINO) && !defined(ARCH_STM32WL)
     atecc.readConfigZone(false);
 
-    LOG_DEBUG("ATECC608B Serial Number: ");
+    std::string atecc_numbers = "ATECC608B Serial Number: ";
     for (int i = 0; i < 9; i++) {
-        LOG_DEBUG("%02x", atecc.serialNumber[i]);
+        atecc_numbers += fmt::sprintf("%02x", atecc.serialNumber[i]);
     }
 
-    LOG_DEBUG(", Rev Number: ");
+    atecc_numbers += ", Rev Number: ";
     for (int i = 0; i < 4; i++) {
-        LOG_DEBUG("%02x", atecc.revisionNumber[i]);
+        atecc_numbers += fmt::sprintf("%02x", atecc.revisionNumber[i]);
     }
-    LOG_DEBUG("");
+    LOG_DEBUG(atecc_numbers.c_str());
 
-    LOG_DEBUG("ATECC608B Config %s", atecc.configLockStatus ? "Locked" : "Unlocked");
-    LOG_DEBUG(", Data %s", atecc.dataOTPLockStatus ? "Locked" : "Unlocked");
-    LOG_DEBUG(", Slot 0 %s", atecc.slot0LockStatus ? "Locked" : "Unlocked");
+    LOG_DEBUG("ATECC608B Config %s, Data %s, Slot 0 %s", atecc.configLockStatus ? "Locked" : "Unlocked",
+              atecc.dataOTPLockStatus ? "Locked" : "Unlocked", atecc.slot0LockStatus ? "Locked" : "Unlocked");
 
+    std::string atecc_publickey = "";
     if (atecc.configLockStatus && atecc.dataOTPLockStatus && atecc.slot0LockStatus) {
         if (atecc.generatePublicKey() == false) {
-            LOG_DEBUG("ATECC608B Error generating public key");
+            atecc_publickey += "ATECC608B Error generating public key";
         } else {
-            LOG_DEBUG("ATECC608B Public Key: ");
+            atecc_publickey += "ATECC608B Public Key: ";
             for (int i = 0; i < 64; i++) {
-                LOG_DEBUG("%02x", atecc.publicKey64Bytes[i]);
+                atecc_publickey += fmt::sprintf("%02x", atecc.publicKey64Bytes[i]);
             }
-            LOG_DEBUG("");
         }
+        LOG_DEBUG(atecc_publickey.c_str());
     }
 #endif
 }
