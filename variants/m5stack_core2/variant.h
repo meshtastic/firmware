@@ -1,13 +1,5 @@
-// #define BUTTON_NEED_PULLUP // if set we need to turn on the internal CPU pullup during sleep
-
-// #define BUTTON_PIN 39 // 38, 37
-// #define BUTTON_PIN 0
 #define BUTTON_NEED_PULLUP
-// #define EXT_NOTIFY_OUT 13 // Default pin to use for Ext Notify Plugin.
 
-// #define BUTTON_PIN
-
-// #define PIN_BUZZER 25
 #undef LORA_SCK
 #undef LORA_MISO
 #undef LORA_MOSI
