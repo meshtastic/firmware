@@ -18,7 +18,7 @@
             frequency_switching, wide_lora, #name                                                                                \
     }
 
-DataInfo  DataRegion;
+DataInfo DataRegion;
 
 const RegionInfo regions[] = {
     /*
