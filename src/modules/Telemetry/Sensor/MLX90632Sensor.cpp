@@ -10,7 +10,7 @@ MLX90632Sensor::MLX90632Sensor() : TelemetrySensor(meshtastic_TelemetrySensorTyp
 
 int32_t MLX90632Sensor::runOnce()
 {
-    LOG_INFO("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
@@ -19,10 +19,10 @@ int32_t MLX90632Sensor::runOnce()
     if (mlx.begin(nodeTelemetrySensorsMap[sensorType].first, *nodeTelemetrySensorsMap[sensorType].second, returnError) ==
         true) // MLX90632 init
     {
-        LOG_DEBUG("MLX90632 Init Succeed\n");
+        LOG_DEBUG("MLX90632 Init Succeed");
         status = true;
     } else {
-        LOG_ERROR("MLX90632 Init Failed\n");
+        LOG_ERROR("MLX90632 Init Failed");
         status = false;
     }
     return initI2CSensor();

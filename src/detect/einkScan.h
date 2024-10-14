@@ -59,9 +59,9 @@ void scanEInkDevice(void)
     d_writeCommand(0x20);
     eink_found = (d_waitWhileBusy(150) > 0) ? true : false;
     if (eink_found)
-        LOG_DEBUG("EInk display found\n");
+        LOG_DEBUG("EInk display found");
     else
-        LOG_DEBUG("EInk display not found\n");
+        LOG_DEBUG("EInk display not found");
     SPI1.end();
 }
 #endif

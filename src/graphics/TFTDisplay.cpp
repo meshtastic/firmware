@@ -391,7 +391,7 @@ class LGFX : public lgfx::LGFX_Device
         _panel_instance->setBus(&_bus_instance); // set the bus on the panel.
 
         auto cfg = _panel_instance->config(); // Gets a structure for display panel settings.
-        LOG_DEBUG("Height: %d, Width: %d \n", settingsMap[displayHeight], settingsMap[displayWidth]);
+        LOG_DEBUG("Height: %d, Width: %d ", settingsMap[displayHeight], settingsMap[displayWidth]);
         cfg.pin_cs = settingsMap[displayCS]; // Pin number where CS is connected (-1 = disable)
         cfg.pin_rst = settingsMap[displayReset];
         cfg.panel_width = settingsMap[displayWidth];            // actual displayable width
@@ -654,7 +654,7 @@ GpioPin *TFTDisplay::backlightEnable = NULL;
 
 TFTDisplay::TFTDisplay(uint8_t address, int sda, int scl, OLEDDISPLAY_GEOMETRY geometry, HW_I2C i2cBus)
 {
-    LOG_DEBUG("TFTDisplay!\n");
+    LOG_DEBUG("TFTDisplay!");
 
 #ifdef TFT_BL
     GpioPin *p = new GpioHwPin(TFT_BL);
@@ -723,7 +723,7 @@ void TFTDisplay::sendCommand(uint8_t com)
     // handle display on/off directly
     switch (com) {
     case DISPLAYON: {
-        // LOG_DEBUG("Display on\n");
+        // LOG_DEBUG("Display on");
         backlightEnable->set(true);
 #if ARCH_PORTDUINO
         display(true);
@@ -747,7 +747,7 @@ void TFTDisplay::sendCommand(uint8_t com)
         break;
     }
     case DISPLAYOFF: {
-        // LOG_DEBUG("Display off\n");
+        // LOG_DEBUG("Display off");
         backlightEnable->set(false);
 #if ARCH_PORTDUINO
         tft->clear();
@@ -783,14 +783,14 @@ void TFTDisplay::setDisplayBrightness(uint8_t _brightness)
     // todo
 #else
     tft->setBrightness(_brightness);
-    LOG_DEBUG("Brightness is set to value: %i \n", _brightness);
+    LOG_DEBUG("Brightness is set to value: %i ", _brightness);
 #endif
 }
 
 void TFTDisplay::flipScreenVertically()
 {
 #if defined(T_WATCH_S3)
-    LOG_DEBUG("Flip TFT vertically\n"); // T-Watch S3 right-handed orientation
+    LOG_DEBUG("Flip TFT vertically"); // T-Watch S3 right-handed orientation
     tft->setRotation(0);
 #endif
 }
@@ -834,7 +834,7 @@ void TFTDisplay::setDetected(uint8_t detected)
 bool TFTDisplay::connect()
 {
     concurrency::LockGuard g(spiLock);
-    LOG_INFO("Doing TFT init\n");
+    LOG_INFO("Doing TFT init");
 #ifdef RAK14014
     tft = new TFT_eSPI;
 #else
@@ -842,7 +842,7 @@ bool TFTDisplay::connect()
 #endif
 
     backlightEnable->set(true);
-    LOG_INFO("Power to TFT Backlight\n");
+    LOG_INFO("Power to TFT Backlight");
 
 #ifdef UNPHONE
     unphone.backlight(true); // using unPhone library

@@ -12,7 +12,7 @@ LPS22HBSensor::LPS22HBSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_
 
 int32_t LPS22HBSensor::runOnce()
 {
-    LOG_INFO("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
