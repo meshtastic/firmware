@@ -125,7 +125,7 @@ int32_t SerialModule::runOnce()
     if (moduleConfig.serial.override_console_serial_port || (moduleConfig.serial.rxd && moduleConfig.serial.txd)) {
         if (firstTime) {
             // Interface with the serial peripheral from in here.
-            LOG_INFO("Initializing serial peripheral interface\n");
+            LOG_INFO("Initializing serial peripheral interface");
 
             uint32_t baud = getBaudRate();
 
@@ -308,7 +308,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
         }
 
         auto &p = mp.decoded;
-        // LOG_DEBUG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s\n",
+        // LOG_DEBUG("Received text msg self=0x%0x, from=0x%0x, to=0x%0x, id=%d, msg=%.*s",
         //          nodeDB->getNodeNum(), mp.from, mp.to, mp.id, p.payload.size, p.payload.bytes);
 
         if (!isFromUs(&mp)) {
@@ -323,7 +323,7 @@ ProcessMessage SerialModuleRadio::handleReceived(const meshtastic_MeshPacket &mp
                 //   TODO: need to find out why.
                 if (lastRxID != mp.id) {
                     lastRxID = mp.id;
-                    // LOG_DEBUG("* * Message came this device\n");
+                    // LOG_DEBUG("* * Message came this device");
                     // serialPrint->println("* * Message came this device");
                     serialPrint->printf("%s", p.payload.bytes);
                 }
@@ -524,7 +524,7 @@ void SerialModule::processWXSerial()
     }
     if (gotwind) {
 
-        LOG_INFO("WS85 : %i %.1fg%.1f %.1fv %.1fv %.1fC\n", atoi(windDir), strtof(windVel, nullptr), strtof(windGust, nullptr),
+        LOG_INFO("WS85 : %i %.1fg%.1f %.1fv %.1fv %.1fC", atoi(windDir), strtof(windVel, nullptr), strtof(windGust, nullptr),
                  batVoltageF, capVoltageF, temperatureF);
     }
     if (gotwind && !Throttle::isWithinTimespanMs(lastAveraged, averageIntervalMillis)) {
@@ -567,7 +567,8 @@ void SerialModule::processWXSerial()
         m.variant.environment_metrics.wind_lull = lull;
         m.variant.environment_metrics.has_wind_lull = true;
 
-        LOG_INFO("WS85 Transmit speed=%fm/s, direction=%d , lull=%f, gust=%f, voltage=%f temperature=%f\n",
+        LOG_INFO("WS85 Transmit speed=%fm/s, direction=%d , lull=%f, gust=%f, voltage=%f temperature=%f",
+        LOG_INFO("WS85 Transmit speed=%fm/s, direction=%d , lull=%f, gust=%f, voltage=%f",
                  m.variant.environment_metrics.wind_speed, m.variant.environment_metrics.wind_direction,
                  m.variant.environment_metrics.wind_lull, m.variant.environment_metrics.wind_gust,
                  m.variant.environment_metrics.voltage, m.variant.environment_metrics.temperature);
