@@ -791,12 +791,6 @@ void NodeDB::loadFromDisk()
         }
     }
 
-    state = loadProto(oemConfigFile, meshtastic_OEMStore_size, sizeof(meshtastic_OEMStore), &meshtastic_OEMStore_msg, &oemStore);
-    if (state == LoadFileResult::LOAD_SUCCESS) {
-        LOG_INFO("Loaded OEMStore");
-        hasOemStore = true;
-    }
-
     state = loadProto(uiconfigFileName, meshtastic_DeviceUIConfig_size, sizeof(meshtastic_DeviceUIConfig),
                       &meshtastic_DeviceUIConfig_msg, &uiconfig);
     if (state == LoadFileResult::LOAD_SUCCESS) {
