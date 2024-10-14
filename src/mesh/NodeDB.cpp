@@ -56,8 +56,6 @@ meshtastic_LocalConfig config;
 meshtastic_DeviceUIConfig uiconfig{.screen_brightness = 153, .screen_timeout = 30};
 meshtastic_LocalModuleConfig moduleConfig;
 meshtastic_ChannelFile channelFile;
-meshtastic_OEMStore oemStore;
-static bool hasOemStore = false;
 
 bool meshtastic_DeviceState_callback(pb_istream_t *istream, pb_ostream_t *ostream, const pb_field_iter_t *field)
 {
@@ -693,7 +691,6 @@ static const char *configFileName = "/prefs/config.proto";
 static const char *uiconfigFileName = "/prefs/uiconfig.proto";
 static const char *moduleConfigFileName = "/prefs/module.proto";
 static const char *channelFileName = "/prefs/channels.proto";
-static const char *oemConfigFile = "/oem/oem.proto";
 
 /** Load a protobuf from a file, return LoadFileResult */
 LoadFileResult NodeDB::loadProto(const char *filename, size_t protoSize, size_t objSize, const pb_msgdesc_t *fields,
@@ -912,11 +909,6 @@ bool NodeDB::saveToDiskNoRetry(int saveWhat)
             saveProto(moduleConfigFileName, meshtastic_LocalModuleConfig_size, &meshtastic_LocalModuleConfig_msg, &moduleConfig);
     }
 
-    // We might need to rewrite the OEM data if we are reformatting the FS
-    if ((saveWhat & SEGMENT_OEM) && hasOemStore) {
-        success &= saveProto(oemConfigFile, meshtastic_OEMStore_size, &meshtastic_OEMStore_msg, &oemStore);
-    }
-
     if (saveWhat & SEGMENT_CHANNELS) {
         success &= saveChannelsToDisk();
     }
@@ -937,8 +929,6 @@ bool NodeDB::saveToDisk(int saveWhat)
 #ifdef ARCH_NRF52 // @geeksville is not ready yet to say we should do this on other platforms.  See bug #4184 discussion
         FSCom.format();
 
-        // We need to rewrite the OEM data if we are reformatting the FS
-        saveWhat |= SEGMENT_OEM;
 #endif
         success = saveToDiskNoRetry(saveWhat);
 

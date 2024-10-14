@@ -21,7 +21,6 @@ DeviceState versions used to be defined in the .proto file but really only this 
 #define SEGMENT_MODULECONFIG 2
 #define SEGMENT_DEVICESTATE 4
 #define SEGMENT_CHANNELS 8
-#define SEGMENT_OEM 16
 
 #define DEVICESTATE_CUR_VER 23
 #define DEVICESTATE_MIN_VER 22
@@ -32,7 +31,6 @@ extern meshtastic_MyNodeInfo &myNodeInfo;
 extern meshtastic_LocalConfig config;
 extern meshtastic_DeviceUIConfig uiconfig;
 extern meshtastic_LocalModuleConfig moduleConfig;
-extern meshtastic_OEMStore oemStore;
 extern meshtastic_User &owner;
 extern meshtastic_Position localPosition;
 
