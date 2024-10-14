@@ -41,10 +41,10 @@ bool BMA423Sensor::init()
 
         // It corresponds to isDoubleClick interrupt
         sensor.enableWakeupIRQ();
-        LOG_DEBUG("BMA423Sensor::init ok\n");
+        LOG_DEBUG("BMA423Sensor::init ok");
         return true;
     }
-    LOG_DEBUG("BMA423Sensor::init failed\n");
+    LOG_DEBUG("BMA423Sensor::init failed");
     return false;
 }
 

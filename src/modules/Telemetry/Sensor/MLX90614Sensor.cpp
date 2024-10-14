@@ -9,7 +9,7 @@ MLX90614Sensor::MLX90614Sensor() : TelemetrySensor(meshtastic_TelemetrySensorTyp
 
 int32_t MLX90614Sensor::runOnce()
 {
-    LOG_INFO("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
@@ -21,10 +21,10 @@ int32_t MLX90614Sensor::runOnce()
             mlx.writeEmissivity(MLX90614_EMISSIVITY);
             LOG_INFO("MLX90614 emissivity updated. In case of weird data, power cycle.");
         }
-        LOG_DEBUG("MLX90614 Init Succeed\n");
+        LOG_DEBUG("MLX90614 Init Succeed");
         status = true;
     } else {
-        LOG_ERROR("MLX90614 Init Failed\n");
+        LOG_ERROR("MLX90614 Init Failed");
         status = false;
     }
     return initI2CSensor();

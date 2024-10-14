@@ -18,7 +18,7 @@
  */
 void CryptoEngine::generateKeyPair(uint8_t *pubKey, uint8_t *privKey)
 {
-    LOG_DEBUG("Generating Curve25519 key pair...\n");
+    LOG_DEBUG("Generating Curve25519 key pair...");
     Curve25519::dh1(public_key, private_key);
     memcpy(pubKey, public_key, sizeof(public_key));
     memcpy(privKey, private_key, sizeof(private_key));
@@ -35,14 +35,14 @@ bool CryptoEngine::regeneratePublicKey(uint8_t *pubKey, uint8_t *privKey)
     if (!memfll(privKey, 0, sizeof(private_key))) {
         Curve25519::eval(pubKey, privKey, 0);
         if (Curve25519::isWeakPoint(pubKey)) {
-            LOG_ERROR("PKI key generation failed. Specified private key results in a weak\n");
+            LOG_ERROR("PKI key generation failed. Specified private key results in a weak");
             memset(pubKey, 0, 32);
             return false;
         }
         memcpy(private_key, privKey, sizeof(private_key));
         memcpy(public_key, pubKey, sizeof(public_key));
     } else {
-        LOG_WARN("X25519 key generation failed due to blank private key\n");
+        LOG_WARN("X25519 key generation failed due to blank private key");
         return false;
     }
     return true;
@@ -68,9 +68,9 @@ bool CryptoEngine::encryptCurve25519(uint32_t toNode, uint32_t fromNode, meshtas
     auth = bytesOut + numBytes;
     memcpy((uint8_t *)(auth + 8), &extraNonceTmp,
            sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : *extraNonce = extraNonceTmp;
-    LOG_INFO("Random nonce value: %d\n", extraNonceTmp);
+    LOG_INFO("Random nonce value: %d", extraNonceTmp);
     if (remotePublic.size == 0) {
-        LOG_DEBUG("Node %d or their public_key not found\n", toNode);
+        LOG_DEBUG("Node %d or their public_key not found", toNode);
         return false;
     }
     if (!crypto->setDHPublicKey(remotePublic.bytes)) {
@@ -103,10 +103,10 @@ bool CryptoEngine::decryptCurve25519(uint32_t fromNode, meshtastic_UserLite_publ
     auth = bytes + numBytes - 12;
     memcpy(&extraNonce, auth + 8,
            sizeof(uint32_t)); // do not use dereference on potential non aligned pointers : (uint32_t *)(auth + 8);
-    LOG_INFO("Random nonce value: %d\n", extraNonce);
+    LOG_INFO("Random nonce value: %d", extraNonce);
 
     if (remotePublic.size == 0) {
-        LOG_DEBUG("Node or its public key not found in database\n");
+        LOG_DEBUG("Node or its public key not found in database");
         return false;
     }
 
@@ -174,7 +174,7 @@ bool CryptoEngine::setDHPublicKey(uint8_t *pubKey)
     // Calculate the shared secret with the specified node's public key and our private key
     // This includes an internal weak key check, which among other things looks for an all 0 public key and shared key.
     if (!Curve25519::dh2(shared_key, local_priv)) {
-        LOG_WARN("Curve25519DH step 2 failed!\n");
+        LOG_WARN("Curve25519DH step 2 failed!");
         return false;
     }
     return true;
@@ -185,7 +185,7 @@ concurrency::Lock *cryptLock;
 
 void CryptoEngine::setKey(const CryptoKey &k)
 {
-    LOG_DEBUG("Using AES%d key!\n", k.length * 8);
+    LOG_DEBUG("Using AES%d key!", k.length * 8);
     key = k;
 }
 
@@ -201,7 +201,7 @@ void CryptoEngine::encryptPacket(uint32_t fromNode, uint64_t packetId, size_t nu
         if (numBytes <= MAX_BLOCKSIZE) {
             encryptAESCtr(key, nonce, numBytes, bytes);
         } else {
-            LOG_ERROR("Packet too large for crypto engine: %d. noop encryption!\n", numBytes);
+            LOG_ERROR("Packet too large for crypto engine: %d. noop encryption!", numBytes);
         }
     }
 }
