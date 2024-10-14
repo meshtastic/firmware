@@ -32,6 +32,6 @@
 // LCD screens are slow, so slowdown the wipe so it looks better
 #define SCREEN_TRANSITION_FRAMERATE 30 // fps
 
-// Picomputer gets a white on black display
+// M5Stack Core2 gets a white on black display
 #define TFT_MESH COLOR565(0xA0, 0xFF, 0x00) //(0x94, 0xEA, 0x67)
 #define ILI9341_SPI_HOST VSPI_HOST          // VSPI_HOST or HSPI_HOST
