@@ -253,7 +253,7 @@ void SerialModule::sendTelemetry(meshtastic_Telemetry m)
     p->to = NODENUM_BROADCAST;
     p->decoded.want_response = false;
     p->want_ack = true;
-    p->priority = meshtastic_MeshPacket_Priority_MAX;
+    p->priority = meshtastic_MeshPacket_Priority_HIGH;
     service->sendToMesh(p, RX_SRC_LOCAL, true);
 }
 
