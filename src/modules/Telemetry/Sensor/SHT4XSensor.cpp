@@ -11,7 +11,7 @@ SHT4XSensor::SHT4XSensor() : TelemetrySensor(meshtastic_TelemetrySensorType_SHT4
 
 int32_t SHT4XSensor::runOnce()
 {
-    LOG_INFO("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
@@ -22,7 +22,7 @@ int32_t SHT4XSensor::runOnce()
 
     serialNumber = sht4x.readSerial();
     if (serialNumber != 0) {
-        LOG_DEBUG("serialNumber : %x\n", serialNumber);
+        LOG_DEBUG("serialNumber : %x", serialNumber);
         status = 1;
     } else {
         LOG_DEBUG("Error trying to execute readSerial(): ");

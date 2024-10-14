@@ -5,19 +5,21 @@
 BMX160Sensor::BMX160Sensor(ScanI2C::FoundDevice foundDevice) : MotionSensor::MotionSensor(foundDevice) {}
 
 #ifdef RAK_4631
+#if !defined(MESHTASTIC_EXCLUDE_SCREEN)
 
 // screen is defined in main.cpp
 extern graphics::Screen *screen;
+#endif
 
 bool BMX160Sensor::init()
 {
     if (sensor.begin()) {
         // set output data rate
         sensor.ODR_Config(BMX160_ACCEL_ODR_100HZ, BMX160_GYRO_ODR_100HZ);
-        LOG_DEBUG("BMX160Sensor::init ok\n");
+        LOG_DEBUG("BMX160Sensor::init ok");
         return true;
     }
-    LOG_DEBUG("BMX160Sensor::init failed\n");
+    LOG_DEBUG("BMX160Sensor::init failed");
     return false;
 }
 
@@ -29,6 +31,7 @@ int32_t BMX160Sensor::runOnce()
     /* Get a new sensor event */
     sensor.getAllData(&magAccel, NULL, &gAccel);
 
+#if !defined(MESHTASTIC_EXCLUDE_SCREEN)
     // experimental calibrate routine. Limited to between 10 and 30 seconds after boot
     if (millis() > 12 * 1000 && millis() < 30 * 1000) {
         if (!showingScreen) {
@@ -91,6 +94,7 @@ int32_t BMX160Sensor::runOnce()
         break;
     }
     screen->setHeading(heading);
+#endif
 
     return MOTION_SENSOR_CHECK_INTERVAL_MS;
 }

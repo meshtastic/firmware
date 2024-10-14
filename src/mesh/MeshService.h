@@ -151,6 +151,8 @@ class MeshService
 
     ErrorCode sendQueueStatusToPhone(const meshtastic_QueueStatus &qs, ErrorCode res, uint32_t mesh_packet_id);
 
+    uint32_t GetTimeSinceMeshPacket(const meshtastic_MeshPacket *mp);
+
   private:
 #if HAS_GPS
     /// Called when our gps position has changed - updates nodedb and sends Location message out into the mesh
