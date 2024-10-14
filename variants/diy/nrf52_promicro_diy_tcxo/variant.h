@@ -115,7 +115,7 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 #define LORA_MISO PIN_SPI_MISO
 #define LORA_MOSI PIN_SPI_MOSI
 #define LORA_SCK PIN_SPI_SCK
-#define LORA_CS (32 + 13)  // P1.13
+#define LORA_CS (32 + 13) // P1.13
 
 // LORA MODULES
 #define USE_LLCC68
@@ -125,13 +125,13 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 
 // RF95 CONFIG
 
-#define LORA_DIO0 (0 + 29)    // P0.10 IRQ
-#define LORA_DIO1 (0 + 10)     // P0.10 IRQ
-#define LORA_RESET (0 + 9)     // P0.09
+#define LORA_DIO0 (0 + 29) // P0.10 IRQ
+#define LORA_DIO1 (0 + 10) // P0.10 IRQ
+#define LORA_RESET (0 + 9) // P0.09
 
 // RX/TX for RFM95/SX127x
-#define RF95_RXEN (0 + 17)     // P0.17
-#define RF95_TXEN RADIOLIB_NC  // Assuming that DIO2 is connected to TXEN pin. If not, TXEN must be connected.
+#define RF95_RXEN (0 + 17)    // P0.17
+#define RF95_TXEN RADIOLIB_NC // Assuming that DIO2 is connected to TXEN pin. If not, TXEN must be connected.
 
 // SX126X CONFIG
 #define SX126X_CS (32 + 13)      // P1.13 FIXME - we really should define LORA_CS instead
