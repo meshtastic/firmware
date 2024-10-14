@@ -22,26 +22,26 @@ extern "C" {
 /*
 NRF52 PRO MICRO PIN ASSIGNMENT
 
-| Pin   | Function   |   | Pin     | Function    |
-|-------|------------|---|---------|-------------|
-| Gnd   |            |   | vbat    |             |
-| P0.06 | Serial2 RX |   | vbat    |             |
-| P0.08 | Serial2 TX |   | Gnd     |             |
-| Gnd   |            |   | reset   |             |
-| Gnd   |            |   | ext_vcc | *see 0.13   |
-| P0.17 | RXEN       |   | P0.31   | BATTERY_PIN |
-| P0.20 | GPS_RX     |   | P0.29   | BUSY        |
-| P0.22 | GPS_TX     |   | P0.02   | MISO        |
-| P0.24 | GPS_EN     |   | P1.15   | MOSI        |
-| P1.00 | BUTTON_PIN |   | P1.13   | CS          |
-| P0.11 | SCL        |   | P1.11   | SCK         |
-| P1.04 | SDA        |   | P0.10   | DIO1/IRQ    |
-| P1.06 | Free pin   |   | P0.09   | RESET       |
-|       |            |   |         |             |
-|       | Mid board  |   |         | Internal    |
-| P1.01 | Free pin   |   | 0.15    | LED         |
-| P1.02 | Free pin   |   | 0.13    | 3V3_EN      |
-| P1.07 | Free pin   |   |         |             |
+| Pin   | Function    |     | Pin      | Function     | RF95  |
+| ----- | ----------- | --- | -------- | ------------ | ----- |
+| Gnd   |             |     | vbat     |              |       |
+| P0.06 | Serial2 RX  |     | vbat     |              |       |
+| P0.08 | Serial2 TX  |     | Gnd      |              |       |
+| Gnd   |             |     | reset    |              |       |
+| Gnd   |             |     | ext_vcc  | *see 0.13    |       |
+| P0.17 | RXEN        |     | P0.31    | BATTERY_PIN  |       |
+| P0.20 | GPS_RX      |     | P0.29    | BUSY         | DIO0  |
+| P0.22 | GPS_TX      |     | P0.02    | MISO         | MISO  |
+| P0.24 | GPS_EN      |     | P1.15    | MOSI         | MOSI  |
+| P1.00 | BUTTON_PIN  |     | P1.13    | CS           | CS    |
+| P0.11 | SCL         |     | P1.11    | SCK          | SCK   |
+| P1.04 | SDA         |     | P0.10    | DIO1/IRQ     | DIO1  |
+| P1.06 | Free pin    |     | P0.09    | RESET        | RST   |
+|       |             |     |          |              |       |
+|       | Mid board   |     |          | Internal     |       |
+| P1.01 | Free pin    |     | 0.15     | LED          |       |
+| P1.02 | Free pin    |     | 0.13     | 3V3_EN       |       |
+| P1.07 | Free pin    |     |          |              |       |
 */
 
 // Number of pins defined in PinDescription array
@@ -112,13 +112,28 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 #define PIN_SPI_MOSI (32 + 15) // P1.15
 #define PIN_SPI_SCK (32 + 11)  // P1.11
 
+#define LORA_MISO PIN_SPI_MISO
+#define LORA_MOSI PIN_SPI_MOSI
+#define LORA_SCK PIN_SPI_SCK
+#define LORA_CS (32 + 13) // P1.13
+
 // LORA MODULES
 #define USE_LLCC68
 #define USE_SX1262
-// #define USE_RF95
+#define USE_RF95
 #define USE_SX1268
 
-// LORA CONFIG
+// RF95 CONFIG
+
+#define LORA_DIO0 (0 + 29) // P0.10 IRQ
+#define LORA_DIO1 (0 + 10) // P0.10 IRQ
+#define LORA_RESET (0 + 9) // P0.09
+
+// RX/TX for RFM95/SX127x
+#define RF95_RXEN (0 + 17)    // P0.17
+#define RF95_TXEN RADIOLIB_NC // Assuming that DIO2 is connected to TXEN pin. If not, TXEN must be connected.
+
+// SX126X CONFIG
 #define SX126X_CS (32 + 13)      // P1.13 FIXME - we really should define LORA_CS instead
 #define SX126X_DIO1 (0 + 10)     // P0.10 IRQ
 #define SX126X_DIO2_AS_RF_SWITCH // Note for E22 modules: DIO2 is not attached internally to TXEN for automatic TX/RX switching,
@@ -134,18 +149,21 @@ NRF52 PRO MICRO PIN ASSIGNMENT
 On the SX1262, DIO3 sets the voltage for an external TCXO, if one is present. If one is not present, use TCXO_OPTIONAL to try both
 settings.
 
-| Mfr        | Module           | TCXO | RF Switch | Notes                                        |
-| ---------- | ---------------- | ---- | --------- | -------------------------------------------- |
-| Ebyte      | E22-900M22S      | Yes  | Ext       |                                              |
-| Ebyte      | E22-900MM22S     | No   | Ext       |                                              |
-| Ebyte      | E22-900M30S      | Yes  | Ext       |                                              |
-| Ebyte      | E22-900M33S      | Yes  | Ext       | MAX_POWER must be set to 8 for this          |
-| Ebyte      | E220-900M22S     | No   | Ext       | LLCC68, looks like DIO3 not connected at all |
-| AI-Thinker | RA-01SH          | No   | Int       |                                              |
-| Heltec     | HT-RA62          | Yes  | Int       |                                              |
-| NiceRF     | Lora1262         | yes  | Int       |                                              |
-| Waveshare  | Core1262-HF      | yes  | Ext       |                                              |
-| Waveshare  | LoRa Node Module | yes  | Int       |                                              |
+| Mfr          | Module           | TCXO | RF Switch | Notes                                 |
+| ------------ | ---------------- | ---- | --------- | ------------------------------------- |
+| Ebyte        | E22-900M22S      | Yes  | Ext       |                                       |
+| Ebyte        | E22-900MM22S     | No   | Ext       |                                       |
+| Ebyte        | E22-900M30S      | Yes  | Ext       |                                       |
+| Ebyte        | E22-900M33S      | Yes  | Ext       | MAX_POWER must be set to 8 for this   |
+| Ebyte        | E220-900M22S     | No   | Ext       | LLCC68, looks like DIO3 not connected |
+| AI-Thinker   | RA-01SH          | No   | Int       | SX1262                                |
+| Heltec       | HT-RA62          | Yes  | Int       |                                       |
+| NiceRF       | Lora1262         | yes  | Int       |                                       |
+| Waveshare    | Core1262-HF      | yes  | Ext       |                                       |
+| Waveshare    | LoRa Node Module | yes  | Int       |                                       |
+| Seeed        | Wio-SX1262       | yes  | Int       | Sooooo cute!                          |
+| AI-Thinker   | RA-02            | No   | Int       | SX1278 **433mhz band only**           |
+| RF Solutions | RFM95            | No   | Int       | Untested                              |
 
 */
 
