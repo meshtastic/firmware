@@ -39,7 +39,7 @@ int32_t HealthTelemetryModule::runOnce()
         sleepOnNextExecution = false;
         uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.health_update_interval,
                                                                    default_telemetry_broadcast_interval_secs);
-        LOG_DEBUG("Sleeping for %ims, then awaking to send metrics again.\n", nightyNightMs);
+        LOG_DEBUG("Sleeping for %ims, then awaking to send metrics again.", nightyNightMs);
         doDeepSleep(nightyNightMs, true);
     }
 
@@ -55,7 +55,7 @@ int32_t HealthTelemetryModule::runOnce()
         firstTime = false;
 
         if (moduleConfig.telemetry.health_measurement_enabled) {
-            LOG_INFO("Health Telemetry: Initializing\n");
+            LOG_INFO("Health Telemetry: Initializing");
             // Initialize sensors
             if (mlx90614Sensor.hasSensor())
                 result = mlx90614Sensor.runOnce();
@@ -143,7 +143,7 @@ bool HealthTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &
 #ifdef DEBUG_PORT
         const char *sender = getSenderShortName(mp);
 
-        LOG_INFO("(Received from %s): temperature=%f, heart_bpm=%d, spO2=%d,\n", sender, t->variant.health_metrics.temperature,
+        LOG_INFO("(Received from %s): temperature=%f, heart_bpm=%d, spO2=%d,", sender, t->variant.health_metrics.temperature,
                  t->variant.health_metrics.heart_bpm, t->variant.health_metrics.spO2);
 
 #endif
@@ -188,14 +188,14 @@ meshtastic_MeshPacket *HealthTelemetryModule::allocReply()
         if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &scratch)) {
             decoded = &scratch;
         } else {
-            LOG_ERROR("Error decoding HealthTelemetry module!\n");
+            LOG_ERROR("Error decoding HealthTelemetry module!");
             return NULL;
         }
         // Check for a request for health metrics
         if (decoded->which_variant == meshtastic_Telemetry_health_metrics_tag) {
             meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
             if (getHealthTelemetry(&m)) {
-                LOG_INFO("Health telemetry replying to request\n");
+                LOG_INFO("Health telemetry replying to request");
                 return allocDataProtobuf(m);
             } else {
                 return NULL;
@@ -211,7 +211,7 @@ bool HealthTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.which_variant = meshtastic_Telemetry_health_metrics_tag;
     m.time = getTime();
     if (getHealthTelemetry(&m)) {
-        LOG_INFO("(Sending): temperature=%f, heart_bpm=%d, spO2=%d\n", m.variant.health_metrics.temperature,
+        LOG_INFO("(Sending): temperature=%f, heart_bpm=%d, spO2=%d", m.variant.health_metrics.temperature,
                  m.variant.health_metrics.heart_bpm, m.variant.health_metrics.spO2);
 
         sensor_read_error_count = 0;
@@ -229,14 +229,14 @@ bool HealthTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 
         lastMeasurementPacket = packetPool.allocCopy(*p);
         if (phoneOnly) {
-            LOG_INFO("Sending packet to phone\n");
+            LOG_INFO("Sending packet to phone");
             service->sendToPhone(p);
         } else {
-            LOG_INFO("Sending packet to mesh\n");
+            LOG_INFO("Sending packet to mesh");
             service->sendToMesh(p, RX_SRC_LOCAL, true);
 
             if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
-                LOG_DEBUG("Starting next execution in 5 seconds and then going to sleep.\n");
+                LOG_DEBUG("Starting next execution in 5 seconds and then going to sleep.");
                 sleepOnNextExecution = true;
                 setIntervalFromNow(5000);
             }

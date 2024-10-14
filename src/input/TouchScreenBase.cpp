@@ -23,7 +23,7 @@ TouchScreenBase::TouchScreenBase(const char *name, uint16_t width, uint16_t heig
 void TouchScreenBase::init(bool hasTouch)
 {
     if (hasTouch) {
-        LOG_INFO("TouchScreen initialized %d %d\n", TOUCH_THRESHOLD_X, TOUCH_THRESHOLD_Y);
+        LOG_INFO("TouchScreen initialized %d %d", TOUCH_THRESHOLD_X, TOUCH_THRESHOLD_Y);
         this->setInterval(100);
     } else {
         disable();
@@ -68,20 +68,20 @@ int32_t TouchScreenBase::runOnce()
             if (adx > ady && adx > TOUCH_THRESHOLD_X) {
                 if (0 > dx) { // swipe right to left
                     e.touchEvent = static_cast<char>(TOUCH_ACTION_LEFT);
-                    LOG_DEBUG("action SWIPE: right to left\n");
+                    LOG_DEBUG("action SWIPE: right to left");
                 } else { // swipe left to right
                     e.touchEvent = static_cast<char>(TOUCH_ACTION_RIGHT);
-                    LOG_DEBUG("action SWIPE: left to right\n");
+                    LOG_DEBUG("action SWIPE: left to right");
                 }
             }
             // swipe vertical
             else if (ady > adx && ady > TOUCH_THRESHOLD_Y) {
                 if (0 > dy) { // swipe bottom to top
                     e.touchEvent = static_cast<char>(TOUCH_ACTION_UP);
-                    LOG_DEBUG("action SWIPE: bottom to top\n");
+                    LOG_DEBUG("action SWIPE: bottom to top");
                 } else { // swipe top to bottom
                     e.touchEvent = static_cast<char>(TOUCH_ACTION_DOWN);
-                    LOG_DEBUG("action SWIPE: top to bottom\n");
+                    LOG_DEBUG("action SWIPE: top to bottom");
                 }
             }
             // tap
@@ -90,7 +90,7 @@ int32_t TouchScreenBase::runOnce()
                     if (_tapped) {
                         _tapped = false;
                         e.touchEvent = static_cast<char>(TOUCH_ACTION_DOUBLE_TAP);
-                        LOG_DEBUG("action DOUBLE TAP(%d/%d)\n", x, y);
+                        LOG_DEBUG("action DOUBLE TAP(%d/%d)", x, y);
                     } else {
                         _tapped = true;
                     }
@@ -106,7 +106,7 @@ int32_t TouchScreenBase::runOnce()
     if (_tapped && (time_t(millis()) - _start) > TIME_LONG_PRESS - 50) {
         _tapped = false;
         e.touchEvent = static_cast<char>(TOUCH_ACTION_TAP);
-        LOG_DEBUG("action TAP(%d/%d)\n", _last_x, _last_y);
+        LOG_DEBUG("action TAP(%d/%d)", _last_x, _last_y);
     }
 
     // fire LONG_PRESS event without the need for release
@@ -114,7 +114,7 @@ int32_t TouchScreenBase::runOnce()
         // tricky: prevent reoccurring events and another touch event when releasing
         _start = millis() + 30000;
         e.touchEvent = static_cast<char>(TOUCH_ACTION_LONG_PRESS);
-        LOG_DEBUG("action LONG PRESS(%d/%d)\n", _last_x, _last_y);
+        LOG_DEBUG("action LONG PRESS(%d/%d)", _last_x, _last_y);
     }
 
     if (e.touchEvent != TOUCH_ACTION_NONE) {

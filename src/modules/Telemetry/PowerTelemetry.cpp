@@ -27,7 +27,7 @@ int32_t PowerTelemetryModule::runOnce()
         sleepOnNextExecution = false;
         uint32_t nightyNightMs = Default::getConfiguredOrDefaultMs(moduleConfig.telemetry.power_update_interval,
                                                                    default_telemetry_broadcast_interval_secs);
-        LOG_DEBUG("Sleeping for %ims, then awaking to send metrics again.\n", nightyNightMs);
+        LOG_DEBUG("Sleeping for %ims, then awaking to send metrics again.", nightyNightMs);
         doDeepSleep(nightyNightMs, true);
     }
 
@@ -51,7 +51,7 @@ int32_t PowerTelemetryModule::runOnce()
         firstTime = 0;
 #if HAS_TELEMETRY && !defined(ARCH_PORTDUINO)
         if (moduleConfig.telemetry.power_measurement_enabled) {
-            LOG_INFO("Power Telemetry: Initializing\n");
+            LOG_INFO("Power Telemetry: Initializing");
             // it's possible to have this module enabled, only for displaying values on the screen.
             // therefore, we should only enable the sensor loop if measurement is also enabled
             if (ina219Sensor.hasSensor() && !ina219Sensor.isInitialized())
@@ -145,7 +145,7 @@ bool PowerTelemetryModule::handleReceivedProtobuf(const meshtastic_MeshPacket &m
         const char *sender = getSenderShortName(mp);
 
         LOG_INFO("(Received from %s): ch1_voltage=%.1f, ch1_current=%.1f, ch2_voltage=%.1f, ch2_current=%.1f, "
-                 "ch3_voltage=%.1f, ch3_current=%.1f\n",
+                 "ch3_voltage=%.1f, ch3_current=%.1f",
                  sender, t->variant.power_metrics.ch1_voltage, t->variant.power_metrics.ch1_current,
                  t->variant.power_metrics.ch2_voltage, t->variant.power_metrics.ch2_current, t->variant.power_metrics.ch3_voltage,
                  t->variant.power_metrics.ch3_current);
@@ -192,14 +192,14 @@ meshtastic_MeshPacket *PowerTelemetryModule::allocReply()
         if (pb_decode_from_bytes(p.payload.bytes, p.payload.size, &meshtastic_Telemetry_msg, &scratch)) {
             decoded = &scratch;
         } else {
-            LOG_ERROR("Error decoding PowerTelemetry module!\n");
+            LOG_ERROR("Error decoding PowerTelemetry module!");
             return NULL;
         }
         // Check for a request for power metrics
         if (decoded->which_variant == meshtastic_Telemetry_power_metrics_tag) {
             meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
             if (getPowerTelemetry(&m)) {
-                LOG_INFO("Power telemetry replying to request\n");
+                LOG_INFO("Power telemetry replying to request");
                 return allocDataProtobuf(m);
             } else {
                 return NULL;
@@ -217,7 +217,7 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
     m.time = getTime();
     if (getPowerTelemetry(&m)) {
         LOG_INFO("(Sending): ch1_voltage=%f, ch1_current=%f, ch2_voltage=%f, ch2_current=%f, "
-                 "ch3_voltage=%f, ch3_current=%f\n",
+                 "ch3_voltage=%f, ch3_current=%f",
                  m.variant.power_metrics.ch1_voltage, m.variant.power_metrics.ch1_current, m.variant.power_metrics.ch2_voltage,
                  m.variant.power_metrics.ch2_current, m.variant.power_metrics.ch3_voltage, m.variant.power_metrics.ch3_current);
 
@@ -236,14 +236,14 @@ bool PowerTelemetryModule::sendTelemetry(NodeNum dest, bool phoneOnly)
 
         lastMeasurementPacket = packetPool.allocCopy(*p);
         if (phoneOnly) {
-            LOG_INFO("Sending packet to phone\n");
+            LOG_INFO("Sending packet to phone");
             service->sendToPhone(p);
         } else {
-            LOG_INFO("Sending packet to mesh\n");
+            LOG_INFO("Sending packet to mesh");
             service->sendToMesh(p, RX_SRC_LOCAL, true);
 
             if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR && config.power.is_power_saving) {
-                LOG_DEBUG("Starting next execution in 5s then going to sleep.\n");
+                LOG_DEBUG("Starting next execution in 5s then going to sleep.");
                 sleepOnNextExecution = true;
                 setIntervalFromNow(5000);
             }
