@@ -32,7 +32,15 @@ typedef enum _meshtastic_Language {
     /* Portuguese */
     meshtastic_Language_PORTUGUESE = 4,
     /* Spanish */
-    meshtastic_Language_SPANISH = 5
+    meshtastic_Language_SPANISH = 5,
+    /* Swedish */
+    meshtastic_Language_SWEDISH = 6,
+    /* Finnish */
+    meshtastic_Language_FINNISH = 7,
+    /* Polish */
+    meshtastic_Language_POLISH = 8,
+    /* Turkish */
+    meshtastic_Language_TURKISH = 9
 } meshtastic_Language;
 
 /* Struct definitions */
@@ -96,8 +104,8 @@ extern "C" {
 #define _meshtastic_Theme_ARRAYSIZE ((meshtastic_Theme)(meshtastic_Theme_RED+1))
 
 #define _meshtastic_Language_MIN meshtastic_Language_ENGLISH
-#define _meshtastic_Language_MAX meshtastic_Language_SPANISH
-#define _meshtastic_Language_ARRAYSIZE ((meshtastic_Language)(meshtastic_Language_SPANISH+1))
+#define _meshtastic_Language_MAX meshtastic_Language_TURKISH
+#define _meshtastic_Language_ARRAYSIZE ((meshtastic_Language)(meshtastic_Language_TURKISH+1))
 
 #define meshtastic_DeviceUIConfig_theme_ENUMTYPE meshtastic_Theme
 #define meshtastic_DeviceUIConfig_language_ENUMTYPE meshtastic_Language
