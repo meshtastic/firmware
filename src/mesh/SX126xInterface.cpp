@@ -20,7 +20,7 @@ SX126xInterface<T>::SX126xInterface(LockingArduinoHal *hal, RADIOLIB_PIN_TYPE cs
                                     RADIOLIB_PIN_TYPE busy)
     : RadioLibInterface(hal, cs, irq, rst, busy, &lora), lora(&module)
 {
-    LOG_DEBUG("SX126xInterface(cs=%d, irq=%d, rst=%d, busy=%d)\n", cs, irq, rst, busy);
+    LOG_DEBUG("SX126xInterface(cs=%d, irq=%d, rst=%d, busy=%d)", cs, irq, rst, busy);
 }
 
 /// Initialise the Driver transport hardware and software.
@@ -68,9 +68,9 @@ template <typename T> bool SX126xInterface<T>::init()
     // (DIO3 is not free to be used as an IRQ)
 #endif
     if (tcxoVoltage == 0)
-        LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE not defined, not using DIO3 as TCXO reference voltage\n");
+        LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE not defined, not using DIO3 as TCXO reference voltage");
     else
-        LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE defined, using DIO3 as TCXO reference voltage at %f V\n", tcxoVoltage);
+        LOG_DEBUG("SX126X_DIO3_TCXO_VOLTAGE defined, using DIO3 as TCXO reference voltage at %f V", tcxoVoltage);
 
     // FIXME: May want to set depending on a definition, currently all SX126x variant files use the DC-DC regulator option
     bool useRegulatorLDO = false; // Seems to depend on the connection to pin 9/DCC_SW - if an inductor DCDC?
@@ -84,13 +84,13 @@ template <typename T> bool SX126xInterface<T>::init()
 
     int res = lora.begin(getFreq(), bw, sf, cr, syncWord, power, preambleLength, tcxoVoltage, useRegulatorLDO);
     // \todo Display actual typename of the adapter, not just `SX126x`
-    LOG_INFO("SX126x init result %d\n", res);
+    LOG_INFO("SX126x init result %d", res);
     if (res == RADIOLIB_ERR_CHIP_NOT_FOUND)
         return false;
 
-    LOG_INFO("Frequency set to %f\n", getFreq());
-    LOG_INFO("Bandwidth set to %f\n", bw);
-    LOG_INFO("Power output set to %d\n", power);
+    LOG_INFO("Frequency set to %f", getFreq());
+    LOG_INFO("Bandwidth set to %f", bw);
+    LOG_INFO("Power output set to %d", power);
 
     // Overriding current limit
     // (https://github.com/jgromes/RadioLib/blob/690a050ebb46e6097c5d00c371e961c1caa3b52e/src/modules/SX126x/SX126x.cpp#L85) using
@@ -101,8 +101,8 @@ template <typename T> bool SX126xInterface<T>::init()
     // FIXME: Not ideal to increase SX1261 current limit above 60mA as it can only transmit max 15dBm, should probably only do it
     // if using SX1262 or SX1268
     res = lora.setCurrentLimit(currentLimit);
-    LOG_DEBUG("Current limit set to %f\n", currentLimit);
-    LOG_DEBUG("Current limit set result %d\n", res);
+    LOG_DEBUG("Current limit set to %f", currentLimit);
+    LOG_DEBUG("Current limit set result %d", res);
 
     if (res == RADIOLIB_ERR_NONE) {
 #ifdef SX126X_DIO2_AS_RF_SWITCH
@@ -116,36 +116,36 @@ template <typename T> bool SX126xInterface<T>::init()
         bool dio2AsRfSwitch = false;
 #endif
         res = lora.setDio2AsRfSwitch(dio2AsRfSwitch);
-        LOG_DEBUG("Set DIO2 as %sRF switch, result: %d\n", dio2AsRfSwitch ? "" : "not ", res);
+        LOG_DEBUG("Set DIO2 as %sRF switch, result: %d", dio2AsRfSwitch ? "" : "not ", res);
     }
 
     // If a pin isn't defined, we set it to RADIOLIB_NC, it is safe to always do external RF switching with RADIOLIB_NC as it has
     // no effect
 #if ARCH_PORTDUINO
     if (res == RADIOLIB_ERR_NONE) {
-        LOG_DEBUG("Using MCU pin %i as RXEN and pin %i as TXEN to control RF switching\n", settingsMap[rxen], settingsMap[txen]);
+        LOG_DEBUG("Using MCU pin %i as RXEN and pin %i as TXEN to control RF switching", settingsMap[rxen], settingsMap[txen]);
         lora.setRfSwitchPins(settingsMap[rxen], settingsMap[txen]);
     }
 #else
 #ifndef SX126X_RXEN
 #define SX126X_RXEN RADIOLIB_NC
-    LOG_DEBUG("SX126X_RXEN not defined, defaulting to RADIOLIB_NC\n");
+    LOG_DEBUG("SX126X_RXEN not defined, defaulting to RADIOLIB_NC");
 #endif
 #ifndef SX126X_TXEN
 #define SX126X_TXEN RADIOLIB_NC
-    LOG_DEBUG("SX126X_TXEN not defined, defaulting to RADIOLIB_NC\n");
+    LOG_DEBUG("SX126X_TXEN not defined, defaulting to RADIOLIB_NC");
 #endif
     if (res == RADIOLIB_ERR_NONE) {
-        LOG_DEBUG("Using MCU pin %i as RXEN and pin %i as TXEN to control RF switching\n", SX126X_RXEN, SX126X_TXEN);
+        LOG_DEBUG("Using MCU pin %i as RXEN and pin %i as TXEN to control RF switching", SX126X_RXEN, SX126X_TXEN);
         lora.setRfSwitchPins(SX126X_RXEN, SX126X_TXEN);
     }
 #endif
     if (config.lora.sx126x_rx_boosted_gain) {
         uint16_t result = lora.setRxBoostedGainMode(true);
-        LOG_INFO("Set RX gain to boosted mode; result: %d\n", result);
+        LOG_INFO("Set RX gain to boosted mode; result: %d", result);
     } else {
         uint16_t result = lora.setRxBoostedGainMode(false);
-        LOG_INFO("Set RX gain to power saving mode (boosted mode off); result: %d\n", result);
+        LOG_INFO("Set RX gain to power saving mode (boosted mode off); result: %d", result);
     }
 
 #if 0
@@ -203,17 +203,17 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
 
     err = lora.setSyncWord(syncWord);
     if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("SX126X setSyncWord %s%d\n", radioLibErr, err);
+        LOG_ERROR("SX126X setSyncWord %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setCurrentLimit(currentLimit);
     if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("SX126X setCurrentLimit %s%d\n", radioLibErr, err);
+        LOG_ERROR("SX126X setCurrentLimit %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setPreambleLength(preambleLength);
     if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("SX126X setPreambleLength %s%d\n", radioLibErr, err);
+        LOG_ERROR("SX126X setPreambleLength %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     err = lora.setFrequency(getFreq());
@@ -225,7 +225,7 @@ template <typename T> bool SX126xInterface<T>::reconfigure()
 
     err = lora.setOutputPower(power);
     if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("SX126X setOutputPower %s%d\n", radioLibErr, err);
+        LOG_ERROR("SX126X setOutputPower %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     startReceive(); // restart receiving
@@ -245,7 +245,7 @@ template <typename T> void SX126xInterface<T>::setStandby()
     int err = lora.standby();
 
     if (err != RADIOLIB_ERR_NONE)
-        LOG_DEBUG("SX126x standby %s%d\n", radioLibErr, err);
+        LOG_DEBUG("SX126x standby %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     isReceiving = false; // If we were receiving, not any more
@@ -260,7 +260,7 @@ template <typename T> void SX126xInterface<T>::setStandby()
  */
 template <typename T> void SX126xInterface<T>::addReceiveMetadata(meshtastic_MeshPacket *mp)
 {
-    // LOG_DEBUG("PacketStatus %x\n", lora.getPacketStatus());
+    // LOG_DEBUG("PacketStatus %x", lora.getPacketStatus());
     mp->rx_snr = lora.getSNR();
     mp->rx_rssi = lround(lora.getRSSI());
 }
@@ -287,7 +287,7 @@ template <typename T> void SX126xInterface<T>::startReceive()
     // Furthermore, we need the PREAMBLE_DETECTED and HEADER_VALID IRQ flag to detect whether we are actively receiving
     int err = lora.startReceiveDutyCycleAuto(preambleLength, 8, RADIOLIB_IRQ_RX_DEFAULT_FLAGS | RADIOLIB_IRQ_PREAMBLE_DETECTED);
     if (err != RADIOLIB_ERR_NONE)
-        LOG_ERROR("SX126X startReceiveDutyCycleAuto %s%d\n", radioLibErr, err);
+        LOG_ERROR("SX126X startReceiveDutyCycleAuto %s%d", radioLibErr, err);
     assert(err == RADIOLIB_ERR_NONE);
 
     RadioLibInterface::startReceive();
@@ -308,7 +308,7 @@ template <typename T> bool SX126xInterface<T>::isChannelActive()
     if (result == RADIOLIB_LORA_DETECTED)
         return true;
     if (result != RADIOLIB_CHANNEL_FREE)
-        LOG_ERROR("SX126X scanChannel %s%d\n", radioLibErr, result);
+        LOG_ERROR("SX126X scanChannel %s%d", radioLibErr, result);
     assert(result != RADIOLIB_ERR_WRONG_MODEM);
 
     return false;
@@ -326,8 +326,8 @@ template <typename T> bool SX126xInterface<T>::sleep()
 {
     // Not keeping config is busted - next time nrf52 board boots lora sending fails  tcxo related? - see datasheet
     // \todo Display actual typename of the adapter, not just `SX126x`
-    LOG_DEBUG("SX126x entering sleep mode\n"); // (FIXME, don't keep config)
-    setStandby();                              // Stop any pending operations
+    LOG_DEBUG("SX126x entering sleep mode"); // (FIXME, don't keep config)
+    setStandby();                            // Stop any pending operations
 
     // turn off TCXO if it was powered
     // FIXME - this isn't correct

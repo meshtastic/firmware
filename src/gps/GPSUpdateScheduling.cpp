@@ -13,7 +13,7 @@ void GPSUpdateScheduling::informSearching()
 void GPSUpdateScheduling::informGotLock()
 {
     searchEndedMs = millis();
-    LOG_DEBUG("Took %us to get lock\n", (searchEndedMs - searchStartedMs) / 1000);
+    LOG_DEBUG("Took %us to get lock", (searchEndedMs - searchStartedMs) / 1000);
     updateLockTimePrediction();
 }
 
@@ -108,7 +108,7 @@ void GPSUpdateScheduling::updateLockTimePrediction()
 
     searchCount++; // Only tracked so we can diregard initial lock-times
 
-    LOG_DEBUG("Predicting %us to get next lock\n", predictedMsToGetLock / 1000);
+    LOG_DEBUG("Predicting %us to get next lock", predictedMsToGetLock / 1000);
 }
 
 // How long do we expect to spend searching for a lock?
