@@ -310,6 +310,12 @@ void MeshService::sendToPhone(meshtastic_MeshPacket *p)
         }
     }
 
+    // in case we have a position packet, the phone does not like the want_response flag. Remove it here.
+    // NB: sendToPhone is always operating on a copy, so it is ok to modify it here.
+    if (p->decoded.portnum == meshtastic_PortNum_POSITION_APP) {
+        p->decoded.want_response = false;
+    }
+
     assert(toPhoneQueue.enqueue(p, 0));
     fromNum++;
 }
