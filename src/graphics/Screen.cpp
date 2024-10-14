@@ -186,56 +186,6 @@ static void drawIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDispl
     display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
 }
 
-static void drawOEMIconScreen(const char *upperMsg, OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    // draw an xbm image.
-    // Please note that everything that should be transitioned
-    // needs to be drawn relative to x and y
-
-    // draw centered icon left to right and centered above the one line of app text
-    display->drawXbm(x + (SCREEN_WIDTH - oemStore.oem_icon_width) / 2,
-                     y + (SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM - oemStore.oem_icon_height) / 2 + 2, oemStore.oem_icon_width,
-                     oemStore.oem_icon_height, (const uint8_t *)oemStore.oem_icon_bits.bytes);
-
-    switch (oemStore.oem_font) {
-    case 0:
-        display->setFont(FONT_SMALL);
-        break;
-    case 2:
-        display->setFont(FONT_LARGE);
-        break;
-    default:
-        display->setFont(FONT_MEDIUM);
-        break;
-    }
-
-    display->setTextAlignment(TEXT_ALIGN_LEFT);
-    const char *title = oemStore.oem_text;
-    display->drawString(x + getStringCenteredX(title), y + SCREEN_HEIGHT - FONT_HEIGHT_MEDIUM, title);
-    display->setFont(FONT_SMALL);
-
-    // Draw region in upper left
-    if (upperMsg)
-        display->drawString(x + 0, y + 0, upperMsg);
-
-    // Draw version and shortname in upper right
-    char buf[25];
-    snprintf(buf, sizeof(buf), "%s\n%s", xstr(APP_VERSION_SHORT), haveGlyphs(owner.short_name) ? owner.short_name : "");
-
-    display->setTextAlignment(TEXT_ALIGN_RIGHT);
-    display->drawString(x + SCREEN_WIDTH, y + 0, buf);
-    screen->forceDisplay();
-
-    display->setTextAlignment(TEXT_ALIGN_LEFT); // Restore left align, just to be kind to any other unsuspecting code
-}
-
-static void drawOEMBootScreen(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y)
-{
-    // Draw region in upper left
-    const char *region = myRegion ? myRegion->name : NULL;
-    drawOEMIconScreen(region, display, state, x, y);
-}
-
 void Screen::drawFrameText(OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y, const char *message)
 {
     uint16_t x_offset = display->width() / 2;
@@ -1699,9 +1649,6 @@ void Screen::setup()
     // Set the utf8 conversion function
     dispdev->setFontTableLookupFunction(customFontTableLookup);
 
-    if (strlen(oemStore.oem_text) > 0)
-        logo_timeout *= 2;
-
     // Add frames.
     EINK_ADD_FRAMEFLAG(dispdev, DEMAND_FAST);
     alertFrames[0] = [this](OLEDDisplay *display, OLEDDisplayUiState *state, int16_t x, int16_t y) -> void {
@@ -1845,23 +1792,6 @@ int32_t Screen::runOnce()
         LOG_INFO("Done with boot screen...");
         stopBootScreen();
         showingBootScreen = false;
-    }
-
-    // If we have an OEM Boot screen, toggle after logo_timeout seconds
-    if (strlen(oemStore.oem_text) > 0) {
-        static bool showingOEMBootScreen = true;
-        if (showingOEMBootScreen && (millis() > ((logo_timeout / 2) + serialSinceMsec))) {
-            LOG_INFO("Switch to OEM screen...");
-            // Change frames.
-            static FrameCallback bootOEMFrames[] = {drawOEMBootScreen};
-            static const int bootOEMFrameCount = sizeof(bootOEMFrames) / sizeof(bootOEMFrames[0]);
-            ui->setFrames(bootOEMFrames, bootOEMFrameCount);
-            ui->update();
-#ifndef USE_EINK
-            ui->update();
-#endif
-            showingOEMBootScreen = false;
-        }
     }
 
 #ifndef DISABLE_WELCOME_UNSET

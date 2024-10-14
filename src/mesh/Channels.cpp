@@ -187,22 +187,7 @@ CryptoKey Channels::getKey(ChannelIndex chIndex)
             LOG_DEBUG("Expanding short PSK #%d", pskIndex);
             if (pskIndex == 0)
                 k.length = 0; // Turn off encryption
-            else if (oemStore.oem_aes_key.size > 1) {
-                // Use the OEM key
-                LOG_DEBUG("Using OEM Key with %d bytes", oemStore.oem_aes_key.size);
-                memcpy(k.bytes, oemStore.oem_aes_key.bytes, oemStore.oem_aes_key.size);
-                k.length = oemStore.oem_aes_key.size;
-                // Bump up the last byte of PSK as needed
-                uint8_t *last = k.bytes + oemStore.oem_aes_key.size - 1;
-                *last = *last + pskIndex - 1; // index of 1 means no change vs defaultPSK
-                if (k.length < 16) {
-                    LOG_WARN("OEM provided a too short AES128 key - padding");
-                    k.length = 16;
-                } else if (k.length < 32 && k.length != 16) {
-                    LOG_WARN("OEM provided a too short AES256 key - padding");
-                    k.length = 32;
-                }
-            } else {
+            else {
                 memcpy(k.bytes, defaultpsk, sizeof(defaultpsk));
                 k.length = sizeof(defaultpsk);
                 // Bump up the last byte of PSK as needed
