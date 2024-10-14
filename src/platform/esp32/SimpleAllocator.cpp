@@ -12,7 +12,7 @@ void *SimpleAllocator::alloc(size_t size)
     assert(nextFree + size <= sizeof(bytes));
     void *res = &bytes[nextFree];
     nextFree += size;
-    LOG_DEBUG("Total simple allocs %u\n", nextFree);
+    LOG_DEBUG("Total simple allocs %u", nextFree);
 
     return res;
 }

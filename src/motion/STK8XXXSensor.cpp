@@ -17,10 +17,10 @@ bool STK8XXXSensor::init()
         attachInterrupt(
             digitalPinToInterrupt(STK8XXX_INT), [] { STK_IRQ = true; }, RISING);
 
-        LOG_DEBUG("STK8XXXSensor::init ok\n");
+        LOG_DEBUG("STK8XXXSensor::init ok");
         return true;
     }
-    LOG_DEBUG("STK8XXXSensor::init failed\n");
+    LOG_DEBUG("STK8XXXSensor::init failed");
     return false;
 }
 

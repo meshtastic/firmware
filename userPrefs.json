@@ -1,0 +1,16 @@
+{
+  "USERPREFS_CHANNEL_0_NAME": "\"DEFCONnect\"",
+  "USERPREFS_CHANNEL_0_PRECISION": "14",
+  "USERPREFS_CHANNEL_0_PSK": "{ 0x38, 0x4b, 0xbc, 0xc0, 0x1d, 0xc0, 0x22, 0xd1, 0x81, 0xbf, 0x36, 0xb8, 0x61, 0x21, 0xe1, 0xfb, 0x96, 0xb7, 0x2e, 0x55, 0xbf, 0x74, 0x22, 0x7e, 0x9d, 0x6a, 0xfb, 0x48, 0xd6, 0x4c, 0xb1, 0xa1 }",
+  "USERPREFS_CONFIG_LORA_IGNORE_MQTT": "true",
+  "USERPREFS_CONFIG_LORA_REGION": "meshtastic_Config_LoRaConfig_RegionCode_US",
+  "USERPREFS_CONFIG_OWNER_LONG_NAME": "\"My Long Name\"",
+  "USERPREFS_CONFIG_OWNER_SHORT_NAME": "\"MLN\"",
+  "USERPREFS_EVENT_MODE": "1",
+  "USERPREFS_HAS_SPLASH": "",
+  "USERPREFS_LORACONFIG_CHANNEL_NUM": "31",
+  "USERPREFS_LORACONFIG_MODEM_PRESET": "meshtastic_Config_LoRaConfig_ModemPreset_SHORT_FAST",
+  "USERPREFS_SPLASH_TITLE": "\"DEFCONtastic\"",
+  "USERPREFS_TZ_STRING": "\"tzplaceholder                                         \"",
+  "USERPREFS_USE_ADMIN_KEY": "1"
+}
