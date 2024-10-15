@@ -539,8 +539,17 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
     // mp_decoded will not be decoded when it's PKI encrypted and not directed to us
     if (mp_decoded.which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
 
+        // Determine if configured MQTT address is part of local network (not public).
+        // Valid 172 address range is actually 172.16.0.0 - 172.31.255.255.
+        // If needed, this should be extended properly later.
+        bool mqttAddressIsLocal =
+            strcmp(moduleConfig.mqtt.address, "127.0.0.1") == 0 ||
+            strncmp(moduleConfig.mqtt.address, "10.", 3) === 0 ||
+            strncmp(moduleConfig.mqtt.address, "172.16.", 7) === 0 ||
+            strncmp(moduleConfig.mqtt.address, "192.168", 7) == 0
+
         // check for the lowest bit of the data bitfield set false, and the use of one of the default keys.
-        if (!isFromUs(&mp_decoded) && strcmp(moduleConfig.mqtt.address, "127.0.0.1") != 0 && mp_decoded.decoded.has_bitfield &&
+        if (!isFromUs(&mp_decoded) && !mqttAddressIsLocal && mp_decoded.decoded.has_bitfield &&
             !(mp_decoded.decoded.bitfield & BITFIELD_OK_TO_MQTT_MASK) &&
             (ch.settings.psk.size < 2 || (ch.settings.psk.size == 16 && memcmp(ch.settings.psk.bytes, defaultpsk, 16)) ||
              (ch.settings.psk.size == 32 && memcmp(ch.settings.psk.bytes, eventpsk, 32)))) {
