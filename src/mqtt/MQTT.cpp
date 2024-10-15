@@ -35,6 +35,8 @@ Allocator<meshtastic_ServiceEnvelope> &mqttPool = staticMqttPool;
 // FIXME - this size calculation is super sloppy, but it will go away once we dynamically alloc meshpackets
 static uint8_t bytes[meshtastic_MqttClientProxyMessage_size + 30]; // 12 for channel name and 16 for nodeid
 
+static bool isMqttServerAddressPrivate = false;
+
 void MQTT::mqttCallback(char *topic, byte *payload, unsigned int length)
 {
     mqtt->onReceive(topic, payload, length);
@@ -236,6 +238,11 @@ MQTT::MQTT() : concurrency::OSThread("mqtt"), mqttQueue(MAX_MQTT_QUEUE)
                                                                      default_map_position_precision);
             map_publish_interval_msecs = Default::getConfiguredOrDefaultMs(
                 moduleConfig.mqtt.map_report_settings.publish_interval_secs, default_map_publish_interval_secs);
+        }
+
+        isMqttServerAddressPrivate = isPrivateIpAddress(moduleConfig.mqtt.address);
+        if (isMqttServerAddressPrivate) {
+            LOG_INFO("MQTT server is a private IP address.");
         }
 
 #if HAS_NETWORKING
@@ -538,9 +545,8 @@ void MQTT::onSend(const meshtastic_MeshPacket &mp_encrypted, const meshtastic_Me
 
     // mp_decoded will not be decoded when it's PKI encrypted and not directed to us
     if (mp_decoded.which_payload_variant == meshtastic_MeshPacket_decoded_tag) {
-
         // check for the lowest bit of the data bitfield set false, and the use of one of the default keys.
-        if (!isFromUs(&mp_decoded) && strcmp(moduleConfig.mqtt.address, "127.0.0.1") != 0 && mp_decoded.decoded.has_bitfield &&
+        if (!isFromUs(&mp_decoded) && !isMqttServerAddressPrivate && mp_decoded.decoded.has_bitfield &&
             !(mp_decoded.decoded.bitfield & BITFIELD_OK_TO_MQTT_MASK) &&
             (ch.settings.psk.size < 2 || (ch.settings.psk.size == 16 && memcmp(ch.settings.psk.bytes, defaultpsk, 16)) ||
              (ch.settings.psk.size == 32 && memcmp(ch.settings.psk.bytes, eventpsk, 32)))) {
@@ -696,4 +702,35 @@ bool MQTT::isValidJsonEnvelope(JSONObject &json)
            (json["from"]->AsNumber() == nodeDB->getNodeNum()) &&            // only accept message if the "from" is us
            (json.find("type") != json.end()) && json["type"]->IsString() && // should specify a type
            (json.find("payload") != json.end());                            // should have a payload
+}
+
+bool MQTT::isPrivateIpAddress(const char ip[])
+{
+    // Check the easy ones first.
+    if (strcmp(ip, "127.0.0.1") == 0 ||
+        strncmp(ip, "10.", 3) == 0 ||
+        strncmp(ip, "192.168", 7) == 0)
+    {
+        return true;
+    }
+
+    // See if it's definitely not a 172 address.
+    if (strncmp(ip, "172", 3) != 0)
+    {
+        return false;
+    }
+
+    // We know it's a 172 address, now see if the second octet is 2 digits.
+    if (ip[6] != '.')
+    {
+        return false;
+    }
+
+    // Copy the second octet into a secondary buffer we can null-terminate and parse.
+    char octet2[3];
+    strncpy(octet2, ip + 4, 2);
+    octet2[2] = 0;
+
+    int octet2Num = atoi(octet2);
+    return octet2Num >= 16 && octet2Num <= 31;
 }
