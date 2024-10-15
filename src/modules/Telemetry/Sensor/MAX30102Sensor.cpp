@@ -11,7 +11,7 @@ MAX30102Sensor::MAX30102Sensor() : TelemetrySensor(meshtastic_TelemetrySensorTyp
 
 int32_t MAX30102Sensor::runOnce()
 {
-    LOG_INFO("Init sensor: %s\n", sensorName);
+    LOG_INFO("Init sensor: %s", sensorName);
     if (!hasSensor()) {
         return DEFAULT_SENSOR_MINIMUM_WAIT_TIME_BETWEEN_READS;
     }
@@ -28,10 +28,10 @@ int32_t MAX30102Sensor::runOnce()
 
         max30102.enableDIETEMPRDY(); // Enable the temperature ready interrupt
         max30102.setup(brightness, sampleAverage, leds, sampleRate, pulseWidth, adcRange);
-        LOG_DEBUG("MAX30102 Init Succeed\n");
+        LOG_DEBUG("MAX30102 Init Succeed");
         status = true;
     } else {
-        LOG_ERROR("MAX30102 Init Failed\n");
+        LOG_ERROR("MAX30102 Init Failed");
         status = false;
     }
     return initI2CSensor();
