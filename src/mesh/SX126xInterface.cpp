@@ -57,6 +57,8 @@ template <typename T> bool SX126xInterface<T>::init()
         digitalWrite(settingsMap[sx126x_ant_sw], HIGH);
         pinMode(settingsMap[sx126x_ant_sw], OUTPUT);
     }
+    // lora.XTAL = true;
+    // lora.standbyXOSC = true;
 // FIXME: correct logic to default to not using TCXO if no voltage is specified for SX126X_DIO3_TCXO_VOLTAGE
 #elif !defined(SX126X_DIO3_TCXO_VOLTAGE)
     float tcxoVoltage =

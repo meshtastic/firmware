@@ -311,7 +311,7 @@ void portduinoSetup()
     // Need to bind all the configured GPIO pins so they're not simulated
     // TODO: Can we do this in the for loop above?
     // TODO: If one of these fails, we should log and terminate
-    if (settingsMap.count(cs) > 0 && settingsMap[cs] != RADIOLIB_NC) {
+    /*if (settingsMap.count(cs) > 0 && settingsMap[cs] != RADIOLIB_NC) {
         if (initGPIOPin(settingsMap[cs], gpioChipName) != ERRNO_OK) {
             settingsMap[cs] = RADIOLIB_NC;
         }
@@ -350,7 +350,7 @@ void portduinoSetup()
         if (initGPIOPin(settingsMap[txen], gpioChipName) != ERRNO_OK) {
             settingsMap[txen] = RADIOLIB_NC;
         }
-    }
+    } */
 
     if (settingsMap[displayPanel] != no_screen) {
         if (settingsMap[displayCS] > 0)
