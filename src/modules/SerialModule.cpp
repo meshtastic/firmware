@@ -252,8 +252,12 @@ void SerialModule::sendTelemetry(meshtastic_Telemetry m)
         pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Telemetry_msg, &m);
     p->to = NODENUM_BROADCAST;
     p->decoded.want_response = false;
-    p->want_ack = true;
-    p->priority = meshtastic_MeshPacket_Priority_HIGH;
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
+        p->want_ack = true;
+        p->priority = meshtastic_MeshPacket_Priority_HIGH;
+    } else {
+        p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+    }
     service->sendToMesh(p, RX_SRC_LOCAL, true);
 }
 
@@ -568,7 +572,6 @@ void SerialModule::processWXSerial()
         m.variant.environment_metrics.has_wind_lull = true;
 
         LOG_INFO("WS85 Transmit speed=%fm/s, direction=%d , lull=%f, gust=%f, voltage=%f temperature=%f",
-        LOG_INFO("WS85 Transmit speed=%fm/s, direction=%d , lull=%f, gust=%f, voltage=%f",
                  m.variant.environment_metrics.wind_speed, m.variant.environment_metrics.wind_direction,
                  m.variant.environment_metrics.wind_lull, m.variant.environment_metrics.wind_gust,
                  m.variant.environment_metrics.voltage, m.variant.environment_metrics.temperature);
