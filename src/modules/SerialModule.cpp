@@ -252,7 +252,12 @@ void SerialModule::sendTelemetry(meshtastic_Telemetry m)
         pb_encode_to_bytes(p->decoded.payload.bytes, sizeof(p->decoded.payload.bytes), &meshtastic_Telemetry_msg, &m);
     p->to = NODENUM_BROADCAST;
     p->decoded.want_response = false;
-    p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+    if (config.device.role == meshtastic_Config_DeviceConfig_Role_SENSOR) {
+        p->want_ack = true;
+        p->priority = meshtastic_MeshPacket_Priority_HIGH;
+    } else {
+        p->priority = meshtastic_MeshPacket_Priority_RELIABLE;
+    }
     service->sendToMesh(p, RX_SRC_LOCAL, true);
 }
 
@@ -424,8 +429,10 @@ void SerialModule::processWXSerial()
     static char windGust[5] = "xx.x"; // Assuming windGust is 4 characters long + null terminator
     static char batVoltage[5] = "0.0V";
     static char capVoltage[5] = "0.0V";
+    static char temperature[5] = "00.0";
     static float batVoltageF = 0;
     static float capVoltageF = 0;
+    static float temperatureF = 0;
     bool gotwind = false;
 
     while (Serial2.available()) {
@@ -499,6 +506,13 @@ void SerialModule::processWXSerial()
                             strcpy(capVoltage, capVoltagePos + 17); // 18 for ws 80, 17 for ws85
                             capVoltageF = strtof(capVoltage, nullptr);
                         }
+                        // GXTS04Temp   = 24.4
+                    } else if (strstr(line, "GXTS04Temp") != NULL) { // we have a temperature line
+                        char *tempPos = strstr(line, "GXTS04Temp   = ");
+                        if (tempPos != NULL) {
+                            strcpy(temperature, tempPos + 15); // 15 spaces for ws85
+                            temperatureF = strtof(temperature, nullptr);
+                        }
                     }
 
                     // Update lineStart for the next line
@@ -514,8 +528,8 @@ void SerialModule::processWXSerial()
     }
     if (gotwind) {
 
-        LOG_INFO("WS85 : %i %.1fg%.1f %.1fv %.1fv", atoi(windDir), strtof(windVel, nullptr), strtof(windGust, nullptr),
-                 batVoltageF, capVoltageF);
+        LOG_INFO("WS85 : %i %.1fg%.1f %.1fv %.1fv %.1fC", atoi(windDir), strtof(windVel, nullptr), strtof(windGust, nullptr),
+                 batVoltageF, capVoltageF, temperatureF);
     }
     if (gotwind && !Throttle::isWithinTimespanMs(lastAveraged, averageIntervalMillis)) {
         // calulate averages and send to the mesh
@@ -535,17 +549,32 @@ void SerialModule::processWXSerial()
         // make a telemetry packet with the data
         meshtastic_Telemetry m = meshtastic_Telemetry_init_zero;
         m.which_variant = meshtastic_Telemetry_environment_metrics_tag;
+
         m.variant.environment_metrics.wind_speed = velAvg;
+        m.variant.environment_metrics.has_wind_speed = true;
+
         m.variant.environment_metrics.wind_direction = dirAvg;
-        m.variant.environment_metrics.wind_gust = gust;
-        m.variant.environment_metrics.wind_lull = lull;
+        m.variant.environment_metrics.has_wind_direction = true;
+
+        m.variant.environment_metrics.temperature = temperatureF;
+        m.variant.environment_metrics.has_temperature = true;
+
         m.variant.environment_metrics.voltage =
             capVoltageF > batVoltageF ? capVoltageF : batVoltageF; // send the larger of the two voltage values.
+        m.variant.environment_metrics.has_voltage = true;
 
-        LOG_INFO("WS85 Transmit speed=%fm/s, direction=%d , lull=%f, gust=%f, voltage=%f",
+        m.variant.environment_metrics.wind_gust = gust;
+        m.variant.environment_metrics.has_wind_gust = true;
+
+        if (lull == -1)
+            lull = 0;
+        m.variant.environment_metrics.wind_lull = lull;
+        m.variant.environment_metrics.has_wind_lull = true;
+
+        LOG_INFO("WS85 Transmit speed=%fm/s, direction=%d , lull=%f, gust=%f, voltage=%f temperature=%f",
                  m.variant.environment_metrics.wind_speed, m.variant.environment_metrics.wind_direction,
                  m.variant.environment_metrics.wind_lull, m.variant.environment_metrics.wind_gust,
-                 m.variant.environment_metrics.voltage);
+                 m.variant.environment_metrics.voltage, m.variant.environment_metrics.temperature);
 
         sendTelemetry(m);
 
