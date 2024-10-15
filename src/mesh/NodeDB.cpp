@@ -556,7 +556,8 @@ void NodeDB::installDefaultChannels()
 
 void NodeDB::resetNodes()
 {
-    clearLocalPosition();
+    if (!config.position.fixed_position)
+        clearLocalPosition();
     numMeshNodes = 1;
     std::fill(devicestate.node_db_lite.begin() + 1, devicestate.node_db_lite.end(), meshtastic_NodeInfoLite());
     devicestate.has_rx_text_message = false;
