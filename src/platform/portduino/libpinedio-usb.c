@@ -89,6 +89,8 @@ static void LIBUSB_CALL cb_in(struct libusb_transfer *transfer)
 static int32_t usb_transfer(struct pinedio_inst *inst, const char *func, unsigned int writecnt, unsigned int readcnt,
                             const uint8_t *writearr, uint8_t *readarr, bool lock)
 {
+    if (writecnt > 10)
+        fprintf(stderr, "Writing %d bytes to SPI!\n", writecnt);
     int state_out = TRANS_IDLE;
     inst->transfer_out->buffer = (uint8_t *)writearr;
     inst->transfer_out->length = writecnt;
@@ -480,7 +482,10 @@ static void *pinedio_pin_poll_thread(void *arg)
                 enum pinedio_int_mode mode =
                     inst_int->previous_state == false && state == true ? PINEDIO_INT_MODE_RISING : PINEDIO_INT_MODE_FALLING;
                 if (inst_int->mode & mode) {
+                    fprintf(stderr, "Calling Callback!\n");
+                    pinedio_mutex_unlock(&inst->usb_access_mutex);
                     inst_int->callback();
+                    pinedio_mutex_lock(&inst->usb_access_mutex);
                 }
             }
             inst_int->previous_state = state;
@@ -488,7 +493,7 @@ static void *pinedio_pin_poll_thread(void *arg)
 
         should_exit = inst->pin_poll_thread_exit;
         pinedio_mutex_unlock(&inst->usb_access_mutex);
-        platform_sleep(1000 / 30);
+        platform_sleep(20);
     }
 }
 
@@ -519,12 +524,14 @@ int32_t pinedio_deattach_interrupt(struct pinedio_inst *inst, enum pinedio_int_p
 {
     pinedio_mutex_lock(&inst->usb_access_mutex);
     inst->interrupts[int_pin].callback = NULL;
-    inst->int_running_cnt--;
-    if (inst->int_running_cnt == 0) {
-        inst->pin_poll_thread_exit = true;
-        pinedio_mutex_unlock(&inst->usb_access_mutex);
-        pthread_join(inst->pin_poll_thread, NULL);
-        return 0;
+    if (inst->int_running_cnt != 0) {
+        inst->int_running_cnt--;
+        if (inst->int_running_cnt == 0) {
+            inst->pin_poll_thread_exit = true;
+            pinedio_mutex_unlock(&inst->usb_access_mutex);
+            pthread_join(inst->pin_poll_thread, NULL);
+            return 0;
+        }
     }
     pinedio_mutex_unlock(&inst->usb_access_mutex);
     return 0;

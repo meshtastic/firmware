@@ -19,7 +19,9 @@ enum pinedio_int_pin {
     PINEDIO_INT_PIN_IRQ,
     //  PINEDIO_INT_PIN_BUSY, // not implemented yet
     PINEDIO_INT_PIN_MAX
+
 };
+// #define PINEDIO_INT_PIN_MAX 110
 
 enum pinedio_int_mode {
     PINEDIO_INT_MODE_RISING = 0x01,

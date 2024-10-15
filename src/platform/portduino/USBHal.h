@@ -14,10 +14,9 @@
 #define PI_OUTPUT (1)
 #define PI_LOW (0)
 #define PI_HIGH (1)
-#define PI_MAX_USER_GPIO (31)
 
 #define CH341_PIN_CS (101)
-#define CH341_PIN_IRQ (102)
+#define CH341_PIN_IRQ (0)
 
 // forward declaration of alert handler that will be used to emulate interrupts
 // static void lgpioAlertHandler(int num_alerts, lgGpioAlert_p alerts, void *userdata);
@@ -85,10 +84,10 @@ class Ch341Hal : public RadioLibHal
 
     void attachInterrupt(uint32_t interruptNum, void (*interruptCb)(void), uint32_t mode) override
     {
-        if ((interruptNum == RADIOLIB_NC) || (interruptNum > PI_MAX_USER_GPIO)) {
+        if ((interruptNum == RADIOLIB_NC)) {
             return;
         }
-
+        fprintf(stderr, "Attach interrupt to pin %d \n", interruptNum);
         pinedio_attach_interrupt(&this->pinedio, (pinedio_int_pin)interruptNum, (pinedio_int_mode)mode, interruptCb);
 
         // set lgpio alert callback
@@ -108,9 +107,10 @@ class Ch341Hal : public RadioLibHal
 
     void detachInterrupt(uint32_t interruptNum) override
     {
-        if ((interruptNum == RADIOLIB_NC) || (interruptNum > PI_MAX_USER_GPIO)) {
+        if ((interruptNum == RADIOLIB_NC)) {
             return;
         }
+        fprintf(stderr, "Detach interrupt from pin %d \n", interruptNum);
 
         pinedio_deattach_interrupt(&this->pinedio, (pinedio_int_pin)interruptNum);
 
