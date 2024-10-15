@@ -707,22 +707,17 @@ bool MQTT::isValidJsonEnvelope(JSONObject &json)
 bool MQTT::isPrivateIpAddress(const char ip[])
 {
     // Check the easy ones first.
-    if (strcmp(ip, "127.0.0.1") == 0 ||
-        strncmp(ip, "10.", 3) == 0 ||
-        strncmp(ip, "192.168", 7) == 0)
-    {
+    if (strcmp(ip, "127.0.0.1") == 0 || strncmp(ip, "10.", 3) == 0 || strncmp(ip, "192.168", 7) == 0) {
         return true;
     }
 
     // See if it's definitely not a 172 address.
-    if (strncmp(ip, "172", 3) != 0)
-    {
+    if (strncmp(ip, "172", 3) != 0) {
         return false;
     }
 
     // We know it's a 172 address, now see if the second octet is 2 digits.
-    if (ip[6] != '.')
-    {
+    if (ip[6] != '.') {
         return false;
     }
 
