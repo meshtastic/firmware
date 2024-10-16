@@ -794,7 +794,7 @@ void NodeDB::loadFromDisk()
     state = loadProto(uiconfigFileName, meshtastic_DeviceUIConfig_size, sizeof(meshtastic_DeviceUIConfig),
                       &meshtastic_DeviceUIConfig_msg, &uiconfig);
     if (state == LoadFileResult::LOAD_SUCCESS) {
-        LOG_INFO("Loaded UIConfig\n");
+        LOG_INFO("Loaded UIConfig");
     }
 
     // 2.4.X - configuration migration to update new default intervals

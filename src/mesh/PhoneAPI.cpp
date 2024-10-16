@@ -202,7 +202,7 @@ size_t PhoneAPI::getFromRadio(uint8_t *buf)
         break;
 
     case STATE_SEND_UIDATA:
-        LOG_INFO("getFromRadio=STATE_SEND_UIDATA\n");
+        LOG_INFO("getFromRadio=STATE_SEND_UIDATA");
         fromRadioScratch.which_payload_variant = meshtastic_FromRadio_deviceuiConfig_tag;
         fromRadioScratch.deviceuiConfig = uiconfig;
         state = STATE_SEND_OWN_NODEINFO;

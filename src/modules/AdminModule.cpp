@@ -176,7 +176,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         handleSetHamMode(r->set_ham_mode);
         break;
     case meshtastic_AdminMessage_get_ui_config_request_tag: {
-        LOG_INFO("Client is getting device-ui config\n");
+        LOG_INFO("Client is getting device-ui config");
         handleGetDeviceUIConfig(mp);
         handled = true;
         break;
@@ -241,7 +241,7 @@ bool AdminModule::handleReceivedProtobuf(const meshtastic_MeshPacket &mp, meshta
         break;
     }
     case meshtastic_AdminMessage_store_ui_config_tag: {
-        LOG_INFO("Storing device-ui config\n");
+        LOG_INFO("Storing device-ui config");
         handleStoreDeviceUIConfig(r->store_ui_config);
         handled = true;
         break;

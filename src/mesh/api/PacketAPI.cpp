@@ -38,7 +38,7 @@ bool PacketAPI::receivePacket(void)
         meshtastic_ToRadio *mr;
         auto p = server->receivePacket()->move();
         int id = p->getPacketId();
-        LOG_DEBUG("Received packet id=%u\n", id);
+        LOG_DEBUG("Received packet id=%u", id);
         mr = (meshtastic_ToRadio *)&static_cast<DataPacket<meshtastic_ToRadio> *>(p.get())->getData();
 
         switch (mr->which_payload_variant) {
@@ -50,22 +50,22 @@ bool PacketAPI::receivePacket(void)
         }
         case meshtastic_ToRadio_want_config_id_tag: {
             uint32_t config_nonce = mr->want_config_id;
-            LOG_INFO("Screen wants config, nonce=%u\n", config_nonce);
+            LOG_INFO("Screen wants config, nonce=%u", config_nonce);
             handleStartConfig();
             break;
         }
         case meshtastic_ToRadio_heartbeat_tag:
             if (mr->heartbeat.dummy_field == 1) {
                 if (nodeInfoModule) {
-                    LOG_INFO("Broadcasting nodeinfo ping\n");
+                    LOG_INFO("Broadcasting nodeinfo ping");
                     nodeInfoModule->sendOurNodeInfo(NODENUM_BROADCAST, true, 0, true);
                 }
             } else {
-                LOG_DEBUG("Got client heartbeat\n");
+                LOG_DEBUG("Got client heartbeat");
             }
             break;
         default:
-            LOG_ERROR("Error: unhandled meshtastic_ToRadio variant: %d\n", mr->which_payload_variant);
+            LOG_ERROR("Error: unhandled meshtastic_ToRadio variant: %d", mr->which_payload_variant);
             break;
         }
     }

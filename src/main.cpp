@@ -742,7 +742,7 @@ void setup()
 #else
     // ESP32
     SPI.begin(LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
-    LOG_DEBUG("SPI.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)\n", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
+    LOG_DEBUG("SPI.begin(SCK=%d, MISO=%d, MOSI=%d, NSS=%d)", LORA_SCK, LORA_MISO, LORA_MOSI, LORA_CS);
     SPI.setFrequency(4000000);
 #endif
 #if HAS_TFT
@@ -817,7 +817,7 @@ void setup()
         PacketAPI::create(PacketServer::init());
         deviceScreen->init(new PacketClient);
     } else {
-        LOG_INFO("Running without TFT display!\n");
+        LOG_INFO("Running without TFT display!");
     }
 #else
     deviceScreen = &DeviceScreen::create();
@@ -1239,8 +1239,8 @@ void setup()
 #endif
 
 #ifdef ARDUINO_ARCH_ESP32
-    LOG_DEBUG("Free heap  : %7d bytes\n", ESP.getFreeHeap());
-    LOG_DEBUG("Free PSRAM : %7d bytes\n", ESP.getFreePsram());
+    LOG_DEBUG("Free heap  : %7d bytes", ESP.getFreeHeap());
+    LOG_DEBUG("Free PSRAM : %7d bytes", ESP.getFreePsram());
 #endif
 }
 #endif
